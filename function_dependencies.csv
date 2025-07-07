@@ -1,0 +1,280 @@
+Function Name,Defined In,Called In
+AddBezierPoint,bezier_editor.c,"bezier_editor.c, bezier_editor.h"
+AddObject,Unknown,object_editor.h
+AddSceneObject,Unknown,object_editor.c
+AnimationCleanup,animation.c,"animation.h, animation copy.c, animation copy.h, animation.c"
+AnimationInit,animation.c,"animation.h, animation copy.c, animation copy.h, animation.c"
+ApplyBlur,ray_tracing2.c,ray_tracing2.c
+ApplyGaussianBlur,ray_tracing2.c,ray_tracing2.c
+ApplyGaussianBlurWithEdgePreservation,ray_tracing2.c,ray_tracing2.c
+ApplyHeavyBlur,ray_tracing2.c,ray_tracing2.c
+BOTTOM_BUTTON_MARGIN_X_EXIT,Unknown,sdl_menu.c
+BOTTOM_BUTTON_MARGIN_X_RESTORE,Unknown,sdl_menu.c
+BOTTOM_BUTTON_MARGIN_X_SAVE,Unknown,sdl_menu.c
+BOTTOM_BUTTON_MARGIN_X_START,Unknown,sdl_menu.c
+BOTTOM_BUTTON_MARGIN_Y_EXIT,Unknown,sdl_menu.c
+BOTTOM_BUTTON_MARGIN_Y_RESTORE,Unknown,sdl_menu.c
+BOTTOM_BUTTON_MARGIN_Y_SAVE,Unknown,sdl_menu.c
+BOTTOM_BUTTON_MARGIN_Y_START,Unknown,sdl_menu.c
+BezierInterpolation,Unknown,path_system.c
+Buttons,Unknown,sdl_menu.c
+CheckLoopConditions,animation.c,animation.c
+CleanupRayTracing,ray_tracing2.c,"ray_tracing2.c, ray_tracing2.h, animation.c"
+CollidesWithObject,ray_tracing.c,"ray_tracing2.c, ray_tracing2 copy.c, ray_tracing.c"
+Color,Unknown,object_manager.h
+CubicBezierInterpolation,Unknown,path_system.c
+DeCasteljau,Unknown,path_system.c
+DeselectObject,Unknown,object_editor.h
+DestroyPath,path_system.c,"path_system.h, path_system.c"
+DestroySceneEditor,scene_editor.c,"scene_editor.h, scene_editor.c"
+DrawRay,Unknown,ray_tracing.c
+EnsureDirectoryExists,Unknown,animation.c
+Fields,Unknown,sdl_menu.c
+FillCircle,ray_tracing.c,"ray_tracing2.c, ray_tracing2 copy.c, ray_tracing.c"
+FillLitCircle,ray_tracing.c,"ray_tracing2.c, ray_tracing2 copy.c, ray_tracing.c"
+FillRays,Unknown,"ray_tracing2.c, ray_tracing2 copy.c, ray_tracing.c"
+GetCurrentLightPosition,ray_tracing2.c,"animation copy.c, ray_tracing2 copy.h, ray_tracing2.c, ray_tracing2.h, animation.c, ray_tracing2 copy.c"
+GetPositionAlongPath,path_system.c,"path_system.c, path_system.h, animation.c"
+GetSimulatedLightPosition,Unknown,animation copy.c
+HandleBezierEditorEvents,bezier_editor.c,"bezier_editor.c, bezier_editor.h, scene_editor.c"
+HandleBezierEditorKeyPress,bezier_editor.c,bezier_editor.c
+HandleBezierEditorMouseClick,bezier_editor.c,bezier_editor.c
+HandleCameraEditorEvents,camera_editor.c,"camera_editor.c, scene_editor.c, camera_editor.h"
+HandleEvents,animation.c,animation.c
+HandleKeyPress,sdl_menu.c,sdl_menu.c
+HandleMouseClick,sdl_menu.c,sdl_menu.c
+HandleMouseMotion,sdl_menu.c,sdl_menu.c
+HandleObjectEditorEvents,object_editor.c,"object_editor.c, scene_editor.c, object_editor.h"
+HandleObjectEditorKeyPress,object_editor.c,"object_editor.c, object_editor.h"
+HandleObjectEditorMouseClick,object_editor.c,"object_editor.c, object_editor.h"
+HandleObjectEditorMouseDrag,object_editor.c,"object_editor.c, object_editor.h"
+HandleObjectEditorMouseRelease,object_editor.c,"object_editor.c, object_editor.h"
+HandleSceneEditorEvents,scene_editor.c,"scene_editor.h, scene_editor.c"
+HandleSliderClick,sdl_menu.c,sdl_menu.c
+InitObject,object_manager.c,"object_manager.c, object_editor.c, object_manager.h"
+InitRayTracingScene,ray_tracing2.c,"animation copy.c, ray_tracing2 copy.h, ray_tracing2.c, ray_tracing2.h, animation.c, ray_tracing2 copy.c"
+InitializeBezierEditor,Unknown,bezier_editor.h
+InitializeCameraEditor,Unknown,camera_editor.h
+InitializeMenu,sdl_menu.c,sdl_menu.c
+InitializeObjectEditor,Unknown,object_editor.h
+InitializeSceneEditor,scene_editor.c,"sdl_menu.c, scene_editor.h, scene_editor.c"
+IsInsideHandle,Unknown,object_editor.h
+IsInsideObject,object_manager.c,"object_manager.c, object_editor.c, object_manager.h, ray_tracing2.c"
+IsObjectDirty,object_manager.c,"object_manager.c, object_manager.h"
+IsPointWithinRadius,Unknown,path_system.h
+LoadAnimationConfig,config_manager.c,"sdl_menu.c, config_manager.c, config_manager.h, animation.c"
+LoadBezierPath,config_manager.c,config_manager.c
+LoadConfig,Unknown,sdl_menu.h
+LoadObjectProperties,config_manager.c,"config_manager.c, config_manager.h"
+LoadSceneConfig,config_manager.c,"config_manager.c, sdl_menu.c, scene_editor.c, animation.c, animation.h, config_manager.h"
+LoadSceneObjects,config_manager.c,config_manager.c
+LoadVelocityHandle,config_manager.c,config_manager.c
+LoadWindowConfig,config_manager.c,config_manager.c
+MakeVideo,make_video.c,"make_video.h, make_video.c, animation.c"
+MarkObjectDirty,object_manager.c,"object_manager.c, object_editor.c, object_manager.h"
+MoveCamera,Unknown,camera_editor.h
+MoveEndPoint,bezier_editor.c,"bezier_editor.c, bezier_editor.h"
+MoveObject,object_manager.c,"object_manager.c, object_editor.c, object_manager.h"
+MoveShape,Unknown,ray_tracing.c
+MoveVelocityHandle,bezier_editor.c,"bezier_editor.c, bezier_editor.h"
+Opacity,Unknown,object_manager.h
+Options,Unknown,sdl_menu.c
+Parameter,Unknown,animation.c
+Polygon,Unknown,object_manager.c
+Positions,Unknown,sdl_menu.c
+ProcessRayTracingEvent,ray_tracing2.c,"animation copy.c, ray_tracing2 copy.h, ray_tracing2.c, ray_tracing2.h, animation.c, ray_tracing2 copy.c"
+RayCalculationWorker,ray_tracing2.c,ray_tracing2.c
+RemoveBezierPoint,bezier_editor.c,"bezier_editor.c, bezier_editor.h"
+RemoveObject,Unknown,object_editor.h
+RemoveSceneObject,object_editor.c,object_editor.c
+RenderAccumulationBuffer,Unknown,ray_tracing.c
+RenderBezierEditor,bezier_editor.c,"bezier_editor.c, bezier_editor.h, scene_editor.c"
+RenderBezierEditorUI,bezier_editor.c,bezier_editor.c
+RenderBezierPath,path_system.c,"path_system.h, object_editor.c, bezier_editor.c, path_system.c"
+RenderButton,sdl_menu.c,"sdl_menu.c, sdl_menu.h"
+RenderButtonText,render_helper.c,"object_editor.c, bezier_editor.c, render_helper.c, render_helper.h"
+RenderCameraEditor,camera_editor.c,"camera_editor.c, scene_editor.c, camera_editor.h"
+RenderCircle,render_helper.c,"render_helper.h, render_helper.c"
+RenderDrawCircle,render_helper.c,"object_editor.c, render_helper.h, render_helper.c"
+RenderDrawShape,render_helper.c,"render_helper.h, render_helper.c"
+RenderFillCircle,render_helper.c,"render_helper.h, render_helper.c"
+RenderFillShape,render_helper.c,"render_helper.h, render_helper.c"
+RenderFrame,animation.c,animation.c
+RenderMenu,sdl_menu.c,sdl_menu.c
+RenderObjectEditor,object_editor.c,"object_editor.c, scene_editor.c, object_editor.h"
+RenderRayTracingScene,ray_tracing2.c,"animation copy.c, ray_tracing2 copy.h, ray_tracing2.c, ray_tracing2.h, animation.c, ray_tracing2 copy.c"
+RenderSceneObject,render_helper.c,"object_editor.c, render_helper.h, render_helper.c, ray_tracing2.c"
+RenderSceneObjects,render_helper.c,"render_helper.h, render_helper.c"
+RenderShape,render_helper.c,"render_helper.h, render_helper.c"
+RenderSliders,sdl_menu.c,sdl_menu.c
+RenderStaticScene,render_helper.c,"bezier_editor.c, render_helper.c, render_helper.h"
+RenderText,sdl_menu.c,"sdl_menu.c, sdl_menu.h"
+ResetAnimationSettings,sdl_menu.c,sdl_menu.c
+ResetCamera,Unknown,camera_editor.h
+ResetObjectTransform,Unknown,object_manager.h
+ResetSceneEditor,scene_editor.c,scene_editor.c
+RotateObject,object_manager.c,"object_manager.c, object_editor.c, object_manager.h"
+RunMainLoop,animation.c,"animation copy.h, animation copy.c, sdl_menu.c, animation.c, animation.h"
+RunMenu,sdl_menu.c,"sdl_menu.c, sdl_menu.h, animation.c"
+SDL_CreateRGBSurface,Unknown,animation.c
+SDL_CreateRenderer,Unknown,"animation copy.c, sdl_menu.c, ray_tracing.c, scene_editor.c, animation.c"
+SDL_CreateTextureFromSurface,Unknown,"sdl_menu.c, render_helper.c"
+SDL_CreateThread,Unknown,ray_tracing2.c
+SDL_CreateWindow,Unknown,"animation copy.c, sdl_menu.c, ray_tracing.c, scene_editor.c, animation.c"
+SDL_Delay,Unknown,"animation copy.c, ray_tracing.c, scene_editor.c, animation.c"
+SDL_DestroyRenderer,Unknown,"animation copy.c, sdl_menu.c, ray_tracing.c, scene_editor.c, animation.c"
+SDL_DestroyTexture,Unknown,"sdl_menu.c, render_helper.c"
+SDL_DestroyWindow,Unknown,"animation copy.c, sdl_menu.c, ray_tracing.c, scene_editor.c, animation.c"
+SDL_FreeSurface,Unknown,"sdl_menu.c, render_helper.c, animation.c"
+SDL_GetError,Unknown,"sdl_menu.c, animation copy.c, ray_tracing.c, animation.c"
+SDL_GetPerformanceCounter,Unknown,"animation copy.c, animation.c"
+SDL_GetPerformanceFrequency,Unknown,"animation copy.c, animation.c"
+SDL_Init,Unknown,"sdl_menu.c, animation copy.c, ray_tracing.c, animation.c"
+SDL_PollEvent,Unknown,"animation copy.c, sdl_menu.c, ray_tracing.c, scene_editor.c, animation.c"
+SDL_Quit,Unknown,"sdl_menu.c, animation copy.c, ray_tracing.c, animation.c"
+SDL_RenderClear,Unknown,"bezier_editor.c, sdl_menu.c, ray_tracing2.c, ray_tracing.c, scene_editor.c, animation.c, object_editor.c, ray_tracing2 copy.c, render_helper.c"
+SDL_RenderCopy,Unknown,"sdl_menu.c, render_helper.c"
+SDL_RenderDrawLine,Unknown,"object_editor.c, render_helper.c, path_system.c"
+SDL_RenderDrawPoint,Unknown,"path_system.c, ray_tracing2.c, ray_tracing.c, ray_tracing2 copy.c, render_helper.c"
+SDL_RenderDrawRect,Unknown,bezier_editor.c
+SDL_RenderFillRect,Unknown,"sdl_menu.c, object_editor.c, bezier_editor.c"
+SDL_RenderPresent,Unknown,"sdl_menu.c, ray_tracing2.c, ray_tracing.c, scene_editor.c, ray_tracing2 copy.c"
+SDL_RenderReadPixels,Unknown,animation.c
+SDL_SaveBMP,Unknown,animation.c
+SDL_SetRenderDrawColor,Unknown,"bezier_editor.c, path_system.c, sdl_menu.c, ray_tracing2.c, ray_tracing.c, animation.c, object_editor.c, ray_tracing2 copy.c, render_helper.c"
+SDL_WaitThread,Unknown,ray_tracing2.c
+SLIDER_FPS_Y,Unknown,sdl_menu.c
+SLIDER_FRAME_Y,Unknown,sdl_menu.c
+SLIDER_LIGHT_Y,Unknown,sdl_menu.c
+SLIDER_MARGIN_X,Unknown,sdl_menu.c
+SLIDER_RAYS_Y,Unknown,sdl_menu.c
+SLIDER_TRAVEL_Y,Unknown,sdl_menu.c
+SUBSETTING_BUTTON_MARGIN_X,Unknown,sdl_menu.c
+SaveAllSettings,config_manager.c,"config_manager.c, sdl_menu.c, animation.c, object_editor.c, config_manager.h"
+SaveAnimationConfig,config_manager.c,"config_manager.c, config_manager.h"
+SaveConfig,Unknown,sdl_menu.h
+SaveFrame,animation.c,"animation.h, animation.c"
+SaveSceneConfig,config_manager.c,"bezier_editor.c, config_manager.c, animation.h, object_editor.c, config_manager.h"
+ScaleHandle,Unknown,path_system.c
+ScaleObject,object_manager.c,"object_manager.c, object_manager.h"
+SceneEditorLoop,scene_editor.c,"sdl_menu.c, scene_editor.h, scene_editor.c"
+SelectObject,Unknown,object_editor.h
+SetLightPosition,ray_tracing2.c,"ray_tracing2.c, ray_tracing2.h, animation.c"
+SetSceneMode,scene_editor.c,"scene_editor.h, scene_editor.c"
+TTF_CloseFont,Unknown,"sdl_menu.c, render_helper.c"
+TTF_GetError,Unknown,"sdl_menu.c, scene_editor.c"
+TTF_Init,Unknown,"sdl_menu.c, scene_editor.c"
+TTF_OpenFont,Unknown,"sdl_menu.c, render_helper.c"
+TTF_Quit,Unknown,sdl_menu.c
+TTF_RenderText_Solid,Unknown,"sdl_menu.c, render_helper.c"
+ToggleBezierMode,path_system.c,"path_system.h, path_system.c"
+ToggleBezierPathMode,bezier_editor.c,"bezier_editor.c, bezier_editor.h"
+ToggleSceneMode,scene_editor.c,scene_editor.c
+UpdateLightPosition,animation.c,animation.c
+UpdateObject,object_manager.c,"object_manager.c, object_manager.h"
+UpdateSimulation,animation.c,animation.c
+ZoomCamera,Unknown,camera_editor.h
+allocateDouble2D,ray_tracing.c,ray_tracing.c
+allocateInt2D,ray_tracing.c,ray_tracing.c
+allocation,Unknown,config_manager.c
+angle,Unknown,object_manager.h
+at,Unknown,"object_editor.c, bezier_editor.c, ray_tracing2.c"
+atan2,Unknown,object_editor.c
+atoi,Unknown,sdl_menu.c
+ceil,Unknown,"ray_tracing2.c, ray_tracing2 copy.c"
+check,Unknown,ray_tracing2.c
+circle,Unknown,ray_tracing2 copy.c
+cleared,Unknown,object_editor.c
+color,Unknown,config_manager.c
+colors,Unknown,bezier_editor.c
+configurations,Unknown,scene_editor.c
+cos,Unknown,"object_manager.c, ray_tracing2.c, ray_tracing.c, object_editor.c, ray_tracing2 copy.c"
+distance,Unknown,ray_tracing2.c
+end,Unknown,config_manager.c
+events,Unknown,"ray_tracing2 copy.h, ray_tracing2.h"
+exit,Unknown,"ray_tracing2.c, ray_tracing.c"
+exp,Unknown,path_system.c
+fclose,Unknown,config_manager.c
+floor,Unknown,"ray_tracing2.c, ray_tracing2 copy.c"
+fmax,Unknown,ray_tracing.c
+fopen,Unknown,config_manager.c
+for,Unknown,"bezier_editor.c, config_manager.c, path_system.c, object_manager.c, sdl_menu.c, ray_tracing2.c, ray_tracing.c, object_editor.c, ray_tracing2 copy.c, render_helper.c"
+fprintf,Unknown,"config_manager.c, make_video.c, animation copy.c, ray_tracing.c, scene_editor.c, animation.c"
+fread,Unknown,config_manager.c
+free,Unknown,"ray_tracing2.c, config_manager.c, ray_tracing.c, path_system.c"
+freeDouble2D,ray_tracing.c,ray_tracing.c
+freeInt2D,ray_tracing.c,ray_tracing.c
+fseek,Unknown,config_manager.c
+ftell,Unknown,config_manager.c
+functions,Unknown,config_manager.c
+handling,Unknown,config_manager.c
+if,bezier_editor.c,"bezier_editor.c, config_manager.c, make_video.c, path_system.c, object_manager.c, animation copy.c, sdl_menu.c, ray_tracing2.c, ray_tracing.c, scene_editor.c, animation.c, object_editor.c, ray_tracing2 copy.c, render_helper.c"
+interactive,Unknown,animation copy.c
+json_object_array_add,Unknown,config_manager.c
+json_object_array_get_idx,Unknown,config_manager.c
+json_object_array_length,Unknown,config_manager.c
+json_object_get_boolean,Unknown,config_manager.c
+json_object_get_double,Unknown,config_manager.c
+json_object_get_int,Unknown,config_manager.c
+json_object_get_string,Unknown,config_manager.c
+json_object_is_type,Unknown,config_manager.c
+json_object_new_array,Unknown,config_manager.c
+json_object_new_boolean,Unknown,config_manager.c
+json_object_new_double,Unknown,config_manager.c
+json_object_new_int,Unknown,config_manager.c
+json_object_new_object,Unknown,config_manager.c
+json_object_new_string,Unknown,config_manager.c
+json_object_object_add,Unknown,config_manager.c
+json_object_object_get,Unknown,config_manager.c
+json_object_object_get_ex,Unknown,config_manager.c
+json_object_put,Unknown,config_manager.c
+json_object_to_json_string_ext,Unknown,config_manager.c
+json_tokener_parse,Unknown,config_manager.c
+kernel,Unknown,ray_tracing2.c
+light,Unknown,ray_tracing2 copy.c
+linearly,Unknown,path_system.c
+main,animation.c,"animation copy.c, ray_tracing.c, animation.c"
+malloc,Unknown,"ray_tracing2.c, config_manager.c, ray_tracing.c"
+memcpy,Unknown,ray_tracing2.c
+memset,Unknown,"object_editor.c, ray_tracing.c, ray_tracing2.c"
+mkdir,Unknown,animation.c
+mode,Unknown,animation copy.c
+opacity,Unknown,config_manager.c
+overpowering,Unknown,ray_tracing2.c
+path,Unknown,path_system.c
+perror,Unknown,config_manager.c
+point,Unknown,ray_tracing2 copy.c
+points,Unknown,"object_manager.h, render_helper.c, path_system.c"
+position,Unknown,"ray_tracing2.c, ray_tracing2 copy.h, ray_tracing2.h"
+positions,Unknown,bezier_editor.c
+pow,Unknown,"ray_tracing2.c, ray_tracing2 copy.c, ray_tracing.c"
+preset,Unknown,animation copy.h
+printf,Unknown,"bezier_editor.c, config_manager.c, make_video.c, path_system.c, animation copy.c, sdl_menu.c, ray_tracing2.c, ray_tracing.c, scene_editor.c, animation.c, camera_editor.c, object_editor.c"
+rand,Unknown,ray_tracing.c
+ray,Unknown,ray_tracing2 copy.c
+return,Unknown,"object_manager.c, ray_tracing2.c, ray_tracing2 copy.c, path_system.c"
+rewind,Unknown,config_manager.c
+scene,Unknown,ray_tracing2 copy.c
+settings,Unknown,"animation.h, animation copy.c, animation.c"
+sin,Unknown,"object_manager.c, ray_tracing2.c, ray_tracing.c, object_editor.c, ray_tracing2 copy.c"
+sizeof,Unknown,"config_manager.c, make_video.c, sdl_menu.c, ray_tracing2.c, ray_tracing.c, animation.c, object_editor.c"
+snprintf,Unknown,"sdl_menu.c, make_video.c, animation.c"
+sqrt,Unknown,"ray_tracing2.c, ray_tracing2 copy.c, ray_tracing.c"
+start,Unknown,config_manager.c
+stat,Unknown,"make_video.c, animation.c"
+states,Unknown,bezier_editor.h
+strcat,Unknown,sdl_menu.c
+strcmp,Unknown,"config_manager.c, object_manager.c, animation copy.c, ray_tracing2.c, animation.c, object_editor.c, render_helper.c"
+strcpy,Unknown,"object_manager.c, config_manager.c"
+strlen,Unknown,sdl_menu.c
+strncpy,Unknown,config_manager.c
+switch,Unknown,"sdl_menu.c, object_editor.c, bezier_editor.c, scene_editor.c"
+system,Unknown,make_video.c
+time,Unknown,animation copy.c
+update,Unknown,animation copy.c
+va_end,Unknown,sdl_menu.c
+va_start,Unknown,sdl_menu.c
+vertices,Unknown,object_manager.h
+vsnprintf,Unknown,sdl_menu.c
+waiting,Unknown,animation copy.c
+while,Unknown,"animation copy.c, sdl_menu.c, ray_tracing2.c, ray_tracing.c, scene_editor.c, animation.c, ray_tracing2 copy.c, render_helper.c"

@@ -1,0 +1,17 @@
+{
+  "interactiveMode":false,
+  "deepRenderMode":true,
+  "bounceMode":true,
+  "autoMP4":true,
+  "bounceLimit":10,
+  "frameLimit":3080,
+  "framesForTravel":1740,
+  "fps":30,
+  "frameDuration":0.033333333333333333,
+  "frameDir":"Animations\/default",
+  "maxLoopCount":2,
+  "loopMode":"stop",
+  "lightMode":1,
+  "blurMode":3,
+  "editorMode":2
+}

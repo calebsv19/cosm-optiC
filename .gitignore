@@ -1,0 +1,5 @@
+# ignore every file inside Animations/ (all sub-dirs, any type)
+Animations/**
+
+# ── OR ── only ignore .bmp frames but keep other assets
+# Animations/**/*.bmp
