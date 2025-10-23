@@ -2,7 +2,7 @@
   "interactiveMode":false,
   "deepRenderMode":true,
   "bounceMode":true,
-  "autoMP4":true,
+  "autoMP4":false,
   "bounceLimit":10,
   "frameLimit":3080,
   "framesForTravel":1740,

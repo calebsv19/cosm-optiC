@@ -1,31 +1,41 @@
-# Compiler settings
-CC = cc
-CFLAGS = -g -Wall -IBackend -IFrontend -I. -I../ $(shell sdl2-config --cflags) -I/usr/local/include
-CFLAGS += -DMAIN_DRIVER
-LDFLAGS = -lm $(shell sdl2-config --libs) -L/usr/local/lib -lSDL2 -lSDL2_ttf -ljson-c
+CC       := cc
+CSTD     := -std=c11
+SRC_DIR  := src
+INC_DIR  := include
+BUILD_DIR:= build
+TARGET   := Ray_anim
 
-# Source files
-SRC = $(wildcard Backend/*.c Frontend/*.c)
-OBJ = $(SRC:.c=.o)
+SDL_CFLAGS := $(shell sdl2-config --cflags)
+SDL_LIBS   := $(shell sdl2-config --libs)
 
-# Output executable
-TARGET = Ray_anim
+CFLAGS  := $(CSTD) -Wall -Wextra -Wpedantic -g $(SDL_CFLAGS) -I$(INC_DIR) -DMAIN_DRIVER
+LDFLAGS := $(SDL_LIBS) -lSDL2_ttf -ljson-c -lm
 
-# Default rule: Compile everything
+SRC := $(shell find $(SRC_DIR) -name '*.c')
+OBJ := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRC))
+DEP := $(OBJ:.o=.d)
+
+.PHONY: all clean run debug format
+
 all: $(TARGET)
 
-# Compile the final executable from object files
 $(TARGET): $(OBJ)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(OBJ) -o $@ $(LDFLAGS)
 
-# Compile each `.o` file only if the corresponding `.c` file changed
-Backend/%.o: Backend/%.c
-	$(CC) $(CFLAGS) -c -o $@ $<
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
-Frontend/%.o: Frontend/%.c
-	$(CC) $(CFLAGS) -c -o $@ $<
+run: $(TARGET)
+	./$(TARGET)
 
-# Cleanup rule
+debug: CFLAGS += -O0 -g3
+debug: clean all
+
+format:
+	@command -v clang-format >/dev/null 2>&1 && clang-format -i $(SRC) $(shell find $(INC_DIR) -name '*.h') || echo "clang-format not found"
+
 clean:
-	rm -f $(TARGET) $(OBJ)
+	rm -rf $(BUILD_DIR) $(TARGET)
 
+-include $(DEP)

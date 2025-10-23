@@ -1,0 +1,12 @@
+# src
+
+All application sources organised by responsibility. Each subdirectory has a matching header namespace under `include/`.
+
+- `app/` – Entry point and runtime loop (`app/README.md`).
+- `ui/` – SDL menu displayed before launching the renderer (`ui/README.md`).
+- `editor/` – Scene-editing tools for objects, Bézier paths, and (future) camera controls (`editor/README.md`).
+- `render/` – Ray-tracer implementation and shared rendering helpers (`render/README.md`).
+- `scene/` – Scene object management utilities (`scene/README.md`).
+- `path/` – Bézier path math powering scripted light motion (`path/README.md`).
+- `config/` – JSON loading/saving of animation and scene settings (`config/README.md`).
+- `tools/` – Auxiliary modules such as FFmpeg integration (`tools/README.md`).

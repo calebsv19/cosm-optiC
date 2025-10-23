@@ -1,5 +1,14 @@
-# ignore every file inside Animations/ (all sub-dirs, any type)
-Animations/**
+# Ignore build artifacts
+build/
+
+# Ignore rendered video outputs
+*.mp4
+
+# Optional: temporary files and OS-specific junk
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
 
 # ── OR ── only ignore .bmp frames but keep other assets
-# Animations/**/*.bmp
+Animations/**/*.bmp
