@@ -3,6 +3,15 @@
 #include <string.h>
 #include <math.h>
 
+static void InitDefaultMaterial(SceneObject* obj) {
+    obj->texture[0] = '\0';
+    obj->color = 0xFFFFFF;
+    obj->opacity = 1.0;
+    obj->reflectivity = 0.35;
+    obj->roughness = 0.65;
+    obj->textureId = 0;
+}
+
 void InitObject(SceneObject* obj, int type, double x, double y, double param1, double param2, double points[][2], int numPoints) {
     (void)param2;
     obj->x = x;
@@ -10,6 +19,7 @@ void InitObject(SceneObject* obj, int type, double x, double y, double param1, d
     obj->scale = 1.0;
     obj->rotation = 0.0;
     obj->dirty = true;
+    InitDefaultMaterial(obj);
 
     if (type == OBJECT_CIRCLE) {
         // Circle creation: param1 = radius

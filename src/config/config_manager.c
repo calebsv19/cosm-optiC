@@ -4,6 +4,7 @@
 #include <stdlib.h>      // For memory allocation (malloc, free)
 #include <string.h>      // For string functions (strncpy)
 #include <json-c/json.h> // For JSON handling
+#include <math.h>
 
 #define SCENE_CONFIG_FILE "Configs/scene_config.json"
 #define ANIMATION_CONFIG_FILE "Configs/animation_config.json"
@@ -29,6 +30,10 @@ AnimationConfig animSettings = {
     .frameDir = "Animations/default",
     .loopMode = "Normal",
     .lightMode = 0,
+    .blurMode = 0,
+    .lightDiffusionEnabled = true,
+    .lightDiffusionRadius = 4,
+    .lightDiffusionStrength = 0.65,
     .editorMode = 0
 };
 
@@ -37,7 +42,9 @@ SceneConfig sceneSettings = {
     .windowHeight = 800,
     .objectCount = 0,  // No objects initially
     .bezierPath = { .numPoints = 0, .mode = BEZIER_CUBIC },
-    .rays = 2000
+    .rays = 2000,
+    .camera = { .x = 0.0, .y = 0.0, .zoom = 1.0 },
+    .cameraMargin = 80.0
 };
 
 void SaveAllSettings(void) {
@@ -65,6 +72,13 @@ void SaveSceneConfig(void) {
     json_object_object_add(window, "height", json_object_new_int(sceneSettings.windowHeight));
     json_object_object_add(config, "window", window);
 
+    struct json_object* camera = json_object_new_object();
+    json_object_object_add(camera, "x", json_object_new_double(sceneSettings.camera.x));
+    json_object_object_add(camera, "y", json_object_new_double(sceneSettings.camera.y));
+    json_object_object_add(camera, "zoom", json_object_new_double(sceneSettings.camera.zoom));
+    json_object_object_add(camera, "margin", json_object_new_double(sceneSettings.cameraMargin));
+    json_object_object_add(config, "camera", camera);
+
     // Save number of rays
     json_object_object_add(config, "rays", json_object_new_int(sceneSettings.rays));
 
@@ -85,6 +99,9 @@ void SaveSceneConfig(void) {
         json_object_object_add(jsonObj, "texture", json_object_new_string(obj->texture));
         json_object_object_add(jsonObj, "color", json_object_new_int(obj->color));
         json_object_object_add(jsonObj, "opacity", json_object_new_double(obj->opacity));
+        json_object_object_add(jsonObj, "reflectivity", json_object_new_double(obj->reflectivity));
+        json_object_object_add(jsonObj, "roughness", json_object_new_double(obj->roughness));
+        json_object_object_add(jsonObj, "textureId", json_object_new_int(obj->textureId));
 
         if (strcmp(obj->type, "circle") == 0) {
             json_object_object_add(jsonObj, "radius", json_object_new_double(obj->radius));
@@ -184,6 +201,9 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "loopMode", json_object_new_string(animSettings.loopMode));
     json_object_object_add(config, "lightMode", json_object_new_int(animSettings.lightMode));
     json_object_object_add(config, "blurMode", json_object_new_int(animSettings.blurMode));
+    json_object_object_add(config, "lightDiffusionEnabled", json_object_new_boolean(animSettings.lightDiffusionEnabled));
+    json_object_object_add(config, "lightDiffusionRadius", json_object_new_int(animSettings.lightDiffusionRadius));
+    json_object_object_add(config, "lightDiffusionStrength", json_object_new_double(animSettings.lightDiffusionStrength));
     json_object_object_add(config, "editorMode", json_object_new_int(animSettings.editorMode));
     fprintf(file, "%s", json_object_to_json_string_ext(config, JSON_C_TO_STRING_PRETTY));
     fclose(file);
@@ -207,8 +227,57 @@ void LoadWindowConfig(struct json_object* config) {
     }
 }
 
+static void LoadCameraConfig(struct json_object* config) {
+    struct json_object *cameraObj;
+    double defaultX = sceneSettings.windowWidth * 0.5;
+    double defaultY = sceneSettings.windowHeight * 0.5;
+    double defaultZoom = 1.0;
+    double maxMargin = fmin(sceneSettings.windowWidth, sceneSettings.windowHeight) * 0.45;
+    if (maxMargin < 1.0) maxMargin = 1.0;
+    double defaultMargin = fmin(sceneSettings.cameraMargin, maxMargin);
+
+    if (json_object_object_get_ex(config, "camera", &cameraObj)) {
+        struct json_object *xObj, *yObj, *zoomObj;
+        if (json_object_object_get_ex(cameraObj, "x", &xObj)) {
+            sceneSettings.camera.x = json_object_get_double(xObj);
+        } else {
+            sceneSettings.camera.x = defaultX;
+        }
+
+        if (json_object_object_get_ex(cameraObj, "y", &yObj)) {
+            sceneSettings.camera.y = json_object_get_double(yObj);
+        } else {
+            sceneSettings.camera.y = defaultY;
+        }
+
+        if (json_object_object_get_ex(cameraObj, "zoom", &zoomObj)) {
+            double zoom = json_object_get_double(zoomObj);
+            sceneSettings.camera.zoom = (zoom > 0.0) ? zoom : defaultZoom;
+        } else {
+            sceneSettings.camera.zoom = defaultZoom;
+        }
+
+        struct json_object *marginObj;
+        if (json_object_object_get_ex(cameraObj, "margin", &marginObj)) {
+            sceneSettings.cameraMargin = json_object_get_double(marginObj);
+        } else {
+            sceneSettings.cameraMargin = defaultMargin;
+        }
+    } else {
+        sceneSettings.camera.x = defaultX;
+        sceneSettings.camera.y = defaultY;
+        sceneSettings.camera.zoom = defaultZoom;
+        sceneSettings.cameraMargin = defaultMargin;
+    }
+
+    if (sceneSettings.cameraMargin < 0.0) sceneSettings.cameraMargin = 0.0;
+    double maxAllowed = fmin(sceneSettings.windowWidth, sceneSettings.windowHeight) * 0.45;
+    if (maxAllowed < 1.0) maxAllowed = 1.0;
+    if (sceneSettings.cameraMargin > maxAllowed) sceneSettings.cameraMargin = maxAllowed;
+}
+
 void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
-    struct json_object *texture, *color, *opacity;
+    struct json_object *texture, *color, *opacity, *reflectivity, *roughness, *textureId;
 
     // Load texture path
     if (json_object_object_get_ex(obj, "texture", &texture)) {
@@ -230,6 +299,24 @@ void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
         sceneObject->opacity = json_object_get_double(opacity);
     } else {
         sceneObject->opacity = 1.0; // Default: Fully opaque
+    }
+
+    if (json_object_object_get_ex(obj, "reflectivity", &reflectivity)) {
+        sceneObject->reflectivity = json_object_get_double(reflectivity);
+    } else {
+        sceneObject->reflectivity = 0.35;
+    }
+
+    if (json_object_object_get_ex(obj, "roughness", &roughness)) {
+        sceneObject->roughness = json_object_get_double(roughness);
+    } else {
+        sceneObject->roughness = 0.65;
+    }
+
+    if (json_object_object_get_ex(obj, "textureId", &textureId)) {
+        sceneObject->textureId = json_object_get_int(textureId);
+    } else {
+        sceneObject->textureId = 0;
     }
 }
 
@@ -441,6 +528,7 @@ void LoadSceneConfig(void) {
     }
     printf("In load scene config hold method for  anaimation.c\n");
     LoadWindowConfig(config);
+    LoadCameraConfig(config);
     LoadSceneObjects(config);
     LoadBezierPath(config);  
 
@@ -529,6 +617,12 @@ void LoadAnimationConfig(void) {
         animSettings.lightMode = json_object_get_int(temp);
     if (json_object_object_get_ex(config, "blurMode", &temp))
         animSettings.blurMode = json_object_get_int(temp); 
+    if (json_object_object_get_ex(config, "lightDiffusionEnabled", &temp))
+        animSettings.lightDiffusionEnabled = json_object_get_boolean(temp);
+    if (json_object_object_get_ex(config, "lightDiffusionRadius", &temp))
+        animSettings.lightDiffusionRadius = json_object_get_int(temp);
+    if (json_object_object_get_ex(config, "lightDiffusionStrength", &temp))
+        animSettings.lightDiffusionStrength = json_object_get_double(temp);
     if (json_object_object_get_ex(config, "editorMode", &temp))
         animSettings.editorMode = json_object_get_int(temp); 
 	

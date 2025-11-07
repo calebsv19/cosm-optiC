@@ -23,11 +23,14 @@ SDL_Rect toggleButton;
 
 
 bool sceneEditorExitFlag = false;  //  Used to signal Scene Editor should exit
+static void InitializeEditorMode(SceneEditor* editor);
 
 void InitializeSceneEditor(SceneEditor* editor) {
     //  Load all scene configurations (window size, objects, paths)
-    LoadSceneConfig();  
-    editor->currentMode = animSettings.editorMode;
+    LoadSceneConfig();
+    if (animSettings.editorMode < 0)
+        animSettings.editorMode = 0;
+    editor->currentMode = animSettings.editorMode % 3;
 
     //  Create the window using stored scene settings
     editor->window = SDL_CreateWindow("Scene Editor", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
@@ -64,18 +67,7 @@ void InitializeSceneEditor(SceneEditor* editor) {
     applyButton = (SDL_Rect){width - 180, height - 80, 150, 50};  // Bottom-right apply button
     changeModeButton = (SDL_Rect){width - 160, height - 135, 130, 40};  
 
-    //  Render the active editor mode
-    switch (editor->currentMode) {
-            case 0:
-                InitializeBezierEditor();
-                break;
-            case 1:
-                InitializeObjectEditor();
-                break;
-            case 2:
-                RenderCameraEditor(editor->renderer);
-                break;
-    }
+    InitializeEditorMode(editor);
 
 
     UpdateObjects();
@@ -142,11 +134,23 @@ void SceneEditorLoop(SceneEditor* editor) {
 
 
 void HandleSceneEditorEvents(SceneEditor* editor, SDL_Event* event) {
-    if (event->type == SDL_QUIT) {
+    if (event->type == SDL_QUIT ||
+        (event->type == SDL_WINDOWEVENT && event->window.event == SDL_WINDOWEVENT_CLOSE)) {
         printf("Received SDL_QUIT event. Closing Scene Editor.\n");
         editor->running = false;
         sceneEditorExitFlag = true;
         return;  // ✅ Exit immediately instead of calling object editor events
+    }
+    if (event->type == SDL_KEYDOWN && event->key.keysym.sym == SDLK_TAB) {
+        if ((event->key.keysym.mod & KMOD_SHIFT) != 0) {
+            editor->currentMode = (editor->currentMode == 0) ? 2 : editor->currentMode - 1;
+        } else {
+            editor->currentMode = (editor->currentMode + 1) % 3;
+        }
+        animSettings.editorMode = editor->currentMode;
+        InitializeEditorMode(editor);
+        printf("Changed Mode to %d via TAB\n", editor->currentMode);
+        return;
     }
     if (event->type == SDL_MOUSEBUTTONDOWN) {
         int mx = event->button.x;
@@ -155,7 +159,9 @@ void HandleSceneEditorEvents(SceneEditor* editor, SDL_Event* event) {
         // Check if clicking on Change Mode Button
         if (mx >= changeModeButton.x && mx <= changeModeButton.x + changeModeButton.w &&
             my >= changeModeButton.y && my <= changeModeButton.y + changeModeButton.h) {
-            editor->currentMode = (editor->currentMode + 1) % 2;  // Cycle through modes
+            editor->currentMode = (editor->currentMode + 1) % 3;  // Cycle through modes
+            animSettings.editorMode = editor->currentMode;
+            InitializeEditorMode(editor);
 	    SaveAllSettings();
 	    LoadAllSettings();
             printf("Changed Mode to %d\n", editor->currentMode);
@@ -212,6 +218,8 @@ bool IsClickingButtonMain(int mx, int my) {
 
 void ToggleSceneMode(SceneEditor* editor) {
     editor->currentMode = (editor->currentMode + 1) % 3;
+    animSettings.editorMode = editor->currentMode;
+    InitializeEditorMode(editor);
     printf("Switched to mode: %d\n", editor->currentMode);
 }
 
@@ -219,12 +227,16 @@ void ToggleSceneMode(SceneEditor* editor) {
 void SetSceneMode(SceneEditor* editor, int mode) {
     if (mode >= 0 && mode <= 2) {
         editor->currentMode = mode;
+        animSettings.editorMode = editor->currentMode;
+        InitializeEditorMode(editor);
     }
 }
 
 void ResetSceneEditor(SceneEditor* editor) {
     LoadSceneConfig();  // Reload all scene settings
     editor->currentMode = 0;  // Default to Bezier Editor Mode
+    animSettings.editorMode = 0;
+    InitializeEditorMode(editor);
     printf("Scene Editor reset to default settings.\n");
 }
 
@@ -241,3 +253,18 @@ void DestroySceneEditor(SceneEditor* editor) {
     printf("Scene Editor Closed. Returning to main menu...\n");
 }
 
+static void InitializeEditorMode(SceneEditor* editor) {
+    switch (editor->currentMode) {
+        case 0:
+            InitializeBezierEditor();
+            break;
+        case 1:
+            InitializeObjectEditor();
+            break;
+        case 2:
+            InitializeCameraEditor();
+            break;
+        default:
+            break;
+    }
+}

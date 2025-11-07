@@ -6,6 +6,7 @@ Public headers mirroring the `src/` hierarchy. Include them using their director
 - `ui/` – Menu APIs (`sdl_menu.h`).
 - `editor/` – Scene/object/Bézier editor contracts.
 - `render/` – Ray-tracing and rendering helpers.
+- `camera/` – Camera struct and world/screen conversion helpers.
 - `scene/` – Scene-object structures and utilities.
 - `path/` – Bézier path types and helpers.
 - `config/` – Animation/scene configuration structs.

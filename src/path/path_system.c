@@ -1,12 +1,12 @@
 
 #include "path/path_system.h"
+#include "config/config_manager.h"
+#include "camera/camera.h"
 #include <math.h>
 #include <stdio.h>
 #include <SDL2/SDL.h>
 
 const int basic = 0;
-
-#include <math.h>  // Needed for exp()
 
 static double ScaleHandle(double value) {
     const double c = 1.0 / 30.0;  // Growth factor
@@ -94,7 +94,19 @@ void ToggleBezierMode(Path* path) {
 }  
 
 
-void RenderBezierPath(SDL_Renderer* renderer, Path* path, bool drawHandles) {
+static SDL_Point ToCameraPoint(double x, double y, const Camera* camera) {
+    if (!camera) {
+        return (SDL_Point){(int)lround(x), (int)lround(y)};
+    }
+    CameraPoint mapped = CameraWorldToScreen(camera,
+                                             x,
+                                             y,
+                                             sceneSettings.windowWidth,
+                                             sceneSettings.windowHeight);
+    return (SDL_Point){(int)lround(mapped.x), (int)lround(mapped.y)};
+}
+
+void RenderBezierPathCamera(SDL_Renderer* renderer, Path* path, bool drawHandles, const Camera* camera) {
     if (!path || path->numPoints < 2) return;
 
     // **Draw Bézier curve as dashed line**
@@ -105,14 +117,16 @@ void RenderBezierPath(SDL_Renderer* renderer, Path* path, bool drawHandles) {
         int dashCounter = 0;
         bool drawDash = true;
         
-        Point prevPoint = GetPositionAlongPath(path, (double)i / (path->numPoints - 1)); // ✅ Get first curve point
+        Point prevWorld = GetPositionAlongPath(path, (double)i / (path->numPoints - 1)); // ✅ Get first curve point
+        SDL_Point prevPoint = ToCameraPoint(prevWorld.x, prevWorld.y, camera);
 
         for (double t = 0.01; t < 1.0; t += 0.01) {  // ✅ Start at t = 0.01 to avoid extra lines
-            Point curve_point = GetPositionAlongPath(path, (i + t) / (path->numPoints - 1));
+            Point curveWorld = GetPositionAlongPath(path, (i + t) / (path->numPoints - 1));
+            SDL_Point curve_point = ToCameraPoint(curveWorld.x, curveWorld.y, camera);
 
             if (drawDash) {
-                SDL_RenderDrawLine(renderer, (int)prevPoint.x, (int)prevPoint.y,
-                                   (int)curve_point.x, (int)curve_point.y);
+                SDL_RenderDrawLine(renderer, prevPoint.x, prevPoint.y,
+                                   curve_point.x, curve_point.y);
             }
             prevPoint = curve_point;
             dashCounter++;
@@ -127,24 +141,30 @@ void RenderBezierPath(SDL_Renderer* renderer, Path* path, bool drawHandles) {
     if (drawHandles) {
         SDL_SetRenderDrawColor(renderer, 255, 165, 0, 255); // Orange for handle points
         for (int i = 0; i < path->numPoints - 1; i++) {
-            Point handle1 = {path->points[i].x + path->handles[i][0].vx, path->points[i].y + path->handles[i][0].vy};
-            Point handle2 = {path->points[i + 1].x + path->handles[i][1].vx, path->points[i + 1].y + path->handles[i][1].vy};
+            Point handle1w = {path->points[i].x + path->handles[i][0].vx, path->points[i].y + path->handles[i][0].vy};
+            Point handle2w = {path->points[i + 1].x + path->handles[i][1].vx, path->points[i + 1].y + path->handles[i][1].vy};
 
-            SDL_RenderDrawLine(renderer, path->points[i].x, path->points[i].y, handle1.x, handle1.y);
-            SDL_RenderDrawLine(renderer, path->points[i + 1].x, path->points[i + 1].y, handle2.x, handle2.y);
+            SDL_Point start1 = ToCameraPoint(path->points[i].x, path->points[i].y, camera);
+            SDL_Point start2 = ToCameraPoint(path->points[i + 1].x, path->points[i + 1].y, camera);
+            SDL_Point handle1 = ToCameraPoint(handle1w.x, handle1w.y, camera);
+            SDL_Point handle2 = ToCameraPoint(handle2w.x, handle2w.y, camera);
 
-            SDL_RenderDrawPoint(renderer, (int)handle1.x, (int)handle1.y);
-            SDL_RenderDrawPoint(renderer, (int)handle2.x, (int)handle2.y);
+            SDL_RenderDrawLine(renderer, start1.x, start1.y, handle1.x, handle1.y);
+            SDL_RenderDrawLine(renderer, start2.x, start2.y, handle2.x, handle2.y);
+
+            SDL_RenderDrawPoint(renderer, handle1.x, handle1.y);
+            SDL_RenderDrawPoint(renderer, handle2.x, handle2.y);
         }
     }
 
     // **Draw control points as circles**
     SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255); // Red for control points
     for (int i = 0; i < path->numPoints; i++) {
+        SDL_Point center = ToCameraPoint(path->points[i].x, path->points[i].y, camera);
         for (int dx = -POINT_RADIUS; dx <= POINT_RADIUS; dx++) {
             for (int dy = -POINT_RADIUS; dy <= POINT_RADIUS; dy++) {
                 if (dx * dx + dy * dy <= POINT_RADIUS * POINT_RADIUS) {
-                    SDL_RenderDrawPoint(renderer, path->points[i].x + dx, path->points[i].y + dy);
+                    SDL_RenderDrawPoint(renderer, center.x + dx, center.y + dy);
                 }
             }
         }
@@ -154,8 +174,10 @@ void RenderBezierPath(SDL_Renderer* renderer, Path* path, bool drawHandles) {
     if (drawHandles) {
         SDL_SetRenderDrawColor(renderer, 255, 165, 0, 255); // Orange for handle points
         for (int i = 0; i < path->numPoints - 1; i++) {
-            Point handle1 = {path->points[i].x + path->handles[i][0].vx, path->points[i].y + path->handles[i][0].vy};
-            Point handle2 = {path->points[i + 1].x + path->handles[i][1].vx, path->points[i + 1].y + path->handles[i][1].vy};
+            Point handle1w = {path->points[i].x + path->handles[i][0].vx, path->points[i].y + path->handles[i][0].vy};
+            Point handle2w = {path->points[i + 1].x + path->handles[i][1].vx, path->points[i + 1].y + path->handles[i][1].vy};
+            SDL_Point handle1 = ToCameraPoint(handle1w.x, handle1w.y, camera);
+            SDL_Point handle2 = ToCameraPoint(handle2w.x, handle2w.y, camera);
 
             for (int dx = -POINT_RADIUS; dx <= POINT_RADIUS; dx++) {
                 for (int dy = -POINT_RADIUS; dy <= POINT_RADIUS; dy++) {
@@ -169,3 +191,6 @@ void RenderBezierPath(SDL_Renderer* renderer, Path* path, bool drawHandles) {
     }
 }
 
+void RenderBezierPath(SDL_Renderer* renderer, Path* path, bool drawHandles) {
+    RenderBezierPathCamera(renderer, path, drawHandles, NULL);
+}

@@ -1,5 +1,6 @@
 #include "render/render_helper.h"
 #include "config/config_manager.h"
+#include "camera/camera.h"
 #include <SDL2/SDL.h>
 #include <math.h>
 #include <stdbool.h>
@@ -25,17 +26,37 @@ int CalculateObjectBrightness(SceneObject* obj, double lightX, double lightY) {
 }
 
 
+static CameraPoint ToScreen(double worldX, double worldY) {
+    return CameraWorldToScreen(&sceneSettings.camera,
+                               worldX,
+                               worldY,
+                               sceneSettings.windowWidth,
+                               sceneSettings.windowHeight);
+}
+
+static void BuildScreenShapePoints(SceneObject* obj, int screenPoints[MAX_POINTS][2]) {
+    for (int i = 0; i < obj->numPoints; i++) {
+        double worldX = obj->x + obj->shapePoints[i][0];
+        double worldY = obj->y + obj->shapePoints[i][1];
+        CameraPoint screen = ToScreen(worldX, worldY);
+        screenPoints[i][0] = (int)lround(screen.x);
+        screenPoints[i][1] = (int)lround(screen.y);
+    }
+}
+
 void RenderFillShape(SDL_Renderer* renderer, SceneObject* obj) {
-		
     if (obj->numPoints < 3) {
         return;
     }
 
-    int minY = obj->y + obj->shapePoints[0][1];
-    int maxY = minY;
+    int screenPoints[MAX_POINTS][2];
+    BuildScreenShapePoints(obj, screenPoints);
+
+    int minY = screenPoints[0][1];
+    int maxY = screenPoints[0][1];
 
     for (int i = 1; i < obj->numPoints; i++) {
-        int y = obj->y + obj->shapePoints[i][1];
+        int y = screenPoints[i][1];
         if (y < minY) minY = y;
         if (y > maxY) maxY = y;
     }
@@ -51,10 +72,10 @@ void RenderFillShape(SDL_Renderer* renderer, SceneObject* obj) {
 
         for (int i = 0; i < obj->numPoints; i++) {
             int nextIndex = (i + 1) % obj->numPoints;
-            int x1 = obj->x + obj->shapePoints[i][0]; 
-            int y1 = obj->y + obj->shapePoints[i][1]; 
-            int x2 = obj->x + obj->shapePoints[nextIndex][0];
-            int y2 = obj->y + obj->shapePoints[nextIndex][1];
+            int x1 = screenPoints[i][0]; 
+            int y1 = screenPoints[i][1]; 
+            int x2 = screenPoints[nextIndex][0];
+            int y2 = screenPoints[nextIndex][1];
 
             if ((y1 < y && y2 >= y) || (y2 < y && y1 >= y)) {
                 float t = (float)(y - y1) / (float)(y2 - y1);
@@ -146,15 +167,18 @@ void RenderFillCircle(SDL_Renderer* renderer, int x, int y, int radius) {
 
 void RenderDrawShape(SDL_Renderer* renderer, SceneObject* obj) {
     if (strcmp(obj->type, "circle") == 0) {
-        RenderDrawCircle(renderer, obj->x, obj->y, obj->radius* obj->scale);
+        CameraPoint center = ToScreen(obj->x, obj->y);
+        int radius = (int)lround(obj->radius * obj->scale * sceneSettings.camera.zoom);
+        RenderDrawCircle(renderer, (int)lround(center.x), (int)lround(center.y), radius);
     } else if (obj->numPoints > 1) {
-        // ✅ Draw shape outline by connecting points
+        int screenPoints[MAX_POINTS][2];
+        BuildScreenShapePoints(obj, screenPoints);
         for (int i = 0; i < obj->numPoints; i++) {
             int nextIndex = (i + 1) % obj->numPoints;
-            int x1 = obj->x + obj->shapePoints[i][0];
-            int y1 = obj->y + obj->shapePoints[i][1];
-            int x2 = obj->x + obj->shapePoints[nextIndex][0];
-            int y2 = obj->y + obj->shapePoints[nextIndex][1];
+            int x1 = screenPoints[i][0];
+            int y1 = screenPoints[i][1];
+            int x2 = screenPoints[nextIndex][0];
+            int y2 = screenPoints[nextIndex][1];
 
             SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
         }
@@ -170,15 +194,9 @@ void RenderStaticScene(SDL_Renderer* renderer) {
     RenderSceneObjects(renderer, true);    
 }
 
-void RenderButtonText(SDL_Renderer* renderer, SDL_Rect button, const char* text) {
-    SDL_Color textColor = {0, 0, 0, 255};  // Black text
-
-    // Dynamically calculate font size based on button width and text length
-    int maxFontSize = 24;  // Default max font size
+static void RenderTextWithColor(SDL_Renderer* renderer, SDL_Rect button, const char* text, SDL_Color textColor, int maxFontSize) {
     int minFontSize = 10;  // Minimum readable font size
-    // int textLength = strlen(text);
 
-    // Adjust font size so the text fits within the button width
     int fontSize = maxFontSize;
     while (fontSize > minFontSize) {
         TTF_Font* tempFont = TTF_OpenFont("/System/Library/Fonts/Supplemental/Arial.ttf", fontSize);
@@ -195,26 +213,32 @@ void RenderButtonText(SDL_Renderer* renderer, SDL_Rect button, const char* text)
         fontSize--;
     }
 
-    // Load font with calculated size
     TTF_Font* font = TTF_OpenFont("/System/Library/Fonts/Supplemental/Arial.ttf", fontSize);
     if (!font) return;
 
-    // Render text surface
     SDL_Surface* textSurface = TTF_RenderText_Solid(font, text, textColor);
     SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
     
     SDL_Rect textRect = {
-        button.x + (button.w - textSurface->w) / 2,  // Center horizontally
-        button.y + (button.h - textSurface->h) / 2,  // Center vertically
+        button.x + (button.w - textSurface->w) / 2,
+        button.y + (button.h - textSurface->h) / 2,
         textSurface->w, textSurface->h
     };
 
     SDL_RenderCopy(renderer, textTexture, NULL, &textRect);
 
-    // Cleanup
     SDL_FreeSurface(textSurface);
     SDL_DestroyTexture(textTexture);
     TTF_CloseFont(font);
+}
+
+void RenderButtonText(SDL_Renderer* renderer, SDL_Rect button, const char* text) {
+    SDL_Color textColor = {0, 0, 0, 255};  // Black text
+    RenderTextWithColor(renderer, button, text, textColor, 24);
+}
+
+void RenderLabelText(SDL_Renderer* renderer, SDL_Rect area, const char* text, SDL_Color color) {
+    RenderTextWithColor(renderer, area, text, color, 22);
 }
                 
 
@@ -222,7 +246,9 @@ void RenderSceneObject(SDL_Renderer* renderer, SceneObject* obj, bool fillObject
 
 
     if (strcmp(obj->type, "circle") == 0) {
-        RenderCircle(renderer, obj->x, obj->y, obj->radius * obj->scale, fillObjects);
+        CameraPoint center = ToScreen(obj->x, obj->y);
+        int radius = (int)lround(obj->radius * obj->scale * sceneSettings.camera.zoom);
+        RenderCircle(renderer, (int)lround(center.x), (int)lround(center.y), radius, fillObjects);
     } else {
         RenderShape(renderer, obj, fillObjects);
     }
@@ -233,7 +259,9 @@ void RenderSceneObjects(SDL_Renderer* renderer, bool fillObjects) {
         SceneObject* obj = &sceneSettings.sceneObjects[i];
 
         if (strcmp(obj->type, "circle") == 0) {
-            RenderCircle(renderer, obj->x, obj->y, obj->radius * obj->scale, fillObjects);
+            CameraPoint center = ToScreen(obj->x, obj->y);
+            int radius = (int)lround(obj->radius * obj->scale * sceneSettings.camera.zoom);
+            RenderCircle(renderer, (int)lround(center.x), (int)lround(center.y), radius, fillObjects);
         } else {
             RenderShape(renderer, obj, fillObjects);
         }

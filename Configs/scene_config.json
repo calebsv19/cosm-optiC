@@ -3,28 +3,40 @@
     "width":1200,
     "height":800
   },
+  "camera":{
+    "x":603.49059829399698,
+    "y":436.03355247040065,
+    "zoom":0.88549178852525523,
+    "margin":96.0
+  },
   "rays":3040,
   "objects":[
     {
       "type":"circle",
-      "x":374.0,
-      "y":393.0,
+      "x":239.0,
+      "y":343.0,
       "scale":1.96468827043885,
       "rotation":2.8842689386187046,
       "texture":"",
       "color":16777215,
       "opacity":1.0,
+      "reflectivity":0.34999999999999998,
+      "roughness":0.65000000000000002,
+      "textureId":0,
       "radius":50.0
     },
     {
       "type":"circle",
-      "x":532.0,
-      "y":497.0,
-      "scale":0.88644107405838191,
-      "rotation":-0.76412477737338713,
+      "x":474.0,
+      "y":362.0,
+      "scale":1.2267391282945568,
+      "rotation":-0.6543702459705546,
       "texture":"",
       "color":16777215,
       "opacity":1.0,
+      "reflectivity":0.34999999999999998,
+      "roughness":0.65000000000000002,
+      "textureId":0,
       "radius":75.0
     },
     {
@@ -36,6 +48,9 @@
       "texture":"",
       "color":0,
       "opacity":0.0,
+      "reflectivity":0.34999999999999998,
+      "roughness":0.65000000000000002,
+      "textureId":0,
       "numPoints":4,
       "baseShapePoints":[
         {
@@ -58,13 +73,16 @@
     },
     {
       "type":"polygon",
-      "x":612.0,
-      "y":667.0,
+      "x":556.0,
+      "y":615.0,
       "scale":3.3293843274695698,
       "rotation":2.9708574421145104,
       "texture":"",
       "color":0,
       "opacity":0.0,
+      "reflectivity":0.34999999999999998,
+      "roughness":0.65000000000000002,
+      "textureId":0,
       "numPoints":4,
       "baseShapePoints":[
         {
@@ -87,13 +105,16 @@
     },
     {
       "type":"polygon",
-      "x":136.0,
-      "y":659.0,
-      "scale":2.2953866776645717,
-      "rotation":0.39194752546851269,
+      "x":921.0,
+      "y":190.0,
+      "scale":2.1021893349553458,
+      "rotation":1.155304230854006,
       "texture":"",
       "color":0,
       "opacity":0.0,
+      "reflectivity":0.34999999999999998,
+      "roughness":0.65000000000000002,
+      "textureId":0,
       "numPoints":4,
       "baseShapePoints":[
         {
@@ -116,42 +137,16 @@
     },
     {
       "type":"polygon",
-      "x":925.0,
-      "y":177.0,
-      "scale":1.6104657711357915,
-      "rotation":1.0364008500404829,
-      "texture":"",
-      "color":0,
-      "opacity":0.0,
-      "numPoints":4,
-      "baseShapePoints":[
-        {
-          "x":-25.0,
-          "y":-25.0
-        },
-        {
-          "x":25.0,
-          "y":-25.0
-        },
-        {
-          "x":25.0,
-          "y":25.0
-        },
-        {
-          "x":-25.0,
-          "y":25.0
-        }
-      ]
-    },
-    {
-      "type":"polygon",
-      "x":900.0,
-      "y":327.0,
+      "x":891.0,
+      "y":285.0,
       "scale":3.0463092423455631,
       "rotation":-0.5467888408892474,
       "texture":"",
       "color":0,
       "opacity":0.0,
+      "reflectivity":0.34999999999999998,
+      "roughness":0.65000000000000002,
+      "textureId":0,
       "numPoints":4,
       "baseShapePoints":[
         {
@@ -174,36 +169,77 @@
     },
     {
       "type":"circle",
-      "x":369.0,
-      "y":130.0,
+      "x":299.0,
+      "y":141.0,
       "scale":1.3206059215375341,
       "rotation":-0.030293759918775101,
       "texture":"",
       "color":0,
       "opacity":0.0,
+      "reflectivity":0.34999999999999998,
+      "roughness":0.65000000000000002,
+      "textureId":0,
       "radius":25.0
     },
     {
       "type":"circle",
-      "x":570.0,
-      "y":198.0,
+      "x":506.0,
+      "y":225.0,
       "scale":1.9440164608356587,
       "rotation":-0.93141042110872374,
       "texture":"",
       "color":0,
       "opacity":0.0,
+      "reflectivity":0.34999999999999998,
+      "roughness":0.65000000000000002,
+      "textureId":0,
       "radius":25.0
     },
     {
       "type":"circle",
-      "x":802.0,
-      "y":546.0,
-      "scale":3.269740050829729,
-      "rotation":-1.7057730766488199,
+      "x":616.0,
+      "y":545.0,
+      "scale":3.8470768123342691,
+      "rotation":-1.1304003406045535,
       "texture":"",
       "color":0,
       "opacity":0.0,
+      "reflectivity":0.34999999999999998,
+      "roughness":0.65000000000000002,
+      "textureId":0,
       "radius":25.0
+    },
+    {
+      "type":"polygon",
+      "x":154.0,
+      "y":599.0,
+      "scale":2.0608736011701443,
+      "rotation":0.75628018189040946,
+      "texture":"",
+      "color":0,
+      "opacity":0.0,
+      "reflectivity":0.34999999999999998,
+      "roughness":0.65000000000000002,
+      "textureId":0,
+      "numPoints":4,
+      "baseShapePoints":[
+        {
+          "x":-25.0,
+          "y":-25.0
+        },
+        {
+          "x":25.0,
+          "y":-25.0
+        },
+        {
+          "x":25.0,
+          "y":25.0
+        },
+        {
+          "x":-25.0,
+          "y":25.0
+        }
+      ]
     }
   ],
   "path":{
@@ -218,20 +254,20 @@
         }
       },
       {
-        "x":699,
-        "y":312,
+        "x":694,
+        "y":386,
         "velocity1":{
-          "vx":-144,
-          "vy":175
+          "vx":-147,
+          "vy":145
         },
         "velocity2":{
-          "vx":145,
-          "vy":-170
+          "vx":131,
+          "vy":-131
         }
       },
       {
-        "x":974,
-        "y":74,
+        "x":971,
+        "y":60,
         "velocity1":{
           "vx":180,
           "vy":77
@@ -266,8 +302,8 @@
         }
       },
       {
-        "x":198,
-        "y":114,
+        "x":208,
+        "y":69,
         "velocity2":{
           "vx":-179,
           "vy":184

@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <SDL2/SDL.h>
 #include <stdbool.h>
+#include "camera/camera.h"
 
 #define MAX_BEZIER_POINTS 100  // Define max points
 #define POINT_RADIUS 10  // Define global radius for point detection
@@ -42,6 +43,7 @@ void DestroyPath(Path* path);
 
 // Bézier Debug Rendering
 void RenderBezierPath(SDL_Renderer* renderer, Path* path, bool drawHandles);
+void RenderBezierPathCamera(SDL_Renderer* renderer, Path* path, bool drawHandles, const Camera* camera);
 
 // Bézier Utility Functions
 int IsPointWithinRadius(Point a, Point b);
@@ -49,4 +51,3 @@ int IsPointWithinRadius(Point a, Point b);
 void ToggleBezierMode(Path* path);
 
 #endif // PATH_SYSTEM_H
-

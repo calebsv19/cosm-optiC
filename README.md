@@ -8,8 +8,9 @@ Experimental 2D ray-tracing sandbox built with SDL2. The project simulates light
   - `ui/` – Pre-launch SDL menu.
   - `editor/` – Scene, object, and Bézier path editors.
   - `render/` – Ray-tracing engine and rendering helpers.
+- `camera/` – View transform math shared by the renderer and all editors (consistent viewport + margin logic).
   - `scene/`, `path/`, `config/`, `tools/` – Supporting subsystems for geometry, Bézier paths, JSON config I/O, and FFmpeg integration.
-- `include/` – Public headers mirroring the `src/` hierarchy.
+- `include/` – Public headers mirroring the `src/` hierarchy (including the camera interface).
 - `Configs/` – JSON configuration files and bundled fonts.
 - `Animations/` – Frame dumps and rendered videos created by deep-render mode.
 - `Other files/` – Archived snapshots and debugging artefacts retained for reference.
@@ -20,6 +21,8 @@ Experimental 2D ray-tracing sandbox built with SDL2. The project simulates light
 - `make run` launches the executable.
 - `make debug` rebuilds with extra debug flags.
 - `make clean` removes the executable and build directory.
+
+The in-app Scene Editor exposes three modes (Bezier path, Object, Camera). Use the on-screen buttons or press `Tab` / `Shift+Tab` to cycle between them; every mode renders through the same camera and margin settings so edits line up with what the renderer will show.
 
 ## Tooling & Assets
 - `function_scanner.py` / `function_dependencies.csv` – Utility + report for mapping function definitions to call sites.

@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <json-c/json.h>
 #include "path/path_system.h"  // Ensure Bézier path handling is included
+#include "camera/camera.h"
 #include "scene/object_manager.h"
 
 #define MAX_SHAPE_POINTS 10  // Supports up to 10 points for custom shapes
@@ -24,6 +25,9 @@ typedef struct {
     char loopMode[64];
     int lightMode;
     int blurMode;
+    bool lightDiffusionEnabled;
+    int lightDiffusionRadius;
+    double lightDiffusionStrength;
     int editorMode;
 } AnimationConfig;
 
@@ -36,6 +40,8 @@ typedef struct {
     int objectCount;
     Path bezierPath;  // Stores the Bézier path
     int rays;
+    Camera camera;
+    double cameraMargin;
 } SceneConfig;
 
 // Global instances

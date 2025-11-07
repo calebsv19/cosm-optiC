@@ -38,6 +38,6 @@ void RemoveObject(int index);
 void SelectObject(int index);
 void DeselectObject(void);
 bool IsInsideHandle(SceneObject* obj, int mx, int my);
+bool CheckObjectClick(double mx, double my);
 
 #endif // OBJECT_EDITOR_H
-

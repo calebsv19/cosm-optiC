@@ -2,10 +2,10 @@
   "interactiveMode":false,
   "deepRenderMode":true,
   "bounceMode":true,
-  "autoMP4":false,
+  "autoMP4":true,
   "bounceLimit":10,
-  "frameLimit":3080,
-  "framesForTravel":1740,
+  "frameLimit":800,
+  "framesForTravel":400,
   "fps":30,
   "frameDuration":0.033333333333333333,
   "frameDir":"Animations\/default",
@@ -13,5 +13,8 @@
   "loopMode":"stop",
   "lightMode":1,
   "blurMode":3,
-  "editorMode":2
+  "lightDiffusionEnabled":true,
+  "lightDiffusionRadius":4,
+  "lightDiffusionStrength":0.65000000000000002,
+  "editorMode":0
 }

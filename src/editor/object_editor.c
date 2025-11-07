@@ -2,6 +2,7 @@
 #include "scene/object_manager.h"
 #include "config/config_manager.h"
 #include "editor/scene_editor.h"
+#include "camera/camera.h"
 #include <stdio.h>
 #include <math.h>
 
@@ -13,8 +14,8 @@ int width, height;
 static int selectedObjectIndex = -1;
 static int handleRadius = 5;
 static bool draggingRotationHandle = false;  // ✅ Tracks whether the handle is being moved
-static int lastMouseX = 0;
-static int lastMouseY = 0;
+static double lastWorldX = 0.0;
+static double lastWorldY = 0.0;
 static bool renderHandles = true;
 
 
@@ -38,6 +39,45 @@ SDL_Rect polygonButton;
 // Buttons for Polygon Creation Mode (Placed to the left of Polygon Button)
 SDL_Rect confirmPolygonButton;  
 SDL_Rect cancelPolygonButton;
+
+static Camera BuildObjectEditorCamera(void) {
+    double margin = GetCurrentMarginPixels();
+    return CameraBuildPreviewCamera(&sceneSettings.camera,
+                                    margin,
+                                    sceneSettings.windowWidth,
+                                    sceneSettings.windowHeight);
+}
+
+static CameraPoint ScreenToWorldObjectEditor(const Camera* camera, int sx, int sy) {
+    return CameraScreenToWorld(camera,
+                               sx,
+                               sy,
+                               sceneSettings.windowWidth,
+                               sceneSettings.windowHeight);
+}
+
+static SDL_Point WorldToScreenObjectEditor(const Camera* camera, double wx, double wy) {
+    CameraPoint screen = CameraWorldToScreen(camera,
+                                             wx,
+                                             wy,
+                                             sceneSettings.windowWidth,
+                                             sceneSettings.windowHeight);
+    return (SDL_Point){(int)lround(screen.x), (int)lround(screen.y)};
+}
+
+static void RenderCameraViewportOverlay(SDL_Renderer* renderer, double margin) {
+    SDL_Rect rect = {
+        (int)lrint(margin),
+        (int)lrint(margin),
+        sceneSettings.windowWidth - (int)lrint(margin) * 2,
+        sceneSettings.windowHeight - (int)lrint(margin) * 2
+    };
+    if (rect.w < 0) rect.w = 0;
+    if (rect.h < 0) rect.h = 0;
+
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 100);
+    SDL_RenderDrawRect(renderer, &rect);
+}
 
 
 void InitializeObjectEditor(void) {
@@ -183,17 +223,17 @@ polygonButton.y + polygonButton.h)) {
 }
 
 
-bool CheckObjectClick(int mx, int my) {
+bool CheckObjectClick(double mx, double my) {
     for (int i = 0; i < sceneSettings.objectCount; i++) {
         SceneObject* obj = &sceneSettings.sceneObjects[i];
 
         // Compute rotation handle position
         double handleDistance = obj->radius * obj->scale;
-        int handleX = obj->x + cos(obj->rotation) * handleDistance;
-        int handleY = obj->y + sin(obj->rotation) * handleDistance;
+        double handleX = obj->x + cos(obj->rotation) * handleDistance;
+        double handleY = obj->y + sin(obj->rotation) * handleDistance;
 
-        int dx = mx - handleX;
-        int dy = my - handleY;
+        double dx = mx - handleX;
+        double dy = my - handleY;
 
         // Check if user clicked the rotation handle
         if ((dx * dx + dy * dy) <= (handleRadius * handleRadius)) {
@@ -204,7 +244,7 @@ bool CheckObjectClick(int mx, int my) {
         }
 
         // Check if clicking inside the object
-        if (IsInsideObject(mx, my, obj)) {
+        if (IsInsideObject((int)mx, (int)my, obj)) {
             if (addModeActive) {
                 printf("Add Mode Active - Adding New Object\n");
                 AddSceneObject(OBJECT_POLYGON, mx, my, 50, 50, NULL, 4);
@@ -224,17 +264,18 @@ bool CheckObjectClick(int mx, int my) {
     return false;
 }
 
-void RenderHandles(SDL_Renderer* renderer, SceneObject* obj){
+void RenderHandles(SDL_Renderer* renderer, SceneObject* obj, const Camera* camera){
        double handleDistance = obj->radius * obj->scale;
 
-       // Compute the handle position
-       int handleX = obj->x + cos(obj->rotation) * handleDistance;
-       int handleY = obj->y + sin(obj->rotation) * handleDistance;
+       double handleX = obj->x + cos(obj->rotation) * handleDistance;
+       double handleY = obj->y + sin(obj->rotation) * handleDistance;
+
+       SDL_Point handleScreen = WorldToScreenObjectEditor(camera, handleX, handleY);
+       SDL_Point centerScreen = WorldToScreenObjectEditor(camera, obj->x, obj->y);
 
        SDL_SetRenderDrawColor(renderer, 0, 255, 255, 255); // Cyan for rotation handle
-       RenderDrawCircle(renderer, handleX, handleY, 5);
-       SDL_RenderDrawLine(renderer, obj->x, obj->y, handleX, handleY);
-
+       RenderDrawCircle(renderer, handleScreen.x, handleScreen.y, 5);
+       SDL_RenderDrawLine(renderer, centerScreen.x, centerScreen.y, handleScreen.x, handleScreen.y);
 }
 
 
@@ -292,28 +333,33 @@ void RenderObjectEditor(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
     SDL_RenderClear(renderer);
 
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    Camera preview = BuildObjectEditorCamera();
+    Camera original = sceneSettings.camera;
+    sceneSettings.camera = preview;
+
     for (int i = 0; i < sceneSettings.objectCount; i++) {
         SceneObject* obj = &sceneSettings.sceneObjects[i];
-
-        // Render the filled shape
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
         RenderSceneObject(renderer, obj, true);
 
-        // If the object is selected, draw an outline and rotation scale handle
         if (i == selectedObjectIndex) {
             SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
             RenderSceneObject(renderer, obj, false);
-            RenderHandles(renderer, obj);
+            RenderHandles(renderer, obj, &preview);
         } else if (renderHandles) {
-            RenderHandles(renderer, obj);
+            SDL_SetRenderDrawColor(renderer, 0, 200, 255, 255);
+            RenderHandles(renderer, obj, &preview);
         }
     }
 
-    RenderBezierPath(renderer, &sceneSettings.bezierPath, false);
+    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
+    RenderBezierPathCamera(renderer, &sceneSettings.bezierPath, false, &preview);
 
+    sceneSettings.camera = original;
 
-    // Render UI buttons
+    RenderCameraViewportOverlay(renderer, GetCurrentMarginPixels());
+    RenderEditorHUD(renderer, "Objects");
+
     RenderModeButtons(renderer);
     if (addModeActive) {
         RenderAddModeButtons(renderer);
@@ -356,11 +402,15 @@ void HandleObjectEditorEvents(SDL_Event* event) {
 
 void HandleObjectEditorMouseClick(SDL_Event* event) {
     if (event->button.button == SDL_BUTTON_LEFT) {
-        lastMouseX = event->button.x;
-        lastMouseY = event->button.y;
-
         int mx = event->button.x;
         int my = event->button.y;
+
+        Camera previewCam = BuildObjectEditorCamera();
+        CameraPoint worldPoint = ScreenToWorldObjectEditor(&previewCam, mx, my);
+        double worldX = worldPoint.x;
+        double worldY = worldPoint.y;
+        lastWorldX = worldX;
+        lastWorldY = worldY;
 
         selectedObjectIndex = -1;
         draggingRotationHandle = false;
@@ -433,15 +483,15 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
         // **Prevent accidental shape creation when clicking buttons**
         if (!clickedButton && addModeActive && !polygonCreationActive) {
             if (shapeMode == SHAPE_CIRCLE) {
-                AddSceneObject(OBJECT_CIRCLE, mx, my, 25, 0, NULL, 0);
+                AddSceneObject(OBJECT_CIRCLE, worldX, worldY, 25, 0, NULL, 0);
             } else if (shapeMode == SHAPE_SQUARE) {
-                AddSceneObject(OBJECT_POLYGON, mx, my, 50, 50, NULL, 4);
+                AddSceneObject(OBJECT_POLYGON, worldX, worldY, 50, 50, NULL, 4);
             }
             return;
         }
 
         // Call CheckObjectClick to handle object interaction
-        if (CheckObjectClick(mx, my)) {
+        if (CheckObjectClick(worldX, worldY)) {
             return;
         }
 
@@ -458,17 +508,22 @@ void HandleObjectEditorMouseDrag(SDL_Event* event) {
     if (event->motion.state & SDL_BUTTON_LMASK) {
         int mx = event->motion.x;
         int my = event->motion.y;
+        Camera previewCam = BuildObjectEditorCamera();
+        CameraPoint worldPoint = ScreenToWorldObjectEditor(&previewCam, mx, my);
+        double worldX = worldPoint.x;
+        double worldY = worldPoint.y;
 
         if (selectedObjectIndex != -1) {
             SceneObject* obj = &sceneSettings.sceneObjects[selectedObjectIndex];
 
             if (draggingRotationHandle) {
                 // Compute new rotation based on cursor position
-                double newAngle = atan2(my - obj->y, mx - obj->x);
+                double newAngle = atan2(worldY - obj->y, worldX - obj->x);
                 obj->rotation = newAngle;
 
                 // Compute new distance from object center to handle position
-                double newDistance = sqrt((mx - obj->x) * (mx - obj->x) + (my - obj->y) * (my - obj->y));
+                double newDistance = sqrt((worldX - obj->x) * (worldX - obj->x) +
+                                          (worldY - obj->y) * (worldY - obj->y));
 
                 // Adjust scaling based on new distance, ensuring uniform scaling
                 double initialDistance = obj->radius;
@@ -480,16 +535,16 @@ void HandleObjectEditorMouseDrag(SDL_Event* event) {
 
             } else {
                 // Move the object naturally based on cursor movement
-                int dx = mx - lastMouseX;
-                int dy = my - lastMouseY;
+                int dx = (int)lround(worldX - lastWorldX);
+                int dy = (int)lround(worldY - lastWorldY);
                 MoveObject(obj, dx, dy);
             }
 
             MarkObjectDirty(obj);
         }
 
-        lastMouseX = mx;
-        lastMouseY = my;
+        lastWorldX = worldX;
+        lastWorldY = worldY;
     }
 }
 
