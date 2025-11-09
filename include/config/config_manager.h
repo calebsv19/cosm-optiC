@@ -28,6 +28,9 @@ typedef struct {
     bool lightDiffusionEnabled;
     int lightDiffusionRadius;
     double lightDiffusionStrength;
+    bool useTiledRenderer;
+    int tileSize;
+    double rouletteThreshold;
     int editorMode;
 } AnimationConfig;
 

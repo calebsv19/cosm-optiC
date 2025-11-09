@@ -7,9 +7,11 @@
 #include <stdio.h>   
 #include <stdlib.h>
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_atomic.h>
 #include <math.h>
 #include <stdbool.h>
 #include <string.h>
+#include <time.h>
 
 #ifndef M_PI_2
 #define M_PI_2 1.57079632679489661923
@@ -22,6 +24,8 @@ typedef struct {
     int height;
     SceneObject* objects;
     int objectCount;
+    struct TileGrid* tileGrid;
+    bool useTiles;
 } TraceContext;
 
 typedef struct {
@@ -30,12 +34,32 @@ typedef struct {
     const TraceContext* ctx;
 } ThreadData;
 
+typedef struct {
+    int originX;
+    int originY;
+    int width;
+    int height;
+    float* energy;
+} Tile;
+
+typedef struct TileGrid {
+    Tile* tiles;
+    int tileSize;
+    int tilesX;
+    int tilesY;
+    size_t count;
+    int width;
+    int height;
+} TileGrid;
+
 
 // Global light source.
 static Circle light = {100, 100, 10};  // Default position (updated dynamically)
 const int TOTAL_RAYS = 1800;
 Uint8* pixelBuffer = NULL;  // Global but uninitialized
 float* energyBuffer = NULL;
+static TileGrid tileGrid = {0};
+static bool rngSeeded = false;
 
 static bool WorldToPixel(double worldX, double worldY,
                          int width, int height, int* pixelIndex,
@@ -58,9 +82,98 @@ static bool WorldToPixel(double worldX, double worldY,
     return true;
 }
 
+static int ClampTileSize(int requested) {
+    if (requested < 4) return 4;
+    if (requested % 4 != 0) {
+        requested += 4 - (requested % 4);
+    }
+    return requested;
+}
+
+static void FreeTileGrid(void) {
+    if (!tileGrid.tiles) return;
+    for (size_t i = 0; i < tileGrid.count; i++) {
+        free(tileGrid.tiles[i].energy);
+        tileGrid.tiles[i].energy = NULL;
+    }
+    free(tileGrid.tiles);
+    tileGrid.tiles = NULL;
+    tileGrid.count = 0;
+    tileGrid.tilesX = tileGrid.tilesY = 0;
+    tileGrid.width = tileGrid.height = 0;
+}
+
+static void EnsureTileGrid(int width, int height, int tileSize) {
+    tileSize = ClampTileSize(tileSize);
+    if (tileGrid.tiles &&
+        tileGrid.width == width &&
+        tileGrid.height == height &&
+        tileGrid.tileSize == tileSize) {
+        return;
+    }
+
+    FreeTileGrid();
+
+    tileGrid.tileSize = tileSize;
+    tileGrid.width = width;
+    tileGrid.height = height;
+    tileGrid.tilesX = (width + tileSize - 1) / tileSize;
+    tileGrid.tilesY = (height + tileSize - 1) / tileSize;
+    tileGrid.count = (size_t)tileGrid.tilesX * (size_t)tileGrid.tilesY;
+    tileGrid.tiles = (Tile*)calloc(tileGrid.count, sizeof(Tile));
+    if (!tileGrid.tiles) {
+        printf("ERROR: Failed to allocate tile grid.\n");
+        tileGrid.count = 0;
+        return;
+    }
+
+    for (int ty = 0; ty < tileGrid.tilesY; ty++) {
+        for (int tx = 0; tx < tileGrid.tilesX; tx++) {
+            size_t idx = (size_t)ty * (size_t)tileGrid.tilesX + (size_t)tx;
+            Tile* tile = &tileGrid.tiles[idx];
+            tile->originX = tx * tileSize;
+            tile->originY = ty * tileSize;
+            tile->width = (tile->originX + tileSize > width) ? (width - tile->originX) : tileSize;
+            tile->height = (tile->originY + tileSize > height) ? (height - tile->originY) : tileSize;
+            tile->energy = (float*)calloc((size_t)tile->width * (size_t)tile->height, sizeof(float));
+            if (!tile->energy) {
+                printf("ERROR: Failed to allocate tile energy buffer.\n");
+            }
+        }
+    }
+}
+
+static void ClearTileEnergies(TileGrid* grid) {
+    if (!grid || !grid->tiles) return;
+    for (size_t i = 0; i < grid->count; i++) {
+        Tile* tile = &grid->tiles[i];
+        if (tile->energy) {
+            memset(tile->energy, 0, (size_t)tile->width * (size_t)tile->height * sizeof(float));
+        }
+    }
+}
+
 #define MAX_BOUNCES 3
 #define MIN_ENERGY 0.003
 #define ENERGY_BOOST 4.5
+
+static double RandomUnit(void) {
+    if (!rngSeeded) {
+        srand((unsigned int)time(NULL));
+        rngSeeded = true;
+    }
+    return rand() / (double)RAND_MAX;
+}
+
+static bool ShouldTerminate(double energy) {
+    double threshold = animSettings.rouletteThreshold;
+    if (threshold <= 0.0) return false;
+    if (energy >= threshold) return false;
+    double survival = energy / threshold;
+    if (survival <= 0.0) return true;
+    double roll = RandomUnit();
+    return roll > survival;
+}
 
 static double Clamp(double value, double minValue, double maxValue) {
     if (value < minValue) return minValue;
@@ -87,12 +200,32 @@ static double Noise2D(double x, double y) {
 }
 
 static void DepositEnergy(const TraceContext* ctx, double worldX, double worldY, double energy) {
-    if (energy <= 0.0 || ctx->energyBuffer == NULL) return;
+    if (energy <= 0.0) return;
     int pixelIndex;
-    if (!WorldToPixel(worldX, worldY, ctx->width, ctx->height, &pixelIndex, NULL, NULL)) {
+    int screenX = 0;
+    int screenY = 0;
+    if (!WorldToPixel(worldX, worldY, ctx->width, ctx->height, &pixelIndex, &screenX, &screenY)) {
         return;
     }
-    ctx->energyBuffer[pixelIndex] += (float)energy;
+
+    if (ctx->useTiles && ctx->tileGrid && ctx->tileGrid->tiles) {
+        int tileSize = ctx->tileGrid->tileSize;
+        int tileX = screenX / tileSize;
+        int tileY = screenY / tileSize;
+        if (tileX >= ctx->tileGrid->tilesX || tileY >= ctx->tileGrid->tilesY || tileX < 0 || tileY < 0) {
+            return;
+        }
+        size_t tileIndex = (size_t)tileY * (size_t)ctx->tileGrid->tilesX + (size_t)tileX;
+        Tile* tile = &ctx->tileGrid->tiles[tileIndex];
+        if (!tile->energy) return;
+        int localX = screenX - tile->originX;
+        int localY = screenY - tile->originY;
+        if (localX < 0 || localY < 0 || localX >= tile->width || localY >= tile->height) return;
+        size_t localIndex = (size_t)localY * (size_t)tile->width + (size_t)localX;
+        tile->energy[localIndex] += (float)energy;
+    } else if (ctx->energyBuffer) {
+        ctx->energyBuffer[pixelIndex] += (float)energy;
+    }
 }
 
 static void ApplyEnergyDiffusion(TraceContext* ctx, int radius, double strength) {
@@ -139,25 +272,121 @@ static void ApplyEnergyDiffusion(TraceContext* ctx, int radius, double strength)
     free(temp);
 }
 
-static void ConvertEnergyToPixels(TraceContext* ctx) {
-    if (!ctx->pixelBuffer || !ctx->energyBuffer) return;
+static float FindMaxTileEnergy(const TileGrid* grid) {
+    if (!grid || !grid->tiles) return 0.0f;
+    float maxEnergy = 0.0f;
+    for (size_t i = 0; i < grid->count; i++) {
+        const Tile* tile = &grid->tiles[i];
+        if (!tile->energy) continue;
+        size_t total = (size_t)tile->width * (size_t)tile->height;
+        for (size_t j = 0; j < total; j++) {
+            if (tile->energy[j] > maxEnergy) {
+                maxEnergy = tile->energy[j];
+            }
+        }
+    }
+    return maxEnergy;
+}
+
+static float FindMaxEnergyBuffer(const TraceContext* ctx) {
+    if (!ctx->energyBuffer) return 0.0f;
     int total = ctx->width * ctx->height;
     float maxEnergy = 0.0f;
     for (int i = 0; i < total; i++) {
-        float val = ctx->energyBuffer[i];
-        if (val > maxEnergy) {
-            maxEnergy = val;
+        if (ctx->energyBuffer[i] > maxEnergy) {
+            maxEnergy = ctx->energyBuffer[i];
         }
     }
-    if (maxEnergy <= 0.0f) {
-        memset(ctx->pixelBuffer, 0, total * sizeof(Uint8));
-        return;
+    return maxEnergy;
+}
+
+static void TonemapTile(const TraceContext* ctx, const Tile* tile, float invMaxEnergy) {
+    if (!tile || !tile->energy) return;
+    for (int ly = 0; ly < tile->height; ly++) {
+        for (int lx = 0; lx < tile->width; lx++) {
+            size_t localIndex = (size_t)ly * (size_t)tile->width + (size_t)lx;
+            float normalized = tile->energy[localIndex] * invMaxEnergy * ENERGY_BOOST;
+            float tone = powf(Clamp01(normalized), 0.55f);
+            int globalX = tile->originX + lx;
+            int globalY = tile->originY + ly;
+            size_t globalIndex = (size_t)globalY * (size_t)ctx->width + (size_t)globalX;
+            ctx->pixelBuffer[globalIndex] = (Uint8)Clamp(tone * 255.0f, 0, 255);
+        }
     }
-    float invMax = 1.0f / maxEnergy;
-    for (int i = 0; i < total; i++) {
-        float normalized = ctx->energyBuffer[i] * invMax * ENERGY_BOOST;
-        float tone = powf(Clamp01(normalized), 0.55f);
-        ctx->pixelBuffer[i] = (Uint8)Clamp(tone * 255.0f, 0, 255);
+}
+
+typedef struct {
+    TraceContext* ctx;
+    float invMaxEnergy;
+    SDL_atomic_t cursor;
+} TileJobPayload;
+
+static int TileWorker(void* data) {
+    TileJobPayload* payload = (TileJobPayload*)data;
+    TileGrid* grid = payload->ctx->tileGrid;
+    if (!grid) return 0;
+    while (true) {
+        int idx = SDL_AtomicAdd(&payload->cursor, 1);
+        if (idx >= (int)grid->count) {
+            break;
+        }
+        TonemapTile(payload->ctx, &grid->tiles[idx], payload->invMaxEnergy);
+    }
+    return 0;
+}
+
+static void ConvertEnergyToPixels(TraceContext* ctx) {
+    if (!ctx->pixelBuffer) return;
+
+    if (ctx->useTiles && ctx->tileGrid && ctx->tileGrid->tiles) {
+        if (ctx->tileGrid->count == 0) {
+            memset(ctx->pixelBuffer, 0, (size_t)ctx->width * (size_t)ctx->height * sizeof(Uint8));
+            return;
+        }
+        float maxEnergy = FindMaxTileEnergy(ctx->tileGrid);
+        size_t totalPixels = (size_t)ctx->width * (size_t)ctx->height;
+        if (maxEnergy <= 0.0f) {
+            memset(ctx->pixelBuffer, 0, totalPixels * sizeof(Uint8));
+            return;
+        }
+        float invMax = 1.0f / maxEnergy;
+
+        TileJobPayload payload = {
+            .ctx = ctx,
+            .invMaxEnergy = invMax
+        };
+        SDL_AtomicSet(&payload.cursor, 0);
+
+        int workerCount = SDL_GetCPUCount();
+        if (workerCount <= 0) workerCount = 4;
+        if (workerCount > (int)ctx->tileGrid->count) {
+            workerCount = (int)ctx->tileGrid->count;
+        }
+        if (workerCount < 1) workerCount = 1;
+
+        SDL_Thread** workers = (SDL_Thread**)malloc((size_t)workerCount * sizeof(SDL_Thread*));
+        for (int i = 0; i < workerCount; i++) {
+            workers[i] = SDL_CreateThread(TileWorker, "TileWorker", &payload);
+        }
+        for (int i = 0; i < workerCount; i++) {
+            if (workers[i]) {
+                SDL_WaitThread(workers[i], NULL);
+            }
+        }
+        free(workers);
+    } else if (ctx->energyBuffer) {
+        int total = ctx->width * ctx->height;
+        float maxEnergy = FindMaxEnergyBuffer(ctx);
+        if (maxEnergy <= 0.0f) {
+            memset(ctx->pixelBuffer, 0, total * sizeof(Uint8));
+            return;
+        }
+        float invMax = 1.0f / maxEnergy;
+        for (int i = 0; i < total; i++) {
+            float normalized = ctx->energyBuffer[i] * invMax * ENERGY_BOOST;
+            float tone = powf(Clamp01(normalized), 0.55f);
+            ctx->pixelBuffer[i] = (Uint8)Clamp(tone * 255.0f, 0, 255);
+        }
     }
 }
 
@@ -340,6 +569,9 @@ static void TraceRayRecursive(const TraceContext* ctx,
         if (energy < MIN_ENERGY) {
             break;
         }
+        if (ShouldTerminate(energy)) {
+            break;
+        }
     }
 }
 
@@ -417,6 +649,7 @@ void CleanupRayTracing(void) {
         free(energyBuffer);
         energyBuffer = NULL;
     }
+    FreeTileGrid();
 }
 
 void SetLightPosition(double x, double y) {
@@ -425,134 +658,73 @@ void SetLightPosition(double x, double y) {
 }
 
 
-void ApplyBlur(Uint8* pixelBuffer, int width, int height) {
-    Uint8 tempBuffer[width * height];
-
-    for (int y = 1; y < height - 1; y++) {
-        for (int x = 1; x < width - 1; x++) {
-            int idx = y * width + x;
-
-            // Simple 3x3 blur kernel (average neighboring pixels)
-            int sum = 0;
-            sum += pixelBuffer[idx];                      // Center
-            sum += pixelBuffer[idx - width];              // Top
-            sum += pixelBuffer[idx + width];              // Bottom
-            sum += pixelBuffer[idx - 1];                  // Left
-            sum += pixelBuffer[idx + 1];                  // Right
-            sum += pixelBuffer[idx - width - 1];          // Top-left
-            sum += pixelBuffer[idx - width + 1];          // Top-right
-            sum += pixelBuffer[idx + width - 1];          // Bottom-left
-            sum += pixelBuffer[idx + width + 1];          // Bottom-right
-
-            tempBuffer[idx] = sum / 9; // Average value
+static void BuildGaussianKernel(float* kernel, int radius) {
+    float sigma = (float)radius * 0.5f + 0.5f;
+    float sum = 0.0f;
+    for (int i = -radius; i <= radius; i++) {
+        float value = expf(-(i * i) / (2.0f * sigma * sigma));
+        kernel[i + radius] = value;
+        sum += value;
+    }
+    if (sum > 0.0f) {
+        for (int i = 0; i < (2 * radius + 1); i++) {
+            kernel[i] /= sum;
         }
     }
-
-    // Copy back to the original buffer
-    memcpy(pixelBuffer, tempBuffer, width * height);
 }
 
-void ApplyHeavyBlur(Uint8* pixelBuffer, int width, int height) {
-    Uint8 tempBuffer[width * height];
+static void ApplySeparableBlur(Uint8* pixelBuffer, int width, int height, int radius) {
+    if (radius <= 0 || !pixelBuffer) return;
+    int kernelSize = radius * 2 + 1;
+    float* kernel = (float*)malloc((size_t)kernelSize * sizeof(float));
+    if (!kernel) return;
+    BuildGaussianKernel(kernel, radius);
 
-    for (int y = 2; y < height - 2; y++) {
-        for (int x = 2; x < width - 2; x++) {
-            int idx = y * width + x;
-            int sum = 0;
+    size_t total = (size_t)width * (size_t)height;
+    float* temp = (float*)malloc(total * sizeof(float));
+    float* output = (float*)malloc(total * sizeof(float));
+    if (!temp || !output) {
+        free(kernel);
+        free(temp);
+        free(output);
+        return;
+    }
 
-            // 5x5 Kernel for stronger blur
-            for (int dy = -2; dy <= 2; dy++) {
-                for (int dx = -2; dx <= 2; dx++) {
-                    sum += pixelBuffer[(y + dy) * width + (x + dx)];
-                }
+    // Horizontal pass
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            float accum = 0.0f;
+            for (int k = -radius; k <= radius; k++) {
+                int sx = x + k;
+                if (sx < 0) sx = 0;
+                if (sx >= width) sx = width - 1;
+                accum += kernel[k + radius] * pixelBuffer[y * width + sx];
             }
-
-            tempBuffer[idx] = sum / 25;  // Average over 25 pixels
+            temp[y * width + x] = accum;
         }
     }
 
-    // Copy back to the original buffer
-    memcpy(pixelBuffer, tempBuffer, width * height);
-}
-
-void ApplyGaussianBlur(Uint8* pixelBuffer, int width, int height) {
-    Uint8 tempBuffer[width * height];
-
-    // Gaussian kernel (weights for 5x5 kernel)
-    float kernel[5][5] = {
-        {1,  4,  7,  4, 1},
-        {4, 16, 26, 16, 4},
-        {7, 26, 41, 26, 7},
-        {4, 16, 26, 16, 4},
-        {1,  4,  7,  4, 1}
-    };
-    float kernelSum = 273.0f;  // Sum of all weights to normalize
-
-    for (int y = 2; y < height - 2; y++) {
-        for (int x = 2; x < width - 2; x++) {
-            float sum = 0.0f;
-
-            // Apply Gaussian filter
-            for (int ky = -2; ky <= 2; ky++) {
-                for (int kx = -2; kx <= 2; kx++) {
-                    int idx = (y + ky) * width + (x + kx);
-                    sum += pixelBuffer[idx] * kernel[ky + 2][kx + 2];
-                }
+    // Vertical pass
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            float accum = 0.0f;
+            for (int k = -radius; k <= radius; k++) {
+                int sy = y + k;
+                if (sy < 0) sy = 0;
+                if (sy >= height) sy = height - 1;
+                accum += kernel[k + radius] * temp[sy * width + x];
             }
-
-            tempBuffer[y * width + x] = (Uint8)(sum / kernelSum);
+            output[y * width + x] = accum;
         }
     }
 
-    // Copy the blurred data back
-    memcpy(pixelBuffer, tempBuffer, width * height);
-}
-
-void ApplyGaussianBlurWithEdgePreservation(Uint8* pixelBuffer, int width, int height, SceneObject* objects, int obj_count) {
-    Uint8 tempBuffer[width * height];
-
-    float kernel[5][5] = {
-        {1,  4,  7,  4, 1},
-        {4, 16, 26, 16, 4},
-        {7, 26, 41, 26, 7},
-        {4, 16, 26, 16, 4},
-        {1,  4,  7,  4, 1}
-    };   
-    float kernelSum = 273.0f;
-
-    for (int y = 2; y < height - 2; y++) {
-        for (int x = 2; x < width - 2; x++) {
-            int idx = y * width + x;
-
-            // ✅ Check if pixel belongs to any object using `IsInsideObject()`
-            bool isObject = false;
-            for (int i = 0; i < obj_count; i++) {
-                if (IsInsideObject(x, y, &objects[i])) {
-                    isObject = true;
-                    break;
-                }
-            }
-
-            // ✅ If the pixel is part of an object, don't blur it
-            if (isObject) {
-                tempBuffer[idx] = pixelBuffer[idx];
-                continue;
-            }
-
-            // ✅ Apply Gaussian Blur for non-object pixels
-            float sum = 0.0f;
-            for (int ky = -2; ky <= 2; ky++) {
-                for (int kx = -2; kx <= 2; kx++) {
-                    int neighborIdx = (y + ky) * width + (x + kx);
-                    sum += pixelBuffer[neighborIdx] * kernel[ky + 2][kx + 2];
-                }
-            }
-
-            tempBuffer[idx] = (Uint8)(sum / kernelSum);
-        }
+    for (size_t i = 0; i < total; i++) {
+        pixelBuffer[i] = (Uint8)Clamp(output[i], 0, 255);
     }
 
-    memcpy(pixelBuffer, tempBuffer, width * height);
+    free(kernel);
+    free(temp);
+    free(output);
 }
 
 
@@ -576,6 +748,9 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
 
     size_t pixelCount = (size_t)WIDTH * (size_t)HEIGHT;
 
+    bool useTiles = animSettings.useTiledRenderer;
+    int tileSize = useTiles ? ClampTileSize(animSettings.tileSize) : 0;
+
     // Ensure pixelBuffer is allocated
     if (pixelBuffer == NULL) {
         pixelBuffer = (Uint8*)malloc(pixelCount * sizeof(Uint8));
@@ -584,24 +759,32 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
             return;
         }
     }
-    if (energyBuffer == NULL) {
-        energyBuffer = (float*)malloc(pixelCount * sizeof(float));
-        if (!energyBuffer) {
-            printf("ERROR: Failed to allocate energy buffer during render.\n");
-            return;
+
+    if (!useTiles) {
+        if (energyBuffer == NULL) {
+            energyBuffer = (float*)malloc(pixelCount * sizeof(float));
+            if (!energyBuffer) {
+                printf("ERROR: Failed to allocate energy buffer during render.\n");
+                return;
+            }
         }
+        memset(energyBuffer, 0, pixelCount * sizeof(float));
+    } else {
+        EnsureTileGrid(WIDTH, HEIGHT, tileSize);
+        ClearTileEnergies(&tileGrid);
     }
     
     memset(pixelBuffer, 0, pixelCount * sizeof(Uint8)); // Clear buffer
-    memset(energyBuffer, 0, pixelCount * sizeof(float));
 
     TraceContext context = {
         .pixelBuffer = pixelBuffer,
-        .energyBuffer = energyBuffer,
+        .energyBuffer = useTiles ? NULL : energyBuffer,
         .width = WIDTH,
         .height = HEIGHT,
         .objects = sceneSettings.sceneObjects,
-        .objectCount = sceneSettings.objectCount
+        .objectCount = sceneSettings.objectCount,
+        .tileGrid = useTiles ? &tileGrid : NULL,
+        .useTiles = useTiles
     };
 
     if (animSettings.lightMode == 0) {
@@ -627,7 +810,7 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
             SDL_WaitThread(threads[i], NULL);
     }
 
-    if (animSettings.lightDiffusionEnabled && animSettings.lightDiffusionRadius > 0) {
+    if (!useTiles && animSettings.lightDiffusionEnabled && animSettings.lightDiffusionRadius > 0) {
         ApplyEnergyDiffusion(&context,
                              animSettings.lightDiffusionRadius,
                              animSettings.lightDiffusionStrength);
@@ -635,13 +818,12 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
 
     ConvertEnergyToPixels(&context);
 
-    if (animSettings.blurMode == 1) {
-        ApplyBlur(pixelBuffer, WIDTH, HEIGHT);
-    } else if (animSettings.blurMode == 2) {
-        ApplyHeavyBlur(pixelBuffer, WIDTH, HEIGHT);
-    } else if (animSettings.blurMode == 3) {
-        ApplyGaussianBlurWithEdgePreservation(pixelBuffer, WIDTH, HEIGHT,
-                                              sceneSettings.sceneObjects, sceneSettings.objectCount);
+    int blurRadius = 0;
+    if (animSettings.blurMode == 1) blurRadius = 1;
+    else if (animSettings.blurMode == 2) blurRadius = 2;
+    else if (animSettings.blurMode == 3) blurRadius = 3;
+    if (blurRadius > 0) {
+        ApplySeparableBlur(pixelBuffer, WIDTH, HEIGHT, blurRadius);
     }
 
     for (int y = 0; y < HEIGHT; y++) {

@@ -2,4 +2,4 @@
 
 Menu components presented before starting the renderer.
 
-- `sdl_menu.c` – Builds the SDL UI for toggling interactive/deep render modes, editing numeric settings through sliders, and launching the scene editor or animation loop. Persists user choices back to `Configs/animation_config.json`.
+- `sdl_menu.c` – Builds the SDL UI for toggling interactive/deep render modes, editing numeric settings through sliders (rays, FPS, tile size, roulette threshold, etc.), enabling the tiled renderer, and launching the scene editor or animation loop. Persists user choices back to `Configs/animation_config.json`.

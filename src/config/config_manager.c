@@ -34,6 +34,9 @@ AnimationConfig animSettings = {
     .lightDiffusionEnabled = true,
     .lightDiffusionRadius = 4,
     .lightDiffusionStrength = 0.65,
+    .useTiledRenderer = false,
+    .tileSize = 16,
+    .rouletteThreshold = 0.01,
     .editorMode = 0
 };
 
@@ -205,6 +208,9 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "lightDiffusionRadius", json_object_new_int(animSettings.lightDiffusionRadius));
     json_object_object_add(config, "lightDiffusionStrength", json_object_new_double(animSettings.lightDiffusionStrength));
     json_object_object_add(config, "editorMode", json_object_new_int(animSettings.editorMode));
+    json_object_object_add(config, "useTiledRenderer", json_object_new_boolean(animSettings.useTiledRenderer));
+    json_object_object_add(config, "tileSize", json_object_new_int(animSettings.tileSize));
+    json_object_object_add(config, "rouletteThreshold", json_object_new_double(animSettings.rouletteThreshold));
     fprintf(file, "%s", json_object_to_json_string_ext(config, JSON_C_TO_STRING_PRETTY));
     fclose(file);
     json_object_put(config);
@@ -625,6 +631,12 @@ void LoadAnimationConfig(void) {
         animSettings.lightDiffusionStrength = json_object_get_double(temp);
     if (json_object_object_get_ex(config, "editorMode", &temp))
         animSettings.editorMode = json_object_get_int(temp); 
+    if (json_object_object_get_ex(config, "useTiledRenderer", &temp))
+        animSettings.useTiledRenderer = json_object_get_boolean(temp);
+    if (json_object_object_get_ex(config, "tileSize", &temp))
+        animSettings.tileSize = json_object_get_int(temp);
+    if (json_object_object_get_ex(config, "rouletteThreshold", &temp))
+        animSettings.rouletteThreshold = json_object_get_double(temp);
 	
     printf(" Loaded animation config successfully.\n");
     json_object_put(config);

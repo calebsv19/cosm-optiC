@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <json-c/json.h>
 #include "editor/scene_editor.h"
 #include "app/animation.h"  // Include the header where RunMainLoop() is declared
@@ -94,6 +95,15 @@
 
 #define SLIDER_HEIGHT_X SLIDER_MARGIN_X
 #define SLIDER_HEIGHT_Y (SLIDER_WIDTH_Y + SLIDER_HEIGHT + SLIDER_SPACING)
+#define SLIDER_TILE_X SLIDER_MARGIN_X
+#define SLIDER_TILE_Y (SLIDER_HEIGHT_Y + SLIDER_HEIGHT + SLIDER_SPACING)
+#define SLIDER_ROULETTE_X SLIDER_MARGIN_X
+#define SLIDER_ROULETTE_Y (SLIDER_TILE_Y + SLIDER_HEIGHT + SLIDER_SPACING)
+
+#define TILE_BUTTON_WIDTH 200
+#define TILE_BUTTON_HEIGHT 40
+#define TILE_BUTTON_X SLIDER_MARGIN_X
+#define TILE_BUTTON_Y (SLIDER_ROULETTE_Y + SLIDER_HEIGHT + SLIDER_SPACING + 10)
 
 
 // Default settings
@@ -111,6 +121,33 @@ int sliderWidth = 0;          // Width of the slider
 char inputBuffer[10] = "";   // Stores user-typed numbers
 bool editingBounce = false;  // Tracks if bounce limit is being edited
 bool editingFrame = false;   // Tracks if frame limit is being edited
+static int rouletteSliderValue = 10; // stores threshold * 1000
+
+static int ClampTileSizeMenu(int value) {
+    if (value < 4) value = 4;
+    if (value % 4 != 0) {
+        value += 4 - (value % 4);
+    }
+    return value;
+}
+
+static void SyncRouletteSliderFromSettings(void) {
+    if (draggingSlider && selectedSlider == &rouletteSliderValue) {
+        return;
+    }
+    rouletteSliderValue = (int)lround(animSettings.rouletteThreshold * 1000.0);
+    if (rouletteSliderValue < 1) rouletteSliderValue = 1;
+}
+
+static void ApplySpecialSliderRules(int* target) {
+    if (target == &animSettings.tileSize) {
+        animSettings.tileSize = ClampTileSizeMenu(animSettings.tileSize);
+    } else if (target == &rouletteSliderValue) {
+        if (rouletteSliderValue < 1) rouletteSliderValue = 1;
+        if (rouletteSliderValue > 2000) rouletteSliderValue = 2000;
+        animSettings.rouletteThreshold = rouletteSliderValue / 1000.0;
+    }
+}
 
 bool InitializeMenu(SDL_Window** window, SDL_Renderer** renderer, TTF_Font** font) {
     // Initialize SDL video subsystem
@@ -161,6 +198,7 @@ bool InitializeMenu(SDL_Window** window, SDL_Renderer** renderer, TTF_Font** fon
     // Load animation settings
     LoadAnimationConfig();
     LoadSceneConfig();
+    SyncRouletteSliderFromSettings();
     return true;  // Menu initialized successfully
 }
 
@@ -174,6 +212,10 @@ void ResetAnimationSettings(void) {
     animSettings.frameLimit = DEFAULT_FRAME_LIMIT;
     animSettings.framesForTravel = DEFAULT_FRAME_FOR_TRAVEL;
     animSettings.fps = 30;
+    animSettings.useTiledRenderer = false;
+    animSettings.tileSize = 16;
+    animSettings.rouletteThreshold = 0.01;
+    SyncRouletteSliderFromSettings();
 }
 
                      
@@ -218,6 +260,7 @@ void RenderButton(SDL_Renderer *renderer, TTF_Font *font, int x, int y, int widt
     SDL_DestroyTexture(textTexture);
 }
 void RenderSliders(SDL_Renderer* renderer, TTF_Font* font) {
+    SyncRouletteSliderFromSettings();
     struct Slider {
         int *value;
         int min, max, x, y, width;
@@ -233,6 +276,8 @@ void RenderSliders(SDL_Renderer* renderer, TTF_Font* font) {
 	{ &sceneSettings.rays, 0, 10000, SLIDER_RAYS_X, SLIDER_RAYS_Y, SLIDER_WIDTH, "Num Rays" },
  	{ &sceneSettings.windowWidth, 0, 2500, SLIDER_WIDTH_X, SLIDER_WIDTH_Y, SLIDER_WIDTH, "Width" },
 	{ &sceneSettings.windowHeight, 0, 1400, SLIDER_HEIGHT_X, SLIDER_HEIGHT_Y, SLIDER_WIDTH, "Height" },
+        { &animSettings.tileSize, 4, 256, SLIDER_TILE_X, SLIDER_TILE_Y, SLIDER_WIDTH, "Tile Size" },
+        { &rouletteSliderValue, 1, 2000, SLIDER_ROULETTE_X, SLIDER_ROULETTE_Y, SLIDER_WIDTH, "Roulette Threshold" },
     };
 
     size_t sliderCount = sizeof(sliders) / sizeof(sliders[0]);
@@ -256,8 +301,13 @@ void RenderSliders(SDL_Renderer* renderer, TTF_Font* font) {
         SDL_RenderFillRect(renderer, &knob);
 
         // Render value next to the slider
-        RenderText(renderer, font, sliders[i].x + sliders[i].width + 10, sliders[i].y- textMarginX,
- 			"%d", *sliders[i].value);
+        if (sliders[i].value == &rouletteSliderValue) {
+            RenderText(renderer, font, sliders[i].x + sliders[i].width + 10, sliders[i].y - textMarginX,
+                       "%.3f", rouletteSliderValue / 1000.0);
+        } else {
+            RenderText(renderer, font, sliders[i].x + sliders[i].width + 10, sliders[i].y- textMarginX,
+                       "%d", *sliders[i].value);
+        }
     }
 }
 
@@ -317,6 +367,10 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
 	*/
     }
                  
+    const char* tileButtonLabel = animSettings.useTiledRenderer ? "Tile Renderer: ON" : "Tile Renderer: OFF";
+    RenderButton(renderer, font, TILE_BUTTON_X, TILE_BUTTON_Y,
+                 TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT, tileButtonLabel, animSettings.useTiledRenderer);
+
     // Render Bottom Buttons
     RenderButton(renderer, font, BOTTOM_BUTTON_MARGIN_X_SAVE, BOTTOM_BUTTON_MARGIN_Y_SAVE,
                  BOTTOM_BUTTON_WIDTH_SAVE, BOTTOM_BUTTON_HEIGHT_SAVE, "Save", false);
@@ -404,10 +458,12 @@ void HandleMouseMotion(SDL_Event* event) {
     if (newValue > selectedSliderMax) newValue = selectedSliderMax;
 
     *selectedSlider = newValue;  // Update the selected value
+    ApplySpecialSliderRules(selectedSlider);
 }
 
 void HandleSliderClick(SDL_Event* event) {
     int x = event->button.x, y = event->button.y;
+    SyncRouletteSliderFromSettings();
     
     // Define sliders with their values, ranges, and positions
     struct Slider {
@@ -423,7 +479,9 @@ void HandleSliderClick(SDL_Event* event) {
         { &animSettings.lightMode, 0, 1, SLIDER_LIGHT_X, SLIDER_LIGHT_Y, SLIDER_WIDTH },
 	{ &sceneSettings.rays, 0, 10000, SLIDER_RAYS_X, SLIDER_RAYS_Y, SLIDER_WIDTH},
 	{ &sceneSettings.windowWidth, 0, 2500, SLIDER_WIDTH_X, SLIDER_WIDTH_Y, SLIDER_WIDTH},
-        { &sceneSettings.windowHeight, 0, 1400, SLIDER_HEIGHT_X, SLIDER_HEIGHT_Y, SLIDER_WIDTH}
+        { &sceneSettings.windowHeight, 0, 1400, SLIDER_HEIGHT_X, SLIDER_HEIGHT_Y, SLIDER_WIDTH},
+        { &animSettings.tileSize, 4, 256, SLIDER_TILE_X, SLIDER_TILE_Y, SLIDER_WIDTH },
+        { &rouletteSliderValue, 1, 2000, SLIDER_ROULETTE_X, SLIDER_ROULETTE_Y, SLIDER_WIDTH }
     };
          
     size_t sliderCount = sizeof(sliders) / sizeof(sliders[0]);
@@ -448,6 +506,7 @@ void HandleSliderClick(SDL_Event* event) {
             if (newValue > sliders[i].max) newValue = sliders[i].max;
 
             *selectedSlider = newValue;  // Apply updated value instantly
+            ApplySpecialSliderRules(selectedSlider);
             return;
         }
     }
@@ -546,6 +605,12 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
         } 
 	*/       
     } 
+    if (x >= TILE_BUTTON_X && x <= TILE_BUTTON_X + TILE_BUTTON_WIDTH &&
+        y >= TILE_BUTTON_Y && y <= TILE_BUTTON_Y + TILE_BUTTON_HEIGHT) {
+        animSettings.useTiledRenderer = !animSettings.useTiledRenderer;
+        return;
+    }
+
     // Restore Defaults Button Click
     if (x > BOTTOM_BUTTON_MARGIN_X_SAVE && x < BOTTOM_BUTTON_MARGIN_X_SAVE + BOTTOM_BUTTON_WIDTH_SAVE &&
         y > BOTTOM_BUTTON_MARGIN_Y_SAVE && y < BOTTOM_BUTTON_MARGIN_Y_SAVE + BOTTOM_BUTTON_HEIGHT_SAVE) {

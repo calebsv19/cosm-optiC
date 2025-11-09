@@ -11,11 +11,15 @@ SDL_LIBS   := $(shell sdl2-config --libs)
 CFLAGS  := $(CSTD) -Wall -Wextra -Wpedantic -g $(SDL_CFLAGS) -I$(INC_DIR) -DMAIN_DRIVER
 LDFLAGS := $(SDL_LIBS) -lSDL2_ttf -ljson-c -lm
 
+VIDEO_FRAMES_DIR ?= Animations/default
+VIDEO_OUTPUT ?= Animations/Vids/output.mp4
+VIDEO_FPS ?= 30
+
 SRC := $(shell find $(SRC_DIR) -name '*.c')
 OBJ := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRC))
 DEP := $(OBJ:.o=.d)
 
-.PHONY: all clean run debug format
+.PHONY: all clean run debug format video
 
 all: $(TARGET)
 
@@ -34,6 +38,9 @@ debug: clean all
 
 format:
 	@command -v clang-format >/dev/null 2>&1 && clang-format -i $(SRC) $(shell find $(INC_DIR) -name '*.h') || echo "clang-format not found"
+
+video:
+	@python3 tools/make_video.py --frames "$(VIDEO_FRAMES_DIR)" --output "$(VIDEO_OUTPUT)" --fps $(VIDEO_FPS)
 
 clean:
 	rm -rf $(BUILD_DIR) $(TARGET)

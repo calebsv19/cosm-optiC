@@ -1,6 +1,6 @@
 {
-  "interactiveMode":false,
-  "deepRenderMode":true,
+  "interactiveMode":true,
+  "deepRenderMode":false,
   "bounceMode":true,
   "autoMP4":true,
   "bounceLimit":10,
@@ -16,5 +16,8 @@
   "lightDiffusionEnabled":true,
   "lightDiffusionRadius":4,
   "lightDiffusionStrength":0.65000000000000002,
-  "editorMode":0
+  "editorMode":0,
+  "useTiledRenderer":true,
+  "tileSize":16,
+  "rouletteThreshold":0.01
 }

@@ -21,6 +21,7 @@ Experimental 2D ray-tracing sandbox built with SDL2. The project simulates light
 - `make run` launches the executable.
 - `make debug` rebuilds with extra debug flags.
 - `make clean` removes the executable and build directory.
+- `make video` renumbers captured BMP frames (default `Animations/default/frame_*.bmp`) and shells out to FFmpeg at 30 fps to produce `Animations/Vids/output.mp4`. Override `VIDEO_FRAMES_DIR`, `VIDEO_OUTPUT`, or `VIDEO_FPS` if needed.
 
 The in-app Scene Editor exposes three modes (Bezier path, Object, Camera). Use the on-screen buttons or press `Tab` / `Shift+Tab` to cycle between them; every mode renders through the same camera and margin settings so edits line up with what the renderer will show.
 
