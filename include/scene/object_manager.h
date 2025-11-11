@@ -53,6 +53,7 @@ void MoveObject(SceneObject* obj, int dx, int dy);
 
 //  Dirty Flag System
 bool IsInsideObject(int mx, int my, SceneObject* obj);
+void ComputeObjectBounds(const SceneObject* obj, double* minX, double* minY, double* maxX, double* maxY);
 void MarkObjectDirty(SceneObject* obj);
 bool IsObjectDirty(SceneObject* obj);
 

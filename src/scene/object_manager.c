@@ -116,6 +116,35 @@ bool IsInsideObject(int mx, int my, SceneObject* obj) {
     }
 }
 
+void ComputeObjectBounds(const SceneObject* obj, double* minX, double* minY, double* maxX, double* maxY) {
+    double localMinX = obj->x;
+    double localMaxX = obj->x;
+    double localMinY = obj->y;
+    double localMaxY = obj->y;
+
+    if (strcmp(obj->type, "circle") == 0) {
+        double r = obj->radius * obj->scale;
+        localMinX = obj->x - r;
+        localMaxX = obj->x + r;
+        localMinY = obj->y - r;
+        localMaxY = obj->y + r;
+    } else {
+        for (int i = 0; i < obj->numPoints; i++) {
+            double wx = obj->shapePoints[i][0] + obj->x;
+            double wy = obj->shapePoints[i][1] + obj->y;
+            if (wx < localMinX) localMinX = wx;
+            if (wx > localMaxX) localMaxX = wx;
+            if (wy < localMinY) localMinY = wy;
+            if (wy > localMaxY) localMaxY = wy;
+        }
+    }
+
+    if (minX) *minX = localMinX;
+    if (maxX) *maxX = localMaxX;
+    if (minY) *minY = localMinY;
+    if (maxY) *maxY = localMaxY;
+}
+
 
 // Moves an object by a given amount
 void MoveObject(SceneObject* obj, int dx, int dy) {

@@ -9,10 +9,11 @@
 #include "editor/scene_editor.h"
 #include "app/animation.h"  // Include the header where RunMainLoop() is declared
 #include "config/config_manager.h"
+#include "camera/camera.h"
 
 // Window & Menu Layout
-#define MENU_WIDTH 800
-#define MENU_HEIGHT 600
+#define MENU_WIDTH 1000
+#define MENU_HEIGHT 720
 #define MENU_MARGIN_X 30   // Distance from left edge
 #define MENU_MARGIN_Y 30   // Distance from top
 
@@ -99,11 +100,26 @@
 #define SLIDER_TILE_Y (SLIDER_HEIGHT_Y + SLIDER_HEIGHT + SLIDER_SPACING)
 #define SLIDER_ROULETTE_X SLIDER_MARGIN_X
 #define SLIDER_ROULETTE_Y (SLIDER_TILE_Y + SLIDER_HEIGHT + SLIDER_SPACING)
+#define SLIDER_SPP_X SLIDER_MARGIN_X
+#define SLIDER_SPP_Y (SLIDER_ROULETTE_Y + SLIDER_HEIGHT + SLIDER_SPACING)
+#define SLIDER_DEPTH_X SLIDER_MARGIN_X
+#define SLIDER_DEPTH_Y (SLIDER_SPP_Y + SLIDER_HEIGHT + SLIDER_SPACING)
+#define SLIDER_ENV_X SLIDER_MARGIN_X
+#define SLIDER_ENV_Y (SLIDER_DEPTH_Y + SLIDER_HEIGHT + SLIDER_SPACING)
 
 #define TILE_BUTTON_WIDTH 200
 #define TILE_BUTTON_HEIGHT 40
 #define TILE_BUTTON_X SLIDER_MARGIN_X
-#define TILE_BUTTON_Y (SLIDER_ROULETTE_Y + SLIDER_HEIGHT + SLIDER_SPACING + 10)
+#define TILE_BUTTON_Y (SLIDER_ENV_Y + SLIDER_HEIGHT + SLIDER_SPACING + 10)
+#define INTEGRATOR_BUTTON_WIDTH 220
+#define INTEGRATOR_BUTTON_HEIGHT 40
+#define INTEGRATOR_BUTTON_X TILE_BUTTON_X
+#define INTEGRATOR_BUTTON_Y (TILE_BUTTON_Y + TILE_BUTTON_HEIGHT + 10)
+#define PATH_TOGGLE_WIDTH 180
+#define PATH_TOGGLE_HEIGHT 35
+#define PATH_TOGGLE_X INTEGRATOR_BUTTON_X
+#define PATH_TOGGLE_DIRECT_Y (INTEGRATOR_BUTTON_Y + INTEGRATOR_BUTTON_HEIGHT + 10)
+#define PATH_TOGGLE_RR_Y (PATH_TOGGLE_DIRECT_Y + PATH_TOGGLE_HEIGHT + 10)
 
 
 // Default settings
@@ -122,6 +138,9 @@ char inputBuffer[10] = "";   // Stores user-typed numbers
 bool editingBounce = false;  // Tracks if bounce limit is being edited
 bool editingFrame = false;   // Tracks if frame limit is being edited
 static int rouletteSliderValue = 10; // stores threshold * 1000
+static int envSliderValue = 0;
+static int oldWindowWidth = 0;
+static int oldWindowHeight = 0;
 
 static int ClampTileSizeMenu(int value) {
     if (value < 4) value = 4;
@@ -139,6 +158,30 @@ static void SyncRouletteSliderFromSettings(void) {
     if (rouletteSliderValue < 1) rouletteSliderValue = 1;
 }
 
+static void SyncEnvSliderFromSettings(void) {
+    if (draggingSlider && selectedSlider == &envSliderValue) {
+        return;
+    }
+    envSliderValue = (int)lround(animSettings.environmentBrightness * 100.0);
+    if (envSliderValue < 0) envSliderValue = 0;
+    if (envSliderValue > 200) envSliderValue = 200;
+}
+
+static void ReanchorCameraAfterResize(int previousWidth, int previousHeight) {
+    if (previousWidth <= 0 || previousHeight <= 0) return;
+    if (sceneSettings.windowWidth <= 0 || sceneSettings.windowHeight <= 0) return;
+    CameraPoint topLeft = CameraScreenToWorld(&sceneSettings.camera,
+                                              0.0,
+                                              0.0,
+                                              previousWidth,
+                                              previousHeight);
+    sceneSettings.camera.x = topLeft.x + (sceneSettings.windowWidth * 0.5) / sceneSettings.camera.zoom;
+    sceneSettings.camera.y = topLeft.y + (sceneSettings.windowHeight * 0.5) / sceneSettings.camera.zoom;
+    sceneSettings.cameraMargin = CameraClampMarginPixels(sceneSettings.cameraMargin,
+                                                        sceneSettings.windowWidth,
+                                                        sceneSettings.windowHeight);
+}
+
 static void ApplySpecialSliderRules(int* target) {
     if (target == &animSettings.tileSize) {
         animSettings.tileSize = ClampTileSizeMenu(animSettings.tileSize);
@@ -146,6 +189,17 @@ static void ApplySpecialSliderRules(int* target) {
         if (rouletteSliderValue < 1) rouletteSliderValue = 1;
         if (rouletteSliderValue > 2000) rouletteSliderValue = 2000;
         animSettings.rouletteThreshold = rouletteSliderValue / 1000.0;
+    } else if (target == &animSettings.pathSamplesPerPixel) {
+        if (animSettings.pathSamplesPerPixel < 1) animSettings.pathSamplesPerPixel = 1;
+    } else if (target == &animSettings.pathMaxDepth) {
+        if (animSettings.pathMaxDepth < 1) animSettings.pathMaxDepth = 1;
+    } else if (target == &envSliderValue) {
+        if (envSliderValue < 0) envSliderValue = 0;
+        if (envSliderValue > 200) envSliderValue = 200;
+        animSettings.environmentBrightness = envSliderValue / 100.0;
+    } else if (target == &sceneSettings.windowWidth || target == &sceneSettings.windowHeight) {
+        if (sceneSettings.windowWidth < 200) sceneSettings.windowWidth = 200;
+        if (sceneSettings.windowHeight < 200) sceneSettings.windowHeight = 200;
     }
 }
 
@@ -199,6 +253,9 @@ bool InitializeMenu(SDL_Window** window, SDL_Renderer** renderer, TTF_Font** fon
     LoadAnimationConfig();
     LoadSceneConfig();
     SyncRouletteSliderFromSettings();
+    SyncEnvSliderFromSettings();
+    oldWindowWidth = sceneSettings.windowWidth;
+    oldWindowHeight = sceneSettings.windowHeight;
     return true;  // Menu initialized successfully
 }
 
@@ -215,7 +272,17 @@ void ResetAnimationSettings(void) {
     animSettings.useTiledRenderer = false;
     animSettings.tileSize = 16;
     animSettings.rouletteThreshold = 0.01;
+    animSettings.integratorMode = 0;
+    animSettings.pathSamplesPerPixel = 4;
+    animSettings.pathMaxDepth = 4;
+    animSettings.pathDirectLighting = true;
+    animSettings.pathRussianRoulette = true;
+    animSettings.environmentBrightness = 0.0;
+    animSettings.pathSeed = 1;
     SyncRouletteSliderFromSettings();
+    SyncEnvSliderFromSettings();
+    oldWindowWidth = sceneSettings.windowWidth;
+    oldWindowHeight = sceneSettings.windowHeight;
 }
 
                      
@@ -259,28 +326,36 @@ void RenderButton(SDL_Renderer *renderer, TTF_Font *font, int x, int y, int widt
     SDL_FreeSurface(textSurface);
     SDL_DestroyTexture(textTexture);
 }
+typedef struct {
+    int *value;
+    int min, max, x, y, width;
+    const char *label;
+} MenuSlider;
+
 void RenderSliders(SDL_Renderer* renderer, TTF_Font* font) {
     SyncRouletteSliderFromSettings();
-    struct Slider {
-        int *value;
-        int min, max, x, y, width;
-        const char *label;
-    };
+    MenuSlider sliders[16];
+    size_t sliderCount = 0;
 
-    struct Slider sliders[] = {
-        { &animSettings.bounceLimit, 0, 100, SLIDER_BOUNCE_X, SLIDER_BOUNCE_Y, SLIDER_WIDTH, "Bounce Limit" },
-        { &animSettings.frameLimit, 1, 5000, SLIDER_FRAME_X, SLIDER_FRAME_Y, SLIDER_WIDTH, "Frame Limit" },
-        { &animSettings.framesForTravel, 1, 5000, SLIDER_TRAVEL_X, SLIDER_TRAVEL_Y, SLIDER_WIDTH, "Path Points" },
-        { &animSettings.fps, 1, 240, SLIDER_FPS_X, SLIDER_FPS_Y, SLIDER_WIDTH, "FPS" },
-        { &animSettings.lightMode, 0, 1, SLIDER_LIGHT_X, SLIDER_LIGHT_Y, SLIDER_WIDTH, "Light Mode" },
-	{ &sceneSettings.rays, 0, 10000, SLIDER_RAYS_X, SLIDER_RAYS_Y, SLIDER_WIDTH, "Num Rays" },
- 	{ &sceneSettings.windowWidth, 0, 2500, SLIDER_WIDTH_X, SLIDER_WIDTH_Y, SLIDER_WIDTH, "Width" },
-	{ &sceneSettings.windowHeight, 0, 1400, SLIDER_HEIGHT_X, SLIDER_HEIGHT_Y, SLIDER_WIDTH, "Height" },
-        { &animSettings.tileSize, 4, 256, SLIDER_TILE_X, SLIDER_TILE_Y, SLIDER_WIDTH, "Tile Size" },
-        { &rouletteSliderValue, 1, 2000, SLIDER_ROULETTE_X, SLIDER_ROULETTE_Y, SLIDER_WIDTH, "Roulette Threshold" },
-    };
+    sliders[sliderCount++] = (MenuSlider){ &animSettings.bounceLimit, 0, 100, SLIDER_BOUNCE_X, SLIDER_BOUNCE_Y, SLIDER_WIDTH, "Bounce Limit" };
+    sliders[sliderCount++] = (MenuSlider){ &animSettings.frameLimit, 1, 5000, SLIDER_FRAME_X, SLIDER_FRAME_Y, SLIDER_WIDTH, "Frame Limit" };
+    sliders[sliderCount++] = (MenuSlider){ &animSettings.framesForTravel, 1, 5000, SLIDER_TRAVEL_X, SLIDER_TRAVEL_Y, SLIDER_WIDTH, "Path Points" };
+    sliders[sliderCount++] = (MenuSlider){ &animSettings.fps, 1, 240, SLIDER_FPS_X, SLIDER_FPS_Y, SLIDER_WIDTH, "FPS" };
+    sliders[sliderCount++] = (MenuSlider){ &animSettings.lightMode, 0, 1, SLIDER_LIGHT_X, SLIDER_LIGHT_Y, SLIDER_WIDTH, "Light Mode" };
+    sliders[sliderCount++] = (MenuSlider){ &sceneSettings.rays, 0, 10000, SLIDER_RAYS_X, SLIDER_RAYS_Y, SLIDER_WIDTH, "Num Rays" };
+    sliders[sliderCount++] = (MenuSlider){ &sceneSettings.windowWidth, 0, 2500, SLIDER_WIDTH_X, SLIDER_WIDTH_Y, SLIDER_WIDTH, "Width" };
+    sliders[sliderCount++] = (MenuSlider){ &sceneSettings.windowHeight, 0, 1400, SLIDER_HEIGHT_X, SLIDER_HEIGHT_Y, SLIDER_WIDTH, "Height" };
+    sliders[sliderCount++] = (MenuSlider){ &animSettings.tileSize, 4, 256, SLIDER_TILE_X, SLIDER_TILE_Y, SLIDER_WIDTH, "Tile Size" };
+    sliders[sliderCount++] = (MenuSlider){ &rouletteSliderValue, 1, 2000, SLIDER_ROULETTE_X, SLIDER_ROULETTE_Y, SLIDER_WIDTH, "Roulette Threshold" };
 
-    size_t sliderCount = sizeof(sliders) / sizeof(sliders[0]);
+    int envSliderIndex = -1;
+    if (animSettings.integratorMode == 1) {
+        sliders[sliderCount++] = (MenuSlider){ &animSettings.pathSamplesPerPixel, 1, 128, SLIDER_SPP_X, SLIDER_SPP_Y, SLIDER_WIDTH, "Path SPP" };
+        sliders[sliderCount++] = (MenuSlider){ &animSettings.pathMaxDepth, 1, 16, SLIDER_DEPTH_X, SLIDER_DEPTH_Y, SLIDER_WIDTH, "Path Depth" };
+        sliders[sliderCount++] = (MenuSlider){ &envSliderValue, 0, 200, SLIDER_ENV_X, SLIDER_ENV_Y, SLIDER_WIDTH, "Environment %" };
+        envSliderIndex = (int)sliderCount - 1;
+    }
+
     for (size_t i = 0; i < sliderCount; i++) {
         int textMarginX = 5;
         // Render label to the left of the slider
@@ -304,6 +379,10 @@ void RenderSliders(SDL_Renderer* renderer, TTF_Font* font) {
         if (sliders[i].value == &rouletteSliderValue) {
             RenderText(renderer, font, sliders[i].x + sliders[i].width + 10, sliders[i].y - textMarginX,
                        "%.3f", rouletteSliderValue / 1000.0);
+        } else if ((int)i == envSliderIndex) {
+            double envValue = envSliderValue / 100.0;
+            RenderText(renderer, font, sliders[i].x + sliders[i].width + 10, sliders[i].y - textMarginX,
+                       "%.2f", envValue);
         } else {
             RenderText(renderer, font, sliders[i].x + sliders[i].width + 10, sliders[i].y- textMarginX,
                        "%d", *sliders[i].value);
@@ -370,6 +449,21 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
     const char* tileButtonLabel = animSettings.useTiledRenderer ? "Tile Renderer: ON" : "Tile Renderer: OFF";
     RenderButton(renderer, font, TILE_BUTTON_X, TILE_BUTTON_Y,
                  TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT, tileButtonLabel, animSettings.useTiledRenderer);
+
+    const char* integratorLabel = (animSettings.integratorMode == 0) ? "Integrator: Forward Light" : "Integrator: Camera Path";
+    RenderButton(renderer, font, INTEGRATOR_BUTTON_X, INTEGRATOR_BUTTON_Y,
+                 INTEGRATOR_BUTTON_WIDTH, INTEGRATOR_BUTTON_HEIGHT, integratorLabel, animSettings.integratorMode == 1);
+
+    if (animSettings.integratorMode == 1) {
+        RenderButton(renderer, font, PATH_TOGGLE_X, PATH_TOGGLE_DIRECT_Y,
+                     PATH_TOGGLE_WIDTH, PATH_TOGGLE_HEIGHT,
+                     animSettings.pathDirectLighting ? "Direct Light: ON" : "Direct Light: OFF",
+                     animSettings.pathDirectLighting);
+        RenderButton(renderer, font, PATH_TOGGLE_X, PATH_TOGGLE_RR_Y,
+                     PATH_TOGGLE_WIDTH, PATH_TOGGLE_HEIGHT,
+                     animSettings.pathRussianRoulette ? "Roulette: ON" : "Roulette: OFF",
+                     animSettings.pathRussianRoulette);
+    }
 
     // Render Bottom Buttons
     RenderButton(renderer, font, BOTTOM_BUTTON_MARGIN_X_SAVE, BOTTOM_BUTTON_MARGIN_Y_SAVE,
@@ -450,6 +544,11 @@ void HandleMouseMotion(SDL_Event* event) {
     int x = event->motion.x;
 
     // Calculate new slider value based on mouse position
+    bool adjustCamera = (selectedSlider == &sceneSettings.windowWidth ||
+                         selectedSlider == &sceneSettings.windowHeight);
+    int prevWidth = sceneSettings.windowWidth;
+    int prevHeight = sceneSettings.windowHeight;
+
     float percent = (float)(x - sliderStartX) / sliderWidth;
     int newValue = selectedSliderMin + percent * (selectedSliderMax - selectedSliderMin);
 
@@ -459,32 +558,38 @@ void HandleMouseMotion(SDL_Event* event) {
 
     *selectedSlider = newValue;  // Update the selected value
     ApplySpecialSliderRules(selectedSlider);
+    if (adjustCamera &&
+        (prevWidth != sceneSettings.windowWidth || prevHeight != sceneSettings.windowHeight)) {
+        ReanchorCameraAfterResize(prevWidth, prevHeight);
+        oldWindowWidth = sceneSettings.windowWidth;
+        oldWindowHeight = sceneSettings.windowHeight;
+    }
 }
 
 void HandleSliderClick(SDL_Event* event) {
     int x = event->button.x, y = event->button.y;
     SyncRouletteSliderFromSettings();
+    SyncEnvSliderFromSettings();
     
     // Define sliders with their values, ranges, and positions
-    struct Slider {
-        int *value;
-        int min, max, x, y, width;
-    };
-     
-    struct Slider sliders[] = {
-        { &animSettings.bounceLimit, 0, 100, SLIDER_BOUNCE_X, SLIDER_BOUNCE_Y, SLIDER_WIDTH },
-        { &animSettings.frameLimit, 1, 5000, SLIDER_FRAME_X, SLIDER_FRAME_Y, SLIDER_WIDTH },
-        { &animSettings.framesForTravel, 1, 5000, SLIDER_TRAVEL_X, SLIDER_TRAVEL_Y, SLIDER_WIDTH },
-        { &animSettings.fps, 1, 240, SLIDER_FPS_X, SLIDER_FPS_Y, SLIDER_WIDTH },
-        { &animSettings.lightMode, 0, 1, SLIDER_LIGHT_X, SLIDER_LIGHT_Y, SLIDER_WIDTH },
-	{ &sceneSettings.rays, 0, 10000, SLIDER_RAYS_X, SLIDER_RAYS_Y, SLIDER_WIDTH},
-	{ &sceneSettings.windowWidth, 0, 2500, SLIDER_WIDTH_X, SLIDER_WIDTH_Y, SLIDER_WIDTH},
-        { &sceneSettings.windowHeight, 0, 1400, SLIDER_HEIGHT_X, SLIDER_HEIGHT_Y, SLIDER_WIDTH},
-        { &animSettings.tileSize, 4, 256, SLIDER_TILE_X, SLIDER_TILE_Y, SLIDER_WIDTH },
-        { &rouletteSliderValue, 1, 2000, SLIDER_ROULETTE_X, SLIDER_ROULETTE_Y, SLIDER_WIDTH }
-    };
+    MenuSlider sliders[16];
+    size_t sliderCount = 0;
+    sliders[sliderCount++] = (MenuSlider){ &animSettings.bounceLimit, 0, 100, SLIDER_BOUNCE_X, SLIDER_BOUNCE_Y, SLIDER_WIDTH, "Bounce Limit" };
+    sliders[sliderCount++] = (MenuSlider){ &animSettings.frameLimit, 1, 5000, SLIDER_FRAME_X, SLIDER_FRAME_Y, SLIDER_WIDTH, "Frame Limit" };
+    sliders[sliderCount++] = (MenuSlider){ &animSettings.framesForTravel, 1, 5000, SLIDER_TRAVEL_X, SLIDER_TRAVEL_Y, SLIDER_WIDTH, "Path Points" };
+    sliders[sliderCount++] = (MenuSlider){ &animSettings.fps, 1, 240, SLIDER_FPS_X, SLIDER_FPS_Y, SLIDER_WIDTH, "FPS" };
+    sliders[sliderCount++] = (MenuSlider){ &animSettings.lightMode, 0, 1, SLIDER_LIGHT_X, SLIDER_LIGHT_Y, SLIDER_WIDTH, "Light Mode" };
+    sliders[sliderCount++] = (MenuSlider){ &sceneSettings.rays, 0, 10000, SLIDER_RAYS_X, SLIDER_RAYS_Y, SLIDER_WIDTH, "Num Rays" };
+    sliders[sliderCount++] = (MenuSlider){ &sceneSettings.windowWidth, 0, 2500, SLIDER_WIDTH_X, SLIDER_WIDTH_Y, SLIDER_WIDTH, "Width" };
+    sliders[sliderCount++] = (MenuSlider){ &sceneSettings.windowHeight, 0, 1400, SLIDER_HEIGHT_X, SLIDER_HEIGHT_Y, SLIDER_WIDTH, "Height" };
+    sliders[sliderCount++] = (MenuSlider){ &animSettings.tileSize, 4, 256, SLIDER_TILE_X, SLIDER_TILE_Y, SLIDER_WIDTH, "Tile Size" };
+    sliders[sliderCount++] = (MenuSlider){ &rouletteSliderValue, 1, 2000, SLIDER_ROULETTE_X, SLIDER_ROULETTE_Y, SLIDER_WIDTH, "Roulette Threshold" };
+    if (animSettings.integratorMode == 1) {
+        sliders[sliderCount++] = (MenuSlider){ &animSettings.pathSamplesPerPixel, 1, 128, SLIDER_SPP_X, SLIDER_SPP_Y, SLIDER_WIDTH, "Path SPP" };
+        sliders[sliderCount++] = (MenuSlider){ &animSettings.pathMaxDepth, 1, 16, SLIDER_DEPTH_X, SLIDER_DEPTH_Y, SLIDER_WIDTH, "Path Depth" };
+        sliders[sliderCount++] = (MenuSlider){ &envSliderValue, 0, 200, SLIDER_ENV_X, SLIDER_ENV_Y, SLIDER_WIDTH, "Environment %" };
+    }
          
-    size_t sliderCount = sizeof(sliders) / sizeof(sliders[0]);
     for (size_t i = 0; i < sliderCount; i++) {
         if (x > sliders[i].x && x < sliders[i].x + sliders[i].width &&
             y > sliders[i].y - 5 && y < sliders[i].y + 15) {
@@ -497,6 +602,11 @@ void HandleSliderClick(SDL_Event* event) {
             sliderStartX = sliders[i].x;
             sliderWidth = sliders[i].width;
 
+            bool adjustCamera = (selectedSlider == &sceneSettings.windowWidth ||
+                                 selectedSlider == &sceneSettings.windowHeight);
+            int prevWidth = sceneSettings.windowWidth;
+            int prevHeight = sceneSettings.windowHeight;
+
             // Immediately update slider value to where the user clicked
             float percent = (float)(x - sliders[i].x) / sliders[i].width;
             int newValue = sliders[i].min + percent * (sliders[i].max - sliders[i].min);
@@ -507,6 +617,12 @@ void HandleSliderClick(SDL_Event* event) {
 
             *selectedSlider = newValue;  // Apply updated value instantly
             ApplySpecialSliderRules(selectedSlider);
+            if (adjustCamera &&
+                (prevWidth != sceneSettings.windowWidth || prevHeight != sceneSettings.windowHeight)) {
+                ReanchorCameraAfterResize(prevWidth, prevHeight);
+                oldWindowWidth = sceneSettings.windowWidth;
+                oldWindowHeight = sceneSettings.windowHeight;
+            }
             return;
         }
     }
@@ -611,7 +727,27 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
         return;
     }
 
-    // Restore Defaults Button Click
+    if (x >= INTEGRATOR_BUTTON_X && x <= INTEGRATOR_BUTTON_X + INTEGRATOR_BUTTON_WIDTH &&
+        y >= INTEGRATOR_BUTTON_Y && y <= INTEGRATOR_BUTTON_Y + INTEGRATOR_BUTTON_HEIGHT) {
+        animSettings.integratorMode = (animSettings.integratorMode == 0) ? 1 : 0;
+        SyncEnvSliderFromSettings();
+        return;
+    }
+
+    if (animSettings.integratorMode == 1) {
+        if (x >= PATH_TOGGLE_X && x <= PATH_TOGGLE_X + PATH_TOGGLE_WIDTH &&
+            y >= PATH_TOGGLE_DIRECT_Y && y <= PATH_TOGGLE_DIRECT_Y + PATH_TOGGLE_HEIGHT) {
+            animSettings.pathDirectLighting = !animSettings.pathDirectLighting;
+            return;
+        }
+        if (x >= PATH_TOGGLE_X && x <= PATH_TOGGLE_X + PATH_TOGGLE_WIDTH &&
+            y >= PATH_TOGGLE_RR_Y && y <= PATH_TOGGLE_RR_Y + PATH_TOGGLE_HEIGHT) {
+            animSettings.pathRussianRoulette = !animSettings.pathRussianRoulette;
+            return;
+        }
+    }
+
+    // Save Button Click
     if (x > BOTTOM_BUTTON_MARGIN_X_SAVE && x < BOTTOM_BUTTON_MARGIN_X_SAVE + BOTTOM_BUTTON_WIDTH_SAVE &&
         y > BOTTOM_BUTTON_MARGIN_Y_SAVE && y < BOTTOM_BUTTON_MARGIN_Y_SAVE + BOTTOM_BUTTON_HEIGHT_SAVE) {
 	SaveAllSettings();

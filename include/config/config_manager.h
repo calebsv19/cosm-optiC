@@ -31,6 +31,13 @@ typedef struct {
     bool useTiledRenderer;
     int tileSize;
     double rouletteThreshold;
+    int integratorMode;
+    int pathSamplesPerPixel;
+    int pathMaxDepth;
+    bool pathDirectLighting;
+    bool pathRussianRoulette;
+    double environmentBrightness;
+    int pathSeed;
     int editorMode;
 } AnimationConfig;
 

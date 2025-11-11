@@ -11,6 +11,11 @@ SDL_LIBS   := $(shell sdl2-config --libs)
 CFLAGS  := $(CSTD) -Wall -Wextra -Wpedantic -g $(SDL_CFLAGS) -I$(INC_DIR) -DMAIN_DRIVER
 LDFLAGS := $(SDL_LIBS) -lSDL2_ttf -ljson-c -lm
 
+CFLAGS_RELEASE := $(CSTD) -Wall -Wextra -Wpedantic -O3 $(SDL_CFLAGS) -I$(INC_DIR) -DMAIN_DRIVER -DNDEBUG \
+	-ffast-math -fno-math-errno -march=native
+REL_BUILD_DIR := build_release
+REL_TARGET := Ray_anim_release
+
 VIDEO_FRAMES_DIR ?= Animations/default
 VIDEO_OUTPUT ?= Animations/Vids/output.mp4
 VIDEO_FPS ?= 30
@@ -19,7 +24,7 @@ SRC := $(shell find $(SRC_DIR) -name '*.c')
 OBJ := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRC))
 DEP := $(OBJ:.o=.d)
 
-.PHONY: all clean run debug format video
+.PHONY: all clean run debug format video release relrun
 
 all: $(TARGET)
 
@@ -42,7 +47,13 @@ format:
 video:
 	@python3 tools/make_video.py --frames "$(VIDEO_FRAMES_DIR)" --output "$(VIDEO_OUTPUT)" --fps $(VIDEO_FPS)
 
+release:
+	$(MAKE) BUILD_DIR=$(REL_BUILD_DIR) TARGET=$(REL_TARGET) CFLAGS="$(CFLAGS_RELEASE)" LDFLAGS="$(LDFLAGS)" all
+
+relrun: release
+	./$(REL_TARGET)
+
 clean:
-	rm -rf $(BUILD_DIR) $(TARGET)
+	rm -rf $(BUILD_DIR) $(TARGET) $(REL_BUILD_DIR) $(REL_TARGET)
 
 -include $(DEP)

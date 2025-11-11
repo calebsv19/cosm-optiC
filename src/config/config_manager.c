@@ -37,6 +37,13 @@ AnimationConfig animSettings = {
     .useTiledRenderer = false,
     .tileSize = 16,
     .rouletteThreshold = 0.01,
+    .integratorMode = 0,
+    .pathSamplesPerPixel = 4,
+    .pathMaxDepth = 4,
+    .pathDirectLighting = true,
+    .pathRussianRoulette = true,
+    .environmentBrightness = 0.0,
+    .pathSeed = 1,
     .editorMode = 0
 };
 
@@ -211,6 +218,13 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "useTiledRenderer", json_object_new_boolean(animSettings.useTiledRenderer));
     json_object_object_add(config, "tileSize", json_object_new_int(animSettings.tileSize));
     json_object_object_add(config, "rouletteThreshold", json_object_new_double(animSettings.rouletteThreshold));
+    json_object_object_add(config, "integratorMode", json_object_new_int(animSettings.integratorMode));
+    json_object_object_add(config, "pathSamplesPerPixel", json_object_new_int(animSettings.pathSamplesPerPixel));
+    json_object_object_add(config, "pathMaxDepth", json_object_new_int(animSettings.pathMaxDepth));
+    json_object_object_add(config, "pathDirectLighting", json_object_new_boolean(animSettings.pathDirectLighting));
+    json_object_object_add(config, "pathRussianRoulette", json_object_new_boolean(animSettings.pathRussianRoulette));
+    json_object_object_add(config, "environmentBrightness", json_object_new_double(animSettings.environmentBrightness));
+    json_object_object_add(config, "pathSeed", json_object_new_int(animSettings.pathSeed));
     fprintf(file, "%s", json_object_to_json_string_ext(config, JSON_C_TO_STRING_PRETTY));
     fclose(file);
     json_object_put(config);
@@ -637,6 +651,20 @@ void LoadAnimationConfig(void) {
         animSettings.tileSize = json_object_get_int(temp);
     if (json_object_object_get_ex(config, "rouletteThreshold", &temp))
         animSettings.rouletteThreshold = json_object_get_double(temp);
+    if (json_object_object_get_ex(config, "integratorMode", &temp))
+        animSettings.integratorMode = json_object_get_int(temp);
+    if (json_object_object_get_ex(config, "pathSamplesPerPixel", &temp))
+        animSettings.pathSamplesPerPixel = json_object_get_int(temp);
+    if (json_object_object_get_ex(config, "pathMaxDepth", &temp))
+        animSettings.pathMaxDepth = json_object_get_int(temp);
+    if (json_object_object_get_ex(config, "pathDirectLighting", &temp))
+        animSettings.pathDirectLighting = json_object_get_boolean(temp);
+    if (json_object_object_get_ex(config, "pathRussianRoulette", &temp))
+        animSettings.pathRussianRoulette = json_object_get_boolean(temp);
+    if (json_object_object_get_ex(config, "environmentBrightness", &temp))
+        animSettings.environmentBrightness = json_object_get_double(temp);
+    if (json_object_object_get_ex(config, "pathSeed", &temp))
+        animSettings.pathSeed = json_object_get_int(temp);
 	
     printf(" Loaded animation config successfully.\n");
     json_object_put(config);

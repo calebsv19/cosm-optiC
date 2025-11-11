@@ -9,5 +9,10 @@ Persistent settings consumed by both the menu and the renderer.
   - `useTiledRenderer` – switches between the original full-buffer path and the new tile-based renderer.
   - `tileSize` – tile edge length (multiples of 4, default 16) used when `useTiledRenderer` is true.
   - `rouletteThreshold` – Russian-roulette cutoff controlling when low-energy rays terminate.
+  - `integratorMode` – selects between the forward-light and camera-path integrators.
+  - `pathSamplesPerPixel`, `pathMaxDepth` – per-pixel sampling count and bounce limit for the camera-path mode.
+  - `pathDirectLighting`, `pathRussianRoulette` – toggles for next-event estimation and Russian roulette in the camera-path integrator.
+  - `environmentBrightness` – scalar environment light applied when rays miss all geometry.
+  - `pathSeed` – base RNG seed for camera-path sampling.
 - `config.json` – Legacy/lightweight settings file kept for compatibility with older tools; current code primarily uses `animation_config.json`.
 - `default.ttf` – Font asset used when rendering UI text. `src/ui/sdl_menu.c` and `src/render/render_helper.c` currently hard-code system fonts, but this file is available for future packaging.

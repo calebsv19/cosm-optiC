@@ -14,8 +14,6 @@
 
 // UI Button
 SDL_Rect applyButton = {1000, 700, 150, 50};
-#define WIDTH 1200
-
 SDL_Rect changeModeButton;
 SDL_Rect addButton;  // Small square
 SDL_Rect deleteButton;
