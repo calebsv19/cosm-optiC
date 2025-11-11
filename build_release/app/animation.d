@@ -64,7 +64,20 @@ build_release/app/animation.o: src/app/animation.c include/ui/sdl_menu.h \
   /usr/local/include/json-c/json_tokener.h \
   /usr/local/include/json-c/json_util.h \
   /usr/local/include/json-c/linkhash.h include/scene/object_manager.h \
-  include/render/ray_tracing2.h include/editor/bezier_editor.h
+  include/render/ray_tracing2.h include/render/integrator_common.h \
+  include/render/uniform_grid.h include/render/ray_types.h \
+  include/editor/bezier_editor.h include/render/timer_hud_api.h \
+  include/render/../../src/render/TimerHUD/src/api/time_scope.h \
+  include/render/../../src/render/TimerHUD/src/api/../core/frame_tracker.h \
+  include/render/../../src/render/TimerHUD/src/api/../core/timer_manager.h \
+  include/render/../../src/render/TimerHUD/src/api/../core/timer.h \
+  include/render/../../src/render/TimerHUD/src/api/../events/event_tracker.h \
+  include/render/../../src/render/TimerHUD/src/api/../hud/hud_renderer.h \
+  include/engine/Render/renderer_backend.h \
+  include/engine/Render/build_config.h \
+  include/render/../../src/render/TimerHUD/src/api/../logging/logger.h \
+  include/render/../../src/render/TimerHUD/src/api/../config/settings_loader.h \
+  include/engine/Render/render_pipeline.h
 
 include/ui/sdl_menu.h:
 
@@ -214,4 +227,34 @@ include/scene/object_manager.h:
 
 include/render/ray_tracing2.h:
 
+include/render/integrator_common.h:
+
+include/render/uniform_grid.h:
+
+include/render/ray_types.h:
+
 include/editor/bezier_editor.h:
+
+include/render/timer_hud_api.h:
+
+include/render/../../src/render/TimerHUD/src/api/time_scope.h:
+
+include/render/../../src/render/TimerHUD/src/api/../core/frame_tracker.h:
+
+include/render/../../src/render/TimerHUD/src/api/../core/timer_manager.h:
+
+include/render/../../src/render/TimerHUD/src/api/../core/timer.h:
+
+include/render/../../src/render/TimerHUD/src/api/../events/event_tracker.h:
+
+include/render/../../src/render/TimerHUD/src/api/../hud/hud_renderer.h:
+
+include/engine/Render/renderer_backend.h:
+
+include/engine/Render/build_config.h:
+
+include/render/../../src/render/TimerHUD/src/api/../logging/logger.h:
+
+include/render/../../src/render/TimerHUD/src/api/../config/settings_loader.h:
+
+include/engine/Render/render_pipeline.h:

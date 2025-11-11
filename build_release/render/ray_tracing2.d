@@ -47,7 +47,9 @@ build_release/render/ray_tracing2.o: src/render/ray_tracing2.c \
   /usr/local/include/SDL2/SDL_timer.h \
   /usr/local/include/SDL2/SDL_version.h \
   /usr/local/include/SDL2/SDL_locale.h \
-  /usr/local/include/SDL2/SDL_misc.h include/config/config_manager.h \
+  /usr/local/include/SDL2/SDL_misc.h include/render/integrator_common.h \
+  include/scene/object_manager.h include/render/uniform_grid.h \
+  include/render/ray_types.h include/config/config_manager.h \
   /usr/local/include/json-c/json.h /usr/local/include/json-c/arraylist.h \
   /usr/local/include/json-c/debug.h \
   /usr/local/include/json-c/json_c_version.h \
@@ -62,15 +64,24 @@ build_release/render/ray_tracing2.o: src/render/ray_tracing2.c \
   /usr/local/include/json-c/json_tokener.h \
   /usr/local/include/json-c/json_util.h \
   /usr/local/include/json-c/linkhash.h include/path/path_system.h \
-  include/camera/camera.h include/scene/object_manager.h \
-  include/render/render_helper.h /usr/local/include/SDL2/SDL_ttf.h \
-  include/render/fast_rng.h include/render/uniform_grid.h \
-  include/render/ray_types.h include/render/integrator_common.h \
+  include/camera/camera.h include/render/render_helper.h \
+  /usr/local/include/SDL2/SDL_ttf.h include/render/fast_rng.h \
   include/render/camera_path_integrator.h \
   include/render/forward_light_integrator.h \
-  include/editor/scene_editor.h include/editor/bezier_editor.h \
-  include/editor/object_editor.h include/editor/camera_editor.h \
-  include/app/animation.h
+  include/render/irradiance_cache.h include/render/timer_hud_api.h \
+  include/render/../../src/render/TimerHUD/src/api/time_scope.h \
+  include/render/../../src/render/TimerHUD/src/api/../core/frame_tracker.h \
+  include/render/../../src/render/TimerHUD/src/api/../core/timer_manager.h \
+  include/render/../../src/render/TimerHUD/src/api/../core/timer.h \
+  include/render/../../src/render/TimerHUD/src/api/../events/event_tracker.h \
+  include/render/../../src/render/TimerHUD/src/api/../hud/hud_renderer.h \
+  include/engine/Render/renderer_backend.h \
+  include/engine/Render/build_config.h \
+  include/render/../../src/render/TimerHUD/src/api/../logging/logger.h \
+  include/render/../../src/render/TimerHUD/src/api/../config/settings_loader.h \
+  include/engine/Render/render_pipeline.h include/editor/scene_editor.h \
+  include/editor/bezier_editor.h include/editor/object_editor.h \
+  include/editor/camera_editor.h include/app/animation.h
 
 include/render/ray_tracing2.h:
 
@@ -174,6 +185,14 @@ include/render/ray_tracing2.h:
 
 /usr/local/include/SDL2/SDL_misc.h:
 
+include/render/integrator_common.h:
+
+include/scene/object_manager.h:
+
+include/render/uniform_grid.h:
+
+include/render/ray_types.h:
+
 include/config/config_manager.h:
 
 /usr/local/include/json-c/json.h:
@@ -210,23 +229,41 @@ include/path/path_system.h:
 
 include/camera/camera.h:
 
-include/scene/object_manager.h:
-
 include/render/render_helper.h:
 
 /usr/local/include/SDL2/SDL_ttf.h:
 
 include/render/fast_rng.h:
 
-include/render/uniform_grid.h:
-
-include/render/ray_types.h:
-
-include/render/integrator_common.h:
-
 include/render/camera_path_integrator.h:
 
 include/render/forward_light_integrator.h:
+
+include/render/irradiance_cache.h:
+
+include/render/timer_hud_api.h:
+
+include/render/../../src/render/TimerHUD/src/api/time_scope.h:
+
+include/render/../../src/render/TimerHUD/src/api/../core/frame_tracker.h:
+
+include/render/../../src/render/TimerHUD/src/api/../core/timer_manager.h:
+
+include/render/../../src/render/TimerHUD/src/api/../core/timer.h:
+
+include/render/../../src/render/TimerHUD/src/api/../events/event_tracker.h:
+
+include/render/../../src/render/TimerHUD/src/api/../hud/hud_renderer.h:
+
+include/engine/Render/renderer_backend.h:
+
+include/engine/Render/build_config.h:
+
+include/render/../../src/render/TimerHUD/src/api/../logging/logger.h:
+
+include/render/../../src/render/TimerHUD/src/api/../config/settings_loader.h:
+
+include/engine/Render/render_pipeline.h:
 
 include/editor/scene_editor.h:
 

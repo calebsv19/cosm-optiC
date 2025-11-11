@@ -10,6 +10,8 @@
 #include "render/ray_tracing2.h"
 #include "editor/bezier_editor.h"
 #include "path/path_system.h"
+#include "render/timer_hud_api.h"
+#include "engine/Render/render_pipeline.h"
 #include <json-c/json.h>
 #include <math.h>
 #include <stdio.h>
@@ -122,6 +124,9 @@ int AnimationInit(void) {
         return -1;
     }
 
+    ts_init();
+    setRenderContext(renderer, window, WINDOW_WIDTH, WINDOW_HEIGHT);
+
     // Validate Bézier path
     if (sceneSettings.bezierPath.numPoints < 2) {
         fprintf(stderr, "Error: Bézier path is uninitialized or invalid. Check scene_config.json.\n");
@@ -222,6 +227,7 @@ void UpdateLightPosition(double* lightX, double* lightY) {
 
 
 void RenderFrame(double lightX, double lightY, int* frameCounter, bool* running) {
+    ts_frame_start();
     // Clear the screen before drawing new frame
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
@@ -232,13 +238,20 @@ void RenderFrame(double lightX, double lightY, int* frameCounter, bool* running)
         
     // Handle deep render mode frame saving
     if (animSettings.deepRenderMode) {
+        ts_start_timer("Frame Save");
         SaveFrame((*frameCounter)++);
+        ts_stop_timer("Frame Save");
         if (*frameCounter >= animSettings.frameLimit) {
             printf("Deep render mode complete. Final frame saved.\n");
             SDL_Delay(500);
             *running = false;
         }
     }
+
+    setRenderContext(renderer, window, sceneSettings.windowWidth, sceneSettings.windowHeight);
+    ts_render(renderer);
+    SDL_RenderPresent(renderer);
+    ts_frame_end();
 }
 
 void CheckLoopConditions(bool* running, int loopCount, int frameCounter) {

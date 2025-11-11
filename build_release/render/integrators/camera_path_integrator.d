@@ -65,7 +65,18 @@ build_release/render/integrators/camera_path_integrator.o: \
   /usr/local/include/json-c/json_tokener.h \
   /usr/local/include/json-c/json_util.h \
   /usr/local/include/json-c/linkhash.h include/path/path_system.h \
-  include/camera/camera.h include/render/fast_rng.h
+  include/camera/camera.h include/render/fast_rng.h \
+  include/render/timer_hud_api.h \
+  include/render/../../src/render/TimerHUD/src/api/time_scope.h \
+  include/render/../../src/render/TimerHUD/src/api/../core/frame_tracker.h \
+  include/render/../../src/render/TimerHUD/src/api/../core/timer_manager.h \
+  include/render/../../src/render/TimerHUD/src/api/../core/timer.h \
+  include/render/../../src/render/TimerHUD/src/api/../events/event_tracker.h \
+  include/render/../../src/render/TimerHUD/src/api/../hud/hud_renderer.h \
+  include/engine/Render/renderer_backend.h \
+  include/engine/Render/build_config.h \
+  include/render/../../src/render/TimerHUD/src/api/../logging/logger.h \
+  include/render/../../src/render/TimerHUD/src/api/../config/settings_loader.h
 
 include/render/camera_path_integrator.h:
 
@@ -214,3 +225,25 @@ include/path/path_system.h:
 include/camera/camera.h:
 
 include/render/fast_rng.h:
+
+include/render/timer_hud_api.h:
+
+include/render/../../src/render/TimerHUD/src/api/time_scope.h:
+
+include/render/../../src/render/TimerHUD/src/api/../core/frame_tracker.h:
+
+include/render/../../src/render/TimerHUD/src/api/../core/timer_manager.h:
+
+include/render/../../src/render/TimerHUD/src/api/../core/timer.h:
+
+include/render/../../src/render/TimerHUD/src/api/../events/event_tracker.h:
+
+include/render/../../src/render/TimerHUD/src/api/../hud/hud_renderer.h:
+
+include/engine/Render/renderer_backend.h:
+
+include/engine/Render/build_config.h:
+
+include/render/../../src/render/TimerHUD/src/api/../logging/logger.h:
+
+include/render/../../src/render/TimerHUD/src/api/../config/settings_loader.h:

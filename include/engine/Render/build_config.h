@@ -1,0 +1,8 @@
+#ifndef ENGINE_RENDER_BUILD_CONFIG_H
+#define ENGINE_RENDER_BUILD_CONFIG_H
+
+#ifndef USE_VULKAN
+#define USE_VULKAN 0
+#endif
+
+#endif

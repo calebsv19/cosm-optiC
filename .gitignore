@@ -1,5 +1,6 @@
 # Ignore build artifacts
 build/
+build_release/
 
 # Ignore rendered video outputs
 *.mp4

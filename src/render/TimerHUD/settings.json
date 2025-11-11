@@ -1,0 +1,15 @@
+{
+  "hud_enabled": true,
+  "log_enabled": true,
+  "event_tagging_enabled": false,
+  "timer_buffer_size": 128,
+  "log_filepath": "timing.json",
+  "log_format": "json",
+  "render_mode": "throttled",
+  "render_threshold": 0.503,
+
+  "hud_position": "bottom-left", 
+  "hud_offset_x": 10,               
+  "hud_offset_y": 10                
+}
+

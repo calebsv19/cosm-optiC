@@ -2,6 +2,7 @@
 #define RAYTRACING_H
 
 #include <SDL2/SDL.h>
+#include "render/integrator_common.h"
 
 // Define a simple circle type used in the scene.
 typedef struct {
@@ -27,5 +28,10 @@ void CleanupRayTracing(void);
 
 // ray_tracing2.h
 void SetLightPosition(double x, double y);
+
+typedef struct {
+    IrradianceCache cache;
+    Uint8* forwardBuffer;
+} ReflectionData;
 
 #endif // RAYTRACING_H

@@ -1,0 +1,13 @@
+{
+  "hud_enabled": true,
+  "log_enabled": false,
+  "event_tagging_enabled": false,
+  "timer_buffer_size": 64,
+  "log_filepath": "timerhud_log.csv",
+  "log_format": "csv",
+  "render_mode": "throttled",
+  "render_threshold": 0.033,
+  "hud_position": "top-left",
+  "hud_offset_x": 20,
+  "hud_offset_y": 20
+}

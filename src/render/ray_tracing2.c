@@ -7,6 +7,9 @@
 #include "render/integrator_common.h"
 #include "render/camera_path_integrator.h"
 #include "render/forward_light_integrator.h"
+#include "render/irradiance_cache.h"
+#include "render/timer_hud_api.h"
+#include "engine/Render/render_pipeline.h"
 #include "editor/scene_editor.h"
 #include "app/animation.h"
 #include "camera/camera.h"
@@ -30,6 +33,102 @@ Uint8* pixelBuffer = NULL;  // Global but uninitialized
 float* energyBuffer = NULL;
 static TileGrid tileGrid = {0};
 static UniformGrid uniformGrid = {0};
+static IrradianceCache irradianceCache = {0};
+
+static bool SampleObjectPoint(const SceneObject* obj,
+                              double t,
+                              double* outX,
+                              double* outY,
+                              double* outNx,
+                              double* outNy) {
+    if (!obj || !outX || !outY) return false;
+    if (strcmp(obj->type, "circle") == 0) {
+        double radius = obj->radius * obj->scale;
+        double angle = t * 2.0 * M_PI;
+        double dirX = cos(angle);
+        double dirY = sin(angle);
+        *outX = obj->x + radius * dirX;
+        *outY = obj->y + radius * dirY;
+        if (outNx && outNy) {
+            *outNx = dirX;
+            *outNy = dirY;
+        }
+        return true;
+    }
+
+    if (obj->numPoints < 2) {
+        return false;
+    }
+
+    double perimeter = 0.0;
+    for (int i = 0; i < obj->numPoints; i++) {
+        int next = (i + 1) % obj->numPoints;
+        double x1 = obj->shapePoints[i][0] + obj->x;
+        double y1 = obj->shapePoints[i][1] + obj->y;
+        double x2 = obj->shapePoints[next][0] + obj->x;
+        double y2 = obj->shapePoints[next][1] + obj->y;
+        double dx = x2 - x1;
+        double dy = y2 - y1;
+        perimeter += sqrt(dx * dx + dy * dy);
+    }
+    if (perimeter < 1e-6) return false;
+
+    double target = Clamp01(t) * perimeter;
+    double accum = 0.0;
+    for (int i = 0; i < obj->numPoints; i++) {
+        int next = (i + 1) % obj->numPoints;
+        double x1 = obj->shapePoints[i][0] + obj->x;
+        double y1 = obj->shapePoints[i][1] + obj->y;
+        double x2 = obj->shapePoints[next][0] + obj->x;
+        double y2 = obj->shapePoints[next][1] + obj->y;
+        double dx = x2 - x1;
+        double dy = y2 - y1;
+        double segLen = sqrt(dx * dx + dy * dy);
+        if (segLen <= 1e-6) continue;
+        if (accum + segLen >= target) {
+            double localT = (target - accum) / segLen;
+            *outX = x1 + dx * localT;
+            *outY = y1 + dy * localT;
+            if (outNx && outNy) {
+                *outNx = dy / segLen;
+                *outNy = -dx / segLen;
+                double centerDx = *outX - obj->x;
+                double centerDy = *outY - obj->y;
+                if ((*outNx * centerDx + *outNy * centerDy) < 0.0) {
+                    *outNx = -*outNx;
+                    *outNy = -*outNy;
+                }
+            }
+            return true;
+        }
+        accum += segLen;
+    }
+    return false;
+}
+
+static float SampleEnergyBufferAt(const float* buffer,
+                                  int width,
+                                  int height,
+                                  double worldX,
+                                  double worldY) {
+    if (!buffer) return 0.0f;
+    CameraPoint screen = CameraWorldToScreen(&sceneSettings.camera,
+                                             worldX,
+                                             worldY,
+                                             width,
+                                             height);
+    int sx = (int)lround(screen.x);
+    int sy = (int)lround(screen.y);
+    if (sx < 0 || sx >= width || sy < 0 || sy >= height) {
+        return 0.0f;
+    }
+    size_t idx = (size_t)sy * (size_t)width + (size_t)sx;
+    return buffer[idx];
+}
+
+static float* reflectionForwardBuffer = NULL;
+static bool BuildReflectionCache(const IntegratorContext* ctx,
+                                 const LightSource* light);
 
 void InitRayTracingScene(void) {
     printf("DEBUG: Initializing Ray Tracing Scene\n");
@@ -92,6 +191,11 @@ void CleanupRayTracing(void) {
     }
     TileGridFree(&tileGrid);
     UniformGridFree(&uniformGrid);
+    IrradianceCacheClear(&irradianceCache);
+    if (reflectionForwardBuffer) {
+        free(reflectionForwardBuffer);
+        reflectionForwardBuffer = NULL;
+    }
 }
 
 void SetLightPosition(double x, double y) {
@@ -207,6 +311,13 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
 
     uint64_t frameSeed = (uint64_t)SDL_GetPerformanceCounter();
 
+    bool haveCache = false;
+    if (animSettings.integratorMode == 1) {
+        haveCache = IrradianceCacheEnsure(&irradianceCache,
+                                          sceneSettings.objectCount,
+                                          64);
+    }
+
     IntegratorContext context = {
         .pixelBuffer = pixelBuffer,
         .energyBuffer = useTiles ? NULL : energyBuffer,
@@ -218,7 +329,8 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
         .useTiles = useTiles,
         .frameSeed = frameSeed,
         .uniformGrid = (uniformGrid.cells ? &uniformGrid : NULL),
-        .integratorMode = animSettings.integratorMode
+        .integratorMode = animSettings.integratorMode,
+        .cache = (haveCache ? &irradianceCache : NULL)
     };
 
     LightSource activeLight = {
@@ -227,16 +339,29 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
         .radius = light.r
     };
 
+    bool cacheReady = false;
+    if (animSettings.integratorMode == 1 && haveCache) {
+        ts_start_timer("Irradiance Cache");
+        cacheReady = BuildReflectionCache(&context, &activeLight);
+        ts_stop_timer("Irradiance Cache");
+        if (!cacheReady) {
+            context.cache = NULL;
+        }
+    }
+
+    ts_start_timer("Buffer Calc");
     if (animSettings.integratorMode == 0) {
         ForwardLightIntegratorRender(&context, &activeLight);
     } else {
         CameraPathIntegratorRender(&context, &activeLight);
     }
+    ts_stop_timer("Buffer Calc");
 
     int blurRadius = 0;
     if (animSettings.blurMode == 1) blurRadius = 1;
     else if (animSettings.blurMode == 2) blurRadius = 2;
     else if (animSettings.blurMode == 3) blurRadius = 3;
+    ts_start_timer("Buffer Present");
     if (blurRadius > 0) {
         ApplySeparableBlur(pixelBuffer, WIDTH, HEIGHT, blurRadius);
     }
@@ -267,7 +392,7 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
         RenderSceneObject(renderer, &sceneSettings.sceneObjects[i], true);
     }
 
-    SDL_RenderPresent(renderer);
+    ts_stop_timer("Buffer Present");
 }
 
 
@@ -293,4 +418,64 @@ void ProcessRayTracingEvent(SDL_Event* event) {
 void GetCurrentLightPosition(double* x, double* y) {
     *x = light.x;
     *y = light.y;
+}
+static bool BuildReflectionCache(const IntegratorContext* ctx,
+                                 const LightSource* light) {
+    if (!ctx || !ctx->cache) return false;
+    int width = ctx->width;
+    int height = ctx->height;
+    size_t pixelCount = (size_t)width * (size_t)height;
+    if (!reflectionForwardBuffer) {
+        reflectionForwardBuffer = (float*)malloc(pixelCount * sizeof(float));
+        if (!reflectionForwardBuffer) {
+            return false;
+        }
+    }
+
+    int savedRays = sceneSettings.rays;
+    int probeRays = savedRays / 6;
+    if (probeRays < 128) probeRays = 128;
+    sceneSettings.rays = probeRays;
+
+    IntegratorContext probeCtx = *ctx;
+    probeCtx.pixelBuffer = NULL;
+    probeCtx.energyBuffer = reflectionForwardBuffer;
+    probeCtx.useTiles = false;
+    probeCtx.tileGrid = NULL;
+    memset(reflectionForwardBuffer, 0, pixelCount * sizeof(float));
+    ForwardLightIntegratorRender(&probeCtx, light);
+    sceneSettings.rays = savedRays;
+
+    float maxEnergy = 0.0f;
+    for (size_t i = 0; i < pixelCount; i++) {
+        if (reflectionForwardBuffer[i] > maxEnergy) {
+            maxEnergy = reflectionForwardBuffer[i];
+        }
+    }
+    if (maxEnergy <= 0.0f) {
+        maxEnergy = 1.0f;
+    }
+
+    for (int objIdx = 0; objIdx < ctx->objectCount; objIdx++) {
+        const SceneObject* obj = &ctx->objects[objIdx];
+        for (int sample = 0; sample < ctx->cache->samplesPerObject; sample++) {
+            SurfaceIrradiance* entry = IrradianceCacheGet(ctx->cache, objIdx, sample);
+            if (!entry) continue;
+            double sampleX, sampleY, nx, ny;
+            double t = ((double)sample + 0.5) / (double)ctx->cache->samplesPerObject;
+            if (!SampleObjectPoint(obj, t, &sampleX, &sampleY, &nx, &ny)) {
+                entry->intensity = 0.0;
+                continue;
+            }
+            float energy = SampleEnergyBufferAt(reflectionForwardBuffer,
+                                                width,
+                                                height,
+                                                sampleX,
+                                                sampleY);
+            entry->intensity = (double)(energy / maxEnergy);
+            entry->dirX = nx;
+            entry->dirY = ny;
+        }
+    }
+    return true;
 }

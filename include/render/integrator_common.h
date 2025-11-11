@@ -40,6 +40,18 @@ typedef struct {
 } TileGrid;
 
 typedef struct {
+    double intensity;
+    double dirX;
+    double dirY;
+} SurfaceIrradiance;
+
+typedef struct {
+    SurfaceIrradiance* data;
+    int samplesPerObject;
+    int objectCount;
+} IrradianceCache;
+
+typedef struct {
     Uint8* pixelBuffer;
     float* energyBuffer;
     int width;
@@ -51,6 +63,7 @@ typedef struct {
     uint64_t frameSeed;
     const UniformGrid* uniformGrid;
     int integratorMode;
+    IrradianceCache* cache;
 } IntegratorContext;
 
 typedef struct {
@@ -65,5 +78,8 @@ void TileGridEnsure(TileGrid* grid, int width, int height, int tileSize);
 void TileGridClear(TileGrid* grid);
 double Clamp(double value, double minValue, double maxValue);
 double Clamp01(double value);
+bool IrradianceCacheEnsure(IrradianceCache* cache, int objectCount, int samplesPerObject);
+void IrradianceCacheClear(IrradianceCache* cache);
+SurfaceIrradiance* IrradianceCacheGet(const IrradianceCache* cache, int objectIndex, int sampleIndex);
 
 #endif

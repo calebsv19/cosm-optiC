@@ -84,3 +84,38 @@ double Clamp(double value, double minValue, double maxValue) {
 double Clamp01(double value) {
     return Clamp(value, 0.0, 1.0);
 }
+
+bool IrradianceCacheEnsure(IrradianceCache* cache, int objectCount, int samplesPerObject) {
+    if (!cache || objectCount <= 0 || samplesPerObject <= 0) return false;
+    int totalSamples = objectCount * samplesPerObject;
+    if (cache->data && cache->objectCount == objectCount && cache->samplesPerObject == samplesPerObject) {
+        memset(cache->data, 0, (size_t)totalSamples * sizeof(SurfaceIrradiance));
+        return true;
+    }
+    free(cache->data);
+    cache->data = (SurfaceIrradiance*)calloc((size_t)totalSamples, sizeof(SurfaceIrradiance));
+    if (!cache->data) {
+        cache->objectCount = 0;
+        cache->samplesPerObject = 0;
+        return false;
+    }
+    cache->objectCount = objectCount;
+    cache->samplesPerObject = samplesPerObject;
+    return true;
+}
+
+void IrradianceCacheClear(IrradianceCache* cache) {
+    if (!cache) return;
+    free(cache->data);
+    cache->data = NULL;
+    cache->objectCount = 0;
+    cache->samplesPerObject = 0;
+}
+
+SurfaceIrradiance* IrradianceCacheGet(const IrradianceCache* cache, int objectIndex, int sampleIndex) {
+    if (!cache || !cache->data) return NULL;
+    if (objectIndex < 0 || objectIndex >= cache->objectCount) return NULL;
+    if (sampleIndex < 0 || sampleIndex >= cache->samplesPerObject) return NULL;
+    size_t idx = (size_t)objectIndex * (size_t)cache->samplesPerObject + (size_t)sampleIndex;
+    return &cache->data[idx];
+}
