@@ -2,6 +2,7 @@
 #include "config/config_manager.h"
 #include <string.h>
 #include <math.h>
+#include <stdlib.h>
 
 static void InitDefaultMaterial(SceneObject* obj) {
     obj->texture[0] = '\0';
@@ -190,4 +191,127 @@ void MarkObjectDirty(SceneObject* obj) {
 // Checks if an object needs to be updated
 bool IsObjectDirty(SceneObject* obj) {
     return obj->dirty;
+}
+
+void SegmentPathInit(SegmentPath* path) {
+    if (!path) return;
+    path->vertices = NULL;
+    path->count = 0;
+    path->capacity = 0;
+}
+
+void SegmentPathFree(SegmentPath* path) {
+    if (!path) return;
+    free(path->vertices);
+    path->vertices = NULL;
+    path->count = 0;
+    path->capacity = 0;
+}
+
+static void NormalizeVec(double* x, double* y) {
+    double len = sqrt((*x) * (*x) + (*y) * (*y));
+    if (len < 1e-9) {
+        *x = 0.0;
+        *y = 1.0;
+        return;
+    }
+    *x /= len;
+    *y /= len;
+}
+
+static bool SegmentPathEnsure(SegmentPath* path, int required) {
+    if (!path || required <= 0) return false;
+    if (path->capacity >= required) {
+        return true;
+    }
+    int newCap = path->capacity > 0 ? path->capacity : 16;
+    while (newCap < required) {
+        newCap *= 2;
+    }
+    PathVertex* verts = (PathVertex*)realloc(path->vertices, (size_t)newCap * sizeof(PathVertex));
+    if (!verts) {
+        return false;
+    }
+    path->vertices = verts;
+    path->capacity = newCap;
+    return true;
+}
+
+static bool BuildPolygonPath(const SceneObject* obj,
+                             SegmentPath* path) {
+    if (!obj || !path) return false;
+    if (obj->numPoints <= 1) return false;
+    if (!SegmentPathEnsure(path, obj->numPoints)) return false;
+    double centerX = obj->x;
+    double centerY = obj->y;
+    for (int i = 0; i < obj->numPoints; i++) {
+        double wx = obj->shapePoints[i][0] + centerX;
+        double wy = obj->shapePoints[i][1] + centerY;
+        double nx = wx - centerX;
+        double ny = wy - centerY;
+        NormalizeVec(&nx, &ny);
+        /* Fallback for near-center vertices (degenerate polygons) */
+        if (fabs(nx) + fabs(ny) < 1e-6) {
+            int prev = (i - 1 + obj->numPoints) % obj->numPoints;
+            int next = (i + 1) % obj->numPoints;
+            double prevX = obj->shapePoints[prev][0] + centerX;
+            double prevY = obj->shapePoints[prev][1] + centerY;
+            double nextX = obj->shapePoints[next][0] + centerX;
+            double nextY = obj->shapePoints[next][1] + centerY;
+            double edgeNX = prevY - wy;
+            double edgeNY = -(prevX - wx);
+            NormalizeVec(&edgeNX, &edgeNY);
+            double edgeNX2 = wy - nextY;
+            double edgeNY2 = -(wx - nextX);
+            NormalizeVec(&edgeNX2, &edgeNY2);
+            nx = edgeNX + edgeNX2;
+            ny = edgeNY + edgeNY2;
+            NormalizeVec(&nx, &ny);
+        }
+        path->vertices[i].x = wx;
+        path->vertices[i].y = wy;
+        path->vertices[i].nx = nx;
+        path->vertices[i].ny = ny;
+    }
+    path->count = obj->numPoints;
+    return true;
+}
+
+static bool BuildCirclePath(const SceneObject* obj,
+                            double maxSegmentLength,
+                            SegmentPath* path) {
+    if (!obj || !path) return false;
+    double radius = obj->radius * obj->scale;
+    if (radius <= 0.0) return false;
+    double circumference = 2.0 * M_PI * radius;
+    double segmentLen = (maxSegmentLength > 0.5) ? maxSegmentLength : 8.0;
+    int samples = (int)ceil(circumference / segmentLen);
+    if (samples < 12) samples = 12;
+    if (!SegmentPathEnsure(path, samples)) return false;
+    for (int i = 0; i < samples; i++) {
+        double t = (double)i / (double)samples;
+        double angle = t * 2.0 * M_PI;
+        double cosA = cos(angle);
+        double sinA = sin(angle);
+        double px = obj->x + radius * cosA;
+        double py = obj->y + radius * sinA;
+        path->vertices[i].x = px;
+        path->vertices[i].y = py;
+        path->vertices[i].nx = cosA;
+        path->vertices[i].ny = sinA;
+    }
+    path->count = samples;
+    return true;
+}
+
+bool OM_BuildSegmentPath(const SceneObject* obj,
+                         double maxSegmentLength,
+                         SegmentPath* outPath) {
+    if (!obj || !outPath) return false;
+    /* reuse existing allocation */
+    outPath->count = 0;
+    if (strcmp(obj->type, "circle") == 0 || obj->numPoints == 0) {
+        return BuildCirclePath(obj, maxSegmentLength, outPath);
+    }
+    return BuildPolygonPath(obj, outPath);
 }

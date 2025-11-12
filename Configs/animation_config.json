@@ -16,7 +16,7 @@
   "lightDiffusionEnabled":true,
   "lightDiffusionRadius":4,
   "lightDiffusionStrength":0.65000000000000002,
-  "editorMode":1,
+  "editorMode":0,
   "useTiledRenderer":true,
   "tileSize":16,
   "rouletteThreshold":0.01,
@@ -25,6 +25,12 @@
   "pathMaxDepth":2,
   "pathDirectLighting":true,
   "pathRussianRoulette":true,
+  "pathEnableMIS":true,
   "environmentBrightness":0.0,
-  "pathSeed":1
+  "pathSeed":1,
+  "cacheContributionWeight":1.0,
+  "bsdfModel":0,
+  "lightIntensity":19.920000000000002,
+  "forwardDecay":2000.0,
+  "forwardFalloffMode":2
 }

@@ -5,7 +5,7 @@
 
 // Centralized initialization
 void ts_init(void) {
-    if (!ts_load_settings("src/engine/TimerHUD/settings.json")) {
+    if (!ts_load_settings("src/render/TimerHUD/settings.json")) {
         fprintf(stderr, "[TimeScope] Using default settings.\n");
     }
 
@@ -28,4 +28,3 @@ void ts_emit_event(const char* tag) {
         event_tracker_add(tag);
     }
 }
-

@@ -35,6 +35,19 @@ typedef struct {
     bool dirty;            // Needs update?
 } SceneObject;
 
+typedef struct {
+    double x;
+    double y;
+    double nx;
+    double ny;
+} PathVertex;
+
+typedef struct {
+    PathVertex* vertices;
+    int count;
+    int capacity;
+} SegmentPath;
+
 
 // Object Initialization
 void InitObject(SceneObject* obj, int type, double x, double y, double param1, double param2, double points[][2], int numPoints);
@@ -56,5 +69,11 @@ bool IsInsideObject(int mx, int my, SceneObject* obj);
 void ComputeObjectBounds(const SceneObject* obj, double* minX, double* minY, double* maxX, double* maxY);
 void MarkObjectDirty(SceneObject* obj);
 bool IsObjectDirty(SceneObject* obj);
+
+void SegmentPathInit(SegmentPath* path);
+void SegmentPathFree(SegmentPath* path);
+bool OM_BuildSegmentPath(const SceneObject* obj,
+                         double maxSegmentLength,
+                         SegmentPath* outPath);
 
 #endif // OBJECT_MANAGER_H

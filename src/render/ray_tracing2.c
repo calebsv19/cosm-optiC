@@ -5,6 +5,8 @@
 #include "render/uniform_grid.h"
 #include "render/ray_types.h"
 #include "render/integrator_common.h"
+#include "render/material_bsdf.h"
+#include "render/surface_mesh.h"
 #include "render/camera_path_integrator.h"
 #include "render/forward_light_integrator.h"
 #include "render/irradiance_cache.h"
@@ -31,104 +33,34 @@
 static Circle light = {100, 100, 10};  // Default position (updated dynamically)
 Uint8* pixelBuffer = NULL;  // Global but uninitialized
 float* energyBuffer = NULL;
+float* directEnergyBufferCPU = NULL;
 static TileGrid tileGrid = {0};
 static UniformGrid uniformGrid = {0};
 static IrradianceCache irradianceCache = {0};
-
-static bool SampleObjectPoint(const SceneObject* obj,
-                              double t,
-                              double* outX,
-                              double* outY,
-                              double* outNx,
-                              double* outNy) {
-    if (!obj || !outX || !outY) return false;
-    if (strcmp(obj->type, "circle") == 0) {
-        double radius = obj->radius * obj->scale;
-        double angle = t * 2.0 * M_PI;
-        double dirX = cos(angle);
-        double dirY = sin(angle);
-        *outX = obj->x + radius * dirX;
-        *outY = obj->y + radius * dirY;
-        if (outNx && outNy) {
-            *outNx = dirX;
-            *outNy = dirY;
-        }
-        return true;
-    }
-
-    if (obj->numPoints < 2) {
-        return false;
-    }
-
-    double perimeter = 0.0;
-    for (int i = 0; i < obj->numPoints; i++) {
-        int next = (i + 1) % obj->numPoints;
-        double x1 = obj->shapePoints[i][0] + obj->x;
-        double y1 = obj->shapePoints[i][1] + obj->y;
-        double x2 = obj->shapePoints[next][0] + obj->x;
-        double y2 = obj->shapePoints[next][1] + obj->y;
-        double dx = x2 - x1;
-        double dy = y2 - y1;
-        perimeter += sqrt(dx * dx + dy * dy);
-    }
-    if (perimeter < 1e-6) return false;
-
-    double target = Clamp01(t) * perimeter;
-    double accum = 0.0;
-    for (int i = 0; i < obj->numPoints; i++) {
-        int next = (i + 1) % obj->numPoints;
-        double x1 = obj->shapePoints[i][0] + obj->x;
-        double y1 = obj->shapePoints[i][1] + obj->y;
-        double x2 = obj->shapePoints[next][0] + obj->x;
-        double y2 = obj->shapePoints[next][1] + obj->y;
-        double dx = x2 - x1;
-        double dy = y2 - y1;
-        double segLen = sqrt(dx * dx + dy * dy);
-        if (segLen <= 1e-6) continue;
-        if (accum + segLen >= target) {
-            double localT = (target - accum) / segLen;
-            *outX = x1 + dx * localT;
-            *outY = y1 + dy * localT;
-            if (outNx && outNy) {
-                *outNx = dy / segLen;
-                *outNy = -dx / segLen;
-                double centerDx = *outX - obj->x;
-                double centerDy = *outY - obj->y;
-                if ((*outNx * centerDx + *outNy * centerDy) < 0.0) {
-                    *outNx = -*outNx;
-                    *outNy = -*outNy;
-                }
-            }
-            return true;
-        }
-        accum += segLen;
-    }
-    return false;
-}
-
-static float SampleEnergyBufferAt(const float* buffer,
-                                  int width,
-                                  int height,
-                                  double worldX,
-                                  double worldY) {
-    if (!buffer) return 0.0f;
-    CameraPoint screen = CameraWorldToScreen(&sceneSettings.camera,
-                                             worldX,
-                                             worldY,
-                                             width,
-                                             height);
-    int sx = (int)lround(screen.x);
-    int sy = (int)lround(screen.y);
-    if (sx < 0 || sx >= width || sy < 0 || sy >= height) {
-        return 0.0f;
-    }
-    size_t idx = (size_t)sy * (size_t)width + (size_t)sx;
-    return buffer[idx];
-}
+static MaterialBSDF* materialTable = NULL;
+static int materialCapacity = 0;
+static SurfaceMesh surfaceMesh = {0};
 
 static float* reflectionForwardBuffer = NULL;
 static bool BuildReflectionCache(const IntegratorContext* ctx,
                                  const LightSource* light);
+static int BuildMaterialTable(void);
+
+static void ApplyMaterialOverrides(MaterialBSDF* material) {
+    if (!material) return;
+    if (animSettings.bsdfModel == 0) {
+        material->specWeight = 0.0;
+        material->diffuseWeight = 1.0;
+        material->weightSum = 1.0;
+    } else {
+        material->weightSum = material->diffuseWeight + material->specWeight;
+        if (material->weightSum <= 1e-4) {
+            material->diffuseWeight = 1.0;
+            material->specWeight = 0.0;
+            material->weightSum = 1.0;
+        }
+    }
+}
 
 void InitRayTracingScene(void) {
     printf("DEBUG: Initializing Ray Tracing Scene\n");
@@ -178,6 +110,8 @@ void InitRayTracingScene(void) {
         light.y = 100;
         printf("WARNING: Bézier Path is uninitialized! Using default light position (100, 100)\n");
     }
+
+    SurfaceMeshInit(&surfaceMesh);
 }
 
 void CleanupRayTracing(void) {
@@ -189,6 +123,10 @@ void CleanupRayTracing(void) {
         free(energyBuffer);
         energyBuffer = NULL;
     }
+    if (directEnergyBufferCPU != NULL) {
+        free(directEnergyBufferCPU);
+        directEnergyBufferCPU = NULL;
+    }
     TileGridFree(&tileGrid);
     UniformGridFree(&uniformGrid);
     IrradianceCacheClear(&irradianceCache);
@@ -196,6 +134,12 @@ void CleanupRayTracing(void) {
         free(reflectionForwardBuffer);
         reflectionForwardBuffer = NULL;
     }
+    if (materialTable) {
+        free(materialTable);
+        materialTable = NULL;
+        materialCapacity = 0;
+    }
+    SurfaceMeshFree(&surfaceMesh);
 }
 
 void SetLightPosition(double x, double y) {
@@ -306,10 +250,21 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
         TileGridEnsure(&tileGrid, WIDTH, HEIGHT, tileSize);
         TileGridClear(&tileGrid);
     }
+    if (!useTiles) {
+        if (directEnergyBufferCPU == NULL) {
+            directEnergyBufferCPU = (float*)malloc(pixelCount * sizeof(float));
+            if (!directEnergyBufferCPU) {
+                printf("ERROR: Failed to allocate direct energy buffer during render.\n");
+                return;
+            }
+        }
+        memset(directEnergyBufferCPU, 0, pixelCount * sizeof(float));
+    }
     
     memset(pixelBuffer, 0, pixelCount * sizeof(Uint8)); // Clear buffer
 
     uint64_t frameSeed = (uint64_t)SDL_GetPerformanceCounter();
+    int materialCount = BuildMaterialTable();
 
     bool haveCache = false;
     if (animSettings.integratorMode == 1) {
@@ -318,9 +273,15 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
                                           64);
     }
 
+    bool meshReady = SurfaceMeshBuild(&surfaceMesh,
+                                      sceneSettings.sceneObjects,
+                                      sceneSettings.objectCount,
+                                      8.0);
+
     IntegratorContext context = {
         .pixelBuffer = pixelBuffer,
         .energyBuffer = useTiles ? NULL : energyBuffer,
+        .directEnergyBuffer = useTiles ? NULL : directEnergyBufferCPU,
         .width = WIDTH,
         .height = HEIGHT,
         .objects = sceneSettings.sceneObjects,
@@ -330,7 +291,10 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
         .frameSeed = frameSeed,
         .uniformGrid = (uniformGrid.cells ? &uniformGrid : NULL),
         .integratorMode = animSettings.integratorMode,
-        .cache = (haveCache ? &irradianceCache : NULL)
+        .cache = (haveCache ? &irradianceCache : NULL),
+        .materials = materialTable,
+        .materialCount = materialCount,
+        .mesh = (meshReady ? &surfaceMesh : NULL)
     };
 
     LightSource activeLight = {
@@ -419,6 +383,37 @@ void GetCurrentLightPosition(double* x, double* y) {
     *x = light.x;
     *y = light.y;
 }
+
+static int BuildMaterialTable(void) {
+    int count = sceneSettings.objectCount;
+    if (count <= 0) {
+        if (materialTable) {
+            free(materialTable);
+            materialTable = NULL;
+        }
+        materialCapacity = 0;
+        return 0;
+    }
+
+    if (!materialTable || materialCapacity < count) {
+        MaterialBSDF* newBuffer = (MaterialBSDF*)realloc(materialTable, (size_t)count * sizeof(MaterialBSDF));
+        if (!newBuffer) {
+            fprintf(stderr, "ERROR: Failed to allocate material table.\n");
+            free(materialTable);
+            materialTable = NULL;
+            materialCapacity = 0;
+            return 0;
+        }
+        materialTable = newBuffer;
+        materialCapacity = count;
+    }
+
+    for (int i = 0; i < count; i++) {
+        MaterialBSDFInitFromSceneObject(&sceneSettings.sceneObjects[i], &materialTable[i]);
+        ApplyMaterialOverrides(&materialTable[i]);
+    }
+    return count;
+}
 static bool BuildReflectionCache(const IntegratorContext* ctx,
                                  const LightSource* light) {
     if (!ctx || !ctx->cache) return false;
@@ -456,26 +451,13 @@ static bool BuildReflectionCache(const IntegratorContext* ctx,
         maxEnergy = 1.0f;
     }
 
-    for (int objIdx = 0; objIdx < ctx->objectCount; objIdx++) {
-        const SceneObject* obj = &ctx->objects[objIdx];
-        for (int sample = 0; sample < ctx->cache->samplesPerObject; sample++) {
-            SurfaceIrradiance* entry = IrradianceCacheGet(ctx->cache, objIdx, sample);
-            if (!entry) continue;
-            double sampleX, sampleY, nx, ny;
-            double t = ((double)sample + 0.5) / (double)ctx->cache->samplesPerObject;
-            if (!SampleObjectPoint(obj, t, &sampleX, &sampleY, &nx, &ny)) {
-                entry->intensity = 0.0;
-                continue;
-            }
-            float energy = SampleEnergyBufferAt(reflectionForwardBuffer,
-                                                width,
-                                                height,
-                                                sampleX,
-                                                sampleY);
-            entry->intensity = (double)(energy / maxEnergy);
-            entry->dirX = nx;
-            entry->dirY = ny;
-        }
-    }
-    return true;
+    return IrradianceCacheFill(ctx->cache,
+                               ctx->objects,
+                               ctx->objectCount,
+                               light,
+                               ctx->uniformGrid,
+                               reflectionForwardBuffer,
+                               width,
+                               height,
+                               (double)maxEnergy);
 }

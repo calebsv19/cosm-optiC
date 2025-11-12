@@ -8,6 +8,8 @@
 #include <SDL2/SDL_stdinc.h>
 #include "scene/object_manager.h"
 #include "render/uniform_grid.h"
+#include "render/fast_rng.h"
+#include "render/surface_mesh.h"
 
 #ifndef GRID_EPSILON
 #define GRID_EPSILON 1e-6
@@ -39,10 +41,24 @@ typedef struct {
     int height;
 } TileGrid;
 
+#define IRRADIANCE_BIN_COUNT 8
+
 typedef struct {
-    double intensity;
     double dirX;
     double dirY;
+    double mean;
+    double variance;
+    double distance;
+    int samples;
+    bool valid;
+} IrradianceBin;
+
+typedef struct {
+    double px;
+    double py;
+    double nx;
+    double ny;
+    IrradianceBin bins[IRRADIANCE_BIN_COUNT];
 } SurfaceIrradiance;
 
 typedef struct {
@@ -51,9 +67,12 @@ typedef struct {
     int objectCount;
 } IrradianceCache;
 
+struct MaterialBSDF;
+
 typedef struct {
     Uint8* pixelBuffer;
     float* energyBuffer;
+    float* directEnergyBuffer;
     int width;
     int height;
     SceneObject* objects;
@@ -64,6 +83,10 @@ typedef struct {
     const UniformGrid* uniformGrid;
     int integratorMode;
     IrradianceCache* cache;
+    const struct MaterialBSDF* materials;
+    int materialCount;
+    SurfaceMesh* mesh;
+    uint64_t feelerSeed;
 } IntegratorContext;
 
 typedef struct {
@@ -71,6 +94,11 @@ typedef struct {
     double y;
     double radius;
 } LightSource;
+
+typedef struct {
+    double throughput;
+    double eta;
+} RayPayload;
 
 int ClampTileSize(int requested);
 void TileGridFree(TileGrid* grid);
@@ -81,5 +109,9 @@ double Clamp01(double value);
 bool IrradianceCacheEnsure(IrradianceCache* cache, int objectCount, int samplesPerObject);
 void IrradianceCacheClear(IrradianceCache* cache);
 SurfaceIrradiance* IrradianceCacheGet(const IrradianceCache* cache, int objectIndex, int sampleIndex);
+double PathLuminance(double throughput);
+double ClampThroughput(double throughput, double minValue, double maxValue);
+bool ShouldTerminatePath(double luminance, double threshold, FastRNG* rng);
+void SeedPixelRNG(FastRNG* rng, uint64_t frameSeed, int pixelX, int pixelY, uint32_t salt);
 
 #endif

@@ -9,6 +9,12 @@
 
 #define MAX_SHAPE_POINTS 10  // Supports up to 10 points for custom shapes
 
+typedef enum {
+    FORWARD_FALLOFF_MODE_QUADRATIC = 0,
+    FORWARD_FALLOFF_MODE_LINEAR = 1,
+    FORWARD_FALLOFF_MODE_NONE = 2
+} ForwardFalloffMode;
+
 // **Animation Config Struct**
 typedef struct {
     bool interactiveMode;
@@ -36,9 +42,15 @@ typedef struct {
     int pathMaxDepth;
     bool pathDirectLighting;
     bool pathRussianRoulette;
+    bool pathEnableMIS;
     double environmentBrightness;
     int pathSeed;
     int editorMode;
+    double cacheContributionWeight;
+    int bsdfModel;
+    double lightIntensity;
+    double forwardDecay;    // Forward falloff distance (world units)
+    ForwardFalloffMode forwardFalloffMode;
 } AnimationConfig;
 
 

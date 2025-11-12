@@ -1,17 +1,19 @@
-CC       := cc
-CSTD     := -std=c11
-SRC_DIR  := src
-INC_DIR  := include
-BUILD_DIR:= build
-TARGET   := Ray_anim
+CC        := cc
+CSTD      := -std=c11
+SRC_DIR   := src
+INC_DIR   := include
+BUILD_DIR := build
+TARGET    := Ray_anim
 
 SDL_CFLAGS := $(shell sdl2-config --cflags)
 SDL_LIBS   := $(shell sdl2-config --libs)
+SDL_PREFIX := $(shell sdl2-config --prefix 2>/dev/null)
+SDL_EXTRA_INC := $(if $(SDL_PREFIX),-I$(SDL_PREFIX)/include,)
 
-CFLAGS  := $(CSTD) -Wall -Wextra -Wpedantic -g $(SDL_CFLAGS) -I$(INC_DIR) -DMAIN_DRIVER
+CFLAGS  := $(CSTD) -Wall -Wextra -Wpedantic -g $(SDL_CFLAGS) $(SDL_EXTRA_INC) -I$(INC_DIR) -DMAIN_DRIVER
 LDFLAGS := $(SDL_LIBS) -lSDL2_ttf -ljson-c -lm
 
-CFLAGS_RELEASE := $(CSTD) -Wall -Wextra -Wpedantic -O3 $(SDL_CFLAGS) -I$(INC_DIR) -DMAIN_DRIVER -DNDEBUG \
+CFLAGS_RELEASE := $(CSTD) -Wall -Wextra -Wpedantic -O3 $(SDL_CFLAGS) $(SDL_EXTRA_INC) -I$(INC_DIR) -DMAIN_DRIVER -DNDEBUG \
 	-ffast-math -fno-math-errno -march=native
 REL_BUILD_DIR := build_release
 REL_TARGET := Ray_anim_release

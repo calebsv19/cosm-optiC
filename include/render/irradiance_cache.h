@@ -7,6 +7,10 @@ bool IrradianceCacheFill(IrradianceCache* cache,
                          const SceneObject* objects,
                          int objectCount,
                          const LightSource* light,
-                         const UniformGrid* grid);
+                         const UniformGrid* grid,
+                         const float* energyBuffer,
+                         int width,
+                         int height,
+                         double maxEnergy);
 
 #endif

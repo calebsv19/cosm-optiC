@@ -15,6 +15,12 @@ typedef enum {
     REALISTIC_LIGHT = 1    // Inverse-square law lighting
 } LightMode;
 
+static double ClampDoubleValue(double value, double minValue, double maxValue) {
+    if (value < minValue) return minValue;
+    if (value > maxValue) return maxValue;
+    return value;
+}
+
 // **Global config instances**
 AnimationConfig animSettings = {
     .interactiveMode = true,
@@ -42,9 +48,15 @@ AnimationConfig animSettings = {
     .pathMaxDepth = 4,
     .pathDirectLighting = true,
     .pathRussianRoulette = true,
+    .pathEnableMIS = true,
     .environmentBrightness = 0.0,
     .pathSeed = 1,
-    .editorMode = 0
+    .editorMode = 0,
+    .cacheContributionWeight = 1.0,
+    .bsdfModel = 1,
+    .lightIntensity = 5.0,
+    .forwardDecay = 0.0,
+    .forwardFalloffMode = FORWARD_FALLOFF_MODE_QUADRATIC
 };
 
 SceneConfig sceneSettings = {
@@ -56,6 +68,12 @@ SceneConfig sceneSettings = {
     .camera = { .x = 0.0, .y = 0.0, .zoom = 1.0 },
     .cameraMargin = 80.0
 };
+
+static double DefaultForwardFalloffDistance(void) {
+    double w = (sceneSettings.windowWidth > 0) ? sceneSettings.windowWidth : 1200.0;
+    double h = (sceneSettings.windowHeight > 0) ? sceneSettings.windowHeight : 800.0;
+    return hypot(w, h);
+}
 
 void SaveAllSettings(void) {
 	SaveSceneConfig();
@@ -223,8 +241,14 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "pathMaxDepth", json_object_new_int(animSettings.pathMaxDepth));
     json_object_object_add(config, "pathDirectLighting", json_object_new_boolean(animSettings.pathDirectLighting));
     json_object_object_add(config, "pathRussianRoulette", json_object_new_boolean(animSettings.pathRussianRoulette));
+    json_object_object_add(config, "pathEnableMIS", json_object_new_boolean(animSettings.pathEnableMIS));
     json_object_object_add(config, "environmentBrightness", json_object_new_double(animSettings.environmentBrightness));
     json_object_object_add(config, "pathSeed", json_object_new_int(animSettings.pathSeed));
+    json_object_object_add(config, "cacheContributionWeight", json_object_new_double(animSettings.cacheContributionWeight));
+    json_object_object_add(config, "bsdfModel", json_object_new_int(animSettings.bsdfModel));
+    json_object_object_add(config, "lightIntensity", json_object_new_double(animSettings.lightIntensity));
+    json_object_object_add(config, "forwardDecay", json_object_new_double(animSettings.forwardDecay));
+    json_object_object_add(config, "forwardFalloffMode", json_object_new_int(animSettings.forwardFalloffMode));
     fprintf(file, "%s", json_object_to_json_string_ext(config, JSON_C_TO_STRING_PRETTY));
     fclose(file);
     json_object_put(config);
@@ -661,10 +685,39 @@ void LoadAnimationConfig(void) {
         animSettings.pathDirectLighting = json_object_get_boolean(temp);
     if (json_object_object_get_ex(config, "pathRussianRoulette", &temp))
         animSettings.pathRussianRoulette = json_object_get_boolean(temp);
+    if (json_object_object_get_ex(config, "pathEnableMIS", &temp))
+        animSettings.pathEnableMIS = json_object_get_boolean(temp);
     if (json_object_object_get_ex(config, "environmentBrightness", &temp))
         animSettings.environmentBrightness = json_object_get_double(temp);
     if (json_object_object_get_ex(config, "pathSeed", &temp))
         animSettings.pathSeed = json_object_get_int(temp);
+    if (json_object_object_get_ex(config, "cacheContributionWeight", &temp))
+        animSettings.cacheContributionWeight = json_object_get_double(temp);
+    if (json_object_object_get_ex(config, "bsdfModel", &temp))
+        animSettings.bsdfModel = json_object_get_int(temp);
+    if (json_object_object_get_ex(config, "lightIntensity", &temp))
+        animSettings.lightIntensity = json_object_get_double(temp);
+    if (json_object_object_get_ex(config, "forwardDecay", &temp))
+        animSettings.forwardDecay = json_object_get_double(temp);
+    if (json_object_object_get_ex(config, "forwardFalloffMode", &temp))
+        animSettings.forwardFalloffMode = json_object_get_int(temp);
+
+    animSettings.cacheContributionWeight = ClampDoubleValue(animSettings.cacheContributionWeight, 0.0, 1.0);
+    animSettings.bsdfModel = (animSettings.bsdfModel != 0) ? 1 : 0;
+    animSettings.lightIntensity = ClampDoubleValue(animSettings.lightIntensity, 0.0, 20.0);
+    if (animSettings.forwardDecay <= 1.0) {
+        double legacyDrop = 1.0 - ClampDoubleValue(animSettings.forwardDecay, 0.0, 0.999999);
+        double scaleFactor = 1.0 / fmax(legacyDrop, 1e-6);
+        animSettings.forwardDecay = DefaultForwardFalloffDistance() * scaleFactor;
+    }
+    if (animSettings.forwardDecay <= 0.0) {
+        animSettings.forwardDecay = DefaultForwardFalloffDistance();
+    }
+    animSettings.forwardDecay = ClampDoubleValue(animSettings.forwardDecay, 50.0, 100000.0);
+
+    if (animSettings.forwardFalloffMode < FORWARD_FALLOFF_MODE_QUADRATIC || animSettings.forwardFalloffMode > FORWARD_FALLOFF_MODE_NONE) {
+        animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_QUADRATIC;
+    }
 	
     printf(" Loaded animation config successfully.\n");
     json_object_put(config);

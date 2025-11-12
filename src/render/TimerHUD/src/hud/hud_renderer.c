@@ -35,6 +35,9 @@ void hud_init(void) {
 }
 
 void ts_render(SDL_Renderer* renderer) {
+    if (!ts_settings.hud_enabled) {
+        return;
+    }
     TimerManager* tm = &g_timer_manager;
 
     // --- 1. Throttled update ---

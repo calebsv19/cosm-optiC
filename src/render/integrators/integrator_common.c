@@ -1,4 +1,6 @@
 #include "render/integrator_common.h"
+
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -118,4 +120,34 @@ SurfaceIrradiance* IrradianceCacheGet(const IrradianceCache* cache, int objectIn
     if (sampleIndex < 0 || sampleIndex >= cache->samplesPerObject) return NULL;
     size_t idx = (size_t)objectIndex * (size_t)cache->samplesPerObject + (size_t)sampleIndex;
     return &cache->data[idx];
+}
+
+double PathLuminance(double throughput) {
+    return fabs(throughput);
+}
+
+double ClampThroughput(double throughput, double minValue, double maxValue) {
+    if (throughput < minValue) return minValue;
+    if (throughput > maxValue) return maxValue;
+    return throughput;
+}
+
+bool ShouldTerminatePath(double luminance, double threshold, FastRNG* rng) {
+    if (threshold <= 0.0 || !rng) return false;
+    if (luminance >= threshold) return false;
+    double survival = luminance / threshold;
+    if (survival <= 0.0) {
+        return true;
+    }
+    double roll = FastRNGNextDouble(rng);
+    return roll > survival;
+}
+
+void SeedPixelRNG(FastRNG* rng, uint64_t frameSeed, int pixelX, int pixelY, uint32_t salt) {
+    if (!rng) return;
+    uint64_t seed = frameSeed ^ 0x9E3779B97F4A7C15ULL;
+    seed ^= ((uint64_t)(pixelX + 1) * 0xC2B2AE3D27D4EB4FULL);
+    seed ^= ((uint64_t)(pixelY + 1) * 0x165667B19E3779F9ULL);
+    uint64_t seq = ((uint64_t)salt + 1ULL) * 0x94D049BB133111EBULL;
+    FastRNGSeed(rng, seed, seq);
 }

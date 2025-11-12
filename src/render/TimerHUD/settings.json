@@ -1,6 +1,6 @@
 {
-  "hud_enabled": true,
-  "log_enabled": true,
+  "hud_enabled": false,
+  "log_enabled": false,
   "event_tagging_enabled": false,
   "timer_buffer_size": 128,
   "log_filepath": "timing.json",

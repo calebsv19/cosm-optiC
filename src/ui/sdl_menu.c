@@ -13,7 +13,7 @@
 
 // Window & Menu Layout
 #define MENU_WIDTH 1000
-#define MENU_HEIGHT 720
+#define MENU_HEIGHT 900
 #define MENU_MARGIN_X 30   // Distance from left edge
 #define MENU_MARGIN_Y 30   // Distance from top
 
@@ -72,54 +72,25 @@
 #define SLIDER_MARGIN_X (MENU_WIDTH - SLIDER_WIDTH - MENU_MARGIN_X - 40)
 #define SLIDER_MARGIN_Y MENU_MARGIN_Y  // Align with top of window
 
-// Individual Slider Positions (stacked vertically)
-#define SLIDER_BOUNCE_X SLIDER_MARGIN_X
-#define SLIDER_BOUNCE_Y SLIDER_MARGIN_Y
+#define FORWARD_FALLOFF_BUTTON_WIDTH SLIDER_WIDTH
+#define FORWARD_FALLOFF_BUTTON_HEIGHT 40
+#define FORWARD_FALLOFF_BUTTON_SPACING 10
+#define FORWARD_FALLOFF_DISTANCE_MIN 100
+#define FORWARD_FALLOFF_DISTANCE_MAX 40000
 
-#define SLIDER_FRAME_X SLIDER_MARGIN_X
-#define SLIDER_FRAME_Y (SLIDER_BOUNCE_Y + SLIDER_HEIGHT + SLIDER_SPACING)
-
-#define SLIDER_TRAVEL_X SLIDER_MARGIN_X
-#define SLIDER_TRAVEL_Y (SLIDER_FRAME_Y + SLIDER_HEIGHT + SLIDER_SPACING)
-
-#define SLIDER_FPS_X SLIDER_MARGIN_X
-#define SLIDER_FPS_Y (SLIDER_TRAVEL_Y + SLIDER_HEIGHT + SLIDER_SPACING)
-
-#define SLIDER_LIGHT_X SLIDER_MARGIN_X
-#define SLIDER_LIGHT_Y (SLIDER_FPS_Y + SLIDER_HEIGHT + SLIDER_SPACING)
-
-#define SLIDER_RAYS_X SLIDER_MARGIN_X
-#define SLIDER_RAYS_Y (SLIDER_LIGHT_Y + SLIDER_HEIGHT + SLIDER_SPACING)
-
-#define SLIDER_WIDTH_X SLIDER_MARGIN_X
-#define SLIDER_WIDTH_Y (SLIDER_RAYS_Y + SLIDER_HEIGHT + SLIDER_SPACING)
-
-#define SLIDER_HEIGHT_X SLIDER_MARGIN_X
-#define SLIDER_HEIGHT_Y (SLIDER_WIDTH_Y + SLIDER_HEIGHT + SLIDER_SPACING)
-#define SLIDER_TILE_X SLIDER_MARGIN_X
-#define SLIDER_TILE_Y (SLIDER_HEIGHT_Y + SLIDER_HEIGHT + SLIDER_SPACING)
-#define SLIDER_ROULETTE_X SLIDER_MARGIN_X
-#define SLIDER_ROULETTE_Y (SLIDER_TILE_Y + SLIDER_HEIGHT + SLIDER_SPACING)
-#define SLIDER_SPP_X SLIDER_MARGIN_X
-#define SLIDER_SPP_Y (SLIDER_ROULETTE_Y + SLIDER_HEIGHT + SLIDER_SPACING)
-#define SLIDER_DEPTH_X SLIDER_MARGIN_X
-#define SLIDER_DEPTH_Y (SLIDER_SPP_Y + SLIDER_HEIGHT + SLIDER_SPACING)
-#define SLIDER_ENV_X SLIDER_MARGIN_X
-#define SLIDER_ENV_Y (SLIDER_DEPTH_Y + SLIDER_HEIGHT + SLIDER_SPACING)
+#define SLIDER_SECTION_GAP 30
+#define MAX_MENU_SLIDERS 24
 
 #define TILE_BUTTON_WIDTH 200
 #define TILE_BUTTON_HEIGHT 40
 #define TILE_BUTTON_X SLIDER_MARGIN_X
-#define TILE_BUTTON_Y (SLIDER_ENV_Y + SLIDER_HEIGHT + SLIDER_SPACING + 10)
 #define INTEGRATOR_BUTTON_WIDTH 220
 #define INTEGRATOR_BUTTON_HEIGHT 40
 #define INTEGRATOR_BUTTON_X TILE_BUTTON_X
-#define INTEGRATOR_BUTTON_Y (TILE_BUTTON_Y + TILE_BUTTON_HEIGHT + 10)
 #define PATH_TOGGLE_WIDTH 180
 #define PATH_TOGGLE_HEIGHT 35
 #define PATH_TOGGLE_X INTEGRATOR_BUTTON_X
-#define PATH_TOGGLE_DIRECT_Y (INTEGRATOR_BUTTON_Y + INTEGRATOR_BUTTON_HEIGHT + 10)
-#define PATH_TOGGLE_RR_Y (PATH_TOGGLE_DIRECT_Y + PATH_TOGGLE_HEIGHT + 10)
+#define PATH_TOGGLE_SPACING 10
 
 
 // Default settings
@@ -139,6 +110,9 @@ bool editingBounce = false;  // Tracks if bounce limit is being edited
 bool editingFrame = false;   // Tracks if frame limit is being edited
 static int rouletteSliderValue = 10; // stores threshold * 1000
 static int envSliderValue = 0;
+static int cacheWeightSliderValue = 100;
+static int lightIntensitySliderValue = 500;
+static int forwardDecaySliderValue = 2000;
 static int oldWindowWidth = 0;
 static int oldWindowHeight = 0;
 
@@ -165,6 +139,46 @@ static void SyncEnvSliderFromSettings(void) {
     envSliderValue = (int)lround(animSettings.environmentBrightness * 100.0);
     if (envSliderValue < 0) envSliderValue = 0;
     if (envSliderValue > 200) envSliderValue = 200;
+}
+
+static double ClampDouble(double value, double minV, double maxV) {
+    if (value < minV) return minV;
+    if (value > maxV) return maxV;
+    return value;
+}
+
+static void SyncCacheSliderFromSettings(void) {
+    if (draggingSlider && selectedSlider == &cacheWeightSliderValue) {
+        return;
+    }
+    double weight = ClampDouble(animSettings.cacheContributionWeight, 0.0, 1.0);
+    cacheWeightSliderValue = (int)lround(weight * 100.0);
+}
+
+static void SyncLightSliderFromSettings(void) {
+    if (draggingSlider && selectedSlider == &lightIntensitySliderValue) {
+        return;
+    }
+    double intensity = ClampDouble(animSettings.lightIntensity, 0.0, 20.0);
+    lightIntensitySliderValue = (int)lround(intensity * 100.0);
+}
+
+static void SyncForwardDecaySliderFromSettings(void) {
+    if (draggingSlider && selectedSlider == &forwardDecaySliderValue) {
+        return;
+    }
+    double distance = ClampDouble(animSettings.forwardDecay,
+                                  FORWARD_FALLOFF_DISTANCE_MIN,
+                                  FORWARD_FALLOFF_DISTANCE_MAX);
+    forwardDecaySliderValue = (int)lround(distance);
+}
+
+static void SyncMenuSliderValues(void) {
+    SyncRouletteSliderFromSettings();
+    SyncEnvSliderFromSettings();
+    SyncCacheSliderFromSettings();
+    SyncLightSliderFromSettings();
+    SyncForwardDecaySliderFromSettings();
 }
 
 static void ReanchorCameraAfterResize(int previousWidth, int previousHeight) {
@@ -197,6 +211,22 @@ static void ApplySpecialSliderRules(int* target) {
         if (envSliderValue < 0) envSliderValue = 0;
         if (envSliderValue > 200) envSliderValue = 200;
         animSettings.environmentBrightness = envSliderValue / 100.0;
+    } else if (target == &cacheWeightSliderValue) {
+        if (cacheWeightSliderValue < 0) cacheWeightSliderValue = 0;
+        if (cacheWeightSliderValue > 100) cacheWeightSliderValue = 100;
+        animSettings.cacheContributionWeight = cacheWeightSliderValue / 100.0;
+    } else if (target == &lightIntensitySliderValue) {
+        if (lightIntensitySliderValue < 0) lightIntensitySliderValue = 0;
+        if (lightIntensitySliderValue > 2000) lightIntensitySliderValue = 2000;
+        animSettings.lightIntensity = lightIntensitySliderValue / 100.0;
+    } else if (target == &forwardDecaySliderValue) {
+        if (forwardDecaySliderValue < FORWARD_FALLOFF_DISTANCE_MIN) {
+            forwardDecaySliderValue = FORWARD_FALLOFF_DISTANCE_MIN;
+        }
+        if (forwardDecaySliderValue > FORWARD_FALLOFF_DISTANCE_MAX) {
+            forwardDecaySliderValue = FORWARD_FALLOFF_DISTANCE_MAX;
+        }
+        animSettings.forwardDecay = forwardDecaySliderValue;
     } else if (target == &sceneSettings.windowWidth || target == &sceneSettings.windowHeight) {
         if (sceneSettings.windowWidth < 200) sceneSettings.windowWidth = 200;
         if (sceneSettings.windowHeight < 200) sceneSettings.windowHeight = 200;
@@ -252,8 +282,7 @@ bool InitializeMenu(SDL_Window** window, SDL_Renderer** renderer, TTF_Font** fon
     // Load animation settings
     LoadAnimationConfig();
     LoadSceneConfig();
-    SyncRouletteSliderFromSettings();
-    SyncEnvSliderFromSettings();
+    SyncMenuSliderValues();
     oldWindowWidth = sceneSettings.windowWidth;
     oldWindowHeight = sceneSettings.windowHeight;
     return true;  // Menu initialized successfully
@@ -277,10 +306,16 @@ void ResetAnimationSettings(void) {
     animSettings.pathMaxDepth = 4;
     animSettings.pathDirectLighting = true;
     animSettings.pathRussianRoulette = true;
+    animSettings.pathEnableMIS = true;
     animSettings.environmentBrightness = 0.0;
     animSettings.pathSeed = 1;
-    SyncRouletteSliderFromSettings();
-    SyncEnvSliderFromSettings();
+    animSettings.cacheContributionWeight = 1.0;
+    animSettings.bsdfModel = 1;
+    animSettings.lightIntensity = 5.0;
+    double diag = hypot(sceneSettings.windowWidth, sceneSettings.windowHeight);
+    animSettings.forwardDecay = (diag > 0.0) ? diag : 2000.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_QUADRATIC;
+    SyncMenuSliderValues();
     oldWindowWidth = sceneSettings.windowWidth;
     oldWindowHeight = sceneSettings.windowHeight;
 }
@@ -332,65 +367,105 @@ typedef struct {
     const char *label;
 } MenuSlider;
 
-void RenderSliders(SDL_Renderer* renderer, TTF_Font* font) {
-    SyncRouletteSliderFromSettings();
-    MenuSlider sliders[16];
-    size_t sliderCount = 0;
+typedef struct {
+    MenuSlider items[MAX_MENU_SLIDERS];
+    size_t count;
+    int nextY;
+} SliderLayout;
 
-    sliders[sliderCount++] = (MenuSlider){ &animSettings.bounceLimit, 0, 100, SLIDER_BOUNCE_X, SLIDER_BOUNCE_Y, SLIDER_WIDTH, "Bounce Limit" };
-    sliders[sliderCount++] = (MenuSlider){ &animSettings.frameLimit, 1, 5000, SLIDER_FRAME_X, SLIDER_FRAME_Y, SLIDER_WIDTH, "Frame Limit" };
-    sliders[sliderCount++] = (MenuSlider){ &animSettings.framesForTravel, 1, 5000, SLIDER_TRAVEL_X, SLIDER_TRAVEL_Y, SLIDER_WIDTH, "Path Points" };
-    sliders[sliderCount++] = (MenuSlider){ &animSettings.fps, 1, 240, SLIDER_FPS_X, SLIDER_FPS_Y, SLIDER_WIDTH, "FPS" };
-    sliders[sliderCount++] = (MenuSlider){ &animSettings.lightMode, 0, 1, SLIDER_LIGHT_X, SLIDER_LIGHT_Y, SLIDER_WIDTH, "Light Mode" };
-    sliders[sliderCount++] = (MenuSlider){ &sceneSettings.rays, 0, 10000, SLIDER_RAYS_X, SLIDER_RAYS_Y, SLIDER_WIDTH, "Num Rays" };
-    sliders[sliderCount++] = (MenuSlider){ &sceneSettings.windowWidth, 0, 2500, SLIDER_WIDTH_X, SLIDER_WIDTH_Y, SLIDER_WIDTH, "Width" };
-    sliders[sliderCount++] = (MenuSlider){ &sceneSettings.windowHeight, 0, 1400, SLIDER_HEIGHT_X, SLIDER_HEIGHT_Y, SLIDER_WIDTH, "Height" };
-    sliders[sliderCount++] = (MenuSlider){ &animSettings.tileSize, 4, 256, SLIDER_TILE_X, SLIDER_TILE_Y, SLIDER_WIDTH, "Tile Size" };
-    sliders[sliderCount++] = (MenuSlider){ &rouletteSliderValue, 1, 2000, SLIDER_ROULETTE_X, SLIDER_ROULETTE_Y, SLIDER_WIDTH, "Roulette Threshold" };
+static SliderLayout BuildSliderLayout(void) {
+    SliderLayout layout = {0};
+    layout.nextY = SLIDER_MARGIN_Y;
+    SyncMenuSliderValues();
+    const int sliderX = SLIDER_MARGIN_X;
+    const int sliderWidth = SLIDER_WIDTH;
 
-    int envSliderIndex = -1;
+#define ADD_SLIDER(targetPtr, minVal, maxVal, labelText) \
+    do { \
+        if (layout.count < MAX_MENU_SLIDERS) { \
+            layout.items[layout.count++] = (MenuSlider){ targetPtr, minVal, maxVal, sliderX, layout.nextY, sliderWidth, labelText }; \
+            layout.nextY += SLIDER_HEIGHT + SLIDER_SPACING; \
+        } \
+    } while (0)
+
+    ADD_SLIDER(&animSettings.bounceLimit, 0, 100, "Bounce Limit");
+    ADD_SLIDER(&animSettings.frameLimit, 1, 5000, "Frame Limit");
+    ADD_SLIDER(&animSettings.framesForTravel, 1, 5000, "Path Points");
+    ADD_SLIDER(&animSettings.fps, 1, 240, "FPS");
+    ADD_SLIDER(&animSettings.lightMode, 0, 1, "Light Mode");
+    ADD_SLIDER(&sceneSettings.rays, 0, 10000, "Num Rays");
+    ADD_SLIDER(&sceneSettings.windowWidth, 200, 4000, "Width");
+    ADD_SLIDER(&sceneSettings.windowHeight, 200, 2400, "Height");
+    ADD_SLIDER(&animSettings.tileSize, 4, 256, "Tile Size");
+    ADD_SLIDER(&rouletteSliderValue, 1, 2000, "Roulette Threshold");
+    ADD_SLIDER(&lightIntensitySliderValue, 0, 2000, "Light Intensity");
+    ADD_SLIDER(&forwardDecaySliderValue, FORWARD_FALLOFF_DISTANCE_MIN, FORWARD_FALLOFF_DISTANCE_MAX, "Falloff Distance");
+    layout.nextY += SLIDER_SECTION_GAP;
+
     if (animSettings.integratorMode == 1) {
-        sliders[sliderCount++] = (MenuSlider){ &animSettings.pathSamplesPerPixel, 1, 128, SLIDER_SPP_X, SLIDER_SPP_Y, SLIDER_WIDTH, "Path SPP" };
-        sliders[sliderCount++] = (MenuSlider){ &animSettings.pathMaxDepth, 1, 16, SLIDER_DEPTH_X, SLIDER_DEPTH_Y, SLIDER_WIDTH, "Path Depth" };
-        sliders[sliderCount++] = (MenuSlider){ &envSliderValue, 0, 200, SLIDER_ENV_X, SLIDER_ENV_Y, SLIDER_WIDTH, "Environment %" };
-        envSliderIndex = (int)sliderCount - 1;
+        ADD_SLIDER(&animSettings.pathSamplesPerPixel, 1, 128, "Path SPP");
+        ADD_SLIDER(&animSettings.pathMaxDepth, 1, 16, "Path Depth");
+        ADD_SLIDER(&envSliderValue, 0, 200, "Environment %");
+        ADD_SLIDER(&cacheWeightSliderValue, 0, 100, "Cache Weight %");
     }
+#undef ADD_SLIDER
+    return layout;
+}
 
-    for (size_t i = 0; i < sliderCount; i++) {
+static void RenderSliders(SDL_Renderer* renderer, TTF_Font* font, const SliderLayout* layout) {
+    if (!layout) return;
+    for (size_t i = 0; i < layout->count; i++) {
+        const MenuSlider* slider = &layout->items[i];
         int textMarginX = 5;
-        // Render label to the left of the slider
-        RenderText(renderer, font, sliders[i].x - 150, sliders[i].y - textMarginX, "%s", sliders[i].label);
+        RenderText(renderer, font, slider->x - 150, slider->y - textMarginX, "%s", slider->label);
 
-        // Render slider background
         SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
-        SDL_Rect sliderBar = {sliders[i].x, sliders[i].y, sliders[i].width, 10};
+        SDL_Rect sliderBar = {slider->x, slider->y, slider->width, SLIDER_HEIGHT};
         SDL_RenderFillRect(renderer, &sliderBar);
 
-        // Calculate knob position based on value range
-        int knobX = sliders[i].x + ((float)(*sliders[i].value - sliders[i].min) / (sliders[i].max - sliders[i].min)) 
-					* sliders[i].width;
+        int range = slider->max - slider->min;
+        float percent = (range > 0) ? ((float)(*slider->value - slider->min) / (float)range) : 0.0f;
+        if (percent < 0.0f) percent = 0.0f;
+        if (percent > 1.0f) percent = 1.0f;
 
-        // Render draggable knob
+        int knobX = slider->x + (int)(percent * slider->width);
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-        SDL_Rect knob = {knobX - 5, sliders[i].y - 5, 10, 20};
+        SDL_Rect knob = {knobX - 5, slider->y - 5, 10, 20};
         SDL_RenderFillRect(renderer, &knob);
 
-        // Render value next to the slider
-        if (sliders[i].value == &rouletteSliderValue) {
-            RenderText(renderer, font, sliders[i].x + sliders[i].width + 10, sliders[i].y - textMarginX,
+        if (slider->value == &rouletteSliderValue) {
+            RenderText(renderer, font, slider->x + slider->width + 10, slider->y - textMarginX,
                        "%.3f", rouletteSliderValue / 1000.0);
-        } else if ((int)i == envSliderIndex) {
-            double envValue = envSliderValue / 100.0;
-            RenderText(renderer, font, sliders[i].x + sliders[i].width + 10, sliders[i].y - textMarginX,
-                       "%.2f", envValue);
+        } else if (slider->value == &envSliderValue) {
+            RenderText(renderer, font, slider->x + slider->width + 10, slider->y - textMarginX,
+                       "%.2f", envSliderValue / 100.0);
+        } else if (slider->value == &cacheWeightSliderValue) {
+            RenderText(renderer, font, slider->x + slider->width + 10, slider->y - textMarginX,
+                       "%.2f", cacheWeightSliderValue / 100.0);
+        } else if (slider->value == &lightIntensitySliderValue) {
+            RenderText(renderer, font, slider->x + slider->width + 10, slider->y - textMarginX,
+                       "%.2f", lightIntensitySliderValue / 100.0);
+        } else if (slider->value == &forwardDecaySliderValue) {
+            RenderText(renderer, font, slider->x + slider->width + 10, slider->y - textMarginX,
+                       "%d", forwardDecaySliderValue);
         } else {
-            RenderText(renderer, font, sliders[i].x + sliders[i].width + 10, sliders[i].y- textMarginX,
-                       "%d", *sliders[i].value);
+            RenderText(renderer, font, slider->x + slider->width + 10, slider->y - textMarginX,
+                       "%d", *slider->value);
         }
     }
 }
 
 void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {  
+    SliderLayout sliderLayout = BuildSliderLayout();
+    int falloffButtonY = sliderLayout.nextY;
+    int sliderBottom = falloffButtonY + FORWARD_FALLOFF_BUTTON_HEIGHT + FORWARD_FALLOFF_BUTTON_SPACING;
+    int tileButtonY = sliderBottom;
+    int integratorButtonY = tileButtonY + TILE_BUTTON_HEIGHT + 10;
+    int pathToggleDirectY = integratorButtonY + INTEGRATOR_BUTTON_HEIGHT + 10;
+    int pathToggleRRY = pathToggleDirectY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
+    int pathToggleMISY = pathToggleRRY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
+    int pathToggleBSDFY = pathToggleMISY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
+
     // Clear the screen with a black background
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
@@ -446,23 +521,42 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
 	*/
     }
                  
+    const char* falloffLabel = "Forward Falloff: Quadratic (1/r^2)";
+    if (animSettings.forwardFalloffMode == FORWARD_FALLOFF_MODE_LINEAR) {
+        falloffLabel = "Forward Falloff: Linear (1/r)";
+    } else if (animSettings.forwardFalloffMode == FORWARD_FALLOFF_MODE_NONE) {
+        falloffLabel = "Forward Falloff: None";
+    }
+    RenderButton(renderer, font, SLIDER_MARGIN_X, falloffButtonY,
+                 FORWARD_FALLOFF_BUTTON_WIDTH, FORWARD_FALLOFF_BUTTON_HEIGHT,
+                 falloffLabel, animSettings.forwardFalloffMode == FORWARD_FALLOFF_MODE_LINEAR);
+
     const char* tileButtonLabel = animSettings.useTiledRenderer ? "Tile Renderer: ON" : "Tile Renderer: OFF";
-    RenderButton(renderer, font, TILE_BUTTON_X, TILE_BUTTON_Y,
+    RenderButton(renderer, font, TILE_BUTTON_X, tileButtonY,
                  TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT, tileButtonLabel, animSettings.useTiledRenderer);
 
     const char* integratorLabel = (animSettings.integratorMode == 0) ? "Integrator: Forward Light" : "Integrator: Camera Path";
-    RenderButton(renderer, font, INTEGRATOR_BUTTON_X, INTEGRATOR_BUTTON_Y,
+    RenderButton(renderer, font, INTEGRATOR_BUTTON_X, integratorButtonY,
                  INTEGRATOR_BUTTON_WIDTH, INTEGRATOR_BUTTON_HEIGHT, integratorLabel, animSettings.integratorMode == 1);
 
     if (animSettings.integratorMode == 1) {
-        RenderButton(renderer, font, PATH_TOGGLE_X, PATH_TOGGLE_DIRECT_Y,
+        RenderButton(renderer, font, PATH_TOGGLE_X, pathToggleDirectY,
                      PATH_TOGGLE_WIDTH, PATH_TOGGLE_HEIGHT,
                      animSettings.pathDirectLighting ? "Direct Light: ON" : "Direct Light: OFF",
                      animSettings.pathDirectLighting);
-        RenderButton(renderer, font, PATH_TOGGLE_X, PATH_TOGGLE_RR_Y,
+        RenderButton(renderer, font, PATH_TOGGLE_X, pathToggleRRY,
                      PATH_TOGGLE_WIDTH, PATH_TOGGLE_HEIGHT,
                      animSettings.pathRussianRoulette ? "Roulette: ON" : "Roulette: OFF",
                      animSettings.pathRussianRoulette);
+        RenderButton(renderer, font, PATH_TOGGLE_X, pathToggleMISY,
+                     PATH_TOGGLE_WIDTH, PATH_TOGGLE_HEIGHT,
+                     animSettings.pathEnableMIS ? "MIS: ON" : "MIS: OFF",
+                     animSettings.pathEnableMIS);
+        const char* bsdfLabel = (animSettings.bsdfModel == 0) ? "BSDF: Lambert" : "BSDF: GGX";
+        RenderButton(renderer, font, PATH_TOGGLE_X, pathToggleBSDFY,
+                     PATH_TOGGLE_WIDTH, PATH_TOGGLE_HEIGHT,
+                     bsdfLabel,
+                     animSettings.bsdfModel != 0);
     }
 
     // Render Bottom Buttons
@@ -476,7 +570,7 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
                  BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START, "Start", false);
    
 
-    RenderSliders(renderer, font);
+    RenderSliders(renderer, font, &sliderLayout);
 
     // Present the updated UI 
     SDL_RenderPresent(renderer);
@@ -566,41 +660,21 @@ void HandleMouseMotion(SDL_Event* event) {
     }
 }
 
-void HandleSliderClick(SDL_Event* event) {
+static void HandleSliderClick(SDL_Event* event, const SliderLayout* layout) {
+    if (!layout) return;
     int x = event->button.x, y = event->button.y;
-    SyncRouletteSliderFromSettings();
-    SyncEnvSliderFromSettings();
-    
-    // Define sliders with their values, ranges, and positions
-    MenuSlider sliders[16];
-    size_t sliderCount = 0;
-    sliders[sliderCount++] = (MenuSlider){ &animSettings.bounceLimit, 0, 100, SLIDER_BOUNCE_X, SLIDER_BOUNCE_Y, SLIDER_WIDTH, "Bounce Limit" };
-    sliders[sliderCount++] = (MenuSlider){ &animSettings.frameLimit, 1, 5000, SLIDER_FRAME_X, SLIDER_FRAME_Y, SLIDER_WIDTH, "Frame Limit" };
-    sliders[sliderCount++] = (MenuSlider){ &animSettings.framesForTravel, 1, 5000, SLIDER_TRAVEL_X, SLIDER_TRAVEL_Y, SLIDER_WIDTH, "Path Points" };
-    sliders[sliderCount++] = (MenuSlider){ &animSettings.fps, 1, 240, SLIDER_FPS_X, SLIDER_FPS_Y, SLIDER_WIDTH, "FPS" };
-    sliders[sliderCount++] = (MenuSlider){ &animSettings.lightMode, 0, 1, SLIDER_LIGHT_X, SLIDER_LIGHT_Y, SLIDER_WIDTH, "Light Mode" };
-    sliders[sliderCount++] = (MenuSlider){ &sceneSettings.rays, 0, 10000, SLIDER_RAYS_X, SLIDER_RAYS_Y, SLIDER_WIDTH, "Num Rays" };
-    sliders[sliderCount++] = (MenuSlider){ &sceneSettings.windowWidth, 0, 2500, SLIDER_WIDTH_X, SLIDER_WIDTH_Y, SLIDER_WIDTH, "Width" };
-    sliders[sliderCount++] = (MenuSlider){ &sceneSettings.windowHeight, 0, 1400, SLIDER_HEIGHT_X, SLIDER_HEIGHT_Y, SLIDER_WIDTH, "Height" };
-    sliders[sliderCount++] = (MenuSlider){ &animSettings.tileSize, 4, 256, SLIDER_TILE_X, SLIDER_TILE_Y, SLIDER_WIDTH, "Tile Size" };
-    sliders[sliderCount++] = (MenuSlider){ &rouletteSliderValue, 1, 2000, SLIDER_ROULETTE_X, SLIDER_ROULETTE_Y, SLIDER_WIDTH, "Roulette Threshold" };
-    if (animSettings.integratorMode == 1) {
-        sliders[sliderCount++] = (MenuSlider){ &animSettings.pathSamplesPerPixel, 1, 128, SLIDER_SPP_X, SLIDER_SPP_Y, SLIDER_WIDTH, "Path SPP" };
-        sliders[sliderCount++] = (MenuSlider){ &animSettings.pathMaxDepth, 1, 16, SLIDER_DEPTH_X, SLIDER_DEPTH_Y, SLIDER_WIDTH, "Path Depth" };
-        sliders[sliderCount++] = (MenuSlider){ &envSliderValue, 0, 200, SLIDER_ENV_X, SLIDER_ENV_Y, SLIDER_WIDTH, "Environment %" };
-    }
-         
-    for (size_t i = 0; i < sliderCount; i++) {
-        if (x > sliders[i].x && x < sliders[i].x + sliders[i].width &&
-            y > sliders[i].y - 5 && y < sliders[i].y + 15) {
+    for (size_t i = 0; i < layout->count; i++) {
+        const MenuSlider* slider = &layout->items[i];
+        if (x > slider->x && x < slider->x + slider->width &&
+            y > slider->y - 5 && y < slider->y + 15) {
             
             // Activate dragging mode
             draggingSlider = true;
-            selectedSlider = sliders[i].value;
-            selectedSliderMin = sliders[i].min;
-            selectedSliderMax = sliders[i].max;
-            sliderStartX = sliders[i].x;
-            sliderWidth = sliders[i].width;
+            selectedSlider = slider->value;
+            selectedSliderMin = slider->min;
+            selectedSliderMax = slider->max;
+            sliderStartX = slider->x;
+            sliderWidth = slider->width;
 
             bool adjustCamera = (selectedSlider == &sceneSettings.windowWidth ||
                                  selectedSlider == &sceneSettings.windowHeight);
@@ -608,12 +682,12 @@ void HandleSliderClick(SDL_Event* event) {
             int prevHeight = sceneSettings.windowHeight;
 
             // Immediately update slider value to where the user clicked
-            float percent = (float)(x - sliders[i].x) / sliders[i].width;
-            int newValue = sliders[i].min + percent * (sliders[i].max - sliders[i].min);
+            float percent = (float)(x - slider->x) / slider->width;
+            int newValue = slider->min + percent * (slider->max - slider->min);
 
             // Clamp value within range
-            if (newValue < sliders[i].min) newValue = sliders[i].min;
-            if (newValue > sliders[i].max) newValue = sliders[i].max;
+            if (newValue < slider->min) newValue = slider->min;
+            if (newValue > slider->max) newValue = slider->max;
 
             *selectedSlider = newValue;  // Apply updated value instantly
             ApplySpecialSliderRules(selectedSlider);
@@ -631,9 +705,17 @@ void HandleSliderClick(SDL_Event* event) {
 
 void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally, SDL_Renderer* renderer) {
     (void)renderer;
-    HandleSliderClick(event);
+    SliderLayout layout = BuildSliderLayout();
+    HandleSliderClick(event, &layout);
 
     int x = event->button.x, y = event->button.y;
+    int falloffButtonY = layout.nextY;
+    int tileButtonY = falloffButtonY + FORWARD_FALLOFF_BUTTON_HEIGHT + FORWARD_FALLOFF_BUTTON_SPACING;
+    int integratorButtonY = tileButtonY + TILE_BUTTON_HEIGHT + 10;
+    int pathToggleDirectY = integratorButtonY + INTEGRATOR_BUTTON_HEIGHT + 10;
+    int pathToggleRRY = pathToggleDirectY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
+    int pathToggleMISY = pathToggleRRY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
+    int pathToggleBSDFY = pathToggleMISY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
                 
     // Toggle Interactive Mode
     if (x > TOGGLE_BUTTON_MARGIN_X && x < TOGGLE_BUTTON_MARGIN_X + TOGGLE_BUTTON_WIDTH &&
@@ -721,28 +803,45 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
         } 
 	*/       
     } 
+    if (x >= SLIDER_MARGIN_X && x <= SLIDER_MARGIN_X + FORWARD_FALLOFF_BUTTON_WIDTH &&
+        y >= falloffButtonY && y <= falloffButtonY + FORWARD_FALLOFF_BUTTON_HEIGHT) {
+        animSettings.forwardFalloffMode = (animSettings.forwardFalloffMode + 1) % 3;
+        return;
+    }
+
     if (x >= TILE_BUTTON_X && x <= TILE_BUTTON_X + TILE_BUTTON_WIDTH &&
-        y >= TILE_BUTTON_Y && y <= TILE_BUTTON_Y + TILE_BUTTON_HEIGHT) {
+        y >= tileButtonY && y <= tileButtonY + TILE_BUTTON_HEIGHT) {
         animSettings.useTiledRenderer = !animSettings.useTiledRenderer;
         return;
     }
 
     if (x >= INTEGRATOR_BUTTON_X && x <= INTEGRATOR_BUTTON_X + INTEGRATOR_BUTTON_WIDTH &&
-        y >= INTEGRATOR_BUTTON_Y && y <= INTEGRATOR_BUTTON_Y + INTEGRATOR_BUTTON_HEIGHT) {
+        y >= integratorButtonY && y <= integratorButtonY + INTEGRATOR_BUTTON_HEIGHT) {
         animSettings.integratorMode = (animSettings.integratorMode == 0) ? 1 : 0;
-        SyncEnvSliderFromSettings();
+        SyncMenuSliderValues();
         return;
     }
 
     if (animSettings.integratorMode == 1) {
         if (x >= PATH_TOGGLE_X && x <= PATH_TOGGLE_X + PATH_TOGGLE_WIDTH &&
-            y >= PATH_TOGGLE_DIRECT_Y && y <= PATH_TOGGLE_DIRECT_Y + PATH_TOGGLE_HEIGHT) {
+            y >= pathToggleDirectY && y <= pathToggleDirectY + PATH_TOGGLE_HEIGHT) {
             animSettings.pathDirectLighting = !animSettings.pathDirectLighting;
             return;
         }
         if (x >= PATH_TOGGLE_X && x <= PATH_TOGGLE_X + PATH_TOGGLE_WIDTH &&
-            y >= PATH_TOGGLE_RR_Y && y <= PATH_TOGGLE_RR_Y + PATH_TOGGLE_HEIGHT) {
+            y >= pathToggleRRY && y <= pathToggleRRY + PATH_TOGGLE_HEIGHT) {
             animSettings.pathRussianRoulette = !animSettings.pathRussianRoulette;
+            return;
+        }
+        if (x >= PATH_TOGGLE_X && x <= PATH_TOGGLE_X + PATH_TOGGLE_WIDTH &&
+            y >= pathToggleMISY && y <= pathToggleMISY + PATH_TOGGLE_HEIGHT) {
+            animSettings.pathEnableMIS = !animSettings.pathEnableMIS;
+            return;
+        }
+        if (x >= PATH_TOGGLE_X && x <= PATH_TOGGLE_X + PATH_TOGGLE_WIDTH &&
+            y >= pathToggleBSDFY && y <= pathToggleBSDFY + PATH_TOGGLE_HEIGHT) {
+            animSettings.bsdfModel = (animSettings.bsdfModel == 0) ? 1 : 0;
+            SyncMenuSliderValues();
             return;
         }
     }
