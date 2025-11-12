@@ -127,7 +127,7 @@ static double IntegrateDirectionalEnergy(const UniformGrid* grid,
     if (!buffer) return 0.0;
     Normalize(&dirX, &dirY);
     double maxDistance = CACHE_MAX_DISTANCE;
-    if (grid && grid->cells) {
+    if (grid && (grid->objectCells || grid->triangleCells)) {
         Ray2D ray = {
             .ox = originX,
             .oy = originY,
@@ -164,7 +164,7 @@ static double MeasureOcclusion(const UniformGrid* grid,
                                double originY,
                                double dirX,
                                double dirY) {
-    if (!grid || !grid->cells) return 0.0;
+    if (!grid || (!grid->objectCells && !grid->triangleCells)) return 0.0;
     Normalize(&dirX, &dirY);
     Ray2D ray = {
         .ox = originX,

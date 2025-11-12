@@ -86,6 +86,7 @@ typedef struct {
     const struct MaterialBSDF* materials;
     int materialCount;
     SurfaceMesh* mesh;
+    TriangleMesh* triangleMesh;
     uint64_t feelerSeed;
 } IntegratorContext;
 

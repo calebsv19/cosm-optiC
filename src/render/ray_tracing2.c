@@ -40,6 +40,7 @@ static IrradianceCache irradianceCache = {0};
 static MaterialBSDF* materialTable = NULL;
 static int materialCapacity = 0;
 static SurfaceMesh surfaceMesh = {0};
+static TriangleMesh triangleMesh = {0};
 
 static float* reflectionForwardBuffer = NULL;
 static bool BuildReflectionCache(const IntegratorContext* ctx,
@@ -112,6 +113,7 @@ void InitRayTracingScene(void) {
     }
 
     SurfaceMeshInit(&surfaceMesh);
+    TriangleMeshInit(&triangleMesh);
 }
 
 void CleanupRayTracing(void) {
@@ -140,6 +142,7 @@ void CleanupRayTracing(void) {
         materialCapacity = 0;
     }
     SurfaceMeshFree(&surfaceMesh);
+    TriangleMeshFree(&triangleMesh);
 }
 
 void SetLightPosition(double x, double y) {
@@ -226,7 +229,6 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
     bool useTiles = animSettings.useTiledRenderer;
     int tileSize = useTiles ? ClampTileSize(animSettings.tileSize) : 0;
     double gridCellSize = fmax(4.0, (animSettings.tileSize > 0 ? animSettings.tileSize : 16));
-    UniformGridBuild(&uniformGrid, sceneSettings.sceneObjects, sceneSettings.objectCount, gridCellSize);
 
     // Ensure pixelBuffer is allocated
     if (pixelBuffer == NULL) {
@@ -273,10 +275,17 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
                                           64);
     }
 
-    bool meshReady = SurfaceMeshBuild(&surfaceMesh,
-                                      sceneSettings.sceneObjects,
-                                      sceneSettings.objectCount,
-                                      8.0);
+    bool meshReady = SurfaceBuildMeshes(&surfaceMesh,
+                                        &triangleMesh,
+                                        sceneSettings.sceneObjects,
+                                        sceneSettings.objectCount,
+                                        8.0);
+
+    UniformGridBuild(&uniformGrid,
+                     sceneSettings.sceneObjects,
+                     sceneSettings.objectCount,
+                     meshReady ? &triangleMesh : NULL,
+                     gridCellSize);
 
     IntegratorContext context = {
         .pixelBuffer = pixelBuffer,
@@ -289,12 +298,13 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
         .tileGrid = useTiles ? &tileGrid : NULL,
         .useTiles = useTiles,
         .frameSeed = frameSeed,
-        .uniformGrid = (uniformGrid.cells ? &uniformGrid : NULL),
+        .uniformGrid = ((uniformGrid.objectCells || uniformGrid.triangleCells) ? &uniformGrid : NULL),
         .integratorMode = animSettings.integratorMode,
         .cache = (haveCache ? &irradianceCache : NULL),
         .materials = materialTable,
         .materialCount = materialCount,
-        .mesh = (meshReady ? &surfaceMesh : NULL)
+        .mesh = (meshReady ? &surfaceMesh : NULL),
+        .triangleMesh = (meshReady ? &triangleMesh : NULL)
     };
 
     LightSource activeLight = {

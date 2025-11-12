@@ -29,6 +29,12 @@ static void MeshReset(SurfaceMesh* mesh) {
     mesh->segmentCount = 0;
 }
 
+static void TriangleMeshReset(TriangleMesh* mesh) {
+    if (!mesh) return;
+    mesh->vertexCount = 0;
+    mesh->triangleCount = 0;
+}
+
 static void AppendSegment(SurfaceMesh* mesh,
                           int objectIndex,
                           int localIndex,
@@ -104,6 +110,148 @@ static void SubdividePathEdge(SurfaceMesh* mesh,
     }
 }
 
+static bool TriangleMeshEnsureVertices(TriangleMesh* mesh, int target) {
+    if (!mesh || target <= 0) return false;
+    if (mesh->vertexCapacity >= target) return true;
+    int newCap = mesh->vertexCapacity > 0 ? mesh->vertexCapacity : 64;
+    while (newCap < target) newCap *= 2;
+    TriangleVertex* next = (TriangleVertex*)realloc(mesh->vertices,
+                                                    (size_t)newCap * sizeof(TriangleVertex));
+    if (!next) return false;
+    mesh->vertices = next;
+    mesh->vertexCapacity = newCap;
+    return true;
+}
+
+static bool TriangleMeshEnsureTriangles(TriangleMesh* mesh, int target) {
+    if (!mesh || target <= 0) return false;
+    if (mesh->triangleCapacity >= target) return true;
+    int newCap = mesh->triangleCapacity > 0 ? mesh->triangleCapacity : 64;
+    while (newCap < target) newCap *= 2;
+    TriangleFace* next = (TriangleFace*)realloc(mesh->triangles,
+                                                (size_t)newCap * sizeof(TriangleFace));
+    if (!next) return false;
+    mesh->triangles = next;
+    mesh->triangleCapacity = newCap;
+    return true;
+}
+
+static double SignedArea(const PathVertex* verts, int count) {
+    double area = 0.0;
+    for (int i = 0; i < count; i++) {
+        int j = (i + 1) % count;
+        area += verts[i].x * verts[j].y - verts[j].x * verts[i].y;
+    }
+    return 0.5 * area;
+}
+
+static bool PointInTriangle(double ax, double ay,
+                            double bx, double by,
+                            double cx, double cy,
+                            double px, double py) {
+    double v0x = cx - ax;
+    double v0y = cy - ay;
+    double v1x = bx - ax;
+    double v1y = by - ay;
+    double v2x = px - ax;
+    double v2y = py - ay;
+
+    double dot00 = v0x * v0x + v0y * v0y;
+    double dot01 = v0x * v1x + v0y * v1y;
+    double dot02 = v0x * v2x + v0y * v2y;
+    double dot11 = v1x * v1x + v1y * v1y;
+    double dot12 = v1x * v2x + v1y * v2y;
+
+    double denom = dot00 * dot11 - dot01 * dot01;
+    if (fabs(denom) < 1e-12) return false;
+    double invDenom = 1.0 / denom;
+    double u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+    double v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+    return (u >= -1e-6) && (v >= -1e-6) && (u + v <= 1.0 + 1e-6);
+}
+
+static bool TriangulatePath(const SegmentPath* path,
+                            TriangleMesh* mesh,
+                            int objectIndex,
+                            int vertexStart) {
+    if (!mesh || !path || path->count < 3) return false;
+    int n = path->count;
+    int* indices = (int*)malloc((size_t)n * sizeof(int));
+    if (!indices) return false;
+    for (int i = 0; i < n; i++) indices[i] = i;
+    double area = SignedArea(path->vertices, path->count);
+    bool ccw = area >= 0.0;
+    int guard = 0;
+    while (n >= 3 && guard < 10000) {
+        bool earFound = false;
+        for (int i = 0; i < n; i++) {
+            int prev = (i + n - 1) % n;
+            int next = (i + 1) % n;
+            int ia = indices[prev];
+            int ib = indices[i];
+            int ic = indices[next];
+            double ax = path->vertices[ia].x;
+            double ay = path->vertices[ia].y;
+            double bx = path->vertices[ib].x;
+            double by = path->vertices[ib].y;
+            double cx = path->vertices[ic].x;
+            double cy = path->vertices[ic].y;
+            double cross = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+            if (ccw) {
+                if (cross <= 1e-6) continue;
+            } else {
+                if (cross >= -1e-6) continue;
+            }
+            bool contains = false;
+            for (int j = 0; j < n; j++) {
+                if (j == prev || j == i || j == next) continue;
+                int idx = indices[j];
+                double px = path->vertices[idx].x;
+                double py = path->vertices[idx].y;
+                if (PointInTriangle(ax, ay, bx, by, cx, cy, px, py)) {
+                    contains = true;
+                    break;
+                }
+            }
+            if (contains) continue;
+            if (!TriangleMeshEnsureTriangles(mesh, mesh->triangleCount + 1)) {
+                free(indices);
+                return false;
+            }
+            TriangleFace* face = &mesh->triangles[mesh->triangleCount++];
+            face->v0 = vertexStart + ia;
+            face->v1 = vertexStart + ib;
+            face->v2 = vertexStart + ic;
+            face->objectIndex = objectIndex;
+            for (int k = i; k < n - 1; k++) {
+                indices[k] = indices[k + 1];
+            }
+            n--;
+            earFound = true;
+            break;
+        }
+        if (!earFound) {
+            if (n >= 3) {
+                if (!TriangleMeshEnsureTriangles(mesh, mesh->triangleCount + (n - 2))) {
+                    free(indices);
+                    return false;
+                }
+                for (int k = 1; k < n - 1; k++) {
+                    TriangleFace* face = &mesh->triangles[mesh->triangleCount++];
+                    face->v0 = vertexStart + indices[0];
+                    face->v1 = vertexStart + indices[k];
+                    face->v2 = vertexStart + indices[k + 1];
+                    face->objectIndex = objectIndex;
+                }
+            }
+            break;
+        }
+        guard++;
+    }
+    free(indices);
+    return true;
+}
+
 void SurfaceMeshInit(SurfaceMesh* mesh) {
     if (!mesh) return;
     memset(mesh, 0, sizeof(*mesh));
@@ -122,15 +270,42 @@ void SurfaceMeshFree(SurfaceMesh* mesh) {
     mesh->offsetsCapacity = 0;
 }
 
-bool SurfaceMeshBuild(SurfaceMesh* mesh,
-                      SceneObject* objects,
-                      int objectCount,
-                      double maxSegmentLength) {
+void TriangleMeshInit(TriangleMesh* mesh) {
+    if (!mesh) return;
+    memset(mesh, 0, sizeof(*mesh));
+}
+
+void TriangleMeshFree(TriangleMesh* mesh) {
+    if (!mesh) return;
+    free(mesh->vertices);
+    mesh->vertices = NULL;
+    mesh->vertexCount = 0;
+    mesh->vertexCapacity = 0;
+    free(mesh->triangles);
+    mesh->triangles = NULL;
+    mesh->triangleCount = 0;
+    mesh->triangleCapacity = 0;
+    free(mesh->vertexOffsets);
+    mesh->vertexOffsets = NULL;
+    free(mesh->triangleOffsets);
+    mesh->triangleOffsets = NULL;
+    mesh->objectCount = 0;
+    mesh->offsetsCapacity = 0;
+}
+
+static bool SurfaceBuildInternal(SurfaceMesh* mesh,
+                                 TriangleMesh* triMesh,
+                                 SceneObject* objects,
+                                 int objectCount,
+                                 double maxSegmentLength) {
     if (!mesh || !objects || objectCount <= 0) {
         return false;
     }
     mesh->maxSegmentLength = (maxSegmentLength > 0.5) ? maxSegmentLength : 5.0;
     MeshReset(mesh);
+    if (triMesh) {
+        TriangleMeshReset(triMesh);
+    }
     SegmentPath path;
     SegmentPathInit(&path);
     if (mesh->offsetsCapacity < objectCount + 1) {
@@ -145,10 +320,38 @@ bool SurfaceMeshBuild(SurfaceMesh* mesh,
     }
     mesh->objectCount = objectCount;
     mesh->objectOffsets[0] = 0;
+
+    if (triMesh) {
+        if (triMesh->offsetsCapacity < objectCount + 1) {
+            int newCap = objectCount + 1;
+            int* vOffsets = (int*)realloc(triMesh->vertexOffsets,
+                                          (size_t)newCap * sizeof(int));
+            int* tOffsets = (int*)realloc(triMesh->triangleOffsets,
+                                          (size_t)newCap * sizeof(int));
+            if (!vOffsets || !tOffsets) {
+                free(vOffsets);
+                free(tOffsets);
+                SegmentPathFree(&path);
+                return false;
+            }
+            triMesh->vertexOffsets = vOffsets;
+            triMesh->triangleOffsets = tOffsets;
+            triMesh->offsetsCapacity = newCap;
+        }
+        triMesh->objectCount = objectCount;
+        triMesh->vertexOffsets[0] = 0;
+        triMesh->triangleOffsets[0] = 0;
+    }
+
     for (int i = 0; i < objectCount; i++) {
         SceneObject* obj = &objects[i];
         int localIndex = 0;
         mesh->objectOffsets[i] = mesh->segmentCount;
+        if (triMesh) {
+            triMesh->vertexOffsets[i] = triMesh->vertexCount;
+            triMesh->triangleOffsets[i] = triMesh->triangleCount;
+        }
+
         if (!OM_BuildSegmentPath(obj, mesh->maxSegmentLength, &path)) {
             continue;
         }
@@ -160,10 +363,46 @@ bool SurfaceMeshBuild(SurfaceMesh* mesh,
                               &path.vertices[next],
                               &localIndex);
         }
+
+        if (triMesh && path.count >= 3) {
+            if (!TriangleMeshEnsureVertices(triMesh,
+                                            triMesh->vertexCount + path.count)) {
+                SegmentPathFree(&path);
+                return false;
+            }
+            int vertexStart = triMesh->vertexCount;
+            for (int v = 0; v < path.count; v++) {
+                TriangleVertex* vert = &triMesh->vertices[triMesh->vertexCount++];
+                vert->x = path.vertices[v].x;
+                vert->y = path.vertices[v].y;
+                vert->nx = path.vertices[v].nx;
+                vert->ny = path.vertices[v].ny;
+            }
+            TriangulatePath(&path, triMesh, i, vertexStart);
+        }
     }
     SegmentPathFree(&path);
     mesh->objectOffsets[objectCount] = mesh->segmentCount;
+    if (triMesh) {
+        triMesh->vertexOffsets[objectCount] = triMesh->vertexCount;
+        triMesh->triangleOffsets[objectCount] = triMesh->triangleCount;
+    }
     return mesh->segmentCount > 0;
+}
+
+bool SurfaceMeshBuild(SurfaceMesh* mesh,
+                      SceneObject* objects,
+                      int objectCount,
+                      double maxSegmentLength) {
+    return SurfaceBuildInternal(mesh, NULL, objects, objectCount, maxSegmentLength);
+}
+
+bool SurfaceBuildMeshes(SurfaceMesh* segments,
+                        TriangleMesh* triangles,
+                        SceneObject* objects,
+                        int objectCount,
+                        double maxSegmentLength) {
+    return SurfaceBuildInternal(segments, triangles, objects, objectCount, maxSegmentLength);
 }
 
 const SurfaceSegment* SurfaceMeshFindSegment(const SurfaceMesh* mesh,

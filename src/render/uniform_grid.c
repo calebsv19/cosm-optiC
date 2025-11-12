@@ -20,19 +20,26 @@ static void GridCellAdd(GridCell* cell, int index) {
 }
 
 void UniformGridClear(UniformGrid* grid) {
-    if (!grid || !grid->cells) return;
-    for (int i = 0; i < grid->cellsX * grid->cellsY; i++) {
-        free(grid->cells[i].indices);
-        grid->cells[i].indices = NULL;
-        grid->cells[i].count = 0;
-        grid->cells[i].capacity = 0;
+    if (!grid) return;
+    if (grid->objectCells) {
+        for (int i = 0; i < grid->cellsX * grid->cellsY; i++) {
+            free(grid->objectCells[i].indices);
+        }
+        free(grid->objectCells);
+        grid->objectCells = NULL;
     }
-    free(grid->cells);
-    grid->cells = NULL;
+    if (grid->triangleCells) {
+        for (int i = 0; i < grid->cellsX * grid->cellsY; i++) {
+            free(grid->triangleCells[i].indices);
+        }
+        free(grid->triangleCells);
+        grid->triangleCells = NULL;
+    }
     grid->cellsX = grid->cellsY = 0;
     grid->minX = grid->minY = 0.0;
     grid->maxX = grid->maxY = 0.0;
     grid->objectCount = 0;
+    grid->triangleMesh = NULL;
 }
 
 void UniformGridFree(UniformGrid* grid) {
@@ -62,13 +69,18 @@ static void ExpandBounds(UniformGrid* grid, SceneObject* objects, int objectCoun
     grid->maxY = maxY + margin;
 }
 
-bool UniformGridBuild(UniformGrid* grid, SceneObject* objects, int objectCount, double cellSize) {
+bool UniformGridBuild(UniformGrid* grid,
+                      SceneObject* objects,
+                      int objectCount,
+                      const TriangleMesh* triangles,
+                      double cellSize) {
     if (!grid) return false;
     if (cellSize < 1.0) cellSize = 1.0;
 
     UniformGridClear(grid);
     grid->objects = objects;
     grid->objectCount = objectCount;
+    grid->triangleMesh = triangles;
     grid->cellSize = cellSize;
 
     ExpandBounds(grid, objects, objectCount);
@@ -78,10 +90,18 @@ bool UniformGridBuild(UniformGrid* grid, SceneObject* objects, int objectCount, 
     grid->cellsX = (int)fmax(1.0, ceil(width / cellSize));
     grid->cellsY = (int)fmax(1.0, ceil(height / cellSize));
 
-    grid->cells = (GridCell*)calloc((size_t)grid->cellsX * (size_t)grid->cellsY, sizeof(GridCell));
-    if (!grid->cells) {
+    size_t cellCount = (size_t)grid->cellsX * (size_t)grid->cellsY;
+    grid->objectCells = (GridCell*)calloc(cellCount, sizeof(GridCell));
+    if (!grid->objectCells) {
         grid->cellsX = grid->cellsY = 0;
         return false;
+    }
+    if (triangles && triangles->triangleCount > 0) {
+        grid->triangleCells = (GridCell*)calloc(cellCount, sizeof(GridCell));
+        if (!grid->triangleCells) {
+            UniformGridClear(grid);
+            return false;
+        }
     }
 
     for (int i = 0; i < objectCount; i++) {
@@ -100,7 +120,34 @@ bool UniformGridBuild(UniformGrid* grid, SceneObject* objects, int objectCount, 
         for (int y = minCellY; y <= maxCellY; y++) {
             for (int x = minCellX; x <= maxCellX; x++) {
                 size_t idx = (size_t)y * (size_t)grid->cellsX + (size_t)x;
-                GridCellAdd(&grid->cells[idx], i);
+                GridCellAdd(&grid->objectCells[idx], i);
+            }
+        }
+    }
+
+    if (triangles && triangles->triangleCount > 0 && grid->triangleCells) {
+        for (int triIndex = 0; triIndex < triangles->triangleCount; triIndex++) {
+            const TriangleFace* face = &triangles->triangles[triIndex];
+            const TriangleVertex* v0 = &triangles->vertices[face->v0];
+            const TriangleVertex* v1 = &triangles->vertices[face->v1];
+            const TriangleVertex* v2 = &triangles->vertices[face->v2];
+            double minX = fmin(v0->x, fmin(v1->x, v2->x));
+            double maxX = fmax(v0->x, fmax(v1->x, v2->x));
+            double minY = fmin(v0->y, fmin(v1->y, v2->y));
+            double maxY = fmax(v0->y, fmax(v1->y, v2->y));
+            int minCellX = (int)floor((minX - grid->minX) / grid->cellSize);
+            int maxCellX = (int)floor((maxX - grid->minX) / grid->cellSize);
+            int minCellY = (int)floor((minY - grid->minY) / grid->cellSize);
+            int maxCellY = (int)floor((maxY - grid->minY) / grid->cellSize);
+            if (minCellX < 0) minCellX = 0;
+            if (minCellY < 0) minCellY = 0;
+            if (maxCellX >= grid->cellsX) maxCellX = grid->cellsX - 1;
+            if (maxCellY >= grid->cellsY) maxCellY = grid->cellsY - 1;
+            for (int y = minCellY; y <= maxCellY; y++) {
+                for (int x = minCellX; x <= maxCellX; x++) {
+                    size_t idx = (size_t)y * (size_t)grid->cellsX + (size_t)x;
+                    GridCellAdd(&grid->triangleCells[idx], triIndex);
+                }
             }
         }
     }
@@ -109,14 +156,14 @@ bool UniformGridBuild(UniformGrid* grid, SceneObject* objects, int objectCount, 
 }
 
 const GridCell* UniformGridGetCell(const UniformGrid* grid, int cellX, int cellY) {
-    if (!grid || !grid->cells) return NULL;
+    if (!grid || !grid->objectCells) return NULL;
     if (cellX < 0 || cellY < 0 || cellX >= grid->cellsX || cellY >= grid->cellsY) return NULL;
     size_t idx = (size_t)cellY * (size_t)grid->cellsX + (size_t)cellX;
-    return &grid->cells[idx];
+    return &grid->objectCells[idx];
 }
 
 bool UniformGridPointTest(const UniformGrid* grid, double x, double y, int** indices, int* count) {
-    if (!grid || !grid->cells) return false;
+    if (!grid || !grid->objectCells) return false;
     int cellX = (int)floor((x - grid->minX) / grid->cellSize);
     int cellY = (int)floor((y - grid->minY) / grid->cellSize);
     const GridCell* cell = UniformGridGetCell(grid, cellX, cellY);
@@ -128,6 +175,78 @@ bool UniformGridPointTest(const UniformGrid* grid, double x, double y, int** ind
 
 static double Cross2(double ax, double ay, double bx, double by) {
     return ax * by - ay * bx;
+}
+
+static bool IntersectTriangleFace(const TriangleMesh* mesh,
+                                  int triangleIndex,
+                                  const Ray2D* ray,
+                                  double tMin,
+                                  double tMax,
+                                  HitInfo2D* hit) {
+    if (!mesh || triangleIndex < 0 || triangleIndex >= mesh->triangleCount) {
+        return false;
+    }
+    const TriangleFace* face = &mesh->triangles[triangleIndex];
+    const TriangleVertex* v0 = &mesh->vertices[face->v0];
+    const TriangleVertex* v1 = &mesh->vertices[face->v1];
+    const TriangleVertex* v2 = &mesh->vertices[face->v2];
+    const TriangleVertex* verts[3] = {v0, v1, v2};
+
+    bool found = false;
+    double bestT = tMax;
+    double hitPx = 0.0;
+    double hitPy = 0.0;
+
+    for (int e = 0; e < 3; e++) {
+        const TriangleVertex* a = verts[e];
+        const TriangleVertex* b = verts[(e + 1) % 3];
+        double sx = b->x - a->x;
+        double sy = b->y - a->y;
+        double denom = Cross2(ray->dx, ray->dy, sx, sy);
+        if (fabs(denom) < GRID_EPSILON) continue;
+        double ax = a->x - ray->ox;
+        double ay = a->y - ray->oy;
+        double t = Cross2(ax, ay, sx, sy) / denom;
+        double u = Cross2(ax, ay, ray->dx, ray->dy) / denom;
+        if (t < tMin || t > bestT) continue;
+        if (u < 0.0 || u > 1.0) continue;
+        found = true;
+        bestT = t;
+        hitPx = ray->ox + ray->dx * t;
+        hitPy = ray->oy + ray->dy * t;
+    }
+
+    if (found && hit) {
+        hit->t = bestT;
+        hit->px = hitPx;
+        hit->py = hitPy;
+        double nx = v0->nx + v1->nx + v2->nx;
+        double ny = v0->ny + v1->ny + v2->ny;
+        double len = sqrt(nx * nx + ny * ny);
+        if (len > GRID_EPSILON) {
+            nx /= len;
+            ny /= len;
+        } else {
+            double sx = v1->x - v0->x;
+            double sy = v1->y - v0->y;
+            nx = -sy;
+            ny = sx;
+            len = sqrt(nx * nx + ny * ny);
+            if (len > GRID_EPSILON) {
+                nx /= len;
+                ny /= len;
+            }
+        }
+        double dot = nx * ray->dx + ny * ray->dy;
+        if (dot > 0.0) {
+            nx = -nx;
+            ny = -ny;
+        }
+        hit->nx = nx;
+        hit->ny = ny;
+        hit->objectIndex = face->objectIndex;
+    }
+    return found;
 }
 
 static bool IntersectCircle(const SceneObject* obj, const Ray2D* ray, double tMin, double tMax, HitInfo2D* hit) {
@@ -230,7 +349,11 @@ static bool IntersectSceneObject(const SceneObject* obj, const Ray2D* ray, doubl
 }
 
 bool UniformGridTraceRay(const UniformGrid* grid, const Ray2D* ray, double tMin, double tMax, HitInfo2D* hit) {
-    if (!grid || !grid->cells || grid->cellsX == 0 || grid->cellsY == 0) return false;
+    bool hasObjects = (grid && grid->objectCells);
+    bool hasTriangles = (grid && grid->triangleCells && grid->triangleMesh && grid->triangleMesh->triangleCount > 0);
+    if (!grid || grid->cellsX == 0 || grid->cellsY == 0 || (!hasObjects && !hasTriangles)) {
+        return false;
+    }
 
     double dirX = ray->dx;
     double dirY = ray->dy;
@@ -308,10 +431,11 @@ bool UniformGridTraceRay(const UniformGrid* grid, const Ray2D* ray, double tMin,
     while (cellX >= 0 && cellX < grid->cellsX &&
            cellY >= 0 && cellY < grid->cellsY) {
         double cellExitT = fmin(tMaxX, tMaxY);
-        const GridCell* cell = UniformGridGetCell(grid, cellX, cellY);
-        if (cell && cell->count > 0) {
-            for (int i = 0; i < cell->count; i++) {
-                int objIndex = cell->indices[i];
+        size_t cellIndex = (size_t)cellY * (size_t)grid->cellsX + (size_t)cellX;
+        const GridCell* objCell = hasObjects ? &grid->objectCells[cellIndex] : NULL;
+        if (objCell && objCell->count > 0) {
+            for (int i = 0; i < objCell->count; i++) {
+                int objIndex = objCell->indices[i];
                 if (objIndex < 0 || objIndex >= grid->objectCount) continue;
                 HitInfo2D localHit;
                 if (IntersectSceneObject(&grid->objects[objIndex], ray, t0, fmin(cellExitT, bestT), &localHit)) {
@@ -323,9 +447,29 @@ bool UniformGridTraceRay(const UniformGrid* grid, const Ray2D* ray, double tMin,
                     }
                 }
             }
-            if (hitFound) {
-                break;
+        }
+
+        const GridCell* triCell = hasTriangles ? &grid->triangleCells[cellIndex] : NULL;
+        if (!hitFound && triCell && triCell->count > 0) {
+            for (int i = 0; i < triCell->count; i++) {
+                int triIndex = triCell->indices[i];
+                HitInfo2D localHit;
+                if (IntersectTriangleFace(grid->triangleMesh,
+                                          triIndex,
+                                          ray,
+                                          t0,
+                                          fmin(cellExitT, bestT),
+                                          &localHit)) {
+                    if (localHit.t < bestT && localHit.t >= t0 + GRID_EPSILON) {
+                        bestT = localHit.t;
+                        tempHit = localHit;
+                        hitFound = true;
+                    }
+                }
             }
+        }
+        if (hitFound) {
+            break;
         }
 
         if (tMaxX < tMaxY) {

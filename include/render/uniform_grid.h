@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include "scene/object_manager.h"
 #include "render/ray_types.h"
+#include "render/surface_mesh.h"
 
 typedef struct {
     int* indices;
@@ -17,12 +18,18 @@ typedef struct {
     double cellSize;
     int cellsX;
     int cellsY;
-    GridCell* cells;
+    GridCell* objectCells;
+    GridCell* triangleCells;
     SceneObject* objects;
     int objectCount;
+    const TriangleMesh* triangleMesh;
 } UniformGrid;
 
-bool UniformGridBuild(UniformGrid* grid, SceneObject* objects, int objectCount, double cellSize);
+bool UniformGridBuild(UniformGrid* grid,
+                      SceneObject* objects,
+                      int objectCount,
+                      const TriangleMesh* triangles,
+                      double cellSize);
 void UniformGridClear(UniformGrid* grid);
 void UniformGridFree(UniformGrid* grid);
 
