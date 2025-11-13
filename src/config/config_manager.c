@@ -56,7 +56,8 @@ AnimationConfig animSettings = {
     .bsdfModel = 1,
     .lightIntensity = 5.0,
     .forwardDecay = 0.0,
-    .forwardFalloffMode = FORWARD_FALLOFF_MODE_QUADRATIC
+    .forwardFalloffMode = FORWARD_FALLOFF_MODE_QUADRATIC,
+    .renderQuality = RENDER_QUALITY_MEDIUM
 };
 
 SceneConfig sceneSettings = {

@@ -15,6 +15,10 @@ typedef struct {
     double nx;
     double ny;
     int objectIndex;
+    int triangleIndex;
+    double baryU;
+    double baryV;
+    double baryW;
 } HitInfo2D;
 
 #endif // RAY_TYPES_H

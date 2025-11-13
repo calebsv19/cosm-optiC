@@ -134,7 +134,10 @@ static double IntegrateDirectionalEnergy(const UniformGrid* grid,
             .dx = dirX,
             .dy = dirY
         };
-        HitInfo2D hit;
+        HitInfo2D hit = {0};
+        hit.objectIndex = -1;
+        hit.triangleIndex = -1;
+        hit.baryW = 1.0;
         if (UniformGridTraceRay(grid, &ray, PATH_EPSILON, CACHE_MAX_DISTANCE, &hit)) {
             maxDistance = hit.t;
         }
@@ -172,7 +175,10 @@ static double MeasureOcclusion(const UniformGrid* grid,
         .dx = dirX,
         .dy = dirY
     };
-    HitInfo2D hit;
+    HitInfo2D hit = {0};
+    hit.objectIndex = -1;
+    hit.triangleIndex = -1;
+    hit.baryW = 1.0;
     if (UniformGridTraceRay(grid, &ray, PATH_EPSILON, CACHE_MAX_DISTANCE, &hit)) {
         return hit.t;
     }

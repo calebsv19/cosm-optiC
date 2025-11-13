@@ -259,7 +259,8 @@ bool InitializeMenu(SDL_Window** window, SDL_Renderer** renderer, TTF_Font** fon
     }
 
     // Create SDL Renderer
-    *renderer = SDL_CreateRenderer(*window, -1, SDL_RENDERER_ACCELERATED);
+    *renderer = SDL_CreateRenderer(*window, -1,
+                                   SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!*renderer) {
         printf("Renderer Creation Failed: %s\n", SDL_GetError());
         SDL_DestroyWindow(*window);
@@ -466,9 +467,7 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
     int pathToggleMISY = pathToggleRRY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
     int pathToggleBSDFY = pathToggleMISY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
 
-    // Clear the screen with a black background
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    SDL_RenderClear(renderer);
+
     
     // Render main mode buttons
     RenderButton(renderer, font, TOGGLE_BUTTON_MARGIN_X, TOGGLE_BUTTON_MARGIN_Y,
@@ -573,8 +572,7 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
     RenderSliders(renderer, font, &sliderLayout);
 
     // Present the updated UI 
-    SDL_RenderPresent(renderer);
-} 
+}
 
 void HandleKeyPress(SDL_Event* event, bool* running) {
     switch (event->key.keysym.sym) {
@@ -886,6 +884,8 @@ bool RunMenu(void) {
     SDL_Event event;
                 
     while (running) {
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
                 case SDL_QUIT:
@@ -919,6 +919,7 @@ bool RunMenu(void) {
             }
         }
         RenderMenu(renderer, font);
+        SDL_RenderPresent(renderer);
     }
     //  Only Quit SDL if the User Exits the Menu
     if (menuExitedNormally) {

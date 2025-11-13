@@ -19,22 +19,22 @@ static void GridCellAdd(GridCell* cell, int index) {
     cell->indices[cell->count++] = index;
 }
 
+static void ClearCellArray(GridCell* cells, int count) {
+    if (!cells) return;
+    for (int i = 0; i < count; i++) {
+        free(cells[i].indices);
+    }
+    free(cells);
+}
+
 void UniformGridClear(UniformGrid* grid) {
     if (!grid) return;
-    if (grid->objectCells) {
-        for (int i = 0; i < grid->cellsX * grid->cellsY; i++) {
-            free(grid->objectCells[i].indices);
-        }
-        free(grid->objectCells);
-        grid->objectCells = NULL;
-    }
-    if (grid->triangleCells) {
-        for (int i = 0; i < grid->cellsX * grid->cellsY; i++) {
-            free(grid->triangleCells[i].indices);
-        }
-        free(grid->triangleCells);
-        grid->triangleCells = NULL;
-    }
+    int totalCells = grid->cellsX * grid->cellsY;
+    if (totalCells < 0) totalCells = 0;
+    ClearCellArray(grid->objectCells, totalCells);
+    ClearCellArray(grid->triangleCells, totalCells);
+    grid->objectCells = NULL;
+    grid->triangleCells = NULL;
     grid->cellsX = grid->cellsY = 0;
     grid->minX = grid->minY = 0.0;
     grid->maxX = grid->maxY = 0.0;
@@ -220,17 +220,27 @@ static bool IntersectTriangleFace(const TriangleMesh* mesh,
         hit->t = bestT;
         hit->px = hitPx;
         hit->py = hitPy;
-        double nx = v0->nx + v1->nx + v2->nx;
-        double ny = v0->ny + v1->ny + v2->ny;
+        hit->triangleIndex = triangleIndex;
+        double denom = (v1->y - v2->y) * (v0->x - v2->x) + (v2->x - v1->x) * (v0->y - v2->y);
+        double u = 0.0;
+        double v = 0.0;
+        if (fabs(denom) > GRID_EPSILON) {
+            u = ((v1->y - v2->y) * (hitPx - v2->x) + (v2->x - v1->x) * (hitPy - v2->y)) / denom;
+            v = ((v2->y - v0->y) * (hitPx - v2->x) + (v0->x - v2->x) * (hitPy - v2->y)) / denom;
+        }
+        double w = 1.0 - u - v;
+        hit->baryU = u;
+        hit->baryV = v;
+        hit->baryW = w;
+        double nx = u * v0->nx + v * v1->nx + w * v2->nx;
+        double ny = u * v0->ny + v * v1->ny + w * v2->ny;
         double len = sqrt(nx * nx + ny * ny);
         if (len > GRID_EPSILON) {
             nx /= len;
             ny /= len;
         } else {
-            double sx = v1->x - v0->x;
-            double sy = v1->y - v0->y;
-            nx = -sy;
-            ny = sx;
+            nx = v1->y - v0->y;
+            ny = -(v1->x - v0->x);
             len = sqrt(nx * nx + ny * ny);
             if (len > GRID_EPSILON) {
                 nx /= len;
@@ -277,6 +287,10 @@ static bool IntersectCircle(const SceneObject* obj, const Ray2D* ray, double tMi
         if (t < tMin || t > tMax) return false;
     }
     if (hit) {
+        hit->triangleIndex = -1;
+        hit->baryU = 0.0;
+        hit->baryV = 0.0;
+        hit->baryW = 1.0;
         hit->t = t;
         hit->px = ray->ox + ray->dx * t;
         hit->py = ray->oy + ray->dy * t;
@@ -332,6 +346,10 @@ static bool IntersectPolygon(const SceneObject* obj, const Ray2D* ray, double tM
         }
     }
     if (found && hit) {
+        hit->triangleIndex = -1;
+        hit->baryU = 0.0;
+        hit->baryV = 0.0;
+        hit->baryW = 1.0;
         hit->t = bestT;
         hit->px = hitPx;
         hit->py = hitPy;
@@ -427,6 +445,9 @@ bool UniformGridTraceRay(const UniformGrid* grid, const Ray2D* ray, double tMin,
     bool hitFound = false;
     double bestT = t1;
     HitInfo2D tempHit = {0};
+    tempHit.objectIndex = -1;
+    tempHit.triangleIndex = -1;
+    tempHit.baryW = 1.0;
 
     while (cellX >= 0 && cellX < grid->cellsX &&
            cellY >= 0 && cellY < grid->cellsY) {
@@ -437,7 +458,10 @@ bool UniformGridTraceRay(const UniformGrid* grid, const Ray2D* ray, double tMin,
             for (int i = 0; i < objCell->count; i++) {
                 int objIndex = objCell->indices[i];
                 if (objIndex < 0 || objIndex >= grid->objectCount) continue;
-                HitInfo2D localHit;
+                HitInfo2D localHit = {0};
+                localHit.objectIndex = -1;
+                localHit.triangleIndex = -1;
+                localHit.baryW = 1.0;
                 if (IntersectSceneObject(&grid->objects[objIndex], ray, t0, fmin(cellExitT, bestT), &localHit)) {
                     if (localHit.t < bestT && localHit.t >= t0 + GRID_EPSILON) {
                         bestT = localHit.t;
@@ -453,7 +477,10 @@ bool UniformGridTraceRay(const UniformGrid* grid, const Ray2D* ray, double tMin,
         if (!hitFound && triCell && triCell->count > 0) {
             for (int i = 0; i < triCell->count; i++) {
                 int triIndex = triCell->indices[i];
-                HitInfo2D localHit;
+                HitInfo2D localHit = {0};
+                localHit.objectIndex = -1;
+                localHit.triangleIndex = -1;
+                localHit.baryW = 1.0;
                 if (IntersectTriangleFace(grid->triangleMesh,
                                           triIndex,
                                           ray,

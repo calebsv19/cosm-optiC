@@ -247,6 +247,12 @@ bool MaterialBSDFSample(const MaterialBSDF* material,
     if (pickSpec) {
         sampled = BSDFSampleGGX(material, nx, ny, inDirX, inDirY, FastRNGNextDouble(rng), FastRNGNextDouble(rng), out);
         if (sampled) {
+            double jitter = 0.1 * Clamp(material->roughness, 0.0, 1.0);
+            double offsetX = (FastRNGNextDouble(rng) * 2.0 - 1.0) * jitter;
+            double offsetY = (FastRNGNextDouble(rng) * 2.0 - 1.0) * jitter;
+            out->dirX += offsetX;
+            out->dirY += offsetY;
+            Normalize(&out->dirX, &out->dirY);
             out->pdf *= specProb;
             return true;
         }

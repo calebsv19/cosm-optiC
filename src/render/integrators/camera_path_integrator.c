@@ -16,6 +16,8 @@
 #define M_PI 3.14159265358979323846
 #endif
 #define INDIRECT_FEELER_COUNT 48
+#define INDIRECT_GI_DOWNSAMPLE 4
+#define INDIRECT_DIRECT_SKIP_THRESHOLD 5.0f
 #define INDIRECT_DISTANCE_FALLOFF 0.0015f
 #define INDIRECT_DISTANCE_DECAY 80.0
 #define MAX_FEELER_DISTANCE 1500.0
@@ -28,65 +30,41 @@ typedef struct {
     size_t cacheContributions;
 } IndirectStats;
 
-static double PixelFeelerJitter(int pixelX, int pixelY, int feelerIndex) {
-    uint32_t h = 0x9E3779B9u;
-    h ^= (uint32_t)(pixelX * 73856093u);
-    h = (h << 13) | (h >> 19);
-    h ^= (uint32_t)(pixelY * 19349663u);
-    h = h * 0x85EBCA6Bu;
-    h ^= (uint32_t)(feelerIndex * 83492791u);
-    h *= 0xC2B2AE35u;
-    double scaled = (double)(h & 0xFFFFFFu) / (double)0x1000000u; // [0,1)
-    return (scaled - 0.5) * 0.25; // small jitter
+static inline double Lerp(double a, double b, double t) {
+    return a + t * (b - a);
 }
 
-static void FeelerDirection(int index,
-                            double jitter,
-                            double* dirX,
-                            double* dirY) {
-    double u = ((double)index + 0.5 + jitter) / (double)INDIRECT_FEELER_COUNT;
-    double angle = u * 2.0 * M_PI;
-    *dirX = cos(angle);
-    *dirY = sin(angle);
+static inline double Sqr(double x) {
+    return x * x;
 }
 
-static void NormalizeVector(double* x, double* y) {
+static inline void NormalizeVector(double* x, double* y) {
     double len = sqrt((*x) * (*x) + (*y) * (*y));
-    if (len > GRID_EPSILON) {
+    if (len > 1e-9) {
         *x /= len;
         *y /= len;
     }
 }
 
-static bool TraceRayToSurface(const IntegratorContext* ctx,
-                              double originX,
-                              double originY,
-                              double dirX,
-                              double dirY,
-                              HitInfo2D* hit,
-                              const SceneObject** outObj,
-                              double maxDistance) {
-    if (!ctx || !ctx->uniformGrid) return false;
-    NormalizeVector(&dirX, &dirY);
-    Ray2D ray = {
-        .ox = originX,
-        .oy = originY,
-        .dx = dirX,
-        .dy = dirY
-    };
-    HitInfo2D localHit;
-    double tMin = PATH_EPSILON;
-    double tMax = (maxDistance > 0.0) ? maxDistance : DBL_MAX;
-    if (!UniformGridTraceRay(ctx->uniformGrid, &ray, tMin, tMax, &localHit)) {
-        return false;
-    }
-    if (hit) {
-        *hit = localHit;
-    }
-    if (outObj) {
-        *outObj = &ctx->objects[localHit.objectIndex];
-    }
-    return true;
+static inline double HashDouble(int x, int y, int s) {
+    uint32_t h = (uint32_t)(x * 73856093) ^ (uint32_t)(y * 19349663) ^ (uint32_t)(s * 83492791);
+    h ^= h >> 13;
+    h *= 0x5bd1e995;
+    h ^= h >> 15;
+    return (double)(h & 0xFFFFFF) / (double)0x1000000;
+}
+
+static double PixelFeelerJitter(int pixelX, int pixelY, int feelerIndex) {
+    double base = HashDouble(pixelX, pixelY, feelerIndex);
+    return base * 2.0 - 1.0;
+}
+
+static void FeelerDirection(int index, double jitter, double* outX, double* outY) {
+    double baseAngle = (2.0 * M_PI * (double)index) / (double)INDIRECT_FEELER_COUNT;
+    double jitterAngle = 0.5 * (M_PI / (double)INDIRECT_FEELER_COUNT) * jitter;
+    double angle = baseAngle + jitterAngle;
+    *outX = cos(angle);
+    *outY = sin(angle);
 }
 
 static bool IsOccluded(const IntegratorContext* ctx,
@@ -94,17 +72,110 @@ static bool IsOccluded(const IntegratorContext* ctx,
                        double originY,
                        double dirX,
                        double dirY,
-                       double maxDistance) {
-    if (!ctx || !ctx->uniformGrid) return false;
-    NormalizeVector(&dirX, &dirY);
-    Ray2D ray = {
-        .ox = originX,
-        .oy = originY,
-        .dx = dirX,
-        .dy = dirY
-    };
-    HitInfo2D tmp;
-    return UniformGridTraceRay(ctx->uniformGrid, &ray, PATH_EPSILON, maxDistance, &tmp);
+                       double maxDistance);
+
+static bool FetchTileSample(const IntegratorContext* ctx,
+                            int pixelX,
+                            int pixelY,
+                            IntegratorTile** outTile,
+                            int* outLocalX,
+                            int* outLocalY) {
+    if (!ctx || !ctx->tileGrid || !ctx->tileGrid->tiles) {
+        return false;
+    }
+    if (pixelX < 0 || pixelY < 0 || pixelX >= ctx->width || pixelY >= ctx->height) {
+        return false;
+    }
+    TileGrid* grid = ctx->tileGrid;
+    int tileSize = grid->tileSize > 0 ? grid->tileSize : 1;
+    int tileX = pixelX / tileSize;
+    int tileY = pixelY / tileSize;
+    if (tileX < 0 || tileY < 0 || tileX >= grid->tilesX || tileY >= grid->tilesY) {
+        return false;
+    }
+    size_t index = (size_t)tileY * (size_t)grid->tilesX + (size_t)tileX;
+    if (index >= grid->count) {
+        return false;
+    }
+    IntegratorTile* tile = &grid->tiles[index];
+    if (!tile->energy) return false;
+    int localX = pixelX - tile->originX;
+    int localY = pixelY - tile->originY;
+    if (localX < 0 || localY < 0 || localX >= tile->width || localY >= tile->height) {
+        return false;
+    }
+    if (outTile) *outTile = tile;
+    if (outLocalX) *outLocalX = localX;
+    if (outLocalY) *outLocalY = localY;
+    return true;
+}
+
+static float ReadEnergySample(const IntegratorContext* ctx,
+                              int pixelX,
+                              int pixelY) {
+    if (!ctx) return 0.0f;
+    if (ctx->useTiles && ctx->tileGrid && ctx->tileGrid->tiles) {
+        IntegratorTile* tile = NULL;
+        int localX = 0;
+        int localY = 0;
+        if (!FetchTileSample(ctx, pixelX, pixelY, &tile, &localX, &localY)) {
+            return 0.0f;
+        }
+        if (!tile->energy) return 0.0f;
+        size_t index = (size_t)localY * (size_t)tile->width + (size_t)localX;
+        if (index >= (size_t)(tile->width * tile->height)) {
+            return 0.0f;
+        }
+        return tile->energy[index];
+    } else if (ctx->energyBuffer) {
+        if (pixelX < 0 || pixelY < 0 || pixelX >= ctx->width || pixelY >= ctx->height) {
+            return 0.0f;
+        }
+        size_t index = (size_t)pixelY * (size_t)ctx->width + (size_t)pixelX;
+        return ctx->energyBuffer[index];
+    }
+    return 0.0f;
+}
+
+static void WriteEnergySample(const IntegratorContext* ctx,
+                              int pixelX,
+                              int pixelY,
+                              float value) {
+    if (!ctx) return;
+    if (ctx->useTiles && ctx->tileGrid && ctx->tileGrid->tiles) {
+        IntegratorTile* tile = NULL;
+        int localX = 0;
+        int localY = 0;
+        if (!FetchTileSample(ctx, pixelX, pixelY, &tile, &localX, &localY)) {
+            return;
+        }
+        if (!tile->energy) return;
+        size_t index = (size_t)localY * (size_t)tile->width + (size_t)localX;
+        if (index >= (size_t)(tile->width * tile->height)) {
+            return;
+        }
+        tile->energy[index] = value;
+    } else if (ctx->energyBuffer) {
+        if (pixelX < 0 || pixelY < 0 || pixelX >= ctx->width || pixelY >= ctx->height) {
+            return;
+        }
+        size_t index = (size_t)pixelY * (size_t)ctx->width + (size_t)pixelX;
+        ctx->energyBuffer[index] = value;
+    }
+}
+
+static void ClearEnergyBuffer(IntegratorContext* ctx) {
+    if (!ctx) return;
+    if (ctx->useTiles && ctx->tileGrid && ctx->tileGrid->tiles) {
+        for (size_t i = 0; i < ctx->tileGrid->count; i++) {
+            IntegratorTile* tile = &ctx->tileGrid->tiles[i];
+            if (!tile->energy) continue;
+            memset(tile->energy, 0, (size_t)(tile->width * tile->height) * sizeof(float));
+        }
+    } else if (ctx->energyBuffer) {
+        size_t total = (size_t)ctx->width * (size_t)ctx->height;
+        memset(ctx->energyBuffer, 0, total * sizeof(float));
+    }
 }
 
 static const SurfaceIrradiance* FindClosestCacheEntry(const IntegratorContext* ctx,
@@ -130,96 +201,122 @@ static const SurfaceIrradiance* FindClosestCacheEntry(const IntegratorContext* c
     return best;
 }
 
-static bool FetchTileSample(const IntegratorContext* ctx,
-                            int pixelX,
-                            int pixelY,
-                            IntegratorTile** outTile,
-                            int* outLocalX,
-                            int* outLocalY) {
-    if (!ctx || !ctx->tileGrid || !ctx->tileGrid->tiles) {
+static bool SegmentFacesPoint(const SurfaceSegment* segment,
+                              double px,
+                              double py) {
+    if (!segment) return false;
+    double cx = 0.5 * (segment->x0 + segment->x1);
+    double cy = 0.5 * (segment->y0 + segment->y1);
+    double vx = px - cx;
+    double vy = py - cy;
+    double dot = vx * segment->nx + vy * segment->ny;
+    return dot > 0.0;
+}
+
+static bool SegmentSeesPixel(const IntegratorContext* ctx,
+                             const SurfaceSegment* segment,
+                             double worldX,
+                             double worldY) {
+    if (!ctx || !segment) return false;
+    double cx = 0.5 * (segment->x0 + segment->x1);
+    double cy = 0.5 * (segment->y0 + segment->y1);
+    double dirX = worldX - cx;
+    double dirY = worldY - cy;
+    double dist = hypot(dirX, dirY);
+    if (dist <= PATH_EPSILON) {
+        return true;
+    }
+    NormalizeVector(&dirX, &dirY);
+    double originX = cx + dirX * PATH_EPSILON;
+    double originY = cy + dirY * PATH_EPSILON;
+    double maxDist = fmax(dist - PATH_EPSILON, PATH_EPSILON);
+    Ray2D ray = {
+        .ox = originX,
+        .oy = originY,
+        .dx = dirX,
+        .dy = dirY
+    };
+    HitInfo2D tmp = {0};
+    return !UniformGridTraceRay(ctx->uniformGrid, &ray, PATH_EPSILON, maxDist, &tmp);
+}
+
+static bool SegmentLitByLight(const IntegratorContext* ctx,
+                              const LightSource* light,
+                              const HitInfo2D* hit) {
+    if (!ctx || !light || !hit) return false;
+    double dirX = light->x - hit->px;
+    double dirY = light->y - hit->py;
+    double dist = hypot(dirX, dirY);
+    if (dist <= PATH_EPSILON) {
+        return true;
+    }
+    NormalizeVector(&dirX, &dirY);
+    double originX = hit->px + hit->nx * PATH_EPSILON;
+    double originY = hit->py + hit->ny * PATH_EPSILON;
+    double maxDistance = fmax(dist - PATH_EPSILON, PATH_EPSILON);
+    return !IsOccluded(ctx, originX, originY, dirX, dirY, maxDistance);
+}
+
+static bool HasDirectLineOfSight(const IntegratorContext* ctx,
+                                 double worldX,
+                                 double worldY,
+                                 const LightSource* light) {
+    if (!ctx || !ctx->uniformGrid || !light) return false;
+    double dx = light->x - worldX;
+    double dy = light->y - worldY;
+    double dist = hypot(dx, dy);
+    if (dist <= PATH_EPSILON) {
+        return true;
+    }
+    NormalizeVector(&dx, &dy);
+    double originX = worldX + dx * PATH_EPSILON;
+    double originY = worldY + dy * PATH_EPSILON;
+    double maxDist = fmax(dist - 2.0 * PATH_EPSILON, PATH_EPSILON);
+    return !IsOccluded(ctx, originX, originY, dx, dy, maxDist);
+}
+
+static bool TraceRayToSurface(const IntegratorContext* ctx,
+                              double worldX,
+                              double worldY,
+                              double dirX,
+                              double dirY,
+                              HitInfo2D* outHit,
+                              const SceneObject** outObj,
+                              double maxDistance) {
+    if (!ctx || !ctx->uniformGrid) return false;
+    Ray2D ray = {
+        .ox = worldX + dirX * PATH_EPSILON,
+        .oy = worldY + dirY * PATH_EPSILON,
+        .dx = dirX,
+        .dy = dirY
+    };
+    HitInfo2D tmp = {0};
+    if (!UniformGridTraceRay(ctx->uniformGrid, &ray, PATH_EPSILON, maxDistance, &tmp)) {
         return false;
     }
-    TileGrid* grid = ctx->tileGrid;
-    if (pixelX < 0 || pixelY < 0 || pixelX >= grid->width || pixelY >= grid->height) {
-        return false;
+    if (outHit) *outHit = tmp;
+    if (outObj && ctx->objects &&
+        tmp.objectIndex >= 0 && tmp.objectIndex < ctx->objectCount) {
+        *outObj = &ctx->objects[tmp.objectIndex];
     }
-    int tileSize = grid->tileSize;
-    int tileX = pixelX / tileSize;
-    int tileY = pixelY / tileSize;
-    if (tileX < 0 || tileY < 0 || tileX >= grid->tilesX || tileY >= grid->tilesY) {
-        return false;
-    }
-    size_t tileIndex = (size_t)tileY * (size_t)grid->tilesX + (size_t)tileX;
-    IntegratorTile* tile = &grid->tiles[tileIndex];
-    if (!tile->energy) {
-        return false;
-    }
-    int localX = pixelX - tile->originX;
-    int localY = pixelY - tile->originY;
-    if (localX < 0 || localY < 0 || localX >= tile->width || localY >= tile->height) {
-        return false;
-    }
-    if (outTile) *outTile = tile;
-    if (outLocalX) *outLocalX = localX;
-    if (outLocalY) *outLocalY = localY;
     return true;
 }
 
-static float ReadEnergySample(const IntegratorContext* ctx,
-                              int pixelX,
-                              int pixelY) {
-    if (!ctx) return 0.0f;
-    if (ctx->useTiles && ctx->tileGrid && ctx->tileGrid->tiles) {
-        IntegratorTile* tile = NULL;
-        int localX = 0;
-        int localY = 0;
-        if (!FetchTileSample(ctx, pixelX, pixelY, &tile, &localX, &localY)) {
-            return 0.0f;
-        }
-        size_t idx = (size_t)localY * (size_t)tile->width + (size_t)localX;
-        return tile->energy[idx];
-    }
-
-    if (!ctx->energyBuffer) return 0.0f;
-    if (pixelX < 0 || pixelY < 0 || pixelX >= ctx->width || pixelY >= ctx->height) {
-        return 0.0f;
-    }
-    size_t idx = (size_t)pixelY * (size_t)ctx->width + (size_t)pixelX;
-    return ctx->energyBuffer[idx];
-}
-
-static void WriteEnergySample(const IntegratorContext* ctx,
-                              int pixelX,
-                              int pixelY,
-                              float value) {
-    if (!ctx) return;
-    if (ctx->useTiles && ctx->tileGrid && ctx->tileGrid->tiles) {
-        IntegratorTile* tile = NULL;
-        int localX = 0;
-        int localY = 0;
-        if (!FetchTileSample(ctx, pixelX, pixelY, &tile, &localX, &localY)) {
-            return;
-        }
-        size_t idx = (size_t)localY * (size_t)tile->width + (size_t)localX;
-        tile->energy[idx] = value;
-        return;
-    }
-
-    if (!ctx->energyBuffer) return;
-    if (pixelX < 0 || pixelY < 0 || pixelX >= ctx->width || pixelY >= ctx->height) {
-        return;
-    }
-    size_t idx = (size_t)pixelY * (size_t)ctx->width + (size_t)pixelX;
-    ctx->energyBuffer[idx] = value;
-}
-
-static void AccumulateEnergyAdd(const IntegratorContext* ctx,
-                                int pixelX,
-                                int pixelY,
-                                float value) {
-    if (!ctx || value <= 0.0f) return;
-    float current = ReadEnergySample(ctx, pixelX, pixelY);
-    WriteEnergySample(ctx, pixelX, pixelY, current + value);
+static bool IsOccluded(const IntegratorContext* ctx,
+                       double originX,
+                       double originY,
+                       double dirX,
+                       double dirY,
+                       double maxDistance) {
+    if (!ctx || !ctx->uniformGrid) return false;
+    Ray2D ray = {
+        .ox = originX,
+        .oy = originY,
+        .dx = dirX,
+        .dy = dirY
+    };
+    HitInfo2D tmp = {0};
+    return UniformGridTraceRay(ctx->uniformGrid, &ray, PATH_EPSILON, maxDistance, &tmp);
 }
 
 static float ComputeDirectRadiance(const LightSource* light,
@@ -247,176 +344,87 @@ static float ComputeSegmentRadiance(const SurfaceSegment* segment,
     double dirY = worldY - cy;
     double dist2 = dirX * dirX + dirY * dirY;
     double distance = sqrt(dist2);
-    if (distance < PATH_EPSILON) {
-        distance = PATH_EPSILON;
-        dist2 = PATH_EPSILON * PATH_EPSILON;
-    }
-    dirX /= distance;
-    dirY /= distance;
-    double facing = fmax(0.0, segment->nx * dirX + segment->ny * dirY);
-    double emission = radiance * facing;
-    double radius = (light) ? fmax(light->radius, 1.0) : 1.0;
-    double base = emission / (dist2 + radius * radius);
-    double decay = exp(-distance / INDIRECT_DISTANCE_DECAY);
-    double attenuation = decay / (1.0 + dist2 * INDIRECT_DISTANCE_FALLOFF);
-    double Lref = 60.0;
-    double lenScale = Clamp(segment->length / Lref, 0.5, 2.0);
-    return (float)(base * attenuation * lenScale);
-}
-
-static bool SegmentSeesPixel(const IntegratorContext* ctx,
-                             const SurfaceSegment* segment,
-                             double worldX,
-                             double worldY) {
-    if (!ctx || !segment) return false;
-    double cx = 0.5 * (segment->x0 + segment->x1);
-    double cy = 0.5 * (segment->y0 + segment->y1);
-    double dirX = worldX - cx;
-    double dirY = worldY - cy;
-    double dist = hypot(dirX, dirY);
-    if (dist <= PATH_EPSILON) {
-        return true;
+    if (distance <= PATH_EPSILON) {
+        return (float)radiance;
     }
     NormalizeVector(&dirX, &dirY);
-    double originX = cx + dirX * PATH_EPSILON;
-    double originY = cy + dirY * PATH_EPSILON;
-    double maxDist = dist - PATH_EPSILON;
-    if (maxDist <= PATH_EPSILON) {
-        return true;
-    }
-    return !IsOccluded(ctx, originX, originY, dirX, dirY, maxDist);
-}
-
-static bool SegmentLitByLight(const IntegratorContext* ctx,
-                              const LightSource* light,
-                              const HitInfo2D* hit) {
-    if (!ctx || !light || !hit) return false;
-    double dirX = light->x - hit->px;
-    double dirY = light->y - hit->py;
-    double dist = hypot(dirX, dirY);
-    if (dist <= PATH_EPSILON) {
-        return true;
-    }
-    NormalizeVector(&dirX, &dirY);
-    double originX = hit->px + hit->nx * PATH_EPSILON;
-    double originY = hit->py + hit->ny * PATH_EPSILON;
-    double maxDistance = fmax(dist - PATH_EPSILON, PATH_EPSILON);
-    return !IsOccluded(ctx, originX, originY, dirX, dirY, maxDistance);
-}
-
-static bool HasDirectLineOfSight(const IntegratorContext* ctx,
-                                 double worldX,
-                                 double worldY,
-                                 const LightSource* light) {
-    if (!light) return false;
-    double dirX = light->x - worldX;
-    double dirY = light->y - worldY;
-    double dist = sqrt(dirX * dirX + dirY * dirY);
-    if (dist <= PATH_EPSILON) {
-        return true;
-    }
-    NormalizeVector(&dirX, &dirY);
-    double offset = PATH_EPSILON * 32.0;
-    double originX = worldX + dirX * offset;
-    double originY = worldY + dirY * offset;
-    double maxDistance = fmax(dist - offset - PATH_EPSILON, PATH_EPSILON);
-    return !IsOccluded(ctx, originX, originY, dirX, dirY, maxDistance);
-}
-
-static void PerformDirectLightingPass(IntegratorContext* ctx,
-                                      const LightSource* light) {
-    if (!ctx || !light) return;
-    size_t losTests = 0;
-    size_t losHits = 0;
-    for (int y = 0; y < ctx->height; y++) {
-        for (int x = 0; x < ctx->width; x++) {
-            CameraPoint world = CameraScreenToWorld(&sceneSettings.camera,
-                                                    x + 0.5,
-                                                    y + 0.5,
-                                                    ctx->width,
-                                                    ctx->height);
-            losTests++;
-            if (!HasDirectLineOfSight(ctx, world.x, world.y, light)) {
-                continue;
-            }
-            losHits++;
-            float radiance = ComputeDirectRadiance(light, world.x, world.y);
-            AccumulateEnergyAdd(ctx, x, y, radiance);
-        }
-    }
-    printf("[CameraIntegr] Direct pass: %zu LOS hits out of %zu tests.\n", losHits, losTests);
-}
-
-static float SampleCacheRadiance(const IntegratorContext* ctx,
-                                 const HitInfo2D* hit,
-                                 double targetX,
-                                 double targetY) {
-    if (!ctx || !ctx->cache || !hit) return 0.0f;
-    const SurfaceIrradiance* entry = FindClosestCacheEntry(ctx,
-                                                           hit->objectIndex,
-                                                           hit->px,
-                                                           hit->py);
-    if (!entry) {
+    double dot = dirX * segment->nx + dirY * segment->ny;
+    if (dot <= 0.0) {
         return 0.0f;
     }
-    double toPixelX = targetX - hit->px;
-    double toPixelY = targetY - hit->py;
-    NormalizeVector(&toPixelX, &toPixelY);
-
-    double bestDot = -1.0;
-    double bestMean = 0.0;
-    for (int i = 0; i < IRRADIANCE_BIN_COUNT; i++) {
-        const IrradianceBin* bin = &entry->bins[i];
-        if (!bin->valid || bin->samples == 0) continue;
-        double dot = bin->dirX * toPixelX + bin->dirY * toPixelY;
-        if (dot > bestDot) {
-            bestDot = dot;
-            bestMean = bin->mean;
-        }
-    }
-    return (float)fmax(bestMean, 0.0);
-}
-
-static bool SegmentFacesPoint(const SurfaceSegment* segment,
-                              double worldX,
-                              double worldY) {
-    double toPointX = worldX - 0.5 * (segment->x0 + segment->x1);
-    double toPointY = worldY - 0.5 * (segment->y0 + segment->y1);
-    return (segment->nx * toPointX + segment->ny * toPointY) > 0.0;
+    double lengthFactor = fmax(segment->length, 1.0);
+    double attenuation = dot * lengthFactor / (1.0 + dist2 * INDIRECT_DISTANCE_FALLOFF);
+    double segmentRadiance = radiance * attenuation;
+    return (float)segmentRadiance;
 }
 
 static double EstimateAverageObjectExtent(const IntegratorContext* ctx) {
     if (!ctx || !ctx->objects || ctx->objectCount <= 0) {
-        return 100.0;
+        return 0.0;
     }
-    double total = 0.0;
+    double sum = 0.0;
     for (int i = 0; i < ctx->objectCount; i++) {
         const SceneObject* obj = &ctx->objects[i];
         double extent = 0.0;
-        if (strcmp(obj->type, "circle") == 0) {
-            extent = fmax(obj->radius * obj->scale * 2.0, 1.0);
-        } else if (obj->numPoints > 0) {
-            double minX = DBL_MAX;
-            double minY = DBL_MAX;
-            double maxX = -DBL_MAX;
-            double maxY = -DBL_MAX;
-            for (int p = 0; p < obj->numPoints; p++) {
-                double px = obj->shapePoints[p][0] + obj->x;
-                double py = obj->shapePoints[p][1] + obj->y;
-                if (px < minX) minX = px;
-                if (py < minY) minY = py;
-                if (px > maxX) maxX = px;
-                if (py > maxY) maxY = py;
-            }
-            double dx = maxX - minX;
-            double dy = maxY - minY;
-            extent = fmax(hypot(dx, dy), 1.0);
+        if (obj->radius > 0.0 && strcmp(obj->type, "circle") == 0) {
+            extent = obj->radius * obj->scale;
+        } else {
+            double minX, minY, maxX, maxY;
+            ComputeObjectBounds(obj, &minX, &minY, &maxX, &maxY);
+            extent = hypot(maxX - minX, maxY - minY);
         }
-        if (extent <= 0.0) extent = 1.0;
-        total += extent;
+        sum += fmax(extent, 1.0);
     }
-    double average = total / (double)ctx->objectCount;
-    return fmax(average, 25.0);
+    return sum / (double)ctx->objectCount;
+}
+
+static float SampleCacheRadiance(const IntegratorContext* ctx,
+                                 const HitInfo2D* hit,
+                                 double worldX,
+                                 double worldY) {
+    if (!ctx || !hit) return 0.0f;
+    const SurfaceIrradiance* entry = FindClosestCacheEntry(ctx,
+                                                          hit->objectIndex,
+                                                          hit->px,
+                                                          hit->py);
+    if (!entry) return 0.0f;
+    double vx = worldX - entry->px;
+    double vy = worldY - entry->py;
+    double dirX = vx;
+    double dirY = vy;
+    NormalizeVector(&dirX, &dirY);
+    double bestDot = -1.0;
+    double bestMean = 0.0;
+    double bestDistance = 0.0;
+    for (int i = 0; i < IRRADIANCE_BIN_COUNT; i++) {
+        const IrradianceBin* bin = &entry->bins[i];
+        if (!bin->valid || bin->samples == 0) continue;
+        double dot = dirX * bin->dirX + dirY * bin->dirY;
+        if (dot > bestDot) {
+            bestDot = dot;
+            bestMean = bin->mean;
+            bestDistance = bin->distance;
+        }
+    }
+    if (bestMean <= 0.0) {
+        return 0.0f;
+    }
+    double distance = sqrt(vx * vx + vy * vy);
+    double falloff = exp(-distance / INDIRECT_DISTANCE_DECAY);
+    double occlusion = (bestDistance > PATH_EPSILON)
+        ? exp(-distance / bestDistance)
+        : 1.0;
+    double weighted = bestMean * falloff * occlusion;
+    return (float)weighted;
+}
+
+static void AccumulateEnergyAdd(const IntegratorContext* ctx,
+                                int pixelX,
+                                int pixelY,
+                                float value) {
+    if (!ctx || value <= 0.0f) return;
+    float current = ReadEnergySample(ctx, pixelX, pixelY);
+    WriteEnergySample(ctx, pixelX, pixelY, current + value);
 }
 
 static float SampleIndirectLighting(const IntegratorContext* ctx,
@@ -430,19 +438,30 @@ static float SampleIndirectLighting(const IntegratorContext* ctx,
     if (!ctx || !ctx->uniformGrid || !ctx->cache || !ctx->mesh) return 0.0f;
     const SurfaceMesh* mesh = ctx->mesh;
     if (!mesh->segments || mesh->segmentCount == 0) return 0.0f;
+
     float directLimit = ComputeDirectRadiance(light, worldX, worldY);
+    if (directLimit > INDIRECT_DIRECT_SKIP_THRESHOLD) {
+        return 0.0f;
+    }
+
     float perSampleClamp = (directLimit > 0.0f)
         ? (directLimit / (float)INDIRECT_FEELER_COUNT)
         : 0.0f;
     float sum = 0.0f;
+
     for (int i = 0; i < INDIRECT_FEELER_COUNT; i++) {
         double jitter = PixelFeelerJitter(pixelX, pixelY, i);
         double dirX, dirY;
         FeelerDirection(i, jitter, &dirX, &dirY);
         NormalizeVector(&dirX, &dirY);
         if (stats) stats->rayTests++;
-        HitInfo2D hit;
+
+        HitInfo2D hit = {0};
+        hit.objectIndex = -1;
+        hit.triangleIndex = -1;
+        hit.baryW = 1.0;
         const SceneObject* obj = NULL;
+
         if (!TraceRayToSurface(ctx,
                                worldX,
                                worldY,
@@ -454,6 +473,7 @@ static float SampleIndirectLighting(const IntegratorContext* ctx,
             continue;
         }
         if (stats) stats->rayHits++;
+
         SurfaceSegment fallbackSegment = (SurfaceSegment){0};
         const SurfaceSegment* segment = SurfaceMeshFindSegment(mesh,
                                                                hit.objectIndex,
@@ -489,29 +509,31 @@ static float SampleIndirectLighting(const IntegratorContext* ctx,
             continue;
         }
         if (stats) stats->segmentFound++;
+
         if (!SegmentFacesPoint(segment, worldX, worldY)) {
             continue;
         }
         if (stats) stats->segmentFacing++;
+
         if ((segment->nx * dirX + segment->ny * dirY) >= 0.0) {
             continue;
         }
-        if (!SegmentLitByLight(ctx, light, &hit)) {
-            continue;
-        }
-        if (!SegmentSeesPixel(ctx, segment, worldX, worldY)) {
-            continue;
-        }
+
         float cacheRadiance = SampleCacheRadiance(ctx, &hit, worldX, worldY);
         if (cacheRadiance <= 0.0f) {
+            if (!SegmentLitByLight(ctx, light, &hit)) {
+                continue;
+            }
             cacheRadiance = ComputeDirectRadiance(light, hit.px, hit.py);
         }
         if (stats) stats->cacheContributions++;
+
         float baseRadiance = ComputeSegmentRadiance(segment,
                                                     light,
                                                     cacheRadiance,
                                                     worldX,
                                                     worldY);
+
         double toPixelX = worldX - hit.px;
         double toPixelY = worldY - hit.py;
         double pixelDistance = hypot(toPixelX, toPixelY);
@@ -520,12 +542,15 @@ static float SampleIndirectLighting(const IntegratorContext* ctx,
         }
         double distanceWeight = exp(-pixelDistance / INDIRECT_DISTANCE_DECAY) /
                                 (1.0 + pixelDistance * pixelDistance * INDIRECT_DISTANCE_FALLOFF);
+
         double toSegX = hit.px - worldX;
         double toSegY = hit.py - worldY;
         NormalizeVector(&toSegX, &toSegY);
         double sensor = fmax(0.0, -(toSegX * dirX + toSegY * dirY));
         sensor = 0.5 + 0.5 * sensor;
+
         float contribution = (float)(baseRadiance * distanceWeight * sensor);
+
         if (cacheRadiance > 0.0f) {
             contribution = fminf(contribution, cacheRadiance);
         }
@@ -534,8 +559,59 @@ static float SampleIndirectLighting(const IntegratorContext* ctx,
         }
         sum += contribution;
     }
+
     float indirect = fminf(sum, 1.2f * directLimit);
     return indirect;
+}
+
+static void PerformDirectLightingPass(IntegratorContext* ctx,
+                                      const LightSource* light) {
+    if (!ctx || !light) return;
+    size_t losTests = 0;
+    size_t losHits = 0;
+    for (int y = 0; y < ctx->height; y++) {
+        for (int x = 0; x < ctx->width; x++) {
+            CameraPoint world = CameraScreenToWorld(&sceneSettings.camera,
+                                                    x + 0.5,
+                                                    y + 0.5,
+                                                    ctx->width,
+                                                    ctx->height);
+            losTests++;
+            if (!HasDirectLineOfSight(ctx, world.x, world.y, light)) {
+                continue;
+            }
+            losHits++;
+            float radiance = ComputeDirectRadiance(light, world.x, world.y);
+            AccumulateEnergyAdd(ctx, x, y, radiance);
+        }
+    }
+    printf("[CameraIntegr] Direct pass: %zu LOS hits out of %zu tests.\n", losHits, losTests);
+}
+
+static inline float TonemapEnergy(float energy) {
+    float mapped = 1.0f - expf(-energy * CAMERA_TONEMAP_EXPOSURE);
+    return powf(Clamp01(mapped), CAMERA_TONEMAP_GAMMA);
+}
+
+static void TonemapTiles(const IntegratorContext* ctx) {
+    if (!ctx->tileGrid || !ctx->tileGrid->tiles || !ctx->pixelBuffer) return;
+    for (size_t tileIndex = 0; tileIndex < ctx->tileGrid->count; tileIndex++) {
+        const IntegratorTile* tile = &ctx->tileGrid->tiles[tileIndex];
+        if (!tile->energy) continue;
+        for (int ly = 0; ly < tile->height; ly++) {
+            for (int lx = 0; lx < tile->width; lx++) {
+                size_t idx = (size_t)ly * (size_t)tile->width + (size_t)lx;
+                float tone = TonemapEnergy(tile->energy[idx]);
+                int pxX = tile->originX + lx;
+                int pxY = tile->originY + ly;
+                if (pxX < 0 || pxY < 0 || pxX >= ctx->width || pxY >= ctx->height) {
+                    continue;
+                }
+                size_t outIndex = (size_t)pxY * (size_t)ctx->width + (size_t)pxX;
+                ctx->pixelBuffer[outIndex] = (Uint8)Clamp(tone * 255.0f, 0, 255);
+            }
+        }
+    }
 }
 
 static void PerformIndirectLightingPass(IntegratorContext* ctx,
@@ -548,8 +624,12 @@ static void PerformIndirectLightingPass(IntegratorContext* ctx,
     IndirectStats stats = {0};
     double avgExtent = EstimateAverageObjectExtent(ctx);
     double feelerLimit = fmax(3.0 * avgExtent, 0.0);
-    for (int y = 0; y < ctx->height; y++) {
-        for (int x = 0; x < ctx->width; x++) {
+
+    int giScale = INDIRECT_GI_DOWNSAMPLE;
+    if (giScale < 1) giScale = 1;
+
+    for (int y = 0; y < ctx->height; y += giScale) {
+        for (int x = 0; x < ctx->width; x += giScale) {
             CameraPoint world = CameraScreenToWorld(&sceneSettings.camera,
                                                     x + 0.5,
                                                     y + 0.5,
@@ -568,10 +648,20 @@ static void PerformIndirectLightingPass(IntegratorContext* ctx,
                 continue;
             }
             feelerHits++;
-            AccumulateEnergyAdd(ctx, x, y, indirect);
+
+            int yEnd = y + giScale;
+            if (yEnd > ctx->height) yEnd = ctx->height;
+            int xEnd = x + giScale;
+            if (xEnd > ctx->width) xEnd = ctx->width;
+
+            for (int yy = y; yy < yEnd; yy++) {
+                for (int xx = x; xx < xEnd; xx++) {
+                    AccumulateEnergyAdd(ctx, xx, yy, indirect);
+                }
+            }
         }
     }
-    printf("[CameraIntegr] Indirect pass: %zu pixels gained energy out of %zu tests.\n",
+    printf("[CameraIntegr] Indirect pass: %zu GI samples produced energy out of %zu tests.\n",
            feelerHits,
            feelerTests);
     printf("[CameraIntegr] Debug segments: rays=%zu hits=%zu segFound=%zu facing=%zu cache=%zu\n",
@@ -580,29 +670,6 @@ static void PerformIndirectLightingPass(IntegratorContext* ctx,
            stats.segmentFound,
            stats.segmentFacing,
            stats.cacheContributions);
-}
-
-static inline float TonemapEnergy(float energy) {
-    float mapped = 1.0f - expf(-energy * CAMERA_TONEMAP_EXPOSURE);
-    return powf(Clamp01(mapped), CAMERA_TONEMAP_GAMMA);
-}
-
-static void TonemapTiles(const IntegratorContext* ctx) {
-    if (!ctx->tileGrid || !ctx->tileGrid->tiles || !ctx->pixelBuffer) return;
-    for (size_t tileIndex = 0; tileIndex < ctx->tileGrid->count; tileIndex++) {
-        const IntegratorTile* tile = &ctx->tileGrid->tiles[tileIndex];
-        if (!tile->energy) continue;
-        for (int ly = 0; ly < tile->height; ly++) {
-            for (int lx = 0; lx < tile->width; lx++) {
-                size_t localIndex = (size_t)ly * (size_t)tile->width + (size_t)lx;
-                float tone = TonemapEnergy(tile->energy[localIndex]);
-                int globalX = tile->originX + lx;
-                int globalY = tile->originY + ly;
-                size_t globalIndex = (size_t)globalY * (size_t)ctx->width + (size_t)globalX;
-                ctx->pixelBuffer[globalIndex] = (Uint8)Clamp(tone * 255.0f, 0, 255);
-            }
-        }
-    }
 }
 
 void CameraPathIntegratorRender(IntegratorContext* ctx,
@@ -618,17 +685,9 @@ void CameraPathIntegratorRender(IntegratorContext* ctx,
         return;
     }
 
-    if (usingTiles) {
-        for (size_t tileIndex = 0; tileIndex < ctx->tileGrid->count; tileIndex++) {
-            IntegratorTile* tile = &ctx->tileGrid->tiles[tileIndex];
-            if (!tile->energy) continue;
-            memset(tile->energy,
-                   0,
-                   (size_t)tile->width * (size_t)tile->height * sizeof(float));
-        }
-    } else if (usingBuffer) {
-        memset(ctx->energyBuffer, 0, total * sizeof(float));
-    }
+    ts_start_timer("CameraPath Clear");
+    ClearEnergyBuffer(ctx);
+    ts_stop_timer("CameraPath Clear");
 
     ts_start_timer("CameraPath Direct");
     PerformDirectLightingPass(ctx, light);

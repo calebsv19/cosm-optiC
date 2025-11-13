@@ -15,6 +15,12 @@ typedef enum {
     FORWARD_FALLOFF_MODE_NONE = 2
 } ForwardFalloffMode;
 
+typedef enum {
+    RENDER_QUALITY_LOW = 0,
+    RENDER_QUALITY_MEDIUM = 1,
+    RENDER_QUALITY_HIGH = 2
+} RenderQuality;
+
 // **Animation Config Struct**
 typedef struct {
     bool interactiveMode;
@@ -51,6 +57,7 @@ typedef struct {
     double lightIntensity;
     double forwardDecay;    // Forward falloff distance (world units)
     ForwardFalloffMode forwardFalloffMode;
+    RenderQuality renderQuality;
 } AnimationConfig;
 
 
