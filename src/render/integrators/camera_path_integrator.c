@@ -21,6 +21,10 @@
 #define INDIRECT_DISTANCE_FALLOFF 0.0015f
 #define INDIRECT_DISTANCE_DECAY 80.0
 #define MAX_FEELER_DISTANCE 1500.0
+#define INDIRECT_FEELER_BASE 16
+#define INDIRECT_FEELER_THRESHOLD_MID 4.0f
+#define INDIRECT_FEELER_THRESHOLD_DARK 1.5f
+#define INDIRECT_FEELER_THRESHOLD_NIGHT 0.3f
 
 typedef struct {
     size_t rayTests;
@@ -29,14 +33,6 @@ typedef struct {
     size_t segmentFacing;
     size_t cacheContributions;
 } IndirectStats;
-
-static inline double Lerp(double a, double b, double t) {
-    return a + t * (b - a);
-}
-
-static inline double Sqr(double x) {
-    return x * x;
-}
 
 static inline void NormalizeVector(double* x, double* y) {
     double len = sqrt((*x) * (*x) + (*y) * (*y));
@@ -59,12 +55,37 @@ static double PixelFeelerJitter(int pixelX, int pixelY, int feelerIndex) {
     return base * 2.0 - 1.0;
 }
 
-static void FeelerDirection(int index, double jitter, double* outX, double* outY) {
-    double baseAngle = (2.0 * M_PI * (double)index) / (double)INDIRECT_FEELER_COUNT;
-    double jitterAngle = 0.5 * (M_PI / (double)INDIRECT_FEELER_COUNT) * jitter;
+static void FeelerDirection(int index,
+                            int total,
+                            double jitter,
+                            double* outX,
+                            double* outY) {
+    if (total <= 0) total = 1;
+    double baseAngle = (2.0 * M_PI * (double)index) / (double)total;
+    double jitterAngle = 0.5 * (M_PI / (double)total) * jitter;
     double angle = baseAngle + jitterAngle;
     *outX = cos(angle);
     *outY = sin(angle);
+}
+
+static double RenderQualityScale(void) {
+    switch (animSettings.renderQuality) {
+        case RENDER_QUALITY_LOW: return 0.5;
+        case RENDER_QUALITY_HIGH: return 2.0;
+        case RENDER_QUALITY_MEDIUM:
+        default: return 1.0;
+    }
+}
+
+static int DetermineFeelerCount(float directLimit) {
+    int base = INDIRECT_FEELER_BASE;
+    if (directLimit < INDIRECT_FEELER_THRESHOLD_MID) base = 24;
+    if (directLimit < INDIRECT_FEELER_THRESHOLD_DARK) base = 32;
+    if (directLimit < INDIRECT_FEELER_THRESHOLD_NIGHT) base = 48;
+    double scaled = base * RenderQualityScale();
+    int count = (int)lround(scaled);
+    if (count < 8) count = 8;
+    return count;
 }
 
 static bool IsOccluded(const IntegratorContext* ctx,
@@ -213,33 +234,6 @@ static bool SegmentFacesPoint(const SurfaceSegment* segment,
     return dot > 0.0;
 }
 
-static bool SegmentSeesPixel(const IntegratorContext* ctx,
-                             const SurfaceSegment* segment,
-                             double worldX,
-                             double worldY) {
-    if (!ctx || !segment) return false;
-    double cx = 0.5 * (segment->x0 + segment->x1);
-    double cy = 0.5 * (segment->y0 + segment->y1);
-    double dirX = worldX - cx;
-    double dirY = worldY - cy;
-    double dist = hypot(dirX, dirY);
-    if (dist <= PATH_EPSILON) {
-        return true;
-    }
-    NormalizeVector(&dirX, &dirY);
-    double originX = cx + dirX * PATH_EPSILON;
-    double originY = cy + dirY * PATH_EPSILON;
-    double maxDist = fmax(dist - PATH_EPSILON, PATH_EPSILON);
-    Ray2D ray = {
-        .ox = originX,
-        .oy = originY,
-        .dx = dirX,
-        .dy = dirY
-    };
-    HitInfo2D tmp = {0};
-    return !UniformGridTraceRay(ctx->uniformGrid, &ray, PATH_EPSILON, maxDist, &tmp);
-}
-
 static bool SegmentLitByLight(const IntegratorContext* ctx,
                               const LightSource* light,
                               const HitInfo2D* hit) {
@@ -337,6 +331,7 @@ static float ComputeSegmentRadiance(const SurfaceSegment* segment,
                                     double radiance,
                                     double worldX,
                                     double worldY) {
+    (void)light;
     if (!segment || radiance <= 0.0f) return 0.0f;
     double cx = 0.5 * (segment->x0 + segment->x1);
     double cy = 0.5 * (segment->y0 + segment->y1);
@@ -434,25 +429,26 @@ static float SampleIndirectLighting(const IntegratorContext* ctx,
                                     int pixelX,
                                     int pixelY,
                                     double feelerDistanceLimit,
+                                    int feelerCount,
+                                    float directLimit,
                                     IndirectStats* stats) {
     if (!ctx || !ctx->uniformGrid || !ctx->cache || !ctx->mesh) return 0.0f;
     const SurfaceMesh* mesh = ctx->mesh;
     if (!mesh->segments || mesh->segmentCount == 0) return 0.0f;
 
-    float directLimit = ComputeDirectRadiance(light, worldX, worldY);
     if (directLimit > INDIRECT_DIRECT_SKIP_THRESHOLD) {
         return 0.0f;
     }
 
     float perSampleClamp = (directLimit > 0.0f)
-        ? (directLimit / (float)INDIRECT_FEELER_COUNT)
+        ? (directLimit / (float)feelerCount)
         : 0.0f;
     float sum = 0.0f;
 
-    for (int i = 0; i < INDIRECT_FEELER_COUNT; i++) {
+    for (int i = 0; i < feelerCount; i++) {
         double jitter = PixelFeelerJitter(pixelX, pixelY, i);
         double dirX, dirY;
-        FeelerDirection(i, jitter, &dirX, &dirY);
+        FeelerDirection(i, feelerCount, jitter, &dirX, &dirY);
         NormalizeVector(&dirX, &dirY);
         if (stats) stats->rayTests++;
 
@@ -635,7 +631,9 @@ static void PerformIndirectLightingPass(IntegratorContext* ctx,
                                                     y + 0.5,
                                                     ctx->width,
                                                     ctx->height);
-            feelerTests++;
+            float directLimit = ComputeDirectRadiance(light, world.x, world.y);
+            int feelerCount = DetermineFeelerCount(directLimit);
+            feelerTests += (size_t)feelerCount;
             float indirect = SampleIndirectLighting(ctx,
                                                     light,
                                                     world.x,
@@ -643,6 +641,8 @@ static void PerformIndirectLightingPass(IntegratorContext* ctx,
                                                     x,
                                                     y,
                                                     feelerLimit,
+                                                    feelerCount,
+                                                    directLimit,
                                                     &stats);
             if (indirect <= 0.0f) {
                 continue;

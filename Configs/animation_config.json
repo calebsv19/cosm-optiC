@@ -16,13 +16,13 @@
   "lightDiffusionEnabled":true,
   "lightDiffusionRadius":6,
   "lightDiffusionStrength":0.60499999999999998,
-  "editorMode":2,
+  "editorMode":0,
   "useTiledRenderer":true,
   "tileSize":16,
   "rouletteThreshold":0.01,
   "integratorMode":1,
-  "pathSamplesPerPixel":4,
-  "pathMaxDepth":2,
+  "pathSamplesPerPixel":8,
+  "pathMaxDepth":3,
   "pathDirectLighting":true,
   "pathRussianRoulette":true,
   "pathEnableMIS":true,
@@ -32,5 +32,6 @@
   "bsdfModel":1,
   "lightIntensity":19.920000000000002,
   "forwardDecay":2000.0,
-  "forwardFalloffMode":1
+  "forwardFalloffMode":1,
+  "renderQuality":1
 }

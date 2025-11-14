@@ -250,6 +250,7 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "lightIntensity", json_object_new_double(animSettings.lightIntensity));
     json_object_object_add(config, "forwardDecay", json_object_new_double(animSettings.forwardDecay));
     json_object_object_add(config, "forwardFalloffMode", json_object_new_int(animSettings.forwardFalloffMode));
+    json_object_object_add(config, "renderQuality", json_object_new_int(animSettings.renderQuality));
     fprintf(file, "%s", json_object_to_json_string_ext(config, JSON_C_TO_STRING_PRETTY));
     fclose(file);
     json_object_put(config);
@@ -702,6 +703,8 @@ void LoadAnimationConfig(void) {
         animSettings.forwardDecay = json_object_get_double(temp);
     if (json_object_object_get_ex(config, "forwardFalloffMode", &temp))
         animSettings.forwardFalloffMode = json_object_get_int(temp);
+    if (json_object_object_get_ex(config, "renderQuality", &temp))
+        animSettings.renderQuality = (RenderQuality)json_object_get_int(temp);
 
     animSettings.cacheContributionWeight = ClampDoubleValue(animSettings.cacheContributionWeight, 0.0, 1.0);
     animSettings.bsdfModel = (animSettings.bsdfModel != 0) ? 1 : 0;
@@ -718,6 +721,9 @@ void LoadAnimationConfig(void) {
 
     if (animSettings.forwardFalloffMode < FORWARD_FALLOFF_MODE_QUADRATIC || animSettings.forwardFalloffMode > FORWARD_FALLOFF_MODE_NONE) {
         animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_QUADRATIC;
+    }
+    if (animSettings.renderQuality < RENDER_QUALITY_LOW || animSettings.renderQuality > RENDER_QUALITY_HIGH) {
+        animSettings.renderQuality = RENDER_QUALITY_MEDIUM;
     }
 	
     printf(" Loaded animation config successfully.\n");
