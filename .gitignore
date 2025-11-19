@@ -4,10 +4,12 @@ build_release/
 
 # Ignore rendered video outputs
 *.mp4
+Ray_anim
 
 # Optional: temporary files and OS-specific junk
 *.log
 *.tmp
+*.exe
 .DS_Store
 Thumbs.db
 
