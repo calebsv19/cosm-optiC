@@ -11,6 +11,7 @@
 #include "editor/bezier_editor.h"
 #include "path/path_system.h"
 #include "render/timer_hud_api.h"
+#include "camera/camera.h"
 #include "engine/Render/render_pipeline.h"
 #include <json-c/json.h>
 #include <math.h>
@@ -219,10 +220,24 @@ void UpdateLightPosition(double* lightX, double* lightY) {
     if (animSettings.interactiveMode) {
         GetCurrentLightPosition(lightX, lightY);
     } else {
-        Point new_position = GetPositionAlongPath(&sceneSettings.bezierPath, t_param);
+        Point new_position = GetPositionAlongPathNormalized(&sceneSettings.bezierPath, t_param);
         *lightX = new_position.x;
         *lightY = new_position.y;
     }
+}
+
+static void UpdateCameraPosition(double t) {
+    if (animSettings.interactiveMode) {
+        return;
+    }
+    if (sceneSettings.cameraPath.numPoints < 1) {
+        return;
+    }
+    Point p = (sceneSettings.cameraPath.numPoints >= 2)
+                  ? GetPositionAlongPathNormalized(&sceneSettings.cameraPath, t)
+                  : sceneSettings.cameraPath.points[0];
+    sceneSettings.camera.x = p.x;
+    sceneSettings.camera.y = p.y;
 }
 
 
@@ -290,6 +305,7 @@ void RunMainLoop(void) {
         
         double lightX, lightY;
         UpdateLightPosition(&lightX, &lightY);
+        UpdateCameraPosition(t_param);
         RenderFrame(lightX, lightY, &frameCounter, &running);
         CheckLoopConditions(&running, loopCount, currentTime);
 

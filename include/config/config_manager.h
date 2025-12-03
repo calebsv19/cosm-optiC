@@ -67,7 +67,8 @@ typedef struct {
     int windowHeight;
     SceneObject sceneObjects[10];  // Stores up to 10 objects
     int objectCount;
-    Path bezierPath;  // Stores the Bézier path
+    Path bezierPath;   // Light path
+    Path cameraPath;   // Camera animation path
     int rays;
     Camera camera;
     double cameraMargin;

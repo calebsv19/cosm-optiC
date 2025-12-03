@@ -14,13 +14,13 @@ extern int draggingVelocity;
 void InitializeBezierEditor(void);
 void RenderBezierEditor(SDL_Renderer* renderer);
 void HandleBezierEditorEvents(SDL_Event* event, int* draggingPoint, int* draggingVelocity);
-void ToggleBezierPathMode(void);
+void ToggleBezierPathMode(Path* path);
 
 // Bézier Path Operations
-void AddBezierPoint(int x, int y);
-void RemoveBezierPoint(int index);
-void MoveEndPoint(int mx, int my, int pointIndex);
-void MoveVelocityHandle(int mx, int my, int segmentIndex, int handleIndex);
+void AddBezierPoint(Path* path, int x, int y);
+void RemoveBezierPoint(Path* path, int index);
+void MoveEndPoint(Path* path, int mx, int my, int pointIndex);
+void MoveVelocityHandle(Path* path, int mx, int my, int segmentIndex, int handleIndex);
 
 
 #endif // BEZIER_EDITOR_H

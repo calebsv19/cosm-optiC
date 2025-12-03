@@ -6,6 +6,8 @@
 #include <json-c/json.h> // For JSON handling
 #include <math.h>
 
+static void LoadVelocityHandle(struct json_object* pointObj, const char* key, Velocity* handle);
+
 #define SCENE_CONFIG_FILE "Configs/scene_config.json"
 #define ANIMATION_CONFIG_FILE "Configs/animation_config.json"
 
@@ -65,6 +67,7 @@ SceneConfig sceneSettings = {
     .windowHeight = 800,
     .objectCount = 0,  // No objects initially
     .bezierPath = { .numPoints = 0, .mode = BEZIER_CUBIC },
+    .cameraPath = { .numPoints = 0, .mode = BEZIER_CUBIC },
     .rays = 2000,
     .camera = { .x = 0.0, .y = 0.0, .zoom = 1.0 },
     .cameraMargin = 80.0
@@ -74,6 +77,114 @@ static double DefaultForwardFalloffDistance(void) {
     double w = (sceneSettings.windowWidth > 0) ? sceneSettings.windowWidth : 1200.0;
     double h = (sceneSettings.windowHeight > 0) ? sceneSettings.windowHeight : 800.0;
     return hypot(w, h);
+}
+
+static void ResetPath(Path* path) {
+    if (!path) return;
+    memset(path, 0, sizeof(Path));
+    path->mode = BEZIER_CUBIC;
+}
+
+static const char* PathModeToString(BezierMode mode) {
+    return (mode == BEZIER_QUADRATIC) ? "BEZIER_QUADRATIC" : "BEZIER_CUBIC";
+}
+
+static BezierMode PathModeFromString(const char* modeStr) {
+    if (!modeStr) return BEZIER_CUBIC;
+    if (strcmp(modeStr, "BEZIER_QUADRATIC") == 0 || strcmp(modeStr, "Quadratic") == 0) {
+        return BEZIER_QUADRATIC;
+    }
+    return BEZIER_CUBIC;
+}
+
+static void SavePathToJson(struct json_object* config, const char* key, const Path* path) {
+    if (!config || !key || !path) return;
+
+    struct json_object* pathObj = json_object_new_object();
+    json_object_object_add(pathObj, "mode", json_object_new_string(PathModeToString(path->mode)));
+
+    struct json_object* pointsArray = json_object_new_array();
+    for (int i = 0; i < path->numPoints; i++) {
+        struct json_object* pointObj = json_object_new_object();
+        json_object_object_add(pointObj, "x", json_object_new_int(path->points[i].x));
+        json_object_object_add(pointObj, "y", json_object_new_int(path->points[i].y));
+
+        if (i < path->numPoints - 1) {
+            struct json_object* velocity1Obj = json_object_new_object();
+            json_object_object_add(velocity1Obj, "vx", json_object_new_int(path->handles[i][0].vx));
+            json_object_object_add(velocity1Obj, "vy", json_object_new_int(path->handles[i][0].vy));
+            json_object_object_add(pointObj, "velocity1", velocity1Obj);
+        }
+        if (i > 0) {
+            struct json_object* velocity2Obj = json_object_new_object();
+            json_object_object_add(velocity2Obj, "vx", json_object_new_int(path->handles[i - 1][1].vx));
+            json_object_object_add(velocity2Obj, "vy", json_object_new_int(path->handles[i - 1][1].vy));
+            json_object_object_add(pointObj, "velocity2", velocity2Obj);
+        }
+
+        json_object_array_add(pointsArray, pointObj);
+    }
+
+    json_object_object_add(pathObj, "points", pointsArray);
+    json_object_object_add(config, key, pathObj);
+}
+
+static bool LoadPathFromJson(struct json_object* config, const char* key, Path* out) {
+    if (!config || !key || !out) return false;
+    ResetPath(out);
+
+    struct json_object *pathData, *pointsArray;
+    if (!(json_object_object_get_ex(config, key, &pathData) &&
+          json_object_object_get_ex(pathData, "points", &pointsArray))) {
+        return false;
+    }
+
+    struct json_object* modeObj;
+    if (json_object_object_get_ex(pathData, "mode", &modeObj)) {
+        const char* modeStr = json_object_get_string(modeObj);
+        out->mode = PathModeFromString(modeStr);
+    }
+
+    int numPoints = json_object_array_length(pointsArray);
+    if (numPoints < 1) {
+        return false;
+    }
+
+    if (numPoints > MAX_BEZIER_POINTS) {
+        numPoints = MAX_BEZIER_POINTS;
+    }
+    out->numPoints = numPoints;
+
+    for (int i = 0; i < numPoints; i++) {
+        struct json_object* pointObj = json_object_array_get_idx(pointsArray, i);
+        struct json_object *xObj, *yObj;
+
+        if (json_object_object_get_ex(pointObj, "x", &xObj) &&
+            json_object_object_get_ex(pointObj, "y", &yObj)) {
+            out->points[i].x = json_object_get_double(xObj);
+            out->points[i].y = json_object_get_double(yObj);
+        }
+
+        if (i < numPoints - 1) {
+            LoadVelocityHandle(pointObj, "velocity1", &out->handles[i][0]);
+        }
+        if (i > 0) {
+            LoadVelocityHandle(pointObj, "velocity2", &out->handles[i - 1][1]);
+        }
+    }
+
+    return true;
+}
+
+static void EnsureCameraPathDefault(void) {
+    if (sceneSettings.cameraPath.numPoints > 0) {
+        return;
+    }
+
+    ResetPath(&sceneSettings.cameraPath);
+    sceneSettings.cameraPath.numPoints = 1;
+    sceneSettings.cameraPath.points[0].x = sceneSettings.camera.x;
+    sceneSettings.cameraPath.points[0].y = sceneSettings.camera.y;
 }
 
 void SaveAllSettings(void) {
@@ -160,43 +271,9 @@ void SaveSceneConfig(void) {
 
     json_object_object_add(config, "objects", objectsArray);
 
-    // Save Bézier Path
-    struct json_object* path = json_object_new_object();
-    struct json_object* pointsArray = json_object_new_array();
-
-    // Save Bézier Path Mode
-    const char* modeStr = (sceneSettings.bezierPath.mode == BEZIER_QUADRATIC) ? "BEZIER_QUADRATIC" : 
-"BEZIER_CUBIC";
-    json_object_object_add(path, "mode", json_object_new_string(modeStr));
-
-    for (int i = 0; i < sceneSettings.bezierPath.numPoints; i++) {
-        struct json_object* pointObj = json_object_new_object();
-        struct json_object* velocity1Obj = json_object_new_object();
-        struct json_object* velocity2Obj = json_object_new_object();
-
-        json_object_object_add(pointObj, "x", json_object_new_int(sceneSettings.bezierPath.points[i].x));
-        json_object_object_add(pointObj, "y", json_object_new_int(sceneSettings.bezierPath.points[i].y));
-
-        if (i < sceneSettings.bezierPath.numPoints - 1) {
-            json_object_object_add(velocity1Obj, "vx", 
-					json_object_new_int(sceneSettings.bezierPath.handles[i][0].vx));
-            json_object_object_add(velocity1Obj, "vy", 
-					json_object_new_int(sceneSettings.bezierPath.handles[i][0].vy));
-            json_object_object_add(pointObj, "velocity1", velocity1Obj);
-        }
-        if (i > 0) {
-            json_object_object_add(velocity2Obj, "vx", 
-					json_object_new_int(sceneSettings.bezierPath.handles[i - 1][1].vx));
-            json_object_object_add(velocity2Obj, "vy", 
-					json_object_new_int(sceneSettings.bezierPath.handles[i - 1][1].vy));
-            json_object_object_add(pointObj, "velocity2", velocity2Obj);
-        }
-
-        json_object_array_add(pointsArray, pointObj);
-    }
-
-    json_object_object_add(path, "points", pointsArray);
-    json_object_object_add(config, "path", path);
+    // Save Bézier Paths
+    SavePathToJson(config, "path", &sceneSettings.bezierPath);
+    SavePathToJson(config, "cameraPath", &sceneSettings.cameraPath);
 
     // Write JSON Data to File
     fprintf(file, "%s", json_object_to_json_string_ext(config, JSON_C_TO_STRING_PRETTY));
@@ -367,7 +444,7 @@ void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
 }
 
             
-void LoadVelocityHandle(struct json_object* pointObj, const char* key, Velocity* handle) {
+static void LoadVelocityHandle(struct json_object* pointObj, const char* key, Velocity* handle) {
     struct json_object *velocityObj, *vxObj, *vyObj;  
     if (json_object_object_get_ex(pointObj, key, &velocityObj) &&
         json_object_object_get_ex(velocityObj, "vx", &vxObj) &&
@@ -377,66 +454,6 @@ void LoadVelocityHandle(struct json_object* pointObj, const char* key, Velocity*
     } else {
         handle->vx = 0;
         handle->vy = 0;
-    }
-}
-
-void LoadBezierPath(struct json_object* config) {
-    printf("DEBUG: Loading Bézier Path from JSON...\n");
-
-    struct json_object *pathData, *pointsArray;
-    if (json_object_object_get_ex(config, "path", &pathData) &&
-        json_object_object_get_ex(pathData, "points", &pointsArray)) {
-
-        int numPoints = json_object_array_length(pointsArray);
-        if (numPoints < 2) {
-            printf("ERROR: Bézier path must have at least two points.\n");
-            return;
-        }
-
-        sceneSettings.bezierPath.numPoints = numPoints;
-
-        for (int i = 0; i < numPoints; i++) {
-            struct json_object *pointObj = json_object_array_get_idx(pointsArray, i);
-            struct json_object *xObj, *yObj, *velocity1Obj, *vx1Obj, *vy1Obj, *velocity2Obj, *vx2Obj, *vy2Obj;
-
-            if (json_object_object_get_ex(pointObj, "x", &xObj) &&
-                json_object_object_get_ex(pointObj, "y", &yObj)) {
-                sceneSettings.bezierPath.points[i].x = json_object_get_double(xObj);
-                sceneSettings.bezierPath.points[i].y = json_object_get_double(yObj);
-            } else {
-                printf("ERROR: Missing x or y coordinate for point %d.\n", i);
-                return;
-            }
-
-            // Load outgoing handle for segment start (i.e., handles[i][0])
-            if (i < sceneSettings.bezierPath.numPoints - 1 &&
-                json_object_object_get_ex(pointObj, "velocity1", &velocity1Obj) &&
-                json_object_object_get_ex(velocity1Obj, "vx", &vx1Obj) &&
-                json_object_object_get_ex(velocity1Obj, "vy", &vy1Obj)) {
-                sceneSettings.bezierPath.handles[i][0].vx = json_object_get_double(vx1Obj);
-                sceneSettings.bezierPath.handles[i][0].vy = json_object_get_double(vy1Obj);
-            } else {
-                sceneSettings.bezierPath.handles[i][0].vx = 0;
-                sceneSettings.bezierPath.handles[i][0].vy = 0;
-            }
-
-            // Load incoming handle for segment end (i.e., handles[i][1])
-            if (i > 0 &&
-                json_object_object_get_ex(pointObj, "velocity2", &velocity2Obj) &&
-                json_object_object_get_ex(velocity2Obj, "vx", &vx2Obj) &&
-                json_object_object_get_ex(velocity2Obj, "vy", &vy2Obj)) {
-                sceneSettings.bezierPath.handles[i - 1][1].vx = json_object_get_double(vx2Obj);
-                sceneSettings.bezierPath.handles[i - 1][1].vy = json_object_get_double(vy2Obj);
-            } else if (i > 0) { // Default for midpoints if not found
-                sceneSettings.bezierPath.handles[i - 1][1].vx = 0;
-                sceneSettings.bezierPath.handles[i - 1][1].vy = 0;
-            }
-        }
-
-        printf("INFO: Loaded Bézier Path with %d points and %d segments.\n",
-               sceneSettings.bezierPath.numPoints, sceneSettings.bezierPath.numPoints - 1);
-    } else {
-        printf("ERROR: Path data missing in scene_config.json.\n");
     }
 }
 
@@ -546,6 +563,7 @@ void LoadSceneConfig(void) {
     FILE *file = fopen(SCENE_CONFIG_FILE, "r");
     if (!file) {
         printf("ERROR: Failed to open scene config file: %s\n", SCENE_CONFIG_FILE);
+        EnsureCameraPathDefault();
         return;
     }
      
@@ -557,6 +575,7 @@ void LoadSceneConfig(void) {
     if (!buffer) {
         printf("ERROR: Memory allocation failed for JSON buffer.\n");
         fclose(file);
+        EnsureCameraPathDefault();
         return;
     }
      
@@ -570,13 +589,30 @@ void LoadSceneConfig(void) {
     if (!config) {
         printf("ERROR: Failed to parse scene config JSON.\n");
         free(buffer);
+        EnsureCameraPathDefault();
         return;
     }
     printf("In load scene config hold method for  anaimation.c\n");
     LoadWindowConfig(config);
     LoadCameraConfig(config);
     LoadSceneObjects(config);
-    LoadBezierPath(config);  
+
+    bool lightPathLoaded = LoadPathFromJson(config, "path", &sceneSettings.bezierPath);
+    if (!lightPathLoaded || sceneSettings.bezierPath.numPoints < 2) {
+        printf("ERROR: Bézier path missing or invalid in scene_config.json.\n");
+        sceneSettings.bezierPath.numPoints = 0;
+    } else {
+        printf("INFO: Loaded Bézier Path with %d points and %d segments.\n",
+               sceneSettings.bezierPath.numPoints, sceneSettings.bezierPath.numPoints - 1);
+    }
+
+    bool cameraPathLoaded = LoadPathFromJson(config, "cameraPath", &sceneSettings.cameraPath);
+    if (cameraPathLoaded) {
+        printf("INFO: Loaded Camera Path with %d point(s).\n", sceneSettings.cameraPath.numPoints);
+    } else {
+        printf("INFO: Camera path missing in config; using default at camera center.\n");
+    }
+    EnsureCameraPathDefault();
 
     struct json_object *raysObj;
     if (json_object_object_get_ex(config, "rays", &raysObj)) {
@@ -589,6 +625,7 @@ void LoadSceneConfig(void) {
     
     json_object_put(config);
     free(buffer);
+    EnsureCameraPathDefault();
 }
 
 void LoadAnimationConfig(void) {

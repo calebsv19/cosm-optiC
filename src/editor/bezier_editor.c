@@ -61,30 +61,32 @@ void InitializeBezierEditor(void) {
 
 }
 
-void ToggleBezierPathMode(void) {
-    if (sceneSettings.bezierPath.mode == BEZIER_CUBIC) {
-        sceneSettings.bezierPath.mode = BEZIER_QUADRATIC;
+void ToggleBezierPathMode(Path* path) {
+    if (!path) return;
+    if (path->mode == BEZIER_CUBIC) {
+        path->mode = BEZIER_QUADRATIC;
         printf("Bézier Path Mode switched to QUADRATIC.\n");
     } else {
-        sceneSettings.bezierPath.mode = BEZIER_CUBIC;
+        path->mode = BEZIER_CUBIC;
         printf("Bézier Path Mode switched to CUBIC.\n");
     }
 }
 
 
-void MoveEndPoint(int mx, int my, int pointIndex) {
-    if (pointIndex < 0 || pointIndex >= sceneSettings.bezierPath.numPoints) {
+void MoveEndPoint(Path* path, int mx, int my, int pointIndex) {
+    if (!path) return;
+    if (pointIndex < 0 || pointIndex >= path->numPoints) {
         printf("ERROR: Invalid point index %d in MoveEndPoint.\n", pointIndex);
         return;
     }
 
-    // Move the selected Bézier path point
-    sceneSettings.bezierPath.points[pointIndex].x = mx;
-    sceneSettings.bezierPath.points[pointIndex].y = my;
+    path->points[pointIndex].x = mx;
+    path->points[pointIndex].y = my;
 }
 
-void MoveVelocityHandle(int mx, int my, int segmentIndex, int handleIndex) {
-    if (segmentIndex < 0 || segmentIndex >= sceneSettings.bezierPath.numPoints - 1) {
+void MoveVelocityHandle(Path* path, int mx, int my, int segmentIndex, int handleIndex) {
+    if (!path) return;
+    if (segmentIndex < 0 || segmentIndex >= path->numPoints - 1) {
         printf("ERROR: Invalid segment index %d in MoveVelocityHandle.\n", segmentIndex);
         return;
     }
@@ -93,89 +95,90 @@ void MoveVelocityHandle(int mx, int my, int segmentIndex, int handleIndex) {
         return;
     }
 
-    // ✅ Fix: Both handles should update symmetrically
     if (handleIndex == 0) {
-        sceneSettings.bezierPath.handles[segmentIndex][0].vx = mx - sceneSettings.bezierPath.points[segmentIndex].x;
-        sceneSettings.bezierPath.handles[segmentIndex][0].vy = my - sceneSettings.bezierPath.points[segmentIndex].y;
+        path->handles[segmentIndex][0].vx = mx - path->points[segmentIndex].x;
+        path->handles[segmentIndex][0].vy = my - path->points[segmentIndex].y;
     } else {  
-        sceneSettings.bezierPath.handles[segmentIndex][1].vx = mx - sceneSettings.bezierPath.points[segmentIndex + 1].x;
-        sceneSettings.bezierPath.handles[segmentIndex][1].vy = my - sceneSettings.bezierPath.points[segmentIndex + 1].y;
+        path->handles[segmentIndex][1].vx = mx - path->points[segmentIndex + 1].x;
+        path->handles[segmentIndex][1].vy = my - path->points[segmentIndex + 1].y;
     }
 }
     
 
-void RemoveBezierPoint(int index) {
-    if (index < 0 || index >= sceneSettings.bezierPath.numPoints) {
+void RemoveBezierPoint(Path* path, int index) {
+    if (!path) return;
+    if (index < 0 || index >= path->numPoints) {
         printf("ERROR: Invalid point index %d in RemoveBezierPoint.\n", index);
         return;
     }
     
     printf("Removing point %d at (%.2f, %.2f)\n", index, 
-           sceneSettings.bezierPath.points[index].x, 
-           sceneSettings.bezierPath.points[index].y);
+           path->points[index].x, 
+           path->points[index].y);
         
     if (index == 0) {
         // Shift handles correctly
-        for (int i = index; i < sceneSettings.bezierPath.numPoints - 1; i++) {
-            sceneSettings.bezierPath.handles[i][0] = sceneSettings.bezierPath.handles[i + 1][0];  // Shift outgoing handle
-            sceneSettings.bezierPath.handles[i][1] = sceneSettings.bezierPath.handles[i + 1][1];  // Shift incoming handle
+        for (int i = index; i < path->numPoints - 1; i++) {
+            path->handles[i][0] = path->handles[i + 1][0];  // Shift outgoing handle
+            path->handles[i][1] = path->handles[i + 1][1];  // Shift incoming handle
         }
-    } else if (index < sceneSettings.bezierPath.numPoints - 1) {
+    } else if (index < path->numPoints - 1) {
         // Shift handles correctly
-        sceneSettings.bezierPath.handles[index - 1][1] = sceneSettings.bezierPath.handles[index][1];  // Shift incom handle
+        path->handles[index - 1][1] = path->handles[index][1];  // Shift incom handle
         
-        for (int i = index + 1; i < sceneSettings.bezierPath.numPoints - 1; i++) {
-            sceneSettings.bezierPath.handles[i][0] = sceneSettings.bezierPath.handles[i + 1][0];  // Shift outgoing handle
-            sceneSettings.bezierPath.handles[i][1] = sceneSettings.bezierPath.handles[i + 1][1];  // Shift incoming handle
+        for (int i = index + 1; i < path->numPoints - 1; i++) {
+            path->handles[i][0] = path->handles[i + 1][0];  // Shift outgoing handle
+            path->handles[i][1] = path->handles[i + 1][1];  // Shift incoming handle
         }
     }
 
     // Shift remaining points
-    for (int i = index; i < sceneSettings.bezierPath.numPoints; i++) {
-        sceneSettings.bezierPath.points[i] = sceneSettings.bezierPath.points[i + 1];
+    for (int i = index; i < path->numPoints; i++) {
+        path->points[i] = path->points[i + 1];
     }
 
     // Update segment count
-    sceneSettings.bezierPath.numPoints--;
+    path->numPoints--;
 
     // Update end handle value
-    sceneSettings.bezierPath.handles[sceneSettings.bezierPath.numPoints][0] = (Velocity){0, 0};
+    path->handles[path->numPoints][0] = (Velocity){0, 0};
         
-    printf("Updated Bézier path. New total points: %d\n", sceneSettings.bezierPath.numPoints);
+    printf("Updated Bézier path. New total points: %d\n", path->numPoints);
 }
 
 
-void AddBezierPoint(int x, int y) {
-    if (sceneSettings.bezierPath.numPoints >= MAX_BEZIER_POINTS) {
+void AddBezierPoint(Path* path, int x, int y) {
+    if (!path) return;
+    if (path->numPoints >= MAX_BEZIER_POINTS) {
         printf("Max points reached, cannot add more.\n");
         return;
     }
             
-    int index = sceneSettings.bezierPath.numPoints;
-    sceneSettings.bezierPath.points[index].x = x;
-    sceneSettings.bezierPath.points[index].y = y;
+    int index = path->numPoints;
+    path->points[index].x = x;
+    path->points[index].y = y;
          
     // First point gets no previous handle
     if (index == 0) {
-        sceneSettings.bezierPath.handles[0][0].vx = 50;
-        sceneSettings.bezierPath.handles[0][0].vy = 0;
+        path->handles[0][0].vx = 50;
+        path->handles[0][0].vy = 0;
     }
     // Second point initializes first segment
     else if (index == 1) {
-        sceneSettings.bezierPath.handles[0][1].vx = -50;
-        sceneSettings.bezierPath.handles[0][1].vy = 0;
+        path->handles[0][1].vx = -50;
+        path->handles[0][1].vy = 0;
     }   
     // Third point makes the previous endpoint a midpoint 
     else {
-        sceneSettings.bezierPath.handles[index - 1][0].vx = 50;
-        sceneSettings.bezierPath.handles[index - 1][0].vy = 0;
+        path->handles[index - 1][0].vx = 50;
+        path->handles[index - 1][0].vy = 0;
             
-        sceneSettings.bezierPath.handles[index - 1][1].vx = -50;
-        sceneSettings.bezierPath.handles[index - 1][1].vy = 0;
+        path->handles[index - 1][1].vx = -50;
+        path->handles[index - 1][1].vy = 0;
     }
      
-    sceneSettings.bezierPath.numPoints++;
-    printf("Added new point at (%d, %d), Segment Count: %d\n", x, y, sceneSettings.bezierPath.numPoints - 1);
+    path->numPoints++;
+    printf("Added new point at (%d, %d), Segment Count: %d\n", x, y, path->numPoints - 1);
 }
 
 bool IsClickingButtonBezier(int mx, int my) {
@@ -200,7 +203,7 @@ void HandleBezierEditorKeyPress(SDL_Event* event) {
                 break;
 
             case SDLK_t: // Toggle between cubic and quadratic Bézier paths
-                ToggleBezierPathMode();
+                ToggleBezierPathMode(&sceneSettings.bezierPath);
                 break;
         }
     }
@@ -243,7 +246,7 @@ void HandleBezierEditorMouseClick(SDL_Event* event) {
 
 	if (mx >= toggleButton.x && mx <= toggleButton.x + toggleButton.w && my >= toggleButton.y &&
                         my <= toggleButton.y + toggleButton.h) {
-            ToggleBezierPathMode();
+            ToggleBezierPathMode(&sceneSettings.bezierPath);
             return;
         }
     }
@@ -257,7 +260,7 @@ void HandleBezierEditorMouseClick(SDL_Event* event) {
 
             //  If in Delete Mode, remove the point
             if (deleteModeActive) {
-                RemoveBezierPoint(i);
+                RemoveBezierPoint(&sceneSettings.bezierPath, i);
             }
 
             return;
@@ -282,7 +285,7 @@ void HandleBezierEditorMouseClick(SDL_Event* event) {
 
     //  If in Add Mode, add a new point at the clicked position
     if (addModeActive && !clickedButton) {
-        AddBezierPoint((int)worldX, (int)worldY);
+        AddBezierPoint(&sceneSettings.bezierPath, (int)worldX, (int)worldY);
     }
 
 }
@@ -305,9 +308,9 @@ void HandleBezierEditorEvents(SDL_Event* event, int* draggingPoint, int* draggin
     // ✅ Handle mouse movement for dragging points or velocity handles
     if (event->type == SDL_MOUSEMOTION) {
         if (*draggingPoint != -1 && *draggingVelocity == -1) {
-            MoveEndPoint(worldX, worldY, *draggingPoint);
+            MoveEndPoint(&sceneSettings.bezierPath, worldX, worldY, *draggingPoint);
         } else if (*draggingPoint != -1 && *draggingVelocity != -1) {
-            MoveVelocityHandle(worldX, worldY, *draggingPoint, *draggingVelocity);
+            MoveVelocityHandle(&sceneSettings.bezierPath, worldX, worldY, *draggingPoint, *draggingVelocity);
         }
     }
     // ✅ Forward mouse click events to HandleBezierEditorMouseClick()
@@ -354,7 +357,8 @@ void RenderBezierEditor(SDL_Renderer* renderer) {
 
     SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
     if (sceneSettings.bezierPath.numPoints >= 2) {
-	RenderBezierPathCamera(renderer, &sceneSettings.bezierPath, true, &preview);
+        SDL_Color lightColor = {0, 255, 0, 255};
+	RenderBezierPathCamera(renderer, &sceneSettings.bezierPath, true, &preview, lightColor);
     }
 
     sceneSettings.camera = original;

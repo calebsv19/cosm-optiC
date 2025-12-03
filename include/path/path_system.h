@@ -39,11 +39,17 @@ typedef struct {
 
 // Bézier Path Functions
 Point GetPositionAlongPath(Path* path, double t);
+Point GetPositionAlongPathNormalized(Path* path, double t);
+double PathApproximateLength(Path* path);
 void DestroyPath(Path* path);
 
 // Bézier Debug Rendering
-void RenderBezierPath(SDL_Renderer* renderer, Path* path, bool drawHandles);
-void RenderBezierPathCamera(SDL_Renderer* renderer, Path* path, bool drawHandles, const Camera* camera);
+void RenderBezierPath(SDL_Renderer* renderer, Path* path, bool drawHandles, SDL_Color curveColor);
+void RenderBezierPathCamera(SDL_Renderer* renderer,
+                            Path* path,
+                            bool drawHandles,
+                            const Camera* camera,
+                            SDL_Color curveColor);
 
 // Bézier Utility Functions
 int IsPointWithinRadius(Point a, Point b);

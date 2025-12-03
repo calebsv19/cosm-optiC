@@ -353,7 +353,8 @@ void RenderObjectEditor(SDL_Renderer* renderer) {
     }
 
     SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
-    RenderBezierPathCamera(renderer, &sceneSettings.bezierPath, false, &preview);
+    SDL_Color pathColor = {0, 255, 0, 255};
+    RenderBezierPathCamera(renderer, &sceneSettings.bezierPath, false, &preview, pathColor);
 
     sceneSettings.camera = original;
 
@@ -578,7 +579,7 @@ void HandleObjectEditorKeyPress(SDL_Event* event) {
                 break;
     
             case SDLK_t: // Toggle between cubic and quadratic Bézier paths
-                ToggleBezierPathMode();
+                ToggleBezierPathMode(&sceneSettings.bezierPath);
                 break;
         }
     }

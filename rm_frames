@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+RENDER_DIR="Animations/default"
+VIDEO_DIR="Animations/Vids"
+
+if [ -d "$RENDER_DIR" ]; then
+    rm -f "$RENDER_DIR"/frame_*.bmp
+    echo "Cleared BMP frames in $RENDER_DIR"
+else
+    echo "Render frame directory $RENDER_DIR does not exist."
+fi

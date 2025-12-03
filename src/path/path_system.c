@@ -74,6 +74,69 @@ Point GetPositionAlongPath(Path* path, double t) {
     return DeCasteljau(controlPoints, controlPointCount, localT);
 }
 
+static double Distance(Point a, Point b) {
+    double dx = a.x - b.x;
+    double dy = a.y - b.y;
+    return sqrt(dx * dx + dy * dy);
+}
+
+double PathApproximateLength(Path* path) {
+    if (!path || path->numPoints < 2) return 0.0;
+    const int samplesPerSegment = 20;
+    int segments = path->numPoints - 1;
+    Point prev = path->points[0];
+    double length = 0.0;
+
+    for (int seg = 0; seg < segments; seg++) {
+        for (int s = 1; s <= samplesPerSegment; s++) {
+            double localT = (double)s / (double)samplesPerSegment;
+            double globalT = ((double)seg + localT) / (double)segments;
+            Point p = GetPositionAlongPath(path, globalT);
+            length += Distance(prev, p);
+            prev = p;
+        }
+    }
+    return length;
+}
+
+Point GetPositionAlongPathNormalized(Path* path, double t) {
+    if (!path || path->numPoints < 2) {
+        return (Point){0, 0};
+    }
+    double totalLen = PathApproximateLength(path);
+    if (totalLen <= 1e-6) {
+        return GetPositionAlongPath(path, t);
+    }
+
+    double clampedT = fmax(0.0, fmin(1.0, t));
+    double target = clampedT * totalLen;
+    const int samplesPerSegment = 20;
+    int segments = path->numPoints - 1;
+
+    Point prev = path->points[0];
+    double traveled = 0.0;
+    for (int seg = 0; seg < segments; seg++) {
+        for (int s = 1; s <= samplesPerSegment; s++) {
+            double localT = (double)s / (double)samplesPerSegment;
+            double globalT = ((double)seg + localT) / (double)segments;
+            Point p = GetPositionAlongPath(path, globalT);
+            double step = Distance(prev, p);
+            if (traveled + step >= target && step > 1e-9) {
+                double ratio = (target - traveled) / step;
+                Point out = {
+                    prev.x + (p.x - prev.x) * ratio,
+                    prev.y + (p.y - prev.y) * ratio
+                };
+                return out;
+            }
+            traveled += step;
+            prev = p;
+        }
+    }
+
+    return path->points[path->numPoints - 1];
+}
+
 
 // Frees the memory used by the path (future-proofing)
 void DestroyPath(Path* path) {
@@ -106,11 +169,24 @@ static SDL_Point ToCameraPoint(double x, double y, const Camera* camera) {
     return (SDL_Point){(int)lround(mapped.x), (int)lround(mapped.y)};
 }
 
-void RenderBezierPathCamera(SDL_Renderer* renderer, Path* path, bool drawHandles, const Camera* camera) {
+static SDL_Color UseColor(SDL_Color color, SDL_Color fallback) {
+    if (color.r == 0 && color.g == 0 && color.b == 0 && color.a == 0) {
+        return fallback;
+    }
+    return color;
+}
+
+void RenderBezierPathCamera(SDL_Renderer* renderer,
+                            Path* path,
+                            bool drawHandles,
+                            const Camera* camera,
+                            SDL_Color curveColor) {
     if (!path || path->numPoints < 2) return;
 
+    SDL_Color curve = UseColor(curveColor, (SDL_Color){0, 255, 0, 255});
+
     // **Draw Bézier curve as dashed line**
-    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255); // Green for curve
+    SDL_SetRenderDrawColor(renderer, curve.r, curve.g, curve.b, curve.a); // Curve color
     for (int i = 0; i < path->numPoints - 1; i++) {
         int dashLength = 6;  // Length of each visible dash segment
         // int gapLength = 4; 
@@ -158,7 +234,7 @@ void RenderBezierPathCamera(SDL_Renderer* renderer, Path* path, bool drawHandles
     }
 
     // **Draw control points as circles**
-    SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255); // Red for control points
+    SDL_SetRenderDrawColor(renderer, curve.r, curve.g, curve.b, curve.a); // Control points
     for (int i = 0; i < path->numPoints; i++) {
         SDL_Point center = ToCameraPoint(path->points[i].x, path->points[i].y, camera);
         for (int dx = -POINT_RADIUS; dx <= POINT_RADIUS; dx++) {
@@ -191,6 +267,6 @@ void RenderBezierPathCamera(SDL_Renderer* renderer, Path* path, bool drawHandles
     }
 }
 
-void RenderBezierPath(SDL_Renderer* renderer, Path* path, bool drawHandles) {
-    RenderBezierPathCamera(renderer, path, drawHandles, NULL);
+void RenderBezierPath(SDL_Renderer* renderer, Path* path, bool drawHandles, SDL_Color curveColor) {
+    RenderBezierPathCamera(renderer, path, drawHandles, NULL, curveColor);
 }
