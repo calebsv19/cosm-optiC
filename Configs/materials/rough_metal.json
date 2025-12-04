@@ -1,0 +1,11 @@
+{
+  "name": "Rough Metal",
+  "diffuse": 0.2,
+  "specular": 0.6,
+  "reflectivity": 0.7,
+  "roughness": 0.6,
+  "base_color": [0.8, 0.8, 0.8],
+  "emissive": [0.0, 0.0, 0.0],
+  "metallic": 1.0,
+  "transparency": 0.0
+}

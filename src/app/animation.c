@@ -459,22 +459,20 @@ int main(int argc, char* argv[]) {
     t_increment = 1.0 / animSettings.framesForTravel;
     printf("Loaded animation config in main.\n");
 
-    // Run the SDL menu to allow user selection
-    if (!RunMenu()) {
-        printf("Menu closed. Exiting program.\n");
-        return 0;
-    }
-
-    if (animSettings.previewMode) {
-        SaveAllSettings();
-        RunPreviewMode();
-        animSettings.previewMode = false; // do not persist
-        SaveAllSettings();
-        // Return to menu after preview
+    // Run menu; allow repeated preview launches before starting
+    while (1) {
         if (!RunMenu()) {
-            printf("Menu closed after preview. Exiting program.\n");
+            printf("Menu closed. Exiting program.\n");
             return 0;
         }
+        if (animSettings.previewMode) {
+            SaveAllSettings();
+            RunPreviewMode();
+            animSettings.previewMode = false; // do not persist
+            SaveAllSettings();
+            continue; // back to menu for next choice
+        }
+        break; // proceed to main run
     }
 
     // Print selected settings

@@ -1,0 +1,11 @@
+{
+  "name": "Default",
+  "diffuse": 0.8,
+  "specular": 0.05,
+  "reflectivity": 0.1,
+  "roughness": 0.6,
+  "base_color": [1.0, 1.0, 1.0],
+  "emissive": [0.0, 0.0, 0.0],
+  "metallic": 0.0,
+  "transparency": 0.0
+}

@@ -31,6 +31,7 @@ typedef struct {
     double reflectivity;   // 0 (matte) .. 1 (mirror)
     double roughness;      // 0 (sharp) .. 1 (diffuse)
     int textureId;         // Procedural texture selector
+    int material_id;       // Material preset reference
 
     bool dirty;            // Needs update?
 } SceneObject;

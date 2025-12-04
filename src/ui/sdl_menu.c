@@ -25,11 +25,11 @@
 #define TOGGLE_BUTTON_TEXT_SIZE 24
 #define TOGGLE_BUTTON_SPACING 10
 
-// Deep Render Sub-Settings Buttons
+// Deep Render Sub-Settings Buttons (reused for general left-column stack)
 #define SUBSETTING_BUTTON_WIDTH 175
 #define SUBSETTING_BUTTON_HEIGHT 40
-#define SUBSETTING_BUTTON_MARGIN_X (MENU_MARGIN_X + 10)  // Nested under Deep Render
-#define SUBSETTING_BUTTON_MARGIN_Y TOGGLE_BUTTON_MARGIN_Y + (TOGGLE_BUTTON_HEIGHT + TOGGLE_BUTTON_SPACING) * 2
+#define SUBSETTING_BUTTON_MARGIN_X (MENU_MARGIN_X + 10)
+#define SUBSETTING_BUTTON_MARGIN_Y (TOGGLE_BUTTON_MARGIN_Y + (TOGGLE_BUTTON_HEIGHT + TOGGLE_BUTTON_SPACING) * 2 + 15)
 #define SUBSETTING_TEXT_SIZE 22
 #define SUBSETTING_BUTTON_SPACING 10
 
@@ -77,7 +77,7 @@
 #define SLIDER_MARGIN_X (MENU_WIDTH - SLIDER_WIDTH - MENU_MARGIN_X - 40)
 #define SLIDER_MARGIN_Y MENU_MARGIN_Y  // Align with top of window
 
-#define FORWARD_FALLOFF_BUTTON_WIDTH SLIDER_WIDTH
+#define FORWARD_FALLOFF_BUTTON_WIDTH 200
 #define FORWARD_FALLOFF_BUTTON_HEIGHT 40
 #define FORWARD_FALLOFF_BUTTON_SPACING 10
 #define FORWARD_FALLOFF_DISTANCE_MIN 100
@@ -120,6 +120,9 @@ static int lightIntensitySliderValue = 500;
 static int forwardDecaySliderValue = 2000;
 static int oldWindowWidth = 0;
 static int oldWindowHeight = 0;
+static Uint32 statusExpireMs = 0;
+static SDL_Color statusColor = {255, 255, 255, 255};
+static char statusLabel[16] = "";
 
 static int ClampTileSizeMenu(int value) {
     if (value < 4) value = 4;
@@ -235,6 +238,8 @@ static void ApplySpecialSliderRules(int* target) {
     } else if (target == &sceneSettings.windowWidth || target == &sceneSettings.windowHeight) {
         if (sceneSettings.windowWidth < 200) sceneSettings.windowWidth = 200;
         if (sceneSettings.windowHeight < 200) sceneSettings.windowHeight = 200;
+        if (sceneSettings.windowWidth % 2) sceneSettings.windowWidth += 1;
+        if (sceneSettings.windowHeight % 2) sceneSettings.windowHeight += 1;
     }
 }
 
@@ -346,6 +351,21 @@ void RenderText(SDL_Renderer *renderer, TTF_Font *font, int x, int y, const char
     SDL_FreeSurface(textSurface);
     SDL_DestroyTexture(textTexture);
 }
+
+static void RenderTextColor(SDL_Renderer *renderer, TTF_Font *font, int x, int y, SDL_Color color, const char *text) {
+    if (!text || !*text) return;
+    SDL_Surface *textSurface = TTF_RenderText_Solid(font, text, color);
+    if (!textSurface) return;
+    SDL_Texture *textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
+    if (!textTexture) {
+        SDL_FreeSurface(textSurface);
+        return;
+    }
+    SDL_Rect textRect = {x, y, textSurface->w, textSurface->h};
+    SDL_RenderCopy(renderer, textTexture, NULL, &textRect);
+    SDL_FreeSurface(textSurface);
+    SDL_DestroyTexture(textTexture);
+}
             
 
 void RenderButton(SDL_Renderer *renderer, TTF_Font *font, int x, int y, int width, int height, const char *text, bool active) {
@@ -400,7 +420,6 @@ static SliderLayout BuildSliderLayout(void) {
     ADD_SLIDER(&animSettings.frameLimit, 1, 5000, "Frame Limit");
     ADD_SLIDER(&animSettings.framesForTravel, 1, 5000, "Path Points");
     ADD_SLIDER(&animSettings.fps, 1, 240, "FPS");
-    ADD_SLIDER(&animSettings.lightMode, 0, 1, "Light Mode");
     ADD_SLIDER(&sceneSettings.rays, 0, 10000, "Num Rays");
     ADD_SLIDER(&sceneSettings.windowWidth, 200, 4000, "Width");
     ADD_SLIDER(&sceneSettings.windowHeight, 200, 2400, "Height");
@@ -465,10 +484,10 @@ static void RenderSliders(SDL_Renderer* renderer, TTF_Font* font, const SliderLa
 
 void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {  
     SliderLayout sliderLayout = BuildSliderLayout();
-    int falloffButtonY = sliderLayout.nextY;
-    int sliderBottom = falloffButtonY + FORWARD_FALLOFF_BUTTON_HEIGHT + FORWARD_FALLOFF_BUTTON_SPACING;
-    int tileButtonY = sliderBottom;
-    int integratorButtonY = tileButtonY + TILE_BUTTON_HEIGHT + 10;
+    int centerX = TOGGLE_BUTTON_MARGIN_X + TOGGLE_BUTTON_WIDTH + 60; // middle column anchor between left and sliders
+    int falloffButtonY = TOGGLE_BUTTON_MARGIN_Y + 10;
+    int tileButtonY = falloffButtonY + FORWARD_FALLOFF_BUTTON_HEIGHT + FORWARD_FALLOFF_BUTTON_SPACING;
+    int integratorButtonY = SUBSETTING_BUTTON_MARGIN_Y + 2 * (SUBSETTING_BUTTON_HEIGHT + SUBSETTING_BUTTON_SPACING) + 10;
     int pathToggleDirectY = integratorButtonY + INTEGRATOR_BUTTON_HEIGHT + 10;
     int pathToggleRRY = pathToggleDirectY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
     int pathToggleMISY = pathToggleRRY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
@@ -478,55 +497,44 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
     
-    // Render main mode buttons
+    // Main mode buttons (left column anchor)
     RenderButton(renderer, font, TOGGLE_BUTTON_MARGIN_X, TOGGLE_BUTTON_MARGIN_Y,
                  TOGGLE_BUTTON_WIDTH, TOGGLE_BUTTON_HEIGHT, "Interactive Mode", animSettings.interactiveMode);
     
     RenderButton(renderer, font, TOGGLE_BUTTON_MARGIN_X,
                  TOGGLE_BUTTON_MARGIN_Y + (TOGGLE_BUTTON_HEIGHT + TOGGLE_BUTTON_SPACING),
                  TOGGLE_BUTTON_WIDTH, TOGGLE_BUTTON_HEIGHT, "Deep Render", animSettings.deepRenderMode);
-    
-    // Render Deep Render settings when enabled
-    if (animSettings.deepRenderMode) {
-        RenderButton(renderer, font, SUBSETTING_BUTTON_MARGIN_X, SUBSETTING_BUTTON_MARGIN_Y,
-                     SUBSETTING_BUTTON_WIDTH, SUBSETTING_BUTTON_HEIGHT, "Bounce Mode", animSettings.bounceMode);
-    
-        RenderButton(renderer, font, SUBSETTING_BUTTON_MARGIN_X,
-                     SUBSETTING_BUTTON_MARGIN_Y + (SUBSETTING_BUTTON_SPACING + SUBSETTING_BUTTON_HEIGHT),
-                     SUBSETTING_BUTTON_WIDTH, SUBSETTING_BUTTON_HEIGHT, "Auto MP4", animSettings.autoMP4);
-        
-        RenderButton(renderer, font, SUBSETTING_BUTTON_MARGIN_X,
-                     SUBSETTING_BUTTON_MARGIN_Y + 2 * (SUBSETTING_BUTTON_SPACING + SUBSETTING_BUTTON_HEIGHT),
-                     SUBSETTING_BUTTON_WIDTH, SUBSETTING_BUTTON_HEIGHT, "Scene Editor", false);
-	// Render Scene Editor Mode Toggle Button
-	const char* editorModeText = (animSettings.editorMode == 0) ? "Path" :
-                             (animSettings.editorMode == 1) ? "Scene" : "Camera";
 
-	RenderButton(renderer, font, SUBSETTING_BUTTON_MARGIN_X,
-        	     SUBSETTING_BUTTON_MARGIN_Y + 3 * (SUBSETTING_BUTTON_SPACING + SUBSETTING_BUTTON_HEIGHT),
-             	     SUBSETTING_BUTTON_WIDTH, SUBSETTING_BUTTON_HEIGHT, editorModeText, false);
- 	/*   
-        // Render Editable Number Fields (Bounce Limit & Frame Limit)
-        if (editingBounce) {
-            RenderText(renderer, font, VALUE_BOX_MARGIN_X + SUBSETTING_BUTTON_WIDTH + SUBSETTING_BUTTON_MARGIN_X,
-                       TOGGLE_BUTTON_MARGIN_Y + 2 * (TOGGLE_BUTTON_HEIGHT + TOGGLE_BUTTON_SPACING) + VALUE_BOX_MARGIN_Y,
-                       "%s_", inputBuffer);  // Show cursor
-        } else {
-            RenderText(renderer, font, VALUE_BOX_MARGIN_X + SUBSETTING_BUTTON_WIDTH + SUBSETTING_BUTTON_MARGIN_X,
-                       TOGGLE_BUTTON_MARGIN_Y + 2 * (TOGGLE_BUTTON_HEIGHT + TOGGLE_BUTTON_SPACING) + VALUE_BOX_MARGIN_Y,
-                       "%d", animSettings.bounceLimit);
-        }
-                
-        if (editingFrame) {
-            RenderText(renderer, font, VALUE_BOX_MARGIN_X + TOGGLE_BUTTON_WIDTH + TOGGLE_BUTTON_MARGIN_X,
-                       TOGGLE_BUTTON_MARGIN_Y + (TOGGLE_BUTTON_HEIGHT + TOGGLE_BUTTON_SPACING) + VALUE_BOX_MARGIN_Y,
-                       "%s_", inputBuffer);
-        } else {
-            RenderText(renderer, font, VALUE_BOX_MARGIN_X + TOGGLE_BUTTON_WIDTH + TOGGLE_BUTTON_MARGIN_X,
-                       TOGGLE_BUTTON_MARGIN_Y + (TOGGLE_BUTTON_HEIGHT + TOGGLE_BUTTON_SPACING) + VALUE_BOX_MARGIN_Y,
-                       "%d", animSettings.framesForTravel);
-        }
-	*/
+    // Left column: bounce/autoMP4 always visible, integrator + path extras
+    RenderButton(renderer, font, SUBSETTING_BUTTON_MARGIN_X, SUBSETTING_BUTTON_MARGIN_Y,
+                 SUBSETTING_BUTTON_WIDTH, SUBSETTING_BUTTON_HEIGHT, "Bounce Mode", animSettings.bounceMode);
+
+    RenderButton(renderer, font, SUBSETTING_BUTTON_MARGIN_X,
+                 SUBSETTING_BUTTON_MARGIN_Y + (SUBSETTING_BUTTON_SPACING + SUBSETTING_BUTTON_HEIGHT),
+                 SUBSETTING_BUTTON_WIDTH, SUBSETTING_BUTTON_HEIGHT, "Auto MP4", animSettings.autoMP4);
+
+    const char* integratorLabel = (animSettings.integratorMode == 0) ? "Integrator: Forward Light" : "Integrator: Camera Path";
+    RenderButton(renderer, font, TOGGLE_BUTTON_MARGIN_X, integratorButtonY,
+                 INTEGRATOR_BUTTON_WIDTH, INTEGRATOR_BUTTON_HEIGHT, integratorLabel, animSettings.integratorMode == 1);
+
+    if (animSettings.integratorMode == 1) {
+        RenderButton(renderer, font, TOGGLE_BUTTON_MARGIN_X, pathToggleDirectY,
+                     PATH_TOGGLE_WIDTH, PATH_TOGGLE_HEIGHT,
+                     animSettings.pathDirectLighting ? "Direct Light: ON" : "Direct Light: OFF",
+                     animSettings.pathDirectLighting);
+        RenderButton(renderer, font, TOGGLE_BUTTON_MARGIN_X, pathToggleRRY,
+                     PATH_TOGGLE_WIDTH, PATH_TOGGLE_HEIGHT,
+                     animSettings.pathRussianRoulette ? "Roulette: ON" : "Roulette: OFF",
+                     animSettings.pathRussianRoulette);
+        RenderButton(renderer, font, TOGGLE_BUTTON_MARGIN_X, pathToggleMISY,
+                     PATH_TOGGLE_WIDTH, PATH_TOGGLE_HEIGHT,
+                     animSettings.pathEnableMIS ? "MIS: ON" : "MIS: OFF",
+                     animSettings.pathEnableMIS);
+        const char* bsdfLabel = (animSettings.bsdfModel == 0) ? "BSDF: Lambert" : "BSDF: GGX";
+        RenderButton(renderer, font, TOGGLE_BUTTON_MARGIN_X, pathToggleBSDFY,
+                     PATH_TOGGLE_WIDTH, PATH_TOGGLE_HEIGHT,
+                     bsdfLabel,
+                     animSettings.bsdfModel != 0);
     }
                  
     const char* falloffLabel = "Forward Falloff: Quadratic (1/r^2)";
@@ -535,37 +543,28 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
     } else if (animSettings.forwardFalloffMode == FORWARD_FALLOFF_MODE_NONE) {
         falloffLabel = "Forward Falloff: None";
     }
-    RenderButton(renderer, font, SLIDER_MARGIN_X, falloffButtonY,
+    RenderButton(renderer, font, centerX, falloffButtonY,
                  FORWARD_FALLOFF_BUTTON_WIDTH, FORWARD_FALLOFF_BUTTON_HEIGHT,
                  falloffLabel, animSettings.forwardFalloffMode == FORWARD_FALLOFF_MODE_LINEAR);
 
     const char* tileButtonLabel = animSettings.useTiledRenderer ? "Tile Renderer: ON" : "Tile Renderer: OFF";
-    RenderButton(renderer, font, TILE_BUTTON_X, tileButtonY,
+    RenderButton(renderer, font, centerX, tileButtonY,
                  TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT, tileButtonLabel, animSettings.useTiledRenderer);
 
-    const char* integratorLabel = (animSettings.integratorMode == 0) ? "Integrator: Forward Light" : "Integrator: Camera Path";
-    RenderButton(renderer, font, INTEGRATOR_BUTTON_X, integratorButtonY,
-                 INTEGRATOR_BUTTON_WIDTH, INTEGRATOR_BUTTON_HEIGHT, integratorLabel, animSettings.integratorMode == 1);
-
-    if (animSettings.integratorMode == 1) {
-        RenderButton(renderer, font, PATH_TOGGLE_X, pathToggleDirectY,
-                     PATH_TOGGLE_WIDTH, PATH_TOGGLE_HEIGHT,
-                     animSettings.pathDirectLighting ? "Direct Light: ON" : "Direct Light: OFF",
-                     animSettings.pathDirectLighting);
-        RenderButton(renderer, font, PATH_TOGGLE_X, pathToggleRRY,
-                     PATH_TOGGLE_WIDTH, PATH_TOGGLE_HEIGHT,
-                     animSettings.pathRussianRoulette ? "Roulette: ON" : "Roulette: OFF",
-                     animSettings.pathRussianRoulette);
-        RenderButton(renderer, font, PATH_TOGGLE_X, pathToggleMISY,
-                     PATH_TOGGLE_WIDTH, PATH_TOGGLE_HEIGHT,
-                     animSettings.pathEnableMIS ? "MIS: ON" : "MIS: OFF",
-                     animSettings.pathEnableMIS);
-        const char* bsdfLabel = (animSettings.bsdfModel == 0) ? "BSDF: Lambert" : "BSDF: GGX";
-        RenderButton(renderer, font, PATH_TOGGLE_X, pathToggleBSDFY,
-                     PATH_TOGGLE_WIDTH, PATH_TOGGLE_HEIGHT,
-                     bsdfLabel,
-                     animSettings.bsdfModel != 0);
-    }
+    // Right column: Scene Editor + mode above Start
+    int sceneBtnX = BOTTOM_BUTTON_MARGIN_X_START;
+    int sceneBtnY = BOTTOM_BUTTON_MARGIN_Y_START - (BOTTOM_BUTTON_HEIGHT_START + 8);
+    int sceneBtnW = BOTTOM_BUTTON_WIDTH_START;
+    int sceneBtnH = BOTTOM_BUTTON_HEIGHT_START;
+    int editorModeY = sceneBtnY - (sceneBtnH + 6);
+    RenderButton(renderer, font, sceneBtnX, sceneBtnY,
+                 sceneBtnW, sceneBtnH,
+                 "Scene Editor", false);
+    const char* editorModeText = (animSettings.editorMode == 0) ? "Path" :
+                                 (animSettings.editorMode == 1) ? "Scene" : "Camera";
+    RenderButton(renderer, font, sceneBtnX,
+                 editorModeY,
+                 sceneBtnW, sceneBtnH, editorModeText, false);
 
     // Render Bottom Buttons
     RenderButton(renderer, font, BOTTOM_BUTTON_MARGIN_X_SAVE, BOTTOM_BUTTON_MARGIN_Y_SAVE,
@@ -576,11 +575,36 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
                  BOTTOM_BUTTON_WIDTH_PREVIEW, BOTTOM_BUTTON_HEIGHT_PREVIEW, "Preview", animSettings.previewMode);
     RenderButton(renderer, font, BOTTOM_BUTTON_MARGIN_X_EXIT, BOTTOM_BUTTON_MARGIN_Y_EXIT,
                  BOTTOM_BUTTON_WIDTH_EXIT, BOTTOM_BUTTON_HEIGHT_EXIT, "Exit w/o Saving", false); 
-    RenderButton(renderer, font, BOTTOM_BUTTON_MARGIN_X_START, BOTTOM_BUTTON_MARGIN_Y_START,
-                 BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START, "Start", false);
+    // Start button with subtle green tint
+    SDL_Rect startRect = {BOTTOM_BUTTON_MARGIN_X_START, BOTTOM_BUTTON_MARGIN_Y_START,
+                          BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START};
+    SDL_SetRenderDrawColor(renderer, 90, 220, 110, 255);
+    SDL_RenderFillRect(renderer, &startRect);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderDrawRect(renderer, &startRect);
+    RenderButtonText(renderer, startRect, "Start");
    
 
     RenderSliders(renderer, font, &sliderLayout);
+
+    // Status label near Save button
+    Uint32 now = SDL_GetTicks();
+    if (statusExpireMs > now) {
+        double remaining = (double)(statusExpireMs - now);
+        double frac = remaining / 1500.0; // shorter lifetime to avoid tail flash
+        if (frac < 0.0) frac = 0.0;
+        if (frac > 1.0) frac = 1.0;
+        SDL_Color c = statusColor;
+        int alpha = (int)lrint((double)c.a * frac);
+        if (alpha < 5) {
+            statusExpireMs = 0; // fully cleared
+        } else {
+            c.a = (Uint8)alpha;
+            int textX = BOTTOM_BUTTON_MARGIN_X_SAVE + BOTTOM_BUTTON_WIDTH_SAVE + 15;
+            int textY = BOTTOM_BUTTON_MARGIN_Y_SAVE + (BOTTOM_BUTTON_HEIGHT_SAVE / 2) - 10;
+            RenderTextColor(renderer, font, textX, textY, c, statusLabel);
+        }
+    }
 
     // Present the updated UI 
     SDL_RenderPresent(renderer);
@@ -719,9 +743,9 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
     HandleSliderClick(event, &layout);
 
     int x = event->button.x, y = event->button.y;
-    int falloffButtonY = layout.nextY;
+    int falloffButtonY = TOGGLE_BUTTON_MARGIN_Y + 10;
     int tileButtonY = falloffButtonY + FORWARD_FALLOFF_BUTTON_HEIGHT + FORWARD_FALLOFF_BUTTON_SPACING;
-    int integratorButtonY = tileButtonY + TILE_BUTTON_HEIGHT + 10;
+    int integratorButtonY = SUBSETTING_BUTTON_MARGIN_Y + 2 * (SUBSETTING_BUTTON_HEIGHT + SUBSETTING_BUTTON_SPACING) + 10;
     int pathToggleDirectY = integratorButtonY + INTEGRATOR_BUTTON_HEIGHT + 10;
     int pathToggleRRY = pathToggleDirectY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
     int pathToggleMISY = pathToggleRRY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
@@ -760,11 +784,15 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
             return;
         }
             
-        if (x > SUBSETTING_BUTTON_MARGIN_X && x < SUBSETTING_BUTTON_MARGIN_X + SUBSETTING_BUTTON_WIDTH &&
-            y > SUBSETTING_BUTTON_MARGIN_Y + 2 * (SUBSETTING_BUTTON_HEIGHT + SUBSETTING_BUTTON_SPACING) &&
-            y < SUBSETTING_BUTTON_MARGIN_Y + 2 * (SUBSETTING_BUTTON_HEIGHT + SUBSETTING_BUTTON_SPACING) + 
-			SUBSETTING_BUTTON_HEIGHT) {
-	    // Initialize the Scene Editor and Run the Loop
+        int sceneBtnX = BOTTOM_BUTTON_MARGIN_X_START;
+        int sceneBtnY = BOTTOM_BUTTON_MARGIN_Y_START - (BOTTOM_BUTTON_HEIGHT_START + 8);
+        int sceneBtnW = BOTTOM_BUTTON_WIDTH_START;
+        int sceneBtnH = BOTTOM_BUTTON_HEIGHT_START;
+        int editorModeY = sceneBtnY - (sceneBtnH + 6);
+
+        // Launch Scene Editor
+        if (x > sceneBtnX && x < sceneBtnX + sceneBtnW &&
+            y > sceneBtnY && y < sceneBtnY + sceneBtnH) {
             SceneEditor editor = {0};  // Zero-initialize struct
             InitializeSceneEditor(&editor);
             editor.running = true;
@@ -772,11 +800,11 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
             return;
         }
 
-	// Check if clicking on the Scene Editor Mode Toggle Button
-        if (x >= SUBSETTING_BUTTON_MARGIN_X &&
-            x <= SUBSETTING_BUTTON_MARGIN_X + SUBSETTING_BUTTON_WIDTH &&
-            y >= SUBSETTING_BUTTON_MARGIN_Y + 3 * (SUBSETTING_BUTTON_SPACING + SUBSETTING_BUTTON_HEIGHT) &&
-            y <= SUBSETTING_BUTTON_MARGIN_Y + 3 * (SUBSETTING_BUTTON_SPACING + SUBSETTING_BUTTON_HEIGHT) + SUBSETTING_BUTTON_HEIGHT) {
+	// Toggle Scene Editor Mode
+        if (x >= sceneBtnX &&
+            x <= sceneBtnX + sceneBtnW &&
+            y >= editorModeY &&
+            y <= editorModeY + sceneBtnH) {
         
             //  Cycle through the three modes
             animSettings.editorMode = (animSettings.editorMode + 1) % 3;
@@ -813,19 +841,21 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
         } 
 	*/       
     } 
-    if (x >= SLIDER_MARGIN_X && x <= SLIDER_MARGIN_X + FORWARD_FALLOFF_BUTTON_WIDTH &&
+    int centerX = TOGGLE_BUTTON_MARGIN_X + TOGGLE_BUTTON_WIDTH + 60; // mirror render calc for hits
+
+    if (x >= centerX && x <= centerX + FORWARD_FALLOFF_BUTTON_WIDTH &&
         y >= falloffButtonY && y <= falloffButtonY + FORWARD_FALLOFF_BUTTON_HEIGHT) {
         animSettings.forwardFalloffMode = (animSettings.forwardFalloffMode + 1) % 3;
         return;
     }
 
-    if (x >= TILE_BUTTON_X && x <= TILE_BUTTON_X + TILE_BUTTON_WIDTH &&
+    if (x >= centerX && x <= centerX + TILE_BUTTON_WIDTH &&
         y >= tileButtonY && y <= tileButtonY + TILE_BUTTON_HEIGHT) {
         animSettings.useTiledRenderer = !animSettings.useTiledRenderer;
         return;
     }
 
-    if (x >= INTEGRATOR_BUTTON_X && x <= INTEGRATOR_BUTTON_X + INTEGRATOR_BUTTON_WIDTH &&
+    if (x >= TOGGLE_BUTTON_MARGIN_X && x <= TOGGLE_BUTTON_MARGIN_X + INTEGRATOR_BUTTON_WIDTH &&
         y >= integratorButtonY && y <= integratorButtonY + INTEGRATOR_BUTTON_HEIGHT) {
         animSettings.integratorMode = (animSettings.integratorMode == 0) ? 1 : 0;
         SyncMenuSliderValues();
@@ -833,22 +863,22 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
     }
 
     if (animSettings.integratorMode == 1) {
-        if (x >= PATH_TOGGLE_X && x <= PATH_TOGGLE_X + PATH_TOGGLE_WIDTH &&
+        if (x >= TOGGLE_BUTTON_MARGIN_X && x <= TOGGLE_BUTTON_MARGIN_X + PATH_TOGGLE_WIDTH &&
             y >= pathToggleDirectY && y <= pathToggleDirectY + PATH_TOGGLE_HEIGHT) {
             animSettings.pathDirectLighting = !animSettings.pathDirectLighting;
             return;
         }
-        if (x >= PATH_TOGGLE_X && x <= PATH_TOGGLE_X + PATH_TOGGLE_WIDTH &&
+        if (x >= TOGGLE_BUTTON_MARGIN_X && x <= TOGGLE_BUTTON_MARGIN_X + PATH_TOGGLE_WIDTH &&
             y >= pathToggleRRY && y <= pathToggleRRY + PATH_TOGGLE_HEIGHT) {
             animSettings.pathRussianRoulette = !animSettings.pathRussianRoulette;
             return;
         }
-        if (x >= PATH_TOGGLE_X && x <= PATH_TOGGLE_X + PATH_TOGGLE_WIDTH &&
+        if (x >= TOGGLE_BUTTON_MARGIN_X && x <= TOGGLE_BUTTON_MARGIN_X + PATH_TOGGLE_WIDTH &&
             y >= pathToggleMISY && y <= pathToggleMISY + PATH_TOGGLE_HEIGHT) {
             animSettings.pathEnableMIS = !animSettings.pathEnableMIS;
             return;
         }
-        if (x >= PATH_TOGGLE_X && x <= PATH_TOGGLE_X + PATH_TOGGLE_WIDTH &&
+        if (x >= TOGGLE_BUTTON_MARGIN_X && x <= TOGGLE_BUTTON_MARGIN_X + PATH_TOGGLE_WIDTH &&
             y >= pathToggleBSDFY && y <= pathToggleBSDFY + PATH_TOGGLE_HEIGHT) {
             animSettings.bsdfModel = (animSettings.bsdfModel == 0) ? 1 : 0;
             SyncMenuSliderValues();
@@ -860,12 +890,20 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
     if (x > BOTTOM_BUTTON_MARGIN_X_SAVE && x < BOTTOM_BUTTON_MARGIN_X_SAVE + BOTTOM_BUTTON_WIDTH_SAVE &&
         y > BOTTOM_BUTTON_MARGIN_Y_SAVE && y < BOTTOM_BUTTON_MARGIN_Y_SAVE + BOTTOM_BUTTON_HEIGHT_SAVE) {
 	SaveAllSettings();
+        strncpy(statusLabel, "Saved", sizeof(statusLabel) - 1);
+        statusLabel[sizeof(statusLabel) - 1] = '\0';
+        statusColor = (SDL_Color){120, 220, 120, 255};
+        statusExpireMs = SDL_GetTicks() + 2000;
     }
 
     // Restore Defaults Button Click
     if (x > BOTTOM_BUTTON_MARGIN_X_RESTORE && x < BOTTOM_BUTTON_MARGIN_X_RESTORE + BOTTOM_BUTTON_WIDTH_RESTORE &&
         y > BOTTOM_BUTTON_MARGIN_Y_RESTORE && y < BOTTOM_BUTTON_MARGIN_Y_RESTORE + BOTTOM_BUTTON_HEIGHT_RESTORE) {
 	ResetAnimationSettings();
+        strncpy(statusLabel, "Restored", sizeof(statusLabel) - 1);
+        statusLabel[sizeof(statusLabel) - 1] = '\0';
+        statusColor = (SDL_Color){200, 180, 120, 255};
+        statusExpireMs = SDL_GetTicks() + 2000;
     }
     // Preview Button Click
     if (x > BOTTOM_BUTTON_MARGIN_X_PREVIEW && x < BOTTOM_BUTTON_MARGIN_X_PREVIEW + BOTTOM_BUTTON_WIDTH_PREVIEW &&

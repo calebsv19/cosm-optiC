@@ -437,12 +437,26 @@ void RenderBezierEditor(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     RenderSceneObjects(renderer, true);
 
-    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
     if (sceneSettings.bezierPath.numPoints >= 2) {
         SDL_Color lightColor = {0, 255, 0, 255};
         SDL_Color handleColor = {255, 80, 80, 255};
         SDL_Color selectColor = {255, 255, 160, 255};
         RenderBezierPathCamera(renderer, &sceneSettings.bezierPath, true, &preview, lightColor, handleColor, selectedPoint, selectColor);
+    }
+    // Show faded camera path for context
+    if (sceneSettings.cameraPath.numPoints >= 2) {
+        SDL_Color camPathColor = {120, 180, 240, 130};
+        SDL_Color handleColor = (SDL_Color){0, 0, 0, 0};
+        SDL_Color selectColor = (SDL_Color){0, 0, 0, 0};
+        RenderBezierPathCameraStyled(renderer,
+                                     &sceneSettings.cameraPath,
+                                     false,
+                                     &preview,
+                                     camPathColor,
+                                     handleColor,
+                                     -1,
+                                     selectColor,
+                                     4);
     }
 
     sceneSettings.camera = original;

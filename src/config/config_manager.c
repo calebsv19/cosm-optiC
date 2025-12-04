@@ -1,5 +1,6 @@
 #include "config/config_manager.h"
 #include "scene/object_manager.h"
+#include "material/material_manager.h"
 #include <stdio.h>       // For file handling (fopen, fprintf, fclose, perror)
 #include <stdlib.h>      // For memory allocation (malloc, free)
 #include <string.h>      // For string functions (strncpy)
@@ -207,13 +208,16 @@ static void EnsureCameraPathDefault(void) {
 }
 
 void SaveAllSettings(void) {
-	SaveSceneConfig();
-	SaveAnimationConfig();
+    MaterialManagerInit();
+    SaveSceneConfig();
+    SaveAnimationConfig();
 }
 
 void LoadAllSettings(void) {
-        LoadSceneConfig();
-        LoadAnimationConfig();
+    MaterialManagerInit();
+    MaterialManagerLoadDir("Configs/materials");
+    LoadSceneConfig();
+    LoadAnimationConfig();
 }
 
 void SaveSceneConfig(void) {
@@ -262,6 +266,8 @@ void SaveSceneConfig(void) {
         json_object_object_add(jsonObj, "reflectivity", json_object_new_double(obj->reflectivity));
         json_object_object_add(jsonObj, "roughness", json_object_new_double(obj->roughness));
         json_object_object_add(jsonObj, "textureId", json_object_new_int(obj->textureId));
+        json_object_object_add(jsonObj, "materialId", json_object_new_int(obj->material_id));
+        json_object_object_add(jsonObj, "materialId", json_object_new_int(obj->material_id));
 
         if (strcmp(obj->type, "circle") == 0) {
             json_object_object_add(jsonObj, "radius", json_object_new_double(obj->radius));
@@ -427,7 +433,7 @@ static void LoadCameraConfig(struct json_object* config) {
 }
 
 void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
-    struct json_object *texture, *color, *opacity, *reflectivity, *roughness, *textureId;
+    struct json_object *texture, *color, *opacity, *reflectivity, *roughness, *textureId, *materialId;
 
     // Load texture path
     if (json_object_object_get_ex(obj, "texture", &texture)) {
@@ -467,6 +473,12 @@ void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
         sceneObject->textureId = json_object_get_int(textureId);
     } else {
         sceneObject->textureId = 0;
+    }
+
+    if (json_object_object_get_ex(obj, "materialId", &materialId)) {
+        sceneObject->material_id = json_object_get_int(materialId);
+    } else {
+        sceneObject->material_id = MaterialManagerDefaultId();
     }
 }
 
@@ -650,6 +662,14 @@ void LoadSceneConfig(void) {
         sceneSettings.rays = 2000;  //  Default value if not found
     }
     
+    // Clamp material ids to valid range
+    for (int i = 0; i < sceneSettings.objectCount; i++) {
+        if (sceneSettings.sceneObjects[i].material_id < 0 ||
+            sceneSettings.sceneObjects[i].material_id >= MaterialManagerCount()) {
+            sceneSettings.sceneObjects[i].material_id = MaterialManagerDefaultId();
+        }
+    }
+
     json_object_put(config);
     free(buffer);
     EnsureCameraPathDefault();

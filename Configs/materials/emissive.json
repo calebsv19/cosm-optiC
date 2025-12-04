@@ -1,0 +1,11 @@
+{
+  "name": "Emissive",
+  "diffuse": 0.0,
+  "specular": 0.0,
+  "reflectivity": 0.0,
+  "roughness": 1.0,
+  "base_color": [1.0, 1.0, 1.0],
+  "emissive": [0.1, 0.1, 0.1],
+  "metallic": 0.0,
+  "transparency": 0.0
+}

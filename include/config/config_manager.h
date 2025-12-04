@@ -6,6 +6,7 @@
 #include "path/path_system.h"  // Ensure Bézier path handling is included
 #include "camera/camera.h"
 #include "scene/object_manager.h"
+#include "material/material.h"
 
 #define MAX_SHAPE_POINTS 10  // Supports up to 10 points for custom shapes
 

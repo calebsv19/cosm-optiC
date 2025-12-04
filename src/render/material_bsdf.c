@@ -1,4 +1,5 @@
 #include "render/material_bsdf.h"
+#include "material/material_manager.h"
 
 #include <float.h>
 #include <math.h>
@@ -204,16 +205,22 @@ static bool BSDFSampleGGX(const MaterialBSDF* material,
 
 void MaterialBSDFInitFromSceneObject(const SceneObject* obj, MaterialBSDF* material) {
     if (!obj || !material) return;
+    const Material* preset = MaterialManagerGet(obj->material_id);
     memset(material, 0, sizeof(*material));
-    material->albedo = ExtractBaseAlbedo(obj);
+    double objLuma = ExtractBaseAlbedo(obj);
+    double presetLuma = 1.0;
+    if (preset) {
+        presetLuma = Clamp01(0.2126 * preset->base_color.x + 0.7152 * preset->base_color.y + 0.0722 * preset->base_color.z);
+    }
+    material->albedo = Clamp01(objLuma * presetLuma);
     material->opacity = Clamp01(obj->opacity);
-    material->reflectivity = Clamp01(obj->reflectivity);
-    material->roughness = Clamp(obj->roughness, 0.02, 1.0);
+    material->reflectivity = Clamp01(preset ? preset->reflectivity : obj->reflectivity);
+    material->roughness = Clamp(preset ? preset->roughness : obj->roughness, 0.02, 1.0);
     material->ior = (material->reflectivity > 0.0) ? 1.45 : 1.0;
     material->textureId = obj->textureId;
-    material->model = SelectModel(obj);
-    material->specWeight = material->reflectivity;
-    material->diffuseWeight = Clamp01(1.0 - material->reflectivity);
+    material->model = (material->reflectivity > 0.05) ? MATERIAL_BSDF_GGX : MATERIAL_BSDF_LAMBERT;
+    material->specWeight = (preset ? preset->specular : 0.0) + material->reflectivity;
+    material->diffuseWeight = preset ? preset->diffuse : Clamp01(1.0 - material->reflectivity);
     material->weightSum = material->diffuseWeight + material->specWeight;
     if (material->weightSum <= 1e-4) {
         material->diffuseWeight = 1.0;

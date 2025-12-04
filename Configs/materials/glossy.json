@@ -1,0 +1,11 @@
+{
+  "name": "Glossy Paint",
+  "diffuse": 0.6,
+  "specular": 0.25,
+  "reflectivity": 0.4,
+  "roughness": 0.25,
+  "base_color": [1.0, 1.0, 1.0],
+  "emissive": [0.0, 0.0, 0.0],
+  "metallic": 0.0,
+  "transparency": 0.0
+}

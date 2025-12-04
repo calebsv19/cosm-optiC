@@ -1,5 +1,6 @@
 #include "scene/object_manager.h"
 #include "config/config_manager.h"
+#include "material/material_manager.h"
 #include <string.h>
 #include <math.h>
 #include <stdlib.h>
@@ -11,6 +12,7 @@ static void InitDefaultMaterial(SceneObject* obj) {
     obj->reflectivity = 0.35;
     obj->roughness = 0.65;
     obj->textureId = 0;
+    obj->material_id = MaterialManagerDefaultId();
 }
 
 void InitObject(SceneObject* obj, int type, double x, double y, double param1, double param2, double points[][2], int numPoints) {

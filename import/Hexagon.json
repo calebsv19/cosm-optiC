@@ -1,0 +1,34 @@
+{
+	"version":	1,
+	"shapes":	[{
+			"name":	"config/Hexagon.json",
+			"paths":	[{
+					"closed":	true,
+					"segments":	[{
+							"type":	"line",
+							"p0":	[-5, -5],
+							"p1":	[5, -5]
+						}, {
+							"type":	"line",
+							"p0":	[5, -5],
+							"p1":	[10, 0]
+						}, {
+							"type":	"line",
+							"p0":	[10, 0],
+							"p1":	[5, 5]
+						}, {
+							"type":	"line",
+							"p0":	[5, 5],
+							"p1":	[-5, 5]
+						}, {
+							"type":	"line",
+							"p0":	[-5, 5],
+							"p1":	[-10, 0]
+						}, {
+							"type":	"line",
+							"p0":	[-10, 0],
+							"p1":	[-5, -5]
+						}]
+				}]
+		}]
+}

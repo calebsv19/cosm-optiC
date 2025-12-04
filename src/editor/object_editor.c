@@ -7,6 +7,7 @@
 #include "geo/shape_library.h"
 #include "import/shape_import.h"
 #include "geo/shape_asset.h"
+#include "material/material_manager.h"
 #include <dirent.h>
 #include <stdio.h>
 #include <math.h>
@@ -55,6 +56,9 @@ static int selectedAssetIndex = -1;
 static ShapeAssetLibrary assetLib = {0};
 static char importNames[MAX_ASSET_LIST][256];
 static int importCount = 0;
+static SDL_Rect materialPanelRect;
+static int selectedMaterialIndex = -1;
+static const int MATERIAL_ROW_HEIGHT = 18;
 
 static Camera BuildObjectEditorCamera(void) {
     double margin = GetCurrentMarginPixels();
@@ -160,6 +164,42 @@ static void DrawAssetList(SDL_Renderer* renderer) {
     SDL_SetRenderDrawBlendMode(renderer, prevMode);
 }
 
+static void DrawMaterialList(SDL_Renderer* renderer) {
+    SDL_Rect panel = materialPanelRect;
+    SDL_BlendMode prevMode;
+    SDL_GetRenderDrawBlendMode(renderer, &prevMode);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+    SDL_SetRenderDrawColor(renderer, 40, 40, 40, 30);
+    SDL_RenderFillRect(renderer, &panel);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 25);
+    SDL_RenderDrawRect(renderer, &panel);
+
+    int count = MaterialManagerCount();
+    int listY = panel.y + 6;
+    for (int i = 0; i < count; ++i) {
+        SDL_Rect row = {panel.x + 6, listY + i * MATERIAL_ROW_HEIGHT, panel.w - 12, MATERIAL_ROW_HEIGHT - 2};
+        bool selected = (i == selectedMaterialIndex);
+        SDL_SetRenderDrawColor(renderer, selected ? 70 : 25, selected ? 140 : 25, selected ? 220 : 25, 200);
+        SDL_RenderFillRect(renderer, &row);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderDrawRect(renderer, &row);
+
+        const char* label = "Material";
+        switch (i) {
+            case MATERIAL_PRESET_DEFAULT: label = "Default"; break;
+            case MATERIAL_PRESET_MIRROR: label = "Mirror"; break;
+            case MATERIAL_PRESET_ROUGH_METAL: label = "Rough Metal"; break;
+            case MATERIAL_PRESET_GLOSSY: label = "Glossy"; break;
+            case MATERIAL_PRESET_EMISSIVE: label = "Emissive"; break;
+            default: break;
+        }
+        RenderButtonText(renderer, row, label);
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer, prevMode);
+}
+
 void InitializeObjectEditor(void) {
     // **Initialize Button Positions Based on Window Size**
     width = sceneSettings.windowWidth;
@@ -178,6 +218,7 @@ void InitializeObjectEditor(void) {
 
     assetPanelRect = (SDL_Rect){20, 60, ASSET_PANEL_WIDTH, 260};
     assetToggleRect = (SDL_Rect){assetPanelRect.x + 6, assetPanelRect.y + 6, assetPanelRect.w - 12, 24};
+    materialPanelRect = (SDL_Rect){assetPanelRect.x, assetPanelRect.y + assetPanelRect.h + 12, assetPanelRect.w, 200};
     RefreshAssetLibrary();
     RefreshImportList();
 }
@@ -245,6 +286,7 @@ numPoints) {
         InitObject(newObj, type, x, y, param1, param2, points, numPoints);
     }
 
+    newObj->material_id = MaterialManagerDefaultId();
     sceneSettings.objectCount++;
     UpdateObject(newObj);
     printf("Added Object %d at (%.2f, %.2f)\n", index, x, y);
@@ -439,19 +481,30 @@ void RenderObjectEditor(SDL_Renderer* renderer) {
         }
     }
 
-    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
-    SDL_Color pathColor = {100, 120, 100, 140};
-    SDL_Color handleColor = {255, 80, 80, 80};
-    SDL_Color selectColor = {255, 255, 160, 255};
+    SDL_Color lightPathColor = {140, 200, 140, 130}; // faded green
+    SDL_Color camPathColor = {120, 180, 240, 130};   // faded blue
+    SDL_Color handleColor = (SDL_Color){0, 0, 0, 0};
+    SDL_Color selectColor = (SDL_Color){0, 0, 0, 0};
     RenderBezierPathCameraStyled(renderer,
                                  &sceneSettings.bezierPath,
                                  false,
                                  &preview,
-                                 pathColor,
+                                 lightPathColor,
                                  handleColor,
                                  -1,
                                  selectColor,
                                  4);
+    if (sceneSettings.cameraPath.numPoints >= 2) {
+        RenderBezierPathCameraStyled(renderer,
+                                     &sceneSettings.cameraPath,
+                                     false,
+                                     &preview,
+                                     camPathColor,
+                                     handleColor,
+                                     -1,
+                                     selectColor,
+                                     4);
+    }
 
     sceneSettings.camera = original;
 
@@ -467,6 +520,7 @@ void RenderObjectEditor(SDL_Renderer* renderer) {
     }
 
     DrawAssetList(renderer);
+    DrawMaterialList(renderer);
 }
 
 
@@ -550,6 +604,19 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
                         selectedAssetIndex = idx;
                         selectedObjectIndex = -1;
                     }
+                }
+            }
+            return;
+        }
+
+        if (mx >= materialPanelRect.x && mx <= materialPanelRect.x + materialPanelRect.w &&
+            my >= materialPanelRect.y && my <= materialPanelRect.y + materialPanelRect.h) {
+            int listY = materialPanelRect.y + 6;
+            int idx = (my - listY) / MATERIAL_ROW_HEIGHT;
+            if (idx >= 0 && idx < MaterialManagerCount()) {
+                selectedMaterialIndex = idx;
+                if (selectedObjectIndex >= 0 && selectedObjectIndex < sceneSettings.objectCount) {
+                    sceneSettings.sceneObjects[selectedObjectIndex].material_id = idx;
                 }
             }
             return;
@@ -663,6 +730,9 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
         // Call CheckObjectClick to handle object interaction
         if (CheckObjectClick(worldX, worldY)) {
             selectedAssetIndex = -1; // only one selection active
+            if (selectedObjectIndex >= 0 && selectedObjectIndex < sceneSettings.objectCount) {
+                selectedMaterialIndex = sceneSettings.sceneObjects[selectedObjectIndex].material_id;
+            }
             return;
         }
 
