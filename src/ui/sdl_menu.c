@@ -53,6 +53,11 @@
 #define BOTTOM_BUTTON_MARGIN_X_EXIT (MENU_MARGIN_X)
 #define BOTTOM_BUTTON_MARGIN_Y_EXIT (MENU_HEIGHT -MENU_MARGIN_Y - BOTTOM_BUTTON_HEIGHT_RESTORE - 0)
 
+#define BOTTOM_BUTTON_WIDTH_PREVIEW 180
+#define BOTTOM_BUTTON_HEIGHT_PREVIEW 40
+#define BOTTOM_BUTTON_MARGIN_X_PREVIEW (MENU_MARGIN_X)
+#define BOTTOM_BUTTON_MARGIN_Y_PREVIEW (BOTTOM_BUTTON_MARGIN_Y_EXIT - BOTTOM_BUTTON_HEIGHT_PREVIEW - BOTTOM_BUTTON_SPACING)
+
 #define BOTTOM_BUTTON_WIDTH_RESTORE 180
 #define BOTTOM_BUTTON_HEIGHT_RESTORE 40
 #define BOTTOM_BUTTON_MARGIN_X_RESTORE (BOTTOM_BUTTON_MARGIN_X_EXIT + BOTTOM_BUTTON_WIDTH_RESTORE + 10)
@@ -282,6 +287,7 @@ bool InitializeMenu(SDL_Window** window, SDL_Renderer** renderer, TTF_Font** fon
     // Load animation settings
     LoadAnimationConfig();
     LoadSceneConfig();
+    animSettings.previewMode = false; // Preview is transient
     SyncMenuSliderValues();
     oldWindowWidth = sceneSettings.windowWidth;
     oldWindowHeight = sceneSettings.windowHeight;
@@ -312,6 +318,8 @@ void ResetAnimationSettings(void) {
     animSettings.cacheContributionWeight = 1.0;
     animSettings.bsdfModel = 1;
     animSettings.lightIntensity = 5.0;
+    animSettings.previewMode = false;
+    animSettings.previewDuration = 5.0;
     double diag = hypot(sceneSettings.windowWidth, sceneSettings.windowHeight);
     animSettings.forwardDecay = (diag > 0.0) ? diag : 2000.0;
     animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_QUADRATIC;
@@ -564,6 +572,8 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
                  BOTTOM_BUTTON_WIDTH_SAVE, BOTTOM_BUTTON_HEIGHT_SAVE, "Save", false);
     RenderButton(renderer, font, BOTTOM_BUTTON_MARGIN_X_RESTORE, BOTTOM_BUTTON_MARGIN_Y_RESTORE,
                  BOTTOM_BUTTON_WIDTH_RESTORE, BOTTOM_BUTTON_HEIGHT_RESTORE, "Restore Defaults", false);
+    RenderButton(renderer, font, BOTTOM_BUTTON_MARGIN_X_PREVIEW, BOTTOM_BUTTON_MARGIN_Y_PREVIEW,
+                 BOTTOM_BUTTON_WIDTH_PREVIEW, BOTTOM_BUTTON_HEIGHT_PREVIEW, "Preview", animSettings.previewMode);
     RenderButton(renderer, font, BOTTOM_BUTTON_MARGIN_X_EXIT, BOTTOM_BUTTON_MARGIN_Y_EXIT,
                  BOTTOM_BUTTON_WIDTH_EXIT, BOTTOM_BUTTON_HEIGHT_EXIT, "Exit w/o Saving", false); 
     RenderButton(renderer, font, BOTTOM_BUTTON_MARGIN_X_START, BOTTOM_BUTTON_MARGIN_Y_START,
@@ -857,6 +867,14 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
         y > BOTTOM_BUTTON_MARGIN_Y_RESTORE && y < BOTTOM_BUTTON_MARGIN_Y_RESTORE + BOTTOM_BUTTON_HEIGHT_RESTORE) {
 	ResetAnimationSettings();
     }
+    // Preview Button Click
+    if (x > BOTTOM_BUTTON_MARGIN_X_PREVIEW && x < BOTTOM_BUTTON_MARGIN_X_PREVIEW + BOTTOM_BUTTON_WIDTH_PREVIEW &&
+        y > BOTTOM_BUTTON_MARGIN_Y_PREVIEW && y < BOTTOM_BUTTON_MARGIN_Y_PREVIEW + BOTTOM_BUTTON_HEIGHT_PREVIEW) {
+        animSettings.previewMode = true;
+        *menuExitedNormally = true;
+        *running = false;
+        return;
+    }
     // Exit without saving Button Click
     if (x > BOTTOM_BUTTON_MARGIN_X_EXIT && x < BOTTOM_BUTTON_MARGIN_X_EXIT + BOTTOM_BUTTON_WIDTH_EXIT &&
         y > BOTTOM_BUTTON_MARGIN_Y_EXIT && y < BOTTOM_BUTTON_MARGIN_Y_EXIT + BOTTOM_BUTTON_HEIGHT_EXIT) {
@@ -867,6 +885,7 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
     if (x > BOTTOM_BUTTON_MARGIN_X_START && x < BOTTOM_BUTTON_MARGIN_X_START + BOTTOM_BUTTON_WIDTH_START &&
         y > BOTTOM_BUTTON_MARGIN_Y_START && y < BOTTOM_BUTTON_MARGIN_Y_START + BOTTOM_BUTTON_HEIGHT_START) {
 	SaveAllSettings();
+        animSettings.previewMode = false;
         *menuExitedNormally = true;
         *running = false;
     }

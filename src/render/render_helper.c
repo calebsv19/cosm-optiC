@@ -1,6 +1,7 @@
 #include "render/render_helper.h"
 #include "config/config_manager.h"
 #include "camera/camera.h"
+#include "math/vec2.h"
 #include <SDL2/SDL.h>
 #include <math.h>
 #include <stdbool.h>
@@ -8,9 +9,9 @@
 #include <stdlib.h>
 
 int CalculateObjectBrightness(SceneObject* obj, double lightX, double lightY) {
-    double dx = obj->x - lightX;
-    double dy = obj->y - lightY;
-    double distance = sqrt(dx * dx + dy * dy);
+    Vec2 o = vec2(obj->x, obj->y);
+    Vec2 l = vec2(lightX, lightY);
+    double distance = vec2_length(vec2_sub(o, l));
 
     // Normalize distance for a smooth fade effect
     double maxDistance = sqrt(sceneSettings.windowWidth * sceneSettings.windowWidth +
@@ -27,11 +28,12 @@ int CalculateObjectBrightness(SceneObject* obj, double lightX, double lightY) {
 
 
 static CameraPoint ToScreen(double worldX, double worldY) {
-    return CameraWorldToScreen(&sceneSettings.camera,
-                               worldX,
-                               worldY,
-                               sceneSettings.windowWidth,
-                               sceneSettings.windowHeight);
+    Vec2 screen = CameraWorldToScreenVec2(&sceneSettings.camera,
+                                          vec2(worldX, worldY),
+                                          sceneSettings.windowWidth,
+                                          sceneSettings.windowHeight);
+    CameraPoint out = {screen.x, screen.y};
+    return out;
 }
 
 static void BuildScreenShapePoints(SceneObject* obj, int screenPoints[MAX_POINTS][2]) {

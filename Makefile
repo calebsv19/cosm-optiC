@@ -10,19 +10,22 @@ SDL_LIBS   := $(shell sdl2-config --libs)
 SDL_PREFIX := $(shell sdl2-config --prefix 2>/dev/null)
 SDL_EXTRA_INC := $(if $(SDL_PREFIX),-I$(SDL_PREFIX)/include,)
 
-CFLAGS  := $(CSTD) -Wall -Wextra -Wpedantic -g $(SDL_CFLAGS) $(SDL_EXTRA_INC) -I$(INC_DIR) -DMAIN_DRIVER
+CFLAGS  := $(CSTD) -Wall -Wextra -Wpedantic -g $(SDL_CFLAGS) $(SDL_EXTRA_INC) -I$(INC_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -Isrc/render/TimerHUD/external -DMAIN_DRIVER
 LDFLAGS := $(SDL_LIBS) -lSDL2_ttf -ljson-c -lm
 
-CFLAGS_RELEASE := $(CSTD) -Wall -Wextra -Wpedantic -O3 $(SDL_CFLAGS) $(SDL_EXTRA_INC) -I$(INC_DIR) -DMAIN_DRIVER -DNDEBUG \
+CFLAGS_RELEASE := $(CSTD) -Wall -Wextra -Wpedantic -O3 $(SDL_CFLAGS) $(SDL_EXTRA_INC) -I$(INC_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -Isrc/render/TimerHUD/external -DMAIN_DRIVER -DNDEBUG \
 	-ffast-math -fno-math-errno -march=native
 REL_BUILD_DIR := build_release
 REL_TARGET := Ray_anim_release
+
+CLI_BIN_DIR := tools/cli/bin
+CLI_TOOLS := $(CLI_BIN_DIR)/shape_asset_tool $(CLI_BIN_DIR)/shape_import_tool
 
 VIDEO_FRAMES_DIR ?= Animations/default
 VIDEO_OUTPUT ?= Animations/Vids/output.mp4
 VIDEO_FPS ?= 30
 
-SRC := $(shell find $(SRC_DIR) -name '*.c')
+SRC := $(shell find $(SRC_DIR) -name '*.c' ! -path '$(SRC_DIR)/tools/cli/*')
 OBJ := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRC))
 DEP := $(OBJ:.o=.d)
 
@@ -32,6 +35,16 @@ all: $(TARGET)
 
 $(TARGET): $(OBJ)
 	$(CC) $(OBJ) -o $@ $(LDFLAGS)
+
+cli-tools: $(CLI_TOOLS)
+
+$(CLI_BIN_DIR)/shape_asset_tool: build/tools/cli/shape_asset_tool.o build/import/shape_import.o build/geo/geolib/shape_asset.o build/geo/geolib/shape_library.o build/tools/ShapeLib/shape_json.o build/tools/ShapeLib/shape_flatten.o build/tools/ShapeLib/shape_core.o build/render/TimerHUD/external/cJSON.o
+	@mkdir -p $(CLI_BIN_DIR)
+	$(CC) $^ -o $@ $(LDFLAGS)
+
+$(CLI_BIN_DIR)/shape_import_tool: build/tools/cli/shape_import_tool.o build/import/shape_import.o build/tools/ShapeLib/shape_json.o build/tools/ShapeLib/shape_flatten.o build/tools/ShapeLib/shape_core.o build/render/TimerHUD/external/cJSON.o
+	@mkdir -p $(CLI_BIN_DIR)
+	$(CC) $^ -o $@ $(LDFLAGS)
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 	@mkdir -p $(dir $@)

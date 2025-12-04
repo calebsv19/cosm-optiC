@@ -28,6 +28,11 @@ extern Path bezierPath;  // Fix: Add missing Bézier path variable
 // Initializes SDL and necessary resources.
 int AnimationInit(void);
 
+// Runs a lightweight preview (no ray tracing).
+void RunPreviewMode(void);
+// Runs preview from within editors (assumes SDL already initialized).
+void RunPreviewModeEmbedded(void);
+
 // Runs the main loop.
 void RunMainLoop(void);
 

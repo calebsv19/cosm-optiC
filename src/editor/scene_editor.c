@@ -5,6 +5,7 @@
 #include "editor/camera_editor.h"   //  Required for camera adjustments
 #include "config/config_manager.h"  //  Required for loading/saving scene settings
 #include "scene/object_manager.h"
+#include "app/animation.h"
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
@@ -14,6 +15,7 @@
 
 // UI Button
 SDL_Rect applyButton = {1000, 700, 150, 50};
+SDL_Rect previewButton;
 SDL_Rect changeModeButton;
 SDL_Rect addButton;  // Small square
 SDL_Rect deleteButton;
@@ -63,6 +65,7 @@ void InitializeSceneEditor(SceneEditor* editor) {
     toggleButton = (SDL_Rect){width - buttonWidth - 20, 140, buttonWidth, 40};
     
     applyButton = (SDL_Rect){width - 180, height - 80, 150, 50};  // Bottom-right apply button
+    previewButton = (SDL_Rect){applyButton.x - 170, applyButton.y, 150, 50}; // Left of apply
     changeModeButton = (SDL_Rect){width - 160, height - 135, 130, 40};  
 
     InitializeEditorMode(editor);
@@ -77,6 +80,8 @@ void RenderSceneButtons(SDL_Renderer* renderer) {
     //Individual Buttons
     SDL_SetRenderDrawColor(renderer, 50, 255, 50, 255);
     SDL_RenderFillRect(renderer, &applyButton);
+    SDL_SetRenderDrawColor(renderer, 180, 180, 180, 255);
+    SDL_RenderFillRect(renderer, &previewButton);
     SDL_SetRenderDrawColor(renderer, 0, 200, 255, 255);
     SDL_RenderFillRect(renderer, &changeModeButton);
     
@@ -84,6 +89,8 @@ void RenderSceneButtons(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderDrawRect(renderer, &applyButton);
     RenderButtonText(renderer, applyButton, "Apply");
+    SDL_RenderDrawRect(renderer, &previewButton);
+    RenderButtonText(renderer, previewButton, "Preview");
     SDL_RenderDrawRect(renderer, &changeModeButton);
     RenderButtonText(renderer, changeModeButton, "Change Mode");
 }
@@ -154,6 +161,12 @@ void HandleSceneEditorEvents(SceneEditor* editor, SDL_Event* event) {
         int mx = event->button.x;
         int my = event->button.y;
 
+        // Preview Button
+        if (mx >= previewButton.x && mx <= previewButton.x + previewButton.w &&
+            my >= previewButton.y && my <= previewButton.y + previewButton.h) {
+            RunPreviewModeEmbedded();
+            return;
+        }
         // Check if clicking on Change Mode Button
         if (mx >= changeModeButton.x && mx <= changeModeButton.x + changeModeButton.w &&
             my >= changeModeButton.y && my <= changeModeButton.y + changeModeButton.h) {
@@ -196,6 +209,8 @@ bool IsClickingButtonMain(int mx, int my) {
     // Check if click is within main buttons
     if ((mx >= applyButton.x && mx <= applyButton.x + applyButton.w && my >= applyButton.y 
                 && my <= applyButton.y + applyButton.h) ||
+        (mx >= previewButton.x && mx <= previewButton.x + previewButton.w && my >= previewButton.y
+                && my <= previewButton.y + previewButton.h) ||
 	(mx >= changeModeButton.x && mx <= changeModeButton.x + changeModeButton.w &&
             my >= changeModeButton.y && my <= changeModeButton.y + changeModeButton.h)) {
 	return true;  // Click is inside a UI button

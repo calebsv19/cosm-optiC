@@ -10,6 +10,7 @@
 #include "editor/camera_editor.h"
 
 extern SDL_Rect applyButton;
+extern SDL_Rect previewButton;
 extern bool sceneEditorExitFlag;
 
 // Scene Editor: Manages all scene-wide settings
@@ -34,4 +35,3 @@ bool IsClickingButtonMain(int mx,int my);
 void SetSceneMode(SceneEditor* editor, int mode);
 
 #endif // SCENE_EDITOR_H
-

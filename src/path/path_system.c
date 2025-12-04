@@ -2,6 +2,8 @@
 #include "path/path_system.h"
 #include "config/config_manager.h"
 #include "camera/camera.h"
+#include "math/vec2.h"
+#include "math/math_utils.h"
 #include <math.h>
 #include <stdio.h>
 #include <SDL2/SDL.h>
@@ -13,16 +15,22 @@ static double ScaleHandle(double value) {
     return (value >= 0) ? (exp(value * c) - 1) : -(exp(-value * c) - 1);
 }
 
+static Vec2 PointToVec2(Point p) { return vec2(p.x, p.y); }
+static Point Vec2ToPoint(Vec2 v) { return (Point){v.x, v.y}; }
+static double LerpAngle(double a, double b, double t) {
+    double delta = atan2(sin(b - a), cos(b - a));
+    return a + delta * t;
+}
+
 // Generalized de Casteljau for single segment interpolation
-static Point DeCasteljau(Point* controlPoints, int numPoints, double t) {
-    Point tempPoints[numPoints];
+static Vec2 DeCasteljau(Vec2* controlPoints, int numPoints, double t) {
+    Vec2 tempPoints[numPoints];
     for (int i = 0; i < numPoints; i++)
         tempPoints[i] = controlPoints[i];
 
     for (int k = 1; k < numPoints; k++) {
         for (int i = 0; i < numPoints - k; i++) {
-            tempPoints[i].x = (1 - t) * tempPoints[i].x + t * tempPoints[i + 1].x;
-            tempPoints[i].y = (1 - t) * tempPoints[i].y + t * tempPoints[i + 1].y;
+            tempPoints[i] = vec2_lerp(tempPoints[i], tempPoints[i + 1], t);
         }
     }
 
@@ -43,8 +51,8 @@ Point GetPositionAlongPath(Path* path, double t) {
     if (segmentIndex >= segmentCount) segmentIndex = segmentCount - 1;
     if (segmentIndex < 0) segmentIndex = 0;
 
-    Point p0 = path->points[segmentIndex];
-    Point p3 = path->points[segmentIndex + 1];
+    Vec2 p0 = PointToVec2(path->points[segmentIndex]);
+    Vec2 p3 = PointToVec2(path->points[segmentIndex + 1]);
 
     // Scale handle offsets non-linearly (existing logic)
     double scaled_vx1 = ScaleHandle(path->handles[segmentIndex][0].vx);
@@ -52,10 +60,10 @@ Point GetPositionAlongPath(Path* path, double t) {
     double scaled_vx2 = ScaleHandle(path->handles[segmentIndex][1].vx);
     double scaled_vy2 = ScaleHandle(path->handles[segmentIndex][1].vy);
 
-    Point p1 = {p0.x + scaled_vx1, p0.y + scaled_vy1};
-    Point p2 = {p3.x + scaled_vx2, p3.y + scaled_vy2};
+    Vec2 p1 = vec2(p0.x + scaled_vx1, p0.y + scaled_vy1);
+    Vec2 p2 = vec2(p3.x + scaled_vx2, p3.y + scaled_vy2);
 
-    Point controlPoints[4];
+    Vec2 controlPoints[4];
     int controlPointCount = 0;
 
     if (path->mode == BEZIER_CUBIC) {
@@ -71,13 +79,59 @@ Point GetPositionAlongPath(Path* path, double t) {
         controlPointCount = 3;
     }
 
-    return DeCasteljau(controlPoints, controlPointCount, localT);
+    Vec2 result = DeCasteljau(controlPoints, controlPointCount, localT);
+    return Vec2ToPoint(result);
 }
 
 static double Distance(Point a, Point b) {
-    double dx = a.x - b.x;
-    double dy = a.y - b.y;
-    return sqrt(dx * dx + dy * dy);
+    Vec2 va = PointToVec2(a);
+    Vec2 vb = PointToVec2(b);
+    return vec2_length(vec2_sub(va, vb));
+}
+
+static void MapNormalizedT(Path* path, double t, int* outSegment, double* outLocalT) {
+    if (!path || path->numPoints < 2) {
+        if (outSegment) *outSegment = 0;
+        if (outLocalT) *outLocalT = 0.0;
+        return;
+    }
+
+    double totalLen = PathApproximateLength(path);
+    if (totalLen <= 1e-6) {
+        if (outSegment) *outSegment = 0;
+        if (outLocalT) *outLocalT = clampd(t, 0.0, 1.0);
+        return;
+    }
+
+    double target = clampd(t, 0.0, 1.0) * totalLen;
+    const int samplesPerSegment = 20;
+    int segments = path->numPoints - 1;
+
+    double accumulated = 0.0;
+    Point prev = path->points[0];
+
+    for (int seg = 0; seg < segments; seg++) {
+        for (int s = 1; s <= samplesPerSegment; s++) {
+            double localT = (double)s / (double)samplesPerSegment;
+            double globalT = ((double)seg + localT) / (double)segments;
+            Point p = GetPositionAlongPath(path, globalT);
+            double segLen = Distance(prev, p);
+
+            if (accumulated + segLen >= target) {
+                double remaining = target - accumulated;
+                double frac = (segLen > 1e-6) ? remaining / segLen : 0.0;
+                if (outSegment) *outSegment = seg;
+                if (outLocalT) *outLocalT = ((double)(s - 1) + frac) / (double)samplesPerSegment;
+                return;
+            }
+
+            accumulated += segLen;
+            prev = p;
+        }
+    }
+
+    if (outSegment) *outSegment = segments - 1;
+    if (outLocalT) *outLocalT = 1.0;
 }
 
 double PathApproximateLength(Path* path) {
@@ -100,41 +154,24 @@ double PathApproximateLength(Path* path) {
 }
 
 Point GetPositionAlongPathNormalized(Path* path, double t) {
-    if (!path || path->numPoints < 2) {
-        return (Point){0, 0};
-    }
-    double totalLen = PathApproximateLength(path);
-    if (totalLen <= 1e-6) {
-        return GetPositionAlongPath(path, t);
-    }
+    int seg = 0;
+    double localT = 0.0;
+    MapNormalizedT(path, t, &seg, &localT);
 
-    double clampedT = fmax(0.0, fmin(1.0, t));
-    double target = clampedT * totalLen;
-    const int samplesPerSegment = 20;
-    int segments = path->numPoints - 1;
+    int segments = (path && path->numPoints >= 2) ? (path->numPoints - 1) : 1;
+    double globalT = ((double)seg + localT) / (double)segments;
+    return GetPositionAlongPath(path, globalT);
+}
 
-    Point prev = path->points[0];
-    double traveled = 0.0;
-    for (int seg = 0; seg < segments; seg++) {
-        for (int s = 1; s <= samplesPerSegment; s++) {
-            double localT = (double)s / (double)samplesPerSegment;
-            double globalT = ((double)seg + localT) / (double)segments;
-            Point p = GetPositionAlongPath(path, globalT);
-            double step = Distance(prev, p);
-            if (traveled + step >= target && step > 1e-9) {
-                double ratio = (target - traveled) / step;
-                Point out = {
-                    prev.x + (p.x - prev.x) * ratio,
-                    prev.y + (p.y - prev.y) * ratio
-                };
-                return out;
-            }
-            traveled += step;
-            prev = p;
-        }
-    }
-
-    return path->points[path->numPoints - 1];
+double GetRotationAlongPathNormalized(Path* path, double t) {
+    if (!path || path->numPoints < 1) return 0.0;
+    int seg = 0;
+    double localT = 0.0;
+    MapNormalizedT(path, t, &seg, &localT);
+    int next = (seg + 1 < path->numPoints) ? (seg + 1) : seg;
+    double a0 = path->rotations[seg];
+    double a1 = path->rotations[next];
+    return LerpAngle(a0, a1, localT);
 }
 
 
@@ -176,14 +213,27 @@ static SDL_Color UseColor(SDL_Color color, SDL_Color fallback) {
     return color;
 }
 
-void RenderBezierPathCamera(SDL_Renderer* renderer,
-                            Path* path,
-                            bool drawHandles,
-                            const Camera* camera,
-                            SDL_Color curveColor) {
+static int ResolveRadius(int radius) {
+    if (radius <= 0) return POINT_RADIUS;
+    return radius;
+}
+
+void RenderBezierPathCameraStyled(SDL_Renderer* renderer,
+                                  Path* path,
+                                  bool drawHandles,
+                                  const Camera* camera,
+                                  SDL_Color curveColor,
+                                  SDL_Color handleColor,
+                                  int selectedIndex,
+                                  SDL_Color selectedColor,
+                                  int pointRadius) {
     if (!path || path->numPoints < 2) return;
 
+    const int radius = ResolveRadius(pointRadius);
+
     SDL_Color curve = UseColor(curveColor, (SDL_Color){0, 255, 0, 255});
+    SDL_Color handles = UseColor(handleColor, (SDL_Color){255, 165, 0, 255});
+    SDL_Color selCol = UseColor(selectedColor, (SDL_Color){255, 255, 120, 255});
 
     // **Draw Bézier curve as dashed line**
     SDL_SetRenderDrawColor(renderer, curve.r, curve.g, curve.b, curve.a); // Curve color
@@ -215,7 +265,7 @@ void RenderBezierPathCamera(SDL_Renderer* renderer,
     }
 
     if (drawHandles) {
-        SDL_SetRenderDrawColor(renderer, 255, 165, 0, 255); // Orange for handle points
+        SDL_SetRenderDrawColor(renderer, handles.r, handles.g, handles.b, handles.a); // Handle points
         for (int i = 0; i < path->numPoints - 1; i++) {
             Point handle1w = {path->points[i].x + path->handles[i][0].vx, path->points[i].y + path->handles[i][0].vy};
             Point handle2w = {path->points[i + 1].x + path->handles[i][1].vx, path->points[i + 1].y + path->handles[i][1].vy};
@@ -234,12 +284,24 @@ void RenderBezierPathCamera(SDL_Renderer* renderer,
     }
 
     // **Draw control points as circles**
-    SDL_SetRenderDrawColor(renderer, curve.r, curve.g, curve.b, curve.a); // Control points
+    SDL_Color startCol = {0, 200, 0, 220};
+    SDL_Color endCol = {220, 40, 40, 220};
+
+    // Control points (with selection highlight)
     for (int i = 0; i < path->numPoints; i++) {
+        SDL_Color pointColor = curve;
+        if (i == selectedIndex) {
+            pointColor = selCol;
+        } else if (i == 0) {
+            pointColor = startCol;
+        } else if (i == path->numPoints - 1) {
+            pointColor = endCol;
+        }
+        SDL_SetRenderDrawColor(renderer, pointColor.r, pointColor.g, pointColor.b, pointColor.a);
         SDL_Point center = ToCameraPoint(path->points[i].x, path->points[i].y, camera);
-        for (int dx = -POINT_RADIUS; dx <= POINT_RADIUS; dx++) {
-            for (int dy = -POINT_RADIUS; dy <= POINT_RADIUS; dy++) {
-                if (dx * dx + dy * dy <= POINT_RADIUS * POINT_RADIUS) {
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dy = -radius; dy <= radius; dy++) {
+                if (dx * dx + dy * dy <= radius * radius) {
                     SDL_RenderDrawPoint(renderer, center.x + dx, center.y + dy);
                 }
             }
@@ -248,16 +310,16 @@ void RenderBezierPathCamera(SDL_Renderer* renderer,
 
     // **Draw handle points (only if handles should be drawn)**
     if (drawHandles) {
-        SDL_SetRenderDrawColor(renderer, 255, 165, 0, 255); // Orange for handle points
+        SDL_SetRenderDrawColor(renderer, handles.r, handles.g, handles.b, handles.a); // Handle points
         for (int i = 0; i < path->numPoints - 1; i++) {
             Point handle1w = {path->points[i].x + path->handles[i][0].vx, path->points[i].y + path->handles[i][0].vy};
             Point handle2w = {path->points[i + 1].x + path->handles[i][1].vx, path->points[i + 1].y + path->handles[i][1].vy};
             SDL_Point handle1 = ToCameraPoint(handle1w.x, handle1w.y, camera);
             SDL_Point handle2 = ToCameraPoint(handle2w.x, handle2w.y, camera);
 
-            for (int dx = -POINT_RADIUS; dx <= POINT_RADIUS; dx++) {
-                for (int dy = -POINT_RADIUS; dy <= POINT_RADIUS; dy++) {
-                    if (dx * dx + dy * dy <= POINT_RADIUS * POINT_RADIUS) {
+            for (int dx = -radius; dx <= radius; dx++) {
+                for (int dy = -radius; dy <= radius; dy++) {
+                    if (dx * dx + dy * dy <= radius * radius) {
                         SDL_RenderDrawPoint(renderer, handle1.x + dx, handle1.y + dy);
                         SDL_RenderDrawPoint(renderer, handle2.x + dx, handle2.y + dy);
                     }
@@ -267,6 +329,39 @@ void RenderBezierPathCamera(SDL_Renderer* renderer,
     }
 }
 
-void RenderBezierPath(SDL_Renderer* renderer, Path* path, bool drawHandles, SDL_Color curveColor) {
-    RenderBezierPathCamera(renderer, path, drawHandles, NULL, curveColor);
+void RenderBezierPathCamera(SDL_Renderer* renderer,
+                            Path* path,
+                            bool drawHandles,
+                            const Camera* camera,
+                            SDL_Color curveColor,
+                            SDL_Color handleColor,
+                            int selectedIndex,
+                            SDL_Color selectedColor) {
+    RenderBezierPathCameraStyled(renderer,
+                                 path,
+                                 drawHandles,
+                                 camera,
+                                 curveColor,
+                                 handleColor,
+                                 selectedIndex,
+                                 selectedColor,
+                                 POINT_RADIUS);
+}
+
+void RenderBezierPath(SDL_Renderer* renderer,
+                      Path* path,
+                      bool drawHandles,
+                      SDL_Color curveColor,
+                      SDL_Color handleColor,
+                      int selectedIndex,
+                      SDL_Color selectedColor) {
+    RenderBezierPathCameraStyled(renderer,
+                                 path,
+                                 drawHandles,
+                                 NULL,
+                                 curveColor,
+                                 handleColor,
+                                 selectedIndex,
+                                 selectedColor,
+                                 POINT_RADIUS);
 }

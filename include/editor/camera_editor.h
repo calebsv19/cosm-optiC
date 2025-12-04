@@ -5,7 +5,7 @@
 #include "config/config_manager.h"
 
 double GetCurrentMarginPixels(void);
-void RenderEditorHUD(SDL_Renderer* renderer, const char* label);
+void RenderEditorHUD(SDL_Renderer* renderer, const char* label, bool showRotation);
 
 // Camera Editor: Handles viewport adjustments and scene framing
 

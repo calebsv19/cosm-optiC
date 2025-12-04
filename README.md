@@ -9,7 +9,9 @@ Experimental 2D ray-tracing sandbox built with SDL2. The project simulates light
   - `editor/` – Scene, object, and Bézier path editors.
   - `render/` – Ray-tracing engine and rendering helpers.
 - `camera/` – View transform math shared by the renderer and all editors (consistent viewport + margin logic).
-  - `scene/`, `path/`, `config/`, `tools/` – Supporting subsystems for geometry, Bézier paths, JSON config I/O, and FFmpeg integration.
+- `scene/`, `path/`, `config/`, `tools/` – Supporting subsystems for geometry, Bézier paths, JSON config I/O, and FFmpeg integration.
+- `math/` – Vector and matrix utilities (2D/3D) used across paths, camera math, and render helpers.
+- `geo/` – Shape asset library + adapters for importing external JSON shapes into scene objects; CLI tools live under `src/tools/cli`.
 - `include/` – Public headers mirroring the `src/` hierarchy (including the camera interface).
 - `Configs/` – JSON configuration files and bundled fonts.
 - `Animations/` – Frame dumps and rendered videos created by deep-render mode.

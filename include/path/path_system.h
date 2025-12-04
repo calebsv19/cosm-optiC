@@ -9,12 +9,14 @@
 #define MAX_BEZIER_POINTS 100  // Define max points
 #define POINT_RADIUS 10  // Define global radius for point detection
 
-// Defines a point in 2D space
+#include "math/vec2.h"
+
+// Defines a point in 2D space (alias to vec2 for compatibility)
 typedef struct {
     double x, y;
 } Point;
 
-// Defines a velocity vector
+// Defines a velocity vector (alias to vec2 for compatibility)
 typedef struct {
     double vx, vy;
 } Velocity;
@@ -33,6 +35,9 @@ static const char *BEZIER_MODE_STRINGS[] = {
 typedef struct {
     Point points[MAX_BEZIER_POINTS];  // Stores all control points
     Velocity handles[MAX_BEZIER_POINTS][2];  // Stores outgoing & incoming handles per segment
+    bool handleLink[MAX_BEZIER_POINTS]; // Mirror handles around a point when true
+    double rotations[MAX_BEZIER_POINTS];     // Orientation per point (radians)
+    bool rotationSet[MAX_BEZIER_POINTS];     // Whether rotation is explicitly authored
     int numPoints;
     BezierMode mode;
 } Path;
@@ -40,16 +45,35 @@ typedef struct {
 // Bézier Path Functions
 Point GetPositionAlongPath(Path* path, double t);
 Point GetPositionAlongPathNormalized(Path* path, double t);
+double GetRotationAlongPathNormalized(Path* path, double t);
 double PathApproximateLength(Path* path);
 void DestroyPath(Path* path);
 
 // Bézier Debug Rendering
-void RenderBezierPath(SDL_Renderer* renderer, Path* path, bool drawHandles, SDL_Color curveColor);
+void RenderBezierPath(SDL_Renderer* renderer,
+                      Path* path,
+                      bool drawHandles,
+                      SDL_Color curveColor,
+                      SDL_Color handleColor,
+                      int selectedIndex,
+                      SDL_Color selectedColor);
+void RenderBezierPathCameraStyled(SDL_Renderer* renderer,
+                                  Path* path,
+                                  bool drawHandles,
+                                  const Camera* camera,
+                                  SDL_Color curveColor,
+                                  SDL_Color handleColor,
+                                  int selectedIndex,
+                                  SDL_Color selectedColor,
+                                  int pointRadius);
 void RenderBezierPathCamera(SDL_Renderer* renderer,
                             Path* path,
                             bool drawHandles,
                             const Camera* camera,
-                            SDL_Color curveColor);
+                            SDL_Color curveColor,
+                            SDL_Color handleColor,
+                            int selectedIndex,
+                            SDL_Color selectedColor);
 
 // Bézier Utility Functions
 int IsPointWithinRadius(Point a, Point b);

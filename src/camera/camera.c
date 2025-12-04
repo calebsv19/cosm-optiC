@@ -1,14 +1,22 @@
 #include "camera/camera.h"
+#include "math/vec2.h"
+#include "math/mat3.h"
+#include "math/math_utils.h"
 #include <math.h>
 
 static const double kDefaultZoom = 1.0;
 static const double kDefaultMinPreviewRatio = 0.05;
+
+static Vec2 CameraCenter(const Camera* camera) {
+    return vec2(camera ? camera->x : 0.0, camera ? camera->y : 0.0);
+}
 
 void CameraInit(Camera* camera, double centerX, double centerY, double zoom) {
     if (!camera) return;
     camera->x = centerX;
     camera->y = centerY;
     camera->zoom = (zoom > 0.0) ? zoom : kDefaultZoom;
+    camera->rotation = 0.0;
 }
 
 void CameraSetPosition(Camera* camera, double x, double y) {
@@ -37,19 +45,24 @@ void CameraZoom(Camera* camera, double zoomDelta, double minZoom, double maxZoom
     CameraSetZoom(camera, target);
 }
 
+void CameraSetRotation(Camera* camera, double radians) {
+    if (!camera) return;
+    camera->rotation = radians;
+}
+
+void CameraRotate(Camera* camera, double deltaRadians) {
+    if (!camera) return;
+    camera->rotation += deltaRadians;
+}
+
 CameraPoint CameraWorldToScreen(const Camera* camera,
                                 double worldX, double worldY,
                                 double viewportWidth, double viewportHeight) {
-    CameraPoint point = {worldX, worldY};
-    if (!camera) {
-        return point;
-    }
-
-    double dx = (worldX - camera->x) * camera->zoom;
-    double dy = (worldY - camera->y) * camera->zoom;
-
-    point.x = viewportWidth * 0.5 + dx;
-    point.y = viewportHeight * 0.5 + dy;
+    Vec2 screen = CameraWorldToScreenVec2(camera,
+                                          vec2(worldX, worldY),
+                                          viewportWidth,
+                                          viewportHeight);
+    CameraPoint point = {screen.x, screen.y};
     return point;
 }
 
@@ -94,15 +107,44 @@ Camera CameraBuildPreviewCamera(const Camera* base,
 CameraPoint CameraScreenToWorld(const Camera* camera,
                                 double screenX, double screenY,
                                 double viewportWidth, double viewportHeight) {
-    CameraPoint point = {screenX, screenY};
-    if (!camera) {
-        return point;
-    }
-
-    double dx = screenX - viewportWidth * 0.5;
-    double dy = screenY - viewportHeight * 0.5;
-
-    point.x = camera->x + (dx / camera->zoom);
-    point.y = camera->y + (dy / camera->zoom);
+    Vec2 world = CameraScreenToWorldVec2(camera,
+                                         vec2(screenX, screenY),
+                                         viewportWidth,
+                                         viewportHeight);
+    CameraPoint point = {world.x, world.y};
     return point;
+}
+
+Vec2 CameraWorldToScreenVec2(const Camera* camera,
+                             Vec2 world,
+                             double viewportWidth,
+                             double viewportHeight) {
+    if (!camera) return world;
+
+    Vec2 center = CameraCenter(camera);
+    Vec2 translated = vec2_sub(world, center);
+    double c = cos(camera->rotation);
+    double s = sin(camera->rotation);
+    Vec2 rotated = vec2(translated.x * c - translated.y * s,
+                        translated.x * s + translated.y * c);
+    Vec2 scaled = vec2_scale(rotated, camera->zoom);
+    Vec2 offset = vec2(viewportWidth * 0.5, viewportHeight * 0.5);
+    return vec2_add(scaled, offset);
+}
+
+Vec2 CameraScreenToWorldVec2(const Camera* camera,
+                             Vec2 screen,
+                             double viewportWidth,
+                             double viewportHeight) {
+    if (!camera) return screen;
+
+    Vec2 offset = vec2(viewportWidth * 0.5, viewportHeight * 0.5);
+    Vec2 centered = vec2_sub(screen, offset);
+    Vec2 unscaled = vec2_scale(centered, (camera->zoom != 0.0) ? (1.0 / camera->zoom) : 1.0);
+    double c = cos(-camera->rotation);
+    double s = sin(-camera->rotation);
+    Vec2 rotated = vec2(unscaled.x * c - unscaled.y * s,
+                        unscaled.x * s + unscaled.y * c);
+    Vec2 center = CameraCenter(camera);
+    return vec2_add(rotated, center);
 }

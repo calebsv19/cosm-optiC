@@ -3,6 +3,11 @@
 #include "config/config_manager.h"
 #include "editor/scene_editor.h"
 #include "camera/camera.h"
+#include "geo/shape_adapter.h"
+#include "geo/shape_library.h"
+#include "import/shape_import.h"
+#include "geo/shape_asset.h"
+#include <dirent.h>
 #include <stdio.h>
 #include <math.h>
 
@@ -17,6 +22,9 @@ static bool draggingRotationHandle = false;  // ✅ Tracks whether the handle is
 static double lastWorldX = 0.0;
 static double lastWorldY = 0.0;
 static bool renderHandles = true;
+#define MAX_ASSET_LIST 128
+#define ASSET_PANEL_WIDTH 220
+#define ASSET_ROW_HEIGHT 22
 
 
 // Global mode states
@@ -39,6 +47,14 @@ SDL_Rect polygonButton;
 // Buttons for Polygon Creation Mode (Placed to the left of Polygon Button)
 SDL_Rect confirmPolygonButton;  
 SDL_Rect cancelPolygonButton;
+
+static SDL_Rect assetPanelRect;
+static SDL_Rect assetToggleRect;
+static bool showImports = false;
+static int selectedAssetIndex = -1;
+static ShapeAssetLibrary assetLib = {0};
+static char importNames[MAX_ASSET_LIST][256];
+static int importCount = 0;
 
 static Camera BuildObjectEditorCamera(void) {
     double margin = GetCurrentMarginPixels();
@@ -79,6 +95,70 @@ static void RenderCameraViewportOverlay(SDL_Renderer* renderer, double margin) {
     SDL_RenderDrawRect(renderer, &rect);
 }
 
+static void RefreshAssetLibrary(void) {
+    shape_library_free(&assetLib);
+    shape_library_load_dir("Configs/objects", &assetLib);
+    if (selectedAssetIndex >= (int)assetLib.count) selectedAssetIndex = -1;
+}
+
+static void RefreshImportList(void) {
+    importCount = 0;
+    DIR* dir = opendir("import");
+    if (!dir) return;
+    struct dirent* ent = NULL;
+    while ((ent = readdir(dir)) != NULL && importCount < MAX_ASSET_LIST) {
+        if (ent->d_name[0] == '.') continue;
+        const char* dot = strrchr(ent->d_name, '.');
+        if (!dot || strcmp(dot, ".json") != 0) continue;
+        strncpy(importNames[importCount], ent->d_name, sizeof(importNames[importCount]) - 1);
+        importNames[importCount][sizeof(importNames[importCount]) - 1] = '\0';
+        importCount++;
+    }
+    closedir(dir);
+}
+
+static void DrawAssetList(SDL_Renderer* renderer) {
+    SDL_Rect panel = assetPanelRect;
+    SDL_BlendMode prevMode;
+    SDL_GetRenderDrawBlendMode(renderer, &prevMode);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+    SDL_SetRenderDrawColor(renderer, 40, 40, 40, 30);
+    SDL_RenderFillRect(renderer, &panel);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 25);
+    SDL_RenderDrawRect(renderer, &panel);
+
+    SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
+    SDL_RenderFillRect(renderer, &assetToggleRect);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderDrawRect(renderer, &assetToggleRect);
+    RenderButtonText(renderer, assetToggleRect, showImports ? "Imports" : "Assets");
+
+    int listY = assetToggleRect.y + assetToggleRect.h + 6;
+    int visible = showImports ? importCount : (int)assetLib.count;
+    for (int i = 0; i < visible; ++i) {
+        SDL_Rect row = {panel.x + 6, listY + i * ASSET_ROW_HEIGHT, panel.w - 12, ASSET_ROW_HEIGHT - 2};
+        bool selected = (!showImports && i == selectedAssetIndex);
+        SDL_SetRenderDrawColor(renderer, selected ? 80 : 25, selected ? 160 : 25, selected ? 240 : 25, 200);
+        SDL_RenderFillRect(renderer, &row);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderDrawRect(renderer, &row);
+
+        const char* label = "";
+        char buffer[256];
+        if (showImports) {
+            label = importNames[i];
+        } else if (assetLib.assets && assetLib.assets[i].name) {
+            label = assetLib.assets[i].name;
+        } else {
+            snprintf(buffer, sizeof(buffer), "asset_%d", i);
+            label = buffer;
+        }
+        RenderButtonText(renderer, row, label);
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer, prevMode);
+}
 
 void InitializeObjectEditor(void) {
     // **Initialize Button Positions Based on Window Size**
@@ -95,6 +175,11 @@ void InitializeObjectEditor(void) {
     // Polygon creation buttons (appear left of Polygon button)
     confirmPolygonButton = (SDL_Rect){width - buttonWidth - 5, 60, buttonWidth - 10, 30};
     cancelPolygonButton = (SDL_Rect){width - buttonWidth - 5,  95, buttonWidth - 10, 30};
+
+    assetPanelRect = (SDL_Rect){20, 60, ASSET_PANEL_WIDTH, 260};
+    assetToggleRect = (SDL_Rect){assetPanelRect.x + 6, assetPanelRect.y + 6, assetPanelRect.w - 12, 24};
+    RefreshAssetLibrary();
+    RefreshImportList();
 }
 
 void FinalizePolygonCreation(void) {
@@ -238,6 +323,7 @@ bool CheckObjectClick(double mx, double my) {
         // Check if user clicked the rotation handle
         if ((dx * dx + dy * dy) <= (handleRadius * handleRadius)) {
             selectedObjectIndex = i;
+            selectedAssetIndex = -1;
             draggingRotationHandle = true;
             printf("Dragging Rotation Handle for Object %d\n", i);
             return true;
@@ -257,6 +343,7 @@ bool CheckObjectClick(double mx, double my) {
             }
 
             selectedObjectIndex = i;
+            selectedAssetIndex = -1;
             printf("Selected Object %d\n", i);
             return true;
         }
@@ -353,13 +440,23 @@ void RenderObjectEditor(SDL_Renderer* renderer) {
     }
 
     SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
-    SDL_Color pathColor = {0, 255, 0, 255};
-    RenderBezierPathCamera(renderer, &sceneSettings.bezierPath, false, &preview, pathColor);
+    SDL_Color pathColor = {100, 120, 100, 140};
+    SDL_Color handleColor = {255, 80, 80, 80};
+    SDL_Color selectColor = {255, 255, 160, 255};
+    RenderBezierPathCameraStyled(renderer,
+                                 &sceneSettings.bezierPath,
+                                 false,
+                                 &preview,
+                                 pathColor,
+                                 handleColor,
+                                 -1,
+                                 selectColor,
+                                 4);
 
     sceneSettings.camera = original;
 
     RenderCameraViewportOverlay(renderer, GetCurrentMarginPixels());
-    RenderEditorHUD(renderer, "Objects");
+    RenderEditorHUD(renderer, "Objects", false);
 
     RenderModeButtons(renderer);
     if (addModeActive) {
@@ -368,6 +465,8 @@ void RenderObjectEditor(SDL_Renderer* renderer) {
     if (polygonCreationActive) {
         RenderPolygonCreationButtons(renderer);
     }
+
+    DrawAssetList(renderer);
 }
 
 
@@ -387,6 +486,9 @@ void HandleObjectEditorEvents(SDL_Event* event) {
 	
     switch (event->type) {
         case SDL_MOUSEBUTTONDOWN:
+            if (showImports || selectedAssetIndex >= 0) {
+                // allow selection without toggling add mode
+            }
             HandleObjectEditorMouseClick(event);
             break;
         case SDL_MOUSEBUTTONUP:
@@ -405,6 +507,53 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
     if (event->button.button == SDL_BUTTON_LEFT) {
         int mx = event->button.x;
         int my = event->button.y;
+        if (mx >= assetPanelRect.x && mx <= assetPanelRect.x + assetPanelRect.w &&
+            my >= assetPanelRect.y && my <= assetPanelRect.y + assetPanelRect.h) {
+            // Toggle button
+            if (mx >= assetToggleRect.x && mx <= assetToggleRect.x + assetToggleRect.w &&
+                my >= assetToggleRect.y && my <= assetToggleRect.y + assetToggleRect.h) {
+                showImports = !showImports;
+                selectedAssetIndex = -1;
+                return;
+            }
+            int listY = assetToggleRect.y + assetToggleRect.h + 6;
+            int idx = (my - listY) / ASSET_ROW_HEIGHT;
+            if (idx >= 0) {
+                if (showImports) {
+                    if (idx < importCount) {
+                        if (event->button.clicks >= 2) {
+                            // Convert import to asset on double-click
+                            char path[256];
+                            snprintf(path, sizeof(path), "import/%s", importNames[idx]);
+                            ShapeDocument doc = {0};
+                            if (shape_import_load(path, &doc) && doc.shapeCount > 0) {
+                                ShapeAsset asset = {0};
+                                if (shape_asset_from_shapelib_shape(&doc.shapes[0], 0.5f, &asset)) {
+                                    const char* base = importNames[idx];
+                                    const char* dot = strrchr(base, '.');
+                                    size_t len = dot ? (size_t)(dot - base) : strlen(base);
+                                    char outPath[256];
+                                    snprintf(outPath, sizeof(outPath), "Configs/objects/%.*s.asset.json", (int)len, base);
+                                    if (shape_asset_save_file(&asset, outPath)) {
+                                        printf("Saved asset to %s\n", outPath);
+                                        RefreshAssetLibrary();
+                                        showImports = false;
+                                    }
+                                    shape_asset_free(&asset);
+                                }
+                            }
+                            ShapeDocument_Free(&doc);
+                        }
+                    }
+                } else {
+                    if (idx < (int)assetLib.count) {
+                        selectedAssetIndex = idx;
+                        selectedObjectIndex = -1;
+                    }
+                }
+            }
+            return;
+        }
 
         Camera previewCam = BuildObjectEditorCamera();
         CameraPoint worldPoint = ScreenToWorldObjectEditor(&previewCam, mx, my);
@@ -415,6 +564,26 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
 
         selectedObjectIndex = -1;
         draggingRotationHandle = false;
+
+        if (addModeActive && selectedAssetIndex >= 0 && !polygonCreationActive) {
+            if (sceneSettings.objectCount >= MAX_OBJECTS) {
+                printf("ERROR: Cannot add more objects. Maximum limit reached.\n");
+                return;
+            }
+            if (selectedAssetIndex < (int)assetLib.count) {
+                const ShapeAsset* asset = &assetLib.assets[selectedAssetIndex];
+                ShapeAssetBounds b = {0};
+                shape_asset_bounds(asset, &b);
+                double max_dim = fmax((double)(b.max_x - b.min_x), (double)(b.max_y - b.min_y));
+                double desired = 80.0;
+                double scale = (max_dim > 1e-6) ? (desired / max_dim) : 1.0;
+                ShapeToSceneOptions opts = {.scale = scale, .offset_x = worldX, .offset_y = worldY};
+                shape_asset_append_to_scene(asset, &opts);
+            }
+            addModeActive = false;
+            selectedAssetIndex = -1;
+            return;
+        }
 
         // Prevent accidental shape creation when clicking UI buttons
         bool clickedButton = IsClickingButtonMain(mx, my);
@@ -493,6 +662,7 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
 
         // Call CheckObjectClick to handle object interaction
         if (CheckObjectClick(worldX, worldY)) {
+            selectedAssetIndex = -1; // only one selection active
             return;
         }
 
@@ -557,22 +727,46 @@ void HandleObjectEditorMouseRelease(SDL_Event* event) {
 }
 
 
+static void ClearSelections(void) {
+    selectedAssetIndex = -1;
+    selectedObjectIndex = -1;
+}
+
+static void DeleteSelected(void) {
+    if (selectedAssetIndex >= 0 && !showImports) {
+        if (selectedAssetIndex < (int)assetLib.count && assetLib.assets[selectedAssetIndex].name) {
+            char path[256];
+            snprintf(path, sizeof(path), "Configs/objects/%s.asset.json", assetLib.assets[selectedAssetIndex].name);
+            remove(path);
+            RefreshAssetLibrary();
+            selectedAssetIndex = -1;
+        }
+        return;
+    }
+    if (selectedObjectIndex != -1) {
+        printf("Deleting Object %d\n", selectedObjectIndex);
+        RemoveSceneObject(selectedObjectIndex);
+        selectedObjectIndex = -1;
+    }
+}
+
 void HandleObjectEditorKeyPress(SDL_Event* event) {
     if (event->type == SDL_KEYDOWN) {
-        switch (event->key.keysym.sym) {
-	    case SDLK_DELETE:
-		if (selectedObjectIndex != -1) {
-            		printf("Deleting Object %d\n", selectedObjectIndex);
-            		RemoveSceneObject(selectedObjectIndex);
-            		selectedObjectIndex = -1;  // Reset selection after deletion
-        	}	
+        SDL_Keycode key = event->key.keysym.sym;
+        if (key == SDLK_DELETE || key == SDLK_BACKSPACE || key == SDLK_KP_PERIOD) {
+            DeleteSelected();
+            return;
+        }
+        switch (key) {
             case SDLK_a:
+                ClearSelections();
                 addModeActive = !addModeActive;
                 deleteModeActive = false;
                 printf("Add Mode: %s\n", addModeActive ? "ON" : "OFF");
                 break;
 
             case SDLK_d:
+                ClearSelections();
                 deleteModeActive = !deleteModeActive;
                 addModeActive = false;
                 printf("Delete Mode: %s\n", deleteModeActive ? "ON" : "OFF");
@@ -583,5 +777,4 @@ void HandleObjectEditorKeyPress(SDL_Event* event) {
                 break;
         }
     }
-
 }

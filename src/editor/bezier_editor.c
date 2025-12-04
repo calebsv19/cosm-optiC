@@ -5,6 +5,7 @@
 #include "path/path_system.h"
 #include "config/config_manager.h"
 #include "camera/camera.h"
+#include "math/vec2.h"
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
@@ -27,6 +28,7 @@ static bool deleteModeActive = false;
 // Dragging state
 int draggingPoint = -1;
 int draggingVelocity = -1;
+static int selectedPoint = -1;
 
 static Camera BuildBezierEditorCamera(void) {
     double margin = GetCurrentMarginPixels();
@@ -42,6 +44,38 @@ static CameraPoint ScreenToWorldBezier(const Camera* camera, int sx, int sy) {
                                sy,
                                sceneSettings.windowWidth,
                                sceneSettings.windowHeight);
+}
+
+static void EnforceHandleLink(Path* path, int pointIndex) {
+    if (!path || pointIndex < 0 || pointIndex >= path->numPoints) return;
+    if (!path->handleLink[pointIndex]) return;
+
+    int outSeg = pointIndex;
+    int inSeg = pointIndex - 1;
+    bool hasOut = (outSeg >= 0 && outSeg < path->numPoints - 1);
+    bool hasIn = (inSeg >= 0 && inSeg < path->numPoints - 1);
+
+    if (!(hasOut && hasIn)) return;
+
+    Velocity* outH = &path->handles[outSeg][0];
+    Velocity* inH = &path->handles[inSeg][1];
+
+    // If both are zero, seed a default handle
+    if (fabs(outH->vx) < 1e-6 && fabs(outH->vy) < 1e-6 &&
+        fabs(inH->vx) < 1e-6 && fabs(inH->vy) < 1e-6) {
+        outH->vx = 50.0;
+        outH->vy = 0.0;
+    }
+
+    // Choose outgoing as source unless zero
+    Velocity* src = outH;
+    Velocity* dst = inH;
+    if (fabs(outH->vx) < 1e-6 && fabs(outH->vy) < 1e-6 && (fabs(inH->vx) > 1e-6 || fabs(inH->vy) > 1e-6)) {
+        src = inH;
+        dst = outH;
+    }
+    dst->vx = -src->vx;
+    dst->vy = -src->vy;
 }
 
 static void RenderBezierViewportOverlay(SDL_Renderer* renderer, double margin) {
@@ -95,13 +129,28 @@ void MoveVelocityHandle(Path* path, int mx, int my, int segmentIndex, int handle
         return;
     }
 
-    if (handleIndex == 0) {
-        path->handles[segmentIndex][0].vx = mx - path->points[segmentIndex].x;
-        path->handles[segmentIndex][0].vy = my - path->points[segmentIndex].y;
-    } else {  
-        path->handles[segmentIndex][1].vx = mx - path->points[segmentIndex + 1].x;
-        path->handles[segmentIndex][1].vy = my - path->points[segmentIndex + 1].y;
+    int pointIndex = (handleIndex == 0) ? segmentIndex : segmentIndex + 1;
+    Velocity* target = &path->handles[segmentIndex][handleIndex];
+    target->vx = mx - path->points[pointIndex].x;
+    target->vy = my - path->points[pointIndex].y;
+
+    // Mirror opposite handle if linking is enabled and both sides exist
+    if (path->handleLink[pointIndex]) {
+        int otherSeg = -1;
+        int otherHandle = -1;
+        if (handleIndex == 0 && pointIndex > 0) {
+            otherSeg = segmentIndex - 1;   // incoming handle of previous segment
+            otherHandle = 1;
+        } else if (handleIndex == 1 && pointIndex < path->numPoints - 1) {
+            otherSeg = segmentIndex + 1;   // outgoing handle of next segment
+            otherHandle = 0;
+        }
+        if (otherSeg >= 0 && otherHandle >= 0 && otherSeg < path->numPoints - 1) {
+            path->handles[otherSeg][otherHandle].vx = -target->vx;
+            path->handles[otherSeg][otherHandle].vy = -target->vy;
+        }
     }
+    EnforceHandleLink(path, pointIndex);
 }
     
 
@@ -137,11 +186,17 @@ void RemoveBezierPoint(Path* path, int index) {
         path->points[i] = path->points[i + 1];
     }
 
+    // Shift handle links
+    for (int i = index; i < path->numPoints; i++) {
+        path->handleLink[i] = path->handleLink[i + 1];
+    }
+
     // Update segment count
     path->numPoints--;
 
     // Update end handle value
     path->handles[path->numPoints][0] = (Velocity){0, 0};
+    path->handleLink[path->numPoints] = false;
         
     printf("Updated Bézier path. New total points: %d\n", path->numPoints);
 }
@@ -157,6 +212,8 @@ void AddBezierPoint(Path* path, int x, int y) {
     int index = path->numPoints;
     path->points[index].x = x;
     path->points[index].y = y;
+    path->rotations[index] = 0.0;
+    path->rotationSet[index] = false;
          
     // First point gets no previous handle
     if (index == 0) {
@@ -178,6 +235,7 @@ void AddBezierPoint(Path* path, int x, int y) {
     }
      
     path->numPoints++;
+    path->handleLink[index] = false;
     printf("Added new point at (%d, %d), Segment Count: %d\n", x, y, path->numPoints - 1);
 }
 
@@ -205,6 +263,14 @@ void HandleBezierEditorKeyPress(SDL_Event* event) {
             case SDLK_t: // Toggle between cubic and quadratic Bézier paths
                 ToggleBezierPathMode(&sceneSettings.bezierPath);
                 break;
+
+            case SDLK_l:
+                if (selectedPoint >= 0 && selectedPoint < sceneSettings.bezierPath.numPoints) {
+                    sceneSettings.bezierPath.handleLink[selectedPoint] = !sceneSettings.bezierPath.handleLink[selectedPoint];
+                    printf("Handle link for point %d: %s\n", selectedPoint, sceneSettings.bezierPath.handleLink[selectedPoint] ? "ON" : "OFF");
+                    EnforceHandleLink(&sceneSettings.bezierPath, selectedPoint);
+                }
+                break;
         }
     }
 }
@@ -215,8 +281,7 @@ void HandleBezierEditorMouseClick(SDL_Event* event) {
     int my = event->button.y;
     Camera previewCam = BuildBezierEditorCamera();
     CameraPoint worldPoint = ScreenToWorldBezier(&previewCam, mx, my);
-    double worldX = worldPoint.x;
-    double worldY = worldPoint.y;
+    Vec2 world = vec2(worldPoint.x, worldPoint.y);
 
     // Reset dragging states
     draggingPoint = -1;
@@ -253,14 +318,17 @@ void HandleBezierEditorMouseClick(SDL_Event* event) {
 
     // Check for clicks on Bézier points
     for (int i = 0; i < sceneSettings.bezierPath.numPoints; i++) {
-        if ((worldX - sceneSettings.bezierPath.points[i].x) * (worldX - sceneSettings.bezierPath.points[i].x) +
-            (worldY - sceneSettings.bezierPath.points[i].y) * (worldY - sceneSettings.bezierPath.points[i].y) <=
-            POINT_RADIUS * POINT_RADIUS) {
+        Vec2 p = vec2(sceneSettings.bezierPath.points[i].x, sceneSettings.bezierPath.points[i].y);
+        Vec2 delta = vec2_sub(world, p);
+        double dist2 = vec2_dot(delta, delta);
+        if (dist2 <= POINT_RADIUS * POINT_RADIUS) {
             draggingPoint = i;
+            selectedPoint = i;
 
             //  If in Delete Mode, remove the point
             if (deleteModeActive) {
                 RemoveBezierPoint(&sceneSettings.bezierPath, i);
+                selectedPoint = -1;
             }
 
             return;
@@ -275,9 +343,13 @@ void HandleBezierEditorMouseClick(SDL_Event* event) {
             double vy = (j == 0) ? sceneSettings.bezierPath.points[i].y + sceneSettings.bezierPath.handles[i][0].vy
                                  : sceneSettings.bezierPath.points[i + 1].y + sceneSettings.bezierPath.handles[i][1].vy;
 
-            if ((worldX - vx) * (worldX - vx) + (worldY - vy) * (worldY - vy) <= POINT_RADIUS * POINT_RADIUS) {
+            Vec2 handle = vec2(vx, vy);
+            Vec2 delta = vec2_sub(world, handle);
+            double dist2 = vec2_dot(delta, delta);
+            if (dist2 <= POINT_RADIUS * POINT_RADIUS) {
                 draggingPoint = i;
                 draggingVelocity = j;
+                selectedPoint = (j == 0) ? i : i + 1;
                 return;
             }
         }
@@ -285,7 +357,10 @@ void HandleBezierEditorMouseClick(SDL_Event* event) {
 
     //  If in Add Mode, add a new point at the clicked position
     if (addModeActive && !clickedButton) {
-        AddBezierPoint(&sceneSettings.bezierPath, (int)worldX, (int)worldY);
+        AddBezierPoint(&sceneSettings.bezierPath, (int)world.x, (int)world.y);
+        selectedPoint = sceneSettings.bezierPath.numPoints - 1;
+    } else if (!clickedButton) {
+        selectedPoint = -1;
     }
 
 }
@@ -302,25 +377,32 @@ void HandleBezierEditorEvents(SDL_Event* event, int* draggingPoint, int* draggin
     }
     Camera previewCam = BuildBezierEditorCamera();
     CameraPoint worldPoint = ScreenToWorldBezier(&previewCam, screenX, screenY);
-    int worldX = (int)round(worldPoint.x);
-    int worldY = (int)round(worldPoint.y);
+    Vec2 world = vec2(worldPoint.x, worldPoint.y);
 
     // ✅ Handle mouse movement for dragging points or velocity handles
     if (event->type == SDL_MOUSEMOTION) {
         if (*draggingPoint != -1 && *draggingVelocity == -1) {
-            MoveEndPoint(&sceneSettings.bezierPath, worldX, worldY, *draggingPoint);
+            MoveEndPoint(&sceneSettings.bezierPath, (int)round(world.x), (int)round(world.y), *draggingPoint);
         } else if (*draggingPoint != -1 && *draggingVelocity != -1) {
-            MoveVelocityHandle(&sceneSettings.bezierPath, worldX, worldY, *draggingPoint, *draggingVelocity);
+            MoveVelocityHandle(&sceneSettings.bezierPath,
+                               (int)round(world.x),
+                               (int)round(world.y),
+                               *draggingPoint,
+                               *draggingVelocity);
         }
     }
     // ✅ Forward mouse click events to HandleBezierEditorMouseClick()
     else if (event->type == SDL_MOUSEBUTTONDOWN && event->button.button == SDL_BUTTON_LEFT) {
         HandleBezierEditorMouseClick(event);
     }
+    else if (event->type == SDL_KEYDOWN) {
+        HandleBezierEditorKeyPress(event);
+    }
     // ✅ Reset dragging states when releasing the mouse
     else if (event->type == SDL_MOUSEBUTTONUP && event->button.button == SDL_BUTTON_LEFT) {
         *draggingPoint = -1;
         *draggingVelocity = -1;
+        // keep selectedPoint as-is after drag to persist selection
     }
 }
 
@@ -358,13 +440,15 @@ void RenderBezierEditor(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
     if (sceneSettings.bezierPath.numPoints >= 2) {
         SDL_Color lightColor = {0, 255, 0, 255};
-	RenderBezierPathCamera(renderer, &sceneSettings.bezierPath, true, &preview, lightColor);
+        SDL_Color handleColor = {255, 80, 80, 255};
+        SDL_Color selectColor = {255, 255, 160, 255};
+        RenderBezierPathCamera(renderer, &sceneSettings.bezierPath, true, &preview, lightColor, handleColor, selectedPoint, selectColor);
     }
 
     sceneSettings.camera = original;
 
     RenderBezierViewportOverlay(renderer, GetCurrentMarginPixels());
-    RenderEditorHUD(renderer, "Bezier");
+    RenderEditorHUD(renderer, "Bezier", false);
     RenderBezierEditorUI(renderer);
 
     SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);

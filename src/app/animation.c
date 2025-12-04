@@ -12,6 +12,7 @@
 #include "path/path_system.h"
 #include "render/timer_hud_api.h"
 #include "camera/camera.h"
+#include "render/render_helper.h"
 #include "engine/Render/render_pipeline.h"
 #include <json-c/json.h>
 #include <math.h>
@@ -43,6 +44,7 @@ int loopCount;
 double t_increment;
 double t_param = 0.0;  // Parameter (0 to 1) for interpolation along the path.
 int direction = 1;      // +1 for forward, -1 for reverse.
+static const double kPreviewBg = 60.0;
 
 char loopMode[16] = "stop";  // Increased buffer size for safety
 int maxLoopCount = 1;  // Default to 1 loop if not set
@@ -236,8 +238,125 @@ static void UpdateCameraPosition(double t) {
     Point p = (sceneSettings.cameraPath.numPoints >= 2)
                   ? GetPositionAlongPathNormalized(&sceneSettings.cameraPath, t)
                   : sceneSettings.cameraPath.points[0];
+    double rot = (sceneSettings.cameraPath.numPoints >= 2)
+                     ? GetRotationAlongPathNormalized(&sceneSettings.cameraPath, t)
+                     : sceneSettings.cameraPath.rotations[0];
     sceneSettings.camera.x = p.x;
     sceneSettings.camera.y = p.y;
+    sceneSettings.camera.rotation = rot;
+}
+
+static void DrawPreviewMarker(SDL_Renderer* r, Point world, SDL_Color col, int radius) {
+    SDL_SetRenderDrawColor(r, col.r, col.g, col.b, col.a);
+    CameraPoint s = CameraWorldToScreen(&sceneSettings.camera, world.x, world.y, sceneSettings.windowWidth, sceneSettings.windowHeight);
+    for (int dx = -radius; dx <= radius; dx++) {
+        for (int dy = -radius; dy <= radius; dy++) {
+            if (dx * dx + dy * dy <= radius * radius) {
+                SDL_RenderDrawPoint(r, (int)lround(s.x) + dx, (int)lround(s.y) + dy);
+            }
+        }
+    }
+}
+
+static void RunPreviewInternal(bool standalone) {
+    bool didInit = false;
+    if (standalone) {
+        if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+            fprintf(stderr, "SDL_Init Error (preview): %s\n", SDL_GetError());
+            return;
+        }
+        didInit = true;
+    }
+
+    WINDOW_WIDTH = sceneSettings.windowWidth;
+    WINDOW_HEIGHT = sceneSettings.windowHeight;
+
+    SDL_Window* pWindow = SDL_CreateWindow("Preview",
+                                           SDL_WINDOWPOS_CENTERED,
+                                           SDL_WINDOWPOS_CENTERED,
+                                           WINDOW_WIDTH, WINDOW_HEIGHT,
+                                           SDL_WINDOW_SHOWN);
+    if (!pWindow) {
+        fprintf(stderr, "SDL_CreateWindow Error (preview): %s\n", SDL_GetError());
+        if (didInit) SDL_Quit();
+        return;
+    }
+
+    SDL_Renderer* pRenderer = SDL_CreateRenderer(pWindow, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    if (!pRenderer) {
+        fprintf(stderr, "SDL_CreateRenderer Error (preview): %s\n", SDL_GetError());
+        SDL_DestroyWindow(pWindow);
+        if (didInit) SDL_Quit();
+        return;
+    }
+
+    double duration = (animSettings.previewDuration > 0.1) ? animSettings.previewDuration : 5.0;
+    Uint64 prev = SDL_GetPerformanceCounter();
+    double elapsed = 0.0;
+    bool runningPreview = true;
+    Camera savedCam = sceneSettings.camera;
+
+    while (runningPreview) {
+        SDL_Event e;
+        while (SDL_PollEvent(&e)) {
+            if (e.type == SDL_QUIT ||
+                (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE)) {
+                runningPreview = false;
+            }
+        }
+
+        Uint64 now = SDL_GetPerformanceCounter();
+        double dt = (double)(now - prev) / SDL_GetPerformanceFrequency();
+        prev = now;
+        elapsed += dt;
+
+        double t = fmod(elapsed, duration) / duration;
+
+        // Update camera + light along paths
+        Point lightP = (sceneSettings.bezierPath.numPoints >= 2)
+                           ? GetPositionAlongPathNormalized(&sceneSettings.bezierPath, t)
+                           : sceneSettings.bezierPath.points[0];
+        Point camP = (sceneSettings.cameraPath.numPoints >= 2)
+                         ? GetPositionAlongPathNormalized(&sceneSettings.cameraPath, t)
+                         : sceneSettings.cameraPath.points[0];
+        double camRot = (sceneSettings.cameraPath.numPoints >= 2)
+                            ? GetRotationAlongPathNormalized(&sceneSettings.cameraPath, t)
+                            : sceneSettings.cameraPath.rotations[0];
+        sceneSettings.camera.x = camP.x;
+        sceneSettings.camera.y = camP.y;
+        sceneSettings.camera.rotation = camRot;
+
+        // Render preview
+        SDL_SetRenderDrawColor(pRenderer, (Uint8)kPreviewBg, (Uint8)kPreviewBg, (Uint8)kPreviewBg + 5, 255);
+        SDL_RenderClear(pRenderer);
+
+        SDL_Color pathColor = {90, 120, 90, 180};
+        SDL_Color camPathColor = {60, 140, 220, 220};
+        SDL_Color selectColor = {255, 255, 160, 255};
+        RenderBezierPathCameraStyled(pRenderer, &sceneSettings.bezierPath, false, &sceneSettings.camera, pathColor, (SDL_Color){0,0,0,0}, -1, selectColor, 3);
+        RenderBezierPathCameraStyled(pRenderer, &sceneSettings.cameraPath, false, &sceneSettings.camera, camPathColor, (SDL_Color){0,0,0,0}, -1, selectColor, 4);
+
+        SDL_SetRenderDrawColor(pRenderer, 220, 220, 220, 255);
+        RenderSceneObjects(pRenderer, true);
+
+        DrawPreviewMarker(pRenderer, lightP, (SDL_Color){255, 230, 120, 255}, 6);
+        DrawPreviewMarker(pRenderer, camP, (SDL_Color){120, 200, 255, 255}, 6);
+
+        SDL_RenderPresent(pRenderer);
+    }
+
+    sceneSettings.camera = savedCam;
+    SDL_DestroyRenderer(pRenderer);
+    SDL_DestroyWindow(pWindow);
+    if (didInit) SDL_Quit();
+}
+
+void RunPreviewMode(void) {
+    RunPreviewInternal(true);
+}
+
+void RunPreviewModeEmbedded(void) {
+    RunPreviewInternal(false);
 }
 
 
@@ -344,6 +463,18 @@ int main(int argc, char* argv[]) {
     if (!RunMenu()) {
         printf("Menu closed. Exiting program.\n");
         return 0;
+    }
+
+    if (animSettings.previewMode) {
+        SaveAllSettings();
+        RunPreviewMode();
+        animSettings.previewMode = false; // do not persist
+        SaveAllSettings();
+        // Return to menu after preview
+        if (!RunMenu()) {
+            printf("Menu closed after preview. Exiting program.\n");
+            return 0;
+        }
     }
 
     // Print selected settings

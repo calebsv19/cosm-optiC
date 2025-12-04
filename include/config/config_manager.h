@@ -44,6 +44,8 @@ typedef struct {
     int tileSize;
     double rouletteThreshold;
     int integratorMode;
+    bool previewMode;
+    double previewDuration;
     int pathSamplesPerPixel;
     int pathMaxDepth;
     bool pathDirectLighting;

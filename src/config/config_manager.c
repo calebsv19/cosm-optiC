@@ -69,7 +69,7 @@ SceneConfig sceneSettings = {
     .bezierPath = { .numPoints = 0, .mode = BEZIER_CUBIC },
     .cameraPath = { .numPoints = 0, .mode = BEZIER_CUBIC },
     .rays = 2000,
-    .camera = { .x = 0.0, .y = 0.0, .zoom = 1.0 },
+    .camera = { .x = 0.0, .y = 0.0, .zoom = 1.0, .rotation = 0.0 },
     .cameraMargin = 80.0
 };
 
@@ -108,6 +108,8 @@ static void SavePathToJson(struct json_object* config, const char* key, const Pa
         struct json_object* pointObj = json_object_new_object();
         json_object_object_add(pointObj, "x", json_object_new_int(path->points[i].x));
         json_object_object_add(pointObj, "y", json_object_new_int(path->points[i].y));
+        json_object_object_add(pointObj, "rotation", json_object_new_double(path->rotations[i]));
+        json_object_object_add(pointObj, "handleLink", json_object_new_boolean(path->handleLink[i]));
 
         if (i < path->numPoints - 1) {
             struct json_object* velocity1Obj = json_object_new_object();
@@ -164,6 +166,15 @@ static bool LoadPathFromJson(struct json_object* config, const char* key, Path* 
             out->points[i].x = json_object_get_double(xObj);
             out->points[i].y = json_object_get_double(yObj);
         }
+        struct json_object* rotObj;
+        if (json_object_object_get_ex(pointObj, "rotation", &rotObj)) {
+            out->rotations[i] = json_object_get_double(rotObj);
+            out->rotationSet[i] = true;
+        }
+        struct json_object* linkObj;
+        if (json_object_object_get_ex(pointObj, "handleLink", &linkObj)) {
+            out->handleLink[i] = json_object_get_boolean(linkObj);
+        }
 
         if (i < numPoints - 1) {
             LoadVelocityHandle(pointObj, "velocity1", &out->handles[i][0]);
@@ -178,6 +189,12 @@ static bool LoadPathFromJson(struct json_object* config, const char* key, Path* 
 
 static void EnsureCameraPathDefault(void) {
     if (sceneSettings.cameraPath.numPoints > 0) {
+        for (int i = 0; i < sceneSettings.cameraPath.numPoints; i++) {
+            if (!sceneSettings.cameraPath.rotationSet[i]) {
+                sceneSettings.cameraPath.rotations[i] = (i == 0) ? 0.0 : sceneSettings.camera.rotation;
+                sceneSettings.cameraPath.rotationSet[i] = true;
+            }
+        }
         return;
     }
 
@@ -185,6 +202,8 @@ static void EnsureCameraPathDefault(void) {
     sceneSettings.cameraPath.numPoints = 1;
     sceneSettings.cameraPath.points[0].x = sceneSettings.camera.x;
     sceneSettings.cameraPath.points[0].y = sceneSettings.camera.y;
+    sceneSettings.cameraPath.rotations[0] = 0.0;
+    sceneSettings.cameraPath.rotationSet[0] = true;
 }
 
 void SaveAllSettings(void) {
@@ -216,6 +235,7 @@ void SaveSceneConfig(void) {
     json_object_object_add(camera, "x", json_object_new_double(sceneSettings.camera.x));
     json_object_object_add(camera, "y", json_object_new_double(sceneSettings.camera.y));
     json_object_object_add(camera, "zoom", json_object_new_double(sceneSettings.camera.zoom));
+    json_object_object_add(camera, "rotation", json_object_new_double(sceneSettings.camera.rotation));
     json_object_object_add(camera, "margin", json_object_new_double(sceneSettings.cameraMargin));
     json_object_object_add(config, "camera", camera);
 
@@ -315,6 +335,7 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "tileSize", json_object_new_int(animSettings.tileSize));
     json_object_object_add(config, "rouletteThreshold", json_object_new_double(animSettings.rouletteThreshold));
     json_object_object_add(config, "integratorMode", json_object_new_int(animSettings.integratorMode));
+    json_object_object_add(config, "previewDuration", json_object_new_double(animSettings.previewDuration));
     json_object_object_add(config, "pathSamplesPerPixel", json_object_new_int(animSettings.pathSamplesPerPixel));
     json_object_object_add(config, "pathMaxDepth", json_object_new_int(animSettings.pathMaxDepth));
     json_object_object_add(config, "pathDirectLighting", json_object_new_boolean(animSettings.pathDirectLighting));
@@ -378,6 +399,12 @@ static void LoadCameraConfig(struct json_object* config) {
             sceneSettings.camera.zoom = (zoom > 0.0) ? zoom : defaultZoom;
         } else {
             sceneSettings.camera.zoom = defaultZoom;
+        }
+        struct json_object *rotObj;
+        if (json_object_object_get_ex(cameraObj, "rotation", &rotObj)) {
+            sceneSettings.camera.rotation = json_object_get_double(rotObj);
+        } else {
+            sceneSettings.camera.rotation = 0.0;
         }
 
         struct json_object *marginObj;
@@ -716,6 +743,12 @@ void LoadAnimationConfig(void) {
         animSettings.rouletteThreshold = json_object_get_double(temp);
     if (json_object_object_get_ex(config, "integratorMode", &temp))
         animSettings.integratorMode = json_object_get_int(temp);
+    if (json_object_object_get_ex(config, "previewDuration", &temp)) {
+        animSettings.previewDuration = json_object_get_double(temp);
+        if (animSettings.previewDuration <= 0.1) animSettings.previewDuration = 5.0;
+    } else {
+        animSettings.previewDuration = 5.0;
+    }
     if (json_object_object_get_ex(config, "pathSamplesPerPixel", &temp))
         animSettings.pathSamplesPerPixel = json_object_get_int(temp);
     if (json_object_object_get_ex(config, "pathMaxDepth", &temp))
