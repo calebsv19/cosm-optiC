@@ -40,6 +40,7 @@ double accumulator;
 double currentTime;
 int frameCounter;
 int loopCount;
+static bool quitRequested = false;
 
 double t_increment;
 double t_param = 0.0;  // Parameter (0 to 1) for interpolation along the path.
@@ -162,8 +163,10 @@ void HandleEvents(bool* running) {
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT) {
             *running = false;
+            quitRequested = true;
         } else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
             *running = false;
+            quitRequested = true;
         } else if (animSettings.interactiveMode && (event.type == SDL_MOUSEMOTION ||
                                 event.type == SDL_MOUSEBUTTONDOWN)) {
             ProcessRayTracingEvent(&event);
@@ -296,12 +299,13 @@ static void RunPreviewInternal(bool standalone) {
     bool runningPreview = true;
     Camera savedCam = sceneSettings.camera;
 
-    while (runningPreview) {
+    while (runningPreview && !quitRequested) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT ||
                 (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE)) {
                 runningPreview = false;
+                quitRequested = true;
             }
         }
 
@@ -361,6 +365,10 @@ void RunPreviewModeEmbedded(void) {
 
 
 void RenderFrame(double lightX, double lightY, int* frameCounter, bool* running) {
+    if (quitRequested) {
+        *running = false;
+        return;
+    }
     ts_frame_start();
     // Clear the screen before drawing new frame
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
@@ -389,6 +397,10 @@ void RenderFrame(double lightX, double lightY, int* frameCounter, bool* running)
 }
 
 void CheckLoopConditions(bool* running, int loopCount, int frameCounter) {
+    if (quitRequested) {
+        *running = false;
+        return;
+    }
     if (loopCount >= animSettings.maxLoopCount && strcmp(animSettings.loopMode, "loop") == 0) {
         *running = false;
     }
@@ -416,7 +428,7 @@ void RunMainLoop(void) {
     printf("DEBUG: RunMainLoop started with interactiveMode=%d, deepRenderMode=%d\n",
            animSettings.interactiveMode, animSettings.deepRenderMode);
     
-    while (running) {
+    while (running && !quitRequested) {
         HandleEvents(&running);
         if (!animSettings.interactiveMode || animSettings.deepRenderMode) {
             UpdateSimulation(&accumulator, &currentTime, &loopCount);
@@ -431,14 +443,17 @@ void RunMainLoop(void) {
         SDL_Delay(16);  // Prevent CPU overload, ~60FPS
     }
  
-    if (animSettings.deepRenderMode) {
+    if (animSettings.deepRenderMode && !quitRequested) {
         printf("Deep render mode complete. Press close on the window to exit.\n");
         bool waitingForExit = true;
         SDL_Event event; 
-        while (waitingForExit) {
+        while (waitingForExit && !quitRequested) {
             while (SDL_PollEvent(&event)) {
-                if (event.type == SDL_QUIT)
+                if (event.type == SDL_QUIT ||
+                    (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE)) {
                     waitingForExit = false;
+                    quitRequested = true;
+                }
             }
             SDL_Delay(10);
         }
@@ -460,7 +475,7 @@ int main(int argc, char* argv[]) {
     printf("Loaded animation config in main.\n");
 
     // Run menu; allow repeated preview launches before starting
-    while (1) {
+    while (!quitRequested) {
         if (!RunMenu()) {
             printf("Menu closed. Exiting program.\n");
             return 0;

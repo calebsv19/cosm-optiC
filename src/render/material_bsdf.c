@@ -221,6 +221,13 @@ void MaterialBSDFInitFromSceneObject(const SceneObject* obj, MaterialBSDF* mater
     material->model = (material->reflectivity > 0.05) ? MATERIAL_BSDF_GGX : MATERIAL_BSDF_LAMBERT;
     material->specWeight = (preset ? preset->specular : 0.0) + material->reflectivity;
     material->diffuseWeight = preset ? preset->diffuse : Clamp01(1.0 - material->reflectivity);
+
+    // Enforce energy conservation: diffuse + spec <= 1.0
+    double total = material->diffuseWeight + material->specWeight;
+    if (total > 1.0) {
+        material->diffuseWeight /= total;
+        material->specWeight /= total;
+    }
     material->weightSum = material->diffuseWeight + material->specWeight;
     if (material->weightSum <= 1e-4) {
         material->diffuseWeight = 1.0;

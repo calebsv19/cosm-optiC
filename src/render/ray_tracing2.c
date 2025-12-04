@@ -9,6 +9,7 @@
 #include "render/surface_mesh.h"
 #include "render/camera_path_integrator.h"
 #include "render/forward_light_integrator.h"
+#include "render/direct_light_integrator.h"
 #include "render/irradiance_cache.h"
 #include "render/timer_hud_api.h"
 #include "engine/Render/render_pipeline.h"
@@ -326,8 +327,10 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
     ts_start_timer("Buffer Calc");
     if (animSettings.integratorMode == 0) {
         ForwardLightIntegratorRender(&context, &activeLight);
-    } else {
+    } else if (animSettings.integratorMode == 1) {
         CameraPathIntegratorRender(&context, &activeLight);
+    } else {
+        DirectLightIntegratorRender(&context, &activeLight);
     }
     ts_stop_timer("Buffer Calc");
 
@@ -461,6 +464,21 @@ static bool BuildReflectionCache(const IntegratorContext* ctx,
         maxEnergy = 1.0f;
     }
 
+    // Two-pass cache: first direct-only to seed, then include indirect reflections.
+    bool ok = IrradianceCacheFill(ctx->cache,
+                                  ctx->objects,
+                                  ctx->objectCount,
+                                  light,
+                                  ctx->uniformGrid,
+                                  reflectionForwardBuffer,
+                                  width,
+                                  height,
+                                  (double)maxEnergy,
+                                  NULL,
+                                  0,
+                                  NULL,
+                                  false);
+    if (!ok) return false;
     return IrradianceCacheFill(ctx->cache,
                                ctx->objects,
                                ctx->objectCount,
@@ -469,5 +487,9 @@ static bool BuildReflectionCache(const IntegratorContext* ctx,
                                reflectionForwardBuffer,
                                width,
                                height,
-                               (double)maxEnergy);
+                               (double)maxEnergy,
+                               NULL,
+                               0,
+                               NULL,
+                               true);
 }

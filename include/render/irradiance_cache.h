@@ -11,6 +11,10 @@ bool IrradianceCacheFill(IrradianceCache* cache,
                          const float* energyBuffer,
                          int width,
                          int height,
-                         double maxEnergy);
+                         double maxEnergy,
+                         const SceneObject* traceObjects,
+                         int traceObjectCount,
+                         const LightSource* traceLight,
+                         bool includeIndirectReflections);
 
 #endif

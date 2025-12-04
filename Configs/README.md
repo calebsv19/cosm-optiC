@@ -9,7 +9,7 @@ Persistent settings consumed by both the menu and the renderer.
   - `useTiledRenderer` – switches between the original full-buffer path and the new tile-based renderer.
   - `tileSize` – tile edge length (multiples of 4, default 16) used when `useTiledRenderer` is true.
   - `rouletteThreshold` – Russian-roulette cutoff controlling when low-energy rays terminate.
-  - `integratorMode` – selects between the forward-light and camera-path integrators.
+  - `integratorMode` – selects the renderer pipeline: 0 = Forward Light (light-emitted rays), 1 = Hybrid (camera-path GI), 2 = Direct Light (single LOS pass).
   - `pathSamplesPerPixel`, `pathMaxDepth` – per-pixel sampling count and bounce limit for the camera-path mode.
   - `pathDirectLighting`, `pathRussianRoulette` – toggles for next-event estimation and Russian roulette in the camera-path integrator.
   - `environmentBrightness` – scalar environment light applied when rays miss all geometry.

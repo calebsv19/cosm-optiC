@@ -41,7 +41,7 @@ typedef struct {
     int height;
 } TileGrid;
 
-#define IRRADIANCE_BIN_COUNT 8
+#define IRRADIANCE_BIN_COUNT 256
 
 typedef struct {
     double dirX;

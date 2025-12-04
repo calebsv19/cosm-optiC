@@ -763,6 +763,9 @@ void LoadAnimationConfig(void) {
         animSettings.rouletteThreshold = json_object_get_double(temp);
     if (json_object_object_get_ex(config, "integratorMode", &temp))
         animSettings.integratorMode = json_object_get_int(temp);
+    if (animSettings.integratorMode < 0 || animSettings.integratorMode > 2) {
+        animSettings.integratorMode = 0;
+    }
     if (json_object_object_get_ex(config, "previewDuration", &temp)) {
         animSettings.previewDuration = json_object_get_double(temp);
         if (animSettings.previewDuration <= 0.1) animSettings.previewDuration = 5.0;

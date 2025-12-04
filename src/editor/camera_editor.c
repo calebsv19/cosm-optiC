@@ -340,6 +340,7 @@ void HandleCameraEditorEvents(SDL_Event* event) {
             camDraggingPoint = -1;
             camDraggingVelocity = -1;
             camDraggingRotation = -1;
+            bool consumed = false;
 
             // Check rotation handles first
             for (int i = 1; i < sceneSettings.cameraPath.numPoints; i++) { // skip start handle
@@ -350,43 +351,51 @@ void HandleCameraEditorEvents(SDL_Event* event) {
                 if (dist2 <= radius * radius) {
                     camDraggingRotation = i;
                     selectedCamPoint = i;
-                    return;
+                    consumed = true;
+                    break;
                 }
             }
 
-            // Check for clicks on Bézier points
-            for (int i = 0; i < sceneSettings.cameraPath.numPoints; i++) {
-                Vec2 p = vec2(sceneSettings.cameraPath.points[i].x, sceneSettings.cameraPath.points[i].y);
-                Vec2 delta = vec2_sub(world, p);
-                double dist2 = vec2_dot(delta, delta);
-                if (dist2 <= POINT_RADIUS * POINT_RADIUS) {
-                    camDraggingPoint = i;
-                    selectedCamPoint = i;
-                    if (deleteModeActive) {
-                        RemoveBezierPoint(&sceneSettings.cameraPath, i);
-                        selectedCamPoint = -1;
+            // Check for clicks on Bézier points first (priority over camera drag)
+            if (!consumed) {
+                for (int i = 0; i < sceneSettings.cameraPath.numPoints; i++) {
+                    Vec2 p = vec2(sceneSettings.cameraPath.points[i].x, sceneSettings.cameraPath.points[i].y);
+                    Vec2 delta = vec2_sub(world, p);
+                    double dist2 = vec2_dot(delta, delta);
+                    if (dist2 <= POINT_RADIUS * POINT_RADIUS) {
+                        camDraggingPoint = i;
+                        selectedCamPoint = i;
+                        if (deleteModeActive) {
+                            RemoveBezierPoint(&sceneSettings.cameraPath, i);
+                            selectedCamPoint = -1;
+                        }
+                        consumed = true;
+                        break;
                     }
-                    return;
                 }
             }
 
             // Check for clicks on velocity handles
-            for (int i = 0; i < sceneSettings.cameraPath.numPoints - 1; i++) {
-                for (int j = 0; j < 2; j++) {
-                    double vx = (j == 0) ? sceneSettings.cameraPath.points[i].x + sceneSettings.cameraPath.handles[i][0].vx
-                                         : sceneSettings.cameraPath.points[i + 1].x + sceneSettings.cameraPath.handles[i][1].vx;
-                    double vy = (j == 0) ? sceneSettings.cameraPath.points[i].y + sceneSettings.cameraPath.handles[i][0].vy
-                                         : sceneSettings.cameraPath.points[i + 1].y + sceneSettings.cameraPath.handles[i][1].vy;
+            if (!consumed) {
+                for (int i = 0; i < sceneSettings.cameraPath.numPoints - 1; i++) {
+                    for (int j = 0; j < 2; j++) {
+                        double vx = (j == 0) ? sceneSettings.cameraPath.points[i].x + sceneSettings.cameraPath.handles[i][0].vx
+                                             : sceneSettings.cameraPath.points[i + 1].x + sceneSettings.cameraPath.handles[i][1].vx;
+                        double vy = (j == 0) ? sceneSettings.cameraPath.points[i].y + sceneSettings.cameraPath.handles[i][0].vy
+                                             : sceneSettings.cameraPath.points[i + 1].y + sceneSettings.cameraPath.handles[i][1].vy;
 
-                    Vec2 handle = vec2(vx, vy);
-                    Vec2 delta = vec2_sub(world, handle);
-                    double dist2 = vec2_dot(delta, delta);
-                    if (dist2 <= POINT_RADIUS * POINT_RADIUS) {
-                        camDraggingPoint = i;
-                        camDraggingVelocity = j;
-                        selectedCamPoint = (j == 0) ? i : i + 1;
-                        return;
+                        Vec2 handle = vec2(vx, vy);
+                        Vec2 delta = vec2_sub(world, handle);
+                        double dist2 = vec2_dot(delta, delta);
+                        if (dist2 <= POINT_RADIUS * POINT_RADIUS) {
+                            camDraggingPoint = i;
+                            camDraggingVelocity = j;
+                            selectedCamPoint = (j == 0) ? i : i + 1;
+                            consumed = true;
+                            break;
+                        }
                     }
+                    if (consumed) break;
                 }
             }
 
@@ -399,6 +408,8 @@ void HandleCameraEditorEvents(SDL_Event* event) {
                 selectedCamPoint = sceneSettings.cameraPath.numPoints - 1;
                 return;
             }
+
+            if (consumed) return;
 
             cameraDragging = true;
             lastMouseX = mx;
@@ -443,6 +454,9 @@ void HandleCameraEditorEvents(SDL_Event* event) {
                                                           height);
                 Vec2 cur = vec2(current.x, current.y);
                 MoveEndPoint(&sceneSettings.cameraPath, (int)round(cur.x), (int)round(cur.y), camDraggingPoint);
+            } else if (camDraggingPoint == -1 && camDraggingVelocity == -1 && camDraggingRotation == -1 &&
+                       (event->motion.state & SDL_BUTTON_LMASK) && selectedCamPoint >= 0) {
+                // drag empty space while a point is selected should not pan camera; do nothing
             } else if (camDraggingPoint != -1 && camDraggingVelocity != -1) {
                 Camera editorCam = BuildEditorCamera();
                 CameraPoint current = CameraScreenToWorld(&editorCam,
@@ -501,6 +515,14 @@ void HandleCameraEditorEvents(SDL_Event* event) {
                 RotateCamera(-0.05);
             } else if (key == SDLK_p) {
                 RotateCamera(0.05);
+            } else if (key == SDLK_BACKSPACE || key == SDLK_DELETE || key == SDLK_KP_PERIOD) {
+                if (selectedCamPoint > 0 && selectedCamPoint < sceneSettings.cameraPath.numPoints) {
+                    RemoveBezierPoint(&sceneSettings.cameraPath, selectedCamPoint);
+                    selectedCamPoint = -1;
+                    camDraggingPoint = -1;
+                    camDraggingVelocity = -1;
+                    camDraggingRotation = -1;
+                }
             }
             break;
         }

@@ -14,7 +14,7 @@ Buttons (top to bottom)
 - Deep Render: enable offline/deep render settings (disables Interactive).
 - Bounce Mode: toggle bounce animation for deep render playback.
 - Auto MP4: auto-generate MP4 after deep render finishes.
-- Integrator: Forward Light ↔ Camera Path.
+- Integrator: cycles Forward Light ↔ Hybrid (Camera Path) ↔ Direct Light (LOS-only).
 - Direct Light: toggle direct lighting when Camera Path integrator is active.
 - Roulette: toggle Russian roulette termination when Camera Path integrator is active.
 - MIS: toggle multiple importance sampling when Camera Path integrator is active.

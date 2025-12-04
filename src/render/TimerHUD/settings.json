@@ -1,5 +1,5 @@
 {
-  "hud_enabled": true,
+  "hud_enabled": false,
   "log_enabled": false,
   "event_tagging_enabled": false,
   "timer_buffer_size": 128,

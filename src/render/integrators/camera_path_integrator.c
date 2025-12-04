@@ -3,6 +3,8 @@
 #include "render/ray_types.h"
 #include "camera/camera.h"
 #include "render/timer_hud_api.h"
+#include "material/material_manager.h"
+#include "render/material_bsdf.h"
 #include <SDL2/SDL.h>
 #include <float.h>
 #include <math.h>
@@ -16,7 +18,7 @@
 #define M_PI 3.14159265358979323846
 #endif
 #define INDIRECT_FEELER_COUNT 48
-#define INDIRECT_GI_DOWNSAMPLE 4
+#define INDIRECT_GI_DOWNSAMPLE 1
 #define INDIRECT_DIRECT_SKIP_THRESHOLD 5.0f
 #define INDIRECT_DISTANCE_FALLOFF 0.0015f
 #define INDIRECT_DISTANCE_DECAY 80.0
@@ -25,6 +27,7 @@
 #define INDIRECT_FEELER_THRESHOLD_MID 4.0f
 #define INDIRECT_FEELER_THRESHOLD_DARK 1.5f
 #define INDIRECT_FEELER_THRESHOLD_NIGHT 0.3f
+#define MAX_INDIRECT_BRIGHTNESS 6.0f
 
 typedef struct {
     size_t rayTests;
@@ -61,7 +64,10 @@ static void FeelerDirection(int index,
                             double* outX,
                             double* outY) {
     if (total <= 0) total = 1;
-    double baseAngle = (2.0 * M_PI * (double)index) / (double)total;
+    // Bias half the rays toward camera-forward (downward screen normal) to favor visible surfaces
+    double hemisphere = (index < total / 2) ? 1.0 : -1.0;
+    double baseAngle = (M_PI * (double)index) / (double)total; // 180-degree spread
+    baseAngle *= hemisphere;
     double jitterAngle = 0.5 * (M_PI / (double)total) * jitter;
     double angle = baseAngle + jitterAngle;
     *outX = cos(angle);
@@ -326,33 +332,6 @@ static float ComputeDirectRadiance(const LightSource* light,
     return (float)radiance;
 }
 
-static float ComputeSegmentRadiance(const SurfaceSegment* segment,
-                                    const LightSource* light,
-                                    double radiance,
-                                    double worldX,
-                                    double worldY) {
-    (void)light;
-    if (!segment || radiance <= 0.0f) return 0.0f;
-    double cx = 0.5 * (segment->x0 + segment->x1);
-    double cy = 0.5 * (segment->y0 + segment->y1);
-    double dirX = worldX - cx;
-    double dirY = worldY - cy;
-    double dist2 = dirX * dirX + dirY * dirY;
-    double distance = sqrt(dist2);
-    if (distance <= PATH_EPSILON) {
-        return (float)radiance;
-    }
-    NormalizeVector(&dirX, &dirY);
-    double dot = dirX * segment->nx + dirY * segment->ny;
-    if (dot <= 0.0) {
-        return 0.0f;
-    }
-    double lengthFactor = fmax(segment->length, 1.0);
-    double attenuation = dot * lengthFactor / (1.0 + dist2 * INDIRECT_DISTANCE_FALLOFF);
-    double segmentRadiance = radiance * attenuation;
-    return (float)segmentRadiance;
-}
-
 static double EstimateAverageObjectExtent(const IntegratorContext* ctx) {
     if (!ctx || !ctx->objects || ctx->objectCount <= 0) {
         return 0.0;
@@ -388,6 +367,10 @@ static float SampleCacheRadiance(const IntegratorContext* ctx,
     double dirX = vx;
     double dirY = vy;
     NormalizeVector(&dirX, &dirY);
+    // Hemisphere check: only sample bins in front of the surface normal
+    if (dirX * entry->nx + dirY * entry->ny <= 0.0) {
+        return 0.0f;
+    }
     double bestDot = -1.0;
     double bestMean = 0.0;
     double bestDistance = 0.0;
@@ -395,7 +378,7 @@ static float SampleCacheRadiance(const IntegratorContext* ctx,
         const IrradianceBin* bin = &entry->bins[i];
         if (!bin->valid || bin->samples == 0) continue;
         double dot = dirX * bin->dirX + dirY * bin->dirY;
-        if (dot > bestDot) {
+        if (dot > bestDot && dot > 0.0) {
             bestDot = dot;
             bestMean = bin->mean;
             bestDistance = bin->distance;
@@ -410,7 +393,39 @@ static float SampleCacheRadiance(const IntegratorContext* ctx,
         ? exp(-distance / bestDistance)
         : 1.0;
     double weighted = bestMean * falloff * occlusion;
+    // Moderate boost so reflections stay visible without blowing up energy
+    weighted *= 2.0;
     return (float)weighted;
+}
+
+// Directional cache query: pick closest bin by direction, enforce hemisphere
+static float SampleCacheDirectional(const IntegratorContext* ctx,
+                                    const HitInfo2D* hit,
+                                    double dirX,
+                                    double dirY) {
+    if (!ctx || !hit) return 0.0f;
+    const SurfaceIrradiance* entry = FindClosestCacheEntry(ctx,
+                                                          hit->objectIndex,
+                                                          hit->px,
+                                                          hit->py);
+    if (!entry) return 0.0f;
+    NormalizeVector(&dirX, &dirY);
+    // Hemisphere check: only consider directions that are on the normal side
+    if (dirX * entry->nx + dirY * entry->ny <= 0.0) {
+        return 0.0f;
+    }
+    double bestDot = -1.0;
+    double bestMean = 0.0;
+    for (int i = 0; i < IRRADIANCE_BIN_COUNT; i++) {
+        const IrradianceBin* bin = &entry->bins[i];
+        if (!bin->valid || bin->samples == 0) continue;
+        double dot = dirX * bin->dirX + dirY * bin->dirY;
+        if (dot > bestDot) {
+            bestDot = dot;
+            bestMean = bin->mean;
+        }
+    }
+    return (float)bestMean;
 }
 
 static void AccumulateEnergyAdd(const IntegratorContext* ctx,
@@ -432,17 +447,11 @@ static float SampleIndirectLighting(const IntegratorContext* ctx,
                                     int feelerCount,
                                     float directLimit,
                                     IndirectStats* stats) {
+    (void)directLimit;
     if (!ctx || !ctx->uniformGrid || !ctx->cache || !ctx->mesh) return 0.0f;
     const SurfaceMesh* mesh = ctx->mesh;
     if (!mesh->segments || mesh->segmentCount == 0) return 0.0f;
 
-    if (directLimit > INDIRECT_DIRECT_SKIP_THRESHOLD) {
-        return 0.0f;
-    }
-
-    float perSampleClamp = (directLimit > 0.0f)
-        ? (directLimit / (float)feelerCount)
-        : 0.0f;
     float sum = 0.0f;
 
     for (int i = 0; i < feelerCount; i++) {
@@ -524,40 +533,66 @@ static float SampleIndirectLighting(const IntegratorContext* ctx,
         }
         if (stats) stats->cacheContributions++;
 
-        float baseRadiance = ComputeSegmentRadiance(segment,
-                                                    light,
-                                                    cacheRadiance,
-                                                    worldX,
-                                                    worldY);
-
         double toPixelX = worldX - hit.px;
         double toPixelY = worldY - hit.py;
         double pixelDistance = hypot(toPixelX, toPixelY);
         if (feelerDistanceLimit > 0.0 && pixelDistance > feelerDistanceLimit) {
             continue;
         }
-        double distanceWeight = exp(-pixelDistance / INDIRECT_DISTANCE_DECAY) /
-                                (1.0 + pixelDistance * pixelDistance * INDIRECT_DISTANCE_FALLOFF);
+        // Keep a gentle distance roll-off so mirrors still punch through
+        double distanceWeight = 1.0 / (1.0 + pixelDistance * 0.01);
 
-        double toSegX = hit.px - worldX;
-        double toSegY = hit.py - worldY;
-        NormalizeVector(&toSegX, &toSegY);
-        double sensor = fmax(0.0, -(toSegX * dirX + toSegY * dirY));
-        sensor = 0.5 + 0.5 * sensor;
-
-        float contribution = (float)(baseRadiance * distanceWeight * sensor);
-
-        if (cacheRadiance > 0.0f) {
-            contribution = fminf(contribution, cacheRadiance);
+        float weighted = (float)(cacheRadiance * distanceWeight);
+        if (weighted <= 0.0f) {
+            continue;
         }
-        if (perSampleClamp > 0.0f) {
-            contribution = fminf(contribution, perSampleClamp);
+
+        // If the hit surface is reflective, bias extra GGX-like samples around the mirror direction
+        if (obj) {
+            MaterialBSDF bsdf = {0};
+            MaterialBSDFInitFromSceneObject(obj, &bsdf);
+            if (bsdf.reflectivity > 0.05) {
+                double inX = dirX;
+                double inY = dirY;
+                NormalizeVector(&inX, &inY);
+                double dot = inX * hit.nx + inY * hit.ny;
+                double rx = inX - 2.0 * dot * hit.nx;
+                double ry = inY - 2.0 * dot * hit.ny;
+                NormalizeVector(&rx, &ry);
+                float reflAccum = 0.0f;
+                int reflSamples = 4;
+                double maxJitter = fmax(0.05, bsdf.roughness * 0.8); // radians spread
+                for (int rs = 0; rs < reflSamples; rs++) {
+                    double h = HashDouble(pixelX, pixelY, i * 31 + rs * 17);
+                    double angle = maxJitter * (h * 2.0 - 1.0);
+                    double ca = cos(angle);
+                    double sa = sin(angle);
+                    double rjx = rx * ca - ry * sa;
+                    double rjy = rx * sa + ry * ca;
+                    NormalizeVector(&rjx, &rjy);
+                    // Hemisphere guard: skip samples that point behind the surface
+                    if (rjx * hit.nx + rjy * hit.ny <= 0.0) {
+                        continue;
+                    }
+                    reflAccum += SampleCacheDirectional(ctx, &hit, rjx, rjy);
+                }
+                if (reflSamples > 0) {
+                    reflAccum /= (float)reflSamples;
+                }
+                weighted += reflAccum * (float)bsdf.reflectivity;
+            }
         }
-        sum += contribution;
+        // Firefly clamp on per-sample contribution
+        if (weighted > MAX_INDIRECT_BRIGHTNESS) {
+            weighted = MAX_INDIRECT_BRIGHTNESS;
+        }
+        sum += weighted;
     }
 
-    float indirect = fminf(sum, 1.2f * directLimit);
-    return indirect;
+    if (sum > MAX_INDIRECT_BRIGHTNESS) {
+        sum = MAX_INDIRECT_BRIGHTNESS;
+    }
+    return sum;
 }
 
 static void PerformDirectLightingPass(IntegratorContext* ctx,
@@ -587,6 +622,50 @@ static void PerformDirectLightingPass(IntegratorContext* ctx,
 static inline float TonemapEnergy(float energy) {
     float mapped = 1.0f - expf(-energy * CAMERA_TONEMAP_EXPOSURE);
     return powf(Clamp01(mapped), CAMERA_TONEMAP_GAMMA);
+}
+
+static void BilateralBlurEnergyBuffer(IntegratorContext* ctx, float spatialSigma, float rangeSigma) {
+    if (!ctx || !ctx->energyBuffer) return;
+    int w = ctx->width;
+    int h = ctx->height;
+    size_t total = (size_t)w * (size_t)h;
+    float* tmp = (float*)malloc(total * sizeof(float));
+    if (!tmp) return;
+    int radius = (int)fmax(1.0, spatialSigma * 2.0);
+    float twoSpatialVar = 2.0f * spatialSigma * spatialSigma;
+    float twoRangeVar = 2.0f * rangeSigma * rangeSigma;
+
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            float center = ctx->energyBuffer[(size_t)y * (size_t)w + (size_t)x];
+            float accum = 0.0f;
+            float weightSum = 0.0f;
+            for (int ky = -radius; ky <= radius; ky++) {
+                int sy = y + ky;
+                if (sy < 0) sy = 0;
+                if (sy >= h) sy = h - 1;
+                for (int kx = -radius; kx <= radius; kx++) {
+                    int sx = x + kx;
+                    if (sx < 0) sx = 0;
+                    if (sx >= w) sx = w - 1;
+                    float neighbor = ctx->energyBuffer[(size_t)sy * (size_t)w + (size_t)sx];
+                    float ds = (float)(kx * kx + ky * ky);
+                    float dr = neighbor - center;
+                    float spatialW = expf(-ds / twoSpatialVar);
+                    float rangeW = expf(-(dr * dr) / twoRangeVar);
+                    float wgt = spatialW * rangeW;
+                    accum += neighbor * wgt;
+                    weightSum += wgt;
+                }
+            }
+            if (weightSum > 1e-6f) {
+                accum /= weightSum;
+            }
+            tmp[(size_t)y * (size_t)w + (size_t)x] = accum;
+        }
+    }
+    memcpy(ctx->energyBuffer, tmp, total * sizeof(float));
+    free(tmp);
 }
 
 static void TonemapTiles(const IntegratorContext* ctx) {
@@ -696,6 +775,12 @@ void CameraPathIntegratorRender(IntegratorContext* ctx,
     ts_start_timer("CameraPath Indirect");
     PerformIndirectLightingPass(ctx, light);
     ts_stop_timer("CameraPath Indirect");
+
+    // Smooth out indirect noise (non-tiled path)
+    if (!usingTiles && ctx->energyBuffer) {
+        // Apply small bilateral filter to preserve edges while reducing noise
+        BilateralBlurEnergyBuffer(ctx, 1.2f, 0.6f);
+    }
 
     if (!ctx->pixelBuffer) return;
     ts_start_timer("CameraPath Tonemap");
