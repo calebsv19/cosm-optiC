@@ -61,6 +61,30 @@ static Uint8  ForwardEnergyToPixel(float energy, float exposure);
 // -----------------------------------------
 // Helpers
 // -----------------------------------------
+static inline void NormalizeVec(double* x, double* y) {
+    double len = sqrt((*x) * (*x) + (*y) * (*y));
+    if (len > 1e-9) {
+        *x /= len;
+        *y /= len;
+    }
+}
+
+static inline void OrientNormalForIncoming(const HitInfo2D* hit,
+                                           double inDirX,
+                                           double inDirY,
+                                           double* outNx,
+                                           double* outNy) {
+    double nx = hit ? hit->nx : 0.0;
+    double ny = hit ? hit->ny : 1.0;
+    NormalizeVec(&inDirX, &inDirY);
+    if ((nx * inDirX + ny * inDirY) < 0.0) {
+        nx = -nx;
+        ny = -ny;
+    }
+    if (outNx) *outNx = nx;
+    if (outNy) *outNy = ny;
+}
+
 static inline const MaterialBSDF* GetMaterial(const IntegratorContext* ctx, int objectIndex) {
     if (!ctx || !ctx->materials) return NULL;
     if (objectIndex < 0 || objectIndex >= ctx->materialCount) return NULL;
@@ -603,11 +627,17 @@ static void TracePhotonPath(const IntegratorContext* ctx,
         if (!material && obj) { MaterialBSDFInitFromSceneObject(obj, &fb); material = &fb; }
         if (!material) break;
 
+        double inDirX = -dx;
+        double inDirY = -dy;
+        NormalizeVec(&inDirX, &inDirY);
+        double shadedNx, shadedNy;
+        OrientNormalForIncoming(&hit, inDirX, inDirY, &shadedNx, &shadedNy);
+
         int secondaryCount = (bounce == 0) ? 3 : 1;
         bool spawned = false;
         for (int i = 0; i < secondaryCount; i++) {
             BSDFSample s;
-            if (!MaterialBSDFSample(material, hit.nx, hit.ny, dx, dy, rng, &s)) continue;
+            if (!MaterialBSDFSample(material, shadedNx, shadedNy, inDirX, inDirY, rng, &s)) continue;
             if (s.pdf <= 1e-8 || s.weight <= 0.0) continue;
 
             double nextT = throughput * (s.weight / s.pdf);
@@ -619,15 +649,15 @@ static void TracePhotonPath(const IntegratorContext* ctx,
             }
 
             if (!spawned) {
-                ox = hit.px + hit.nx * PATH_EPSILON;
-                oy = hit.py + hit.ny * PATH_EPSILON;
+                ox = hit.px + shadedNx * PATH_EPSILON;
+                oy = hit.py + shadedNy * PATH_EPSILON;
                 dx = s.dirX; dy = s.dirY;
                 throughput = nextT;
                 spawned = true;
             } else {
                 TracePhotonPath(ctx, rng,
-                                hit.px + hit.nx * PATH_EPSILON,
-                                hit.py + hit.ny * PATH_EPSILON,
+                                hit.px + shadedNx * PATH_EPSILON,
+                                hit.py + shadedNy * PATH_EPSILON,
                                 s.dirX, s.dirY,
                                 nextT, effBounce + 1);
             }

@@ -1,0 +1,10 @@
+{
+  "windowWidth": 64,
+  "windowHeight": 64,
+  "camera": { "x": 0.0, "y": 0.0, "zoom": 1.0 },
+  "light": { "x": 20.0, "y": 0.0, "radius": 3.0, "intensity": 2.0 },
+  "objects": [
+    { "type": "circle", "x": 0.0, "y": 0.0, "radius": 5.0, "scale": 1.0, "color": 16777215, "opacity": 1.0, "reflectivity": 0.0, "roughness": 0.5, "material_id": 0 },
+    { "type": "circle", "x": -15.0, "y": -5.0, "radius": 3.0, "scale": 1.0, "color": 8421504, "opacity": 1.0, "reflectivity": 0.2, "roughness": 0.1, "material_id": 0 }
+  ]
+}

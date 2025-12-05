@@ -19,7 +19,6 @@
 #endif
 #define INDIRECT_FEELER_COUNT 48
 #define INDIRECT_GI_DOWNSAMPLE 1
-#define INDIRECT_DIRECT_SKIP_THRESHOLD 5.0f
 #define INDIRECT_DISTANCE_FALLOFF 0.0015f
 #define INDIRECT_DISTANCE_DECAY 80.0
 #define MAX_FEELER_DISTANCE 1500.0
@@ -28,6 +27,7 @@
 #define INDIRECT_FEELER_THRESHOLD_DARK 1.5f
 #define INDIRECT_FEELER_THRESHOLD_NIGHT 0.3f
 #define MAX_INDIRECT_BRIGHTNESS 6.0f
+#define CACHE_BIN_DOT_EPS 1e-4
 
 typedef struct {
     size_t rayTests;
@@ -35,6 +35,8 @@ typedef struct {
     size_t segmentFound;
     size_t segmentFacing;
     size_t cacheContributions;
+    size_t cacheRejectVariance;
+    size_t cacheRejectAlignment;
 } IndirectStats;
 
 static inline void NormalizeVector(double* x, double* y) {
@@ -43,6 +45,22 @@ static inline void NormalizeVector(double* x, double* y) {
         *x /= len;
         *y /= len;
     }
+}
+
+static inline void OrientNormalForIncoming(const HitInfo2D* hit,
+                                           double inDirX,
+                                           double inDirY,
+                                           double* outNx,
+                                           double* outNy) {
+    double nx = hit ? hit->nx : 0.0;
+    double ny = hit ? hit->ny : 1.0;
+    NormalizeVector(&inDirX, &inDirY);
+    if ((nx * inDirX + ny * inDirY) < 0.0) {
+        nx = -nx;
+        ny = -ny;
+    }
+    if (outNx) *outNx = nx;
+    if (outNy) *outNy = ny;
 }
 
 static inline double HashDouble(int x, int y, int s) {
@@ -61,15 +79,15 @@ static double PixelFeelerJitter(int pixelX, int pixelY, int feelerIndex) {
 static void FeelerDirection(int index,
                             int total,
                             double jitter,
+                            double baseNx,
+                            double baseNy,
                             double* outX,
                             double* outY) {
     if (total <= 0) total = 1;
-    // Bias half the rays toward camera-forward (downward screen normal) to favor visible surfaces
-    double hemisphere = (index < total / 2) ? 1.0 : -1.0;
-    double baseAngle = (M_PI * (double)index) / (double)total; // 180-degree spread
-    baseAngle *= hemisphere;
+    double baseAngle = atan2(baseNy, baseNx);
+    double hemisphereAngle = (M_PI * (double)index) / (double)total;
     double jitterAngle = 0.5 * (M_PI / (double)total) * jitter;
-    double angle = baseAngle + jitterAngle;
+    double angle = baseAngle + hemisphereAngle + jitterAngle;
     *outX = cos(angle);
     *outY = sin(angle);
 }
@@ -81,6 +99,20 @@ static double RenderQualityScale(void) {
         case RENDER_QUALITY_MEDIUM:
         default: return 1.0;
     }
+}
+
+static inline double CacheVarianceThreshold(void) {
+    double v = animSettings.cacheVarianceCutoff;
+    if (v <= 0.0) v = 0.35;
+    return Clamp(v, 0.05, 10.0);
+}
+
+static inline double CacheHaloRadius(const LightSource* light) {
+    double mul = animSettings.cacheHaloRadius;
+    if (mul <= 0.0) mul = 3.5;
+    double base = light ? light->radius * mul : 0.0;
+    if (base < 12.0) base = 12.0;
+    return base;
 }
 
 static int DetermineFeelerCount(float directLimit) {
@@ -352,57 +384,12 @@ static double EstimateAverageObjectExtent(const IntegratorContext* ctx) {
     return sum / (double)ctx->objectCount;
 }
 
-static float SampleCacheRadiance(const IntegratorContext* ctx,
-                                 const HitInfo2D* hit,
-                                 double worldX,
-                                 double worldY) {
-    if (!ctx || !hit) return 0.0f;
-    const SurfaceIrradiance* entry = FindClosestCacheEntry(ctx,
-                                                          hit->objectIndex,
-                                                          hit->px,
-                                                          hit->py);
-    if (!entry) return 0.0f;
-    double vx = worldX - entry->px;
-    double vy = worldY - entry->py;
-    double dirX = vx;
-    double dirY = vy;
-    NormalizeVector(&dirX, &dirY);
-    // Hemisphere check: only sample bins in front of the surface normal
-    if (dirX * entry->nx + dirY * entry->ny <= 0.0) {
-        return 0.0f;
-    }
-    double bestDot = -1.0;
-    double bestMean = 0.0;
-    double bestDistance = 0.0;
-    for (int i = 0; i < IRRADIANCE_BIN_COUNT; i++) {
-        const IrradianceBin* bin = &entry->bins[i];
-        if (!bin->valid || bin->samples == 0) continue;
-        double dot = dirX * bin->dirX + dirY * bin->dirY;
-        if (dot > bestDot && dot > 0.0) {
-            bestDot = dot;
-            bestMean = bin->mean;
-            bestDistance = bin->distance;
-        }
-    }
-    if (bestMean <= 0.0) {
-        return 0.0f;
-    }
-    double distance = sqrt(vx * vx + vy * vy);
-    double falloff = exp(-distance / INDIRECT_DISTANCE_DECAY);
-    double occlusion = (bestDistance > PATH_EPSILON)
-        ? exp(-distance / bestDistance)
-        : 1.0;
-    double weighted = bestMean * falloff * occlusion;
-    // Moderate boost so reflections stay visible without blowing up energy
-    weighted *= 2.0;
-    return (float)weighted;
-}
-
-// Directional cache query: pick closest bin by direction, enforce hemisphere
 static float SampleCacheDirectional(const IntegratorContext* ctx,
                                     const HitInfo2D* hit,
                                     double dirX,
-                                    double dirY) {
+                                    double dirY,
+                                    const MaterialBSDF* material,
+                                    IndirectStats* stats) {
     if (!ctx || !hit) return 0.0f;
     const SurfaceIrradiance* entry = FindClosestCacheEntry(ctx,
                                                           hit->objectIndex,
@@ -410,22 +397,44 @@ static float SampleCacheDirectional(const IntegratorContext* ctx,
                                                           hit->py);
     if (!entry) return 0.0f;
     NormalizeVector(&dirX, &dirY);
-    // Hemisphere check: only consider directions that are on the normal side
     if (dirX * entry->nx + dirY * entry->ny <= 0.0) {
         return 0.0f;
     }
+    const MaterialBSDF* mat = material;
+    if (!mat && ctx->materials &&
+        hit->objectIndex >= 0 && hit->objectIndex < ctx->materialCount) {
+        mat = &ctx->materials[hit->objectIndex];
+    }
+
     double bestDot = -1.0;
     double bestMean = 0.0;
+    double varianceCutoff = CacheVarianceThreshold();
     for (int i = 0; i < IRRADIANCE_BIN_COUNT; i++) {
         const IrradianceBin* bin = &entry->bins[i];
         if (!bin->valid || bin->samples == 0) continue;
         double dot = dirX * bin->dirX + dirY * bin->dirY;
+        if (dot < CACHE_BIN_DOT_EPS) {
+            if (stats) stats->cacheRejectAlignment++;
+            continue;
+        }
+        double variance = bin->variance / (double)fmax(1, bin->samples);
+        if (variance > varianceCutoff) {
+            if (stats) stats->cacheRejectVariance++;
+            continue;
+        }
         if (dot > bestDot) {
             bestDot = dot;
             bestMean = bin->mean;
         }
     }
-    return (float)bestMean;
+    if (bestMean <= 0.0) {
+        return 0.0f;
+    }
+    double diffuseScale = 1.0;
+    if (mat) {
+        diffuseScale = (mat->diffuseWeight > 0.0) ? mat->diffuseWeight : mat->albedo;
+    }
+    return (float)(bestMean * diffuseScale);
 }
 
 static void AccumulateEnergyAdd(const IntegratorContext* ctx,
@@ -452,12 +461,28 @@ static float SampleIndirectLighting(const IntegratorContext* ctx,
     const SurfaceMesh* mesh = ctx->mesh;
     if (!mesh->segments || mesh->segmentCount == 0) return 0.0f;
 
+    if (light) {
+        double lx = light->x - worldX;
+        double ly = light->y - worldY;
+        double dist = hypot(lx, ly);
+        double haloRadius = CacheHaloRadius(light);
+        if (dist < haloRadius) {
+            return 0.0f;
+        }
+    }
+
     float sum = 0.0f;
 
     for (int i = 0; i < feelerCount; i++) {
         double jitter = PixelFeelerJitter(pixelX, pixelY, i);
         double dirX, dirY;
-        FeelerDirection(i, feelerCount, jitter, &dirX, &dirY);
+        double baseNx = worldX - sceneSettings.camera.x;
+        double baseNy = worldY - sceneSettings.camera.y;
+        if (fabs(baseNx) < 1e-6 && fabs(baseNy) < 1e-6) {
+            baseNx = 1.0; baseNy = 0.0;
+        }
+        NormalizeVector(&baseNx, &baseNy);
+        FeelerDirection(i, feelerCount, jitter, baseNx, baseNy, &dirX, &dirY);
         NormalizeVector(&dirX, &dirY);
         if (stats) stats->rayTests++;
 
@@ -524,65 +549,149 @@ static float SampleIndirectLighting(const IntegratorContext* ctx,
             continue;
         }
 
-        float cacheRadiance = SampleCacheRadiance(ctx, &hit, worldX, worldY);
-        if (cacheRadiance <= 0.0f) {
+        double vx = worldX - hit.px;
+        double vy = worldY - hit.py;
+        double toPixelX = vx;
+        double toPixelY = vy;
+        double pixelDistance = hypot(toPixelX, toPixelY);
+        double inDirX = -dirX;
+        double inDirY = -dirY;
+        NormalizeVector(&inDirX, &inDirY);
+        double shadedNx, shadedNy;
+        OrientNormalForIncoming(&hit, inDirX, inDirY, &shadedNx, &shadedNy);
+
+        const MaterialBSDF* surfaceMat = NULL;
+        MaterialBSDF tempMat = {0};
+        if (ctx->materials &&
+            hit.objectIndex >= 0 && hit.objectIndex < ctx->materialCount) {
+            surfaceMat = &ctx->materials[hit.objectIndex];
+        } else if (obj) {
+            MaterialBSDFInitFromSceneObject(obj, &tempMat);
+            surfaceMat = &tempMat;
+        }
+
+        float diffuseRadiance = SampleCacheDirectional(ctx,
+                                                       &hit,
+                                                       vx,
+                                                       vy,
+                                                       surfaceMat,
+                                                       stats);
+        if (diffuseRadiance <= 0.0f) {
             if (!SegmentLitByLight(ctx, light, &hit)) {
                 continue;
             }
-            cacheRadiance = ComputeDirectRadiance(light, hit.px, hit.py);
+            double lx = light ? (light->x - hit.px) : 0.0;
+            double ly = light ? (light->y - hit.py) : 0.0;
+            double lLen = hypot(lx, ly);
+            if (lLen > GRID_EPSILON) {
+                lx /= lLen;
+                ly /= lLen;
+            }
+            double viewDirX = (pixelDistance > GRID_EPSILON) ? (vx / pixelDistance) : 0.0;
+            double viewDirY = (pixelDistance > GRID_EPSILON) ? (vy / pixelDistance) : 0.0;
+            double bsdfTerm = surfaceMat
+                ? MaterialBSDFEvaluateCos(surfaceMat, shadedNx, shadedNy, lx, ly, viewDirX, viewDirY)
+                : fmax(0.0, viewDirX * shadedNx + viewDirY * shadedNy);
+            if (bsdfTerm <= 0.0) {
+                continue;
+            }
+            diffuseRadiance = (float)(ComputeDirectRadiance(light, hit.px, hit.py) * bsdfTerm);
         }
         if (stats) stats->cacheContributions++;
 
-        double toPixelX = worldX - hit.px;
-        double toPixelY = worldY - hit.py;
-        double pixelDistance = hypot(toPixelX, toPixelY);
         if (feelerDistanceLimit > 0.0 && pixelDistance > feelerDistanceLimit) {
             continue;
         }
-        // Keep a gentle distance roll-off so mirrors still punch through
+        double viewFacing = (pixelDistance > GRID_EPSILON)
+            ? fmax(0.0, (toPixelX * shadedNx + toPixelY * shadedNy) / pixelDistance)
+            : 0.0;
+        if (viewFacing <= 0.01) {
+            continue;
+        }
         double distanceWeight = 1.0 / (1.0 + pixelDistance * 0.01);
 
-        float weighted = (float)(cacheRadiance * distanceWeight);
+        double viewDirX = (pixelDistance > GRID_EPSILON) ? (toPixelX / pixelDistance) : 0.0;
+        double viewDirY = (pixelDistance > GRID_EPSILON) ? (toPixelY / pixelDistance) : 0.0;
+        double cacheBsdf = surfaceMat
+            ? MaterialBSDFEvaluateCos(surfaceMat, shadedNx, shadedNy, shadedNx, shadedNy, viewDirX, viewDirY)
+            : viewFacing;
+        float weighted = (float)(diffuseRadiance * distanceWeight * cacheBsdf);
         if (weighted <= 0.0f) {
             continue;
         }
 
-        // If the hit surface is reflective, bias extra GGX-like samples around the mirror direction
-        if (obj) {
-            MaterialBSDF bsdf = {0};
-            MaterialBSDFInitFromSceneObject(obj, &bsdf);
-            if (bsdf.reflectivity > 0.05) {
+        if (surfaceMat) {
+            const MaterialBSDF* bsdf = surfaceMat;
+            if (bsdf->reflectivity > 0.05) {
                 double inX = dirX;
                 double inY = dirY;
+                double dotIn = inX * hit.nx + inY * hit.ny;
+                if (dotIn >= 0.0) {
+                    goto add_contrib;
+                }
                 NormalizeVector(&inX, &inY);
-                double dot = inX * hit.nx + inY * hit.ny;
-                double rx = inX - 2.0 * dot * hit.nx;
-                double ry = inY - 2.0 * dot * hit.ny;
+                double rx = inX - 2.0 * dotIn * hit.nx;
+                double ry = inY - 2.0 * dotIn * hit.ny;
                 NormalizeVector(&rx, &ry);
+                if (rx * hit.nx + ry * hit.ny <= 0.0) {
+                    goto add_contrib;
+                }
                 float reflAccum = 0.0f;
                 int reflSamples = 4;
-                double maxJitter = fmax(0.05, bsdf.roughness * 0.8); // radians spread
+                double maxJitter = fmax(0.05, bsdf->roughness * 0.8);
+                double tx = -ry;
+                double ty = rx;
+                NormalizeVector(&tx, &ty);
                 for (int rs = 0; rs < reflSamples; rs++) {
                     double h = HashDouble(pixelX, pixelY, i * 31 + rs * 17);
                     double angle = maxJitter * (h * 2.0 - 1.0);
                     double ca = cos(angle);
                     double sa = sin(angle);
-                    double rjx = rx * ca - ry * sa;
-                    double rjy = rx * sa + ry * ca;
+                    double rjx = rx * ca + tx * sa;
+                    double rjy = ry * ca + ty * sa;
                     NormalizeVector(&rjx, &rjy);
-                    // Hemisphere guard: skip samples that point behind the surface
                     if (rjx * hit.nx + rjy * hit.ny <= 0.0) {
                         continue;
                     }
-                    reflAccum += SampleCacheDirectional(ctx, &hit, rjx, rjy);
+                    float reflSample = SampleCacheDirectional(ctx, &hit, rjx, rjy, surfaceMat, stats);
+                    double reflBsdf = surfaceMat
+                        ? MaterialBSDFEvaluateCos(surfaceMat, shadedNx, shadedNy, rjx, rjy, viewDirX, viewDirY)
+                        : 1.0;
+                    if (reflBsdf <= 0.0) {
+                        continue;
+                    }
+                    if (reflSample > MAX_INDIRECT_BRIGHTNESS) {
+                        reflSample = MAX_INDIRECT_BRIGHTNESS;
+                    }
+                    reflAccum += (float)(reflSample * reflBsdf);
                 }
                 if (reflSamples > 0) {
                     reflAccum /= (float)reflSamples;
                 }
-                weighted += reflAccum * (float)bsdf.reflectivity;
+                weighted += reflAccum * (float)bsdf->reflectivity;
+
+                if (bsdf->roughness < 0.05 && bsdf->reflectivity > 0.5) {
+                    double sharpX = rx;
+                    double sharpY = ry;
+                    NormalizeVector(&sharpX, &sharpY);
+                    if (sharpX * hit.nx + sharpY * hit.ny > 0.0) {
+                        float sharpSample = SampleCacheDirectional(ctx, &hit, sharpX, sharpY, surfaceMat, stats);
+                        double sharpBsdf = surfaceMat
+                            ? MaterialBSDFEvaluateCos(surfaceMat, shadedNx, shadedNy, sharpX, sharpY, viewDirX,
+                                                      viewDirY)
+                            : 1.0;
+                        if (sharpBsdf <= 0.0) {
+                            continue;
+                        }
+                        if (sharpSample > MAX_INDIRECT_BRIGHTNESS) {
+                            sharpSample = MAX_INDIRECT_BRIGHTNESS;
+                        }
+                        weighted += (float)(sharpSample * sharpBsdf * bsdf->reflectivity);
+                    }
+                }
             }
         }
-        // Firefly clamp on per-sample contribution
+add_contrib:
         if (weighted > MAX_INDIRECT_BRIGHTNESS) {
             weighted = MAX_INDIRECT_BRIGHTNESS;
         }
@@ -743,12 +852,14 @@ static void PerformIndirectLightingPass(IntegratorContext* ctx,
     printf("[CameraIntegr] Indirect pass: %zu GI samples produced energy out of %zu tests.\n",
            feelerHits,
            feelerTests);
-    printf("[CameraIntegr] Debug segments: rays=%zu hits=%zu segFound=%zu facing=%zu cache=%zu\n",
+    printf("[CameraIntegr] Debug segments: rays=%zu hits=%zu segFound=%zu facing=%zu cache=%zu varReject=%zu alignReject=%zu\n",
            stats.rayTests,
            stats.rayHits,
            stats.segmentFound,
            stats.segmentFacing,
-           stats.cacheContributions);
+           stats.cacheContributions,
+           stats.cacheRejectVariance,
+           stats.cacheRejectAlignment);
 }
 
 void CameraPathIntegratorRender(IntegratorContext* ctx,
@@ -776,9 +887,7 @@ void CameraPathIntegratorRender(IntegratorContext* ctx,
     PerformIndirectLightingPass(ctx, light);
     ts_stop_timer("CameraPath Indirect");
 
-    // Smooth out indirect noise (non-tiled path)
     if (!usingTiles && ctx->energyBuffer) {
-        // Apply small bilateral filter to preserve edges while reducing noise
         BilateralBlurEnergyBuffer(ctx, 1.2f, 0.6f);
     }
 

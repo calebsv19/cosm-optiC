@@ -25,11 +25,44 @@ VIDEO_FRAMES_DIR ?= Animations/default
 VIDEO_OUTPUT ?= Animations/Vids/output.mp4
 VIDEO_FPS ?= 30
 
+TEST_DIR := tests
+TEST_BIN := $(BUILD_DIR)/tests/test_runner
+TEST_SRC := $(TEST_DIR)/test_runner.c
+TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_stubs.o
+TEST_DEPS := \
+	$(BUILD_DIR)/render/material_bsdf.o \
+	$(BUILD_DIR)/material/material_manager.o \
+	$(BUILD_DIR)/material/material.o \
+	$(BUILD_DIR)/render/integrators/direct_light_integrator.o \
+	$(BUILD_DIR)/render/integrators/forward_light_integrator.o \
+	$(BUILD_DIR)/render/integrators/camera_path_integrator.o \
+	$(BUILD_DIR)/render/integrators/camera_path_integrator_disney.o \
+	$(BUILD_DIR)/render/integrators/integrator_common.o \
+	$(BUILD_DIR)/render/irradiance_cache.o \
+	$(BUILD_DIR)/render/uniform_grid.o \
+	$(BUILD_DIR)/render/surface_mesh.o \
+	$(BUILD_DIR)/render/render_helper.o \
+	$(BUILD_DIR)/render/ray_tracing2.o \
+	$(BUILD_DIR)/scene/object_manager.o \
+	$(BUILD_DIR)/geo/shape_adapter.o \
+	$(BUILD_DIR)/geo/geolib/shape_asset.o \
+	$(BUILD_DIR)/geo/geolib/shape_library.o \
+	$(BUILD_DIR)/render/TimerHUD/external/cJSON.o \
+	$(BUILD_DIR)/camera/camera.o \
+	$(BUILD_DIR)/config/config_manager.o \
+	$(BUILD_DIR)/tools/ShapeLib/shape_core.o \
+	$(BUILD_DIR)/tools/ShapeLib/shape_json.o \
+	$(BUILD_DIR)/tools/ShapeLib/shape_flatten.o
+
 SRC := $(shell find $(SRC_DIR) -name '*.c' ! -path '$(SRC_DIR)/tools/cli/*')
 OBJ := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRC))
 DEP := $(OBJ:.o=.d)
 
-.PHONY: all clean run debug format video release relrun
+.PHONY: add-disney-flag
+add-disney-flag:
+	$(eval CFLAGS += -DCAMERA_INTEGRATOR_DISNEY_AVAILABLE)
+
+.PHONY: all clean run debug format video release relrun test
 
 all: $(TARGET)
 
@@ -50,6 +83,10 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
+$(BUILD_DIR)/tests/%.o: $(TEST_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
 run: $(TARGET)
 	./$(TARGET)
 
@@ -67,6 +104,12 @@ release:
 
 relrun: release
 	./$(REL_TARGET)
+
+test: $(TARGET) $(TEST_BIN)
+	./$(TEST_BIN)
+
+$(TEST_BIN): $(TEST_OBJ) $(TEST_DEPS)
+	$(CC) $(TEST_OBJ) $(TEST_DEPS) -o $@ $(LDFLAGS)
 
 clean:
 	rm -rf $(BUILD_DIR) $(TARGET) $(REL_BUILD_DIR) $(REL_TARGET)

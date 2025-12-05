@@ -4,9 +4,9 @@
     "height":472
   },
   "camera":{
-    "x":740.0,
-    "y":275.0,
-    "zoom":0.26409947505411097,
+    "x":740.24889518315581,
+    "y":274.88079037952735,
+    "zoom":0.29457677785036934,
     "rotation":0.0,
     "margin":80.0
   },
@@ -281,7 +281,21 @@
         "x":740,
         "y":275,
         "rotation":0.0,
-        "handleLink":false
+        "handleLink":false,
+        "velocity1":{
+          "vx":0,
+          "vy":0
+        }
+      },
+      {
+        "x":857,
+        "y":221,
+        "rotation":0.0,
+        "handleLink":false,
+        "velocity2":{
+          "vx":-50,
+          "vy":0
+        }
       }
     ]
   }

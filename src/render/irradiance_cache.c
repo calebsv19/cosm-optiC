@@ -17,20 +17,16 @@
 #define CACHE_MAX_DISTANCE 400.0
 #define CACHE_DISTANCE_DECAY 150.0
 
+// When a forward-probe buffer is provided, dampen far samples so cache bins
+// stay local to the surfel being seeded.
+#define CACHE_FORWARD_DECAY 0.0025
+
 static void Normalize(double* x, double* y) {
     double len = sqrt((*x) * (*x) + (*y) * (*y));
     if (len > 1e-9) {
         *x /= len;
         *y /= len;
     }
-}
-
-static double HashDouble(int x, int y, int s) {
-    uint32_t h = (uint32_t)(x * 73856093) ^ (uint32_t)(y * 19349663) ^ (uint32_t)(s * 83492791);
-    h ^= h >> 13;
-    h *= 0x5bd1e995;
-    h ^= h >> 15;
-    return (double)(h & 0xFFFFFF) / (double)0x1000000;
 }
 
 static bool SampleObjectPoint(const SceneObject* obj,
@@ -105,6 +101,32 @@ static bool SampleObjectPoint(const SceneObject* obj,
 }
 
 // Raytrace-based directional sample for cache fill
+static double SampleForwardProbe(const float* energyBuffer,
+                                 int width,
+                                 int height,
+                                 double worldX,
+                                 double worldY,
+                                 double distance) {
+    if (!energyBuffer || width <= 0 || height <= 0) return 0.0;
+    CameraPoint screen = CameraWorldToScreen(&sceneSettings.camera,
+                                             worldX,
+                                             worldY,
+                                             width,
+                                             height);
+    int px = (int)floor(screen.x + 0.5);
+    int py = (int)floor(screen.y + 0.5);
+    if (px < 0 || py < 0 || px >= width || py >= height) {
+        return 0.0;
+    }
+    size_t idx = (size_t)py * (size_t)width + (size_t)px;
+    double value = energyBuffer[idx];
+    // Apply gentle decay so distant forward samples don't dominate
+    if (distance > 0.0) {
+        value *= exp(-CACHE_FORWARD_DECAY * distance);
+    }
+    return value;
+}
+
 static double TraceDirectionalEnergy(const UniformGrid* grid,
                                      const SceneObject* objects,
                                      int objectCount,
@@ -113,9 +135,13 @@ static double TraceDirectionalEnergy(const UniformGrid* grid,
                                      double dirX,
                                      double dirY,
                                      const LightSource* light,
+                                     const float* energyBuffer,
+                                     int bufferWidth,
+                                     int bufferHeight,
                                      bool includeIndirect) {
     if (!grid || !objects || objectCount <= 0) return 0.0;
     Normalize(&dirX, &dirY);
+    // Hemisphere guard: only trace directions in front of the surface normal
     Ray2D ray = {
         .ox = originX + dirX * PATH_EPSILON,
         .oy = originY + dirY * PATH_EPSILON,
@@ -133,17 +159,24 @@ static double TraceDirectionalEnergy(const UniformGrid* grid,
     const SceneObject* obj = &objects[hit.objectIndex];
     MaterialBSDF bsdf = {0};
     MaterialBSDFInitFromSceneObject(obj, &bsdf);
+    double nx = hit.nx;
+    double ny = hit.ny;
+    Normalize(&nx, &ny);
+    // Reject if outgoing direction is behind the surface
+    if (dirX * nx + dirY * ny <= 0.0) {
+        return 0.0;
+    }
 
     // Direct light visibility + intensity falloff
     double lx = light ? (light->x - hit.px) : 0.0;
     double ly = light ? (light->y - hit.py) : 0.0;
     double lightDist2 = lx * lx + ly * ly;
     Normalize(&lx, &ly);
-    double ndotl = fmax(0.0, hit.nx * lx + hit.ny * ly);
+    double ndotl = fmax(0.0, nx * lx + ny * ly);
 
     double directVis = 0.0;
     if (light && ndotl > 0.0) {
-        Ray2D lray = { hit.px + hit.nx * PATH_EPSILON, hit.py + hit.ny * PATH_EPSILON, lx, ly };
+        Ray2D lray = { hit.px + nx * PATH_EPSILON, hit.py + ny * PATH_EPSILON, lx, ly };
         HitInfo2D lhit = {0};
         if (!UniformGridTraceRay(grid, &lray, PATH_EPSILON, CACHE_MAX_DISTANCE, &lhit)) {
             directVis = 1.0;
@@ -155,70 +188,20 @@ static double TraceDirectionalEnergy(const UniformGrid* grid,
         double radius = light ? fmax(light->radius, 1.0) : 1.0;
         double area = M_PI * radius * radius;
         double lightTerm = animSettings.lightIntensity * area / (lightDist2 + radius * radius);
-        double direct = ndotl * directVis * lightTerm;
-        double diffuseScale = bsdf.diffuseWeight > 0.0 ? bsdf.diffuseWeight : bsdf.albedo;
-        radiance += direct * diffuseScale;
+        double bsdfCos = MaterialBSDFEvaluateCos(&bsdf, nx, ny, lx, ly, dirX, dirY);
+        radiance += directVis * lightTerm * bsdfCos;
     }
 
-    // Multi-sample reflected probe weighted by material reflectivity/roughness
-    if (includeIndirect && bsdf.reflectivity > 0.0) {
-        // Treat dirX/dirY as outgoing; convert to incoming for reflection math
-        double inX = -dirX;
-        double inY = -dirY;
-        Normalize(&inX, &inY);
-        double inDot = inX * hit.nx + inY * hit.ny;
-        double rx = inX - 2.0 * inDot * hit.nx;
-        double ry = inY - 2.0 * inDot * hit.ny;
-        Normalize(&rx, &ry);
-        int reflSamples = 4;
-        double jitterCone = fmax(0.05, bsdf.roughness * 0.8); // radians
-        double reflAccum = 0.0;
-        for (int rs = 0; rs < reflSamples; rs++) {
-            double h = HashDouble(hit.objectIndex, rs, (int)(hit.px * 13 + hit.py * 7 + rs * 3));
-            double angle = (h * 2.0 - 1.0) * jitterCone;
-            double ca = cos(angle);
-            double sa = sin(angle);
-            double rtx = rx * ca - ry * sa;
-            double rty = rx * sa + ry * ca;
-            Normalize(&rtx, &rty);
-            // Hemisphere guard
-            if (rtx * hit.nx + rty * hit.ny <= 0.0) {
-                continue;
-            }
-
-            Ray2D rray = { hit.px + hit.nx * PATH_EPSILON, hit.py + hit.ny * PATH_EPSILON, rtx, rty };
-            HitInfo2D rhit = {0};
-            if (UniformGridTraceRay(grid, &rray, PATH_EPSILON, CACHE_MAX_DISTANCE, &rhit)) {
-                const SceneObject* robj = (rhit.objectIndex >= 0 && rhit.objectIndex < objectCount)
-                                              ? &objects[rhit.objectIndex] : NULL;
-                if (robj) {
-                    MaterialBSDF rbsdf = {0};
-                    MaterialBSDFInitFromSceneObject(robj, &rbsdf);
-                    double rlx = light ? (light->x - rhit.px) : 0.0;
-                    double rly = light ? (light->y - rhit.py) : 0.0;
-                    double rdist2 = rlx * rlx + rly * rly;
-                    Normalize(&rlx, &rly);
-                    double rndotl = fmax(0.0, rhit.nx * rlx + rhit.ny * rly);
-                    double rvis = 0.0;
-                    if (light && rndotl > 0.0) {
-                        Ray2D rlray = { rhit.px + rhit.nx * PATH_EPSILON, rhit.py + rhit.ny * PATH_EPSILON, rlx, rly };
-                        HitInfo2D rlhit = {0};
-                        if (!UniformGridTraceRay(grid, &rlray, PATH_EPSILON, CACHE_MAX_DISTANCE, &rlhit)) {
-                            rvis = 1.0;
-                        }
-                    }
-                    if (rndotl > 0.0 && rvis > 0.0) {
-                        double radius = light ? fmax(light->radius, 1.0) : 1.0;
-                        double area = M_PI * radius * radius;
-                        double lightTerm = animSettings.lightIntensity * area / (rdist2 + radius * radius);
-                        double reflContribution = rndotl * rvis * lightTerm * rbsdf.albedo * bsdf.reflectivity;
-                        reflAccum += reflContribution;
-                    }
-                }
-            }
-        }
-        if (reflSamples > 0) {
-            radiance += reflAccum / (double)reflSamples;
+    // Optional indirect pickup from the forward-probe buffer
+    if (includeIndirect && energyBuffer) {
+        double probe = SampleForwardProbe(energyBuffer,
+                                          bufferWidth,
+                                          bufferHeight,
+                                          hit.px,
+                                          hit.py,
+                                          hit.t);
+        if (probe > 0.0) {
+            radiance += probe;
         }
     }
 
@@ -286,38 +269,32 @@ static void SmoothEntryBins(SurfaceIrradiance* entry) {
     for (int i = 0; i < IRRADIANCE_BIN_COUNT; i++) {
         int prev = (i - 1 + IRRADIANCE_BIN_COUNT) % IRRADIANCE_BIN_COUNT;
         int next = (i + 1) % IRRADIANCE_BIN_COUNT;
-        double center = entry->bins[i].mean;
-        double left = entry->bins[prev].mean;
-        double right = entry->bins[next].mean;
-        double varCenter = entry->bins[i].variance;
-        double varLeft = entry->bins[prev].variance;
-        double varRight = entry->bins[next].variance;
-        double weightCenter = 0.5;
+        const IrradianceBin* bC = &entry->bins[i];
+        const IrradianceBin* bL = &entry->bins[prev];
+        const IrradianceBin* bR = &entry->bins[next];
+        double center = (bC->valid && bC->samples > 0) ? bC->mean : 0.0;
+        double left = (bL->valid && bL->samples > 0) ? bL->mean : 0.0;
+        double right = (bR->valid && bR->samples > 0) ? bR->mean : 0.0;
+        double varCenter = (bC->valid && bC->samples > 0) ? bC->variance : 0.0;
+        double varLeft = (bL->valid && bL->samples > 0) ? bL->variance : varCenter;
+        double varRight = (bR->valid && bR->samples > 0) ? bR->variance : varCenter;
+        double weightCenter = bC->valid ? 0.5 : 0.0;
         double weightNeighbors = 0.25;
         // If neighbors are noisy relative to center, downweight them slightly
         double centerVar = varCenter + 1e-6;
         if (varLeft > 4.0 * centerVar) weightNeighbors *= 0.5;
         if (varRight > 4.0 * centerVar) weightNeighbors *= 0.5;
+        if (!bL->valid) weightNeighbors = 0.0;
+        if (!bR->valid) weightNeighbors = 0.0;
         double norm = weightCenter + 2.0 * weightNeighbors;
-        tmp[i] = (weightNeighbors * left + weightCenter * center + weightNeighbors * right) / norm;
+        if (norm > 1e-6) {
+            tmp[i] = (weightNeighbors * left + weightCenter * center + weightNeighbors * right) / norm;
+        } else {
+            tmp[i] = center;
+        }
     }
     for (int i = 0; i < IRRADIANCE_BIN_COUNT; i++) {
         entry->bins[i].mean = tmp[i];
-    }
-}
-
-static void NormalizeEntryBins(SurfaceIrradiance* entry) {
-    if (!entry) return;
-    double maxMean = 0.0;
-    for (int i = 0; i < IRRADIANCE_BIN_COUNT; i++) {
-        if (entry->bins[i].mean > maxMean) {
-            maxMean = entry->bins[i].mean;
-        }
-    }
-    if (maxMean <= 0.0) return;
-    double inv = 1.0 / fmax(maxMean, 1e-6);
-    for (int i = 0; i < IRRADIANCE_BIN_COUNT; i++) {
-        entry->bins[i].mean *= inv;
     }
 }
 
@@ -328,6 +305,9 @@ static void FillEntryBins(const UniformGrid* grid,
                           const SceneObject* traceObjects,
                           int traceObjectCount,
                           const LightSource* light,
+                          const float* energyBuffer,
+                          int bufferWidth,
+                          int bufferHeight,
                           bool includeIndirect) {
     if (!entry || !objects || objectCount <= 0) return;
     const SceneObject* traceList = (traceObjects && traceObjectCount > 0)
@@ -355,6 +335,9 @@ static void FillEntryBins(const UniformGrid* grid,
             double sampleDirX = nx * cos(jitterAngle) + tx * sin(jitterAngle);
             double sampleDirY = ny * cos(jitterAngle) + ty * sin(jitterAngle);
             Normalize(&sampleDirX, &sampleDirY);
+            if (sampleDirX * entry->nx + sampleDirY * entry->ny <= 0.0) {
+                continue;
+            }
             double value = TraceDirectionalEnergy(grid,
                                                   traceList,
                                                   traceCount,
@@ -363,6 +346,9 @@ static void FillEntryBins(const UniformGrid* grid,
                                                   sampleDirX,
                                                   sampleDirY,
                                                   light,
+                                                  energyBuffer,
+                                                  bufferWidth,
+                                                  bufferHeight,
                                                   includeIndirect);
             AccumulateBin(&entry->bins[binIndex], value);
         }
@@ -419,10 +405,12 @@ bool IrradianceCacheFill(IrradianceCache* cache,
                           traceList,
                           traceCount,
                           activeLight,
+                          energyBuffer,
+                          width,
+                          height,
                           includeIndirectReflections);
             SmoothEntryBins(entry);
             SmoothEntryBins(entry);
-            NormalizeEntryBins(entry);
         }
     }
     return true;

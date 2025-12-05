@@ -75,6 +75,9 @@ void DirectLightIntegratorRender(IntegratorContext* ctx, const LightSource* ligh
                                                     y + 0.5,
                                                     ctx->width,
                                                     ctx->height);
+            double lx = light->x - world.x;
+            double ly = light->y - world.y;
+            NormalizeVec(&lx, &ly);
             if (!HasDirectLineOfSight(ctx, world.x, world.y, light)) {
                 continue;
             }

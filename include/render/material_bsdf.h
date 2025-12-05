@@ -22,6 +22,7 @@ typedef struct MaterialBSDF {
     double diffuseWeight;
     double specWeight;
     double weightSum;
+    double emissive;      // scalar emission (luminance)
 } MaterialBSDF;
 
 typedef struct {

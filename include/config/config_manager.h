@@ -61,6 +61,10 @@ typedef struct {
     double forwardDecay;    // Forward falloff distance (world units)
     ForwardFalloffMode forwardFalloffMode;
     RenderQuality renderQuality;
+    double cacheVarianceCutoff;   // Variance rejection threshold for irradiance cache bins
+    double cacheHaloRadius;       // Multiplier for light radius to suppress GI near the emitter
+    // Integrator mode: 0 = forward, 1 = hybrid (legacy camera path), 2 = disney path tracer, else direct
+    int cameraIntegratorMode;
 } AnimationConfig;
 
 

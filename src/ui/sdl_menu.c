@@ -514,8 +514,9 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
                  SUBSETTING_BUTTON_WIDTH, SUBSETTING_BUTTON_HEIGHT, "Auto MP4", animSettings.autoMP4);
 
     const char* integratorLabel = "Integrator: Forward Light";
-    if (animSettings.integratorMode == 1) integratorLabel = "Integrator: Hybrid (Camera Path)";
-    else if (animSettings.integratorMode == 2) integratorLabel = "Integrator: Direct Light";
+    if (animSettings.integratorMode == 1) integratorLabel = "Integrator: Hybrid";
+    else if (animSettings.integratorMode == 2) integratorLabel = "Integrator: Disney Path";
+    else if (animSettings.integratorMode == 3) integratorLabel = "Integrator: Direct Light";
     RenderButton(renderer, font, TOGGLE_BUTTON_MARGIN_X, integratorButtonY,
                  INTEGRATOR_BUTTON_WIDTH, INTEGRATOR_BUTTON_HEIGHT, integratorLabel, true);
 
@@ -859,12 +860,12 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
 
     if (x >= TOGGLE_BUTTON_MARGIN_X && x <= TOGGLE_BUTTON_MARGIN_X + INTEGRATOR_BUTTON_WIDTH &&
         y >= integratorButtonY && y <= integratorButtonY + INTEGRATOR_BUTTON_HEIGHT) {
-        animSettings.integratorMode = (animSettings.integratorMode + 1) % 3;
+        animSettings.integratorMode = (animSettings.integratorMode + 1) % 4;
         SyncMenuSliderValues();
         return;
     }
 
-    if (animSettings.integratorMode == 1) {
+    if (animSettings.integratorMode == 1 || animSettings.integratorMode == 2) {
         if (x >= TOGGLE_BUTTON_MARGIN_X && x <= TOGGLE_BUTTON_MARGIN_X + PATH_TOGGLE_WIDTH &&
             y >= pathToggleDirectY && y <= pathToggleDirectY + PATH_TOGGLE_HEIGHT) {
             animSettings.pathDirectLighting = !animSettings.pathDirectLighting;

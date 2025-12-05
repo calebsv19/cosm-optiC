@@ -8,6 +8,7 @@
 #include "render/material_bsdf.h"
 #include "render/surface_mesh.h"
 #include "render/camera_path_integrator.h"
+#include "render/camera_path_integrator_disney.h"
 #include "render/forward_light_integrator.h"
 #include "render/direct_light_integrator.h"
 #include "render/irradiance_cache.h"
@@ -262,6 +263,9 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
             }
         }
         memset(directEnergyBufferCPU, 0, pixelCount * sizeof(float));
+    } else {
+        // Ensure forward-only buffers are not reused in tiled mode
+        if (directEnergyBufferCPU) memset(directEnergyBufferCPU, 0, pixelCount * sizeof(float));
     }
     
     memset(pixelBuffer, 0, pixelCount * sizeof(Uint8)); // Clear buffer
@@ -322,15 +326,25 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
         if (!cacheReady) {
             context.cache = NULL;
         }
+    } else {
+        // Do not reuse stale caches when not in camera-path mode
+        context.cache = NULL;
     }
 
     ts_start_timer("Buffer Calc");
-    if (animSettings.integratorMode == 0) {
-        ForwardLightIntegratorRender(&context, &activeLight);
-    } else if (animSettings.integratorMode == 1) {
-        CameraPathIntegratorRender(&context, &activeLight);
-    } else {
-        DirectLightIntegratorRender(&context, &activeLight);
+    switch (animSettings.integratorMode) {
+        case 0: // forward
+            ForwardLightIntegratorRender(&context, &activeLight);
+            break;
+        case 1: // hybrid legacy camera path
+            CameraPathIntegratorRender(&context, &activeLight);
+            break;
+        case 2: // disney MIS path
+            CameraPathIntegratorRenderDisney(&context, &activeLight);
+            break;
+        default: // direct-only
+            DirectLightIntegratorRender(&context, &activeLight);
+            break;
     }
     ts_stop_timer("Buffer Calc");
 

@@ -60,7 +60,9 @@ AnimationConfig animSettings = {
     .lightIntensity = 5.0,
     .forwardDecay = 0.0,
     .forwardFalloffMode = FORWARD_FALLOFF_MODE_QUADRATIC,
-    .renderQuality = RENDER_QUALITY_MEDIUM
+    .renderQuality = RENDER_QUALITY_MEDIUM,
+    .cacheVarianceCutoff = 0.35,
+    .cacheHaloRadius = 3.5
 };
 
 SceneConfig sceneSettings = {
@@ -355,6 +357,8 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "forwardDecay", json_object_new_double(animSettings.forwardDecay));
     json_object_object_add(config, "forwardFalloffMode", json_object_new_int(animSettings.forwardFalloffMode));
     json_object_object_add(config, "renderQuality", json_object_new_int(animSettings.renderQuality));
+    json_object_object_add(config, "cacheVarianceCutoff", json_object_new_double(animSettings.cacheVarianceCutoff));
+    json_object_object_add(config, "cacheHaloRadius", json_object_new_double(animSettings.cacheHaloRadius));
     fprintf(file, "%s", json_object_to_json_string_ext(config, JSON_C_TO_STRING_PRETTY));
     fclose(file);
     json_object_put(config);
@@ -798,6 +802,16 @@ void LoadAnimationConfig(void) {
         animSettings.forwardFalloffMode = json_object_get_int(temp);
     if (json_object_object_get_ex(config, "renderQuality", &temp))
         animSettings.renderQuality = (RenderQuality)json_object_get_int(temp);
+    if (json_object_object_get_ex(config, "cacheVarianceCutoff", &temp)) {
+        animSettings.cacheVarianceCutoff = json_object_get_double(temp);
+    } else {
+        animSettings.cacheVarianceCutoff = 0.35;
+    }
+    if (json_object_object_get_ex(config, "cacheHaloRadius", &temp)) {
+        animSettings.cacheHaloRadius = json_object_get_double(temp);
+    } else {
+        animSettings.cacheHaloRadius = 3.5;
+    }
 
     animSettings.cacheContributionWeight = ClampDoubleValue(animSettings.cacheContributionWeight, 0.0, 1.0);
     animSettings.bsdfModel = (animSettings.bsdfModel != 0) ? 1 : 0;
@@ -817,6 +831,12 @@ void LoadAnimationConfig(void) {
     }
     if (animSettings.renderQuality < RENDER_QUALITY_LOW || animSettings.renderQuality > RENDER_QUALITY_HIGH) {
         animSettings.renderQuality = RENDER_QUALITY_MEDIUM;
+    }
+    if (animSettings.cacheVarianceCutoff <= 0.0) {
+        animSettings.cacheVarianceCutoff = 0.35;
+    }
+    if (animSettings.cacheHaloRadius <= 0.0) {
+        animSettings.cacheHaloRadius = 3.5;
     }
 	
     printf(" Loaded animation config successfully.\n");

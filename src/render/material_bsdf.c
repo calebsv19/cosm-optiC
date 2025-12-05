@@ -233,6 +233,12 @@ void MaterialBSDFInitFromSceneObject(const SceneObject* obj, MaterialBSDF* mater
         material->diffuseWeight = 1.0;
         material->weightSum = 1.0;
     }
+
+    double emissiveLuma = 0.0;
+    if (preset) {
+        emissiveLuma = Clamp01(0.2126 * preset->emissive.x + 0.7152 * preset->emissive.y + 0.0722 * preset->emissive.z);
+    }
+    material->emissive = emissiveLuma;
 }
 
 double MaterialBSDFDiffuseProbability(const MaterialBSDF* material) {
