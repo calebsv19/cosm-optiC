@@ -1,4 +1,4 @@
-#include "render/camera_path_integrator_disney.h"
+#include "render/integrators/camera_path_integrator_disney.h"
 #include "config/config_manager.h"
 #include "render/ray_types.h"
 #include "camera/camera.h"

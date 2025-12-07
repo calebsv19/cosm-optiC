@@ -7,10 +7,10 @@
 #include "render/integrator_common.h"
 #include "render/material_bsdf.h"
 #include "render/surface_mesh.h"
-#include "render/camera_path_integrator.h"
-#include "render/camera_path_integrator_disney.h"
-#include "render/forward_light_integrator.h"
-#include "render/direct_light_integrator.h"
+#include "render/integrators/hybrid/camera_path_integrator.h"
+#include "render/integrators/camera_path_integrator_disney.h"
+#include "render/integrators/forward_light_integrator.h"
+#include "render/integrators/direct_light_integrator.h"
 #include "render/irradiance_cache.h"
 #include "render/timer_hud_api.h"
 #include "engine/Render/render_pipeline.h"
@@ -336,9 +336,21 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
         case 0: // forward
             ForwardLightIntegratorRender(&context, &activeLight);
             break;
-        case 1: // hybrid legacy camera path
-            CameraPathIntegratorRender(&context, &activeLight);
+        case 1: { // hybrid camera path (new split)
+            CameraIntegratorSettings settings = {
+                .directIntensityScale = animSettings.lightIntensity,
+                .indirectVariance = animSettings.cacheVarianceCutoff,
+                .indirectHaloRadius = animSettings.cacheHaloRadius,
+                .blurEnabled = (animSettings.blurMode != 0),
+                .brightnessBoost = 1.0
+            };
+            CameraPathIntegratorRenderFromContext(&context,
+                                                  &activeLight,
+                                                  &settings,
+                                                  sceneSettings.camera.x,
+                                                  sceneSettings.camera.y);
             break;
+        }
         case 2: // disney MIS path
             CameraPathIntegratorRenderDisney(&context, &activeLight);
             break;

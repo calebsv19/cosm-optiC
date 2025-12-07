@@ -1,12 +1,12 @@
 {
   "window":{
-    "width":702,
-    "height":472
+    "width":368,
+    "height":270
   },
   "camera":{
-    "x":740.24889518315581,
-    "y":274.88079037952735,
-    "zoom":0.29457677785036934,
+    "x":705.0,
+    "y":269.0,
+    "zoom":0.15184320860152034,
     "rotation":0.0,
     "margin":80.0
   },
@@ -24,7 +24,7 @@
       "reflectivity":0.34999999999999998,
       "roughness":0.65000000000000002,
       "textureId":0,
-      "materialId":2,
+      "materialId":1,
       "numPoints":4,
       "baseShapePoints":[
         {
@@ -46,24 +46,9 @@
       ]
     },
     {
-      "type":"circle",
-      "x":773.59960796395103,
-      "y":513.26840700893808,
-      "scale":2.8096838867120026,
-      "rotation":-0.079789077343848783,
-      "texture":"",
-      "color":16777215,
-      "opacity":1.0,
-      "reflectivity":0.34999999999999998,
-      "roughness":0.65000000000000002,
-      "textureId":0,
-      "materialId":2,
-      "radius":25.0
-    },
-    {
       "type":"polygon",
-      "x":1394.6360482318751,
-      "y":800.54711798765402,
+      "x":83.636048231875066,
+      "y":760.54711798765402,
       "scale":6.4728172614465329,
       "rotation":-0.52706293007448324,
       "texture":"",
@@ -72,7 +57,7 @@
       "reflectivity":0.34999999999999998,
       "roughness":0.65000000000000002,
       "textureId":0,
-      "materialId":2,
+      "materialId":1,
       "numPoints":4,
       "baseShapePoints":[
         {
@@ -105,40 +90,7 @@
       "reflectivity":0.34999999999999998,
       "roughness":0.65000000000000002,
       "textureId":0,
-      "materialId":2,
-      "numPoints":4,
-      "baseShapePoints":[
-        {
-          "x":-25.0,
-          "y":-25.0
-        },
-        {
-          "x":25.0,
-          "y":-25.0
-        },
-        {
-          "x":25.0,
-          "y":25.0
-        },
-        {
-          "x":-25.0,
-          "y":25.0
-        }
-      ]
-    },
-    {
-      "type":"polygon",
-      "x":114.89706138961617,
-      "y":25.51068276741654,
-      "scale":2.809363443941697,
-      "rotation":1.2753554896511772,
-      "texture":"",
-      "color":16777215,
-      "opacity":1.0,
-      "reflectivity":0.34999999999999998,
-      "roughness":0.65000000000000002,
-      "textureId":0,
-      "materialId":2,
+      "materialId":1,
       "numPoints":4,
       "baseShapePoints":[
         {
@@ -171,7 +123,40 @@
       "reflectivity":0.34999999999999998,
       "roughness":0.65000000000000002,
       "textureId":0,
-      "materialId":3,
+      "materialId":1,
+      "numPoints":4,
+      "baseShapePoints":[
+        {
+          "x":-25.0,
+          "y":-25.0
+        },
+        {
+          "x":25.0,
+          "y":-25.0
+        },
+        {
+          "x":25.0,
+          "y":25.0
+        },
+        {
+          "x":-25.0,
+          "y":25.0
+        }
+      ]
+    },
+    {
+      "type":"polygon",
+      "x":1006.6615331754351,
+      "y":291.57530926501067,
+      "scale":3.2926159318180868,
+      "rotation":0.11229320203597243,
+      "texture":"",
+      "color":16777215,
+      "opacity":1.0,
+      "reflectivity":0.34999999999999998,
+      "roughness":0.65000000000000002,
+      "textureId":0,
+      "materialId":1,
       "numPoints":4,
       "baseShapePoints":[
         {
@@ -235,8 +220,8 @@
         }
       },
       {
-        "x":724,
-        "y":685,
+        "x":817,
+        "y":654,
         "rotation":0.0,
         "handleLink":false,
         "velocity1":{
@@ -278,24 +263,10 @@
     "mode":"BEZIER_CUBIC",
     "points":[
       {
-        "x":740,
-        "y":275,
+        "x":705,
+        "y":269,
         "rotation":0.0,
-        "handleLink":false,
-        "velocity1":{
-          "vx":0,
-          "vy":0
-        }
-      },
-      {
-        "x":857,
-        "y":221,
-        "rotation":0.0,
-        "handleLink":false,
-        "velocity2":{
-          "vx":-50,
-          "vy":0
-        }
+        "handleLink":false
       }
     ]
   }

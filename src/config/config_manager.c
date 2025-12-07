@@ -62,7 +62,8 @@ AnimationConfig animSettings = {
     .forwardFalloffMode = FORWARD_FALLOFF_MODE_QUADRATIC,
     .renderQuality = RENDER_QUALITY_MEDIUM,
     .cacheVarianceCutoff = 0.35,
-    .cacheHaloRadius = 3.5
+    .cacheHaloRadius = 3.5,
+    .lightDecaySoftness = 1.0
 };
 
 SceneConfig sceneSettings = {
@@ -359,6 +360,7 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "renderQuality", json_object_new_int(animSettings.renderQuality));
     json_object_object_add(config, "cacheVarianceCutoff", json_object_new_double(animSettings.cacheVarianceCutoff));
     json_object_object_add(config, "cacheHaloRadius", json_object_new_double(animSettings.cacheHaloRadius));
+    json_object_object_add(config, "lightDecaySoftness", json_object_new_double(animSettings.lightDecaySoftness));
     fprintf(file, "%s", json_object_to_json_string_ext(config, JSON_C_TO_STRING_PRETTY));
     fclose(file);
     json_object_put(config);
@@ -767,7 +769,7 @@ void LoadAnimationConfig(void) {
         animSettings.rouletteThreshold = json_object_get_double(temp);
     if (json_object_object_get_ex(config, "integratorMode", &temp))
         animSettings.integratorMode = json_object_get_int(temp);
-    if (animSettings.integratorMode < 0 || animSettings.integratorMode > 2) {
+    if (animSettings.integratorMode < 0 || animSettings.integratorMode > 3) {
         animSettings.integratorMode = 0;
     }
     if (json_object_object_get_ex(config, "previewDuration", &temp)) {
@@ -812,6 +814,11 @@ void LoadAnimationConfig(void) {
     } else {
         animSettings.cacheHaloRadius = 3.5;
     }
+    if (json_object_object_get_ex(config, "lightDecaySoftness", &temp)) {
+        animSettings.lightDecaySoftness = json_object_get_double(temp);
+    } else {
+        animSettings.lightDecaySoftness = 1.0;
+    }
 
     animSettings.cacheContributionWeight = ClampDoubleValue(animSettings.cacheContributionWeight, 0.0, 1.0);
     animSettings.bsdfModel = (animSettings.bsdfModel != 0) ? 1 : 0;
@@ -837,6 +844,12 @@ void LoadAnimationConfig(void) {
     }
     if (animSettings.cacheHaloRadius <= 0.0) {
         animSettings.cacheHaloRadius = 3.5;
+    }
+    if (animSettings.lightDecaySoftness <= 0.0) {
+        animSettings.lightDecaySoftness = 1.0;
+    }
+    if (animSettings.lightDecaySoftness > 10.0) {
+        animSettings.lightDecaySoftness = 10.0;
     }
 	
     printf(" Loaded animation config successfully.\n");

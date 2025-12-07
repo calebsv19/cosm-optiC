@@ -1,4 +1,4 @@
-#include "render/camera_path_integrator.h"
+#include "render/integrators/camera_path_integrator_old_version.h"
 #include "config/config_manager.h"
 #include "render/ray_types.h"
 #include "camera/camera.h"
@@ -357,10 +357,35 @@ static float ComputeDirectRadiance(const LightSource* light,
     if (!light) return 0.0f;
     double dx = light->x - worldX;
     double dy = light->y - worldY;
-    double dist2 = dx * dx + dy * dy;
-    double radius = fmax(light->radius, 1.0);
-    double area = M_PI * radius * radius;
-    double radiance = animSettings.lightIntensity * area / (dist2 + radius * radius);
+    double dist = hypot(dx, dy);
+
+    double falloffScale = animSettings.forwardDecay;
+    if (falloffScale <= 0.0) {
+        double w = (double)sceneSettings.windowWidth;
+        double h = (double)sceneSettings.windowHeight;
+        if (w <= 0.0) w = 1200.0;
+        if (h <= 0.0) h = 800.0;
+        falloffScale = hypot(w, h);
+    }
+    double softness = fmax(animSettings.lightDecaySoftness, 0.1);
+    double scale = fmax(falloffScale * softness, 1.0);
+    double normalized = dist / scale;
+
+    double att = 1.0;
+    switch (animSettings.forwardFalloffMode) {
+        case FORWARD_FALLOFF_MODE_LINEAR:
+            att = 1.0 / (1.0 + normalized);
+            break;
+        case FORWARD_FALLOFF_MODE_NONE:
+            att = 1.0;
+            break;
+        case FORWARD_FALLOFF_MODE_QUADRATIC:
+        default:
+            att = 1.0 / (1.0 + normalized * normalized);
+            break;
+    }
+
+    double radiance = animSettings.lightIntensity * att;
     return (float)radiance;
 }
 

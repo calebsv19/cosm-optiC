@@ -7,7 +7,9 @@
 #include "camera/camera.h"
 
 #define MAX_BEZIER_POINTS 100  // Define max points
-#define POINT_RADIUS 10  // Define global radius for point detection
+#define POINT_VIS_RADIUS 5     // Draw radius for control points
+#define HANDLE_VIS_RADIUS 4    // Draw radius for velocity handles
+#define POINT_HIT_RADIUS 8     // Hit radius for points/handles (screen space)
 
 #include "math/vec2.h"
 

@@ -214,7 +214,7 @@ static SDL_Color UseColor(SDL_Color color, SDL_Color fallback) {
 }
 
 static int ResolveRadius(int radius) {
-    if (radius <= 0) return POINT_RADIUS;
+    if (radius <= 0) return POINT_VIS_RADIUS;
     return radius;
 }
 
@@ -230,6 +230,7 @@ void RenderBezierPathCameraStyled(SDL_Renderer* renderer,
     if (!path || path->numPoints < 2) return;
 
     const int radius = ResolveRadius(pointRadius);
+    const int handleRadius = HANDLE_VIS_RADIUS;
 
     SDL_Color curve = UseColor(curveColor, (SDL_Color){0, 255, 0, 255});
     SDL_Color handles = UseColor(handleColor, (SDL_Color){255, 165, 0, 255});
@@ -317,9 +318,9 @@ void RenderBezierPathCameraStyled(SDL_Renderer* renderer,
             SDL_Point handle1 = ToCameraPoint(handle1w.x, handle1w.y, camera);
             SDL_Point handle2 = ToCameraPoint(handle2w.x, handle2w.y, camera);
 
-            for (int dx = -radius; dx <= radius; dx++) {
-                for (int dy = -radius; dy <= radius; dy++) {
-                    if (dx * dx + dy * dy <= radius * radius) {
+            for (int dx = -handleRadius; dx <= handleRadius; dx++) {
+                for (int dy = -handleRadius; dy <= handleRadius; dy++) {
+                    if (dx * dx + dy * dy <= handleRadius * handleRadius) {
                         SDL_RenderDrawPoint(renderer, handle1.x + dx, handle1.y + dy);
                         SDL_RenderDrawPoint(renderer, handle2.x + dx, handle2.y + dy);
                     }
@@ -345,7 +346,7 @@ void RenderBezierPathCamera(SDL_Renderer* renderer,
                                  handleColor,
                                  selectedIndex,
                                  selectedColor,
-                                 POINT_RADIUS);
+                                 POINT_VIS_RADIUS);
 }
 
 void RenderBezierPath(SDL_Renderer* renderer,
@@ -363,5 +364,5 @@ void RenderBezierPath(SDL_Renderer* renderer,
                                  handleColor,
                                  selectedIndex,
                                  selectedColor,
-                                 POINT_RADIUS);
+                                 POINT_VIS_RADIUS);
 }

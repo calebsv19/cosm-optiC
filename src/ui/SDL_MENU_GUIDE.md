@@ -46,6 +46,7 @@ Grouped on the far right. Current set (values persist via config):
 - Roulette Threshold (0.001–2.000): Russian roulette threshold (slider shows threshold*1000).
 - Light Intensity (0–20.00): scene light intensity (slider shows *100).
 - Falloff Distance (100–40000): forward decay distance (in world units).
+- Falloff Softness (0.10–5.00): scales how quickly light energy decays with distance (higher = slower decay/longer reach) for forward/direct/hybrid integrators.
 - Path SPP (1–128, only when Camera Path integrator is active): samples per pixel for camera path integrator.
 - Path Depth (1–16, only when Camera Path integrator is active): max path depth.
 - Environment % (0–2.00, only when Camera Path integrator is active): environment brightness (slider shows percent*100).

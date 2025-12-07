@@ -46,6 +46,18 @@ static CameraPoint ScreenToWorldBezier(const Camera* camera, int sx, int sy) {
                                sceneSettings.windowHeight);
 }
 
+static bool HitOnScreen(const Camera* camera, double wx, double wy, int mx, int my, double radius) {
+    if (!camera || radius <= 0.0) return false;
+    CameraPoint sp = CameraWorldToScreen(camera,
+                                         wx,
+                                         wy,
+                                         sceneSettings.windowWidth,
+                                         sceneSettings.windowHeight);
+    double dx = sp.x - (double)mx;
+    double dy = sp.y - (double)my;
+    return (dx * dx + dy * dy) <= radius * radius;
+}
+
 static void EnforceHandleLink(Path* path, int pointIndex) {
     if (!path || pointIndex < 0 || pointIndex >= path->numPoints) return;
     if (!path->handleLink[pointIndex]) return;
@@ -318,10 +330,9 @@ void HandleBezierEditorMouseClick(SDL_Event* event) {
 
     // Check for clicks on Bézier points
     for (int i = 0; i < sceneSettings.bezierPath.numPoints; i++) {
-        Vec2 p = vec2(sceneSettings.bezierPath.points[i].x, sceneSettings.bezierPath.points[i].y);
-        Vec2 delta = vec2_sub(world, p);
-        double dist2 = vec2_dot(delta, delta);
-        if (dist2 <= POINT_RADIUS * POINT_RADIUS) {
+        double px = sceneSettings.bezierPath.points[i].x;
+        double py = sceneSettings.bezierPath.points[i].y;
+        if (HitOnScreen(&previewCam, px, py, mx, my, POINT_HIT_RADIUS)) {
             draggingPoint = i;
             selectedPoint = i;
 
@@ -343,10 +354,7 @@ void HandleBezierEditorMouseClick(SDL_Event* event) {
             double vy = (j == 0) ? sceneSettings.bezierPath.points[i].y + sceneSettings.bezierPath.handles[i][0].vy
                                  : sceneSettings.bezierPath.points[i + 1].y + sceneSettings.bezierPath.handles[i][1].vy;
 
-            Vec2 handle = vec2(vx, vy);
-            Vec2 delta = vec2_sub(world, handle);
-            double dist2 = vec2_dot(delta, delta);
-            if (dist2 <= POINT_RADIUS * POINT_RADIUS) {
+            if (HitOnScreen(&previewCam, vx, vy, mx, my, POINT_HIT_RADIUS)) {
                 draggingPoint = i;
                 draggingVelocity = j;
                 selectedPoint = (j == 0) ? i : i + 1;

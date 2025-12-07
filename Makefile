@@ -35,7 +35,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/material/material.o \
 	$(BUILD_DIR)/render/integrators/direct_light_integrator.o \
 	$(BUILD_DIR)/render/integrators/forward_light_integrator.o \
-	$(BUILD_DIR)/render/integrators/camera_path_integrator.o \
+	$(BUILD_DIR)/render/integrators/hybrid/camera_path_integrator.o \
 	$(BUILD_DIR)/render/integrators/camera_path_integrator_disney.o \
 	$(BUILD_DIR)/render/integrators/integrator_common.o \
 	$(BUILD_DIR)/render/irradiance_cache.o \
@@ -54,8 +54,9 @@ TEST_DEPS := \
 	$(BUILD_DIR)/tools/ShapeLib/shape_json.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_flatten.o
 
-SRC := $(shell find $(SRC_DIR) -name '*.c' ! -path '$(SRC_DIR)/tools/cli/*')
+SRC := $(shell find $(SRC_DIR) -name '*.c' ! -path '$(SRC_DIR)/tools/cli/*' ! -path '$(SRC_DIR)/render/integrators/camera_path_integrator_old_version.c')
 OBJ := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRC))
+OBJ := $(filter-out $(BUILD_DIR)/render/integrators/camera_path_integrator_old_version.o,$(OBJ))
 DEP := $(OBJ:.o=.d)
 
 .PHONY: add-disney-flag

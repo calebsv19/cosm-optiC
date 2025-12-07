@@ -29,11 +29,26 @@ static SDL_Rect rotationSlider = {0};
 static int rotationSliderValue = 0; // 0..360 degrees
 static const double kRotationHandleLength = 70.0;
 static const int kRotationHandleRadius = 8;
+static const int kRotationHandleVisRadius = 6;
+static const int kRotationHandleHitRadius = 12;
 static const double kHalfPi = M_PI * 0.5;
 static const SDL_Color kRotHandleColor = {180, 120, 255, 220};
 
 static const double kWheelZoomFactor = 0.10;   // 10% zoom per wheel tick
 static const double kKeyZoomFactor   = 0.02;   // 2% zoom per +/- key press
+
+static bool HitOnScreen(const Camera* camera, double wx, double wy, int mx, int my, double radius) {
+    if (!camera || radius <= 0.0) return false;
+    CameraPoint sp = CameraWorldToScreen(camera,
+                                         wx,
+                                         wy,
+                                         sceneSettings.windowWidth,
+                                         sceneSettings.windowHeight);
+    double dx = sp.x - (double)mx;
+    double dy = sp.y - (double)my;
+    return (dx * dx + dy * dy) <= radius * radius;
+}
+
 static void EnforceCamHandleLink(int pointIndex) {
     Path* path = &sceneSettings.cameraPath;
     if (!path || pointIndex < 0 || pointIndex >= path->numPoints) return;
@@ -288,9 +303,9 @@ void RenderCameraEditor(SDL_Renderer* renderer) {
         SDL_Color col = (i == selectedCamPoint) ? (SDL_Color){200, 170, 255, 255} : kRotHandleColor;
         SDL_SetRenderDrawColor(renderer, col.r, col.g, col.b, col.a);
         SDL_RenderDrawLine(renderer, (int)baseS.x, (int)baseS.y, (int)endS.x, (int)endS.y);
-        for (int dx = -kRotationHandleRadius; dx <= kRotationHandleRadius; dx++) {
-            for (int dy = -kRotationHandleRadius; dy <= kRotationHandleRadius; dy++) {
-                if (dx * dx + dy * dy <= kRotationHandleRadius * kRotationHandleRadius) {
+        for (int dx = -kRotationHandleVisRadius; dx <= kRotationHandleVisRadius; dx++) {
+            for (int dy = -kRotationHandleVisRadius; dy <= kRotationHandleVisRadius; dy++) {
+                if (dx * dx + dy * dy <= kRotationHandleVisRadius * kRotationHandleVisRadius) {
                     SDL_RenderDrawPoint(renderer, (int)endS.x + dx, (int)endS.y + dy);
                 }
             }
@@ -345,10 +360,8 @@ void HandleCameraEditorEvents(SDL_Event* event) {
             // Check rotation handles first
             for (int i = 1; i < sceneSettings.cameraPath.numPoints; i++) { // skip start handle
                 Vec2 end = RotationHandleEndWorld(i);
-                Vec2 delta = vec2_sub(world, end);
-                double dist2 = vec2_dot(delta, delta);
-                int radius = kRotationHandleRadius + 3;
-                if (dist2 <= radius * radius) {
+                int radius = kRotationHandleHitRadius;
+                if (HitOnScreen(&editorCam, end.x, end.y, mx, my, radius)) {
                     camDraggingRotation = i;
                     selectedCamPoint = i;
                     consumed = true;
@@ -359,10 +372,9 @@ void HandleCameraEditorEvents(SDL_Event* event) {
             // Check for clicks on Bézier points first (priority over camera drag)
             if (!consumed) {
                 for (int i = 0; i < sceneSettings.cameraPath.numPoints; i++) {
-                    Vec2 p = vec2(sceneSettings.cameraPath.points[i].x, sceneSettings.cameraPath.points[i].y);
-                    Vec2 delta = vec2_sub(world, p);
-                    double dist2 = vec2_dot(delta, delta);
-                    if (dist2 <= POINT_RADIUS * POINT_RADIUS) {
+                    double px = sceneSettings.cameraPath.points[i].x;
+                    double py = sceneSettings.cameraPath.points[i].y;
+                    if (HitOnScreen(&editorCam, px, py, mx, my, POINT_HIT_RADIUS)) {
                         camDraggingPoint = i;
                         selectedCamPoint = i;
                         if (deleteModeActive) {
@@ -384,10 +396,7 @@ void HandleCameraEditorEvents(SDL_Event* event) {
                         double vy = (j == 0) ? sceneSettings.cameraPath.points[i].y + sceneSettings.cameraPath.handles[i][0].vy
                                              : sceneSettings.cameraPath.points[i + 1].y + sceneSettings.cameraPath.handles[i][1].vy;
 
-                        Vec2 handle = vec2(vx, vy);
-                        Vec2 delta = vec2_sub(world, handle);
-                        double dist2 = vec2_dot(delta, delta);
-                        if (dist2 <= POINT_RADIUS * POINT_RADIUS) {
+                        if (HitOnScreen(&editorCam, vx, vy, mx, my, POINT_HIT_RADIUS)) {
                             camDraggingPoint = i;
                             camDraggingVelocity = j;
                             selectedCamPoint = (j == 0) ? i : i + 1;
@@ -471,6 +480,15 @@ void HandleCameraEditorEvents(SDL_Event* event) {
                                    camDraggingPoint,
                                    camDraggingVelocity);
                 EnforceCamHandleLink(selectedCamPoint);
+            } else if ((event->motion.state & SDL_BUTTON_LMASK) &&
+                       !cameraDragging &&
+                       camDraggingPoint == -1 &&
+                       camDraggingVelocity == -1 &&
+                       camDraggingRotation == -1) {
+                // Start a pan drag if nothing else is being dragged
+                cameraDragging = true;
+                lastMouseX = event->motion.x;
+                lastMouseY = event->motion.y;
             } else if (cameraDragging) {
                 Camera editorCam = BuildEditorCamera();
                 CameraPoint prev = CameraScreenToWorld(&editorCam,
@@ -499,10 +517,23 @@ void HandleCameraEditorEvents(SDL_Event* event) {
             break;
         case SDL_KEYDOWN: {
             SDL_Keycode key = event->key.keysym.sym;
+            const double panStep = 20.0 / sceneSettings.camera.zoom;
             if (key == SDLK_EQUALS || key == SDLK_PLUS || key == SDLK_KP_PLUS) {
                 ApplyZoomDelta(kKeyZoomFactor);
             } else if (key == SDLK_MINUS || key == SDLK_UNDERSCORE || key == SDLK_KP_MINUS) {
                 ApplyZoomDelta(-kKeyZoomFactor);
+            } else if (key == SDLK_LEFT) {
+                CameraPan(&sceneSettings.camera, -panStep, 0.0);
+                OffsetCameraPath(-panStep, 0.0);
+            } else if (key == SDLK_RIGHT) {
+                CameraPan(&sceneSettings.camera, panStep, 0.0);
+                OffsetCameraPath(panStep, 0.0);
+            } else if (key == SDLK_UP) {
+                CameraPan(&sceneSettings.camera, 0.0, -panStep);
+                OffsetCameraPath(0.0, -panStep);
+            } else if (key == SDLK_DOWN) {
+                CameraPan(&sceneSettings.camera, 0.0, panStep);
+                OffsetCameraPath(0.0, panStep);
             } else if (key == SDLK_t) {
                 ToggleBezierPathMode(&sceneSettings.cameraPath);
             } else if (key == SDLK_l) {

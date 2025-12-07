@@ -162,11 +162,9 @@ void HandleEvents(bool* running) {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT) {
-            *running = false;
-            quitRequested = true;
+            *running = false; // return to menu instead of killing app
         } else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
-            *running = false;
-            quitRequested = true;
+            *running = false; // escape exits loop, menu decides next step
         } else if (animSettings.interactiveMode && (event.type == SDL_MOUSEMOTION ||
                                 event.type == SDL_MOUSEBUTTONDOWN)) {
             ProcessRayTracingEvent(&event);
@@ -451,8 +449,7 @@ void RunMainLoop(void) {
             while (SDL_PollEvent(&event)) {
                 if (event.type == SDL_QUIT ||
                     (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE)) {
-                    waitingForExit = false;
-                    quitRequested = true;
+                    waitingForExit = false; // return to menu
                 }
             }
             SDL_Delay(10);
@@ -474,7 +471,7 @@ int main(int argc, char* argv[]) {
     t_increment = 1.0 / animSettings.framesForTravel;
     printf("Loaded animation config in main.\n");
 
-    // Run menu; allow repeated preview launches before starting
+    // Menu → run loop, allowing return to menu after each run
     while (!quitRequested) {
         if (!RunMenu()) {
             printf("Menu closed. Exiting program.\n");
@@ -487,36 +484,39 @@ int main(int argc, char* argv[]) {
             SaveAllSettings();
             continue; // back to menu for next choice
         }
-        break; // proceed to main run
+
+        // Print selected settings
+        printf("Selected Mode: %s\n",
+               animSettings.interactiveMode ? "Interactive" :
+               animSettings.deepRenderMode ? "Deep Render" :
+               animSettings.bounceMode ? "Bounce Animation" : "Standard Animation");
+        printf("Auto MP4 after render: %s\n", animSettings.autoMP4 ? "Enabled" : "Disabled");
+        printf("Saving frames in directory: %s\n", animSettings.frameDir);
+
+        // Initialize animation
+        if (AnimationInit() != 0) {
+            printf("Error: Animation initialization failed. Exiting program.\n");
+            return -1;
+        }
+
+        t_increment = 1.0 / animSettings.framesForTravel;
+
+        printf("Starting animation loop...\n");
+        RunMainLoop();
+
+        if (animSettings.autoMP4 && animSettings.deepRenderMode) {
+            printf("Generating MP4 automatically...\n");
+            MakeVideo("output.mp4");
+        }
+
+        AnimationCleanup();
+        SaveAllSettings();
+
+        // If run ended without a quit request, drop back to the menu
+        if (quitRequested) {
+            break;
+        }
     }
-
-    // Print selected settings
-    printf("Selected Mode: %s\n",
-           animSettings.interactiveMode ? "Interactive" :
-           animSettings.deepRenderMode ? "Deep Render" :
-           animSettings.bounceMode ? "Bounce Animation" : "Standard Animation");
-    printf("Auto MP4 after render: %s\n", animSettings.autoMP4 ? "Enabled" : "Disabled");
-    printf("Saving frames in directory: %s\n", animSettings.frameDir);
-
-    // Initialize animation
-    if (AnimationInit() != 0) {
-        printf("Error: Animation initialization failed. Exiting program.\n");
-        return -1;
-    }
-
-    printf("Starting animation loop...\n");
-    // Run animation based on settings from the menu
-    RunMainLoop();
-
-    // Automatically create MP4 if deep render mode was enabled and autoMP4 is ON
-    if (animSettings.autoMP4 && animSettings.deepRenderMode) {
-        printf("Generating MP4 automatically...\n");
-        MakeVideo("output.mp4");
-    }
-
-    // Cleanup animation and save settings
-    AnimationCleanup();
-    SaveAllSettings();
 
     return 0;
 }

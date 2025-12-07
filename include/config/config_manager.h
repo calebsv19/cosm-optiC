@@ -63,6 +63,7 @@ typedef struct {
     RenderQuality renderQuality;
     double cacheVarianceCutoff;   // Variance rejection threshold for irradiance cache bins
     double cacheHaloRadius;       // Multiplier for light radius to suppress GI near the emitter
+    double lightDecaySoftness;    // >1.0 flattens decay, <1.0 steepens decay
     // Integrator mode: 0 = forward, 1 = hybrid (legacy camera path), 2 = disney path tracer, else direct
     int cameraIntegratorMode;
 } AnimationConfig;

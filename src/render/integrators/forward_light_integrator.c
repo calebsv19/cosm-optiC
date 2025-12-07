@@ -1,4 +1,4 @@
-#include "render/forward_light_integrator.h"
+#include "render/integrators/forward_light_integrator.h"
 #include "config/config_manager.h"
 #include "render/fast_rng.h"
 #include "render/ray_types.h"
@@ -763,7 +763,8 @@ static double ForwardDistanceAttenuation(double distance, double scale, int mode
     if (mode == FORWARD_FALLOFF_MODE_NONE || scale <= 0.0) return 1.0;
 
     double safeScale  = fmax(scale, 1.0);
-    double normalized = fmax(distance, 0.0) / safeScale;
+    double softness   = fmax(animSettings.lightDecaySoftness, 0.1);
+    double normalized = fmax(distance, 0.0) / (safeScale * softness);
 
     // Default to a slow linear-style soft rolloff; quadratic optional.
     if (mode == FORWARD_FALLOFF_MODE_LINEAR) {

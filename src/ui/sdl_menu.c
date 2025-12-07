@@ -117,6 +117,7 @@ static int rouletteSliderValue = 10; // stores threshold * 1000
 static int envSliderValue = 0;
 static int cacheWeightSliderValue = 100;
 static int lightIntensitySliderValue = 500;
+static int lightDecaySoftnessSliderValue = 100; // maps to 0.1..10.0
 static int forwardDecaySliderValue = 2000;
 static int oldWindowWidth = 0;
 static int oldWindowHeight = 0;
@@ -171,6 +172,14 @@ static void SyncLightSliderFromSettings(void) {
     lightIntensitySliderValue = (int)lround(intensity * 100.0);
 }
 
+static void SyncDecaySoftnessSliderFromSettings(void) {
+    if (draggingSlider && selectedSlider == &lightDecaySoftnessSliderValue) {
+        return;
+    }
+    double softness = ClampDouble(animSettings.lightDecaySoftness, 0.1, 10.0);
+    lightDecaySoftnessSliderValue = (int)lround(softness * 100.0);
+}
+
 static void SyncForwardDecaySliderFromSettings(void) {
     if (draggingSlider && selectedSlider == &forwardDecaySliderValue) {
         return;
@@ -186,6 +195,7 @@ static void SyncMenuSliderValues(void) {
     SyncEnvSliderFromSettings();
     SyncCacheSliderFromSettings();
     SyncLightSliderFromSettings();
+    SyncDecaySoftnessSliderFromSettings();
     SyncForwardDecaySliderFromSettings();
 }
 
@@ -227,6 +237,10 @@ static void ApplySpecialSliderRules(int* target) {
         if (lightIntensitySliderValue < 0) lightIntensitySliderValue = 0;
         if (lightIntensitySliderValue > 2000) lightIntensitySliderValue = 2000;
         animSettings.lightIntensity = lightIntensitySliderValue / 100.0;
+    } else if (target == &lightDecaySoftnessSliderValue) {
+        if (lightDecaySoftnessSliderValue < 10) lightDecaySoftnessSliderValue = 10;
+        if (lightDecaySoftnessSliderValue > 1000) lightDecaySoftnessSliderValue = 1000;
+        animSettings.lightDecaySoftness = lightDecaySoftnessSliderValue / 100.0;
     } else if (target == &forwardDecaySliderValue) {
         if (forwardDecaySliderValue < FORWARD_FALLOFF_DISTANCE_MIN) {
             forwardDecaySliderValue = FORWARD_FALLOFF_DISTANCE_MIN;
@@ -426,6 +440,7 @@ static SliderLayout BuildSliderLayout(void) {
     ADD_SLIDER(&animSettings.tileSize, 4, 256, "Tile Size");
     ADD_SLIDER(&rouletteSliderValue, 1, 2000, "Roulette Threshold");
     ADD_SLIDER(&lightIntensitySliderValue, 0, 2000, "Light Intensity");
+    ADD_SLIDER(&lightDecaySoftnessSliderValue, 10, 1000, "Falloff Softness");
     ADD_SLIDER(&forwardDecaySliderValue, FORWARD_FALLOFF_DISTANCE_MIN, FORWARD_FALLOFF_DISTANCE_MAX, "Falloff Distance");
     layout.nextY += SLIDER_SECTION_GAP;
 
@@ -472,6 +487,9 @@ static void RenderSliders(SDL_Renderer* renderer, TTF_Font* font, const SliderLa
         } else if (slider->value == &lightIntensitySliderValue) {
             RenderText(renderer, font, slider->x + slider->width + 10, slider->y - textMarginX,
                        "%.2f", lightIntensitySliderValue / 100.0);
+        } else if (slider->value == &lightDecaySoftnessSliderValue) {
+            RenderText(renderer, font, slider->x + slider->width + 10, slider->y - textMarginX,
+                       "%.2f", lightDecaySoftnessSliderValue / 100.0);
         } else if (slider->value == &forwardDecaySliderValue) {
             RenderText(renderer, font, slider->x + slider->width + 10, slider->y - textMarginX,
                        "%d", forwardDecaySliderValue);
@@ -540,11 +558,11 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
                      animSettings.bsdfModel != 0);
     }
                  
-    const char* falloffLabel = "Forward Falloff: Quadratic (1/r^2)";
+    const char* falloffLabel = "Quadratic (1/r^2)";
     if (animSettings.forwardFalloffMode == FORWARD_FALLOFF_MODE_LINEAR) {
-        falloffLabel = "Forward Falloff: Linear (1/r)";
+        falloffLabel = "Linear (1/r)";
     } else if (animSettings.forwardFalloffMode == FORWARD_FALLOFF_MODE_NONE) {
-        falloffLabel = "Forward Falloff: None";
+        falloffLabel = "Falloff: None";
     }
     RenderButton(renderer, font, centerX, falloffButtonY,
                  FORWARD_FALLOFF_BUTTON_WIDTH, FORWARD_FALLOFF_BUTTON_HEIGHT,
@@ -911,6 +929,8 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
     // Preview Button Click
     if (x > BOTTOM_BUTTON_MARGIN_X_PREVIEW && x < BOTTOM_BUTTON_MARGIN_X_PREVIEW + BOTTOM_BUTTON_WIDTH_PREVIEW &&
         y > BOTTOM_BUTTON_MARGIN_Y_PREVIEW && y < BOTTOM_BUTTON_MARGIN_Y_PREVIEW + BOTTOM_BUTTON_HEIGHT_PREVIEW) {
+        SyncMenuSliderValues();
+        SaveAllSettings();
         animSettings.previewMode = true;
         *menuExitedNormally = true;
         *running = false;
@@ -925,7 +945,15 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
     // Start Button Click
     if (x > BOTTOM_BUTTON_MARGIN_X_START && x < BOTTOM_BUTTON_MARGIN_X_START + BOTTOM_BUTTON_WIDTH_START &&
         y > BOTTOM_BUTTON_MARGIN_Y_START && y < BOTTOM_BUTTON_MARGIN_Y_START + BOTTOM_BUTTON_HEIGHT_START) {
-	SaveAllSettings();
+        // Capture any in-flight slider edits, then persist
+        SyncMenuSliderValues();
+        printf("[Menu] Start pressed: integrator=%d falloffMode=%d decay=%.2f softness=%.2f intensity=%.2f\n",
+               animSettings.integratorMode,
+               animSettings.forwardFalloffMode,
+               animSettings.forwardDecay,
+               animSettings.lightDecaySoftness,
+               animSettings.lightIntensity);
+        SaveAllSettings();
         animSettings.previewMode = false;
         *menuExitedNormally = true;
         *running = false;
