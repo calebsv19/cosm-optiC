@@ -6,12 +6,15 @@
 #include "config/config_manager.h"  //  Required for loading/saving scene settings
 #include "scene/object_manager.h"
 #include "app/animation.h"
+#include "render/fluid_state.h"
+#include "camera/camera.h"
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 // UI Button
 SDL_Rect applyButton = {1000, 700, 150, 50};
@@ -24,6 +27,31 @@ SDL_Rect toggleButton;
 
 bool sceneEditorExitFlag = false;  //  Used to signal Scene Editor should exit
 static void InitializeEditorMode(SceneEditor* editor);
+
+static void RenderFluidBounds(SDL_Renderer* renderer) {
+    if (!g_fluidGrid.valid) return;
+    Camera cam = CameraBuildPreviewCamera(&sceneSettings.camera,
+                                          GetCurrentMarginPixels(),
+                                          sceneSettings.windowWidth,
+                                          sceneSettings.windowHeight);
+    CameraPoint minS = CameraWorldToScreen(&cam,
+                                           g_fluidGrid.min_x,
+                                           g_fluidGrid.min_y,
+                                           sceneSettings.windowWidth,
+                                           sceneSettings.windowHeight);
+    CameraPoint maxS = CameraWorldToScreen(&cam,
+                                           g_fluidGrid.max_x,
+                                           g_fluidGrid.max_y,
+                                           sceneSettings.windowWidth,
+                                           sceneSettings.windowHeight);
+    int x0 = (int)lrint(fmin(minS.x, maxS.x));
+    int x1 = (int)lrint(fmax(minS.x, maxS.x));
+    int y0 = (int)lrint(fmin(minS.y, maxS.y));
+    int y1 = (int)lrint(fmax(minS.y, maxS.y));
+    SDL_Rect rect = {x0, y0, x1 - x0, y1 - y0};
+    SDL_SetRenderDrawColor(renderer, 120, 200, 255, 180);
+    SDL_RenderDrawRect(renderer, &rect);
+}
 
 void InitializeSceneEditor(SceneEditor* editor) {
     //  Load all scene configurations (window size, objects, paths)
@@ -128,6 +156,7 @@ void SceneEditorLoop(SceneEditor* editor) {
                 RenderCameraEditor(editor->renderer);
                 break;
         }
+        RenderFluidBounds(editor->renderer);
 	RenderSceneButtons(editor->renderer);
 
         SDL_RenderPresent(editor->renderer);

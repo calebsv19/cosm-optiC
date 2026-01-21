@@ -108,9 +108,26 @@ void DirectLightingPass(IntegratorDirectContext* ctx,
                         double camX, double camY,
                         double intensityScale)
 {
+    DirectLightingPassRegion(ctx, light, camX, camY, intensityScale,
+                             0, 0, ctx ? ctx->width : 0, ctx ? ctx->height : 0);
+}
+
+void DirectLightingPassRegion(IntegratorDirectContext* ctx,
+                              const LightSource* light,
+                              double camX, double camY,
+                              double intensityScale,
+                              int startX, int startY,
+                              int endX, int endY)
+{
     if (!ctx || !light) return;
     (void)camX;
     (void)camY;
+
+    int minX = startX < 0 ? 0 : startX;
+    int minY = startY < 0 ? 0 : startY;
+    int maxX = endX > ctx->width ? ctx->width : endX;
+    int maxY = endY > ctx->height ? ctx->height : endY;
+    if (minX >= maxX || minY >= maxY) return;
 
     IntegratorEnergyContext ectx = {
         .width = ctx->width,
@@ -120,9 +137,8 @@ void DirectLightingPass(IntegratorDirectContext* ctx,
         .energyBuffer = ctx->energyBuffer
     };
 
-    for (int y = 0; y < ctx->height; y++) {
-        for (int x = 0; x < ctx->width; x++) {
-
+    for (int y = minY; y < maxY; y++) {
+        for (int x = minX; x < maxX; x++) {
             CameraPoint world = CameraScreenToWorld(&sceneSettings.camera,
                                                     x + 0.5,
                                                     y + 0.5,

@@ -68,10 +68,10 @@ void FeelerDirection(int index, int total, double jitter,
 
 int DetermineFeelerCount(float directLimit, float qualityScale)
 {
-    int base = 16;
-    if (directLimit < 4.0f) base = 24;
-    if (directLimit < 1.5f) base = 32;
-    if (directLimit < 0.3f) base = 48;
+    int base = 14;
+    if (directLimit < 4.0f) base = 22;
+    if (directLimit < 1.5f) base = 30;
+    if (directLimit < 0.3f) base = 44;
 
     float scaled = base * qualityScale;
     int out = (int)lround(scaled);

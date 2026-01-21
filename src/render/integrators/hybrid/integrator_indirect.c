@@ -87,7 +87,6 @@ float IndirectSamplePoint(const IntegratorIndirectContext* ctx,
                           double feelerLimit,
                           double varianceCut,
                           double haloRadius,
-                          double camX, double camY,
                           double intensityScale,
                           float* debugStats)
 {
@@ -101,12 +100,13 @@ float IndirectSamplePoint(const IntegratorIndirectContext* ctx,
     if (light && ldist < haloRadius)
         return 0.0f;
 
-    double baseNx = worldX - camX;
-    double baseNy = worldY - camY;
-    if (fabs(baseNx) < 1e-8 && fabs(baseNy) < 1e-8)
-        baseNx = 1.0;
+    // Hybrid uses an infinite, top-down view: fixed view direction for all pixels.
+    double viewX = 0.0;
+    double viewY = -1.0;
+    normalize(&viewX, &viewY);
 
-    normalize(&baseNx, &baseNy);
+    double baseNx = viewX;
+    double baseNy = viewY;
 
     float sum = 0.0f;
 
@@ -214,16 +214,8 @@ float IndirectSamplePoint(const IntegratorIndirectContext* ctx,
             double Lx = vdx;
             double Ly = vdy;
 
-            double Vx = camX - hit.px;
-            double Vy = camY - hit.py;
-            double vlen = sqrt(Vx*Vx + Vy*Vy);
-            if (vlen > GRID_EPSILON) {
-                Vx /= vlen;
-                Vy /= vlen;
-            } else {
-                Vx = -Lx;
-                Vy = -Ly;
-            }
+            double Vx = viewX;
+            double Vy = viewY;
 
             bsdfTerm = MaterialBSDFEvaluateCos(mat,
                                                nnx, nny,
@@ -252,10 +244,21 @@ float IndirectSamplePoint(const IntegratorIndirectContext* ctx,
 
 void IndirectLightingPass(IntegratorIndirectContext* ctx,
                           const LightSource* light,
-                          double camX, double camY,
                           double userVariance,
                           double userHalo,
                           double intensityScale)
+{
+    IndirectLightingPassRegion(ctx, light, userVariance, userHalo, intensityScale,
+                               0, 0, ctx ? ctx->width : 0, ctx ? ctx->height : 0);
+}
+
+void IndirectLightingPassRegion(IntegratorIndirectContext* ctx,
+                                const LightSource* light,
+                                double userVariance,
+                                double userHalo,
+                                double intensityScale,
+                                int startX, int startY,
+                                int endX, int endY)
 {
     if (!ctx)
         return;
@@ -273,6 +276,12 @@ void IndirectLightingPass(IntegratorIndirectContext* ctx,
         .energyBuffer = ctx->energyBuffer
     };
 
+    int minX = startX < 0 ? 0 : startX;
+    int minY = startY < 0 ? 0 : startY;
+    int maxX = endX > ctx->width ? ctx->width : endX;
+    int maxY = endY > ctx->height ? ctx->height : endY;
+    if (minX >= maxX || minY >= maxY) return;
+
     double avgExtent = EstimateAverageObjectExtent(ctx);
     double baseFeelerLimit = fmax(3.0 * avgExtent, 300.0);
     double feelerLimitMax = 1500.0;
@@ -280,9 +289,8 @@ void IndirectLightingPass(IntegratorIndirectContext* ctx,
     if (baseFeelerLimit > feelerLimitMax) baseFeelerLimit = feelerLimitMax;
     if (baseFeelerLimit < feelerLimitMin) baseFeelerLimit = feelerLimitMin;
 
-    for (int y = 0; y < ctx->height; y++) {
-        for (int x = 0; x < ctx->width; x++) {
-
+    for (int y = minY; y < maxY; y++) {
+        for (int x = minX; x < maxX; x++) {
             CameraPoint world = CameraScreenToWorld(&sceneSettings.camera,
                                                     x + 0.5,
                                                     y + 0.5,
@@ -290,6 +298,10 @@ void IndirectLightingPass(IntegratorIndirectContext* ctx,
                                                     ctx->height);
             double wx = world.x;
             double wy = world.y;
+
+            // Skip indirect if the direct pass already lit this pixel.
+            if (ReadEnergy(&ectx, x, y) > 0.0f)
+                continue;
 
             float directScale = (float)DirectComputeRadiance(light, wx, wy, intensityScale);
             float qualityScale = (float)RenderQualityScale();
@@ -302,7 +314,6 @@ void IndirectLightingPass(IntegratorIndirectContext* ctx,
                                            baseFeelerLimit,
                                            varianceCut,
                                            haloRadius,
-                                           camX, camY,
                                            intensityScale,
                                            debug);
 

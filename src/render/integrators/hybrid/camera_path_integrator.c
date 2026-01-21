@@ -109,8 +109,6 @@ static void DirectPass(CameraIntegrator* ci,
 
 static void IndirectPass(CameraIntegrator* ci,
                          const LightSource* light,
-                         double camX,
-                         double camY,
                          double userVariance,
                          double userHalo,
                          double intensityScale,
@@ -132,7 +130,7 @@ static void IndirectPass(CameraIntegrator* ci,
         .materialCount= ci->materialCount
     };
 
-    IndirectLightingPass(&ictx, light, camX, camY, userVariance, userHalo, intensityScale);
+    IndirectLightingPass(&ictx, light, userVariance, userHalo, intensityScale);
     if (brightnessBoost != 1.0) {
         // Simple scale of indirect buffer to mirror direct boost
         IntegratorEnergyContext ectx = {
@@ -256,8 +254,6 @@ void CameraPathIntegrator_Render(CameraIntegrator* ci,
 
     IndirectPass(ci,
                  light,
-                 camX,
-                 camY,
                  s->indirectVariance,
                  s->indirectHaloRadius,
                  s->directIntensityScale,

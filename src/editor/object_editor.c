@@ -11,6 +11,7 @@
 #include <dirent.h>
 #include <stdio.h>
 #include <math.h>
+#include <stdlib.h>
 
 #define MAX_POLYGON_POINTS 10  // Limit for custom polygons
 
@@ -24,8 +25,11 @@ static double lastWorldX = 0.0;
 static double lastWorldY = 0.0;
 static bool renderHandles = true;
 #define MAX_ASSET_LIST 128
-#define ASSET_PANEL_WIDTH 220
+#define ASSET_PANEL_WIDTH 200
 #define ASSET_ROW_HEIGHT 22
+#define PANEL_HEADER_HEIGHT 26
+#define PANEL_PADDING 6
+#define PANEL_MAX_HEIGHT 220
 
 
 // Global mode states
@@ -51,14 +55,25 @@ SDL_Rect cancelPolygonButton;
 
 static SDL_Rect assetPanelRect;
 static SDL_Rect assetToggleRect;
+static SDL_Rect assetCollapseRect;
 static bool showImports = false;
 static int selectedAssetIndex = -1;
 static ShapeAssetLibrary assetLib = {0};
 static char importNames[MAX_ASSET_LIST][256];
 static int importCount = 0;
 static SDL_Rect materialPanelRect;
+static SDL_Rect materialCollapseRect;
 static int selectedMaterialIndex = -1;
 static const int MATERIAL_ROW_HEIGHT = 18;
+static bool assetsCollapsed = false;
+static bool materialsCollapsed = false;
+static int assetScroll = 0;
+static int materialScroll = 0;
+
+static const char* ShapeAssetDir(void) {
+    const char* dir = getenv("SHAPE_ASSET_DIR");
+    return (dir && dir[0]) ? dir : "Configs/objects";
+}
 
 static Camera BuildObjectEditorCamera(void) {
     double margin = GetCurrentMarginPixels();
@@ -101,7 +116,7 @@ static void RenderCameraViewportOverlay(SDL_Renderer* renderer, double margin) {
 
 static void RefreshAssetLibrary(void) {
     shape_library_free(&assetLib);
-    shape_library_load_dir("Configs/objects", &assetLib);
+    shape_library_load_dir(ShapeAssetDir(), &assetLib);
     if (selectedAssetIndex >= (int)assetLib.count) selectedAssetIndex = -1;
 }
 
@@ -121,6 +136,36 @@ static void RefreshImportList(void) {
     closedir(dir);
 }
 
+static void UpdatePanelLayout(void) {
+    int headerW = ASSET_PANEL_WIDTH - PANEL_PADDING * 2;
+    int x = 20;
+    int y = 40;
+    int assetRows = showImports ? importCount : (int)assetLib.count;
+    if (assetRows < 1) assetRows = 1;
+    int assetContent = PANEL_HEADER_HEIGHT + PANEL_PADDING * 2 + assetRows * ASSET_ROW_HEIGHT;
+    if (assetContent > PANEL_MAX_HEIGHT) assetContent = PANEL_MAX_HEIGHT;
+    assetPanelRect = (SDL_Rect){x, y, ASSET_PANEL_WIDTH, assetContent};
+    assetToggleRect = (SDL_Rect){x + PANEL_PADDING,
+                                 y + PANEL_PADDING,
+                                 headerW - 20,
+                                 PANEL_HEADER_HEIGHT - PANEL_PADDING};
+    assetCollapseRect = (SDL_Rect){assetToggleRect.x + assetToggleRect.w + 4,
+                                   assetToggleRect.y,
+                                   16,
+                                   16};
+
+    int matRows = MaterialManagerCount();
+    if (matRows < 1) matRows = 1;
+    int matContent = PANEL_HEADER_HEIGHT + PANEL_PADDING * 2 + matRows * MATERIAL_ROW_HEIGHT;
+    if (matContent > PANEL_MAX_HEIGHT) matContent = PANEL_MAX_HEIGHT;
+    int matY = sceneSettings.windowHeight - matContent - 20;
+    materialPanelRect = (SDL_Rect){x, matY, ASSET_PANEL_WIDTH, matContent};
+    materialCollapseRect = (SDL_Rect){materialPanelRect.x + materialPanelRect.w - PANEL_PADDING - 16,
+                                      materialPanelRect.y + PANEL_PADDING,
+                                      16,
+                                      16};
+}
+
 static void DrawAssetList(SDL_Renderer* renderer) {
     SDL_Rect panel = assetPanelRect;
     SDL_BlendMode prevMode;
@@ -137,11 +182,34 @@ static void DrawAssetList(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderDrawRect(renderer, &assetToggleRect);
     RenderButtonText(renderer, assetToggleRect, showImports ? "Imports" : "Assets");
+    SDL_SetRenderDrawColor(renderer, assetsCollapsed ? 200 : 100, assetsCollapsed ? 60 : 200, 80, 220);
+    SDL_RenderFillRect(renderer, &assetCollapseRect);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderDrawRect(renderer, &assetCollapseRect);
 
-    int listY = assetToggleRect.y + assetToggleRect.h + 6;
+    if (assetsCollapsed) {
+        SDL_SetRenderDrawBlendMode(renderer, prevMode);
+        return;
+    }
+
+    int listY = assetToggleRect.y + assetToggleRect.h + 4;
     int visible = showImports ? importCount : (int)assetLib.count;
-    for (int i = 0; i < visible; ++i) {
-        SDL_Rect row = {panel.x + 6, listY + i * ASSET_ROW_HEIGHT, panel.w - 12, ASSET_ROW_HEIGHT - 2};
+    int rowAreaH = panel.h - (listY - panel.y) - PANEL_PADDING;
+    if (rowAreaH < ASSET_ROW_HEIGHT) rowAreaH = ASSET_ROW_HEIGHT;
+    int maxRows = rowAreaH / ASSET_ROW_HEIGHT;
+    if (maxRows < 1) maxRows = 1;
+    int maxScroll = visible - maxRows;
+    if (maxScroll < 0) maxScroll = 0;
+    if (assetScroll > maxScroll) assetScroll = maxScroll;
+    int start = assetScroll;
+    int end = start + maxRows;
+    if (end > visible) end = visible;
+    for (int i = start; i < end; ++i) {
+        int rowIdx = i - start;
+        SDL_Rect row = {panel.x + PANEL_PADDING,
+                        listY + rowIdx * ASSET_ROW_HEIGHT,
+                        panel.w - PANEL_PADDING * 2,
+                        ASSET_ROW_HEIGHT - 2};
         bool selected = (!showImports && i == selectedAssetIndex);
         SDL_SetRenderDrawColor(renderer, selected ? 80 : 25, selected ? 160 : 25, selected ? 240 : 25, 200);
         SDL_RenderFillRect(renderer, &row);
@@ -175,10 +243,35 @@ static void DrawMaterialList(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 25);
     SDL_RenderDrawRect(renderer, &panel);
 
+    SDL_SetRenderDrawColor(renderer, materialsCollapsed ? 200 : 100, materialsCollapsed ? 60 : 200, 80, 220);
+    SDL_RenderFillRect(renderer, &materialCollapseRect);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderDrawRect(renderer, &materialCollapseRect);
+
+    if (materialsCollapsed) {
+        SDL_SetRenderDrawBlendMode(renderer, prevMode);
+        return;
+    }
+
     int count = MaterialManagerCount();
-    int listY = panel.y + 6;
-    for (int i = 0; i < count; ++i) {
-        SDL_Rect row = {panel.x + 6, listY + i * MATERIAL_ROW_HEIGHT, panel.w - 12, MATERIAL_ROW_HEIGHT - 2};
+    int listY = panel.y + PANEL_PADDING;
+    int rowAreaH = panel.h - PANEL_PADDING * 2;
+    if (rowAreaH < MATERIAL_ROW_HEIGHT) rowAreaH = MATERIAL_ROW_HEIGHT;
+    int maxRows = rowAreaH / MATERIAL_ROW_HEIGHT;
+    if (maxRows < 1) maxRows = 1;
+    int maxScroll = count - maxRows;
+    if (maxScroll < 0) maxScroll = 0;
+    if (materialScroll > maxScroll) materialScroll = maxScroll;
+    int start = materialScroll;
+    int end = start + maxRows;
+    if (end > count) end = count;
+
+    for (int i = start; i < end; ++i) {
+        int rowIdx = i - start;
+        SDL_Rect row = {panel.x + PANEL_PADDING,
+                        listY + rowIdx * MATERIAL_ROW_HEIGHT,
+                        panel.w - PANEL_PADDING * 2,
+                        MATERIAL_ROW_HEIGHT - 2};
         bool selected = (i == selectedMaterialIndex);
         SDL_SetRenderDrawColor(renderer, selected ? 70 : 25, selected ? 140 : 25, selected ? 220 : 25, 200);
         SDL_RenderFillRect(renderer, &row);
@@ -216,9 +309,7 @@ void InitializeObjectEditor(void) {
     confirmPolygonButton = (SDL_Rect){width - buttonWidth - 5, 60, buttonWidth - 10, 30};
     cancelPolygonButton = (SDL_Rect){width - buttonWidth - 5,  95, buttonWidth - 10, 30};
 
-    assetPanelRect = (SDL_Rect){20, 60, ASSET_PANEL_WIDTH, 260};
-    assetToggleRect = (SDL_Rect){assetPanelRect.x + 6, assetPanelRect.y + 6, assetPanelRect.w - 12, 24};
-    materialPanelRect = (SDL_Rect){assetPanelRect.x, assetPanelRect.y + assetPanelRect.h + 12, assetPanelRect.w, 200};
+    UpdatePanelLayout();
     RefreshAssetLibrary();
     RefreshImportList();
 }
@@ -462,6 +553,8 @@ void RenderObjectEditor(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
     SDL_RenderClear(renderer);
 
+    UpdatePanelLayout();
+
     Camera preview = BuildObjectEditorCamera();
     Camera original = sceneSettings.camera;
     sceneSettings.camera = preview;
@@ -551,6 +644,22 @@ void HandleObjectEditorEvents(SDL_Event* event) {
         case SDL_MOUSEMOTION:
             HandleObjectEditorMouseDrag(event);
             break;
+        case SDL_MOUSEWHEEL: {
+            int mx, my;
+            SDL_GetMouseState(&mx, &my);
+            int scrollDir = event->wheel.y > 0 ? -1 : 1;
+            if (mx >= assetPanelRect.x && mx <= assetPanelRect.x + assetPanelRect.w &&
+                my >= assetPanelRect.y && my <= assetPanelRect.y + assetPanelRect.h && !assetsCollapsed) {
+                assetScroll += scrollDir;
+                if (assetScroll < 0) assetScroll = 0;
+            }
+            if (mx >= materialPanelRect.x && mx <= materialPanelRect.x + materialPanelRect.w &&
+                my >= materialPanelRect.y && my <= materialPanelRect.y + materialPanelRect.h && !materialsCollapsed) {
+                materialScroll += scrollDir;
+                if (materialScroll < 0) materialScroll = 0;
+            }
+            break;
+        }
         case SDL_KEYDOWN:
             HandleObjectEditorKeyPress(event);
             break;
@@ -563,6 +672,11 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
         int my = event->button.y;
         if (mx >= assetPanelRect.x && mx <= assetPanelRect.x + assetPanelRect.w &&
             my >= assetPanelRect.y && my <= assetPanelRect.y + assetPanelRect.h) {
+            if (mx >= assetCollapseRect.x && mx <= assetCollapseRect.x + assetCollapseRect.w &&
+                my >= assetCollapseRect.y && my <= assetCollapseRect.y + assetCollapseRect.h) {
+                assetsCollapsed = !assetsCollapsed;
+                return;
+            }
             // Toggle button
             if (mx >= assetToggleRect.x && mx <= assetToggleRect.x + assetToggleRect.w &&
                 my >= assetToggleRect.y && my <= assetToggleRect.y + assetToggleRect.h) {
@@ -570,56 +684,75 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
                 selectedAssetIndex = -1;
                 return;
             }
-            int listY = assetToggleRect.y + assetToggleRect.h + 6;
-            int idx = (my - listY) / ASSET_ROW_HEIGHT;
-            if (idx >= 0) {
-                if (showImports) {
-                    if (idx < importCount) {
-                        if (event->button.clicks >= 2) {
-                            // Convert import to asset on double-click
-                            char path[256];
-                            snprintf(path, sizeof(path), "import/%s", importNames[idx]);
-                            ShapeDocument doc = {0};
-                            if (shape_import_load(path, &doc) && doc.shapeCount > 0) {
-                                ShapeAsset asset = {0};
-                                if (shape_asset_from_shapelib_shape(&doc.shapes[0], 0.5f, &asset)) {
-                                    const char* base = importNames[idx];
-                                    const char* dot = strrchr(base, '.');
-                                    size_t len = dot ? (size_t)(dot - base) : strlen(base);
-                                    char outPath[256];
-                                    snprintf(outPath, sizeof(outPath), "Configs/objects/%.*s.asset.json", (int)len, base);
-                                    if (shape_asset_save_file(&asset, outPath)) {
-                                        printf("Saved asset to %s\n", outPath);
-                                        RefreshAssetLibrary();
-                                        showImports = false;
+            if (!assetsCollapsed) {
+                int listY = assetToggleRect.y + assetToggleRect.h + 6;
+                int rowAreaH = assetPanelRect.h - (listY - assetPanelRect.y) - PANEL_PADDING;
+                if (rowAreaH < ASSET_ROW_HEIGHT) rowAreaH = ASSET_ROW_HEIGHT;
+                int maxRows = rowAreaH / ASSET_ROW_HEIGHT;
+                if (maxRows < 1) maxRows = 1;
+                int idx = (my - listY) / ASSET_ROW_HEIGHT + assetScroll;
+                if (idx >= 0) {
+                    if (showImports) {
+                        if (idx < importCount) {
+                            if (event->button.clicks >= 2) {
+                                // Convert import to asset on double-click
+                                char path[256];
+                                snprintf(path, sizeof(path), "import/%s", importNames[idx]);
+                                ShapeDocument doc = {0};
+                                if (shape_import_load(path, &doc) && doc.shapeCount > 0) {
+                                    ShapeAsset asset = {0};
+                                    if (shape_asset_from_shapelib_shape(&doc.shapes[0], 0.5f, &asset)) {
+                                        const char* base = importNames[idx];
+                                        const char* dot = strrchr(base, '.');
+                                        size_t len = dot ? (size_t)(dot - base) : strlen(base);
+                                        char outPath[256];
+                                        snprintf(outPath, sizeof(outPath), "%s/%.*s.asset.json", ShapeAssetDir(), (int)len, base);
+                                        if (shape_asset_save_file(&asset, outPath)) {
+                                            printf("Saved asset to %s\n", outPath);
+                                            RefreshAssetLibrary();
+                                            showImports = false;
+                                        }
+                                        shape_asset_free(&asset);
                                     }
-                                    shape_asset_free(&asset);
                                 }
+                                ShapeDocument_Free(&doc);
                             }
-                            ShapeDocument_Free(&doc);
+                        }
+                    } else {
+                        if (idx < (int)assetLib.count) {
+                            selectedAssetIndex = idx;
+                            selectedObjectIndex = -1;
                         }
                     }
-                } else {
-                    if (idx < (int)assetLib.count) {
-                        selectedAssetIndex = idx;
-                        selectedObjectIndex = -1;
-                    }
                 }
+                return;
             }
-            return;
+            // Collapsed: allow click to pass through to scene
         }
 
         if (mx >= materialPanelRect.x && mx <= materialPanelRect.x + materialPanelRect.w &&
             my >= materialPanelRect.y && my <= materialPanelRect.y + materialPanelRect.h) {
-            int listY = materialPanelRect.y + 6;
-            int idx = (my - listY) / MATERIAL_ROW_HEIGHT;
-            if (idx >= 0 && idx < MaterialManagerCount()) {
-                selectedMaterialIndex = idx;
-                if (selectedObjectIndex >= 0 && selectedObjectIndex < sceneSettings.objectCount) {
-                    sceneSettings.sceneObjects[selectedObjectIndex].material_id = idx;
-                }
+            if (mx >= materialCollapseRect.x && mx <= materialCollapseRect.x + materialCollapseRect.w &&
+                my >= materialCollapseRect.y && my <= materialCollapseRect.y + materialCollapseRect.h) {
+                materialsCollapsed = !materialsCollapsed;
+                return;
             }
-            return;
+            if (!materialsCollapsed) {
+                int listY = materialPanelRect.y + PANEL_PADDING;
+                int rowAreaH = materialPanelRect.h - PANEL_PADDING * 2;
+                if (rowAreaH < MATERIAL_ROW_HEIGHT) rowAreaH = MATERIAL_ROW_HEIGHT;
+                int maxRows = rowAreaH / MATERIAL_ROW_HEIGHT;
+                if (maxRows < 1) maxRows = 1;
+                int idx = (my - listY) / MATERIAL_ROW_HEIGHT + materialScroll;
+                if (idx >= 0 && idx < MaterialManagerCount()) {
+                    selectedMaterialIndex = idx;
+                    if (selectedObjectIndex >= 0 && selectedObjectIndex < sceneSettings.objectCount) {
+                        sceneSettings.sceneObjects[selectedObjectIndex].material_id = idx;
+                    }
+                }
+                return;
+            }
+            // Collapsed: allow click to pass through to scene
         }
 
         Camera previewCam = BuildObjectEditorCamera();
@@ -806,7 +939,7 @@ static void DeleteSelected(void) {
     if (selectedAssetIndex >= 0 && !showImports) {
         if (selectedAssetIndex < (int)assetLib.count && assetLib.assets[selectedAssetIndex].name) {
             char path[256];
-            snprintf(path, sizeof(path), "Configs/objects/%s.asset.json", assetLib.assets[selectedAssetIndex].name);
+            snprintf(path, sizeof(path), "%s/%s.asset.json", ShapeAssetDir(), assetLib.assets[selectedAssetIndex].name);
             remove(path);
             RefreshAssetLibrary();
             selectedAssetIndex = -1;

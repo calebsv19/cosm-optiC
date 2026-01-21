@@ -8,7 +8,7 @@
 #include "app/animation.h"
 #include "render/ray_tracing2.h"
 #include "render/integrator_common.h"
-#include "render/direct_light_integrator.h"
+#include "render/integrators/direct_light_integrator.h"
 #include "render/integrators/forward_light_integrator.h"
 #include "render/integrators/hybrid/camera_path_integrator.h"
 #include "render/uniform_grid.h"
@@ -74,7 +74,7 @@ static int test_sample_diffuse_consistency(void) {
     FastRNG rng;
     FastRNGSeed(&rng, 12345u, 6789u);
     BSDFSample s = {0};
-    bool ok = MaterialBSDFSample(&m, nx, ny, inX, inY, &rng, &s);
+    bool ok = MaterialBSDFSample(&m, nx, ny, inX, inY, 0.0, &rng, &s);
     assert_true("sample_diffuse_valid", ok);
     if (!ok) return 0;
     double dot = s.dirX * nx + s.dirY * ny;
@@ -147,6 +147,20 @@ static int test_deterministic_modes(void) {
     float* scratch = (float*)malloc(count * sizeof(float));
     if (!scratch) return 0;
 
+    // Build simple material table
+    MaterialBSDF materials[sceneSettings.objectCount];
+    for (int i = 0; i < sceneSettings.objectCount; i++) {
+        MaterialBSDFInitFromSceneObject(&sceneSettings.sceneObjects[i], &materials[i]);
+    }
+
+    // Build a uniform grid for intersection tests
+    UniformGrid grid = {0};
+    UniformGridBuild(&grid,
+                     sceneSettings.sceneObjects,
+                     sceneSettings.objectCount,
+                     NULL,
+                     8.0);
+
     LightSource light = { .x = sceneSettings.bezierPath.points[0].x,
                           .y = sceneSettings.bezierPath.points[0].y,
                           .radius = 3.0 };
@@ -163,11 +177,11 @@ static int test_deterministic_modes(void) {
         .tileGrid = NULL,
         .useTiles = false,
         .frameSeed = 1,
-        .uniformGrid = NULL,
+        .uniformGrid = (grid.objectCells || grid.triangleCells) ? &grid : NULL,
         .integratorMode = 2,
         .cache = NULL,
-        .materials = NULL,
-        .materialCount = 0,
+        .materials = materials,
+        .materialCount = sceneSettings.objectCount,
         .mesh = NULL,
         .triangleMesh = NULL
     };
@@ -189,7 +203,18 @@ static int test_deterministic_modes(void) {
     memset(ctx.pixelBuffer, 0, count);
     memset(ctx.energyBuffer, 0, count * sizeof(float));
     animSettings.integratorMode = 1;
-    CameraPathIntegratorRender(&ctx, &light);
+    CameraIntegratorSettings settings = {
+        .directIntensityScale = animSettings.lightIntensity,
+        .indirectVariance = animSettings.cacheVarianceCutoff,
+        .indirectHaloRadius = animSettings.cacheHaloRadius,
+        .blurEnabled = false,
+        .brightnessBoost = 1.0
+    };
+    CameraPathIntegratorRenderFromContext(&ctx,
+                                          &light,
+                                          &settings,
+                                          sceneSettings.camera.x,
+                                          sceneSettings.camera.y);
     float cameraSample = 0.0f;
     sample_pixel_energy(ctx.energyBuffer, w, h, w / 2, h / 2, &cameraSample);
 
@@ -199,6 +224,7 @@ static int test_deterministic_modes(void) {
 
     free(ctx.pixelBuffer);
     free(scratch);
+    UniformGridFree(&grid);
     CleanupRayTracing();
     return 0;
 }
@@ -283,7 +309,7 @@ static int test_hit_normal_and_pdfs(void) {
         MaterialBSDFInitFromSceneObject(&sceneSettings.sceneObjects[hit.objectIndex], &m);
         BSDFSample s;
         FastRNG rng; FastRNGSeed(&rng, 111, 222);
-        bool sampled = MaterialBSDFSample(&m, hit.nx, hit.ny, inx, iny, &rng, &s);
+        bool sampled = MaterialBSDFSample(&m, hit.nx, hit.ny, inx, iny, 0.0, &rng, &s);
         assert_true("debug_bsdf_sample_ok", sampled);
         if (sampled) {
             double pdf = MaterialBSDFAngularPdf(&m, hit.nx, hit.ny, inx, iny, s.dirX, s.dirY);
@@ -297,8 +323,7 @@ static int test_hit_normal_and_pdfs(void) {
         double ly = light.y - hit.py;
         double lDist = sqrt(lx*lx + ly*ly);
         if (lDist > 1e-6) { lx /= lDist; ly /= lDist; }
-        double cosOn = fmax(0.0, hit.nx * lx + hit.ny * ly);
-        double pdfL = CircleLightPdfSolidAngle(&light, hit.px, hit.py, cosOn);
+        double pdfL = CircleLightPdfSolidAngle(&light, hit.px, hit.py, 0.0);
         assert_true("debug_light_pdf_positive", pdfL > 0.0);
     }
 

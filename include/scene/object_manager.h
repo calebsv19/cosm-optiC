@@ -4,7 +4,7 @@
 #include <SDL2/SDL.h>
 #include <math.h>
 #include <stdbool.h>
-#define MAX_POINTS 10
+#define MAX_POINTS 256
 #define MAX_OBJECTS 10
 
 typedef enum {

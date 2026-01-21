@@ -3,9 +3,14 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <math.h>
 #include <string.h>
 #include <math.h>
 #include <json-c/json.h>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <limits.h>
+#include <unistd.h>
 #include "editor/scene_editor.h"
 #include "app/animation.h"  // Include the header where RunMainLoop() is declared
 #include "config/config_manager.h"
@@ -97,6 +102,18 @@
 #define PATH_TOGGLE_X INTEGRATOR_BUTTON_X
 #define PATH_TOGGLE_SPACING 10
 
+#define LOAD_SCENE_BUTTON_WIDTH INTEGRATOR_BUTTON_WIDTH
+#define LOAD_SCENE_BUTTON_HEIGHT 36
+#define LOAD_SCENE_BUTTON_X TOGGLE_BUTTON_MARGIN_X
+#define LOAD_SCENE_BUTTON_SPACING 20
+#define MANIFEST_PANEL_EXTRA_WIDTH 40
+#define MANIFEST_PANEL_MIN_HEIGHT 140
+#define MANIFEST_PANEL_MAX_HEIGHT 260
+#define MANIFEST_ITEM_HEIGHT 26
+#define MANIFEST_ITEM_PADDING 6
+#define MANIFEST_SCROLLBAR_WIDTH 10
+#define MAX_MANIFEST_OPTIONS 128
+
 
 // Default settings
 #define DEFAULT_BOUNCE_LIMIT 10
@@ -124,6 +141,27 @@ static int oldWindowHeight = 0;
 static Uint32 statusExpireMs = 0;
 static SDL_Color statusColor = {255, 255, 255, 255};
 static char statusLabel[16] = "";
+
+typedef struct {
+    char name[128];
+    char path[PATH_MAX];
+} ManifestOption;
+
+static ManifestOption g_manifestOptions[MAX_MANIFEST_OPTIONS];
+static size_t g_manifestOptionCount = 0;
+static bool g_manifestDropdownOpen = false;
+static bool g_manifestLoadEnabled = false;
+static SDL_Rect g_manifestPanelRect = {0};
+static SDL_Rect g_manifestListRect = {0};
+static SDL_Rect g_manifestScrollbarRect = {0};
+static bool g_manifestScrollbarVisible = false;
+static bool g_manifestScrollbarDragging = false;
+static float g_manifestThumbHeight = 0.0f;
+static float g_manifestTrackHeight = 0.0f;
+static int g_manifestDragStartY = 0;
+static float g_manifestScrollStart = 0.0f;
+static float g_manifestScroll = 0.0f;
+static float g_manifestMaxScroll = 0.0f;
 
 static int ClampTileSizeMenu(int value) {
     if (value < 4) value = 4;
@@ -190,6 +228,8 @@ static void SyncForwardDecaySliderFromSettings(void) {
     forwardDecaySliderValue = (int)lround(distance);
 }
 
+static void RefreshManifestOptions(void);
+
 static void SyncMenuSliderValues(void) {
     SyncRouletteSliderFromSettings();
     SyncEnvSliderFromSettings();
@@ -212,6 +252,150 @@ static void ReanchorCameraAfterResize(int previousWidth, int previousHeight) {
     sceneSettings.cameraMargin = CameraClampMarginPixels(sceneSettings.cameraMargin,
                                                         sceneSettings.windowWidth,
                                                         sceneSettings.windowHeight);
+}
+
+static void SetLoadSceneEnabled(bool enabled) {
+    g_manifestLoadEnabled = enabled;
+    animSettings.useFluidScene = enabled;
+    g_manifestDropdownOpen = enabled;
+    if (enabled) {
+        RefreshManifestOptions();
+        g_manifestScroll = 0.0f;
+        g_manifestScrollbarDragging = false;
+        if (animSettings.fluidManifest[0]) {
+            AnimationApplyFluidScene(animSettings.fluidManifest);
+        }
+    } else {
+        g_manifestDropdownOpen = false;
+        AnimationClearFluidGrid();
+        LoadSceneConfig();
+    }
+}
+
+static bool PointInRect(const SDL_Rect *rect, int x, int y) {
+    if (!rect) return false;
+    return x >= rect->x && x <= rect->x + rect->w &&
+           y >= rect->y && y <= rect->y + rect->h;
+}
+
+static int ComputeLoadSceneButtonY(void) {
+    int integratorButtonY = SUBSETTING_BUTTON_MARGIN_Y + 2 * (SUBSETTING_BUTTON_HEIGHT + SUBSETTING_BUTTON_SPACING) + 10;
+    int pathToggleRouletteY = integratorButtonY + INTEGRATOR_BUTTON_HEIGHT + 10;
+    int pathToggleBSDFY = pathToggleRouletteY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
+    return pathToggleBSDFY + PATH_TOGGLE_HEIGHT + LOAD_SCENE_BUTTON_SPACING;
+}
+
+static void ManifestClampScroll(void) {
+    if (g_manifestScroll < 0.0f) g_manifestScroll = 0.0f;
+    if (g_manifestScroll > g_manifestMaxScroll) g_manifestScroll = g_manifestMaxScroll;
+}
+
+static void ManifestScrollBy(float delta) {
+    g_manifestScroll += delta;
+    ManifestClampScroll();
+}
+
+static bool FileExistsRegular(const char *path) {
+    if (!path || !*path) return false;
+    struct stat st;
+    if (stat(path, &st) != 0) return false;
+    return S_ISREG(st.st_mode);
+}
+
+static void BuildManifestLabel(const char *path, char *out, size_t outSize) {
+    if (!out || outSize == 0) return;
+    out[0] = '\0';
+    if (!path || !*path) return;
+    const char *filename = strrchr(path, '/');
+    filename = filename ? filename + 1 : path;
+
+    if (strcmp(filename, "manifest.json") == 0) {
+        char parentBuf[PATH_MAX];
+        size_t len = (size_t)(filename - path - 1); // exclude trailing slash
+        if (len >= sizeof(parentBuf)) len = sizeof(parentBuf) - 1;
+        memcpy(parentBuf, path, len);
+        parentBuf[len] = '\0';
+        const char *dirName = strrchr(parentBuf, '/');
+        filename = dirName ? dirName + 1 : parentBuf;
+    }
+
+    const char *suffix = NULL;
+    if (strstr(path, "physics_sim")) suffix = "phys";
+    else if (strstr(path, "ray_tracing")) suffix = "ray";
+    else if (strstr(path, "shared")) suffix = "shared";
+
+    if (suffix) {
+        snprintf(out, outSize, "%s (%s)", filename, suffix);
+    } else {
+        snprintf(out, outSize, "%s", filename);
+    }
+}
+
+static void AddManifestOption(const char *path) {
+    if (!path || !*path) return;
+    if (g_manifestOptionCount >= MAX_MANIFEST_OPTIONS) return;
+
+    char resolved[PATH_MAX];
+    const char *usePath = path;
+    if (realpath(path, resolved)) {
+        usePath = resolved;
+    }
+    if (!FileExistsRegular(usePath)) return;
+
+    for (size_t i = 0; i < g_manifestOptionCount; ++i) {
+        if (strcmp(g_manifestOptions[i].path, usePath) == 0) {
+            return; // already present
+        }
+    }
+
+    ManifestOption *opt = &g_manifestOptions[g_manifestOptionCount++];
+    strncpy(opt->path, usePath, sizeof(opt->path) - 1);
+    opt->path[sizeof(opt->path) - 1] = '\0';
+    BuildManifestLabel(usePath, opt->name, sizeof(opt->name));
+}
+
+static void ScanManifestRoot(const char *root) {
+    if (!root || !*root) return;
+
+    char pathBuf[PATH_MAX];
+    snprintf(pathBuf, sizeof(pathBuf), "%s/manifest.json", root);
+    AddManifestOption(pathBuf);
+
+    DIR *dir = opendir(root);
+    if (!dir) return;
+
+    struct dirent *ent = NULL;
+    while ((ent = readdir(dir)) != NULL) {
+        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) continue;
+        snprintf(pathBuf, sizeof(pathBuf), "%s/%s", root, ent->d_name);
+        struct stat st;
+        if (stat(pathBuf, &st) != 0) continue;
+        if (S_ISDIR(st.st_mode)) {
+            char manifestPath[PATH_MAX];
+            snprintf(manifestPath, sizeof(manifestPath), "%s/manifest.json", pathBuf);
+            AddManifestOption(manifestPath);
+        } else if (S_ISREG(st.st_mode) && strcmp(ent->d_name, "manifest.json") == 0) {
+            AddManifestOption(pathBuf);
+        }
+    }
+    closedir(dir);
+}
+
+static void RefreshManifestOptions(void) {
+    g_manifestOptionCount = 0;
+    const char *roots[] = {
+        "export/volume_frames",
+        "../physics_sim/export/volume_frames",
+        "../ray_tracing/export/volume_frames"
+    };
+    for (size_t i = 0; i < sizeof(roots) / sizeof(roots[0]); ++i) {
+        ScanManifestRoot(roots[i]);
+    }
+    if (animSettings.fluidManifest[0]) {
+        AddManifestOption(animSettings.fluidManifest);
+    }
+    g_manifestScroll = 0.0f;
+    g_manifestMaxScroll = 0.0f;
 }
 
 static void ApplySpecialSliderRules(int* target) {
@@ -308,6 +492,9 @@ bool InitializeMenu(SDL_Window** window, SDL_Renderer** renderer, TTF_Font** fon
     LoadSceneConfig();
     animSettings.previewMode = false; // Preview is transient
     SyncMenuSliderValues();
+    g_manifestLoadEnabled = animSettings.useFluidScene;
+    g_manifestDropdownOpen = g_manifestLoadEnabled;
+    RefreshManifestOptions();
     oldWindowWidth = sceneSettings.windowWidth;
     oldWindowHeight = sceneSettings.windowHeight;
     return true;  // Menu initialized successfully
@@ -324,6 +511,7 @@ void ResetAnimationSettings(void) {
     animSettings.framesForTravel = DEFAULT_FRAME_FOR_TRAVEL;
     animSettings.fps = 30;
     animSettings.useTiledRenderer = false;
+    animSettings.tilePreviewEnabled = false;
     animSettings.tileSize = 16;
     animSettings.rouletteThreshold = 0.01;
     animSettings.integratorMode = 0;
@@ -380,7 +568,99 @@ static void RenderTextColor(SDL_Renderer *renderer, TTF_Font *font, int x, int y
     SDL_FreeSurface(textSurface);
     SDL_DestroyTexture(textTexture);
 }
-            
+
+static void FormatManifestButtonLabel(char *out, size_t outSize) {
+    if (!out || outSize == 0) return;
+    const char *base = "Load Scene";
+    if (!animSettings.fluidManifest[0]) {
+        snprintf(out, outSize, "%s", base);
+        return;
+    }
+    char label[128];
+    BuildManifestLabel(animSettings.fluidManifest, label, sizeof(label));
+    snprintf(out, outSize, "%s: %s", base, label);
+    if (strlen(out) >= outSize) {
+        out[outSize - 1] = '\0';
+    }
+}
+
+static void RenderManifestDropdown(SDL_Renderer *renderer, TTF_Font *font, int loadButtonY) {
+    int panelX = LOAD_SCENE_BUTTON_X;
+    int panelY = loadButtonY + LOAD_SCENE_BUTTON_HEIGHT + 6;
+    int panelW = LOAD_SCENE_BUTTON_WIDTH + MANIFEST_PANEL_EXTRA_WIDTH;
+    int available = BOTTOM_BUTTON_MARGIN_Y_PREVIEW - 10 - panelY;
+    int panelH = MANIFEST_PANEL_MIN_HEIGHT;
+    if (available > MANIFEST_PANEL_MIN_HEIGHT) panelH = available;
+    if (panelH > MANIFEST_PANEL_MAX_HEIGHT) panelH = MANIFEST_PANEL_MAX_HEIGHT;
+    int minH = MANIFEST_ITEM_HEIGHT + MANIFEST_ITEM_PADDING * 2 + 4;
+    if (panelH < minH) panelH = minH;
+
+    g_manifestPanelRect = (SDL_Rect){panelX, panelY, panelW, panelH};
+    SDL_SetRenderDrawColor(renderer, 28, 28, 30, 230);
+    SDL_RenderFillRect(renderer, &g_manifestPanelRect);
+    SDL_SetRenderDrawColor(renderer, 80, 80, 90, 255);
+    SDL_RenderDrawRect(renderer, &g_manifestPanelRect);
+
+    int listX = panelX + MANIFEST_ITEM_PADDING;
+    int listY = panelY + MANIFEST_ITEM_PADDING;
+    int listW = panelW - MANIFEST_ITEM_PADDING * 2 - MANIFEST_SCROLLBAR_WIDTH - 4;
+    if (listW < 40) listW = 40;
+    int listH = panelH - MANIFEST_ITEM_PADDING * 2;
+    g_manifestListRect = (SDL_Rect){listX, listY, listW, listH};
+
+    int contentH = (int)(g_manifestOptionCount * MANIFEST_ITEM_HEIGHT);
+    g_manifestMaxScroll = (contentH > listH) ? (float)(contentH - listH) : 0.0f;
+    g_manifestScrollbarVisible = g_manifestMaxScroll > 0.5f;
+    ManifestClampScroll();
+    g_manifestTrackHeight = (float)listH;
+    g_manifestThumbHeight = 0.0f;
+    g_manifestScrollbarRect = (SDL_Rect){0, 0, 0, 0};
+
+    if (g_manifestScrollbarVisible) {
+        float thumb = ((float)listH * (float)listH) / (float)contentH;
+        if (thumb < 16.0f) thumb = 16.0f;
+        g_manifestThumbHeight = thumb;
+        float trackRange = (float)listH - thumb;
+        float thumbY = (trackRange > 0.0f && g_manifestMaxScroll > 0.0f)
+                           ? (float)listY + (g_manifestScroll / g_manifestMaxScroll) * trackRange
+                           : (float)listY;
+        int scrollX = panelX + panelW - MANIFEST_SCROLLBAR_WIDTH - MANIFEST_ITEM_PADDING;
+        SDL_Rect track = {scrollX, listY, MANIFEST_SCROLLBAR_WIDTH, listH};
+        SDL_SetRenderDrawColor(renderer, 70, 70, 80, 255);
+        SDL_RenderFillRect(renderer, &track);
+
+        g_manifestScrollbarRect = (SDL_Rect){scrollX, (int)thumbY, MANIFEST_SCROLLBAR_WIDTH, (int)thumb};
+        SDL_SetRenderDrawColor(renderer, 120, 120, 140, 255);
+        SDL_RenderFillRect(renderer, &g_manifestScrollbarRect);
+    }
+
+    int firstIndex = (int)(g_manifestScroll / MANIFEST_ITEM_HEIGHT);
+    int yOffset = -(int)g_manifestScroll % MANIFEST_ITEM_HEIGHT;
+    for (int i = firstIndex; i < (int)g_manifestOptionCount; ++i) {
+        int itemY = listY + yOffset + (i - firstIndex) * MANIFEST_ITEM_HEIGHT;
+        if (itemY > listY + listH - MANIFEST_ITEM_HEIGHT) break;
+        SDL_Rect itemRect = {listX, itemY, listW, MANIFEST_ITEM_HEIGHT};
+        bool isSelected = animSettings.fluidManifest[0] &&
+                          strcmp(animSettings.fluidManifest, g_manifestOptions[i].path) == 0;
+        SDL_SetRenderDrawColor(renderer,
+                               isSelected ? 70 : 50,
+                               isSelected ? 120 : 70,
+                               isSelected ? 90 : 70,
+                               255);
+        SDL_RenderFillRect(renderer, &itemRect);
+        SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
+        SDL_RenderDrawRect(renderer, &itemRect);
+        SDL_Color textColor = isSelected ? (SDL_Color){220, 240, 220, 255}
+                                         : (SDL_Color){230, 230, 230, 255};
+        RenderTextColor(renderer, font, itemRect.x + 6, itemRect.y + 4, textColor, g_manifestOptions[i].name);
+    }
+
+    if (g_manifestOptionCount == 0) {
+        SDL_Color c = {210, 210, 210, 255};
+        RenderTextColor(renderer, font, listX, listY + 4, c, "No manifests found");
+    }
+}
+
 
 void RenderButton(SDL_Renderer *renderer, TTF_Font *font, int x, int y, int width, int height, const char *text, bool active) {
     SDL_Rect rect = {x, y, width, height};
@@ -447,8 +727,6 @@ static SliderLayout BuildSliderLayout(void) {
     if (animSettings.integratorMode == 1) {
         ADD_SLIDER(&animSettings.pathSamplesPerPixel, 1, 128, "Path SPP");
         ADD_SLIDER(&animSettings.pathMaxDepth, 1, 16, "Path Depth");
-        ADD_SLIDER(&envSliderValue, 0, 200, "Environment %");
-        ADD_SLIDER(&cacheWeightSliderValue, 0, 100, "Cache Weight %");
     }
 #undef ADD_SLIDER
     return layout;
@@ -505,11 +783,10 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
     int centerX = TOGGLE_BUTTON_MARGIN_X + TOGGLE_BUTTON_WIDTH + 60; // middle column anchor between left and sliders
     int falloffButtonY = TOGGLE_BUTTON_MARGIN_Y + 10;
     int tileButtonY = falloffButtonY + FORWARD_FALLOFF_BUTTON_HEIGHT + FORWARD_FALLOFF_BUTTON_SPACING;
+    int tilePreviewButtonY = tileButtonY + TILE_BUTTON_HEIGHT + FORWARD_FALLOFF_BUTTON_SPACING;
     int integratorButtonY = SUBSETTING_BUTTON_MARGIN_Y + 2 * (SUBSETTING_BUTTON_HEIGHT + SUBSETTING_BUTTON_SPACING) + 10;
-    int pathToggleDirectY = integratorButtonY + INTEGRATOR_BUTTON_HEIGHT + 10;
-    int pathToggleRRY = pathToggleDirectY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
-    int pathToggleMISY = pathToggleRRY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
-    int pathToggleBSDFY = pathToggleMISY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
+    int pathToggleRouletteY = integratorButtonY + INTEGRATOR_BUTTON_HEIGHT + 10;
+    int pathToggleBSDFY = pathToggleRouletteY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
 
     // Clear the screen with a black background
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
@@ -533,29 +810,37 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
 
     const char* integratorLabel = "Integrator: Forward Light";
     if (animSettings.integratorMode == 1) integratorLabel = "Integrator: Hybrid";
-    else if (animSettings.integratorMode == 2) integratorLabel = "Integrator: Disney Path";
-    else if (animSettings.integratorMode == 3) integratorLabel = "Integrator: Direct Light";
+    else if (animSettings.integratorMode == 2) integratorLabel = "Integrator: Direct Light";
     RenderButton(renderer, font, TOGGLE_BUTTON_MARGIN_X, integratorButtonY,
                  INTEGRATOR_BUTTON_WIDTH, INTEGRATOR_BUTTON_HEIGHT, integratorLabel, true);
 
     if (animSettings.integratorMode == 1) {
-        RenderButton(renderer, font, TOGGLE_BUTTON_MARGIN_X, pathToggleDirectY,
-                     PATH_TOGGLE_WIDTH, PATH_TOGGLE_HEIGHT,
-                     animSettings.pathDirectLighting ? "Direct Light: ON" : "Direct Light: OFF",
-                     animSettings.pathDirectLighting);
-        RenderButton(renderer, font, TOGGLE_BUTTON_MARGIN_X, pathToggleRRY,
+        RenderButton(renderer, font, TOGGLE_BUTTON_MARGIN_X, pathToggleRouletteY,
                      PATH_TOGGLE_WIDTH, PATH_TOGGLE_HEIGHT,
                      animSettings.pathRussianRoulette ? "Roulette: ON" : "Roulette: OFF",
                      animSettings.pathRussianRoulette);
-        RenderButton(renderer, font, TOGGLE_BUTTON_MARGIN_X, pathToggleMISY,
-                     PATH_TOGGLE_WIDTH, PATH_TOGGLE_HEIGHT,
-                     animSettings.pathEnableMIS ? "MIS: ON" : "MIS: OFF",
-                     animSettings.pathEnableMIS);
         const char* bsdfLabel = (animSettings.bsdfModel == 0) ? "BSDF: Lambert" : "BSDF: GGX";
         RenderButton(renderer, font, TOGGLE_BUTTON_MARGIN_X, pathToggleBSDFY,
                      PATH_TOGGLE_WIDTH, PATH_TOGGLE_HEIGHT,
                      bsdfLabel,
                      animSettings.bsdfModel != 0);
+    }
+
+    int loadSceneButtonY = ComputeLoadSceneButtonY();
+    char manifestLabel[160];
+    FormatManifestButtonLabel(manifestLabel, sizeof(manifestLabel));
+    RenderButton(renderer, font, LOAD_SCENE_BUTTON_X, loadSceneButtonY,
+                 LOAD_SCENE_BUTTON_WIDTH, LOAD_SCENE_BUTTON_HEIGHT,
+                 manifestLabel, g_manifestLoadEnabled);
+    if (g_manifestLoadEnabled) {
+        RenderManifestDropdown(renderer, font, loadSceneButtonY);
+    } else {
+        g_manifestPanelRect = (SDL_Rect){0, 0, 0, 0};
+        g_manifestListRect = (SDL_Rect){0, 0, 0, 0};
+        g_manifestScrollbarRect = (SDL_Rect){0, 0, 0, 0};
+        g_manifestScrollbarVisible = false;
+        g_manifestThumbHeight = 0.0f;
+        g_manifestTrackHeight = 0.0f;
     }
                  
     const char* falloffLabel = "Quadratic (1/r^2)";
@@ -571,6 +856,20 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
     const char* tileButtonLabel = animSettings.useTiledRenderer ? "Tile Renderer: ON" : "Tile Renderer: OFF";
     RenderButton(renderer, font, centerX, tileButtonY,
                  TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT, tileButtonLabel, animSettings.useTiledRenderer);
+
+    const char* previewLabel = animSettings.tilePreviewEnabled ? "Tile Preview: ON" : "Tile Preview: OFF";
+    RenderButton(renderer, font, centerX, tilePreviewButtonY,
+                 TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT, previewLabel, animSettings.tilePreviewEnabled);
+
+    // Light height (2.5D shading) disabled while Disney integrator is paused.
+    bool showLightHeight = false;
+    int lightHeightButtonY = tilePreviewButtonY + TILE_BUTTON_HEIGHT + FORWARD_FALLOFF_BUTTON_SPACING;
+    if (showLightHeight) {
+        char heightLabel[64];
+        snprintf(heightLabel, sizeof(heightLabel), "Light Height: %.1f", animSettings.lightHeight);
+        RenderButton(renderer, font, centerX, lightHeightButtonY,
+                     TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT, heightLabel, true);
+    }
 
     // Right column: Scene Editor + mode above Start
     int sceneBtnX = BOTTOM_BUTTON_MARGIN_X_START;
@@ -688,6 +987,15 @@ void HandleKeyPress(SDL_Event* event, bool* running) {
 }
 
 void HandleMouseMotion(SDL_Event* event) {
+    if (g_manifestScrollbarDragging && g_manifestDropdownOpen && g_manifestScrollbarVisible) {
+        float trackRange = g_manifestTrackHeight - g_manifestThumbHeight;
+        if (trackRange < 1.0f) trackRange = 1.0f;
+        int deltaY = event->motion.y - g_manifestDragStartY;
+        float newScroll = g_manifestScrollStart + ((float)deltaY * g_manifestMaxScroll / trackRange);
+        g_manifestScroll = newScroll;
+        ManifestClampScroll();
+    }
+
     if (!draggingSlider || !selectedSlider) return;  // Ensure a slider is being dragged
 
     int x = event->motion.x;
@@ -713,6 +1021,16 @@ void HandleMouseMotion(SDL_Event* event) {
         oldWindowWidth = sceneSettings.windowWidth;
         oldWindowHeight = sceneSettings.windowHeight;
     }
+}
+
+void HandleMouseWheel(SDL_Event *event) {
+    if (!g_manifestLoadEnabled || !g_manifestDropdownOpen) return;
+    int mx = 0, my = 0;
+    SDL_GetMouseState(&mx, &my);
+    if (!PointInRect(&g_manifestPanelRect, mx, my)) return;
+    float delta = (float)event->wheel.y * (float)(MANIFEST_ITEM_HEIGHT * 2);
+    // SDL wheel is positive when scrolling up; scrolling up should decrease scroll offset
+    ManifestScrollBy(-delta);
 }
 
 static void HandleSliderClick(SDL_Event* event, const SliderLayout* layout) {
@@ -764,13 +1082,47 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
     HandleSliderClick(event, &layout);
 
     int x = event->button.x, y = event->button.y;
+    int loadSceneButtonY = ComputeLoadSceneButtonY();
+    SDL_Rect loadBtnRect = {LOAD_SCENE_BUTTON_X, loadSceneButtonY, LOAD_SCENE_BUTTON_WIDTH, LOAD_SCENE_BUTTON_HEIGHT};
     int falloffButtonY = TOGGLE_BUTTON_MARGIN_Y + 10;
     int tileButtonY = falloffButtonY + FORWARD_FALLOFF_BUTTON_HEIGHT + FORWARD_FALLOFF_BUTTON_SPACING;
+    int tilePreviewButtonY = tileButtonY + TILE_BUTTON_HEIGHT + FORWARD_FALLOFF_BUTTON_SPACING;
+    int lightHeightButtonY = tilePreviewButtonY + TILE_BUTTON_HEIGHT + FORWARD_FALLOFF_BUTTON_SPACING;
+    bool showLightHeight = false;
     int integratorButtonY = SUBSETTING_BUTTON_MARGIN_Y + 2 * (SUBSETTING_BUTTON_HEIGHT + SUBSETTING_BUTTON_SPACING) + 10;
-    int pathToggleDirectY = integratorButtonY + INTEGRATOR_BUTTON_HEIGHT + 10;
-    int pathToggleRRY = pathToggleDirectY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
-    int pathToggleMISY = pathToggleRRY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
-    int pathToggleBSDFY = pathToggleMISY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
+    int pathToggleRouletteY = integratorButtonY + INTEGRATOR_BUTTON_HEIGHT + 10;
+    int pathToggleBSDFY = pathToggleRouletteY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
+
+    if (g_manifestLoadEnabled && g_manifestDropdownOpen) {
+        if (PointInRect(&g_manifestPanelRect, x, y)) {
+            if (g_manifestScrollbarVisible && PointInRect(&g_manifestScrollbarRect, x, y)) {
+                g_manifestScrollbarDragging = true;
+                g_manifestDragStartY = y;
+                g_manifestScrollStart = g_manifestScroll;
+                return;
+            }
+            if (g_manifestOptionCount > 0 && PointInRect(&g_manifestListRect, x, y)) {
+                int relativeY = y - g_manifestListRect.y + (int)g_manifestScroll;
+                int idx = relativeY / MANIFEST_ITEM_HEIGHT;
+                if (idx >= 0 && idx < (int)g_manifestOptionCount) {
+                    strncpy(animSettings.fluidManifest, g_manifestOptions[idx].path, sizeof(animSettings.fluidManifest) - 1);
+                    animSettings.fluidManifest[sizeof(animSettings.fluidManifest) - 1] = '\0';
+                    strncpy(statusLabel, "Scene set", sizeof(statusLabel) - 1);
+                    statusLabel[sizeof(statusLabel) - 1] = '\0';
+                    statusColor = (SDL_Color){140, 220, 200, 255};
+                    statusExpireMs = SDL_GetTicks() + 1800;
+                    AnimationApplyFluidScene(animSettings.fluidManifest);
+                    return;
+                }
+            }
+            return;
+        }
+    }
+
+    if (PointInRect(&loadBtnRect, x, y)) {
+        SetLoadSceneEnabled(!g_manifestLoadEnabled);
+        return;
+    }
                 
     // Toggle Interactive Mode
     if (x > TOGGLE_BUTTON_MARGIN_X && x < TOGGLE_BUTTON_MARGIN_X + TOGGLE_BUTTON_WIDTH &&
@@ -875,28 +1227,39 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
         animSettings.useTiledRenderer = !animSettings.useTiledRenderer;
         return;
     }
+    if (x >= centerX && x <= centerX + TILE_BUTTON_WIDTH &&
+        y >= tilePreviewButtonY && y <= tilePreviewButtonY + TILE_BUTTON_HEIGHT) {
+        animSettings.tilePreviewEnabled = !animSettings.tilePreviewEnabled;
+        return;
+    }
+    if (showLightHeight && x >= centerX && x <= centerX + TILE_BUTTON_WIDTH &&
+        y >= lightHeightButtonY && y <= lightHeightButtonY + TILE_BUTTON_HEIGHT) {
+        // Cycle through a small set of useful light heights
+        double options[] = {2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 16.0, 20.0};
+        int count = (int)(sizeof(options) / sizeof(options[0]));
+        int idx = 0;
+        double current = animSettings.lightHeight;
+        for (int i = 0; i < count; i++) {
+            if (fabs(options[i] - current) < 1e-3) { idx = i; break; }
+            if (options[i] > current) { idx = i; break; }
+            idx = i;
+        }
+        idx = (idx + 1) % count;
+        animSettings.lightHeight = options[idx];
+        return;
+    }
 
     if (x >= TOGGLE_BUTTON_MARGIN_X && x <= TOGGLE_BUTTON_MARGIN_X + INTEGRATOR_BUTTON_WIDTH &&
         y >= integratorButtonY && y <= integratorButtonY + INTEGRATOR_BUTTON_HEIGHT) {
-        animSettings.integratorMode = (animSettings.integratorMode + 1) % 4;
+        animSettings.integratorMode = (animSettings.integratorMode + 1) % 3;
         SyncMenuSliderValues();
         return;
     }
 
-    if (animSettings.integratorMode == 1 || animSettings.integratorMode == 2) {
+    if (animSettings.integratorMode == 1) {
         if (x >= TOGGLE_BUTTON_MARGIN_X && x <= TOGGLE_BUTTON_MARGIN_X + PATH_TOGGLE_WIDTH &&
-            y >= pathToggleDirectY && y <= pathToggleDirectY + PATH_TOGGLE_HEIGHT) {
-            animSettings.pathDirectLighting = !animSettings.pathDirectLighting;
-            return;
-        }
-        if (x >= TOGGLE_BUTTON_MARGIN_X && x <= TOGGLE_BUTTON_MARGIN_X + PATH_TOGGLE_WIDTH &&
-            y >= pathToggleRRY && y <= pathToggleRRY + PATH_TOGGLE_HEIGHT) {
+            y >= pathToggleRouletteY && y <= pathToggleRouletteY + PATH_TOGGLE_HEIGHT) {
             animSettings.pathRussianRoulette = !animSettings.pathRussianRoulette;
-            return;
-        }
-        if (x >= TOGGLE_BUTTON_MARGIN_X && x <= TOGGLE_BUTTON_MARGIN_X + PATH_TOGGLE_WIDTH &&
-            y >= pathToggleMISY && y <= pathToggleMISY + PATH_TOGGLE_HEIGHT) {
-            animSettings.pathEnableMIS = !animSettings.pathEnableMIS;
             return;
         }
         if (x >= TOGGLE_BUTTON_MARGIN_X && x <= TOGGLE_BUTTON_MARGIN_X + PATH_TOGGLE_WIDTH &&
@@ -991,6 +1354,11 @@ bool RunMenu(void) {
 
                 case SDL_MOUSEBUTTONUP:
                     draggingSlider = false;  // Stop dragging on mouse release
+                    g_manifestScrollbarDragging = false;
+                    break;
+
+                case SDL_MOUSEWHEEL:
+                    HandleMouseWheel(&event);
                     break;
 
                 case SDL_MOUSEMOTION:

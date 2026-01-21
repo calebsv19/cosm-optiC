@@ -4,6 +4,9 @@
 #include "camera/camera.h"
 #include "editor/scene_editor.h"
 #include "editor/bezier_editor.h"
+#include "config/config_manager.h"
+#include "scene/object_manager.h"
+#include "render/fluid_state.h"
 #include "math/vec2.h"
 #include "math/math_utils.h"
 
@@ -36,6 +39,21 @@ static const SDL_Color kRotHandleColor = {180, 120, 255, 220};
 
 static const double kWheelZoomFactor = 0.10;   // 10% zoom per wheel tick
 static const double kKeyZoomFactor   = 0.02;   // 2% zoom per +/- key press
+
+static void ClampCameraToFluidBounds(Camera* cam) {
+    if (!cam || !g_fluidGrid.valid) return;
+    double margin_world = GetCurrentMarginPixels() / cam->zoom;
+    double min_x = g_fluidGrid.min_x + margin_world;
+    double max_x = g_fluidGrid.max_x - margin_world;
+    double min_y = g_fluidGrid.min_y + margin_world;
+    double max_y = g_fluidGrid.max_y - margin_world;
+    if (min_x > max_x) { double mid = (g_fluidGrid.min_x + g_fluidGrid.max_x) * 0.5; min_x = max_x = mid; }
+    if (min_y > max_y) { double mid = (g_fluidGrid.min_y + g_fluidGrid.max_y) * 0.5; min_y = max_y = mid; }
+    if (cam->x < min_x) cam->x = min_x;
+    if (cam->x > max_x) cam->x = max_x;
+    if (cam->y < min_y) cam->y = min_y;
+    if (cam->y > max_y) cam->y = max_y;
+}
 
 static bool HitOnScreen(const Camera* camera, double wx, double wy, int mx, int my, double radius) {
     if (!camera || radius <= 0.0) return false;
@@ -502,8 +520,13 @@ void HandleCameraEditorEvents(SDL_Event* event) {
                                                           width,
                                                           height);
                 Vec2 delta = vec2_sub(vec2(prev.x, prev.y), vec2(current.x, current.y));
+                double beforeX = sceneSettings.camera.x;
+                double beforeY = sceneSettings.camera.y;
                 CameraPan(&sceneSettings.camera, delta.x, delta.y);
-                OffsetCameraPath(delta.x, delta.y);
+                ClampCameraToFluidBounds(&sceneSettings.camera);
+                double usedDx = sceneSettings.camera.x - beforeX;
+                double usedDy = sceneSettings.camera.y - beforeY;
+                OffsetCameraPath(usedDx, usedDy);
                 lastMouseX = event->motion.x;
                 lastMouseY = event->motion.y;
             }
@@ -523,17 +546,25 @@ void HandleCameraEditorEvents(SDL_Event* event) {
             } else if (key == SDLK_MINUS || key == SDLK_UNDERSCORE || key == SDLK_KP_MINUS) {
                 ApplyZoomDelta(-kKeyZoomFactor);
             } else if (key == SDLK_LEFT) {
+                double bx = sceneSettings.camera.x, by = sceneSettings.camera.y;
                 CameraPan(&sceneSettings.camera, -panStep, 0.0);
-                OffsetCameraPath(-panStep, 0.0);
+                ClampCameraToFluidBounds(&sceneSettings.camera);
+                OffsetCameraPath(sceneSettings.camera.x - bx, sceneSettings.camera.y - by);
             } else if (key == SDLK_RIGHT) {
+                double bx = sceneSettings.camera.x, by = sceneSettings.camera.y;
                 CameraPan(&sceneSettings.camera, panStep, 0.0);
-                OffsetCameraPath(panStep, 0.0);
+                ClampCameraToFluidBounds(&sceneSettings.camera);
+                OffsetCameraPath(sceneSettings.camera.x - bx, sceneSettings.camera.y - by);
             } else if (key == SDLK_UP) {
+                double bx = sceneSettings.camera.x, by = sceneSettings.camera.y;
                 CameraPan(&sceneSettings.camera, 0.0, -panStep);
-                OffsetCameraPath(0.0, -panStep);
+                ClampCameraToFluidBounds(&sceneSettings.camera);
+                OffsetCameraPath(sceneSettings.camera.x - bx, sceneSettings.camera.y - by);
             } else if (key == SDLK_DOWN) {
+                double bx = sceneSettings.camera.x, by = sceneSettings.camera.y;
                 CameraPan(&sceneSettings.camera, 0.0, panStep);
-                OffsetCameraPath(0.0, panStep);
+                ClampCameraToFluidBounds(&sceneSettings.camera);
+                OffsetCameraPath(sceneSettings.camera.x - bx, sceneSettings.camera.y - by);
             } else if (key == SDLK_t) {
                 ToggleBezierPathMode(&sceneSettings.cameraPath);
             } else if (key == SDLK_l) {

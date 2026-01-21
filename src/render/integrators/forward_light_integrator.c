@@ -637,7 +637,7 @@ static void TracePhotonPath(const IntegratorContext* ctx,
         bool spawned = false;
         for (int i = 0; i < secondaryCount; i++) {
             BSDFSample s;
-            if (!MaterialBSDFSample(material, shadedNx, shadedNy, inDirX, inDirY, rng, &s)) continue;
+            if (!MaterialBSDFSample(material, shadedNx, shadedNy, inDirX, inDirY, 0.0, rng, &s)) continue;
             if (s.pdf <= 1e-8 || s.weight <= 0.0) continue;
 
             double nextT = throughput * (s.weight / s.pdf);

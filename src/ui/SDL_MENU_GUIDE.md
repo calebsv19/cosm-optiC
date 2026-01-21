@@ -15,14 +15,13 @@ Buttons (top to bottom)
 - Bounce Mode: toggle bounce animation for deep render playback.
 - Auto MP4: auto-generate MP4 after deep render finishes.
 - Integrator: cycles Forward Light ↔ Hybrid (Camera Path) ↔ Direct Light (LOS-only).
-- Direct Light: toggle direct lighting when Camera Path integrator is active.
-- Roulette: toggle Russian roulette termination when Camera Path integrator is active.
-- MIS: toggle multiple importance sampling when Camera Path integrator is active.
-- BSDF: Lambert ↔ GGX when Camera Path integrator is active.
+- Roulette: toggle Russian roulette termination (used by forward lighting).
+- BSDF: Lambert ↔ GGX when Hybrid integrator is active.
 
 **Center column**
 - Forward Falloff: cycle falloff model (Quadratic → Linear → None).
 - Tile Renderer: toggle tiled renderer on/off.
+- Tile Preview: show tiles as they complete during hybrid renders.
 
 **Right column**
 - Scene Editor: opens the scene editor window.
@@ -49,8 +48,6 @@ Grouped on the far right. Current set (values persist via config):
 - Falloff Softness (0.10–5.00): scales how quickly light energy decays with distance (higher = slower decay/longer reach) for forward/direct/hybrid integrators.
 - Path SPP (1–128, only when Camera Path integrator is active): samples per pixel for camera path integrator.
 - Path Depth (1–16, only when Camera Path integrator is active): max path depth.
-- Environment % (0–2.00, only when Camera Path integrator is active): environment brightness (slider shows percent*100).
-- Cache Weight % (0–1.00, only when Camera Path integrator is active): irradiance cache contribution weight (slider shows percent*100).
 
 Status toast
 ------------

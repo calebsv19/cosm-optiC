@@ -8,7 +8,7 @@
 #include "scene/object_manager.h"
 #include "material/material.h"
 
-#define MAX_SHAPE_POINTS 10  // Supports up to 10 points for custom shapes
+#define MAX_SHAPE_POINTS 256  // Supports up to 256 points for custom shapes
 
 typedef enum {
     FORWARD_FALLOFF_MODE_QUADRATIC = 0,
@@ -42,6 +42,7 @@ typedef struct {
     int lightDiffusionRadius;
     double lightDiffusionStrength;
     bool useTiledRenderer;
+    bool tilePreviewEnabled;
     int tileSize;
     double rouletteThreshold;
     int integratorMode;
@@ -64,8 +65,13 @@ typedef struct {
     double cacheVarianceCutoff;   // Variance rejection threshold for irradiance cache bins
     double cacheHaloRadius;       // Multiplier for light radius to suppress GI near the emitter
     double lightDecaySoftness;    // >1.0 flattens decay, <1.0 steepens decay
-    // Integrator mode: 0 = forward, 1 = hybrid (legacy camera path), 2 = disney path tracer, else direct
+    double lightHeight;           // Z-height of the light above the ground plane for Disney path/2.5D shading
+    // Integrator mode: 0 = forward, 1 = hybrid (camera-path GI), 2 = direct light (Disney path paused).
     int cameraIntegratorMode;
+
+    // Fluid import
+    bool useFluidScene;
+    char fluidManifest[256];
 } AnimationConfig;
 
 

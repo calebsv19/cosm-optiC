@@ -48,4 +48,14 @@ void SaveSceneConfig(void);
 // Saves a single frame of animation to disk.
 void SaveFrame(int frameNumber);
 
+// Indicates whether a fluid scene should override the default scene.
+bool AnimationUseFluidScene(void);
+
+// Apply a fluid manifest into the current scene (camera/object placement).
+// Returns true on success and updates animSettings.useFluidScene/fluidManifest.
+bool AnimationApplyFluidScene(const char *manifest_path);
+
+// Clears the cached grid bounds when fluid scene is disabled.
+void AnimationClearFluidGrid(void);
+
 #endif // ANIMATION_H

@@ -1,7 +1,7 @@
 {
   "interactiveMode":false,
   "deepRenderMode":true,
-  "bounceMode":false,
+  "bounceMode":true,
   "autoMP4":false,
   "bounceLimit":10,
   "frameLimit":50,
@@ -16,8 +16,9 @@
   "lightDiffusionEnabled":true,
   "lightDiffusionRadius":6,
   "lightDiffusionStrength":0.60499999999999998,
-  "editorMode":2,
+  "editorMode":1,
   "useTiledRenderer":true,
+  "tilePreviewEnabled":true,
   "tileSize":16,
   "rouletteThreshold":0.01,
   "integratorMode":1,
@@ -31,11 +32,14 @@
   "pathSeed":1,
   "cacheContributionWeight":1.0,
   "bsdfModel":1,
-  "lightIntensity":1.2,
+  "lightIntensity":0.40000000000000002,
   "forwardDecay":259.0,
   "forwardFalloffMode":0,
   "renderQuality":1,
   "cacheVarianceCutoff":0.34999999999999998,
   "cacheHaloRadius":3.5,
-  "lightDecaySoftness":0.84999999999999998
+  "lightDecaySoftness":0.28999999999999998,
+  "lightHeight":8.0,
+  "useFluidScene":false,
+  "fluidManifest":"\/Users\/calebsv\/Desktop\/CodeWork\/physics_sim\/export\/volume_frames\/M Air\/manifest.json"
 }

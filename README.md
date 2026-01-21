@@ -11,7 +11,9 @@ Experimental 2D ray-tracing sandbox built with SDL2. The project simulates light
 - `camera/` – View transform math shared by the renderer and all editors (consistent viewport + margin logic).
 - `scene/`, `path/`, `config/`, `tools/` – Supporting subsystems for geometry, Bézier paths, JSON config I/O, and FFmpeg integration.
 - `math/` – Vector and matrix utilities (2D/3D) used across paths, camera math, and render helpers.
-- `geo/` – Shape asset library + adapters for importing external JSON shapes into scene objects; CLI tools live under `src/tools/cli`.
+- `geo/` – Shape asset library + adapters for importing external JSON shapes into scene objects; CLI tools live under `src/tools/cli`. Set `SHAPE_ASSET_DIR=/path/to/shared/assets/shapes` to load the unified ShapeAsset folder (falls back to `Configs/objects`).
+- `import/fluid_import.*` – Loader for physics_sim volume frames (`.vf2d` v1/v2) and `manifest.json`.
+- `render/fluid_overlay.*` – Debug density overlay; toggle with `F` at runtime, cycle frames with `[`/`]`.
 - `include/` – Public headers mirroring the `src/` hierarchy (including the camera interface).
 - `Configs/` – JSON configuration files and bundled fonts.
 - `Animations/` – Frame dumps and rendered videos created by deep-render mode.
@@ -36,4 +38,4 @@ The in-app Scene Editor exposes three modes (Bezier path, Object, Camera). Use t
 - `function_scanner.py` / `function_dependencies.csv` – Utility + report for mapping function definitions to call sites.
 - `output.mp4` – Example video rendered from frames under `Animations/default/`.
 
-Read the subdirectory READMEs for detailed notes on each module.
+Read the subdirectory READMEs for detailed notes on each module. To sync shapes from the line-drawing exports into the shared asset folder, run `make cli-tools` here (for `shape_asset_tool`) and then `SHAPE_ASSET_DIR=shared/assets/shapes shared/shape/sync_exports.sh` from the repo root. To view a physics fluid run, set `fluidManifest` in `Configs/config.json` (or pass `--fluid-manifest <path>`) and press `F` to show the overlay; use `[`/`]` to switch frames. Single `.vf2d` files can also be loaded (header v1/v2) if no manifest is present.

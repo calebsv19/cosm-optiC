@@ -2,19 +2,22 @@
 #include "config/config_manager.h"
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 static int clamp_points_copy(const ShapeAssetPath* path, double (*dst)[2]) {
     if (!path || !dst) return 0;
     int count = (int)path->point_count;
     if (count > MAX_POINTS) {
-        int stride = (int)((path->point_count + MAX_POINTS - 1) / MAX_POINTS);
-        if (stride < 1) stride = 1;
+        double step = (double)(path->point_count - 1) / (double)(MAX_POINTS - 1);
         int idx = 0;
-        for (size_t i = 0; i < path->point_count && idx < MAX_POINTS; i += (size_t)stride, ++idx) {
-            dst[idx][0] = path->points[i].x;
-            dst[idx][1] = path->points[i].y;
+        for (int i = 0; i < MAX_POINTS; ++i) {
+            size_t src = (size_t)lrint((double)i * step);
+            if (src >= path->point_count) src = path->point_count - 1;
+            dst[idx][0] = path->points[src].x;
+            dst[idx][1] = path->points[src].y;
+            ++idx;
         }
-        count = idx;
+        count = MAX_POINTS;
     } else {
         for (int i = 0; i < count; ++i) {
             dst[i][0] = path->points[i].x;
@@ -22,6 +25,34 @@ static int clamp_points_copy(const ShapeAssetPath* path, double (*dst)[2]) {
         }
     }
     return count;
+}
+
+static void smooth_closed_polygon(double (*pts)[2], int *count) {
+    if (!pts || !count) return;
+    int n = *count;
+    if (n < 3) return;
+    int iterations = 0;
+    double temp[MAX_POINTS][2];
+    while (iterations < 2) {
+        int newCount = n * 2;
+        if (newCount > MAX_POINTS) break;
+        for (int i = 0; i < n; ++i) {
+            int j = (i + 1) % n;
+            double x0 = pts[i][0], y0 = pts[i][1];
+            double x1 = pts[j][0], y1 = pts[j][1];
+            temp[i * 2][0]     = 0.75 * x0 + 0.25 * x1;
+            temp[i * 2][1]     = 0.75 * y0 + 0.25 * y1;
+            temp[i * 2 + 1][0] = 0.25 * x0 + 0.75 * x1;
+            temp[i * 2 + 1][1] = 0.25 * y0 + 0.75 * y1;
+        }
+        for (int k = 0; k < newCount; ++k) {
+            pts[k][0] = temp[k][0];
+            pts[k][1] = temp[k][1];
+        }
+        n = newCount;
+        iterations++;
+    }
+    *count = n;
 }
 
 static void apply_opts(SceneObject* obj, const ShapeToSceneOptions* opts) {
@@ -51,6 +82,7 @@ bool shape_asset_to_scene_objects(const ShapeAsset* asset,
         SceneObject* obj = &out_objects[emitted];
         memset(obj, 0, sizeof(SceneObject));
         InitObject(obj, OBJECT_POLYGON, 0.0, 0.0, 0.0, 0.0, points, count);
+        smooth_closed_polygon(obj->baseShapePoints, &obj->numPoints);
         apply_opts(obj, opts);
         emitted++;
     }

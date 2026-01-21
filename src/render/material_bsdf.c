@@ -48,6 +48,14 @@ static void Normalize(double* x, double* y) {
         *y /= len;
     }
 }
+static void Normalize3(double* x, double* y, double* z) {
+    double len = sqrt((*x) * (*x) + (*y) * (*y) + (*z) * (*z));
+    if (len > 1e-9) {
+        *x /= len;
+        *y /= len;
+        *z /= len;
+    }
+}
 
 static void CosineSampleHemisphere2D(double nx,
                                      double ny,
@@ -137,6 +145,7 @@ static double GGXEvaluate(const MaterialBSDF* material,
 static bool BSDFSampleLambert(const MaterialBSDF* material,
                               double nx,
                               double ny,
+                              double nz,
                               double u1,
                               double u2,
                               BSDFSample* out) {
@@ -144,9 +153,10 @@ static bool BSDFSampleLambert(const MaterialBSDF* material,
     double dirX, dirY, pdf;
     CosineSampleHemisphere2D(nx, ny, u1, u2, &dirX, &dirY, &pdf);
     if (pdf <= 0.0) return false;
-    double cosTheta = dirX * nx + dirY * ny;
+    double cosTheta = dirX * nx + dirY * ny + nz * 0.0;
     out->dirX = dirX;
     out->dirY = dirY;
+    out->dirZ = 0.0;
     out->pdf = pdf;
     out->weight = LambertEvaluate(material, cosTheta);
     out->specular = false;
@@ -156,8 +166,10 @@ static bool BSDFSampleLambert(const MaterialBSDF* material,
 static bool BSDFSampleGGX(const MaterialBSDF* material,
                           double nx,
                           double ny,
+                          double nz,
                           double inDirX,
                           double inDirY,
+                          double inDirZ,
                           double u1,
                           double u2,
                           BSDFSample* out) {
@@ -176,18 +188,19 @@ static bool BSDFSampleGGX(const MaterialBSDF* material,
     double hy = ty * (sinThetaH * tangentSign) + ny * cosThetaH;
     Normalize(&hx, &hy);
 
-    double dotIH = inDirX * hx + inDirY * hy;
+    double dotIH = inDirX * hx + inDirY * hy + inDirZ * 0.0;
     if (dotIH <= 0.0) {
         return false;
     }
 
     double outX = 2.0 * dotIH * hx - inDirX;
     double outY = 2.0 * dotIH * hy - inDirY;
-    Normalize(&outX, &outY);
+    double outZ = -inDirZ; // reflect across 2D half-vector plane; keep z mirrored for ground use
+    Normalize3(&outX, &outY, &outZ);
 
-    double cosThetaI = fmax(0.0, inDirX * nx + inDirY * ny);
-    double cosThetaO = fmax(0.0, outX * nx + outY * ny);
-    double cosThetaHalf = fmax(0.0, hx * nx + hy * ny);
+    double cosThetaI = fmax(0.0, inDirX * nx + inDirY * ny + inDirZ * nz);
+    double cosThetaO = fmax(0.0, outX * nx + outY * ny + outZ * nz);
+    double cosThetaHalf = fmax(0.0, hx * nx + hy * ny + 0.0 * nz);
     if (cosThetaI <= 0.0 || cosThetaO <= 0.0 || cosThetaHalf <= 0.0) {
         return false;
     }
@@ -197,6 +210,7 @@ static bool BSDFSampleGGX(const MaterialBSDF* material,
 
     out->dirX = outX;
     out->dirY = outY;
+    out->dirZ = outZ;
     out->pdf = pdf;
     out->weight = brdf * cosThetaO;
     out->specular = true;
@@ -256,6 +270,7 @@ bool MaterialBSDFSample(const MaterialBSDF* material,
                         double ny,
                         double inDirX,
                         double inDirY,
+                        double inDirZ,
                         FastRNG* rng,
                         BSDFSample* out) {
     if (!material || !rng || !out) return false;
@@ -265,20 +280,20 @@ bool MaterialBSDFSample(const MaterialBSDF* material,
     bool pickSpec = (specProb > 0.0) && (choice > diffuseProb || diffuseProb <= 0.0);
     bool sampled = false;
     if (pickSpec) {
-        sampled = BSDFSampleGGX(material, nx, ny, inDirX, inDirY, FastRNGNextDouble(rng), FastRNGNextDouble(rng), out);
+        sampled = BSDFSampleGGX(material, nx, ny, 0.0, inDirX, inDirY, inDirZ, FastRNGNextDouble(rng), FastRNGNextDouble(rng), out);
         if (sampled) {
             double jitter = 0.1 * Clamp(material->roughness, 0.0, 1.0);
             double offsetX = (FastRNGNextDouble(rng) * 2.0 - 1.0) * jitter;
             double offsetY = (FastRNGNextDouble(rng) * 2.0 - 1.0) * jitter;
             out->dirX += offsetX;
             out->dirY += offsetY;
-            Normalize(&out->dirX, &out->dirY);
+            Normalize3(&out->dirX, &out->dirY, &out->dirZ);
             out->pdf *= specProb;
             return true;
         }
         // Fallback to diffuse if spec fails
     }
-    sampled = BSDFSampleLambert(material, nx, ny, FastRNGNextDouble(rng), FastRNGNextDouble(rng), out);
+    sampled = BSDFSampleLambert(material, nx, ny, 0.0, FastRNGNextDouble(rng), FastRNGNextDouble(rng), out);
     if (sampled) {
         out->pdf *= diffuseProb > 0.0 ? diffuseProb : 1.0;
     }
@@ -330,6 +345,57 @@ double MaterialBSDFAngularPdf(const MaterialBSDF* material,
         Normalize(&hx, &hy);
         double cosThetaH = fmax(0.0, hx * nx + hy * ny);
         double dotIH = fmax(0.0, inDirX * hx + inDirY * hy);
+        if (cosThetaH > 0.0 && dotIH > 0.0) {
+            double alpha = fmax(material->roughness * material->roughness, 1e-3);
+            pdf += specProb * GGXPdf(alpha, cosThetaH, dotIH);
+        }
+    }
+    return pdf;
+}
+
+// 3D helpers: lift to z and reuse 2D math (nz only affects cosines with in/out z)
+double MaterialBSDFEvaluateCos3(const MaterialBSDF* material,
+                                double nx, double ny, double nz,
+                                double inDirX, double inDirY, double inDirZ,
+                                double outDirX, double outDirY, double outDirZ) {
+    // Project onto plane of nx,ny,nz; here bsdf math stays planar, so include z in cosines only
+    double cosThetaI = fmax(0.0, inDirX * nx + inDirY * ny + inDirZ * nz);
+    double cosThetaO = fmax(0.0, outDirX * nx + outDirY * ny + outDirZ * nz);
+    if (cosThetaI <= 0.0 || cosThetaO <= 0.0) return 0.0;
+    double hx = inDirX + outDirX;
+    double hy = inDirY + outDirY;
+    double hz = inDirZ + outDirZ;
+    Normalize3(&hx, &hy, &hz);
+    double cosThetaH = fmax(0.0, hx * nx + hy * ny + hz * nz);
+    // Reuse planar Lambert+GGX but with updated cosines; the planar hx/hy choice still approximates half-vector
+    double value = LambertEvaluate(material, cosThetaO);
+    if (material->specWeight > 0.0) {
+        double brdf = GGXEvaluate(material, cosThetaI, cosThetaO, cosThetaH);
+        value += brdf * cosThetaO;
+    }
+    return value;
+}
+
+double MaterialBSDFAngularPdf3(const MaterialBSDF* material,
+                               double nx, double ny, double nz,
+                               double inDirX, double inDirY, double inDirZ,
+                               double outDirX, double outDirY, double outDirZ) {
+    if (!material) return 0.0;
+    double cosThetaO = fmax(0.0, outDirX * nx + outDirY * ny + outDirZ * nz);
+    if (cosThetaO <= 0.0) return 0.0;
+    double pdf = 0.0;
+    double diffuseProb = MaterialBSDFDiffuseProbability(material);
+    double specProb = MaterialBSDFSpecProbability(material);
+    if (diffuseProb > 0.0) {
+        pdf += diffuseProb * LambertPdf(cosThetaO);
+    }
+    if (specProb > 0.0) {
+        double hx = inDirX + outDirX;
+        double hy = inDirY + outDirY;
+        double hz = inDirZ + outDirZ;
+        Normalize3(&hx, &hy, &hz);
+        double cosThetaH = fmax(0.0, hx * nx + hy * ny + hz * nz);
+        double dotIH = fmax(0.0, inDirX * hx + inDirY * hy + inDirZ * hz);
         if (cosThetaH > 0.0 && dotIH > 0.0) {
             double alpha = fmax(material->roughness * material->roughness, 1e-3);
             pdf += specProb * GGXPdf(alpha, cosThetaH, dotIH);

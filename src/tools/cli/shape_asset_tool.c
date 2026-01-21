@@ -43,13 +43,18 @@ static const char *default_out_path(const char *input) {
     const char *base = slash ? slash + 1 : input;
     const char *dot = strrchr(base, '.');
     size_t base_len = dot ? (size_t)(dot - base) : strlen(base);
-    const char *prefix = "Configs/objects/";
-    size_t total = strlen(prefix) + base_len + strlen(".asset.json") + 1;
+    const char *prefix = getenv("SHAPE_ASSET_DIR");
+    if (!prefix || prefix[0] == '\0') {
+        prefix = "Configs/objects";
+    }
+    size_t total = strlen(prefix) + 1 + base_len + strlen(".asset.json") + 1;
     char *buf = (char *)malloc(total);
     if (!buf) return NULL;
-    memcpy(buf, prefix, strlen(prefix));
-    memcpy(buf + strlen(prefix), base, base_len);
-    memcpy(buf + strlen(prefix) + base_len, ".asset.json", strlen(".asset.json") + 1);
+    size_t prefix_len = strlen(prefix);
+    memcpy(buf, prefix, prefix_len);
+    buf[prefix_len] = '/';
+    memcpy(buf + prefix_len + 1, base, base_len);
+    memcpy(buf + prefix_len + 1 + base_len, ".asset.json", strlen(".asset.json") + 1);
     return buf;
 }
 

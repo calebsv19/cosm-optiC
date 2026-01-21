@@ -33,6 +33,12 @@ void DirectLightingPass(IntegratorDirectContext* ctx,
                         const LightSource* light,
                         double camX, double camY,
                         double intensityScale);
+void DirectLightingPassRegion(IntegratorDirectContext* ctx,
+                              const LightSource* light,
+                              double camX, double camY,
+                              double intensityScale,
+                              int startX, int startY,
+                              int endX, int endY);
 
 #ifdef __cplusplus
 }

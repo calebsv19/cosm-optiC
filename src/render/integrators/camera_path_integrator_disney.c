@@ -28,6 +28,50 @@ static inline void NormalizeVector(double* x, double* y) {
     }
 }
 
+static inline void BuildGroundBSDF(MaterialBSDF* bsdf) {
+    if (!bsdf) return;
+    memset(bsdf, 0, sizeof(*bsdf));
+    bsdf->albedo = 1.0;
+    bsdf->diffuseWeight = 1.0;
+    bsdf->weightSum = 1.0;
+    bsdf->roughness = 1.0;
+    bsdf->model = MATERIAL_BSDF_LAMBERT;
+}
+
+static inline void CameraViewDirection(double rotation, double* vx, double* vy) {
+    // In an orthographic camera, the view direction is screen -Y rotated by camera rotation.
+    double c = cos(rotation);
+    double s = sin(rotation);
+    *vx = s;
+    *vy = -c;
+    NormalizeVector(vx, vy);
+}
+
+static inline double DisneyFalloffDistance(const IntegratorContext* ctx) {
+    double d = animSettings.forwardDecay;
+    if (d > 0.0) return d;
+    double w = (ctx && ctx->width  > 0) ? (double)ctx->width  : (double)sceneSettings.windowWidth;
+    double h = (ctx && ctx->height > 0) ? (double)ctx->height : (double)sceneSettings.windowHeight;
+    if (w <= 0.0) w = 1200.0;
+    if (h <= 0.0) h = 800.0;
+    return hypot(w, h);
+}
+
+static inline double DisneyDistanceAttenuation(const IntegratorContext* ctx, double distance) {
+    int mode = animSettings.forwardFalloffMode;
+    if (mode == FORWARD_FALLOFF_MODE_NONE) return 1.0;
+    double scale = DisneyFalloffDistance(ctx) * fmax(animSettings.lightDecaySoftness, 0.1);
+    if (scale < 1.0) scale = 1.0;
+    double normalized = fmax(distance, 0.0) / scale;
+    switch (mode) {
+        case FORWARD_FALLOFF_MODE_LINEAR:
+            return 1.0 / (1.0 + normalized);
+        case FORWARD_FALLOFF_MODE_QUADRATIC:
+        default:
+            return 1.0 / (1.0 + normalized * normalized);
+    }
+}
+
 // --- Tile/energy helpers ---
 static bool FetchTileSample(const IntegratorContext* ctx,
                             int pixelX,
@@ -258,8 +302,10 @@ static double SampleDirectLight(const IntegratorContext* ctx,
                                 FastRNG* rng,
                                 const HitInfo2D* hit,
                                 const MaterialBSDF* bsdf,
-                                double outDirX,
-                                double outDirY) {
+                                double inDirX,
+                                double inDirY,
+                                double normalZ,
+                                double lightHeight) {
     if (!ctx || !light || !rng || !hit || !bsdf) return 0.0;
     int directSamples = 8;
     double accum = 0.0;
@@ -272,11 +318,12 @@ static double SampleDirectLight(const IntegratorContext* ctx,
         double lpY = light->y + ly;
         double dirX = lpX - hit->px;
         double dirY = lpY - hit->py;
-        double dist2 = dirX * dirX + dirY * dirY;
-        double dist = sqrt(dist2);
+        double distXY2 = dirX * dirX + dirY * dirY;
+        double dist = sqrt(distXY2 + lightHeight * lightHeight);
         if (dist <= PATH_EPSILON) continue;
-        dirX /= dist;
-        dirY /= dist;
+        dirX /= sqrt(distXY2 > 1e-12 ? distXY2 : 1.0);
+        dirY /= sqrt(distXY2 > 1e-12 ? distXY2 : 1.0);
+        double dirZ = lightHeight / dist;
 
         Ray2D shadow = { hit->px + hit->nx * PATH_EPSILON,
                          hit->py + hit->ny * PATH_EPSILON,
@@ -286,28 +333,31 @@ static double SampleDirectLight(const IntegratorContext* ctx,
             continue;
         }
 
-        double cosOn = fmax(0.0, hit->nx * dirX + hit->ny * dirY);
+        double cosOn = fmax(0.0, hit->nx * dirX + hit->ny * dirY + normalZ * dirZ);
         if (cosOn <= 0.0) continue;
 
-        double pdfLight = CircleLightPdfSolidAngle(light, hit->px, hit->py, cosOn);
+        double pdfLight = CircleLightPdfSolidAngle(light, hit->px, hit->py, lightHeight);
         double area = M_PI * light->radius * light->radius;
-        double radiance = animSettings.lightIntensity * area / (dist2 + light->radius * light->radius);
+        double att = DisneyDistanceAttenuation(ctx, dist);
+        double radiance = animSettings.lightIntensity * area * att;
 
-        double bsdfVal = MaterialBSDFEvaluateCos(bsdf,
-                                                 hit->nx, hit->ny,
-                                                 dirX, dirY,  // incoming from light
-                                                 outDirX, outDirY); // outgoing toward camera path
+        double inX = -dirX;
+        double inY = -dirY;
+        double outX = inDirX;
+        double outY = inDirY;
+        double bsdfVal = MaterialBSDFEvaluateCos3(bsdf,
+                                                  hit->nx, hit->ny, normalZ,
+                                                  inX, inY, dirZ,
+                                                  outX, outY, normalZ * -1.0);
         if (bsdfVal <= 0.0) continue;
-        double pdfBsdf = MaterialBSDFAngularPdf(bsdf,
-                                                hit->nx, hit->ny,
-                                                outDirX, outDirY,
-                                                dirX, dirY);
+        double pdfBsdf = MaterialBSDFAngularPdf3(bsdf,
+                                                 hit->nx, hit->ny, normalZ,
+                                                 inDirX, inDirY, normalZ * -1.0,
+                                                 dirX, dirY, dirZ);
         double misW = (pdfBsdf > 0.0 && pdfLight > 0.0)
-            ? (pdfBsdf / (pdfBsdf + pdfLight))
+            ? (pdfLight / (pdfLight + pdfBsdf))
             : 1.0;
         double contrib = radiance * bsdfVal * cosOn / fmax(pdfLight, 1e-8);
-        // Gentle clamp to avoid fireflies from single lucky samples
-        if (contrib > 50.0) contrib = 50.0;
         accum += contrib * misW;
     }
     if (directSamples > 0) accum /= (double)directSamples;
@@ -320,6 +370,7 @@ static double PathTracePixel(const IntegratorContext* ctx,
                              int py,
                              FastRNG* rng) {
     if (!ctx || !ctx->uniformGrid) return 0.0;
+    const bool topDownGroundShading = true;
     int maxDepth = (animSettings.pathMaxDepth > 0) ? animSettings.pathMaxDepth : 4;
     int minDepth = 2;
     double throughput = 1.0;
@@ -333,13 +384,27 @@ static double PathTracePixel(const IntegratorContext* ctx,
                                             py + 0.5 + jitterY,
                                             ctx->width,
                                             ctx->height);
-    // Pinhole-style: origin at camera, direction through pixel
-    double ox = sceneSettings.camera.x;
-    double oy = sceneSettings.camera.y;
-    double dx = world.x - ox;
-    double dy = world.y - oy;
-    NormalizeVector(&dx, &dy);
-    if (fabs(dx) < 1e-6 && fabs(dy) < 1e-6) { dx = 0.0; dy = 1.0; }
+    double lightHeight = (animSettings.lightHeight > 0.0) ? animSettings.lightHeight : 8.0;
+    double viewDirX = 0.0, viewDirY = -1.0;
+    CameraViewDirection(sceneSettings.camera.rotation, &viewDirX, &viewDirY);
+
+    // Top-down shading: start at the pixel's world position.
+    double ox = world.x;
+    double oy = world.y;
+    double dx = viewDirX;
+    double dy = viewDirY;
+
+    bool useSyntheticGround = topDownGroundShading;
+    if (!topDownGroundShading) {
+        // Pinhole fallback: origin at camera, direction through pixel
+        ox = sceneSettings.camera.x;
+        oy = sceneSettings.camera.y;
+        dx = world.x - ox;
+        dy = world.y - oy;
+        NormalizeVector(&dx, &dy);
+        if (fabs(dx) < 1e-6 && fabs(dy) < 1e-6) { dx = 0.0; dy = 1.0; }
+        useSyntheticGround = false;
+    }
 
     for (int depth = 0; depth < maxDepth; depth++) {
         HitInfo2D hit = {0};
@@ -347,41 +412,55 @@ static double PathTracePixel(const IntegratorContext* ctx,
         hit.triangleIndex = -1;
         hit.baryW = 1.0;
         const SceneObject* obj = NULL;
-        if (!TraceRayToSurface(ctx, ox, oy, dx, dy, &hit, &obj)) {
-            if (envLight > 0.0) {
-                radiance += throughput * envLight;
-            }
-            break;
-        }
-
         MaterialBSDF matScratch = {0};
-        const MaterialBSDF* bsdf = GetMaterial(ctx, hit.objectIndex, &matScratch, obj);
-        if (!bsdf) break;
+        const MaterialBSDF* bsdf = NULL;
+
+        if (useSyntheticGround && depth == 0) {
+            hit.px = ox;
+            hit.py = oy;
+            // Fixed ground normal pointing up; view is straight down. Use planar up (0,1) for sampling.
+            hit.nx = 0.0;
+            hit.ny = 1.0;
+            BuildGroundBSDF(&matScratch);
+            bsdf = &matScratch;
+        } else {
+            if (!TraceRayToSurface(ctx, ox, oy, dx, dy, &hit, &obj)) {
+                if (envLight > 0.0) {
+                    radiance += throughput * envLight;
+                }
+                break;
+            }
+            bsdf = GetMaterial(ctx, hit.objectIndex, &matScratch, obj);
+            if (!bsdf) break;
+        }
 
         double inDirX = -dx;
         double inDirY = -dy;
-        OrientNormalForIncoming(&hit, inDirX, inDirY);
+        double inDirZ = 0.0;
+        double normalZ = (useSyntheticGround && depth == 0) ? 1.0 : 0.0;
+        if (!useSyntheticGround || depth != 0) {
+            OrientNormalForIncoming(&hit, inDirX, inDirY);
+        }
 
         // Emissive hit (one-sided)
-        double ndotI = fmax(0.0, -(inDirX * hit.nx + inDirY * hit.ny));
+        double ndotI = fmax(0.0, -(inDirX * hit.nx + inDirY * hit.ny + normalZ * inDirZ));
         if (bsdf->emissive > 0.0 && ndotI > 0.0) {
             radiance += throughput * bsdf->emissive;
         }
 
-        double direct = SampleDirectLight(ctx, light, rng, &hit, bsdf, -dx, -dy);
+        double direct = SampleDirectLight(ctx, light, rng, &hit, bsdf, inDirX, inDirY, normalZ, lightHeight);
         if (direct > 0.0) {
             radiance += throughput * direct;
         }
 
         BSDFSample s = {0};
-        if (!MaterialBSDFSample(bsdf, hit.nx, hit.ny, inDirX, inDirY, rng, &s)) {
+        if (!MaterialBSDFSample(bsdf, hit.nx, hit.ny, inDirX, inDirY, inDirZ, rng, &s)) {
             break;
         }
         if (s.pdf <= 1e-8 || s.weight <= 0.0) break;
 
-        throughput *= s.weight / s.pdf;
-        throughput = ClampThroughput(throughput, 0.0, 50.0);
-        if (throughput <= 0.0) break;
+        double Tprev = throughput;
+        double bsdfThroughput = s.weight / s.pdf;
 
         // MIS for BSDF-sampled hit on light (point-in-disk test)
         if (light) {
@@ -396,7 +475,8 @@ static double PathTracePixel(const IntegratorContext* ctx,
                 double d2 = dxL * dxL + dyL * dyL;
                 if (d2 <= light->radius * light->radius) {
                     double dist2 = t * t;
-                    double cosOn = fmax(0.0, hit.nx * s.dirX + hit.ny * s.dirY);
+                    double dist3 = sqrt(dist2 + lightHeight * lightHeight);
+                    double cosOn = fmax(0.0, hit.nx * s.dirX + hit.ny * s.dirY + normalZ * s.dirZ);
                     if (cosOn > 0.0) {
                         Ray2D shadow = { hit.px + hit.nx * PATH_EPSILON,
                                          hit.py + hit.ny * PATH_EPSILON,
@@ -404,18 +484,23 @@ static double PathTracePixel(const IntegratorContext* ctx,
                         HitInfo2D block = {0};
                         if (!UniformGridTraceRay(ctx->uniformGrid, &shadow, PATH_EPSILON, t - PATH_EPSILON, &block)) {
                             double area = M_PI * light->radius * light->radius;
-                            double radianceL = animSettings.lightIntensity * area / (dist2 + light->radius * light->radius);
-                            double pdfLight = CircleLightPdfSolidAngle(light, hit.px, hit.py, cosOn);
+                            double att = DisneyDistanceAttenuation(ctx, dist3);
+                            double radianceL = animSettings.lightIntensity * area * att;
+                            double pdfLight = CircleLightPdfSolidAngle(light, hit.px, hit.py, lightHeight);
                             double pdfBsdf = s.pdf;
                             double misW = (pdfLight > 0.0 && pdfBsdf > 0.0)
-                                ? (pdfLight / (pdfLight + pdfBsdf))
+                                ? (pdfBsdf / (pdfLight + pdfBsdf))
                                 : 1.0;
-                            radiance += throughput * radianceL * misW;
+                            radiance += Tprev * bsdfThroughput * radianceL * misW;
                         }
                     }
                 }
             }
         }
+
+        throughput = Tprev * bsdfThroughput;
+        // Optional clamp can be re-enabled for debugging extreme fireflies.
+        if (throughput <= 0.0) break;
 
         if (animSettings.pathRussianRoulette && depth + 1 >= minDepth) {
             double p = fmax(0.05, fmin(1.0, throughput));

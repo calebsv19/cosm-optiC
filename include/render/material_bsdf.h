@@ -28,6 +28,7 @@ typedef struct MaterialBSDF {
 typedef struct {
     double dirX;
     double dirY;
+    double dirZ;
     double pdf;
     double weight;
     bool specular;
@@ -43,6 +44,7 @@ bool MaterialBSDFSample(const MaterialBSDF* material,
                         double ny,
                         double inDirX,
                         double inDirY,
+                        double inDirZ,
                         FastRNG* rng,
                         BSDFSample* out);
 
@@ -61,6 +63,17 @@ double MaterialBSDFAngularPdf(const MaterialBSDF* material,
                               double inDirY,
                               double outDirX,
                               double outDirY);
+
+// 3D convenience wrappers (simple lift with nz/in/out z)
+double MaterialBSDFEvaluateCos3(const MaterialBSDF* material,
+                                double nx, double ny, double nz,
+                                double inDirX, double inDirY, double inDirZ,
+                                double outDirX, double outDirY, double outDirZ);
+
+double MaterialBSDFAngularPdf3(const MaterialBSDF* material,
+                               double nx, double ny, double nz,
+                               double inDirX, double inDirY, double inDirZ,
+                               double outDirX, double outDirY, double outDirZ);
 
 double FresnelSchlick(double cosTheta, double f0);
 

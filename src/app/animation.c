@@ -11,9 +11,13 @@
 #include "editor/bezier_editor.h"
 #include "path/path_system.h"
 #include "render/timer_hud_api.h"
+#include "render/timer_hud_adapter.h"
 #include "camera/camera.h"
 #include "render/render_helper.h"
 #include "engine/Render/render_pipeline.h"
+#include "import/fluid_import.h"
+#include "geo/shape_asset.h"
+#include "geo/shape_adapter.h"
 #include <json-c/json.h>
 #include <math.h>
 #include <stdio.h>
@@ -46,6 +50,75 @@ double t_increment;
 double t_param = 0.0;  // Parameter (0 to 1) for interpolation along the path.
 int direction = 1;      // +1 for forward, -1 for reverse.
 static const double kPreviewBg = 60.0;
+
+static const char* s_fluidManifestOverride = NULL;
+#include "render/fluid_state.h"
+
+bool AnimationUseFluidScene(void) {
+    return animSettings.useFluidScene && animSettings.fluidManifest[0];
+}
+
+void AnimationClearFluidGrid(void) {
+    g_fluidGrid.valid = false;
+    g_fluidGrid.min_x = g_fluidGrid.min_y = 0.0f;
+    g_fluidGrid.max_x = g_fluidGrid.max_y = 0.0f;
+}
+
+bool AnimationApplyFluidScene(const char *manifest_path) {
+    if (!manifest_path || !*manifest_path) return false;
+    FluidManifest manifest = {0};
+    if (!fluid_manifest_load(manifest_path, &manifest)) {
+        printf("[menu] failed to load manifest %s\n", manifest_path);
+        return false;
+    }
+
+    // Fit grid
+    g_fluidGrid.valid = true;
+    g_fluidGrid.min_x = manifest.origin_x;
+    g_fluidGrid.min_y = manifest.origin_y;
+    g_fluidGrid.max_x = manifest.origin_x + manifest.cell_size * (float)manifest.grid_w;
+    g_fluidGrid.max_y = manifest.origin_y + manifest.cell_size * (float)manifest.grid_h;
+
+    // Reset scene and place imports
+    sceneSettings.objectCount = 0;
+    double grid_w_world = g_fluidGrid.max_x - g_fluidGrid.min_x;
+    double grid_h_world = g_fluidGrid.max_y - g_fluidGrid.min_y;
+    sceneSettings.camera.x = g_fluidGrid.min_x + grid_w_world * 0.5;
+    sceneSettings.camera.y = g_fluidGrid.min_y + grid_h_world * 0.5;
+    double zoom_x = (grid_w_world > 1e-4) ? ((double)sceneSettings.windowWidth / grid_w_world) : 1.0;
+    double zoom_y = (grid_h_world > 1e-4) ? ((double)sceneSettings.windowHeight / grid_h_world) : 1.0;
+    sceneSettings.camera.zoom = fmin(zoom_x, zoom_y) * 0.9;
+
+    for (size_t i = 0; i < manifest.import_count; ++i) {
+        const FluidImportShape *imp = &manifest.imports[i];
+        if (!imp->path) continue;
+        double world_x = g_fluidGrid.min_x + (grid_w_world) * imp->pos_x_norm;
+        double world_y = g_fluidGrid.min_y + (grid_h_world) * imp->pos_y_norm;
+        ShapeAsset asset = {0};
+        bool loaded = shape_asset_load_file(imp->path, &asset);
+        double angle = imp->rotation_deg * M_PI / 180.0;
+        double scale = (imp->scale > 0.0f) ? imp->scale : 1.0;
+        if (loaded) {
+            int before = sceneSettings.objectCount;
+            ShapeToSceneOptions opts = {.scale = scale, .offset_x = world_x, .offset_y = world_y};
+            shape_asset_append_to_scene(&asset, &opts);
+            int after = sceneSettings.objectCount;
+            for (int oi = before; oi < after; ++oi) {
+                sceneSettings.sceneObjects[oi].rotation = angle;
+                sceneSettings.sceneObjects[oi].dirty = true;
+            }
+            shape_asset_free(&asset);
+        }
+    }
+
+    animSettings.useFluidScene = true;
+    if (manifest_path != animSettings.fluidManifest) {
+        strncpy(animSettings.fluidManifest, manifest_path, sizeof(animSettings.fluidManifest) - 1);
+        animSettings.fluidManifest[sizeof(animSettings.fluidManifest) - 1] = '\0';
+    }
+    fluid_manifest_free(&manifest);
+    return true;
+}
 
 char loopMode[16] = "stop";  // Increased buffer size for safety
 int maxLoopCount = 1;  // Default to 1 loop if not set
@@ -97,7 +170,17 @@ void SaveFrame(int frameNumber) {
 
 int AnimationInit(void) {
     LoadAnimationConfig();
+    if (s_fluidManifestOverride && s_fluidManifestOverride[0]) {
+        strncpy(animSettings.fluidManifest, s_fluidManifestOverride, sizeof(animSettings.fluidManifest) - 1);
+        animSettings.fluidManifest[sizeof(animSettings.fluidManifest) - 1] = '\0';
+        animSettings.useFluidScene = true;
+    }
     LoadSceneConfig();
+    if (animSettings.useFluidScene && animSettings.fluidManifest[0]) {
+        AnimationApplyFluidScene(animSettings.fluidManifest);
+    } else {
+        AnimationClearFluidGrid();
+    }
     UpdateObjects();
     WINDOW_WIDTH = sceneSettings.windowWidth;       
     WINDOW_HEIGHT = sceneSettings.windowHeight; 
@@ -128,6 +211,7 @@ int AnimationInit(void) {
         return -1;
     }
 
+    timer_hud_register_backend();
     ts_init();
     setRenderContext(renderer, window, WINDOW_WIDTH, WINDOW_HEIGHT);
 
@@ -305,6 +389,13 @@ static void RunPreviewInternal(bool standalone) {
                 runningPreview = false;
                 quitRequested = true;
             }
+            if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_f) {
+                g_fluidOverlayEnabled = !g_fluidOverlayEnabled;
+            } else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_LEFTBRACKET) {
+                if (g_fluidFrameIndex > 0) g_fluidFrameIndex--;
+            } else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_RIGHTBRACKET) {
+                g_fluidFrameIndex++;
+            }
         }
 
         Uint64 now = SDL_GetPerformanceCounter();
@@ -389,7 +480,7 @@ void RenderFrame(double lightX, double lightY, int* frameCounter, bool* running)
     }
 
     setRenderContext(renderer, window, sceneSettings.windowWidth, sceneSettings.windowHeight);
-    ts_render(renderer);
+    ts_render();
     SDL_RenderPresent(renderer);
     ts_frame_end();
 }
@@ -446,14 +537,20 @@ void RunMainLoop(void) {
         bool waitingForExit = true;
         SDL_Event event; 
         while (waitingForExit && !quitRequested) {
-            while (SDL_PollEvent(&event)) {
-                if (event.type == SDL_QUIT ||
-                    (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE)) {
-                    waitingForExit = false; // return to menu
-                }
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT ||
+                (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE)) {
+                waitingForExit = false; // return to menu
+            } else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_f) {
+                g_fluidOverlayEnabled = !g_fluidOverlayEnabled;
+            } else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_LEFTBRACKET) {
+                if (g_fluidFrameIndex > 0) g_fluidFrameIndex--;
+            } else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_RIGHTBRACKET) {
+                g_fluidFrameIndex++;
             }
-            SDL_Delay(10);
         }
+        SDL_Delay(10);
+    }
     }
     CleanupRayTracing();    
     SDL_DestroyRenderer(renderer);
@@ -463,7 +560,19 @@ void RunMainLoop(void) {
 
 
 #ifdef MAIN_DRIVER  
+static void ParseArgs(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i) {
+        const char* arg = argv[i];
+        if (strcmp(arg, "--fluid-manifest") == 0 && i + 1 < argc) {
+            s_fluidManifestOverride = argv[++i];
+        } else if (strcmp(arg, "--fluid-frame") == 0 && i + 1 < argc) {
+            g_fluidFrameIndex = atoi(argv[++i]);
+        }
+    }
+}
+
 int main(int argc, char* argv[]) {
+    ParseArgs(argc, argv);
     (void)argc;
     (void)argv;
     // Load animation settings from config file

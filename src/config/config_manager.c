@@ -44,6 +44,7 @@ AnimationConfig animSettings = {
     .lightDiffusionRadius = 4,
     .lightDiffusionStrength = 0.65,
     .useTiledRenderer = false,
+    .tilePreviewEnabled = false,
     .tileSize = 16,
     .rouletteThreshold = 0.01,
     .integratorMode = 0,
@@ -63,7 +64,10 @@ AnimationConfig animSettings = {
     .renderQuality = RENDER_QUALITY_MEDIUM,
     .cacheVarianceCutoff = 0.35,
     .cacheHaloRadius = 3.5,
-    .lightDecaySoftness = 1.0
+    .lightDecaySoftness = 1.0,
+    .lightHeight = 8.0,
+    .useFluidScene = false,
+    .fluidManifest = ""
 };
 
 SceneConfig sceneSettings = {
@@ -212,7 +216,9 @@ static void EnsureCameraPathDefault(void) {
 
 void SaveAllSettings(void) {
     MaterialManagerInit();
-    SaveSceneConfig();
+    if (!animSettings.useFluidScene) {
+        SaveSceneConfig();
+    }
     SaveAnimationConfig();
 }
 
@@ -341,6 +347,7 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "lightDiffusionStrength", json_object_new_double(animSettings.lightDiffusionStrength));
     json_object_object_add(config, "editorMode", json_object_new_int(animSettings.editorMode));
     json_object_object_add(config, "useTiledRenderer", json_object_new_boolean(animSettings.useTiledRenderer));
+    json_object_object_add(config, "tilePreviewEnabled", json_object_new_boolean(animSettings.tilePreviewEnabled));
     json_object_object_add(config, "tileSize", json_object_new_int(animSettings.tileSize));
     json_object_object_add(config, "rouletteThreshold", json_object_new_double(animSettings.rouletteThreshold));
     json_object_object_add(config, "integratorMode", json_object_new_int(animSettings.integratorMode));
@@ -361,6 +368,10 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "cacheVarianceCutoff", json_object_new_double(animSettings.cacheVarianceCutoff));
     json_object_object_add(config, "cacheHaloRadius", json_object_new_double(animSettings.cacheHaloRadius));
     json_object_object_add(config, "lightDecaySoftness", json_object_new_double(animSettings.lightDecaySoftness));
+    json_object_object_add(config, "lightHeight", json_object_new_double(animSettings.lightHeight));
+    json_object_object_add(config, "useFluidScene", json_object_new_boolean(animSettings.useFluidScene));
+    json_object_object_add(config, "fluidManifest", json_object_new_string(animSettings.fluidManifest));
+    json_object_object_add(config, "lightHeight", json_object_new_double(animSettings.lightHeight));
     fprintf(file, "%s", json_object_to_json_string_ext(config, JSON_C_TO_STRING_PRETTY));
     fclose(file);
     json_object_put(config);
@@ -763,14 +774,18 @@ void LoadAnimationConfig(void) {
         animSettings.editorMode = json_object_get_int(temp); 
     if (json_object_object_get_ex(config, "useTiledRenderer", &temp))
         animSettings.useTiledRenderer = json_object_get_boolean(temp);
+    if (json_object_object_get_ex(config, "tilePreviewEnabled", &temp))
+        animSettings.tilePreviewEnabled = json_object_get_boolean(temp);
     if (json_object_object_get_ex(config, "tileSize", &temp))
         animSettings.tileSize = json_object_get_int(temp);
     if (json_object_object_get_ex(config, "rouletteThreshold", &temp))
         animSettings.rouletteThreshold = json_object_get_double(temp);
     if (json_object_object_get_ex(config, "integratorMode", &temp))
         animSettings.integratorMode = json_object_get_int(temp);
-    if (animSettings.integratorMode < 0 || animSettings.integratorMode > 3) {
+    if (animSettings.integratorMode < 0) {
         animSettings.integratorMode = 0;
+    } else if (animSettings.integratorMode > 2) {
+        animSettings.integratorMode = 2;
     }
     if (json_object_object_get_ex(config, "previewDuration", &temp)) {
         animSettings.previewDuration = json_object_get_double(temp);
@@ -819,6 +834,23 @@ void LoadAnimationConfig(void) {
     } else {
         animSettings.lightDecaySoftness = 1.0;
     }
+    if (json_object_object_get_ex(config, "lightHeight", &temp)) {
+        animSettings.lightHeight = json_object_get_double(temp);
+    } else {
+        animSettings.lightHeight = 8.0;
+    }
+    if (json_object_object_get_ex(config, "useFluidScene", &temp) && json_object_is_type(temp, json_type_boolean)) {
+        animSettings.useFluidScene = json_object_get_boolean(temp);
+    } else {
+        animSettings.useFluidScene = false;
+    }
+    if (json_object_object_get_ex(config, "fluidManifest", &temp) && json_object_is_type(temp, json_type_string)) {
+        const char *fm = json_object_get_string(temp);
+        if (fm) {
+            strncpy(animSettings.fluidManifest, fm, sizeof(animSettings.fluidManifest) - 1);
+            animSettings.fluidManifest[sizeof(animSettings.fluidManifest) - 1] = '\0';
+        }
+    }
 
     animSettings.cacheContributionWeight = ClampDoubleValue(animSettings.cacheContributionWeight, 0.0, 1.0);
     animSettings.bsdfModel = (animSettings.bsdfModel != 0) ? 1 : 0;
@@ -850,6 +882,9 @@ void LoadAnimationConfig(void) {
     }
     if (animSettings.lightDecaySoftness > 10.0) {
         animSettings.lightDecaySoftness = 10.0;
+    }
+    if (!isfinite(animSettings.lightHeight) || animSettings.lightHeight < 0.0) {
+        animSettings.lightHeight = 8.0;
     }
 	
     printf(" Loaded animation config successfully.\n");

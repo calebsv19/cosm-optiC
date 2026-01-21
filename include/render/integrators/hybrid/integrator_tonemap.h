@@ -19,6 +19,7 @@ typedef struct {
 float TonemapCurve(float x);
 void  TonemapApply(TonemapContext* ctx);
 void  TonemapTiles(TonemapContext* ctx);
+void  TonemapTile(TonemapContext* ctx, const IntegratorTile* tile);
 
 #ifdef __cplusplus
 }

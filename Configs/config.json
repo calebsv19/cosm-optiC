@@ -5,5 +5,7 @@
   "autoMP4":false,
   "bounceLimit":10,
   "frameLimit":300,
-  "frameDir":"Animations\/default"
+  "frameDir":"Animations\/default",
+  "useFluidScene":false,
+  "fluidManifest":""
 }

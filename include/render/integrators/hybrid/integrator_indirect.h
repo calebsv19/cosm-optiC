@@ -31,16 +31,21 @@ float IndirectSamplePoint(const IntegratorIndirectContext* ctx,
                           double feelerLimit,
                           double varianceCut,
                           double haloRadius,
-                          double camX, double camY,
                           double intensityScale,
                           float* debugStats);
 
 void IndirectLightingPass(IntegratorIndirectContext* ctx,
                           const LightSource* light,
-                          double camX, double camY,
                           double userVariance,
                           double userHalo,
                           double intensityScale);
+void IndirectLightingPassRegion(IntegratorIndirectContext* ctx,
+                                const LightSource* light,
+                                double userVariance,
+                                double userHalo,
+                                double intensityScale,
+                                int startX, int startY,
+                                int endX, int endY);
 
 #ifdef __cplusplus
 }

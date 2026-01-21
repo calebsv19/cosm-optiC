@@ -46,6 +46,29 @@ void TonemapTiles(TonemapContext* ctx)
     }
 }
 
+void TonemapTile(TonemapContext* ctx, const IntegratorTile* tile)
+{
+    if (!ctx || !tile || !tile->energy || !ctx->pixelBuffer)
+        return;
+
+    for (int y = 0; y < tile->height; y++) {
+        for (int x = 0; x < tile->width; x++) {
+            size_t idx = (size_t)y * (size_t)tile->width + (size_t)x;
+            float e = tile->energy[idx];
+
+            float tone = TonemapCurve(e);
+            int px = tile->originX + x;
+            int py = tile->originY + y;
+
+            if (px < 0 || py < 0 || px >= ctx->width || py >= ctx->height)
+                continue;
+
+            size_t outIdx = (size_t)py * (size_t)ctx->width + (size_t)px;
+            ctx->pixelBuffer[outIdx] = (unsigned char)(tone * 255.0f);
+        }
+    }
+}
+
 void TonemapApply(TonemapContext* ctx)
 {
     if (!ctx || !ctx->pixelBuffer)
