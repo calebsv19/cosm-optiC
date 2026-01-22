@@ -8,6 +8,8 @@
 #include "app/animation.h"
 #include "render/fluid_state.h"
 #include "camera/camera.h"
+#include "engine/Render/render_pipeline.h"
+#include "render/vk_shared_device.h"
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
@@ -24,6 +26,9 @@ SDL_Rect addButton;  // Small square
 SDL_Rect deleteButton;
 SDL_Rect toggleButton;
 
+#if USE_VULKAN
+static VkRenderer g_scene_renderer_storage;
+#endif
 
 bool sceneEditorExitFlag = false;  //  Used to signal Scene Editor should exit
 static void InitializeEditorMode(SceneEditor* editor);
@@ -62,12 +67,46 @@ void InitializeSceneEditor(SceneEditor* editor) {
 
     //  Create the window using stored scene settings
     editor->window = SDL_CreateWindow("Scene Editor", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                                      sceneSettings.windowWidth, sceneSettings.windowHeight, SDL_WINDOW_SHOWN);
+                                      sceneSettings.windowWidth, sceneSettings.windowHeight,
+                                      SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
     if (!editor->window) {
         fprintf(stderr, "Error: Failed to create scene window.\n");
         return;
     }
 
+#if USE_VULKAN
+    VkRendererConfig cfg;
+    vk_renderer_config_set_defaults(&cfg);
+    cfg.enable_validation = SDL_FALSE;
+    cfg.clear_color[0] = 0.0f;
+    cfg.clear_color[1] = 0.0f;
+    cfg.clear_color[2] = 0.0f;
+    cfg.clear_color[3] = 1.0f;
+
+    if (!vk_shared_device_init(editor->window, &cfg)) {
+        fprintf(stderr, "vk_shared_device_init failed.\n");
+        SDL_DestroyWindow(editor->window);
+        return;
+    }
+
+    VkRendererDevice* shared_device = vk_shared_device_get();
+    if (!shared_device) {
+        fprintf(stderr, "vk_shared_device_get failed.\n");
+        SDL_DestroyWindow(editor->window);
+        return;
+    }
+
+    VkResult init = vk_renderer_init_with_device(&g_scene_renderer_storage, shared_device, editor->window, &cfg);
+    if (init != VK_SUCCESS) {
+        fprintf(stderr, "vk_renderer_init failed: %d\n", init);
+        SDL_DestroyWindow(editor->window);
+        return;
+    }
+    editor->renderer = (SDL_Renderer*)&g_scene_renderer_storage;
+    vk_renderer_set_logical_size((VkRenderer*)editor->renderer,
+                                 (float)sceneSettings.windowWidth,
+                                 (float)sceneSettings.windowHeight);
+#else
     //  Create the renderer
     editor->renderer = SDL_CreateRenderer(editor->window, -1, SDL_RENDERER_ACCELERATED | 
 			SDL_RENDERER_PRESENTVSYNC);
@@ -76,11 +115,17 @@ void InitializeSceneEditor(SceneEditor* editor) {
         SDL_DestroyWindow(editor->window);
         return;
     }
+#endif
 
     //  Initialize TTF for font rendering
     if (TTF_Init() == -1) {
         fprintf(stderr, "Error: TTF_Init failed: %s\n", TTF_GetError());
+#if USE_VULKAN
+        vk_renderer_wait_idle((VkRenderer*)editor->renderer);
+        vk_renderer_shutdown_surface((VkRenderer*)editor->renderer);
+#else
         SDL_DestroyRenderer(editor->renderer);
+#endif
         SDL_DestroyWindow(editor->window);
         return;
     }
@@ -142,7 +187,17 @@ void SceneEditorLoop(SceneEditor* editor) {
             }
         }
 
-        SDL_RenderClear(editor->renderer);
+        setRenderContext(editor->renderer, editor->window,
+                         sceneSettings.windowWidth, sceneSettings.windowHeight);
+        render_set_clear_color(editor->renderer, 0, 0, 0, 255);
+        if (!render_begin_frame()) {
+            if (render_device_lost()) {
+                editor->running = false;
+                sceneEditorExitFlag = true;
+            }
+            SDL_Delay(10);
+            continue;
+        }
 
         // **Render Active Editor Mode**
         switch (editor->currentMode) {
@@ -159,7 +214,7 @@ void SceneEditorLoop(SceneEditor* editor) {
         RenderFluidBounds(editor->renderer);
 	RenderSceneButtons(editor->renderer);
 
-        SDL_RenderPresent(editor->renderer);
+        render_end_frame();
         SDL_Delay(16);  // Maintain ~60 FPS
     }
 
@@ -285,7 +340,12 @@ void ResetSceneEditor(SceneEditor* editor) {
 
 void DestroySceneEditor(SceneEditor* editor) {
     if (editor->renderer) {
+#if USE_VULKAN
+        vk_renderer_wait_idle((VkRenderer*)editor->renderer);
+        vk_renderer_shutdown_surface((VkRenderer*)editor->renderer);
+#else
         SDL_DestroyRenderer(editor->renderer);
+#endif
         editor->renderer = NULL;
     }
     if (editor->window) {

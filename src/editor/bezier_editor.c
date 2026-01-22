@@ -436,7 +436,8 @@ void RenderBezierEditorUI(SDL_Renderer* renderer) {
  
 void RenderBezierEditor(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 80, 80, 85, 255);  
-    SDL_RenderClear(renderer);  
+    SDL_Rect bg = {0, 0, sceneSettings.windowWidth, sceneSettings.windowHeight};
+    SDL_RenderFillRect(renderer, &bg);
 
     Camera preview = BuildBezierEditorCamera();
     Camera original = sceneSettings.camera;

@@ -7,6 +7,25 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "vk_renderer.h"
+
+static void RenderSurface(SDL_Renderer* renderer, SDL_Surface* surface, const SDL_Rect* dst) {
+    if (!renderer || !surface || !dst) return;
+#if USE_VULKAN
+    VkRendererTexture texture;
+    if (vk_renderer_upload_sdl_surface_with_filter((VkRenderer*)renderer, surface, &texture,
+                                                   VK_FILTER_LINEAR) != VK_SUCCESS) {
+        return;
+    }
+    vk_renderer_draw_texture((VkRenderer*)renderer, &texture, NULL, dst);
+    vk_renderer_queue_texture_destroy((VkRenderer*)renderer, &texture);
+#else
+    SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, surface);
+    if (!textTexture) return;
+    SDL_RenderCopy(renderer, textTexture, NULL, dst);
+    SDL_DestroyTexture(textTexture);
+#endif
+}
 
 int CalculateObjectBrightness(SceneObject* obj, double lightX, double lightY) {
     Vec2 o = vec2(obj->x, obj->y);
@@ -189,7 +208,8 @@ void RenderDrawShape(SDL_Renderer* renderer, SceneObject* obj) {
 
 void RenderStaticScene(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 128, 128, 128, 255);
-    SDL_RenderClear(renderer);
+    SDL_Rect bg = {0, 0, sceneSettings.windowWidth, sceneSettings.windowHeight};
+    SDL_RenderFillRect(renderer, &bg);
         
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);  // White objects
 
@@ -219,18 +239,19 @@ static void RenderTextWithColor(SDL_Renderer* renderer, SDL_Rect button, const c
     if (!font) return;
 
     SDL_Surface* textSurface = TTF_RenderText_Solid(font, text, textColor);
-    SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
-    
+    if (!textSurface) {
+        TTF_CloseFont(font);
+        return;
+    }
+
     SDL_Rect textRect = {
         button.x + (button.w - textSurface->w) / 2,
         button.y + (button.h - textSurface->h) / 2,
         textSurface->w, textSurface->h
     };
 
-    SDL_RenderCopy(renderer, textTexture, NULL, &textRect);
-
+    RenderSurface(renderer, textSurface, &textRect);
     SDL_FreeSurface(textSurface);
-    SDL_DestroyTexture(textTexture);
     TTF_CloseFont(font);
 }
 

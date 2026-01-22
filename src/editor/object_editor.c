@@ -168,9 +168,11 @@ static void UpdatePanelLayout(void) {
 
 static void DrawAssetList(SDL_Renderer* renderer) {
     SDL_Rect panel = assetPanelRect;
+#if !USE_VULKAN
     SDL_BlendMode prevMode;
     SDL_GetRenderDrawBlendMode(renderer, &prevMode);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+#endif
 
     SDL_SetRenderDrawColor(renderer, 40, 40, 40, 30);
     SDL_RenderFillRect(renderer, &panel);
@@ -188,7 +190,9 @@ static void DrawAssetList(SDL_Renderer* renderer) {
     SDL_RenderDrawRect(renderer, &assetCollapseRect);
 
     if (assetsCollapsed) {
+#if !USE_VULKAN
         SDL_SetRenderDrawBlendMode(renderer, prevMode);
+#endif
         return;
     }
 
@@ -229,14 +233,18 @@ static void DrawAssetList(SDL_Renderer* renderer) {
         RenderButtonText(renderer, row, label);
     }
 
+#if !USE_VULKAN
     SDL_SetRenderDrawBlendMode(renderer, prevMode);
+#endif
 }
 
 static void DrawMaterialList(SDL_Renderer* renderer) {
     SDL_Rect panel = materialPanelRect;
+#if !USE_VULKAN
     SDL_BlendMode prevMode;
     SDL_GetRenderDrawBlendMode(renderer, &prevMode);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+#endif
 
     SDL_SetRenderDrawColor(renderer, 40, 40, 40, 30);
     SDL_RenderFillRect(renderer, &panel);
@@ -249,7 +257,9 @@ static void DrawMaterialList(SDL_Renderer* renderer) {
     SDL_RenderDrawRect(renderer, &materialCollapseRect);
 
     if (materialsCollapsed) {
+#if !USE_VULKAN
         SDL_SetRenderDrawBlendMode(renderer, prevMode);
+#endif
         return;
     }
 
@@ -290,7 +300,9 @@ static void DrawMaterialList(SDL_Renderer* renderer) {
         RenderButtonText(renderer, row, label);
     }
 
+#if !USE_VULKAN
     SDL_SetRenderDrawBlendMode(renderer, prevMode);
+#endif
 }
 
 void InitializeObjectEditor(void) {
@@ -551,7 +563,8 @@ void RenderAddModeButtons(SDL_Renderer* renderer) {
 
 void RenderObjectEditor(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
-    SDL_RenderClear(renderer);
+    SDL_Rect bg = {0, 0, sceneSettings.windowWidth, sceneSettings.windowHeight};
+    SDL_RenderFillRect(renderer, &bg);
 
     UpdatePanelLayout();
 

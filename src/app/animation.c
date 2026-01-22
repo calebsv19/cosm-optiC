@@ -18,6 +18,7 @@
 #include "import/fluid_import.h"
 #include "geo/shape_asset.h"
 #include "geo/shape_adapter.h"
+#include "render/vk_shared_device.h"
 #include <json-c/json.h>
 #include <math.h>
 #include <stdio.h>
@@ -36,6 +37,9 @@ int WINDOW_HEIGHT;
 
 SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL;
+#if USE_VULKAN
+static VkRenderer renderer_storage;
+#endif
 SceneObject sceneObjects[10];  // Define object array storage
 int objectCount = 0;  // Define object count
 
@@ -128,9 +132,21 @@ static void EnsureDirectoryExists(const char* path) {
     if (stat(path, &st) == -1) {
         mkdir(path, 0700);  // Create directory with full permissions
     }
-}       
+}
         
 void SaveFrame(int frameNumber) {
+#if USE_VULKAN
+    EnsureDirectoryExists(animSettings.frameDir);
+
+    char filename[256];
+    snprintf(filename, sizeof(filename), "%s/frame_%04d.bmp", animSettings.frameDir, frameNumber);
+
+    VkResult capture_result = vk_renderer_request_capture((VkRenderer*)renderer, filename);
+    if (capture_result != VK_SUCCESS) {
+        fprintf(stderr, "SaveFrame failed to request capture: %d\n", capture_result);
+    }
+    return;
+#else
     // Ensure the frame directory exists
     EnsureDirectoryExists(animSettings.frameDir);
     
@@ -165,6 +181,7 @@ void SaveFrame(int frameNumber) {
     }
 
     SDL_FreeSurface(surface);
+#endif
 }
 
 
@@ -195,13 +212,47 @@ int AnimationInit(void) {
                               SDL_WINDOWPOS_CENTERED,
                               SDL_WINDOWPOS_CENTERED,
                               WINDOW_WIDTH, WINDOW_HEIGHT,
-                              SDL_WINDOW_SHOWN);
+                              SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
     if (!window) {
         fprintf(stderr, "SDL_CreateWindow Error: %s\n", SDL_GetError());
         SDL_Quit();
         return -1;
     }
 
+#if USE_VULKAN
+    VkRendererConfig cfg;
+    vk_renderer_config_set_defaults(&cfg);
+    cfg.enable_validation = SDL_FALSE;
+    cfg.clear_color[0] = 0.0f;
+    cfg.clear_color[1] = 0.0f;
+    cfg.clear_color[2] = 0.0f;
+    cfg.clear_color[3] = 1.0f;
+
+    if (!vk_shared_device_init(window, &cfg)) {
+        fprintf(stderr, "vk_shared_device_init failed.\n");
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return -1;
+    }
+
+    VkRendererDevice* shared_device = vk_shared_device_get();
+    if (!shared_device) {
+        fprintf(stderr, "vk_shared_device_get failed.\n");
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return -1;
+    }
+
+    VkResult init = vk_renderer_init_with_device(&renderer_storage, shared_device, window, &cfg);
+    if (init != VK_SUCCESS) {
+        fprintf(stderr, "vk_renderer_init failed: %d\n", init);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return -1;
+    }
+    renderer = (SDL_Renderer*)&renderer_storage;
+    vk_renderer_set_logical_size((VkRenderer*)renderer, (float)WINDOW_WIDTH, (float)WINDOW_HEIGHT);
+#else
     // Create renderer
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!renderer) {
@@ -210,6 +261,7 @@ int AnimationInit(void) {
         SDL_Quit();
         return -1;
     }
+#endif
 
     timer_hud_register_backend();
     ts_init();
@@ -231,14 +283,22 @@ int AnimationInit(void) {
 
 
 void AnimationCleanup(void) {   
-    if (renderer) {     
+    if (renderer) {
+#if USE_VULKAN
+        vk_renderer_wait_idle((VkRenderer*)renderer);
+        vk_renderer_shutdown_surface((VkRenderer*)renderer);
+#else
         SDL_DestroyRenderer(renderer);
+#endif
         renderer = NULL;
     }
     if (window) {
         SDL_DestroyWindow(window);
         window = NULL;
     }
+#if USE_VULKAN
+    vk_shared_device_shutdown();
+#endif
     SDL_Quit();
 }
 
@@ -360,13 +420,48 @@ static void RunPreviewInternal(bool standalone) {
                                            SDL_WINDOWPOS_CENTERED,
                                            SDL_WINDOWPOS_CENTERED,
                                            WINDOW_WIDTH, WINDOW_HEIGHT,
-                                           SDL_WINDOW_SHOWN);
+                                           SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
     if (!pWindow) {
         fprintf(stderr, "SDL_CreateWindow Error (preview): %s\n", SDL_GetError());
         if (didInit) SDL_Quit();
         return;
     }
 
+#if USE_VULKAN
+    VkRendererConfig preview_cfg;
+    vk_renderer_config_set_defaults(&preview_cfg);
+    preview_cfg.enable_validation = SDL_FALSE;
+    preview_cfg.clear_color[0] = 0.0f;
+    preview_cfg.clear_color[1] = 0.0f;
+    preview_cfg.clear_color[2] = 0.0f;
+    preview_cfg.clear_color[3] = 1.0f;
+
+    if (!vk_shared_device_init(pWindow, &preview_cfg)) {
+        fprintf(stderr, "vk_shared_device_init failed (preview).\n");
+        SDL_DestroyWindow(pWindow);
+        if (didInit) SDL_Quit();
+        return;
+    }
+
+    VkRendererDevice* shared_device = vk_shared_device_get();
+    if (!shared_device) {
+        fprintf(stderr, "vk_shared_device_get failed (preview).\n");
+        SDL_DestroyWindow(pWindow);
+        if (didInit) SDL_Quit();
+        return;
+    }
+
+    VkRenderer preview_storage;
+    VkResult preview_init = vk_renderer_init_with_device(&preview_storage, shared_device, pWindow, &preview_cfg);
+    if (preview_init != VK_SUCCESS) {
+        fprintf(stderr, "vk_renderer_init failed (preview): %d\n", preview_init);
+        SDL_DestroyWindow(pWindow);
+        if (didInit) SDL_Quit();
+        return;
+    }
+    SDL_Renderer* pRenderer = (SDL_Renderer*)&preview_storage;
+    vk_renderer_set_logical_size((VkRenderer*)pRenderer, (float)WINDOW_WIDTH, (float)WINDOW_HEIGHT);
+#else
     SDL_Renderer* pRenderer = SDL_CreateRenderer(pWindow, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!pRenderer) {
         fprintf(stderr, "SDL_CreateRenderer Error (preview): %s\n", SDL_GetError());
@@ -374,6 +469,7 @@ static void RunPreviewInternal(bool standalone) {
         if (didInit) SDL_Quit();
         return;
     }
+#endif
 
     double duration = (animSettings.previewDuration > 0.1) ? animSettings.previewDuration : 5.0;
     Uint64 prev = SDL_GetPerformanceCounter();
@@ -420,8 +516,15 @@ static void RunPreviewInternal(bool standalone) {
         sceneSettings.camera.rotation = camRot;
 
         // Render preview
-        SDL_SetRenderDrawColor(pRenderer, (Uint8)kPreviewBg, (Uint8)kPreviewBg, (Uint8)kPreviewBg + 5, 255);
-        SDL_RenderClear(pRenderer);
+        setRenderContext(pRenderer, pWindow, sceneSettings.windowWidth, sceneSettings.windowHeight);
+        render_set_clear_color(pRenderer, (Uint8)kPreviewBg, (Uint8)kPreviewBg, (Uint8)kPreviewBg + 5, 255);
+        if (!render_begin_frame()) {
+            if (render_device_lost()) {
+                runningPreview = false;
+            }
+            SDL_Delay(10);
+            continue;
+        }
 
         SDL_Color pathColor = {90, 120, 90, 180};
         SDL_Color camPathColor = {60, 140, 220, 220};
@@ -435,11 +538,16 @@ static void RunPreviewInternal(bool standalone) {
         DrawPreviewMarker(pRenderer, lightP, (SDL_Color){255, 230, 120, 255}, 6);
         DrawPreviewMarker(pRenderer, camP, (SDL_Color){120, 200, 255, 255}, 6);
 
-        SDL_RenderPresent(pRenderer);
+        render_end_frame();
     }
 
     sceneSettings.camera = savedCam;
+#if USE_VULKAN
+    vk_renderer_wait_idle((VkRenderer*)pRenderer);
+    vk_renderer_shutdown_surface((VkRenderer*)pRenderer);
+#else
     SDL_DestroyRenderer(pRenderer);
+#endif
     SDL_DestroyWindow(pWindow);
     if (didInit) SDL_Quit();
 }
@@ -459,9 +567,15 @@ void RenderFrame(double lightX, double lightY, int* frameCounter, bool* running)
         return;
     }
     ts_frame_start();
-    // Clear the screen before drawing new frame
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    SDL_RenderClear(renderer);
+    setRenderContext(renderer, window, sceneSettings.windowWidth, sceneSettings.windowHeight);
+    render_set_clear_color(renderer, 0, 0, 0, 255);
+    if (!render_begin_frame()) {
+        if (render_device_lost()) {
+            *running = false;
+        }
+        ts_frame_end();
+        return;
+    }
         
     // Render scene objects
     SetLightPosition(lightX, lightY);
@@ -479,9 +593,8 @@ void RenderFrame(double lightX, double lightY, int* frameCounter, bool* running)
         }
     }
 
-    setRenderContext(renderer, window, sceneSettings.windowWidth, sceneSettings.windowHeight);
     ts_render();
-    SDL_RenderPresent(renderer);
+    render_end_frame();
     ts_frame_end();
 }
 
@@ -553,7 +666,12 @@ void RunMainLoop(void) {
     }
     }
     CleanupRayTracing();    
+#if USE_VULKAN
+    vk_renderer_wait_idle((VkRenderer*)renderer);
+    vk_renderer_shutdown_surface((VkRenderer*)renderer);
+#else
     SDL_DestroyRenderer(renderer);
+#endif
     SDL_DestroyWindow(window);
     SDL_Quit();
 }

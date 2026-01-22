@@ -4,11 +4,36 @@ SRC_DIR   := src
 INC_DIR   := include
 BUILD_DIR := build
 TARGET    := Ray_anim
+VK_RENDERER_DIR := ../shared/vk_renderer
+UNAME_S := $(shell uname -s)
 
 SDL_CFLAGS := $(shell sdl2-config --cflags)
 SDL_LIBS   := $(shell sdl2-config --libs)
 SDL_PREFIX := $(shell sdl2-config --prefix 2>/dev/null)
 SDL_EXTRA_INC := $(if $(SDL_PREFIX),-I$(SDL_PREFIX)/include,)
+
+VULKAN_CFLAGS :=
+VULKAN_LIBS :=
+
+ifeq ($(UNAME_S),Linux)
+    VULKAN_CFLAGS := $(shell pkg-config --cflags vulkan 2>/dev/null)
+    VULKAN_LIBS := $(shell pkg-config --libs vulkan 2>/dev/null)
+    ifeq ($(strip $(VULKAN_CFLAGS)$(VULKAN_LIBS)),)
+        VULKAN_CFLAGS := -I/usr/include
+        VULKAN_LIBS := -lvulkan
+    endif
+endif
+
+ifeq ($(UNAME_S),Darwin)
+    VULKAN_CFLAGS := $(shell pkg-config --cflags vulkan 2>/dev/null)
+    VULKAN_LIBS := $(shell pkg-config --libs vulkan 2>/dev/null)
+    ifeq ($(strip $(VULKAN_CFLAGS)$(VULKAN_LIBS)),)
+        VULKAN_CFLAGS := -I/opt/homebrew/include
+        VULKAN_LIBS := -L/opt/homebrew/lib -lvulkan
+    endif
+    VULKAN_LIBS += -framework Metal -framework QuartzCore -framework Cocoa -framework IOKit -framework CoreVideo
+    CFLAGS += -DVK_USE_PLATFORM_METAL_EXT
+endif
 
 CFLAGS  := $(CSTD) -Wall -Wextra -Wpedantic -g $(SDL_CFLAGS) $(SDL_EXTRA_INC) -I$(INC_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -DMAIN_DRIVER
 LDFLAGS := $(SDL_LIBS) -lSDL2_ttf -ljson-c -lm
@@ -32,8 +57,13 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_stubs.o
 TIMER_HUD_DIR := ../shared/timer_hud
 TIMER_HUD_INCLUDE := -I$(TIMER_HUD_DIR)/include -I$(TIMER_HUD_DIR)/external
 
-CFLAGS += $(TIMER_HUD_INCLUDE)
-CFLAGS_RELEASE += $(TIMER_HUD_INCLUDE)
+CFLAGS += $(TIMER_HUD_INCLUDE) -I$(VK_RENDERER_DIR)/include $(VULKAN_CFLAGS) \
+	-DUSE_VULKAN=1 -DVK_RENDERER_SHADER_ROOT=\"$(abspath $(VK_RENDERER_DIR))\" \
+	-include $(VK_RENDERER_DIR)/include/vk_renderer_sdl.h
+LDFLAGS += $(VULKAN_LIBS)
+CFLAGS_RELEASE += $(TIMER_HUD_INCLUDE) -I$(VK_RENDERER_DIR)/include $(VULKAN_CFLAGS) \
+	-DUSE_VULKAN=1 -DVK_RENDERER_SHADER_ROOT=\"$(abspath $(VK_RENDERER_DIR))\" \
+	-include $(VK_RENDERER_DIR)/include/vk_renderer_sdl.h
 
 TEST_DEPS := \
 	$(BUILD_DIR)/render/material_bsdf.o \
@@ -71,6 +101,7 @@ SRC := $(shell find $(SRC_DIR) -name '*.c' \
 	! -path '$(SRC_DIR)/tools/cli/*' \
 	! -path '$(SRC_DIR)/render/integrators/camera_path_integrator_old_version.c' \
 	! -path '$(SRC_DIR)/render/TimerHUD_legacy_backup/*')
+VK_RENDERER_SRCS := $(shell find $(VK_RENDERER_DIR)/src -name '*.c')
 OBJ := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRC))
 OBJ := $(filter-out $(BUILD_DIR)/render/integrators/camera_path_integrator_old_version.o,$(OBJ))
 
@@ -79,7 +110,8 @@ TIMER_HUD_EXTERNAL_SRCS := $(TIMER_HUD_DIR)/external/cJSON.c
 TIMER_HUD_OBJS := $(patsubst $(TIMER_HUD_DIR)/src/%.c,$(BUILD_DIR)/timer_hud/%.o,$(TIMER_HUD_SRCS))
 TIMER_HUD_EXTERNAL_OBJS := $(patsubst $(TIMER_HUD_DIR)/external/%.c,$(BUILD_DIR)/timer_hud_external/%.o,$(TIMER_HUD_EXTERNAL_SRCS))
 
-OBJ := $(OBJ) $(TIMER_HUD_OBJS) $(TIMER_HUD_EXTERNAL_OBJS)
+OBJ := $(OBJ) $(TIMER_HUD_OBJS) $(TIMER_HUD_EXTERNAL_OBJS) \
+	$(patsubst $(VK_RENDERER_DIR)/src/%.c,$(BUILD_DIR)/vk_renderer/%.o,$(VK_RENDERER_SRCS))
 DEP := $(OBJ:.o=.d)
 
 .PHONY: add-disney-flag
@@ -119,6 +151,9 @@ $(BUILD_DIR)/timer_hud_external/%.o: $(TIMER_HUD_DIR)/external/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
+$(BUILD_DIR)/vk_renderer/%.o: $(VK_RENDERER_DIR)/src/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 $(BUILD_DIR)/tests/%.o: $(TEST_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@

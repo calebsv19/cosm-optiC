@@ -7,6 +7,9 @@
 #include <math.h>
 #include <stdio.h>
 #include <SDL2/SDL.h>
+#if USE_VULKAN
+#include "vk_renderer.h"
+#endif
 
 const int basic = 0;
 
@@ -228,6 +231,25 @@ void RenderBezierPathCameraStyled(SDL_Renderer* renderer,
                                   SDL_Color selectedColor,
                                   int pointRadius) {
     if (!path || path->numPoints < 2) return;
+#if USE_VULKAN
+    static int s_bezier_debug_logs = 0;
+    uint32_t start_calls = 0;
+    if (s_bezier_debug_logs < 6 && renderer) {
+        VkRenderer* vk_renderer = (VkRenderer*)renderer;
+        start_calls = vk_renderer->draw_state.draw_call_count;
+        SDL_Point p0 = ToCameraPoint(path->points[0].x, path->points[0].y, camera);
+        SDL_Point p1 = ToCameraPoint(path->points[path->numPoints - 1].x,
+                                     path->points[path->numPoints - 1].y,
+                                     camera);
+        fprintf(stderr,
+                "[bezier] points=%d handles=%d sel=%d start=(%d,%d) end=(%d,%d)\n",
+                path->numPoints,
+                drawHandles ? 1 : 0,
+                selectedIndex,
+                p0.x, p0.y,
+                p1.x, p1.y);
+    }
+#endif
 
     const int radius = ResolveRadius(pointRadius);
     const int handleRadius = HANDLE_VIS_RADIUS;
@@ -328,6 +350,15 @@ void RenderBezierPathCameraStyled(SDL_Renderer* renderer,
             }
         }
     }
+
+#if USE_VULKAN
+    if (s_bezier_debug_logs < 6 && renderer) {
+        VkRenderer* vk_renderer = (VkRenderer*)renderer;
+        uint32_t end_calls = vk_renderer->draw_state.draw_call_count;
+        fprintf(stderr, "[bezier] draw calls delta=%u\n", (unsigned)(end_calls - start_calls));
+        s_bezier_debug_logs++;
+    }
+#endif
 }
 
 void RenderBezierPathCamera(SDL_Renderer* renderer,

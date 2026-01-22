@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "camera/camera.h"
+#include "vk_renderer.h"
 
 static float clamp01f(float v) {
     if (v < 0.0f) return 0.0f;
@@ -18,6 +19,13 @@ bool fluid_overlay_draw(SDL_Renderer *renderer,
                         int screen_w,
                         int screen_h) {
     if (!renderer || !frame || !camera || frame->w <= 0 || frame->h <= 0) return false;
+#if USE_VULKAN
+    SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormat(0, frame->w, frame->h, 32,
+                                                          SDL_PIXELFORMAT_ARGB8888);
+    if (!surface) return false;
+    uint8_t *dst = (uint8_t *)surface->pixels;
+    int pitch = surface->pitch;
+#else
     SDL_Texture *tex = SDL_CreateTexture(renderer,
                                          SDL_PIXELFORMAT_ARGB8888,
                                          SDL_TEXTUREACCESS_STREAMING,
@@ -33,6 +41,7 @@ bool fluid_overlay_draw(SDL_Renderer *renderer,
         return false;
     }
     uint8_t *dst = (uint8_t *)pixels;
+#endif
     size_t count = (size_t)frame->w * (size_t)frame->h;
     const float *density = frame->density;
     float max_d = 0.0f;
@@ -49,8 +58,10 @@ bool fluid_overlay_draw(SDL_Renderer *renderer,
             row[x] = ((uint32_t)alpha << 24) | 0x00FFFFFF; // white with alpha
         }
     }
+#if !USE_VULKAN
     SDL_UnlockTexture(tex);
     SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+#endif
 
     // Compute screen-space rectangle for the fluid grid
     float origin_x = frame->meta.origin_x;
@@ -73,7 +84,19 @@ bool fluid_overlay_draw(SDL_Renderer *renderer,
     if (dst_rect.w < 1) dst_rect.w = 1;
     if (dst_rect.h < 1) dst_rect.h = 1;
 
+#if USE_VULKAN
+    VkRendererTexture texture;
+    VkResult result = vk_renderer_upload_sdl_surface_with_filter((VkRenderer*)renderer, surface, &texture,
+                                                                 VK_FILTER_LINEAR);
+    SDL_FreeSurface(surface);
+    if (result != VK_SUCCESS) {
+        return false;
+    }
+    vk_renderer_draw_texture((VkRenderer*)renderer, &texture, NULL, &dst_rect);
+    vk_renderer_queue_texture_destroy((VkRenderer*)renderer, &texture);
+#else
     SDL_RenderCopy(renderer, tex, NULL, &dst_rect);
     SDL_DestroyTexture(tex);
+#endif
     return true;
 }

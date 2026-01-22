@@ -33,6 +33,7 @@
 #include <string.h>
 #include <time.h>
 #include <float.h>
+#include "vk_renderer.h"
 
 #ifndef M_PI_2
 #define M_PI_2 1.57079632679489661923
@@ -69,6 +70,63 @@ static FluidFrame g_fluidFrame = {0};
 static int g_loadedFrameIndex = -1;
 static FluidGridBounds g_grid = {0};
 static bool g_manifestLoaded = false;
+
+#if USE_VULKAN
+static SDL_Surface* g_luma_surface = NULL;
+static int g_luma_w = 0;
+static int g_luma_h = 0;
+
+static SDL_Surface* get_luma_surface(int width, int height) {
+    if (width <= 0 || height <= 0) return NULL;
+    if (!g_luma_surface || g_luma_w != width || g_luma_h != height) {
+        if (g_luma_surface) {
+            SDL_FreeSurface(g_luma_surface);
+        }
+        g_luma_surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32,
+                                                        SDL_PIXELFORMAT_ARGB8888);
+        if (!g_luma_surface) {
+            g_luma_w = 0;
+            g_luma_h = 0;
+            return NULL;
+        }
+        g_luma_w = width;
+        g_luma_h = height;
+    }
+    return g_luma_surface;
+}
+
+static void draw_luminance_buffer(SDL_Renderer* renderer,
+                                  const Uint8* buffer,
+                                  int width,
+                                  int height) {
+    if (!renderer || !buffer || width <= 0 || height <= 0) return;
+    SDL_Surface* surface = get_luma_surface(width, height);
+    if (!surface) return;
+
+    uint8_t* dst = (uint8_t*)surface->pixels;
+    int pitch = surface->pitch;
+    for (int y = 0; y < height; y++) {
+        uint32_t* row = (uint32_t*)(dst + y * pitch);
+        size_t base = (size_t)y * (size_t)width;
+        for (int x = 0; x < width; x++) {
+            uint8_t b = buffer[base + (size_t)x];
+            row[x] = ((uint32_t)0xFF << 24) | ((uint32_t)b << 16) |
+                     ((uint32_t)b << 8) | (uint32_t)b;
+        }
+    }
+
+    VkRendererTexture texture;
+    if (vk_renderer_upload_sdl_surface_with_filter((VkRenderer*)renderer,
+                                                   surface,
+                                                   &texture,
+                                                   VK_FILTER_NEAREST) != VK_SUCCESS) {
+        return;
+    }
+    SDL_Rect dst_rect = {0, 0, width, height};
+    vk_renderer_draw_texture((VkRenderer*)renderer, &texture, NULL, &dst_rect);
+    vk_renderer_queue_texture_destroy((VkRenderer*)renderer, &texture);
+}
+#endif
 
 static bool LoadShapelibReplacement(const char *asset_path, ShapeAsset *asset) {
     if (!asset) return false;
@@ -394,9 +452,6 @@ static void ApplySeparableBlur(Uint8* buffer, int width, int height, int radius)
 }
 
 void RenderRayTracingScene(SDL_Renderer* renderer) {
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    SDL_RenderClear(renderer);
-    
     int WIDTH = sceneSettings.windowWidth;
     int HEIGHT = sceneSettings.windowHeight;
 
@@ -566,12 +621,16 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
     ts_start_timer("Buffer Present");
     if (useTiles && animSettings.tilePreviewEnabled && animSettings.integratorMode == 1) {
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-        SDL_RenderClear(renderer);
+        SDL_Rect bg = {0, 0, WIDTH, HEIGHT};
+        SDL_RenderFillRect(renderer, &bg);
     }
     if (blurRadius > 0) {
         ApplySeparableBlur(pixelBuffer, WIDTH, HEIGHT, blurRadius);
     }
 
+#if USE_VULKAN
+    draw_luminance_buffer(renderer, pixelBuffer, WIDTH, HEIGHT);
+#else
     for (int y = 0; y < HEIGHT; y++) {
         for (int x = 0; x < WIDTH; x++) {
             Uint8 brightness = pixelBuffer[y * WIDTH + x];
@@ -581,6 +640,7 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
             }
         }
     }
+#endif
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     CameraPoint lightScreen = CameraWorldToScreen(&sceneSettings.camera,
                                                   light.x,
@@ -746,6 +806,9 @@ static void DrawTilePreview(SDL_Renderer* renderer,
                             const IntegratorTile* tile,
                             const Uint8* previewBuffer) {
     if (!renderer || !ctx || !tile || !previewBuffer) return;
+#if USE_VULKAN
+    return;
+#endif
     for (int y = 0; y < tile->height; y++) {
         int py = tile->originY + y;
         if (py < 0 || py >= ctx->height) continue;
@@ -765,8 +828,13 @@ static void DrawPreviewBuffer(SDL_Renderer* renderer,
                               const Uint8* previewBuffer) {
     if (!renderer || !ctx || !previewBuffer) return;
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    SDL_RenderClear(renderer);
+    SDL_Rect bg = {0, 0, ctx->width, ctx->height};
+    SDL_RenderFillRect(renderer, &bg);
 
+#if USE_VULKAN
+    draw_luminance_buffer(renderer, previewBuffer, ctx->width, ctx->height);
+    return;
+#endif
     int width = ctx->width;
     int height = ctx->height;
     for (int y = 0; y < height; y++) {
@@ -859,14 +927,19 @@ static void RenderHybridTilesPreview(SDL_Renderer* renderer,
         if (tilesSincePresent >= tilesPerPresent ||
             (now - lastPresent) >= presentIntervalMs) {
             DrawPreviewBuffer(renderer, ctx, previewBuffer);
-            SDL_RenderPresent(renderer);
+            render_end_frame();
+            if (render_device_lost()) {
+                return;
+            }
+            if (!render_begin_frame()) {
+                return;
+            }
             lastPresent = now;
             tilesSincePresent = 0;
         }
     }
 
     DrawPreviewBuffer(renderer, ctx, previewBuffer);
-    SDL_RenderPresent(renderer);
 
     if (previewBuffer != ctx->pixelBuffer) {
         tctx.pixelBuffer = ctx->pixelBuffer;

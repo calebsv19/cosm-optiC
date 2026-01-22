@@ -31,7 +31,6 @@ static int lastMouseY = 0;
 static SDL_Rect rotationSlider = {0};
 static int rotationSliderValue = 0; // 0..360 degrees
 static const double kRotationHandleLength = 70.0;
-static const int kRotationHandleRadius = 8;
 static const int kRotationHandleVisRadius = 6;
 static const int kRotationHandleHitRadius = 12;
 static const double kHalfPi = M_PI * 0.5;
@@ -280,7 +279,8 @@ void RenderCameraEditor(SDL_Renderer* renderer) {
     SyncCameraPathStart();
 
     SDL_SetRenderDrawColor(renderer, 40, 40, 45, 255);
-    SDL_RenderClear(renderer);
+    SDL_Rect bg = {0, 0, sceneSettings.windowWidth, sceneSettings.windowHeight};
+    SDL_RenderFillRect(renderer, &bg);
 
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     RenderSceneObjects(renderer, true);

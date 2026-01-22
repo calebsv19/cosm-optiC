@@ -8,6 +8,7 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 #include <stdio.h>
+#include "vk_renderer.h"
 
 static void timer_hud_backend_init(void) {
     if (!initFontSystem()) {
@@ -39,7 +40,9 @@ static int timer_hud_line_height(void) {
 static void timer_hud_draw_rect(int x, int y, int w, int h, TimerHUDColor color) {
     RenderContext* ctx = getRenderContext();
     if (!ctx || !ctx->renderer) return;
+#if !USE_VULKAN
     SDL_SetRenderDrawBlendMode(ctx->renderer, SDL_BLENDMODE_BLEND);
+#endif
     SDL_SetRenderDrawColor(ctx->renderer, color.r, color.g, color.b, color.a);
     SDL_Rect rect = {x, y, w, h};
     SDL_RenderFillRect(ctx->renderer, &rect);
@@ -62,11 +65,20 @@ static void timer_hud_draw_text(const char* text, int x, int y, int align_flags,
     if (align_flags & TIMER_HUD_ALIGN_MIDDLE)  dst.y -= surface->h / 2;
     if (align_flags & TIMER_HUD_ALIGN_BOTTOM)  dst.y -= surface->h;
 
+#if USE_VULKAN
+    VkRendererTexture texture;
+    if (vk_renderer_upload_sdl_surface_with_filter((VkRenderer*)ctx->renderer, surface, &texture,
+                                                   VK_FILTER_LINEAR) == VK_SUCCESS) {
+        vk_renderer_draw_texture((VkRenderer*)ctx->renderer, &texture, NULL, &dst);
+        vk_renderer_queue_texture_destroy((VkRenderer*)ctx->renderer, &texture);
+    }
+#else
     SDL_Texture* texture = SDL_CreateTextureFromSurface(ctx->renderer, surface);
     if (texture) {
         SDL_RenderCopy(ctx->renderer, texture, NULL, &dst);
         SDL_DestroyTexture(texture);
     }
+#endif
 
     SDL_FreeSurface(surface);
 }

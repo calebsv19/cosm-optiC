@@ -11,10 +11,12 @@
 #include <sys/stat.h>
 #include <limits.h>
 #include <unistd.h>
+#include "engine/Render/render_pipeline.h"
 #include "editor/scene_editor.h"
 #include "app/animation.h"  // Include the header where RunMainLoop() is declared
 #include "config/config_manager.h"
 #include "camera/camera.h"
+#include "render/vk_shared_device.h"
 
 // Window & Menu Layout
 #define MENU_WIDTH 1000
@@ -77,6 +79,28 @@
 #define SLIDER_WIDTH 250
 #define SLIDER_HEIGHT 10
 #define SLIDER_SPACING 20  // Vertical spacing between sliders
+
+#if USE_VULKAN
+static VkRenderer g_menu_renderer_storage;
+#endif
+
+static void RenderSurface(SDL_Renderer* renderer, SDL_Surface* surface, const SDL_Rect* dst) {
+    if (!renderer || !surface || !dst) return;
+#if USE_VULKAN
+    VkRendererTexture texture;
+    if (vk_renderer_upload_sdl_surface_with_filter((VkRenderer*)renderer, surface, &texture,
+                                                   VK_FILTER_LINEAR) != VK_SUCCESS) {
+        return;
+    }
+    vk_renderer_draw_texture((VkRenderer*)renderer, &texture, NULL, dst);
+    vk_renderer_queue_texture_destroy((VkRenderer*)renderer, &texture);
+#else
+    SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, surface);
+    if (!textTexture) return;
+    SDL_RenderCopy(renderer, textTexture, NULL, dst);
+    SDL_DestroyTexture(textTexture);
+#endif
+}
 
 // Align all sliders to the top-right of the menu
 #define SLIDER_MARGIN_X (MENU_WIDTH - SLIDER_WIDTH - MENU_MARGIN_X - 40)
@@ -458,7 +482,7 @@ bool InitializeMenu(SDL_Window** window, SDL_Renderer** renderer, TTF_Font** fon
     // Create SDL Window
     *window = SDL_CreateWindow("RayTracing Menu",
                                SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                               MENU_WIDTH, MENU_HEIGHT, SDL_WINDOW_SHOWN);
+                               MENU_WIDTH, MENU_HEIGHT, SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
     if (!*window) {
         printf("Window Creation Failed: %s\n", SDL_GetError());
         TTF_Quit();
@@ -466,6 +490,43 @@ bool InitializeMenu(SDL_Window** window, SDL_Renderer** renderer, TTF_Font** fon
         return false;
     }
 
+#if USE_VULKAN
+    VkRendererConfig cfg;
+    vk_renderer_config_set_defaults(&cfg);
+    cfg.enable_validation = SDL_FALSE;
+    cfg.clear_color[0] = 0.0f;
+    cfg.clear_color[1] = 0.0f;
+    cfg.clear_color[2] = 0.0f;
+    cfg.clear_color[3] = 1.0f;
+
+    if (!vk_shared_device_init(*window, &cfg)) {
+        printf("vk_shared_device_init failed.\n");
+        SDL_DestroyWindow(*window);
+        TTF_Quit();
+        SDL_Quit();
+        return false;
+    }
+
+    VkRendererDevice* shared_device = vk_shared_device_get();
+    if (!shared_device) {
+        printf("vk_shared_device_get failed.\n");
+        SDL_DestroyWindow(*window);
+        TTF_Quit();
+        SDL_Quit();
+        return false;
+    }
+
+    VkResult init = vk_renderer_init_with_device(&g_menu_renderer_storage, shared_device, *window, &cfg);
+    if (init != VK_SUCCESS) {
+        printf("vk_renderer_init failed: %d\n", init);
+        SDL_DestroyWindow(*window);
+        TTF_Quit();
+        SDL_Quit();
+        return false;
+    }
+    *renderer = (SDL_Renderer*)&g_menu_renderer_storage;
+    vk_renderer_set_logical_size((VkRenderer*)*renderer, (float)MENU_WIDTH, (float)MENU_HEIGHT);
+#else
     // Create SDL Renderer
     *renderer = SDL_CreateRenderer(*window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!*renderer) {
@@ -475,12 +536,18 @@ bool InitializeMenu(SDL_Window** window, SDL_Renderer** renderer, TTF_Font** fon
         SDL_Quit();
         return false;
     }
+#endif
 
     // Load Font
     *font = TTF_OpenFont("/System/Library/Fonts/Supplemental/Arial.ttf", TOGGLE_BUTTON_TEXT_SIZE);
     if (!*font) {
         printf("Font Loading Failed: %s\n", TTF_GetError());
+#if USE_VULKAN
+        vk_renderer_wait_idle((VkRenderer*)*renderer);
+        vk_renderer_shutdown_surface((VkRenderer*)*renderer);
+#else
         SDL_DestroyRenderer(*renderer);
+#endif
         SDL_DestroyWindow(*window);
         TTF_Quit();
         SDL_Quit();
@@ -545,28 +612,20 @@ void RenderText(SDL_Renderer *renderer, TTF_Font *font, int x, int y, const char
     
     SDL_Color textColor = {255, 255, 255, 255};
     SDL_Surface *textSurface = TTF_RenderText_Solid(font, buffer, textColor);
-    SDL_Texture *textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
-                        
+    if (!textSurface) return;
+
     SDL_Rect textRect = {x, y, textSurface->w, textSurface->h};
-    SDL_RenderCopy(renderer, textTexture, NULL, &textRect);
-                 
+    RenderSurface(renderer, textSurface, &textRect);
     SDL_FreeSurface(textSurface);
-    SDL_DestroyTexture(textTexture);
 }
 
 static void RenderTextColor(SDL_Renderer *renderer, TTF_Font *font, int x, int y, SDL_Color color, const char *text) {
     if (!text || !*text) return;
     SDL_Surface *textSurface = TTF_RenderText_Solid(font, text, color);
     if (!textSurface) return;
-    SDL_Texture *textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
-    if (!textTexture) {
-        SDL_FreeSurface(textSurface);
-        return;
-    }
     SDL_Rect textRect = {x, y, textSurface->w, textSurface->h};
-    SDL_RenderCopy(renderer, textTexture, NULL, &textRect);
+    RenderSurface(renderer, textSurface, &textRect);
     SDL_FreeSurface(textSurface);
-    SDL_DestroyTexture(textTexture);
 }
 
 static void FormatManifestButtonLabel(char *out, size_t outSize) {
@@ -672,16 +731,15 @@ void RenderButton(SDL_Renderer *renderer, TTF_Font *font, int x, int y, int widt
     // Render text centered inside the button
     SDL_Color textColor = {255, 255, 255, 255};
     SDL_Surface *textSurface = TTF_RenderText_Solid(font, text, textColor);
-    SDL_Texture *textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
+    if (!textSurface) return;
 
     int textX = x + (width - textSurface->w) / 2;  // Center text horizontally
     int textY = y + (height - textSurface->h) / 2; // Center text vertically
 
     SDL_Rect textRect = {textX, textY, textSurface->w, textSurface->h};
-    SDL_RenderCopy(renderer, textTexture, NULL, &textRect);
+    RenderSurface(renderer, textSurface, &textRect);
 
     SDL_FreeSurface(textSurface);
-    SDL_DestroyTexture(textTexture);
 }
 typedef struct {
     int *value;
@@ -789,8 +847,10 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
     int pathToggleBSDFY = pathToggleRouletteY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
 
     // Clear the screen with a black background
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    SDL_RenderClear(renderer);
+    render_set_clear_color(renderer, 0, 0, 0, 255);
+    if (!render_begin_frame()) {
+        return;
+    }
     
     // Main mode buttons (left column anchor)
     RenderButton(renderer, font, TOGGLE_BUTTON_MARGIN_X, TOGGLE_BUTTON_MARGIN_Y,
@@ -927,7 +987,7 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
     }
 
     // Present the updated UI 
-    SDL_RenderPresent(renderer);
+    render_end_frame();
 } 
 
 void HandleKeyPress(SDL_Event* event, bool* running) {
@@ -1374,14 +1434,27 @@ bool RunMenu(void) {
                     break;
             }
         }
+        setRenderContext(renderer, window, MENU_WIDTH, MENU_HEIGHT);
         RenderMenu(renderer, font);
+        if (render_device_lost()) {
+            running = false;
+            menuExitedNormally = false;
+        }
     }
     //  Only Quit SDL if the User Exits the Menu
     if (menuExitedNormally) {
+#if USE_VULKAN
+        vk_renderer_wait_idle((VkRenderer*)renderer);
+        vk_renderer_shutdown_surface((VkRenderer*)renderer);
+#else
         SDL_DestroyRenderer(renderer);
+#endif
         SDL_DestroyWindow(window);
         TTF_CloseFont(font);
         TTF_Quit();
+#if USE_VULKAN
+        vk_shared_device_shutdown();
+#endif
         SDL_Quit();
     }
     SaveAllSettings();
