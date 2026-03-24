@@ -1,17 +1,27 @@
 # Ignore build artifacts
 build/
 build_release/
+Frontend/
+Backend/
+ide_files/
 
 # Ignore rendered video outputs
 *.mp4
 Ray_anim
+Ray_anim 2
+Ray_anim_release
+output.mp4
 
 # Optional: temporary files and OS-specific junk
 *.log
 *.tmp
 *.exe
 .DS_Store
+**/.DS_Store
 Thumbs.db
+timing.json
+Other files/
+tools/cli/bin/
 
 # ── OR ── only ignore .bmp frames but keep other assets
 Animations/**/*.bmp

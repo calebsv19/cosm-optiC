@@ -16,8 +16,7 @@ Experimental 2D ray-tracing sandbox built with SDL2. The project simulates light
 - `render/fluid_overlay.*` – Debug fluid overlay with density and optional velocity arrows.
 - `include/` – Public headers mirroring the `src/` hierarchy (including the camera interface).
 - `Configs/` – JSON configuration files and bundled fonts.
-- `Animations/` – Frame dumps and rendered videos created by deep-render mode.
-- `Other files/` – Archived snapshots and debugging artefacts retained for reference.
+- `Animations/` – Frame dumps created by deep-render mode. Generated frames and rendered videos are local outputs, not part of the public source surface.
 
 ## Build & Run
 - Dependencies: SDL2, SDL2_ttf, json-c, and FFmpeg (for MP4 assembly).
@@ -36,7 +35,6 @@ The in-app Scene Editor exposes three modes (Bezier path, Object, Camera). Use t
 
 ## Tooling & Assets
 - `function_scanner.py` / `function_dependencies.csv` – Utility + report for mapping function definitions to call sites.
-- `output.mp4` – Example video rendered from frames under `Animations/default/`.
 
 ## Shared Diagnostics Contracts
 - Render metrics dataset export uses shared `core_data` + `core_io` via `src/export/render_metrics_dataset.c`.
