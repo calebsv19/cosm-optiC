@@ -33,6 +33,25 @@ static VkRenderer g_scene_renderer_storage;
 bool sceneEditorExitFlag = false;  //  Used to signal Scene Editor should exit
 static void InitializeEditorMode(SceneEditor* editor);
 
+static bool FluidSceneLocksObjects(void) {
+    return AnimationUseFluidScene();
+}
+
+static int NextEditorMode(int current_mode, bool reverse) {
+    if (!FluidSceneLocksObjects()) {
+        if (reverse) {
+            return (current_mode == 0) ? 2 : (current_mode - 1);
+        }
+        return (current_mode + 1) % 3;
+    }
+    // Fluid scenes: lock object edits, only Bezier(0) + Camera(2).
+    if (current_mode != 0 && current_mode != 2) current_mode = 0;
+    if (reverse) {
+        return (current_mode == 0) ? 2 : 0;
+    }
+    return (current_mode == 0) ? 2 : 0;
+}
+
 static void RenderFluidBounds(SDL_Renderer* renderer) {
     if (!g_fluidGrid.valid) return;
     Camera cam = CameraBuildPreviewCamera(&sceneSettings.camera,
@@ -59,11 +78,22 @@ static void RenderFluidBounds(SDL_Renderer* renderer) {
 }
 
 void InitializeSceneEditor(SceneEditor* editor) {
+    LoadAnimationConfig();
     //  Load all scene configurations (window size, objects, paths)
     LoadSceneConfig();
+    if (animSettings.useFluidScene && animSettings.fluidManifest[0]) {
+        if (!AnimationApplyFluidScene(animSettings.fluidManifest)) {
+            fprintf(stderr, "[editor] failed to apply fluid scene: %s\n", animSettings.fluidManifest);
+        }
+    } else {
+        AnimationClearFluidGrid();
+    }
     if (animSettings.editorMode < 0)
         animSettings.editorMode = 0;
     editor->currentMode = animSettings.editorMode % 3;
+    if (FluidSceneLocksObjects() && editor->currentMode == 1) {
+        editor->currentMode = 0;
+    }
 
     //  Create the window using stored scene settings
     editor->window = SDL_CreateWindow("Scene Editor", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
@@ -231,11 +261,8 @@ void HandleSceneEditorEvents(SceneEditor* editor, SDL_Event* event) {
         return;  // ✅ Exit immediately instead of calling object editor events
     }
     if (event->type == SDL_KEYDOWN && event->key.keysym.sym == SDLK_TAB) {
-        if ((event->key.keysym.mod & KMOD_SHIFT) != 0) {
-            editor->currentMode = (editor->currentMode == 0) ? 2 : editor->currentMode - 1;
-        } else {
-            editor->currentMode = (editor->currentMode + 1) % 3;
-        }
+        editor->currentMode = NextEditorMode(editor->currentMode,
+                                             (event->key.keysym.mod & KMOD_SHIFT) != 0);
         animSettings.editorMode = editor->currentMode;
         InitializeEditorMode(editor);
         printf("Changed Mode to %d via TAB\n", editor->currentMode);
@@ -254,7 +281,7 @@ void HandleSceneEditorEvents(SceneEditor* editor, SDL_Event* event) {
         // Check if clicking on Change Mode Button
         if (mx >= changeModeButton.x && mx <= changeModeButton.x + changeModeButton.w &&
             my >= changeModeButton.y && my <= changeModeButton.y + changeModeButton.h) {
-            editor->currentMode = (editor->currentMode + 1) % 3;  // Cycle through modes
+            editor->currentMode = NextEditorMode(editor->currentMode, false);  // Cycle through modes
             animSettings.editorMode = editor->currentMode;
             InitializeEditorMode(editor);
 	    SaveAllSettings();
@@ -279,7 +306,9 @@ void HandleSceneEditorEvents(SceneEditor* editor, SDL_Event* event) {
             break;
     
         case 1:  // Object Editor Mode
-            HandleObjectEditorEvents(event);
+            if (!FluidSceneLocksObjects()) {
+                HandleObjectEditorEvents(event);
+            }
             break;
     
         case 2:  // Camera Editor Mode
@@ -314,7 +343,7 @@ bool IsClickingButtonMain(int mx, int my) {
 }
 
 void ToggleSceneMode(SceneEditor* editor) {
-    editor->currentMode = (editor->currentMode + 1) % 3;
+    editor->currentMode = NextEditorMode(editor->currentMode, false);
     animSettings.editorMode = editor->currentMode;
     InitializeEditorMode(editor);
     printf("Switched to mode: %d\n", editor->currentMode);
@@ -323,6 +352,9 @@ void ToggleSceneMode(SceneEditor* editor) {
 // Set Scene Mode
 void SetSceneMode(SceneEditor* editor, int mode) {
     if (mode >= 0 && mode <= 2) {
+        if (FluidSceneLocksObjects() && mode == 1) {
+            mode = 0;
+        }
         editor->currentMode = mode;
         animSettings.editorMode = editor->currentMode;
         InitializeEditorMode(editor);

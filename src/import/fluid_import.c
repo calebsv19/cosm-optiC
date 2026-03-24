@@ -1,9 +1,11 @@
 #include "import/fluid_import.h"
+#include "import/fluid_pack_import.h"
+#include "import/scene_bundle_import.h"
+#include "core_io.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <limits.h>
 
 #include "cJSON.h"
@@ -37,9 +39,16 @@ static const uint32_t VOLUME_VERSION_V2 = 2;
 static const uint32_t VOLUME_VERSION_V1 = 1;
 
 static bool file_exists(const char *path) {
-    if (!path) return false;
-    struct stat st;
-    return stat(path, &st) == 0;
+    if (!path || !path[0]) return false;
+    return core_io_path_exists(path);
+}
+
+static bool has_extension(const char *path, const char *ext) {
+    if (!path || !ext) return false;
+    size_t path_len = strlen(path);
+    size_t ext_len = strlen(ext);
+    if (path_len < ext_len) return false;
+    return strcmp(path + path_len - ext_len, ext) == 0;
 }
 
 static char *dup_string(const char *s) {
@@ -143,7 +152,7 @@ static bool read_header(const char *path, FluidFrameMeta *out_meta) {
     return false;
 }
 
-bool fluid_frame_load(const char *path, FluidFrame *out) {
+static bool fluid_frame_load_vf2d(const char *path, FluidFrame *out) {
     if (!path || !out) return false;
     FluidFrameMeta meta;
     if (!read_header(path, &meta)) return false;
@@ -185,6 +194,26 @@ bool fluid_frame_load(const char *path, FluidFrame *out) {
     return true;
 }
 
+bool fluid_frame_load(const char *path, FluidFrame *out) {
+    if (!path || !out) return false;
+    SceneBundleImportResult bundle;
+    if (scene_bundle_import_resolve_fluid_source(path, &bundle)) {
+        if (strcmp(bundle.fluid_source_path, path) == 0) return false;
+        return fluid_frame_load(bundle.fluid_source_path, out);
+    }
+    if (fluid_pack_path_is_pack(path)) {
+        if (fluid_pack_frame_load(path, out)) {
+            return true;
+        }
+        char legacy_vf2d_path[PATH_MAX];
+        if (fluid_pack_derive_legacy_vf2d_path(path, legacy_vf2d_path, sizeof(legacy_vf2d_path))) {
+            return fluid_frame_load_vf2d(legacy_vf2d_path, out);
+        }
+        return false;
+    }
+    return fluid_frame_load_vf2d(path, out);
+}
+
 bool fluid_frame_load_single(const char *path, FluidFrame *out) {
     return fluid_frame_load(path, out);
 }
@@ -213,18 +242,59 @@ static char *dir_of(const char *path) {
 
 bool fluid_manifest_load(const char *manifest_path, FluidManifest *out) {
     if (!manifest_path || !out) return false;
-    FILE *f = fopen(manifest_path, "rb");
-    if (!f) return false;
-    fseek(f, 0, SEEK_END);
-    long sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    if (sz <= 0) { fclose(f); return false; }
-    char *buf = (char *)malloc((size_t)sz + 1);
-    if (!buf) { fclose(f); return false; }
-    size_t n = fread(buf, 1, (size_t)sz, f);
-    fclose(f);
-    if (n != (size_t)sz) { free(buf); return false; }
-    buf[sz] = '\0';
+    SceneBundleImportResult bundle;
+    if (scene_bundle_import_resolve_fluid_source(manifest_path, &bundle)) {
+        if (strcmp(bundle.fluid_source_path, manifest_path) == 0) return false;
+        return fluid_manifest_load(bundle.fluid_source_path, out);
+    }
+    if (has_extension(manifest_path, ".pack") || has_extension(manifest_path, ".vf2d")) {
+        FluidFrame probe = {0};
+        if (!fluid_frame_load(manifest_path, &probe)) return false;
+
+        FluidManifest manifest = {0};
+        manifest.paths = (char **)calloc(1u, sizeof(char *));
+        manifest.meta = (FluidFrameMeta *)calloc(1u, sizeof(FluidFrameMeta));
+        if (!manifest.paths || !manifest.meta) {
+            fluid_manifest_free(&manifest);
+            fluid_frame_free(&probe);
+            return false;
+        }
+
+        manifest.paths[0] = dup_string(manifest_path);
+        if (!manifest.paths[0]) {
+            fluid_manifest_free(&manifest);
+            fluid_frame_free(&probe);
+            return false;
+        }
+
+        manifest.meta[0] = probe.meta;
+        manifest.count = 1;
+        manifest.grid_w = (uint32_t)probe.w;
+        manifest.grid_h = (uint32_t)probe.h;
+        manifest.cell_size = probe.meta.cell_size;
+        manifest.origin_x = probe.meta.origin_x;
+        manifest.origin_y = probe.meta.origin_y;
+        manifest.obstacle_mask_crc32 = probe.meta.obstacle_mask_crc32;
+        manifest.space_contract_version = 0;
+        manifest.space_author_window_w = 1200;
+        manifest.space_author_window_h = 800;
+        manifest.space_desired_fit = 0.25f;
+        fluid_frame_free(&probe);
+        *out = manifest;
+        return true;
+    }
+
+    CoreBuffer manifest_data = {0};
+    CoreResult read_r = core_io_read_all(manifest_path, &manifest_data);
+    if (read_r.code != CORE_OK || !manifest_data.data || manifest_data.size == 0u) return false;
+    char *buf = (char *)malloc(manifest_data.size + 1u);
+    if (!buf) {
+        core_io_buffer_free(&manifest_data);
+        return false;
+    }
+    memcpy(buf, manifest_data.data, manifest_data.size);
+    buf[manifest_data.size] = '\0';
+    core_io_buffer_free(&manifest_data);
 
     cJSON *root = cJSON_Parse(buf);
     free(buf);
@@ -243,6 +313,39 @@ bool fluid_manifest_load(const char *manifest_path, FluidManifest *out) {
     manifest.origin_x = (origin_x && cJSON_IsNumber(origin_x)) ? (float)origin_x->valuedouble : 0.0f;
     manifest.origin_y = (origin_y && cJSON_IsNumber(origin_y)) ? (float)origin_y->valuedouble : 0.0f;
     manifest.obstacle_mask_crc32 = (crc && cJSON_IsNumber(crc)) ? (uint32_t)crc->valuedouble : 0;
+    manifest.space_contract_version = 0;
+    manifest.space_author_window_w = 1200;
+    manifest.space_author_window_h = 800;
+    manifest.space_desired_fit = 0.25f;
+
+    cJSON *space_contract = cJSON_GetObjectItem(root, "space_contract");
+    if (cJSON_IsObject(space_contract)) {
+        const cJSON *sc_version = cJSON_GetObjectItem(space_contract, "version");
+        const cJSON *sc_grid_w = cJSON_GetObjectItem(space_contract, "grid_w");
+        const cJSON *sc_grid_h = cJSON_GetObjectItem(space_contract, "grid_h");
+        const cJSON *sc_origin_x = cJSON_GetObjectItem(space_contract, "origin_x");
+        const cJSON *sc_origin_y = cJSON_GetObjectItem(space_contract, "origin_y");
+        const cJSON *sc_cell_size = cJSON_GetObjectItem(space_contract, "cell_size");
+        const cJSON *sc_author_w = cJSON_GetObjectItem(space_contract, "author_window_w");
+        const cJSON *sc_author_h = cJSON_GetObjectItem(space_contract, "author_window_h");
+        const cJSON *sc_fit = cJSON_GetObjectItem(space_contract, "import_fit");
+
+        if (sc_version && cJSON_IsNumber(sc_version)) {
+            manifest.space_contract_version = (uint32_t)sc_version->valuedouble;
+        }
+        if (sc_grid_w && cJSON_IsNumber(sc_grid_w)) manifest.grid_w = (uint32_t)sc_grid_w->valuedouble;
+        if (sc_grid_h && cJSON_IsNumber(sc_grid_h)) manifest.grid_h = (uint32_t)sc_grid_h->valuedouble;
+        if (sc_origin_x && cJSON_IsNumber(sc_origin_x)) manifest.origin_x = (float)sc_origin_x->valuedouble;
+        if (sc_origin_y && cJSON_IsNumber(sc_origin_y)) manifest.origin_y = (float)sc_origin_y->valuedouble;
+        if (sc_cell_size && cJSON_IsNumber(sc_cell_size)) manifest.cell_size = (float)sc_cell_size->valuedouble;
+        if (sc_author_w && cJSON_IsNumber(sc_author_w)) manifest.space_author_window_w = (int)sc_author_w->valuedouble;
+        if (sc_author_h && cJSON_IsNumber(sc_author_h)) manifest.space_author_window_h = (int)sc_author_h->valuedouble;
+        if (sc_fit && cJSON_IsNumber(sc_fit)) manifest.space_desired_fit = (float)sc_fit->valuedouble;
+
+        if (manifest.space_author_window_w <= 0) manifest.space_author_window_w = 1200;
+        if (manifest.space_author_window_h <= 0) manifest.space_author_window_h = 800;
+        if (manifest.space_desired_fit <= 0.0f) manifest.space_desired_fit = 0.25f;
+    }
 
     cJSON *frames = cJSON_GetObjectItem(root, "frames");
     if (!cJSON_IsArray(frames)) { cJSON_Delete(root); return false; }
@@ -354,5 +457,9 @@ void fluid_manifest_free(FluidManifest *manifest) {
     manifest->cell_size = 0.0f;
     manifest->origin_x = manifest->origin_y = 0.0f;
     manifest->obstacle_mask_crc32 = 0;
+    manifest->space_contract_version = 0;
+    manifest->space_author_window_w = 0;
+    manifest->space_author_window_h = 0;
+    manifest->space_desired_fit = 0.0f;
     manifest->import_count = 0;
 }

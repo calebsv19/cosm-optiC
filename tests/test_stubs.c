@@ -1,5 +1,11 @@
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_ttf.h>
 #include <stddef.h>
+#include <stdbool.h>
+
+#include "editor/scene_editor.h"
+#include "app/animation.h"
+#include "timer_hud/time_scope.h"
 
 void ts_init(void) {}
 void ts_start_timer(const char* name) { (void)name; }
@@ -7,4 +13,22 @@ void ts_stop_timer(const char* name) { (void)name; }
 void ts_frame_start(void) {}
 void ts_frame_end(void) {}
 void ts_emit_event(const char* tag) { (void)tag; }
-void ts_render(SDL_Renderer* renderer) { (void)renderer; }
+void ts_render(void) {}
+
+// UI/editor symbols needed when linking the broad RayTracing test target.
+void InitializeSceneEditor(SceneEditor* editor) { (void)editor; }
+void SceneEditorLoop(SceneEditor* editor) { (void)editor; }
+
+// Font symbols used by timer_hud_adapter.
+bool initFontSystem(void) { return true; }
+TTF_Font* getActiveFont(void) { return NULL; }
+
+// TimerHUD global registration symbols.
+void ts_register_backend(const TimerHUDBackend* backend) { (void)backend; }
+void ts_set_settings_path(const char* path) { (void)path; }
+
+// Animation/render pipeline symbols used by ray_tracing2 in tests.
+bool AnimationUseFluidScene(void) { return false; }
+bool render_begin_frame(void) { return true; }
+void render_end_frame(void) {}
+bool render_device_lost(void) { return false; }

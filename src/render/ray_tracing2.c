@@ -17,10 +17,12 @@
 #include "render/timer_hud_api.h"
 #include "render/fluid_overlay.h"
 #include "import/fluid_import.h"
+#include "core_space.h"
 #include "engine/Render/render_pipeline.h"
 #include "render/fluid_state.h"
 #include "editor/scene_editor.h"
 #include "app/animation.h"
+#include "app/runtime_time.h"
 #include "camera/camera.h"
 #include "geo/shape_asset.h"
 #include "geo/shape_adapter.h"
@@ -70,6 +72,8 @@ static FluidFrame g_fluidFrame = {0};
 static int g_loadedFrameIndex = -1;
 static FluidGridBounds g_grid = {0};
 static bool g_manifestLoaded = false;
+static CoreSpaceDesc g_fluidSpaceDesc = {0};
+static bool g_fluidSpaceValid = false;
 
 #if USE_VULKAN
 static SDL_Surface* g_luma_surface = NULL;
@@ -185,6 +189,32 @@ static void AddImportedObject(const FluidImportShape *imp) {
     }
     double angle = imp->rotation_deg * M_PI / 180.0;
     double scale = (imp->scale > 0.0f) ? imp->scale : 1.0;
+    if (g_fluidSpaceValid) {
+        float asset_max_dim = 1.0f;
+        if (loaded) {
+            ShapeAssetBounds bnds;
+            if (shape_asset_bounds(&asset, &bnds) && bnds.valid) {
+                float dx = bnds.max_x - bnds.min_x;
+                float dy = bnds.max_y - bnds.min_y;
+                asset_max_dim = (dx > dy) ? dx : dy;
+                if (asset_max_dim <= 0.0001f) asset_max_dim = 1.0f;
+            }
+        }
+        CoreSpaceImport import_in;
+        CoreSpaceWorldTransform world_out;
+        memset(&import_in, 0, sizeof(import_in));
+        memset(&world_out, 0, sizeof(world_out));
+        import_in.pos_x_raw = imp->pos_x_norm;
+        import_in.pos_y_raw = imp->pos_y_norm;
+        import_in.rotation_deg = imp->rotation_deg;
+        import_in.scale = (imp->scale > 0.0f) ? imp->scale : 1.0f;
+        import_in.asset_max_dim = asset_max_dim;
+        if (core_space_import_to_world(&g_fluidSpaceDesc, &import_in, &world_out).code == CORE_OK) {
+            world_x = world_out.x;
+            world_y = world_out.y;
+            scale = world_out.scale;
+        }
+    }
     if (loaded) {
         int before = sceneSettings.objectCount;
         ShapeToSceneOptions opts = {.scale = scale, .offset_x = world_x, .offset_y = world_y};
@@ -300,6 +330,24 @@ void InitRayTracingScene(void) {
             g_grid.max_x = g_fluidManifest.origin_x + g_fluidManifest.cell_size * (float)g_fluidManifest.grid_w;
             g_grid.max_y = g_fluidManifest.origin_y + g_fluidManifest.cell_size * (float)g_fluidManifest.grid_h;
             g_manifestLoaded = true;
+            g_fluidSpaceValid = false;
+            if (core_space_desc_default_from_grid((int)g_fluidManifest.grid_w,
+                                                  (int)g_fluidManifest.grid_h,
+                                                  g_fluidManifest.origin_x,
+                                                  g_fluidManifest.origin_y,
+                                                  g_fluidManifest.cell_size,
+                                                  &g_fluidSpaceDesc).code == CORE_OK) {
+                if (g_fluidManifest.space_author_window_w > 0) {
+                    g_fluidSpaceDesc.author_window_w = g_fluidManifest.space_author_window_w;
+                }
+                if (g_fluidManifest.space_author_window_h > 0) {
+                    g_fluidSpaceDesc.author_window_h = g_fluidManifest.space_author_window_h;
+                }
+                if (g_fluidManifest.space_desired_fit > 0.0f) {
+                    g_fluidSpaceDesc.desired_fit = g_fluidManifest.space_desired_fit;
+                }
+                g_fluidSpaceValid = true;
+            }
             // Fit camera to grid bounds
             double grid_w_world = g_grid.max_x - g_grid.min_x;
             double grid_h_world = g_grid.max_y - g_grid.min_y;
@@ -328,8 +376,11 @@ void InitRayTracingScene(void) {
             }
         } else {
             printf("[fluid] Failed to load manifest: %s\n", animSettings.fluidManifest);
+            g_fluidSpaceValid = false;
         }
-    } else if (animSettings.fluidManifest[0] == '\0' && strlen(animSettings.frameDir) > 0 && strstr(animSettings.frameDir, ".vf2d")) {
+    } else if (animSettings.fluidManifest[0] == '\0' &&
+               strlen(animSettings.frameDir) > 0 &&
+               (strstr(animSettings.frameDir, ".vf2d") || strstr(animSettings.frameDir, ".pack"))) {
         // If a direct frame path was provided in config, attempt single-frame load.
         const char *path = animSettings.frameDir;
         if (fluid_frame_load_single(path, &g_fluidFrame)) {
@@ -340,6 +391,9 @@ void InitRayTracingScene(void) {
             g_grid.max_y = (float)g_fluidFrame.h;
             printf("[fluid] Loaded single frame from %s\n", path);
         }
+        g_fluidSpaceValid = false;
+    } else {
+        g_fluidSpaceValid = false;
     }
 }
 
@@ -377,6 +431,7 @@ void CleanupRayTracing(void) {
 
     fluid_frame_free(&g_fluidFrame);
     fluid_manifest_free(&g_fluidManifest);
+    g_fluidSpaceValid = false;
 }
 
 void SetLightPosition(double x, double y) {
@@ -515,7 +570,7 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
     memset(pixelBuffer, 0, pixelCount * sizeof(Uint8)); // Clear buffer
     memset(tilePreviewBuffer, 0, pixelCount * sizeof(Uint8));
 
-    uint64_t frameSeed = (uint64_t)SDL_GetPerformanceCounter();
+    uint64_t frameSeed = runtime_time_now_ns();
     int materialCount = BuildMaterialTable();
 
     bool haveCache = false;

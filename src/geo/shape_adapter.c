@@ -27,34 +27,6 @@ static int clamp_points_copy(const ShapeAssetPath* path, double (*dst)[2]) {
     return count;
 }
 
-static void smooth_closed_polygon(double (*pts)[2], int *count) {
-    if (!pts || !count) return;
-    int n = *count;
-    if (n < 3) return;
-    int iterations = 0;
-    double temp[MAX_POINTS][2];
-    while (iterations < 2) {
-        int newCount = n * 2;
-        if (newCount > MAX_POINTS) break;
-        for (int i = 0; i < n; ++i) {
-            int j = (i + 1) % n;
-            double x0 = pts[i][0], y0 = pts[i][1];
-            double x1 = pts[j][0], y1 = pts[j][1];
-            temp[i * 2][0]     = 0.75 * x0 + 0.25 * x1;
-            temp[i * 2][1]     = 0.75 * y0 + 0.25 * y1;
-            temp[i * 2 + 1][0] = 0.25 * x0 + 0.75 * x1;
-            temp[i * 2 + 1][1] = 0.25 * y0 + 0.75 * y1;
-        }
-        for (int k = 0; k < newCount; ++k) {
-            pts[k][0] = temp[k][0];
-            pts[k][1] = temp[k][1];
-        }
-        n = newCount;
-        iterations++;
-    }
-    *count = n;
-}
-
 static void apply_opts(SceneObject* obj, const ShapeToSceneOptions* opts) {
     if (!obj || !opts) return;
     obj->scale = opts->scale;
@@ -82,7 +54,7 @@ bool shape_asset_to_scene_objects(const ShapeAsset* asset,
         SceneObject* obj = &out_objects[emitted];
         memset(obj, 0, sizeof(SceneObject));
         InitObject(obj, OBJECT_POLYGON, 0.0, 0.0, 0.0, 0.0, points, count);
-        smooth_closed_polygon(obj->baseShapePoints, &obj->numPoints);
+        // Keep original corners/edge fidelity from imported assets.
         apply_opts(obj, opts);
         emitted++;
     }

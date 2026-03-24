@@ -4,6 +4,7 @@
 #include "camera/camera.h"
 #include "editor/scene_editor.h"
 #include "editor/bezier_editor.h"
+#include "app/animation.h"
 #include "config/config_manager.h"
 #include "scene/object_manager.h"
 #include "render/fluid_state.h"
@@ -283,7 +284,7 @@ void RenderCameraEditor(SDL_Renderer* renderer) {
     SDL_RenderFillRect(renderer, &bg);
 
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    RenderSceneObjects(renderer, true);
+    RenderSceneObjects(renderer, !AnimationUseFluidScene());
 
     SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
     SDL_Color lightColor = {110, 130, 110, 140};

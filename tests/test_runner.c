@@ -14,6 +14,9 @@
 #include "render/uniform_grid.h"
 #include "render/light_pdf.h"
 #include "render/ray_types.h"
+#include "fluid_pack_import_test.h"
+#include "kit_viz_fluid_overlay_adapter_test.h"
+#include "render_metrics_dataset_test.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -339,6 +342,9 @@ int main(void) {
     test_sample_diffuse_consistency();
     test_deterministic_modes();
     test_hit_normal_and_pdfs();
+    failures += run_fluid_pack_import_tests();
+    failures += run_kit_viz_fluid_overlay_adapter_tests();
+    failures += run_render_metrics_dataset_tests();
 
     if (failures > 0) {
         printf("TEST RESULT: %d failure(s)\n", failures);

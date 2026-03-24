@@ -16,12 +16,12 @@
   "lightDiffusionEnabled":true,
   "lightDiffusionRadius":6,
   "lightDiffusionStrength":0.60499999999999998,
-  "editorMode":0,
+  "editorMode":1,
   "useTiledRenderer":true,
   "tilePreviewEnabled":true,
   "tileSize":16,
   "rouletteThreshold":0.01,
-  "integratorMode":1,
+  "integratorMode":2,
   "previewDuration":5.0,
   "pathSamplesPerPixel":4,
   "pathMaxDepth":3,
@@ -40,6 +40,6 @@
   "cacheHaloRadius":3.5,
   "lightDecaySoftness":0.28999999999999998,
   "lightHeight":8.0,
-  "useFluidScene":false,
-  "fluidManifest":"\/Users\/calebsv\/Desktop\/CodeWork\/physics_sim\/export\/volume_frames\/M Air\/manifest.json"
+  "useFluidScene":true,
+  "fluidManifest":"\/Users\/calebsv\/Desktop\/CodeWork\/physics_sim\/export\/volume_frames\/U in U\/scene_bundle.json"
 }

@@ -48,6 +48,16 @@ static void timer_hud_draw_rect(int x, int y, int w, int h, TimerHUDColor color)
     SDL_RenderFillRect(ctx->renderer, &rect);
 }
 
+static void timer_hud_draw_line(int x1, int y1, int x2, int y2, TimerHUDColor color) {
+    RenderContext* ctx = getRenderContext();
+    if (!ctx || !ctx->renderer) return;
+#if !USE_VULKAN
+    SDL_SetRenderDrawBlendMode(ctx->renderer, SDL_BLENDMODE_BLEND);
+#endif
+    SDL_SetRenderDrawColor(ctx->renderer, color.r, color.g, color.b, color.a);
+    SDL_RenderDrawLine(ctx->renderer, x1, y1, x2, y2);
+}
+
 static void timer_hud_draw_text(const char* text, int x, int y, int align_flags, TimerHUDColor color) {
     RenderContext* ctx = getRenderContext();
     if (!ctx || !ctx->renderer) return;
@@ -90,6 +100,7 @@ static const TimerHUDBackend g_timer_hud_backend = {
     .measure_text = timer_hud_measure_text,
     .get_line_height = timer_hud_line_height,
     .draw_rect = timer_hud_draw_rect,
+    .draw_line = timer_hud_draw_line,
     .draw_text = timer_hud_draw_text,
     .hud_padding = 6,
     .hud_spacing = 4,

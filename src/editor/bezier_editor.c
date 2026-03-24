@@ -444,7 +444,7 @@ void RenderBezierEditor(SDL_Renderer* renderer) {
     sceneSettings.camera = preview;
 
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    RenderSceneObjects(renderer, true);
+    RenderSceneObjects(renderer, !AnimationUseFluidScene());
 
     if (sceneSettings.bezierPath.numPoints >= 2) {
         SDL_Color lightColor = {0, 255, 0, 255};

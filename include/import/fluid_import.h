@@ -45,6 +45,10 @@ typedef struct {
     float               origin_x;
     float               origin_y;
     uint32_t            obstacle_mask_crc32;
+    uint32_t            space_contract_version;
+    int                 space_author_window_w;
+    int                 space_author_window_h;
+    float               space_desired_fit;
     FluidImportShape   *imports;
     size_t              import_count;
 } FluidManifest;

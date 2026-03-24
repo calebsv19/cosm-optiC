@@ -2,6 +2,7 @@
 #include "scene/object_manager.h"
 #include "config/config_manager.h"
 #include "editor/scene_editor.h"
+#include "app/animation.h"
 #include "camera/camera.h"
 #include "geo/shape_adapter.h"
 #include "geo/shape_library.h"
@@ -572,10 +573,11 @@ void RenderObjectEditor(SDL_Renderer* renderer) {
     Camera original = sceneSettings.camera;
     sceneSettings.camera = preview;
 
+    bool fillObjects = !AnimationUseFluidScene();
     for (int i = 0; i < sceneSettings.objectCount; i++) {
         SceneObject* obj = &sceneSettings.sceneObjects[i];
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-        RenderSceneObject(renderer, obj, true);
+        RenderSceneObject(renderer, obj, fillObjects);
 
         if (i == selectedObjectIndex) {
             SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);

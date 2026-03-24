@@ -17,6 +17,7 @@
 #include "config/config_manager.h"
 #include "camera/camera.h"
 #include "render/vk_shared_device.h"
+#include "ui/shared_theme_font_adapter.h"
 
 // Window & Menu Layout
 #define MENU_WIDTH 1000
@@ -333,7 +334,7 @@ static void BuildManifestLabel(const char *path, char *out, size_t outSize) {
     const char *filename = strrchr(path, '/');
     filename = filename ? filename + 1 : path;
 
-    if (strcmp(filename, "manifest.json") == 0) {
+    if (strcmp(filename, "manifest.json") == 0 || strcmp(filename, "scene_bundle.json") == 0) {
         char parentBuf[PATH_MAX];
         size_t len = (size_t)(filename - path - 1); // exclude trailing slash
         if (len >= sizeof(parentBuf)) len = sizeof(parentBuf) - 1;
@@ -384,6 +385,8 @@ static void ScanManifestRoot(const char *root) {
     char pathBuf[PATH_MAX];
     snprintf(pathBuf, sizeof(pathBuf), "%s/manifest.json", root);
     AddManifestOption(pathBuf);
+    snprintf(pathBuf, sizeof(pathBuf), "%s/scene_bundle.json", root);
+    AddManifestOption(pathBuf);
 
     DIR *dir = opendir(root);
     if (!dir) return;
@@ -398,7 +401,12 @@ static void ScanManifestRoot(const char *root) {
             char manifestPath[PATH_MAX];
             snprintf(manifestPath, sizeof(manifestPath), "%s/manifest.json", pathBuf);
             AddManifestOption(manifestPath);
+            char bundlePath[PATH_MAX];
+            snprintf(bundlePath, sizeof(bundlePath), "%s/scene_bundle.json", pathBuf);
+            AddManifestOption(bundlePath);
         } else if (S_ISREG(st.st_mode) && strcmp(ent->d_name, "manifest.json") == 0) {
+            AddManifestOption(pathBuf);
+        } else if (S_ISREG(st.st_mode) && strcmp(ent->d_name, "scene_bundle.json") == 0) {
             AddManifestOption(pathBuf);
         }
     }
@@ -410,7 +418,8 @@ static void RefreshManifestOptions(void) {
     const char *roots[] = {
         "export/volume_frames",
         "../physics_sim/export/volume_frames",
-        "../ray_tracing/export/volume_frames"
+        "../ray_tracing/export/volume_frames",
+        "../shared/assets/scenes"
     };
     for (size_t i = 0; i < sizeof(roots) / sizeof(roots[0]); ++i) {
         ScanManifestRoot(roots[i]);
@@ -466,6 +475,8 @@ static void ApplySpecialSliderRules(int* target) {
 }
 
 bool InitializeMenu(SDL_Window** window, SDL_Renderer** renderer, TTF_Font** font) {
+    ray_tracing_shared_theme_load_persisted();
+
     // Initialize SDL video subsystem
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         printf("SDL Initialization Failed: %s\n", SDL_GetError());
@@ -538,8 +549,17 @@ bool InitializeMenu(SDL_Window** window, SDL_Renderer** renderer, TTF_Font** fon
     }
 #endif
 
-    // Load Font
-    *font = TTF_OpenFont("/System/Library/Fonts/Supplemental/Arial.ttf", TOGGLE_BUTTON_TEXT_SIZE);
+    // Load Font (shared adapter path is opt-in and falls back to legacy menu font)
+    {
+        char shared_font_path[256];
+        int shared_point_size = TOGGLE_BUTTON_TEXT_SIZE;
+        if (ray_tracing_shared_font_resolve_ui_regular(
+                shared_font_path, sizeof(shared_font_path), &shared_point_size)) {
+            *font = TTF_OpenFont(shared_font_path, shared_point_size);
+        } else {
+            *font = TTF_OpenFont("/System/Library/Fonts/Supplemental/Arial.ttf", TOGGLE_BUTTON_TEXT_SIZE);
+        }
+    }
     if (!*font) {
         printf("Font Loading Failed: %s\n", TTF_GetError());
 #if USE_VULKAN
@@ -609,8 +629,10 @@ void RenderText(SDL_Renderer *renderer, TTF_Font *font, int x, int y, const char
     va_start(args, format);
     vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
-    
-    SDL_Color textColor = {255, 255, 255, 255};
+
+    RayTracingThemePalette palette = {0};
+    const bool has_shared_palette = ray_tracing_shared_theme_resolve_palette(&palette);
+    SDL_Color textColor = has_shared_palette ? palette.text_primary : (SDL_Color){255, 255, 255, 255};
     SDL_Surface *textSurface = TTF_RenderText_Solid(font, buffer, textColor);
     if (!textSurface) return;
 
@@ -626,6 +648,72 @@ static void RenderTextColor(SDL_Renderer *renderer, TTF_Font *font, int x, int y
     SDL_Rect textRect = {x, y, textSurface->w, textSurface->h};
     RenderSurface(renderer, textSurface, &textRect);
     SDL_FreeSurface(textSurface);
+}
+
+static void RenderCenteredTextColor(SDL_Renderer *renderer,
+                                    TTF_Font *font,
+                                    const SDL_Rect *rect,
+                                    SDL_Color color,
+                                    const char *text) {
+    SDL_Surface *textSurface;
+    SDL_Rect textRect;
+    if (!font || !rect || !text || !text[0]) return;
+    textSurface = TTF_RenderText_Solid(font, text, color);
+    if (!textSurface) return;
+    textRect = (SDL_Rect){
+        rect->x + (rect->w - textSurface->w) / 2,
+        rect->y + (rect->h - textSurface->h) / 2,
+        textSurface->w,
+        textSurface->h
+    };
+    RenderSurface(renderer, textSurface, &textRect);
+    SDL_FreeSurface(textSurface);
+}
+
+static int color_luma(SDL_Color color) {
+    return (299 * (int)color.r + 587 * (int)color.g + 114 * (int)color.b) / 1000;
+}
+
+static int color_contrast_gap(SDL_Color a, SDL_Color b) {
+    int gap = color_luma(a) - color_luma(b);
+    return gap < 0 ? -gap : gap;
+}
+
+static Uint8 mix_u8(Uint8 a, Uint8 b, int a_weight, int b_weight) {
+    int total = a_weight + b_weight;
+    if (total <= 0) return a;
+    return (Uint8)(((int)a * a_weight + (int)b * b_weight) / total);
+}
+
+static SDL_Color mix_color(SDL_Color a, SDL_Color b, int a_weight, int b_weight) {
+    return (SDL_Color){
+        mix_u8(a.r, b.r, a_weight, b_weight),
+        mix_u8(a.g, b.g, a_weight, b_weight),
+        mix_u8(a.b, b.b, a_weight, b_weight),
+        mix_u8(a.a, b.a, a_weight, b_weight)
+    };
+}
+
+static SDL_Color ensure_highlight_fill_contrast(SDL_Color fill,
+                                                SDL_Color preferred_text,
+                                                SDL_Color darker_anchor) {
+    if (color_contrast_gap(fill, preferred_text) >= 110) {
+        return fill;
+    }
+    if (color_luma(preferred_text) >= 150) {
+        return mix_color(fill, darker_anchor, 1, 2);
+    }
+    return mix_color(fill, (SDL_Color){240, 243, 247, fill.a}, 1, 2);
+}
+
+static SDL_Color choose_readable_text(SDL_Color background, SDL_Color preferred_text) {
+    if (color_contrast_gap(background, preferred_text) >= 110) {
+        return preferred_text;
+    }
+    if (color_luma(background) >= 150) {
+        return (SDL_Color){24, 28, 34, preferred_text.a ? preferred_text.a : 255};
+    }
+    return (SDL_Color){245, 247, 250, preferred_text.a ? preferred_text.a : 255};
 }
 
 static void FormatManifestButtonLabel(char *out, size_t outSize) {
@@ -644,6 +732,8 @@ static void FormatManifestButtonLabel(char *out, size_t outSize) {
 }
 
 static void RenderManifestDropdown(SDL_Renderer *renderer, TTF_Font *font, int loadButtonY) {
+    RayTracingThemePalette palette = {0};
+    const bool has_shared_palette = ray_tracing_shared_theme_resolve_palette(&palette);
     int panelX = LOAD_SCENE_BUTTON_X;
     int panelY = loadButtonY + LOAD_SCENE_BUTTON_HEIGHT + 6;
     int panelW = LOAD_SCENE_BUTTON_WIDTH + MANIFEST_PANEL_EXTRA_WIDTH;
@@ -655,9 +745,21 @@ static void RenderManifestDropdown(SDL_Renderer *renderer, TTF_Font *font, int l
     if (panelH < minH) panelH = minH;
 
     g_manifestPanelRect = (SDL_Rect){panelX, panelY, panelW, panelH};
-    SDL_SetRenderDrawColor(renderer, 28, 28, 30, 230);
+    if (has_shared_palette) {
+        SDL_SetRenderDrawColor(renderer,
+                               palette.panel_fill.r, palette.panel_fill.g,
+                               palette.panel_fill.b, palette.panel_fill.a);
+    } else {
+        SDL_SetRenderDrawColor(renderer, 28, 28, 30, 230);
+    }
     SDL_RenderFillRect(renderer, &g_manifestPanelRect);
-    SDL_SetRenderDrawColor(renderer, 80, 80, 90, 255);
+    if (has_shared_palette) {
+        SDL_SetRenderDrawColor(renderer,
+                               palette.panel_border.r, palette.panel_border.g,
+                               palette.panel_border.b, palette.panel_border.a);
+    } else {
+        SDL_SetRenderDrawColor(renderer, 80, 80, 90, 255);
+    }
     SDL_RenderDrawRect(renderer, &g_manifestPanelRect);
 
     int listX = panelX + MANIFEST_ITEM_PADDING;
@@ -685,11 +787,23 @@ static void RenderManifestDropdown(SDL_Renderer *renderer, TTF_Font *font, int l
                            : (float)listY;
         int scrollX = panelX + panelW - MANIFEST_SCROLLBAR_WIDTH - MANIFEST_ITEM_PADDING;
         SDL_Rect track = {scrollX, listY, MANIFEST_SCROLLBAR_WIDTH, listH};
-        SDL_SetRenderDrawColor(renderer, 70, 70, 80, 255);
+        if (has_shared_palette) {
+            SDL_SetRenderDrawColor(renderer,
+                                   palette.panel_border.r, palette.panel_border.g,
+                                   palette.panel_border.b, palette.panel_border.a);
+        } else {
+            SDL_SetRenderDrawColor(renderer, 70, 70, 80, 255);
+        }
         SDL_RenderFillRect(renderer, &track);
 
         g_manifestScrollbarRect = (SDL_Rect){scrollX, (int)thumbY, MANIFEST_SCROLLBAR_WIDTH, (int)thumb};
-        SDL_SetRenderDrawColor(renderer, 120, 120, 140, 255);
+        if (has_shared_palette) {
+            SDL_SetRenderDrawColor(renderer,
+                                   palette.accent_primary.r, palette.accent_primary.g,
+                                   palette.accent_primary.b, 255);
+        } else {
+            SDL_SetRenderDrawColor(renderer, 120, 120, 140, 255);
+        }
         SDL_RenderFillRect(renderer, &g_manifestScrollbarRect);
     }
 
@@ -701,21 +815,44 @@ static void RenderManifestDropdown(SDL_Renderer *renderer, TTF_Font *font, int l
         SDL_Rect itemRect = {listX, itemY, listW, MANIFEST_ITEM_HEIGHT};
         bool isSelected = animSettings.fluidManifest[0] &&
                           strcmp(animSettings.fluidManifest, g_manifestOptions[i].path) == 0;
-        SDL_SetRenderDrawColor(renderer,
-                               isSelected ? 70 : 50,
-                               isSelected ? 120 : 70,
-                               isSelected ? 90 : 70,
-                               255);
+        if (has_shared_palette) {
+            SDL_Color fill = isSelected ? palette.accent_primary : palette.button_fill;
+            if (isSelected) {
+                fill = ensure_highlight_fill_contrast(fill, palette.text_primary, palette.panel_fill);
+            }
+            SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, 255);
+        } else {
+            SDL_SetRenderDrawColor(renderer,
+                                   isSelected ? 70 : 50,
+                                   isSelected ? 120 : 70,
+                                   isSelected ? 90 : 70,
+                                   255);
+        }
         SDL_RenderFillRect(renderer, &itemRect);
-        SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
+        if (has_shared_palette) {
+            SDL_SetRenderDrawColor(renderer,
+                                   palette.panel_border.r, palette.panel_border.g,
+                                   palette.panel_border.b, palette.panel_border.a);
+        } else {
+            SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
+        }
         SDL_RenderDrawRect(renderer, &itemRect);
-        SDL_Color textColor = isSelected ? (SDL_Color){220, 240, 220, 255}
-                                         : (SDL_Color){230, 230, 230, 255};
+        SDL_Color textColor;
+        if (has_shared_palette) {
+            SDL_Color itemFill = isSelected
+                                     ? ensure_highlight_fill_contrast(palette.accent_primary,
+                                                                      palette.text_primary,
+                                                                      palette.panel_fill)
+                                     : palette.button_fill;
+            textColor = choose_readable_text(itemFill, palette.text_primary);
+        } else {
+            textColor = isSelected ? (SDL_Color){220, 240, 220, 255} : (SDL_Color){230, 230, 230, 255};
+        }
         RenderTextColor(renderer, font, itemRect.x + 6, itemRect.y + 4, textColor, g_manifestOptions[i].name);
     }
 
     if (g_manifestOptionCount == 0) {
-        SDL_Color c = {210, 210, 210, 255};
+        SDL_Color c = has_shared_palette ? palette.text_muted : (SDL_Color){210, 210, 210, 255};
         RenderTextColor(renderer, font, listX, listY + 4, c, "No manifests found");
     }
 }
@@ -723,23 +860,24 @@ static void RenderManifestDropdown(SDL_Renderer *renderer, TTF_Font *font, int l
 
 void RenderButton(SDL_Renderer *renderer, TTF_Font *font, int x, int y, int width, int height, const char *text, bool active) {
     SDL_Rect rect = {x, y, width, height};
+    RayTracingThemePalette palette = {0};
+    const bool has_shared_palette = ray_tracing_shared_theme_resolve_palette(&palette);
+    SDL_Color fill = has_shared_palette
+                         ? (active ? palette.button_active_fill : palette.button_fill)
+                         : (active ? (SDL_Color){0, 255, 0, 255} : (SDL_Color){100, 100, 100, 255});
+    SDL_Color textColor = has_shared_palette ? palette.button_text : (SDL_Color){255, 255, 255, 255};
+    if (has_shared_palette && active) {
+        fill = ensure_highlight_fill_contrast(fill, textColor, palette.panel_fill);
+    }
+    if (has_shared_palette) {
+        textColor = choose_readable_text(fill, textColor);
+    }
 
     // Toggle button color based on active state
-    SDL_SetRenderDrawColor(renderer, active ? 0 : 100, active ? 255 : 100, active ? 0 : 100, 255);
+    SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
     SDL_RenderFillRect(renderer, &rect);
 
-    // Render text centered inside the button
-    SDL_Color textColor = {255, 255, 255, 255};
-    SDL_Surface *textSurface = TTF_RenderText_Solid(font, text, textColor);
-    if (!textSurface) return;
-
-    int textX = x + (width - textSurface->w) / 2;  // Center text horizontally
-    int textY = y + (height - textSurface->h) / 2; // Center text vertically
-
-    SDL_Rect textRect = {textX, textY, textSurface->w, textSurface->h};
-    RenderSurface(renderer, textSurface, &textRect);
-
-    SDL_FreeSurface(textSurface);
+    RenderCenteredTextColor(renderer, font, &rect, textColor, text);
 }
 typedef struct {
     int *value;
@@ -791,13 +929,21 @@ static SliderLayout BuildSliderLayout(void) {
 }
 
 static void RenderSliders(SDL_Renderer* renderer, TTF_Font* font, const SliderLayout* layout) {
+    RayTracingThemePalette palette = {0};
+    const bool has_shared_palette = ray_tracing_shared_theme_resolve_palette(&palette);
     if (!layout) return;
     for (size_t i = 0; i < layout->count; i++) {
         const MenuSlider* slider = &layout->items[i];
         int textMarginX = 5;
         RenderText(renderer, font, slider->x - 150, slider->y - textMarginX, "%s", slider->label);
 
-        SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
+        if (has_shared_palette) {
+            SDL_SetRenderDrawColor(renderer,
+                                   palette.button_fill.r, palette.button_fill.g,
+                                   palette.button_fill.b, palette.button_fill.a);
+        } else {
+            SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
+        }
         SDL_Rect sliderBar = {slider->x, slider->y, slider->width, SLIDER_HEIGHT};
         SDL_RenderFillRect(renderer, &sliderBar);
 
@@ -807,7 +953,13 @@ static void RenderSliders(SDL_Renderer* renderer, TTF_Font* font, const SliderLa
         if (percent > 1.0f) percent = 1.0f;
 
         int knobX = slider->x + (int)(percent * slider->width);
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        if (has_shared_palette) {
+            SDL_SetRenderDrawColor(renderer,
+                                   palette.accent_primary.r, palette.accent_primary.g,
+                                   palette.accent_primary.b, 255);
+        } else {
+            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        }
         SDL_Rect knob = {knobX - 5, slider->y - 5, 10, 20};
         SDL_RenderFillRect(renderer, &knob);
 
@@ -837,6 +989,8 @@ static void RenderSliders(SDL_Renderer* renderer, TTF_Font* font, const SliderLa
 }
 
 void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {  
+    RayTracingThemePalette palette = {0};
+    const bool has_shared_palette = ray_tracing_shared_theme_resolve_palette(&palette);
     SliderLayout sliderLayout = BuildSliderLayout();
     int centerX = TOGGLE_BUTTON_MARGIN_X + TOGGLE_BUTTON_WIDTH + 60; // middle column anchor between left and sliders
     int falloffButtonY = TOGGLE_BUTTON_MARGIN_Y + 10;
@@ -847,7 +1001,13 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
     int pathToggleBSDFY = pathToggleRouletteY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
 
     // Clear the screen with a black background
-    render_set_clear_color(renderer, 0, 0, 0, 255);
+    if (has_shared_palette) {
+        render_set_clear_color(renderer,
+                               palette.background_fill.r, palette.background_fill.g,
+                               palette.background_fill.b, palette.background_fill.a);
+    } else {
+        render_set_clear_color(renderer, 0, 0, 0, 255);
+    }
     if (!render_begin_frame()) {
         return;
     }
@@ -958,11 +1118,34 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
     // Start button with subtle green tint
     SDL_Rect startRect = {BOTTOM_BUTTON_MARGIN_X_START, BOTTOM_BUTTON_MARGIN_Y_START,
                           BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START};
-    SDL_SetRenderDrawColor(renderer, 90, 220, 110, 255);
+    if (has_shared_palette) {
+        SDL_Color startFill = ensure_highlight_fill_contrast(palette.accent_primary,
+                                                             palette.button_text,
+                                                             palette.panel_fill);
+        SDL_SetRenderDrawColor(renderer,
+                               startFill.r, startFill.g,
+                               startFill.b, startFill.a);
+    } else {
+        SDL_SetRenderDrawColor(renderer, 90, 220, 110, 255);
+    }
     SDL_RenderFillRect(renderer, &startRect);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    if (has_shared_palette) {
+        SDL_SetRenderDrawColor(renderer,
+                               palette.panel_border.r, palette.panel_border.g,
+                               palette.panel_border.b, palette.panel_border.a);
+    } else {
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    }
     SDL_RenderDrawRect(renderer, &startRect);
-    RenderButtonText(renderer, startRect, "Start");
+    if (has_shared_palette) {
+        SDL_Color startFill = ensure_highlight_fill_contrast(palette.accent_primary,
+                                                             palette.button_text,
+                                                             palette.panel_fill);
+        SDL_Color startText = choose_readable_text(startFill, palette.button_text);
+        RenderCenteredTextColor(renderer, font, &startRect, startText, "Start");
+    } else {
+        RenderButtonText(renderer, startRect, "Start");
+    }
    
 
     RenderSliders(renderer, font, &sliderLayout);
@@ -991,6 +1174,21 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
 } 
 
 void HandleKeyPress(SDL_Event* event, bool* running) {
+    SDL_Keymod mod = event->key.keysym.mod;
+    bool ctrl_or_cmd = (mod & (KMOD_CTRL | KMOD_GUI)) != 0;
+    bool shift = (mod & KMOD_SHIFT) != 0;
+    if (ctrl_or_cmd && shift) {
+        if (event->key.keysym.sym == SDLK_t) {
+            ray_tracing_shared_theme_cycle_next();
+            ray_tracing_shared_theme_save_persisted();
+            return;
+        }
+        if (event->key.keysym.sym == SDLK_y) {
+            ray_tracing_shared_theme_cycle_prev();
+            ray_tracing_shared_theme_save_persisted();
+            return;
+        }
+    }
     switch (event->key.keysym.sym) {
         case SDLK_BACKSPACE:
             if ((editingBounce || editingFrame) && strlen(inputBuffer) > 0) {
@@ -1457,6 +1655,7 @@ bool RunMenu(void) {
 #endif
         SDL_Quit();
     }
+    ray_tracing_shared_theme_save_persisted();
     SaveAllSettings();
     return menuExitedNormally;
 }
