@@ -1,0 +1,11 @@
+{
+  "interactiveMode": true,
+  "deepRenderMode": false,
+  "bounceMode": false,
+  "autoMP4": false,
+  "bounceLimit": 10,
+  "frameLimit": 300,
+  "frameDir": "data/runtime/frames/default",
+  "useFluidScene": false,
+  "fluidManifest": ""
+}

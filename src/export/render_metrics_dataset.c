@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static const char *k_default_dataset_path = "Configs/render_metrics.dataset.json";
+static const char *k_default_dataset_path = "data/runtime/render_metrics.dataset.json";
 
 static bool append_dataset_items_json(cJSON *items, const CoreDataset *dataset) {
     if (!items || !dataset) return false;

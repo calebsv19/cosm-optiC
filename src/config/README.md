@@ -2,4 +2,4 @@
 
 Configuration persistence.
 
-- `config_manager.c` – Loads/saves animation and scene settings from `Configs/animation_config.json` and `Configs/scene_config.json`, populating the global `animSettings` and `sceneSettings` instances.
+- `config_manager.c` – Loads animation/scene settings with runtime-first fallback (`data/runtime/*.json` -> `config/*.json` -> legacy `Configs/*.json`), and saves mutable state to `data/runtime/*.json`.

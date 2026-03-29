@@ -73,7 +73,7 @@ static int materialScroll = 0;
 
 static const char* ShapeAssetDir(void) {
     const char* dir = getenv("SHAPE_ASSET_DIR");
-    return (dir && dir[0]) ? dir : "Configs/objects";
+    return (dir && dir[0]) ? dir : "config/objects";
 }
 
 static Camera BuildObjectEditorCamera(void) {

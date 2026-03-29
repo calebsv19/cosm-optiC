@@ -45,7 +45,7 @@ static const char *default_out_path(const char *input) {
     size_t base_len = dot ? (size_t)(dot - base) : strlen(base);
     const char *prefix = getenv("SHAPE_ASSET_DIR");
     if (!prefix || prefix[0] == '\0') {
-        prefix = "Configs/objects";
+        prefix = "config/objects";
     }
     size_t total = strlen(prefix) + 1 + base_len + strlen(".asset.json") + 1;
     char *buf = (char *)malloc(total);

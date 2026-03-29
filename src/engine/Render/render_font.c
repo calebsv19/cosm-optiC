@@ -17,9 +17,9 @@ static bool ensureTTF(void) {
 static bool loadDefaultFont(void) {
     if (activeFont) return true;
     if (!ensureTTF()) return false;
-    activeFont = TTF_OpenFont("Configs/default.ttf", activePointSize);
+    activeFont = TTF_OpenFont("config/default.ttf", activePointSize);
     if (!activeFont) {
-        fprintf(stderr, "[TimerHUD] Failed to open font Configs/default.ttf: %s\n", TTF_GetError());
+        fprintf(stderr, "[TimerHUD] Failed to open font config/default.ttf: %s\n", TTF_GetError());
         return false;
     }
     return true;

@@ -2,8 +2,7 @@
 
 set -euo pipefail
 
-RENDER_DIR="Animations/default"
-VIDEO_DIR="Animations/Vids"
+RENDER_DIR="data/runtime/frames/default"
 
 if [ -d "$RENDER_DIR" ]; then
     rm -f "$RENDER_DIR"/frame_*.bmp

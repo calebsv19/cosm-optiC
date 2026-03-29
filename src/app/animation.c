@@ -23,6 +23,7 @@
 #include "core_space.h"
 #include "geo/shape_asset.h"
 #include "geo/shape_adapter.h"
+#include "ray_tracing/ray_tracing_app_main.h"
 #include "render/vk_shared_device.h"
 #include <json-c/json.h>
 #include <math.h>
@@ -30,11 +31,9 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <sys/stat.h>  // For mkdir()
 #include <sys/types.h>
-
-#define SCENE_CONFIG_FILE "Configs/scene_config.json"
-#define ANIMATION_CONFIG_FILE "Configs/animation_config.json"
 
 // Global animation settings (Loaded from config)
 int WINDOW_WIDTH;
@@ -104,7 +103,7 @@ static void ExportRenderMetricsDatasetIfEnabled(void) {
     if (out_path && out_path[0]) {
         printf("[render_metrics] dataset exported: %s\n", out_path);
     } else {
-        printf("[render_metrics] dataset exported: Configs/render_metrics.dataset.json\n");
+        printf("[render_metrics] dataset exported: data/runtime/render_metrics.dataset.json\n");
     }
 }
 
@@ -580,9 +579,24 @@ char loopMode[16] = "stop";  // Increased buffer size for safety
 int maxLoopCount = 1;  // Default to 1 loop if not set
 
 static void EnsureDirectoryExists(const char* path) {
-    struct stat st = {0};
-    if (stat(path, &st) == -1) {
-        mkdir(path, 0700);  // Create directory with full permissions
+    if (!path || !path[0]) return;
+
+    char tmp[512];
+    size_t len = strlen(path);
+    if (len >= sizeof(tmp)) return;
+    memcpy(tmp, path, len + 1);
+
+    for (size_t i = 1; i < len; ++i) {
+        if (tmp[i] != '/') continue;
+        tmp[i] = '\0';
+        if (tmp[0] != '\0' && mkdir(tmp, 0700) != 0 && errno != EEXIST) {
+            return;
+        }
+        tmp[i] = '/';
+    }
+
+    if (mkdir(tmp, 0700) != 0 && errno != EEXIST) {
+        return;
     }
 }
         
@@ -1136,7 +1150,7 @@ static void ParseArgs(int argc, char* argv[]) {
     }
 }
 
-int main(int argc, char* argv[]) {
+int ray_tracing_app_main_legacy(int argc, char* argv[]) {
     ParseArgs(argc, argv);
     (void)argc;
     (void)argv;
@@ -1193,5 +1207,10 @@ int main(int argc, char* argv[]) {
     }
 
     return 0;
+}
+
+int main(int argc, char* argv[]) {
+    ray_tracing_app_set_legacy_entry(ray_tracing_app_main_legacy);
+    return ray_tracing_app_main(argc, argv);
 }
 #endif

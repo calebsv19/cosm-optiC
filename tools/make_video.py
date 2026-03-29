@@ -12,13 +12,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--frames",
-        default="Animations/default",
-        help="Directory containing frame_XXXX.bmp files (default: Animations/default)",
+        default="data/runtime/frames/default",
+        help="Directory containing frame_XXXX.bmp files (default: data/runtime/frames/default)",
     )
     parser.add_argument(
         "--output",
-        default="Animations/Vids/output.mp4",
-        help="Output MP4 path (default: Animations/Vids/output.mp4)",
+        default="data/runtime/videos/output.mp4",
+        help="Output MP4 path (default: data/runtime/videos/output.mp4)",
     )
     parser.add_argument(
         "--fps",

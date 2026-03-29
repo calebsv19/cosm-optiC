@@ -8,7 +8,48 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 #include <stdio.h>
+#include <errno.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include "vk_renderer.h"
+
+#define TIMER_HUD_DEFAULT_SETTINGS_PATH "config/timer_hud_settings.json"
+#define TIMER_HUD_RUNTIME_SETTINGS_PATH "data/runtime/timer_hud_settings.json"
+
+static int path_exists(const char* path) {
+    struct stat st = {0};
+    return (path && path[0] && stat(path, &st) == 0);
+}
+
+static int ensure_runtime_lane(void) {
+    if (mkdir("data", 0755) != 0 && errno != EEXIST) return 0;
+    if (mkdir("data/runtime", 0755) != 0 && errno != EEXIST) return 0;
+    return 1;
+}
+
+static void seed_runtime_timer_hud_settings(void) {
+    if (path_exists(TIMER_HUD_RUNTIME_SETTINGS_PATH)) return;
+    if (!path_exists(TIMER_HUD_DEFAULT_SETTINGS_PATH)) return;
+    if (!ensure_runtime_lane()) return;
+
+    FILE* in = fopen(TIMER_HUD_DEFAULT_SETTINGS_PATH, "rb");
+    if (!in) return;
+    FILE* out = fopen(TIMER_HUD_RUNTIME_SETTINGS_PATH, "wb");
+    if (!out) {
+        fclose(in);
+        return;
+    }
+
+    char buffer[4096];
+    size_t n = 0;
+    while ((n = fread(buffer, 1, sizeof(buffer), in)) > 0) {
+        if (fwrite(buffer, 1, n, out) != n) {
+            break;
+        }
+    }
+    fclose(out);
+    fclose(in);
+}
 
 static void timer_hud_backend_init(void) {
     if (!initFontSystem()) {
@@ -109,5 +150,6 @@ static const TimerHUDBackend g_timer_hud_backend = {
 
 void timer_hud_register_backend(void) {
     ts_register_backend(&g_timer_hud_backend);
-    ts_set_settings_path("Configs/timer_hud_settings.json");
+    seed_runtime_timer_hud_settings();
+    ts_set_settings_path(TIMER_HUD_RUNTIME_SETTINGS_PATH);
 }

@@ -321,7 +321,7 @@ bool ray_tracing_shared_font_resolve_ui_regular(char* out_path, size_t out_path_
     }
 
     if (!resolve_existing_font_path(&role, out_path, out_path_size) &&
-        !copy_existing_path(out_path, out_path_size, "Configs/default.ttf")) {
+        !copy_existing_path(out_path, out_path_size, "config/default.ttf")) {
         return false;
     }
     r = core_font_point_size_for_tier(&role, CORE_FONT_TEXT_SIZE_HEADER, &tier_size);

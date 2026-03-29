@@ -4,6 +4,7 @@ SRC_DIR   := src
 INC_DIR   := include
 BUILD_DIR := build
 TARGET    := Ray_anim
+.DEFAULT_GOAL := all
 VK_RENDERER_DIR := ../shared/vk_renderer
 CORE_BASE_DIR := ../shared/core/core_base
 CORE_IO_DIR := ../shared/core/core_io
@@ -59,8 +60,8 @@ CLI_TOOLS := $(CLI_BIN_DIR)/shape_asset_tool $(CLI_BIN_DIR)/shape_import_tool $(
 RAY_TRACE_TOOL_SRC := $(SRC_DIR)/tools/cli/ray_trace_tool.c
 RAY_TRACE_TOOL_BIN := ray_trace_tool
 
-VIDEO_FRAMES_DIR ?= Animations/default
-VIDEO_OUTPUT ?= Animations/Vids/output.mp4
+VIDEO_FRAMES_DIR ?= data/runtime/frames/default
+VIDEO_OUTPUT ?= data/runtime/videos/output.mp4
 VIDEO_FPS ?= 30
 
 TEST_DIR := tests
@@ -193,7 +194,15 @@ DEP := $(OBJ:.o=.d)
 add-disney-flag:
 	$(eval CFLAGS += -DCAMERA_INTEGRATOR_DISNEY_AVAILABLE)
 
-.PHONY: all clean run run-ide-theme run-daw-theme debug format video release relrun test test-shared-theme-font-adapter test-manifest-to-trace-export test-fluid-pack-contract-parity
+STABLE_TEST_TARGETS := \
+	test \
+	test-manifest-to-trace-export \
+	test-fluid-pack-contract-parity \
+	test-shared-theme-font-adapter
+
+LEGACY_TEST_TARGETS :=
+
+.PHONY: all clean run run-ide-theme run-daw-theme run-headless-smoke visual-harness debug format video release relrun test test-stable test-legacy test-shared-theme-font-adapter test-manifest-to-trace-export test-fluid-pack-contract-parity
 
 all: $(TARGET)
 
@@ -313,6 +322,12 @@ run-ide-theme: $(TARGET)
 run-daw-theme: $(TARGET)
 	RAY_TRACING_USE_SHARED_THEME_FONT=1 RAY_TRACING_USE_SHARED_THEME=1 RAY_TRACING_USE_SHARED_FONT=1 RAY_TRACING_THEME_PRESET=daw_default RAY_TRACING_FONT_PRESET=daw_default ./$(TARGET)
 
+run-headless-smoke: all test-stable
+	@echo "ray_tracing headless smoke passed (non-interactive)"
+
+visual-harness: $(TARGET)
+	@echo "visual harness binary ready: $(TARGET)"
+
 debug: CFLAGS += -O0 -g3
 debug: clean all
 
@@ -357,7 +372,27 @@ test-manifest-to-trace-export: ray_trace_tool
 test-fluid-pack-contract-parity:
 	tests/integration/run_fluid_pack_contract_parity.sh
 
+test-stable:
+	@$(MAKE) $(STABLE_TEST_TARGETS)
+	@echo "ray_tracing stable test lane passed"
+
+test-legacy:
+	@if [ -z "$(strip $(LEGACY_TEST_TARGETS))" ]; then \
+		echo "ray_tracing legacy test lane is empty"; \
+		exit 0; \
+	fi; \
+	set +e; \
+	fails=0; \
+	for t in $(LEGACY_TEST_TARGETS); do \
+		echo "[legacy] running $$t"; \
+		$(MAKE) $$t || fails=1; \
+	done; \
+	if [ $$fails -ne 0 ]; then \
+		echo "[legacy] one or more legacy tests failed"; \
+		exit 1; \
+	fi
+
 clean:
-	rm -rf $(BUILD_DIR) $(TARGET) $(REL_BUILD_DIR) $(REL_TARGET) $(RAY_TRACE_TOOL_BIN)
+	rm -rf $(BUILD_DIR) $(TARGET) $(REL_BUILD_DIR) $(REL_TARGET) $(RAY_TRACE_TOOL_BIN) $(RAY_TRACE_TOOL_BIN).dSYM
 
 -include $(DEP)

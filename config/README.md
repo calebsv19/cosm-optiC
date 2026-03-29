@@ -1,9 +1,9 @@
-# Configs
+# config/
 
-Persistent settings consumed by both the menu and the renderer.
+Tracked defaults consumed by the menu and renderer.
 
-- `scene_config.json` – Window size, ray count, camera origin/zoom/margin, object definitions (circles/polygons with transforms, colours, opacity), and Bézier path control points/handles. Parsed and written by `src/config/config_manager.c`.
-- `animation_config.json` – Animation preferences: interactive vs. deep render, bounce behaviour, FPS, light mode, blur mode, editor mode, frame storage directory, and loop options.
+- `scene_config.json` – Default scene settings (window size, ray count, camera origin/zoom/margin, object definitions, Bézier paths). Runtime writes now go to `data/runtime/scene_config.json`.
+- `animation_config.json` – Default animation preferences (interactive/deep render, bounce behaviour, FPS, light mode, blur mode, editor mode, frame storage directory, loop options). Runtime writes now go to `data/runtime/animation_config.json`.
 - `animation_config.json` also stores renderer-specific controls:
   - `lightDiffusionEnabled`, `lightDiffusionRadius`, `lightDiffusionStrength` – post-process diffusion blur applied in legacy full-frame mode.
   - `useTiledRenderer` – switches between the original full-buffer path and the new tile-based renderer.

@@ -23,6 +23,6 @@ Notes:
 - Presets use neutral base colors so SceneObject color can serve as albedo.
 - Material IDs are referenced by SceneObjects; defaults to `MATERIAL_PRESET_DEFAULT`.
 - The manager (`material_manager`) initializes the library and clamps invalid IDs to the default preset.
-- Optional override: JSON presets in `Configs/materials/*.json` can redefine the library. Each file supports keys:
+- Optional override: JSON presets in `config/materials/*.json` can redefine the library. Each file supports keys:
   `diffuse`, `specular`, `reflectivity`, `roughness`, `base_color` (array[3]), `emissive` (array[3]),
   `metallic`, `transparency`. If the directory is present at load, the library is rebuilt from those files (order is file order).
