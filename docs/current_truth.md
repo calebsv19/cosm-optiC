@@ -1,6 +1,6 @@
 # Ray Tracing Current Truth
 
-Last updated: 2026-03-29
+Last updated: 2026-03-30
 
 ## Program Identity
 - repository directory: `ray_tracing/`
@@ -98,4 +98,15 @@ Shared libs consumed by current build:
 - completed phases:
   - `RT-S0`, `RT-S1`, `RT-S2`, `RT-S3`, `RT-S4`, `RT-S5`
 - next phase:
-  - user visual validation + final commit confirmation (`Project Scaffold Standardization`)
+  - scaffold migration complete; next structured lane is post-scaffold font-size standardization plan:
+  - `../docs/private_program_docs/ray_tracing/2026-03-30_ray_tracing_post_scaffold_font_size_pass_plan.md`
+  - current status in that lane:
+    - `RT-F0` complete (font/text/input mapping + risk capture)
+    - `RT-F1` complete (runtime zoom contract + persisted `textZoomStep` config key with clamp policy)
+    - `RT-F2` complete (Cmd/Ctrl shortcut wiring + live menu/HUD font refresh)
+    - `RT-F3` complete (menu/editor metric-driven layout and slider/control render-hit rect unification)
+    - `RT-F4` complete (pane-level overlap/clip hardening for menu + object editor lists/scroll lanes)
+    - `RT-F5` complete (final verification/docs/memory sync + wrap-up commit lane closed)
+    - wrap-up commit title:
+      - `Post-Scaffold Font Size Standardization`
+  - `test-stable` remains the baseline non-interactive regression gate during the font pass

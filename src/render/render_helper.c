@@ -219,12 +219,17 @@ void RenderStaticScene(SDL_Renderer* renderer) {
 static void RenderTextWithColor(SDL_Renderer* renderer, SDL_Rect button, const char* text, SDL_Color textColor, int maxFontSize) {
     int minFontSize = 10;  // Minimum readable font size
 
-    int fontSize = maxFontSize;
+    int fontSize = animation_config_scale_text_point_size(&animSettings, maxFontSize, minFontSize);
+    if (fontSize < minFontSize) fontSize = minFontSize;
     while (fontSize > minFontSize) {
         TTF_Font* tempFont = TTF_OpenFont("/System/Library/Fonts/Supplemental/Arial.ttf", fontSize);
         if (!tempFont) return;
 
         SDL_Surface* tempSurface = TTF_RenderText_Solid(tempFont, text, textColor);
+        if (!tempSurface) {
+            TTF_CloseFont(tempFont);
+            return;
+        }
         int textWidth = tempSurface->w;
         SDL_FreeSurface(tempSurface);
         TTF_CloseFont(tempFont);

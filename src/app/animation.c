@@ -3,6 +3,7 @@
 #endif
 
 #include "ui/sdl_menu.h"
+#include "ui/text_zoom_shortcuts.h"
 #include "tools/make_video.h"
 #include "app/animation.h"
 #include "app/runtime_time.h"
@@ -456,6 +457,25 @@ static void HandleFluidOverlayKey(SDL_Keycode key) {
     }
 }
 
+static bool HandleTextZoomShortcut(const SDL_KeyboardEvent* key_event) {
+    bool changed = false;
+    int zoom_step = 0;
+    int zoom_percent = 100;
+    if (!key_event) return false;
+    if (!ray_tracing_text_zoom_apply_shortcut(key_event->keysym.sym,
+                                              key_event->keysym.mod,
+                                              &changed,
+                                              &zoom_step,
+                                              &zoom_percent)) {
+        return false;
+    }
+    printf("[font] text zoom %d%% step=%d%s\n",
+           zoom_percent,
+           zoom_step,
+           changed ? "" : " (clamped)");
+    return true;
+}
+
 bool AnimationApplyFluidScene(const char *manifest_path) {
     if (!manifest_path || !*manifest_path) return false;
 
@@ -773,9 +793,14 @@ void HandleEvents(bool* running) {
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT) {
             *running = false; // return to menu instead of killing app
-        } else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
-            *running = false; // escape exits loop, menu decides next step
         } else if (event.type == SDL_KEYDOWN) {
+            if (HandleTextZoomShortcut(&event.key)) {
+                continue;
+            }
+            if (event.key.keysym.sym == SDLK_ESCAPE) {
+                *running = false; // escape exits loop, menu decides next step
+                continue;
+            }
             HandleFluidOverlayKey(event.key.keysym.sym);
         } else if (animSettings.interactiveMode && (event.type == SDL_MOUSEMOTION ||
                                 event.type == SDL_MOUSEBUTTONDOWN)) {
@@ -954,6 +979,9 @@ static void RunPreviewInternal(bool standalone) {
                 quitRequested = true;
             }
             if (e.type == SDL_KEYDOWN) {
+                if (HandleTextZoomShortcut(&e.key)) {
+                    continue;
+                }
                 HandleFluidOverlayKey(e.key.keysym.sym);
             }
         }
@@ -1119,6 +1147,9 @@ void RunMainLoop(void) {
                 (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE)) {
                 waitingForExit = false; // return to menu
             } else if (event.type == SDL_KEYDOWN) {
+                if (HandleTextZoomShortcut(&event.key)) {
+                    continue;
+                }
                 HandleFluidOverlayKey(event.key.keysym.sym);
             }
         }

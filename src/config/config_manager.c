@@ -23,6 +23,9 @@ static void LoadVelocityHandle(struct json_object* pointObj, const char* key, Ve
 #define FRAME_DIR_RUNTIME_ROOT "data/runtime/frames"
 #define FRAME_DIR_DEFAULT "data/runtime/frames/default"
 #define FRAME_DIR_LEGACY_PREFIX "Animations/"
+#define TEXT_ZOOM_STEP_MIN (-4)
+#define TEXT_ZOOM_STEP_MAX (5)
+#define TEXT_ZOOM_STEP_PERCENT_PER_STEP (10)
 
 static bool DirectoryExists(const char* path) {
     struct stat st = {0};
@@ -121,6 +124,34 @@ static double ClampDoubleValue(double value, double minValue, double maxValue) {
     return value;
 }
 
+int animation_config_text_zoom_step_clamp(int step) {
+    if (step < TEXT_ZOOM_STEP_MIN) return TEXT_ZOOM_STEP_MIN;
+    if (step > TEXT_ZOOM_STEP_MAX) return TEXT_ZOOM_STEP_MAX;
+    return step;
+}
+
+int animation_config_text_zoom_percent_from_step(int step) {
+    int clamped = animation_config_text_zoom_step_clamp(step);
+    return 100 + (clamped * TEXT_ZOOM_STEP_PERCENT_PER_STEP);
+}
+
+int animation_config_scale_text_point_size(const AnimationConfig* cfg,
+                                           int base_point_size,
+                                           int min_point_size) {
+    int percent = 100;
+    double scaled = 0.0;
+    int out_size = 0;
+    if (base_point_size <= 0) base_point_size = 1;
+    if (min_point_size <= 0) min_point_size = 1;
+    if (cfg) {
+        percent = animation_config_text_zoom_percent_from_step(cfg->textZoomStep);
+    }
+    scaled = ((double)base_point_size * (double)percent) / 100.0;
+    out_size = (int)lround(scaled);
+    if (out_size < min_point_size) out_size = min_point_size;
+    return out_size;
+}
+
 // **Global config instances**
 AnimationConfig animSettings = {
     .interactiveMode = true,
@@ -153,6 +184,7 @@ AnimationConfig animSettings = {
     .environmentBrightness = 0.0,
     .pathSeed = 1,
     .editorMode = 0,
+    .textZoomStep = 0,
     .cacheContributionWeight = 1.0,
     .bsdfModel = 1,
     .lightIntensity = 5.0,
@@ -456,6 +488,8 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "lightDiffusionRadius", json_object_new_int(animSettings.lightDiffusionRadius));
     json_object_object_add(config, "lightDiffusionStrength", json_object_new_double(animSettings.lightDiffusionStrength));
     json_object_object_add(config, "editorMode", json_object_new_int(animSettings.editorMode));
+    json_object_object_add(config, "textZoomStep",
+                           json_object_new_int(animation_config_text_zoom_step_clamp(animSettings.textZoomStep)));
     json_object_object_add(config, "useTiledRenderer", json_object_new_boolean(animSettings.useTiledRenderer));
     json_object_object_add(config, "tilePreviewEnabled", json_object_new_boolean(animSettings.tilePreviewEnabled));
     json_object_object_add(config, "tileSize", json_object_new_int(animSettings.tileSize));
@@ -903,6 +937,13 @@ void LoadAnimationConfig(void) {
         animSettings.lightDiffusionStrength = json_object_get_double(temp);
     if (json_object_object_get_ex(config, "editorMode", &temp))
         animSettings.editorMode = json_object_get_int(temp); 
+    if (json_object_object_get_ex(config, "textZoomStep", &temp)) {
+        animSettings.textZoomStep = json_object_get_int(temp);
+    } else if (json_object_object_get_ex(config, "text_zoom_step", &temp)) {
+        animSettings.textZoomStep = json_object_get_int(temp);
+    } else {
+        animSettings.textZoomStep = 0;
+    }
     if (json_object_object_get_ex(config, "useTiledRenderer", &temp))
         animSettings.useTiledRenderer = json_object_get_boolean(temp);
     if (json_object_object_get_ex(config, "tilePreviewEnabled", &temp))
@@ -1017,6 +1058,7 @@ void LoadAnimationConfig(void) {
     if (!isfinite(animSettings.lightHeight) || animSettings.lightHeight < 0.0) {
         animSettings.lightHeight = 8.0;
     }
+    animSettings.textZoomStep = animation_config_text_zoom_step_clamp(animSettings.textZoomStep);
 	
     printf(" Loaded animation config successfully.\n");
     json_object_put(config);

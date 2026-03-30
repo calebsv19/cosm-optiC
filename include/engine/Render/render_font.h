@@ -12,5 +12,7 @@ bool initFontSystem(void);
 void shutdownFontSystem(void);
 bool loadFontByID(FontID id);
 TTF_Font* getActiveFont(void);
+bool refreshActiveFontFromAnimationConfig(void);
+int getActiveFontPointSize(void);
 
 #endif

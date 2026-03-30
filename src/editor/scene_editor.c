@@ -10,6 +10,7 @@
 #include "camera/camera.h"
 #include "engine/Render/render_pipeline.h"
 #include "render/vk_shared_device.h"
+#include "ui/text_zoom_shortcuts.h"
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
@@ -35,6 +36,33 @@ static void InitializeEditorMode(SceneEditor* editor);
 
 static bool FluidSceneLocksObjects(void) {
     return AnimationUseFluidScene();
+}
+
+static int SceneEditorMeasureButtonWidth(const char* label, int min_width) {
+    const char* font_path = "/System/Library/Fonts/Supplemental/Arial.ttf";
+    int point_size = animation_config_scale_text_point_size(&animSettings, 24, 12);
+    int text_w = 0;
+    int text_h = 0;
+    TTF_Font* font = NULL;
+    if (!label || !label[0]) return min_width;
+    font = TTF_OpenFont(font_path, point_size);
+    if (!font) return min_width;
+    if (TTF_SizeUTF8(font, label, &text_w, &text_h) != 0) {
+        TTF_CloseFont(font);
+        return min_width;
+    }
+    TTF_CloseFont(font);
+    if (text_w + 28 > min_width) {
+        min_width = text_w + 28;
+    }
+    return min_width;
+}
+
+static int SceneEditorMeasureButtonHeight(int min_height) {
+    int point_size = animation_config_scale_text_point_size(&animSettings, 24, 12);
+    int target = point_size + 14;
+    if (target > min_height) return target;
+    return min_height;
 }
 
 static int NextEditorMode(int current_mode, bool reverse) {
@@ -162,14 +190,25 @@ void InitializeSceneEditor(SceneEditor* editor) {
     // **Initialize Button Positions Based on Window Size**
     int width = sceneSettings.windowWidth;
     int height = sceneSettings.windowHeight;
-    int buttonWidth = 70;
-    addButton = (SDL_Rect){width - buttonWidth - 20, 20, buttonWidth, 40};
-    deleteButton = (SDL_Rect){width - buttonWidth - 20, 80, buttonWidth, 40};
-    toggleButton = (SDL_Rect){width - buttonWidth - 20, 140, buttonWidth, 40};
+    int compactButtonWidth = 70;
+    int compactButtonHeight = SceneEditorMeasureButtonHeight(40);
+    int footerButtonHeight = SceneEditorMeasureButtonHeight(50);
+    int applyWidth = SceneEditorMeasureButtonWidth("Apply", 150);
+    int previewWidth = SceneEditorMeasureButtonWidth("Preview", 150);
+    int changeModeWidth = SceneEditorMeasureButtonWidth("Change Mode", 130);
+    addButton = (SDL_Rect){width - compactButtonWidth - 20, 20, compactButtonWidth, compactButtonHeight};
+    deleteButton = (SDL_Rect){width - compactButtonWidth - 20, 20 + compactButtonHeight + 20,
+                              compactButtonWidth, compactButtonHeight};
+    toggleButton = (SDL_Rect){width - compactButtonWidth - 20, 20 + (compactButtonHeight + 20) * 2,
+                              compactButtonWidth, compactButtonHeight};
     
-    applyButton = (SDL_Rect){width - 180, height - 80, 150, 50};  // Bottom-right apply button
-    previewButton = (SDL_Rect){applyButton.x - 170, applyButton.y, 150, 50}; // Left of apply
-    changeModeButton = (SDL_Rect){width - 160, height - 135, 130, 40};  
+    applyButton = (SDL_Rect){width - applyWidth - 30, height - footerButtonHeight - 30,
+                             applyWidth, footerButtonHeight};  // Bottom-right apply button
+    previewButton = (SDL_Rect){applyButton.x - previewWidth - 20, applyButton.y,
+                               previewWidth, footerButtonHeight}; // Left of apply
+    changeModeButton = (SDL_Rect){width - changeModeWidth - 30,
+                                  applyButton.y - footerButtonHeight - 12,
+                                  changeModeWidth, footerButtonHeight};
 
     InitializeEditorMode(editor);
 
@@ -267,6 +306,22 @@ void HandleSceneEditorEvents(SceneEditor* editor, SDL_Event* event) {
         InitializeEditorMode(editor);
         printf("Changed Mode to %d via TAB\n", editor->currentMode);
         return;
+    }
+    if (event->type == SDL_KEYDOWN) {
+        bool changed = false;
+        int zoom_step = 0;
+        int zoom_percent = 100;
+        if (ray_tracing_text_zoom_apply_shortcut(event->key.keysym.sym,
+                                                 event->key.keysym.mod,
+                                                 &changed,
+                                                 &zoom_step,
+                                                 &zoom_percent)) {
+            printf("[font] text zoom %d%% step=%d%s\n",
+                   zoom_percent,
+                   zoom_step,
+                   changed ? "" : " (clamped)");
+            return;
+        }
     }
     if (event->type == SDL_MOUSEBUTTONDOWN) {
         int mx = event->button.x;

@@ -16,8 +16,10 @@
 #include "app/animation.h"  // Include the header where RunMainLoop() is declared
 #include "config/config_manager.h"
 #include "camera/camera.h"
+#include "engine/Render/render_font.h"
 #include "render/vk_shared_device.h"
 #include "ui/shared_theme_font_adapter.h"
+#include "ui/text_zoom_shortcuts.h"
 
 // Window & Menu Layout
 #define MENU_WIDTH 1000
@@ -187,6 +189,9 @@ static int g_manifestDragStartY = 0;
 static float g_manifestScrollStart = 0.0f;
 static float g_manifestScroll = 0.0f;
 static float g_manifestMaxScroll = 0.0f;
+static SDL_Rect g_sliderPanelRect = {0};
+static float g_sliderScroll = 0.0f;
+static float g_sliderMaxScroll = 0.0f;
 
 static int ClampTileSizeMenu(int value) {
     if (value < 4) value = 4;
@@ -303,13 +308,6 @@ static bool PointInRect(const SDL_Rect *rect, int x, int y) {
            y >= rect->y && y <= rect->y + rect->h;
 }
 
-static int ComputeLoadSceneButtonY(void) {
-    int integratorButtonY = SUBSETTING_BUTTON_MARGIN_Y + 2 * (SUBSETTING_BUTTON_HEIGHT + SUBSETTING_BUTTON_SPACING) + 10;
-    int pathToggleRouletteY = integratorButtonY + INTEGRATOR_BUTTON_HEIGHT + 10;
-    int pathToggleBSDFY = pathToggleRouletteY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
-    return pathToggleBSDFY + PATH_TOGGLE_HEIGHT + LOAD_SCENE_BUTTON_SPACING;
-}
-
 static void ManifestClampScroll(void) {
     if (g_manifestScroll < 0.0f) g_manifestScroll = 0.0f;
     if (g_manifestScroll > g_manifestMaxScroll) g_manifestScroll = g_manifestMaxScroll;
@@ -318,6 +316,12 @@ static void ManifestClampScroll(void) {
 static void ManifestScrollBy(float delta) {
     g_manifestScroll += delta;
     ManifestClampScroll();
+}
+
+static float SliderClampScroll(float value, float maxScroll) {
+    if (value < 0.0f) return 0.0f;
+    if (value > maxScroll) return maxScroll;
+    return value;
 }
 
 static bool FileExistsRegular(const char *path) {
@@ -474,6 +478,40 @@ static void ApplySpecialSliderRules(int* target) {
     }
 }
 
+static bool OpenMenuFontForCurrentZoom(TTF_Font** out_font) {
+    char shared_font_path[256];
+    const char* font_path = "/System/Library/Fonts/Supplemental/Arial.ttf";
+    int point_size = TOGGLE_BUTTON_TEXT_SIZE;
+    TTF_Font* opened_font;
+    if (!out_font) return false;
+
+    if (ray_tracing_shared_font_resolve_ui_regular(
+            shared_font_path, sizeof(shared_font_path), &point_size)) {
+        font_path = shared_font_path;
+    }
+    point_size = animation_config_scale_text_point_size(&animSettings, point_size, 12);
+    opened_font = TTF_OpenFont(font_path, point_size);
+    if (!opened_font && font_path != NULL && strcmp(font_path, "/System/Library/Fonts/Supplemental/Arial.ttf") != 0) {
+        opened_font = TTF_OpenFont("/System/Library/Fonts/Supplemental/Arial.ttf", point_size);
+    }
+    if (!opened_font) return false;
+    *out_font = opened_font;
+    return true;
+}
+
+static bool ReloadMenuFont(TTF_Font** font) {
+    TTF_Font* replacement = NULL;
+    if (!font) return false;
+    if (!OpenMenuFontForCurrentZoom(&replacement)) {
+        return false;
+    }
+    if (*font) {
+        TTF_CloseFont(*font);
+    }
+    *font = replacement;
+    return true;
+}
+
 bool InitializeMenu(SDL_Window** window, SDL_Renderer** renderer, TTF_Font** font) {
     ray_tracing_shared_theme_load_persisted();
 
@@ -549,17 +587,22 @@ bool InitializeMenu(SDL_Window** window, SDL_Renderer** renderer, TTF_Font** fon
     }
 #endif
 
+    LoadAnimationConfig();
+    LoadSceneConfig();
+    animSettings.previewMode = false; // Preview is transient
+    SyncMenuSliderValues();
+    g_manifestLoadEnabled = animSettings.useFluidScene;
+    g_manifestDropdownOpen = g_manifestLoadEnabled;
+    RefreshManifestOptions();
+    g_sliderScroll = 0.0f;
+    g_sliderMaxScroll = 0.0f;
+    g_sliderPanelRect = (SDL_Rect){0, 0, 0, 0};
+    oldWindowWidth = sceneSettings.windowWidth;
+    oldWindowHeight = sceneSettings.windowHeight;
+
     // Load Font (shared adapter path is opt-in and falls back to legacy menu font)
-    {
-        char shared_font_path[256];
-        int shared_point_size = TOGGLE_BUTTON_TEXT_SIZE;
-        if (ray_tracing_shared_font_resolve_ui_regular(
-                shared_font_path, sizeof(shared_font_path), &shared_point_size)) {
-            *font = TTF_OpenFont(shared_font_path, shared_point_size);
-        } else {
-            *font = TTF_OpenFont("/System/Library/Fonts/Supplemental/Arial.ttf", TOGGLE_BUTTON_TEXT_SIZE);
-        }
-    }
+    *font = NULL;
+    ReloadMenuFont(font);
     if (!*font) {
         printf("Font Loading Failed: %s\n", TTF_GetError());
 #if USE_VULKAN
@@ -574,16 +617,6 @@ bool InitializeMenu(SDL_Window** window, SDL_Renderer** renderer, TTF_Font** fon
         return false;
     }
 
-    // Load animation settings
-    LoadAnimationConfig();
-    LoadSceneConfig();
-    animSettings.previewMode = false; // Preview is transient
-    SyncMenuSliderValues();
-    g_manifestLoadEnabled = animSettings.useFluidScene;
-    g_manifestDropdownOpen = g_manifestLoadEnabled;
-    RefreshManifestOptions();
-    oldWindowWidth = sceneSettings.windowWidth;
-    oldWindowHeight = sceneSettings.windowHeight;
     return true;  // Menu initialized successfully
 }
 
@@ -612,8 +645,10 @@ void ResetAnimationSettings(void) {
     animSettings.cacheContributionWeight = 1.0;
     animSettings.bsdfModel = 1;
     animSettings.lightIntensity = 5.0;
+    animSettings.textZoomStep = 0;
     animSettings.previewMode = false;
     animSettings.previewDuration = 5.0;
+    g_sliderScroll = 0.0f;
     double diag = hypot(sceneSettings.windowWidth, sceneSettings.windowHeight);
     animSettings.forwardDecay = (diag > 0.0) ? diag : 2000.0;
     animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_QUADRATIC;
@@ -731,13 +766,18 @@ static void FormatManifestButtonLabel(char *out, size_t outSize) {
     }
 }
 
-static void RenderManifestDropdown(SDL_Renderer *renderer, TTF_Font *font, int loadButtonY) {
+static void RenderManifestDropdown(SDL_Renderer *renderer, TTF_Font *font, const SDL_Rect* loadButtonRect) {
     RayTracingThemePalette palette = {0};
     const bool has_shared_palette = ray_tracing_shared_theme_resolve_palette(&palette);
-    int panelX = LOAD_SCENE_BUTTON_X;
-    int panelY = loadButtonY + LOAD_SCENE_BUTTON_HEIGHT + 6;
-    int panelW = LOAD_SCENE_BUTTON_WIDTH + MANIFEST_PANEL_EXTRA_WIDTH;
-    int available = BOTTOM_BUTTON_MARGIN_Y_PREVIEW - 10 - panelY;
+    int panelX;
+    int panelY;
+    int panelW;
+    int available = 0;
+    if (!loadButtonRect) return;
+    panelX = loadButtonRect->x;
+    panelY = loadButtonRect->y + loadButtonRect->h + 6;
+    panelW = loadButtonRect->w + MANIFEST_PANEL_EXTRA_WIDTH;
+    available = BOTTOM_BUTTON_MARGIN_Y_PREVIEW - 10 - panelY;
     int panelH = MANIFEST_PANEL_MIN_HEIGHT;
     if (available > MANIFEST_PANEL_MIN_HEIGHT) panelH = available;
     if (panelH > MANIFEST_PANEL_MAX_HEIGHT) panelH = MANIFEST_PANEL_MAX_HEIGHT;
@@ -858,8 +898,49 @@ static void RenderManifestDropdown(SDL_Renderer *renderer, TTF_Font *font, int l
 }
 
 
-void RenderButton(SDL_Renderer *renderer, TTF_Font *font, int x, int y, int width, int height, const char *text, bool active) {
-    SDL_Rect rect = {x, y, width, height};
+static int max_int(int a, int b) {
+    return (a > b) ? a : b;
+}
+
+static int min_int(int a, int b) {
+    return (a < b) ? a : b;
+}
+
+static SDL_Rect BuildAdaptiveButtonRect(TTF_Font* font,
+                                        int x,
+                                        int y,
+                                        int minWidth,
+                                        int minHeight,
+                                        const char* text,
+                                        int maxWidth) {
+    int width = minWidth;
+    int height = minHeight;
+    int textW = 0;
+    int textH = 0;
+    if (font && text && text[0] && TTF_SizeUTF8(font, text, &textW, &textH) == 0) {
+        width = max_int(width, textW + 24);
+        height = max_int(height, textH + 14);
+    }
+    if (maxWidth > 0) {
+        width = min_int(width, maxWidth);
+    }
+    return (SDL_Rect){x, y, width, height};
+}
+
+static SDL_Rect BuildAdaptiveButtonRectRight(TTF_Font* font,
+                                             int rightX,
+                                             int y,
+                                             int minWidth,
+                                             int minHeight,
+                                             const char* text,
+                                             int maxWidth) {
+    SDL_Rect rect = BuildAdaptiveButtonRect(font, 0, y, minWidth, minHeight, text, maxWidth);
+    rect.x = rightX - rect.w;
+    return rect;
+}
+
+static void RenderButtonRect(SDL_Renderer *renderer, TTF_Font *font, const SDL_Rect* rect, const char *text, bool active) {
+    if (!rect) return;
     RayTracingThemePalette palette = {0};
     const bool has_shared_palette = ray_tracing_shared_theme_resolve_palette(&palette);
     SDL_Color fill = has_shared_palette
@@ -875,13 +956,23 @@ void RenderButton(SDL_Renderer *renderer, TTF_Font *font, int x, int y, int widt
 
     // Toggle button color based on active state
     SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
-    SDL_RenderFillRect(renderer, &rect);
+    SDL_RenderFillRect(renderer, rect);
 
-    RenderCenteredTextColor(renderer, font, &rect, textColor, text);
+    RenderCenteredTextColor(renderer, font, rect, textColor, text);
 }
+
+void RenderButton(SDL_Renderer *renderer, TTF_Font *font, int x, int y, int width, int height, const char *text, bool active) {
+    SDL_Rect rect = {x, y, width, height};
+    RenderButtonRect(renderer, font, &rect, text, active);
+}
+
 typedef struct {
     int *value;
-    int min, max, x, y, width;
+    int min, max;
+    SDL_Rect trackRect;
+    SDL_Rect hitRect;
+    int labelX, labelY;
+    int valueX, valueY;
     const char *label;
 } MenuSlider;
 
@@ -889,20 +980,224 @@ typedef struct {
     MenuSlider items[MAX_MENU_SLIDERS];
     size_t count;
     int nextY;
+    int trackHeight;
+    int knobWidth;
+    int knobHeight;
+    SDL_Rect panelRect;
+    int contentBottomY;
+    float maxScroll;
+    float scroll;
 } SliderLayout;
 
-static SliderLayout BuildSliderLayout(void) {
+typedef struct {
+    SDL_Rect interactiveRect;
+    SDL_Rect deepRenderRect;
+    SDL_Rect bounceRect;
+    SDL_Rect autoMp4Rect;
+    SDL_Rect integratorRect;
+    SDL_Rect pathRouletteRect;
+    SDL_Rect pathBsdfRect;
+    SDL_Rect loadSceneRect;
+    SDL_Rect falloffRect;
+    SDL_Rect tileRect;
+    SDL_Rect tilePreviewRect;
+    SDL_Rect lightHeightRect;
+    SDL_Rect sceneEditorRect;
+    SDL_Rect sceneModeRect;
+    SDL_Rect saveRect;
+    SDL_Rect restoreRect;
+    SDL_Rect previewRect;
+    SDL_Rect exitRect;
+    SDL_Rect startRect;
+    bool showLightHeight;
+    bool showPathToggles;
+} MenuButtonLayout;
+
+static MenuButtonLayout BuildMenuButtonLayout(TTF_Font* font) {
+    MenuButtonLayout layout;
+    char manifestLabel[160];
+    const char* integratorLabel = "Integrator: Forward Light";
+    int leftX = TOGGLE_BUTTON_MARGIN_X;
+    int subX = SUBSETTING_BUTTON_MARGIN_X;
+    int maxLeftWidth = SLIDER_MARGIN_X - leftX - 24;
+    int leftColumnRight;
+    int centerX;
+    int centerMaxWidth;
+    int rightEdge = MENU_WIDTH - MENU_MARGIN_X;
+    int bottomGap = BOTTOM_BUTTON_SPACING;
+    int rightLimit;
+
+    memset(&layout, 0, sizeof(layout));
+    layout.showPathToggles = (animSettings.integratorMode == 1);
+    layout.showLightHeight = false;
+    if (maxLeftWidth < 120) maxLeftWidth = 120;
+
+    layout.interactiveRect = BuildAdaptiveButtonRect(font, leftX, TOGGLE_BUTTON_MARGIN_Y,
+                                                     TOGGLE_BUTTON_WIDTH, TOGGLE_BUTTON_HEIGHT,
+                                                     "Interactive Mode", maxLeftWidth);
+    layout.deepRenderRect = BuildAdaptiveButtonRect(font, leftX,
+                                                    layout.interactiveRect.y + layout.interactiveRect.h + TOGGLE_BUTTON_SPACING,
+                                                    TOGGLE_BUTTON_WIDTH, TOGGLE_BUTTON_HEIGHT,
+                                                    "Deep Render", maxLeftWidth);
+
+    layout.bounceRect = BuildAdaptiveButtonRect(font, subX,
+                                                layout.deepRenderRect.y + layout.deepRenderRect.h + 15,
+                                                SUBSETTING_BUTTON_WIDTH, SUBSETTING_BUTTON_HEIGHT,
+                                                "Bounce Mode", maxLeftWidth);
+    layout.autoMp4Rect = BuildAdaptiveButtonRect(font, subX,
+                                                 layout.bounceRect.y + layout.bounceRect.h + SUBSETTING_BUTTON_SPACING,
+                                                 SUBSETTING_BUTTON_WIDTH, SUBSETTING_BUTTON_HEIGHT,
+                                                 "Auto MP4", maxLeftWidth);
+
+    if (animSettings.integratorMode == 1) integratorLabel = "Integrator: Hybrid";
+    else if (animSettings.integratorMode == 2) integratorLabel = "Integrator: Direct Light";
+    layout.integratorRect = BuildAdaptiveButtonRect(font, leftX,
+                                                    layout.autoMp4Rect.y + layout.autoMp4Rect.h + 10,
+                                                    INTEGRATOR_BUTTON_WIDTH, INTEGRATOR_BUTTON_HEIGHT,
+                                                    integratorLabel, maxLeftWidth);
+
+    layout.pathRouletteRect = BuildAdaptiveButtonRect(font, leftX,
+                                                      layout.integratorRect.y + layout.integratorRect.h + 10,
+                                                      PATH_TOGGLE_WIDTH, PATH_TOGGLE_HEIGHT,
+                                                      animSettings.pathRussianRoulette ? "Roulette: ON" : "Roulette: OFF",
+                                                      maxLeftWidth);
+    layout.pathBsdfRect = BuildAdaptiveButtonRect(font, leftX,
+                                                  layout.pathRouletteRect.y + layout.pathRouletteRect.h + PATH_TOGGLE_SPACING,
+                                                  PATH_TOGGLE_WIDTH, PATH_TOGGLE_HEIGHT,
+                                                  (animSettings.bsdfModel == 0) ? "BSDF: Lambert" : "BSDF: GGX",
+                                                  maxLeftWidth);
+
+    FormatManifestButtonLabel(manifestLabel, sizeof(manifestLabel));
+    layout.loadSceneRect = BuildAdaptiveButtonRect(font, LOAD_SCENE_BUTTON_X,
+                                                   (layout.showPathToggles ? layout.pathBsdfRect.y + layout.pathBsdfRect.h
+                                                                           : layout.integratorRect.y + layout.integratorRect.h) + LOAD_SCENE_BUTTON_SPACING,
+                                                   LOAD_SCENE_BUTTON_WIDTH, LOAD_SCENE_BUTTON_HEIGHT,
+                                                   manifestLabel, maxLeftWidth);
+
+    leftColumnRight = max_int(layout.interactiveRect.x + layout.interactiveRect.w,
+                              layout.deepRenderRect.x + layout.deepRenderRect.w);
+    leftColumnRight = max_int(leftColumnRight, layout.bounceRect.x + layout.bounceRect.w);
+    leftColumnRight = max_int(leftColumnRight, layout.autoMp4Rect.x + layout.autoMp4Rect.w);
+    leftColumnRight = max_int(leftColumnRight, layout.integratorRect.x + layout.integratorRect.w);
+    if (layout.showPathToggles) {
+        leftColumnRight = max_int(leftColumnRight, layout.pathRouletteRect.x + layout.pathRouletteRect.w);
+        leftColumnRight = max_int(leftColumnRight, layout.pathBsdfRect.x + layout.pathBsdfRect.w);
+    }
+    leftColumnRight = max_int(leftColumnRight, layout.loadSceneRect.x + layout.loadSceneRect.w);
+
+    centerX = leftColumnRight + 24;
+    centerMaxWidth = SLIDER_MARGIN_X - centerX - 16;
+    if (centerMaxWidth < 120) centerMaxWidth = 120;
+    layout.falloffRect = BuildAdaptiveButtonRect(font, centerX, TOGGLE_BUTTON_MARGIN_Y + 10,
+                                                 FORWARD_FALLOFF_BUTTON_WIDTH, FORWARD_FALLOFF_BUTTON_HEIGHT,
+                                                 "Quadratic (1/r^2)", centerMaxWidth);
+    layout.tileRect = BuildAdaptiveButtonRect(font, centerX,
+                                              layout.falloffRect.y + layout.falloffRect.h + FORWARD_FALLOFF_BUTTON_SPACING,
+                                              TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT,
+                                              animSettings.useTiledRenderer ? "Tile Renderer: ON" : "Tile Renderer: OFF",
+                                              centerMaxWidth);
+    layout.tilePreviewRect = BuildAdaptiveButtonRect(font, centerX,
+                                                     layout.tileRect.y + layout.tileRect.h + FORWARD_FALLOFF_BUTTON_SPACING,
+                                                     TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT,
+                                                     animSettings.tilePreviewEnabled ? "Tile Preview: ON" : "Tile Preview: OFF",
+                                                     centerMaxWidth);
+    layout.lightHeightRect = BuildAdaptiveButtonRect(font, centerX,
+                                                     layout.tilePreviewRect.y + layout.tilePreviewRect.h + FORWARD_FALLOFF_BUTTON_SPACING,
+                                                     TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT,
+                                                     "Light Height", centerMaxWidth);
+
+    layout.startRect = BuildAdaptiveButtonRectRight(font, rightEdge, BOTTOM_BUTTON_MARGIN_Y_START,
+                                                    BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START,
+                                                    "Start", 0);
+    layout.sceneEditorRect = BuildAdaptiveButtonRectRight(font, rightEdge,
+                                                          layout.startRect.y - (BOTTOM_BUTTON_HEIGHT_START + 8),
+                                                          BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START,
+                                                          "Scene Editor", 0);
+    layout.sceneModeRect = BuildAdaptiveButtonRectRight(font, rightEdge,
+                                                        layout.sceneEditorRect.y - (BOTTOM_BUTTON_HEIGHT_START + 6),
+                                                        BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START,
+                                                        "Path", 0);
+    layout.exitRect = BuildAdaptiveButtonRect(font, BOTTOM_BUTTON_MARGIN_X_EXIT, BOTTOM_BUTTON_MARGIN_Y_EXIT,
+                                              BOTTOM_BUTTON_WIDTH_EXIT, BOTTOM_BUTTON_HEIGHT_EXIT,
+                                              "Exit w/o Saving", 280);
+    layout.previewRect = BuildAdaptiveButtonRect(font, BOTTOM_BUTTON_MARGIN_X_PREVIEW, BOTTOM_BUTTON_MARGIN_Y_PREVIEW,
+                                                 BOTTOM_BUTTON_WIDTH_PREVIEW, BOTTOM_BUTTON_HEIGHT_PREVIEW,
+                                                 "Preview", 240);
+    layout.restoreRect = BuildAdaptiveButtonRect(font, layout.exitRect.x + layout.exitRect.w + 10,
+                                                 BOTTOM_BUTTON_MARGIN_Y_RESTORE,
+                                                 BOTTOM_BUTTON_WIDTH_RESTORE, BOTTOM_BUTTON_HEIGHT_RESTORE,
+                                                 "Restore Defaults", 260);
+    layout.saveRect = BuildAdaptiveButtonRect(font, layout.restoreRect.x + layout.restoreRect.w + 10,
+                                              BOTTOM_BUTTON_MARGIN_Y_SAVE,
+                                              BOTTOM_BUTTON_WIDTH_SAVE, BOTTOM_BUTTON_HEIGHT_SAVE,
+                                              "Save", 180);
+    rightLimit = layout.startRect.x - 14;
+    if (layout.saveRect.x + layout.saveRect.w > rightLimit) {
+        int overflow = (layout.saveRect.x + layout.saveRect.w) - rightLimit;
+        layout.saveRect.x -= overflow;
+    }
+    if (layout.saveRect.x < layout.restoreRect.x + layout.restoreRect.w + bottomGap) {
+        layout.saveRect.x = layout.restoreRect.x + layout.restoreRect.w + bottomGap;
+        if (layout.saveRect.x + layout.saveRect.w > rightLimit) {
+            layout.saveRect.w = max_int(70, rightLimit - layout.saveRect.x);
+        }
+    }
+    return layout;
+}
+
+static SliderLayout BuildSliderLayout(TTF_Font* font, const MenuButtonLayout* buttons) {
     SliderLayout layout = {0};
-    layout.nextY = SLIDER_MARGIN_Y;
+    int textHeight = 18;
+    int valueReserve = 110;
+    int sliderX = SLIDER_MARGIN_X;
+    int sliderWidth = SLIDER_WIDTH;
+    int rightLimit = MENU_WIDTH - MENU_MARGIN_X - 10;
+    int centerRight = 0;
+    int panelTop = SLIDER_MARGIN_Y - 4;
+    int panelBottom = MENU_HEIGHT - MENU_MARGIN_Y - 10;
+    int panelHeight;
+    int visibleBottom;
+    int scrollOffset;
+    if (font) {
+        textHeight = TTF_FontHeight(font);
+    }
+    if (textHeight < 12) textHeight = 12;
+    if (buttons) {
+        centerRight = buttons->falloffRect.x + buttons->falloffRect.w;
+        centerRight = max_int(centerRight, buttons->tileRect.x + buttons->tileRect.w);
+        centerRight = max_int(centerRight, buttons->tilePreviewRect.x + buttons->tilePreviewRect.w);
+        sliderX = max_int(sliderX, centerRight + 24);
+        panelBottom = min_int(panelBottom, buttons->startRect.y - 14);
+    }
+    sliderWidth = rightLimit - sliderX - valueReserve;
+    if (sliderWidth < 130) {
+        sliderWidth = 130;
+        sliderX = rightLimit - valueReserve - sliderWidth;
+    }
+    if (sliderX < SLIDER_MARGIN_X) sliderX = SLIDER_MARGIN_X;
+    layout.trackHeight = max_int(SLIDER_HEIGHT, textHeight / 2);
+    layout.knobWidth = max_int(10, textHeight / 2);
+    layout.knobHeight = layout.trackHeight + 10;
+    panelHeight = panelBottom - panelTop;
+    if (panelHeight < 120) panelHeight = 120;
+    layout.panelRect = (SDL_Rect){sliderX - 12, panelTop, rightLimit - (sliderX - 12), panelHeight};
+    layout.nextY = panelTop + 8;
     SyncMenuSliderValues();
-    const int sliderX = SLIDER_MARGIN_X;
-    const int sliderWidth = SLIDER_WIDTH;
 
 #define ADD_SLIDER(targetPtr, minVal, maxVal, labelText) \
     do { \
         if (layout.count < MAX_MENU_SLIDERS) { \
-            layout.items[layout.count++] = (MenuSlider){ targetPtr, minVal, maxVal, sliderX, layout.nextY, sliderWidth, labelText }; \
-            layout.nextY += SLIDER_HEIGHT + SLIDER_SPACING; \
+            int labelY_ = layout.nextY; \
+            int trackY_ = labelY_ + textHeight + 4; \
+            SDL_Rect track_ = { sliderX, trackY_, sliderWidth, layout.trackHeight }; \
+            SDL_Rect hit_ = { sliderX, trackY_ - 8, sliderWidth, layout.trackHeight + 16 }; \
+            layout.items[layout.count++] = (MenuSlider){ \
+                targetPtr, minVal, maxVal, track_, hit_, \
+                sliderX, labelY_, \
+                sliderX + sliderWidth + 10, trackY_ - ((textHeight - layout.trackHeight) / 2), \
+                labelText \
+            }; \
+            layout.nextY = trackY_ + layout.trackHeight + SLIDER_SPACING + 4; \
         } \
     } while (0)
 
@@ -925,6 +1220,26 @@ static SliderLayout BuildSliderLayout(void) {
         ADD_SLIDER(&animSettings.pathMaxDepth, 1, 16, "Path Depth");
     }
 #undef ADD_SLIDER
+    layout.contentBottomY = layout.nextY;
+    visibleBottom = panelTop + panelHeight - 8;
+    if (layout.contentBottomY > visibleBottom) {
+        layout.maxScroll = (float)(layout.contentBottomY - visibleBottom);
+    } else {
+        layout.maxScroll = 0.0f;
+    }
+    layout.scroll = SliderClampScroll(g_sliderScroll, layout.maxScroll);
+    scrollOffset = (int)lround(layout.scroll);
+    if (scrollOffset != 0) {
+        for (size_t i = 0; i < layout.count; ++i) {
+            layout.items[i].labelY -= scrollOffset;
+            layout.items[i].trackRect.y -= scrollOffset;
+            layout.items[i].hitRect.y -= scrollOffset;
+            layout.items[i].valueY -= scrollOffset;
+        }
+    }
+    g_sliderScroll = layout.scroll;
+    g_sliderMaxScroll = layout.maxScroll;
+    g_sliderPanelRect = layout.panelRect;
     return layout;
 }
 
@@ -932,10 +1247,33 @@ static void RenderSliders(SDL_Renderer* renderer, TTF_Font* font, const SliderLa
     RayTracingThemePalette palette = {0};
     const bool has_shared_palette = ray_tracing_shared_theme_resolve_palette(&palette);
     if (!layout) return;
+    if (layout->panelRect.w > 0 && layout->panelRect.h > 0) {
+        SDL_Rect panel = layout->panelRect;
+        if (has_shared_palette) {
+            SDL_SetRenderDrawColor(renderer,
+                                   palette.panel_fill.r, palette.panel_fill.g,
+                                   palette.panel_fill.b, palette.panel_fill.a);
+        } else {
+            SDL_SetRenderDrawColor(renderer, 22, 22, 24, 220);
+        }
+        SDL_RenderFillRect(renderer, &panel);
+        if (has_shared_palette) {
+            SDL_SetRenderDrawColor(renderer,
+                                   palette.panel_border.r, palette.panel_border.g,
+                                   palette.panel_border.b, palette.panel_border.a);
+        } else {
+            SDL_SetRenderDrawColor(renderer, 80, 80, 90, 255);
+        }
+        SDL_RenderDrawRect(renderer, &panel);
+        SDL_RenderSetClipRect(renderer, &panel);
+    }
     for (size_t i = 0; i < layout->count; i++) {
         const MenuSlider* slider = &layout->items[i];
-        int textMarginX = 5;
-        RenderText(renderer, font, slider->x - 150, slider->y - textMarginX, "%s", slider->label);
+        if (slider->trackRect.y + slider->trackRect.h < layout->panelRect.y ||
+            slider->trackRect.y > layout->panelRect.y + layout->panelRect.h) {
+            continue;
+        }
+        RenderText(renderer, font, slider->labelX, slider->labelY, "%s", slider->label);
 
         if (has_shared_palette) {
             SDL_SetRenderDrawColor(renderer,
@@ -944,7 +1282,7 @@ static void RenderSliders(SDL_Renderer* renderer, TTF_Font* font, const SliderLa
         } else {
             SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
         }
-        SDL_Rect sliderBar = {slider->x, slider->y, slider->width, SLIDER_HEIGHT};
+        SDL_Rect sliderBar = slider->trackRect;
         SDL_RenderFillRect(renderer, &sliderBar);
 
         int range = slider->max - slider->min;
@@ -952,7 +1290,7 @@ static void RenderSliders(SDL_Renderer* renderer, TTF_Font* font, const SliderLa
         if (percent < 0.0f) percent = 0.0f;
         if (percent > 1.0f) percent = 1.0f;
 
-        int knobX = slider->x + (int)(percent * slider->width);
+        int knobX = slider->trackRect.x + (int)(percent * slider->trackRect.w);
         if (has_shared_palette) {
             SDL_SetRenderDrawColor(renderer,
                                    palette.accent_primary.r, palette.accent_primary.g,
@@ -960,30 +1298,67 @@ static void RenderSliders(SDL_Renderer* renderer, TTF_Font* font, const SliderLa
         } else {
             SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
         }
-        SDL_Rect knob = {knobX - 5, slider->y - 5, 10, 20};
+        SDL_Rect knob = {
+            knobX - layout->knobWidth / 2,
+            slider->trackRect.y - ((layout->knobHeight - slider->trackRect.h) / 2),
+            layout->knobWidth,
+            layout->knobHeight
+        };
         SDL_RenderFillRect(renderer, &knob);
 
         if (slider->value == &rouletteSliderValue) {
-            RenderText(renderer, font, slider->x + slider->width + 10, slider->y - textMarginX,
+            RenderText(renderer, font, slider->valueX, slider->valueY,
                        "%.3f", rouletteSliderValue / 1000.0);
         } else if (slider->value == &envSliderValue) {
-            RenderText(renderer, font, slider->x + slider->width + 10, slider->y - textMarginX,
+            RenderText(renderer, font, slider->valueX, slider->valueY,
                        "%.2f", envSliderValue / 100.0);
         } else if (slider->value == &cacheWeightSliderValue) {
-            RenderText(renderer, font, slider->x + slider->width + 10, slider->y - textMarginX,
+            RenderText(renderer, font, slider->valueX, slider->valueY,
                        "%.2f", cacheWeightSliderValue / 100.0);
         } else if (slider->value == &lightIntensitySliderValue) {
-            RenderText(renderer, font, slider->x + slider->width + 10, slider->y - textMarginX,
+            RenderText(renderer, font, slider->valueX, slider->valueY,
                        "%.2f", lightIntensitySliderValue / 100.0);
         } else if (slider->value == &lightDecaySoftnessSliderValue) {
-            RenderText(renderer, font, slider->x + slider->width + 10, slider->y - textMarginX,
+            RenderText(renderer, font, slider->valueX, slider->valueY,
                        "%.2f", lightDecaySoftnessSliderValue / 100.0);
         } else if (slider->value == &forwardDecaySliderValue) {
-            RenderText(renderer, font, slider->x + slider->width + 10, slider->y - textMarginX,
+            RenderText(renderer, font, slider->valueX, slider->valueY,
                        "%d", forwardDecaySliderValue);
         } else {
-            RenderText(renderer, font, slider->x + slider->width + 10, slider->y - textMarginX,
+            RenderText(renderer, font, slider->valueX, slider->valueY,
                        "%d", *slider->value);
+        }
+    }
+    SDL_RenderSetClipRect(renderer, NULL);
+    if (layout->maxScroll > 0.5f && layout->panelRect.w > 0 && layout->panelRect.h > 0) {
+        SDL_Rect track = {
+            layout->panelRect.x + layout->panelRect.w - 8,
+            layout->panelRect.y + 6,
+            4,
+            layout->panelRect.h - 12
+        };
+        float ratio = (float)(layout->panelRect.h - 12) / (float)(layout->contentBottomY - layout->panelRect.y);
+        int thumbH = (int)lround((float)track.h * ratio);
+        int minThumb = max_int(20, layout->trackHeight + 4);
+        if (thumbH < minThumb) thumbH = minThumb;
+        if (thumbH > track.h) thumbH = track.h;
+        float scrollRatio = (layout->maxScroll > 0.0f) ? (layout->scroll / layout->maxScroll) : 0.0f;
+        int thumbY = track.y + (int)lround((float)(track.h - thumbH) * scrollRatio);
+        SDL_Rect thumb = {track.x, thumbY, track.w, thumbH};
+        if (has_shared_palette) {
+            SDL_SetRenderDrawColor(renderer,
+                                   palette.panel_border.r, palette.panel_border.g,
+                                   palette.panel_border.b, 180);
+            SDL_RenderFillRect(renderer, &track);
+            SDL_SetRenderDrawColor(renderer,
+                                   palette.accent_primary.r, palette.accent_primary.g,
+                                   palette.accent_primary.b, 220);
+            SDL_RenderFillRect(renderer, &thumb);
+        } else {
+            SDL_SetRenderDrawColor(renderer, 70, 70, 76, 170);
+            SDL_RenderFillRect(renderer, &track);
+            SDL_SetRenderDrawColor(renderer, 180, 180, 190, 220);
+            SDL_RenderFillRect(renderer, &thumb);
         }
     }
 }
@@ -991,14 +1366,8 @@ static void RenderSliders(SDL_Renderer* renderer, TTF_Font* font, const SliderLa
 void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {  
     RayTracingThemePalette palette = {0};
     const bool has_shared_palette = ray_tracing_shared_theme_resolve_palette(&palette);
-    SliderLayout sliderLayout = BuildSliderLayout();
-    int centerX = TOGGLE_BUTTON_MARGIN_X + TOGGLE_BUTTON_WIDTH + 60; // middle column anchor between left and sliders
-    int falloffButtonY = TOGGLE_BUTTON_MARGIN_Y + 10;
-    int tileButtonY = falloffButtonY + FORWARD_FALLOFF_BUTTON_HEIGHT + FORWARD_FALLOFF_BUTTON_SPACING;
-    int tilePreviewButtonY = tileButtonY + TILE_BUTTON_HEIGHT + FORWARD_FALLOFF_BUTTON_SPACING;
-    int integratorButtonY = SUBSETTING_BUTTON_MARGIN_Y + 2 * (SUBSETTING_BUTTON_HEIGHT + SUBSETTING_BUTTON_SPACING) + 10;
-    int pathToggleRouletteY = integratorButtonY + INTEGRATOR_BUTTON_HEIGHT + 10;
-    int pathToggleBSDFY = pathToggleRouletteY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
+    MenuButtonLayout buttons = BuildMenuButtonLayout(font);
+    SliderLayout sliderLayout = BuildSliderLayout(font, &buttons);
 
     // Clear the screen with a black background
     if (has_shared_palette) {
@@ -1013,47 +1382,35 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
     }
     
     // Main mode buttons (left column anchor)
-    RenderButton(renderer, font, TOGGLE_BUTTON_MARGIN_X, TOGGLE_BUTTON_MARGIN_Y,
-                 TOGGLE_BUTTON_WIDTH, TOGGLE_BUTTON_HEIGHT, "Interactive Mode", animSettings.interactiveMode);
+    RenderButtonRect(renderer, font, &buttons.interactiveRect, "Interactive Mode", animSettings.interactiveMode);
     
-    RenderButton(renderer, font, TOGGLE_BUTTON_MARGIN_X,
-                 TOGGLE_BUTTON_MARGIN_Y + (TOGGLE_BUTTON_HEIGHT + TOGGLE_BUTTON_SPACING),
-                 TOGGLE_BUTTON_WIDTH, TOGGLE_BUTTON_HEIGHT, "Deep Render", animSettings.deepRenderMode);
+    RenderButtonRect(renderer, font, &buttons.deepRenderRect, "Deep Render", animSettings.deepRenderMode);
 
     // Left column: bounce/autoMP4 always visible, integrator + path extras
-    RenderButton(renderer, font, SUBSETTING_BUTTON_MARGIN_X, SUBSETTING_BUTTON_MARGIN_Y,
-                 SUBSETTING_BUTTON_WIDTH, SUBSETTING_BUTTON_HEIGHT, "Bounce Mode", animSettings.bounceMode);
+    RenderButtonRect(renderer, font, &buttons.bounceRect, "Bounce Mode", animSettings.bounceMode);
 
-    RenderButton(renderer, font, SUBSETTING_BUTTON_MARGIN_X,
-                 SUBSETTING_BUTTON_MARGIN_Y + (SUBSETTING_BUTTON_SPACING + SUBSETTING_BUTTON_HEIGHT),
-                 SUBSETTING_BUTTON_WIDTH, SUBSETTING_BUTTON_HEIGHT, "Auto MP4", animSettings.autoMP4);
+    RenderButtonRect(renderer, font, &buttons.autoMp4Rect, "Auto MP4", animSettings.autoMP4);
 
     const char* integratorLabel = "Integrator: Forward Light";
     if (animSettings.integratorMode == 1) integratorLabel = "Integrator: Hybrid";
     else if (animSettings.integratorMode == 2) integratorLabel = "Integrator: Direct Light";
-    RenderButton(renderer, font, TOGGLE_BUTTON_MARGIN_X, integratorButtonY,
-                 INTEGRATOR_BUTTON_WIDTH, INTEGRATOR_BUTTON_HEIGHT, integratorLabel, true);
+    RenderButtonRect(renderer, font, &buttons.integratorRect, integratorLabel, true);
 
-    if (animSettings.integratorMode == 1) {
-        RenderButton(renderer, font, TOGGLE_BUTTON_MARGIN_X, pathToggleRouletteY,
-                     PATH_TOGGLE_WIDTH, PATH_TOGGLE_HEIGHT,
+    if (buttons.showPathToggles) {
+        RenderButtonRect(renderer, font, &buttons.pathRouletteRect,
                      animSettings.pathRussianRoulette ? "Roulette: ON" : "Roulette: OFF",
                      animSettings.pathRussianRoulette);
         const char* bsdfLabel = (animSettings.bsdfModel == 0) ? "BSDF: Lambert" : "BSDF: GGX";
-        RenderButton(renderer, font, TOGGLE_BUTTON_MARGIN_X, pathToggleBSDFY,
-                     PATH_TOGGLE_WIDTH, PATH_TOGGLE_HEIGHT,
+        RenderButtonRect(renderer, font, &buttons.pathBsdfRect,
                      bsdfLabel,
                      animSettings.bsdfModel != 0);
     }
 
-    int loadSceneButtonY = ComputeLoadSceneButtonY();
     char manifestLabel[160];
     FormatManifestButtonLabel(manifestLabel, sizeof(manifestLabel));
-    RenderButton(renderer, font, LOAD_SCENE_BUTTON_X, loadSceneButtonY,
-                 LOAD_SCENE_BUTTON_WIDTH, LOAD_SCENE_BUTTON_HEIGHT,
-                 manifestLabel, g_manifestLoadEnabled);
+    RenderButtonRect(renderer, font, &buttons.loadSceneRect, manifestLabel, g_manifestLoadEnabled);
     if (g_manifestLoadEnabled) {
-        RenderManifestDropdown(renderer, font, loadSceneButtonY);
+        RenderManifestDropdown(renderer, font, &buttons.loadSceneRect);
     } else {
         g_manifestPanelRect = (SDL_Rect){0, 0, 0, 0};
         g_manifestListRect = (SDL_Rect){0, 0, 0, 0};
@@ -1069,55 +1426,34 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
     } else if (animSettings.forwardFalloffMode == FORWARD_FALLOFF_MODE_NONE) {
         falloffLabel = "Falloff: None";
     }
-    RenderButton(renderer, font, centerX, falloffButtonY,
-                 FORWARD_FALLOFF_BUTTON_WIDTH, FORWARD_FALLOFF_BUTTON_HEIGHT,
-                 falloffLabel, animSettings.forwardFalloffMode == FORWARD_FALLOFF_MODE_LINEAR);
+    RenderButtonRect(renderer, font, &buttons.falloffRect, falloffLabel,
+                     animSettings.forwardFalloffMode == FORWARD_FALLOFF_MODE_LINEAR);
 
     const char* tileButtonLabel = animSettings.useTiledRenderer ? "Tile Renderer: ON" : "Tile Renderer: OFF";
-    RenderButton(renderer, font, centerX, tileButtonY,
-                 TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT, tileButtonLabel, animSettings.useTiledRenderer);
+    RenderButtonRect(renderer, font, &buttons.tileRect, tileButtonLabel, animSettings.useTiledRenderer);
 
     const char* previewLabel = animSettings.tilePreviewEnabled ? "Tile Preview: ON" : "Tile Preview: OFF";
-    RenderButton(renderer, font, centerX, tilePreviewButtonY,
-                 TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT, previewLabel, animSettings.tilePreviewEnabled);
+    RenderButtonRect(renderer, font, &buttons.tilePreviewRect, previewLabel, animSettings.tilePreviewEnabled);
 
     // Light height (2.5D shading) disabled while Disney integrator is paused.
-    bool showLightHeight = false;
-    int lightHeightButtonY = tilePreviewButtonY + TILE_BUTTON_HEIGHT + FORWARD_FALLOFF_BUTTON_SPACING;
-    if (showLightHeight) {
+    if (buttons.showLightHeight) {
         char heightLabel[64];
         snprintf(heightLabel, sizeof(heightLabel), "Light Height: %.1f", animSettings.lightHeight);
-        RenderButton(renderer, font, centerX, lightHeightButtonY,
-                     TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT, heightLabel, true);
+        RenderButtonRect(renderer, font, &buttons.lightHeightRect, heightLabel, true);
     }
 
     // Right column: Scene Editor + mode above Start
-    int sceneBtnX = BOTTOM_BUTTON_MARGIN_X_START;
-    int sceneBtnY = BOTTOM_BUTTON_MARGIN_Y_START - (BOTTOM_BUTTON_HEIGHT_START + 8);
-    int sceneBtnW = BOTTOM_BUTTON_WIDTH_START;
-    int sceneBtnH = BOTTOM_BUTTON_HEIGHT_START;
-    int editorModeY = sceneBtnY - (sceneBtnH + 6);
-    RenderButton(renderer, font, sceneBtnX, sceneBtnY,
-                 sceneBtnW, sceneBtnH,
-                 "Scene Editor", false);
+    RenderButtonRect(renderer, font, &buttons.sceneEditorRect, "Scene Editor", false);
     const char* editorModeText = (animSettings.editorMode == 0) ? "Path" :
                                  (animSettings.editorMode == 1) ? "Scene" : "Camera";
-    RenderButton(renderer, font, sceneBtnX,
-                 editorModeY,
-                 sceneBtnW, sceneBtnH, editorModeText, false);
+    RenderButtonRect(renderer, font, &buttons.sceneModeRect, editorModeText, false);
 
     // Render Bottom Buttons
-    RenderButton(renderer, font, BOTTOM_BUTTON_MARGIN_X_SAVE, BOTTOM_BUTTON_MARGIN_Y_SAVE,
-                 BOTTOM_BUTTON_WIDTH_SAVE, BOTTOM_BUTTON_HEIGHT_SAVE, "Save", false);
-    RenderButton(renderer, font, BOTTOM_BUTTON_MARGIN_X_RESTORE, BOTTOM_BUTTON_MARGIN_Y_RESTORE,
-                 BOTTOM_BUTTON_WIDTH_RESTORE, BOTTOM_BUTTON_HEIGHT_RESTORE, "Restore Defaults", false);
-    RenderButton(renderer, font, BOTTOM_BUTTON_MARGIN_X_PREVIEW, BOTTOM_BUTTON_MARGIN_Y_PREVIEW,
-                 BOTTOM_BUTTON_WIDTH_PREVIEW, BOTTOM_BUTTON_HEIGHT_PREVIEW, "Preview", animSettings.previewMode);
-    RenderButton(renderer, font, BOTTOM_BUTTON_MARGIN_X_EXIT, BOTTOM_BUTTON_MARGIN_Y_EXIT,
-                 BOTTOM_BUTTON_WIDTH_EXIT, BOTTOM_BUTTON_HEIGHT_EXIT, "Exit w/o Saving", false); 
+    RenderButtonRect(renderer, font, &buttons.saveRect, "Save", false);
+    RenderButtonRect(renderer, font, &buttons.restoreRect, "Restore Defaults", false);
+    RenderButtonRect(renderer, font, &buttons.previewRect, "Preview", animSettings.previewMode);
+    RenderButtonRect(renderer, font, &buttons.exitRect, "Exit w/o Saving", false);
     // Start button with subtle green tint
-    SDL_Rect startRect = {BOTTOM_BUTTON_MARGIN_X_START, BOTTOM_BUTTON_MARGIN_Y_START,
-                          BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START};
     if (has_shared_palette) {
         SDL_Color startFill = ensure_highlight_fill_contrast(palette.accent_primary,
                                                              palette.button_text,
@@ -1128,7 +1464,7 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
     } else {
         SDL_SetRenderDrawColor(renderer, 90, 220, 110, 255);
     }
-    SDL_RenderFillRect(renderer, &startRect);
+    SDL_RenderFillRect(renderer, &buttons.startRect);
     if (has_shared_palette) {
         SDL_SetRenderDrawColor(renderer,
                                palette.panel_border.r, palette.panel_border.g,
@@ -1136,15 +1472,15 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
     } else {
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     }
-    SDL_RenderDrawRect(renderer, &startRect);
+    SDL_RenderDrawRect(renderer, &buttons.startRect);
     if (has_shared_palette) {
         SDL_Color startFill = ensure_highlight_fill_contrast(palette.accent_primary,
                                                              palette.button_text,
                                                              palette.panel_fill);
         SDL_Color startText = choose_readable_text(startFill, palette.button_text);
-        RenderCenteredTextColor(renderer, font, &startRect, startText, "Start");
+        RenderCenteredTextColor(renderer, font, &buttons.startRect, startText, "Start");
     } else {
-        RenderButtonText(renderer, startRect, "Start");
+        RenderButtonText(renderer, buttons.startRect, "Start");
     }
    
 
@@ -1163,8 +1499,8 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
             statusExpireMs = 0; // fully cleared
         } else {
             c.a = (Uint8)alpha;
-            int textX = BOTTOM_BUTTON_MARGIN_X_SAVE + BOTTOM_BUTTON_WIDTH_SAVE + 15;
-            int textY = BOTTOM_BUTTON_MARGIN_Y_SAVE + (BOTTOM_BUTTON_HEIGHT_SAVE / 2) - 10;
+            int textX = buttons.saveRect.x + buttons.saveRect.w + 15;
+            int textY = buttons.saveRect.y + (buttons.saveRect.h / 2) - 10;
             RenderTextColor(renderer, font, textX, textY, c, statusLabel);
         }
     }
@@ -1173,21 +1509,41 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
     render_end_frame();
 } 
 
-void HandleKeyPress(SDL_Event* event, bool* running) {
+void HandleKeyPress(SDL_Event* event, bool* running, TTF_Font** font) {
     SDL_Keymod mod = event->key.keysym.mod;
     bool ctrl_or_cmd = (mod & (KMOD_CTRL | KMOD_GUI)) != 0;
     bool shift = (mod & KMOD_SHIFT) != 0;
+    bool zoom_changed = false;
+    int zoom_step = 0;
+    int zoom_percent = 100;
     if (ctrl_or_cmd && shift) {
         if (event->key.keysym.sym == SDLK_t) {
             ray_tracing_shared_theme_cycle_next();
             ray_tracing_shared_theme_save_persisted();
+            ReloadMenuFont(font);
             return;
         }
         if (event->key.keysym.sym == SDLK_y) {
             ray_tracing_shared_theme_cycle_prev();
             ray_tracing_shared_theme_save_persisted();
+            ReloadMenuFont(font);
             return;
         }
+    }
+    if (ray_tracing_text_zoom_apply_shortcut(event->key.keysym.sym,
+                                             mod,
+                                             &zoom_changed,
+                                             &zoom_step,
+                                             &zoom_percent)) {
+        if (zoom_changed) {
+            ReloadMenuFont(font);
+        }
+        snprintf(statusLabel, sizeof(statusLabel), "Text %d%%", zoom_percent);
+        statusLabel[sizeof(statusLabel) - 1] = '\0';
+        statusColor = (SDL_Color){120, 210, 240, 255};
+        statusExpireMs = SDL_GetTicks() + 1700;
+        (void)zoom_step;
+        return;
     }
     switch (event->key.keysym.sym) {
         case SDLK_BACKSPACE:
@@ -1229,6 +1585,7 @@ void HandleKeyPress(SDL_Event* event, bool* running) {
                 InitializeSceneEditor(&editor);
                 editor.running = true;
                 SceneEditorLoop(&editor);
+                ReloadMenuFont(font);
                 *running = false;  // Exit menu after scene starts
 	    }
             break;
@@ -1240,6 +1597,9 @@ void HandleKeyPress(SDL_Event* event, bool* running) {
             animSettings.bounceLimit = DEFAULT_BOUNCE_LIMIT;
             animSettings.frameLimit = DEFAULT_FRAME_LIMIT;
             animSettings.framesForTravel = DEFAULT_FRAME_FOR_TRAVEL;
+            animSettings.textZoomStep = 0;
+            (void)refreshActiveFontFromAnimationConfig();
+            ReloadMenuFont(font);
             break;
     }
 }
@@ -1282,30 +1642,35 @@ void HandleMouseMotion(SDL_Event* event) {
 }
 
 void HandleMouseWheel(SDL_Event *event) {
-    if (!g_manifestLoadEnabled || !g_manifestDropdownOpen) return;
     int mx = 0, my = 0;
     SDL_GetMouseState(&mx, &my);
-    if (!PointInRect(&g_manifestPanelRect, mx, my)) return;
-    float delta = (float)event->wheel.y * (float)(MANIFEST_ITEM_HEIGHT * 2);
-    // SDL wheel is positive when scrolling up; scrolling up should decrease scroll offset
-    ManifestScrollBy(-delta);
+    if (g_manifestLoadEnabled && g_manifestDropdownOpen && PointInRect(&g_manifestPanelRect, mx, my)) {
+        float delta = (float)event->wheel.y * (float)(MANIFEST_ITEM_HEIGHT * 2);
+        // SDL wheel is positive when scrolling up; scrolling up should decrease scroll offset
+        ManifestScrollBy(-delta);
+        return;
+    }
+    if (PointInRect(&g_sliderPanelRect, mx, my) && g_sliderMaxScroll > 0.5f) {
+        float delta = (float)event->wheel.y * 28.0f;
+        g_sliderScroll = SliderClampScroll(g_sliderScroll - delta, g_sliderMaxScroll);
+    }
 }
 
 static void HandleSliderClick(SDL_Event* event, const SliderLayout* layout) {
     if (!layout) return;
     int x = event->button.x, y = event->button.y;
+    if (!PointInRect(&layout->panelRect, x, y)) return;
     for (size_t i = 0; i < layout->count; i++) {
         const MenuSlider* slider = &layout->items[i];
-        if (x > slider->x && x < slider->x + slider->width &&
-            y > slider->y - 5 && y < slider->y + 15) {
+        if (PointInRect(&slider->hitRect, x, y)) {
             
             // Activate dragging mode
             draggingSlider = true;
             selectedSlider = slider->value;
             selectedSliderMin = slider->min;
             selectedSliderMax = slider->max;
-            sliderStartX = slider->x;
-            sliderWidth = slider->width;
+            sliderStartX = slider->trackRect.x;
+            sliderWidth = slider->trackRect.w;
 
             bool adjustCamera = (selectedSlider == &sceneSettings.windowWidth ||
                                  selectedSlider == &sceneSettings.windowHeight);
@@ -1313,7 +1678,9 @@ static void HandleSliderClick(SDL_Event* event, const SliderLayout* layout) {
             int prevHeight = sceneSettings.windowHeight;
 
             // Immediately update slider value to where the user clicked
-            float percent = (float)(x - slider->x) / slider->width;
+            float percent = (float)(x - slider->trackRect.x) / slider->trackRect.w;
+            if (percent < 0.0f) percent = 0.0f;
+            if (percent > 1.0f) percent = 1.0f;
             int newValue = slider->min + percent * (slider->max - slider->min);
 
             // Clamp value within range
@@ -1334,22 +1701,13 @@ static void HandleSliderClick(SDL_Event* event, const SliderLayout* layout) {
 }
 
 
-void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally, SDL_Renderer* renderer) {
+void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally, SDL_Renderer* renderer, TTF_Font** font) {
     (void)renderer;
-    SliderLayout layout = BuildSliderLayout();
+    MenuButtonLayout buttons = BuildMenuButtonLayout(*font);
+    SliderLayout layout = BuildSliderLayout(*font, &buttons);
     HandleSliderClick(event, &layout);
 
     int x = event->button.x, y = event->button.y;
-    int loadSceneButtonY = ComputeLoadSceneButtonY();
-    SDL_Rect loadBtnRect = {LOAD_SCENE_BUTTON_X, loadSceneButtonY, LOAD_SCENE_BUTTON_WIDTH, LOAD_SCENE_BUTTON_HEIGHT};
-    int falloffButtonY = TOGGLE_BUTTON_MARGIN_Y + 10;
-    int tileButtonY = falloffButtonY + FORWARD_FALLOFF_BUTTON_HEIGHT + FORWARD_FALLOFF_BUTTON_SPACING;
-    int tilePreviewButtonY = tileButtonY + TILE_BUTTON_HEIGHT + FORWARD_FALLOFF_BUTTON_SPACING;
-    int lightHeightButtonY = tilePreviewButtonY + TILE_BUTTON_HEIGHT + FORWARD_FALLOFF_BUTTON_SPACING;
-    bool showLightHeight = false;
-    int integratorButtonY = SUBSETTING_BUTTON_MARGIN_Y + 2 * (SUBSETTING_BUTTON_HEIGHT + SUBSETTING_BUTTON_SPACING) + 10;
-    int pathToggleRouletteY = integratorButtonY + INTEGRATOR_BUTTON_HEIGHT + 10;
-    int pathToggleBSDFY = pathToggleRouletteY + PATH_TOGGLE_HEIGHT + PATH_TOGGLE_SPACING;
 
     if (g_manifestLoadEnabled && g_manifestDropdownOpen) {
         if (PointInRect(&g_manifestPanelRect, x, y)) {
@@ -1377,23 +1735,20 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
         }
     }
 
-    if (PointInRect(&loadBtnRect, x, y)) {
+    if (PointInRect(&buttons.loadSceneRect, x, y)) {
         SetLoadSceneEnabled(!g_manifestLoadEnabled);
         return;
     }
                 
     // Toggle Interactive Mode
-    if (x > TOGGLE_BUTTON_MARGIN_X && x < TOGGLE_BUTTON_MARGIN_X + TOGGLE_BUTTON_WIDTH &&
-        y > TOGGLE_BUTTON_MARGIN_Y && y < TOGGLE_BUTTON_MARGIN_Y + TOGGLE_BUTTON_HEIGHT) {
+    if (PointInRect(&buttons.interactiveRect, x, y)) {
         animSettings.interactiveMode = true;
         animSettings.deepRenderMode = false;
         return;
     }
         
     // Toggle Deep Render Mode
-    if (x > TOGGLE_BUTTON_MARGIN_X && x < TOGGLE_BUTTON_MARGIN_X + TOGGLE_BUTTON_WIDTH &&
-        y > TOGGLE_BUTTON_MARGIN_Y + (TOGGLE_BUTTON_HEIGHT + TOGGLE_BUTTON_SPACING) &&
-        y < TOGGLE_BUTTON_MARGIN_Y + TOGGLE_BUTTON_HEIGHT + (TOGGLE_BUTTON_HEIGHT + TOGGLE_BUTTON_SPACING)) {
+    if (PointInRect(&buttons.deepRenderRect, x, y)) {
         animSettings.deepRenderMode = true;
         animSettings.interactiveMode = false;
         return;
@@ -1401,41 +1756,28 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
             
     // Deep Render Mode Options (Only Available When Deep Render is ON)
     if (animSettings.deepRenderMode) {
-        if (x > SUBSETTING_BUTTON_MARGIN_X && x < SUBSETTING_BUTTON_MARGIN_X + SUBSETTING_BUTTON_WIDTH &&
-            y > SUBSETTING_BUTTON_MARGIN_Y && y < SUBSETTING_BUTTON_MARGIN_Y + SUBSETTING_BUTTON_HEIGHT) {
+        if (PointInRect(&buttons.bounceRect, x, y)) {
             animSettings.bounceMode = !animSettings.bounceMode;
             return;
         }
         
-        if (x > SUBSETTING_BUTTON_MARGIN_X && x < SUBSETTING_BUTTON_MARGIN_X + SUBSETTING_BUTTON_WIDTH &&
-            y > SUBSETTING_BUTTON_MARGIN_Y + (SUBSETTING_BUTTON_HEIGHT + SUBSETTING_BUTTON_SPACING) &&
-            y < SUBSETTING_BUTTON_MARGIN_Y + SUBSETTING_BUTTON_HEIGHT + (SUBSETTING_BUTTON_HEIGHT + 
-			SUBSETTING_BUTTON_SPACING)) {
+        if (PointInRect(&buttons.autoMp4Rect, x, y)) {
             animSettings.autoMP4 = !animSettings.autoMP4;
             return;
         }
-            
-        int sceneBtnX = BOTTOM_BUTTON_MARGIN_X_START;
-        int sceneBtnY = BOTTOM_BUTTON_MARGIN_Y_START - (BOTTOM_BUTTON_HEIGHT_START + 8);
-        int sceneBtnW = BOTTOM_BUTTON_WIDTH_START;
-        int sceneBtnH = BOTTOM_BUTTON_HEIGHT_START;
-        int editorModeY = sceneBtnY - (sceneBtnH + 6);
 
         // Launch Scene Editor
-        if (x > sceneBtnX && x < sceneBtnX + sceneBtnW &&
-            y > sceneBtnY && y < sceneBtnY + sceneBtnH) {
+        if (PointInRect(&buttons.sceneEditorRect, x, y)) {
             SceneEditor editor = {0};  // Zero-initialize struct
             InitializeSceneEditor(&editor);
             editor.running = true;
             SceneEditorLoop(&editor);
+            ReloadMenuFont(font);
             return;
         }
 
 	// Toggle Scene Editor Mode
-        if (x >= sceneBtnX &&
-            x <= sceneBtnX + sceneBtnW &&
-            y >= editorModeY &&
-            y <= editorModeY + sceneBtnH) {
+        if (PointInRect(&buttons.sceneModeRect, x, y)) {
         
             //  Cycle through the three modes
             animSettings.editorMode = (animSettings.editorMode + 1) % 3;
@@ -1472,26 +1814,20 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
         } 
 	*/       
     } 
-    int centerX = TOGGLE_BUTTON_MARGIN_X + TOGGLE_BUTTON_WIDTH + 60; // mirror render calc for hits
-
-    if (x >= centerX && x <= centerX + FORWARD_FALLOFF_BUTTON_WIDTH &&
-        y >= falloffButtonY && y <= falloffButtonY + FORWARD_FALLOFF_BUTTON_HEIGHT) {
+    if (PointInRect(&buttons.falloffRect, x, y)) {
         animSettings.forwardFalloffMode = (animSettings.forwardFalloffMode + 1) % 3;
         return;
     }
 
-    if (x >= centerX && x <= centerX + TILE_BUTTON_WIDTH &&
-        y >= tileButtonY && y <= tileButtonY + TILE_BUTTON_HEIGHT) {
+    if (PointInRect(&buttons.tileRect, x, y)) {
         animSettings.useTiledRenderer = !animSettings.useTiledRenderer;
         return;
     }
-    if (x >= centerX && x <= centerX + TILE_BUTTON_WIDTH &&
-        y >= tilePreviewButtonY && y <= tilePreviewButtonY + TILE_BUTTON_HEIGHT) {
+    if (PointInRect(&buttons.tilePreviewRect, x, y)) {
         animSettings.tilePreviewEnabled = !animSettings.tilePreviewEnabled;
         return;
     }
-    if (showLightHeight && x >= centerX && x <= centerX + TILE_BUTTON_WIDTH &&
-        y >= lightHeightButtonY && y <= lightHeightButtonY + TILE_BUTTON_HEIGHT) {
+    if (buttons.showLightHeight && PointInRect(&buttons.lightHeightRect, x, y)) {
         // Cycle through a small set of useful light heights
         double options[] = {2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 16.0, 20.0};
         int count = (int)(sizeof(options) / sizeof(options[0]));
@@ -1507,21 +1843,18 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
         return;
     }
 
-    if (x >= TOGGLE_BUTTON_MARGIN_X && x <= TOGGLE_BUTTON_MARGIN_X + INTEGRATOR_BUTTON_WIDTH &&
-        y >= integratorButtonY && y <= integratorButtonY + INTEGRATOR_BUTTON_HEIGHT) {
+    if (PointInRect(&buttons.integratorRect, x, y)) {
         animSettings.integratorMode = (animSettings.integratorMode + 1) % 3;
         SyncMenuSliderValues();
         return;
     }
 
-    if (animSettings.integratorMode == 1) {
-        if (x >= TOGGLE_BUTTON_MARGIN_X && x <= TOGGLE_BUTTON_MARGIN_X + PATH_TOGGLE_WIDTH &&
-            y >= pathToggleRouletteY && y <= pathToggleRouletteY + PATH_TOGGLE_HEIGHT) {
+    if (buttons.showPathToggles) {
+        if (PointInRect(&buttons.pathRouletteRect, x, y)) {
             animSettings.pathRussianRoulette = !animSettings.pathRussianRoulette;
             return;
         }
-        if (x >= TOGGLE_BUTTON_MARGIN_X && x <= TOGGLE_BUTTON_MARGIN_X + PATH_TOGGLE_WIDTH &&
-            y >= pathToggleBSDFY && y <= pathToggleBSDFY + PATH_TOGGLE_HEIGHT) {
+        if (PointInRect(&buttons.pathBsdfRect, x, y)) {
             animSettings.bsdfModel = (animSettings.bsdfModel == 0) ? 1 : 0;
             SyncMenuSliderValues();
             return;
@@ -1529,8 +1862,7 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
     }
 
     // Save Button Click
-    if (x > BOTTOM_BUTTON_MARGIN_X_SAVE && x < BOTTOM_BUTTON_MARGIN_X_SAVE + BOTTOM_BUTTON_WIDTH_SAVE &&
-        y > BOTTOM_BUTTON_MARGIN_Y_SAVE && y < BOTTOM_BUTTON_MARGIN_Y_SAVE + BOTTOM_BUTTON_HEIGHT_SAVE) {
+    if (PointInRect(&buttons.saveRect, x, y)) {
 	SaveAllSettings();
         strncpy(statusLabel, "Saved", sizeof(statusLabel) - 1);
         statusLabel[sizeof(statusLabel) - 1] = '\0';
@@ -1539,17 +1871,17 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
     }
 
     // Restore Defaults Button Click
-    if (x > BOTTOM_BUTTON_MARGIN_X_RESTORE && x < BOTTOM_BUTTON_MARGIN_X_RESTORE + BOTTOM_BUTTON_WIDTH_RESTORE &&
-        y > BOTTOM_BUTTON_MARGIN_Y_RESTORE && y < BOTTOM_BUTTON_MARGIN_Y_RESTORE + BOTTOM_BUTTON_HEIGHT_RESTORE) {
+    if (PointInRect(&buttons.restoreRect, x, y)) {
 	ResetAnimationSettings();
+        (void)refreshActiveFontFromAnimationConfig();
+        ReloadMenuFont(font);
         strncpy(statusLabel, "Restored", sizeof(statusLabel) - 1);
         statusLabel[sizeof(statusLabel) - 1] = '\0';
         statusColor = (SDL_Color){200, 180, 120, 255};
         statusExpireMs = SDL_GetTicks() + 2000;
     }
     // Preview Button Click
-    if (x > BOTTOM_BUTTON_MARGIN_X_PREVIEW && x < BOTTOM_BUTTON_MARGIN_X_PREVIEW + BOTTOM_BUTTON_WIDTH_PREVIEW &&
-        y > BOTTOM_BUTTON_MARGIN_Y_PREVIEW && y < BOTTOM_BUTTON_MARGIN_Y_PREVIEW + BOTTOM_BUTTON_HEIGHT_PREVIEW) {
+    if (PointInRect(&buttons.previewRect, x, y)) {
         SyncMenuSliderValues();
         SaveAllSettings();
         animSettings.previewMode = true;
@@ -1558,14 +1890,12 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
         return;
     }
     // Exit without saving Button Click
-    if (x > BOTTOM_BUTTON_MARGIN_X_EXIT && x < BOTTOM_BUTTON_MARGIN_X_EXIT + BOTTOM_BUTTON_WIDTH_EXIT &&
-        y > BOTTOM_BUTTON_MARGIN_Y_EXIT && y < BOTTOM_BUTTON_MARGIN_Y_EXIT + BOTTOM_BUTTON_HEIGHT_EXIT) {
+    if (PointInRect(&buttons.exitRect, x, y)) {
 	*running = false;
     }
     
     // Start Button Click
-    if (x > BOTTOM_BUTTON_MARGIN_X_START && x < BOTTOM_BUTTON_MARGIN_X_START + BOTTOM_BUTTON_WIDTH_START &&
-        y > BOTTOM_BUTTON_MARGIN_Y_START && y < BOTTOM_BUTTON_MARGIN_Y_START + BOTTOM_BUTTON_HEIGHT_START) {
+    if (PointInRect(&buttons.startRect, x, y)) {
         // Capture any in-flight slider edits, then persist
         SyncMenuSliderValues();
         printf("[Menu] Start pressed: integrator=%d falloffMode=%d decay=%.2f softness=%.2f intensity=%.2f\n",
@@ -1603,11 +1933,11 @@ bool RunMenu(void) {
                     break;
 
                 case SDL_KEYDOWN:
-                    HandleKeyPress(&event, &running);
+                    HandleKeyPress(&event, &running, &font);
                     break;
 
                 case SDL_MOUSEBUTTONDOWN:
-                    HandleMouseClick(&event, &running, &menuExitedNormally, renderer);
+                    HandleMouseClick(&event, &running, &menuExitedNormally, renderer, &font);
                     break;
 
                 case SDL_MOUSEBUTTONUP:

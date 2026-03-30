@@ -71,6 +71,18 @@ static bool materialsCollapsed = false;
 static int assetScroll = 0;
 static int materialScroll = 0;
 
+static int ObjectEditorHeaderHeight(void) {
+    return animation_config_scale_text_point_size(&animSettings, PANEL_HEADER_HEIGHT, 20);
+}
+
+static int ObjectEditorAssetRowHeight(void) {
+    return animation_config_scale_text_point_size(&animSettings, ASSET_ROW_HEIGHT, 18);
+}
+
+static int ObjectEditorMaterialRowHeight(void) {
+    return animation_config_scale_text_point_size(&animSettings, MATERIAL_ROW_HEIGHT, 16);
+}
+
 static const char* ShapeAssetDir(void) {
     const char* dir = getenv("SHAPE_ASSET_DIR");
     return (dir && dir[0]) ? dir : "config/objects";
@@ -138,18 +150,26 @@ static void RefreshImportList(void) {
 }
 
 static void UpdatePanelLayout(void) {
+    int headerH = ObjectEditorHeaderHeight();
+    int assetRowH = ObjectEditorAssetRowHeight();
+    int materialRowH = ObjectEditorMaterialRowHeight();
+    int panelMaxH = animation_config_scale_text_point_size(&animSettings, PANEL_MAX_HEIGHT, 160);
     int headerW = ASSET_PANEL_WIDTH - PANEL_PADDING * 2;
     int x = 20;
     int y = 40;
+    if (panelMaxH > sceneSettings.windowHeight - 80) {
+        panelMaxH = sceneSettings.windowHeight - 80;
+    }
+    if (panelMaxH < 140) panelMaxH = 140;
     int assetRows = showImports ? importCount : (int)assetLib.count;
     if (assetRows < 1) assetRows = 1;
-    int assetContent = PANEL_HEADER_HEIGHT + PANEL_PADDING * 2 + assetRows * ASSET_ROW_HEIGHT;
-    if (assetContent > PANEL_MAX_HEIGHT) assetContent = PANEL_MAX_HEIGHT;
+    int assetContent = headerH + PANEL_PADDING * 2 + assetRows * assetRowH;
+    if (assetContent > panelMaxH) assetContent = panelMaxH;
     assetPanelRect = (SDL_Rect){x, y, ASSET_PANEL_WIDTH, assetContent};
     assetToggleRect = (SDL_Rect){x + PANEL_PADDING,
                                  y + PANEL_PADDING,
                                  headerW - 20,
-                                 PANEL_HEADER_HEIGHT - PANEL_PADDING};
+                                 headerH - PANEL_PADDING};
     assetCollapseRect = (SDL_Rect){assetToggleRect.x + assetToggleRect.w + 4,
                                    assetToggleRect.y,
                                    16,
@@ -157,8 +177,8 @@ static void UpdatePanelLayout(void) {
 
     int matRows = MaterialManagerCount();
     if (matRows < 1) matRows = 1;
-    int matContent = PANEL_HEADER_HEIGHT + PANEL_PADDING * 2 + matRows * MATERIAL_ROW_HEIGHT;
-    if (matContent > PANEL_MAX_HEIGHT) matContent = PANEL_MAX_HEIGHT;
+    int matContent = headerH + PANEL_PADDING * 2 + matRows * materialRowH;
+    if (matContent > panelMaxH) matContent = panelMaxH;
     int matY = sceneSettings.windowHeight - matContent - 20;
     materialPanelRect = (SDL_Rect){x, matY, ASSET_PANEL_WIDTH, matContent};
     materialCollapseRect = (SDL_Rect){materialPanelRect.x + materialPanelRect.w - PANEL_PADDING - 16,
@@ -169,6 +189,7 @@ static void UpdatePanelLayout(void) {
 
 static void DrawAssetList(SDL_Renderer* renderer) {
     SDL_Rect panel = assetPanelRect;
+    int assetRowH = ObjectEditorAssetRowHeight();
 #if !USE_VULKAN
     SDL_BlendMode prevMode;
     SDL_GetRenderDrawBlendMode(renderer, &prevMode);
@@ -200,8 +221,8 @@ static void DrawAssetList(SDL_Renderer* renderer) {
     int listY = assetToggleRect.y + assetToggleRect.h + 4;
     int visible = showImports ? importCount : (int)assetLib.count;
     int rowAreaH = panel.h - (listY - panel.y) - PANEL_PADDING;
-    if (rowAreaH < ASSET_ROW_HEIGHT) rowAreaH = ASSET_ROW_HEIGHT;
-    int maxRows = rowAreaH / ASSET_ROW_HEIGHT;
+    if (rowAreaH < assetRowH) rowAreaH = assetRowH;
+    int maxRows = rowAreaH / assetRowH;
     if (maxRows < 1) maxRows = 1;
     int maxScroll = visible - maxRows;
     if (maxScroll < 0) maxScroll = 0;
@@ -212,9 +233,9 @@ static void DrawAssetList(SDL_Renderer* renderer) {
     for (int i = start; i < end; ++i) {
         int rowIdx = i - start;
         SDL_Rect row = {panel.x + PANEL_PADDING,
-                        listY + rowIdx * ASSET_ROW_HEIGHT,
+                        listY + rowIdx * assetRowH,
                         panel.w - PANEL_PADDING * 2,
-                        ASSET_ROW_HEIGHT - 2};
+                        assetRowH - 2};
         bool selected = (!showImports && i == selectedAssetIndex);
         SDL_SetRenderDrawColor(renderer, selected ? 80 : 25, selected ? 160 : 25, selected ? 240 : 25, 200);
         SDL_RenderFillRect(renderer, &row);
@@ -241,6 +262,7 @@ static void DrawAssetList(SDL_Renderer* renderer) {
 
 static void DrawMaterialList(SDL_Renderer* renderer) {
     SDL_Rect panel = materialPanelRect;
+    int materialRowH = ObjectEditorMaterialRowHeight();
 #if !USE_VULKAN
     SDL_BlendMode prevMode;
     SDL_GetRenderDrawBlendMode(renderer, &prevMode);
@@ -267,8 +289,8 @@ static void DrawMaterialList(SDL_Renderer* renderer) {
     int count = MaterialManagerCount();
     int listY = panel.y + PANEL_PADDING;
     int rowAreaH = panel.h - PANEL_PADDING * 2;
-    if (rowAreaH < MATERIAL_ROW_HEIGHT) rowAreaH = MATERIAL_ROW_HEIGHT;
-    int maxRows = rowAreaH / MATERIAL_ROW_HEIGHT;
+    if (rowAreaH < materialRowH) rowAreaH = materialRowH;
+    int maxRows = rowAreaH / materialRowH;
     if (maxRows < 1) maxRows = 1;
     int maxScroll = count - maxRows;
     if (maxScroll < 0) maxScroll = 0;
@@ -280,9 +302,9 @@ static void DrawMaterialList(SDL_Renderer* renderer) {
     for (int i = start; i < end; ++i) {
         int rowIdx = i - start;
         SDL_Rect row = {panel.x + PANEL_PADDING,
-                        listY + rowIdx * MATERIAL_ROW_HEIGHT,
+                        listY + rowIdx * materialRowH,
                         panel.w - PANEL_PADDING * 2,
-                        MATERIAL_ROW_HEIGHT - 2};
+                        materialRowH - 2};
         bool selected = (i == selectedMaterialIndex);
         SDL_SetRenderDrawColor(renderer, selected ? 70 : 25, selected ? 140 : 25, selected ? 220 : 25, 200);
         SDL_RenderFillRect(renderer, &row);
@@ -665,13 +687,36 @@ void HandleObjectEditorEvents(SDL_Event* event) {
             int scrollDir = event->wheel.y > 0 ? -1 : 1;
             if (mx >= assetPanelRect.x && mx <= assetPanelRect.x + assetPanelRect.w &&
                 my >= assetPanelRect.y && my <= assetPanelRect.y + assetPanelRect.h && !assetsCollapsed) {
+                int assetRowH = ObjectEditorAssetRowHeight();
+                int visible = showImports ? importCount : (int)assetLib.count;
+                int listY = assetToggleRect.y + assetToggleRect.h + 4;
+                int rowAreaH = assetPanelRect.h - (listY - assetPanelRect.y) - PANEL_PADDING;
+                int maxRows;
+                int maxScroll;
+                if (rowAreaH < assetRowH) rowAreaH = assetRowH;
+                maxRows = rowAreaH / assetRowH;
+                if (maxRows < 1) maxRows = 1;
+                maxScroll = visible - maxRows;
+                if (maxScroll < 0) maxScroll = 0;
                 assetScroll += scrollDir;
                 if (assetScroll < 0) assetScroll = 0;
+                if (assetScroll > maxScroll) assetScroll = maxScroll;
             }
             if (mx >= materialPanelRect.x && mx <= materialPanelRect.x + materialPanelRect.w &&
                 my >= materialPanelRect.y && my <= materialPanelRect.y + materialPanelRect.h && !materialsCollapsed) {
+                int materialRowH = ObjectEditorMaterialRowHeight();
+                int count = MaterialManagerCount();
+                int rowAreaH = materialPanelRect.h - PANEL_PADDING * 2;
+                int maxRows;
+                int maxScroll;
+                if (rowAreaH < materialRowH) rowAreaH = materialRowH;
+                maxRows = rowAreaH / materialRowH;
+                if (maxRows < 1) maxRows = 1;
+                maxScroll = count - maxRows;
+                if (maxScroll < 0) maxScroll = 0;
                 materialScroll += scrollDir;
                 if (materialScroll < 0) materialScroll = 0;
+                if (materialScroll > maxScroll) materialScroll = maxScroll;
             }
             break;
         }
@@ -700,12 +745,13 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
                 return;
             }
             if (!assetsCollapsed) {
+                int assetRowH = ObjectEditorAssetRowHeight();
                 int listY = assetToggleRect.y + assetToggleRect.h + 6;
                 int rowAreaH = assetPanelRect.h - (listY - assetPanelRect.y) - PANEL_PADDING;
-                if (rowAreaH < ASSET_ROW_HEIGHT) rowAreaH = ASSET_ROW_HEIGHT;
-                int maxRows = rowAreaH / ASSET_ROW_HEIGHT;
+                if (rowAreaH < assetRowH) rowAreaH = assetRowH;
+                int maxRows = rowAreaH / assetRowH;
                 if (maxRows < 1) maxRows = 1;
-                int idx = (my - listY) / ASSET_ROW_HEIGHT + assetScroll;
+                int idx = (my - listY) / assetRowH + assetScroll;
                 if (idx >= 0) {
                     if (showImports) {
                         if (idx < importCount) {
@@ -753,12 +799,13 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
                 return;
             }
             if (!materialsCollapsed) {
+                int materialRowH = ObjectEditorMaterialRowHeight();
                 int listY = materialPanelRect.y + PANEL_PADDING;
                 int rowAreaH = materialPanelRect.h - PANEL_PADDING * 2;
-                if (rowAreaH < MATERIAL_ROW_HEIGHT) rowAreaH = MATERIAL_ROW_HEIGHT;
-                int maxRows = rowAreaH / MATERIAL_ROW_HEIGHT;
+                if (rowAreaH < materialRowH) rowAreaH = materialRowH;
+                int maxRows = rowAreaH / materialRowH;
                 if (maxRows < 1) maxRows = 1;
-                int idx = (my - listY) / MATERIAL_ROW_HEIGHT + materialScroll;
+                int idx = (my - listY) / materialRowH + materialScroll;
                 if (idx >= 0 && idx < MaterialManagerCount()) {
                     selectedMaterialIndex = idx;
                     if (selectedObjectIndex >= 0 && selectedObjectIndex < sceneSettings.objectCount) {

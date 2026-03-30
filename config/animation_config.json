@@ -17,6 +17,7 @@
   "lightDiffusionRadius": 6,
   "lightDiffusionStrength": 0.605,
   "editorMode": 1,
+  "textZoomStep": 0,
   "useTiledRenderer": true,
   "tilePreviewEnabled": true,
   "tileSize": 16,

@@ -56,6 +56,7 @@ typedef struct {
     double environmentBrightness;
     int pathSeed;
     int editorMode;
+    int textZoomStep;
     double cacheContributionWeight;
     int bsdfModel;
     double lightIntensity;
@@ -102,5 +103,11 @@ void LoadSceneConfig(void);
 
 
 void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject);
+
+int animation_config_text_zoom_step_clamp(int step);
+int animation_config_text_zoom_percent_from_step(int step);
+int animation_config_scale_text_point_size(const AnimationConfig* cfg,
+                                           int base_point_size,
+                                           int min_point_size);
 
 #endif // CONFIG_MANAGER_H

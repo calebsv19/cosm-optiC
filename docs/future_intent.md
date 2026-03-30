@@ -1,6 +1,6 @@
 # Ray Tracing Future Intent
 
-Last updated: 2026-03-29
+Last updated: 2026-03-30
 
 ## Scaffold Alignment Intent
 1. Keep the current strong subsystem split while normalizing scaffold contracts.
@@ -59,8 +59,22 @@ Last updated: 2026-03-29
 - `RT-S5` (completed):
   - closeout sync for private/public/global scaffold trackers completed
   - final verification gates passed (`clean/build`, `run-headless-smoke`, `visual-harness`, `test-stable`)
-  - final scaffold closeout commit intentionally deferred until user visual confirmation:
-    - `Project Scaffold Standardization`
+  - final scaffold closeout commit recorded:
+    - `f1b666c` (`Project Scaffold Standardization`)
+
+## Post-Scaffold Direction
+- scaffold migration is complete for `ray_tracing`; next structured lane is post-scaffold font-size standardization.
+- active private plan:
+  - `../docs/private_program_docs/ray_tracing/2026-03-30_ray_tracing_post_scaffold_font_size_pass_plan.md`
+- current phase status:
+  - `RT-F0` complete (font/text/input mapping + risk capture)
+  - `RT-F1` complete (runtime zoom state contract + persistence)
+  - `RT-F2` complete (shortcut wiring + live font reload/invalidation)
+  - `RT-F3` complete (metric-driven menu/editor layout safety foundation)
+  - `RT-F4` complete (pane-by-pane overlap/clip hardening)
+  - `RT-F5` complete (verification/docs/memory closeout + wrap-up commit lane closed)
+- wrap-up commit title for that lane is fixed:
+  - `Post-Scaffold Font Size Standardization`
 
 ## Non-Goals During Scaffold Migration
 - no feature-expansion work unrelated to scaffold alignment
