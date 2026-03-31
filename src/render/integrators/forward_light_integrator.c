@@ -2,6 +2,7 @@
 #include "config/config_manager.h"
 #include "render/fast_rng.h"
 #include "render/ray_types.h"
+#include "render/space_mode_adapter.h"
 #include "render/material_bsdf.h"
 #include "camera/camera.h"
 #include <SDL2/SDL.h>
@@ -99,17 +100,16 @@ static bool ComputeViewBounds(const IntegratorContext* ctx,
                               double* outMinX, double* outMinY,
                               double* outMaxX, double* outMaxY) {
     if (!ctx) return false;
+    SpaceModeViewContext view_ctx = SpaceModeAdapter_BuildViewContext(&sceneSettings.camera,
+                                                                       ctx->width,
+                                                                       ctx->height);
     double minX = 0.0, minY = 0.0, maxX = 0.0, maxY = 0.0;
     bool initialised = false;
     for (int sx = 0; sx <= 1; sx++) {
         for (int sy = 0; sy <= 1; sy++) {
             double screenX = (sx == 0) ? 0.0 : (double)(ctx->width);
             double screenY = (sy == 0) ? 0.0 : (double)(ctx->height);
-            CameraPoint world = CameraScreenToWorld(&sceneSettings.camera,
-                                                    screenX,
-                                                    screenY,
-                                                    ctx->width,
-                                                    ctx->height);
+            CameraPoint world = SpaceModeAdapter_ScreenToWorld(&view_ctx, screenX, screenY);
             if (!initialised) {
                 minX = maxX = world.x;
                 minY = maxY = world.y;
@@ -184,11 +184,9 @@ static bool TraceRayToSurface(const IntegratorContext* ctx,
     if (len <= GRID_EPSILON) return false;
     dx /= len; dy /= len;
 
-    Ray2D ray = {.ox = originX, .oy = originY, .dx = dx, .dy = dy};
-    HitInfo2D h = {0};
-    h.objectIndex   = -1;
-    h.triangleIndex = -1;
-    h.baryW         = 1.0;
+    Ray2D ray = SpaceModeAdapter_MakeRay(originX, originY, dx, dy);
+    HitInfo2D h;
+    SpaceModeAdapter_ResetHit(&h);
 
     double tMin = PATH_EPSILON;
     double tMax = (maxDistance > 0.0) ? maxDistance : DBL_MAX;
@@ -247,7 +245,8 @@ static bool WorldToPixel(double wx, double wy,
                          int w, int h,
                          int* outIdx, int* sx, int* sy)
 {
-    CameraPoint sc = CameraWorldToScreen(&sceneSettings.camera, wx, wy, w, h);
+    SpaceModeViewContext view_ctx = SpaceModeAdapter_BuildViewContext(&sceneSettings.camera, w, h);
+    CameraPoint sc = SpaceModeAdapter_WorldToScreen(&view_ctx, wx, wy);
     int ix = (int)lround(sc.x);
     int iy = (int)lround(sc.y);
     if (sx) *sx = ix; if (sy) *sy = iy;

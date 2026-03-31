@@ -135,6 +135,12 @@ int animation_config_text_zoom_percent_from_step(int step) {
     return 100 + (clamped * TEXT_ZOOM_STEP_PERCENT_PER_STEP);
 }
 
+int animation_config_space_mode_clamp(int mode) {
+    if (mode < SPACE_MODE_2D) return SPACE_MODE_2D;
+    if (mode > SPACE_MODE_3D) return SPACE_MODE_2D;
+    return mode;
+}
+
 int animation_config_scale_text_point_size(const AnimationConfig* cfg,
                                            int base_point_size,
                                            int min_point_size) {
@@ -184,6 +190,7 @@ AnimationConfig animSettings = {
     .environmentBrightness = 0.0,
     .pathSeed = 1,
     .editorMode = 0,
+    .spaceMode = SPACE_MODE_2D,
     .textZoomStep = 0,
     .cacheContributionWeight = 1.0,
     .bsdfModel = 1,
@@ -402,6 +409,7 @@ void SaveSceneConfig(void) {
         json_object_object_add(jsonObj, "type", json_object_new_string(obj->type));
         json_object_object_add(jsonObj, "x", json_object_new_double(obj->x));
         json_object_object_add(jsonObj, "y", json_object_new_double(obj->y));
+        json_object_object_add(jsonObj, "z", json_object_new_double(obj->z));
         json_object_object_add(jsonObj, "scale", json_object_new_double(obj->scale));
         json_object_object_add(jsonObj, "rotation", json_object_new_double(obj->rotation));
 
@@ -488,6 +496,8 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "lightDiffusionRadius", json_object_new_int(animSettings.lightDiffusionRadius));
     json_object_object_add(config, "lightDiffusionStrength", json_object_new_double(animSettings.lightDiffusionStrength));
     json_object_object_add(config, "editorMode", json_object_new_int(animSettings.editorMode));
+    json_object_object_add(config, "spaceMode",
+                           json_object_new_int(animation_config_space_mode_clamp(animSettings.spaceMode)));
     json_object_object_add(config, "textZoomStep",
                            json_object_new_int(animation_config_text_zoom_step_clamp(animSettings.textZoomStep)));
     json_object_object_add(config, "useTiledRenderer", json_object_new_boolean(animSettings.useTiledRenderer));
@@ -671,7 +681,7 @@ void LoadSceneObjects(struct json_object* config) {
 
             LoadObjectProperties(obj, sceneObj);
 
-            struct json_object *type, *x, *y, *scale, *rotation, *radius, *numPoints, *baseShapePoints, 
+            struct json_object *type, *x, *y, *z, *scale, *rotation, *radius, *numPoints, *baseShapePoints, 
 *shapePoints;
 
             if (!json_object_object_get_ex(obj, "type", &type) ||
@@ -684,9 +694,14 @@ void LoadSceneObjects(struct json_object* config) {
             strcpy(sceneObj->type, json_object_get_string(type));
             sceneObj->x = json_object_get_double(x);
             sceneObj->y = json_object_get_double(y);
+            sceneObj->z = 0.0;
             sceneObj->scale = 1.0;
             sceneObj->rotation = 0.0;
             sceneObj->dirty = true;
+
+            if (json_object_object_get_ex(obj, "z", &z)) {
+                sceneObj->z = json_object_get_double(z);
+            }
 
             if (json_object_object_get_ex(obj, "scale", &scale)) {
                 sceneObj->scale = json_object_get_double(scale);
@@ -937,6 +952,13 @@ void LoadAnimationConfig(void) {
         animSettings.lightDiffusionStrength = json_object_get_double(temp);
     if (json_object_object_get_ex(config, "editorMode", &temp))
         animSettings.editorMode = json_object_get_int(temp); 
+    if (json_object_object_get_ex(config, "spaceMode", &temp)) {
+        animSettings.spaceMode = animation_config_space_mode_clamp(json_object_get_int(temp));
+    } else if (json_object_object_get_ex(config, "space_mode", &temp)) {
+        animSettings.spaceMode = animation_config_space_mode_clamp(json_object_get_int(temp));
+    } else {
+        animSettings.spaceMode = SPACE_MODE_2D;
+    }
     if (json_object_object_get_ex(config, "textZoomStep", &temp)) {
         animSettings.textZoomStep = json_object_get_int(temp);
     } else if (json_object_object_get_ex(config, "text_zoom_step", &temp)) {
@@ -1058,6 +1080,7 @@ void LoadAnimationConfig(void) {
     if (!isfinite(animSettings.lightHeight) || animSettings.lightHeight < 0.0) {
         animSettings.lightHeight = 8.0;
     }
+    animSettings.spaceMode = animation_config_space_mode_clamp(animSettings.spaceMode);
     animSettings.textZoomStep = animation_config_text_zoom_step_clamp(animSettings.textZoomStep);
 	
     printf(" Loaded animation config successfully.\n");

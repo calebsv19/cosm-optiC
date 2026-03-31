@@ -22,6 +22,11 @@ typedef enum {
     RENDER_QUALITY_HIGH = 2
 } RenderQuality;
 
+typedef enum {
+    SPACE_MODE_2D = 0,
+    SPACE_MODE_3D = 1
+} SpaceMode;
+
 // **Animation Config Struct**
 typedef struct {
     bool interactiveMode;
@@ -56,6 +61,7 @@ typedef struct {
     double environmentBrightness;
     int pathSeed;
     int editorMode;
+    SpaceMode spaceMode;
     int textZoomStep;
     double cacheContributionWeight;
     int bsdfModel;
@@ -109,5 +115,6 @@ int animation_config_text_zoom_percent_from_step(int step);
 int animation_config_scale_text_point_size(const AnimationConfig* cfg,
                                            int base_point_size,
                                            int min_point_size);
+int animation_config_space_mode_clamp(int mode);
 
 #endif // CONFIG_MANAGER_H

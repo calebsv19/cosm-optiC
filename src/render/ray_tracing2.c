@@ -24,6 +24,8 @@
 #include "app/animation.h"
 #include "app/runtime_time.h"
 #include "camera/camera.h"
+#include "render/space_mode_adapter.h"
+#include "render/ray_tracing_mode_backend.h"
 #include "geo/shape_asset.h"
 #include "geo/shape_adapter.h"
 #include "import/shape_import.h"
@@ -512,8 +514,9 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
 
     size_t pixelCount = (size_t)WIDTH * (size_t)HEIGHT;
 
-    bool useTiles = animSettings.useTiledRenderer;
-    int tileSize = useTiles ? ClampTileSize(animSettings.tileSize) : 0;
+    RayTracingRuntimeRoute route = RayTracingModeBackend_ResolveRoute();
+    bool useTiles = route.useTiles;
+    int tileSize = route.tileSize;
     double gridCellSize = fmax(4.0, (animSettings.tileSize > 0 ? animSettings.tileSize : 16));
 
     // Clamp camera to grid if fluid bounds are known.
@@ -574,7 +577,7 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
     int materialCount = BuildMaterialTable();
 
     bool haveCache = false;
-    if (animSettings.integratorMode == 1) {
+    if (route.buildIrradianceCache) {
         haveCache = IrradianceCacheEnsure(&irradianceCache,
                                           sceneSettings.objectCount,
                                           32);
@@ -604,7 +607,7 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
         .useTiles = useTiles,
         .frameSeed = frameSeed,
         .uniformGrid = ((uniformGrid.objectCells || uniformGrid.triangleCells) ? &uniformGrid : NULL),
-        .integratorMode = animSettings.integratorMode,
+        .integratorMode = route.integratorMode,
         .cache = (haveCache ? &irradianceCache : NULL),
         .materials = materialTable,
         .materialCount = materialCount,
@@ -619,7 +622,7 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
     };
 
     bool cacheReady = false;
-    if (animSettings.integratorMode == 1 && haveCache) {
+    if (route.buildIrradianceCache && haveCache) {
         ts_start_timer("Irradiance Cache");
         cacheReady = BuildReflectionCache(&context, &activeLight);
         ts_stop_timer("Irradiance Cache");
@@ -632,7 +635,7 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
     }
 
     ts_start_timer("Buffer Calc");
-    switch (animSettings.integratorMode) {
+    switch (route.integratorMode) {
         case 0: // forward
             ForwardLightIntegratorRender(&context, &activeLight);
             break;
@@ -644,7 +647,7 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
                 .blurEnabled = (animSettings.blurMode != 0),
                 .brightnessBoost = 1.0
             };
-            if (useTiles && animSettings.tilePreviewEnabled) {
+            if (route.tilePreviewEnabled) {
                 RenderHybridTilesPreview(renderer,
                                          &context,
                                          &activeLight,
@@ -674,7 +677,7 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
     else if (animSettings.blurMode == 2) blurRadius = 2;
     else if (animSettings.blurMode == 3) blurRadius = 3;
     ts_start_timer("Buffer Present");
-    if (useTiles && animSettings.tilePreviewEnabled && animSettings.integratorMode == 1) {
+    if (route.tilePreviewEnabled) {
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_Rect bg = {0, 0, WIDTH, HEIGHT};
         SDL_RenderFillRect(renderer, &bg);
@@ -697,11 +700,11 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
     }
 #endif
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    CameraPoint lightScreen = CameraWorldToScreen(&sceneSettings.camera,
-                                                  light.x,
-                                                  light.y,
-                                                  WIDTH,
-                                                  HEIGHT);
+    SpaceModeViewContext view_ctx = RayTracingModeBackend_BuildViewContext(&sceneSettings.camera,
+                                                                           WIDTH,
+                                                                           HEIGHT,
+                                                                           &route);
+    CameraPoint lightScreen = SpaceModeAdapter_WorldToScreen(&view_ctx, light.x, light.y);
     int lightRadius = (int)lround(light.r * sceneSettings.camera.zoom);
     RenderCircle(renderer, (int)lround(lightScreen.x), (int)lround(lightScreen.y), lightRadius, true);
 
@@ -737,11 +740,14 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
 
 void ProcessRayTracingEvent(SDL_Event* event) {
     if (event->type == SDL_MOUSEMOTION || event->type == SDL_MOUSEBUTTONDOWN) {
-        CameraPoint world = CameraScreenToWorld(&sceneSettings.camera,
-                                                event->motion.x,
-                                                event->motion.y,
-                                                sceneSettings.windowWidth,
-                                                sceneSettings.windowHeight);
+        RayTracingRuntimeRoute route = RayTracingModeBackend_ResolveRoute();
+        SpaceModeViewContext view_ctx = RayTracingModeBackend_BuildViewContext(&sceneSettings.camera,
+                                                                               sceneSettings.windowWidth,
+                                                                               sceneSettings.windowHeight,
+                                                                               &route);
+        CameraPoint world = SpaceModeAdapter_ScreenToWorld(&view_ctx,
+                                                           event->motion.x,
+                                                           event->motion.y);
         light.x = world.x;
         light.y = world.y;
     }

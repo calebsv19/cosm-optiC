@@ -19,6 +19,7 @@ void InitObject(SceneObject* obj, int type, double x, double y, double param1, d
     (void)param2;
     obj->x = x;
     obj->y = y;
+    obj->z = 0.0;
     obj->scale = 1.0;
     obj->rotation = 0.0;
     obj->dirty = true;

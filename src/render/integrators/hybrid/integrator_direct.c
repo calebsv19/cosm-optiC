@@ -4,6 +4,7 @@
 #include "render/material_bsdf.h"
 #include "config/config_manager.h"
 #include "camera/camera.h"
+#include "render/space_mode_adapter.h"
 #include <math.h>
 
 #ifndef PATH_EPSILON
@@ -136,14 +137,15 @@ void DirectLightingPassRegion(IntegratorDirectContext* ctx,
         .tileGrid = ctx->tileGrid,
         .energyBuffer = ctx->energyBuffer
     };
+    SpaceModeViewContext view_ctx = SpaceModeAdapter_BuildViewContext(&sceneSettings.camera,
+                                                                       ctx->width,
+                                                                       ctx->height);
 
     for (int y = minY; y < maxY; y++) {
         for (int x = minX; x < maxX; x++) {
-            CameraPoint world = CameraScreenToWorld(&sceneSettings.camera,
-                                                    x + 0.5,
-                                                    y + 0.5,
-                                                    ctx->width,
-                                                    ctx->height);
+            CameraPoint world = SpaceModeAdapter_ScreenToWorld(&view_ctx,
+                                                                x + 0.5,
+                                                                y + 0.5);
             double wx = world.x;
             double wy = world.y;
 

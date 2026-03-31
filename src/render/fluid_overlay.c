@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "camera/camera.h"
+#include "render/space_mode_adapter.h"
 #include "kit_viz.h"
 #include "vk_renderer.h"
 
@@ -261,6 +262,7 @@ static void draw_velocity_overlay(SDL_Renderer *renderer,
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 #endif
     SDL_SetRenderDrawColor(renderer, 72, 255, 210, 220);
+    SpaceModeViewContext view_ctx = SpaceModeAdapter_BuildViewContext(camera, screen_w, screen_h);
 
     for (size_t i = 0; i < segment_count; ++i) {
         const KitVizVecSegment *seg = &g_overlayScratchSegments[i];
@@ -270,8 +272,8 @@ static void draw_velocity_overlay(SDL_Renderer *renderer,
         float wx1 = origin_x + seg->x1 * cell;
         float wy1 = origin_y + seg->y1 * cell;
 
-        CameraPoint p0 = CameraWorldToScreen(camera, wx0, wy0, screen_w, screen_h);
-        CameraPoint p1 = CameraWorldToScreen(camera, wx1, wy1, screen_w, screen_h);
+        CameraPoint p0 = SpaceModeAdapter_WorldToScreen(&view_ctx, wx0, wy0);
+        CameraPoint p1 = SpaceModeAdapter_WorldToScreen(&view_ctx, wx1, wy1);
 
         SDL_RenderDrawLine(renderer,
                            (int)lroundf((float)p0.x),
@@ -360,8 +362,9 @@ bool fluid_overlay_draw(SDL_Renderer *renderer,
     float world_max_x = origin_x + cell * (float)(frame->w);
     float world_max_y = origin_y + cell * (float)(frame->h);
 
-    CameraPoint p0 = CameraWorldToScreen(camera, world_min_x, world_min_y, screen_w, screen_h);
-    CameraPoint p1 = CameraWorldToScreen(camera, world_max_x, world_max_y, screen_w, screen_h);
+    SpaceModeViewContext view_ctx = SpaceModeAdapter_BuildViewContext(camera, screen_w, screen_h);
+    CameraPoint p0 = SpaceModeAdapter_WorldToScreen(&view_ctx, world_min_x, world_min_y);
+    CameraPoint p1 = SpaceModeAdapter_WorldToScreen(&view_ctx, world_max_x, world_max_y);
 
     SDL_Rect dst_rect = {
         (int)lroundf(fminf((float)p0.x, (float)p1.x)),

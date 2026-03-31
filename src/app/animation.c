@@ -15,6 +15,7 @@
 #include "render/timer_hud_api.h"
 #include "render/timer_hud_adapter.h"
 #include "camera/camera.h"
+#include "render/space_mode_adapter.h"
 #include "render/render_helper.h"
 #include "engine/Render/render_pipeline.h"
 #include "import/fluid_import.h"
@@ -886,7 +887,10 @@ static void UpdateCameraPosition(double t) {
 
 static void DrawPreviewMarker(SDL_Renderer* r, Point world, SDL_Color col, int radius) {
     SDL_SetRenderDrawColor(r, col.r, col.g, col.b, col.a);
-    CameraPoint s = CameraWorldToScreen(&sceneSettings.camera, world.x, world.y, sceneSettings.windowWidth, sceneSettings.windowHeight);
+    SpaceModeViewContext view_ctx = SpaceModeAdapter_BuildViewContext(&sceneSettings.camera,
+                                                                       sceneSettings.windowWidth,
+                                                                       sceneSettings.windowHeight);
+    CameraPoint s = SpaceModeAdapter_WorldToScreen(&view_ctx, world.x, world.y);
     for (int dx = -radius; dx <= radius; dx++) {
         for (int dy = -radius; dy <= radius; dy++) {
             if (dx * dx + dy * dy <= radius * radius) {

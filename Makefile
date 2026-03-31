@@ -106,6 +106,9 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/integrators/camera_path_integrator_disney.o \
 	$(BUILD_DIR)/render/integrators/integrator_common.o \
 	$(BUILD_DIR)/render/irradiance_cache.o \
+	$(BUILD_DIR)/render/space_mode_adapter.o \
+	$(BUILD_DIR)/render/ray_tracing_mode_backend.o \
+	$(BUILD_DIR)/editor/editor_mode_router.o \
 	$(BUILD_DIR)/render/uniform_grid.o \
 	$(BUILD_DIR)/render/surface_mesh.o \
 	$(BUILD_DIR)/render/render_helper.o \

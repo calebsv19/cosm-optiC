@@ -5,6 +5,7 @@
 #include "path/path_system.h"
 #include "config/config_manager.h"
 #include "camera/camera.h"
+#include "editor/editor_mode_router.h"
 #include "math/vec2.h"
 
 #include <SDL2/SDL.h>
@@ -39,20 +40,18 @@ static Camera BuildBezierEditorCamera(void) {
 }
 
 static CameraPoint ScreenToWorldBezier(const Camera* camera, int sx, int sy) {
-    return CameraScreenToWorld(camera,
-                               sx,
-                               sy,
-                               sceneSettings.windowWidth,
-                               sceneSettings.windowHeight);
+    SpaceModeViewContext view_ctx = EditorModeRouter_BuildViewContext(camera,
+                                                                      sceneSettings.windowWidth,
+                                                                      sceneSettings.windowHeight);
+    return SpaceModeAdapter_ScreenToWorld(&view_ctx, sx, sy);
 }
 
 static bool HitOnScreen(const Camera* camera, double wx, double wy, int mx, int my, double radius) {
     if (!camera || radius <= 0.0) return false;
-    CameraPoint sp = CameraWorldToScreen(camera,
-                                         wx,
-                                         wy,
-                                         sceneSettings.windowWidth,
-                                         sceneSettings.windowHeight);
+    SpaceModeViewContext view_ctx = EditorModeRouter_BuildViewContext(camera,
+                                                                      sceneSettings.windowWidth,
+                                                                      sceneSettings.windowHeight);
+    CameraPoint sp = SpaceModeAdapter_WorldToScreen(&view_ctx, wx, wy);
     double dx = sp.x - (double)mx;
     double dy = sp.y - (double)my;
     return (dx * dx + dy * dy) <= radius * radius;

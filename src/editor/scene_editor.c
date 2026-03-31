@@ -8,6 +8,7 @@
 #include "app/animation.h"
 #include "render/fluid_state.h"
 #include "camera/camera.h"
+#include "editor/editor_mode_router.h"
 #include "engine/Render/render_pipeline.h"
 #include "render/vk_shared_device.h"
 #include "ui/text_zoom_shortcuts.h"
@@ -65,37 +66,21 @@ static int SceneEditorMeasureButtonHeight(int min_height) {
     return min_height;
 }
 
-static int NextEditorMode(int current_mode, bool reverse) {
-    if (!FluidSceneLocksObjects()) {
-        if (reverse) {
-            return (current_mode == 0) ? 2 : (current_mode - 1);
-        }
-        return (current_mode + 1) % 3;
-    }
-    // Fluid scenes: lock object edits, only Bezier(0) + Camera(2).
-    if (current_mode != 0 && current_mode != 2) current_mode = 0;
-    if (reverse) {
-        return (current_mode == 0) ? 2 : 0;
-    }
-    return (current_mode == 0) ? 2 : 0;
-}
-
 static void RenderFluidBounds(SDL_Renderer* renderer) {
     if (!g_fluidGrid.valid) return;
     Camera cam = CameraBuildPreviewCamera(&sceneSettings.camera,
                                           GetCurrentMarginPixels(),
                                           sceneSettings.windowWidth,
                                           sceneSettings.windowHeight);
-    CameraPoint minS = CameraWorldToScreen(&cam,
-                                           g_fluidGrid.min_x,
-                                           g_fluidGrid.min_y,
-                                           sceneSettings.windowWidth,
-                                           sceneSettings.windowHeight);
-    CameraPoint maxS = CameraWorldToScreen(&cam,
-                                           g_fluidGrid.max_x,
-                                           g_fluidGrid.max_y,
-                                           sceneSettings.windowWidth,
-                                           sceneSettings.windowHeight);
+    SpaceModeViewContext view_ctx = EditorModeRouter_BuildViewContext(&cam,
+                                                                       sceneSettings.windowWidth,
+                                                                       sceneSettings.windowHeight);
+    CameraPoint minS = SpaceModeAdapter_WorldToScreen(&view_ctx,
+                                                       g_fluidGrid.min_x,
+                                                       g_fluidGrid.min_y);
+    CameraPoint maxS = SpaceModeAdapter_WorldToScreen(&view_ctx,
+                                                       g_fluidGrid.max_x,
+                                                       g_fluidGrid.max_y);
     int x0 = (int)lrint(fmin(minS.x, maxS.x));
     int x1 = (int)lrint(fmax(minS.x, maxS.x));
     int y0 = (int)lrint(fmin(minS.y, maxS.y));
@@ -118,10 +103,8 @@ void InitializeSceneEditor(SceneEditor* editor) {
     }
     if (animSettings.editorMode < 0)
         animSettings.editorMode = 0;
-    editor->currentMode = animSettings.editorMode % 3;
-    if (FluidSceneLocksObjects() && editor->currentMode == 1) {
-        editor->currentMode = 0;
-    }
+    editor->currentMode = EditorModeRouter_ClampEditorMode(animSettings.editorMode % 3,
+                                                           FluidSceneLocksObjects());
 
     //  Create the window using stored scene settings
     editor->window = SDL_CreateWindow("Scene Editor", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
@@ -235,6 +218,21 @@ void RenderSceneButtons(SDL_Renderer* renderer) {
     RenderButtonText(renderer, previewButton, "Preview");
     SDL_RenderDrawRect(renderer, &changeModeButton);
     RenderButtonText(renderer, changeModeButton, "Change Mode");
+
+    if (EditorModeRouter_IsControlled3D()) {
+        SDL_Rect hintRect = {
+            20,
+            changeModeButton.y - 28,
+            sceneSettings.windowWidth - 40,
+            22
+        };
+        SDL_Color hintColor = {255, 220, 140, 255};
+        SDL_SetRenderDrawColor(renderer, 30, 30, 38, 220);
+        SDL_RenderFillRect(renderer, &hintRect);
+        SDL_SetRenderDrawColor(renderer, 90, 90, 110, 255);
+        SDL_RenderDrawRect(renderer, &hintRect);
+        RenderLabelText(renderer, hintRect, EditorModeRouter_RuntimeHintLabel(), hintColor);
+    }
 }
 
 void SceneEditorLoop(SceneEditor* editor) {
@@ -300,8 +298,10 @@ void HandleSceneEditorEvents(SceneEditor* editor, SDL_Event* event) {
         return;  // ✅ Exit immediately instead of calling object editor events
     }
     if (event->type == SDL_KEYDOWN && event->key.keysym.sym == SDLK_TAB) {
-        editor->currentMode = NextEditorMode(editor->currentMode,
-                                             (event->key.keysym.mod & KMOD_SHIFT) != 0);
+        editor->currentMode = EditorModeRouter_NextEditorMode(
+            editor->currentMode,
+            (event->key.keysym.mod & KMOD_SHIFT) != 0,
+            FluidSceneLocksObjects());
         animSettings.editorMode = editor->currentMode;
         InitializeEditorMode(editor);
         printf("Changed Mode to %d via TAB\n", editor->currentMode);
@@ -336,7 +336,9 @@ void HandleSceneEditorEvents(SceneEditor* editor, SDL_Event* event) {
         // Check if clicking on Change Mode Button
         if (mx >= changeModeButton.x && mx <= changeModeButton.x + changeModeButton.w &&
             my >= changeModeButton.y && my <= changeModeButton.y + changeModeButton.h) {
-            editor->currentMode = NextEditorMode(editor->currentMode, false);  // Cycle through modes
+            editor->currentMode = EditorModeRouter_NextEditorMode(editor->currentMode,
+                                                                  false,
+                                                                  FluidSceneLocksObjects());
             animSettings.editorMode = editor->currentMode;
             InitializeEditorMode(editor);
 	    SaveAllSettings();
@@ -398,7 +400,9 @@ bool IsClickingButtonMain(int mx, int my) {
 }
 
 void ToggleSceneMode(SceneEditor* editor) {
-    editor->currentMode = NextEditorMode(editor->currentMode, false);
+    editor->currentMode = EditorModeRouter_NextEditorMode(editor->currentMode,
+                                                          false,
+                                                          FluidSceneLocksObjects());
     animSettings.editorMode = editor->currentMode;
     InitializeEditorMode(editor);
     printf("Switched to mode: %d\n", editor->currentMode);
@@ -407,10 +411,7 @@ void ToggleSceneMode(SceneEditor* editor) {
 // Set Scene Mode
 void SetSceneMode(SceneEditor* editor, int mode) {
     if (mode >= 0 && mode <= 2) {
-        if (FluidSceneLocksObjects() && mode == 1) {
-            mode = 0;
-        }
-        editor->currentMode = mode;
+        editor->currentMode = EditorModeRouter_ClampEditorMode(mode, FluidSceneLocksObjects());
         animSettings.editorMode = editor->currentMode;
         InitializeEditorMode(editor);
     }

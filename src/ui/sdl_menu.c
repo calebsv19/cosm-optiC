@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include "engine/Render/render_pipeline.h"
 #include "editor/scene_editor.h"
+#include "editor/editor_mode_router.h"
 #include "app/animation.h"  // Include the header where RunMainLoop() is declared
 #include "config/config_manager.h"
 #include "camera/camera.h"
@@ -167,7 +168,11 @@ static int oldWindowWidth = 0;
 static int oldWindowHeight = 0;
 static Uint32 statusExpireMs = 0;
 static SDL_Color statusColor = {255, 255, 255, 255};
-static char statusLabel[16] = "";
+static char statusLabel[64] = "";
+
+static const char* SpaceModeButtonLabel(void) {
+    return EditorModeRouter_SpaceButtonLabel();
+}
 
 typedef struct {
     char name[128];
@@ -645,6 +650,7 @@ void ResetAnimationSettings(void) {
     animSettings.cacheContributionWeight = 1.0;
     animSettings.bsdfModel = 1;
     animSettings.lightIntensity = 5.0;
+    animSettings.spaceMode = SPACE_MODE_2D;
     animSettings.textZoomStep = 0;
     animSettings.previewMode = false;
     animSettings.previewDuration = 5.0;
@@ -1004,6 +1010,7 @@ typedef struct {
     SDL_Rect lightHeightRect;
     SDL_Rect sceneEditorRect;
     SDL_Rect sceneModeRect;
+    SDL_Rect spaceModeRect;
     SDL_Rect saveRect;
     SDL_Rect restoreRect;
     SDL_Rect previewRect;
@@ -1113,10 +1120,21 @@ static MenuButtonLayout BuildMenuButtonLayout(TTF_Font* font) {
                                                           layout.startRect.y - (BOTTOM_BUTTON_HEIGHT_START + 8),
                                                           BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START,
                                                           "Scene Editor", 0);
+    int clampedEditorMode = EditorModeRouter_ClampEditorMode(animSettings.editorMode,
+                                                             AnimationUseFluidScene());
+    if (clampedEditorMode != animSettings.editorMode) {
+        animSettings.editorMode = clampedEditorMode;
+    }
+    const char* editorModeLabel = (clampedEditorMode == 0) ? "Editor: Path" :
+                                  (clampedEditorMode == 1) ? "Editor: Scene" : "Editor: Camera";
     layout.sceneModeRect = BuildAdaptiveButtonRectRight(font, rightEdge,
                                                         layout.sceneEditorRect.y - (BOTTOM_BUTTON_HEIGHT_START + 6),
                                                         BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START,
-                                                        "Path", 0);
+                                                        editorModeLabel, 0);
+    layout.spaceModeRect = BuildAdaptiveButtonRectRight(font, rightEdge,
+                                                        layout.sceneModeRect.y - (BOTTOM_BUTTON_HEIGHT_START + 6),
+                                                        BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START,
+                                                        SpaceModeButtonLabel(), 0);
     layout.exitRect = BuildAdaptiveButtonRect(font, BOTTOM_BUTTON_MARGIN_X_EXIT, BOTTOM_BUTTON_MARGIN_Y_EXIT,
                                               BOTTOM_BUTTON_WIDTH_EXIT, BOTTOM_BUTTON_HEIGHT_EXIT,
                                               "Exit w/o Saving", 280);
@@ -1442,11 +1460,32 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
         RenderButtonRect(renderer, font, &buttons.lightHeightRect, heightLabel, true);
     }
 
-    // Right column: Scene Editor + mode above Start
+    // Right column: Scene Editor + editor mode + space mode above Start
     RenderButtonRect(renderer, font, &buttons.sceneEditorRect, "Scene Editor", false);
-    const char* editorModeText = (animSettings.editorMode == 0) ? "Path" :
-                                 (animSettings.editorMode == 1) ? "Scene" : "Camera";
+    int currentEditorMode = EditorModeRouter_ClampEditorMode(animSettings.editorMode,
+                                                             AnimationUseFluidScene());
+    if (currentEditorMode != animSettings.editorMode) {
+        animSettings.editorMode = currentEditorMode;
+    }
+    const char* editorModeText = (currentEditorMode == 0) ? "Editor: Path" :
+                                 (currentEditorMode == 1) ? "Editor: Scene" : "Editor: Camera";
     RenderButtonRect(renderer, font, &buttons.sceneModeRect, editorModeText, false);
+    RenderButtonRect(renderer, font, &buttons.spaceModeRect,
+                     SpaceModeButtonLabel(),
+                     animSettings.spaceMode == SPACE_MODE_3D);
+    if (EditorModeRouter_IsControlled3D()) {
+        SDL_Color scaffoldHintColor = {255, 220, 140, 240};
+        int hintY = buttons.spaceModeRect.y - 18;
+        if (hintY < MENU_MARGIN_Y) {
+            hintY = buttons.spaceModeRect.y + buttons.spaceModeRect.h + 4;
+        }
+        RenderTextColor(renderer,
+                        font,
+                        buttons.spaceModeRect.x,
+                        hintY,
+                        scaffoldHintColor,
+                        EditorModeRouter_RuntimeHintLabel());
+    }
 
     // Render Bottom Buttons
     RenderButtonRect(renderer, font, &buttons.saveRect, "Save", false);
@@ -1597,6 +1636,7 @@ void HandleKeyPress(SDL_Event* event, bool* running, TTF_Font** font) {
             animSettings.bounceLimit = DEFAULT_BOUNCE_LIMIT;
             animSettings.frameLimit = DEFAULT_FRAME_LIMIT;
             animSettings.framesForTravel = DEFAULT_FRAME_FOR_TRAVEL;
+            animSettings.spaceMode = SPACE_MODE_2D;
             animSettings.textZoomStep = 0;
             (void)refreshActiveFontFromAnimationConfig();
             ReloadMenuFont(font);
@@ -1778,14 +1818,15 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
 
 	// Toggle Scene Editor Mode
         if (PointInRect(&buttons.sceneModeRect, x, y)) {
-        
-            //  Cycle through the three modes
-            animSettings.editorMode = (animSettings.editorMode + 1) % 3;
+            animSettings.editorMode = EditorModeRouter_NextEditorMode(animSettings.editorMode,
+                                                                       false,
+                                                                       AnimationUseFluidScene());
 
             //  Print the new mode
-            const char* newModeText = (animSettings.editorMode == 0) ? "Camera" :
-                                  (animSettings.editorMode == 1) ? "Scene" : "Path";
+            const char* newModeText = (animSettings.editorMode == 0) ? "Path" :
+                                  (animSettings.editorMode == 1) ? "Scene" : "Camera";
             printf("Scene Editor Mode Toggled: %s\n", newModeText);
+            return;
         }
 
 
@@ -1813,7 +1854,23 @@ void HandleMouseClick(SDL_Event* event, bool* running, bool* menuExitedNormally,
             inputBuffer[0] = '\0';  // Clear buffer
         } 
 	*/       
-    } 
+    }
+    if (PointInRect(&buttons.spaceModeRect, x, y)) {
+        animSettings.spaceMode = (animSettings.spaceMode == SPACE_MODE_3D)
+                                     ? SPACE_MODE_2D
+                                     : SPACE_MODE_3D;
+        snprintf(statusLabel,
+                 sizeof(statusLabel),
+                 "%s",
+                 EditorModeRouter_IsControlled3D()
+                     ? "3D scaffold active (2D backend)"
+                     : "Space: 2D active");
+        statusLabel[sizeof(statusLabel) - 1] = '\0';
+        statusColor = (SDL_Color){255, 220, 140, 255};
+        statusExpireMs = SDL_GetTicks() + 2200;
+        printf("Space Mode Toggled: %s\n", SpaceModeButtonLabel());
+        return;
+    }
     if (PointInRect(&buttons.falloffRect, x, y)) {
         animSettings.forwardFalloffMode = (animSettings.forwardFalloffMode + 1) % 3;
         return;

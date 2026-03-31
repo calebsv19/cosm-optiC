@@ -3,6 +3,7 @@
 #include "camera/camera.h"
 #include "config/config_manager.h"
 #include "render/ray_types.h"
+#include "render/space_mode_adapter.h"
 #include "render/uniform_grid.h"
 #include "render/material_bsdf.h"
 
@@ -108,11 +109,8 @@ static double SampleForwardProbe(const float* energyBuffer,
                                  double worldY,
                                  double distance) {
     if (!energyBuffer || width <= 0 || height <= 0) return 0.0;
-    CameraPoint screen = CameraWorldToScreen(&sceneSettings.camera,
-                                             worldX,
-                                             worldY,
-                                             width,
-                                             height);
+    SpaceModeViewContext view_ctx = SpaceModeAdapter_BuildViewContext(&sceneSettings.camera, width, height);
+    CameraPoint screen = SpaceModeAdapter_WorldToScreen(&view_ctx, worldX, worldY);
     int px = (int)floor(screen.x + 0.5);
     int py = (int)floor(screen.y + 0.5);
     if (px < 0 || py < 0 || px >= width || py >= height) {
@@ -142,16 +140,9 @@ static double TraceDirectionalEnergy(const UniformGrid* grid,
     if (!grid || !objects || objectCount <= 0) return 0.0;
     Normalize(&dirX, &dirY);
     // Hemisphere guard: only trace directions in front of the surface normal
-    Ray2D ray = {
-        .ox = originX + dirX * PATH_EPSILON,
-        .oy = originY + dirY * PATH_EPSILON,
-        .dx = dirX,
-        .dy = dirY
-    };
-    HitInfo2D hit = {0};
-    hit.objectIndex = -1;
-    hit.triangleIndex = -1;
-    hit.baryW = 1.0;
+    Ray2D ray = SpaceModeAdapter_MakeOffsetRay(originX, originY, dirX, dirY, PATH_EPSILON);
+    HitInfo2D hit;
+    SpaceModeAdapter_ResetHit(&hit);
     if (!UniformGridTraceRay(grid, &ray, PATH_EPSILON, CACHE_MAX_DISTANCE, &hit)) {
         return 0.0;
     }
@@ -176,8 +167,11 @@ static double TraceDirectionalEnergy(const UniformGrid* grid,
 
     double directVis = 0.0;
     if (light && ndotl > 0.0) {
-        Ray2D lray = { hit.px + nx * PATH_EPSILON, hit.py + ny * PATH_EPSILON, lx, ly };
-        HitInfo2D lhit = {0};
+        Ray2D lray = SpaceModeAdapter_MakeOffsetRay(hit.px, hit.py, nx, ny, PATH_EPSILON);
+        lray.dx = lx;
+        lray.dy = ly;
+        HitInfo2D lhit;
+        SpaceModeAdapter_ResetHit(&lhit);
         if (!UniformGridTraceRay(grid, &lray, PATH_EPSILON, CACHE_MAX_DISTANCE, &lhit)) {
             directVis = 1.0;
         }
@@ -215,16 +209,9 @@ static double MeasureOcclusion(const UniformGrid* grid,
                                double dirY) {
     if (!grid || (!grid->objectCells && !grid->triangleCells)) return 0.0;
     Normalize(&dirX, &dirY);
-    Ray2D ray = {
-        .ox = originX,
-        .oy = originY,
-        .dx = dirX,
-        .dy = dirY
-    };
-    HitInfo2D hit = {0};
-    hit.objectIndex = -1;
-    hit.triangleIndex = -1;
-    hit.baryW = 1.0;
+    Ray2D ray = SpaceModeAdapter_MakeRay(originX, originY, dirX, dirY);
+    HitInfo2D hit;
+    SpaceModeAdapter_ResetHit(&hit);
     if (UniformGridTraceRay(grid, &ray, PATH_EPSILON, CACHE_MAX_DISTANCE, &hit)) {
         return hit.t;
     }

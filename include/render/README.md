@@ -11,5 +11,7 @@ Ray-tracing and drawing helper declarations.
 - `surface_mesh.h` – Packed surface-segment representation plus the new `TriangleMesh` data (shared vertices + faces) emitted from the same `SegmentPath` builder, letting visibility code use triangles while the indirect heuristic still references segments.
 - `uniform_grid.h` – Shared acceleration structure for intersection tests and point queries; all shadow rays, cache probes, and camera feelers traverse the same grid.
 - `ray_types.h` – Basic 2D ray and hit-record structs passed between integrators and the grid.
+- `space_mode_adapter.h` – Mode adapter seam for camera/world conversion and ray/hit setup entrypoints (`2D` default behavior with `3D` routing placeholder).
+- `ray_tracing_mode_backend.h` – Runtime mode backend route contract that resolves canonical 2D vs controlled 3D lane selection, integrator/tile/cache routing flags, and projection fallback behavior for render/event callsites.
 - `material_bsdf.h` – Shared material representation plus Lambert/GGX BSDF helpers that convert `SceneObject` data into shading parameters.
 - `timer_hud_api.h` – Lightweight instrumentation hooks (`ts_start_timer`, etc.) used to profile integrator subpasses without pulling in the entire TimerHUD implementation.

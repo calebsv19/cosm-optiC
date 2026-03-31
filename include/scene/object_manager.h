@@ -19,7 +19,8 @@ typedef struct {
     double baseShapePoints[MAX_POINTS][2];  // Base points (unused for circles)
     double shapePoints[MAX_POINTS][2];      // Transformed points (unused for circles)
 
-    double x, y;           // Object center position
+    double x, y;           // Object center position (XY plane)
+    double z;              // Additive depth metadata (defaults to 0 for 2D scenes)
     double scale;          // Scale factor
     double rotation;       // Rotation angle (radians)
 

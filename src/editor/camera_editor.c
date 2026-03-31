@@ -4,6 +4,7 @@
 #include "camera/camera.h"
 #include "editor/scene_editor.h"
 #include "editor/bezier_editor.h"
+#include "editor/editor_mode_router.h"
 #include "app/animation.h"
 #include "config/config_manager.h"
 #include "scene/object_manager.h"
@@ -57,11 +58,10 @@ static void ClampCameraToFluidBounds(Camera* cam) {
 
 static bool HitOnScreen(const Camera* camera, double wx, double wy, int mx, int my, double radius) {
     if (!camera || radius <= 0.0) return false;
-    CameraPoint sp = CameraWorldToScreen(camera,
-                                         wx,
-                                         wy,
-                                         sceneSettings.windowWidth,
-                                         sceneSettings.windowHeight);
+    SpaceModeViewContext view_ctx = EditorModeRouter_BuildViewContext(camera,
+                                                                      sceneSettings.windowWidth,
+                                                                      sceneSettings.windowHeight);
+    CameraPoint sp = SpaceModeAdapter_WorldToScreen(&view_ctx, wx, wy);
     double dx = sp.x - (double)mx;
     double dy = sp.y - (double)my;
     return (dx * dx + dy * dy) <= radius * radius;
@@ -161,6 +161,24 @@ static Camera BuildEditorCamera(void) {
                                     sceneSettings.windowHeight);
 }
 
+static CameraPoint CameraEditorScreenToWorld(const Camera* camera,
+                                             double screen_x,
+                                             double screen_y,
+                                             int width,
+                                             int height) {
+    SpaceModeViewContext view_ctx = EditorModeRouter_BuildViewContext(camera, width, height);
+    return SpaceModeAdapter_ScreenToWorld(&view_ctx, screen_x, screen_y);
+}
+
+static CameraPoint CameraEditorWorldToScreen(const Camera* camera,
+                                             double world_x,
+                                             double world_y,
+                                             int width,
+                                             int height) {
+    SpaceModeViewContext view_ctx = EditorModeRouter_BuildViewContext(camera, width, height);
+    return SpaceModeAdapter_WorldToScreen(&view_ctx, world_x, world_y);
+}
+
 static void ApplyZoomDelta(double factor) {
     double delta = sceneSettings.camera.zoom * factor;
     CameraZoom(&sceneSettings.camera, delta, 0.01, 20.0);
@@ -209,9 +227,16 @@ static void RenderCameraButtons(SDL_Renderer* renderer) {
 }
 
 void RenderEditorHUD(SDL_Renderer* renderer, const char* label, bool showRotation) {
-    char buffer[128];
-    snprintf(buffer, sizeof(buffer), "%s  |  Camera: (%.1f, %.1f)  Zoom: %.2f",
-             label, sceneSettings.camera.x, sceneSettings.camera.y, sceneSettings.camera.zoom);
+    char buffer[196];
+    const char* routeLabel = EditorModeRouter_IsControlled3D()
+                                 ? "Space: 3D scaffold (2D backend)"
+                                 : "Space: 2D";
+    snprintf(buffer, sizeof(buffer), "%s  |  Camera: (%.1f, %.1f)  Zoom: %.2f  |  %s",
+             label,
+             sceneSettings.camera.x,
+             sceneSettings.camera.y,
+             sceneSettings.camera.zoom,
+             routeLabel);
     SDL_Rect hud = {20, 20, 420, 30};
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200);
     SDL_RenderFillRect(renderer, &hud);
@@ -309,16 +334,16 @@ void RenderCameraEditor(SDL_Renderer* renderer) {
     for (int i = 1; i < sceneSettings.cameraPath.numPoints; i++) {  // skip start
         Vec2 base = vec2(sceneSettings.cameraPath.points[i].x, sceneSettings.cameraPath.points[i].y);
         Vec2 end = RotationHandleEndWorld(i);
-        CameraPoint baseS = CameraWorldToScreen(&sceneSettings.camera,
-                                                base.x,
-                                                base.y,
-                                                sceneSettings.windowWidth,
-                                                sceneSettings.windowHeight);
-        CameraPoint endS = CameraWorldToScreen(&sceneSettings.camera,
-                                               end.x,
-                                               end.y,
-                                               sceneSettings.windowWidth,
-                                               sceneSettings.windowHeight);
+        CameraPoint baseS = CameraEditorWorldToScreen(&sceneSettings.camera,
+                                                      base.x,
+                                                      base.y,
+                                                      sceneSettings.windowWidth,
+                                                      sceneSettings.windowHeight);
+        CameraPoint endS = CameraEditorWorldToScreen(&sceneSettings.camera,
+                                                     end.x,
+                                                     end.y,
+                                                     sceneSettings.windowWidth,
+                                                     sceneSettings.windowHeight);
         SDL_Color col = (i == selectedCamPoint) ? (SDL_Color){200, 170, 255, 255} : kRotHandleColor;
         SDL_SetRenderDrawColor(renderer, col.r, col.g, col.b, col.a);
         SDL_RenderDrawLine(renderer, (int)baseS.x, (int)baseS.y, (int)endS.x, (int)endS.y);
@@ -368,7 +393,7 @@ void HandleCameraEditorEvents(SDL_Event* event) {
                 return;
 
             Camera editorCam = BuildEditorCamera();
-            CameraPoint worldPoint = CameraScreenToWorld(&editorCam, mx, my, width, height);
+            CameraPoint worldPoint = CameraEditorScreenToWorld(&editorCam, mx, my, width, height);
             Vec2 world = vec2(worldPoint.x, worldPoint.y);
 
             camDraggingPoint = -1;
@@ -461,11 +486,11 @@ void HandleCameraEditorEvents(SDL_Event* event) {
                 CameraSetRotation(&sceneSettings.camera, radians);
             } else if (camDraggingRotation != -1) {
                 Camera editorCam = BuildEditorCamera();
-                CameraPoint current = CameraScreenToWorld(&editorCam,
-                                                          event->motion.x,
-                                                          event->motion.y,
-                                                          width,
-                                                          height);
+                CameraPoint current = CameraEditorScreenToWorld(&editorCam,
+                                                                event->motion.x,
+                                                                event->motion.y,
+                                                                width,
+                                                                height);
                 Vec2 cur = vec2(current.x, current.y);
                 Vec2 base = vec2(sceneSettings.cameraPath.points[camDraggingRotation].x,
                                  sceneSettings.cameraPath.points[camDraggingRotation].y);
@@ -475,11 +500,11 @@ void HandleCameraEditorEvents(SDL_Event* event) {
                 SetCameraPointRotation(camDraggingRotation, rotation);
             } else if (camDraggingPoint != -1 && camDraggingVelocity == -1) {
                 Camera editorCam = BuildEditorCamera();
-                CameraPoint current = CameraScreenToWorld(&editorCam,
-                                                          event->motion.x,
-                                                          event->motion.y,
-                                                          width,
-                                                          height);
+                CameraPoint current = CameraEditorScreenToWorld(&editorCam,
+                                                                event->motion.x,
+                                                                event->motion.y,
+                                                                width,
+                                                                height);
                 Vec2 cur = vec2(current.x, current.y);
                 MoveEndPoint(&sceneSettings.cameraPath, (int)round(cur.x), (int)round(cur.y), camDraggingPoint);
             } else if (camDraggingPoint == -1 && camDraggingVelocity == -1 && camDraggingRotation == -1 &&
@@ -487,11 +512,11 @@ void HandleCameraEditorEvents(SDL_Event* event) {
                 // drag empty space while a point is selected should not pan camera; do nothing
             } else if (camDraggingPoint != -1 && camDraggingVelocity != -1) {
                 Camera editorCam = BuildEditorCamera();
-                CameraPoint current = CameraScreenToWorld(&editorCam,
-                                                          event->motion.x,
-                                                          event->motion.y,
-                                                          width,
-                                                          height);
+                CameraPoint current = CameraEditorScreenToWorld(&editorCam,
+                                                                event->motion.x,
+                                                                event->motion.y,
+                                                                width,
+                                                                height);
                 Vec2 cur = vec2(current.x, current.y);
                 MoveVelocityHandle(&sceneSettings.cameraPath,
                                    (int)round(cur.x),
@@ -510,16 +535,16 @@ void HandleCameraEditorEvents(SDL_Event* event) {
                 lastMouseY = event->motion.y;
             } else if (cameraDragging) {
                 Camera editorCam = BuildEditorCamera();
-                CameraPoint prev = CameraScreenToWorld(&editorCam,
-                                                       lastMouseX,
-                                                       lastMouseY,
-                                                       width,
-                                                       height);
-                CameraPoint current = CameraScreenToWorld(&editorCam,
-                                                          event->motion.x,
-                                                          event->motion.y,
-                                                          width,
-                                                          height);
+                CameraPoint prev = CameraEditorScreenToWorld(&editorCam,
+                                                             lastMouseX,
+                                                             lastMouseY,
+                                                             width,
+                                                             height);
+                CameraPoint current = CameraEditorScreenToWorld(&editorCam,
+                                                                event->motion.x,
+                                                                event->motion.y,
+                                                                width,
+                                                                height);
                 Vec2 delta = vec2_sub(vec2(prev.x, prev.y), vec2(current.x, current.y));
                 double beforeX = sceneSettings.camera.x;
                 double beforeY = sceneSettings.camera.y;

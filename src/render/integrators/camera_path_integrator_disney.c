@@ -1,6 +1,7 @@
 #include "render/integrators/camera_path_integrator_disney.h"
 #include "config/config_manager.h"
 #include "render/ray_types.h"
+#include "render/space_mode_adapter.h"
 #include "camera/camera.h"
 #include "render/timer_hud_api.h"
 #include "material/material_manager.h"
@@ -267,9 +268,9 @@ static bool TraceRayToSurface(const IntegratorContext* ctx,
     double len = sqrt(dx*dx + dy*dy);
     if (len <= GRID_EPSILON) return false;
     dx /= len; dy /= len;
-    Ray2D ray = {.ox = ox + dx * PATH_EPSILON, .oy = oy + dy * PATH_EPSILON, .dx = dx, .dy = dy};
-    HitInfo2D h = {0};
-    h.objectIndex = -1; h.triangleIndex = -1; h.baryW = 1.0;
+    Ray2D ray = SpaceModeAdapter_MakeOffsetRay(ox, oy, dx, dy, PATH_EPSILON);
+    HitInfo2D h;
+    SpaceModeAdapter_ResetHit(&h);
     if (!UniformGridTraceRay(ctx->uniformGrid, &ray, PATH_EPSILON, DBL_MAX, &h)) return false;
     if (outHit) *outHit = h;
     if (outObj && ctx->objects && h.objectIndex >= 0 && h.objectIndex < ctx->objectCount) {
@@ -325,10 +326,11 @@ static double SampleDirectLight(const IntegratorContext* ctx,
         dirY /= sqrt(distXY2 > 1e-12 ? distXY2 : 1.0);
         double dirZ = lightHeight / dist;
 
-        Ray2D shadow = { hit->px + hit->nx * PATH_EPSILON,
-                         hit->py + hit->ny * PATH_EPSILON,
-                         dirX, dirY };
-        HitInfo2D block = {0};
+        Ray2D shadow = SpaceModeAdapter_MakeOffsetRay(hit->px, hit->py, hit->nx, hit->ny, PATH_EPSILON);
+        shadow.dx = dirX;
+        shadow.dy = dirY;
+        HitInfo2D block;
+        SpaceModeAdapter_ResetHit(&block);
         if (UniformGridTraceRay(ctx->uniformGrid, &shadow, PATH_EPSILON, dist - PATH_EPSILON, &block)) {
             continue;
         }
@@ -379,11 +381,12 @@ static double PathTracePixel(const IntegratorContext* ctx,
 
     double jitterX = FastRNGNextDouble(rng) - 0.5;
     double jitterY = FastRNGNextDouble(rng) - 0.5;
-    CameraPoint world = CameraScreenToWorld(&sceneSettings.camera,
-                                            px + 0.5 + jitterX,
-                                            py + 0.5 + jitterY,
-                                            ctx->width,
-                                            ctx->height);
+    SpaceModeViewContext view_ctx = SpaceModeAdapter_BuildViewContext(&sceneSettings.camera,
+                                                                       ctx->width,
+                                                                       ctx->height);
+    CameraPoint world = SpaceModeAdapter_ScreenToWorld(&view_ctx,
+                                                       px + 0.5 + jitterX,
+                                                       py + 0.5 + jitterY);
     double lightHeight = (animSettings.lightHeight > 0.0) ? animSettings.lightHeight : 8.0;
     double viewDirX = 0.0, viewDirY = -1.0;
     CameraViewDirection(sceneSettings.camera.rotation, &viewDirX, &viewDirY);
@@ -407,10 +410,8 @@ static double PathTracePixel(const IntegratorContext* ctx,
     }
 
     for (int depth = 0; depth < maxDepth; depth++) {
-        HitInfo2D hit = {0};
-        hit.objectIndex = -1;
-        hit.triangleIndex = -1;
-        hit.baryW = 1.0;
+        HitInfo2D hit;
+        SpaceModeAdapter_ResetHit(&hit);
         const SceneObject* obj = NULL;
         MaterialBSDF matScratch = {0};
         const MaterialBSDF* bsdf = NULL;
@@ -478,10 +479,11 @@ static double PathTracePixel(const IntegratorContext* ctx,
                     double dist3 = sqrt(dist2 + lightHeight * lightHeight);
                     double cosOn = fmax(0.0, hit.nx * s.dirX + hit.ny * s.dirY + normalZ * s.dirZ);
                     if (cosOn > 0.0) {
-                        Ray2D shadow = { hit.px + hit.nx * PATH_EPSILON,
-                                         hit.py + hit.ny * PATH_EPSILON,
-                                         s.dirX, s.dirY };
-                        HitInfo2D block = {0};
+                        Ray2D shadow = SpaceModeAdapter_MakeOffsetRay(hit.px, hit.py, hit.nx, hit.ny, PATH_EPSILON);
+                        shadow.dx = s.dirX;
+                        shadow.dy = s.dirY;
+                        HitInfo2D block;
+                        SpaceModeAdapter_ResetHit(&block);
                         if (!UniformGridTraceRay(ctx->uniformGrid, &shadow, PATH_EPSILON, t - PATH_EPSILON, &block)) {
                             double area = M_PI * light->radius * light->radius;
                             double att = DisneyDistanceAttenuation(ctx, dist3);

@@ -1,4 +1,5 @@
 #include "render/integrators/hybrid/integrator_visibility.h"
+#include "render/space_mode_adapter.h"
 #include <math.h>
 
 #ifndef PATH_EPSILON
@@ -21,8 +22,9 @@ bool IsOccluded(const UniformGrid* grid,
 {
     if (!grid) return false;
 
-    Ray2D ray = { originX, originY, dirX, dirY };
-    HitInfo2D tmp = {0};
+    Ray2D ray = SpaceModeAdapter_MakeRay(originX, originY, dirX, dirY);
+    HitInfo2D tmp;
+    SpaceModeAdapter_ResetHit(&tmp);
 
     return UniformGridTraceRay(grid, &ray, PATH_EPSILON, maxDist, &tmp);
 }
@@ -36,14 +38,9 @@ bool TraceRayToSurface(const UniformGrid* grid,
 {
     if (!grid) return false;
 
-    Ray2D ray = {
-        worldX + dirX * PATH_EPSILON,
-        worldY + dirY * PATH_EPSILON,
-        dirX,
-        dirY
-    };
-
-    HitInfo2D hit = {0};
+    Ray2D ray = SpaceModeAdapter_MakeOffsetRay(worldX, worldY, dirX, dirY, PATH_EPSILON);
+    HitInfo2D hit;
+    SpaceModeAdapter_ResetHit(&hit);
     if (!UniformGridTraceRay(grid, &ray, PATH_EPSILON, maxDist, &hit))
         return false;
 

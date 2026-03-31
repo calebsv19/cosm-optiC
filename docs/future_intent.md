@@ -63,18 +63,24 @@ Last updated: 2026-03-30
     - `f1b666c` (`Project Scaffold Standardization`)
 
 ## Post-Scaffold Direction
-- scaffold migration is complete for `ray_tracing`; next structured lane is post-scaffold font-size standardization.
-- active private plan:
-  - `../docs/private_program_docs/ray_tracing/2026-03-30_ray_tracing_post_scaffold_font_size_pass_plan.md`
-- current phase status:
-  - `RT-F0` complete (font/text/input mapping + risk capture)
-  - `RT-F1` complete (runtime zoom state contract + persistence)
-  - `RT-F2` complete (shortcut wiring + live font reload/invalidation)
-  - `RT-F3` complete (metric-driven menu/editor layout safety foundation)
-  - `RT-F4` complete (pane-by-pane overlap/clip hardening)
-  - `RT-F5` complete (verification/docs/memory closeout + wrap-up commit lane closed)
-- wrap-up commit title for that lane is fixed:
-  - `Post-Scaffold Font Size Standardization`
+- scaffold migration is complete for `ray_tracing`.
+- completed post-scaffold lane:
+  - font-size standardization (`RT-F0` through `RT-F5`) is complete
+  - wrap-up commit title used:
+    - `Post-Scaffold Font Size Standardization`
+- active post-scaffold lane:
+  - completed trio 2D/3D parity propagation with `line_drawing`:
+    - `../docs/private_program_docs/ray_tracing/2026-03-30_ray_tracing_2d_3d_parity_with_line_drawing_plan.md`
+  - current status:
+    - `RT-U0` complete (baseline freeze and risk map)
+    - `RT-U1` complete (space mode runtime contract + menu selector)
+    - `RT-U2` complete (mode adapter seam for camera/world/ray routing)
+    - `RT-U3` complete (additive scene/object upgrade with optional `z` compatibility)
+    - `RT-U4` complete (backend separation + explicit mode routing)
+    - `RT-U5` complete (UX + editor parity layer)
+    - `RT-U6` complete (verification/docs/memory closeout)
+  - closeout execution log:
+    - `../docs/private_program_docs/ray_tracing/2026-03-30_rt_u6_verification_docs_memory_closeout.md`
 
 ## Non-Goals During Scaffold Migration
 - no feature-expansion work unrelated to scaffold alignment

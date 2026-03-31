@@ -1,6 +1,7 @@
 #include "render/integrators/direct_light_integrator.h"
 #include "config/config_manager.h"
 #include "render/ray_types.h"
+#include "render/space_mode_adapter.h"
 #include "camera/camera.h"
 #include "render/uniform_grid.h"
 #include <math.h>
@@ -36,8 +37,9 @@ static bool HasDirectLineOfSight(const IntegratorContext* ctx,
     if (!ctx->uniformGrid) {
         return true;
     }
-    Ray2D ray = { originX, originY, dx, dy };
-    HitInfo2D hit = {0};
+    Ray2D ray = SpaceModeAdapter_MakeRay(originX, originY, dx, dy);
+    HitInfo2D hit;
+    SpaceModeAdapter_ResetHit(&hit);
     return !UniformGridTraceRay(ctx->uniformGrid, &ray, PATH_EPSILON, maxDist, &hit);
 }
 
@@ -103,13 +105,14 @@ void DirectLightIntegratorRender(IntegratorContext* ctx, const LightSource* ligh
     }
     memset(ctx->pixelBuffer, 0, total * sizeof(Uint8));
 
+    SpaceModeViewContext view_ctx = SpaceModeAdapter_BuildViewContext(&sceneSettings.camera,
+                                                                       ctx->width,
+                                                                       ctx->height);
     for (int y = 0; y < ctx->height; y++) {
         for (int x = 0; x < ctx->width; x++) {
-            CameraPoint world = CameraScreenToWorld(&sceneSettings.camera,
-                                                    x + 0.5,
-                                                    y + 0.5,
-                                                    ctx->width,
-                                                    ctx->height);
+            CameraPoint world = SpaceModeAdapter_ScreenToWorld(&view_ctx,
+                                                                x + 0.5,
+                                                                y + 0.5);
             double lx = light->x - world.x;
             double ly = light->y - world.y;
             NormalizeVec(&lx, &ly);

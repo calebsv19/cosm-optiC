@@ -2,6 +2,7 @@
 #include "scene/object_manager.h"
 #include "config/config_manager.h"
 #include "editor/scene_editor.h"
+#include "editor/editor_mode_router.h"
 #include "app/animation.h"
 #include "camera/camera.h"
 #include "geo/shape_adapter.h"
@@ -97,19 +98,17 @@ static Camera BuildObjectEditorCamera(void) {
 }
 
 static CameraPoint ScreenToWorldObjectEditor(const Camera* camera, int sx, int sy) {
-    return CameraScreenToWorld(camera,
-                               sx,
-                               sy,
-                               sceneSettings.windowWidth,
-                               sceneSettings.windowHeight);
+    SpaceModeViewContext view_ctx = EditorModeRouter_BuildViewContext(camera,
+                                                                      sceneSettings.windowWidth,
+                                                                      sceneSettings.windowHeight);
+    return SpaceModeAdapter_ScreenToWorld(&view_ctx, sx, sy);
 }
 
 static SDL_Point WorldToScreenObjectEditor(const Camera* camera, double wx, double wy) {
-    CameraPoint screen = CameraWorldToScreen(camera,
-                                             wx,
-                                             wy,
-                                             sceneSettings.windowWidth,
-                                             sceneSettings.windowHeight);
+    SpaceModeViewContext view_ctx = EditorModeRouter_BuildViewContext(camera,
+                                                                      sceneSettings.windowWidth,
+                                                                      sceneSettings.windowHeight);
+    CameraPoint screen = SpaceModeAdapter_WorldToScreen(&view_ctx, wx, wy);
     return (SDL_Point){(int)lround(screen.x), (int)lround(screen.y)};
 }
 
