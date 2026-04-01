@@ -20,6 +20,7 @@ output.mp4
 data/runtime/
 data/snapshots/
 tmp/
+/dist/
 
 # Optional: temporary files and OS-specific junk
 *.log

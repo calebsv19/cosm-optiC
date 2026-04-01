@@ -81,8 +81,8 @@
 
 // Slider Layout Constants
 #define SLIDER_WIDTH 250
-#define SLIDER_HEIGHT 10
-#define SLIDER_SPACING 20  // Vertical spacing between sliders
+#define SLIDER_HEIGHT 8
+#define SLIDER_SPACING 10  // Vertical spacing between sliders
 
 #if USE_VULKAN
 static VkRenderer g_menu_renderer_storage;
@@ -488,18 +488,28 @@ static bool OpenMenuFontForCurrentZoom(TTF_Font** out_font) {
     const char* font_path = "/System/Library/Fonts/Supplemental/Arial.ttf";
     int point_size = TOGGLE_BUTTON_TEXT_SIZE;
     TTF_Font* opened_font;
+    bool used_shared_path = false;
     if (!out_font) return false;
 
     if (ray_tracing_shared_font_resolve_ui_regular(
             shared_font_path, sizeof(shared_font_path), &point_size)) {
         font_path = shared_font_path;
+        used_shared_path = true;
     }
-    point_size = animation_config_scale_text_point_size(&animSettings, point_size, 12);
+    point_size = animation_config_scale_text_point_size(&animSettings, point_size, 8);
     opened_font = TTF_OpenFont(font_path, point_size);
     if (!opened_font && font_path != NULL && strcmp(font_path, "/System/Library/Fonts/Supplemental/Arial.ttf") != 0) {
         opened_font = TTF_OpenFont("/System/Library/Fonts/Supplemental/Arial.ttf", point_size);
+        if (opened_font) {
+            font_path = "/System/Library/Fonts/Supplemental/Arial.ttf";
+            used_shared_path = false;
+        }
     }
     if (!opened_font) return false;
+    printf("Menu font loaded: path=%s size=%d shared=%s\n",
+           font_path,
+           point_size,
+           used_shared_path ? "yes" : "no");
     *out_font = opened_font;
     return true;
 }
@@ -674,7 +684,7 @@ void RenderText(SDL_Renderer *renderer, TTF_Font *font, int x, int y, const char
     RayTracingThemePalette palette = {0};
     const bool has_shared_palette = ray_tracing_shared_theme_resolve_palette(&palette);
     SDL_Color textColor = has_shared_palette ? palette.text_primary : (SDL_Color){255, 255, 255, 255};
-    SDL_Surface *textSurface = TTF_RenderText_Solid(font, buffer, textColor);
+    SDL_Surface *textSurface = TTF_RenderUTF8_Blended(font, buffer, textColor);
     if (!textSurface) return;
 
     SDL_Rect textRect = {x, y, textSurface->w, textSurface->h};
@@ -684,7 +694,7 @@ void RenderText(SDL_Renderer *renderer, TTF_Font *font, int x, int y, const char
 
 static void RenderTextColor(SDL_Renderer *renderer, TTF_Font *font, int x, int y, SDL_Color color, const char *text) {
     if (!text || !*text) return;
-    SDL_Surface *textSurface = TTF_RenderText_Solid(font, text, color);
+    SDL_Surface *textSurface = TTF_RenderUTF8_Blended(font, text, color);
     if (!textSurface) return;
     SDL_Rect textRect = {x, y, textSurface->w, textSurface->h};
     RenderSurface(renderer, textSurface, &textRect);
@@ -699,7 +709,7 @@ static void RenderCenteredTextColor(SDL_Renderer *renderer,
     SDL_Surface *textSurface;
     SDL_Rect textRect;
     if (!font || !rect || !text || !text[0]) return;
-    textSurface = TTF_RenderText_Solid(font, text, color);
+    textSurface = TTF_RenderUTF8_Blended(font, text, color);
     if (!textSurface) return;
     textRect = (SDL_Rect){
         rect->x + (rect->w - textSurface->w) / 2,
@@ -1185,7 +1195,7 @@ static SliderLayout BuildSliderLayout(TTF_Font* font, const MenuButtonLayout* bu
         centerRight = max_int(centerRight, buttons->tileRect.x + buttons->tileRect.w);
         centerRight = max_int(centerRight, buttons->tilePreviewRect.x + buttons->tilePreviewRect.w);
         sliderX = max_int(sliderX, centerRight + 24);
-        panelBottom = min_int(panelBottom, buttons->startRect.y - 14);
+        panelBottom = min_int(panelBottom, buttons->spaceModeRect.y - 12);
     }
     sliderWidth = rightLimit - sliderX - valueReserve;
     if (sliderWidth < 130) {
@@ -1193,9 +1203,9 @@ static SliderLayout BuildSliderLayout(TTF_Font* font, const MenuButtonLayout* bu
         sliderX = rightLimit - valueReserve - sliderWidth;
     }
     if (sliderX < SLIDER_MARGIN_X) sliderX = SLIDER_MARGIN_X;
-    layout.trackHeight = max_int(SLIDER_HEIGHT, textHeight / 2);
-    layout.knobWidth = max_int(10, textHeight / 2);
-    layout.knobHeight = layout.trackHeight + 10;
+    layout.trackHeight = max_int(SLIDER_HEIGHT, (textHeight * 3) / 8);
+    layout.knobWidth = max_int(8, (textHeight * 3) / 8);
+    layout.knobHeight = layout.trackHeight + 6;
     panelHeight = panelBottom - panelTop;
     if (panelHeight < 120) panelHeight = 120;
     layout.panelRect = (SDL_Rect){sliderX - 12, panelTop, rightLimit - (sliderX - 12), panelHeight};
@@ -1215,7 +1225,7 @@ static SliderLayout BuildSliderLayout(TTF_Font* font, const MenuButtonLayout* bu
                 sliderX + sliderWidth + 10, trackY_ - ((textHeight - layout.trackHeight) / 2), \
                 labelText \
             }; \
-            layout.nextY = trackY_ + layout.trackHeight + SLIDER_SPACING + 4; \
+            layout.nextY = trackY_ + layout.trackHeight + SLIDER_SPACING + 2; \
         } \
     } while (0)
 
@@ -1460,6 +1470,8 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
         RenderButtonRect(renderer, font, &buttons.lightHeightRect, heightLabel, true);
     }
 
+    RenderSliders(renderer, font, &sliderLayout);
+
     // Right column: Scene Editor + editor mode + space mode above Start
     RenderButtonRect(renderer, font, &buttons.sceneEditorRect, "Scene Editor", false);
     int currentEditorMode = EditorModeRouter_ClampEditorMode(animSettings.editorMode,
@@ -1522,8 +1534,6 @@ void RenderMenu(SDL_Renderer* renderer, TTF_Font* font) {
         RenderButtonText(renderer, buttons.startRect, "Start");
     }
    
-
-    RenderSliders(renderer, font, &sliderLayout);
 
     // Status label near Save button
     Uint32 now = SDL_GetTicks();

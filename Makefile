@@ -5,6 +5,15 @@ INC_DIR   := include
 BUILD_DIR := build
 TARGET    := Ray_anim
 .DEFAULT_GOAL := all
+DIST_DIR := dist
+PACKAGE_APP_NAME := RayTracing.app
+PACKAGE_APP_DIR := $(DIST_DIR)/$(PACKAGE_APP_NAME)
+PACKAGE_CONTENTS_DIR := $(PACKAGE_APP_DIR)/Contents
+PACKAGE_MACOS_DIR := $(PACKAGE_CONTENTS_DIR)/MacOS
+PACKAGE_RESOURCES_DIR := $(PACKAGE_CONTENTS_DIR)/Resources
+PACKAGE_INFO_PLIST_SRC := tools/packaging/macos/Info.plist
+PACKAGE_LAUNCHER_SRC := tools/packaging/macos/raytracing-launcher
+DESKTOP_APP_DIR ?= $(HOME)/Desktop/$(PACKAGE_APP_NAME)
 VK_RENDERER_DIR := ../shared/vk_renderer
 CORE_BASE_DIR := ../shared/core/core_base
 CORE_IO_DIR := ../shared/core/core_io
@@ -12,6 +21,7 @@ CORE_DATA_DIR := ../shared/core/core_data
 CORE_PACK_DIR := ../shared/core/core_pack
 CORE_TIME_DIR := ../shared/core/core_time
 CORE_SCENE_DIR := ../shared/core/core_scene
+CORE_SCENE_COMPILE_DIR := ../shared/core/core_scene_compile
 CORE_TRACE_DIR := ../shared/core/core_trace
 CORE_SPACE_DIR := ../shared/core/core_space
 CORE_THEME_DIR := ../shared/core/core_theme
@@ -75,12 +85,12 @@ TIMER_HUD_DIR := ../shared/timer_hud
 TIMER_HUD_INCLUDE := -I$(TIMER_HUD_DIR)/include -I$(TIMER_HUD_DIR)/external
 
 CFLAGS += $(TIMER_HUD_INCLUDE) -I$(VK_RENDERER_DIR)/include $(VULKAN_CFLAGS) \
-	-I$(CORE_BASE_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_DATA_DIR)/include -I$(CORE_PACK_DIR)/include -I$(CORE_TIME_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_TRACE_DIR)/include -I$(CORE_SPACE_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(KIT_VIZ_DIR)/include \
+	-I$(CORE_BASE_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_DATA_DIR)/include -I$(CORE_PACK_DIR)/include -I$(CORE_TIME_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_SCENE_COMPILE_DIR)/include -I$(CORE_TRACE_DIR)/include -I$(CORE_SPACE_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(KIT_VIZ_DIR)/include \
 	-DUSE_VULKAN=1 -DVK_RENDERER_SHADER_ROOT=\"$(abspath $(VK_RENDERER_DIR))\" \
 	-include $(VK_RENDERER_DIR)/include/vk_renderer_sdl.h
 LDFLAGS += $(VULKAN_LIBS)
 CFLAGS_RELEASE += $(TIMER_HUD_INCLUDE) -I$(VK_RENDERER_DIR)/include $(VULKAN_CFLAGS) \
-	-I$(CORE_BASE_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_DATA_DIR)/include -I$(CORE_PACK_DIR)/include -I$(CORE_TIME_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_TRACE_DIR)/include -I$(CORE_SPACE_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(KIT_VIZ_DIR)/include \
+	-I$(CORE_BASE_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_DATA_DIR)/include -I$(CORE_PACK_DIR)/include -I$(CORE_TIME_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_SCENE_COMPILE_DIR)/include -I$(CORE_TRACE_DIR)/include -I$(CORE_SPACE_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(KIT_VIZ_DIR)/include \
 	-DUSE_VULKAN=1 -DVK_RENDERER_SHADER_ROOT=\"$(abspath $(VK_RENDERER_DIR))\" \
 	-include $(VK_RENDERER_DIR)/include/vk_renderer_sdl.h
 ifeq ($(UNAME_S),Darwin)
@@ -129,6 +139,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/import/fluid_import.o \
 	$(BUILD_DIR)/import/fluid_pack_import.o \
 	$(BUILD_DIR)/import/scene_bundle_import.o \
+	$(BUILD_DIR)/import/runtime_scene_bridge.o \
 	$(BUILD_DIR)/render/kit_viz_fluid_overlay_adapter.o \
 	$(BUILD_DIR)/core_base/core_base.o \
 	$(BUILD_DIR)/core_io/core_io.o \
@@ -136,6 +147,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/core_pack/core_pack.o \
 	$(CORE_TIME_TEST_DEPS) \
 	$(BUILD_DIR)/core_scene/core_scene.o \
+	$(BUILD_DIR)/core_scene_compile/core_scene_compile.o \
 	$(BUILD_DIR)/core_space/core_space.o \
 	$(BUILD_DIR)/export/render_metrics_dataset.o \
 	$(BUILD_DIR)/core_theme/core_theme.o \
@@ -173,6 +185,7 @@ else
 CORE_TIME_SRCS += $(CORE_TIME_DIR)/src/core_time_posix.c
 endif
 CORE_SCENE_SRCS := $(CORE_SCENE_DIR)/src/core_scene.c
+CORE_SCENE_COMPILE_SRCS := $(CORE_SCENE_COMPILE_DIR)/src/core_scene_compile.c
 CORE_SPACE_SRCS := $(CORE_SPACE_DIR)/src/core_space.c
 CORE_THEME_SRCS := $(CORE_THEME_DIR)/src/core_theme.c
 CORE_FONT_SRCS := $(CORE_FONT_DIR)/src/core_font.c
@@ -183,6 +196,7 @@ CORE_DATA_OBJS := $(patsubst $(CORE_DATA_DIR)/src/%.c,$(BUILD_DIR)/core_data/%.o
 CORE_PACK_OBJS := $(patsubst $(CORE_PACK_DIR)/src/%.c,$(BUILD_DIR)/core_pack/%.o,$(CORE_PACK_SRCS))
 CORE_TIME_OBJS := $(patsubst $(CORE_TIME_DIR)/src/%.c,$(BUILD_DIR)/core_time/%.o,$(CORE_TIME_SRCS))
 CORE_SCENE_OBJS := $(patsubst $(CORE_SCENE_DIR)/src/%.c,$(BUILD_DIR)/core_scene/%.o,$(CORE_SCENE_SRCS))
+CORE_SCENE_COMPILE_OBJS := $(patsubst $(CORE_SCENE_COMPILE_DIR)/src/%.c,$(BUILD_DIR)/core_scene_compile/%.o,$(CORE_SCENE_COMPILE_SRCS))
 CORE_SPACE_OBJS := $(patsubst $(CORE_SPACE_DIR)/src/%.c,$(BUILD_DIR)/core_space/%.o,$(CORE_SPACE_SRCS))
 CORE_THEME_OBJS := $(patsubst $(CORE_THEME_DIR)/src/%.c,$(BUILD_DIR)/core_theme/%.o,$(CORE_THEME_SRCS))
 CORE_FONT_OBJS := $(patsubst $(CORE_FONT_DIR)/src/%.c,$(BUILD_DIR)/core_font/%.o,$(CORE_FONT_SRCS))
@@ -190,7 +204,7 @@ KIT_VIZ_OBJS := $(patsubst $(KIT_VIZ_DIR)/src/%.c,$(BUILD_DIR)/kit_viz/%.o,$(KIT
 
 OBJ := $(OBJ) $(TIMER_HUD_OBJS) $(TIMER_HUD_EXTERNAL_OBJS) \
 	$(patsubst $(VK_RENDERER_DIR)/src/%.c,$(BUILD_DIR)/vk_renderer/%.o,$(VK_RENDERER_SRCS)) \
-	$(CORE_BASE_OBJS) $(CORE_IO_OBJS) $(CORE_DATA_OBJS) $(CORE_PACK_OBJS) $(CORE_TIME_OBJS) $(CORE_SCENE_OBJS) $(CORE_SPACE_OBJS) $(CORE_THEME_OBJS) $(CORE_FONT_OBJS) $(KIT_VIZ_OBJS)
+	$(CORE_BASE_OBJS) $(CORE_IO_OBJS) $(CORE_DATA_OBJS) $(CORE_PACK_OBJS) $(CORE_TIME_OBJS) $(CORE_SCENE_OBJS) $(CORE_SCENE_COMPILE_OBJS) $(CORE_SPACE_OBJS) $(CORE_THEME_OBJS) $(CORE_FONT_OBJS) $(KIT_VIZ_OBJS)
 DEP := $(OBJ:.o=.d)
 
 .PHONY: add-disney-flag
@@ -205,7 +219,7 @@ STABLE_TEST_TARGETS := \
 
 LEGACY_TEST_TARGETS :=
 
-.PHONY: all clean run run-ide-theme run-daw-theme run-headless-smoke visual-harness debug format video release relrun test test-stable test-legacy test-shared-theme-font-adapter test-manifest-to-trace-export test-fluid-pack-contract-parity
+.PHONY: all clean run run-ide-theme run-daw-theme run-headless-smoke visual-harness package-desktop package-desktop-smoke package-desktop-self-test package-desktop-copy-desktop package-desktop-sync package-desktop-open package-desktop-remove package-desktop-refresh debug format video release relrun test test-stable test-legacy test-shared-theme-font-adapter test-manifest-to-trace-export test-fluid-pack-contract-parity
 
 all: $(TARGET)
 
@@ -297,6 +311,10 @@ $(BUILD_DIR)/core_scene/%.o: $(CORE_SCENE_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
+$(BUILD_DIR)/core_scene_compile/%.o: $(CORE_SCENE_COMPILE_DIR)/src/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
 $(BUILD_DIR)/core_space/%.o: $(CORE_SPACE_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
@@ -330,6 +348,65 @@ run-headless-smoke: all test-stable
 
 visual-harness: $(TARGET)
 	@echo "visual harness binary ready: $(TARGET)"
+
+package-desktop: all
+	@echo "Preparing desktop package..."
+	@rm -rf "$(PACKAGE_APP_DIR)"
+	@mkdir -p "$(PACKAGE_MACOS_DIR)" "$(PACKAGE_RESOURCES_DIR)"
+	@cp "$(PACKAGE_INFO_PLIST_SRC)" "$(PACKAGE_CONTENTS_DIR)/Info.plist"
+	@cp "$(TARGET)" "$(PACKAGE_MACOS_DIR)/raytracing-bin"
+	@cp "$(PACKAGE_LAUNCHER_SRC)" "$(PACKAGE_MACOS_DIR)/raytracing-launcher"
+	@chmod +x "$(PACKAGE_MACOS_DIR)/raytracing-bin" "$(PACKAGE_MACOS_DIR)/raytracing-launcher"
+	@cp -R config "$(PACKAGE_RESOURCES_DIR)/"
+	@mkdir -p "$(PACKAGE_RESOURCES_DIR)/shared/assets/fonts"
+	@cp -R "../shared/assets/fonts/." "$(PACKAGE_RESOURCES_DIR)/shared/assets/fonts/"
+	@mkdir -p "$(PACKAGE_RESOURCES_DIR)/data/runtime" "$(PACKAGE_RESOURCES_DIR)/data/runtime/frames" "$(PACKAGE_RESOURCES_DIR)/data/runtime/videos" "$(PACKAGE_RESOURCES_DIR)/data/snapshots"
+	@mkdir -p "$(PACKAGE_RESOURCES_DIR)/vk_renderer" "$(PACKAGE_RESOURCES_DIR)/shaders"
+	@cp -R "$(VK_RENDERER_DIR)/shaders" "$(PACKAGE_RESOURCES_DIR)/vk_renderer/"
+	@cp -R "$(VK_RENDERER_DIR)/shaders/." "$(PACKAGE_RESOURCES_DIR)/shaders/"
+	@echo "Desktop package ready: $(PACKAGE_APP_DIR)"
+
+package-desktop-smoke: package-desktop
+	@test -x "$(PACKAGE_MACOS_DIR)/raytracing-launcher" || (echo "Missing launcher"; exit 1)
+	@test -x "$(PACKAGE_MACOS_DIR)/raytracing-bin" || (echo "Missing app binary"; exit 1)
+	@test -f "$(PACKAGE_CONTENTS_DIR)/Info.plist" || (echo "Missing Info.plist"; exit 1)
+	@test -f "$(PACKAGE_RESOURCES_DIR)/config/animation_config.json" || (echo "Missing config/animation_config.json"; exit 1)
+	@test -f "$(PACKAGE_RESOURCES_DIR)/config/scene_config.json" || (echo "Missing config/scene_config.json"; exit 1)
+	@test -f "$(PACKAGE_RESOURCES_DIR)/config/default.ttf" || (echo "Missing config/default.ttf"; exit 1)
+	@test -f "$(PACKAGE_RESOURCES_DIR)/shared/assets/fonts/Montserrat-Regular.ttf" || (echo "Missing shared packaged font"; exit 1)
+	@test -f "$(PACKAGE_RESOURCES_DIR)/config/objects/Hexagon.asset.json" || (echo "Missing bundled shape assets"; exit 1)
+	@test -d "$(PACKAGE_RESOURCES_DIR)/data/runtime" || (echo "Missing runtime dir"; exit 1)
+	@test -d "$(PACKAGE_RESOURCES_DIR)/data/runtime/frames" || (echo "Missing runtime frames dir"; exit 1)
+	@test -d "$(PACKAGE_RESOURCES_DIR)/data/runtime/videos" || (echo "Missing runtime videos dir"; exit 1)
+	@test -f "$(PACKAGE_RESOURCES_DIR)/vk_renderer/shaders/textured.vert.spv" || (echo "Missing bundled vk_renderer shader"; exit 1)
+	@test -f "$(PACKAGE_RESOURCES_DIR)/shaders/textured.vert.spv" || (echo "Missing bundled runtime shader"; exit 1)
+	@echo "package-desktop-smoke passed."
+
+package-desktop-self-test: package-desktop-smoke
+	@"$(PACKAGE_MACOS_DIR)/raytracing-launcher" --self-test || (echo "package-desktop self-test failed."; exit 1)
+	@echo "package-desktop-self-test passed."
+
+package-desktop-copy-desktop: package-desktop
+	@mkdir -p "$(dir $(DESKTOP_APP_DIR))"
+	@rm -rf "$(DESKTOP_APP_DIR)"
+	@cp -R "$(PACKAGE_APP_DIR)" "$(DESKTOP_APP_DIR)"
+	@echo "Copied $(PACKAGE_APP_NAME) to $(DESKTOP_APP_DIR)"
+
+package-desktop-sync: package-desktop-copy-desktop
+	@echo "Desktop package synchronized: $(DESKTOP_APP_DIR)"
+
+package-desktop-open: package-desktop
+	@open "$(PACKAGE_APP_DIR)"
+
+package-desktop-remove:
+	@rm -rf "$(PACKAGE_APP_DIR)"
+	@echo "Removed desktop package: $(PACKAGE_APP_DIR)"
+
+package-desktop-refresh: package-desktop
+	@mkdir -p "$(dir $(DESKTOP_APP_DIR))"
+	@rm -rf "$(DESKTOP_APP_DIR)"
+	@cp -R "$(PACKAGE_APP_DIR)" "$(DESKTOP_APP_DIR)"
+	@echo "Refreshed $(PACKAGE_APP_NAME) at $(DESKTOP_APP_DIR)"
 
 debug: CFLAGS += -O0 -g3
 debug: clean all

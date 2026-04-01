@@ -1,0 +1,58 @@
+#!/bin/sh
+set -eu
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+APP_CONTENTS_DIR="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
+RES_DIR="$APP_CONTENTS_DIR/Resources"
+LOG_DIR="${HOME}/Library/Logs/RayTracing"
+LOG_FILE="$LOG_DIR/launcher.log"
+
+mkdir -p "$LOG_DIR" 2>/dev/null || true
+if ! touch "$LOG_FILE" 2>/dev/null; then
+    LOG_FILE="${TMPDIR:-/tmp}/raytracing-launcher.log"
+    touch "$LOG_FILE" 2>/dev/null || true
+fi
+
+export VK_RENDERER_SHADER_ROOT="${VK_RENDERER_SHADER_ROOT:-$RES_DIR}"
+export SHAPE_ASSET_DIR="${SHAPE_ASSET_DIR:-$RES_DIR/config/objects}"
+export RAY_TRACING_USE_SHARED_THEME="${RAY_TRACING_USE_SHARED_THEME:-1}"
+export RAY_TRACING_USE_SHARED_THEME_FONT="${RAY_TRACING_USE_SHARED_THEME_FONT:-1}"
+export RAY_TRACING_USE_SHARED_FONT="${RAY_TRACING_USE_SHARED_FONT:-1}"
+export RAY_TRACING_FONT_PRESET="${RAY_TRACING_FONT_PRESET:-daw_default}"
+
+if [ "${1:-}" = "--print-config" ]; then
+    echo "APP_CONTENTS_DIR=$APP_CONTENTS_DIR"
+    echo "RES_DIR=$RES_DIR"
+    echo "LOG_FILE=$LOG_FILE"
+    echo "VK_RENDERER_SHADER_ROOT=$VK_RENDERER_SHADER_ROOT"
+    echo "SHAPE_ASSET_DIR=$SHAPE_ASSET_DIR"
+    echo "RAY_TRACING_USE_SHARED_THEME=$RAY_TRACING_USE_SHARED_THEME"
+    echo "RAY_TRACING_USE_SHARED_THEME_FONT=$RAY_TRACING_USE_SHARED_THEME_FONT"
+    echo "RAY_TRACING_USE_SHARED_FONT=$RAY_TRACING_USE_SHARED_FONT"
+    echo "RAY_TRACING_FONT_PRESET=$RAY_TRACING_FONT_PRESET"
+    exit 0
+fi
+
+if [ "${1:-}" = "--self-test" ]; then
+    [ -x "$SCRIPT_DIR/raytracing-bin" ] || { echo "missing: raytracing-bin" >&2; exit 1; }
+    [ -f "$APP_CONTENTS_DIR/Info.plist" ] || { echo "missing: Info.plist" >&2; exit 1; }
+    [ -f "$RES_DIR/config/animation_config.json" ] || { echo "missing: config/animation_config.json" >&2; exit 1; }
+    [ -f "$RES_DIR/config/scene_config.json" ] || { echo "missing: config/scene_config.json" >&2; exit 1; }
+    [ -f "$RES_DIR/config/default.ttf" ] || { echo "missing: config/default.ttf" >&2; exit 1; }
+    [ -f "$RES_DIR/config/objects/Hexagon.asset.json" ] || { echo "missing: bundled shape assets" >&2; exit 1; }
+    [ -d "$RES_DIR/data/runtime" ] || { echo "missing: runtime dir" >&2; exit 1; }
+    [ -d "$RES_DIR/data/runtime/frames" ] || { echo "missing: runtime frames dir" >&2; exit 1; }
+    [ -d "$RES_DIR/data/runtime/videos" ] || { echo "missing: runtime videos dir" >&2; exit 1; }
+    [ -f "$RES_DIR/vk_renderer/shaders/textured.vert.spv" ] || { echo "missing: bundled vk_renderer shader" >&2; exit 1; }
+    [ -f "$RES_DIR/shaders/textured.vert.spv" ] || { echo "missing: bundled runtime shader" >&2; exit 1; }
+    echo "self-test: ok"
+    echo "LOG_FILE=$LOG_FILE"
+    echo "VK_RENDERER_SHADER_ROOT=$VK_RENDERER_SHADER_ROOT"
+    echo "SHAPE_ASSET_DIR=$SHAPE_ASSET_DIR"
+    echo "RAY_TRACING_FONT_PRESET=$RAY_TRACING_FONT_PRESET"
+    exit 0
+fi
+
+cd "$RES_DIR"
+printf '%s launch begin pid=%s cwd=%s shader_root=%s shape_asset_dir=%s args=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$$" "$RES_DIR" "$VK_RENDERER_SHADER_ROOT" "$SHAPE_ASSET_DIR" "$*" >>"$LOG_FILE" 2>/dev/null || true
+exec "$SCRIPT_DIR/raytracing-bin" "$@" >>"$LOG_FILE" 2>&1
