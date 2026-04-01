@@ -10,6 +10,7 @@ All application sources organised by responsibility. Each subdirectory has a mat
 - `scene/` – Scene object management utilities (`scene/README.md`).
 - `path/` – Bézier path math powering scripted light motion (`path/README.md`).
 - `config/` – JSON loading/saving of animation and scene settings (`config/README.md`).
+- `import/` – Shared scene/pack import adapters, including runtime-scene contract preflight for trio handoff readiness.
 - `tools/` – Auxiliary modules such as FFmpeg integration (`tools/README.md`).
 - `math/` – Core vector/matrix utilities (2D/3D) shared by paths, camera, and render math.
 - `geo/` – Shape asset library (geolib) plus adapter code to convert imported shapes into scene objects.

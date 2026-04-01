@@ -1,6 +1,6 @@
 # Ray Tracing Current Truth
 
-Last updated: 2026-03-30
+Last updated: 2026-04-01
 
 ## Program Identity
 - repository directory: `ray_tracing/`
@@ -135,19 +135,37 @@ Shared libs consumed by current build:
   - compatibility tests now cover:
     - `z` roundtrip persistence
     - omitted-`z` fallback behavior
+- trio runtime-scene bridge is active and scaffolded for interop (`TP-S3` complete):
+  - bridge APIs:
+    - preflight/apply:
+      - `runtime_scene_bridge_preflight_json/file`
+      - `runtime_scene_bridge_apply_json/file`
+    - namespace-safe writeback:
+      - `runtime_scene_bridge_writeback_ray_overlay_json`
+  - contract behavior:
+    - consumes `scene_runtime_v1`
+    - maps runtime scene payload into ray runtime state
+    - writeback only permits `extensions.ray_tracing.*` plus approved runtime lane `space_mode_default`
+    - preserves unrelated runtime fields and foreign extension namespaces
+  - coverage in `tests/test_runner.c`:
+    - runtime preflight/compile/apply checks
+    - writeback nondestructive merge + policy rejection checks
+    - shared interop fixture roundtrip check (`TP-S5`):
+      - authoring fixture compile -> ray overlay writeback -> preflight/apply
+      - validates preservation of non-ray namespaces (`line_drawing`, `physics_sim`)
 
-## Active Scaffold Migration State
+## Scaffold Migration State
 - private migration plan:
   - `../docs/private_program_docs/ray_tracing/2026-03-28_ray_tracing_scaffold_standardization_switchover_plan.md`
 - baseline freeze:
   - `../docs/private_program_docs/ray_tracing/2026-03-28_rt_s0_baseline_freeze_and_mapping.md`
 - completed phases:
   - `RT-S0`, `RT-S1`, `RT-S2`, `RT-S3`, `RT-S4`, `RT-S5`
-- active post-scaffold lanes:
+- completed post-scaffold lanes:
   - completed font-size standardization lane:
     - `../docs/private_program_docs/ray_tracing/2026-03-30_ray_tracing_post_scaffold_font_size_pass_plan.md`
     - `RT-F0` through `RT-F5` complete
-  - active trio 2D/3D parity lane:
+  - completed trio 2D/3D parity lane:
     - `../docs/private_program_docs/ray_tracing/2026-03-30_ray_tracing_2d_3d_parity_with_line_drawing_plan.md`
     - `RT-U0` complete (baseline freeze + risk map)
     - `RT-U1` complete (space mode runtime contract + menu selector)
@@ -158,4 +176,8 @@ Shared libs consumed by current build:
     - `RT-U6` complete (verification/docs/memory closeout)
     - closeout log:
       - `../docs/private_program_docs/ray_tracing/2026-03-30_rt_u6_verification_docs_memory_closeout.md`
-  - `test-stable` remains the baseline non-interactive regression gate during parity rollout slices
+  - completed trio shared-scene bridge lane (`TP-S3`):
+    - `../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_pre_deep_readiness.md`
+    - `../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_deep_runtime_mapping.md`
+    - `../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_writeback_guardrails_closeout.md`
+  - `test-stable` remains the baseline non-interactive regression gate

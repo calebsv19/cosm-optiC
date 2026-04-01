@@ -1,6 +1,6 @@
 # Ray Tracing Future Intent
 
-Last updated: 2026-03-30
+Last updated: 2026-04-01
 
 ## Scaffold Alignment Intent
 1. Keep the current strong subsystem split while normalizing scaffold contracts.
@@ -64,11 +64,10 @@ Last updated: 2026-03-30
 
 ## Post-Scaffold Direction
 - scaffold migration is complete for `ray_tracing`.
-- completed post-scaffold lane:
+- completed post-scaffold lanes:
   - font-size standardization (`RT-F0` through `RT-F5`) is complete
   - wrap-up commit title used:
     - `Post-Scaffold Font Size Standardization`
-- active post-scaffold lane:
   - completed trio 2D/3D parity propagation with `line_drawing`:
     - `../docs/private_program_docs/ray_tracing/2026-03-30_ray_tracing_2d_3d_parity_with_line_drawing_plan.md`
   - current status:
@@ -81,6 +80,16 @@ Last updated: 2026-03-30
     - `RT-U6` complete (verification/docs/memory closeout)
   - closeout execution log:
     - `../docs/private_program_docs/ray_tracing/2026-03-30_rt_u6_verification_docs_memory_closeout.md`
+  - completed trio shared-scene bridge lane (`TP-S3`):
+    - `../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_pre_deep_readiness.md`
+    - `../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_deep_runtime_mapping.md`
+    - `../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_writeback_guardrails_closeout.md`
+
+## Trio Interop Next Intent
+- trio rollout milestone status:
+  - `TP-S3` complete in `ray_tracing`
+  - `TP-S4` complete in `physics_sim`
+  - `TP-S5` complete (fixture-driven roundtrip and namespace-preservation interop validation)
 
 ## Non-Goals During Scaffold Migration
 - no feature-expansion work unrelated to scaffold alignment

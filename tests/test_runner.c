@@ -17,6 +17,8 @@
 #include "render/uniform_grid.h"
 #include "render/light_pdf.h"
 #include "render/ray_types.h"
+#include "import/runtime_scene_bridge.h"
+#include "core_scene_compile.h"
 #include "fluid_pack_import_test.h"
 #include "kit_viz_fluid_overlay_adapter_test.h"
 #include "render_metrics_dataset_test.h"
@@ -232,6 +234,350 @@ static int test_scene_object_z_missing_fallback(void) {
     }
 
     restore_runtime_scene_config(backup, backup_size);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_preflight_accepts_runtime_contract(void) {
+    RuntimeSceneBridgePreflight preflight;
+    bool ok = runtime_scene_bridge_preflight_file("../shared/assets/scenes/trio_contract/scene_runtime_min.json",
+                                                  &preflight);
+    assert_true("runtime_scene_preflight_accept_fixture", ok);
+    if (ok) {
+        assert_true("runtime_scene_preflight_valid_contract", preflight.valid_contract);
+        assert_true("runtime_scene_preflight_scene_id",
+                    strcmp(preflight.scene_id, "scene_trio_min") == 0);
+        assert_true("runtime_scene_preflight_object_count", preflight.object_count == 1);
+    }
+    return 0;
+}
+
+static int test_runtime_scene_bridge_rejects_authoring_variant(void) {
+    RuntimeSceneBridgePreflight preflight;
+    bool ok = runtime_scene_bridge_preflight_file("../shared/assets/scenes/trio_contract/scene_authoring_min.json",
+                                                  &preflight);
+    assert_true("runtime_scene_preflight_reject_authoring", !ok);
+    if (!ok) {
+        assert_true("runtime_scene_preflight_diag_schema_variant",
+                    strstr(preflight.diagnostics, "scene_runtime_v1") != NULL);
+    }
+    return 0;
+}
+
+static int test_scene_compile_and_preflight_roundtrip(void) {
+    const char *authoring_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_authoring_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_compile_rt\","
+        "\"space_mode_default\":\"3d\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"objects\":[{\"object_id\":\"obj_a\"}],"
+        "\"hierarchy\":[],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{\"ray_tracing\":{\"seed\":1}}"
+        "}";
+    char diagnostics[256];
+    char *runtime_json = NULL;
+    RuntimeSceneBridgePreflight preflight;
+    CoreResult r = core_scene_compile_authoring_to_runtime(authoring_json,
+                                                           &runtime_json,
+                                                           diagnostics,
+                                                           sizeof(diagnostics));
+    assert_true("scene_compile_roundtrip_compile_ok", r.code == CORE_OK);
+    if (r.code == CORE_OK && runtime_json) {
+        bool ok = runtime_scene_bridge_preflight_json(runtime_json, &preflight);
+        assert_true("scene_compile_roundtrip_preflight_ok", ok);
+        if (ok) {
+            assert_true("scene_compile_roundtrip_scene_id",
+                        strcmp(preflight.scene_id, "scene_compile_rt") == 0);
+            assert_true("scene_compile_roundtrip_objects", preflight.object_count == 1);
+        }
+    }
+    free(runtime_json);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_apply_runtime_fixture(void) {
+    RuntimeSceneBridgePreflight summary;
+    bool ok = runtime_scene_bridge_apply_file("../shared/assets/scenes/trio_contract/scene_runtime_min.json",
+                                              &summary);
+    assert_true("runtime_scene_apply_fixture_ok", ok);
+    if (!ok) return 0;
+
+    assert_true("runtime_scene_apply_valid_contract", summary.valid_contract);
+    assert_true("runtime_scene_apply_object_count", sceneSettings.objectCount == 1);
+    assert_close("runtime_scene_apply_object_x", sceneSettings.sceneObjects[0].x, 0.0, 1e-9);
+    assert_close("runtime_scene_apply_object_y", sceneSettings.sceneObjects[0].y, 0.0, 1e-9);
+    assert_close("runtime_scene_apply_object_z", sceneSettings.sceneObjects[0].z, 0.0, 1e-9);
+    assert_true("runtime_scene_apply_color_from_material",
+                sceneSettings.sceneObjects[0].color == 0xFFFFFF);
+    assert_close("runtime_scene_apply_light_x", sceneSettings.bezierPath.points[0].x, 5.0, 1e-9);
+    assert_close("runtime_scene_apply_light_y", sceneSettings.bezierPath.points[0].y, 8.0, 1e-9);
+    assert_close("runtime_scene_apply_camera_x", sceneSettings.camera.x, 0.0, 1e-9);
+    assert_close("runtime_scene_apply_camera_y", sceneSettings.camera.y, 0.0, 1e-9);
+    assert_true("runtime_scene_apply_space_mode_2d", animSettings.spaceMode == SPACE_MODE_2D);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_apply_compile_output(void) {
+    const char *authoring_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_authoring_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_apply_compile\","
+        "\"space_mode_default\":\"3d\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"objects\":[{"
+          "\"object_id\":\"obj_apply\","
+          "\"object_type\":\"circle\","
+          "\"transform\":{"
+             "\"position\":{\"x\":4.0,\"y\":6.0,\"z\":2.5},"
+             "\"rotation\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+             "\"scale\":{\"x\":1.2,\"y\":1.2,\"z\":1.2}"
+          "},"
+          "\"material_ref\":{\"id\":\"mat_apply\"}"
+        "}],"
+        "\"hierarchy\":[],"
+        "\"materials\":[{\"material_id\":\"mat_apply\",\"albedo\":[0.25,0.5,1.0]}],"
+        "\"lights\":[{\"position\":{\"x\":2.0,\"y\":3.0,\"z\":1.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":7.0,\"y\":8.0,\"z\":9.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary;
+    char diagnostics[256];
+    char *runtime_json = NULL;
+    CoreResult r = core_scene_compile_authoring_to_runtime(authoring_json,
+                                                           &runtime_json,
+                                                           diagnostics,
+                                                           sizeof(diagnostics));
+    assert_true("runtime_scene_apply_compile_compile_ok", r.code == CORE_OK);
+    if (r.code != CORE_OK || !runtime_json) {
+        free(runtime_json);
+        return 0;
+    }
+
+    {
+        bool ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+        assert_true("runtime_scene_apply_compile_apply_ok", ok);
+        if (ok) {
+            assert_true("runtime_scene_apply_compile_count", sceneSettings.objectCount == 1);
+            assert_close("runtime_scene_apply_compile_x", sceneSettings.sceneObjects[0].x, 4.0, 1e-9);
+            assert_close("runtime_scene_apply_compile_y", sceneSettings.sceneObjects[0].y, 6.0, 1e-9);
+            assert_close("runtime_scene_apply_compile_z", sceneSettings.sceneObjects[0].z, 2.5, 1e-9);
+            assert_true("runtime_scene_apply_compile_space3d", animSettings.spaceMode == SPACE_MODE_3D);
+        }
+    }
+
+    free(runtime_json);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_writeback_overlay_preserves_non_ray_state(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_writeback_1\","
+        "\"space_mode_default\":\"2d\","
+        "\"objects\":[{\"object_id\":\"obj_base\"}],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{"
+          "\"physics_sim\":{\"gravity\":9.81},"
+          "\"custom_tool\":{\"foo\":1}"
+        "},"
+        "\"compile_meta\":{\"compiler\":\"core_scene_compile\"}"
+        "}";
+    const char *overlay_json =
+        "{"
+        "\"space_mode_default\":\"3d\","
+        "\"extensions\":{"
+          "\"ray_tracing\":{"
+            "\"exposure\":1.25,"
+            "\"integrator\":\"hybrid\""
+          "}"
+        "}"
+        "}";
+    char *merged = NULL;
+    char diagnostics[256];
+    bool ok = runtime_scene_bridge_writeback_ray_overlay_json(runtime_json,
+                                                              overlay_json,
+                                                              &merged,
+                                                              diagnostics,
+                                                              sizeof(diagnostics));
+    assert_true("runtime_scene_writeback_overlay_ok", ok);
+    if (!ok || !merged) {
+        free(merged);
+        return 0;
+    }
+
+    assert_true("runtime_scene_writeback_preserve_physics",
+                strstr(merged, "\"physics_sim\"") != NULL);
+    assert_true("runtime_scene_writeback_preserve_custom",
+                strstr(merged, "\"custom_tool\"") != NULL);
+    assert_true("runtime_scene_writeback_add_ray",
+                strstr(merged, "\"ray_tracing\"") != NULL);
+    assert_true("runtime_scene_writeback_update_space_mode",
+                strstr(merged, "\"space_mode_default\":\"3d\"") != NULL);
+    assert_true("runtime_scene_writeback_preserve_compile_meta",
+                strstr(merged, "\"compile_meta\"") != NULL);
+    free(merged);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_writeback_rejects_foreign_extension_namespace(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_writeback_2\","
+        "\"space_mode_default\":\"2d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    const char *overlay_json =
+        "{"
+        "\"extensions\":{"
+          "\"physics_sim\":{\"gravity\":9.81}"
+        "}"
+        "}";
+    char *merged = NULL;
+    char diagnostics[256];
+    bool ok = runtime_scene_bridge_writeback_ray_overlay_json(runtime_json,
+                                                              overlay_json,
+                                                              &merged,
+                                                              diagnostics,
+                                                              sizeof(diagnostics));
+    assert_true("runtime_scene_writeback_reject_foreign_namespace", !ok);
+    if (!ok) {
+        assert_true("runtime_scene_writeback_reject_foreign_diag",
+                    strstr(diagnostics, "namespace not allowed") != NULL);
+    }
+    free(merged);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_writeback_rejects_forbidden_top_level_overlay_key(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_writeback_3\","
+        "\"space_mode_default\":\"2d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    const char *overlay_json =
+        "{"
+        "\"objects\":[{\"object_id\":\"hack\"}]"
+        "}";
+    char *merged = NULL;
+    char diagnostics[256];
+    bool ok = runtime_scene_bridge_writeback_ray_overlay_json(runtime_json,
+                                                              overlay_json,
+                                                              &merged,
+                                                              diagnostics,
+                                                              sizeof(diagnostics));
+    assert_true("runtime_scene_writeback_reject_forbidden_top_key", !ok);
+    if (!ok) {
+        assert_true("runtime_scene_writeback_reject_forbidden_top_key_diag",
+                    strstr(diagnostics, "overlay key not allowed") != NULL);
+    }
+    free(merged);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_trio_fixture_compile_writeback_apply(void) {
+    size_t authoring_size = 0;
+    size_t overlay_size = 0;
+    char *authoring_json = read_text_file_alloc("../shared/assets/scenes/trio_contract/scene_authoring_interop_min.json",
+                                                &authoring_size);
+    char *overlay_json = read_text_file_alloc("../shared/assets/scenes/trio_contract/ray_overlay_min.json",
+                                              &overlay_size);
+    char diagnostics[256];
+    char *runtime_json = NULL;
+    char *merged_json = NULL;
+    RuntimeSceneBridgePreflight preflight;
+    CoreResult r;
+
+    assert_true("trio_fixture_authoring_read_ok", authoring_json != NULL && authoring_size > 0);
+    assert_true("trio_fixture_ray_overlay_read_ok", overlay_json != NULL && overlay_size > 0);
+    if (!authoring_json || !overlay_json) {
+        free(authoring_json);
+        free(overlay_json);
+        return 0;
+    }
+
+    r = core_scene_compile_authoring_to_runtime(authoring_json,
+                                                &runtime_json,
+                                                diagnostics,
+                                                sizeof(diagnostics));
+    assert_true("trio_fixture_compile_ok", r.code == CORE_OK);
+    if (r.code != CORE_OK || !runtime_json) {
+        free(authoring_json);
+        free(overlay_json);
+        free(runtime_json);
+        return 0;
+    }
+
+    {
+        bool ok = runtime_scene_bridge_writeback_ray_overlay_json(runtime_json,
+                                                                  overlay_json,
+                                                                  &merged_json,
+                                                                  diagnostics,
+                                                                  sizeof(diagnostics));
+        assert_true("trio_fixture_ray_writeback_ok", ok);
+    }
+
+    if (!merged_json) {
+        free(authoring_json);
+        free(overlay_json);
+        free(runtime_json);
+        free(merged_json);
+        return 0;
+    }
+
+    assert_true("trio_fixture_preserve_line_drawing_ext",
+                strstr(merged_json, "\"line_drawing\"") != NULL);
+    assert_true("trio_fixture_preserve_physics_ext",
+                strstr(merged_json, "\"physics_sim\"") != NULL);
+    assert_true("trio_fixture_has_ray_ext",
+                strstr(merged_json, "\"ray_tracing\"") != NULL);
+
+    {
+        bool ok = runtime_scene_bridge_preflight_json(merged_json, &preflight);
+        assert_true("trio_fixture_preflight_after_writeback_ok", ok);
+    }
+    {
+        bool ok = runtime_scene_bridge_apply_json(merged_json, &preflight);
+        assert_true("trio_fixture_apply_after_writeback_ok", ok);
+    }
+
+    free(authoring_json);
+    free(overlay_json);
+    free(runtime_json);
+    free(merged_json);
     return 0;
 }
 
@@ -578,6 +924,15 @@ int main(void) {
     test_sample_diffuse_consistency();
     test_scene_object_z_roundtrip();
     test_scene_object_z_missing_fallback();
+    test_runtime_scene_bridge_preflight_accepts_runtime_contract();
+    test_runtime_scene_bridge_rejects_authoring_variant();
+    test_scene_compile_and_preflight_roundtrip();
+    test_runtime_scene_bridge_apply_runtime_fixture();
+    test_runtime_scene_bridge_apply_compile_output();
+    test_runtime_scene_bridge_writeback_overlay_preserves_non_ray_state();
+    test_runtime_scene_bridge_writeback_rejects_foreign_extension_namespace();
+    test_runtime_scene_bridge_writeback_rejects_forbidden_top_level_overlay_key();
+    test_runtime_scene_bridge_trio_fixture_compile_writeback_apply();
     test_mode_backend_route_2d_defaults();
     test_mode_backend_route_3d_controlled_lane();
     test_editor_mode_router_capabilities_2d();
