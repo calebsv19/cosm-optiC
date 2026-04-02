@@ -1,5 +1,6 @@
 #include "import/runtime_scene_bridge.h"
 
+#include "core_scene_overlay_merge_shared.h"
 #include "config/config_manager.h"
 #include "core_io.h"
 #include "scene/object_manager.h"
@@ -161,57 +162,6 @@ static bool validate_runtime_scene_root_diag(json_object *root,
         return false;
     }
     bridge_diag(out_diagnostics, out_diagnostics_size, "ok");
-    return true;
-}
-
-static bool overlay_has_forbidden_top_level_key(json_object *overlay_root,
-                                                const char **out_key) {
-    static const char *k_allowed[] = {
-        "extensions",
-        "space_mode_default"
-    };
-    json_object_object_foreach(overlay_root, key, value) {
-        bool allowed = false;
-        size_t i;
-        (void)value;
-        for (i = 0; i < sizeof(k_allowed) / sizeof(k_allowed[0]); ++i) {
-            if (strcmp(key, k_allowed[i]) == 0) {
-                allowed = true;
-                break;
-            }
-        }
-        if (!allowed) {
-            if (out_key) *out_key = key;
-            return true;
-        }
-    }
-    return false;
-}
-
-static bool overlay_extensions_only_ray_tracing(json_object *extensions_obj,
-                                                const char **out_key) {
-    json_object_object_foreach(extensions_obj, key, value) {
-        (void)value;
-        if (strcmp(key, "ray_tracing") != 0) {
-            if (out_key) *out_key = key;
-            return false;
-        }
-    }
-    return true;
-}
-
-static bool set_or_replace_key_with_deep_copy(json_object *target,
-                                              const char *key,
-                                              json_object *src_value) {
-    json_object *copy = NULL;
-    const char *serialized = NULL;
-    if (!target || !key || !src_value) return false;
-    serialized = json_object_to_json_string_ext(src_value, JSON_C_TO_STRING_PLAIN);
-    if (!serialized) return false;
-    copy = json_tokener_parse(serialized);
-    if (!copy) return false;
-    json_object_object_del(target, key);
-    json_object_object_add(target, key, copy);
     return true;
 }
 
@@ -524,12 +474,6 @@ bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_j
                                                      size_t out_diagnostics_size) {
     json_object *runtime_root = NULL;
     json_object *overlay_root = NULL;
-    json_object *overlay_extensions = NULL;
-    json_object *overlay_ray_extension = NULL;
-    json_object *overlay_space_mode = NULL;
-    json_object *runtime_extensions = NULL;
-    const char *forbidden_key = NULL;
-    const char *bad_extension_key = NULL;
     const char *serialized = NULL;
     char *out = NULL;
     size_t out_len = 0;
@@ -553,75 +497,15 @@ bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_j
         json_object_put(overlay_root);
         return false;
     }
-
-    if (overlay_has_forbidden_top_level_key(overlay_root, &forbidden_key)) {
-        char tmp[192];
-        snprintf(tmp,
-                 sizeof(tmp),
-                 "overlay key not allowed: %s",
-                 forbidden_key ? forbidden_key : "(unknown)");
-        bridge_diag(out_diagnostics, out_diagnostics_size, tmp);
+    if (!core_scene_overlay_merge_apply(runtime_root,
+                                        overlay_root,
+                                        "ray_tracing",
+                                        "ray_tracing",
+                                        out_diagnostics,
+                                        out_diagnostics_size)) {
         json_object_put(runtime_root);
         json_object_put(overlay_root);
         return false;
-    }
-
-    if (json_object_object_get_ex(overlay_root, "extensions", &overlay_extensions)) {
-        if (!json_object_is_type(overlay_extensions, json_type_object)) {
-            bridge_diag(out_diagnostics, out_diagnostics_size, "overlay extensions must be object");
-            json_object_put(runtime_root);
-            json_object_put(overlay_root);
-            return false;
-        }
-        if (!overlay_extensions_only_ray_tracing(overlay_extensions, &bad_extension_key)) {
-            char tmp[192];
-            snprintf(tmp,
-                     sizeof(tmp),
-                     "overlay extension namespace not allowed: %s",
-                     bad_extension_key ? bad_extension_key : "(unknown)");
-            bridge_diag(out_diagnostics, out_diagnostics_size, tmp);
-            json_object_put(runtime_root);
-            json_object_put(overlay_root);
-            return false;
-        }
-    }
-
-    if (json_object_object_get_ex(overlay_root, "space_mode_default", &overlay_space_mode)) {
-        if (!json_object_is_type(overlay_space_mode, json_type_string)) {
-            bridge_diag(out_diagnostics, out_diagnostics_size, "space_mode_default must be string");
-            json_object_put(runtime_root);
-            json_object_put(overlay_root);
-            return false;
-        }
-        if (!set_or_replace_key_with_deep_copy(runtime_root, "space_mode_default", overlay_space_mode)) {
-            bridge_diag(out_diagnostics, out_diagnostics_size, "failed to apply space_mode_default");
-            json_object_put(runtime_root);
-            json_object_put(overlay_root);
-            return false;
-        }
-    }
-
-    if (json_object_object_get_ex(overlay_root, "extensions", &overlay_extensions)) {
-        if (!json_object_object_get_ex(runtime_root, "extensions", &runtime_extensions) ||
-            !json_object_is_type(runtime_extensions, json_type_object)) {
-            runtime_extensions = json_object_new_object();
-            if (!runtime_extensions) {
-                bridge_diag(out_diagnostics, out_diagnostics_size, "failed to create runtime extensions");
-                json_object_put(runtime_root);
-                json_object_put(overlay_root);
-                return false;
-            }
-            json_object_object_add(runtime_root, "extensions", runtime_extensions);
-        }
-
-        if (json_object_object_get_ex(overlay_extensions, "ray_tracing", &overlay_ray_extension)) {
-            if (!set_or_replace_key_with_deep_copy(runtime_extensions, "ray_tracing", overlay_ray_extension)) {
-                bridge_diag(out_diagnostics, out_diagnostics_size, "failed to apply ray_tracing extension");
-                json_object_put(runtime_root);
-                json_object_put(overlay_root);
-                return false;
-            }
-        }
     }
 
     serialized = json_object_to_json_string_ext(runtime_root,

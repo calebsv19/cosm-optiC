@@ -38,6 +38,7 @@ Stable test lane:
   - `test`
   - `test-manifest-to-trace-export`
   - `test-fluid-pack-contract-parity`
+  - `test-trio-scene-contract-diff`
   - `test-shared-theme-font-adapter`
 
 Legacy test lane:
@@ -145,7 +146,17 @@ Shared libs consumed by current build:
   - contract behavior:
     - consumes `scene_runtime_v1`
     - maps runtime scene payload into ray runtime state
+    - writeback guardrails are now shared-promoted via:
+      - `shared/core/core_scene_compile/include/core_scene_overlay_merge_shared.h`
     - writeback only permits `extensions.ray_tracing.*` plus approved runtime lane `space_mode_default`
+    - `space_mode_default` writeback values are constrained to `"2d"` or `"3d"` only
+    - `extensions.ray_tracing` payload must be a JSON object
+    - writeback now requires provenance metadata:
+      - `overlay_meta.producer = "ray_tracing"`
+      - `overlay_meta.logical_clock >= 0`
+    - deterministic merge guards:
+      - stale producer-clock overlays are rejected
+      - canonical `space_mode_default` writes use logical-clock ordering with lexical producer tie-break
     - preserves unrelated runtime fields and foreign extension namespaces
   - coverage in `tests/test_runner.c`:
     - runtime preflight/compile/apply checks

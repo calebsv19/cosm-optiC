@@ -401,6 +401,7 @@ static int test_runtime_scene_bridge_writeback_overlay_preserves_non_ray_state(v
         "}";
     const char *overlay_json =
         "{"
+        "\"overlay_meta\":{\"producer\":\"ray_tracing\",\"logical_clock\":10},"
         "\"space_mode_default\":\"3d\","
         "\"extensions\":{"
           "\"ray_tracing\":{"
@@ -453,6 +454,7 @@ static int test_runtime_scene_bridge_writeback_rejects_foreign_extension_namespa
         "}";
     const char *overlay_json =
         "{"
+        "\"overlay_meta\":{\"producer\":\"ray_tracing\",\"logical_clock\":11},"
         "\"extensions\":{"
           "\"physics_sim\":{\"gravity\":9.81}"
         "}"
@@ -490,6 +492,7 @@ static int test_runtime_scene_bridge_writeback_rejects_forbidden_top_level_overl
         "}";
     const char *overlay_json =
         "{"
+        "\"overlay_meta\":{\"producer\":\"ray_tracing\",\"logical_clock\":12},"
         "\"objects\":[{\"object_id\":\"hack\"}]"
         "}";
     char *merged = NULL;
@@ -503,6 +506,155 @@ static int test_runtime_scene_bridge_writeback_rejects_forbidden_top_level_overl
     if (!ok) {
         assert_true("runtime_scene_writeback_reject_forbidden_top_key_diag",
                     strstr(diagnostics, "overlay key not allowed") != NULL);
+    }
+    free(merged);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_writeback_rejects_invalid_space_mode_value(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_writeback_4\","
+        "\"space_mode_default\":\"2d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    const char *overlay_json =
+        "{"
+        "\"overlay_meta\":{\"producer\":\"ray_tracing\",\"logical_clock\":13},"
+        "\"space_mode_default\":\"4d\""
+        "}";
+    char *merged = NULL;
+    char diagnostics[256];
+    bool ok = runtime_scene_bridge_writeback_ray_overlay_json(runtime_json,
+                                                              overlay_json,
+                                                              &merged,
+                                                              diagnostics,
+                                                              sizeof(diagnostics));
+    assert_true("runtime_scene_writeback_reject_invalid_space_mode", !ok);
+    if (!ok) {
+        assert_true("runtime_scene_writeback_reject_invalid_space_mode_diag",
+                    strstr(diagnostics, "space_mode_default must be '2d' or '3d'") != NULL);
+    }
+    free(merged);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_writeback_rejects_non_object_ray_extension_payload(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_writeback_5\","
+        "\"space_mode_default\":\"2d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    const char *overlay_json =
+        "{"
+        "\"overlay_meta\":{\"producer\":\"ray_tracing\",\"logical_clock\":14},"
+        "\"extensions\":{"
+          "\"ray_tracing\":[1,2,3]"
+        "}"
+        "}";
+    char *merged = NULL;
+    char diagnostics[256];
+    bool ok = runtime_scene_bridge_writeback_ray_overlay_json(runtime_json,
+                                                              overlay_json,
+                                                              &merged,
+                                                              diagnostics,
+                                                              sizeof(diagnostics));
+    assert_true("runtime_scene_writeback_reject_non_object_ray_payload", !ok);
+    if (!ok) {
+        assert_true("runtime_scene_writeback_reject_non_object_ray_payload_diag",
+                    strstr(diagnostics, "payload must be object") != NULL);
+    }
+    free(merged);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_writeback_rejects_missing_overlay_meta(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_writeback_6\","
+        "\"space_mode_default\":\"2d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    const char *overlay_json =
+        "{"
+        "\"extensions\":{\"ray_tracing\":{\"samples\":8}}"
+        "}";
+    char *merged = NULL;
+    char diagnostics[256];
+    bool ok = runtime_scene_bridge_writeback_ray_overlay_json(runtime_json,
+                                                              overlay_json,
+                                                              &merged,
+                                                              diagnostics,
+                                                              sizeof(diagnostics));
+    assert_true("runtime_scene_writeback_reject_missing_meta", !ok);
+    if (!ok) {
+        assert_true("runtime_scene_writeback_reject_missing_meta_diag",
+                    strstr(diagnostics, "overlay_meta object is required") != NULL);
+    }
+    free(merged);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_writeback_rejects_stale_logical_clock(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_writeback_7\","
+        "\"space_mode_default\":\"2d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{"
+          "\"overlay_merge\":{"
+            "\"producer_clocks\":{\"ray_tracing\":20}"
+          "}"
+        "}"
+        "}";
+    const char *overlay_json =
+        "{"
+        "\"overlay_meta\":{\"producer\":\"ray_tracing\",\"logical_clock\":20},"
+        "\"extensions\":{\"ray_tracing\":{\"samples\":16}}"
+        "}";
+    char *merged = NULL;
+    char diagnostics[256];
+    bool ok = runtime_scene_bridge_writeback_ray_overlay_json(runtime_json,
+                                                              overlay_json,
+                                                              &merged,
+                                                              diagnostics,
+                                                              sizeof(diagnostics));
+    assert_true("runtime_scene_writeback_reject_stale_clock", !ok);
+    if (!ok) {
+        assert_true("runtime_scene_writeback_reject_stale_clock_diag",
+                    strstr(diagnostics, "logical_clock is stale") != NULL);
     }
     free(merged);
     return 0;
@@ -932,6 +1084,10 @@ int main(void) {
     test_runtime_scene_bridge_writeback_overlay_preserves_non_ray_state();
     test_runtime_scene_bridge_writeback_rejects_foreign_extension_namespace();
     test_runtime_scene_bridge_writeback_rejects_forbidden_top_level_overlay_key();
+    test_runtime_scene_bridge_writeback_rejects_invalid_space_mode_value();
+    test_runtime_scene_bridge_writeback_rejects_non_object_ray_extension_payload();
+    test_runtime_scene_bridge_writeback_rejects_missing_overlay_meta();
+    test_runtime_scene_bridge_writeback_rejects_stale_logical_clock();
     test_runtime_scene_bridge_trio_fixture_compile_writeback_apply();
     test_mode_backend_route_2d_defaults();
     test_mode_backend_route_3d_controlled_lane();
