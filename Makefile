@@ -6,7 +6,7 @@ BUILD_DIR := build
 TARGET    := Ray_anim
 .DEFAULT_GOAL := all
 DIST_DIR := dist
-PACKAGE_APP_NAME := RayTracing.app
+PACKAGE_APP_NAME := optiC.app
 PACKAGE_APP_DIR := $(DIST_DIR)/$(PACKAGE_APP_NAME)
 PACKAGE_CONTENTS_DIR := $(PACKAGE_APP_DIR)/Contents
 PACKAGE_MACOS_DIR := $(PACKAGE_CONTENTS_DIR)/MacOS
@@ -215,11 +215,12 @@ STABLE_TEST_TARGETS := \
 	test \
 	test-manifest-to-trace-export \
 	test-fluid-pack-contract-parity \
+	test-trio-scene-contract-diff \
 	test-shared-theme-font-adapter
 
 LEGACY_TEST_TARGETS :=
 
-.PHONY: all clean run run-ide-theme run-daw-theme run-headless-smoke visual-harness package-desktop package-desktop-smoke package-desktop-self-test package-desktop-copy-desktop package-desktop-sync package-desktop-open package-desktop-remove package-desktop-refresh debug format video release relrun test test-stable test-legacy test-shared-theme-font-adapter test-manifest-to-trace-export test-fluid-pack-contract-parity
+.PHONY: all clean run run-ide-theme run-daw-theme run-headless-smoke visual-harness package-desktop package-desktop-smoke package-desktop-self-test package-desktop-copy-desktop package-desktop-sync package-desktop-open package-desktop-remove package-desktop-refresh debug format video release relrun test test-stable test-legacy test-shared-theme-font-adapter test-manifest-to-trace-export test-fluid-pack-contract-parity test-trio-scene-contract-diff
 
 all: $(TARGET)
 
@@ -451,6 +452,9 @@ test-manifest-to-trace-export: ray_trace_tool
 
 test-fluid-pack-contract-parity:
 	tests/integration/run_fluid_pack_contract_parity.sh
+
+test-trio-scene-contract-diff:
+	tests/integration/run_trio_scene_contract_diff.sh
 
 test-stable:
 	@$(MAKE) $(STABLE_TEST_TARGETS)
