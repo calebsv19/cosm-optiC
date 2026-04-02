@@ -91,6 +91,18 @@ Last updated: 2026-04-01
   - `TP-S4` complete in `physics_sim`
   - `TP-S5` complete (fixture-driven roundtrip and namespace-preservation interop validation)
 
+## Connection Pass Intent
+- completed:
+  - `RT-CP0` baseline routing/ownership map captured
+  - `RT-CP1` wrapper context + guarded stage-transition hardening landed
+  - `RT-CP2` wrapper runtime dispatch seam extraction landed with typed dispatch request/outcome contract and behavior parity
+  - `RT-CP3` wrapper-side dispatch flow split landed (`prepare`/`execute`/`finalize`)
+  - `RT-CP4` deterministic wrapper lifecycle ownership release ordering landed
+  - `RT-CP5` closeout (docs/tracker/memory sync) landed:
+    - `../docs/private_program_docs/ray_tracing/2026-04-01_ray_tracing_connection_pass_cp0_cp5_execution.md`
+- next:
+  - optional `RT-CP6+`: deeper runtime/update/render/shutdown ownership extraction from `animation.c`
+
 ## Non-Goals During Scaffold Migration
 - no feature-expansion work unrelated to scaffold alignment
 - no shared subtree redesign inside scaffold migration slices

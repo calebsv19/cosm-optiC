@@ -17,6 +17,7 @@
 #include "render/uniform_grid.h"
 #include "render/light_pdf.h"
 #include "render/ray_types.h"
+#include "render/render_helper.h"
 #include "import/runtime_scene_bridge.h"
 #include "core_scene_compile.h"
 #include "fluid_pack_import_test.h"
@@ -234,6 +235,21 @@ static int test_scene_object_z_missing_fallback(void) {
     }
 
     restore_runtime_scene_config(backup, backup_size);
+    return 0;
+}
+
+static int test_depth_projection_scalars(void) {
+    double scale_far = RenderHelper_DepthScaleForObjectZ(4.0);
+    double scale_near = RenderHelper_DepthScaleForObjectZ(-4.0);
+    double scale_zero = RenderHelper_DepthScaleForObjectZ(0.0);
+    double yoff_far = RenderHelper_DepthYOffsetPixelsForObjectZ(3.0, 1.0);
+    double yoff_near = RenderHelper_DepthYOffsetPixelsForObjectZ(-3.0, 1.0);
+
+    assert_true("depth_scale_far_smaller_than_zero", scale_far < scale_zero);
+    assert_true("depth_scale_near_larger_than_zero", scale_near > scale_zero);
+    assert_true("depth_scale_positive", scale_far > 0.0 && scale_near > 0.0);
+    assert_true("depth_yoff_far_positive", yoff_far > 0.0);
+    assert_true("depth_yoff_near_negative", yoff_near < 0.0);
     return 0;
 }
 
@@ -1070,12 +1086,48 @@ static int test_hit_normal_and_pdfs(void) {
     return 0;
 }
 
-int main(void) {
+static int run_bridge_apply_file_mode(const char *runtime_scene_path) {
+    RuntimeSceneBridgePreflight preflight;
+    RuntimeSceneBridgePreflight summary;
+    bool ok = false;
+    if (!runtime_scene_path || !runtime_scene_path[0]) {
+        fprintf(stderr, "runtime_scene_bridge_apply_file: missing path\n");
+        return EXIT_FAILURE;
+    }
+    ok = runtime_scene_bridge_preflight_file(runtime_scene_path, &preflight);
+    if (!ok) {
+        fprintf(stderr, "runtime_scene_bridge_preflight_file failed: %s\n", preflight.diagnostics);
+        return EXIT_FAILURE;
+    }
+    ok = runtime_scene_bridge_apply_file(runtime_scene_path, &summary);
+    if (!ok) {
+        fprintf(stderr, "runtime_scene_bridge_apply_file failed: %s\n", summary.diagnostics);
+        return EXIT_FAILURE;
+    }
+    printf("runtime_scene_bridge_apply_file: PASS scene_id=%s objects=%d materials=%d lights=%d cameras=%d\n",
+           summary.scene_id,
+           summary.object_count,
+           summary.material_count,
+           summary.light_count,
+           summary.camera_count);
+    return EXIT_SUCCESS;
+}
+
+int main(int argc, char **argv) {
+    if (argc == 3 && strcmp(argv[1], "--bridge-apply-file") == 0) {
+        return run_bridge_apply_file_mode(argv[2]);
+    }
+    if (argc != 1) {
+        fprintf(stderr, "usage: %s [--bridge-apply-file <scene_runtime.json>]\n", argv[0]);
+        return EXIT_FAILURE;
+    }
+
     test_diffuse_evaluate();
     test_diffuse_pdf();
     test_sample_diffuse_consistency();
     test_scene_object_z_roundtrip();
     test_scene_object_z_missing_fallback();
+    test_depth_projection_scalars();
     test_runtime_scene_bridge_preflight_accepts_runtime_contract();
     test_runtime_scene_bridge_rejects_authoring_variant();
     test_scene_compile_and_preflight_roundtrip();

@@ -22,5 +22,7 @@ void RenderButtonText(SDL_Renderer* renderer, SDL_Rect button, const char* text)
 void RenderLabelText(SDL_Renderer* renderer, SDL_Rect area, const char* text, SDL_Color color);
 int CalculateObjectBrightness(SceneObject* obj, double lightX, double lightY);
 int compareInts(const void* a, const void* b);
+double RenderHelper_DepthScaleForObjectZ(double object_z);
+double RenderHelper_DepthYOffsetPixelsForObjectZ(double object_z, double camera_zoom);
 
 #endif // RENDER_HELPER_H

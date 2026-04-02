@@ -105,7 +105,7 @@ Shared libs consumed by current build:
     - `src/render/space_mode_adapter.c`
   - editor and render callsites now route screen/world conversion through adapter APIs
   - key render ray/hit setup paths now use adapter entrypoints (`MakeRay`, `MakeOffsetRay`, `ResetHit`)
-  - current behavior remains 2D-equivalent in both `SPACE_MODE_2D` and `SPACE_MODE_3D` until later slices add 3D-specific projection/ray behavior
+  - render/path ray math remains 2D-equivalent at adapter seam level; NP-4 adds real z-aware visual behavior in render lane without schema fork.
 - backend separation + mode routing is active (`RT-U4`):
   - canonical runtime route files:
     - `include/render/ray_tracing_mode_backend.h`
@@ -192,3 +192,24 @@ Shared libs consumed by current build:
     - `../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_deep_runtime_mapping.md`
     - `../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_writeback_guardrails_closeout.md`
   - `test-stable` remains the baseline non-interactive regression gate
+
+## NP-4 3D Behavior Slice (Current)
+- app-local 3D behavior slice is now active over shared runtime scene contract:
+  - z-aware depth projection in render lane (3D mode):
+    - projected vertical offset from object `z`,
+    - depth-scaled object size,
+    - depth-ordered draw pass for stable overlap.
+  - helper APIs:
+    - `RenderHelper_DepthScaleForObjectZ(...)`
+    - `RenderHelper_DepthYOffsetPixelsForObjectZ(...)`
+  - regression coverage:
+    - `tests/test_runner.c` (`test_depth_projection_scalars`)
+
+## Connection Pass State
+- `RT-CP0` through `RT-CP5` are complete:
+  - `../docs/private_program_docs/ray_tracing/2026-04-01_ray_tracing_connection_pass_cp0_cp5_execution.md`
+- current ownership summary:
+  - wrapper (`src/app/ray_tracing_app_main.c`) owns typed context + guarded staged flow + explicit runtime dispatch seam + split dispatch flow stages + deterministic lifecycle ownership release ordering
+  - legacy body (`src/app/animation.c`, `ray_tracing_app_main_legacy(...)`) still owns most runtime initialization/routing/teardown
+- next slices:
+  - optional `RT-CP6+`: deeper extraction of runtime/update/render/shutdown ownership from legacy lane
