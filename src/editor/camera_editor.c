@@ -41,6 +41,27 @@ static const SDL_Color kRotHandleColor = {180, 120, 255, 220};
 static const double kWheelZoomFactor = 0.10;   // 10% zoom per wheel tick
 static const double kKeyZoomFactor   = 0.02;   // 2% zoom per +/- key press
 
+typedef enum CameraEditorAction {
+    CAMERA_EDITOR_ACTION_NONE = 0,
+    CAMERA_EDITOR_ACTION_MOUSE_DOWN,
+    CAMERA_EDITOR_ACTION_MOUSE_UP,
+    CAMERA_EDITOR_ACTION_MOUSE_DRAG,
+    CAMERA_EDITOR_ACTION_MOUSE_WHEEL,
+    CAMERA_EDITOR_ACTION_KEY_DOWN,
+    CAMERA_EDITOR_ACTION_QUIT
+} CameraEditorAction;
+
+static CameraEditorAction ResolveCameraEditorAction(const SDL_Event* event) {
+    if (!event) return CAMERA_EDITOR_ACTION_NONE;
+    if (event->type == SDL_MOUSEBUTTONDOWN) return CAMERA_EDITOR_ACTION_MOUSE_DOWN;
+    if (event->type == SDL_MOUSEBUTTONUP) return CAMERA_EDITOR_ACTION_MOUSE_UP;
+    if (event->type == SDL_MOUSEMOTION) return CAMERA_EDITOR_ACTION_MOUSE_DRAG;
+    if (event->type == SDL_MOUSEWHEEL) return CAMERA_EDITOR_ACTION_MOUSE_WHEEL;
+    if (event->type == SDL_KEYDOWN) return CAMERA_EDITOR_ACTION_KEY_DOWN;
+    if (event->type == SDL_QUIT) return CAMERA_EDITOR_ACTION_QUIT;
+    return CAMERA_EDITOR_ACTION_NONE;
+}
+
 static void ClampCameraToFluidBounds(Camera* cam) {
     if (!cam || !g_fluidGrid.valid) return;
     double margin_world = GetCurrentMarginPixels() / cam->zoom;
@@ -209,6 +230,20 @@ static bool HandleCameraButtons(int mx, int my) {
     return false;
 }
 
+CameraEditorHitRegion CameraEditorHitRegionAtPoint(int mx, int my) {
+    if (mx >= rotationSlider.x && mx <= rotationSlider.x + rotationSlider.w &&
+        my >= rotationSlider.y - 4 && my <= rotationSlider.y + rotationSlider.h + 4) {
+        return CAMERA_EDITOR_HIT_SLIDER;
+    }
+    if (IsClickingButtonMain(mx, my) ||
+        (mx >= addButton.x && mx <= addButton.x + addButton.w && my >= addButton.y && my <= addButton.y + addButton.h) ||
+        (mx >= deleteButton.x && mx <= deleteButton.x + deleteButton.w && my >= deleteButton.y && my <= deleteButton.y + deleteButton.h) ||
+        (mx >= toggleButton.x && mx <= toggleButton.x + toggleButton.w && my >= toggleButton.y && my <= toggleButton.y + toggleButton.h)) {
+        return CAMERA_EDITOR_HIT_CONTROLS;
+    }
+    return CAMERA_EDITOR_HIT_CANVAS;
+}
+
 static void RenderCameraButtons(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, addModeActive ? 0 : 255, addModeActive ? 255 : 255, 0, 255);
     SDL_RenderFillRect(renderer, &addButton);
@@ -366,9 +401,10 @@ void RenderCameraEditor(SDL_Renderer* renderer) {
 void HandleCameraEditorEvents(SDL_Event* event) {
     const int width = sceneSettings.windowWidth;
     const int height = sceneSettings.windowHeight;
+    CameraEditorAction action = ResolveCameraEditorAction(event);
 
-    switch (event->type) {
-        case SDL_MOUSEBUTTONDOWN: {
+    switch (action) {
+        case CAMERA_EDITOR_ACTION_MOUSE_DOWN: {
             if (event->button.button != SDL_BUTTON_LEFT)
                 break;
 
@@ -469,7 +505,7 @@ void HandleCameraEditorEvents(SDL_Event* event) {
             lastMouseY = my;
             break;
         }
-        case SDL_MOUSEBUTTONUP:
+        case CAMERA_EDITOR_ACTION_MOUSE_UP:
             if (event->button.button == SDL_BUTTON_LEFT) {
                 cameraDragging = false;
                 sliderDragging = false;
@@ -478,7 +514,7 @@ void HandleCameraEditorEvents(SDL_Event* event) {
                 camDraggingRotation = -1;
             }
             break;
-        case SDL_MOUSEMOTION:
+        case CAMERA_EDITOR_ACTION_MOUSE_DRAG:
             if (sliderDragging) {
                 double t = (double)(event->motion.x - rotationSlider.x) / (double)rotationSlider.w;
                 t = clampd(t, 0.0, 1.0);
@@ -557,14 +593,14 @@ void HandleCameraEditorEvents(SDL_Event* event) {
                 lastMouseY = event->motion.y;
             }
             break;
-        case SDL_MOUSEWHEEL:
+        case CAMERA_EDITOR_ACTION_MOUSE_WHEEL:
             if (event->wheel.y > 0) {
                 ApplyZoomDelta(kWheelZoomFactor);
             } else if (event->wheel.y < 0) {
                 ApplyZoomDelta(-kWheelZoomFactor);
             }
             break;
-        case SDL_KEYDOWN: {
+        case CAMERA_EDITOR_ACTION_KEY_DOWN: {
             SDL_Keycode key = event->key.keysym.sym;
             const double panStep = 20.0 / sceneSettings.camera.zoom;
             if (key == SDLK_EQUALS || key == SDLK_PLUS || key == SDLK_KP_PLUS) {
@@ -614,10 +650,11 @@ void HandleCameraEditorEvents(SDL_Event* event) {
             }
             break;
         }
-        case SDL_QUIT:
+        case CAMERA_EDITOR_ACTION_QUIT:
             SaveAllSettings();
             sceneEditorExitFlag = true;
             break;
+        case CAMERA_EDITOR_ACTION_NONE:
         default:
             break;
     }

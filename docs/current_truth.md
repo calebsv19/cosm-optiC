@@ -1,6 +1,6 @@
 # Ray Tracing Current Truth
 
-Last updated: 2026-04-02
+Last updated: 2026-04-03
 
 ## Program Identity
 - repository directory: `ray_tracing/`
@@ -208,11 +208,100 @@ Shared libs consumed by current build:
 ## Connection Pass State
 - `RT-CP0` through `RT-CP5` are complete:
   - `../docs/private_program_docs/ray_tracing/2026-04-01_ray_tracing_connection_pass_cp0_cp5_execution.md`
+- cross-program wrapper initiative update (`W1` + `W2`) complete:
+  - wrapper diagnostics are now canonicalized in `src/app/ray_tracing_app_main.c`:
+    - structured wrapper error taxonomy + function-context boundary logging
+    - stage transition violation diagnostics (`expected`/`actual`/`next`)
+    - normalized dispatch summary reporting (`dispatch_count`, `dispatch_succeeded`, `last_dispatch_exit_code`)
+    - deterministic wrapper exit summary diagnostics
+  - execution closeout log:
+    - `../docs/private_program_docs/ray_tracing/2026-04-02_ray_tracing_w1_w2_wrapper_hardening.md`
+  - verification snapshot:
+    - `make -C ray_tracing clean && make -C ray_tracing` -> PASS
+    - `make -C ray_tracing test-stable` -> PASS
+    - `make -C ray_tracing run-headless-smoke` -> PASS
+    - `make -C ray_tracing visual-harness` -> PASS
 - current ownership summary:
   - wrapper (`src/app/ray_tracing_app_main.c`) owns typed context + guarded staged flow + explicit runtime dispatch seam + split dispatch flow stages + deterministic lifecycle ownership release ordering
   - legacy body (`src/app/animation.c`, `ray_tracing_app_main_legacy(...)`) still owns most runtime initialization/routing/teardown
 - next slices:
   - optional `RT-CP6+`: deeper extraction of runtime/update/render/shutdown ownership from legacy lane
+- `RS1` render-split lane started (`S0`/`S1`):
+  - shared diagnostics contract adoption landed in legacy runtime loop (`src/app/animation.c`):
+    - `kit_runtime_diag_compute_timings(...)`
+    - `kit_runtime_diag_input_totals_accumulate(...)`
+  - per-frame runtime timing and input counter roll-up are now emitted under opt-in env gate:
+    - `RAY_TRACING_RUNTIME_DIAG=1`
+  - `RS1-S2` landed:
+    - explicit frame derive/submit split in main loop:
+      - `DeriveRenderInputs(...)`
+      - `SubmitRenderFrame(...)`
+    - diagnostics marks now include explicit derive/submit timing windows (`render_derive_ms`, `render_submit_ms`)
+  - `RS1-S3` landed:
+    - frame submit now routes through wrapper-owned render handoff:
+      - `ray_tracing_app_render_submit(...)`
+      - wrapper handoff diagnostics counters track attempts/success/rejections
+    - legacy loop preserves behavior with direct submit fallback if wrapper handoff declines.
+  - `RS1-S4` landed:
+    - frame update and route phases now route through wrapper-owned handoff helpers:
+      - `ray_tracing_app_frame_update(...)`
+      - `ray_tracing_app_frame_route(...)`
+    - wrapper diagnostics counters now include update/route handoff attempts/success/rejections.
+    - legacy loop preserves behavior with direct update/route fallbacks if wrapper handoff declines.
+  - `RS1-S5` landed:
+    - frame event intake phase now routes through wrapper-owned handoff helper:
+      - `ray_tracing_app_frame_events(...)`
+    - wrapper diagnostics counters now include event-intake handoff attempts/success/rejections.
+    - legacy loop preserves behavior with direct event handling fallback if wrapper handoff declines.
+  - behavior status:
+    - no intentional render/input policy changes; this remains a structure/diagnostics split.
+- `IR1` setup landed for upcoming editor complexity:
+  - legacy input loop now uses explicit phase helpers in `animation.c`:
+    - `InputFrame_Intake(...)`
+    - `InputFrame_Normalize(...)`
+    - `InputFrame_Route(...)`
+    - `InputFrame_Invalidate(...)`
+    - `RunInputRoutingFrame(...)`
+  - explicit raw-event + normalized-action frame model added (`RayTracingInputFrame`).
+  - explicit input invalidation output contract added (`RayTracingInputRoutingResult`) for target/full invalidation and reason bits.
+  - behavior parity preserved for existing quit/escape/zoom/fluid/ray-input routes.
+  - scene editor top-level now uses explicit target routing contract in `scene_editor.c`:
+    - `system -> chrome -> pane` routing stages
+    - typed routing result with invalidation intent outputs and reason bits
+    - behavior-preserving forwarding to Bezier/Object/Camera editor handlers
+  - `IR1-S2` landed in scene editor:
+    - explicit normalized action contract:
+      - `SceneEditorInputNormalized` (`action_class`, `route_policy`, `target_hint`, `event`)
+      - route-policy surface: `global`, `chrome`, `active_pane`, `none`
+    - explicit per-event diagnostics contract:
+      - `SceneEditorInputDiagFrame` (raw/normalized/ignored/immediate/queued, routed target counters, invalidation counters)
+      - opt-in diagnostics gate: `RAY_TRACING_EDITOR_INPUT_DIAG=1`
+    - behavior parity remains intact:
+      - existing quit/tab/text-zoom/chrome button/mode-pane forwarding behavior is unchanged
+  - `IR1-S3` landed in scene editor:
+    - concrete pane hit-region routing contract is explicit before pane dispatch:
+      - `controls`, `list panel`, `canvas`, `drag`
+      - mode-local hit-region adapters now exist in editor modules:
+        - `BezierEditorHitRegionAtPoint(...)`
+        - `ObjectEditorHitRegionAtPoint(...)`
+        - `CameraEditorHitRegionAtPoint(...)`
+    - expanded invalidation-policy classes are explicit in route outputs:
+      - `target_ui`, `target_pane`, `target_interaction`, `full_exit`
+      - reason bits now classify pane-controls/canvas/drag causes
+    - opt-in diagnostics now include pane-hit class counters.
+  - `IR1-S4` landed in pane handlers:
+    - pane-local canonical action adapters are now explicit before deep mutation paths:
+      - `BezierEditorAction` + `ResolveBezierEditorAction(...)`
+      - `ObjectEditorAction` + `ResolveObjectEditorAction(...)`
+      - `CameraEditorAction` + `ResolveCameraEditorAction(...)`
+    - behavior parity is preserved while per-pane command normalization is now explicit.
+  - `IR1-S5` landed in scene editor routing:
+    - explicit scene-editor pane command contract added before pane dispatch:
+      - `SceneEditorPaneCommandKind`
+      - `SceneEditorPaneCommand`
+      - `SceneEditorResolvePaneCommand(...)`
+    - active-pane route now resolves `pane command -> pane dispatch` explicitly instead of direct raw-event pane dispatch.
+    - behavior parity preserved; pane handlers remain mutation owners.
 
 ## RT3D Execution State
 - active execution plan:

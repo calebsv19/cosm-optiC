@@ -31,6 +31,27 @@ int draggingPoint = -1;
 int draggingVelocity = -1;
 static int selectedPoint = -1;
 
+typedef enum BezierEditorAction {
+    BEZIER_EDITOR_ACTION_NONE = 0,
+    BEZIER_EDITOR_ACTION_MOUSE_DRAG,
+    BEZIER_EDITOR_ACTION_MOUSE_DOWN_LEFT,
+    BEZIER_EDITOR_ACTION_MOUSE_UP_LEFT,
+    BEZIER_EDITOR_ACTION_KEY_DOWN
+} BezierEditorAction;
+
+static BezierEditorAction ResolveBezierEditorAction(const SDL_Event* event) {
+    if (!event) return BEZIER_EDITOR_ACTION_NONE;
+    if (event->type == SDL_MOUSEMOTION) return BEZIER_EDITOR_ACTION_MOUSE_DRAG;
+    if (event->type == SDL_MOUSEBUTTONDOWN && event->button.button == SDL_BUTTON_LEFT) {
+        return BEZIER_EDITOR_ACTION_MOUSE_DOWN_LEFT;
+    }
+    if (event->type == SDL_MOUSEBUTTONUP && event->button.button == SDL_BUTTON_LEFT) {
+        return BEZIER_EDITOR_ACTION_MOUSE_UP_LEFT;
+    }
+    if (event->type == SDL_KEYDOWN) return BEZIER_EDITOR_ACTION_KEY_DOWN;
+    return BEZIER_EDITOR_ACTION_NONE;
+}
+
 static Camera BuildBezierEditorCamera(void) {
     double margin = GetCurrentMarginPixels();
     return CameraBuildPreviewCamera(&sceneSettings.camera,
@@ -256,6 +277,18 @@ bool IsClickingButtonBezier(int mx, int my) {
     return false;  // Click is not inside a UI button
 }
 
+BezierEditorHitRegion BezierEditorHitRegionAtPoint(int mx, int my) {
+    if (IsClickingButtonMain(mx, my)) {
+        return BEZIER_EDITOR_HIT_CONTROLS;
+    }
+    if ((mx >= addButton.x && mx <= addButton.x + addButton.w && my >= addButton.y && my <= addButton.y + addButton.h) ||
+        (mx >= deleteButton.x && mx <= deleteButton.x + deleteButton.w && my >= deleteButton.y && my <= deleteButton.y + deleteButton.h) ||
+        (mx >= toggleButton.x && mx <= toggleButton.x + toggleButton.w && my >= toggleButton.y && my <= toggleButton.y + toggleButton.h)) {
+        return BEZIER_EDITOR_HIT_CONTROLS;
+    }
+    return BEZIER_EDITOR_HIT_CANVAS;
+}
+
 void HandleBezierEditorKeyPress(SDL_Event* event) {
     if (event->type == SDL_KEYDOWN) {
         switch (event->key.keysym.sym) {
@@ -373,43 +406,43 @@ void HandleBezierEditorMouseClick(SDL_Event* event) {
 }
 
 void HandleBezierEditorEvents(SDL_Event* event, int* draggingPoint, int* draggingVelocity) {
-    int screenX = 0;
-    int screenY = 0;
-    if (event->type == SDL_MOUSEMOTION) {
-        screenX = event->motion.x;
-        screenY = event->motion.y;
-    } else {
-        screenX = event->button.x;
-        screenY = event->button.y;
+    BezierEditorAction action = ResolveBezierEditorAction(event);
+    if (action == BEZIER_EDITOR_ACTION_NONE) {
+        return;
     }
-    Camera previewCam = BuildBezierEditorCamera();
-    CameraPoint worldPoint = ScreenToWorldBezier(&previewCam, screenX, screenY);
-    Vec2 world = vec2(worldPoint.x, worldPoint.y);
 
-    // ✅ Handle mouse movement for dragging points or velocity handles
-    if (event->type == SDL_MOUSEMOTION) {
-        if (*draggingPoint != -1 && *draggingVelocity == -1) {
-            MoveEndPoint(&sceneSettings.bezierPath, (int)round(world.x), (int)round(world.y), *draggingPoint);
-        } else if (*draggingPoint != -1 && *draggingVelocity != -1) {
-            MoveVelocityHandle(&sceneSettings.bezierPath,
-                               (int)round(world.x),
-                               (int)round(world.y),
-                               *draggingPoint,
-                               *draggingVelocity);
+    switch (action) {
+        case BEZIER_EDITOR_ACTION_MOUSE_DRAG: {
+            int screenX = event->motion.x;
+            int screenY = event->motion.y;
+            Camera previewCam = BuildBezierEditorCamera();
+            CameraPoint worldPoint = ScreenToWorldBezier(&previewCam, screenX, screenY);
+            Vec2 world = vec2(worldPoint.x, worldPoint.y);
+            if (*draggingPoint != -1 && *draggingVelocity == -1) {
+                MoveEndPoint(&sceneSettings.bezierPath, (int)round(world.x), (int)round(world.y), *draggingPoint);
+            } else if (*draggingPoint != -1 && *draggingVelocity != -1) {
+                MoveVelocityHandle(&sceneSettings.bezierPath,
+                                   (int)round(world.x),
+                                   (int)round(world.y),
+                                   *draggingPoint,
+                                   *draggingVelocity);
+            }
+            break;
         }
-    }
-    // ✅ Forward mouse click events to HandleBezierEditorMouseClick()
-    else if (event->type == SDL_MOUSEBUTTONDOWN && event->button.button == SDL_BUTTON_LEFT) {
-        HandleBezierEditorMouseClick(event);
-    }
-    else if (event->type == SDL_KEYDOWN) {
-        HandleBezierEditorKeyPress(event);
-    }
-    // ✅ Reset dragging states when releasing the mouse
-    else if (event->type == SDL_MOUSEBUTTONUP && event->button.button == SDL_BUTTON_LEFT) {
-        *draggingPoint = -1;
-        *draggingVelocity = -1;
-        // keep selectedPoint as-is after drag to persist selection
+        case BEZIER_EDITOR_ACTION_MOUSE_DOWN_LEFT:
+            HandleBezierEditorMouseClick(event);
+            break;
+        case BEZIER_EDITOR_ACTION_KEY_DOWN:
+            HandleBezierEditorKeyPress(event);
+            break;
+        case BEZIER_EDITOR_ACTION_MOUSE_UP_LEFT:
+            *draggingPoint = -1;
+            *draggingVelocity = -1;
+            // keep selectedPoint as-is after drag to persist selection
+            break;
+        case BEZIER_EDITOR_ACTION_NONE:
+        default:
+            break;
     }
 }
 

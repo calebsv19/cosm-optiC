@@ -72,6 +72,31 @@ static bool materialsCollapsed = false;
 static int assetScroll = 0;
 static int materialScroll = 0;
 
+typedef enum ObjectEditorAction {
+    OBJECT_EDITOR_ACTION_NONE = 0,
+    OBJECT_EDITOR_ACTION_QUIT,
+    OBJECT_EDITOR_ACTION_ESCAPE,
+    OBJECT_EDITOR_ACTION_MOUSE_DOWN,
+    OBJECT_EDITOR_ACTION_MOUSE_UP,
+    OBJECT_EDITOR_ACTION_MOUSE_DRAG,
+    OBJECT_EDITOR_ACTION_MOUSE_WHEEL,
+    OBJECT_EDITOR_ACTION_KEY_DOWN
+} ObjectEditorAction;
+
+static ObjectEditorAction ResolveObjectEditorAction(const SDL_Event* event) {
+    if (!event) return OBJECT_EDITOR_ACTION_NONE;
+    if (event->type == SDL_QUIT) return OBJECT_EDITOR_ACTION_QUIT;
+    if (event->type == SDL_KEYDOWN && event->key.keysym.sym == SDLK_ESCAPE) {
+        return OBJECT_EDITOR_ACTION_ESCAPE;
+    }
+    if (event->type == SDL_MOUSEBUTTONDOWN) return OBJECT_EDITOR_ACTION_MOUSE_DOWN;
+    if (event->type == SDL_MOUSEBUTTONUP) return OBJECT_EDITOR_ACTION_MOUSE_UP;
+    if (event->type == SDL_MOUSEMOTION) return OBJECT_EDITOR_ACTION_MOUSE_DRAG;
+    if (event->type == SDL_MOUSEWHEEL) return OBJECT_EDITOR_ACTION_MOUSE_WHEEL;
+    if (event->type == SDL_KEYDOWN) return OBJECT_EDITOR_ACTION_KEY_DOWN;
+    return OBJECT_EDITOR_ACTION_NONE;
+}
+
 static int ObjectEditorHeaderHeight(void) {
     return animation_config_scale_text_point_size(&animSettings, PANEL_HEADER_HEIGHT, 20);
 }
@@ -474,6 +499,21 @@ polygonButton.y + polygonButton.h)) {
     return false;  // Click is not inside a UI button
 }
 
+ObjectEditorHitRegion ObjectEditorHitRegionAtPoint(int mx, int my) {
+    if (IsClickingButtonMain(mx, my) || IsClickingButton(mx, my)) {
+        return OBJECT_EDITOR_HIT_CONTROLS;
+    }
+    if (mx >= assetPanelRect.x && mx <= assetPanelRect.x + assetPanelRect.w &&
+        my >= assetPanelRect.y && my <= assetPanelRect.y + assetPanelRect.h) {
+        return OBJECT_EDITOR_HIT_ASSET_PANEL;
+    }
+    if (mx >= materialPanelRect.x && mx <= materialPanelRect.x + materialPanelRect.w &&
+        my >= materialPanelRect.y && my <= materialPanelRect.y + materialPanelRect.h) {
+        return OBJECT_EDITOR_HIT_MATERIAL_PANEL;
+    }
+    return OBJECT_EDITOR_HIT_CANVAS;
+}
+
 
 bool CheckObjectClick(double mx, double my) {
     for (int i = 0; i < sceneSettings.objectCount; i++) {
@@ -654,33 +694,30 @@ void RenderObjectEditor(SDL_Renderer* renderer) {
 
 
 void HandleObjectEditorEvents(SDL_Event* event) {
-    if (event->type == SDL_QUIT) {  
-	SaveAllSettings();
-        sceneEditorExitFlag = true;  // ✅ Ensure clicking "X" closes the editor properly
-        printf("Window closed manually. Exiting Object Editor.\n");
-        return;
-    }
-
-    if (event->type == SDL_KEYDOWN && event->key.keysym.sym == SDLK_ESCAPE) {
-        SaveAllSettings();
-	sceneEditorExitFlag = true;  // ✅ Also close with ESC
-        return;
-    }
-	
-    switch (event->type) {
-        case SDL_MOUSEBUTTONDOWN:
+    ObjectEditorAction action = ResolveObjectEditorAction(event);
+    switch (action) {
+        case OBJECT_EDITOR_ACTION_QUIT:
+            SaveAllSettings();
+            sceneEditorExitFlag = true;  // Ensure clicking "X" closes the editor properly
+            printf("Window closed manually. Exiting Object Editor.\n");
+            return;
+        case OBJECT_EDITOR_ACTION_ESCAPE:
+            SaveAllSettings();
+            sceneEditorExitFlag = true;  // Also close with ESC
+            return;
+        case OBJECT_EDITOR_ACTION_MOUSE_DOWN:
             if (showImports || selectedAssetIndex >= 0) {
                 // allow selection without toggling add mode
             }
             HandleObjectEditorMouseClick(event);
             break;
-        case SDL_MOUSEBUTTONUP:
+        case OBJECT_EDITOR_ACTION_MOUSE_UP:
             HandleObjectEditorMouseRelease(event);
             break;
-        case SDL_MOUSEMOTION:
+        case OBJECT_EDITOR_ACTION_MOUSE_DRAG:
             HandleObjectEditorMouseDrag(event);
             break;
-        case SDL_MOUSEWHEEL: {
+        case OBJECT_EDITOR_ACTION_MOUSE_WHEEL: {
             int mx, my;
             SDL_GetMouseState(&mx, &my);
             int scrollDir = event->wheel.y > 0 ? -1 : 1;
@@ -719,8 +756,11 @@ void HandleObjectEditorEvents(SDL_Event* event) {
             }
             break;
         }
-        case SDL_KEYDOWN:
+        case OBJECT_EDITOR_ACTION_KEY_DOWN:
             HandleObjectEditorKeyPress(event);
+            break;
+        case OBJECT_EDITOR_ACTION_NONE:
+        default:
             break;
     }
 }

@@ -19,10 +19,19 @@ typedef enum {
 
 extern ShapeMode shapeMode;
 
+typedef enum ObjectEditorHitRegion {
+    OBJECT_EDITOR_HIT_NONE = 0,
+    OBJECT_EDITOR_HIT_CONTROLS,
+    OBJECT_EDITOR_HIT_ASSET_PANEL,
+    OBJECT_EDITOR_HIT_MATERIAL_PANEL,
+    OBJECT_EDITOR_HIT_CANVAS
+} ObjectEditorHitRegion;
+
 // Object Editor Functions
 void InitializeObjectEditor(void);
 void RenderObjectEditor(SDL_Renderer* renderer);
 void HandleObjectEditorEvents(SDL_Event* event);
+ObjectEditorHitRegion ObjectEditorHitRegionAtPoint(int mx, int my);
 
 // Sub-functions for event handling
 void HandleObjectEditorMouseClick(SDL_Event* event);

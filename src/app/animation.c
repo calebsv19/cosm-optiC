@@ -27,6 +27,7 @@
 #include "geo/shape_adapter.h"
 #include "ray_tracing/ray_tracing_app_main.h"
 #include "render/vk_shared_device.h"
+#include "kit_runtime_diag.h"
 #include <json-c/json.h>
 #include <math.h>
 #include <stdio.h>
@@ -63,6 +64,8 @@ static const double kPreviewBg = 60.0;
 
 static const char* s_fluidManifestOverride = NULL;
 #include "render/fluid_state.h"
+
+void UpdateSimulation(double* accumulator, double* currentTime, int* loopCount);
 
 static bool EnvEnabled(const char *name) {
     const char *v = getenv(name);
@@ -789,25 +792,176 @@ void AnimationCleanup(void) {
     SDL_Quit();
 }
 
-void HandleEvents(bool* running) {
+typedef enum RayTracingInputActionType {
+    RAY_TRACING_INPUT_ACTION_QUIT = 0,
+    RAY_TRACING_INPUT_ACTION_KEYDOWN,
+    RAY_TRACING_INPUT_ACTION_RAY_EVENT
+} RayTracingInputActionType;
+
+typedef struct RayTracingInputAction {
+    RayTracingInputActionType type;
     SDL_Event event;
+} RayTracingInputAction;
+
+typedef struct RayTracingInputFrame {
+    SDL_Event raw_events[256];
+    uint16_t raw_count;
+    RayTracingInputAction actions[256];
+    uint16_t action_count;
+} RayTracingInputFrame;
+
+typedef struct RayTracingInputRoutingResult {
+    bool requested_target_invalidation;
+    bool requested_full_invalidation;
+    uint32_t invalidation_reason_bits;
+} RayTracingInputRoutingResult;
+
+enum {
+    RAY_TRACING_INPUT_INVALIDATION_REASON_ACTION = 1u << 0,
+    RAY_TRACING_INPUT_INVALIDATION_REASON_EXIT = 1u << 1
+};
+
+static void InputFrame_Reset(RayTracingInputFrame *frame) {
+    if (!frame) {
+        return;
+    }
+    memset(frame, 0, sizeof(*frame));
+}
+
+static void InputFrame_Intake(RayTracingInputFrame *frame, KitRuntimeDiagInputFrame *out_diag) {
+    SDL_Event event;
+    if (!frame) {
+        return;
+    }
     while (SDL_PollEvent(&event)) {
-        if (event.type == SDL_QUIT) {
-            *running = false; // return to menu instead of killing app
-        } else if (event.type == SDL_KEYDOWN) {
-            if (HandleTextZoomShortcut(&event.key)) {
-                continue;
-            }
-            if (event.key.keysym.sym == SDLK_ESCAPE) {
-                *running = false; // escape exits loop, menu decides next step
-                continue;
-            }
-            HandleFluidOverlayKey(event.key.keysym.sym);
-        } else if (animSettings.interactiveMode && (event.type == SDL_MOUSEMOTION ||
-                                event.type == SDL_MOUSEBUTTONDOWN)) {
-            ProcessRayTracingEvent(&event);
+        if (frame->raw_count < (uint16_t)(sizeof(frame->raw_events) / sizeof(frame->raw_events[0]))) {
+            frame->raw_events[frame->raw_count++] = event;
+        }
+        if (out_diag) {
+            out_diag->raw_event_count += 1u;
         }
     }
+}
+
+static void InputFrame_Normalize(RayTracingInputFrame *frame) {
+    uint16_t i = 0;
+    if (!frame) {
+        return;
+    }
+    for (i = 0; i < frame->raw_count; ++i) {
+        const SDL_Event *raw = &frame->raw_events[i];
+        RayTracingInputActionType action_type;
+        bool supported = true;
+
+        if (raw->type == SDL_QUIT) {
+            action_type = RAY_TRACING_INPUT_ACTION_QUIT;
+        } else if (raw->type == SDL_KEYDOWN) {
+            action_type = RAY_TRACING_INPUT_ACTION_KEYDOWN;
+        } else if (animSettings.interactiveMode &&
+                   (raw->type == SDL_MOUSEMOTION || raw->type == SDL_MOUSEBUTTONDOWN)) {
+            action_type = RAY_TRACING_INPUT_ACTION_RAY_EVENT;
+        } else {
+            supported = false;
+            action_type = RAY_TRACING_INPUT_ACTION_RAY_EVENT;
+        }
+
+        if (!supported) {
+            continue;
+        }
+        if (frame->action_count < (uint16_t)(sizeof(frame->actions) / sizeof(frame->actions[0]))) {
+            frame->actions[frame->action_count].type = action_type;
+            frame->actions[frame->action_count].event = *raw;
+            frame->action_count += 1u;
+        }
+    }
+}
+
+static void InputFrame_Route(const RayTracingInputFrame *frame,
+                             bool *running,
+                             KitRuntimeDiagInputFrame *out_diag) {
+    uint16_t i = 0;
+    if (!frame || !running) {
+        return;
+    }
+    for (i = 0; i < frame->action_count; ++i) {
+        const RayTracingInputAction *action = &frame->actions[i];
+        if (action->type == RAY_TRACING_INPUT_ACTION_QUIT) {
+            *running = false;
+            if (out_diag) {
+                out_diag->action_count += 1u;
+                out_diag->routed_global_count += 1u;
+            }
+            continue;
+        }
+        if (action->type == RAY_TRACING_INPUT_ACTION_KEYDOWN) {
+            if (out_diag) {
+                out_diag->action_count += 1u;
+                out_diag->routed_global_count += 1u;
+            }
+            if (HandleTextZoomShortcut(&action->event.key)) {
+                continue;
+            }
+            if (action->event.key.keysym.sym == SDLK_ESCAPE) {
+                *running = false;
+                continue;
+            }
+            HandleFluidOverlayKey(action->event.key.keysym.sym);
+            continue;
+        }
+        if (action->type == RAY_TRACING_INPUT_ACTION_RAY_EVENT) {
+            SDL_Event mutable_event = action->event;
+            ProcessRayTracingEvent(&mutable_event);
+            if (out_diag) {
+                out_diag->action_count += 1u;
+                out_diag->routed_pane_count += 1u;
+            }
+        }
+    }
+}
+
+static void InputFrame_Invalidate(const RayTracingInputFrame *frame,
+                                  bool running,
+                                  KitRuntimeDiagInputFrame *out_diag,
+                                  RayTracingInputRoutingResult *out_result) {
+    if (!out_result) {
+        return;
+    }
+    memset(out_result, 0, sizeof(*out_result));
+    if (frame && frame->action_count > 0) {
+        out_result->requested_target_invalidation = true;
+        out_result->invalidation_reason_bits |= RAY_TRACING_INPUT_INVALIDATION_REASON_ACTION;
+        if (out_diag) {
+            out_diag->target_invalidation_count += 1u;
+            out_diag->invalidation_reason_bits |= RAY_TRACING_INPUT_INVALIDATION_REASON_ACTION;
+        }
+    }
+    if (!running) {
+        out_result->requested_full_invalidation = true;
+        out_result->invalidation_reason_bits |= RAY_TRACING_INPUT_INVALIDATION_REASON_EXIT;
+        if (out_diag) {
+            out_diag->full_invalidation_count += 1u;
+            out_diag->invalidation_reason_bits |= RAY_TRACING_INPUT_INVALIDATION_REASON_EXIT;
+        }
+    }
+}
+
+static void RunInputRoutingFrame(bool *running,
+                                 KitRuntimeDiagInputFrame *out_diag,
+                                 RayTracingInputRoutingResult *out_result) {
+    RayTracingInputFrame frame;
+    InputFrame_Reset(&frame);
+    InputFrame_Intake(&frame, out_diag);
+    InputFrame_Normalize(&frame);
+    InputFrame_Route(&frame, running, out_diag);
+    InputFrame_Invalidate(&frame, running ? *running : true, out_diag, out_result);
+}
+
+void HandleEvents(bool* running, KitRuntimeDiagInputFrame* out_diag) {
+    RayTracingInputRoutingResult input_result = {0};
+    if (out_diag) {
+        memset(out_diag, 0, sizeof(*out_diag));
+    }
+    RunInputRoutingFrame(running, out_diag, &input_result);
 }
 
 void UpdateSimulation(double* accumulator, double* currentTime, int* loopCount) {
@@ -1094,6 +1248,89 @@ void RenderFrame(double lightX, double lightY, int* frameCounter, bool* running)
     ts_frame_end();
 }
 
+typedef struct RayTracingFrameRenderInputs {
+    double light_x;
+    double light_y;
+} RayTracingFrameRenderInputs;
+
+typedef struct RayTracingFrameUpdateBridge {
+    double *accumulator;
+    double *current_time;
+    int *loop_count;
+    bool should_update;
+} RayTracingFrameUpdateBridge;
+
+typedef struct RayTracingFrameEventsBridge {
+    bool *running;
+    KitRuntimeDiagInputFrame *input_frame;
+    RayTracingInputRoutingResult *input_result;
+} RayTracingFrameEventsBridge;
+
+typedef struct RayTracingFrameRouteBridge {
+    RayTracingFrameRenderInputs *render_inputs;
+} RayTracingFrameRouteBridge;
+
+static void DeriveRenderInputs(RayTracingFrameRenderInputs* out_inputs) {
+    if (!out_inputs) {
+        return;
+    }
+    UpdateLightPosition(&out_inputs->light_x, &out_inputs->light_y);
+    UpdateCameraPosition(t_param);
+}
+
+static void SubmitRenderFrame(const RayTracingFrameRenderInputs* inputs,
+                              int* frameCounter,
+                              bool* running) {
+    if (!inputs) {
+        return;
+    }
+    RenderFrame(inputs->light_x, inputs->light_y, frameCounter, running);
+}
+
+static bool HandleFrameEventsViaBridge(void *user_data) {
+    RayTracingFrameEventsBridge *bridge = (RayTracingFrameEventsBridge *)user_data;
+    if (!bridge || !bridge->running || !bridge->input_frame) {
+        return false;
+    }
+    RunInputRoutingFrame(bridge->running, bridge->input_frame, bridge->input_result);
+    return true;
+}
+
+static bool UpdateFrameViaBridge(void *user_data) {
+    RayTracingFrameUpdateBridge *bridge = (RayTracingFrameUpdateBridge *)user_data;
+    if (!bridge || !bridge->accumulator || !bridge->current_time || !bridge->loop_count) {
+        return false;
+    }
+    if (bridge->should_update) {
+        UpdateSimulation(bridge->accumulator, bridge->current_time, bridge->loop_count);
+    }
+    return true;
+}
+
+static bool RouteFrameViaBridge(void *user_data) {
+    RayTracingFrameRouteBridge *bridge = (RayTracingFrameRouteBridge *)user_data;
+    if (!bridge || !bridge->render_inputs) {
+        return false;
+    }
+    DeriveRenderInputs(bridge->render_inputs);
+    return true;
+}
+
+typedef struct RayTracingRenderSubmitBridge {
+    const RayTracingFrameRenderInputs *inputs;
+    int *frame_counter;
+    bool *running;
+} RayTracingRenderSubmitBridge;
+
+static bool SubmitRenderFrameViaBridge(void *user_data) {
+    RayTracingRenderSubmitBridge *bridge = (RayTracingRenderSubmitBridge *)user_data;
+    if (!bridge || !bridge->inputs || !bridge->frame_counter || !bridge->running) {
+        return false;
+    }
+    SubmitRenderFrame(bridge->inputs, bridge->frame_counter, bridge->running);
+    return true;
+}
+
 void CheckLoopConditions(bool* running, int loopCount, int frameCounter) {
     if (quitRequested) {
         *running = false;
@@ -1125,18 +1362,114 @@ void RunMainLoop(void) {
     
     printf("DEBUG: RunMainLoop started with interactiveMode=%d, deepRenderMode=%d\n",
            animSettings.interactiveMode, animSettings.deepRenderMode);
+
+    const bool runtime_diag_enabled = EnvEnabled("RAY_TRACING_RUNTIME_DIAG");
+    double runtime_diag_next_log = 0.0;
+    KitRuntimeDiagInputTotals input_totals = {0};
     
     while (running && !quitRequested) {
-        HandleEvents(&running);
-        if (!animSettings.interactiveMode || animSettings.deepRenderMode) {
-            UpdateSimulation(&accumulator, &currentTime, &loopCount);
+        const double frame_begin = (double)runtime_time_now_ns() / 1000000000.0;
+        KitRuntimeDiagInputFrame input_frame = {0};
+        RayTracingInputRoutingResult input_result = {0};
+        RayTracingFrameEventsBridge events_bridge = {
+            .running = &running,
+            .input_frame = &input_frame,
+            .input_result = &input_result,
+        };
+        RayTracingFrameEventsRequest events_request = {
+            .events_fn = HandleFrameEventsViaBridge,
+            .user_data = &events_bridge,
+        };
+        RayTracingFrameEventsOutcome events_outcome = {0};
+        if (!ray_tracing_app_frame_events(&events_request, &events_outcome) ||
+            !events_outcome.handled) {
+            RunInputRoutingFrame(&running, &input_frame, &input_result);
         }
-        
-        double lightX, lightY;
-        UpdateLightPosition(&lightX, &lightY);
-        UpdateCameraPosition(t_param);
-        RenderFrame(lightX, lightY, &frameCounter, &running);
-        CheckLoopConditions(&running, loopCount, currentTime);
+        const double after_events = (double)runtime_time_now_ns() / 1000000000.0;
+        RayTracingFrameUpdateBridge update_bridge = {
+            .accumulator = &accumulator,
+            .current_time = &currentTime,
+            .loop_count = &loopCount,
+            .should_update = (!animSettings.interactiveMode || animSettings.deepRenderMode),
+        };
+        RayTracingFrameUpdateRequest update_request = {
+            .update_fn = UpdateFrameViaBridge,
+            .user_data = &update_bridge,
+        };
+        RayTracingFrameUpdateOutcome update_outcome = {0};
+        if (!ray_tracing_app_frame_update(&update_request, &update_outcome) ||
+            !update_outcome.updated) {
+            if (update_bridge.should_update) {
+                UpdateSimulation(&accumulator, &currentTime, &loopCount);
+            }
+        }
+        const double after_update = (double)runtime_time_now_ns() / 1000000000.0;
+
+        const double after_route = (double)runtime_time_now_ns() / 1000000000.0;
+        RayTracingFrameRenderInputs render_inputs = {0};
+        RayTracingFrameRouteBridge route_bridge = {
+            .render_inputs = &render_inputs,
+        };
+        RayTracingFrameRouteRequest route_request = {
+            .route_fn = RouteFrameViaBridge,
+            .user_data = &route_bridge,
+        };
+        RayTracingFrameRouteOutcome route_outcome = {0};
+        if (!ray_tracing_app_frame_route(&route_request, &route_outcome) ||
+            !route_outcome.routed) {
+            DeriveRenderInputs(&render_inputs);
+        }
+        const double after_render_derive = (double)runtime_time_now_ns() / 1000000000.0;
+        const double before_present = (double)runtime_time_now_ns() / 1000000000.0;
+        RayTracingRenderSubmitBridge submit_bridge = {
+            .inputs = &render_inputs,
+            .frame_counter = &frameCounter,
+            .running = &running,
+        };
+        RayTracingRenderSubmitRequest submit_request = {
+            .submit_fn = SubmitRenderFrameViaBridge,
+            .user_data = &submit_bridge,
+        };
+        RayTracingRenderSubmitOutcome submit_outcome = {0};
+        if (!ray_tracing_app_render_submit(&submit_request, &submit_outcome) ||
+            !submit_outcome.submitted) {
+            SubmitRenderFrame(&render_inputs, &frameCounter, &running);
+        }
+        const double after_render = (double)runtime_time_now_ns() / 1000000000.0;
+        CheckLoopConditions(&running, loopCount, frameCounter);
+        kit_runtime_diag_input_totals_accumulate(&input_totals, &input_frame);
+
+        if (runtime_diag_enabled) {
+            KitRuntimeDiagStageMarks marks = {
+                .frame_begin = frame_begin,
+                .after_events = after_events,
+                .after_update = after_update,
+                .after_queue = after_update,
+                .after_integrate = after_update,
+                .after_route = after_route,
+                .after_render_derive = after_render_derive,
+                .before_present = before_present,
+                .after_render = after_render,
+            };
+            KitRuntimeDiagTimings timings = {0};
+            kit_runtime_diag_compute_timings(&marks, &timings);
+            if (runtime_diag_next_log <= 0.0 || after_render >= runtime_diag_next_log) {
+                printf("[rt_diag] frame=%.1fms events=%.1f update=%.1f route=%.1f derive=%.1f submit=%.1f render=%.1f present=%.1f input(frame_raw=%u frame_actions=%u) input(total_raw=%llu total_actions=%llu)\n",
+                       timings.frame_ms,
+                       timings.events_ms,
+                       timings.update_ms,
+                       timings.route_ms,
+                       timings.render_derive_ms,
+                       timings.render_submit_ms,
+                       timings.render_ms,
+                       timings.present_ms,
+                       input_frame.raw_event_count,
+                       input_frame.action_count,
+                       (unsigned long long)input_totals.raw_event_count,
+                       (unsigned long long)input_totals.action_count);
+                runtime_diag_next_log = after_render + 1.0;
+            }
+        }
 
         SDL_Delay(16);  // Prevent CPU overload, ~60FPS
     }

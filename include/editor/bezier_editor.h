@@ -16,6 +16,14 @@ void RenderBezierEditor(SDL_Renderer* renderer);
 void HandleBezierEditorEvents(SDL_Event* event, int* draggingPoint, int* draggingVelocity);
 void ToggleBezierPathMode(Path* path);
 
+typedef enum BezierEditorHitRegion {
+    BEZIER_EDITOR_HIT_NONE = 0,
+    BEZIER_EDITOR_HIT_CONTROLS,
+    BEZIER_EDITOR_HIT_CANVAS
+} BezierEditorHitRegion;
+
+BezierEditorHitRegion BezierEditorHitRegionAtPoint(int mx, int my);
+
 // Bézier Path Operations
 void AddBezierPoint(Path* path, int x, int y);
 void RemoveBezierPoint(Path* path, int index);

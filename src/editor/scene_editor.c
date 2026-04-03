@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <stdint.h>
 
 // UI Button
 SDL_Rect applyButton = {1000, 700, 150, 50};
@@ -37,6 +38,552 @@ static void InitializeEditorMode(SceneEditor* editor);
 
 static bool FluidSceneLocksObjects(void) {
     return AnimationUseFluidScene();
+}
+
+typedef enum SceneEditorInputTarget {
+    SCENE_EDITOR_INPUT_TARGET_NONE = 0,
+    SCENE_EDITOR_INPUT_TARGET_SYSTEM,
+    SCENE_EDITOR_INPUT_TARGET_CHROME,
+    SCENE_EDITOR_INPUT_TARGET_BEZIER_PANE,
+    SCENE_EDITOR_INPUT_TARGET_OBJECT_PANE,
+    SCENE_EDITOR_INPUT_TARGET_CAMERA_PANE
+} SceneEditorInputTarget;
+
+typedef enum SceneEditorInputActionClass {
+    SCENE_EDITOR_INPUT_ACTION_IGNORED = 0,
+    SCENE_EDITOR_INPUT_ACTION_IMMEDIATE,
+    SCENE_EDITOR_INPUT_ACTION_QUEUED
+} SceneEditorInputActionClass;
+
+typedef enum SceneEditorInputRoutePolicy {
+    SCENE_EDITOR_INPUT_ROUTE_POLICY_NONE = 0,
+    SCENE_EDITOR_INPUT_ROUTE_POLICY_GLOBAL,
+    SCENE_EDITOR_INPUT_ROUTE_POLICY_CHROME,
+    SCENE_EDITOR_INPUT_ROUTE_POLICY_ACTIVE_PANE
+} SceneEditorInputRoutePolicy;
+
+typedef struct SceneEditorInputRoutingResult {
+    SceneEditorInputTarget target;
+    bool consumed;
+    bool requested_target_invalidation;
+    bool requested_full_invalidation;
+    uint8_t pane_hit_region;
+    uint8_t invalidation_class;
+    uint32_t invalidation_reason_bits;
+} SceneEditorInputRoutingResult;
+
+typedef struct SceneEditorInputNormalized {
+    SceneEditorInputActionClass action_class;
+    SceneEditorInputRoutePolicy route_policy;
+    SceneEditorInputTarget target_hint;
+    const SDL_Event* event;
+} SceneEditorInputNormalized;
+
+typedef struct SceneEditorInputDiagFrame {
+    uint32_t raw_event_count;
+    uint32_t normalized_count;
+    uint32_t ignored_count;
+    uint32_t immediate_count;
+    uint32_t queued_count;
+    uint32_t routed_global_count;
+    uint32_t routed_chrome_count;
+    uint32_t routed_pane_count;
+    uint32_t pane_controls_count;
+    uint32_t pane_canvas_count;
+    uint32_t pane_drag_count;
+    uint32_t target_invalidation_count;
+    uint32_t full_invalidation_count;
+} SceneEditorInputDiagFrame;
+
+enum {
+    SCENE_EDITOR_INVALIDATE_REASON_UI = 1u << 0,
+    SCENE_EDITOR_INVALIDATE_REASON_PANE = 1u << 1,
+    SCENE_EDITOR_INVALIDATE_REASON_EXIT = 1u << 2,
+    SCENE_EDITOR_INVALIDATE_REASON_PANE_CONTROLS = 1u << 3,
+    SCENE_EDITOR_INVALIDATE_REASON_PANE_CANVAS = 1u << 4,
+    SCENE_EDITOR_INVALIDATE_REASON_PANE_DRAG = 1u << 5
+};
+
+typedef enum SceneEditorPaneHitRegion {
+    SCENE_EDITOR_PANE_HIT_NONE = 0,
+    SCENE_EDITOR_PANE_HIT_CONTROLS,
+    SCENE_EDITOR_PANE_HIT_LIST_PANEL,
+    SCENE_EDITOR_PANE_HIT_CANVAS,
+    SCENE_EDITOR_PANE_HIT_DRAG
+} SceneEditorPaneHitRegion;
+
+typedef enum SceneEditorInvalidationClass {
+    SCENE_EDITOR_INVALIDATION_NONE = 0,
+    SCENE_EDITOR_INVALIDATION_TARGET_UI,
+    SCENE_EDITOR_INVALIDATION_TARGET_PANE,
+    SCENE_EDITOR_INVALIDATION_TARGET_INTERACTION,
+    SCENE_EDITOR_INVALIDATION_FULL_EXIT
+} SceneEditorInvalidationClass;
+
+typedef enum SceneEditorPaneCommandKind {
+    SCENE_EDITOR_PANE_COMMAND_NONE = 0,
+    SCENE_EDITOR_PANE_COMMAND_POINTER_DOWN,
+    SCENE_EDITOR_PANE_COMMAND_POINTER_UP,
+    SCENE_EDITOR_PANE_COMMAND_POINTER_DRAG,
+    SCENE_EDITOR_PANE_COMMAND_WHEEL,
+    SCENE_EDITOR_PANE_COMMAND_KEY
+} SceneEditorPaneCommandKind;
+
+typedef struct SceneEditorPaneCommand {
+    SceneEditorPaneCommandKind kind;
+    SceneEditorInputTarget target;
+    SceneEditorPaneHitRegion pane_hit_region;
+    SDL_Event* event;
+} SceneEditorPaneCommand;
+
+static void SceneEditorInputRoutingResult_Reset(SceneEditorInputRoutingResult* result) {
+    if (!result) return;
+    memset(result, 0, sizeof(*result));
+    result->target = SCENE_EDITOR_INPUT_TARGET_NONE;
+}
+
+static void SceneEditorInputNormalized_Reset(SceneEditorInputNormalized* normalized) {
+    if (!normalized) return;
+    memset(normalized, 0, sizeof(*normalized));
+    normalized->action_class = SCENE_EDITOR_INPUT_ACTION_IGNORED;
+    normalized->route_policy = SCENE_EDITOR_INPUT_ROUTE_POLICY_NONE;
+    normalized->target_hint = SCENE_EDITOR_INPUT_TARGET_NONE;
+    normalized->event = NULL;
+}
+
+static bool SceneEditorInputDiagEnabled(void) {
+    const char* value = getenv("RAY_TRACING_EDITOR_INPUT_DIAG");
+    if (!value || !value[0]) return false;
+    return strcmp(value, "1") == 0 ||
+           strcmp(value, "true") == 0 ||
+           strcmp(value, "TRUE") == 0 ||
+           strcmp(value, "yes") == 0 ||
+           strcmp(value, "on") == 0;
+}
+
+static bool SceneEditorIsTextZoomShortcutKey(SDL_Keycode key, SDL_Keymod mod) {
+    if ((mod & (KMOD_CTRL | KMOD_GUI)) == 0) {
+        return false;
+    }
+    return key == SDLK_0 ||
+           key == SDLK_KP_0 ||
+           key == SDLK_EQUALS ||
+           key == SDLK_PLUS ||
+           key == SDLK_KP_PLUS ||
+           key == SDLK_MINUS ||
+           key == SDLK_UNDERSCORE ||
+           key == SDLK_KP_MINUS;
+}
+
+static void SceneEditorInputDiagMaybeEmit(const SDL_Event* event,
+                                          const SceneEditorInputDiagFrame* diag,
+                                          const SceneEditorInputRoutingResult* route) {
+    if (!event || !diag || !route) return;
+    if (!SceneEditorInputDiagEnabled()) return;
+    if (!(event->type == SDL_QUIT ||
+          event->type == SDL_KEYDOWN ||
+          event->type == SDL_MOUSEBUTTONDOWN ||
+          event->type == SDL_WINDOWEVENT)) {
+        return;
+    }
+
+    printf("[ir1] scene_editor_input raw=%u normalized=%u ignored=%u immediate=%u queued=%u "
+           "route(g=%u c=%u p=%u) pane_hit(ctrl=%u canvas=%u drag=%u) "
+           "invalidate(target=%u full=%u class=%u) consumed=%d target=%d reasons=0x%x\n",
+           diag->raw_event_count,
+           diag->normalized_count,
+           diag->ignored_count,
+           diag->immediate_count,
+           diag->queued_count,
+           diag->routed_global_count,
+           diag->routed_chrome_count,
+           diag->routed_pane_count,
+           diag->pane_controls_count,
+           diag->pane_canvas_count,
+           diag->pane_drag_count,
+           diag->target_invalidation_count,
+           diag->full_invalidation_count,
+           (unsigned int)route->invalidation_class,
+           route->consumed ? 1 : 0,
+           (int)route->target,
+           (unsigned int)route->invalidation_reason_bits);
+}
+
+static bool SceneEditorPointInRect(int x, int y, const SDL_Rect* rect) {
+    if (!rect) return false;
+    return x >= rect->x && x <= rect->x + rect->w &&
+           y >= rect->y && y <= rect->y + rect->h;
+}
+
+static SceneEditorInputTarget SceneEditorResolvePaneTarget(const SceneEditor* editor) {
+    if (!editor) return SCENE_EDITOR_INPUT_TARGET_NONE;
+    switch (editor->currentMode) {
+        case 0:
+            return SCENE_EDITOR_INPUT_TARGET_BEZIER_PANE;
+        case 1:
+            return FluidSceneLocksObjects() ? SCENE_EDITOR_INPUT_TARGET_NONE
+                                            : SCENE_EDITOR_INPUT_TARGET_OBJECT_PANE;
+        case 2:
+            return SCENE_EDITOR_INPUT_TARGET_CAMERA_PANE;
+        default:
+            return SCENE_EDITOR_INPUT_TARGET_NONE;
+    }
+}
+
+static bool SceneEditorHandleSystemInput(SceneEditor* editor,
+                                         SDL_Event* event,
+                                         SceneEditorInputRoutingResult* result) {
+    if (!editor || !event || !result) return false;
+    if (event->type == SDL_QUIT ||
+        (event->type == SDL_WINDOWEVENT && event->window.event == SDL_WINDOWEVENT_CLOSE)) {
+        printf("Received SDL_QUIT event. Closing Scene Editor.\n");
+        editor->running = false;
+        sceneEditorExitFlag = true;
+        result->target = SCENE_EDITOR_INPUT_TARGET_SYSTEM;
+        result->consumed = true;
+        result->invalidation_class = SCENE_EDITOR_INVALIDATION_FULL_EXIT;
+        result->requested_full_invalidation = true;
+        result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_EXIT;
+        return true;
+    }
+    if (event->type == SDL_KEYDOWN && event->key.keysym.sym == SDLK_TAB) {
+        editor->currentMode = EditorModeRouter_NextEditorMode(
+            editor->currentMode,
+            (event->key.keysym.mod & KMOD_SHIFT) != 0,
+            FluidSceneLocksObjects());
+        animSettings.editorMode = editor->currentMode;
+        InitializeEditorMode(editor);
+        printf("Changed Mode to %d via TAB\n", editor->currentMode);
+        result->target = SCENE_EDITOR_INPUT_TARGET_SYSTEM;
+        result->consumed = true;
+        result->invalidation_class = SCENE_EDITOR_INVALIDATION_TARGET_UI;
+        result->requested_target_invalidation = true;
+        result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_UI;
+        return true;
+    }
+    if (event->type == SDL_KEYDOWN) {
+        bool changed = false;
+        int zoom_step = 0;
+        int zoom_percent = 100;
+        if (ray_tracing_text_zoom_apply_shortcut(event->key.keysym.sym,
+                                                 event->key.keysym.mod,
+                                                 &changed,
+                                                 &zoom_step,
+                                                 &zoom_percent)) {
+            printf("[font] text zoom %d%% step=%d%s\n",
+                   zoom_percent,
+                   zoom_step,
+                   changed ? "" : " (clamped)");
+            result->target = SCENE_EDITOR_INPUT_TARGET_SYSTEM;
+            result->consumed = true;
+            result->invalidation_class = SCENE_EDITOR_INVALIDATION_TARGET_UI;
+            result->requested_target_invalidation = true;
+            result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_UI;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool SceneEditorHandleChromeInput(SceneEditor* editor,
+                                         SDL_Event* event,
+                                         SceneEditorInputRoutingResult* result) {
+    if (!editor || !event || !result) return false;
+    if (event->type != SDL_MOUSEBUTTONDOWN) return false;
+
+    const int mx = event->button.x;
+    const int my = event->button.y;
+
+    if (SceneEditorPointInRect(mx, my, &previewButton)) {
+        RunPreviewModeEmbedded();
+        result->target = SCENE_EDITOR_INPUT_TARGET_CHROME;
+        result->consumed = true;
+        result->invalidation_class = SCENE_EDITOR_INVALIDATION_TARGET_UI;
+        result->requested_target_invalidation = true;
+        result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_UI;
+        return true;
+    }
+    if (SceneEditorPointInRect(mx, my, &changeModeButton)) {
+        editor->currentMode = EditorModeRouter_NextEditorMode(editor->currentMode,
+                                                              false,
+                                                              FluidSceneLocksObjects());
+        animSettings.editorMode = editor->currentMode;
+        InitializeEditorMode(editor);
+        SaveAllSettings();
+        LoadAllSettings();
+        printf("Changed Mode to %d\n", editor->currentMode);
+        result->target = SCENE_EDITOR_INPUT_TARGET_CHROME;
+        result->consumed = true;
+        result->invalidation_class = SCENE_EDITOR_INVALIDATION_TARGET_UI;
+        result->requested_target_invalidation = true;
+        result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_UI;
+        return true;
+    }
+    if (SceneEditorPointInRect(mx, my, &applyButton)) {
+        SaveAllSettings();
+        editor->running = false;
+        sceneEditorExitFlag = true;
+        printf("Changed Mode to %d\n", editor->currentMode);
+        result->target = SCENE_EDITOR_INPUT_TARGET_CHROME;
+        result->consumed = true;
+        result->invalidation_class = SCENE_EDITOR_INVALIDATION_FULL_EXIT;
+        result->requested_full_invalidation = true;
+        result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_EXIT;
+        return true;
+    }
+    return false;
+}
+
+static void SceneEditorRoutePaneEvent(SceneEditor* editor,
+                                      const SceneEditorPaneCommand* command,
+                                      SceneEditorInputRoutingResult* result) {
+    if (!editor || !command || !command->event || !result) return;
+    switch (command->target) {
+        case SCENE_EDITOR_INPUT_TARGET_BEZIER_PANE:
+            HandleBezierEditorEvents(command->event, &draggingPoint, &draggingVelocity);
+            result->consumed = true;
+            break;
+        case SCENE_EDITOR_INPUT_TARGET_OBJECT_PANE:
+            HandleObjectEditorEvents(command->event);
+            result->consumed = true;
+            break;
+        case SCENE_EDITOR_INPUT_TARGET_CAMERA_PANE:
+            HandleCameraEditorEvents(command->event);
+            result->consumed = true;
+            break;
+        default:
+            result->consumed = false;
+            break;
+    }
+    if (result->consumed) {
+        result->target = command->target;
+        result->pane_hit_region = (uint8_t)command->pane_hit_region;
+        result->requested_target_invalidation = true;
+        result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_PANE;
+        if (command->pane_hit_region == SCENE_EDITOR_PANE_HIT_CONTROLS ||
+            command->pane_hit_region == SCENE_EDITOR_PANE_HIT_LIST_PANEL) {
+            result->invalidation_class = SCENE_EDITOR_INVALIDATION_TARGET_UI;
+            result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_PANE_CONTROLS;
+        } else if (command->pane_hit_region == SCENE_EDITOR_PANE_HIT_DRAG) {
+            result->invalidation_class = SCENE_EDITOR_INVALIDATION_TARGET_INTERACTION;
+            result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_PANE_DRAG;
+        } else {
+            result->invalidation_class = SCENE_EDITOR_INVALIDATION_TARGET_PANE;
+            result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_PANE_CANVAS;
+        }
+    }
+}
+
+static bool SceneEditorResolvePaneCommand(SceneEditorInputTarget target,
+                                          SceneEditorPaneHitRegion pane_hit_region,
+                                          SDL_Event* event,
+                                          SceneEditorPaneCommand* command) {
+    if (!event || !command) return false;
+    memset(command, 0, sizeof(*command));
+    command->target = target;
+    command->pane_hit_region = pane_hit_region;
+    command->event = event;
+    command->kind = SCENE_EDITOR_PANE_COMMAND_NONE;
+
+    if (target != SCENE_EDITOR_INPUT_TARGET_BEZIER_PANE &&
+        target != SCENE_EDITOR_INPUT_TARGET_OBJECT_PANE &&
+        target != SCENE_EDITOR_INPUT_TARGET_CAMERA_PANE) {
+        return false;
+    }
+
+    switch (event->type) {
+        case SDL_MOUSEBUTTONDOWN:
+            command->kind = SCENE_EDITOR_PANE_COMMAND_POINTER_DOWN;
+            break;
+        case SDL_MOUSEBUTTONUP:
+            command->kind = SCENE_EDITOR_PANE_COMMAND_POINTER_UP;
+            break;
+        case SDL_MOUSEMOTION:
+            command->kind = SCENE_EDITOR_PANE_COMMAND_POINTER_DRAG;
+            break;
+        case SDL_MOUSEWHEEL:
+            command->kind = SCENE_EDITOR_PANE_COMMAND_WHEEL;
+            break;
+        case SDL_KEYDOWN:
+            command->kind = SCENE_EDITOR_PANE_COMMAND_KEY;
+            break;
+        default:
+            command->kind = SCENE_EDITOR_PANE_COMMAND_NONE;
+            break;
+    }
+
+    return command->kind != SCENE_EDITOR_PANE_COMMAND_NONE;
+}
+
+static SceneEditorPaneHitRegion SceneEditorResolvePaneHitRegion(SceneEditorInputTarget target,
+                                                                const SDL_Event* event) {
+    int mx = 0;
+    int my = 0;
+    if (!event) return SCENE_EDITOR_PANE_HIT_NONE;
+
+    if (event->type == SDL_MOUSEMOTION) {
+        mx = event->motion.x;
+        my = event->motion.y;
+        if (event->motion.state & SDL_BUTTON_LMASK) {
+            return SCENE_EDITOR_PANE_HIT_DRAG;
+        }
+    } else if (event->type == SDL_MOUSEBUTTONDOWN || event->type == SDL_MOUSEBUTTONUP) {
+        mx = event->button.x;
+        my = event->button.y;
+    } else if (event->type == SDL_MOUSEWHEEL) {
+        SDL_GetMouseState(&mx, &my);
+    } else {
+        return SCENE_EDITOR_PANE_HIT_NONE;
+    }
+
+    if (target == SCENE_EDITOR_INPUT_TARGET_BEZIER_PANE) {
+        BezierEditorHitRegion hit = BezierEditorHitRegionAtPoint(mx, my);
+        if (hit == BEZIER_EDITOR_HIT_CONTROLS) return SCENE_EDITOR_PANE_HIT_CONTROLS;
+        return SCENE_EDITOR_PANE_HIT_CANVAS;
+    }
+    if (target == SCENE_EDITOR_INPUT_TARGET_OBJECT_PANE) {
+        ObjectEditorHitRegion hit = ObjectEditorHitRegionAtPoint(mx, my);
+        if (hit == OBJECT_EDITOR_HIT_CONTROLS) return SCENE_EDITOR_PANE_HIT_CONTROLS;
+        if (hit == OBJECT_EDITOR_HIT_ASSET_PANEL || hit == OBJECT_EDITOR_HIT_MATERIAL_PANEL) {
+            return SCENE_EDITOR_PANE_HIT_LIST_PANEL;
+        }
+        return SCENE_EDITOR_PANE_HIT_CANVAS;
+    }
+    if (target == SCENE_EDITOR_INPUT_TARGET_CAMERA_PANE) {
+        CameraEditorHitRegion hit = CameraEditorHitRegionAtPoint(mx, my);
+        if (hit == CAMERA_EDITOR_HIT_CONTROLS || hit == CAMERA_EDITOR_HIT_SLIDER) {
+            return SCENE_EDITOR_PANE_HIT_CONTROLS;
+        }
+        return SCENE_EDITOR_PANE_HIT_CANVAS;
+    }
+
+    return SCENE_EDITOR_PANE_HIT_NONE;
+}
+
+static void SceneEditorNormalizeInput(SceneEditor* editor,
+                                      const SDL_Event* event,
+                                      SceneEditorInputNormalized* normalized) {
+    if (!editor || !event || !normalized) return;
+
+    SceneEditorInputNormalized_Reset(normalized);
+    normalized->event = event;
+
+    if (event->type == SDL_QUIT ||
+        (event->type == SDL_WINDOWEVENT && event->window.event == SDL_WINDOWEVENT_CLOSE)) {
+        normalized->action_class = SCENE_EDITOR_INPUT_ACTION_IMMEDIATE;
+        normalized->route_policy = SCENE_EDITOR_INPUT_ROUTE_POLICY_GLOBAL;
+        normalized->target_hint = SCENE_EDITOR_INPUT_TARGET_SYSTEM;
+        return;
+    }
+
+    if (event->type == SDL_KEYDOWN) {
+        if (event->key.keysym.sym == SDLK_TAB) {
+            normalized->action_class = SCENE_EDITOR_INPUT_ACTION_IMMEDIATE;
+            normalized->route_policy = SCENE_EDITOR_INPUT_ROUTE_POLICY_GLOBAL;
+            normalized->target_hint = SCENE_EDITOR_INPUT_TARGET_SYSTEM;
+            return;
+        }
+        if (SceneEditorIsTextZoomShortcutKey(event->key.keysym.sym, event->key.keysym.mod)) {
+            normalized->action_class = SCENE_EDITOR_INPUT_ACTION_IMMEDIATE;
+            normalized->route_policy = SCENE_EDITOR_INPUT_ROUTE_POLICY_GLOBAL;
+            normalized->target_hint = SCENE_EDITOR_INPUT_TARGET_SYSTEM;
+            return;
+        }
+    }
+
+    if (event->type == SDL_MOUSEBUTTONDOWN) {
+        const int mx = event->button.x;
+        const int my = event->button.y;
+        if (SceneEditorPointInRect(mx, my, &previewButton) ||
+            SceneEditorPointInRect(mx, my, &changeModeButton) ||
+            SceneEditorPointInRect(mx, my, &applyButton)) {
+            normalized->action_class = SCENE_EDITOR_INPUT_ACTION_IMMEDIATE;
+            normalized->route_policy = SCENE_EDITOR_INPUT_ROUTE_POLICY_CHROME;
+            normalized->target_hint = SCENE_EDITOR_INPUT_TARGET_CHROME;
+            return;
+        }
+    }
+
+    normalized->target_hint = SceneEditorResolvePaneTarget(editor);
+    if (normalized->target_hint != SCENE_EDITOR_INPUT_TARGET_NONE &&
+        (event->type == SDL_MOUSEBUTTONDOWN ||
+         event->type == SDL_MOUSEBUTTONUP ||
+         event->type == SDL_MOUSEMOTION ||
+         event->type == SDL_MOUSEWHEEL ||
+         event->type == SDL_KEYDOWN)) {
+        normalized->action_class = SCENE_EDITOR_INPUT_ACTION_IMMEDIATE;
+        normalized->route_policy = SCENE_EDITOR_INPUT_ROUTE_POLICY_ACTIVE_PANE;
+        return;
+    }
+
+    normalized->action_class = SCENE_EDITOR_INPUT_ACTION_IGNORED;
+    normalized->route_policy = SCENE_EDITOR_INPUT_ROUTE_POLICY_NONE;
+}
+
+static void SceneEditorApplyInputInvalidation(SceneEditor* editor,
+                                              const SceneEditorInputRoutingResult* result) {
+    (void)editor;
+    if (!result) return;
+    // IR1-S3 policy seam: invalidation classes are explicit even while render invalidation remains behavior-preserving.
+}
+
+static void SceneEditorHandleInputRouted(SceneEditor* editor, SDL_Event* event) {
+    SceneEditorInputNormalized normalized;
+    SceneEditorInputDiagFrame diag;
+    SceneEditorInputRoutingResult route;
+
+    memset(&diag, 0, sizeof(diag));
+    diag.raw_event_count = 1u;
+    SceneEditorInputNormalized_Reset(&normalized);
+    SceneEditorNormalizeInput(editor, event, &normalized);
+
+    SceneEditorInputRoutingResult_Reset(&route);
+    if (normalized.action_class == SCENE_EDITOR_INPUT_ACTION_IMMEDIATE ||
+        normalized.action_class == SCENE_EDITOR_INPUT_ACTION_QUEUED) {
+        diag.normalized_count += 1u;
+    }
+    if (normalized.action_class == SCENE_EDITOR_INPUT_ACTION_IGNORED) {
+        diag.ignored_count += 1u;
+    } else if (normalized.action_class == SCENE_EDITOR_INPUT_ACTION_IMMEDIATE) {
+        diag.immediate_count += 1u;
+    } else if (normalized.action_class == SCENE_EDITOR_INPUT_ACTION_QUEUED) {
+        diag.queued_count += 1u;
+    }
+
+    if (normalized.route_policy == SCENE_EDITOR_INPUT_ROUTE_POLICY_GLOBAL) {
+        if (SceneEditorHandleSystemInput(editor, event, &route)) {
+            diag.routed_global_count += 1u;
+        }
+    } else if (normalized.route_policy == SCENE_EDITOR_INPUT_ROUTE_POLICY_CHROME) {
+        if (SceneEditorHandleChromeInput(editor, event, &route)) {
+            diag.routed_chrome_count += 1u;
+        }
+    } else if (normalized.route_policy == SCENE_EDITOR_INPUT_ROUTE_POLICY_ACTIVE_PANE) {
+        SceneEditorPaneHitRegion pane_hit = SceneEditorResolvePaneHitRegion(normalized.target_hint, event);
+        SceneEditorPaneCommand pane_command;
+        if (SceneEditorResolvePaneCommand(normalized.target_hint, pane_hit, event, &pane_command)) {
+            SceneEditorRoutePaneEvent(editor, &pane_command, &route);
+        }
+        if (route.consumed) {
+            diag.routed_pane_count += 1u;
+            if (pane_hit == SCENE_EDITOR_PANE_HIT_CONTROLS || pane_hit == SCENE_EDITOR_PANE_HIT_LIST_PANEL) {
+                diag.pane_controls_count += 1u;
+            } else if (pane_hit == SCENE_EDITOR_PANE_HIT_DRAG) {
+                diag.pane_drag_count += 1u;
+            } else {
+                diag.pane_canvas_count += 1u;
+            }
+        }
+    }
+
+    SceneEditorApplyInputInvalidation(editor, &route);
+    if (route.requested_target_invalidation) {
+        diag.target_invalidation_count += 1u;
+    }
+    if (route.requested_full_invalidation) {
+        diag.full_invalidation_count += 1u;
+    }
+    SceneEditorInputDiagMaybeEmit(event, &diag, &route);
 }
 
 static int SceneEditorMeasureButtonWidth(const char* label, int min_width) {
@@ -290,89 +837,7 @@ void SceneEditorLoop(SceneEditor* editor) {
 
 
 void HandleSceneEditorEvents(SceneEditor* editor, SDL_Event* event) {
-    if (event->type == SDL_QUIT ||
-        (event->type == SDL_WINDOWEVENT && event->window.event == SDL_WINDOWEVENT_CLOSE)) {
-        printf("Received SDL_QUIT event. Closing Scene Editor.\n");
-        editor->running = false;
-        sceneEditorExitFlag = true;
-        return;  // ✅ Exit immediately instead of calling object editor events
-    }
-    if (event->type == SDL_KEYDOWN && event->key.keysym.sym == SDLK_TAB) {
-        editor->currentMode = EditorModeRouter_NextEditorMode(
-            editor->currentMode,
-            (event->key.keysym.mod & KMOD_SHIFT) != 0,
-            FluidSceneLocksObjects());
-        animSettings.editorMode = editor->currentMode;
-        InitializeEditorMode(editor);
-        printf("Changed Mode to %d via TAB\n", editor->currentMode);
-        return;
-    }
-    if (event->type == SDL_KEYDOWN) {
-        bool changed = false;
-        int zoom_step = 0;
-        int zoom_percent = 100;
-        if (ray_tracing_text_zoom_apply_shortcut(event->key.keysym.sym,
-                                                 event->key.keysym.mod,
-                                                 &changed,
-                                                 &zoom_step,
-                                                 &zoom_percent)) {
-            printf("[font] text zoom %d%% step=%d%s\n",
-                   zoom_percent,
-                   zoom_step,
-                   changed ? "" : " (clamped)");
-            return;
-        }
-    }
-    if (event->type == SDL_MOUSEBUTTONDOWN) {
-        int mx = event->button.x;
-        int my = event->button.y;
-
-        // Preview Button
-        if (mx >= previewButton.x && mx <= previewButton.x + previewButton.w &&
-            my >= previewButton.y && my <= previewButton.y + previewButton.h) {
-            RunPreviewModeEmbedded();
-            return;
-        }
-        // Check if clicking on Change Mode Button
-        if (mx >= changeModeButton.x && mx <= changeModeButton.x + changeModeButton.w &&
-            my >= changeModeButton.y && my <= changeModeButton.y + changeModeButton.h) {
-            editor->currentMode = EditorModeRouter_NextEditorMode(editor->currentMode,
-                                                                  false,
-                                                                  FluidSceneLocksObjects());
-            animSettings.editorMode = editor->currentMode;
-            InitializeEditorMode(editor);
-	    SaveAllSettings();
-	    LoadAllSettings();
-            printf("Changed Mode to %d\n", editor->currentMode);
-            return;
-        }
- 	// Check if clicking on Change Mode Button
-        if (mx >= applyButton.x && mx <= applyButton.x + applyButton.w &&
-            my >= applyButton.y && my <= applyButton.y + applyButton.h) {
-            SaveAllSettings();
-	    editor->running = false;
-            sceneEditorExitFlag = true;
-            printf("Changed Mode to %d\n", editor->currentMode);
-            return;
-        }
-    }
-
-    switch (editor->currentMode) {
-        case 0:  // Bezier Editor Mode
-            HandleBezierEditorEvents(event, &draggingPoint, &draggingVelocity);
-            break;
-    
-        case 1:  // Object Editor Mode
-            if (!FluidSceneLocksObjects()) {
-                HandleObjectEditorEvents(event);
-            }
-            break;
-    
-        case 2:  // Camera Editor Mode
-            HandleCameraEditorEvents(event);
-            break;
-    }
-    
+    SceneEditorHandleInputRouted(editor, event);
 }
 
 bool IsClickingButtonMain(int mx, int my) {

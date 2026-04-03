@@ -1,6 +1,6 @@
 # Ray Tracing Future Intent
 
-Last updated: 2026-04-01
+Last updated: 2026-04-03
 
 ## Scaffold Alignment Intent
 1. Keep the current strong subsystem split while normalizing scaffold contracts.
@@ -100,8 +100,69 @@ Last updated: 2026-04-01
   - `RT-CP4` deterministic wrapper lifecycle ownership release ordering landed
   - `RT-CP5` closeout (docs/tracker/memory sync) landed:
     - `../docs/private_program_docs/ray_tracing/2026-04-01_ray_tracing_connection_pass_cp0_cp5_execution.md`
+  - `W1` + `W2` wrapper diagnostics standardization landed:
+    - `../docs/private_program_docs/ray_tracing/2026-04-02_ray_tracing_w1_w2_wrapper_hardening.md`
 - next:
   - optional `RT-CP6+`: deeper runtime/update/render/shutdown ownership extraction from `animation.c`
+
+## RS1 Render Split Intent
+- started:
+  - `RS1-S0`/`RS1-S1` diagnostics-contract adoption landed in `animation.c` via shared `kit_runtime_diag`.
+  - opt-in runtime diagnostics gate is available with `RAY_TRACING_RUNTIME_DIAG=1`.
+- in progress:
+  - `RS1-S2` completed in legacy loop:
+    - explicit frame derive/submit seam extraction (`DeriveRenderInputs` + `SubmitRenderFrame`)
+    - diagnostics timing now reports explicit derive/submit windows
+  - `RS1-S3` completed:
+    - frame submit handoff now routes through wrapper-owned helper (`ray_tracing_app_render_submit`)
+    - wrapper tracks render-submit attempt/success/rejection counters in exit diagnostics
+    - behavior-preserving fallback keeps direct submit path if wrapper handoff is unavailable
+  - `RS1-S4` completed:
+    - frame update/route handoffs now route through wrapper-owned helpers:
+      - `ray_tracing_app_frame_update`
+      - `ray_tracing_app_frame_route`
+    - wrapper exit diagnostics now include frame update/route attempt/success/rejection counters
+    - behavior-preserving fallback keeps direct update/route path if wrapper handoff is unavailable
+  - `RS1-S5` completed:
+    - frame event-intake handoff now routes through wrapper-owned helper:
+      - `ray_tracing_app_frame_events`
+    - wrapper exit diagnostics now include frame event-intake attempt/success/rejection counters
+    - behavior-preserving fallback keeps direct event handling path if wrapper handoff is unavailable
+- next:
+  - `RS1` closeout: verification/docs consolidation and optional maintain-only status for this lane.
+
+## IR1 Input Routing Intent
+- started:
+  - editor-readiness setup landed in `animation.c`:
+    - explicit `InputFrame_Intake -> InputFrame_Normalize -> InputFrame_Route` helpers
+    - explicit raw/normalized frame model (`RayTracingInputFrame`)
+    - explicit invalidation output stage (`InputFrame_Invalidate`) and frame runner (`RunInputRoutingFrame`)
+  - scene editor top-level routing seam landed in `scene_editor.c`:
+    - explicit `system -> chrome -> pane` dispatch staging
+    - explicit routing result + invalidation policy hook for pane-target growth
+  - `IR1-S2` landed in `scene_editor.c`:
+    - explicit normalized input contract (`action_class`, `route_policy`, `target_hint`)
+    - explicit bounded per-event diagnostics contract (`SceneEditorInputDiagFrame`) with opt-in gate:
+      - `RAY_TRACING_EDITOR_INPUT_DIAG=1`
+  - `IR1-S3` landed in `scene_editor.c` + editor panes:
+    - explicit pane hit-region classification before pane dispatch (`controls/list panel/canvas/drag`)
+    - expanded invalidation classes in routed output (`target_ui/target_pane/target_interaction/full_exit`)
+    - editor-local hit-region adapters added for pane-specific routing seams.
+  - `IR1-S4` landed in editor pane handlers:
+    - pane-local canonical action adapter enums/resolvers are now explicit in:
+      - `bezier_editor.c`
+      - `object_editor.c`
+      - `camera_editor.c`
+    - pane handlers now dispatch through local normalized action contracts before deeper mutations.
+  - `IR1-S5` landed in scene editor:
+    - active-pane routing now resolves typed pane commands before pane dispatch:
+      - `SceneEditorPaneCommandKind`
+      - `SceneEditorPaneCommand`
+      - `SceneEditorResolvePaneCommand(...)`
+    - explicit `resolve -> dispatch` pane command seam is now in place while preserving existing behavior.
+  - behavior remains unchanged; this is a routing-seam setup slice.
+- next:
+  - continue IR1 with optional pane command payload enrichment and deeper mutation extraction behind existing command seams (keep behavior-preserving).
 
 ## Non-Goals During Scaffold Migration
 - no feature-expansion work unrelated to scaffold alignment
