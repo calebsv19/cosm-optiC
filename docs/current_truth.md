@@ -1,6 +1,6 @@
 # Ray Tracing Current Truth
 
-Last updated: 2026-04-01
+Last updated: 2026-04-02
 
 ## Program Identity
 - repository directory: `ray_tracing/`
@@ -213,3 +213,45 @@ Shared libs consumed by current build:
   - legacy body (`src/app/animation.c`, `ray_tracing_app_main_legacy(...)`) still owns most runtime initialization/routing/teardown
 - next slices:
   - optional `RT-CP6+`: deeper extraction of runtime/update/render/shutdown ownership from legacy lane
+
+## RT3D Execution State
+- active execution plan:
+  - `../docs/private_program_docs/ray_tracing/2026-04-02_ray_tracing_rt3d_execution_plan.md`
+- `RT3D-0` runtime intake is complete:
+  - runtime bridge remains strict to `scene_runtime_v1`
+  - authoring payloads are rejected by runtime-only intake path
+  - malformed runtime payload diagnostics are explicitly regression-tested (`missing schema_variant`)
+  - optional lane fallback (`materials`/`lights`/`cameras` omitted) is deterministic and regression-tested
+- `RT3D-0` verification snapshot:
+  - `make -C ray_tracing test` -> PASS
+  - `./bin/run_trio_scene_pipeline.sh` -> PASS
+- `RT3D-1` render-domain mapping is complete:
+  - runtime bridge now enforces canonical runtime units (`unit_system=meters`, finite positive `world_scale`)
+  - runtime bridge mapping applies `world_scale` consistently for object/camera/light mapping
+  - mapping boundary remains bridge-local; editor mode state mutation is explicitly regression-tested as unchanged
+- `RT3D-1` verification snapshot:
+  - `make -C ray_tracing test` -> PASS
+  - `./bin/run_trio_scene_pipeline.sh` -> PASS
+- `RT3D-2` overlay writeback constraints is complete:
+  - allow-list remains `extensions.ray_tracing.*` plus `space_mode_default`
+  - canonical runtime-core overlay writes remain blocked (including `unit_system`/`world_scale`)
+  - deterministic merge/conflict paths are regression-covered (stale clock + tie-break handling)
+- `RT3D-2` verification snapshot:
+  - `make -C ray_tracing test` -> PASS
+  - `./bin/run_trio_scene_pipeline.sh` -> PASS
+- `RT3D-3` early backend stabilization is complete:
+  - runtime intake now tracks 3D scaffold state (camera seed `z` + primitive baseline counts)
+  - controlled 3D backend route consumes scaffold state and computes deterministic ray-origin offset
+  - camera-path integrator controlled-3D lane now uses scaffold-aware camera origin input
+  - baseline primitives are scaffold-mapped in runtime apply path (`box`, `plane`, `triangle_mesh`)
+  - canonical 2D lane remains unchanged and still passes the same deterministic gates
+- `RT3D-3` verification snapshot:
+  - `make -C ray_tracing test` -> PASS
+  - `./bin/run_trio_scene_pipeline.sh` -> PASS
+- `RT3D-4` closeout complete:
+  - full local stable lane rerun:
+    - `make -C ray_tracing test-stable` -> PASS
+  - trio interop smoke rerun:
+    - `./bin/run_trio_scene_pipeline.sh` -> PASS
+  - lane status:
+    - `RT3D-0` through `RT3D-4` complete

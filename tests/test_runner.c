@@ -279,6 +279,232 @@ static int test_runtime_scene_bridge_rejects_authoring_variant(void) {
     return 0;
 }
 
+static int test_runtime_scene_bridge_rejects_malformed_runtime_payload(void) {
+    const char *runtime_json_missing_variant =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_missing_variant\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[]"
+        "}";
+    RuntimeSceneBridgePreflight preflight;
+    bool ok = runtime_scene_bridge_preflight_json(runtime_json_missing_variant, &preflight);
+    assert_true("runtime_scene_preflight_reject_missing_variant", !ok);
+    if (!ok) {
+        assert_true("runtime_scene_preflight_diag_missing_variant",
+                    strstr(preflight.diagnostics, "missing schema_variant") != NULL);
+    }
+    return 0;
+}
+
+static int test_runtime_scene_bridge_optional_lanes_default_deterministic(void) {
+    const char *runtime_json_missing_optional_lanes =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_optional_lanes\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"2d\","
+        "\"objects\":[{"
+          "\"object_id\":\"obj_optional_1\","
+          "\"object_type\":\"circle\","
+          "\"transform\":{"
+            "\"position\":{\"x\":3.0,\"y\":4.0,\"z\":0.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+          "}"
+        "}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight preflight;
+    RuntimeSceneBridgePreflight summary;
+    bool ok = runtime_scene_bridge_preflight_json(runtime_json_missing_optional_lanes, &preflight);
+    assert_true("runtime_scene_preflight_optional_lanes_ok", ok);
+    if (ok) {
+        assert_true("runtime_scene_preflight_optional_material_count_zero", preflight.material_count == 0);
+        assert_true("runtime_scene_preflight_optional_light_count_zero", preflight.light_count == 0);
+        assert_true("runtime_scene_preflight_optional_camera_count_zero", preflight.camera_count == 0);
+        assert_true("runtime_scene_preflight_optional_object_count_one", preflight.object_count == 1);
+    }
+
+    ok = runtime_scene_bridge_apply_json(runtime_json_missing_optional_lanes, &summary);
+    assert_true("runtime_scene_apply_optional_lanes_ok", ok);
+    if (ok) {
+        assert_true("runtime_scene_apply_optional_object_count_one", sceneSettings.objectCount == 1);
+        assert_true("runtime_scene_apply_optional_material_count_zero", summary.material_count == 0);
+        assert_true("runtime_scene_apply_optional_light_count_zero", summary.light_count == 0);
+        assert_true("runtime_scene_apply_optional_camera_count_zero", summary.camera_count == 0);
+        assert_close("runtime_scene_apply_optional_object_x", sceneSettings.sceneObjects[0].x, 3.0, 1e-9);
+        assert_close("runtime_scene_apply_optional_object_y", sceneSettings.sceneObjects[0].y, 4.0, 1e-9);
+        assert_close("runtime_scene_apply_optional_camera_x_default", sceneSettings.camera.x, 0.0, 1e-9);
+        assert_close("runtime_scene_apply_optional_camera_y_default", sceneSettings.camera.y, 0.0, 1e-9);
+        assert_close("runtime_scene_apply_optional_light_path_x_default",
+                     sceneSettings.bezierPath.points[0].x,
+                     0.0,
+                     1e-9);
+        assert_close("runtime_scene_apply_optional_light_path_y_default",
+                     sceneSettings.bezierPath.points[0].y,
+                     0.0,
+                     1e-9);
+    }
+    return 0;
+}
+
+static int test_runtime_scene_bridge_rejects_noncanonical_unit_system(void) {
+    const char *runtime_json_noncanonical_units =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_units_invalid\","
+        "\"unit_system\":\"centimeters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"2d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[]"
+        "}";
+    RuntimeSceneBridgePreflight preflight;
+    bool ok = runtime_scene_bridge_preflight_json(runtime_json_noncanonical_units, &preflight);
+    assert_true("runtime_scene_preflight_reject_noncanonical_units", !ok);
+    if (!ok) {
+        assert_true("runtime_scene_preflight_diag_noncanonical_units",
+                    strstr(preflight.diagnostics, "unit_system must be meters") != NULL);
+    }
+    return 0;
+}
+
+static int test_runtime_scene_bridge_apply_uses_world_scale_mapping(void) {
+    const char *runtime_json_scaled =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_world_scale\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":2.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"obj_scale_1\","
+          "\"object_type\":\"circle\","
+          "\"transform\":{"
+            "\"position\":{\"x\":2.0,\"y\":3.0,\"z\":4.0},"
+            "\"scale\":{\"x\":1.0,\"y\":2.0,\"z\":3.0}"
+          "}"
+        "}],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":5.0,\"y\":6.0,\"z\":7.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":8.0,\"y\":9.0,\"z\":10.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary;
+    bool ok = runtime_scene_bridge_apply_json(runtime_json_scaled, &summary);
+    assert_true("runtime_scene_apply_world_scale_ok", ok);
+    if (!ok) return 0;
+    assert_true("runtime_scene_apply_world_scale_object_count_one", sceneSettings.objectCount == 1);
+    assert_close("runtime_scene_apply_world_scale_object_x", sceneSettings.sceneObjects[0].x, 4.0, 1e-9);
+    assert_close("runtime_scene_apply_world_scale_object_y", sceneSettings.sceneObjects[0].y, 6.0, 1e-9);
+    assert_close("runtime_scene_apply_world_scale_object_z", sceneSettings.sceneObjects[0].z, 8.0, 1e-9);
+    assert_close("runtime_scene_apply_world_scale_object_scale", sceneSettings.sceneObjects[0].scale, 4.0, 1e-9);
+    assert_close("runtime_scene_apply_world_scale_light_x", sceneSettings.bezierPath.points[0].x, 10.0, 1e-9);
+    assert_close("runtime_scene_apply_world_scale_light_y", sceneSettings.bezierPath.points[0].y, 12.0, 1e-9);
+    assert_close("runtime_scene_apply_world_scale_camera_x", sceneSettings.camera.x, 16.0, 1e-9);
+    assert_close("runtime_scene_apply_world_scale_camera_y", sceneSettings.camera.y, 18.0, 1e-9);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_apply_preserves_editor_mode_state(void) {
+    const char *runtime_json_no_editor_mutation =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_editor_state\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"2d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary;
+    bool ok = false;
+    int original_editor_mode = animSettings.editorMode;
+    animSettings.editorMode = 2;
+    ok = runtime_scene_bridge_apply_json(runtime_json_no_editor_mutation, &summary);
+    assert_true("runtime_scene_apply_preserve_editor_mode_apply_ok", ok);
+    assert_true("runtime_scene_apply_preserve_editor_mode_unchanged", animSettings.editorMode == 2);
+    animSettings.editorMode = original_editor_mode;
+    return 0;
+}
+
+static int test_runtime_scene_bridge_apply_3d_primitives_scaffold(void) {
+    const char *runtime_json_primitives =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_3d_primitives\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"obj_box\","
+            "\"object_type\":\"box\","
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"obj_plane\","
+            "\"object_type\":\"plane\","
+            "\"transform\":{\"position\":{\"x\":5.0,\"y\":0.0,\"z\":0.0},\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"obj_mesh\","
+            "\"object_type\":\"triangle_mesh\","
+            "\"transform\":{\"position\":{\"x\":10.0,\"y\":0.0,\"z\":-1.0},\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":20.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary;
+    RuntimeSceneBridge3DScaffoldState scaffold;
+    bool ok = runtime_scene_bridge_apply_json(runtime_json_primitives, &summary);
+    assert_true("runtime_scene_apply_3d_primitives_ok", ok);
+    if (!ok) return 0;
+
+    assert_true("runtime_scene_apply_3d_primitives_object_count", sceneSettings.objectCount == 3);
+    assert_true("runtime_scene_apply_3d_primitives_box_polygon",
+                sceneSettings.sceneObjects[0].numPoints == 4);
+    assert_true("runtime_scene_apply_3d_primitives_plane_polygon",
+                sceneSettings.sceneObjects[1].numPoints == 4);
+    assert_true("runtime_scene_apply_3d_primitives_mesh_triangle",
+                sceneSettings.sceneObjects[2].numPoints == 3);
+
+    runtime_scene_bridge_get_last_3d_scaffold_state(&scaffold);
+    assert_true("runtime_scene_apply_3d_primitives_scaffold_valid", scaffold.valid);
+    assert_true("runtime_scene_apply_3d_primitives_scaffold_has_camera", scaffold.has_camera_seed);
+    assert_close("runtime_scene_apply_3d_primitives_scaffold_camera_z", scaffold.camera_z, 20.0, 1e-9);
+    assert_true("runtime_scene_apply_3d_primitives_scaffold_box_count", scaffold.box_count == 1);
+    assert_true("runtime_scene_apply_3d_primitives_scaffold_plane_count", scaffold.plane_count == 1);
+    assert_true("runtime_scene_apply_3d_primitives_scaffold_mesh_count", scaffold.triangle_mesh_count == 1);
+    return 0;
+}
+
 static int test_scene_compile_and_preflight_roundtrip(void) {
     const char *authoring_json =
         "{"
@@ -403,6 +629,8 @@ static int test_runtime_scene_bridge_writeback_overlay_preserves_non_ray_state(v
         "\"schema_variant\":\"scene_runtime_v1\","
         "\"schema_version\":1,"
         "\"scene_id\":\"scene_writeback_1\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
         "\"space_mode_default\":\"2d\","
         "\"objects\":[{\"object_id\":\"obj_base\"}],"
         "\"materials\":[],"
@@ -460,6 +688,8 @@ static int test_runtime_scene_bridge_writeback_rejects_foreign_extension_namespa
         "\"schema_variant\":\"scene_runtime_v1\","
         "\"schema_version\":1,"
         "\"scene_id\":\"scene_writeback_2\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
         "\"space_mode_default\":\"2d\","
         "\"objects\":[],"
         "\"materials\":[],"
@@ -498,6 +728,8 @@ static int test_runtime_scene_bridge_writeback_rejects_forbidden_top_level_overl
         "\"schema_variant\":\"scene_runtime_v1\","
         "\"schema_version\":1,"
         "\"scene_id\":\"scene_writeback_3\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
         "\"space_mode_default\":\"2d\","
         "\"objects\":[],"
         "\"materials\":[],"
@@ -534,6 +766,8 @@ static int test_runtime_scene_bridge_writeback_rejects_invalid_space_mode_value(
         "\"schema_variant\":\"scene_runtime_v1\","
         "\"schema_version\":1,"
         "\"scene_id\":\"scene_writeback_4\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
         "\"space_mode_default\":\"2d\","
         "\"objects\":[],"
         "\"materials\":[],"
@@ -570,6 +804,8 @@ static int test_runtime_scene_bridge_writeback_rejects_non_object_ray_extension_
         "\"schema_variant\":\"scene_runtime_v1\","
         "\"schema_version\":1,"
         "\"scene_id\":\"scene_writeback_5\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
         "\"space_mode_default\":\"2d\","
         "\"objects\":[],"
         "\"materials\":[],"
@@ -608,6 +844,8 @@ static int test_runtime_scene_bridge_writeback_rejects_missing_overlay_meta(void
         "\"schema_variant\":\"scene_runtime_v1\","
         "\"schema_version\":1,"
         "\"scene_id\":\"scene_writeback_6\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
         "\"space_mode_default\":\"2d\","
         "\"objects\":[],"
         "\"materials\":[],"
@@ -643,6 +881,8 @@ static int test_runtime_scene_bridge_writeback_rejects_stale_logical_clock(void)
         "\"schema_variant\":\"scene_runtime_v1\","
         "\"schema_version\":1,"
         "\"scene_id\":\"scene_writeback_7\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
         "\"space_mode_default\":\"2d\","
         "\"objects\":[],"
         "\"materials\":[],"
@@ -671,6 +911,244 @@ static int test_runtime_scene_bridge_writeback_rejects_stale_logical_clock(void)
     if (!ok) {
         assert_true("runtime_scene_writeback_reject_stale_clock_diag",
                     strstr(diagnostics, "logical_clock is stale") != NULL);
+    }
+    free(merged);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_writeback_rejects_wrong_overlay_producer(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_writeback_8\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"2d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    const char *overlay_json =
+        "{"
+        "\"overlay_meta\":{\"producer\":\"physics_sim\",\"logical_clock\":1},"
+        "\"extensions\":{\"ray_tracing\":{\"samples\":8}}"
+        "}";
+    char *merged = NULL;
+    char diagnostics[256];
+    bool ok = runtime_scene_bridge_writeback_ray_overlay_json(runtime_json,
+                                                              overlay_json,
+                                                              &merged,
+                                                              diagnostics,
+                                                              sizeof(diagnostics));
+    assert_true("runtime_scene_writeback_reject_wrong_producer", !ok);
+    if (!ok) {
+        assert_true("runtime_scene_writeback_reject_wrong_producer_diag",
+                    strstr(diagnostics, "producer not allowed") != NULL);
+    }
+    free(merged);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_writeback_rejects_negative_logical_clock(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_writeback_9\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"2d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    const char *overlay_json =
+        "{"
+        "\"overlay_meta\":{\"producer\":\"ray_tracing\",\"logical_clock\":-1},"
+        "\"extensions\":{\"ray_tracing\":{\"samples\":8}}"
+        "}";
+    char *merged = NULL;
+    char diagnostics[256];
+    bool ok = runtime_scene_bridge_writeback_ray_overlay_json(runtime_json,
+                                                              overlay_json,
+                                                              &merged,
+                                                              diagnostics,
+                                                              sizeof(diagnostics));
+    assert_true("runtime_scene_writeback_reject_negative_clock", !ok);
+    if (!ok) {
+        assert_true("runtime_scene_writeback_reject_negative_clock_diag",
+                    strstr(diagnostics, "logical_clock must be >= 0") != NULL);
+    }
+    free(merged);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_writeback_rejects_runtime_core_unit_system_overlay(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_writeback_10\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"2d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    const char *overlay_json =
+        "{"
+        "\"overlay_meta\":{\"producer\":\"ray_tracing\",\"logical_clock\":15},"
+        "\"unit_system\":\"centimeters\""
+        "}";
+    char *merged = NULL;
+    char diagnostics[256];
+    bool ok = runtime_scene_bridge_writeback_ray_overlay_json(runtime_json,
+                                                              overlay_json,
+                                                              &merged,
+                                                              diagnostics,
+                                                              sizeof(diagnostics));
+    assert_true("runtime_scene_writeback_reject_unit_system_top_key", !ok);
+    if (!ok) {
+        assert_true("runtime_scene_writeback_reject_unit_system_top_key_diag",
+                    strstr(diagnostics, "overlay key not allowed") != NULL);
+    }
+    free(merged);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_writeback_rejects_runtime_core_world_scale_overlay(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_writeback_11\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"2d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    const char *overlay_json =
+        "{"
+        "\"overlay_meta\":{\"producer\":\"ray_tracing\",\"logical_clock\":16},"
+        "\"world_scale\":2.0"
+        "}";
+    char *merged = NULL;
+    char diagnostics[256];
+    bool ok = runtime_scene_bridge_writeback_ray_overlay_json(runtime_json,
+                                                              overlay_json,
+                                                              &merged,
+                                                              diagnostics,
+                                                              sizeof(diagnostics));
+    assert_true("runtime_scene_writeback_reject_world_scale_top_key", !ok);
+    if (!ok) {
+        assert_true("runtime_scene_writeback_reject_world_scale_top_key_diag",
+                    strstr(diagnostics, "overlay key not allowed") != NULL);
+    }
+    free(merged);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_writeback_space_mode_tiebreak_rejects_lexically_larger_producer(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_writeback_12\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"2d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{"
+          "\"overlay_merge\":{"
+            "\"space_mode_default\":{\"producer\":\"line_drawing\",\"logical_clock\":50}"
+          "}"
+        "}"
+        "}";
+    const char *overlay_json =
+        "{"
+        "\"overlay_meta\":{\"producer\":\"ray_tracing\",\"logical_clock\":50},"
+        "\"space_mode_default\":\"3d\","
+        "\"extensions\":{\"ray_tracing\":{\"samples\":8}}"
+        "}";
+    char *merged = NULL;
+    char diagnostics[256];
+    bool ok = runtime_scene_bridge_writeback_ray_overlay_json(runtime_json,
+                                                              overlay_json,
+                                                              &merged,
+                                                              diagnostics,
+                                                              sizeof(diagnostics));
+    assert_true("runtime_scene_writeback_tiebreak_reject_larger_producer", !ok);
+    if (!ok) {
+        assert_true("runtime_scene_writeback_tiebreak_reject_larger_producer_diag",
+                    strstr(diagnostics, "tie-break lost") != NULL);
+    }
+    free(merged);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_writeback_space_mode_tiebreak_accepts_lexically_smaller_producer(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_writeback_13\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"2d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{"
+          "\"overlay_merge\":{"
+            "\"space_mode_default\":{\"producer\":\"ray_tracing\",\"logical_clock\":50}"
+          "}"
+        "}"
+        "}";
+    const char *overlay_json =
+        "{"
+        "\"overlay_meta\":{\"producer\":\"ray_tracing\",\"logical_clock\":51},"
+        "\"space_mode_default\":\"3d\","
+        "\"extensions\":{\"ray_tracing\":{\"samples\":32}}"
+        "}";
+    char *merged = NULL;
+    char diagnostics[256];
+    bool ok = runtime_scene_bridge_writeback_ray_overlay_json(runtime_json,
+                                                              overlay_json,
+                                                              &merged,
+                                                              diagnostics,
+                                                              sizeof(diagnostics));
+    assert_true("runtime_scene_writeback_tiebreak_accept_same_producer_newer_clock", ok);
+    if (ok && merged) {
+        assert_true("runtime_scene_writeback_tiebreak_accept_space_mode_updated",
+                    strstr(merged, "\"space_mode_default\":\"3d\"") != NULL);
     }
     free(merged);
     return 0;
@@ -762,6 +1240,9 @@ static int test_mode_backend_route_2d_defaults(void) {
     assert_true("route2d_lane_canonical", route.backendLane == RAY_TRACING_BACKEND_CANONICAL_2D);
     assert_true("route2d_no_fallback", !route.fallbackTo2DProjection);
     assert_true("route2d_projection_2d", route.projectionMode == SPACE_MODE_2D);
+    assert_true("route2d_no_runtime_3d_scaffold", !route.usesRuntime3DScaffold);
+    assert_close("route2d_runtime_camera_z_zero", route.runtimeCameraZ, 0.0, 1e-9);
+    assert_close("route2d_ray_origin_y_offset_zero", route.rayOriginYOffset, 0.0, 1e-9);
     assert_true("route2d_tiles_enabled", route.useTiles);
     assert_true("route2d_tile_preview_enabled", route.tilePreviewEnabled);
     assert_true("route2d_cache_enabled", route.buildIrradianceCache);
@@ -769,18 +1250,57 @@ static int test_mode_backend_route_2d_defaults(void) {
 }
 
 static int test_mode_backend_route_3d_controlled_lane(void) {
+    const char *runtime_json_route_3d =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_route_3d\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"obj_box\","
+            "\"object_type\":\"box\","
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"obj_plane\","
+            "\"object_type\":\"plane\","
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"obj_mesh\","
+            "\"object_type\":\"triangle_mesh\","
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":20.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary;
     memset(&animSettings, 0, sizeof(animSettings));
     animSettings.spaceMode = SPACE_MODE_3D;
     animSettings.integratorMode = 2;
     animSettings.useTiledRenderer = true;
     animSettings.tileSize = 16;
     animSettings.tilePreviewEnabled = true;
+    assert_true("route3d_seed_runtime_apply_ok",
+                runtime_scene_bridge_apply_json(runtime_json_route_3d, &summary));
 
     RayTracingRuntimeRoute route = RayTracingModeBackend_ResolveRoute();
 
     assert_true("route3d_lane_controlled", route.backendLane == RAY_TRACING_BACKEND_CONTROLLED_3D);
     assert_true("route3d_fallback_projection", route.fallbackTo2DProjection);
     assert_true("route3d_projection_mode_2d", route.projectionMode == SPACE_MODE_2D);
+    assert_true("route3d_runtime_scaffold_enabled", route.usesRuntime3DScaffold);
+    assert_close("route3d_runtime_camera_z", route.runtimeCameraZ, 20.0, 1e-9);
+    assert_true("route3d_ray_origin_y_offset_nonzero", fabs(route.rayOriginYOffset) > 0.0);
+    assert_true("route3d_scaffold_primitive_count", route.scaffoldPrimitiveCount == 3);
     assert_true("route3d_integrator_preserved", route.integratorMode == 2);
     assert_true("route3d_tile_preview_off", !route.tilePreviewEnabled);
     return 0;
@@ -1130,6 +1650,12 @@ int main(int argc, char **argv) {
     test_depth_projection_scalars();
     test_runtime_scene_bridge_preflight_accepts_runtime_contract();
     test_runtime_scene_bridge_rejects_authoring_variant();
+    test_runtime_scene_bridge_rejects_malformed_runtime_payload();
+    test_runtime_scene_bridge_optional_lanes_default_deterministic();
+    test_runtime_scene_bridge_rejects_noncanonical_unit_system();
+    test_runtime_scene_bridge_apply_uses_world_scale_mapping();
+    test_runtime_scene_bridge_apply_preserves_editor_mode_state();
+    test_runtime_scene_bridge_apply_3d_primitives_scaffold();
     test_scene_compile_and_preflight_roundtrip();
     test_runtime_scene_bridge_apply_runtime_fixture();
     test_runtime_scene_bridge_apply_compile_output();
@@ -1140,6 +1666,12 @@ int main(int argc, char **argv) {
     test_runtime_scene_bridge_writeback_rejects_non_object_ray_extension_payload();
     test_runtime_scene_bridge_writeback_rejects_missing_overlay_meta();
     test_runtime_scene_bridge_writeback_rejects_stale_logical_clock();
+    test_runtime_scene_bridge_writeback_rejects_wrong_overlay_producer();
+    test_runtime_scene_bridge_writeback_rejects_negative_logical_clock();
+    test_runtime_scene_bridge_writeback_rejects_runtime_core_unit_system_overlay();
+    test_runtime_scene_bridge_writeback_rejects_runtime_core_world_scale_overlay();
+    test_runtime_scene_bridge_writeback_space_mode_tiebreak_rejects_lexically_larger_producer();
+    test_runtime_scene_bridge_writeback_space_mode_tiebreak_accepts_lexically_smaller_producer();
     test_runtime_scene_bridge_trio_fixture_compile_writeback_apply();
     test_mode_backend_route_2d_defaults();
     test_mode_backend_route_3d_controlled_lane();

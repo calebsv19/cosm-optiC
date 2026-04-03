@@ -518,6 +518,8 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
     bool useTiles = route.useTiles;
     int tileSize = route.tileSize;
     double gridCellSize = fmax(4.0, (animSettings.tileSize > 0 ? animSettings.tileSize : 16));
+    double camera_origin_x = sceneSettings.camera.x;
+    double camera_origin_y = sceneSettings.camera.y + route.rayOriginYOffset;
 
     // Clamp camera to grid if fluid bounds are known.
     if (g_grid.valid) {
@@ -652,14 +654,14 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
                                          &context,
                                          &activeLight,
                                          &settings,
-                                         sceneSettings.camera.x,
-                                         sceneSettings.camera.y);
+                                         camera_origin_x,
+                                         camera_origin_y);
             } else {
                 CameraPathIntegratorRenderFromContext(&context,
                                                       &activeLight,
                                                       &settings,
-                                                      sceneSettings.camera.x,
-                                                      sceneSettings.camera.y);
+                                                      camera_origin_x,
+                                                      camera_origin_y);
             }
             break;
         }

@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+static RuntimeSceneBridge3DScaffoldState g_last_3d_scaffold = {0};
+
 static void preflight_reset(RuntimeSceneBridgePreflight *out_preflight) {
     if (!out_preflight) return;
     memset(out_preflight, 0, sizeof(*out_preflight));
@@ -103,9 +105,13 @@ static bool validate_runtime_scene_root(json_object *root,
     json_object *schema_family = NULL;
     json_object *schema_variant = NULL;
     json_object *scene_id = NULL;
+    json_object *unit_system = NULL;
+    json_object *world_scale = NULL;
     const char *schema_family_str = NULL;
     const char *schema_variant_str = NULL;
     const char *scene_id_str = NULL;
+    const char *unit_system_str = NULL;
+    double world_scale_value = 1.0;
 
     if (!root || !out_preflight) return false;
 
@@ -139,6 +145,29 @@ static bool validate_runtime_scene_root(json_object *root,
     scene_id_str = json_object_get_string(scene_id);
     if (!scene_id_str || !scene_id_str[0]) {
         preflight_diag(out_preflight, "scene_id is empty");
+        return false;
+    }
+
+    if (!json_object_object_get_ex(root, "unit_system", &unit_system) ||
+        !json_object_is_type(unit_system, json_type_string)) {
+        preflight_diag(out_preflight, "missing unit_system");
+        return false;
+    }
+    unit_system_str = json_object_get_string(unit_system);
+    if (!unit_system_str || strcmp(unit_system_str, "meters") != 0) {
+        preflight_diag(out_preflight, "unit_system must be meters");
+        return false;
+    }
+
+    if (!json_object_object_get_ex(root, "world_scale", &world_scale) ||
+        (!json_object_is_type(world_scale, json_type_double) &&
+         !json_object_is_type(world_scale, json_type_int))) {
+        preflight_diag(out_preflight, "missing world_scale");
+        return false;
+    }
+    world_scale_value = json_object_get_double(world_scale);
+    if (!(world_scale_value > 0.0) || !isfinite(world_scale_value)) {
+        preflight_diag(out_preflight, "world_scale must be finite and > 0");
         return false;
     }
 
@@ -181,6 +210,10 @@ static void scene_defaults_reset(void) {
     sceneSettings.cameraPath.mode = BEZIER_CUBIC;
 }
 
+static void scaffold_state_reset(void) {
+    memset(&g_last_3d_scaffold, 0, sizeof(g_last_3d_scaffold));
+}
+
 static void apply_space_mode(json_object *root) {
     json_object *space_mode = NULL;
     const char *mode = NULL;
@@ -194,7 +227,7 @@ static void apply_space_mode(json_object *root) {
     animSettings.spaceMode = (mode && strcmp(mode, "3d") == 0) ? SPACE_MODE_3D : SPACE_MODE_2D;
 }
 
-static void apply_light_seed(json_object *lights_array) {
+static void apply_light_seed_scaled(json_object *lights_array, double world_scale) {
     json_object *light0 = NULL;
     double lx = 0.0, ly = 0.0, lz = 0.0;
     if (!lights_array || !json_object_is_type(lights_array, json_type_array) ||
@@ -206,12 +239,12 @@ static void apply_light_seed(json_object *lights_array) {
     if (parse_vec3(light0, "position", &lx, &ly, &lz)) {
         (void)lz;
         sceneSettings.bezierPath.numPoints = 1;
-        sceneSettings.bezierPath.points[0].x = lx;
-        sceneSettings.bezierPath.points[0].y = ly;
+        sceneSettings.bezierPath.points[0].x = lx * world_scale;
+        sceneSettings.bezierPath.points[0].y = ly * world_scale;
     }
 }
 
-static void apply_camera_seed(json_object *cameras_array) {
+static void apply_camera_seed_scaled(json_object *cameras_array, double world_scale) {
     json_object *camera0 = NULL;
     double cx = 0.0, cy = 0.0, cz = 0.0;
     if (!cameras_array || !json_object_is_type(cameras_array, json_type_array) ||
@@ -222,11 +255,13 @@ static void apply_camera_seed(json_object *cameras_array) {
     if (!camera0 || !json_object_is_type(camera0, json_type_object)) return;
     if (parse_vec3(camera0, "position", &cx, &cy, &cz)) {
         (void)cz;
-        sceneSettings.camera.x = cx;
-        sceneSettings.camera.y = cy;
+        sceneSettings.camera.x = cx * world_scale;
+        sceneSettings.camera.y = cy * world_scale;
         sceneSettings.cameraPath.numPoints = 1;
-        sceneSettings.cameraPath.points[0].x = cx;
-        sceneSettings.cameraPath.points[0].y = cy;
+        sceneSettings.cameraPath.points[0].x = cx * world_scale;
+        sceneSettings.cameraPath.points[0].y = cy * world_scale;
+        g_last_3d_scaffold.has_camera_seed = true;
+        g_last_3d_scaffold.camera_z = cz * world_scale;
     }
 }
 
@@ -265,12 +300,24 @@ static void apply_object_flags(json_object *object_obj, SceneObject *out_object)
 
 static void apply_objects(json_object *objects_array,
                           json_object *materials_array,
+                          double world_scale,
                           RuntimeSceneBridgePreflight *out_summary) {
     static double k_default_poly[4][2] = {
         {-10.0, -10.0},
         {10.0, -10.0},
         {10.0, 10.0},
         {-10.0, 10.0}
+    };
+    static double k_plane_poly[4][2] = {
+        {-120.0, -6.0},
+        {120.0, -6.0},
+        {120.0, 6.0},
+        {-120.0, 6.0}
+    };
+    static double k_triangle_poly[3][2] = {
+        {-12.0, -10.0},
+        {12.0, -10.0},
+        {0.0, 12.0}
     };
     size_t src_count = 0;
     size_t i = 0;
@@ -294,6 +341,9 @@ static void apply_objects(json_object *objects_array,
         double x = 0.0, y = 0.0, z = 0.0;
         double sx = 1.0, sy = 1.0, sz = 1.0;
         bool is_circle = true;
+        bool is_plane = false;
+        bool is_triangle_mesh = false;
+        bool is_box = false;
         SceneObject *dst = NULL;
         if (!obj || !json_object_is_type(obj, json_type_object)) continue;
 
@@ -301,8 +351,15 @@ static void apply_objects(json_object *objects_array,
             json_object_is_type(object_type, json_type_string)) {
             type_str = json_object_get_string(object_type);
         }
-        if (type_str && strstr(type_str, "circle") == NULL) {
-            is_circle = false;
+        if (type_str) {
+            if (strstr(type_str, "circle")) {
+                is_circle = true;
+            } else {
+                is_circle = false;
+            }
+            if (strstr(type_str, "plane")) is_plane = true;
+            if (strstr(type_str, "triangle_mesh")) is_triangle_mesh = true;
+            if (strstr(type_str, "box")) is_box = true;
         }
 
         if (json_object_object_get_ex(obj, "transform", &transform) &&
@@ -326,11 +383,20 @@ static void apply_objects(json_object *objects_array,
         dst = &sceneSettings.sceneObjects[sceneSettings.objectCount];
         if (is_circle) {
             InitObject(dst, OBJECT_CIRCLE, x, y, 10.0, 0.0, NULL, 0);
+        } else if (is_plane) {
+            InitObject(dst, OBJECT_POLYGON, x, y, 0.0, 0.0, k_plane_poly, 4);
+            g_last_3d_scaffold.plane_count++;
+        } else if (is_triangle_mesh) {
+            InitObject(dst, OBJECT_POLYGON, x, y, 0.0, 0.0, k_triangle_poly, 3);
+            g_last_3d_scaffold.triangle_mesh_count++;
         } else {
             InitObject(dst, OBJECT_POLYGON, x, y, 0.0, 0.0, k_default_poly, 4);
+            if (is_box) g_last_3d_scaffold.box_count++;
         }
-        dst->z = z;
-        dst->scale = (sx + sy + sz) / 3.0;
+        dst->x *= world_scale;
+        dst->y *= world_scale;
+        dst->z = z * world_scale;
+        dst->scale = ((sx + sy + sz) / 3.0) * world_scale;
         if (dst->scale <= 0.01) dst->scale = 0.01;
         apply_object_material(obj, materials_array, dst);
         apply_object_flags(obj, dst);
@@ -402,6 +468,8 @@ bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
     json_object *materials = NULL;
     json_object *lights = NULL;
     json_object *cameras = NULL;
+    json_object *world_scale_obj = NULL;
+    double world_scale = 1.0;
 
     if (!runtime_scene_json || !out_summary) return false;
     preflight_reset(out_summary);
@@ -419,16 +487,21 @@ bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
     }
 
     scene_defaults_reset();
+    scaffold_state_reset();
     apply_space_mode(root);
+    if (json_object_object_get_ex(root, "world_scale", &world_scale_obj)) {
+        world_scale = json_object_get_double(world_scale_obj);
+    }
 
     json_object_object_get_ex(root, "materials", &materials);
     json_object_object_get_ex(root, "objects", &objects);
     json_object_object_get_ex(root, "lights", &lights);
     json_object_object_get_ex(root, "cameras", &cameras);
 
-    apply_objects(objects, materials, out_summary);
-    apply_light_seed(lights);
-    apply_camera_seed(cameras);
+    apply_objects(objects, materials, world_scale, out_summary);
+    apply_light_seed_scaled(lights, world_scale);
+    apply_camera_seed_scaled(cameras, world_scale);
+    g_last_3d_scaffold.valid = true;
 
     preflight_diag(out_summary, "ok");
     json_object_put(root);
@@ -532,4 +605,9 @@ bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_j
     json_object_put(runtime_root);
     json_object_put(overlay_root);
     return true;
+}
+
+void runtime_scene_bridge_get_last_3d_scaffold_state(RuntimeSceneBridge3DScaffoldState *out_state) {
+    if (!out_state) return;
+    *out_state = g_last_3d_scaffold;
 }

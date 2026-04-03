@@ -13,6 +13,15 @@ typedef struct RuntimeSceneBridgePreflight {
     char diagnostics[256];
 } RuntimeSceneBridgePreflight;
 
+typedef struct RuntimeSceneBridge3DScaffoldState {
+    bool valid;
+    bool has_camera_seed;
+    double camera_z;
+    int box_count;
+    int plane_count;
+    int triangle_mesh_count;
+} RuntimeSceneBridge3DScaffoldState;
+
 bool runtime_scene_bridge_preflight_json(const char *runtime_scene_json,
                                          RuntimeSceneBridgePreflight *out_preflight);
 bool runtime_scene_bridge_preflight_file(const char *runtime_scene_path,
@@ -28,3 +37,5 @@ bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_j
                                                      char **out_runtime_scene_json,
                                                      char *out_diagnostics,
                                                      size_t out_diagnostics_size);
+
+void runtime_scene_bridge_get_last_3d_scaffold_state(RuntimeSceneBridge3DScaffoldState *out_state);

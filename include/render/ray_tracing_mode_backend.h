@@ -17,6 +17,10 @@ typedef struct {
     SpaceMode projectionMode;
     RayTracingBackendLane backendLane;
     bool fallbackTo2DProjection;
+    bool usesRuntime3DScaffold;
+    double runtimeCameraZ;
+    double rayOriginYOffset;
+    int scaffoldPrimitiveCount;
     bool useTiles;
     int tileSize;
     int integratorMode;
