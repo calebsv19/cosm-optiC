@@ -1,6 +1,6 @@
 # Ray Tracing Current Truth
 
-Last updated: 2026-04-03
+Last updated: 2026-04-04
 
 ## Program Identity
 - repository directory: `ray_tracing/`
@@ -45,6 +45,72 @@ Legacy test lane:
 - `make -C ray_tracing test-legacy`
 - current composition:
   - empty lane placeholder (returns success and prints status)
+
+## Release Readiness Snapshot
+- `RT-RL0` complete:
+  - release contract is now locked in `Makefile` with:
+    - `RELEASE_PRODUCT_NAME := optiC`
+    - `RELEASE_PROGRAM_KEY := ray_tracing`
+    - `RELEASE_BUNDLE_ID := com.cosm.optic`
+  - `VERSION` file is now canonical (`VERSION` -> `0.1.0`)
+  - `make -C ray_tracing release-contract` is available as contract sanity output.
+- `RT-RL1` complete:
+  - package stage now bundles Frameworks closure via:
+    - `tools/packaging/macos/bundle-dylibs.sh`
+  - package smoke now hard-fails if either Vulkan runtime dylib is missing:
+    - `libvulkan.1.dylib`
+    - `libMoltenVK.dylib`
+  - launcher now establishes writable runtime root outside app bundle:
+    - default: `~/Library/Application Support/RayTracing/runtime`
+    - fallback: `${TMPDIR}/RayTracing/runtime`
+  - launcher now writes deterministic runtime ICD JSON and exports:
+    - `VK_ICD_FILENAMES`
+    - `VK_DRIVER_FILES`
+  - release bundle audit gate is active:
+    - `make -C ray_tracing release-bundle-audit`
+    - validates bundle id, portable dylib closure, writable runtime paths, and Vulkan ICD env output.
+- `RT-RL2` complete:
+  - Developer ID signing gate is active and passing:
+    - `make -C ray_tracing release-verify-signed APPLE_SIGN_IDENTITY="Developer ID Application: ... (J4ZR8UWD8G)"`
+  - notarization + staple + notarized verification passed:
+    - `make -C ray_tracing release-notarize APPLE_SIGN_IDENTITY="Developer ID Application: ... (J4ZR8UWD8G)" APPLE_NOTARY_PROFILE="cosm-notary"`
+    - `make -C ray_tracing release-staple`
+    - `make -C ray_tracing release-verify-notarized`
+  - accepted notary submission id:
+    - `fbacac91-d960-45cb-a732-3388c0b9cf1e`
+  - pre-notary `spctl` rejection (`Unnotarized Developer ID`) is now treated as expected in `release-verify`; notarized validation remains strict in `release-verify-notarized`.
+- `RT-RL3` complete:
+  - release artifact generation is active and passing:
+    - `make -C ray_tracing release-artifact`
+    - emits:
+      - `build/release/optiC-0.1.0-macOS-stable.zip`
+      - `build/release/optiC-0.1.0-macOS-stable.zip.sha256`
+      - `build/release/optiC-0.1.0-macOS-stable.manifest.txt`
+  - release desktop refresh flow is active and passing:
+    - `make -C ray_tracing release-desktop-refresh`
+    - refreshes `/Users/calebsv/Desktop/optiC.app` from the existing release app.
+- `RT-RL4` complete:
+  - Finder-launch/runtime evidence captured from launcher log:
+    - launch entries now show runtime-rooted cwd:
+      - `/Users/calebsv/Library/Application Support/RayTracing/runtime`
+    - wrapper exits are clean:
+      - `exit_code=0`
+      - `wrapper_error=0`
+  - desktop trust verification evidence captured:
+    - `spctl --assess --type execute --verbose=2 /Users/calebsv/Desktop/optiC.app`
+      - `accepted`
+      - `source=Notarized Developer ID`
+    - `codesign --verify --deep --strict /Users/calebsv/Desktop/optiC.app` passed.
+- `RT-RL5` complete:
+  - full one-shot release pipeline proof command passed:
+    - `make -C ray_tracing release-distribute APPLE_SIGN_IDENTITY="Developer ID Application: CALEB SUMNER VITZTHUM (J4ZR8UWD8G)" APPLE_NOTARY_PROFILE="cosm-notary"`
+  - latest accepted notary submission ids captured:
+    - `fbacac91-d960-45cb-a732-3388c0b9cf1e`
+    - `779ef7fd-3529-495d-94ee-9d797d73fd35`
+  - release artifact lane is now canonical for distribution:
+    - `build/release/optiC-0.1.0-macOS-stable.zip`
+    - `build/release/optiC-0.1.0-macOS-stable.zip.sha256`
+    - `build/release/optiC-0.1.0-macOS-stable.manifest.txt`
 
 ## Lifecycle Wrapper Snapshot
 - locked lifecycle wrapper symbols are active:

@@ -1,6 +1,6 @@
 # Ray Tracing Future Intent
 
-Last updated: 2026-04-03
+Last updated: 2026-04-04
 
 ## Scaffold Alignment Intent
 1. Keep the current strong subsystem split while normalizing scaffold contracts.
@@ -168,3 +168,17 @@ Last updated: 2026-04-03
 - no feature-expansion work unrelated to scaffold alignment
 - no shared subtree redesign inside scaffold migration slices
 - no one-pass broad churn that mixes lane normalization with lifecycle refactors
+
+## Release Readiness Next Intent
+- next active release lane:
+  - `RT-RL0` through `RT-RL5` execution plan:
+    - `../docs/private_program_docs/ray_tracing/2026-04-04_ray_tracing_release_readiness_rl0_rl5_execution_plan.md`
+- completed now:
+  - `RT-RL0` release contract freeze
+  - `RT-RL1` bundle audit + Vulkan runtime hardening
+  - `RT-RL2` signing/notary integration
+  - `RT-RL3` release artifact + desktop refresh flow
+  - `RT-RL4` release validation + docs sync
+  - `RT-RL5` release closeout
+- next:
+  - hand off this release-ready pattern to next program lane (`RL0` pilot for next app in queue).

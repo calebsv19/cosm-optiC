@@ -8,7 +8,7 @@
     <key>CFBundleExecutable</key>
     <string>raytracing-launcher</string>
     <key>CFBundleIdentifier</key>
-    <string>com.codework.raytracing</string>
+    <string>com.cosm.optic</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
