@@ -1,5 +1,6 @@
 #include "config/config_manager.h"
 #include "config/config_file_io.h"
+#include "app/data_paths.h"
 #include "scene/object_manager.h"
 #include "material/material_manager.h"
 #include <stdio.h>       // For file handling (fopen, fprintf, fclose, perror)
@@ -18,7 +19,6 @@ static void LoadVelocityHandle(struct json_object* pointObj, const char* key, Ve
 #define ANIMATION_CONFIG_LEGACY_FILE "Configs/animation_config.json"
 #define MATERIALS_DEFAULT_DIR "config/materials"
 #define MATERIALS_LEGACY_DIR "Configs/materials"
-#define FRAME_DIR_RUNTIME_ROOT "data/runtime/frames"
 #define FRAME_DIR_DEFAULT "data/runtime/frames/default"
 #define FRAME_DIR_LEGACY_PREFIX "Animations/"
 #define TEXT_ZOOM_STEP_MIN (-4)
@@ -26,8 +26,10 @@ static void LoadVelocityHandle(struct json_object* pointObj, const char* key, Ve
 #define TEXT_ZOOM_STEP_PERCENT_PER_STEP (10)
 
 static void NormalizeFrameDirPath(void) {
+    const char *frame_root = ray_tracing_default_frame_root();
+    const char *default_frame_dir = ray_tracing_default_frame_dir();
     if (animSettings.frameDir[0] == '\0') {
-        strncpy(animSettings.frameDir, FRAME_DIR_DEFAULT, sizeof(animSettings.frameDir) - 1);
+        strncpy(animSettings.frameDir, default_frame_dir, sizeof(animSettings.frameDir) - 1);
         animSettings.frameDir[sizeof(animSettings.frameDir) - 1] = '\0';
         return;
     }
@@ -41,15 +43,74 @@ static void NormalizeFrameDirPath(void) {
     if (!suffix[0]) suffix = "default";
 
     char mapped[sizeof(animSettings.frameDir)];
-    int written = snprintf(mapped, sizeof(mapped), "%s/%s", FRAME_DIR_RUNTIME_ROOT, suffix);
+    int written = snprintf(mapped, sizeof(mapped), "%s/%s", frame_root, suffix);
     if (written <= 0 || (size_t)written >= sizeof(mapped)) {
-        strncpy(animSettings.frameDir, FRAME_DIR_DEFAULT, sizeof(animSettings.frameDir) - 1);
+        strncpy(animSettings.frameDir, default_frame_dir, sizeof(animSettings.frameDir) - 1);
         animSettings.frameDir[sizeof(animSettings.frameDir) - 1] = '\0';
         return;
     }
 
     strncpy(animSettings.frameDir, mapped, sizeof(animSettings.frameDir) - 1);
     animSettings.frameDir[sizeof(animSettings.frameDir) - 1] = '\0';
+}
+
+static void NormalizeDataRootPaths(void) {
+    const char *default_input_root = ray_tracing_default_input_root();
+    const char *default_output_root = ray_tracing_default_output_root();
+    if (animSettings.inputRoot[0] == '\0') {
+        strncpy(animSettings.inputRoot, default_input_root, sizeof(animSettings.inputRoot) - 1);
+        animSettings.inputRoot[sizeof(animSettings.inputRoot) - 1] = '\0';
+    }
+    if (animSettings.outputRoot[0] == '\0') {
+        strncpy(animSettings.outputRoot, default_output_root, sizeof(animSettings.outputRoot) - 1);
+        animSettings.outputRoot[sizeof(animSettings.outputRoot) - 1] = '\0';
+    }
+}
+
+static bool ValidateDataRootPath(char *target,
+                                 size_t target_size,
+                                 const char *default_path,
+                                 const char *label,
+                                 bool create_if_missing) {
+    bool corrected = false;
+    if (!target || target_size == 0 || !default_path || !default_path[0]) return false;
+    if (target[0] == '\0') {
+        fprintf(stderr,
+                "[startup] %s root is empty; using default '%s'.\n",
+                label ? label : "data",
+                default_path);
+        snprintf(target, target_size, "%s", default_path);
+        corrected = true;
+    }
+    if (create_if_missing && !config_io_directory_exists(target)) {
+        if (!config_io_ensure_directory_exists(target)) {
+            fprintf(stderr,
+                    "[startup] %s root '%s' could not be created; using default '%s'.\n",
+                    label ? label : "data",
+                    target,
+                    default_path);
+            snprintf(target, target_size, "%s", default_path);
+            corrected = true;
+        }
+    }
+    if (!config_io_directory_exists(target)) {
+        fprintf(stderr,
+                "[startup] %s root '%s' missing; using default '%s'.\n",
+                label ? label : "data",
+                target,
+                default_path);
+        snprintf(target, target_size, "%s", default_path);
+        corrected = true;
+    }
+    if (create_if_missing && !config_io_directory_exists(target)) {
+        if (!config_io_ensure_directory_exists(target)) {
+            fprintf(stderr,
+                    "[startup] %s default root '%s' is unavailable after fallback.\n",
+                    label ? label : "data",
+                    target);
+        }
+    }
+    return corrected;
 }
 
 typedef enum {
@@ -109,6 +170,8 @@ AnimationConfig animSettings = {
     .maxLoopCount = 1,
     .fps = 30,
     .frameDuration = 1.0 / 30.0,
+    .inputRoot = "config",
+    .outputRoot = "data/runtime",
     .frameDir = FRAME_DIR_DEFAULT,
     .loopMode = "Normal",
     .lightMode = 0,
@@ -425,6 +488,9 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "framesForTravel", json_object_new_int(animSettings.framesForTravel));
     json_object_object_add(config, "fps", json_object_new_int(animSettings.fps));
     json_object_object_add(config, "frameDuration", json_object_new_double(animSettings.frameDuration));
+    NormalizeDataRootPaths();
+    json_object_object_add(config, "inputRoot", json_object_new_string(animSettings.inputRoot));
+    json_object_object_add(config, "outputRoot", json_object_new_string(animSettings.outputRoot));
     NormalizeFrameDirPath();
     json_object_object_add(config, "frameDir", json_object_new_string(animSettings.frameDir));
     json_object_object_add(config, "maxLoopCount", json_object_new_int(animSettings.maxLoopCount));
@@ -821,6 +887,23 @@ void LoadAnimationConfig(void) {
         animSettings.fps = json_object_get_int(temp);
         animSettings.frameDuration = (animSettings.fps > 0) ? 1.0 / animSettings.fps : 1.0 / 30.0;
     }
+    if (json_object_object_get_ex(config, "inputRoot", &temp) && json_object_is_type(temp, json_type_string)) {
+        const char *path = json_object_get_string(temp);
+        if (path) {
+            strncpy(animSettings.inputRoot, path, sizeof(animSettings.inputRoot) - 1);
+            animSettings.inputRoot[sizeof(animSettings.inputRoot) - 1] = '\0';
+        }
+    }
+    if (json_object_object_get_ex(config, "outputRoot", &temp) && json_object_is_type(temp, json_type_string)) {
+        const char *path = json_object_get_string(temp);
+        if (path) {
+            strncpy(animSettings.outputRoot, path, sizeof(animSettings.outputRoot) - 1);
+            animSettings.outputRoot[sizeof(animSettings.outputRoot) - 1] = '\0';
+        }
+    }
+    NormalizeDataRootPaths();
+    (void)setenv("RAY_TRACING_INPUT_ROOT", animSettings.inputRoot, 1);
+    (void)setenv("RAY_TRACING_OUTPUT_ROOT", animSettings.outputRoot, 1);
     if (json_object_object_get_ex(config, "loopMode", &temp)) {
         strncpy(animSettings.loopMode, json_object_get_string(temp), sizeof(animSettings.loopMode) - 1);
         animSettings.loopMode[sizeof(animSettings.loopMode) - 1] = '\0';
@@ -941,6 +1024,7 @@ void LoadAnimationConfig(void) {
         }
     }
 
+    bool root_corrected = false;
     animSettings.cacheContributionWeight = ClampDoubleValue(animSettings.cacheContributionWeight, 0.0, 1.0);
     animSettings.bsdfModel = (animSettings.bsdfModel != 0) ? 1 : 0;
     animSettings.lightIntensity = ClampDoubleValue(animSettings.lightIntensity, 0.0, 20.0);
@@ -974,6 +1058,23 @@ void LoadAnimationConfig(void) {
     }
     if (!isfinite(animSettings.lightHeight) || animSettings.lightHeight < 0.0) {
         animSettings.lightHeight = 8.0;
+    }
+    root_corrected |= ValidateDataRootPath(animSettings.inputRoot,
+                                           sizeof(animSettings.inputRoot),
+                                           ray_tracing_default_input_root(),
+                                           "input",
+                                           false);
+    root_corrected |= ValidateDataRootPath(animSettings.outputRoot,
+                                           sizeof(animSettings.outputRoot),
+                                           ray_tracing_default_output_root(),
+                                           "output",
+                                           true);
+    (void)setenv("RAY_TRACING_INPUT_ROOT", animSettings.inputRoot, 1);
+    (void)setenv("RAY_TRACING_OUTPUT_ROOT", animSettings.outputRoot, 1);
+    if (root_corrected) {
+        SaveAnimationConfig();
+        fprintf(stderr,
+                "[startup] Data root fallback correction persisted to runtime animation config.\n");
     }
     animSettings.spaceMode = animation_config_space_mode_clamp(animSettings.spaceMode);
     animSettings.textZoomStep = animation_config_text_zoom_step_clamp(animSettings.textZoomStep);

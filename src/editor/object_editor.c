@@ -5,6 +5,7 @@
 #include "editor/editor_mode_router.h"
 #include "editor/object_editor_panels.h"
 #include "app/animation.h"
+#include "app/data_paths.h"
 #include "camera/camera.h"
 #include "geo/shape_adapter.h"
 #include "geo/shape_library.h"
@@ -15,6 +16,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <stdlib.h>
+#include <limits.h>
 
 #define MAX_POLYGON_POINTS 10  // Limit for custom polygons
 
@@ -107,8 +109,9 @@ static int ObjectEditorMaterialRowHeight(void) {
 }
 
 static const char* ShapeAssetDir(void) {
+    static char resolved_dir[PATH_MAX];
     const char* dir = getenv("SHAPE_ASSET_DIR");
-    return (dir && dir[0]) ? dir : "config/objects";
+    return ray_tracing_resolve_shape_asset_dir(dir, resolved_dir, sizeof(resolved_dir));
 }
 
 static Camera BuildObjectEditorCamera(void) {
@@ -155,8 +158,10 @@ static void RefreshAssetLibrary(void) {
 }
 
 static void RefreshImportList(void) {
+    char import_root_buf[PATH_MAX];
+    const char *import_root = ray_tracing_resolve_import_dir(import_root_buf, sizeof(import_root_buf));
     importCount = 0;
-    DIR* dir = opendir("import");
+    DIR* dir = opendir(import_root);
     if (!dir) return;
     struct dirent* ent = NULL;
     while ((ent = readdir(dir)) != NULL && importCount < MAX_ASSET_LIST) {
@@ -612,10 +617,13 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
                 if (idx >= 0) {
                     if (showImports) {
                         if (idx < importCount) {
-                            if (event->button.clicks >= 2) {
-                                // Convert import to asset on double-click
-                                char path[256];
-                                snprintf(path, sizeof(path), "import/%s", importNames[idx]);
+                                if (event->button.clicks >= 2) {
+                                    // Convert import to asset on double-click
+                                    char path[PATH_MAX];
+                                    char import_root_buf[PATH_MAX];
+                                    const char *import_root =
+                                        ray_tracing_resolve_import_dir(import_root_buf, sizeof(import_root_buf));
+                                    snprintf(path, sizeof(path), "%s/%s", import_root, importNames[idx]);
                                 ShapeDocument doc = {0};
                                 if (shape_import_load(path, &doc) && doc.shapeCount > 0) {
                                     ShapeAsset asset = {0};
@@ -623,7 +631,7 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
                                         const char* base = importNames[idx];
                                         const char* dot = strrchr(base, '.');
                                         size_t len = dot ? (size_t)(dot - base) : strlen(base);
-                                        char outPath[256];
+                                        char outPath[PATH_MAX];
                                         snprintf(outPath, sizeof(outPath), "%s/%.*s.asset.json", ShapeAssetDir(), (int)len, base);
                                         if (shape_asset_save_file(&asset, outPath)) {
                                             printf("Saved asset to %s\n", outPath);
@@ -857,7 +865,7 @@ static void ClearSelections(void) {
 static void DeleteSelected(void) {
     if (selectedAssetIndex >= 0 && !showImports) {
         if (selectedAssetIndex < (int)assetLib.count && assetLib.assets[selectedAssetIndex].name) {
-            char path[256];
+            char path[PATH_MAX];
             snprintf(path, sizeof(path), "%s/%s.asset.json", ShapeAssetDir(), assetLib.assets[selectedAssetIndex].name);
             remove(path);
             RefreshAssetLibrary();

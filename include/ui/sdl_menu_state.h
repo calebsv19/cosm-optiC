@@ -5,8 +5,17 @@
 #include <SDL2/SDL_ttf.h>
 #include <stdbool.h>
 #include <limits.h>
+#include <stddef.h>
 
 #define SDL_MENU_MAX_MANIFEST_OPTIONS 128
+#define SDL_MENU_MANIFEST_ITEM_HEIGHT 26
+
+#define SDL_MENU_DEFAULT_BOUNCE_LIMIT 10
+#define SDL_MENU_DEFAULT_FRAME_LIMIT 50
+#define SDL_MENU_DEFAULT_FRAME_FOR_TRAVEL 40
+
+#define SDL_MENU_FORWARD_FALLOFF_DISTANCE_MIN 100
+#define SDL_MENU_FORWARD_FALLOFF_DISTANCE_MAX 40000
 
 typedef struct {
     char name[128];
@@ -24,6 +33,9 @@ typedef struct {
     char inputBuffer[10];
     bool editingBounce;
     bool editingFrame;
+    bool editingInputRoot;
+    bool editingOutputRoot;
+    char pathInputBuffer[PATH_MAX];
 
     int rouletteSliderValue;
     int envSliderValue;

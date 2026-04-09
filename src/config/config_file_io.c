@@ -34,6 +34,12 @@ static bool config_io_ensure_directory_path(const char* path) {
     return true;
 }
 
+bool config_io_ensure_directory_exists(const char* path) {
+    if (!path || !path[0]) return false;
+    if (config_io_directory_exists(path)) return true;
+    return config_io_ensure_directory_path(path);
+}
+
 bool config_io_ensure_parent_directory_for_file(const char* path) {
     if (!path || !path[0]) return false;
     char tmp[512];

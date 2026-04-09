@@ -1,6 +1,6 @@
 # Ray Tracing Future Intent
 
-Last updated: 2026-04-04
+Last updated: 2026-04-09
 
 ## Scaffold Alignment Intent
 1. Keep the current strong subsystem split while normalizing scaffold contracts.
@@ -104,6 +104,24 @@ Last updated: 2026-04-04
     - `../docs/private_program_docs/ray_tracing/2026-04-02_ray_tracing_w1_w2_wrapper_hardening.md`
 - next:
   - optional `RT-CP6+`: deeper runtime/update/render/shutdown ownership extraction from `animation.c`
+
+## Maintainability Decomposition Status
+- completed in the recent decomposition tranche:
+  - config file I/O helpers extracted to `include/config/config_file_io.h` + `src/config/config_file_io.c`
+  - runtime helper slices extracted from `animation.c` into:
+    - `src/app/animation_fluid_scene.c`
+    - `src/app/animation_input_helpers.c`
+    - `src/app/animation_output.c`
+    - `src/app/data_paths.c`
+  - editor/render helper splits landed:
+    - `src/editor/object_editor_panels.c`
+    - `src/render/ray_tracing2_preview.c`
+  - menu decomposition moved to focused lanes:
+    - `src/ui/sdl_menu_input.c`
+    - `src/ui/sdl_menu_render.c`
+    - `src/ui/sdl_menu_state.c`
+- next:
+  - keep extracting high-churn helper families out of `src/app/animation.c` while preserving wrapper ownership and existing behavior.
 
 ## RS1 Render Split Intent
 - started:

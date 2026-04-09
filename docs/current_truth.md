@@ -1,6 +1,6 @@
 # Ray Tracing Current Truth
 
-Last updated: 2026-04-04
+Last updated: 2026-04-09
 
 ## Program Identity
 - repository directory: `ray_tracing/`
@@ -23,6 +23,23 @@ Last updated: 2026-04-04
   - `app`, `camera`, `config`, `editor`, `engine`, `export`, `geo`, `import`, `material`, `path`, `render`, `scene`, `tools`, `ui`
 - header strategy:
   - include-dominant (`60` headers in `include/`, `5` private headers in `src/`)
+- decomposition snapshot (`2026-04-09`):
+  - menu flow is now split into focused modules:
+    - `src/ui/sdl_menu.c` (orchestration and event loop only)
+    - `src/ui/sdl_menu_input.c` (keyboard/mouse/edit interactions)
+    - `src/ui/sdl_menu_render.c` (layout and draw pass)
+    - `src/ui/sdl_menu_state.c` (menu runtime state + manifest list management)
+  - config file path/JSON helpers were extracted into:
+    - `include/config/config_file_io.h`
+    - `src/config/config_file_io.c`
+  - runtime helper slices extracted from `src/app/animation.c`:
+    - `src/app/animation_fluid_scene.c`
+    - `src/app/animation_input_helpers.c`
+    - `src/app/animation_output.c`
+    - `src/app/data_paths.c`
+  - editor/render helper slices extracted:
+    - `src/editor/object_editor_panels.c`
+    - `src/render/ray_tracing2_preview.c`
 
 ## Runtime/Verification Contract (Current)
 - build:
@@ -45,6 +62,18 @@ Legacy test lane:
 - `make -C ray_tracing test-legacy`
 - current composition:
   - empty lane placeholder (returns success and prints status)
+
+Data-path contract lane (`DP S0-S5`) status:
+- completed on 2026-04-08.
+- current user-facing contract:
+  - explicit menu controls for `inputRoot` and `outputRoot` (edit/folder/apply + keyboard-first shortcuts).
+  - startup root validation with deterministic fallback and immediate runtime-config persistence on correction.
+  - manifest discovery roots are input/output-root aware with legacy fallback roots retained.
+- current verification snapshot:
+  - `make -C ray_tracing all` passes
+  - `make -C ray_tracing package-desktop-refresh` passes
+  - `codesign --verify --deep --strict ~/Desktop/optiC.app` passes
+  - `make -C ray_tracing test-stable` still reports the existing 13 route/integrator failures (known lane debt, unchanged by DP lane).
 
 ## Release Readiness Snapshot
 - `RT-RL0` complete:

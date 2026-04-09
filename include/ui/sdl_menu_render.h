@@ -44,6 +44,14 @@ typedef struct {
     SDL_Rect pathRouletteRect;
     SDL_Rect pathBsdfRect;
     SDL_Rect loadSceneRect;
+    SDL_Rect inputRootValueRect;
+    SDL_Rect inputRootEditRect;
+    SDL_Rect inputRootFolderRect;
+    SDL_Rect inputRootApplyRect;
+    SDL_Rect outputRootValueRect;
+    SDL_Rect outputRootEditRect;
+    SDL_Rect outputRootFolderRect;
+    SDL_Rect outputRootApplyRect;
     SDL_Rect falloffRect;
     SDL_Rect tileRect;
     SDL_Rect tilePreviewRect;

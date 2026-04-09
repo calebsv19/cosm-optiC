@@ -2,4 +2,8 @@
 
 Menu components presented before starting the renderer.
 
-- `sdl_menu.c` – Builds the SDL UI for toggling interactive/deep render modes, switching between forward-light and camera-path integrators, editing numeric settings through sliders (rays, FPS, tile size, roulette threshold, falloff distance, falloff softness, path SPP/depth, environment brightness, etc.), enabling the tiled renderer, and launching the scene editor or animation loop. Includes a forward falloff mode button (None / Linear / Quadratic) and persists all settings back to `config/animation_config.json`.
+- `sdl_menu.c` – Top-level menu orchestrator (SDL lifecycle + event loop dispatch).
+- `sdl_menu_input.c` – Menu keyboard/mouse/edit handling (including root path edit/folder/apply controls and slider interactions).
+- `sdl_menu_render.c` – Menu layout/render pass (buttons, sliders, manifest dropdown, status text).
+- `sdl_menu_state.c` – Runtime menu state and manifest option discovery/scroll policy.
+- `text_zoom_shortcuts.c` – Shared text-zoom shortcut handling used by menu and runtime/editor flows.

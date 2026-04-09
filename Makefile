@@ -158,6 +158,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/import/shape_import.o \
 	$(BUILD_DIR)/timer_hud_external/cJSON.o \
 	$(BUILD_DIR)/camera/camera.o \
+	$(BUILD_DIR)/app/data_paths.o \
 	$(BUILD_DIR)/config/config_file_io.o \
 	$(BUILD_DIR)/config/config_manager.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_core.o \
@@ -400,6 +401,12 @@ package-desktop: all
 	@mkdir -p "$(PACKAGE_RESOURCES_DIR)/vk_renderer" "$(PACKAGE_RESOURCES_DIR)/shaders"
 	@cp -R "$(VK_RENDERER_DIR)/shaders" "$(PACKAGE_RESOURCES_DIR)/vk_renderer/"
 	@cp -R "$(VK_RENDERER_DIR)/shaders/." "$(PACKAGE_RESOURCES_DIR)/shaders/"
+	@for dylib in $$(/usr/bin/find "$(PACKAGE_FRAMEWORKS_DIR)" -type f -name '*.dylib' 2>/dev/null); do \
+		/usr/bin/codesign --force --sign "$(PACKAGE_ADHOC_SIGN_IDENTITY)" --timestamp=none "$$dylib"; \
+	done
+	@/usr/bin/codesign --force --sign "$(PACKAGE_ADHOC_SIGN_IDENTITY)" --timestamp=none "$(PACKAGE_MACOS_DIR)/raytracing-bin"
+	@/usr/bin/codesign --force --sign "$(PACKAGE_ADHOC_SIGN_IDENTITY)" --timestamp=none "$(PACKAGE_MACOS_DIR)/raytracing-launcher"
+	@/usr/bin/codesign --force --sign "$(PACKAGE_ADHOC_SIGN_IDENTITY)" --timestamp=none "$(PACKAGE_APP_DIR)"
 	@echo "Desktop package ready: $(PACKAGE_APP_DIR)"
 
 package-desktop-smoke: package-desktop
@@ -427,7 +434,7 @@ package-desktop-self-test: package-desktop-smoke
 package-desktop-copy-desktop: package-desktop
 	@mkdir -p "$(dir $(DESKTOP_APP_DIR))"
 	@rm -rf "$(DESKTOP_APP_DIR)"
-	@cp -R "$(PACKAGE_APP_DIR)" "$(DESKTOP_APP_DIR)"
+	@/usr/bin/ditto "$(PACKAGE_APP_DIR)" "$(DESKTOP_APP_DIR)"
 	@echo "Copied $(PACKAGE_APP_NAME) to $(DESKTOP_APP_DIR)"
 
 package-desktop-sync: package-desktop-copy-desktop
@@ -443,7 +450,7 @@ package-desktop-remove:
 package-desktop-refresh: package-desktop
 	@mkdir -p "$(dir $(DESKTOP_APP_DIR))"
 	@rm -rf "$(DESKTOP_APP_DIR)"
-	@cp -R "$(PACKAGE_APP_DIR)" "$(DESKTOP_APP_DIR)"
+	@/usr/bin/ditto "$(PACKAGE_APP_DIR)" "$(DESKTOP_APP_DIR)"
 	@echo "Refreshed $(PACKAGE_APP_NAME) at $(DESKTOP_APP_DIR)"
 
 release-contract:

@@ -15,6 +15,15 @@
 - `B`: Cycle blur mode (`None` -> `Light` -> `Heavy`).
 - `Esc`: Exit current run loop (returns to menu flow).
 
+## Menu Data Root Controls
+
+- `Cmd/Ctrl+B`: Open native folder chooser and set input root.
+- `Cmd/Ctrl+Shift+B`: Open native folder chooser and set output root.
+- `Cmd/Ctrl+Shift+I`: Start typed input-root edit.
+- `Cmd/Ctrl+Shift+O`: Start typed output-root edit.
+- `Enter`: Apply active typed root edit.
+- `Esc`: Cancel active typed root edit.
+
 ## Runtime Interaction
 
 - `Mouse move` / `Mouse click`: Move light position in interactive mode.

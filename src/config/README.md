@@ -2,4 +2,5 @@
 
 Configuration persistence.
 
-- `config_manager.c` – Loads animation/scene settings with runtime-first fallback (`data/runtime/*.json` -> `config/*.json` -> legacy `Configs/*.json`), and saves mutable state to `data/runtime/*.json`.
+- `config_manager.c` – Owns animation/scene config schema, normalization/clamping, runtime-first fallback policy (`data/runtime/*.json` -> `config/*.json` -> legacy `Configs/*.json`), and save flows.
+- `config_file_io.c` – Shared file/directory/JSON helpers used by config load/save paths.
