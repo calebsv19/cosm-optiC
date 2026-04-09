@@ -11,6 +11,9 @@ extern int WINDOW_HEIGHT;
 
 extern int maxLoopCount;
 extern double TOTAL_TIME;  // Fix for missing TOTAL_TIME
+extern int frameCounter;
+extern int loopCount;
+extern double currentTime;
 
 // Simulation parameters
 extern double light_start_x, light_start_y;
