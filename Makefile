@@ -147,6 +147,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/uniform_grid.o \
 	$(BUILD_DIR)/render/surface_mesh.o \
 	$(BUILD_DIR)/render/render_helper.o \
+	$(BUILD_DIR)/render/ray_tracing2_preview.o \
 	$(BUILD_DIR)/render/ray_tracing2.o \
 	$(BUILD_DIR)/render/fluid_state.o \
 	$(BUILD_DIR)/render/fluid_overlay.o \
