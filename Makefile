@@ -158,6 +158,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/import/shape_import.o \
 	$(BUILD_DIR)/timer_hud_external/cJSON.o \
 	$(BUILD_DIR)/camera/camera.o \
+	$(BUILD_DIR)/config/config_file_io.o \
 	$(BUILD_DIR)/config/config_manager.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_core.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_json.o \

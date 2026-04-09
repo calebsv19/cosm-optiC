@@ -1,4 +1,5 @@
 #include "config/config_manager.h"
+#include "config/config_file_io.h"
 #include "scene/object_manager.h"
 #include "material/material_manager.h"
 #include <stdio.h>       // For file handling (fopen, fprintf, fclose, perror)
@@ -6,9 +7,6 @@
 #include <string.h>      // For string functions (strncpy)
 #include <json-c/json.h> // For JSON handling
 #include <math.h>
-#include <errno.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 
 static void LoadVelocityHandle(struct json_object* pointObj, const char* key, Velocity* handle);
 
@@ -26,65 +24,6 @@ static void LoadVelocityHandle(struct json_object* pointObj, const char* key, Ve
 #define TEXT_ZOOM_STEP_MIN (-4)
 #define TEXT_ZOOM_STEP_MAX (5)
 #define TEXT_ZOOM_STEP_PERCENT_PER_STEP (10)
-
-static bool DirectoryExists(const char* path) {
-    struct stat st = {0};
-    return (path && path[0] && stat(path, &st) == 0 && S_ISDIR(st.st_mode));
-}
-
-static bool EnsureDirectoryPath(const char* path) {
-    if (!path || !path[0]) return false;
-
-    char tmp[512];
-    size_t len = strlen(path);
-    if (len >= sizeof(tmp)) return false;
-    memcpy(tmp, path, len + 1);
-
-    for (size_t i = 1; i < len; ++i) {
-        if (tmp[i] != '/') continue;
-        tmp[i] = '\0';
-        if (tmp[0] != '\0' && mkdir(tmp, 0755) != 0 && errno != EEXIST) {
-            return false;
-        }
-        tmp[i] = '/';
-    }
-
-    if (mkdir(tmp, 0755) != 0 && errno != EEXIST) {
-        return false;
-    }
-    return true;
-}
-
-static bool EnsureParentDirectoryForFile(const char* path) {
-    if (!path || !path[0]) return false;
-    char tmp[512];
-    size_t len = strlen(path);
-    if (len >= sizeof(tmp)) return false;
-    memcpy(tmp, path, len + 1);
-    char* slash = strrchr(tmp, '/');
-    if (!slash) return true;
-    *slash = '\0';
-    if (tmp[0] == '\0') return true;
-    return EnsureDirectoryPath(tmp);
-}
-
-static FILE* OpenReadWithFallback(const char* primary,
-                                  const char* fallback,
-                                  const char* legacy,
-                                  const char** selected_path) {
-    const char* candidates[] = {primary, fallback, legacy};
-    if (selected_path) *selected_path = NULL;
-    for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); ++i) {
-        const char* path = candidates[i];
-        if (!path || !path[0]) continue;
-        FILE* file = fopen(path, "r");
-        if (file) {
-            if (selected_path) *selected_path = path;
-            return file;
-        }
-    }
-    return NULL;
-}
 
 static void NormalizeFrameDirPath(void) {
     if (animSettings.frameDir[0] == '\0') {
@@ -360,7 +299,7 @@ void SaveAllSettings(void) {
 
 void LoadAllSettings(void) {
     MaterialManagerInit();
-    if (DirectoryExists(MATERIALS_DEFAULT_DIR)) {
+    if (config_io_directory_exists(MATERIALS_DEFAULT_DIR)) {
         MaterialManagerLoadDir(MATERIALS_DEFAULT_DIR);
     } else {
         MaterialManagerLoadDir(MATERIALS_LEGACY_DIR);
@@ -370,7 +309,7 @@ void LoadAllSettings(void) {
 }
 
 void SaveSceneConfig(void) {
-    if (!EnsureParentDirectoryForFile(SCENE_CONFIG_RUNTIME_FILE)) {
+    if (!config_io_ensure_parent_directory_for_file(SCENE_CONFIG_RUNTIME_FILE)) {
         fprintf(stderr, "Error: Failed to prepare runtime config lane for %s\n", SCENE_CONFIG_RUNTIME_FILE);
         return;
     }
@@ -465,7 +404,7 @@ void SaveSceneConfig(void) {
 
 
 void SaveAnimationConfig(void) {
-    if (!EnsureParentDirectoryForFile(ANIMATION_CONFIG_RUNTIME_FILE)) {
+    if (!config_io_ensure_parent_directory_for_file(ANIMATION_CONFIG_RUNTIME_FILE)) {
         fprintf(stderr, "Error: Failed to prepare runtime config lane for %s\n", ANIMATION_CONFIG_RUNTIME_FILE);
         return;
     }
@@ -776,10 +715,10 @@ void LoadSceneObjects(struct json_object* config) {
 
 void LoadSceneConfig(void) {
     const char *loaded_path = NULL;
-    FILE *file = OpenReadWithFallback(SCENE_CONFIG_RUNTIME_FILE,
-                                      SCENE_CONFIG_DEFAULT_FILE,
-                                      SCENE_CONFIG_LEGACY_FILE,
-                                      &loaded_path);
+    FILE *file = config_io_open_read_with_fallback(SCENE_CONFIG_RUNTIME_FILE,
+                                                   SCENE_CONFIG_DEFAULT_FILE,
+                                                   SCENE_CONFIG_LEGACY_FILE,
+                                                   &loaded_path);
     if (!file) {
         printf("ERROR: Failed to open scene config file (tried %s, %s, %s)\n",
                SCENE_CONFIG_RUNTIME_FILE,
@@ -792,28 +731,8 @@ void LoadSceneConfig(void) {
         printf("INFO: Loaded scene config from: %s\n", loaded_path);
     }
      
-    fseek(file, 0, SEEK_END);
-    long fsize = ftell(file);
-    rewind(file);
-    
-    char *buffer = malloc(fsize + 1);
-    if (!buffer) {
-        printf("ERROR: Memory allocation failed for JSON buffer.\n");
-        fclose(file);
-        EnsureCameraPathDefault();
-        return;
-    }
-     
-    fread(buffer, 1, fsize, file);
-    fclose(file);
-    buffer[fsize] = '\0';
-    
-    //    printf("DEBUG: Loaded JSON Data:\n%s\n", buffer);
-    
-    struct json_object *config = json_tokener_parse(buffer);
+    struct json_object *config = config_io_parse_json_file(file, "scene config", false);
     if (!config) {
-        printf("ERROR: Failed to parse scene config JSON.\n");
-        free(buffer);
         EnsureCameraPathDefault();
         return;
     }
@@ -857,16 +776,15 @@ void LoadSceneConfig(void) {
     }
 
     json_object_put(config);
-    free(buffer);
     EnsureCameraPathDefault();
 }
 
 void LoadAnimationConfig(void) {
     const char* loaded_path = NULL;
-    FILE* file = OpenReadWithFallback(ANIMATION_CONFIG_RUNTIME_FILE,
-                                      ANIMATION_CONFIG_DEFAULT_FILE,
-                                      ANIMATION_CONFIG_LEGACY_FILE,
-                                      &loaded_path);
+    FILE* file = config_io_open_read_with_fallback(ANIMATION_CONFIG_RUNTIME_FILE,
+                                                   ANIMATION_CONFIG_DEFAULT_FILE,
+                                                   ANIMATION_CONFIG_LEGACY_FILE,
+                                                   &loaded_path);
     if (!file) {
         printf("Failed to open animation config file (tried %s, %s, %s)\n",
                ANIMATION_CONFIG_RUNTIME_FILE,
@@ -878,31 +796,8 @@ void LoadAnimationConfig(void) {
         printf("INFO: Loaded animation config from: %s\n", loaded_path);
     }
 
-    fseek(file, 0, SEEK_END);
-    long fsize = ftell(file);
-    rewind(file);
-    
-    if (fsize <= 0) {
-        printf("️ Warning: Animation config file is empty or invalid.\n");
-        fclose(file);
-        return;
-    }
-
-    char* buffer = malloc(fsize + 1);
-    if (!buffer) {
-        printf(" Error: Memory allocation failed for animation config buffer.\n");
-        fclose(file);
-        return;
-    }
-
-    fread(buffer, 1, fsize, file);
-    fclose(file);
-    buffer[fsize] = '\0';
-
-    struct json_object* config = json_tokener_parse(buffer);
+    struct json_object* config = config_io_parse_json_file(file, "animation config", true);
     if (!config) {
-        printf(" Failed to parse animation config JSON.\n");
-        free(buffer);
         return;
     }
 
@@ -1085,5 +980,4 @@ void LoadAnimationConfig(void) {
 	
     printf(" Loaded animation config successfully.\n");
     json_object_put(config);
-    free(buffer);
 }
