@@ -1,6 +1,6 @@
 # Ray Tracing Future Intent
 
-Last updated: 2026-04-09
+Last updated: 2026-04-10
 
 ## Scaffold Alignment Intent
 1. Keep the current strong subsystem split while normalizing scaffold contracts.
@@ -69,7 +69,7 @@ Last updated: 2026-04-09
   - wrap-up commit title used:
     - `Post-Scaffold Font Size Standardization`
   - completed trio 2D/3D parity propagation with `line_drawing`:
-    - `../docs/private_program_docs/ray_tracing/2026-03-30_ray_tracing_2d_3d_parity_with_line_drawing_plan.md`
+    - `../../docs/private_program_docs/ray_tracing/2026-03-30_ray_tracing_2d_3d_parity_with_line_drawing_plan.md`
   - current status:
     - `RT-U0` complete (baseline freeze and risk map)
     - `RT-U1` complete (space mode runtime contract + menu selector)
@@ -79,11 +79,11 @@ Last updated: 2026-04-09
     - `RT-U5` complete (UX + editor parity layer)
     - `RT-U6` complete (verification/docs/memory closeout)
   - closeout execution log:
-    - `../docs/private_program_docs/ray_tracing/2026-03-30_rt_u6_verification_docs_memory_closeout.md`
+    - `../../docs/private_program_docs/ray_tracing/2026-03-30_rt_u6_verification_docs_memory_closeout.md`
   - completed trio shared-scene bridge lane (`TP-S3`):
-    - `../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_pre_deep_readiness.md`
-    - `../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_deep_runtime_mapping.md`
-    - `../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_writeback_guardrails_closeout.md`
+    - `../../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_pre_deep_readiness.md`
+    - `../../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_deep_runtime_mapping.md`
+    - `../../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_writeback_guardrails_closeout.md`
 
 ## Trio Interop Next Intent
 - trio rollout milestone status:
@@ -99,9 +99,9 @@ Last updated: 2026-04-09
   - `RT-CP3` wrapper-side dispatch flow split landed (`prepare`/`execute`/`finalize`)
   - `RT-CP4` deterministic wrapper lifecycle ownership release ordering landed
   - `RT-CP5` closeout (docs/tracker/memory sync) landed:
-    - `../docs/private_program_docs/ray_tracing/2026-04-01_ray_tracing_connection_pass_cp0_cp5_execution.md`
+    - `../../docs/private_program_docs/ray_tracing/2026-04-01_ray_tracing_connection_pass_cp0_cp5_execution.md`
   - `W1` + `W2` wrapper diagnostics standardization landed:
-    - `../docs/private_program_docs/ray_tracing/2026-04-02_ray_tracing_w1_w2_wrapper_hardening.md`
+    - `../../docs/private_program_docs/ray_tracing/2026-04-02_ray_tracing_w1_w2_wrapper_hardening.md`
 - next:
   - optional `RT-CP6+`: deeper runtime/update/render/shutdown ownership extraction from `animation.c`
 
@@ -190,7 +190,7 @@ Last updated: 2026-04-09
 ## Release Readiness Next Intent
 - next active release lane:
   - `RT-RL0` through `RT-RL5` execution plan:
-    - `../docs/private_program_docs/ray_tracing/2026-04-04_ray_tracing_release_readiness_rl0_rl5_execution_plan.md`
+    - `../../docs/private_program_docs/ray_tracing/2026-04-04_ray_tracing_release_readiness_rl0_rl5_execution_plan.md`
 - completed now:
   - `RT-RL0` release contract freeze
   - `RT-RL1` bundle audit + Vulkan runtime hardening

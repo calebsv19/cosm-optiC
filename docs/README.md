@@ -19,4 +19,4 @@ Current verification contract:
 
 ## Private Planning Docs
 - Private scaffold plans and internal execution docs are in the workspace private docs bucket:
-  - `../docs/private_program_docs/ray_tracing/`
+  - `../../docs/private_program_docs/ray_tracing/`

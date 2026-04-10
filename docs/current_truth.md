@@ -1,6 +1,6 @@
 # Ray Tracing Current Truth
 
-Last updated: 2026-04-09
+Last updated: 2026-04-10
 
 ## Program Identity
 - repository directory: `ray_tracing/`
@@ -22,7 +22,7 @@ Last updated: 2026-04-09
 - active source subsystem lanes:
   - `app`, `camera`, `config`, `editor`, `engine`, `export`, `geo`, `import`, `material`, `path`, `render`, `scene`, `tools`, `ui`
 - header strategy:
-  - include-dominant (`60` headers in `include/`, `5` private headers in `src/`)
+  - include-dominant with public interfaces primarily under `include/` and a smaller private-header set under `src/`
 - decomposition snapshot (`2026-04-09`):
   - menu flow is now split into focused modules:
     - `src/ui/sdl_menu.c` (orchestration and event loop only)
@@ -262,17 +262,17 @@ Shared libs consumed by current build:
 
 ## Scaffold Migration State
 - private migration plan:
-  - `../docs/private_program_docs/ray_tracing/2026-03-28_ray_tracing_scaffold_standardization_switchover_plan.md`
+  - `../../docs/private_program_docs/ray_tracing/2026-03-28_ray_tracing_scaffold_standardization_switchover_plan.md`
 - baseline freeze:
-  - `../docs/private_program_docs/ray_tracing/2026-03-28_rt_s0_baseline_freeze_and_mapping.md`
+  - `../../docs/private_program_docs/ray_tracing/2026-03-28_rt_s0_baseline_freeze_and_mapping.md`
 - completed phases:
   - `RT-S0`, `RT-S1`, `RT-S2`, `RT-S3`, `RT-S4`, `RT-S5`
 - completed post-scaffold lanes:
   - completed font-size standardization lane:
-    - `../docs/private_program_docs/ray_tracing/2026-03-30_ray_tracing_post_scaffold_font_size_pass_plan.md`
+    - `../../docs/private_program_docs/ray_tracing/2026-03-30_ray_tracing_post_scaffold_font_size_pass_plan.md`
     - `RT-F0` through `RT-F5` complete
   - completed trio 2D/3D parity lane:
-    - `../docs/private_program_docs/ray_tracing/2026-03-30_ray_tracing_2d_3d_parity_with_line_drawing_plan.md`
+    - `../../docs/private_program_docs/ray_tracing/2026-03-30_ray_tracing_2d_3d_parity_with_line_drawing_plan.md`
     - `RT-U0` complete (baseline freeze + risk map)
     - `RT-U1` complete (space mode runtime contract + menu selector)
     - `RT-U2` complete (mode adapter seam for camera/world/ray routing)
@@ -281,11 +281,11 @@ Shared libs consumed by current build:
     - `RT-U5` complete (UX/editor parity layer)
     - `RT-U6` complete (verification/docs/memory closeout)
     - closeout log:
-      - `../docs/private_program_docs/ray_tracing/2026-03-30_rt_u6_verification_docs_memory_closeout.md`
+      - `../../docs/private_program_docs/ray_tracing/2026-03-30_rt_u6_verification_docs_memory_closeout.md`
   - completed trio shared-scene bridge lane (`TP-S3`):
-    - `../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_pre_deep_readiness.md`
-    - `../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_deep_runtime_mapping.md`
-    - `../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_writeback_guardrails_closeout.md`
+    - `../../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_pre_deep_readiness.md`
+    - `../../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_deep_runtime_mapping.md`
+    - `../../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_writeback_guardrails_closeout.md`
   - `test-stable` remains the baseline non-interactive regression gate
 
 ## NP-4 3D Behavior Slice (Current)
@@ -302,7 +302,7 @@ Shared libs consumed by current build:
 
 ## Connection Pass State
 - `RT-CP0` through `RT-CP5` are complete:
-  - `../docs/private_program_docs/ray_tracing/2026-04-01_ray_tracing_connection_pass_cp0_cp5_execution.md`
+  - `../../docs/private_program_docs/ray_tracing/2026-04-01_ray_tracing_connection_pass_cp0_cp5_execution.md`
 - cross-program wrapper initiative update (`W1` + `W2`) complete:
   - wrapper diagnostics are now canonicalized in `src/app/ray_tracing_app_main.c`:
     - structured wrapper error taxonomy + function-context boundary logging
@@ -310,7 +310,7 @@ Shared libs consumed by current build:
     - normalized dispatch summary reporting (`dispatch_count`, `dispatch_succeeded`, `last_dispatch_exit_code`)
     - deterministic wrapper exit summary diagnostics
   - execution closeout log:
-    - `../docs/private_program_docs/ray_tracing/2026-04-02_ray_tracing_w1_w2_wrapper_hardening.md`
+    - `../../docs/private_program_docs/ray_tracing/2026-04-02_ray_tracing_w1_w2_wrapper_hardening.md`
   - verification snapshot:
     - `make -C ray_tracing clean && make -C ray_tracing` -> PASS
     - `make -C ray_tracing test-stable` -> PASS
@@ -400,7 +400,7 @@ Shared libs consumed by current build:
 
 ## RT3D Execution State
 - active execution plan:
-  - `../docs/private_program_docs/ray_tracing/2026-04-02_ray_tracing_rt3d_execution_plan.md`
+  - `../../docs/private_program_docs/ray_tracing/2026-04-02_ray_tracing_rt3d_execution_plan.md`
 - `RT3D-0` runtime intake is complete:
   - runtime bridge remains strict to `scene_runtime_v1`
   - authoring payloads are rejected by runtime-only intake path
