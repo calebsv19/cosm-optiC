@@ -20,7 +20,7 @@
 #include "import/fluid_import.h"
 #include "core_space.h"
 #include "engine/Render/render_pipeline.h"
-#include "render/fluid_state.h"
+#include "render/fluid/fluid_state.h"
 #include "editor/scene_editor.h"
 #include "app/animation.h"
 #include "app/runtime_time.h"

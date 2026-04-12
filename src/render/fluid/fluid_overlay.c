@@ -1,6 +1,6 @@
 #include "render/fluid_overlay.h"
 #include "render/kit_viz_fluid_overlay_adapter.h"
-#include "render/fluid_state.h"
+#include "render/fluid/fluid_state.h"
 
 #include <math.h>
 #include <stdint.h>

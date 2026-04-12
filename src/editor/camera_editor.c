@@ -8,7 +8,7 @@
 #include "app/animation.h"
 #include "config/config_manager.h"
 #include "scene/object_manager.h"
-#include "render/fluid_state.h"
+#include "render/fluid/fluid_state.h"
 #include "math/vec2.h"
 #include "math/math_utils.h"
 

@@ -77,6 +77,10 @@ void menu_render_build_slider_layout(TTF_Font* font,
                                      MenuRuntimeState* state,
                                      const MenuButtonLayout* buttons,
                                      SliderLayout* out_layout);
+void menu_render_draw_sliders(SDL_Renderer* renderer,
+                              TTF_Font* font,
+                              MenuRuntimeState* state,
+                              const SliderLayout* layout);
 
 void menu_render_frame(SDL_Renderer* renderer, TTF_Font* font, MenuRuntimeState* state);
 

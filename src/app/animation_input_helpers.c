@@ -1,6 +1,6 @@
 #include "app/animation_input_helpers.h"
 
-#include "render/fluid_state.h"
+#include "render/fluid/fluid_state.h"
 #include "ui/text_zoom_shortcuts.h"
 
 #include <stdio.h>

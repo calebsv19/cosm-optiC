@@ -7,7 +7,7 @@
 #include "import/fluid_import.h"
 #include "import/scene_bundle_import.h"
 #include "import/shape_import.h"
-#include "render/fluid_state.h"
+#include "render/fluid/fluid_state.h"
 
 #include <json-c/json.h>
 #include <math.h>

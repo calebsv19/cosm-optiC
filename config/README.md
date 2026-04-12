@@ -18,4 +18,4 @@ Tracked defaults consumed by the menu and renderer.
   - `forwardDecay` – forward integrator falloff distance in world units (roughly pixels). Increase to let primary/reflection energy travel farther before dimming.
   - `forwardFalloffMode` – 0=quadratic (1/r²), 1=linear (1/r), 2=None. Controls how the forward integrator attenuates energy over distance.
 - `config.json` – Legacy/lightweight settings file kept for compatibility with older tools; current code primarily uses `animation_config.json`.
-- `default.ttf` – Font asset used when rendering UI text. `src/ui/sdl_menu.c` and `src/render/render_helper.c` currently hard-code system fonts, but this file is available for future packaging.
+- `default.ttf` – Font asset used when rendering UI text. `src/ui/menu/sdl_menu.c` and `src/render/helpers/render_helper.c` currently hard-code system fonts, but this file is available for future packaging.

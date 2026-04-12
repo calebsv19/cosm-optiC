@@ -125,7 +125,7 @@ CORE_TIME_TEST_DEPS := $(BUILD_DIR)/core_time/core_time.o $(BUILD_DIR)/core_time
 endif
 
 TEST_DEPS := \
-	$(BUILD_DIR)/render/material_bsdf.o \
+	$(BUILD_DIR)/render/materials/material_bsdf.o \
 	$(BUILD_DIR)/material/material_manager.o \
 	$(BUILD_DIR)/material/material.o \
 	$(BUILD_DIR)/render/integrators/direct_light_integrator.o \
@@ -140,17 +140,17 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/integrators/hybrid/camera_path_integrator.o \
 	$(BUILD_DIR)/render/integrators/camera_path_integrator_disney.o \
 	$(BUILD_DIR)/render/integrators/integrator_common.o \
-	$(BUILD_DIR)/render/irradiance_cache.o \
-	$(BUILD_DIR)/render/space_mode_adapter.o \
-	$(BUILD_DIR)/render/ray_tracing_mode_backend.o \
+	$(BUILD_DIR)/render/accel/irradiance_cache.o \
+	$(BUILD_DIR)/render/adapters/space_mode_adapter.o \
+	$(BUILD_DIR)/render/backend/ray_tracing_mode_backend.o \
 	$(BUILD_DIR)/editor/editor_mode_router.o \
-	$(BUILD_DIR)/render/uniform_grid.o \
-	$(BUILD_DIR)/render/surface_mesh.o \
-	$(BUILD_DIR)/render/render_helper.o \
-	$(BUILD_DIR)/render/ray_tracing2_preview.o \
-	$(BUILD_DIR)/render/ray_tracing2.o \
-	$(BUILD_DIR)/render/fluid_state.o \
-	$(BUILD_DIR)/render/fluid_overlay.o \
+	$(BUILD_DIR)/render/accel/uniform_grid.o \
+	$(BUILD_DIR)/render/accel/surface_mesh.o \
+	$(BUILD_DIR)/render/helpers/render_helper.o \
+	$(BUILD_DIR)/render/pipeline/ray_tracing2_preview.o \
+	$(BUILD_DIR)/render/pipeline/ray_tracing2.o \
+	$(BUILD_DIR)/render/fluid/fluid_state.o \
+	$(BUILD_DIR)/render/fluid/fluid_overlay.o \
 	$(BUILD_DIR)/scene/object_manager.o \
 	$(BUILD_DIR)/geo/shape_adapter.o \
 	$(BUILD_DIR)/geo/geolib/shape_asset.o \
@@ -159,8 +159,9 @@ TEST_DEPS := \
 	$(BUILD_DIR)/timer_hud_external/cJSON.o \
 	$(BUILD_DIR)/camera/camera.o \
 	$(BUILD_DIR)/app/data_paths.o \
-	$(BUILD_DIR)/config/config_file_io.o \
-	$(BUILD_DIR)/config/config_manager.o \
+	$(BUILD_DIR)/config/io/config_file_io.o \
+	$(BUILD_DIR)/config/scene/config_scene_path_io.o \
+	$(BUILD_DIR)/config/core/config_manager.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_core.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_json.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_flatten.o \
@@ -168,7 +169,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/import/fluid_pack_import.o \
 	$(BUILD_DIR)/import/scene_bundle_import.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge.o \
-	$(BUILD_DIR)/render/kit_viz_fluid_overlay_adapter.o \
+	$(BUILD_DIR)/render/adapters/kit_viz_fluid_overlay_adapter.o \
 	$(BUILD_DIR)/core_base/core_base.o \
 	$(BUILD_DIR)/core_io/core_io.o \
 	$(BUILD_DIR)/core_data/core_data.o \
@@ -650,7 +651,7 @@ $(TEST_BIN): $(TEST_OBJ) $(TEST_DEPS)
 SHARED_THEME_FONT_ADAPTER_TEST_BIN := $(BUILD_DIR)/tests/shared_theme_font_adapter_test
 SHARED_THEME_FONT_ADAPTER_TEST_SRCS := \
 	$(TEST_DIR)/shared_theme_font_adapter_test.c \
-	$(SRC_DIR)/ui/shared_theme_font_adapter.c \
+	$(SRC_DIR)/ui/menu/shared_theme_font_adapter.c \
 	$(CORE_THEME_DIR)/src/core_theme.c \
 	$(CORE_FONT_DIR)/src/core_font.c \
 	$(CORE_IO_DIR)/src/core_io.c \

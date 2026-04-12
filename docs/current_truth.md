@@ -23,15 +23,15 @@ Last updated: 2026-04-10
   - `app`, `camera`, `config`, `editor`, `engine`, `export`, `geo`, `import`, `material`, `path`, `render`, `scene`, `tools`, `ui`
 - header strategy:
   - include-dominant with public interfaces primarily under `include/` and a smaller private-header set under `src/`
-- decomposition snapshot (`2026-04-09`):
+  - decomposition snapshot (`2026-04-09`):
   - menu flow is now split into focused modules:
-    - `src/ui/sdl_menu.c` (orchestration and event loop only)
-    - `src/ui/sdl_menu_input.c` (keyboard/mouse/edit interactions)
-    - `src/ui/sdl_menu_render.c` (layout and draw pass)
-    - `src/ui/sdl_menu_state.c` (menu runtime state + manifest list management)
+    - `src/ui/menu/sdl_menu.c` (orchestration and event loop only)
+    - `src/ui/menu/sdl_menu_input.c` (keyboard/mouse/edit interactions)
+    - `src/ui/menu/sdl_menu_render.c` (layout and draw pass)
+    - `src/ui/menu/sdl_menu_state.c` (menu runtime state + manifest list management)
   - config file path/JSON helpers were extracted into:
     - `include/config/config_file_io.h`
-    - `src/config/config_file_io.c`
+    - `src/config/io/config_file_io.c`
   - runtime helper slices extracted from `src/app/animation.c`:
     - `src/app/animation_fluid_scene.c`
     - `src/app/animation_input_helpers.c`
@@ -39,7 +39,7 @@ Last updated: 2026-04-10
     - `src/app/data_paths.c`
   - editor/render helper slices extracted:
     - `src/editor/object_editor_panels.c`
-    - `src/render/ray_tracing2_preview.c`
+    - `src/render/pipeline/ray_tracing2_preview.c`
 
 ## Runtime/Verification Contract (Current)
 - build:
@@ -157,7 +157,7 @@ Data-path contract lane (`DP S0-S5`) status:
 Current baseline result (`RT-S0`):
 - all commands pass
 - one warning observed during build:
-  - `src/render/material_bsdf.c`: unused function `SelectModel`
+  - `src/render/materials/material_bsdf.c`: unused function `SelectModel`
 
 ## Shared Dependency Snapshot
 Shared libs consumed by current build:
@@ -197,14 +197,14 @@ Shared libs consumed by current build:
 - mode adapter seam is active (`RT-U2`):
   - canonical adapter files:
     - `include/render/space_mode_adapter.h`
-    - `src/render/space_mode_adapter.c`
+    - `src/render/adapters/space_mode_adapter.c`
   - editor and render callsites now route screen/world conversion through adapter APIs
   - key render ray/hit setup paths now use adapter entrypoints (`MakeRay`, `MakeOffsetRay`, `ResetHit`)
   - render/path ray math remains 2D-equivalent at adapter seam level; NP-4 adds real z-aware visual behavior in render lane without schema fork.
 - backend separation + mode routing is active (`RT-U4`):
   - canonical runtime route files:
     - `include/render/ray_tracing_mode_backend.h`
-    - `src/render/ray_tracing_mode_backend.c`
+    - `src/render/backend/ray_tracing_mode_backend.c`
   - route contract now centralizes:
     - mode lane selection (`2D` canonical, `3D` controlled)
     - projection fallback (`SPACE_MODE_3D` -> controlled 2D projection lane)

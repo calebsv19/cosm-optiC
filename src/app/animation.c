@@ -65,7 +65,7 @@ int direction = 1;      // +1 for forward, -1 for reverse.
 static const double kPreviewBg = 60.0;
 
 static const char* s_fluidManifestOverride = NULL;
-#include "render/fluid_state.h"
+#include "render/fluid/fluid_state.h"
 
 void UpdateSimulation(double* accumulator, double* currentTime, int* loopCount);
 

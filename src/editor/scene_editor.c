@@ -6,7 +6,7 @@
 #include "config/config_manager.h"  //  Required for loading/saving scene settings
 #include "scene/object_manager.h"
 #include "app/animation.h"
-#include "render/fluid_state.h"
+#include "render/fluid/fluid_state.h"
 #include "camera/camera.h"
 #include "editor/editor_mode_router.h"
 #include "engine/Render/render_pipeline.h"

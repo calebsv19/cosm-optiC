@@ -107,7 +107,7 @@ Last updated: 2026-04-10
 
 ## Maintainability Decomposition Status
 - completed in the recent decomposition tranche:
-  - config file I/O helpers extracted to `include/config/config_file_io.h` + `src/config/config_file_io.c`
+  - config file I/O helpers extracted to `include/config/config_file_io.h` + `src/config/io/config_file_io.c`
   - runtime helper slices extracted from `animation.c` into:
     - `src/app/animation_fluid_scene.c`
     - `src/app/animation_input_helpers.c`
@@ -115,11 +115,11 @@ Last updated: 2026-04-10
     - `src/app/data_paths.c`
   - editor/render helper splits landed:
     - `src/editor/object_editor_panels.c`
-    - `src/render/ray_tracing2_preview.c`
+    - `src/render/pipeline/ray_tracing2_preview.c`
   - menu decomposition moved to focused lanes:
-    - `src/ui/sdl_menu_input.c`
-    - `src/ui/sdl_menu_render.c`
-    - `src/ui/sdl_menu_state.c`
+    - `src/ui/menu/sdl_menu_input.c`
+    - `src/ui/menu/sdl_menu_render.c`
+    - `src/ui/menu/sdl_menu_state.c`
 - next:
   - keep extracting high-churn helper families out of `src/app/animation.c` while preserving wrapper ownership and existing behavior.
 
