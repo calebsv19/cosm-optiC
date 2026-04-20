@@ -1,11 +1,16 @@
 #include <math.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "render/material_bsdf.h"
+#include "material/material_manager.h"
 #include "render/fast_rng.h"
 #include "config/config_manager.h"
+#include "app/data_paths.h"
 #include "app/animation.h"
 #include "editor/editor_mode_router.h"
 #include "render/ray_tracing2.h"
@@ -20,6 +25,8 @@
 #include "render/render_helper.h"
 #include "import/runtime_scene_bridge.h"
 #include "core_scene_compile.h"
+#include "ui/scene_source_catalog.h"
+#include "ui/sdl_menu_state.h"
 #include "fluid_pack_import_test.h"
 #include "kit_viz_fluid_overlay_adapter_test.h"
 #include "render_metrics_dataset_test.h"
@@ -30,6 +37,7 @@
 
 static int failures = 0;
 static const char* kRuntimeSceneConfigPath = "data/runtime/scene_config.json";
+static const char* kRuntimeAnimationConfigPath = "data/runtime/animation_config.json";
 
 static void assert_close(const char* name, double a, double b, double tol) {
     if (fabs(a - b) > tol) {
@@ -86,6 +94,74 @@ static bool write_text_file(const char* path, const char* text) {
     return written == len;
 }
 
+static bool path_list_contains(const char *const *paths,
+                               size_t count,
+                               const char *needle) {
+    if (!paths || !needle || !needle[0]) return false;
+    for (size_t i = 0; i < count; ++i) {
+        if (paths[i] && strcmp(paths[i], needle) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool catalog_contains_path_source(const SceneSourceCatalogEntry *entries,
+                                         size_t count,
+                                         const char *path,
+                                         int source) {
+    char resolved[PATH_MAX];
+    const char *needle = path;
+    if (!entries || !path || !path[0]) return false;
+    if (realpath(path, resolved)) {
+        needle = resolved;
+    }
+    for (size_t i = 0; i < count; ++i) {
+        if (entries[i].source == source && strcmp(entries[i].path, needle) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool catalog_contains_path_any_source(const SceneSourceCatalogEntry *entries,
+                                             size_t count,
+                                             const char *path) {
+    char resolved[PATH_MAX];
+    const char *needle = path;
+    if (!entries || !path || !path[0]) return false;
+    if (realpath(path, resolved)) {
+        needle = resolved;
+    }
+    for (size_t i = 0; i < count; ++i) {
+        if (strcmp(entries[i].path, needle) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static size_t catalog_count_source(const SceneSourceCatalogEntry *entries,
+                                   size_t count,
+                                   int source) {
+    size_t total = 0;
+    if (!entries) return 0;
+    for (size_t i = 0; i < count; ++i) {
+        if (entries[i].source == source) total += 1;
+    }
+    return total;
+}
+
+static int digest_count_kind(const RuntimeSceneBridge3DDigestState *digest,
+                             RuntimeSceneBridgePrimitiveKind kind) {
+    int total = 0;
+    if (!digest) return 0;
+    for (int i = 0; i < digest->primitive_count; ++i) {
+        if (digest->primitives[i].kind == kind) total += 1;
+    }
+    return total;
+}
+
 static void restore_runtime_scene_config(char* backup, size_t backup_size) {
     if (backup) {
         FILE* f = fopen(kRuntimeSceneConfigPath, "wb");
@@ -97,6 +173,19 @@ static void restore_runtime_scene_config(char* backup, size_t backup_size) {
         return;
     }
     remove(kRuntimeSceneConfigPath);
+}
+
+static void restore_runtime_animation_config(char* backup, size_t backup_size) {
+    if (backup) {
+        FILE* f = fopen(kRuntimeAnimationConfigPath, "wb");
+        if (f) {
+            fwrite(backup, 1, backup_size, f);
+            fclose(f);
+        }
+        free(backup);
+        return;
+    }
+    remove(kRuntimeAnimationConfigPath);
 }
 
 static MaterialBSDF make_diffuse(double albedo) {
@@ -235,6 +324,374 @@ static int test_scene_object_z_missing_fallback(void) {
     }
 
     restore_runtime_scene_config(backup, backup_size);
+    return 0;
+}
+
+static int test_animation_scene_source_legacy_migration(void) {
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+    const char* json_legacy_fluid =
+        "{\n"
+        "  \"inputRoot\": \"config\",\n"
+        "  \"outputRoot\": \"data/runtime\",\n"
+        "  \"spaceMode\": 0,\n"
+        "  \"useFluidScene\": true,\n"
+        "  \"fluidManifest\": \"import/legacy_manifest.json\"\n"
+        "}\n";
+    const char* json_legacy_missing_manifest =
+        "{\n"
+        "  \"inputRoot\": \"config\",\n"
+        "  \"outputRoot\": \"data/runtime\",\n"
+        "  \"spaceMode\": 0,\n"
+        "  \"useFluidScene\": true,\n"
+        "  \"fluidManifest\": \"\"\n"
+        "}\n";
+
+    bool wrote = write_text_file(kRuntimeAnimationConfigPath, json_legacy_fluid);
+    assert_true("scene_source_legacy_write_fluid", wrote);
+    if (wrote) {
+        LoadAnimationConfig();
+        assert_true("scene_source_legacy_migrates_to_fluid",
+                    animSettings.sceneSource == SCENE_SOURCE_FLUID_MANIFEST);
+        assert_true("scene_source_legacy_use_fluid_true", animSettings.useFluidScene);
+    }
+
+    wrote = write_text_file(kRuntimeAnimationConfigPath, json_legacy_missing_manifest);
+    assert_true("scene_source_legacy_write_missing_manifest", wrote);
+    if (wrote) {
+        LoadAnimationConfig();
+        assert_true("scene_source_legacy_missing_manifest_fallback_2d",
+                    animSettings.sceneSource == SCENE_SOURCE_CONFIG_2D);
+        assert_true("scene_source_legacy_missing_manifest_use_fluid_false",
+                    !animSettings.useFluidScene);
+    }
+
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
+static int test_animation_scene_source_roundtrip_runtime_lane(void) {
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    animSettings.useFluidScene = true;
+    strncpy(animSettings.fluidManifest, "import/should_not_drive_runtime_lane.json",
+            sizeof(animSettings.fluidManifest) - 1);
+    animSettings.fluidManifest[sizeof(animSettings.fluidManifest) - 1] = '\0';
+    strncpy(animSettings.runtimeScenePath, "../shared/assets/scenes/trio_contract/scene_runtime_min.json",
+            sizeof(animSettings.runtimeScenePath) - 1);
+    animSettings.runtimeScenePath[sizeof(animSettings.runtimeScenePath) - 1] = '\0';
+
+    SaveAnimationConfig();
+    animSettings.sceneSource = SCENE_SOURCE_CONFIG_2D;
+    animSettings.useFluidScene = false;
+    animSettings.fluidManifest[0] = '\0';
+    animSettings.runtimeScenePath[0] = '\0';
+    LoadAnimationConfig();
+
+    assert_true("scene_source_roundtrip_runtime_lane",
+                animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE);
+    assert_true("scene_source_roundtrip_runtime_not_fluid", !animSettings.useFluidScene);
+    assert_true("scene_source_roundtrip_runtime_path",
+                strcmp(animSettings.runtimeScenePath,
+                       "../shared/assets/scenes/trio_contract/scene_runtime_min.json") == 0);
+
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
+static int test_animation_scene_source_select_runtime_failure_rolls_back(void) {
+    static const char *kFixtureRuntimePath = "../shared/assets/scenes/trio_contract/scene_runtime_min.json";
+    static const char *kMissingRuntimePath = "/tmp/ray_tracing_missing_scene_source_contract.json";
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+
+    remove(kMissingRuntimePath);
+    MaterialManagerInit();
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    animSettings.useFluidScene = false;
+    animSettings.fluidManifest[0] = '\0';
+    strncpy(animSettings.runtimeScenePath, kFixtureRuntimePath, sizeof(animSettings.runtimeScenePath) - 1);
+    animSettings.runtimeScenePath[sizeof(animSettings.runtimeScenePath) - 1] = '\0';
+
+    assert_true("scene_source_select_runtime_baseline_source_runtime",
+                animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE);
+    assert_true("scene_source_select_runtime_baseline_runtime_path",
+                strcmp(animSettings.runtimeScenePath, kFixtureRuntimePath) == 0);
+
+    assert_true("scene_source_select_runtime_missing_rejected",
+                !AnimationSelectSceneSource(SCENE_SOURCE_RUNTIME_SCENE,
+                                            kMissingRuntimePath,
+                                            true));
+    assert_true("scene_source_select_runtime_rollback_source_runtime",
+                animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE);
+    assert_true("scene_source_select_runtime_rollback_runtime_path",
+                strcmp(animSettings.runtimeScenePath, kFixtureRuntimePath) == 0);
+    assert_true("scene_source_select_runtime_rollback_not_fluid",
+                !animSettings.useFluidScene);
+
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
+static int test_animation_scene_source_select_runtime_persists_on_save(void) {
+    static const char *kFixtureRuntimePath = "../shared/assets/scenes/trio_contract/scene_runtime_min.json";
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+
+    MaterialManagerInit();
+    assert_true("scene_source_select_runtime_apply_ok",
+                AnimationSelectSceneSource(SCENE_SOURCE_RUNTIME_SCENE,
+                                           kFixtureRuntimePath,
+                                           false));
+    assert_true("scene_source_select_runtime_apply_source_runtime",
+                animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE);
+    assert_true("scene_source_select_runtime_apply_runtime_path",
+                strcmp(animSettings.runtimeScenePath, kFixtureRuntimePath) == 0);
+    assert_true("scene_source_select_runtime_apply_not_fluid",
+                !animSettings.useFluidScene);
+
+    SaveAnimationConfig();
+    animSettings.sceneSource = SCENE_SOURCE_CONFIG_2D;
+    animSettings.useFluidScene = false;
+    animSettings.fluidManifest[0] = '\0';
+    animSettings.runtimeScenePath[0] = '\0';
+    LoadAnimationConfig();
+
+    assert_true("scene_source_select_runtime_persist_source_runtime",
+                animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE);
+    assert_true("scene_source_select_runtime_persist_runtime_path",
+                strcmp(animSettings.runtimeScenePath, kFixtureRuntimePath) == 0);
+    assert_true("scene_source_select_runtime_persist_not_fluid",
+                !animSettings.useFluidScene);
+
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
+static int test_animation_apply_active_scene_source_invalid_fluid_falls_back_2d(void) {
+    static const char *kMissingFluidPath = "/tmp/ray_tracing_missing_fluid_manifest.json";
+    static const char *kRuntimeFixturePath = "../shared/assets/scenes/trio_contract/scene_runtime_min.json";
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+
+    remove(kMissingFluidPath);
+    animSettings.sceneSource = SCENE_SOURCE_FLUID_MANIFEST;
+    animSettings.useFluidScene = true;
+    strncpy(animSettings.fluidManifest, kMissingFluidPath, sizeof(animSettings.fluidManifest) - 1);
+    animSettings.fluidManifest[sizeof(animSettings.fluidManifest) - 1] = '\0';
+    strncpy(animSettings.runtimeScenePath, kRuntimeFixturePath, sizeof(animSettings.runtimeScenePath) - 1);
+    animSettings.runtimeScenePath[sizeof(animSettings.runtimeScenePath) - 1] = '\0';
+
+    assert_true("scene_source_invalid_fluid_apply_rejected",
+                !AnimationApplyActiveSceneSource());
+    assert_true("scene_source_invalid_fluid_fallback_source_2d",
+                animSettings.sceneSource == SCENE_SOURCE_CONFIG_2D);
+    assert_true("scene_source_invalid_fluid_fallback_not_fluid",
+                !animSettings.useFluidScene);
+    assert_true("scene_source_invalid_fluid_fallback_fluid_path_cleared",
+                animSettings.fluidManifest[0] == '\0');
+    assert_true("scene_source_invalid_fluid_fallback_runtime_path_cleared",
+                animSettings.runtimeScenePath[0] == '\0');
+
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
+static int test_animation_restore_active_scene_source_persists_fallback_correction(void) {
+    static const char *kMissingRuntimePath = "/tmp/ray_tracing_missing_restore_runtime_scene.json";
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+    const char *json_invalid_runtime_source =
+        "{\n"
+        "  \"inputRoot\": \"config\",\n"
+        "  \"outputRoot\": \"data/runtime\",\n"
+        "  \"spaceMode\": 1,\n"
+        "  \"sceneSource\": 2,\n"
+        "  \"useFluidScene\": false,\n"
+        "  \"fluidManifest\": \"\",\n"
+        "  \"runtimeScenePath\": \"/tmp/ray_tracing_missing_restore_runtime_scene.json\"\n"
+        "}\n";
+
+    remove(kMissingRuntimePath);
+    assert_true("scene_source_restore_write_invalid_runtime",
+                write_text_file(kRuntimeAnimationConfigPath, json_invalid_runtime_source));
+    LoadAnimationConfig();
+
+    assert_true("scene_source_restore_invalid_runtime_rejected",
+                !AnimationRestoreActiveSceneSource(true));
+    assert_true("scene_source_restore_invalid_runtime_fallback_source_2d",
+                animSettings.sceneSource == SCENE_SOURCE_CONFIG_2D);
+    assert_true("scene_source_restore_invalid_runtime_fallback_runtime_path_cleared",
+                animSettings.runtimeScenePath[0] == '\0');
+
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    animSettings.runtimeScenePath[0] = 'x';
+    animSettings.runtimeScenePath[1] = '\0';
+    LoadAnimationConfig();
+    assert_true("scene_source_restore_persisted_source_2d",
+                animSettings.sceneSource == SCENE_SOURCE_CONFIG_2D);
+    assert_true("scene_source_restore_persisted_runtime_path_cleared",
+                animSettings.runtimeScenePath[0] == '\0');
+
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
+static int test_manifest_default_roots_expands_runtime_and_legacy_paths(void) {
+    const char *input_env = getenv("RAY_TRACING_INPUT_ROOT");
+    const char *output_env = getenv("RAY_TRACING_OUTPUT_ROOT");
+    char input_backup[PATH_MAX] = {0};
+    char output_backup[PATH_MAX] = {0};
+    bool had_input_env = false;
+    bool had_output_env = false;
+    const char **roots = NULL;
+    size_t root_count = 0;
+
+    if (input_env && input_env[0]) {
+        strncpy(input_backup, input_env, sizeof(input_backup) - 1);
+        input_backup[sizeof(input_backup) - 1] = '\0';
+        had_input_env = true;
+    }
+    if (output_env && output_env[0]) {
+        strncpy(output_backup, output_env, sizeof(output_backup) - 1);
+        output_backup[sizeof(output_backup) - 1] = '\0';
+        had_output_env = true;
+    }
+
+    unsetenv("RAY_TRACING_INPUT_ROOT");
+    unsetenv("RAY_TRACING_OUTPUT_ROOT");
+
+    root_count = ray_tracing_manifest_default_roots(&roots);
+    assert_true("manifest_roots_nonempty", root_count > 0 && roots != NULL);
+    assert_true("manifest_roots_has_config_samples",
+                path_list_contains(roots, root_count, "config/samples"));
+    assert_true("manifest_roots_has_runtime_scenes",
+                path_list_contains(roots, root_count, "data/runtime/scenes"));
+    assert_true("manifest_roots_has_legacy_physics_samples",
+                path_list_contains(roots, root_count, "../physics_sim/config/samples"));
+
+    if (had_input_env) {
+        setenv("RAY_TRACING_INPUT_ROOT", input_backup, 1);
+    } else {
+        unsetenv("RAY_TRACING_INPUT_ROOT");
+    }
+    if (had_output_env) {
+        setenv("RAY_TRACING_OUTPUT_ROOT", output_backup, 1);
+    } else {
+        unsetenv("RAY_TRACING_OUTPUT_ROOT");
+    }
+    return 0;
+}
+
+static int test_scene_source_catalog_collect_admits_runtime_and_manifest_lanes(void) {
+    char tmp_template[] = "/tmp/ray_tracing_catalog_s6_XXXXXX";
+    char *tmp_root = mkdtemp(tmp_template);
+    char runtime_path[PATH_MAX];
+    char authoring_path[PATH_MAX];
+    char manifest_path[PATH_MAX];
+    const char *roots[1];
+    SceneSourceCatalogEntry entries[16];
+    size_t entry_count = 0;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_catalog_runtime\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[]"
+        "}";
+    const char *authoring_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_authoring_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_catalog_authoring\","
+        "\"objects\":[]"
+        "}";
+    const char *manifest_json =
+        "{"
+        "\"schema\":\"fluid_manifest_v1\","
+        "\"meta\":{\"name\":\"s6_catalog\"}"
+        "}";
+
+    assert_true("scene_catalog_tmpdir_created", tmp_root != NULL);
+    if (!tmp_root) return 0;
+
+    snprintf(runtime_path, sizeof(runtime_path), "%s/scene_runtime.json", tmp_root);
+    snprintf(authoring_path, sizeof(authoring_path), "%s/scene_authoring.json", tmp_root);
+    snprintf(manifest_path, sizeof(manifest_path), "%s/manifest.json", tmp_root);
+
+    assert_true("scene_catalog_write_runtime", write_text_file(runtime_path, runtime_json));
+    assert_true("scene_catalog_write_authoring", write_text_file(authoring_path, authoring_json));
+    assert_true("scene_catalog_write_manifest", write_text_file(manifest_path, manifest_json));
+
+    roots[0] = tmp_root;
+    entry_count = scene_source_catalog_collect(entries,
+                                               sizeof(entries) / sizeof(entries[0]),
+                                               roots,
+                                               1,
+                                               manifest_path,
+                                               authoring_path);
+
+    assert_true("scene_catalog_entry_count_min", entry_count >= 2);
+    assert_true("scene_catalog_runtime_count_one",
+                catalog_count_source(entries, entry_count, SCENE_SOURCE_RUNTIME_SCENE) == 1);
+    assert_true("scene_catalog_manifest_present",
+                catalog_contains_path_source(entries,
+                                             entry_count,
+                                             manifest_path,
+                                             SCENE_SOURCE_FLUID_MANIFEST));
+    assert_true("scene_catalog_runtime_present",
+                catalog_contains_path_source(entries,
+                                             entry_count,
+                                             runtime_path,
+                                             SCENE_SOURCE_RUNTIME_SCENE));
+    assert_true("scene_catalog_reject_authoring_variant",
+                !catalog_contains_path_any_source(entries, entry_count, authoring_path));
+
+    remove(runtime_path);
+    remove(authoring_path);
+    remove(manifest_path);
+    rmdir(tmp_root);
+    return 0;
+}
+
+static int test_menu_state_manifest_option_visibility_matrix(void) {
+    const int original_space_mode = animSettings.spaceMode;
+    MenuRuntimeState state = {0};
+    ManifestOption config_2d = {0};
+    ManifestOption fluid_manifest = {0};
+    ManifestOption runtime_scene = {0};
+
+    config_2d.source = SCENE_SOURCE_CONFIG_2D;
+    fluid_manifest.source = SCENE_SOURCE_FLUID_MANIFEST;
+    runtime_scene.source = SCENE_SOURCE_RUNTIME_SCENE;
+
+    animSettings.spaceMode = SPACE_MODE_2D;
+    assert_true("menu_manifest_visible_2d_config",
+                menu_state_manifest_option_visible(&state, &config_2d));
+    assert_true("menu_manifest_visible_2d_fluid",
+                menu_state_manifest_option_visible(&state, &fluid_manifest));
+    assert_true("menu_manifest_visible_2d_runtime_hidden",
+                !menu_state_manifest_option_visible(&state, &runtime_scene));
+
+    animSettings.spaceMode = SPACE_MODE_3D;
+    assert_true("menu_manifest_visible_3d_runtime",
+                menu_state_manifest_option_visible(&state, &runtime_scene));
+    assert_true("menu_manifest_visible_3d_config_hidden",
+                !menu_state_manifest_option_visible(&state, &config_2d));
+    assert_true("menu_manifest_visible_3d_fluid_hidden",
+                !menu_state_manifest_option_visible(&state, &fluid_manifest));
+
+    animSettings.spaceMode = original_space_mode;
     return 0;
 }
 
@@ -505,6 +962,55 @@ static int test_runtime_scene_bridge_apply_3d_primitives_scaffold(void) {
     return 0;
 }
 
+static int test_runtime_scene_bridge_apply_ps4d_fixture_retains_digest_truth(void) {
+    RuntimeSceneBridgePreflight summary;
+    RuntimeSceneBridge3DScaffoldState scaffold;
+    RuntimeSceneBridge3DDigestState digest;
+    bool ok = runtime_scene_bridge_apply_file("../physics_sim/config/samples/ps4d_runtime_scene_visual_test.json",
+                                              &summary);
+    assert_true("runtime_scene_ps4d_apply_ok", ok);
+    if (!ok) return 0;
+
+    assert_true("runtime_scene_ps4d_summary_valid", summary.valid_contract);
+    assert_true("runtime_scene_ps4d_object_count", sceneSettings.objectCount == 3);
+    assert_true("runtime_scene_ps4d_space_mode_3d", animSettings.spaceMode == SPACE_MODE_3D);
+
+    runtime_scene_bridge_get_last_3d_scaffold_state(&scaffold);
+    assert_true("runtime_scene_ps4d_scaffold_valid", scaffold.valid);
+    assert_true("runtime_scene_ps4d_scaffold_plane_count", scaffold.plane_count == 1);
+    assert_true("runtime_scene_ps4d_scaffold_box_count", scaffold.box_count == 2);
+
+    runtime_scene_bridge_get_last_3d_digest_state(&digest);
+    assert_true("runtime_scene_ps4d_digest_valid", digest.valid);
+    assert_true("runtime_scene_ps4d_digest_has_bounds", digest.has_scene_bounds);
+    assert_true("runtime_scene_ps4d_digest_bounds_enabled", digest.bounds_enabled);
+    assert_true("runtime_scene_ps4d_digest_bounds_clamp", digest.bounds_clamp_on_edit);
+    assert_close("runtime_scene_ps4d_digest_bounds_min_x", digest.bounds_min_x, -6.0, 1e-9);
+    assert_close("runtime_scene_ps4d_digest_bounds_min_y", digest.bounds_min_y, -5.0, 1e-9);
+    assert_close("runtime_scene_ps4d_digest_bounds_min_z", digest.bounds_min_z, -2.5, 1e-9);
+    assert_close("runtime_scene_ps4d_digest_bounds_max_x", digest.bounds_max_x, 6.0, 1e-9);
+    assert_close("runtime_scene_ps4d_digest_bounds_max_y", digest.bounds_max_y, 5.0, 1e-9);
+    assert_close("runtime_scene_ps4d_digest_bounds_max_z", digest.bounds_max_z, 4.0, 1e-9);
+    assert_true("runtime_scene_ps4d_digest_has_construction_plane", digest.has_construction_plane);
+    assert_true("runtime_scene_ps4d_digest_construction_mode",
+                strcmp(digest.construction_plane_mode, "axis_aligned") == 0);
+    assert_true("runtime_scene_ps4d_digest_construction_axis",
+                strcmp(digest.construction_plane_axis, "xy") == 0);
+    assert_close("runtime_scene_ps4d_digest_construction_offset",
+                 digest.construction_plane_offset,
+                 -1.0,
+                 1e-9);
+    assert_true("runtime_scene_ps4d_digest_primitive_count", digest.primitive_count == 3);
+    assert_true("runtime_scene_ps4d_digest_plane_count", digest.plane_primitive_count == 1);
+    assert_true("runtime_scene_ps4d_digest_prism_count", digest.rect_prism_primitive_count == 2);
+    assert_true("runtime_scene_ps4d_digest_plane_kind_count",
+                digest_count_kind(&digest, RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE) == 1);
+    assert_true("runtime_scene_ps4d_digest_prism_kind_count",
+                digest_count_kind(&digest, RUNTIME_SCENE_BRIDGE_PRIMITIVE_RECT_PRISM) == 2);
+
+    return 0;
+}
+
 static int test_scene_compile_and_preflight_roundtrip(void) {
     const char *authoring_json =
         "{"
@@ -546,6 +1052,7 @@ static int test_scene_compile_and_preflight_roundtrip(void) {
 
 static int test_runtime_scene_bridge_apply_runtime_fixture(void) {
     RuntimeSceneBridgePreflight summary;
+    RuntimeSceneBridgePreflight alias_summary;
     bool ok = runtime_scene_bridge_apply_file("../shared/assets/scenes/trio_contract/scene_runtime_min.json",
                                               &summary);
     assert_true("runtime_scene_apply_fixture_ok", ok);
@@ -563,6 +1070,21 @@ static int test_runtime_scene_bridge_apply_runtime_fixture(void) {
     assert_close("runtime_scene_apply_camera_x", sceneSettings.camera.x, 0.0, 1e-9);
     assert_close("runtime_scene_apply_camera_y", sceneSettings.camera.y, 0.0, 1e-9);
     assert_true("runtime_scene_apply_space_mode_2d", animSettings.spaceMode == SPACE_MODE_2D);
+    assert_true("runtime_scene_apply_source_runtime_scene",
+                animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE);
+    assert_true("runtime_scene_apply_source_runtime_scene_path",
+                strcmp(animSettings.runtimeScenePath,
+                       "../shared/assets/scenes/trio_contract/scene_runtime_min.json") == 0);
+
+    // Regression: menu apply path passes animSettings.runtimeScenePath as input.
+    ok = runtime_scene_bridge_apply_file(animSettings.runtimeScenePath, &alias_summary);
+    assert_true("runtime_scene_apply_alias_buffer_ok", ok);
+    if (ok) {
+        assert_true("runtime_scene_apply_alias_buffer_valid_contract", alias_summary.valid_contract);
+        assert_true("runtime_scene_apply_alias_buffer_path_retained",
+                    strcmp(animSettings.runtimeScenePath,
+                           "../shared/assets/scenes/trio_contract/scene_runtime_min.json") == 0);
+    }
     return 0;
 }
 
@@ -615,6 +1137,10 @@ static int test_runtime_scene_bridge_apply_compile_output(void) {
             assert_close("runtime_scene_apply_compile_y", sceneSettings.sceneObjects[0].y, 6.0, 1e-9);
             assert_close("runtime_scene_apply_compile_z", sceneSettings.sceneObjects[0].z, 2.5, 1e-9);
             assert_true("runtime_scene_apply_compile_space3d", animSettings.spaceMode == SPACE_MODE_3D);
+            assert_true("runtime_scene_apply_compile_source_runtime_scene",
+                        animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE);
+            assert_true("runtime_scene_apply_compile_runtime_path_empty",
+                        animSettings.runtimeScenePath[0] == '\0');
         }
     }
 
@@ -1237,6 +1763,14 @@ static int test_mode_backend_route_2d_defaults(void) {
 
     RayTracingRuntimeRoute route = RayTracingModeBackend_ResolveRoute();
 
+    assert_true("route2d_family_canonical",
+                route.routeFamily == RAY_TRACING_ROUTE_CANONICAL_2D);
+    assert_true("route2d_is_canonical_helper",
+                RayTracingModeBackend_IsCanonical2D(&route));
+    assert_true("route2d_not_compat_helper",
+                !RayTracingModeBackend_IsCompat3DFallback(&route));
+    assert_true("route2d_not_native_helper",
+                !RayTracingModeBackend_IsNative3D(&route));
     assert_true("route2d_lane_canonical", route.backendLane == RAY_TRACING_BACKEND_CANONICAL_2D);
     assert_true("route2d_no_fallback", !route.fallbackTo2DProjection);
     assert_true("route2d_projection_2d", route.projectionMode == SPACE_MODE_2D);
@@ -1294,6 +1828,14 @@ static int test_mode_backend_route_3d_controlled_lane(void) {
 
     RayTracingRuntimeRoute route = RayTracingModeBackend_ResolveRoute();
 
+    assert_true("route3d_family_compat_fallback",
+                route.routeFamily == RAY_TRACING_ROUTE_COMPAT_3D_FALLBACK);
+    assert_true("route3d_not_canonical_helper",
+                !RayTracingModeBackend_IsCanonical2D(&route));
+    assert_true("route3d_compat_helper",
+                RayTracingModeBackend_IsCompat3DFallback(&route));
+    assert_true("route3d_not_native_helper",
+                !RayTracingModeBackend_IsNative3D(&route));
     assert_true("route3d_lane_controlled", route.backendLane == RAY_TRACING_BACKEND_CONTROLLED_3D);
     assert_true("route3d_fallback_projection", route.fallbackTo2DProjection);
     assert_true("route3d_projection_mode_2d", route.projectionMode == SPACE_MODE_2D);
@@ -1303,6 +1845,241 @@ static int test_mode_backend_route_3d_controlled_lane(void) {
     assert_true("route3d_scaffold_primitive_count", route.scaffoldPrimitiveCount == 3);
     assert_true("route3d_integrator_preserved", route.integratorMode == 2);
     assert_true("route3d_tile_preview_off", !route.tilePreviewEnabled);
+    return 0;
+}
+
+static int test_mode_backend_scene_digest_status_2d_canonical_empty(void) {
+    RayTracingRuntimeRoute route;
+    RayTracingSceneDigestStatus status;
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.spaceMode = SPACE_MODE_2D;
+
+    route = RayTracingModeBackend_ResolveRoute();
+    status = RayTracingModeBackend_BuildSceneDigestStatus(&route);
+
+    assert_true("digest2d_route_canonical",
+                route.routeFamily == RAY_TRACING_ROUTE_CANONICAL_2D);
+    assert_true("digest2d_status_invalid", !status.valid);
+    assert_true("digest2d_primitive_count_zero", status.digestPrimitiveCount == 0);
+    assert_true("digest2d_scaffold_count_zero", status.scaffoldPrimitiveCount == 0);
+    return 0;
+}
+
+static int test_mode_backend_scene_digest_status_ps4d_fixture(void) {
+    RuntimeSceneBridgePreflight summary;
+    RayTracingRuntimeRoute route;
+    RayTracingSceneDigestStatus status;
+
+    memset(&animSettings, 0, sizeof(animSettings));
+    assert_true("digestps4d_apply_file_ok",
+                runtime_scene_bridge_apply_file("../physics_sim/config/samples/ps4d_runtime_scene_visual_test.json",
+                                                &summary));
+
+    route = RayTracingModeBackend_ResolveRoute();
+    status = RayTracingModeBackend_BuildSceneDigestStatus(&route);
+
+    assert_true("digestps4d_route_compat",
+                route.routeFamily == RAY_TRACING_ROUTE_COMPAT_3D_FALLBACK);
+    assert_true("digestps4d_status_valid", status.valid);
+    assert_true("digestps4d_bounds_present", status.hasSceneBounds);
+    assert_true("digestps4d_bounds_enabled", status.boundsEnabled);
+    assert_true("digestps4d_bounds_clamp", status.boundsClampOnEdit);
+    assert_true("digestps4d_plane_present", status.hasConstructionPlane);
+    assert_true("digestps4d_plane_mode_axis_aligned",
+                strcmp(status.constructionPlaneMode, "axis_aligned") == 0);
+    assert_true("digestps4d_plane_axis_xy",
+                strcmp(status.constructionPlaneAxis, "xy") == 0);
+    assert_close("digestps4d_plane_offset",
+                 status.constructionPlaneOffset,
+                 -1.0,
+                 1e-9);
+    assert_true("digestps4d_primitive_count_three", status.digestPrimitiveCount == 3);
+    assert_true("digestps4d_plane_count_one", status.planePrimitiveCount == 1);
+    assert_true("digestps4d_prism_count_two", status.rectPrismPrimitiveCount == 2);
+    assert_true("digestps4d_scaffold_count_three", status.scaffoldPrimitiveCount == 3);
+    return 0;
+}
+
+static int test_mode_backend_view_carrier_2d_defaults(void) {
+    Camera camera = {0};
+    RayTracingRuntimeRoute route;
+    RayTracingViewCarrier carrier;
+
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.spaceMode = SPACE_MODE_2D;
+    camera.x = 10.0;
+    camera.y = -6.0;
+    camera.zoom = 1.5;
+
+    route = RayTracingModeBackend_ResolveRoute();
+    carrier = RayTracingModeBackend_BuildViewCarrier(&camera, 320, 200, &route);
+
+    assert_true("carrier2d_family_canonical",
+                carrier.family == RAY_TRACING_VIEW_CARRIER_CANONICAL_2D);
+    assert_true("carrier2d_projection_mode_2d",
+                carrier.viewContext.mode == SPACE_MODE_2D);
+    assert_close("carrier2d_camera_x", carrier.cameraXY.x, 10.0, 1e-9);
+    assert_close("carrier2d_camera_y", carrier.cameraXY.y, -6.0, 1e-9);
+    assert_close("carrier2d_camera_z", carrier.cameraZ, 0.0, 1e-9);
+    assert_close("carrier2d_origin_x", carrier.originX, 10.0, 1e-9);
+    assert_close("carrier2d_origin_y", carrier.originY, -6.0, 1e-9);
+    assert_close("carrier2d_origin_z", carrier.originZ, 0.0, 1e-9);
+    assert_true("carrier2d_not_compat_fallback", !carrier.usesCompatProjectionFallback);
+    return 0;
+}
+
+static int test_mode_backend_view_carrier_3d_compat_fallback(void) {
+    const char *runtime_json_route_3d =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_route_3d_carrier\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[{\"position\":{\"x\":2.0,\"y\":3.0,\"z\":12.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary;
+    Camera camera = {0};
+    RayTracingRuntimeRoute route;
+    RayTracingViewCarrier carrier;
+
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.spaceMode = SPACE_MODE_3D;
+    assert_true("carrier3d_seed_runtime_apply_ok",
+                runtime_scene_bridge_apply_json(runtime_json_route_3d, &summary));
+
+    camera.x = 2.0;
+    camera.y = 3.0;
+    camera.zoom = 1.0;
+
+    route = RayTracingModeBackend_ResolveRoute();
+    carrier = RayTracingModeBackend_BuildViewCarrier(&camera, 640, 480, &route);
+
+    assert_true("carrier3d_route_is_compat_fallback",
+                route.routeFamily == RAY_TRACING_ROUTE_COMPAT_3D_FALLBACK);
+    assert_true("carrier3d_family_compat",
+                carrier.family == RAY_TRACING_VIEW_CARRIER_COMPAT_3D);
+    assert_true("carrier3d_projection_matches_route",
+                carrier.viewContext.mode == route.projectionMode);
+    assert_true("carrier3d_compat_fallback", carrier.usesCompatProjectionFallback);
+    assert_true("carrier3d_has_scaffold_camera", carrier.hasRuntimeScaffoldCamera);
+    assert_close("carrier3d_camera_x", carrier.cameraXY.x, 2.0, 1e-9);
+    assert_close("carrier3d_camera_y", carrier.cameraXY.y, 3.0, 1e-9);
+    assert_close("carrier3d_camera_z", carrier.cameraZ, 12.0, 1e-9);
+    assert_close("carrier3d_origin_x", carrier.originX, 2.0, 1e-9);
+    assert_true("carrier3d_origin_y_offset_nonzero", fabs(carrier.originY - 3.0) > 0.0);
+    assert_close("carrier3d_origin_z", carrier.originZ, 12.0, 1e-9);
+    return 0;
+}
+
+static int test_mode_backend_primitive_prep_plan_2d_defaults(void) {
+    RayTracingRuntimeRoute route;
+    RayTracingPrimitivePrepPlan plan;
+
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.spaceMode = SPACE_MODE_2D;
+
+    route = RayTracingModeBackend_ResolveRoute();
+    plan = RayTracingModeBackend_BuildPrimitivePrepPlan(&route, 4);
+
+    assert_true("prep2d_family_canonical",
+                plan.family == RAY_TRACING_PRIMITIVE_PREP_CANONICAL_2D);
+    assert_true("prep2d_uses_scene_objects", plan.usesLegacySceneObjects);
+    assert_true("prep2d_not_compat_placeholders", !plan.usesCompatPlaceholderObjects);
+    assert_true("prep2d_no_runtime_scaffold", !plan.hasRuntimeScaffoldPrimitives);
+    assert_true("prep2d_scaffold_count_zero", plan.scaffoldPrimitiveCount == 0);
+    assert_true("prep2d_mesh_enabled", plan.enableSurfaceMeshPrep);
+    assert_true("prep2d_triangles_enabled", plan.enableTriangleMeshPrep);
+    assert_true("prep2d_uniform_grid_enabled", plan.enableUniformGrid2D);
+    assert_true("prep2d_ray2d_enabled", plan.enableRay2DIntersections);
+    return 0;
+}
+
+static int test_mode_backend_primitive_prep_plan_3d_compat_placeholder(void) {
+    const char *runtime_json_route_3d =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_route_3d_prep\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"obj_box\","
+            "\"object_type\":\"box\","
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"obj_plane\","
+            "\"object_type\":\"plane\","
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"obj_mesh\","
+            "\"object_type\":\"triangle_mesh\","
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":20.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary;
+    RayTracingRuntimeRoute route;
+    RayTracingPrimitivePrepPlan plan;
+
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.spaceMode = SPACE_MODE_3D;
+    assert_true("prep3d_seed_runtime_apply_ok",
+                runtime_scene_bridge_apply_json(runtime_json_route_3d, &summary));
+
+    route = RayTracingModeBackend_ResolveRoute();
+    plan = RayTracingModeBackend_BuildPrimitivePrepPlan(&route, sceneSettings.objectCount);
+
+    assert_true("prep3d_family_compat_placeholder",
+                plan.family == RAY_TRACING_PRIMITIVE_PREP_COMPAT_3D_PLACEHOLDER);
+    assert_true("prep3d_uses_scene_objects", plan.usesLegacySceneObjects);
+    assert_true("prep3d_uses_compat_placeholders", plan.usesCompatPlaceholderObjects);
+    assert_true("prep3d_has_runtime_scaffold_primitives", plan.hasRuntimeScaffoldPrimitives);
+    assert_true("prep3d_scaffold_count_three", plan.scaffoldPrimitiveCount == 3);
+    assert_true("prep3d_mesh_enabled", plan.enableSurfaceMeshPrep);
+    assert_true("prep3d_triangles_enabled", plan.enableTriangleMeshPrep);
+    assert_true("prep3d_uniform_grid_enabled", plan.enableUniformGrid2D);
+    assert_true("prep3d_ray2d_enabled", plan.enableRay2DIntersections);
+    return 0;
+}
+
+static int test_mode_backend_primitive_prep_plan_native3d_placeholder_contract(void) {
+    RayTracingRuntimeRoute route;
+    RayTracingPrimitivePrepPlan plan;
+
+    memset(&route, 0, sizeof(route));
+    route.routeFamily = RAY_TRACING_ROUTE_NATIVE_3D;
+    route.usesRuntime3DScaffold = true;
+    route.scaffoldPrimitiveCount = 5;
+    plan = RayTracingModeBackend_BuildPrimitivePrepPlan(&route, 7);
+
+    assert_true("prepnative_family_native",
+                plan.family == RAY_TRACING_PRIMITIVE_PREP_NATIVE_3D);
+    assert_true("prepnative_not_legacy_scene_objects", !plan.usesLegacySceneObjects);
+    assert_true("prepnative_not_compat_placeholders", !plan.usesCompatPlaceholderObjects);
+    assert_true("prepnative_has_runtime_scaffold", plan.hasRuntimeScaffoldPrimitives);
+    assert_true("prepnative_scaffold_count", plan.scaffoldPrimitiveCount == 5);
+    assert_true("prepnative_mesh_disabled", !plan.enableSurfaceMeshPrep);
+    assert_true("prepnative_triangles_disabled", !plan.enableTriangleMeshPrep);
+    assert_true("prepnative_uniform_grid_disabled", !plan.enableUniformGrid2D);
+    assert_true("prepnative_ray2d_disabled", !plan.enableRay2DIntersections);
     return 0;
 }
 
@@ -1333,10 +2110,10 @@ static int test_editor_mode_router_capabilities_3d_scaffold(void) {
     assert_true("router3d_can_edit_xy", caps.canEditXY);
     assert_true("router3d_no_edit_z", !caps.canEditZ);
     assert_true("router3d_no_free_camera3d", !caps.canUseFreeCamera3D);
-    assert_true("router3d_label_scaffold",
-                strstr(EditorModeRouter_SpaceButtonLabel(), "Scaffold") != NULL);
-    assert_true("router3d_hint_scaffold",
-                strstr(EditorModeRouter_RuntimeHintLabel(), "3D scaffold") != NULL);
+    assert_true("router3d_label_compat_fallback",
+                strstr(EditorModeRouter_SpaceButtonLabel(), "Compat Fallback") != NULL);
+    assert_true("router3d_hint_compat_fallback",
+                strstr(EditorModeRouter_RuntimeHintLabel(), "compat fallback") != NULL);
     return 0;
 }
 
@@ -1647,6 +2424,15 @@ int main(int argc, char **argv) {
     test_sample_diffuse_consistency();
     test_scene_object_z_roundtrip();
     test_scene_object_z_missing_fallback();
+    test_animation_scene_source_legacy_migration();
+    test_animation_scene_source_roundtrip_runtime_lane();
+    test_animation_scene_source_select_runtime_failure_rolls_back();
+    test_animation_scene_source_select_runtime_persists_on_save();
+    test_animation_apply_active_scene_source_invalid_fluid_falls_back_2d();
+    test_animation_restore_active_scene_source_persists_fallback_correction();
+    test_manifest_default_roots_expands_runtime_and_legacy_paths();
+    test_scene_source_catalog_collect_admits_runtime_and_manifest_lanes();
+    test_menu_state_manifest_option_visibility_matrix();
     test_depth_projection_scalars();
     test_runtime_scene_bridge_preflight_accepts_runtime_contract();
     test_runtime_scene_bridge_rejects_authoring_variant();
@@ -1656,6 +2442,7 @@ int main(int argc, char **argv) {
     test_runtime_scene_bridge_apply_uses_world_scale_mapping();
     test_runtime_scene_bridge_apply_preserves_editor_mode_state();
     test_runtime_scene_bridge_apply_3d_primitives_scaffold();
+    test_runtime_scene_bridge_apply_ps4d_fixture_retains_digest_truth();
     test_scene_compile_and_preflight_roundtrip();
     test_runtime_scene_bridge_apply_runtime_fixture();
     test_runtime_scene_bridge_apply_compile_output();
@@ -1675,6 +2462,13 @@ int main(int argc, char **argv) {
     test_runtime_scene_bridge_trio_fixture_compile_writeback_apply();
     test_mode_backend_route_2d_defaults();
     test_mode_backend_route_3d_controlled_lane();
+    test_mode_backend_scene_digest_status_2d_canonical_empty();
+    test_mode_backend_scene_digest_status_ps4d_fixture();
+    test_mode_backend_view_carrier_2d_defaults();
+    test_mode_backend_view_carrier_3d_compat_fallback();
+    test_mode_backend_primitive_prep_plan_2d_defaults();
+    test_mode_backend_primitive_prep_plan_3d_compat_placeholder();
+    test_mode_backend_primitive_prep_plan_native3d_placeholder_contract();
     test_editor_mode_router_capabilities_2d();
     test_editor_mode_router_capabilities_3d_scaffold();
     test_editor_mode_router_cycle_policy();

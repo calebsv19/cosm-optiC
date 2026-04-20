@@ -11,6 +11,7 @@
 #include "render/fluid/fluid_state.h"
 #include "math/vec2.h"
 #include "math/math_utils.h"
+#include "ui/shared_theme_font_adapter.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -235,10 +236,7 @@ CameraEditorHitRegion CameraEditorHitRegionAtPoint(int mx, int my) {
         my >= rotationSlider.y - 4 && my <= rotationSlider.y + rotationSlider.h + 4) {
         return CAMERA_EDITOR_HIT_SLIDER;
     }
-    if (IsClickingButtonMain(mx, my) ||
-        (mx >= addButton.x && mx <= addButton.x + addButton.w && my >= addButton.y && my <= addButton.y + addButton.h) ||
-        (mx >= deleteButton.x && mx <= deleteButton.x + deleteButton.w && my >= deleteButton.y && my <= deleteButton.y + deleteButton.h) ||
-        (mx >= toggleButton.x && mx <= toggleButton.x + toggleButton.w && my >= toggleButton.y && my <= toggleButton.y + toggleButton.h)) {
+    if (IsClickingButtonMain(mx, my) || SceneEditorIsPaneToolButton(mx, my)) {
         return CAMERA_EDITOR_HIT_CONTROLS;
     }
     return CAMERA_EDITOR_HIT_CANVAS;
@@ -263,8 +261,10 @@ static void RenderCameraButtons(SDL_Renderer* renderer) {
 
 void RenderEditorHUD(SDL_Renderer* renderer, const char* label, bool showRotation) {
     char buffer[196];
+    SceneEditorPaneLayout pane_layout = {0};
+    SDL_Rect hud = {20, 20, 420, 30};
     const char* routeLabel = EditorModeRouter_IsControlled3D()
-                                 ? "Space: 3D scaffold (2D backend)"
+                                 ? "Space: 3D compat fallback (2D backend)"
                                  : "Space: 2D";
     snprintf(buffer, sizeof(buffer), "%s  |  Camera: (%.1f, %.1f)  Zoom: %.2f  |  %s",
              label,
@@ -272,7 +272,12 @@ void RenderEditorHUD(SDL_Renderer* renderer, const char* label, bool showRotatio
              sceneSettings.camera.y,
              sceneSettings.camera.zoom,
              routeLabel);
-    SDL_Rect hud = {20, 20, 420, 30};
+    if (SceneEditorGetPaneLayout(&pane_layout)) {
+        hud.x = pane_layout.left_content_rect.x;
+        hud.y = pane_layout.left_content_rect.y + 4;
+        hud.w = pane_layout.left_content_rect.w;
+        if (hud.w < 180) hud.w = 180;
+    }
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200);
     SDL_RenderFillRect(renderer, &hud);
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 200);
@@ -320,6 +325,11 @@ static void RenderCameraViewportRect(SDL_Renderer* renderer) {
 }
 
 void InitializeCameraEditor(void) {
+    SceneEditorPaneLayout pane_layout = {0};
+    int slider_x = 460;
+    int slider_y = 25;
+    int slider_w = 200;
+
     cameraDragging = false;
     lastMouseX = lastMouseY = 0;
     addModeActive = false;
@@ -330,20 +340,40 @@ void InitializeCameraEditor(void) {
                                                         sceneSettings.windowHeight);
     SyncCameraPathStart();
     EnsureCameraRotationsSeeded();
-    rotationSlider = (SDL_Rect){460, 25, 200, 10};
+    if (SceneEditorGetPaneLayout(&pane_layout)) {
+        slider_x = pane_layout.left_content_rect.x;
+        slider_y = toggleButton.y + toggleButton.h + 20;
+        slider_w = pane_layout.left_content_rect.w - 20;
+        if (slider_w < 120) slider_w = 120;
+        if (slider_w > 260) slider_w = 260;
+    }
+    rotationSlider = (SDL_Rect){slider_x, slider_y, slider_w, 10};
 }
 
 void RenderCameraEditor(SDL_Renderer* renderer) {
     Camera original = sceneSettings.camera;
     Camera editorCamera = BuildEditorCamera();
+    SDL_Color objectColor = {255, 255, 255, 255};
     sceneSettings.camera = editorCamera;
     SyncCameraPathStart();
 
-    SDL_SetRenderDrawColor(renderer, 40, 40, 45, 255);
+    {
+        RayTracingThemePalette palette = {0};
+        if (ray_tracing_shared_theme_resolve_palette(&palette)) {
+            SDL_SetRenderDrawColor(renderer,
+                                   palette.background_fill.r,
+                                   palette.background_fill.g,
+                                   palette.background_fill.b,
+                                   255);
+            objectColor = palette.text_primary;
+        } else {
+            SDL_SetRenderDrawColor(renderer, 40, 40, 45, 255);
+        }
+    }
     SDL_Rect bg = {0, 0, sceneSettings.windowWidth, sceneSettings.windowHeight};
     SDL_RenderFillRect(renderer, &bg);
 
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    SDL_SetRenderDrawColor(renderer, objectColor.r, objectColor.g, objectColor.b, 255);
     RenderSceneObjects(renderer, !AnimationUseFluidScene());
 
     SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);

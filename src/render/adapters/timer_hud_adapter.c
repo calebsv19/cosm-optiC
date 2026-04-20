@@ -4,6 +4,7 @@
 #include "timer_hud/timer_hud_backend.h"
 #include "engine/Render/render_pipeline.h"
 #include "engine/Render/render_font.h"
+#include "render/text_upload_policy.h"
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
@@ -67,15 +68,25 @@ static int timer_hud_get_screen_size(int* out_w, int* out_h) {
 
 static int timer_hud_measure_text(const char* text, int* out_w, int* out_h) {
     TTF_Font* font = getActiveFont();
+    RenderContext* ctx = getRenderContext();
+    SDL_Renderer* renderer = (ctx ? ctx->renderer : NULL);
+    int raster_w = 0;
+    int raster_h = 0;
     if (!text || !font) return 0;
-    if (TTF_SizeUTF8(font, text, out_w, out_h) != 0) return 0;
+    if (TTF_SizeUTF8(font, text, &raster_w, &raster_h) != 0) return 0;
+    if (out_w) *out_w = ray_tracing_text_logical_pixels(renderer, raster_w);
+    if (out_h) *out_h = ray_tracing_text_logical_pixels(renderer, raster_h);
     return 1;
 }
 
 static int timer_hud_line_height(void) {
     TTF_Font* font = getActiveFont();
+    RenderContext* ctx = getRenderContext();
+    SDL_Renderer* renderer = (ctx ? ctx->renderer : NULL);
+    int raster_h = 0;
     if (!font) return 0;
-    return TTF_FontHeight(font);
+    raster_h = TTF_FontHeight(font);
+    return ray_tracing_text_logical_pixels(renderer, raster_h);
 }
 
 static void timer_hud_draw_rect(int x, int y, int w, int h, TimerHUDColor color) {
@@ -103,23 +114,27 @@ static void timer_hud_draw_text(const char* text, int x, int y, int align_flags,
     RenderContext* ctx = getRenderContext();
     if (!ctx || !ctx->renderer) return;
     TTF_Font* font = getActiveFont();
+    int logical_w = 0;
+    int logical_h = 0;
     if (!text || !font) return;
 
     SDL_Surface* surface = TTF_RenderUTF8_Blended(font, text,
                                                   (SDL_Color){color.r, color.g, color.b, color.a});
     if (!surface) return;
 
-    SDL_Rect dst = {x, y, surface->w, surface->h};
+    logical_w = ray_tracing_text_logical_pixels(ctx->renderer, surface->w);
+    logical_h = ray_tracing_text_logical_pixels(ctx->renderer, surface->h);
+    SDL_Rect dst = {x, y, logical_w, logical_h};
 
-    if (align_flags & TIMER_HUD_ALIGN_CENTER)  dst.x -= surface->w / 2;
-    if (align_flags & TIMER_HUD_ALIGN_RIGHT)   dst.x -= surface->w;
-    if (align_flags & TIMER_HUD_ALIGN_MIDDLE)  dst.y -= surface->h / 2;
-    if (align_flags & TIMER_HUD_ALIGN_BOTTOM)  dst.y -= surface->h;
+    if (align_flags & TIMER_HUD_ALIGN_CENTER)  dst.x -= logical_w / 2;
+    if (align_flags & TIMER_HUD_ALIGN_RIGHT)   dst.x -= logical_w;
+    if (align_flags & TIMER_HUD_ALIGN_MIDDLE)  dst.y -= logical_h / 2;
+    if (align_flags & TIMER_HUD_ALIGN_BOTTOM)  dst.y -= logical_h;
 
 #if USE_VULKAN
     VkRendererTexture texture;
     if (vk_renderer_upload_sdl_surface_with_filter((VkRenderer*)ctx->renderer, surface, &texture,
-                                                   VK_FILTER_LINEAR) == VK_SUCCESS) {
+                                                   ray_tracing_text_upload_filter(ctx->renderer)) == VK_SUCCESS) {
         vk_renderer_draw_texture((VkRenderer*)ctx->renderer, &texture, NULL, &dst);
         vk_renderer_queue_texture_destroy((VkRenderer*)ctx->renderer, &texture);
     }

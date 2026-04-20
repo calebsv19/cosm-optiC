@@ -10,7 +10,6 @@
 #include "app/data_paths.h"
 #include "config/config_manager.h"
 #include "editor/editor_mode_router.h"
-#include "editor/scene_editor.h"
 #include "engine/Render/render_font.h"
 #include "ui/shared_theme_font_adapter.h"
 #include "ui/text_zoom_shortcuts.h"
@@ -254,12 +253,7 @@ void menu_input_handle_key(SDL_Event* event,
             break;
         case SDLK_p:
             if (animSettings.deepRenderMode) {
-                SceneEditor editor = {0};
-                InitializeSceneEditor(&editor);
-                editor.running = true;
-                SceneEditorLoop(&editor);
-                menu_state_reload_font(font);
-                *running = false;
+                state->activeView = MENU_VIEW_SCENE_EDITOR;
             }
             break;
         case SDLK_r:
@@ -313,7 +307,7 @@ void menu_input_handle_mouse_wheel(SDL_Event *event, MenuRuntimeState* state) {
     int mx = 0;
     int my = 0;
     SDL_GetMouseState(&mx, &my);
-    if (state->manifestLoadEnabled && state->manifestDropdownOpen && point_in_rect(&state->manifestPanelRect, mx, my)) {
+    if (state->manifestDropdownOpen && point_in_rect(&state->manifestPanelRect, mx, my)) {
         float delta = (float)event->wheel.y * (float)(SDL_MENU_MANIFEST_ITEM_HEIGHT * 2);
         menu_state_manifest_scroll_by(state, -delta);
         return;
@@ -342,7 +336,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     int x = event->button.x;
     int y = event->button.y;
 
-    if (state->manifestLoadEnabled && state->manifestDropdownOpen) {
+    if (state->manifestDropdownOpen) {
         if (point_in_rect(&state->manifestPanelRect, x, y)) {
             if (state->manifestScrollbarVisible && point_in_rect(&state->manifestScrollbarRect, x, y)) {
                 state->manifestScrollbarDragging = true;
@@ -352,17 +346,41 @@ void menu_input_handle_mouse_click(SDL_Event* event,
             }
             if (state->manifestOptionCount > 0 && point_in_rect(&state->manifestListRect, x, y)) {
                 int relativeY = y - state->manifestListRect.y + (int)state->manifestScroll;
-                int idx = relativeY / SDL_MENU_MANIFEST_ITEM_HEIGHT;
+                int visible_indices[SDL_MENU_MAX_MANIFEST_OPTIONS];
+                int visible_count = 0;
+                int row_idx = 0;
+                int idx = -1;
+                for (int i = 0; i < (int)state->manifestOptionCount; ++i) {
+                    if (menu_state_manifest_option_visible(state, &state->manifestOptions[i])) {
+                        visible_indices[visible_count++] = i;
+                    }
+                }
+                row_idx = relativeY / SDL_MENU_MANIFEST_ITEM_HEIGHT;
+                if (row_idx >= 0 && row_idx < visible_count) {
+                    idx = visible_indices[row_idx];
+                }
                 if (idx >= 0 && idx < (int)state->manifestOptionCount) {
-                    strncpy(animSettings.fluidManifest,
-                            state->manifestOptions[idx].path,
-                            sizeof(animSettings.fluidManifest) - 1);
-                    animSettings.fluidManifest[sizeof(animSettings.fluidManifest) - 1] = '\0';
-                    strncpy(state->statusLabel, "Scene set", sizeof(state->statusLabel) - 1);
+                    int source = animation_config_scene_source_clamp(state->manifestOptions[idx].source);
+                    bool ok = AnimationSelectSceneSource(source,
+                                                         state->manifestOptions[idx].path,
+                                                         true);
+                    if (ok) {
+                        if (source == SCENE_SOURCE_RUNTIME_SCENE) {
+                            strncpy(state->statusLabel, "Runtime scene set", sizeof(state->statusLabel) - 1);
+                        } else if (source == SCENE_SOURCE_FLUID_MANIFEST) {
+                            strncpy(state->statusLabel, "Scene set", sizeof(state->statusLabel) - 1);
+                        } else {
+                            strncpy(state->statusLabel, "2D config active", sizeof(state->statusLabel) - 1);
+                        }
+                        SaveAnimationConfig();
+                        state->statusColor = (SDL_Color){140, 220, 200, 255};
+                    } else {
+                        strncpy(state->statusLabel, "Scene apply failed", sizeof(state->statusLabel) - 1);
+                        state->statusColor = (SDL_Color){240, 120, 120, 255};
+                    }
                     state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
-                    state->statusColor = (SDL_Color){140, 220, 200, 255};
                     state->statusExpireMs = SDL_GetTicks() + 1800;
-                    AnimationApplyFluidScene(animSettings.fluidManifest);
+                    menu_state_sync_from_anim(state);
                     return;
                 }
             }
@@ -371,7 +389,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     }
 
     if (point_in_rect(&buttons.loadSceneRect, x, y)) {
-        menu_state_set_load_scene_enabled(state, !state->manifestLoadEnabled);
+        menu_state_set_load_scene_enabled(state, !state->manifestDropdownOpen);
         return;
     }
 
@@ -438,11 +456,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         }
 
         if (point_in_rect(&buttons.sceneEditorRect, x, y)) {
-            SceneEditor editor = {0};
-            InitializeSceneEditor(&editor);
-            editor.running = true;
-            SceneEditorLoop(&editor);
-            menu_state_reload_font(font);
+            state->activeView = MENU_VIEW_SCENE_EDITOR;
             return;
         }
 
@@ -458,15 +472,25 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     }
 
     if (point_in_rect(&buttons.spaceModeRect, x, y)) {
+        const char* mode_status = NULL;
         animSettings.spaceMode = (animSettings.spaceMode == SPACE_MODE_3D)
                                      ? SPACE_MODE_2D
                                      : SPACE_MODE_3D;
+        menu_state_sync_from_anim(state);
+        menu_state_refresh_manifest_options(state);
+        if (state->manifestDropdownOpen) {
+            state->manifestScroll = 0.0f;
+            state->manifestScrollbarDragging = false;
+        }
+        mode_status = (animSettings.spaceMode == SPACE_MODE_3D)
+                          ? (EditorModeRouter_IsControlled3D()
+                                 ? "3D compat fallback active (2D backend)"
+                                 : "Space: 3D active")
+                          : "Space: 2D active";
         snprintf(state->statusLabel,
                  sizeof(state->statusLabel),
                  "%s",
-                 EditorModeRouter_IsControlled3D()
-                     ? "3D scaffold active (2D backend)"
-                     : "Space: 2D active");
+                 mode_status);
         state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
         state->statusColor = (SDL_Color){255, 220, 140, 255};
         state->statusExpireMs = SDL_GetTicks() + 2200;

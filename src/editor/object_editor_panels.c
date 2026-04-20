@@ -45,22 +45,31 @@ static int ObjectEditorMaterialRowHeight(void) {
 }
 
 void ObjectEditorPanels_UpdateLayout(void) {
+    SceneEditorPaneLayout pane_layout = {0};
     int headerH = ObjectEditorHeaderHeight();
     int assetRowH = ObjectEditorAssetRowHeight();
     int materialRowH = ObjectEditorMaterialRowHeight();
     int panelMaxH = animation_config_scale_text_point_size(&animSettings, PANEL_MAX_HEIGHT, 160);
-    int headerW = ASSET_PANEL_WIDTH - PANEL_PADDING * 2;
+    int panelW = ASSET_PANEL_WIDTH;
     int x = 20;
     int y = 40;
     if (panelMaxH > sceneSettings.windowHeight - 80) {
         panelMaxH = sceneSettings.windowHeight - 80;
     }
     if (panelMaxH < 140) panelMaxH = 140;
+    if (SceneEditorGetPaneLayout(&pane_layout)) {
+        x = pane_layout.left_content_rect.x;
+        y = pane_layout.left_content_rect.y + 150;
+        panelW = pane_layout.left_content_rect.w;
+        if (panelW > ASSET_PANEL_WIDTH) panelW = ASSET_PANEL_WIDTH;
+        if (panelW < 160) panelW = 160;
+    }
+    int headerW = panelW - PANEL_PADDING * 2;
     int assetRows = showImports ? importCount : (int)assetLib.count;
     if (assetRows < 1) assetRows = 1;
     int assetContent = headerH + PANEL_PADDING * 2 + assetRows * assetRowH;
     if (assetContent > panelMaxH) assetContent = panelMaxH;
-    assetPanelRect = (SDL_Rect){x, y, ASSET_PANEL_WIDTH, assetContent};
+    assetPanelRect = (SDL_Rect){x, y, panelW, assetContent};
     assetToggleRect = (SDL_Rect){x + PANEL_PADDING,
                                  y + PANEL_PADDING,
                                  headerW - 20,
@@ -75,7 +84,13 @@ void ObjectEditorPanels_UpdateLayout(void) {
     int matContent = headerH + PANEL_PADDING * 2 + matRows * materialRowH;
     if (matContent > panelMaxH) matContent = panelMaxH;
     int matY = sceneSettings.windowHeight - matContent - 20;
-    materialPanelRect = (SDL_Rect){x, matY, ASSET_PANEL_WIDTH, matContent};
+    if (SceneEditorGetPaneLayout(&pane_layout)) {
+        matY = pane_layout.left_content_rect.y + pane_layout.left_content_rect.h - matContent;
+        if (matY < assetPanelRect.y + assetPanelRect.h + 10) {
+            matY = assetPanelRect.y + assetPanelRect.h + 10;
+        }
+    }
+    materialPanelRect = (SDL_Rect){x, matY, panelW, matContent};
     materialCollapseRect = (SDL_Rect){materialPanelRect.x + materialPanelRect.w - PANEL_PADDING - 16,
                                       materialPanelRect.y + PANEL_PADDING,
                                       16,

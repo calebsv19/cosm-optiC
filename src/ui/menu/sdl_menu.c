@@ -8,14 +8,16 @@
 
 #include "app/animation.h"
 #include "config/config_manager.h"
+#include "editor/scene_editor.h"
 #include "engine/Render/render_pipeline.h"
+#include "render/text_font_cache.h"
 #include "render/vk_shared_device.h"
 #include "ui/shared_theme_font_adapter.h"
 #include "ui/sdl_menu_input.h"
 #include "ui/sdl_menu_render.h"
 #include "ui/sdl_menu_state.h"
 
-#define MENU_WIDTH 1000
+#define MENU_WIDTH 1200
 #define MENU_HEIGHT 900
 
 #if USE_VULKAN
@@ -106,6 +108,7 @@ static bool initialize_menu(SDL_Window** window,
     animSettings.previewMode = false;
 
     menu_state_init(state);
+    setRenderContext(*renderer, *window, MENU_WIDTH, MENU_HEIGHT);
 
     *font = NULL;
     menu_state_reload_font(font);
@@ -130,21 +133,40 @@ static void shutdown_menu(SDL_Window* window,
                           SDL_Renderer* renderer,
                           TTF_Font* font,
                           bool keep_running_engine) {
-    if (keep_running_engine) {
+    (void)keep_running_engine;
+    setRenderContext(NULL, NULL, 0, 0);
+
+    if (renderer) {
 #if USE_VULKAN
         vk_renderer_wait_idle((VkRenderer*)renderer);
         vk_renderer_shutdown_surface((VkRenderer*)renderer);
 #else
         SDL_DestroyRenderer(renderer);
 #endif
-        SDL_DestroyWindow(window);
-        TTF_CloseFont(font);
-        TTF_Quit();
-#if USE_VULKAN
-        vk_shared_device_shutdown();
-#endif
-        SDL_Quit();
     }
+    if (window) {
+        SDL_DestroyWindow(window);
+    }
+    (void)font;
+    ray_tracing_text_font_cache_shutdown();
+    if (TTF_WasInit() != 0) {
+        TTF_Quit();
+    }
+#if USE_VULKAN
+    vk_shared_device_shutdown();
+#endif
+    SDL_Quit();
+}
+
+static bool menu_event_is_host_window_close(SDL_Window* window, const SDL_Event* event) {
+    Uint32 window_id = 0;
+    if (!window || !event) return false;
+    if (event->type != SDL_WINDOWEVENT || event->window.event != SDL_WINDOWEVENT_CLOSE) {
+        return false;
+    }
+    window_id = SDL_GetWindowID(window);
+    if (window_id == 0) return false;
+    return event->window.windowID == window_id;
 }
 
 bool RunMenu(void) {
@@ -152,6 +174,9 @@ bool RunMenu(void) {
     SDL_Renderer *renderer = NULL;
     TTF_Font *font = NULL;
     MenuRuntimeState menuState;
+    SceneEditor sceneEditor;
+    bool sceneEditorSessionActive = false;
+    memset(&sceneEditor, 0, sizeof(sceneEditor));
 
     if (!initialize_menu(&window, &renderer, &font, &menuState)) {
         return false;
@@ -163,11 +188,26 @@ bool RunMenu(void) {
 
     while (running) {
         while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT || menu_event_is_host_window_close(window, &event)) {
+                menuExitedNormally = false;
+                running = false;
+                break;
+            }
+
+            if (menuState.activeView == MENU_VIEW_SCENE_EDITOR) {
+                if (sceneEditorSessionActive) {
+                    SceneEditorSessionHandleEvent(&sceneEditor, &event);
+                    if (SceneEditorSessionWantsExit(&sceneEditor)) {
+                        SceneEditorSessionEnd(&sceneEditor);
+                        sceneEditorSessionActive = false;
+                        menuState.activeView = MENU_VIEW_MAIN;
+                        (void)menu_state_reload_font(&font);
+                    }
+                }
+                continue;
+            }
+
             switch (event.type) {
-                case SDL_QUIT:
-                    menuExitedNormally = false;
-                    running = false;
-                    break;
                 case SDL_KEYDOWN:
                     menu_input_handle_key(&event, &running, &font, &menuState);
                     break;
@@ -205,15 +245,44 @@ bool RunMenu(void) {
                     break;
             }
         }
+        if (!running) {
+            break;
+        }
 
         setRenderContext(renderer, window, MENU_WIDTH, MENU_HEIGHT);
-        menu_render_frame(renderer, font, &menuState);
+        if (menuState.activeView == MENU_VIEW_SCENE_EDITOR) {
+            if (!sceneEditorSessionActive) {
+                if (SceneEditorSessionBegin(&sceneEditor, renderer, window)) {
+                    sceneEditorSessionActive = true;
+                } else {
+                    menuState.activeView = MENU_VIEW_MAIN;
+                    snprintf(menuState.statusLabel, sizeof(menuState.statusLabel), "%s", "Scene editor init failed");
+                    menuState.statusLabel[sizeof(menuState.statusLabel) - 1] = '\0';
+                    menuState.statusColor = (SDL_Color){255, 170, 140, 255};
+                    menuState.statusExpireMs = SDL_GetTicks() + 2200;
+                }
+            }
+            if (sceneEditorSessionActive) {
+                SceneEditorSessionRender(&sceneEditor);
+                if (SceneEditorSessionWantsExit(&sceneEditor)) {
+                    SceneEditorSessionEnd(&sceneEditor);
+                    sceneEditorSessionActive = false;
+                    menuState.activeView = MENU_VIEW_MAIN;
+                    (void)menu_state_reload_font(&font);
+                }
+            }
+        } else {
+            menu_render_frame(renderer, font, &menuState);
+        }
         if (render_device_lost()) {
             running = false;
             menuExitedNormally = false;
         }
     }
 
+    if (sceneEditorSessionActive) {
+        SceneEditorSessionEnd(&sceneEditor);
+    }
     shutdown_menu(window, renderer, font, menuExitedNormally);
     ray_tracing_shared_theme_save_persisted();
     SaveAllSettings();

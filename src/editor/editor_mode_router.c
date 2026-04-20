@@ -35,7 +35,7 @@ EditorModeCapabilities EditorModeRouter_GetCapabilities(void) {
     RayTracingRuntimeRoute route = ResolveRoute();
     EditorModeCapabilities caps;
 
-    caps.isControlled3D = RayTracingModeBackend_IsControlled3D(&route);
+    caps.isControlled3D = RayTracingModeBackend_IsCompat3DFallback(&route);
     caps.uses2DProjectionFallback = route.fallbackTo2DProjection;
     caps.canEditXY = true;
     caps.canEditZ = false;
@@ -52,14 +52,14 @@ bool EditorModeRouter_IsControlled3D(void) {
 
 const char* EditorModeRouter_SpaceButtonLabel(void) {
     if (EditorModeRouter_IsControlled3D()) {
-        return "Space: 3D (Scaffold)";
+        return "Space: 3D (Compat Fallback)";
     }
     return "Space: 2D";
 }
 
 const char* EditorModeRouter_RuntimeHintLabel(void) {
     if (EditorModeRouter_IsControlled3D()) {
-        return "3D scaffold active: editor routes through 2D backend.";
+        return "3D compat fallback active: editor routes through 2D projection/backend.";
     }
     return "2D backend active.";
 }
@@ -68,5 +68,9 @@ SpaceModeViewContext EditorModeRouter_BuildViewContext(const Camera* camera,
                                                        int viewport_width,
                                                        int viewport_height) {
     RayTracingRuntimeRoute route = ResolveRoute();
-    return RayTracingModeBackend_BuildViewContext(camera, viewport_width, viewport_height, &route);
+    RayTracingViewCarrier viewCarrier = RayTracingModeBackend_BuildViewCarrier(camera,
+                                                                               viewport_width,
+                                                                               viewport_height,
+                                                                               &route);
+    return viewCarrier.viewContext;
 }

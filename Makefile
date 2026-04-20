@@ -46,6 +46,8 @@ CORE_PACK_DIR := ../shared/core/core_pack
 CORE_TIME_DIR := ../shared/core/core_time
 CORE_SCENE_DIR := ../shared/core/core_scene
 CORE_SCENE_COMPILE_DIR := ../shared/core/core_scene_compile
+CORE_OBJECT_DIR := ../shared/core/core_object
+CORE_UNITS_DIR := ../shared/core/core_units
 CORE_TRACE_DIR := ../shared/core/core_trace
 CORE_SPACE_DIR := ../shared/core/core_space
 CORE_THEME_DIR := ../shared/core/core_theme
@@ -110,12 +112,12 @@ TIMER_HUD_DIR := ../shared/timer_hud
 TIMER_HUD_INCLUDE := -I$(TIMER_HUD_DIR)/include -I$(TIMER_HUD_DIR)/external
 
 CFLAGS += $(TIMER_HUD_INCLUDE) -I$(VK_RENDERER_DIR)/include $(VULKAN_CFLAGS) \
-	-I$(CORE_BASE_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_DATA_DIR)/include -I$(CORE_PACK_DIR)/include -I$(CORE_TIME_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_SCENE_COMPILE_DIR)/include -I$(CORE_TRACE_DIR)/include -I$(CORE_SPACE_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(KIT_VIZ_DIR)/include -I$(KIT_RUNTIME_DIAG_DIR)/include \
+	-I$(CORE_BASE_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_DATA_DIR)/include -I$(CORE_PACK_DIR)/include -I$(CORE_TIME_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_SCENE_COMPILE_DIR)/include -I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include -I$(CORE_TRACE_DIR)/include -I$(CORE_SPACE_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(KIT_VIZ_DIR)/include -I$(KIT_RUNTIME_DIAG_DIR)/include \
 	-DUSE_VULKAN=1 -DVK_RENDERER_SHADER_ROOT=\"$(abspath $(VK_RENDERER_DIR))\" \
 	-include $(VK_RENDERER_DIR)/include/vk_renderer_sdl.h
 LDFLAGS += $(VULKAN_LIBS)
 CFLAGS_RELEASE += $(TIMER_HUD_INCLUDE) -I$(VK_RENDERER_DIR)/include $(VULKAN_CFLAGS) \
-	-I$(CORE_BASE_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_DATA_DIR)/include -I$(CORE_PACK_DIR)/include -I$(CORE_TIME_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_SCENE_COMPILE_DIR)/include -I$(CORE_TRACE_DIR)/include -I$(CORE_SPACE_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(KIT_VIZ_DIR)/include -I$(KIT_RUNTIME_DIAG_DIR)/include \
+	-I$(CORE_BASE_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_DATA_DIR)/include -I$(CORE_PACK_DIR)/include -I$(CORE_TIME_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_SCENE_COMPILE_DIR)/include -I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include -I$(CORE_TRACE_DIR)/include -I$(CORE_SPACE_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(KIT_VIZ_DIR)/include -I$(KIT_RUNTIME_DIAG_DIR)/include \
 	-DUSE_VULKAN=1 -DVK_RENDERER_SHADER_ROOT=\"$(abspath $(VK_RENDERER_DIR))\" \
 	-include $(VK_RENDERER_DIR)/include/vk_renderer_sdl.h
 ifeq ($(UNAME_S),Darwin)
@@ -144,11 +146,14 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/adapters/space_mode_adapter.o \
 	$(BUILD_DIR)/render/backend/ray_tracing_mode_backend.o \
 	$(BUILD_DIR)/editor/editor_mode_router.o \
-	$(BUILD_DIR)/render/accel/uniform_grid.o \
-	$(BUILD_DIR)/render/accel/surface_mesh.o \
-	$(BUILD_DIR)/render/helpers/render_helper.o \
-	$(BUILD_DIR)/render/pipeline/ray_tracing2_preview.o \
-	$(BUILD_DIR)/render/pipeline/ray_tracing2.o \
+		$(BUILD_DIR)/render/accel/uniform_grid.o \
+		$(BUILD_DIR)/render/accel/surface_mesh.o \
+		$(BUILD_DIR)/render/helpers/render_helper.o \
+		$(BUILD_DIR)/render/text_font_cache.o \
+		$(BUILD_DIR)/render/text_font_quality.o \
+		$(BUILD_DIR)/render/text_upload_policy.o \
+		$(BUILD_DIR)/render/pipeline/ray_tracing2_preview.o \
+		$(BUILD_DIR)/render/pipeline/ray_tracing2.o \
 	$(BUILD_DIR)/render/fluid/fluid_state.o \
 	$(BUILD_DIR)/render/fluid/fluid_overlay.o \
 	$(BUILD_DIR)/scene/object_manager.o \
@@ -158,17 +163,21 @@ TEST_DEPS := \
 	$(BUILD_DIR)/import/shape_import.o \
 	$(BUILD_DIR)/timer_hud_external/cJSON.o \
 	$(BUILD_DIR)/camera/camera.o \
+	$(BUILD_DIR)/app/animation_fluid_scene.o \
 	$(BUILD_DIR)/app/data_paths.o \
-	$(BUILD_DIR)/config/io/config_file_io.o \
-	$(BUILD_DIR)/config/scene/config_scene_path_io.o \
-	$(BUILD_DIR)/config/core/config_manager.o \
-	$(BUILD_DIR)/tools/ShapeLib/shape_core.o \
+		$(BUILD_DIR)/config/io/config_file_io.o \
+		$(BUILD_DIR)/config/scene/config_scene_path_io.o \
+		$(BUILD_DIR)/config/core/config_manager.o \
+		$(BUILD_DIR)/ui/menu/shared_theme_font_adapter.o \
+		$(BUILD_DIR)/tools/ShapeLib/shape_core.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_json.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_flatten.o \
 	$(BUILD_DIR)/import/fluid_import.o \
 	$(BUILD_DIR)/import/fluid_pack_import.o \
 	$(BUILD_DIR)/import/scene_bundle_import.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge.o \
+	$(BUILD_DIR)/ui/menu/scene_source_catalog.o \
+	$(BUILD_DIR)/ui/menu/sdl_menu_state.o \
 	$(BUILD_DIR)/render/adapters/kit_viz_fluid_overlay_adapter.o \
 	$(BUILD_DIR)/core_base/core_base.o \
 	$(BUILD_DIR)/core_io/core_io.o \
@@ -177,6 +186,8 @@ TEST_DEPS := \
 	$(CORE_TIME_TEST_DEPS) \
 	$(BUILD_DIR)/core_scene/core_scene.o \
 	$(BUILD_DIR)/core_scene_compile/core_scene_compile.o \
+	$(BUILD_DIR)/core_object/core_object.o \
+	$(BUILD_DIR)/core_units/core_units.o \
 	$(BUILD_DIR)/core_space/core_space.o \
 	$(BUILD_DIR)/export/render_metrics_dataset.o \
 	$(BUILD_DIR)/core_theme/core_theme.o \
@@ -215,6 +226,8 @@ CORE_TIME_SRCS += $(CORE_TIME_DIR)/src/core_time_posix.c
 endif
 CORE_SCENE_SRCS := $(CORE_SCENE_DIR)/src/core_scene.c
 CORE_SCENE_COMPILE_SRCS := $(CORE_SCENE_COMPILE_DIR)/src/core_scene_compile.c
+CORE_OBJECT_SRCS := $(CORE_OBJECT_DIR)/src/core_object.c
+CORE_UNITS_SRCS := $(CORE_UNITS_DIR)/src/core_units.c
 CORE_SPACE_SRCS := $(CORE_SPACE_DIR)/src/core_space.c
 CORE_THEME_SRCS := $(CORE_THEME_DIR)/src/core_theme.c
 CORE_FONT_SRCS := $(CORE_FONT_DIR)/src/core_font.c
@@ -227,6 +240,8 @@ CORE_PACK_OBJS := $(patsubst $(CORE_PACK_DIR)/src/%.c,$(BUILD_DIR)/core_pack/%.o
 CORE_TIME_OBJS := $(patsubst $(CORE_TIME_DIR)/src/%.c,$(BUILD_DIR)/core_time/%.o,$(CORE_TIME_SRCS))
 CORE_SCENE_OBJS := $(patsubst $(CORE_SCENE_DIR)/src/%.c,$(BUILD_DIR)/core_scene/%.o,$(CORE_SCENE_SRCS))
 CORE_SCENE_COMPILE_OBJS := $(patsubst $(CORE_SCENE_COMPILE_DIR)/src/%.c,$(BUILD_DIR)/core_scene_compile/%.o,$(CORE_SCENE_COMPILE_SRCS))
+CORE_OBJECT_OBJS := $(patsubst $(CORE_OBJECT_DIR)/src/%.c,$(BUILD_DIR)/core_object/%.o,$(CORE_OBJECT_SRCS))
+CORE_UNITS_OBJS := $(patsubst $(CORE_UNITS_DIR)/src/%.c,$(BUILD_DIR)/core_units/%.o,$(CORE_UNITS_SRCS))
 CORE_SPACE_OBJS := $(patsubst $(CORE_SPACE_DIR)/src/%.c,$(BUILD_DIR)/core_space/%.o,$(CORE_SPACE_SRCS))
 CORE_THEME_OBJS := $(patsubst $(CORE_THEME_DIR)/src/%.c,$(BUILD_DIR)/core_theme/%.o,$(CORE_THEME_SRCS))
 CORE_FONT_OBJS := $(patsubst $(CORE_FONT_DIR)/src/%.c,$(BUILD_DIR)/core_font/%.o,$(CORE_FONT_SRCS))
@@ -235,7 +250,7 @@ KIT_RUNTIME_DIAG_OBJS := $(patsubst $(KIT_RUNTIME_DIAG_DIR)/src/%.c,$(BUILD_DIR)
 
 OBJ := $(OBJ) $(TIMER_HUD_OBJS) $(TIMER_HUD_EXTERNAL_OBJS) \
 	$(patsubst $(VK_RENDERER_DIR)/src/%.c,$(BUILD_DIR)/vk_renderer/%.o,$(VK_RENDERER_SRCS)) \
-	$(CORE_BASE_OBJS) $(CORE_IO_OBJS) $(CORE_DATA_OBJS) $(CORE_PACK_OBJS) $(CORE_TIME_OBJS) $(CORE_SCENE_OBJS) $(CORE_SCENE_COMPILE_OBJS) $(CORE_SPACE_OBJS) $(CORE_THEME_OBJS) $(CORE_FONT_OBJS) $(KIT_VIZ_OBJS) $(KIT_RUNTIME_DIAG_OBJS)
+	$(CORE_BASE_OBJS) $(CORE_IO_OBJS) $(CORE_DATA_OBJS) $(CORE_PACK_OBJS) $(CORE_TIME_OBJS) $(CORE_SCENE_OBJS) $(CORE_SCENE_COMPILE_OBJS) $(CORE_OBJECT_OBJS) $(CORE_UNITS_OBJS) $(CORE_SPACE_OBJS) $(CORE_THEME_OBJS) $(CORE_FONT_OBJS) $(KIT_VIZ_OBJS) $(KIT_RUNTIME_DIAG_OBJS)
 DEP := $(OBJ:.o=.d)
 
 .PHONY: add-disney-flag
@@ -268,12 +283,14 @@ RAY_TRACE_TOOL_SRCS := \
 	$(CORE_TRACE_DIR)/src/core_trace.c \
 	$(CORE_PACK_DIR)/src/core_pack.c \
 	$(CORE_SCENE_DIR)/src/core_scene.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
 	$(CORE_IO_DIR)/src/core_io.c \
 	$(CORE_BASE_DIR)/src/core_base.c \
 	$(TIMER_HUD_DIR)/external/cJSON.c
 RAY_TRACE_TOOL_INCS := \
 	-I$(INC_DIR) -I$(SRC_DIR) \
-	-I$(CORE_TRACE_DIR)/include -I$(CORE_PACK_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
+	-I$(CORE_TRACE_DIR)/include -I$(CORE_PACK_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
 	-I$(TIMER_HUD_DIR)/external
 
 $(CLI_BIN_DIR)/shape_asset_tool: build/tools/cli/shape_asset_tool.o build/import/shape_import.o build/geo/geolib/shape_asset.o build/geo/geolib/shape_library.o build/tools/ShapeLib/shape_json.o build/tools/ShapeLib/shape_flatten.o build/tools/ShapeLib/shape_core.o build/timer_hud_external/cJSON.o
@@ -344,6 +361,14 @@ $(BUILD_DIR)/core_scene/%.o: $(CORE_SCENE_DIR)/src/%.c
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 $(BUILD_DIR)/core_scene_compile/%.o: $(CORE_SCENE_COMPILE_DIR)/src/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD_DIR)/core_object/%.o: $(CORE_OBJECT_DIR)/src/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD_DIR)/core_units/%.o: $(CORE_UNITS_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 

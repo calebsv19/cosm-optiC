@@ -27,6 +27,12 @@ typedef enum {
     SPACE_MODE_3D = 1
 } SpaceMode;
 
+typedef enum {
+    SCENE_SOURCE_CONFIG_2D = 0,
+    SCENE_SOURCE_FLUID_MANIFEST = 1,
+    SCENE_SOURCE_RUNTIME_SCENE = 2
+} SceneSource;
+
 // **Animation Config Struct**
 typedef struct {
     bool interactiveMode;
@@ -79,8 +85,10 @@ typedef struct {
     int cameraIntegratorMode;
 
     // Fluid import
+    SceneSource sceneSource;
     bool useFluidScene;
     char fluidManifest[256];
+    char runtimeScenePath[256];
 } AnimationConfig;
 
 
@@ -118,5 +126,7 @@ int animation_config_scale_text_point_size(const AnimationConfig* cfg,
                                            int base_point_size,
                                            int min_point_size);
 int animation_config_space_mode_clamp(int mode);
+int animation_config_scene_source_clamp(int source);
+bool animation_config_scene_source_is_fluid(int source);
 
 #endif // CONFIG_MANAGER_H

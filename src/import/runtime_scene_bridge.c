@@ -12,6 +12,7 @@
 #include <string.h>
 
 static RuntimeSceneBridge3DScaffoldState g_last_3d_scaffold = {0};
+static RuntimeSceneBridge3DDigestState g_last_3d_digest = {0};
 
 static void preflight_reset(RuntimeSceneBridgePreflight *out_preflight) {
     if (!out_preflight) return;
@@ -62,6 +63,36 @@ static bool parse_vec3(json_object *obj,
     *out_y = json_object_get_double(y);
     *out_z = json_object_get_double(z);
     return true;
+}
+
+static bool parse_bool_field(json_object *obj, const char *key, bool *out_value) {
+    json_object *value = NULL;
+    if (!obj || !key || !out_value) return false;
+    if (!json_object_object_get_ex(obj, key, &value) || !json_object_is_type(value, json_type_boolean)) {
+        return false;
+    }
+    *out_value = json_object_get_boolean(value) != 0;
+    return true;
+}
+
+static bool parse_double_field(json_object *obj, const char *key, double *out_value) {
+    json_object *value = NULL;
+    if (!obj || !key || !out_value) return false;
+    if (!json_object_object_get_ex(obj, key, &value) ||
+        (!json_object_is_type(value, json_type_double) && !json_object_is_type(value, json_type_int))) {
+        return false;
+    }
+    *out_value = json_object_get_double(value);
+    return true;
+}
+
+static const char *json_string_field_or_null(json_object *obj, const char *key) {
+    json_object *value = NULL;
+    if (!obj || !key) return NULL;
+    if (!json_object_object_get_ex(obj, key, &value) || !json_object_is_type(value, json_type_string)) {
+        return NULL;
+    }
+    return json_object_get_string(value);
 }
 
 static int clamp_color_channel(double value01) {
@@ -212,6 +243,163 @@ static void scene_defaults_reset(void) {
 
 static void scaffold_state_reset(void) {
     memset(&g_last_3d_scaffold, 0, sizeof(g_last_3d_scaffold));
+    memset(&g_last_3d_digest, 0, sizeof(g_last_3d_digest));
+}
+
+static RuntimeSceneBridgePrimitiveKind digest_kind_from_labels(const char *object_type,
+                                                               const char *primitive_kind) {
+    const char *label = primitive_kind && primitive_kind[0] ? primitive_kind : object_type;
+    if (!label || !label[0]) return RUNTIME_SCENE_BRIDGE_PRIMITIVE_UNKNOWN;
+    if (strstr(label, "rect_prism")) return RUNTIME_SCENE_BRIDGE_PRIMITIVE_RECT_PRISM;
+    if (strstr(label, "plane")) return RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE;
+    if (strstr(label, "triangle_mesh")) return RUNTIME_SCENE_BRIDGE_PRIMITIVE_TRIANGLE_MESH;
+    if (strstr(label, "box")) return RUNTIME_SCENE_BRIDGE_PRIMITIVE_BOX;
+    return RUNTIME_SCENE_BRIDGE_PRIMITIVE_UNKNOWN;
+}
+
+static void digest_append_primitive(json_object *object_obj,
+                                    json_object *transform_obj,
+                                    json_object *primitive_obj,
+                                    RuntimeSceneBridgePrimitiveKind kind,
+                                    double world_scale) {
+    RuntimeSceneBridgePrimitiveDigest *entry = NULL;
+    const char *object_id = NULL;
+    json_object *frame = NULL;
+    json_object *origin_source = NULL;
+    json_object *position_source = NULL;
+    double width = 0.0;
+    double height = 0.0;
+    double depth = 0.0;
+    bool has_width = false;
+    bool has_height = false;
+    bool has_depth = false;
+
+    if (g_last_3d_digest.primitive_count >= RUNTIME_SCENE_BRIDGE_MAX_DIGEST_PRIMITIVES) return;
+    entry = &g_last_3d_digest.primitives[g_last_3d_digest.primitive_count];
+    memset(entry, 0, sizeof(*entry));
+    entry->kind = kind;
+
+    object_id = json_string_field_or_null(object_obj, "object_id");
+    if (object_id && object_id[0]) {
+        snprintf(entry->object_id, sizeof(entry->object_id), "%s", object_id);
+    }
+
+    if (primitive_obj && json_object_is_type(primitive_obj, json_type_object)) {
+        if (json_object_object_get_ex(primitive_obj, "frame", &frame) &&
+            json_object_is_type(frame, json_type_object) &&
+            json_object_object_get_ex(frame, "origin", &origin_source) &&
+            json_object_is_type(origin_source, json_type_object)) {
+            double ox = 0.0, oy = 0.0, oz = 0.0;
+            if (parse_vec3(frame, "origin", &ox, &oy, &oz)) {
+                entry->origin_x = ox * world_scale;
+                entry->origin_y = oy * world_scale;
+                entry->origin_z = oz * world_scale;
+            }
+        }
+        has_width = parse_double_field(primitive_obj, "width", &width);
+        has_height = parse_double_field(primitive_obj, "height", &height);
+        has_depth = parse_double_field(primitive_obj, "depth", &depth);
+    }
+
+    if ((!origin_source || !json_object_is_type(origin_source, json_type_object)) &&
+        transform_obj && json_object_is_type(transform_obj, json_type_object) &&
+        json_object_object_get_ex(transform_obj, "position", &position_source) &&
+        json_object_is_type(position_source, json_type_object)) {
+        json_object *jx = NULL;
+        json_object *jy = NULL;
+        json_object *jz = NULL;
+        if (json_object_object_get_ex(position_source, "x", &jx)) {
+            entry->origin_x = json_object_get_double(jx) * world_scale;
+        }
+        if (json_object_object_get_ex(position_source, "y", &jy)) {
+            entry->origin_y = json_object_get_double(jy) * world_scale;
+        }
+        if (json_object_object_get_ex(position_source, "z", &jz)) {
+            entry->origin_z = json_object_get_double(jz) * world_scale;
+        }
+    }
+
+    entry->has_dimensions = has_width || has_height || has_depth;
+    if (has_width) entry->width = width * world_scale;
+    if (has_height) entry->height = height * world_scale;
+    if (has_depth) entry->depth = depth * world_scale;
+
+    g_last_3d_digest.primitive_count += 1;
+    if (kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE) {
+        g_last_3d_digest.plane_primitive_count += 1;
+    } else if (kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_RECT_PRISM) {
+        g_last_3d_digest.rect_prism_primitive_count += 1;
+    }
+}
+
+static void apply_scene3d_extension_digest(json_object *root, double world_scale) {
+    json_object *extensions = NULL;
+    json_object *line_drawing = NULL;
+    json_object *scene3d = NULL;
+    json_object *bounds = NULL;
+    json_object *construction_plane = NULL;
+
+    if (!root || !json_object_is_type(root, json_type_object)) return;
+    if (!json_object_object_get_ex(root, "extensions", &extensions) ||
+        !json_object_is_type(extensions, json_type_object)) {
+        return;
+    }
+    if (!json_object_object_get_ex(extensions, "line_drawing", &line_drawing) ||
+        !json_object_is_type(line_drawing, json_type_object)) {
+        return;
+    }
+    if (!json_object_object_get_ex(line_drawing, "scene3d", &scene3d) ||
+        !json_object_is_type(scene3d, json_type_object)) {
+        return;
+    }
+
+    if (json_object_object_get_ex(scene3d, "bounds", &bounds) &&
+        json_object_is_type(bounds, json_type_object)) {
+        double min_x = 0.0, min_y = 0.0, min_z = 0.0;
+        double max_x = 0.0, max_y = 0.0, max_z = 0.0;
+        bool has_enabled = false;
+        bool has_clamp = false;
+        bool enabled = false;
+        bool clamp_on_edit = false;
+        g_last_3d_digest.has_scene_bounds = true;
+        has_enabled = parse_bool_field(bounds, "enabled", &enabled);
+        has_clamp = parse_bool_field(bounds, "clamp_on_edit", &clamp_on_edit);
+        g_last_3d_digest.bounds_enabled = has_enabled && enabled;
+        g_last_3d_digest.bounds_clamp_on_edit = has_clamp && clamp_on_edit;
+        if (parse_vec3(bounds, "min", &min_x, &min_y, &min_z)) {
+            g_last_3d_digest.bounds_min_x = min_x * world_scale;
+            g_last_3d_digest.bounds_min_y = min_y * world_scale;
+            g_last_3d_digest.bounds_min_z = min_z * world_scale;
+        }
+        if (parse_vec3(bounds, "max", &max_x, &max_y, &max_z)) {
+            g_last_3d_digest.bounds_max_x = max_x * world_scale;
+            g_last_3d_digest.bounds_max_y = max_y * world_scale;
+            g_last_3d_digest.bounds_max_z = max_z * world_scale;
+        }
+    }
+
+    if (json_object_object_get_ex(scene3d, "construction_plane", &construction_plane) &&
+        json_object_is_type(construction_plane, json_type_object)) {
+        const char *mode = json_string_field_or_null(construction_plane, "mode");
+        const char *axis = json_string_field_or_null(construction_plane, "axis");
+        double offset = 0.0;
+        g_last_3d_digest.has_construction_plane = true;
+        if (mode && mode[0]) {
+            snprintf(g_last_3d_digest.construction_plane_mode,
+                     sizeof(g_last_3d_digest.construction_plane_mode),
+                     "%s",
+                     mode);
+        }
+        if (axis && axis[0]) {
+            snprintf(g_last_3d_digest.construction_plane_axis,
+                     sizeof(g_last_3d_digest.construction_plane_axis),
+                     "%s",
+                     axis);
+        }
+        if (parse_double_field(construction_plane, "offset", &offset)) {
+            g_last_3d_digest.construction_plane_offset = offset * world_scale;
+        }
+    }
 }
 
 static void apply_space_mode(json_object *root) {
@@ -334,16 +522,20 @@ static void apply_objects(json_object *objects_array,
     for (i = 0; i < src_count; ++i) {
         json_object *obj = json_object_array_get_idx(objects_array, i);
         json_object *object_type = NULL;
+        json_object *primitive = NULL;
+        json_object *primitive_kind_obj = NULL;
         json_object *transform = NULL;
         json_object *position = NULL;
         json_object *scale = NULL;
         const char *type_str = NULL;
+        const char *primitive_kind_str = NULL;
         double x = 0.0, y = 0.0, z = 0.0;
         double sx = 1.0, sy = 1.0, sz = 1.0;
         bool is_circle = true;
         bool is_plane = false;
         bool is_triangle_mesh = false;
         bool is_box = false;
+        RuntimeSceneBridgePrimitiveKind digest_kind = RUNTIME_SCENE_BRIDGE_PRIMITIVE_UNKNOWN;
         SceneObject *dst = NULL;
         if (!obj || !json_object_is_type(obj, json_type_object)) continue;
 
@@ -351,6 +543,13 @@ static void apply_objects(json_object *objects_array,
             json_object_is_type(object_type, json_type_string)) {
             type_str = json_object_get_string(object_type);
         }
+        if (json_object_object_get_ex(obj, "primitive", &primitive) &&
+            json_object_is_type(primitive, json_type_object) &&
+            json_object_object_get_ex(primitive, "kind", &primitive_kind_obj) &&
+            json_object_is_type(primitive_kind_obj, json_type_string)) {
+            primitive_kind_str = json_object_get_string(primitive_kind_obj);
+        }
+        digest_kind = digest_kind_from_labels(type_str, primitive_kind_str);
         if (type_str) {
             if (strstr(type_str, "circle")) {
                 is_circle = true;
@@ -360,6 +559,20 @@ static void apply_objects(json_object *objects_array,
             if (strstr(type_str, "plane")) is_plane = true;
             if (strstr(type_str, "triangle_mesh")) is_triangle_mesh = true;
             if (strstr(type_str, "box")) is_box = true;
+        }
+        if (primitive_kind_str) {
+            if (strstr(primitive_kind_str, "plane")) {
+                is_plane = true;
+                is_circle = false;
+            }
+            if (strstr(primitive_kind_str, "triangle_mesh")) {
+                is_triangle_mesh = true;
+                is_circle = false;
+            }
+            if (strstr(primitive_kind_str, "rect_prism") || strstr(primitive_kind_str, "box")) {
+                is_box = true;
+                is_circle = false;
+            }
         }
 
         if (json_object_object_get_ex(obj, "transform", &transform) &&
@@ -400,6 +613,7 @@ static void apply_objects(json_object *objects_array,
         if (dst->scale <= 0.01) dst->scale = 0.01;
         apply_object_material(obj, materials_array, dst);
         apply_object_flags(obj, dst);
+        digest_append_primitive(obj, transform, primitive, digest_kind, world_scale);
         sceneSettings.objectCount++;
     }
 
@@ -501,7 +715,12 @@ bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
     apply_objects(objects, materials, world_scale, out_summary);
     apply_light_seed_scaled(lights, world_scale);
     apply_camera_seed_scaled(cameras, world_scale);
+    apply_scene3d_extension_digest(root, world_scale);
     g_last_3d_scaffold.valid = true;
+    g_last_3d_digest.valid = true;
+    animSettings.runtimeScenePath[0] = '\0';
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    animSettings.useFluidScene = false;
 
     preflight_diag(out_summary, "ok");
     json_object_put(root);
@@ -512,13 +731,18 @@ bool runtime_scene_bridge_apply_file(const char *runtime_scene_path,
                                      RuntimeSceneBridgePreflight *out_summary) {
     CoreBuffer file_data = {0};
     CoreResult io_result;
+    char runtime_scene_path_copy[sizeof(animSettings.runtimeScenePath)];
     char *json_text = NULL;
     bool ok;
 
     if (!runtime_scene_path || !out_summary) return false;
     preflight_reset(out_summary);
+    snprintf(runtime_scene_path_copy,
+             sizeof(runtime_scene_path_copy),
+             "%s",
+             runtime_scene_path);
 
-    io_result = core_io_read_all(runtime_scene_path, &file_data);
+    io_result = core_io_read_all(runtime_scene_path_copy, &file_data);
     if (io_result.code != CORE_OK || !file_data.data || file_data.size == 0) {
         preflight_diag(out_summary, "failed to read runtime scene file");
         core_io_buffer_free(&file_data);
@@ -536,6 +760,12 @@ bool runtime_scene_bridge_apply_file(const char *runtime_scene_path,
     core_io_buffer_free(&file_data);
 
     ok = runtime_scene_bridge_apply_json(json_text, out_summary);
+    if (ok) {
+        snprintf(animSettings.runtimeScenePath,
+                 sizeof(animSettings.runtimeScenePath),
+                 "%s",
+                 runtime_scene_path_copy);
+    }
     free(json_text);
     return ok;
 }
@@ -610,4 +840,9 @@ bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_j
 void runtime_scene_bridge_get_last_3d_scaffold_state(RuntimeSceneBridge3DScaffoldState *out_state) {
     if (!out_state) return;
     *out_state = g_last_3d_scaffold;
+}
+
+void runtime_scene_bridge_get_last_3d_digest_state(RuntimeSceneBridge3DDigestState *out_state) {
+    if (!out_state) return;
+    *out_state = g_last_3d_digest;
 }

@@ -1,13 +1,18 @@
 #include "engine/Render/render_text_helpers.h"
 #include "engine/Render/render_font.h"
+#include "engine/Render/render_pipeline.h"
+#include "render/text_upload_policy.h"
 #include <SDL2/SDL_ttf.h>
 #include <string.h>
 
 static int measureRange(const char* text, int length, int* outWidth) {
     TTF_Font* font = getActiveFont();
+    RenderContext* ctx = getRenderContext();
+    SDL_Renderer* renderer = ctx ? ctx->renderer : NULL;
     if (!font || !text || length <= 0) return 0;
     int w = 0;
     TTF_SizeUTF8(font, text, &w, NULL);
+    w = ray_tracing_text_logical_pixels(renderer, w);
     if (outWidth) *outWidth = w;
     return w;
 }

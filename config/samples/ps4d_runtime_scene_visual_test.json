@@ -1,0 +1,129 @@
+{
+  "schema_family": "codework_scene",
+  "schema_variant": "scene_runtime_v1",
+  "schema_version": 1,
+  "scene_id": "scene_ps4d_visual_test",
+  "space_mode_default": "3d",
+  "unit_system": "meters",
+  "world_scale": 1.0,
+  "objects": [
+    {
+      "object_id": "plane_floor",
+      "object_type": "plane_primitive",
+      "space_mode_intent": "2d",
+      "dimensional_mode": "plane_locked",
+      "locked_plane": "xy",
+      "transform": {
+        "position": { "x": 0.0, "y": 0.0, "z": -1.0 },
+        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+      },
+      "flags": {
+        "visible": true,
+        "locked": false,
+        "selectable": true
+      },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 8.0,
+        "height": 6.0,
+        "lock_to_construction_plane": true,
+        "lock_to_bounds": true,
+        "frame": {
+          "origin": { "x": 0.0, "y": 0.0, "z": -1.0 },
+          "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+          "axis_v": { "x": 0.0, "y": 1.0, "z": 0.0 },
+          "normal": { "x": 0.0, "y": 0.0, "z": 1.0 }
+        }
+      }
+    },
+    {
+      "object_id": "prism_center",
+      "object_type": "rect_prism_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": {
+        "position": { "x": 0.0, "y": 0.0, "z": 0.25 },
+        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+      },
+      "flags": {
+        "visible": true,
+        "locked": false,
+        "selectable": true
+      },
+      "primitive": {
+        "kind": "rect_prism_primitive",
+        "width": 2.0,
+        "height": 1.5,
+        "depth": 2.5,
+        "lock_to_construction_plane": false,
+        "lock_to_bounds": false,
+        "frame": {
+          "origin": { "x": 0.0, "y": 0.0, "z": 0.25 },
+          "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+          "axis_v": { "x": 0.0, "y": 1.0, "z": 0.0 },
+          "normal": { "x": 0.0, "y": 0.0, "z": 1.0 }
+        }
+      }
+    },
+    {
+      "object_id": "prism_offset",
+      "object_type": "rect_prism_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": {
+        "position": { "x": 2.5, "y": 1.5, "z": 0.0 },
+        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+      },
+      "flags": {
+        "visible": true,
+        "locked": false,
+        "selectable": true
+      },
+      "primitive": {
+        "kind": "rect_prism_primitive",
+        "width": 1.25,
+        "height": 1.25,
+        "depth": 1.5,
+        "lock_to_construction_plane": false,
+        "lock_to_bounds": false,
+        "frame": {
+          "origin": { "x": 2.5, "y": 1.5, "z": 0.0 },
+          "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+          "axis_v": { "x": 0.0, "y": 1.0, "z": 0.0 },
+          "normal": { "x": 0.0, "y": 0.0, "z": 1.0 }
+        }
+      }
+    }
+  ],
+  "materials": [],
+  "lights": [],
+  "cameras": [],
+  "constraints": [],
+  "hierarchy": [],
+  "extensions": {
+    "line_drawing": {
+      "scene3d": {
+        "bounds": {
+          "enabled": true,
+          "clamp_on_edit": true,
+          "min": { "x": -6.0, "y": -5.0, "z": -2.5 },
+          "max": { "x": 6.0, "y": 5.0, "z": 4.0 }
+        },
+        "construction_plane": {
+          "mode": "axis_aligned",
+          "axis": "xy",
+          "offset": -1.0,
+          "custom_frame": {
+            "origin": { "x": 0.0, "y": 0.0, "z": -1.0 },
+            "axisU": { "x": 1.0, "y": 0.0, "z": 0.0 },
+            "axisV": { "x": 0.0, "y": 1.0, "z": 0.0 },
+            "normal": { "x": 0.0, "y": 0.0, "z": 1.0 }
+          }
+        }
+      }
+    }
+  }
+}

@@ -20,7 +20,19 @@
 typedef struct {
     char name[128];
     char path[PATH_MAX];
+    int source;
 } ManifestOption;
+
+typedef enum {
+    MENU_SCENE_LIBRARY_2D_CONFIG = 0,
+    MENU_SCENE_LIBRARY_FLUID_MANIFEST = 1,
+    MENU_SCENE_LIBRARY_RUNTIME_SCENE = 2
+} MenuSceneLibraryLane;
+
+typedef enum {
+    MENU_VIEW_MAIN = 0,
+    MENU_VIEW_SCENE_EDITOR = 1
+} MenuViewMode;
 
 typedef struct {
     bool draggingSlider;
@@ -50,6 +62,9 @@ typedef struct {
     Uint32 statusExpireMs;
     SDL_Color statusColor;
     char statusLabel[64];
+    MenuViewMode activeView;
+    int activeSceneSource;
+    MenuSceneLibraryLane activeSceneLibraryLane;
 
     ManifestOption manifestOptions[SDL_MENU_MAX_MANIFEST_OPTIONS];
     size_t manifestOptionCount;
@@ -86,6 +101,8 @@ void menu_state_apply_special_slider_rules(MenuRuntimeState* state, int* target)
 void menu_state_reanchor_camera_after_resize(int previousWidth, int previousHeight);
 
 void menu_state_build_manifest_label(const char *path, char *out, size_t outSize);
+bool menu_state_manifest_option_visible(const MenuRuntimeState* state,
+                                        const ManifestOption* option);
 
 bool menu_state_reload_font(TTF_Font** font);
 

@@ -9,6 +9,7 @@
 #include <string.h>      // For string functions (strncpy)
 #include <json-c/json.h> // For JSON handling
 #include <math.h>
+#include <limits.h>
 
 #define SCENE_CONFIG_DEFAULT_FILE "config/scene_config.json"
 #define SCENE_CONFIG_RUNTIME_FILE "data/runtime/scene_config.json"
@@ -70,7 +71,9 @@ static bool ValidateDataRootPath(char *target,
                                  size_t target_size,
                                  const char *default_path,
                                  const char *label,
+                                 bool is_output_root,
                                  bool create_if_missing) {
+    char stable_root[PATH_MAX];
     bool corrected = false;
     if (!target || target_size == 0 || !default_path || !default_path[0]) return false;
     if (target[0] == '\0') {
@@ -89,6 +92,20 @@ static bool ValidateDataRootPath(char *target,
                     target,
                     default_path);
             snprintf(target, target_size, "%s", default_path);
+            corrected = true;
+        }
+    }
+    if (!config_io_directory_exists(target)) {
+        bool has_stable_root = is_output_root
+                                   ? ray_tracing_find_stable_output_root(stable_root, sizeof(stable_root))
+                                   : ray_tracing_find_stable_input_root(stable_root, sizeof(stable_root));
+        if (has_stable_root) {
+            fprintf(stderr,
+                    "[startup] %s root '%s' missing; using stable workspace root '%s'.\n",
+                    label ? label : "data",
+                    target,
+                    stable_root);
+            snprintf(target, target_size, "%s", stable_root);
             corrected = true;
         }
     }
@@ -138,6 +155,30 @@ int animation_config_space_mode_clamp(int mode) {
     if (mode < SPACE_MODE_2D) return SPACE_MODE_2D;
     if (mode > SPACE_MODE_3D) return SPACE_MODE_2D;
     return mode;
+}
+
+int animation_config_scene_source_clamp(int source) {
+    if (source < SCENE_SOURCE_CONFIG_2D) return SCENE_SOURCE_CONFIG_2D;
+    if (source > SCENE_SOURCE_RUNTIME_SCENE) return SCENE_SOURCE_CONFIG_2D;
+    return source;
+}
+
+bool animation_config_scene_source_is_fluid(int source) {
+    return animation_config_scene_source_clamp(source) == SCENE_SOURCE_FLUID_MANIFEST;
+}
+
+static void animation_config_sync_scene_source_legacy_fields(AnimationConfig* cfg) {
+    if (!cfg) return;
+    cfg->sceneSource = animation_config_scene_source_clamp(cfg->sceneSource);
+    if (cfg->sceneSource == SCENE_SOURCE_FLUID_MANIFEST &&
+        cfg->fluidManifest[0] == '\0') {
+        cfg->sceneSource = SCENE_SOURCE_CONFIG_2D;
+    }
+    if (cfg->sceneSource == SCENE_SOURCE_RUNTIME_SCENE &&
+        cfg->runtimeScenePath[0] == '\0') {
+        cfg->sceneSource = SCENE_SOURCE_CONFIG_2D;
+    }
+    cfg->useFluidScene = animation_config_scene_source_is_fluid(cfg->sceneSource);
 }
 
 int animation_config_scale_text_point_size(const AnimationConfig* cfg,
@@ -203,8 +244,10 @@ AnimationConfig animSettings = {
     .cacheHaloRadius = 3.5,
     .lightDecaySoftness = 1.0,
     .lightHeight = 8.0,
+    .sceneSource = SCENE_SOURCE_CONFIG_2D,
     .useFluidScene = false,
-    .fluidManifest = ""
+    .fluidManifest = "",
+    .runtimeScenePath = ""
 };
 
 SceneConfig sceneSettings = {
@@ -226,7 +269,8 @@ static double DefaultForwardFalloffDistance(void) {
 
 void SaveAllSettings(void) {
     MaterialManagerInit();
-    if (!animSettings.useFluidScene) {
+    animation_config_sync_scene_source_legacy_fields(&animSettings);
+    if (animSettings.sceneSource == SCENE_SOURCE_CONFIG_2D) {
         SaveSceneConfig();
     }
     SaveAnimationConfig();
@@ -350,6 +394,7 @@ void SaveAnimationConfig(void) {
     }
 
     struct json_object* config = json_object_new_object();
+    animation_config_sync_scene_source_legacy_fields(&animSettings);
 
     json_object_object_add(config, "interactiveMode", json_object_new_boolean(animSettings.interactiveMode));
     json_object_object_add(config, "deepRenderMode", json_object_new_boolean(animSettings.deepRenderMode));
@@ -400,8 +445,11 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "cacheHaloRadius", json_object_new_double(animSettings.cacheHaloRadius));
     json_object_object_add(config, "lightDecaySoftness", json_object_new_double(animSettings.lightDecaySoftness));
     json_object_object_add(config, "lightHeight", json_object_new_double(animSettings.lightHeight));
+    json_object_object_add(config, "sceneSource",
+                           json_object_new_int(animation_config_scene_source_clamp(animSettings.sceneSource)));
     json_object_object_add(config, "useFluidScene", json_object_new_boolean(animSettings.useFluidScene));
     json_object_object_add(config, "fluidManifest", json_object_new_string(animSettings.fluidManifest));
+    json_object_object_add(config, "runtimeScenePath", json_object_new_string(animSettings.runtimeScenePath));
     json_object_object_add(config, "lightHeight", json_object_new_double(animSettings.lightHeight));
     fprintf(file, "%s", json_object_to_json_string_ext(config, JSON_C_TO_STRING_PRETTY));
     fclose(file);
@@ -727,6 +775,7 @@ void LoadAnimationConfig(void) {
     }
 
     struct json_object* temp;
+    bool has_scene_source = false;
     
     if (json_object_object_get_ex(config, "interactiveMode", &temp))   
         animSettings.interactiveMode = json_object_get_boolean(temp);   
@@ -870,6 +919,12 @@ void LoadAnimationConfig(void) {
     } else {
         animSettings.lightHeight = 8.0;
     }
+    if (json_object_object_get_ex(config, "sceneSource", &temp)) {
+        animSettings.sceneSource = animation_config_scene_source_clamp(json_object_get_int(temp));
+        has_scene_source = true;
+    } else {
+        animSettings.sceneSource = SCENE_SOURCE_CONFIG_2D;
+    }
     if (json_object_object_get_ex(config, "useFluidScene", &temp) && json_object_is_type(temp, json_type_boolean)) {
         animSettings.useFluidScene = json_object_get_boolean(temp);
     } else {
@@ -881,6 +936,21 @@ void LoadAnimationConfig(void) {
             strncpy(animSettings.fluidManifest, fm, sizeof(animSettings.fluidManifest) - 1);
             animSettings.fluidManifest[sizeof(animSettings.fluidManifest) - 1] = '\0';
         }
+    }
+    if (json_object_object_get_ex(config, "runtimeScenePath", &temp) &&
+        json_object_is_type(temp, json_type_string)) {
+        const char *path = json_object_get_string(temp);
+        if (path) {
+            strncpy(animSettings.runtimeScenePath, path, sizeof(animSettings.runtimeScenePath) - 1);
+            animSettings.runtimeScenePath[sizeof(animSettings.runtimeScenePath) - 1] = '\0';
+        }
+    } else {
+        animSettings.runtimeScenePath[0] = '\0';
+    }
+    if (!has_scene_source) {
+        animSettings.sceneSource = animSettings.useFluidScene
+                                       ? SCENE_SOURCE_FLUID_MANIFEST
+                                       : SCENE_SOURCE_CONFIG_2D;
     }
 
     bool root_corrected = false;
@@ -922,11 +992,13 @@ void LoadAnimationConfig(void) {
                                            sizeof(animSettings.inputRoot),
                                            ray_tracing_default_input_root(),
                                            "input",
+                                           false,
                                            false);
     root_corrected |= ValidateDataRootPath(animSettings.outputRoot,
                                            sizeof(animSettings.outputRoot),
                                            ray_tracing_default_output_root(),
                                            "output",
+                                           true,
                                            true);
     (void)setenv("RAY_TRACING_INPUT_ROOT", animSettings.inputRoot, 1);
     (void)setenv("RAY_TRACING_OUTPUT_ROOT", animSettings.outputRoot, 1);
@@ -936,6 +1008,7 @@ void LoadAnimationConfig(void) {
                 "[startup] Data root fallback correction persisted to runtime animation config.\n");
     }
     animSettings.spaceMode = animation_config_space_mode_clamp(animSettings.spaceMode);
+    animation_config_sync_scene_source_legacy_fields(&animSettings);
     animSettings.textZoomStep = animation_config_text_zoom_step_clamp(animSettings.textZoomStep);
 	
     printf(" Loaded animation config successfully.\n");

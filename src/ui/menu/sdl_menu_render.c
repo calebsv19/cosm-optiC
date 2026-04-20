@@ -7,13 +7,15 @@
 #include <limits.h>
 
 #include "app/animation.h"
+#include "config/config_manager.h"
 #include "editor/editor_mode_router.h"
 #include "engine/Render/render_font.h"
 #include "render/render_helper.h"
+#include "render/text_upload_policy.h"
 #include "engine/Render/render_pipeline.h"
 #include "ui/shared_theme_font_adapter.h"
 
-#define MENU_WIDTH 1000
+#define MENU_WIDTH 1200
 #define MENU_HEIGHT 900
 #define MENU_MARGIN_X 30
 #define MENU_MARGIN_Y 30
@@ -72,12 +74,22 @@
 #define MANIFEST_ITEM_PADDING 6
 #define MANIFEST_SCROLLBAR_WIDTH 10
 
+static SDL_Renderer* menu_context_renderer(void) {
+    RenderContext* ctx = getRenderContext();
+    if (!ctx) return NULL;
+    return ctx->renderer;
+}
+
+static int menu_logical_pixels(int raster_pixels) {
+    return ray_tracing_text_logical_pixels(menu_context_renderer(), raster_pixels);
+}
+
 static void render_surface(SDL_Renderer* renderer, SDL_Surface* surface, const SDL_Rect* dst) {
     if (!renderer || !surface || !dst) return;
 #if USE_VULKAN
     VkRendererTexture texture;
     if (vk_renderer_upload_sdl_surface_with_filter((VkRenderer*)renderer, surface, &texture,
-                                                   VK_FILTER_LINEAR) != VK_SUCCESS) {
+                                                   ray_tracing_text_upload_filter(renderer)) != VK_SUCCESS) {
         return;
     }
     vk_renderer_draw_texture((VkRenderer*)renderer, &texture, NULL, dst);
@@ -107,7 +119,12 @@ void RenderText(SDL_Renderer *renderer, TTF_Font *font, int x, int y, const char
     SDL_Surface *textSurface = TTF_RenderUTF8_Blended(font, buffer, textColor);
     if (!textSurface) return;
 
-    SDL_Rect textRect = {x, y, textSurface->w, textSurface->h};
+    SDL_Rect textRect = {
+        x,
+        y,
+        ray_tracing_text_logical_pixels(renderer, textSurface->w),
+        ray_tracing_text_logical_pixels(renderer, textSurface->h)
+    };
     render_surface(renderer, textSurface, &textRect);
     SDL_FreeSurface(textSurface);
 }
@@ -116,7 +133,12 @@ static void render_text_color(SDL_Renderer *renderer, TTF_Font *font, int x, int
     if (!text || !*text) return;
     SDL_Surface *textSurface = TTF_RenderUTF8_Blended(font, text, color);
     if (!textSurface) return;
-    SDL_Rect textRect = {x, y, textSurface->w, textSurface->h};
+    SDL_Rect textRect = {
+        x,
+        y,
+        ray_tracing_text_logical_pixels(renderer, textSurface->w),
+        ray_tracing_text_logical_pixels(renderer, textSurface->h)
+    };
     render_surface(renderer, textSurface, &textRect);
     SDL_FreeSurface(textSurface);
 }
@@ -131,12 +153,16 @@ static void render_centered_text_color(SDL_Renderer *renderer,
     if (!font || !rect || !text || !text[0]) return;
     textSurface = TTF_RenderUTF8_Blended(font, text, color);
     if (!textSurface) return;
-    textRect = (SDL_Rect){
-        rect->x + (rect->w - textSurface->w) / 2,
-        rect->y + (rect->h - textSurface->h) / 2,
-        textSurface->w,
-        textSurface->h
-    };
+    {
+        int logical_w = ray_tracing_text_logical_pixels(renderer, textSurface->w);
+        int logical_h = ray_tracing_text_logical_pixels(renderer, textSurface->h);
+        textRect = (SDL_Rect){
+            rect->x + (rect->w - logical_w) / 2,
+            rect->y + (rect->h - logical_h) / 2,
+            logical_w,
+            logical_h
+        };
+    }
     render_surface(renderer, textSurface, &textRect);
     SDL_FreeSurface(textSurface);
 }
@@ -193,16 +219,47 @@ static void fit_text_to_width(TTF_Font *font,
                               char *out,
                               size_t out_size);
 
+static const char* menu_active_scene_source_path(void) {
+    int source = animation_config_scene_source_clamp(animSettings.sceneSource);
+    if (source == SCENE_SOURCE_RUNTIME_SCENE) {
+        return animSettings.runtimeScenePath;
+    }
+    if (source == SCENE_SOURCE_FLUID_MANIFEST) {
+        return animSettings.fluidManifest;
+    }
+    return "";
+}
+
+static bool manifest_option_is_selected(const ManifestOption *option) {
+    int selected_source = animation_config_scene_source_clamp(animSettings.sceneSource);
+    const char *selected_path = menu_active_scene_source_path();
+    int option_source = animation_config_scene_source_clamp(option ? option->source : SCENE_SOURCE_CONFIG_2D);
+    if (!option) return false;
+    if (selected_source != option_source) return false;
+    if (option_source == SCENE_SOURCE_CONFIG_2D) return true;
+    return selected_path[0] && strcmp(selected_path, option->path) == 0;
+}
+
 static void format_manifest_button_label(MenuRuntimeState* state, char *out, size_t outSize) {
     if (!state || !out || outSize == 0) return;
     const char *base = "Load Scene";
-    if (!animSettings.fluidManifest[0]) {
+    const char *path = menu_active_scene_source_path();
+    int source = animation_config_scene_source_clamp(animSettings.sceneSource);
+    if (source == SCENE_SOURCE_CONFIG_2D) {
+        snprintf(out, outSize, "%s [2D config]", base);
+        return;
+    }
+    if (!path[0]) {
         snprintf(out, outSize, "%s", base);
         return;
     }
     char label[128];
-    menu_state_build_manifest_label(animSettings.fluidManifest, label, sizeof(label));
-    snprintf(out, outSize, "%s: %s", base, label);
+    menu_state_build_manifest_label(path, label, sizeof(label));
+    if (source == SCENE_SOURCE_RUNTIME_SCENE) {
+        snprintf(out, outSize, "%s [Runtime]: %s", base, label);
+    } else {
+        snprintf(out, outSize, "%s [Fluid]: %s", base, label);
+    }
     if (strlen(out) >= outSize) {
         out[outSize - 1] = '\0';
     }
@@ -254,7 +311,15 @@ static void render_manifest_dropdown(SDL_Renderer *renderer,
     int listH = panelH - MANIFEST_ITEM_PADDING * 2;
     state->manifestListRect = (SDL_Rect){listX, listY, listW, listH};
 
-    int contentH = (int)(state->manifestOptionCount * SDL_MENU_MANIFEST_ITEM_HEIGHT);
+    int visible_indices[SDL_MENU_MAX_MANIFEST_OPTIONS];
+    int visible_count = 0;
+    for (int i = 0; i < (int)state->manifestOptionCount; ++i) {
+        if (menu_state_manifest_option_visible(state, &state->manifestOptions[i])) {
+            visible_indices[visible_count++] = i;
+        }
+    }
+
+    int contentH = visible_count * SDL_MENU_MANIFEST_ITEM_HEIGHT;
     state->manifestMaxScroll = (contentH > listH) ? (float)(contentH - listH) : 0.0f;
     state->manifestScrollbarVisible = state->manifestMaxScroll > 0.5f;
     menu_state_manifest_clamp_scroll(state);
@@ -297,12 +362,12 @@ static void render_manifest_dropdown(SDL_Renderer *renderer,
     SDL_Rect prev_clip = {0, 0, 0, 0};
     SDL_RenderGetClipRect(renderer, &prev_clip);
     SDL_RenderSetClipRect(renderer, &state->manifestListRect);
-    for (int i = firstIndex; i < (int)state->manifestOptionCount; ++i) {
-        int itemY = listY + yOffset + (i - firstIndex) * SDL_MENU_MANIFEST_ITEM_HEIGHT;
+    for (int row = firstIndex; row < visible_count; ++row) {
+        int i = visible_indices[row];
+        int itemY = listY + yOffset + (row - firstIndex) * SDL_MENU_MANIFEST_ITEM_HEIGHT;
         if (itemY > listY + listH - SDL_MENU_MANIFEST_ITEM_HEIGHT) break;
         SDL_Rect itemRect = {listX, itemY, listW, SDL_MENU_MANIFEST_ITEM_HEIGHT};
-        bool isSelected = animSettings.fluidManifest[0] &&
-                          strcmp(animSettings.fluidManifest, state->manifestOptions[i].path) == 0;
+        bool isSelected = manifest_option_is_selected(&state->manifestOptions[i]);
         if (has_shared_palette) {
             SDL_Color fill = isSelected ? palette.accent_primary : palette.button_fill;
             if (isSelected) {
@@ -341,9 +406,9 @@ static void render_manifest_dropdown(SDL_Renderer *renderer,
         render_text_color(renderer, font, itemRect.x + 6, itemRect.y + 4, textColor, label_fit);
     }
 
-    if (state->manifestOptionCount == 0) {
+    if (visible_count == 0) {
         SDL_Color c = has_shared_palette ? palette.text_muted : (SDL_Color){210, 210, 210, 255};
-        render_text_color(renderer, font, listX, listY + 4, c, "No manifests found");
+        render_text_color(renderer, font, listX, listY + 4, c, "No scene sources found");
     }
     SDL_RenderSetClipRect(renderer, &prev_clip);
 }
@@ -368,6 +433,8 @@ static SDL_Rect build_adaptive_button_rect(TTF_Font* font,
     int textW = 0;
     int textH = 0;
     if (font && text && text[0] && TTF_SizeUTF8(font, text, &textW, &textH) == 0) {
+        textW = menu_logical_pixels(textW);
+        textH = menu_logical_pixels(textH);
         width = max_int(width, textW + 24);
         height = max_int(height, textH + 14);
     }
@@ -422,7 +489,10 @@ static void fit_text_to_width(TTF_Font *font,
     if (!text) return;
     snprintf(out, out_size, "%s", text);
     if (!font || max_width <= 0) return;
-    if (TTF_SizeUTF8(font, out, &w, NULL) == 0 && w <= max_width) return;
+    if (TTF_SizeUTF8(font, out, &w, NULL) == 0) {
+        w = menu_logical_pixels(w);
+        if (w <= max_width) return;
+    }
     len = strlen(out);
     while (len > 0) {
         --len;
@@ -430,9 +500,12 @@ static void fit_text_to_width(TTF_Font *font,
         {
             char candidate[PATH_MAX];
             snprintf(candidate, sizeof(candidate), "%s...", out);
-            if (TTF_SizeUTF8(font, candidate, &w, NULL) == 0 && w <= max_width) {
-                snprintf(out, out_size, "%s", candidate);
-                return;
+            if (TTF_SizeUTF8(font, candidate, &w, NULL) == 0) {
+                w = menu_logical_pixels(w);
+                if (w <= max_width) {
+                    snprintf(out, out_size, "%s", candidate);
+                    return;
+                }
             }
         }
     }
@@ -707,8 +780,8 @@ void menu_render_frame(SDL_Renderer* renderer, TTF_Font* font, MenuRuntimeState*
 
     char manifestLabel[160];
     format_manifest_button_label(state, manifestLabel, sizeof(manifestLabel));
-    render_button_rect(renderer, font, &buttons.loadSceneRect, manifestLabel, state->manifestLoadEnabled);
-    if (state->manifestLoadEnabled) {
+    render_button_rect(renderer, font, &buttons.loadSceneRect, manifestLabel, state->manifestDropdownOpen);
+    if (state->manifestDropdownOpen) {
         render_manifest_dropdown(renderer, font, state, &buttons.loadSceneRect);
     } else {
         state->manifestPanelRect = (SDL_Rect){0, 0, 0, 0};

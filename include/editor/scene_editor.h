@@ -8,6 +8,7 @@
 #include "editor/bezier_editor.h"
 #include "editor/object_editor.h"
 #include "editor/camera_editor.h"
+#include "editor/scene_editor_pane_host.h"
 
 extern SDL_Rect applyButton;
 extern SDL_Rect previewButton;
@@ -19,17 +20,27 @@ typedef struct {
     SDL_Renderer* renderer;
 
     bool running;
+    bool owns_window;
+    bool owns_renderer;
     int currentMode;  // 0 = Bezier, 1 = Objects, 2 = Camera
 } SceneEditor;
 
+bool SceneEditorSessionBegin(SceneEditor* editor, SDL_Renderer* renderer, SDL_Window* window);
+void SceneEditorSessionHandleEvent(SceneEditor* editor, SDL_Event* event);
+void SceneEditorSessionRender(SceneEditor* editor);
+bool SceneEditorSessionWantsExit(const SceneEditor* editor);
+void SceneEditorSessionEnd(SceneEditor* editor);
+
 // Initialization & Cleanup
-void InitializeSceneEditor(SceneEditor* editor);
+bool InitializeSceneEditor(SceneEditor* editor);
 void DestroySceneEditor(SceneEditor* editor);
 
 // Main Loop & Event Handling
 void SceneEditorLoop(SceneEditor* editor);
 void HandleSceneEditorEvents(SceneEditor* editor, SDL_Event* event);
 bool IsClickingButtonMain(int mx,int my);
+bool SceneEditorIsPaneToolButton(int mx, int my);
+bool SceneEditorGetPaneLayout(SceneEditorPaneLayout* out_layout);
 
 // Scene Mode Management
 void SetSceneMode(SceneEditor* editor, int mode);

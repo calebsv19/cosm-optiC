@@ -1,15 +1,14 @@
 #include "engine/Render/render_font.h"
+#include "engine/Render/render_pipeline.h"
 #include "config/config_manager.h"
-#include "ui/shared_theme_font_adapter.h"
+#include "render/text_font_cache.h"
+#include "render/text_upload_policy.h"
 #include <stdio.h>
-#include <string.h>
 
 static TTF_Font* activeFont = NULL;
 static int activePointSize = 16;
 static const int kBasePointSize = 16;
-static const int kMinPointSize = 8;
-static const char* kSystemFontPath = "/System/Library/Fonts/Supplemental/Arial.ttf";
-static const char* kBundledFontPath = "config/default.ttf";
+static const int kMinPointSize = 6;
 
 static bool ensureTTF(void) {
     if (TTF_WasInit() == 0) {
@@ -22,32 +21,23 @@ static bool ensureTTF(void) {
 }
 
 static bool loadDefaultFont(void) {
-    char shared_font_path[256];
-    const char* font_path = kSystemFontPath;
-    TTF_Font* opened_font = NULL;
+    TTF_Font* cached_font = NULL;
+    int base_point_size = kBasePointSize;
     int requested_point_size = 0;
+    SDL_Renderer* renderer = NULL;
 
     if (activeFont) return true;
     if (!ensureTTF()) return false;
-    requested_point_size = animation_config_scale_text_point_size(&animSettings, kBasePointSize, kMinPointSize);
-    if (ray_tracing_shared_font_resolve_ui_regular(
-            shared_font_path, sizeof(shared_font_path), &requested_point_size)) {
-        font_path = shared_font_path;
-    }
-    opened_font = TTF_OpenFont(font_path, requested_point_size);
-    if (!opened_font && strcmp(font_path, kSystemFontPath) != 0) {
-        opened_font = TTF_OpenFont(kSystemFontPath, requested_point_size);
-        font_path = kSystemFontPath;
-    }
-    if (!opened_font && strcmp(font_path, kBundledFontPath) != 0) {
-        opened_font = TTF_OpenFont(kBundledFontPath, requested_point_size);
-        font_path = kBundledFontPath;
-    }
-    if (!opened_font) {
+    renderer = getRenderContext() ? getRenderContext()->renderer : NULL;
+    base_point_size = ray_tracing_text_font_cache_ui_regular_base_point_size(kBasePointSize);
+    requested_point_size = animation_config_scale_text_point_size(&animSettings, base_point_size, kMinPointSize);
+    requested_point_size = ray_tracing_text_raster_point_size(renderer, requested_point_size, kMinPointSize);
+    cached_font = ray_tracing_text_font_cache_get_ui_regular(requested_point_size);
+    if (!cached_font) {
         fprintf(stderr, "[TimerHUD] Failed to open runtime font: %s\n", TTF_GetError());
         return false;
     }
-    activeFont = opened_font;
+    activeFont = cached_font;
     activePointSize = requested_point_size;
     return true;
 }
@@ -57,10 +47,8 @@ bool initFontSystem(void) {
 }
 
 void shutdownFontSystem(void) {
-    if (activeFont) {
-        TTF_CloseFont(activeFont);
-        activeFont = NULL;
-    }
+    activeFont = NULL;
+    ray_tracing_text_font_cache_shutdown();
 }
 
 bool loadFontByID(FontID id) {
@@ -76,14 +64,17 @@ TTF_Font* getActiveFont(void) {
 }
 
 bool refreshActiveFontFromAnimationConfig(void) {
-    char shared_font_path[256];
-    const char* font_path = kSystemFontPath;
+    int base_point_size = kBasePointSize;
     int scaled_point_size = animation_config_scale_text_point_size(&animSettings, kBasePointSize, kMinPointSize);
     TTF_Font* refreshed = NULL;
+    SDL_Renderer* renderer = getRenderContext() ? getRenderContext()->renderer : NULL;
 
+    base_point_size = ray_tracing_text_font_cache_ui_regular_base_point_size(kBasePointSize);
+    scaled_point_size = animation_config_scale_text_point_size(&animSettings, base_point_size, kMinPointSize);
     if (scaled_point_size <= 0) {
         scaled_point_size = kMinPointSize;
     }
+    scaled_point_size = ray_tracing_text_raster_point_size(renderer, scaled_point_size, kMinPointSize);
     if (!ensureTTF()) {
         return false;
     }
@@ -91,27 +82,11 @@ bool refreshActiveFontFromAnimationConfig(void) {
         return true;
     }
 
-    if (ray_tracing_shared_font_resolve_ui_regular(
-            shared_font_path, sizeof(shared_font_path), &scaled_point_size)) {
-        font_path = shared_font_path;
-    }
-    refreshed = TTF_OpenFont(font_path, scaled_point_size);
-    if (!refreshed && strcmp(font_path, kSystemFontPath) != 0) {
-        refreshed = TTF_OpenFont(kSystemFontPath, scaled_point_size);
-        font_path = kSystemFontPath;
-    }
-    if (!refreshed && strcmp(font_path, kBundledFontPath) != 0) {
-        refreshed = TTF_OpenFont(kBundledFontPath, scaled_point_size);
-        font_path = kBundledFontPath;
-    }
+    refreshed = ray_tracing_text_font_cache_get_ui_regular(scaled_point_size);
     if (!refreshed) {
         fprintf(stderr, "[TimerHUD] Failed to reload runtime font (%d): %s\n",
                 scaled_point_size, TTF_GetError());
         return false;
-    }
-
-    if (activeFont) {
-        TTF_CloseFont(activeFont);
     }
     activeFont = refreshed;
     activePointSize = scaled_point_size;

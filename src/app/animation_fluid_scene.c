@@ -5,6 +5,7 @@
 #include "geo/shape_adapter.h"
 #include "geo/shape_asset.h"
 #include "import/fluid_import.h"
+#include "import/runtime_scene_bridge.h"
 #include "import/scene_bundle_import.h"
 #include "import/shape_import.h"
 #include "render/fluid/fluid_state.h"
@@ -326,13 +327,80 @@ static void ApplyBundleSceneMetadata(const SceneBundleImportResult *bundle_info)
 }
 
 bool AnimationUseFluidScene(void) {
-    return animSettings.useFluidScene && animSettings.fluidManifest[0];
+    return animation_config_scene_source_is_fluid(animSettings.sceneSource) &&
+           animSettings.fluidManifest[0];
 }
 
 void AnimationClearFluidGrid(void) {
     g_fluidGrid.valid = false;
     g_fluidGrid.min_x = g_fluidGrid.min_y = 0.0f;
     g_fluidGrid.max_x = g_fluidGrid.max_y = 0.0f;
+}
+
+typedef struct {
+    int source;
+    bool use_fluid_scene;
+    char fluid_manifest[sizeof(animSettings.fluidManifest)];
+    char runtime_scene_path[sizeof(animSettings.runtimeScenePath)];
+} AnimationSceneSourceSnapshot;
+
+static void animation_scene_source_snapshot_capture(AnimationSceneSourceSnapshot *out_snapshot) {
+    if (!out_snapshot) return;
+    out_snapshot->source = animation_config_scene_source_clamp(animSettings.sceneSource);
+    out_snapshot->use_fluid_scene = animSettings.useFluidScene;
+    strncpy(out_snapshot->fluid_manifest,
+            animSettings.fluidManifest,
+            sizeof(out_snapshot->fluid_manifest) - 1);
+    out_snapshot->fluid_manifest[sizeof(out_snapshot->fluid_manifest) - 1] = '\0';
+    strncpy(out_snapshot->runtime_scene_path,
+            animSettings.runtimeScenePath,
+            sizeof(out_snapshot->runtime_scene_path) - 1);
+    out_snapshot->runtime_scene_path[sizeof(out_snapshot->runtime_scene_path) - 1] = '\0';
+}
+
+static void animation_scene_source_snapshot_restore(const AnimationSceneSourceSnapshot *snapshot) {
+    if (!snapshot) return;
+    animSettings.sceneSource = (SceneSource)animation_config_scene_source_clamp(snapshot->source);
+    animSettings.useFluidScene = snapshot->use_fluid_scene;
+    strncpy(animSettings.fluidManifest,
+            snapshot->fluid_manifest,
+            sizeof(animSettings.fluidManifest) - 1);
+    animSettings.fluidManifest[sizeof(animSettings.fluidManifest) - 1] = '\0';
+    strncpy(animSettings.runtimeScenePath,
+            snapshot->runtime_scene_path,
+            sizeof(animSettings.runtimeScenePath) - 1);
+    animSettings.runtimeScenePath[sizeof(animSettings.runtimeScenePath) - 1] = '\0';
+}
+
+static bool animation_scene_source_assign_candidate(int source, const char *path) {
+    source = animation_config_scene_source_clamp(source);
+    if (source == SCENE_SOURCE_CONFIG_2D) {
+        animSettings.sceneSource = SCENE_SOURCE_CONFIG_2D;
+        animSettings.useFluidScene = false;
+        animSettings.fluidManifest[0] = '\0';
+        animSettings.runtimeScenePath[0] = '\0';
+        return true;
+    }
+    if (!path || !path[0]) {
+        return false;
+    }
+    if (source == SCENE_SOURCE_FLUID_MANIFEST) {
+        animSettings.sceneSource = SCENE_SOURCE_FLUID_MANIFEST;
+        animSettings.useFluidScene = true;
+        strncpy(animSettings.fluidManifest, path, sizeof(animSettings.fluidManifest) - 1);
+        animSettings.fluidManifest[sizeof(animSettings.fluidManifest) - 1] = '\0';
+        animSettings.runtimeScenePath[0] = '\0';
+        return true;
+    }
+    if (source == SCENE_SOURCE_RUNTIME_SCENE) {
+        animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+        animSettings.useFluidScene = false;
+        strncpy(animSettings.runtimeScenePath, path, sizeof(animSettings.runtimeScenePath) - 1);
+        animSettings.runtimeScenePath[sizeof(animSettings.runtimeScenePath) - 1] = '\0';
+        animSettings.fluidManifest[0] = '\0';
+        return true;
+    }
+    return false;
 }
 
 bool AnimationApplyFluidScene(const char *manifest_path) {
@@ -434,7 +502,9 @@ bool AnimationApplyFluidScene(const char *manifest_path) {
         }
     }
 
+    animSettings.sceneSource = SCENE_SOURCE_FLUID_MANIFEST;
     animSettings.useFluidScene = true;
+    animSettings.runtimeScenePath[0] = '\0';
     if (manifest_path != animSettings.fluidManifest) {
         strncpy(animSettings.fluidManifest, manifest_path, sizeof(animSettings.fluidManifest) - 1);
         animSettings.fluidManifest[sizeof(animSettings.fluidManifest) - 1] = '\0';
@@ -450,4 +520,88 @@ bool AnimationApplyFluidScene(const char *manifest_path) {
            sceneSettings.camera.zoom);
     fluid_manifest_free(&manifest);
     return true;
+}
+
+bool AnimationApplyActiveSceneSource(void) {
+    int source = animation_config_scene_source_clamp(animSettings.sceneSource);
+    animSettings.sceneSource = (SceneSource)source;
+
+    if (source == SCENE_SOURCE_FLUID_MANIFEST) {
+        if (animSettings.fluidManifest[0] == '\0') {
+            animSettings.sceneSource = SCENE_SOURCE_CONFIG_2D;
+            animSettings.useFluidScene = false;
+            animSettings.fluidManifest[0] = '\0';
+            animSettings.runtimeScenePath[0] = '\0';
+            AnimationClearFluidGrid();
+            return false;
+        }
+        if (!AnimationApplyFluidScene(animSettings.fluidManifest)) {
+            fprintf(stderr,
+                    "[fluid-scene] failed to apply fluid scene source '%s'\n",
+                    animSettings.fluidManifest);
+            animSettings.sceneSource = SCENE_SOURCE_CONFIG_2D;
+            animSettings.useFluidScene = false;
+            animSettings.fluidManifest[0] = '\0';
+            animSettings.runtimeScenePath[0] = '\0';
+            AnimationClearFluidGrid();
+            return false;
+        }
+        return true;
+    }
+
+    if (source == SCENE_SOURCE_RUNTIME_SCENE) {
+        RuntimeSceneBridgePreflight summary;
+        if (animSettings.runtimeScenePath[0] == '\0') {
+            animSettings.sceneSource = SCENE_SOURCE_CONFIG_2D;
+            animSettings.useFluidScene = false;
+            animSettings.fluidManifest[0] = '\0';
+            animSettings.runtimeScenePath[0] = '\0';
+            AnimationClearFluidGrid();
+            return false;
+        }
+        if (!runtime_scene_bridge_apply_file(animSettings.runtimeScenePath, &summary)) {
+            fprintf(stderr,
+                    "[runtime-scene] failed to apply runtime scene source '%s': %s\n",
+                    animSettings.runtimeScenePath,
+                    summary.diagnostics);
+            animSettings.sceneSource = SCENE_SOURCE_CONFIG_2D;
+            animSettings.useFluidScene = false;
+            animSettings.fluidManifest[0] = '\0';
+            animSettings.runtimeScenePath[0] = '\0';
+            AnimationClearFluidGrid();
+            return false;
+        }
+        animSettings.useFluidScene = false;
+        return true;
+    }
+
+    animSettings.useFluidScene = false;
+    animSettings.fluidManifest[0] = '\0';
+    animSettings.runtimeScenePath[0] = '\0';
+    AnimationClearFluidGrid();
+    return true;
+}
+
+bool AnimationSelectSceneSource(int source, const char *path, bool apply_immediately) {
+    AnimationSceneSourceSnapshot snapshot = {0};
+    animation_scene_source_snapshot_capture(&snapshot);
+    if (!animation_scene_source_assign_candidate(source, path)) {
+        return false;
+    }
+    if (!apply_immediately) {
+        return true;
+    }
+    if (AnimationApplyActiveSceneSource()) {
+        return true;
+    }
+    animation_scene_source_snapshot_restore(&snapshot);
+    return false;
+}
+
+bool AnimationRestoreActiveSceneSource(bool persist_on_failure) {
+    bool ok = AnimationApplyActiveSceneSource();
+    if (!ok && persist_on_failure) {
+        SaveAnimationConfig();
+    }
+    return ok;
 }

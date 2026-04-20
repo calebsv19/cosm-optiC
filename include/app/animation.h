@@ -58,6 +58,18 @@ bool AnimationUseFluidScene(void);
 // Returns true on success and updates animSettings.useFluidScene/fluidManifest.
 bool AnimationApplyFluidScene(const char *manifest_path);
 
+// Apply whichever scene source is currently active in animSettings.sceneSource.
+// Returns true when the selected source is in a valid applied state.
+bool AnimationApplyActiveSceneSource(void);
+
+// Transactionally set source lane/path and optionally apply immediately.
+// On apply failure, previous source lane/path state is restored.
+bool AnimationSelectSceneSource(int source, const char *path, bool apply_immediately);
+
+// Apply persisted active source at startup/editor session boundaries.
+// When persist_on_failure is true, fallback corrections are saved for deterministic reopen.
+bool AnimationRestoreActiveSceneSource(bool persist_on_failure);
+
 // Clears the cached grid bounds when fluid scene is disabled.
 void AnimationClearFluidGrid(void);
 

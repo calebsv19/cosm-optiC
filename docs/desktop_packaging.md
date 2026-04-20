@@ -1,0 +1,95 @@
+# Ray Tracing Desktop Packaging
+
+Last updated: 2026-04-12
+
+## Bundle Contract
+
+- output app: `dist/optiC.app`
+- Desktop copy target: `/Users/<user>/Desktop/optiC.app`
+- launcher: `Contents/MacOS/raytracing-launcher`
+- runtime binary: `Contents/MacOS/raytracing-bin`
+- app bundle metadata:
+  - bundle id: `com.cosm.optic`
+  - product name: `optiC`
+  - version: `0.1.0`
+- bundled frameworks live under `Contents/Frameworks/`
+
+## Make Targets
+
+- local packaging:
+  - `make -C ray_tracing package-desktop`
+  - `make -C ray_tracing package-desktop-smoke`
+  - `make -C ray_tracing package-desktop-self-test`
+  - `make -C ray_tracing package-desktop-copy-desktop`
+  - `make -C ray_tracing package-desktop-sync`
+  - `make -C ray_tracing package-desktop-open`
+  - `make -C ray_tracing package-desktop-remove`
+  - `make -C ray_tracing package-desktop-refresh`
+- release/readiness:
+  - `make -C ray_tracing release-contract`
+  - `make -C ray_tracing release-bundle-audit`
+  - `make -C ray_tracing release-sign APPLE_SIGN_IDENTITY="Developer ID Application: <Name> (<TEAMID>)"`
+  - `make -C ray_tracing release-notarize APPLE_SIGN_IDENTITY="Developer ID Application: <Name> (<TEAMID>)" APPLE_NOTARY_PROFILE="<profile>"`
+  - `make -C ray_tracing release-staple`
+  - `make -C ray_tracing release-verify-notarized`
+  - `make -C ray_tracing release-artifact`
+  - `make -C ray_tracing release-distribute APPLE_SIGN_IDENTITY="Developer ID Application: <Name> (<TEAMID>)" APPLE_NOTARY_PROFILE="<profile>"`
+  - `make -C ray_tracing release-desktop-refresh`
+
+## Launcher Runtime Contract
+
+- `--print-config` prints:
+  - `RAY_TRACING_RUNTIME_DIR`
+  - `VK_RENDERER_SHADER_ROOT`
+  - `SHAPE_ASSET_DIR`
+  - `RAY_TRACING_FONT_PRESET`
+  - `RAY_TRACING_RENDER_METRICS_DATASET_PATH`
+  - `VK_ICD_FILENAMES`
+  - `VK_DRIVER_FILES`
+  - `MOLTENVK_DYLIB`
+- `--self-test` verifies:
+  - packaged runtime binary is executable
+  - config/default asset presence is intact
+  - runtime directories are writable
+  - Vulkan portability files and shaders are present
+- launcher runtime root:
+  - default: `~/Library/Application Support/RayTracing/runtime`
+  - tmp fallback: `${TMPDIR:-/tmp}/RayTracing/runtime`
+- launcher log lane:
+  - `~/Library/Logs/RayTracing/launcher.log`
+  - tmp fallback: `${TMPDIR:-/tmp}/raytracing-launcher.log`
+
+## Packaged Resource And Framework Contract
+
+Bundled resource lanes include:
+- `Resources/config/`
+- `Resources/data/runtime/`
+- `Resources/data/runtime/frames/`
+- `Resources/data/runtime/videos/`
+- `Resources/data/snapshots/`
+- `Resources/vk_renderer/shaders/`
+- `Resources/shaders/`
+- `Resources/shared/`
+
+Bundled framework/runtime rules include:
+- `Contents/Frameworks/libMoltenVK.dylib`
+- `Contents/Frameworks/libvulkan.1.dylib`
+- launcher-generated ICD JSON under writable runtime root
+- package step rewrites local dylib install names and ad-hoc signs bundled dylibs, binaries, and the app bundle for local launch safety
+
+## Recommended Local Validation
+
+1. `make -C ray_tracing clean && make -C ray_tracing`
+2. `make -C ray_tracing test-stable`
+3. `make -C ray_tracing package-desktop-self-test`
+4. `make -C ray_tracing release-bundle-audit`
+5. `make -C ray_tracing package-desktop-refresh`
+6. `/Users/<user>/Desktop/optiC.app/Contents/MacOS/raytracing-launcher --print-config`
+7. `open /Users/<user>/Desktop/optiC.app`
+8. `tail -n 120 ~/Library/Logs/RayTracing/launcher.log`
+
+## Current Limits
+
+- This doc describes the current local packaged-app and release-readiness workflow only.
+- It does not prove a fresh packaging or release rerun on its own; use current verification records and release docs for bounded milestone context.
+- Current repo-state presence of `dist/`, Desktop, or `build/release/` artifacts should be checked separately from this doc before making artifact-presence claims.

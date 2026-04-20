@@ -2,17 +2,24 @@
 #include "config/config_manager.h"
 #include "camera/camera.h"
 #include "math/vec2.h"
+#include "render/text_font_cache.h"
+#include "render/text_upload_policy.h"
 #include <SDL2/SDL.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "vk_renderer.h"
 
 static double clamp_double(double value, double min_value, double max_value) {
     if (value < min_value) return min_value;
     if (value > max_value) return max_value;
     return value;
+}
+
+static TTF_Font* RenderHelperOpenUIFontAtPointSize(int point_size) {
+    return ray_tracing_text_font_cache_get_ui_regular(point_size);
 }
 
 double RenderHelper_DepthScaleForObjectZ(double object_z) {
@@ -26,12 +33,13 @@ double RenderHelper_DepthYOffsetPixelsForObjectZ(double object_z, double camera_
     return object_z * 18.0 * camera_zoom;
 }
 
-static void RenderSurface(SDL_Renderer* renderer, SDL_Surface* surface, const SDL_Rect* dst) {
+static void RenderSurface(SDL_Renderer* renderer, SDL_Surface* surface, const SDL_Rect* dst, float raster_scale) {
     if (!renderer || !surface || !dst) return;
 #if USE_VULKAN
     VkRendererTexture texture;
+    (void)raster_scale;
     if (vk_renderer_upload_sdl_surface_with_filter((VkRenderer*)renderer, surface, &texture,
-                                                   VK_FILTER_LINEAR) != VK_SUCCESS) {
+                                                   ray_tracing_text_upload_filter(renderer)) != VK_SUCCESS) {
         return;
     }
     vk_renderer_draw_texture((VkRenderer*)renderer, &texture, NULL, dst);
@@ -259,55 +267,69 @@ void RenderStaticScene(SDL_Renderer* renderer) {
 
 static void RenderTextWithColor(SDL_Renderer* renderer, SDL_Rect button, const char* text, SDL_Color textColor, int maxFontSize) {
     int minFontSize = 10;  // Minimum readable font size
+    int baseFontSize = 0;
+    float raster_scale = 1.0f;
+    int rasterFontSize = 0;
+    int minRasterFontSize = 0;
+    int chosenRasterFontSize = 0;
+    TTF_Font* font = NULL;
+    int measured_w = 0;
+    int measured_h = 0;
+    SDL_Surface* textSurface = NULL;
+    SDL_Rect textRect = {0};
 
-    int fontSize = animation_config_scale_text_point_size(&animSettings, maxFontSize, minFontSize);
-    if (fontSize < minFontSize) fontSize = minFontSize;
-    while (fontSize > minFontSize) {
-        TTF_Font* tempFont = TTF_OpenFont("/System/Library/Fonts/Supplemental/Arial.ttf", fontSize);
+    if (!renderer || !text || !text[0]) return;
+    if (button.w <= 0 || button.h <= 0) return;
+    baseFontSize = animation_config_scale_text_point_size(&animSettings, maxFontSize, minFontSize);
+    if (baseFontSize < minFontSize) baseFontSize = minFontSize;
+    raster_scale = ray_tracing_text_raster_scale(renderer);
+    rasterFontSize = ray_tracing_text_raster_point_size(renderer, baseFontSize, minFontSize);
+    minRasterFontSize = ray_tracing_text_raster_point_size(renderer, minFontSize, minFontSize);
+    if (minRasterFontSize < 4) minRasterFontSize = 4;
+    if (rasterFontSize < minRasterFontSize) rasterFontSize = minRasterFontSize;
+
+    chosenRasterFontSize = rasterFontSize;
+    while (chosenRasterFontSize > minRasterFontSize) {
+        int draw_width = 0;
+        int draw_width_logical = 0;
+        TTF_Font* tempFont = RenderHelperOpenUIFontAtPointSize(chosenRasterFontSize);
         if (!tempFont) return;
-
-        SDL_Surface* tempSurface = TTF_RenderText_Solid(tempFont, text, textColor);
-        if (!tempSurface) {
-            TTF_CloseFont(tempFont);
+        if (TTF_SizeUTF8(tempFont, text, &draw_width, NULL) != 0) {
             return;
         }
-        int textWidth = tempSurface->w;
-        SDL_FreeSurface(tempSurface);
-        TTF_CloseFont(tempFont);
-
-        if (textWidth <= button.w - 10) {  // Leave a margin of 5 pixels on each side
+        draw_width_logical = ray_tracing_text_logical_pixels(renderer, draw_width);
+        if (draw_width_logical <= button.w - 10) {
             break;
         }
-        fontSize--;
+        chosenRasterFontSize--;
     }
 
-    TTF_Font* font = TTF_OpenFont("/System/Library/Fonts/Supplemental/Arial.ttf", fontSize);
+    font = RenderHelperOpenUIFontAtPointSize(chosenRasterFontSize);
     if (!font) return;
 
-    SDL_Surface* textSurface = TTF_RenderText_Solid(font, text, textColor);
+    textSurface = TTF_RenderUTF8_Blended(font, text, textColor);
     if (!textSurface) {
-        TTF_CloseFont(font);
         return;
     }
-
-    SDL_Rect textRect = {
-        button.x + (button.w - textSurface->w) / 2,
-        button.y + (button.h - textSurface->h) / 2,
-        textSurface->w, textSurface->h
-    };
-
-    RenderSurface(renderer, textSurface, &textRect);
+    measured_w = ray_tracing_text_logical_pixels(renderer, textSurface->w);
+    measured_h = ray_tracing_text_logical_pixels(renderer, textSurface->h);
+    if (measured_w < 1) measured_w = 1;
+    if (measured_h < 1) measured_h = 1;
+    textRect.x = button.x + (button.w - measured_w) / 2;
+    textRect.y = button.y + (button.h - measured_h) / 2;
+    textRect.w = measured_w;
+    textRect.h = measured_h;
+    RenderSurface(renderer, textSurface, &textRect, raster_scale);
     SDL_FreeSurface(textSurface);
-    TTF_CloseFont(font);
 }
 
 void RenderButtonText(SDL_Renderer* renderer, SDL_Rect button, const char* text) {
     SDL_Color textColor = {0, 0, 0, 255};  // Black text
-    RenderTextWithColor(renderer, button, text, textColor, 24);
+    RenderTextWithColor(renderer, button, text, textColor, 18);
 }
 
 void RenderLabelText(SDL_Renderer* renderer, SDL_Rect area, const char* text, SDL_Color color) {
-    RenderTextWithColor(renderer, area, text, color, 22);
+    RenderTextWithColor(renderer, area, text, color, 16);
 }
                 
 

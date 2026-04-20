@@ -449,11 +449,17 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
     size_t pixelCount = (size_t)WIDTH * (size_t)HEIGHT;
 
     RayTracingRuntimeRoute route = RayTracingModeBackend_ResolveRoute();
+    RayTracingViewCarrier viewCarrier = RayTracingModeBackend_BuildViewCarrier(&sceneSettings.camera,
+                                                                                WIDTH,
+                                                                                HEIGHT,
+                                                                                &route);
+    RayTracingPrimitivePrepPlan primitivePrepPlan =
+        RayTracingModeBackend_BuildPrimitivePrepPlan(&route, sceneSettings.objectCount);
     bool useTiles = route.useTiles;
     int tileSize = route.tileSize;
     double gridCellSize = fmax(4.0, (animSettings.tileSize > 0 ? animSettings.tileSize : 16));
-    double camera_origin_x = sceneSettings.camera.x;
-    double camera_origin_y = sceneSettings.camera.y + route.rayOriginYOffset;
+    double camera_origin_x = viewCarrier.originX;
+    double camera_origin_y = viewCarrier.originY;
 
     // Clamp camera to grid if fluid bounds are known.
     if (g_grid.valid) {
@@ -519,17 +525,24 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
                                           32);
     }
 
-    bool meshReady = SurfaceBuildMeshes(&surfaceMesh,
-                                        &triangleMesh,
-                                        sceneSettings.sceneObjects,
-                                        sceneSettings.objectCount,
-                                        8.0);
+    bool meshReady = false;
+    if (primitivePrepPlan.enableSurfaceMeshPrep || primitivePrepPlan.enableTriangleMeshPrep) {
+        meshReady = SurfaceBuildMeshes(&surfaceMesh,
+                                       &triangleMesh,
+                                       sceneSettings.sceneObjects,
+                                       sceneSettings.objectCount,
+                                       8.0);
+    }
 
-    UniformGridBuild(&uniformGrid,
-                     sceneSettings.sceneObjects,
-                     sceneSettings.objectCount,
-                     meshReady ? &triangleMesh : NULL,
-                     gridCellSize);
+    if (primitivePrepPlan.enableUniformGrid2D && primitivePrepPlan.enableRay2DIntersections) {
+        UniformGridBuild(&uniformGrid,
+                         sceneSettings.sceneObjects,
+                         sceneSettings.objectCount,
+                         (meshReady && primitivePrepPlan.enableTriangleMeshPrep) ? &triangleMesh : NULL,
+                         gridCellSize);
+    } else {
+        UniformGridClear(&uniformGrid);
+    }
 
     IntegratorContext context = {
         .pixelBuffer = pixelBuffer,
@@ -542,13 +555,16 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
         .tileGrid = useTiles ? &tileGrid : NULL,
         .useTiles = useTiles,
         .frameSeed = frameSeed,
-        .uniformGrid = ((uniformGrid.objectCells || uniformGrid.triangleCells) ? &uniformGrid : NULL),
+        .uniformGrid = (primitivePrepPlan.enableRay2DIntersections &&
+                        (uniformGrid.objectCells || uniformGrid.triangleCells))
+                           ? &uniformGrid
+                           : NULL,
         .integratorMode = route.integratorMode,
         .cache = (haveCache ? &irradianceCache : NULL),
         .materials = materialTable,
         .materialCount = materialCount,
-        .mesh = (meshReady ? &surfaceMesh : NULL),
-        .triangleMesh = (meshReady ? &triangleMesh : NULL)
+        .mesh = (meshReady && primitivePrepPlan.enableSurfaceMeshPrep) ? &surfaceMesh : NULL,
+        .triangleMesh = (meshReady && primitivePrepPlan.enableTriangleMeshPrep) ? &triangleMesh : NULL
     };
 
     LightSource activeLight = {
@@ -677,11 +693,11 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
 void ProcessRayTracingEvent(SDL_Event* event) {
     if (event->type == SDL_MOUSEMOTION || event->type == SDL_MOUSEBUTTONDOWN) {
         RayTracingRuntimeRoute route = RayTracingModeBackend_ResolveRoute();
-        SpaceModeViewContext view_ctx = RayTracingModeBackend_BuildViewContext(&sceneSettings.camera,
-                                                                               sceneSettings.windowWidth,
-                                                                               sceneSettings.windowHeight,
-                                                                               &route);
-        CameraPoint world = SpaceModeAdapter_ScreenToWorld(&view_ctx,
+        RayTracingViewCarrier viewCarrier = RayTracingModeBackend_BuildViewCarrier(&sceneSettings.camera,
+                                                                                   sceneSettings.windowWidth,
+                                                                                   sceneSettings.windowHeight,
+                                                                                   &route);
+        CameraPoint world = SpaceModeAdapter_ScreenToWorld(&viewCarrier.viewContext,
                                                            event->motion.x,
                                                            event->motion.y);
         light.x = world.x;

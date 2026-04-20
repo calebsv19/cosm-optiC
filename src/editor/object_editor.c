@@ -12,6 +12,7 @@
 #include "import/shape_import.h"
 #include "geo/shape_asset.h"
 #include "material/material_manager.h"
+#include "ui/shared_theme_font_adapter.h"
 #include <dirent.h>
 #include <stdio.h>
 #include <math.h>
@@ -28,6 +29,9 @@ static int handleRadius = 5;
 static bool draggingRotationHandle = false;  // ✅ Tracks whether the handle is being moved
 static double lastWorldX = 0.0;
 static double lastWorldY = 0.0;
+static bool viewportPanDragging = false;
+static int viewportPanLastMouseX = 0;
+static int viewportPanLastMouseY = 0;
 static bool renderHandles = true;
 #define MAX_ASSET_LIST 128
 #define ASSET_PANEL_WIDTH 200
@@ -129,6 +133,13 @@ static CameraPoint ScreenToWorldObjectEditor(const Camera* camera, int sx, int s
     return SpaceModeAdapter_ScreenToWorld(&view_ctx, sx, sy);
 }
 
+static void PanViewportObjectByScreenDelta(int prev_x, int prev_y, int cur_x, int cur_y) {
+    Camera previewCam = BuildObjectEditorCamera();
+    CameraPoint prev = ScreenToWorldObjectEditor(&previewCam, prev_x, prev_y);
+    CameraPoint cur = ScreenToWorldObjectEditor(&previewCam, cur_x, cur_y);
+    CameraPan(&sceneSettings.camera, prev.x - cur.x, prev.y - cur.y);
+}
+
 static SDL_Point WorldToScreenObjectEditor(const Camera* camera, double wx, double wy) {
     SpaceModeViewContext view_ctx = EditorModeRouter_BuildViewContext(camera,
                                                                       sceneSettings.windowWidth,
@@ -176,20 +187,25 @@ static void RefreshImportList(void) {
 }
 
 void InitializeObjectEditor(void) {
-    // **Initialize Button Positions Based on Window Size**
-    width = sceneSettings.windowWidth;
-    height = sceneSettings.windowHeight;	 
-     int buttonWidth = 50;
-    int sceneButtonWidth = 70;
-    // Add mode buttons (appear left of the Add button)
-    width -= sceneButtonWidth;
-    circleButton = (SDL_Rect){width - (buttonWidth + 10), 20, buttonWidth, 35};
-    squareButton = (SDL_Rect){width - (buttonWidth + 10) * 2, 20, buttonWidth, 35};
-    polygonButton = (SDL_Rect){width - (buttonWidth + 10) * 3, 20, buttonWidth, 35};
+    SceneEditorPaneLayout pane_layout = {0};
+    int buttonWidth = 50;
+    int rowGap = 10;
+    int rowY = toggleButton.y + toggleButton.h + 12;
+    int baseX = addButton.x;
 
-    // Polygon creation buttons (appear left of Polygon button)
-    confirmPolygonButton = (SDL_Rect){width - buttonWidth - 5, 60, buttonWidth - 10, 30};
-    cancelPolygonButton = (SDL_Rect){width - buttonWidth - 5,  95, buttonWidth - 10, 30};
+    width = sceneSettings.windowWidth;
+    height = sceneSettings.windowHeight;
+    if (SceneEditorGetPaneLayout(&pane_layout)) {
+        baseX = pane_layout.left_content_rect.x;
+        rowY = toggleButton.y + toggleButton.h + 12;
+    }
+
+    circleButton = (SDL_Rect){baseX, rowY, buttonWidth, 35};
+    squareButton = (SDL_Rect){baseX + (buttonWidth + rowGap), rowY, buttonWidth, 35};
+    polygonButton = (SDL_Rect){baseX + (buttonWidth + rowGap) * 2, rowY, buttonWidth, 35};
+
+    confirmPolygonButton = (SDL_Rect){baseX, rowY + 44, buttonWidth + 10, 30};
+    cancelPolygonButton = (SDL_Rect){baseX + buttonWidth + rowGap + 10, rowY + 44, buttonWidth + 10, 30};
 
     ObjectEditorPanels_UpdateLayout();
     RefreshAssetLibrary();
@@ -287,13 +303,7 @@ void RemoveSceneObject(int index) {
 }
 
 bool IsClickingButton(int mx, int my) {
-    // Check if click is within main buttons
-    if ((mx >= addButton.x && mx <= addButton.x + addButton.w && my >= addButton.y && my <= addButton.y + addButton.h) 
-||
-        (mx >= deleteButton.x && mx <= deleteButton.x + deleteButton.w && my >= deleteButton.y && my <= deleteButton.y 
-+ deleteButton.h) ||
-        (mx >= toggleButton.x && mx <= toggleButton.x + toggleButton.w && my >= toggleButton.y && my <= toggleButton.y 
-+ toggleButton.h)) {
+    if (SceneEditorIsPaneToolButton(mx, my)) {
         return true;  // Click is inside a UI button
     }
 
@@ -447,7 +457,18 @@ void RenderAddModeButtons(SDL_Renderer* renderer) {
 
 
 void RenderObjectEditor(SDL_Renderer* renderer) {
-    SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
+    RayTracingThemePalette palette = {0};
+    SDL_Color objectColor = {255, 255, 255, 255};
+    if (ray_tracing_shared_theme_resolve_palette(&palette)) {
+        SDL_SetRenderDrawColor(renderer,
+                               palette.background_fill.r,
+                               palette.background_fill.g,
+                               palette.background_fill.b,
+                               255);
+        objectColor = palette.text_primary;
+    } else {
+        SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
+    }
     SDL_Rect bg = {0, 0, sceneSettings.windowWidth, sceneSettings.windowHeight};
     SDL_RenderFillRect(renderer, &bg);
 
@@ -460,7 +481,7 @@ void RenderObjectEditor(SDL_Renderer* renderer) {
     bool fillObjects = !AnimationUseFluidScene();
     for (int i = 0; i < sceneSettings.objectCount; i++) {
         SceneObject* obj = &sceneSettings.sceneObjects[i];
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        SDL_SetRenderDrawColor(renderer, objectColor.r, objectColor.g, objectColor.b, 255);
         RenderSceneObject(renderer, obj, fillObjects);
 
         if (i == selectedObjectIndex) {
@@ -592,6 +613,7 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
     if (event->button.button == SDL_BUTTON_LEFT) {
         int mx = event->button.x;
         int my = event->button.y;
+        viewportPanDragging = false;
         if (mx >= assetPanelRect.x && mx <= assetPanelRect.x + assetPanelRect.w &&
             my >= assetPanelRect.y && my <= assetPanelRect.y + assetPanelRect.h) {
             if (mx >= assetCollapseRect.x && mx <= assetCollapseRect.x + assetCollapseRect.w &&
@@ -713,10 +735,7 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
         }
 
         // Prevent accidental shape creation when clicking UI buttons
-        bool clickedButton = IsClickingButtonMain(mx, my);
-	if (!clickedButton){
-		clickedButton = IsClickingButton(mx, my);
-	}
+        bool clickedButton = IsClickingButtonMain(mx, my) || IsClickingButton(mx, my);
 	
 
         // Handle UI Buttons Clicks
@@ -796,11 +815,14 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
             return;
         }
 
-        // Handle Apply Button Click
-        if (mx >= applyButton.x && mx <= applyButton.x + applyButton.w &&
-            my >= applyButton.y && my <= applyButton.y + applyButton.h) {
-            SaveSceneConfig();
-            sceneEditorExitFlag = true;
+        if (!clickedButton &&
+            !addModeActive &&
+            !deleteModeActive &&
+            !polygonCreationActive &&
+            selectedObjectIndex == -1) {
+            viewportPanDragging = true;
+            viewportPanLastMouseX = mx;
+            viewportPanLastMouseY = my;
         }
     }
 }
@@ -814,7 +836,16 @@ void HandleObjectEditorMouseDrag(SDL_Event* event) {
         double worldX = worldPoint.x;
         double worldY = worldPoint.y;
 
-        if (selectedObjectIndex != -1) {
+        if (viewportPanDragging &&
+            selectedObjectIndex == -1 &&
+            !draggingRotationHandle) {
+            PanViewportObjectByScreenDelta(viewportPanLastMouseX,
+                                           viewportPanLastMouseY,
+                                           mx,
+                                           my);
+            viewportPanLastMouseX = mx;
+            viewportPanLastMouseY = my;
+        } else if (selectedObjectIndex != -1) {
             SceneObject* obj = &sceneSettings.sceneObjects[selectedObjectIndex];
 
             if (draggingRotationHandle) {
@@ -852,7 +883,7 @@ void HandleObjectEditorMouseDrag(SDL_Event* event) {
 
 void HandleObjectEditorMouseRelease(SDL_Event* event) {
     if (event->button.button == SDL_BUTTON_LEFT) {
-        // No special action for now, but useful if we add drag snapping later
+        viewportPanDragging = false;
     }
 }
 

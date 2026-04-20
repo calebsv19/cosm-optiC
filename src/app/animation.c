@@ -86,13 +86,12 @@ int AnimationInit(void) {
     if (s_fluidManifestOverride && s_fluidManifestOverride[0]) {
         strncpy(animSettings.fluidManifest, s_fluidManifestOverride, sizeof(animSettings.fluidManifest) - 1);
         animSettings.fluidManifest[sizeof(animSettings.fluidManifest) - 1] = '\0';
-        animSettings.useFluidScene = true;
+        animSettings.sceneSource = SCENE_SOURCE_FLUID_MANIFEST;
     }
     LoadSceneConfig();
-    if (animSettings.useFluidScene && animSettings.fluidManifest[0]) {
-        AnimationApplyFluidScene(animSettings.fluidManifest);
-    } else {
-        AnimationClearFluidGrid();
+    if (!AnimationRestoreActiveSceneSource(true)) {
+        fprintf(stderr,
+                "[startup] active scene source could not be applied; fallback persisted.\n");
     }
     UpdateObjects();
     WINDOW_WIDTH = sceneSettings.windowWidth;       
@@ -159,9 +158,9 @@ int AnimationInit(void) {
     }
 #endif
 
+    setRenderContext(renderer, window, WINDOW_WIDTH, WINDOW_HEIGHT);
     timer_hud_register_backend();
     ts_init();
-    setRenderContext(renderer, window, WINDOW_WIDTH, WINDOW_HEIGHT);
 
     // Validate Bézier path
     if (sceneSettings.bezierPath.numPoints < 2) {

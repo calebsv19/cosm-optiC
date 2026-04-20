@@ -7,6 +7,7 @@
 #include "camera/camera.h"
 #include "editor/editor_mode_router.h"
 #include "math/vec2.h"
+#include "ui/shared_theme_font_adapter.h"
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
@@ -16,7 +17,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-extern SDL_Rect applyButton;  // the existing definition from scene_editor.c
 extern SDL_Rect addButton;  // the existing definition from scene_editor.c
 extern SDL_Rect deleteButton;  // the existing definition from scene_editor.c
 extern SDL_Rect toggleButton;  // the existing definition from scene_editor.c
@@ -30,6 +30,9 @@ static bool deleteModeActive = false;
 int draggingPoint = -1;
 int draggingVelocity = -1;
 static int selectedPoint = -1;
+static bool viewportPanDragging = false;
+static int viewportPanLastMouseX = 0;
+static int viewportPanLastMouseY = 0;
 
 typedef enum BezierEditorAction {
     BEZIER_EDITOR_ACTION_NONE = 0,
@@ -65,6 +68,13 @@ static CameraPoint ScreenToWorldBezier(const Camera* camera, int sx, int sy) {
                                                                       sceneSettings.windowWidth,
                                                                       sceneSettings.windowHeight);
     return SpaceModeAdapter_ScreenToWorld(&view_ctx, sx, sy);
+}
+
+static void PanViewportBezierByScreenDelta(int prev_x, int prev_y, int cur_x, int cur_y) {
+    Camera previewCam = BuildBezierEditorCamera();
+    CameraPoint prev = ScreenToWorldBezier(&previewCam, prev_x, prev_y);
+    CameraPoint cur = ScreenToWorldBezier(&previewCam, cur_x, cur_y);
+    CameraPan(&sceneSettings.camera, prev.x - cur.x, prev.y - cur.y);
 }
 
 static bool HitOnScreen(const Camera* camera, double wx, double wy, int mx, int my, double radius) {
@@ -278,12 +288,7 @@ bool IsClickingButtonBezier(int mx, int my) {
 }
 
 BezierEditorHitRegion BezierEditorHitRegionAtPoint(int mx, int my) {
-    if (IsClickingButtonMain(mx, my)) {
-        return BEZIER_EDITOR_HIT_CONTROLS;
-    }
-    if ((mx >= addButton.x && mx <= addButton.x + addButton.w && my >= addButton.y && my <= addButton.y + addButton.h) ||
-        (mx >= deleteButton.x && mx <= deleteButton.x + deleteButton.w && my >= deleteButton.y && my <= deleteButton.y + deleteButton.h) ||
-        (mx >= toggleButton.x && mx <= toggleButton.x + toggleButton.w && my >= toggleButton.y && my <= toggleButton.y + toggleButton.h)) {
+    if (IsClickingButtonMain(mx, my) || SceneEditorIsPaneToolButton(mx, my)) {
         return BEZIER_EDITOR_HIT_CONTROLS;
     }
     return BEZIER_EDITOR_HIT_CANVAS;
@@ -330,34 +335,31 @@ void HandleBezierEditorMouseClick(SDL_Event* event) {
     // Reset dragging states
     draggingPoint = -1;
     draggingVelocity = -1;
+    viewportPanDragging = false;
 
     // Prevent accidental shape creation when clicking UI buttons
-    bool clickedButton = IsClickingButtonMain(mx, my);
+    bool clickedButton = IsClickingButtonMain(mx, my) || SceneEditorIsPaneToolButton(mx, my);
     if(!clickedButton){
 	IsClickingButtonBezier(mx, my);
     }
 
-    //  Check if clicking inside the Add or Delete button area
-    if (mx >= sceneSettings.windowWidth - addButton.x * 2 - 20 && mx <= sceneSettings.windowWidth - 20) {
-	// Handle UI Buttons Clicks 
-        if (mx >= addButton.x && mx <= addButton.x + addButton.w && my >= addButton.y && 
-                my <= addButton.y + addButton.h) {
-            addModeActive = !addModeActive;
-            deleteModeActive = false;
-            return;
-        }
-        if (mx >= deleteButton.x && mx <= deleteButton.x + deleteButton.w && my >= deleteButton.y && 
-                my <= deleteButton.y + deleteButton.h) {
-            deleteModeActive = !deleteModeActive;
-            addModeActive = false;
-            return;
-        }
-
-	if (mx >= toggleButton.x && mx <= toggleButton.x + toggleButton.w && my >= toggleButton.y &&
-                        my <= toggleButton.y + toggleButton.h) {
-            ToggleBezierPathMode(&sceneSettings.bezierPath);
-            return;
-        }
+    // Handle editor control buttons
+    if (mx >= addButton.x && mx <= addButton.x + addButton.w && my >= addButton.y &&
+            my <= addButton.y + addButton.h) {
+        addModeActive = !addModeActive;
+        deleteModeActive = false;
+        return;
+    }
+    if (mx >= deleteButton.x && mx <= deleteButton.x + deleteButton.w && my >= deleteButton.y &&
+            my <= deleteButton.y + deleteButton.h) {
+        deleteModeActive = !deleteModeActive;
+        addModeActive = false;
+        return;
+    }
+    if (mx >= toggleButton.x && mx <= toggleButton.x + toggleButton.w && my >= toggleButton.y &&
+                    my <= toggleButton.y + toggleButton.h) {
+        ToggleBezierPathMode(&sceneSettings.bezierPath);
+        return;
     }
 
     // Check for clicks on Bézier points
@@ -401,6 +403,9 @@ void HandleBezierEditorMouseClick(SDL_Event* event) {
         selectedPoint = sceneSettings.bezierPath.numPoints - 1;
     } else if (!clickedButton) {
         selectedPoint = -1;
+        viewportPanDragging = true;
+        viewportPanLastMouseX = mx;
+        viewportPanLastMouseY = my;
     }
 
 }
@@ -418,7 +423,17 @@ void HandleBezierEditorEvents(SDL_Event* event, int* draggingPoint, int* draggin
             Camera previewCam = BuildBezierEditorCamera();
             CameraPoint worldPoint = ScreenToWorldBezier(&previewCam, screenX, screenY);
             Vec2 world = vec2(worldPoint.x, worldPoint.y);
-            if (*draggingPoint != -1 && *draggingVelocity == -1) {
+            if (viewportPanDragging &&
+                (*draggingPoint == -1) &&
+                (*draggingVelocity == -1) &&
+                (event->motion.state & SDL_BUTTON_LMASK)) {
+                PanViewportBezierByScreenDelta(viewportPanLastMouseX,
+                                               viewportPanLastMouseY,
+                                               screenX,
+                                               screenY);
+                viewportPanLastMouseX = screenX;
+                viewportPanLastMouseY = screenY;
+            } else if (*draggingPoint != -1 && *draggingVelocity == -1) {
                 MoveEndPoint(&sceneSettings.bezierPath, (int)round(world.x), (int)round(world.y), *draggingPoint);
             } else if (*draggingPoint != -1 && *draggingVelocity != -1) {
                 MoveVelocityHandle(&sceneSettings.bezierPath,
@@ -438,6 +453,7 @@ void HandleBezierEditorEvents(SDL_Event* event, int* draggingPoint, int* draggin
         case BEZIER_EDITOR_ACTION_MOUSE_UP_LEFT:
             *draggingPoint = -1;
             *draggingVelocity = -1;
+            viewportPanDragging = false;
             // keep selectedPoint as-is after drag to persist selection
             break;
         case BEZIER_EDITOR_ACTION_NONE:
@@ -467,7 +483,18 @@ void RenderBezierEditorUI(SDL_Renderer* renderer) {
 }
  
 void RenderBezierEditor(SDL_Renderer* renderer) {
-    SDL_SetRenderDrawColor(renderer, 80, 80, 85, 255);  
+    RayTracingThemePalette palette = {0};
+    SDL_Color objectColor = {255, 255, 255, 255};
+    if (ray_tracing_shared_theme_resolve_palette(&palette)) {
+        SDL_SetRenderDrawColor(renderer,
+                               palette.background_fill.r,
+                               palette.background_fill.g,
+                               palette.background_fill.b,
+                               255);
+        objectColor = palette.text_primary;
+    } else {
+        SDL_SetRenderDrawColor(renderer, 80, 80, 85, 255);
+    }
     SDL_Rect bg = {0, 0, sceneSettings.windowWidth, sceneSettings.windowHeight};
     SDL_RenderFillRect(renderer, &bg);
 
@@ -475,7 +502,7 @@ void RenderBezierEditor(SDL_Renderer* renderer) {
     Camera original = sceneSettings.camera;
     sceneSettings.camera = preview;
 
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    SDL_SetRenderDrawColor(renderer, objectColor.r, objectColor.g, objectColor.b, 255);
     RenderSceneObjects(renderer, !AnimationUseFluidScene());
 
     if (sceneSettings.bezierPath.numPoints >= 2) {
@@ -506,7 +533,4 @@ void RenderBezierEditor(SDL_Renderer* renderer) {
     RenderEditorHUD(renderer, "Bezier", false);
     RenderBezierEditorUI(renderer);
 
-    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
-    SDL_RenderFillRect(renderer, &applyButton);
-    RenderButtonText(renderer, applyButton, "Apply");
 }

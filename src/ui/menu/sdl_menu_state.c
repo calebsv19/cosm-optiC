@@ -1,21 +1,22 @@
 #include "ui/sdl_menu_state.h"
 
-#include <dirent.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 #include "app/animation.h"
 #include "app/data_paths.h"
 #include "camera/camera.h"
 #include "config/config_manager.h"
 #include "editor/editor_mode_router.h"
-#include "ui/shared_theme_font_adapter.h"
+#include "engine/Render/render_pipeline.h"
+#include "render/text_font_cache.h"
+#include "render/text_upload_policy.h"
+#include "ui/scene_source_catalog.h"
 
-#define TOGGLE_BUTTON_TEXT_SIZE 24
+#define TOGGLE_BUTTON_TEXT_SIZE 14
+static const int kMenuMinFontPointSize = 6;
 
 static int clamp_tile_size_menu(int value) {
     if (value < 4) value = 4;
@@ -31,11 +32,26 @@ static double clamp_double(double value, double min_v, double max_v) {
     return value;
 }
 
-static bool file_exists_regular(const char *path) {
-    if (!path || !*path) return false;
-    struct stat st;
-    if (stat(path, &st) != 0) return false;
-    return S_ISREG(st.st_mode);
+static MenuSceneLibraryLane menu_library_lane_from_source(int source) {
+    int clamped = animation_config_scene_source_clamp(source);
+    if (clamped == SCENE_SOURCE_FLUID_MANIFEST) return MENU_SCENE_LIBRARY_FLUID_MANIFEST;
+    if (clamped == SCENE_SOURCE_RUNTIME_SCENE) return MENU_SCENE_LIBRARY_RUNTIME_SCENE;
+    return MENU_SCENE_LIBRARY_2D_CONFIG;
+}
+
+static void menu_state_sync_load_scene_dropdown_flags(MenuRuntimeState* state) {
+    if (!state) return;
+    state->manifestLoadEnabled = state->manifestDropdownOpen;
+    if (!state->manifestDropdownOpen) {
+        state->manifestScrollbarDragging = false;
+    }
+}
+
+static void menu_state_sync_source_and_library(MenuRuntimeState* state) {
+    if (!state) return;
+    state->activeSceneSource = animation_config_scene_source_clamp(animSettings.sceneSource);
+    state->activeSceneLibraryLane = menu_library_lane_from_source(state->activeSceneSource);
+    menu_state_sync_load_scene_dropdown_flags(state);
 }
 
 void menu_state_build_manifest_label(const char *path, char *out, size_t out_size) {
@@ -67,75 +83,93 @@ void menu_state_build_manifest_label(const char *path, char *out, size_t out_siz
     }
 }
 
-static void add_manifest_option(MenuRuntimeState* state, const char *path) {
-    if (!state || !path || !*path) return;
+static void add_manifest_option_from_catalog_entry(MenuRuntimeState* state,
+                                                   const SceneSourceCatalogEntry *entry) {
+    if (!state || !entry || !entry->path[0]) return;
     if (state->manifestOptionCount >= SDL_MENU_MAX_MANIFEST_OPTIONS) return;
 
-    char resolved[PATH_MAX];
-    const char *use_path = path;
-    if (realpath(path, resolved)) {
-        use_path = resolved;
-    }
-    if (!file_exists_regular(use_path)) return;
-
-    for (size_t i = 0; i < state->manifestOptionCount; ++i) {
-        if (strcmp(state->manifestOptions[i].path, use_path) == 0) {
-            return;
-        }
-    }
-
     ManifestOption *opt = &state->manifestOptions[state->manifestOptionCount++];
-    strncpy(opt->path, use_path, sizeof(opt->path) - 1);
+    strncpy(opt->path, entry->path, sizeof(opt->path) - 1);
     opt->path[sizeof(opt->path) - 1] = '\0';
-    menu_state_build_manifest_label(use_path, opt->name, sizeof(opt->name));
+    opt->source = animation_config_scene_source_clamp(entry->source);
+    menu_state_build_manifest_label(entry->path, opt->name, sizeof(opt->name));
+    if (opt->source == SCENE_SOURCE_RUNTIME_SCENE) {
+        char decorated[sizeof(opt->name)];
+        snprintf(decorated, sizeof(decorated), "runtime: %s", opt->name);
+        strncpy(opt->name, decorated, sizeof(opt->name) - 1);
+        opt->name[sizeof(opt->name) - 1] = '\0';
+    } else if (opt->source == SCENE_SOURCE_FLUID_MANIFEST) {
+        char decorated[sizeof(opt->name)];
+        snprintf(decorated, sizeof(decorated), "fluid: %s", opt->name);
+        strncpy(opt->name, decorated, sizeof(opt->name) - 1);
+        opt->name[sizeof(opt->name) - 1] = '\0';
+    }
 }
 
-static void scan_manifest_root(MenuRuntimeState* state, const char *root) {
-    if (!state || !root || !*root) return;
+static void add_manifest_option_2d_config(MenuRuntimeState* state) {
+    if (!state) return;
+    if (state->manifestOptionCount >= SDL_MENU_MAX_MANIFEST_OPTIONS) return;
 
-    char path_buf[PATH_MAX];
-    snprintf(path_buf, sizeof(path_buf), "%s/manifest.json", root);
-    add_manifest_option(state, path_buf);
-    snprintf(path_buf, sizeof(path_buf), "%s/scene_bundle.json", root);
-    add_manifest_option(state, path_buf);
+    ManifestOption *opt = &state->manifestOptions[state->manifestOptionCount++];
+    snprintf(opt->name, sizeof(opt->name), "2D config");
+    opt->path[0] = '\0';
+    opt->source = SCENE_SOURCE_CONFIG_2D;
+}
 
-    DIR *dir = opendir(root);
-    if (!dir) return;
+static int manifest_option_compare(const void *lhs, const void *rhs) {
+    const ManifestOption *a = (const ManifestOption *)lhs;
+    const ManifestOption *b = (const ManifestOption *)rhs;
+    int a_source = animation_config_scene_source_clamp(a ? a->source : SCENE_SOURCE_CONFIG_2D);
+    int b_source = animation_config_scene_source_clamp(b ? b->source : SCENE_SOURCE_CONFIG_2D);
+    int cmp = 0;
+    if (!a || !b) return 0;
 
-    struct dirent *ent = NULL;
-    while ((ent = readdir(dir)) != NULL) {
-        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) continue;
-        snprintf(path_buf, sizeof(path_buf), "%s/%s", root, ent->d_name);
-        struct stat st;
-        if (stat(path_buf, &st) != 0) continue;
-        if (S_ISDIR(st.st_mode)) {
-            char manifest_path[PATH_MAX];
-            snprintf(manifest_path, sizeof(manifest_path), "%s/manifest.json", path_buf);
-            add_manifest_option(state, manifest_path);
-            char bundle_path[PATH_MAX];
-            snprintf(bundle_path, sizeof(bundle_path), "%s/scene_bundle.json", path_buf);
-            add_manifest_option(state, bundle_path);
-        } else if (S_ISREG(st.st_mode) && strcmp(ent->d_name, "manifest.json") == 0) {
-            add_manifest_option(state, path_buf);
-        } else if (S_ISREG(st.st_mode) && strcmp(ent->d_name, "scene_bundle.json") == 0) {
-            add_manifest_option(state, path_buf);
-        }
+    if (a_source != b_source) return a_source - b_source;
+    cmp = strcmp(a->name, b->name);
+    if (cmp != 0) return cmp;
+    return strcmp(a->path, b->path);
+}
+
+bool menu_state_manifest_option_visible(const MenuRuntimeState* state,
+                                        const ManifestOption* option) {
+    const int space_mode = animation_config_space_mode_clamp(animSettings.spaceMode);
+    const int source = animation_config_scene_source_clamp(option ? option->source : SCENE_SOURCE_CONFIG_2D);
+    static const bool kAllowFluidRowsIn3D = false;
+
+    if (!state || !option) return false;
+    if (space_mode == SPACE_MODE_2D) {
+        return source == SCENE_SOURCE_CONFIG_2D || source == SCENE_SOURCE_FLUID_MANIFEST;
     }
-    closedir(dir);
+    if (space_mode == SPACE_MODE_3D) {
+        if (source == SCENE_SOURCE_RUNTIME_SCENE) return true;
+        if (source == SCENE_SOURCE_FLUID_MANIFEST) return kAllowFluidRowsIn3D;
+        return false;
+    }
+    return true;
 }
 
 void menu_state_refresh_manifest_options(MenuRuntimeState* state) {
+    SceneSourceCatalogEntry catalog_entries[SDL_MENU_MAX_MANIFEST_OPTIONS];
     const char **roots = NULL;
     size_t root_count = 0;
+    size_t catalog_entry_count = 0;
     if (!state) return;
     state->manifestOptionCount = 0;
     root_count = ray_tracing_manifest_default_roots(&roots);
-    for (size_t i = 0; i < root_count; ++i) {
-        scan_manifest_root(state, roots[i]);
+    catalog_entry_count = scene_source_catalog_collect(catalog_entries,
+                                                       SDL_MENU_MAX_MANIFEST_OPTIONS,
+                                                       roots,
+                                                       root_count,
+                                                       animSettings.fluidManifest,
+                                                       animSettings.runtimeScenePath);
+    add_manifest_option_2d_config(state);
+    for (size_t i = 0; i < catalog_entry_count; ++i) {
+        add_manifest_option_from_catalog_entry(state, &catalog_entries[i]);
     }
-    if (animSettings.fluidManifest[0]) {
-        add_manifest_option(state, animSettings.fluidManifest);
-    }
+    qsort(state->manifestOptions,
+          state->manifestOptionCount,
+          sizeof(state->manifestOptions[0]),
+          manifest_option_compare);
     state->manifestScroll = 0.0f;
     state->manifestMaxScroll = 0.0f;
 }
@@ -223,6 +257,7 @@ void menu_state_sync_from_anim(MenuRuntimeState* state) {
     sync_light_slider_from_settings(state);
     sync_decay_softness_slider_from_settings(state);
     sync_forward_decay_slider_from_settings(state);
+    menu_state_sync_source_and_library(state);
 }
 
 void menu_state_reanchor_camera_after_resize(int previousWidth, int previousHeight) {
@@ -242,21 +277,15 @@ void menu_state_reanchor_camera_after_resize(int previousWidth, int previousHeig
 
 void menu_state_set_load_scene_enabled(MenuRuntimeState* state, bool enabled) {
     if (!state) return;
-    state->manifestLoadEnabled = enabled;
-    animSettings.useFluidScene = enabled;
-    state->manifestDropdownOpen = enabled;
     if (enabled) {
+        state->manifestDropdownOpen = true;
         menu_state_refresh_manifest_options(state);
         state->manifestScroll = 0.0f;
         state->manifestScrollbarDragging = false;
-        if (animSettings.fluidManifest[0]) {
-            AnimationApplyFluidScene(animSettings.fluidManifest);
-        }
     } else {
         state->manifestDropdownOpen = false;
-        AnimationClearFluidGrid();
-        LoadSceneConfig();
     }
+    menu_state_sync_source_and_library(state);
 }
 
 void menu_state_apply_special_slider_rules(MenuRuntimeState* state, int* target) {
@@ -304,32 +333,19 @@ void menu_state_apply_special_slider_rules(MenuRuntimeState* state, int* target)
 }
 
 static bool open_menu_font_for_current_zoom(TTF_Font** out_font) {
-    char shared_font_path[256];
-    const char* font_path = "/System/Library/Fonts/Supplemental/Arial.ttf";
-    int point_size = TOGGLE_BUTTON_TEXT_SIZE;
+    int point_size = ray_tracing_text_font_cache_ui_regular_base_point_size(TOGGLE_BUTTON_TEXT_SIZE);
     TTF_Font* opened_font;
-    bool used_shared_path = false;
     if (!out_font) return false;
 
-    if (ray_tracing_shared_font_resolve_ui_regular(
-            shared_font_path, sizeof(shared_font_path), &point_size)) {
-        font_path = shared_font_path;
-        used_shared_path = true;
-    }
-    point_size = animation_config_scale_text_point_size(&animSettings, point_size, 8);
-    opened_font = TTF_OpenFont(font_path, point_size);
-    if (!opened_font && font_path != NULL && strcmp(font_path, "/System/Library/Fonts/Supplemental/Arial.ttf") != 0) {
-        opened_font = TTF_OpenFont("/System/Library/Fonts/Supplemental/Arial.ttf", point_size);
-        if (opened_font) {
-            font_path = "/System/Library/Fonts/Supplemental/Arial.ttf";
-            used_shared_path = false;
-        }
-    }
+    point_size = animation_config_scale_text_point_size(&animSettings,
+                                                        point_size,
+                                                        kMenuMinFontPointSize);
+    point_size = ray_tracing_text_raster_point_size(getRenderContext() ? getRenderContext()->renderer : NULL,
+                                                    point_size,
+                                                    kMenuMinFontPointSize);
+    opened_font = ray_tracing_text_font_cache_get_ui_regular(point_size);
     if (!opened_font) return false;
-    printf("Menu font loaded: path=%s size=%d shared=%s\n",
-           font_path,
-           point_size,
-           used_shared_path ? "yes" : "no");
+    printf("Menu font loaded: size=%d cache=yes\n", point_size);
     *out_font = opened_font;
     return true;
 }
@@ -340,9 +356,6 @@ bool menu_state_reload_font(TTF_Font** font) {
     if (!open_menu_font_for_current_zoom(&replacement)) {
         return false;
     }
-    if (*font) {
-        TTF_CloseFont(*font);
-    }
     *font = replacement;
     return true;
 }
@@ -350,6 +363,7 @@ bool menu_state_reload_font(TTF_Font** font) {
 void menu_state_init(MenuRuntimeState* state) {
     if (!state) return;
     memset(state, 0, sizeof(*state));
+    state->activeView = MENU_VIEW_MAIN;
     state->statusColor = (SDL_Color){255, 255, 255, 255};
     state->rouletteSliderValue = 10;
     state->envSliderValue = 0;
@@ -357,9 +371,10 @@ void menu_state_init(MenuRuntimeState* state) {
     state->lightIntensitySliderValue = 500;
     state->lightDecaySoftnessSliderValue = 100;
     state->forwardDecaySliderValue = 2000;
+    state->manifestDropdownOpen = false;
+    menu_state_sync_load_scene_dropdown_flags(state);
     menu_state_sync_from_anim(state);
-    state->manifestLoadEnabled = animSettings.useFluidScene;
-    state->manifestDropdownOpen = state->manifestLoadEnabled;
+    menu_state_sync_source_and_library(state);
     menu_state_refresh_manifest_options(state);
     if (animSettings.inputRoot[0]) {
         (void)setenv("RAY_TRACING_INPUT_ROOT", animSettings.inputRoot, 1);
@@ -408,6 +423,10 @@ void menu_state_reset_defaults(MenuRuntimeState* state) {
     animSettings.bsdfModel = 1;
     animSettings.lightIntensity = 5.0;
     animSettings.spaceMode = SPACE_MODE_2D;
+    animSettings.sceneSource = SCENE_SOURCE_CONFIG_2D;
+    animSettings.useFluidScene = false;
+    animSettings.fluidManifest[0] = '\0';
+    animSettings.runtimeScenePath[0] = '\0';
     animSettings.textZoomStep = 0;
     animSettings.previewMode = false;
     animSettings.previewDuration = 5.0;

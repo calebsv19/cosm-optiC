@@ -5,8 +5,10 @@
 #include "app/animation.h"
 #include "config/config_manager.h"
 #include "ui/shared_theme_font_adapter.h"
+#include "engine/Render/render_pipeline.h"
+#include "render/text_upload_policy.h"
 
-#define MENU_WIDTH 1000
+#define MENU_WIDTH 1200
 #define MENU_HEIGHT 900
 #define MENU_MARGIN_X 30
 #define MENU_MARGIN_Y 30
@@ -44,6 +46,8 @@ void menu_render_build_slider_layout(TTF_Font* font,
 
     if (font) {
         textHeight = TTF_FontHeight(font);
+        textHeight = ray_tracing_text_logical_pixels(getRenderContext() ? getRenderContext()->renderer : NULL,
+                                                     textHeight);
     }
     if (textHeight < 12) textHeight = 12;
     if (buttons) {
