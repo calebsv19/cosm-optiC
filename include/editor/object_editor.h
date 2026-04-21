@@ -48,5 +48,8 @@ void SelectObject(int index);
 void DeselectObject(void);
 bool IsInsideHandle(SceneObject* obj, int mx, int my);
 bool CheckObjectClick(double mx, double my);
+int ObjectEditorGetSelectedObjectIndex(void);
+void ObjectEditorSetSelectedObjectIndex(int index);
+void ObjectEditorAssignMaterialToSelected(int material_id);
 
 #endif // OBJECT_EDITOR_H

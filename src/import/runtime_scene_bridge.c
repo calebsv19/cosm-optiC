@@ -2,6 +2,7 @@
 
 #include "core_scene_overlay_merge_shared.h"
 #include "config/config_manager.h"
+#include "config/config_scene_path_io.h"
 #include "core_io.h"
 #include "scene/object_manager.h"
 
@@ -231,7 +232,7 @@ static void scene_defaults_reset(void) {
     sceneSettings.camera.y = 0.0;
     sceneSettings.camera.zoom = 1.0;
     sceneSettings.camera.rotation = 0.0;
-    sceneSettings.bezierPath.numPoints = 1;
+    sceneSettings.bezierPath.numPoints = 0;
     sceneSettings.bezierPath.points[0].x = 0.0;
     sceneSettings.bezierPath.points[0].y = 0.0;
     sceneSettings.bezierPath.mode = BEZIER_CUBIC;
@@ -450,6 +451,76 @@ static void apply_camera_seed_scaled(json_object *cameras_array, double world_sc
         sceneSettings.cameraPath.points[0].y = cy * world_scale;
         g_last_3d_scaffold.has_camera_seed = true;
         g_last_3d_scaffold.camera_z = cz * world_scale;
+    }
+}
+
+static void scale_path_world_units(Path *path, double world_scale) {
+    int i = 0;
+    if (!path) return;
+    for (i = 0; i < path->numPoints && i < MAX_BEZIER_POINTS; ++i) {
+        path->points[i].x *= world_scale;
+        path->points[i].y *= world_scale;
+        if (i < MAX_BEZIER_POINTS - 1) {
+            path->handles[i][0].vx *= world_scale;
+            path->handles[i][0].vy *= world_scale;
+            path->handles[i][1].vx *= world_scale;
+            path->handles[i][1].vy *= world_scale;
+        }
+    }
+}
+
+static bool apply_authoring_path_scaled(json_object *authoring_obj,
+                                        const char *key,
+                                        Path *target_path,
+                                        double world_scale,
+                                        bool allow_empty) {
+    json_object *path_obj = NULL;
+    Path loaded = {0};
+    if (!authoring_obj || !key || !target_path) return false;
+    if (!json_object_object_get_ex(authoring_obj, key, &path_obj)) {
+        return false;
+    }
+    if (!config_scene_load_path_from_json_object(path_obj, &loaded, allow_empty)) {
+        return false;
+    }
+    scale_path_world_units(&loaded, world_scale);
+    *target_path = loaded;
+    return true;
+}
+
+static void apply_ray_authoring_paths(json_object *root, double world_scale) {
+    json_object *extensions = NULL;
+    json_object *ray_tracing = NULL;
+    json_object *authoring = NULL;
+    if (!root) return;
+    if (!json_object_object_get_ex(root, "extensions", &extensions) ||
+        !json_object_is_type(extensions, json_type_object) ||
+        !json_object_object_get_ex(extensions, "ray_tracing", &ray_tracing) ||
+        !json_object_is_type(ray_tracing, json_type_object) ||
+        !json_object_object_get_ex(ray_tracing, "authoring", &authoring) ||
+        !json_object_is_type(authoring, json_type_object)) {
+        return;
+    }
+
+    if (apply_authoring_path_scaled(authoring,
+                                    "light_path",
+                                    &sceneSettings.bezierPath,
+                                    world_scale,
+                                    true)) {
+        /* Authoring payload overrides top-level light seed, including an intentional empty path. */
+    }
+    if (apply_authoring_path_scaled(authoring,
+                                    "camera_path",
+                                    &sceneSettings.cameraPath,
+                                    world_scale,
+                                    true)) {
+        if (sceneSettings.cameraPath.numPoints > 0) {
+            sceneSettings.camera.x = sceneSettings.cameraPath.points[0].x;
+            sceneSettings.camera.y = sceneSettings.cameraPath.points[0].y;
+            if (sceneSettings.cameraPath.rotationSet[0]) {
+                sceneSettings.camera.rotation = sceneSettings.cameraPath.rotations[0];
+            }
+        }
     }
 }
 
@@ -715,6 +786,7 @@ bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
     apply_objects(objects, materials, world_scale, out_summary);
     apply_light_seed_scaled(lights, world_scale);
     apply_camera_seed_scaled(cameras, world_scale);
+    apply_ray_authoring_paths(root, world_scale);
     apply_scene3d_extension_digest(root, world_scale);
     g_last_3d_scaffold.valid = true;
     g_last_3d_digest.valid = true;

@@ -11,6 +11,7 @@
 #include "editor/editor_mode_router.h"
 #include "engine/Render/render_font.h"
 #include "render/render_helper.h"
+#include "render/ray_tracing_mode_backend.h"
 #include "render/text_upload_policy.h"
 #include "engine/Render/render_pipeline.h"
 #include "ui/shared_theme_font_adapter.h"
@@ -744,10 +745,14 @@ void menu_render_frame(SDL_Renderer* renderer, TTF_Font* font, MenuRuntimeState*
     const bool has_shared_palette = ray_tracing_shared_theme_resolve_palette(&palette);
     MenuButtonLayout buttons;
     SliderLayout sliderLayout;
+    RayTracingRuntimeRoute route;
+    RayTracingSceneDigestStatus digestStatus;
     if (!state) return;
 
     menu_render_build_button_layout(font, state, &buttons);
     menu_render_build_slider_layout(font, state, &buttons, &sliderLayout);
+    route = RayTracingModeBackend_ResolveRoute();
+    digestStatus = RayTracingModeBackend_BuildSceneDigestStatus(&route);
 
     if (has_shared_palette) {
         render_set_clear_color(renderer,
@@ -843,16 +848,65 @@ void menu_render_frame(SDL_Renderer* renderer, TTF_Font* font, MenuRuntimeState*
                        animSettings.spaceMode == SPACE_MODE_3D);
     if (EditorModeRouter_IsControlled3D()) {
         SDL_Color scaffoldHintColor = {255, 220, 140, 240};
-        int hintY = buttons.spaceModeRect.y - 18;
-        if (hintY < MENU_MARGIN_Y) {
-            hintY = buttons.spaceModeRect.y + buttons.spaceModeRect.h + 4;
+        SDL_Color digestHintColor = has_shared_palette
+                                        ? (SDL_Color){palette.text_muted.r,
+                                                      palette.text_muted.g,
+                                                      palette.text_muted.b,
+                                                      230}
+                                        : (SDL_Color){210, 210, 210, 230};
+        int hintX = buttons.spaceModeRect.x;
+        int hintMaxWidth = MENU_WIDTH - hintX - MENU_MARGIN_X;
+        int hintLine1Y = 0;
+        int hintLine2Y = 0;
+        char hintLine1[192];
+        char hintLine2[256];
+        char hintFit[256];
+
+        if (buttons.spaceModeRect.y - 36 >= MENU_MARGIN_Y) {
+            hintLine1Y = buttons.spaceModeRect.y - 34;
+            hintLine2Y = buttons.spaceModeRect.y - 18;
+        } else {
+            hintLine1Y = buttons.spaceModeRect.y + buttons.spaceModeRect.h + 4;
+            hintLine2Y = hintLine1Y + 16;
         }
+
+        snprintf(hintLine1, sizeof(hintLine1), "%s", EditorModeRouter_RuntimeHintLabel());
+        fit_text_to_width(font, hintLine1, hintMaxWidth, hintFit, sizeof(hintFit));
         render_text_color(renderer,
                           font,
-                          buttons.spaceModeRect.x,
-                          hintY,
+                          hintX,
+                          hintLine1Y,
                           scaffoldHintColor,
-                          EditorModeRouter_RuntimeHintLabel());
+                          hintFit);
+
+        if (!digestStatus.valid) {
+            snprintf(hintLine2, sizeof(hintLine2), "3D digest pending runtime payload");
+        } else if (digestStatus.hasSceneBounds) {
+            snprintf(hintLine2,
+                     sizeof(hintLine2),
+                     "3D digest prim=%d plane=%d prism=%d bx=%.1f..%.1f by=%.1f..%.1f",
+                     digestStatus.digestPrimitiveCount,
+                     digestStatus.planePrimitiveCount,
+                     digestStatus.rectPrismPrimitiveCount,
+                     digestStatus.boundsMinX,
+                     digestStatus.boundsMaxX,
+                     digestStatus.boundsMinY,
+                     digestStatus.boundsMaxY);
+        } else {
+            snprintf(hintLine2,
+                     sizeof(hintLine2),
+                     "3D digest prim=%d plane=%d prism=%d",
+                     digestStatus.digestPrimitiveCount,
+                     digestStatus.planePrimitiveCount,
+                     digestStatus.rectPrismPrimitiveCount);
+        }
+        fit_text_to_width(font, hintLine2, hintMaxWidth, hintFit, sizeof(hintFit));
+        render_text_color(renderer,
+                          font,
+                          hintX,
+                          hintLine2Y,
+                          digestHintColor,
+                          hintFit);
     }
 
     render_button_rect(renderer, font, &buttons.saveRect, "Save", false);

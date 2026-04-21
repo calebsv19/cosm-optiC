@@ -30,6 +30,9 @@ static bool deleteModeActive = false;
 int draggingPoint = -1;
 int draggingVelocity = -1;
 static int selectedPoint = -1;
+static int selectedHandleSegment = -1;
+static int selectedHandleIndex = -1;
+static BezierEditorSelectionKind selectionKind = BEZIER_EDITOR_SELECTION_NONE;
 static bool viewportPanDragging = false;
 static int viewportPanLastMouseX = 0;
 static int viewportPanLastMouseY = 0;
@@ -244,41 +247,71 @@ void RemoveBezierPoint(Path* path, int index) {
 }
 
 
-void AddBezierPoint(Path* path, int x, int y) {
+void AddBezierPointPrecise(Path* path, double x, double y, double default_handle_length) {
+    double prev_x = 0.0;
+    double prev_y = 0.0;
     if (!path) return;
     if (path->numPoints >= MAX_BEZIER_POINTS) {
         printf("Max points reached, cannot add more.\n");
         return;
     }
+    if (!(default_handle_length > 0.0) || !isfinite(default_handle_length)) {
+        default_handle_length = 50.0;
+    }
             
     int index = path->numPoints;
+    if (index > 0) {
+        prev_x = path->points[index - 1].x;
+        prev_y = path->points[index - 1].y;
+    }
     path->points[index].x = x;
     path->points[index].y = y;
     path->rotations[index] = 0.0;
     path->rotationSet[index] = false;
-         
-    // First point gets no previous handle
-    if (index == 0) {
-        path->handles[0][0].vx = 50;
-        path->handles[0][0].vy = 0;
+
+    if (index < MAX_BEZIER_POINTS - 1) {
+        path->handles[index][0].vx = 0.0;
+        path->handles[index][0].vy = 0.0;
+        path->handles[index][1].vx = 0.0;
+        path->handles[index][1].vy = 0.0;
     }
-    // Second point initializes first segment
-    else if (index == 1) {
-        path->handles[0][1].vx = -50;
-        path->handles[0][1].vy = 0;
-    }   
-    // Third point makes the previous endpoint a midpoint 
-    else {
-        path->handles[index - 1][0].vx = 50;
-        path->handles[index - 1][0].vy = 0;
-            
-        path->handles[index - 1][1].vx = -50;
-        path->handles[index - 1][1].vy = 0;
+
+    if (index > 0) {
+        double dx = x - prev_x;
+        double dy = y - prev_y;
+        double dist = sqrt(dx * dx + dy * dy);
+        if (dist > 1e-6) {
+            double dir_x = dx / dist;
+            double dir_y = dy / dist;
+            double handle_length = fmin(default_handle_length, dist * 0.20);
+            double min_handle_length = fmin(default_handle_length * 0.35, dist * 0.10);
+            if (handle_length < min_handle_length) {
+                handle_length = min_handle_length;
+            }
+            path->handles[index - 1][0].vx = dir_x * handle_length;
+            path->handles[index - 1][0].vy = dir_y * handle_length;
+            path->handles[index - 1][1].vx = -dir_x * handle_length;
+            path->handles[index - 1][1].vy = -dir_y * handle_length;
+        } else {
+            path->handles[index - 1][0].vx = 0.0;
+            path->handles[index - 1][0].vy = 0.0;
+            path->handles[index - 1][1].vx = 0.0;
+            path->handles[index - 1][1].vy = 0.0;
+        }
+    } else {
+        path->handles[0][0].vx = 0.0;
+        path->handles[0][0].vy = 0.0;
+        path->handles[0][1].vx = 0.0;
+        path->handles[0][1].vy = 0.0;
     }
      
     path->numPoints++;
     path->handleLink[index] = false;
-    printf("Added new point at (%d, %d), Segment Count: %d\n", x, y, path->numPoints - 1);
+    printf("Added new point at (%.3f, %.3f), Segment Count: %d\n", x, y, path->numPoints - 1);
+}
+
+void AddBezierPoint(Path* path, int x, int y) {
+    AddBezierPointPrecise(path, (double)x, (double)y, 50.0);
 }
 
 bool IsClickingButtonBezier(int mx, int my) {
@@ -322,6 +355,102 @@ void HandleBezierEditorKeyPress(SDL_Event* event) {
                 break;
         }
     }
+}
+
+int BezierEditorGetSelectedPointIndex(void) {
+    return selectedPoint;
+}
+
+void BezierEditorSetSelectedPointIndex(int index) {
+    selectedPoint = index;
+    if (index >= 0) {
+        selectionKind = BEZIER_EDITOR_SELECTION_POINT;
+        selectedHandleSegment = -1;
+        selectedHandleIndex = -1;
+    } else {
+        selectionKind = BEZIER_EDITOR_SELECTION_NONE;
+        selectedHandleSegment = -1;
+        selectedHandleIndex = -1;
+    }
+}
+
+BezierEditorSelectionKind BezierEditorGetSelectionKind(void) {
+    return selectionKind;
+}
+
+void BezierEditorClearSelection(void) {
+    selectedPoint = -1;
+    selectedHandleSegment = -1;
+    selectedHandleIndex = -1;
+    selectionKind = BEZIER_EDITOR_SELECTION_NONE;
+}
+
+void BezierEditorSelectHandle(int segmentIndex, int handleIndex) {
+    selectedHandleSegment = segmentIndex;
+    selectedHandleIndex = handleIndex;
+    selectedPoint = (handleIndex == 0) ? segmentIndex : (segmentIndex + 1);
+    selectionKind = BEZIER_EDITOR_SELECTION_HANDLE;
+}
+
+bool BezierEditorGetSelectedHandle(int* out_segment_index, int* out_handle_index) {
+    if (selectionKind != BEZIER_EDITOR_SELECTION_HANDLE ||
+        selectedHandleSegment < 0 ||
+        selectedHandleIndex < 0) {
+        return false;
+    }
+    if (out_segment_index) *out_segment_index = selectedHandleSegment;
+    if (out_handle_index) *out_handle_index = selectedHandleIndex;
+    return true;
+}
+
+bool BezierEditorGetSelectionWorldPosition(double* out_x, double* out_y) {
+    if (selectionKind == BEZIER_EDITOR_SELECTION_HANDLE &&
+        selectedHandleSegment >= 0 &&
+        selectedHandleSegment < sceneSettings.bezierPath.numPoints - 1 &&
+        (selectedHandleIndex == 0 || selectedHandleIndex == 1)) {
+        int pointIndex = (selectedHandleIndex == 0) ? selectedHandleSegment : (selectedHandleSegment + 1);
+        if (out_x) {
+            *out_x = sceneSettings.bezierPath.points[pointIndex].x +
+                     sceneSettings.bezierPath.handles[selectedHandleSegment][selectedHandleIndex].vx;
+        }
+        if (out_y) {
+            *out_y = sceneSettings.bezierPath.points[pointIndex].y +
+                     sceneSettings.bezierPath.handles[selectedHandleSegment][selectedHandleIndex].vy;
+        }
+        return true;
+    }
+    if (selectionKind == BEZIER_EDITOR_SELECTION_POINT &&
+        selectedPoint >= 0 &&
+        selectedPoint < sceneSettings.bezierPath.numPoints) {
+        if (out_x) *out_x = sceneSettings.bezierPath.points[selectedPoint].x;
+        if (out_y) *out_y = sceneSettings.bezierPath.points[selectedPoint].y;
+        return true;
+    }
+    return false;
+}
+
+bool BezierEditorMoveSelectionTo(double world_x, double world_y) {
+    if (selectionKind == BEZIER_EDITOR_SELECTION_HANDLE &&
+        selectedHandleSegment >= 0 &&
+        selectedHandleSegment < sceneSettings.bezierPath.numPoints - 1 &&
+        (selectedHandleIndex == 0 || selectedHandleIndex == 1)) {
+        int pointIndex = (selectedHandleIndex == 0) ? selectedHandleSegment : (selectedHandleSegment + 1);
+        Velocity* target = &sceneSettings.bezierPath.handles[selectedHandleSegment][selectedHandleIndex];
+        target->vx = world_x - sceneSettings.bezierPath.points[pointIndex].x;
+        target->vy = world_y - sceneSettings.bezierPath.points[pointIndex].y;
+        if (sceneSettings.bezierPath.handleLink[pointIndex]) {
+            EnforceHandleLink(&sceneSettings.bezierPath, pointIndex);
+        }
+        return true;
+    }
+    if (selectionKind == BEZIER_EDITOR_SELECTION_POINT &&
+        selectedPoint >= 0 &&
+        selectedPoint < sceneSettings.bezierPath.numPoints) {
+        sceneSettings.bezierPath.points[selectedPoint].x = world_x;
+        sceneSettings.bezierPath.points[selectedPoint].y = world_y;
+        return true;
+    }
+    return false;
 }
 			
 
@@ -368,12 +497,12 @@ void HandleBezierEditorMouseClick(SDL_Event* event) {
         double py = sceneSettings.bezierPath.points[i].y;
         if (HitOnScreen(&previewCam, px, py, mx, my, POINT_HIT_RADIUS)) {
             draggingPoint = i;
-            selectedPoint = i;
+            BezierEditorSetSelectedPointIndex(i);
 
             //  If in Delete Mode, remove the point
             if (deleteModeActive) {
                 RemoveBezierPoint(&sceneSettings.bezierPath, i);
-                selectedPoint = -1;
+                BezierEditorClearSelection();
             }
 
             return;
@@ -391,7 +520,7 @@ void HandleBezierEditorMouseClick(SDL_Event* event) {
             if (HitOnScreen(&previewCam, vx, vy, mx, my, POINT_HIT_RADIUS)) {
                 draggingPoint = i;
                 draggingVelocity = j;
-                selectedPoint = (j == 0) ? i : i + 1;
+                BezierEditorSelectHandle(i, j);
                 return;
             }
         }
@@ -400,9 +529,9 @@ void HandleBezierEditorMouseClick(SDL_Event* event) {
     //  If in Add Mode, add a new point at the clicked position
     if (addModeActive && !clickedButton) {
         AddBezierPoint(&sceneSettings.bezierPath, (int)world.x, (int)world.y);
-        selectedPoint = sceneSettings.bezierPath.numPoints - 1;
+        BezierEditorSetSelectedPointIndex(sceneSettings.bezierPath.numPoints - 1);
     } else if (!clickedButton) {
-        selectedPoint = -1;
+        BezierEditorClearSelection();
         viewportPanDragging = true;
         viewportPanLastMouseX = mx;
         viewportPanLastMouseY = my;

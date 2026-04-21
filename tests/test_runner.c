@@ -13,6 +13,8 @@
 #include "app/data_paths.h"
 #include "app/animation.h"
 #include "editor/editor_mode_router.h"
+#include "editor/scene_editor_control_surface.h"
+#include "editor/scene_editor_runtime_scene_persistence.h"
 #include "render/ray_tracing2.h"
 #include "render/ray_tracing_mode_backend.h"
 #include "render/integrator_common.h"
@@ -24,6 +26,7 @@
 #include "render/ray_types.h"
 #include "render/render_helper.h"
 #include "import/runtime_scene_bridge.h"
+#include "path/path_system.h"
 #include "core_scene_compile.h"
 #include "ui/scene_source_catalog.h"
 #include "ui/sdl_menu_state.h"
@@ -974,6 +977,8 @@ static int test_runtime_scene_bridge_apply_ps4d_fixture_retains_digest_truth(voi
     assert_true("runtime_scene_ps4d_summary_valid", summary.valid_contract);
     assert_true("runtime_scene_ps4d_object_count", sceneSettings.objectCount == 3);
     assert_true("runtime_scene_ps4d_space_mode_3d", animSettings.spaceMode == SPACE_MODE_3D);
+    assert_true("runtime_scene_ps4d_light_path_empty_without_light_seed",
+                sceneSettings.bezierPath.numPoints == 0);
 
     runtime_scene_bridge_get_last_3d_scaffold_state(&scaffold);
     assert_true("runtime_scene_ps4d_scaffold_valid", scaffold.valid);
@@ -1065,6 +1070,8 @@ static int test_runtime_scene_bridge_apply_runtime_fixture(void) {
     assert_close("runtime_scene_apply_object_z", sceneSettings.sceneObjects[0].z, 0.0, 1e-9);
     assert_true("runtime_scene_apply_color_from_material",
                 sceneSettings.sceneObjects[0].color == 0xFFFFFF);
+    assert_true("runtime_scene_apply_light_point_count_seeded",
+                sceneSettings.bezierPath.numPoints == 1);
     assert_close("runtime_scene_apply_light_x", sceneSettings.bezierPath.points[0].x, 5.0, 1e-9);
     assert_close("runtime_scene_apply_light_y", sceneSettings.bezierPath.points[0].y, 8.0, 1e-9);
     assert_close("runtime_scene_apply_camera_x", sceneSettings.camera.x, 0.0, 1e-9);
@@ -1085,6 +1092,30 @@ static int test_runtime_scene_bridge_apply_runtime_fixture(void) {
                     strcmp(animSettings.runtimeScenePath,
                            "../shared/assets/scenes/trio_contract/scene_runtime_min.json") == 0);
     }
+    return 0;
+}
+
+static int test_path_eval_3d_uses_linear_handle_units(void) {
+    Path path = {0};
+    int original_space_mode = animSettings.spaceMode;
+    Point p = {0};
+
+    path.mode = BEZIER_CUBIC;
+    path.numPoints = 2;
+    path.points[0] = (Point){0.0, 0.0};
+    path.points[1] = (Point){10.0, 0.0};
+    path.handles[0][0] = (Velocity){0.0, 4.0};
+    path.handles[0][1] = (Velocity){0.0, 4.0};
+
+    animSettings.spaceMode = SPACE_MODE_2D;
+    p = GetPositionAlongPath(&path, 0.5);
+    assert_true("path_eval_2d_handle_compression_active", p.y < 0.5);
+
+    animSettings.spaceMode = SPACE_MODE_3D;
+    p = GetPositionAlongPath(&path, 0.5);
+    assert_close("path_eval_3d_linear_handle_y", p.y, 3.0, 1e-9);
+
+    animSettings.spaceMode = original_space_mode;
     return 0;
 }
 
@@ -1753,6 +1784,222 @@ static int test_runtime_scene_bridge_trio_fixture_compile_writeback_apply(void) 
     return 0;
 }
 
+static int test_runtime_scene_bridge_apply_hydrates_ray_authoring_paths(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_authoring_hydrate_1\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":2.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":1.0,\"y\":1.0,\"z\":2.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{"
+          "\"ray_tracing\":{"
+            "\"authoring\":{"
+              "\"light_path\":{"
+                "\"mode\":\"BEZIER_CUBIC\","
+                "\"points\":["
+                  "{"
+                    "\"x\":1.25,"
+                    "\"y\":-0.75,"
+                    "\"rotation\":0.0,"
+                    "\"handleLink\":false,"
+                    "\"velocity1\":{\"vx\":0.5,\"vy\":0.25}"
+                  "},"
+                  "{"
+                    "\"x\":2.50,"
+                    "\"y\":1.00,"
+                    "\"rotation\":0.0,"
+                    "\"handleLink\":false,"
+                    "\"velocity2\":{\"vx\":-0.5,\"vy\":-0.25}"
+                  "}"
+                "]"
+              "},"
+              "\"camera_path\":{"
+                "\"mode\":\"BEZIER_CUBIC\","
+                "\"points\":["
+                  "{"
+                    "\"x\":2.0,"
+                    "\"y\":3.0,"
+                    "\"rotation\":0.5,"
+                    "\"handleLink\":false"
+                  "}"
+                "]"
+              "}"
+            "}"
+          "}"
+        "}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    bool ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_scene_authoring_hydrate_apply_ok", ok);
+    if (!ok) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+    assert_true("runtime_scene_authoring_hydrate_bezier_points",
+                sceneSettings.bezierPath.numPoints == 2);
+    assert_close("runtime_scene_authoring_hydrate_light_p0_x",
+                 sceneSettings.bezierPath.points[0].x,
+                 2.5,
+                 1e-6);
+    assert_close("runtime_scene_authoring_hydrate_light_p0_y",
+                 sceneSettings.bezierPath.points[0].y,
+                 -1.5,
+                 1e-6);
+    assert_close("runtime_scene_authoring_hydrate_light_handle_vx",
+                 sceneSettings.bezierPath.handles[0][0].vx,
+                 1.0,
+                 1e-6);
+    assert_close("runtime_scene_authoring_hydrate_light_handle_vy",
+                 sceneSettings.bezierPath.handles[0][0].vy,
+                 0.5,
+                 1e-6);
+    assert_true("runtime_scene_authoring_hydrate_camera_points",
+                sceneSettings.cameraPath.numPoints == 1);
+    assert_close("runtime_scene_authoring_hydrate_camera_p0_x",
+                 sceneSettings.cameraPath.points[0].x,
+                 4.0,
+                 1e-6);
+    assert_close("runtime_scene_authoring_hydrate_camera_p0_y",
+                 sceneSettings.cameraPath.points[0].y,
+                 6.0,
+                 1e-6);
+    assert_close("runtime_scene_authoring_hydrate_camera_x",
+                 sceneSettings.camera.x,
+                 4.0,
+                 1e-6);
+    assert_close("runtime_scene_authoring_hydrate_camera_y",
+                 sceneSettings.camera.y,
+                 6.0,
+                 1e-6);
+    assert_close("runtime_scene_authoring_hydrate_camera_rot",
+                 sceneSettings.camera.rotation,
+                 0.5,
+                 1e-6);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_scene_editor_runtime_scene_persistence_roundtrip(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_path = "/tmp/ray_tracing_runtime_scene_authoring_roundtrip.json";
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_authoring_persist_1\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":2.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":2.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    char diagnostics[256];
+    char *persisted_json = NULL;
+    FILE *file = fopen(runtime_path, "wb");
+    bool ok = false;
+
+    assert_true("runtime_scene_authoring_persist_open_tmp", file != NULL);
+    if (!file) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+    fwrite(runtime_json, 1, strlen(runtime_json), file);
+    fclose(file);
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    snprintf(animSettings.runtimeScenePath, sizeof(animSettings.runtimeScenePath), "%s", runtime_path);
+    animSettings.spaceMode = SPACE_MODE_3D;
+
+    sceneSettings.bezierPath.mode = BEZIER_CUBIC;
+    sceneSettings.bezierPath.numPoints = 2;
+    sceneSettings.bezierPath.points[0].x = 6.5;
+    sceneSettings.bezierPath.points[0].y = -1.5;
+    sceneSettings.bezierPath.points[1].x = 8.0;
+    sceneSettings.bezierPath.points[1].y = 3.0;
+    sceneSettings.bezierPath.handles[0][0].vx = 1.25;
+    sceneSettings.bezierPath.handles[0][0].vy = 0.75;
+    sceneSettings.bezierPath.handles[0][1].vx = -0.5;
+    sceneSettings.bezierPath.handles[0][1].vy = -1.0;
+
+    sceneSettings.cameraPath.mode = BEZIER_CUBIC;
+    sceneSettings.cameraPath.numPoints = 1;
+    sceneSettings.cameraPath.points[0].x = 10.0;
+    sceneSettings.cameraPath.points[0].y = 4.0;
+    sceneSettings.cameraPath.rotations[0] = 0.25;
+    sceneSettings.cameraPath.rotationSet[0] = true;
+    sceneSettings.camera.x = 10.0;
+    sceneSettings.camera.y = 4.0;
+    sceneSettings.camera.rotation = 0.25;
+
+    ok = SceneEditorRuntimeScenePersistAuthoring(diagnostics, sizeof(diagnostics));
+    assert_true("runtime_scene_authoring_persist_ok", ok);
+    if (!ok) {
+        unlink(runtime_path);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    persisted_json = read_text_file_alloc(runtime_path, NULL);
+    assert_true("runtime_scene_authoring_persist_readback_ok", persisted_json != NULL);
+    if (persisted_json) {
+        assert_true("runtime_scene_authoring_persist_has_authoring",
+                    strstr(persisted_json, "\"authoring\"") != NULL);
+        assert_true("runtime_scene_authoring_persist_has_light_path",
+                    strstr(persisted_json, "\"light_path\"") != NULL);
+        assert_true("runtime_scene_authoring_persist_has_camera_path",
+                    strstr(persisted_json, "\"camera_path\"") != NULL);
+    }
+
+    assert_true("runtime_scene_authoring_persist_hydrated_light_points",
+                sceneSettings.bezierPath.numPoints == 2);
+    assert_close("runtime_scene_authoring_persist_light_p0_x",
+                 sceneSettings.bezierPath.points[0].x,
+                 6.5,
+                 1e-6);
+    assert_close("runtime_scene_authoring_persist_light_handle_vx",
+                 sceneSettings.bezierPath.handles[0][0].vx,
+                 1.25,
+                 1e-6);
+    assert_true("runtime_scene_authoring_persist_hydrated_camera_points",
+                sceneSettings.cameraPath.numPoints == 1);
+    assert_close("runtime_scene_authoring_persist_camera_p0_x",
+                 sceneSettings.cameraPath.points[0].x,
+                 10.0,
+                 1e-6);
+    assert_close("runtime_scene_authoring_persist_camera_rot",
+                 sceneSettings.camera.rotation,
+                 0.25,
+                 1e-6);
+
+    free(persisted_json);
+    unlink(runtime_path);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 static int test_mode_backend_route_2d_defaults(void) {
     memset(&animSettings, 0, sizeof(animSettings));
     animSettings.spaceMode = SPACE_MODE_2D;
@@ -1884,6 +2131,12 @@ static int test_mode_backend_scene_digest_status_ps4d_fixture(void) {
     assert_true("digestps4d_bounds_present", status.hasSceneBounds);
     assert_true("digestps4d_bounds_enabled", status.boundsEnabled);
     assert_true("digestps4d_bounds_clamp", status.boundsClampOnEdit);
+    assert_close("digestps4d_bounds_min_x", status.boundsMinX, -6.0, 1e-9);
+    assert_close("digestps4d_bounds_min_y", status.boundsMinY, -5.0, 1e-9);
+    assert_close("digestps4d_bounds_min_z", status.boundsMinZ, -2.5, 1e-9);
+    assert_close("digestps4d_bounds_max_x", status.boundsMaxX, 6.0, 1e-9);
+    assert_close("digestps4d_bounds_max_y", status.boundsMaxY, 5.0, 1e-9);
+    assert_close("digestps4d_bounds_max_z", status.boundsMaxZ, 4.0, 1e-9);
     assert_true("digestps4d_plane_present", status.hasConstructionPlane);
     assert_true("digestps4d_plane_mode_axis_aligned",
                 strcmp(status.constructionPlaneMode, "axis_aligned") == 0);
@@ -2130,6 +2383,247 @@ static int test_editor_mode_router_cycle_policy(void) {
                 EditorModeRouter_NextEditorMode(0, false, true) == 2);
     assert_true("router_next_locked_reverse",
                 EditorModeRouter_NextEditorMode(2, true, true) == 0);
+    return 0;
+}
+
+static int test_scene_editor_control_surface_source_path_parity(void) {
+    SceneEditorControlSurfaceInput input;
+    SceneEditorControlSurfaceContract contract;
+
+    memset(&input, 0, sizeof(input));
+    memset(&contract, 0, sizeof(contract));
+    input.requestedMode = 0;
+    input.lockObjectMode = false;
+    input.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    input.sourceLabel = "Runtime Scene";
+    input.sourcePath = "";
+    input.objectCount = 3;
+    input.route.routeFamily = RAY_TRACING_ROUTE_CANONICAL_2D;
+
+    SceneEditorControlSurfaceBuild(&input, &contract);
+
+    assert_true("surface_runtime_source_label",
+                strstr(contract.statusSource, "Runtime Scene") != NULL);
+    assert_true("surface_runtime_source_path_default",
+                strstr(contract.statusPath, "runtime scene: none selected") != NULL);
+    assert_true("surface_runtime_route_label_2d",
+                strstr(contract.statusRoute, "2D(canonical)") != NULL);
+    assert_true("surface_runtime_tab_shared",
+                contract.sharedKeyTabCycleEnabled);
+    assert_true("surface_runtime_escape_shared",
+                contract.sharedKeyEscapeEnabled);
+    assert_true("surface_runtime_canvas_enabled",
+                contract.laneCanvasEditEnabled);
+    assert_true("surface_runtime_bezier_canvas_enabled",
+                contract.laneBezierCanvasEditEnabled);
+    assert_true("surface_runtime_object_canvas_enabled",
+                contract.laneObjectCanvasEditEnabled);
+    assert_true("surface_runtime_camera_canvas_enabled",
+                contract.laneCameraCanvasEditEnabled);
+    assert_true("surface_runtime_viewport_bezier_disabled",
+                !contract.laneViewportBezierPlacementEnabled);
+    assert_true("surface_runtime_viewport_pick_disabled",
+                !contract.laneViewportObjectPickEnabled);
+    assert_true("surface_runtime_orbit_disabled_in_2d",
+                !contract.laneGestureOrbitEnabled);
+    assert_true("surface_runtime_controls_hint_shared",
+                strstr(contract.statusControls, "Shared TAB cycle ESC close") != NULL);
+
+    memset(&input, 0, sizeof(input));
+    memset(&contract, 0, sizeof(contract));
+    input.requestedMode = 0;
+    input.lockObjectMode = false;
+    input.sceneSource = SCENE_SOURCE_CONFIG_2D;
+    input.sourceLabel = "2D Config";
+    input.sourcePath = "(default)";
+    input.objectCount = 2;
+    input.route.routeFamily = RAY_TRACING_ROUTE_CANONICAL_2D;
+
+    SceneEditorControlSurfaceBuild(&input, &contract);
+
+    assert_true("surface_2d_source_path_default",
+                strstr(contract.statusPath, "default 2D config") != NULL);
+    return 0;
+}
+
+static int test_scene_editor_control_surface_native_lane_parity(void) {
+    SceneEditorControlSurfaceInput input;
+    SceneEditorControlSurfaceContract contract;
+
+    memset(&input, 0, sizeof(input));
+    memset(&contract, 0, sizeof(contract));
+    input.requestedMode = 2;
+    input.lockObjectMode = false;
+    input.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    input.sourceLabel = "Runtime Scene";
+    input.sourcePath = "/tmp/runtime_scene_native_test.json";
+    input.objectCount = 5;
+    input.route.routeFamily = RAY_TRACING_ROUTE_NATIVE_3D;
+
+    SceneEditorControlSurfaceBuild(&input, &contract);
+
+    assert_true("surface_native_lane_enum",
+                contract.lane == SCENE_EDITOR_CONTROL_SURFACE_LANE_NATIVE_3D_RESERVED);
+    assert_true("surface_native_digest_reserved",
+                strstr(contract.statusDigest, "native 3D lane reserved") != NULL);
+    assert_true("surface_native_runtime_reserved",
+                strstr(contract.statusRuntime, "native lane reserved") != NULL);
+    assert_true("surface_native_preview_disabled", !contract.previewEnabled);
+    assert_true("surface_native_frame_disabled", !contract.laneKeyFrameEnabled);
+    assert_true("surface_native_orbit_disabled", !contract.laneGestureOrbitEnabled);
+    assert_true("surface_native_wheel_disabled", !contract.laneWheelZoomEnabled);
+    assert_true("surface_native_bezier_canvas_disabled", !contract.laneBezierCanvasEditEnabled);
+    assert_true("surface_native_object_canvas_disabled", !contract.laneObjectCanvasEditEnabled);
+    assert_true("surface_native_camera_canvas_disabled", !contract.laneCameraCanvasEditEnabled);
+    assert_true("surface_native_viewport_bezier_disabled", !contract.laneViewportBezierPlacementEnabled);
+    assert_true("surface_native_viewport_pick_disabled", !contract.laneViewportObjectPickEnabled);
+    assert_true("surface_native_canvas_disabled", !contract.laneCanvasEditEnabled);
+    assert_true("surface_native_controls_pending",
+                strstr(contract.statusControls, "pending") != NULL);
+    return 0;
+}
+
+static int test_scene_editor_control_surface_controlled_3d_interaction_parity(void) {
+    SceneEditorControlSurfaceInput input;
+    SceneEditorControlSurfaceContract contract;
+
+    memset(&input, 0, sizeof(input));
+    memset(&contract, 0, sizeof(contract));
+    input.requestedMode = 2;
+    input.lockObjectMode = false;
+    input.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    input.sourceLabel = "Runtime Scene";
+    input.sourcePath = "/tmp/runtime_scene_controlled_lane.json";
+    input.objectCount = 3;
+    input.route.routeFamily = RAY_TRACING_ROUTE_COMPAT_3D_FALLBACK;
+
+    SceneEditorControlSurfaceBuild(&input, &contract);
+
+    assert_true("surface_controlled3d_lane",
+                contract.lane == SCENE_EDITOR_CONTROL_SURFACE_LANE_CONTROLLED_3D);
+    assert_true("surface_controlled3d_preview_enabled",
+                contract.previewEnabled);
+    assert_true("surface_controlled3d_tab_shared",
+                contract.sharedKeyTabCycleEnabled);
+    assert_true("surface_controlled3d_escape_shared",
+                contract.sharedKeyEscapeEnabled);
+    assert_true("surface_controlled3d_frame_enabled",
+                contract.laneKeyFrameEnabled);
+    assert_true("surface_controlled3d_orbit_enabled",
+                contract.laneGestureOrbitEnabled);
+    assert_true("surface_controlled3d_wheel_enabled",
+                contract.laneWheelZoomEnabled);
+    assert_true("surface_controlled3d_bezier_canvas_disabled",
+                !contract.laneBezierCanvasEditEnabled);
+    assert_true("surface_controlled3d_object_canvas_disabled_in_camera_mode",
+                !contract.laneObjectCanvasEditEnabled);
+    assert_true("surface_controlled3d_camera_canvas_disabled",
+                !contract.laneCameraCanvasEditEnabled);
+    assert_true("surface_controlled3d_viewport_bezier_disabled_in_camera_mode",
+                !contract.laneViewportBezierPlacementEnabled);
+    assert_true("surface_controlled3d_viewport_pick_disabled_in_camera_mode",
+                !contract.laneViewportObjectPickEnabled);
+    assert_true("surface_controlled3d_canvas_disabled",
+                !contract.laneCanvasEditEnabled);
+    assert_true("surface_controlled3d_controls_has_orbit",
+                strstr(contract.statusControls, "Alt+drag orbit") != NULL);
+    return 0;
+}
+
+static int test_scene_editor_control_surface_controlled_3d_bezier_mode_enablement(void) {
+    SceneEditorControlSurfaceInput input;
+    SceneEditorControlSurfaceContract contract;
+
+    memset(&input, 0, sizeof(input));
+    memset(&contract, 0, sizeof(contract));
+    input.requestedMode = 0;
+    input.lockObjectMode = false;
+    input.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    input.sourceLabel = "Runtime Scene";
+    input.sourcePath = "/tmp/runtime_scene_controlled_lane.json";
+    input.objectCount = 3;
+    input.route.routeFamily = RAY_TRACING_ROUTE_COMPAT_3D_FALLBACK;
+
+    SceneEditorControlSurfaceBuild(&input, &contract);
+
+    assert_true("surface_controlled3d_bezier_mode_lane",
+                contract.lane == SCENE_EDITOR_CONTROL_SURFACE_LANE_CONTROLLED_3D);
+    assert_true("surface_controlled3d_bezier_mode_active_mode",
+                contract.activeMode == 0);
+    assert_true("surface_controlled3d_bezier_mode_canvas_disabled",
+                !contract.laneBezierCanvasEditEnabled);
+    assert_true("surface_controlled3d_bezier_mode_viewport_enabled",
+                contract.laneViewportBezierPlacementEnabled);
+    assert_true("surface_controlled3d_bezier_mode_object_pick_disabled",
+                !contract.laneViewportObjectPickEnabled);
+    assert_true("surface_controlled3d_bezier_mode_lane_canvas_enabled",
+                contract.laneCanvasEditEnabled);
+    assert_true("surface_controlled3d_bezier_mode_controls_hint",
+                strstr(contract.statusControls, "LMB select bezier") != NULL);
+    assert_true("surface_controlled3d_bezier_mode_shift_add_hint",
+                strstr(contract.statusControls, "Shift+LMB add point") != NULL);
+    assert_true("surface_controlled3d_bezier_mode_controls_smooth_drag",
+                strstr(contract.statusControls, "Cmd+drag smooth") != NULL);
+    return 0;
+}
+
+static int test_scene_editor_control_surface_controlled_3d_object_mode_canvas_enablement(void) {
+    SceneEditorControlSurfaceInput input;
+    SceneEditorControlSurfaceContract contract;
+
+    memset(&input, 0, sizeof(input));
+    memset(&contract, 0, sizeof(contract));
+    input.requestedMode = 1;
+    input.lockObjectMode = false;
+    input.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    input.sourceLabel = "Runtime Scene";
+    input.sourcePath = "/tmp/runtime_scene_controlled_lane.json";
+    input.objectCount = 3;
+    input.route.routeFamily = RAY_TRACING_ROUTE_COMPAT_3D_FALLBACK;
+
+    SceneEditorControlSurfaceBuild(&input, &contract);
+
+    assert_true("surface_controlled3d_object_mode_lane",
+                contract.lane == SCENE_EDITOR_CONTROL_SURFACE_LANE_CONTROLLED_3D);
+    assert_true("surface_controlled3d_object_mode_active_mode",
+                contract.activeMode == 1);
+    assert_true("surface_controlled3d_object_mode_bezier_canvas_disabled",
+                !contract.laneBezierCanvasEditEnabled);
+    assert_true("surface_controlled3d_object_mode_viewport_bezier_disabled",
+                !contract.laneViewportBezierPlacementEnabled);
+    assert_true("surface_controlled3d_object_mode_object_canvas_enabled",
+                contract.laneObjectCanvasEditEnabled);
+    assert_true("surface_controlled3d_object_mode_camera_canvas_disabled",
+                !contract.laneCameraCanvasEditEnabled);
+    assert_true("surface_controlled3d_object_mode_viewport_pick_enabled",
+                contract.laneViewportObjectPickEnabled);
+    assert_true("surface_controlled3d_object_mode_lane_canvas_enabled",
+                contract.laneCanvasEditEnabled);
+    assert_true("surface_controlled3d_object_mode_controls_hint",
+                strstr(contract.statusControls, "LMB pick object") != NULL);
+    return 0;
+}
+
+static int test_scene_editor_control_surface_selected_object_status(void) {
+    SceneEditorControlSurfaceInput input;
+    SceneEditorControlSurfaceContract contract;
+
+    memset(&input, 0, sizeof(input));
+    memset(&contract, 0, sizeof(contract));
+    input.requestedMode = 1;
+    input.lockObjectMode = false;
+    input.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    input.sourceLabel = "Runtime Scene";
+    input.sourcePath = "/tmp/runtime_scene_controlled_lane.json";
+    input.objectCount = 3;
+    input.hasSelectedObject = true;
+    input.selectedObjectIndex = 2;
+    input.route.routeFamily = RAY_TRACING_ROUTE_COMPAT_3D_FALLBACK;
+
+    SceneEditorControlSurfaceBuild(&input, &contract);
+
+    assert_true("surface_selected_status_has_index",
+                strstr(contract.statusObjects, "Selected: #2") != NULL);
     return 0;
 }
 
@@ -2445,6 +2939,7 @@ int main(int argc, char **argv) {
     test_runtime_scene_bridge_apply_ps4d_fixture_retains_digest_truth();
     test_scene_compile_and_preflight_roundtrip();
     test_runtime_scene_bridge_apply_runtime_fixture();
+    test_path_eval_3d_uses_linear_handle_units();
     test_runtime_scene_bridge_apply_compile_output();
     test_runtime_scene_bridge_writeback_overlay_preserves_non_ray_state();
     test_runtime_scene_bridge_writeback_rejects_foreign_extension_namespace();
@@ -2460,6 +2955,8 @@ int main(int argc, char **argv) {
     test_runtime_scene_bridge_writeback_space_mode_tiebreak_rejects_lexically_larger_producer();
     test_runtime_scene_bridge_writeback_space_mode_tiebreak_accepts_lexically_smaller_producer();
     test_runtime_scene_bridge_trio_fixture_compile_writeback_apply();
+    test_runtime_scene_bridge_apply_hydrates_ray_authoring_paths();
+    test_scene_editor_runtime_scene_persistence_roundtrip();
     test_mode_backend_route_2d_defaults();
     test_mode_backend_route_3d_controlled_lane();
     test_mode_backend_scene_digest_status_2d_canonical_empty();
@@ -2472,6 +2969,12 @@ int main(int argc, char **argv) {
     test_editor_mode_router_capabilities_2d();
     test_editor_mode_router_capabilities_3d_scaffold();
     test_editor_mode_router_cycle_policy();
+    test_scene_editor_control_surface_source_path_parity();
+    test_scene_editor_control_surface_native_lane_parity();
+    test_scene_editor_control_surface_controlled_3d_interaction_parity();
+    test_scene_editor_control_surface_controlled_3d_bezier_mode_enablement();
+    test_scene_editor_control_surface_controlled_3d_object_mode_canvas_enablement();
+    test_scene_editor_control_surface_selected_object_status();
     test_deterministic_modes();
     test_hit_normal_and_pdfs();
     failures += run_fluid_pack_import_tests();

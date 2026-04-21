@@ -27,38 +27,38 @@ static void config_scene_load_velocity_handle(struct json_object* point_obj,
     if (json_object_object_get_ex(point_obj, key, &velocity_obj) &&
         json_object_object_get_ex(velocity_obj, "vx", &vx_obj) &&
         json_object_object_get_ex(velocity_obj, "vy", &vy_obj)) {
-        handle->vx = json_object_get_int(vx_obj);
-        handle->vy = json_object_get_int(vy_obj);
+        handle->vx = json_object_get_double(vx_obj);
+        handle->vy = json_object_get_double(vy_obj);
     } else {
         handle->vx = 0;
         handle->vy = 0;
     }
 }
 
-void config_scene_save_path_to_json(struct json_object* config, const char* key, const Path* path) {
-    if (!config || !key || !path) return;
-
+struct json_object* config_scene_path_to_json_object(const Path* path) {
     struct json_object* path_obj = json_object_new_object();
+    if (!path_obj) return NULL;
+    if (!path) return path_obj;
     json_object_object_add(path_obj, "mode", json_object_new_string(config_scene_path_mode_to_string(path->mode)));
 
     struct json_object* points_array = json_object_new_array();
     for (int i = 0; i < path->numPoints; i++) {
         struct json_object* point_obj = json_object_new_object();
-        json_object_object_add(point_obj, "x", json_object_new_int(path->points[i].x));
-        json_object_object_add(point_obj, "y", json_object_new_int(path->points[i].y));
+        json_object_object_add(point_obj, "x", json_object_new_double(path->points[i].x));
+        json_object_object_add(point_obj, "y", json_object_new_double(path->points[i].y));
         json_object_object_add(point_obj, "rotation", json_object_new_double(path->rotations[i]));
         json_object_object_add(point_obj, "handleLink", json_object_new_boolean(path->handleLink[i]));
 
         if (i < path->numPoints - 1) {
             struct json_object* velocity_1_obj = json_object_new_object();
-            json_object_object_add(velocity_1_obj, "vx", json_object_new_int(path->handles[i][0].vx));
-            json_object_object_add(velocity_1_obj, "vy", json_object_new_int(path->handles[i][0].vy));
+            json_object_object_add(velocity_1_obj, "vx", json_object_new_double(path->handles[i][0].vx));
+            json_object_object_add(velocity_1_obj, "vy", json_object_new_double(path->handles[i][0].vy));
             json_object_object_add(point_obj, "velocity1", velocity_1_obj);
         }
         if (i > 0) {
             struct json_object* velocity_2_obj = json_object_new_object();
-            json_object_object_add(velocity_2_obj, "vx", json_object_new_int(path->handles[i - 1][1].vx));
-            json_object_object_add(velocity_2_obj, "vy", json_object_new_int(path->handles[i - 1][1].vy));
+            json_object_object_add(velocity_2_obj, "vx", json_object_new_double(path->handles[i - 1][1].vx));
+            json_object_object_add(velocity_2_obj, "vy", json_object_new_double(path->handles[i - 1][1].vy));
             json_object_object_add(point_obj, "velocity2", velocity_2_obj);
         }
 
@@ -66,16 +66,25 @@ void config_scene_save_path_to_json(struct json_object* config, const char* key,
     }
 
     json_object_object_add(path_obj, "points", points_array);
+    return path_obj;
+}
+
+void config_scene_save_path_to_json(struct json_object* config, const char* key, const Path* path) {
+    struct json_object* path_obj = NULL;
+    if (!config || !key || !path) return;
+    path_obj = config_scene_path_to_json_object(path);
+    if (!path_obj) return;
     json_object_object_add(config, key, path_obj);
 }
 
-bool config_scene_load_path_from_json(struct json_object* config, const char* key, Path* out) {
-    if (!config || !key || !out) return false;
+bool config_scene_load_path_from_json_object(struct json_object* path_data, Path* out, bool allow_empty) {
+    if (!path_data || !out) return false;
     config_scene_reset_path(out);
 
-    struct json_object *path_data, *points_array;
-    if (!(json_object_object_get_ex(config, key, &path_data) &&
-          json_object_object_get_ex(path_data, "points", &points_array))) {
+    struct json_object *points_array;
+    if (!json_object_is_type(path_data, json_type_object) ||
+        !json_object_object_get_ex(path_data, "points", &points_array) ||
+        !json_object_is_type(points_array, json_type_array)) {
         return false;
     }
 
@@ -87,7 +96,7 @@ bool config_scene_load_path_from_json(struct json_object* config, const char* ke
 
     int num_points = json_object_array_length(points_array);
     if (num_points < 1) {
-        return false;
+        return allow_empty;
     }
 
     if (num_points > MAX_BEZIER_POINTS) {
@@ -127,6 +136,15 @@ bool config_scene_load_path_from_json(struct json_object* config, const char* ke
     }
 
     return true;
+}
+
+bool config_scene_load_path_from_json(struct json_object* config, const char* key, Path* out) {
+    struct json_object *path_data = NULL;
+    if (!config || !key || !out) return false;
+    if (!json_object_object_get_ex(config, key, &path_data)) {
+        return false;
+    }
+    return config_scene_load_path_from_json_object(path_data, out, false);
 }
 
 void config_scene_ensure_camera_path_default(SceneConfig* scene) {

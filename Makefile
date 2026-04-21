@@ -146,6 +146,9 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/adapters/space_mode_adapter.o \
 	$(BUILD_DIR)/render/backend/ray_tracing_mode_backend.o \
 	$(BUILD_DIR)/editor/editor_mode_router.o \
+	$(BUILD_DIR)/editor/scene_editor_control_surface.o \
+	$(BUILD_DIR)/editor/scene_editor_runtime_scene_persistence.o \
+	$(BUILD_DIR)/path/path_system.o \
 		$(BUILD_DIR)/render/accel/uniform_grid.o \
 		$(BUILD_DIR)/render/accel/surface_mesh.o \
 		$(BUILD_DIR)/render/helpers/render_helper.o \

@@ -177,6 +177,12 @@ RayTracingSceneDigestStatus RayTracingModeBackend_BuildSceneDigestStatus(
     status.hasSceneBounds = digest.has_scene_bounds;
     status.boundsEnabled = digest.bounds_enabled;
     status.boundsClampOnEdit = digest.bounds_clamp_on_edit;
+    status.boundsMinX = digest.bounds_min_x;
+    status.boundsMinY = digest.bounds_min_y;
+    status.boundsMinZ = digest.bounds_min_z;
+    status.boundsMaxX = digest.bounds_max_x;
+    status.boundsMaxY = digest.bounds_max_y;
+    status.boundsMaxZ = digest.bounds_max_z;
     status.hasConstructionPlane = digest.has_construction_plane;
     snprintf(status.constructionPlaneMode,
              sizeof(status.constructionPlaneMode),

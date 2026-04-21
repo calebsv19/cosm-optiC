@@ -18,6 +18,14 @@ static double ScaleHandle(double value) {
     return (value >= 0) ? (exp(value * c) - 1) : -(exp(-value * c) - 1);
 }
 
+static double ResolveHandleForPathEvaluation(double value) {
+    /* Controlled-3D authoring uses scene-relative world units directly. */
+    if (animSettings.spaceMode == SPACE_MODE_3D) {
+        return value;
+    }
+    return ScaleHandle(value);
+}
+
 static Vec2 PointToVec2(Point p) { return vec2(p.x, p.y); }
 static Point Vec2ToPoint(Vec2 v) { return (Point){v.x, v.y}; }
 static double LerpAngle(double a, double b, double t) {
@@ -57,11 +65,11 @@ Point GetPositionAlongPath(Path* path, double t) {
     Vec2 p0 = PointToVec2(path->points[segmentIndex]);
     Vec2 p3 = PointToVec2(path->points[segmentIndex + 1]);
 
-    // Scale handle offsets non-linearly (existing logic)
-    double scaled_vx1 = ScaleHandle(path->handles[segmentIndex][0].vx);
-    double scaled_vy1 = ScaleHandle(path->handles[segmentIndex][0].vy);
-    double scaled_vx2 = ScaleHandle(path->handles[segmentIndex][1].vx);
-    double scaled_vy2 = ScaleHandle(path->handles[segmentIndex][1].vy);
+    // Legacy 2D keeps compressed handle response; controlled-3D uses authored units directly.
+    double scaled_vx1 = ResolveHandleForPathEvaluation(path->handles[segmentIndex][0].vx);
+    double scaled_vy1 = ResolveHandleForPathEvaluation(path->handles[segmentIndex][0].vy);
+    double scaled_vx2 = ResolveHandleForPathEvaluation(path->handles[segmentIndex][1].vx);
+    double scaled_vy2 = ResolveHandleForPathEvaluation(path->handles[segmentIndex][1].vy);
 
     Vec2 p1 = vec2(p0.x + scaled_vx1, p0.y + scaled_vy1);
     Vec2 p2 = vec2(p3.x + scaled_vx2, p3.y + scaled_vy2);

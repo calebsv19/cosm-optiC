@@ -265,7 +265,14 @@ void RenderStaticScene(SDL_Renderer* renderer) {
     RenderSceneObjects(renderer, true);    
 }
 
-static void RenderTextWithColor(SDL_Renderer* renderer, SDL_Rect button, const char* text, SDL_Color textColor, int maxFontSize) {
+static int RenderTextBlockWithColor(SDL_Renderer* renderer,
+                                    SDL_Rect area,
+                                    const char* text,
+                                    SDL_Color textColor,
+                                    int maxFontSize,
+                                    bool wrapped,
+                                    bool center_horizontal,
+                                    bool center_vertical) {
     int minFontSize = 10;  // Minimum readable font size
     int baseFontSize = 0;
     float raster_scale = 1.0f;
@@ -277,9 +284,10 @@ static void RenderTextWithColor(SDL_Renderer* renderer, SDL_Rect button, const c
     int measured_h = 0;
     SDL_Surface* textSurface = NULL;
     SDL_Rect textRect = {0};
+    int wrap_width = 0;
 
-    if (!renderer || !text || !text[0]) return;
-    if (button.w <= 0 || button.h <= 0) return;
+    if (!renderer || !text || !text[0]) return 0;
+    if (area.w <= 0 || area.h <= 0) return 0;
     baseFontSize = animation_config_scale_text_point_size(&animSettings, maxFontSize, minFontSize);
     if (baseFontSize < minFontSize) baseFontSize = minFontSize;
     raster_scale = ray_tracing_text_raster_scale(renderer);
@@ -289,38 +297,66 @@ static void RenderTextWithColor(SDL_Renderer* renderer, SDL_Rect button, const c
     if (rasterFontSize < minRasterFontSize) rasterFontSize = minRasterFontSize;
 
     chosenRasterFontSize = rasterFontSize;
-    while (chosenRasterFontSize > minRasterFontSize) {
-        int draw_width = 0;
-        int draw_width_logical = 0;
-        TTF_Font* tempFont = RenderHelperOpenUIFontAtPointSize(chosenRasterFontSize);
-        if (!tempFont) return;
-        if (TTF_SizeUTF8(tempFont, text, &draw_width, NULL) != 0) {
-            return;
+    if (!wrapped) {
+        while (chosenRasterFontSize > minRasterFontSize) {
+            int draw_width = 0;
+            int draw_width_logical = 0;
+            TTF_Font* tempFont = RenderHelperOpenUIFontAtPointSize(chosenRasterFontSize);
+            if (!tempFont) return 0;
+            if (TTF_SizeUTF8(tempFont, text, &draw_width, NULL) != 0) {
+                return 0;
+            }
+            draw_width_logical = ray_tracing_text_logical_pixels(renderer, draw_width);
+            if (draw_width_logical <= area.w - 10) {
+                break;
+            }
+            chosenRasterFontSize--;
         }
-        draw_width_logical = ray_tracing_text_logical_pixels(renderer, draw_width);
-        if (draw_width_logical <= button.w - 10) {
-            break;
-        }
-        chosenRasterFontSize--;
     }
 
     font = RenderHelperOpenUIFontAtPointSize(chosenRasterFontSize);
-    if (!font) return;
+    if (!font) return 0;
 
-    textSurface = TTF_RenderUTF8_Blended(font, text, textColor);
+    if (wrapped) {
+        wrap_width = (int)lroundf((float)area.w * raster_scale);
+        if (wrap_width < 1) wrap_width = 1;
+        textSurface = TTF_RenderUTF8_Blended_Wrapped(font, text, textColor, (Uint32)wrap_width);
+    } else {
+        textSurface = TTF_RenderUTF8_Blended(font, text, textColor);
+    }
     if (!textSurface) {
-        return;
+        return 0;
     }
     measured_w = ray_tracing_text_logical_pixels(renderer, textSurface->w);
     measured_h = ray_tracing_text_logical_pixels(renderer, textSurface->h);
     if (measured_w < 1) measured_w = 1;
     if (measured_h < 1) measured_h = 1;
-    textRect.x = button.x + (button.w - measured_w) / 2;
-    textRect.y = button.y + (button.h - measured_h) / 2;
+    if (center_horizontal) {
+        textRect.x = area.x + (area.w - measured_w) / 2;
+    } else {
+        textRect.x = area.x;
+    }
+    if (center_vertical) {
+        textRect.y = area.y + (area.h - measured_h) / 2;
+    } else {
+        textRect.y = area.y;
+    }
     textRect.w = measured_w;
     textRect.h = measured_h;
     RenderSurface(renderer, textSurface, &textRect, raster_scale);
     SDL_FreeSurface(textSurface);
+    return measured_h;
+}
+
+static void RenderTextWithColor(SDL_Renderer* renderer, SDL_Rect button, const char* text, SDL_Color textColor, int maxFontSize) {
+    (void)RenderTextBlockWithColor(renderer,
+                                   button,
+                                   text,
+                                   textColor,
+                                   maxFontSize,
+                                   false,
+                                   true,
+                                   true);
 }
 
 void RenderButtonText(SDL_Renderer* renderer, SDL_Rect button, const char* text) {
@@ -329,7 +365,72 @@ void RenderButtonText(SDL_Renderer* renderer, SDL_Rect button, const char* text)
 }
 
 void RenderLabelText(SDL_Renderer* renderer, SDL_Rect area, const char* text, SDL_Color color) {
+    SDL_Rect previous_clip = {0, 0, 0, 0};
+    SDL_bool clip_was_enabled = SDL_FALSE;
+    if (!renderer) return;
+    clip_was_enabled = SDL_RenderIsClipEnabled(renderer);
+    SDL_RenderGetClipRect(renderer, &previous_clip);
+    if (area.w > 0 && area.h > 0) {
+        SDL_RenderSetClipRect(renderer, &area);
+    }
     RenderTextWithColor(renderer, area, text, color, 16);
+    if (clip_was_enabled) {
+        SDL_RenderSetClipRect(renderer, &previous_clip);
+    } else {
+        SDL_RenderSetClipRect(renderer, NULL);
+    }
+}
+
+int RenderLabelTextLeft(SDL_Renderer* renderer, SDL_Rect area, const char* text, SDL_Color color) {
+    SDL_Rect previous_clip = {0, 0, 0, 0};
+    SDL_bool clip_was_enabled = SDL_FALSE;
+    int used_height = 0;
+    if (!renderer) return 0;
+    clip_was_enabled = SDL_RenderIsClipEnabled(renderer);
+    SDL_RenderGetClipRect(renderer, &previous_clip);
+    if (area.w > 0 && area.h > 0) {
+        SDL_RenderSetClipRect(renderer, &area);
+    }
+    used_height = RenderTextBlockWithColor(renderer,
+                                           area,
+                                           text,
+                                           color,
+                                           16,
+                                           false,
+                                           false,
+                                           false);
+    if (clip_was_enabled) {
+        SDL_RenderSetClipRect(renderer, &previous_clip);
+    } else {
+        SDL_RenderSetClipRect(renderer, NULL);
+    }
+    return used_height;
+}
+
+int RenderLabelTextWrappedLeft(SDL_Renderer* renderer, SDL_Rect area, const char* text, SDL_Color color) {
+    SDL_Rect previous_clip = {0, 0, 0, 0};
+    SDL_bool clip_was_enabled = SDL_FALSE;
+    int used_height = 0;
+    if (!renderer) return 0;
+    clip_was_enabled = SDL_RenderIsClipEnabled(renderer);
+    SDL_RenderGetClipRect(renderer, &previous_clip);
+    if (area.w > 0 && area.h > 0) {
+        SDL_RenderSetClipRect(renderer, &area);
+    }
+    used_height = RenderTextBlockWithColor(renderer,
+                                           area,
+                                           text,
+                                           color,
+                                           16,
+                                           true,
+                                           false,
+                                           false);
+    if (clip_was_enabled) {
+        SDL_RenderSetClipRect(renderer, &previous_clip);
+    } else {
+        SDL_RenderSetClipRect(renderer, NULL);
+    }
+    return used_height;
 }
                 
 

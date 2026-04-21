@@ -73,11 +73,61 @@ int importCount = 0;
 SDL_Rect materialPanelRect;
 SDL_Rect materialCollapseRect;
 int selectedMaterialIndex = -1;
-static const int MATERIAL_ROW_HEIGHT = 18;
 bool assetsCollapsed = false;
 bool materialsCollapsed = false;
 int assetScroll = 0;
 int materialScroll = 0;
+
+static int ClampColorByte(double unit) {
+    int out = (int)lround(unit * 255.0);
+    if (out < 0) return 0;
+    if (out > 255) return 255;
+    return out;
+}
+
+static int ObjectEditorResolveMaterialPreviewColor(int material_id) {
+    const Material* mat = MaterialManagerGet(material_id);
+    int r = 220;
+    int g = 220;
+    int b = 220;
+
+    if (mat) {
+        r = ClampColorByte((double)mat->base_color.x);
+        g = ClampColorByte((double)mat->base_color.y);
+        b = ClampColorByte((double)mat->base_color.z);
+    }
+
+    if (abs(r - g) < 8 && abs(g - b) < 8) {
+        switch (material_id) {
+            case MATERIAL_PRESET_MIRROR:
+                r = 156; g = 196; b = 255;
+                break;
+            case MATERIAL_PRESET_ROUGH_METAL:
+                r = 214; g = 170; b = 116;
+                break;
+            case MATERIAL_PRESET_GLOSSY:
+                r = 236; g = 120; b = 120;
+                break;
+            case MATERIAL_PRESET_EMISSIVE:
+                r = 255; g = 220; b = 92;
+                break;
+            case MATERIAL_PRESET_DEFAULT:
+            default:
+                r = 220; g = 220; b = 220;
+                break;
+        }
+    }
+
+    return (r << 16) | (g << 8) | b;
+}
+
+static void ObjectEditorAssignMaterialToObject(SceneObject* obj, int material_id) {
+    if (!obj) return;
+    if (material_id < 0 || material_id >= MaterialManagerCount()) return;
+    obj->material_id = material_id;
+    obj->color = ObjectEditorResolveMaterialPreviewColor(material_id);
+    MarkObjectDirty(obj);
+}
 
 typedef enum ObjectEditorAction {
     OBJECT_EDITOR_ACTION_NONE = 0,
@@ -102,14 +152,6 @@ static ObjectEditorAction ResolveObjectEditorAction(const SDL_Event* event) {
     if (event->type == SDL_MOUSEWHEEL) return OBJECT_EDITOR_ACTION_MOUSE_WHEEL;
     if (event->type == SDL_KEYDOWN) return OBJECT_EDITOR_ACTION_KEY_DOWN;
     return OBJECT_EDITOR_ACTION_NONE;
-}
-
-static int ObjectEditorAssetRowHeight(void) {
-    return animation_config_scale_text_point_size(&animSettings, ASSET_ROW_HEIGHT, 18);
-}
-
-static int ObjectEditorMaterialRowHeight(void) {
-    return animation_config_scale_text_point_size(&animSettings, MATERIAL_ROW_HEIGHT, 16);
 }
 
 static const char* ShapeAssetDir(void) {
@@ -244,6 +286,7 @@ void FinalizePolygonCreation(void) {
 
     // Initialize object as a new polygon
     InitObject(newObj, OBJECT_POLYGON, centerX, centerY, 0, 0, adjustedPoints, polygonPointCount);
+    ObjectEditorAssignMaterialToObject(newObj, MaterialManagerDefaultId());
 
     sceneSettings.objectCount++;
     polygonPointCount = 0;  // Reset for next polygon
@@ -275,7 +318,7 @@ numPoints) {
         InitObject(newObj, type, x, y, param1, param2, points, numPoints);
     }
 
-    newObj->material_id = MaterialManagerDefaultId();
+    ObjectEditorAssignMaterialToObject(newObj, MaterialManagerDefaultId());
     sceneSettings.objectCount++;
     UpdateObject(newObj);
     printf("Added Object %d at (%.2f, %.2f)\n", index, x, y);
@@ -362,8 +405,7 @@ bool CheckObjectClick(double mx, double my) {
 
         // Check if user clicked the rotation handle
         if ((dx * dx + dy * dy) <= (handleRadius * handleRadius)) {
-            selectedObjectIndex = i;
-            selectedAssetIndex = -1;
+            ObjectEditorSetSelectedObjectIndex(i);
             draggingRotationHandle = true;
             printf("Dragging Rotation Handle for Object %d\n", i);
             return true;
@@ -382,8 +424,7 @@ bool CheckObjectClick(double mx, double my) {
                 return true;
             }
 
-            selectedObjectIndex = i;
-            selectedAssetIndex = -1;
+            ObjectEditorSetSelectedObjectIndex(i);
             printf("Selected Object %d\n", i);
             return true;
         }
@@ -567,33 +608,14 @@ void HandleObjectEditorEvents(SDL_Event* event) {
             int scrollDir = event->wheel.y > 0 ? -1 : 1;
             if (mx >= assetPanelRect.x && mx <= assetPanelRect.x + assetPanelRect.w &&
                 my >= assetPanelRect.y && my <= assetPanelRect.y + assetPanelRect.h && !assetsCollapsed) {
-                int assetRowH = ObjectEditorAssetRowHeight();
-                int visible = showImports ? importCount : (int)assetLib.count;
-                int listY = assetToggleRect.y + assetToggleRect.h + 4;
-                int rowAreaH = assetPanelRect.h - (listY - assetPanelRect.y) - PANEL_PADDING;
-                int maxRows;
-                int maxScroll;
-                if (rowAreaH < assetRowH) rowAreaH = assetRowH;
-                maxRows = rowAreaH / assetRowH;
-                if (maxRows < 1) maxRows = 1;
-                maxScroll = visible - maxRows;
-                if (maxScroll < 0) maxScroll = 0;
+                int maxScroll = ObjectEditorPanels_AssetMaxScroll();
                 assetScroll += scrollDir;
                 if (assetScroll < 0) assetScroll = 0;
                 if (assetScroll > maxScroll) assetScroll = maxScroll;
             }
             if (mx >= materialPanelRect.x && mx <= materialPanelRect.x + materialPanelRect.w &&
                 my >= materialPanelRect.y && my <= materialPanelRect.y + materialPanelRect.h && !materialsCollapsed) {
-                int materialRowH = ObjectEditorMaterialRowHeight();
-                int count = MaterialManagerCount();
-                int rowAreaH = materialPanelRect.h - PANEL_PADDING * 2;
-                int maxRows;
-                int maxScroll;
-                if (rowAreaH < materialRowH) rowAreaH = materialRowH;
-                maxRows = rowAreaH / materialRowH;
-                if (maxRows < 1) maxRows = 1;
-                maxScroll = count - maxRows;
-                if (maxScroll < 0) maxScroll = 0;
+                int maxScroll = ObjectEditorPanels_MaterialMaxScroll();
                 materialScroll += scrollDir;
                 if (materialScroll < 0) materialScroll = 0;
                 if (materialScroll > maxScroll) materialScroll = maxScroll;
@@ -629,13 +651,7 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
                 return;
             }
             if (!assetsCollapsed) {
-                int assetRowH = ObjectEditorAssetRowHeight();
-                int listY = assetToggleRect.y + assetToggleRect.h + 6;
-                int rowAreaH = assetPanelRect.h - (listY - assetPanelRect.y) - PANEL_PADDING;
-                if (rowAreaH < assetRowH) rowAreaH = assetRowH;
-                int maxRows = rowAreaH / assetRowH;
-                if (maxRows < 1) maxRows = 1;
-                int idx = (my - listY) / assetRowH + assetScroll;
+                int idx = ObjectEditorPanels_AssetIndexAtPoint(mx, my);
                 if (idx >= 0) {
                     if (showImports) {
                         if (idx < importCount) {
@@ -686,18 +702,10 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
                 return;
             }
             if (!materialsCollapsed) {
-                int materialRowH = ObjectEditorMaterialRowHeight();
-                int listY = materialPanelRect.y + PANEL_PADDING;
-                int rowAreaH = materialPanelRect.h - PANEL_PADDING * 2;
-                if (rowAreaH < materialRowH) rowAreaH = materialRowH;
-                int maxRows = rowAreaH / materialRowH;
-                if (maxRows < 1) maxRows = 1;
-                int idx = (my - listY) / materialRowH + materialScroll;
+                int idx = ObjectEditorPanels_MaterialIndexAtPoint(mx, my);
                 if (idx >= 0 && idx < MaterialManagerCount()) {
                     selectedMaterialIndex = idx;
-                    if (selectedObjectIndex >= 0 && selectedObjectIndex < sceneSettings.objectCount) {
-                        sceneSettings.sceneObjects[selectedObjectIndex].material_id = idx;
-                    }
+                    ObjectEditorAssignMaterialToSelected(idx);
                 }
                 return;
             }
@@ -891,6 +899,7 @@ void HandleObjectEditorMouseRelease(SDL_Event* event) {
 static void ClearSelections(void) {
     selectedAssetIndex = -1;
     selectedObjectIndex = -1;
+    selectedMaterialIndex = -1;
 }
 
 static void DeleteSelected(void) {
@@ -938,4 +947,28 @@ void HandleObjectEditorKeyPress(SDL_Event* event) {
                 break;
         }
     }
+}
+
+int ObjectEditorGetSelectedObjectIndex(void) {
+    return selectedObjectIndex;
+}
+
+void ObjectEditorSetSelectedObjectIndex(int index) {
+    if (index < 0 || index >= sceneSettings.objectCount) {
+        selectedObjectIndex = -1;
+        selectedMaterialIndex = -1;
+    } else {
+        selectedObjectIndex = index;
+        selectedMaterialIndex = sceneSettings.sceneObjects[index].material_id;
+    }
+    selectedAssetIndex = -1;
+    draggingRotationHandle = false;
+}
+
+void ObjectEditorAssignMaterialToSelected(int material_id) {
+    if (selectedObjectIndex < 0 || selectedObjectIndex >= sceneSettings.objectCount) {
+        return;
+    }
+    ObjectEditorAssignMaterialToObject(&sceneSettings.sceneObjects[selectedObjectIndex], material_id);
+    selectedMaterialIndex = material_id;
 }

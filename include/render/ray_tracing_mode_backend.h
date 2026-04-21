@@ -76,6 +76,12 @@ typedef struct {
     bool hasSceneBounds;
     bool boundsEnabled;
     bool boundsClampOnEdit;
+    double boundsMinX;
+    double boundsMinY;
+    double boundsMinZ;
+    double boundsMaxX;
+    double boundsMaxY;
+    double boundsMaxZ;
     bool hasConstructionPlane;
     char constructionPlaneMode[24];
     char constructionPlaneAxis[12];
