@@ -7,3 +7,5 @@ Exposes the public interface for the application runtime.
 - `animation_output.h` – Output helper contract for optional render-metrics dataset export.
 - `data_paths.h` – Canonical path/root resolution helpers for config/import/export manifest lanes.
 - `runtime_time.h` – Runtime timing helper contract.
+- `scene_loop_policy.h` – Mode-aware wait-timeout policy contract for menu/editor idle behavior.
+- `scene_loop_diag.h` – Schema-locked loop diagnostics sink contract for blocked-vs-active calibration.

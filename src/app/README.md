@@ -8,3 +8,5 @@ Application lifecycle orchestration.
 - `animation_output.c` – Output/export helpers (frame capture and optional render-metrics dataset export).
 - `data_paths.c` – Canonical input/output/default path resolution and manifest root discovery helpers.
 - `ray_tracing_app_main.c` – Wrapper-owned staged lifecycle/dispatch boundary and diagnostics lane.
+- `scene_loop_policy.c` – Mode-split wait policy helper for menu/editor idle vs active behavior.
+- `scene_loop_diag.c` – Schema-1 `LoopDiag` emission helper for loop idle calibration parity.

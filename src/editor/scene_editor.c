@@ -7,6 +7,8 @@
 #include "config/config_manager.h"  //  Required for loading/saving scene settings
 #include "scene/object_manager.h"
 #include "app/animation.h"
+#include "app/scene_loop_diag.h"
+#include "app/scene_loop_policy.h"
 #include "import/runtime_scene_bridge.h"
 #include "render/fluid/fluid_state.h"
 #include "render/ray_tracing_mode_backend.h"
@@ -53,6 +55,7 @@ static SDL_Rect g_sceneStatusControlsRect;
 #define SCENE_EDITOR_BEZIER_POINT_PICK_RADIUS_PX 18.0
 #define SCENE_EDITOR_BEZIER_HANDLE_PICK_RADIUS_PX 16.0
 #define SCENE_EDITOR_BEZIER_GIZMO_PICK_RADIUS_PX 18.0
+#define SCENE_EDITOR_IDLE_HEARTBEAT_MS 250u
 
 #if USE_VULKAN
 static VkRenderer g_scene_renderer_storage;
@@ -3545,6 +3548,9 @@ void RenderSceneButtons(SDL_Renderer* renderer) {
 
 void SceneEditorLoop(SceneEditor* editor) {
     SDL_Event event;
+    uint64_t perf_freq = SDL_GetPerformanceFrequency();
+    bool frame_dirty = true;
+    Uint32 last_render_ms = 0u;
 
     if (!editor || !editor->window || !editor->renderer) {
         return;
@@ -3557,49 +3563,112 @@ void SceneEditorLoop(SceneEditor* editor) {
             sceneEditorExitFlag = true;
             break;
         }
-        SceneEditorSyncWindowSize(editor);
-        while (SDL_PollEvent(&event)) {
-            HandleSceneEditorEvents(editor, &event);
-            if (sceneEditorExitFlag)
-                break;
-        }
-        SceneEditorDrainMutationQueue(editor);
-        if (sceneEditorExitFlag || !editor->running) {
-            break;
-        }
-
-        // **Check for Dirty Objects and Update Them**
-        for (int i = 0; i < sceneSettings.objectCount; i++) {
-            SceneObject* obj = &sceneSettings.sceneObjects[i];
-            if (IsObjectDirty(obj)) {
-                UpdateObject(obj);
-            }
-        }
-
-        setRenderContext(editor->renderer, editor->window,
-                         sceneSettings.windowWidth, sceneSettings.windowHeight);
         {
-            RayTracingThemePalette palette = SceneEditorResolvePalette();
-            render_set_clear_color(editor->renderer,
-                                   palette.background_fill.r,
-                                   palette.background_fill.g,
-                                   palette.background_fill.b,
-                                   255);
-        }
-        if (!render_begin_frame()) {
-            if (render_device_lost()) {
-                editor->running = false;
-                sceneEditorExitFlag = true;
+            uint64_t frame_begin_counter = SDL_GetPerformanceCounter();
+            uint32_t wait_blocked_ms = 0u;
+            uint32_t wait_call_count = 0u;
+            bool heartbeat_due = false;
+
+            if (!frame_dirty) {
+                SceneLoopWaitPolicyInput wait_input = {
+                    .high_intensity_mode = false,
+                    .interaction_active = SceneEditorSessionInteractionActive(editor),
+                    .background_busy = false,
+                    .resize_pending = false,
+                };
+                int wait_timeout_ms = scene_loop_compute_wait_timeout_ms(&wait_input);
+                if (wait_timeout_ms > 0) {
+                    uint64_t wait_start = SDL_GetPerformanceCounter();
+                    int wait_result = SDL_WaitEventTimeout(&event, wait_timeout_ms);
+                    uint64_t wait_end = SDL_GetPerformanceCounter();
+                    if (perf_freq > 0u && wait_end >= wait_start) {
+                        uint64_t blocked_ms = ((wait_end - wait_start) * 1000u) / perf_freq;
+                        if (blocked_ms > (uint64_t)UINT32_MAX) {
+                            blocked_ms = (uint64_t)UINT32_MAX;
+                        }
+                        wait_blocked_ms += (uint32_t)blocked_ms;
+                    }
+                    wait_call_count += 1u;
+                    if (wait_result == 1) {
+                        frame_dirty = true;
+                        HandleSceneEditorEvents(editor, &event);
+                    }
+                }
             }
-            SDL_Delay(10);
-            continue;
+
+            SceneEditorSyncWindowSize(editor);
+            while (SDL_PollEvent(&event)) {
+                frame_dirty = true;
+                HandleSceneEditorEvents(editor, &event);
+                if (sceneEditorExitFlag) {
+                    break;
+                }
+            }
+            SceneEditorDrainMutationQueue(editor);
+            if (sceneEditorExitFlag || !editor->running) {
+                if (perf_freq > 0u) {
+                    double frame_elapsed_sec =
+                        (double)(SDL_GetPerformanceCounter() - frame_begin_counter) / (double)perf_freq;
+                    scene_loop_diag_tick(frame_elapsed_sec, wait_blocked_ms, wait_call_count);
+                }
+                break;
+            }
+
+            heartbeat_due = (last_render_ms == 0u) ||
+                            ((Uint32)(SDL_GetTicks() - last_render_ms) >= SCENE_EDITOR_IDLE_HEARTBEAT_MS);
+            if (!frame_dirty && !heartbeat_due) {
+                if (perf_freq > 0u) {
+                    double frame_elapsed_sec =
+                        (double)(SDL_GetPerformanceCounter() - frame_begin_counter) / (double)perf_freq;
+                    scene_loop_diag_tick(frame_elapsed_sec, wait_blocked_ms, wait_call_count);
+                }
+                continue;
+            }
+
+            // **Check for Dirty Objects and Update Them**
+            for (int i = 0; i < sceneSettings.objectCount; i++) {
+                SceneObject* obj = &sceneSettings.sceneObjects[i];
+                if (IsObjectDirty(obj)) {
+                    UpdateObject(obj);
+                }
+            }
+
+            setRenderContext(editor->renderer, editor->window,
+                             sceneSettings.windowWidth, sceneSettings.windowHeight);
+            {
+                RayTracingThemePalette palette = SceneEditorResolvePalette();
+                render_set_clear_color(editor->renderer,
+                                       palette.background_fill.r,
+                                       palette.background_fill.g,
+                                       palette.background_fill.b,
+                                       255);
+            }
+            if (!render_begin_frame()) {
+                if (render_device_lost()) {
+                    editor->running = false;
+                    sceneEditorExitFlag = true;
+                }
+                frame_dirty = true;
+                if (perf_freq > 0u) {
+                    double frame_elapsed_sec =
+                        (double)(SDL_GetPerformanceCounter() - frame_begin_counter) / (double)perf_freq;
+                    scene_loop_diag_tick(frame_elapsed_sec, wait_blocked_ms, wait_call_count);
+                }
+                continue;
+            }
+
+            SceneEditorRenderViewportLane(editor, SceneEditorResolveViewportRenderLane());
+            RenderSceneButtons(editor->renderer);
+
+            render_end_frame();
+            frame_dirty = false;
+            last_render_ms = SDL_GetTicks();
+            if (perf_freq > 0u) {
+                double frame_elapsed_sec =
+                    (double)(SDL_GetPerformanceCounter() - frame_begin_counter) / (double)perf_freq;
+                scene_loop_diag_tick(frame_elapsed_sec, wait_blocked_ms, wait_call_count);
+            }
         }
-
-        SceneEditorRenderViewportLane(editor, SceneEditorResolveViewportRenderLane());
-        RenderSceneButtons(editor->renderer);
-
-        render_end_frame();
-        SDL_Delay(16);  // Maintain ~60 FPS
     }
 
     DestroySceneEditor(editor);
@@ -3662,6 +3731,11 @@ bool SceneEditorSessionWantsExit(const SceneEditor* editor) {
         return true;
     }
     return sceneEditorExitFlag || !editor->running;
+}
+
+bool SceneEditorSessionInteractionActive(const SceneEditor* editor) {
+    (void)editor;
+    return g_viewport_nav_state.orbit_active || g_bezier3d_gizmo_state.dragging;
 }
 
 void SceneEditorSessionEnd(SceneEditor* editor) {

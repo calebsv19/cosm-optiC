@@ -29,6 +29,7 @@ bool SceneEditorSessionBegin(SceneEditor* editor, SDL_Renderer* renderer, SDL_Wi
 void SceneEditorSessionHandleEvent(SceneEditor* editor, SDL_Event* event);
 void SceneEditorSessionRender(SceneEditor* editor);
 bool SceneEditorSessionWantsExit(const SceneEditor* editor);
+bool SceneEditorSessionInteractionActive(const SceneEditor* editor);
 void SceneEditorSessionEnd(SceneEditor* editor);
 
 // Initialization & Cleanup
