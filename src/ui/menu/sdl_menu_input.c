@@ -10,6 +10,7 @@
 #include "app/data_paths.h"
 #include "config/config_manager.h"
 #include "editor/editor_mode_router.h"
+#include "editor/scene_editor.h"
 #include "engine/Render/render_font.h"
 #include "ui/shared_theme_font_adapter.h"
 #include "ui/text_zoom_shortcuts.h"
@@ -571,10 +572,10 @@ void menu_input_handle_mouse_click(SDL_Event* event,
             finish_root_edit(state, true);
         }
         menu_state_sync_from_anim(state);
+        animSettings.previewMode = false;
         SaveAllSettings();
-        animSettings.previewMode = true;
-        *menuExitedNormally = true;
-        *running = false;
+        SceneEditorSessionRequestPreviewOnBegin();
+        state->activeView = MENU_VIEW_SCENE_EDITOR;
         return;
     }
 

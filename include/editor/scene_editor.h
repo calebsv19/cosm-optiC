@@ -30,6 +30,7 @@ void SceneEditorSessionHandleEvent(SceneEditor* editor, SDL_Event* event);
 void SceneEditorSessionRender(SceneEditor* editor);
 bool SceneEditorSessionWantsExit(const SceneEditor* editor);
 bool SceneEditorSessionInteractionActive(const SceneEditor* editor);
+void SceneEditorSessionRequestPreviewOnBegin(void);
 void SceneEditorSessionEnd(SceneEditor* editor);
 
 // Initialization & Cleanup

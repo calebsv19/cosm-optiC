@@ -364,6 +364,13 @@ void RenderButtonText(SDL_Renderer* renderer, SDL_Rect button, const char* text)
     RenderTextWithColor(renderer, button, text, textColor, 18);
 }
 
+void RenderButtonTextWithColor(SDL_Renderer* renderer,
+                               SDL_Rect button,
+                               const char* text,
+                               SDL_Color text_color) {
+    RenderTextWithColor(renderer, button, text, text_color, 18);
+}
+
 void RenderLabelText(SDL_Renderer* renderer, SDL_Rect area, const char* text, SDL_Color color) {
     SDL_Rect previous_clip = {0, 0, 0, 0};
     SDL_bool clip_was_enabled = SDL_FALSE;

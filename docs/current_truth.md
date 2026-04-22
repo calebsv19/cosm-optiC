@@ -1,15 +1,23 @@
 # Ray Tracing Current Truth
 
-Last updated: 2026-04-10
+Last updated: 2026-04-21
 
 ## Program Identity
 - repository directory: `ray_tracing/`
 - public product name in README: `RayTracing Project`
 - primary runtime entry path today:
   - `src/app/animation.c` (`main()` delegates through `ray_tracing_app_main(...)`)
-  - canonical lifecycle wrapper entry:
+- canonical lifecycle wrapper entry:
     - `include/ray_tracing/ray_tracing_app_main.h`
     - `src/app/ray_tracing_app_main.c`
+
+## Latest Lane Snapshot
+
+- preset-authoring connection lane is complete through `P5-S5`
+- active next boundary is preview mode expansion from:
+  - `docs/private_program_docs/ray_tracing/active/preset_authoring_connection/preview_mode_expansion/2026-04-21_ray_tracing_preview_mode_follow_camera_execution_plan.md`
+- preview expansion progress recorded in active private docs:
+  - `S0` through `S5` complete (camera sampling, projector extraction, retained-scene preview render, branch ownership/fallback surfacing, playback parity)
 
 ## Current Structure
 - required scaffold lanes are present:

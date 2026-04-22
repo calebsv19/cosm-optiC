@@ -83,3 +83,6 @@ bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_j
 
 void runtime_scene_bridge_get_last_3d_scaffold_state(RuntimeSceneBridge3DScaffoldState *out_state);
 void runtime_scene_bridge_get_last_3d_digest_state(RuntimeSceneBridge3DDigestState *out_state);
+bool runtime_scene_bridge_get_last_object_id_for_scene_index(int scene_index,
+                                                             char *out_object_id,
+                                                             size_t out_object_id_size);

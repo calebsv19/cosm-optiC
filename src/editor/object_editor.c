@@ -252,6 +252,10 @@ void InitializeObjectEditor(void) {
     ObjectEditorPanels_UpdateLayout();
     RefreshAssetLibrary();
     RefreshImportList();
+    draggingRotationHandle = false;
+    viewportPanDragging = false;
+    viewportPanLastMouseX = 0;
+    viewportPanLastMouseY = 0;
 }
 
 void FinalizePolygonCreation(void) {
@@ -537,27 +541,17 @@ void RenderObjectEditor(SDL_Renderer* renderer) {
 
     SDL_Color lightPathColor = {140, 200, 140, 130}; // faded green
     SDL_Color camPathColor = {120, 180, 240, 130};   // faded blue
-    SDL_Color handleColor = (SDL_Color){0, 0, 0, 0};
-    SDL_Color selectColor = (SDL_Color){0, 0, 0, 0};
-    RenderBezierPathCameraStyled(renderer,
-                                 &sceneSettings.bezierPath,
-                                 false,
-                                 &preview,
-                                 lightPathColor,
-                                 handleColor,
-                                 -1,
-                                 selectColor,
-                                 4);
+    RenderBezierPathCameraPassive(renderer,
+                                  &sceneSettings.bezierPath,
+                                  &preview,
+                                  lightPathColor,
+                                  4);
     if (sceneSettings.cameraPath.numPoints >= 2) {
-        RenderBezierPathCameraStyled(renderer,
-                                     &sceneSettings.cameraPath,
-                                     false,
-                                     &preview,
-                                     camPathColor,
-                                     handleColor,
-                                     -1,
-                                     selectColor,
-                                     4);
+        RenderBezierPathCameraPassive(renderer,
+                                      &sceneSettings.cameraPath,
+                                      &preview,
+                                      camPathColor,
+                                      4);
     }
 
     sceneSettings.camera = original;
@@ -582,12 +576,10 @@ void HandleObjectEditorEvents(SDL_Event* event) {
     ObjectEditorAction action = ResolveObjectEditorAction(event);
     switch (action) {
         case OBJECT_EDITOR_ACTION_QUIT:
-            SaveAllSettings();
             sceneEditorExitFlag = true;  // Ensure clicking "X" closes the editor properly
             printf("Window closed manually. Exiting Object Editor.\n");
             return;
         case OBJECT_EDITOR_ACTION_ESCAPE:
-            SaveAllSettings();
             sceneEditorExitFlag = true;  // Also close with ESC
             return;
         case OBJECT_EDITOR_ACTION_MOUSE_DOWN:
@@ -892,6 +884,7 @@ void HandleObjectEditorMouseDrag(SDL_Event* event) {
 void HandleObjectEditorMouseRelease(SDL_Event* event) {
     if (event->button.button == SDL_BUTTON_LEFT) {
         viewportPanDragging = false;
+        draggingRotationHandle = false;
     }
 }
 

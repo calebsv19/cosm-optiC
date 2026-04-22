@@ -6,6 +6,7 @@
 
 #include "config/config_manager.h"
 #include "editor/bezier_editor.h"
+#include "editor/camera_editor.h"
 #include "editor/object_editor.h"
 #include "editor/object_editor_panels.h"
 #include "render/render_helper.h"
@@ -136,19 +137,32 @@ void SceneEditorSurfaceRenderLeftPaneContent(SDL_Renderer* renderer,
 
     snprintf(line,
              sizeof(line),
-             "Camera: x=%.2f y=%.2f zoom=%.2f rot=%.1f",
+             "Camera: x=%.2f y=%.2f z=%.2f zoom=%.2f rot=%.1f",
              sceneSettings.camera.x,
              sceneSettings.camera.y,
+             sceneSettings.cameraZ,
              sceneSettings.camera.zoom,
              sceneSettings.camera.rotation * (180.0 / M_PI));
     cursor_y = SceneEditorSurfaceRenderFlowLine(renderer, bounds, cursor_y, bottom_y, line, body_color, true, 4);
     snprintf(line, sizeof(line), "Camera Path Points: %d", sceneSettings.cameraPath.numPoints);
     cursor_y = SceneEditorSurfaceRenderFlowLine(renderer, bounds, cursor_y, bottom_y, line, body_color, false, 4);
+    if (CameraEditorGetSelectedPointIndex() >= 0 &&
+        CameraEditorGetSelectedPointIndex() < sceneSettings.cameraPath.numPoints) {
+        int selected_index = CameraEditorGetSelectedPointIndex();
+        snprintf(line,
+                 sizeof(line),
+                 "Selected Camera Point: #%d z=%.2f",
+                 selected_index,
+                 sceneSettings.cameraPath3D.point_z[selected_index]);
+        cursor_y = SceneEditorSurfaceRenderFlowLine(renderer, bounds, cursor_y, bottom_y, line, body_color, true, 4);
+    }
     SceneEditorSurfaceRenderFlowLine(renderer,
                                      bounds,
                                      cursor_y,
                                      bottom_y,
-                                     "Viewport navigation is shared across modes: Alt+drag orbit, MMB pan, wheel zoom.",
+                                     contract->lane == SCENE_EDITOR_CONTROL_SURFACE_LANE_CONTROLLED_3D
+                                         ? "3D lane: Shift+LMB adds a camera point, LMB selects, gizmo moves X/Y/Z."
+                                         : "Viewport navigation is shared across modes: Alt+drag orbit, MMB pan, wheel zoom.",
                                      body_color,
                                      true,
                                      4);

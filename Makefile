@@ -149,6 +149,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/editor/scene_editor_control_surface.o \
 	$(BUILD_DIR)/editor/scene_editor_runtime_scene_persistence.o \
 	$(BUILD_DIR)/path/path_system.o \
+	$(BUILD_DIR)/path/path_arc_length.o \
 		$(BUILD_DIR)/render/accel/uniform_grid.o \
 		$(BUILD_DIR)/render/accel/surface_mesh.o \
 		$(BUILD_DIR)/render/helpers/render_helper.o \
@@ -166,13 +167,19 @@ TEST_DEPS := \
 	$(BUILD_DIR)/import/shape_import.o \
 	$(BUILD_DIR)/timer_hud_external/cJSON.o \
 	$(BUILD_DIR)/camera/camera.o \
+	$(BUILD_DIR)/camera/camera_path_3d.o \
+	$(BUILD_DIR)/app/preview_mode_route.o \
+	$(BUILD_DIR)/app/preview_playback.o \
+	$(BUILD_DIR)/app/preview_camera_sample.o \
+	$(BUILD_DIR)/app/preview_camera_projector.o \
+	$(BUILD_DIR)/app/preview_retained_scene_renderer.o \
 	$(BUILD_DIR)/app/animation_fluid_scene.o \
 	$(BUILD_DIR)/app/data_paths.o \
 		$(BUILD_DIR)/config/io/config_file_io.o \
-		$(BUILD_DIR)/config/scene/config_scene_path_io.o \
-		$(BUILD_DIR)/config/core/config_manager.o \
-		$(BUILD_DIR)/ui/menu/shared_theme_font_adapter.o \
-		$(BUILD_DIR)/tools/ShapeLib/shape_core.o \
+	$(BUILD_DIR)/config/scene/config_scene_path_io.o \
+	$(BUILD_DIR)/config/core/config_manager.o \
+	$(BUILD_DIR)/ui/menu/shared_theme_font_adapter.o \
+	$(BUILD_DIR)/tools/ShapeLib/shape_core.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_json.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_flatten.o \
 	$(BUILD_DIR)/import/fluid_import.o \

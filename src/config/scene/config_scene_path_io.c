@@ -1,5 +1,7 @@
 #include "config/config_scene_path_io.h"
 
+#include "camera/camera_path_3d.h"
+
 #include <string.h>
 
 static void config_scene_reset_path(Path* path) {
@@ -147,6 +149,43 @@ bool config_scene_load_path_from_json(struct json_object* config, const char* ke
     return config_scene_load_path_from_json_object(path_data, out, false);
 }
 
+void config_scene_save_path_depth_to_json(struct json_object* config,
+                                          const char* key,
+                                          const CameraPath3D* path3d,
+                                          const Path* path) {
+    struct json_object* object = NULL;
+    if (!config || !key || !path3d || !path) return;
+    object = CameraPath3D_ToJsonObject(path3d, path);
+    if (!object) return;
+    json_object_object_add(config, key, object);
+}
+
+bool config_scene_load_path_depth_from_json(struct json_object* config,
+                                            const char* key,
+                                            CameraPath3D* out_path3d,
+                                            const Path* path) {
+    struct json_object* path_data = NULL;
+    if (!config || !key || !out_path3d || !path) return false;
+    if (!json_object_object_get_ex(config, key, &path_data)) {
+        return false;
+    }
+    return CameraPath3D_LoadFromJsonObject(path_data, out_path3d, path, false);
+}
+
+void config_scene_save_camera_path_depth_to_json(struct json_object* config,
+                                                 const char* key,
+                                                 const CameraPath3D* path3d,
+                                                 const Path* path) {
+    config_scene_save_path_depth_to_json(config, key, path3d, path);
+}
+
+bool config_scene_load_camera_path_depth_from_json(struct json_object* config,
+                                                   const char* key,
+                                                   CameraPath3D* out_path3d,
+                                                   const Path* path) {
+    return config_scene_load_path_depth_from_json(config, key, out_path3d, path);
+}
+
 void config_scene_ensure_camera_path_default(SceneConfig* scene) {
     if (!scene) return;
 
@@ -157,6 +196,7 @@ void config_scene_ensure_camera_path_default(SceneConfig* scene) {
                 scene->cameraPath.rotationSet[i] = true;
             }
         }
+        CameraPath3D_SyncDefaults(&scene->cameraPath3D, &scene->cameraPath, scene->cameraZ);
         return;
     }
 
@@ -166,4 +206,6 @@ void config_scene_ensure_camera_path_default(SceneConfig* scene) {
     scene->cameraPath.points[0].y = scene->camera.y;
     scene->cameraPath.rotations[0] = 0.0;
     scene->cameraPath.rotationSet[0] = true;
+    CameraPath3D_Reset(&scene->cameraPath3D);
+    scene->cameraPath3D.point_z[0] = scene->cameraZ;
 }

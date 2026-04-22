@@ -11,6 +11,13 @@ typedef enum CameraEditorHitRegion {
     CAMERA_EDITOR_HIT_CANVAS
 } CameraEditorHitRegion;
 
+typedef enum CameraEditorSelectionKind {
+    CAMERA_EDITOR_SELECTION_NONE = 0,
+    CAMERA_EDITOR_SELECTION_POINT,
+    CAMERA_EDITOR_SELECTION_BEZIER_HANDLE,
+    CAMERA_EDITOR_SELECTION_ROTATION_HANDLE
+} CameraEditorSelectionKind;
+
 double GetCurrentMarginPixels(void);
 void RenderEditorHUD(SDL_Renderer* renderer, const char* label, bool showRotation);
 
@@ -18,6 +25,7 @@ void RenderEditorHUD(SDL_Renderer* renderer, const char* label, bool showRotatio
 
 // Initialization
 void InitializeCameraEditor(void);
+void CameraEditorSyncPathStartForViewport(void);
 
 // Rendering
 void RenderCameraEditor(SDL_Renderer* renderer);
@@ -25,5 +33,18 @@ void RenderCameraEditor(SDL_Renderer* renderer);
 // Event Handling
 void HandleCameraEditorEvents(SDL_Event* event);
 CameraEditorHitRegion CameraEditorHitRegionAtPoint(int mx, int my);
+int CameraEditorGetSelectedPointIndex(void);
+void CameraEditorSetSelectedPointIndex(int index);
+CameraEditorSelectionKind CameraEditorGetSelectionKind(void);
+bool CameraEditorSelectBezierHandle(int segment_index, int handle_index);
+bool CameraEditorSelectRotationHandle(int point_index);
+void CameraEditorClearSelection(void);
+bool CameraEditorMoveSelectedPointTo(double x, double y);
+bool CameraEditorGetSelectedWorldPosition(double* out_x, double* out_y, double* out_z);
+bool CameraEditorGetSelectedGizmoWorldPosition(double* out_x, double* out_y, double* out_z);
+bool CameraEditorMoveSelectedGizmoTo(double x, double y, double z);
+void CameraEditorSetSelectedPointZ(double z);
+double CameraEditorGetPointRotation(int index);
+double CameraEditorGetPointPitch(int index);
 
 #endif // CAMERA_EDITOR_H

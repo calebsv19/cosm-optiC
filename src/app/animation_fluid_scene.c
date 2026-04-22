@@ -1,5 +1,6 @@
 #include "app/animation.h"
 
+#include "camera/camera_path_3d.h"
 #include "config/config_manager.h"
 #include "core_space.h"
 #include "geo/shape_adapter.h"
@@ -86,8 +87,11 @@ static void BuildDefaultFluidPaths(double min_x, double min_y,
     sceneSettings.cameraPath.rotations[0] = sceneSettings.camera.rotation;
     sceneSettings.cameraPath.rotationSet[0] = true;
     sceneSettings.cameraPath.handleLink[0] = true;
+    CameraPath3D_Reset(&sceneSettings.cameraPath3D);
+    sceneSettings.cameraPath3D.point_z[0] = sceneSettings.cameraZ;
 
     ResetPathLocal(&sceneSettings.bezierPath, BEZIER_CUBIC);
+    CameraPath3D_Reset(&sceneSettings.bezierPath3D);
     double cx = min_x + grid_w_world * 0.5;
     double cy = min_y + grid_h_world * 0.5;
     double orbit_rx = fmax(grid_w_world * 0.30, grid_w_world * 0.08);
@@ -104,6 +108,7 @@ static void BuildDefaultFluidPaths(double min_x, double min_y,
         sceneSettings.bezierPath.rotations[i] = 0.0;
         sceneSettings.bezierPath.rotationSet[i] = true;
         sceneSettings.bezierPath.handleLink[i] = true;
+        sceneSettings.bezierPath3D.point_z[i] = animSettings.lightHeight;
     }
 }
 

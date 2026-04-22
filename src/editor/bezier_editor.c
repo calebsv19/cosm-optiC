@@ -137,7 +137,17 @@ static void RenderBezierViewportOverlay(SDL_Renderer* renderer, double margin) {
 }
 
 void InitializeBezierEditor(void) {
-
+    addModeActive = false;
+    deleteModeActive = false;
+    draggingPoint = -1;
+    draggingVelocity = -1;
+    selectedPoint = -1;
+    selectedHandleSegment = -1;
+    selectedHandleIndex = -1;
+    selectionKind = BEZIER_EDITOR_SELECTION_NONE;
+    viewportPanDragging = false;
+    viewportPanLastMouseX = 0;
+    viewportPanLastMouseY = 0;
 }
 
 void ToggleBezierPathMode(Path* path) {
@@ -429,6 +439,37 @@ bool BezierEditorGetSelectionWorldPosition(double* out_x, double* out_y) {
     return false;
 }
 
+bool BezierEditorGetSelectionWorldPosition3D(double* out_x, double* out_y, double* out_z) {
+    if (selectionKind == BEZIER_EDITOR_SELECTION_HANDLE &&
+        selectedHandleSegment >= 0 &&
+        selectedHandleSegment < sceneSettings.bezierPath.numPoints - 1 &&
+        (selectedHandleIndex == 0 || selectedHandleIndex == 1)) {
+        int pointIndex = (selectedHandleIndex == 0) ? selectedHandleSegment : (selectedHandleSegment + 1);
+        if (out_x) {
+            *out_x = sceneSettings.bezierPath.points[pointIndex].x +
+                     sceneSettings.bezierPath.handles[selectedHandleSegment][selectedHandleIndex].vx;
+        }
+        if (out_y) {
+            *out_y = sceneSettings.bezierPath.points[pointIndex].y +
+                     sceneSettings.bezierPath.handles[selectedHandleSegment][selectedHandleIndex].vy;
+        }
+        if (out_z) {
+            *out_z = sceneSettings.bezierPath3D.point_z[pointIndex] +
+                     sceneSettings.bezierPath3D.handles_vz[selectedHandleSegment][selectedHandleIndex];
+        }
+        return true;
+    }
+    if (selectionKind == BEZIER_EDITOR_SELECTION_POINT &&
+        selectedPoint >= 0 &&
+        selectedPoint < sceneSettings.bezierPath.numPoints) {
+        if (out_x) *out_x = sceneSettings.bezierPath.points[selectedPoint].x;
+        if (out_y) *out_y = sceneSettings.bezierPath.points[selectedPoint].y;
+        if (out_z) *out_z = sceneSettings.bezierPath3D.point_z[selectedPoint];
+        return true;
+    }
+    return false;
+}
+
 bool BezierEditorMoveSelectionTo(double world_x, double world_y) {
     if (selectionKind == BEZIER_EDITOR_SELECTION_HANDLE &&
         selectedHandleSegment >= 0 &&
@@ -448,6 +489,35 @@ bool BezierEditorMoveSelectionTo(double world_x, double world_y) {
         selectedPoint < sceneSettings.bezierPath.numPoints) {
         sceneSettings.bezierPath.points[selectedPoint].x = world_x;
         sceneSettings.bezierPath.points[selectedPoint].y = world_y;
+        return true;
+    }
+    return false;
+}
+
+bool BezierEditorMoveSelectionTo3D(double world_x, double world_y, double world_z) {
+    if (selectionKind == BEZIER_EDITOR_SELECTION_HANDLE &&
+        selectedHandleSegment >= 0 &&
+        selectedHandleSegment < sceneSettings.bezierPath.numPoints - 1 &&
+        (selectedHandleIndex == 0 || selectedHandleIndex == 1)) {
+        int pointIndex = (selectedHandleIndex == 0) ? selectedHandleSegment : (selectedHandleSegment + 1);
+        Velocity* target = &sceneSettings.bezierPath.handles[selectedHandleSegment][selectedHandleIndex];
+        target->vx = world_x - sceneSettings.bezierPath.points[pointIndex].x;
+        target->vy = world_y - sceneSettings.bezierPath.points[pointIndex].y;
+        sceneSettings.bezierPath3D.handles_vz[selectedHandleSegment][selectedHandleIndex] =
+            world_z - sceneSettings.bezierPath3D.point_z[pointIndex];
+        if (sceneSettings.bezierPath.handleLink[pointIndex]) {
+            EnforceHandleLink(&sceneSettings.bezierPath, pointIndex);
+            sceneSettings.bezierPath3D.handles_vz[selectedHandleSegment][selectedHandleIndex ^ 1] =
+                -sceneSettings.bezierPath3D.handles_vz[selectedHandleSegment][selectedHandleIndex];
+        }
+        return true;
+    }
+    if (selectionKind == BEZIER_EDITOR_SELECTION_POINT &&
+        selectedPoint >= 0 &&
+        selectedPoint < sceneSettings.bezierPath.numPoints) {
+        sceneSettings.bezierPath.points[selectedPoint].x = world_x;
+        sceneSettings.bezierPath.points[selectedPoint].y = world_y;
+        sceneSettings.bezierPath3D.point_z[selectedPoint] = world_z;
         return true;
     }
     return false;
@@ -643,17 +713,11 @@ void RenderBezierEditor(SDL_Renderer* renderer) {
     // Show faded camera path for context
     if (sceneSettings.cameraPath.numPoints >= 2) {
         SDL_Color camPathColor = {120, 180, 240, 130};
-        SDL_Color handleColor = (SDL_Color){0, 0, 0, 0};
-        SDL_Color selectColor = (SDL_Color){0, 0, 0, 0};
-        RenderBezierPathCameraStyled(renderer,
-                                     &sceneSettings.cameraPath,
-                                     false,
-                                     &preview,
-                                     camPathColor,
-                                     handleColor,
-                                     -1,
-                                     selectColor,
-                                     4);
+        RenderBezierPathCameraPassive(renderer,
+                                      &sceneSettings.cameraPath,
+                                      &preview,
+                                      camPathColor,
+                                      4);
     }
 
     sceneSettings.camera = original;

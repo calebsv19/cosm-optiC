@@ -93,6 +93,8 @@ void SceneEditorControlSurfaceBuild(const SceneEditorControlSurfaceInput* input,
     contract.previewEnabled = (contract.lane != SCENE_EDITOR_CONTROL_SURFACE_LANE_NATIVE_3D_RESERVED);
     contract.cycleModeEnabled = true;
     contract.applyEnabled = true;
+    contract.saveEnabled = true;
+    contract.backToMenuEnabled = true;
     contract.sharedKeyTabCycleEnabled = true;
     contract.sharedKeyEscapeEnabled = true;
     contract.laneKeyFrameEnabled = (contract.lane != SCENE_EDITOR_CONTROL_SURFACE_LANE_NATIVE_3D_RESERVED);
@@ -104,9 +106,11 @@ void SceneEditorControlSurfaceBuild(const SceneEditorControlSurfaceInput* input,
     contract.laneBezierCanvasEditEnabled = canonical_2d_lane;
     contract.laneObjectCanvasEditEnabled =
         canonical_2d_lane || (controlled_3d_lane && contract.activeMode == 1);
-    contract.laneCameraCanvasEditEnabled = canonical_2d_lane;
+    contract.laneCameraCanvasEditEnabled =
+        canonical_2d_lane || (controlled_3d_lane && contract.activeMode == 2);
     contract.laneViewportBezierPlacementEnabled = controlled_3d_lane && contract.activeMode == 0;
     contract.laneViewportObjectPickEnabled = controlled_3d_lane && contract.activeMode == 1;
+    contract.laneViewportCameraPlacementEnabled = controlled_3d_lane && contract.activeMode == 2;
 
     switch (contract.activeMode) {
         case 0:
@@ -130,6 +134,8 @@ void SceneEditorControlSurfaceBuild(const SceneEditorControlSurfaceInput* input,
     contract.previewLabel = "Preview";
     contract.cycleModeLabel = "Cycle Mode";
     contract.applyLabel = "Apply";
+    contract.saveLabel = "Save";
+    contract.backToMenuLabel = "Back to Menu";
 
     snprintf(contract.statusTitle, sizeof(contract.statusTitle), "ray_tracing Scene Editor");
     snprintf(contract.statusSource,
@@ -221,7 +227,7 @@ void SceneEditorControlSurfaceBuild(const SceneEditorControlSurfaceInput* input,
         } else {
             snprintf(contract.statusControls,
                      sizeof(contract.statusControls),
-                     "Controls: TAB cycle ESC close Alt+drag orbit MMB pan Wheel zoom F frame");
+                     "Controls: TAB cycle ESC close Alt+drag orbit MMB pan Wheel zoom F frame LMB select camera Shift+LMB add camera point Cmd+drag smooth");
         }
     } else {
         snprintf(contract.statusRuntime,

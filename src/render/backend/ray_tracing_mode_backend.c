@@ -37,13 +37,13 @@ RayTracingRuntimeRoute RayTracingModeBackend_ResolveRoute(void) {
         route.projectionMode = SPACE_MODE_2D;
         compat_fallback = true;
         route.usesRuntime3DScaffold = scaffold.valid;
-        route.runtimeCameraZ = scaffold.camera_z;
+        route.runtimeCameraZ = sceneSettings.cameraZ;
         route.scaffoldPrimitiveCount =
             scaffold.box_count + scaffold.plane_count + scaffold.triangle_mesh_count;
-        if (scaffold.has_camera_seed) {
-            double z_mag = fabs(scaffold.camera_z);
+        if (scaffold.has_camera_seed || fabs(sceneSettings.cameraZ) > 1e-6) {
+            double z_mag = fabs(route.runtimeCameraZ);
             route.rayOriginYOffset = fmin(240.0, z_mag * 0.25);
-            if (scaffold.camera_z < 0.0) route.rayOriginYOffset = -route.rayOriginYOffset;
+            if (route.runtimeCameraZ < 0.0) route.rayOriginYOffset = -route.rayOriginYOffset;
         }
     }
 

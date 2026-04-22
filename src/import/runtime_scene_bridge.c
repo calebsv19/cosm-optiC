@@ -1,9 +1,11 @@
 #include "import/runtime_scene_bridge.h"
 
+#include "camera/camera_path_3d.h"
 #include "core_scene_overlay_merge_shared.h"
 #include "config/config_manager.h"
 #include "config/config_scene_path_io.h"
 #include "core_io.h"
+#include "material/material_manager.h"
 #include "scene/object_manager.h"
 
 #include <json-c/json.h>
@@ -14,6 +16,10 @@
 
 static RuntimeSceneBridge3DScaffoldState g_last_3d_scaffold = {0};
 static RuntimeSceneBridge3DDigestState g_last_3d_digest = {0};
+static char g_last_runtime_object_ids[MAX_OBJECTS][64] = {{0}};
+static int g_last_runtime_object_id_count = 0;
+
+static void apply_ray_authoring_object_materials(json_object *authoring);
 
 static void preflight_reset(RuntimeSceneBridgePreflight *out_preflight) {
     if (!out_preflight) return;
@@ -230,16 +236,21 @@ static void scene_defaults_reset(void) {
     sceneSettings.objectCount = 0;
     sceneSettings.camera.x = 0.0;
     sceneSettings.camera.y = 0.0;
+    sceneSettings.cameraZ = 0.0;
     sceneSettings.camera.zoom = 1.0;
     sceneSettings.camera.rotation = 0.0;
     sceneSettings.bezierPath.numPoints = 0;
     sceneSettings.bezierPath.points[0].x = 0.0;
     sceneSettings.bezierPath.points[0].y = 0.0;
     sceneSettings.bezierPath.mode = BEZIER_CUBIC;
-    sceneSettings.cameraPath.numPoints = 1;
+    CameraPath3D_Reset(&sceneSettings.bezierPath3D);
+    sceneSettings.cameraPath.numPoints = 0;
     sceneSettings.cameraPath.points[0].x = 0.0;
     sceneSettings.cameraPath.points[0].y = 0.0;
     sceneSettings.cameraPath.mode = BEZIER_CUBIC;
+    CameraPath3D_Reset(&sceneSettings.cameraPath3D);
+    memset(g_last_runtime_object_ids, 0, sizeof(g_last_runtime_object_ids));
+    g_last_runtime_object_id_count = 0;
 }
 
 static void scaffold_state_reset(void) {
@@ -426,10 +437,13 @@ static void apply_light_seed_scaled(json_object *lights_array, double world_scal
     light0 = json_object_array_get_idx(lights_array, 0);
     if (!light0 || !json_object_is_type(light0, json_type_object)) return;
     if (parse_vec3(light0, "position", &lx, &ly, &lz)) {
-        (void)lz;
         sceneSettings.bezierPath.numPoints = 1;
         sceneSettings.bezierPath.points[0].x = lx * world_scale;
         sceneSettings.bezierPath.points[0].y = ly * world_scale;
+        sceneSettings.bezierPath3D.point_z[0] = lz * world_scale;
+        if (lz * world_scale > 0.0) {
+            animSettings.lightHeight = lz * world_scale;
+        }
     }
 }
 
@@ -443,12 +457,9 @@ static void apply_camera_seed_scaled(json_object *cameras_array, double world_sc
     camera0 = json_object_array_get_idx(cameras_array, 0);
     if (!camera0 || !json_object_is_type(camera0, json_type_object)) return;
     if (parse_vec3(camera0, "position", &cx, &cy, &cz)) {
-        (void)cz;
         sceneSettings.camera.x = cx * world_scale;
         sceneSettings.camera.y = cy * world_scale;
-        sceneSettings.cameraPath.numPoints = 1;
-        sceneSettings.cameraPath.points[0].x = cx * world_scale;
-        sceneSettings.cameraPath.points[0].y = cy * world_scale;
+        sceneSettings.cameraZ = cz * world_scale;
         g_last_3d_scaffold.has_camera_seed = true;
         g_last_3d_scaffold.camera_z = cz * world_scale;
     }
@@ -492,6 +503,8 @@ static void apply_ray_authoring_paths(json_object *root, double world_scale) {
     json_object *extensions = NULL;
     json_object *ray_tracing = NULL;
     json_object *authoring = NULL;
+    json_object *light_path_depth = NULL;
+    json_object *camera_path_depth = NULL;
     if (!root) return;
     if (!json_object_object_get_ex(root, "extensions", &extensions) ||
         !json_object_is_type(extensions, json_type_object) ||
@@ -507,21 +520,53 @@ static void apply_ray_authoring_paths(json_object *root, double world_scale) {
                                     &sceneSettings.bezierPath,
                                     world_scale,
                                     true)) {
-        /* Authoring payload overrides top-level light seed, including an intentional empty path. */
+        if (json_object_object_get_ex(authoring, "light_path_depth", &light_path_depth) &&
+            CameraPath3D_LoadFromJsonObject(light_path_depth,
+                                            &sceneSettings.bezierPath3D,
+                                            &sceneSettings.bezierPath,
+                                            true)) {
+            CameraPath3D_ScaleWorldUnits(&sceneSettings.bezierPath3D,
+                                         &sceneSettings.bezierPath,
+                                         world_scale);
+        } else {
+            CameraPath3D_Reset(&sceneSettings.bezierPath3D);
+            CameraPath3D_SyncDefaults(&sceneSettings.bezierPath3D,
+                                      &sceneSettings.bezierPath,
+                                      animSettings.lightHeight);
+        }
+        if (sceneSettings.bezierPath.numPoints > 0) {
+            animSettings.lightHeight = sceneSettings.bezierPath3D.point_z[0];
+        }
     }
     if (apply_authoring_path_scaled(authoring,
                                     "camera_path",
                                     &sceneSettings.cameraPath,
                                     world_scale,
                                     true)) {
+        if (json_object_object_get_ex(authoring, "camera_path_depth", &camera_path_depth) &&
+            CameraPath3D_LoadFromJsonObject(camera_path_depth,
+                                            &sceneSettings.cameraPath3D,
+                                            &sceneSettings.cameraPath,
+                                            true)) {
+            CameraPath3D_ScaleWorldUnits(&sceneSettings.cameraPath3D,
+                                         &sceneSettings.cameraPath,
+                                         world_scale);
+        } else {
+            CameraPath3D_Reset(&sceneSettings.cameraPath3D);
+            CameraPath3D_SyncDefaults(&sceneSettings.cameraPath3D,
+                                      &sceneSettings.cameraPath,
+                                      sceneSettings.cameraZ);
+        }
         if (sceneSettings.cameraPath.numPoints > 0) {
             sceneSettings.camera.x = sceneSettings.cameraPath.points[0].x;
             sceneSettings.camera.y = sceneSettings.cameraPath.points[0].y;
+            sceneSettings.cameraZ = sceneSettings.cameraPath3D.point_z[0];
             if (sceneSettings.cameraPath.rotationSet[0]) {
                 sceneSettings.camera.rotation = sceneSettings.cameraPath.rotations[0];
             }
         }
     }
+    apply_ray_authoring_object_materials(authoring);
 }
 
 static void apply_object_material(json_object *object_obj,
@@ -541,6 +586,68 @@ static void apply_object_material(json_object *object_obj,
     mat_id = json_object_get_string(id);
     if (!mat_id) return;
     out_object->color = color_from_material_albedo(materials_array, mat_id);
+}
+
+static int runtime_scene_bridge_color_from_material_preset(int material_id) {
+    const Material *preset = MaterialManagerGet(material_id);
+    int r = 255;
+    int g = 255;
+    int b = 255;
+    if (!preset) return 0xFFFFFF;
+    r = clamp_color_channel(preset->base_color.x);
+    g = clamp_color_channel(preset->base_color.y);
+    b = clamp_color_channel(preset->base_color.z);
+    return (r << 16) | (g << 8) | b;
+}
+
+static void runtime_scene_bridge_apply_object_material_preset(SceneObject *out_object,
+                                                              int material_id) {
+    if (!out_object) return;
+    if (material_id < 0 || material_id >= MaterialManagerCount()) {
+        material_id = MaterialManagerDefaultId();
+    }
+    out_object->material_id = material_id;
+    out_object->color = runtime_scene_bridge_color_from_material_preset(material_id);
+}
+
+static void apply_ray_authoring_object_materials(json_object *authoring) {
+    json_object *object_materials = NULL;
+    size_t i = 0;
+    if (!authoring) return;
+    if (!json_object_object_get_ex(authoring, "object_materials", &object_materials) ||
+        !json_object_is_type(object_materials, json_type_array)) {
+        return;
+    }
+    for (i = 0; i < json_object_array_length(object_materials); ++i) {
+        json_object *entry = json_object_array_get_idx(object_materials, i);
+        json_object *object_id_obj = NULL;
+        json_object *material_id_obj = NULL;
+        const char *object_id = NULL;
+        int material_id = MaterialManagerDefaultId();
+        int scene_index = 0;
+        if (!entry || !json_object_is_type(entry, json_type_object)) continue;
+        if (!json_object_object_get_ex(entry, "object_id", &object_id_obj) ||
+            !json_object_is_type(object_id_obj, json_type_string)) {
+            continue;
+        }
+        if (!json_object_object_get_ex(entry, "material_id", &material_id_obj) ||
+            (!json_object_is_type(material_id_obj, json_type_int) &&
+             !json_object_is_type(material_id_obj, json_type_double))) {
+            continue;
+        }
+        object_id = json_object_get_string(object_id_obj);
+        material_id = json_object_get_int(material_id_obj);
+        if (!object_id || !object_id[0]) continue;
+        for (scene_index = 0;
+             scene_index < sceneSettings.objectCount && scene_index < g_last_runtime_object_id_count;
+             ++scene_index) {
+            if (strcmp(g_last_runtime_object_ids[scene_index], object_id) == 0) {
+                runtime_scene_bridge_apply_object_material_preset(&sceneSettings.sceneObjects[scene_index],
+                                                                  material_id);
+                break;
+            }
+        }
+    }
 }
 
 static void apply_object_flags(json_object *object_obj, SceneObject *out_object) {
@@ -665,6 +772,18 @@ static void apply_objects(json_object *objects_array,
         }
 
         dst = &sceneSettings.sceneObjects[sceneSettings.objectCount];
+        memset(g_last_runtime_object_ids[sceneSettings.objectCount],
+               0,
+               sizeof(g_last_runtime_object_ids[sceneSettings.objectCount]));
+        {
+            const char *object_id = json_string_field_or_null(obj, "object_id");
+            if (object_id && object_id[0]) {
+                snprintf(g_last_runtime_object_ids[sceneSettings.objectCount],
+                         sizeof(g_last_runtime_object_ids[sceneSettings.objectCount]),
+                         "%s",
+                         object_id);
+            }
+        }
         if (is_circle) {
             InitObject(dst, OBJECT_CIRCLE, x, y, 10.0, 0.0, NULL, 0);
         } else if (is_plane) {
@@ -686,6 +805,7 @@ static void apply_objects(json_object *objects_array,
         apply_object_flags(obj, dst);
         digest_append_primitive(obj, transform, primitive, digest_kind, world_scale);
         sceneSettings.objectCount++;
+        g_last_runtime_object_id_count = sceneSettings.objectCount;
     }
 
     if (out_summary) out_summary->object_count = sceneSettings.objectCount;
@@ -917,4 +1037,23 @@ void runtime_scene_bridge_get_last_3d_scaffold_state(RuntimeSceneBridge3DScaffol
 void runtime_scene_bridge_get_last_3d_digest_state(RuntimeSceneBridge3DDigestState *out_state) {
     if (!out_state) return;
     *out_state = g_last_3d_digest;
+}
+
+bool runtime_scene_bridge_get_last_object_id_for_scene_index(int scene_index,
+                                                             char *out_object_id,
+                                                             size_t out_object_id_size) {
+    if (out_object_id && out_object_id_size > 0) {
+        out_object_id[0] = '\0';
+    }
+    if (scene_index < 0 ||
+        scene_index >= g_last_runtime_object_id_count ||
+        !out_object_id ||
+        out_object_id_size == 0) {
+        return false;
+    }
+    if (!g_last_runtime_object_ids[scene_index][0]) {
+        return false;
+    }
+    snprintf(out_object_id, out_object_id_size, "%s", g_last_runtime_object_ids[scene_index]);
+    return true;
 }

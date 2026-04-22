@@ -48,6 +48,8 @@ typedef struct {
 Point GetPositionAlongPath(Path* path, double t);
 Point GetPositionAlongPathNormalized(Path* path, double t);
 double GetRotationAlongPathNormalized(Path* path, double t);
+double PathResolveNormalizedGlobalT(const Path* path, double t);
+void PathMapNormalizedT(const Path* path, double t, int* out_segment, double* out_local_t);
 double PathApproximateLength(Path* path);
 void DestroyPath(Path* path);
 
@@ -68,6 +70,11 @@ void RenderBezierPathCameraStyled(SDL_Renderer* renderer,
                                   int selectedIndex,
                                   SDL_Color selectedColor,
                                   int pointRadius);
+void RenderBezierPathCameraPassive(SDL_Renderer* renderer,
+                                   Path* path,
+                                   const Camera* camera,
+                                   SDL_Color curveColor,
+                                   int endpointRadius);
 void RenderBezierPathCamera(SDL_Renderer* renderer,
                             Path* path,
                             bool drawHandles,

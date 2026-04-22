@@ -235,7 +235,7 @@
     },
     "overlay_merge":{
       "producer_clocks":{
-        "ray_tracing":3
+        "ray_tracing":20
       }
     },
     "ray_tracing":{
@@ -249,8 +249,8 @@
               "rotation":0.0,
               "handleLink":false,
               "velocity1":{
-                "vx":5.5999999999999996,
-                "vy":-0.40000000000000002
+                "vx":-0.90000000000000036,
+                "vy":-5.6500000000000004
               }
             },
             {
@@ -259,8 +259,26 @@
               "rotation":0.0,
               "handleLink":false,
               "velocity2":{
-                "vx":4.4000000000000004,
+                "vx":8.9000000000000004,
                 "vy":0.39999999999999991
+              }
+            }
+          ]
+        },
+        "light_path_depth":{
+          "points":[
+            {
+              "z":5.75,
+              "lookPitch":0.0,
+              "velocity1":{
+                "vz":-2.0
+              }
+            },
+            {
+              "z":0.0,
+              "lookPitch":0.0,
+              "velocity2":{
+                "vz":0.0
               }
             }
           ]
@@ -269,13 +287,83 @@
           "mode":"BEZIER_CUBIC",
           "points":[
             {
-              "x":0.0,
-              "y":0.0,
+              "x":-3.0,
+              "y":10.0,
               "rotation":0.0,
-              "handleLink":false
+              "handleLink":false,
+              "velocity1":{
+                "vx":-3.7857041669194338,
+                "vy":-4.4995750106162049
+              }
+            },
+            {
+              "x":-6.0,
+              "y":-6.0,
+              "rotation":2.4215219598156965,
+              "handleLink":true,
+              "velocity1":{
+                "vx":2.9784333822199001,
+                "vy":-7.4965542773337326
+              },
+              "velocity2":{
+                "vx":-2.9784333822199001,
+                "vy":7.4965542773337326
+              }
+            },
+            {
+              "x":3.0,
+              "y":-5.0,
+              "rotation":3.6438464547038731,
+              "handleLink":false,
+              "velocity2":{
+                "vx":-1.4784333822199001,
+                "vy":-1.5034457226662683
+              }
             }
           ]
-        }
+        },
+        "camera_path_depth":{
+          "points":[
+            {
+              "z":6.0,
+              "lookPitch":-0.41386625432849,
+              "velocity1":{
+                "vz":0.34999999999999964
+              }
+            },
+            {
+              "z":5.5,
+              "lookPitch":-0.4844779290370233,
+              "velocity1":{
+                "vz":1.9499999999999993
+              },
+              "velocity2":{
+                "vz":-1.0999999999999996
+              }
+            },
+            {
+              "z":9.0,
+              "lookPitch":-1.1046041719872666,
+              "velocity2":{
+                "vz":1.3000000000000007
+              }
+            }
+          ]
+        },
+        "object_materials":[
+          {
+            "object_id":"plane_floor",
+            "material_id":0
+          },
+          {
+            "object_id":"prism_center",
+            "material_id":1
+          },
+          {
+            "object_id":"prism_offset",
+            "material_id":2
+          }
+        ]
       }
     }
   }

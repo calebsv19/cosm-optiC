@@ -36,6 +36,8 @@
 SDL_Rect applyButton = {1000, 700, 150, 50};
 SDL_Rect previewButton;
 SDL_Rect changeModeButton;
+SDL_Rect saveButton;
+SDL_Rect backToMenuButton;
 SDL_Rect addButton;  // Small square
 SDL_Rect deleteButton;
 SDL_Rect toggleButton;
@@ -51,6 +53,9 @@ static SDL_Rect g_sceneStatusSpaceRect;
 static SDL_Rect g_sceneStatusDigestRect;
 static SDL_Rect g_sceneStatusRuntimeRect;
 static SDL_Rect g_sceneStatusControlsRect;
+static char g_sceneActionFeedbackText[128];
+static Uint64 g_sceneActionFeedbackUntilMs = 0u;
+static bool g_sceneEditorPreviewOnBegin = false;
 
 #define SCENE_EDITOR_BEZIER_POINT_PICK_RADIUS_PX 18.0
 #define SCENE_EDITOR_BEZIER_HANDLE_PICK_RADIUS_PX 16.0
@@ -64,6 +69,9 @@ static VkRenderer g_scene_renderer_storage;
 bool sceneEditorExitFlag = false;  //  Used to signal Scene Editor should exit
 static void InitializeEditorMode(SceneEditor* editor);
 static void SceneEditorLayoutChrome(void);
+static void SceneEditorSyncWindowSize(SceneEditor* editor);
+static void SceneEditorResumeAfterPreview(SceneEditor* editor);
+static bool SceneEditorViewportFitDigestOverlay(bool reset_angles);
 static int SceneEditorResolveModeButtonAtPoint(int mx, int my);
 static bool SceneEditorIsChromeShellButtonHit(int mx, int my);
 
@@ -148,6 +156,56 @@ static Uint8 SceneEditorColorOffset(Uint8 value, int offset) {
     if (out < 0) return 0;
     if (out > 255) return 255;
     return (Uint8)out;
+}
+
+static void SceneEditorSetActionFeedback(const char* text, Uint32 lifetime_ms) {
+    if (!text || !text[0]) {
+        g_sceneActionFeedbackText[0] = '\0';
+        g_sceneActionFeedbackUntilMs = 0u;
+        return;
+    }
+    snprintf(g_sceneActionFeedbackText,
+             sizeof(g_sceneActionFeedbackText),
+             "%s",
+             text);
+    g_sceneActionFeedbackUntilMs = SDL_GetTicks64() + (Uint64)lifetime_ms;
+}
+
+static SDL_Color SceneEditorResolveButtonTextColor(SDL_Color fill,
+                                                   RayTracingThemePalette palette) {
+    (void)fill;
+    return palette.button_text;
+}
+
+static int SceneEditorResolveToneDelta(SDL_Color base_fill,
+                                       int dark_theme_delta,
+                                       int light_theme_delta) {
+    int luminance = (int)base_fill.r * 299 + (int)base_fill.g * 587 + (int)base_fill.b * 114;
+    return (luminance >= 140000) ? light_theme_delta : dark_theme_delta;
+}
+
+static SDL_Color SceneEditorResolveButtonFill(SDL_Color base_fill,
+                                              SDL_Color disabled_fill,
+                                              bool enabled,
+                                              bool hovered,
+                                              bool emphasized) {
+    SDL_Color out = enabled ? base_fill : disabled_fill;
+    int delta = 0;
+    if (!enabled) return out;
+    if (emphasized) {
+        delta = SceneEditorResolveToneDelta(base_fill, hovered ? 24 : 16, hovered ? -24 : -16);
+        out.r = SceneEditorColorOffset(out.r, delta);
+        out.g = SceneEditorColorOffset(out.g, delta);
+        out.b = SceneEditorColorOffset(out.b, delta);
+        return out;
+    }
+    if (hovered) {
+        delta = SceneEditorResolveToneDelta(base_fill, 10, -10);
+        out.r = SceneEditorColorOffset(out.r, delta);
+        out.g = SceneEditorColorOffset(out.g, delta);
+        out.b = SceneEditorColorOffset(out.b, delta);
+    }
+    return out;
 }
 
 typedef enum SceneEditorInputTarget {
@@ -244,7 +302,9 @@ typedef enum SceneEditorChromeActionKind {
     SCENE_EDITOR_CHROME_ACTION_MODE_SELECT,
     SCENE_EDITOR_CHROME_ACTION_PREVIEW,
     SCENE_EDITOR_CHROME_ACTION_CYCLE_MODE,
-    SCENE_EDITOR_CHROME_ACTION_APPLY
+    SCENE_EDITOR_CHROME_ACTION_APPLY,
+    SCENE_EDITOR_CHROME_ACTION_SAVE,
+    SCENE_EDITOR_CHROME_ACTION_BACK_TO_MENU
 } SceneEditorChromeActionKind;
 
 typedef struct SceneEditorPaneCommand {
@@ -281,9 +341,21 @@ typedef struct SceneEditorBezier3DGizmoState {
     SceneEditorBezier3DGizmoAxis drag_axis;
     double drag_start_world_x;
     double drag_start_world_y;
+    double drag_start_world_z;
     int drag_start_mouse_x;
     int drag_start_mouse_y;
 } SceneEditorBezier3DGizmoState;
+
+typedef struct SceneEditorCamera3DGizmoState {
+    bool dragging;
+    bool smooth_drag;
+    SceneEditorBezier3DGizmoAxis drag_axis;
+    double drag_start_world_x;
+    double drag_start_world_y;
+    double drag_start_world_z;
+    int drag_start_mouse_x;
+    int drag_start_mouse_y;
+} SceneEditorCamera3DGizmoState;
 
 #define SCENE_EDITOR_DIGEST_OVERLAY_DEFAULT_YAW_DEG (-35.0)
 #define SCENE_EDITOR_DIGEST_OVERLAY_DEFAULT_PITCH_DEG (24.0)
@@ -303,6 +375,7 @@ static SceneEditorViewportNavState g_viewport_nav_state = {
 };
 static int g_digest_hover_object_index = -1;
 static SceneEditorBezier3DGizmoState g_bezier3d_gizmo_state = {0};
+static SceneEditorCamera3DGizmoState g_camera3d_gizmo_state = {0};
 
 typedef struct SceneEditorDigestOverlayProjector {
     SDL_Rect viewport;
@@ -542,6 +615,50 @@ static bool SceneEditorPointInRect(int x, int y, const SDL_Rect* rect) {
            y >= rect->y && y <= rect->y + rect->h;
 }
 
+static bool SceneEditorEventMatchesEditorWindow(const SceneEditor* editor, const SDL_Event* event) {
+    Uint32 editor_window_id = 0;
+    Uint32 event_window_id = 0;
+    if (!editor || !editor->window || !event) return true;
+    editor_window_id = SDL_GetWindowID(editor->window);
+    if (editor_window_id == 0) return true;
+    switch (event->type) {
+        case SDL_KEYDOWN:
+        case SDL_KEYUP:
+            event_window_id = event->key.windowID;
+            break;
+        case SDL_MOUSEMOTION:
+            event_window_id = event->motion.windowID;
+            break;
+        case SDL_MOUSEBUTTONDOWN:
+        case SDL_MOUSEBUTTONUP:
+            event_window_id = event->button.windowID;
+            break;
+        case SDL_MOUSEWHEEL:
+            event_window_id = event->wheel.windowID;
+            break;
+        case SDL_TEXTINPUT:
+            event_window_id = event->text.windowID;
+            break;
+        case SDL_TEXTEDITING:
+            event_window_id = event->edit.windowID;
+            break;
+        case SDL_WINDOWEVENT:
+            event_window_id = event->window.windowID;
+            break;
+        default:
+            return true;
+    }
+    if (event_window_id == 0) return true;
+    return event_window_id == editor_window_id;
+}
+
+static bool SceneEditorButtonHovered(const SDL_Rect* rect) {
+    int mx = 0;
+    int my = 0;
+    SDL_GetMouseState(&mx, &my);
+    return SceneEditorPointInRect(mx, my, rect);
+}
+
 static bool SceneEditorIsOwnWindowCloseEvent(const SceneEditor* editor, const SDL_Event* event) {
     Uint32 window_id = 0;
     if (!editor || !event || !editor->window) return false;
@@ -581,6 +698,34 @@ static void SceneEditorViewportResetDigestOverlayNavigation(void) {
 static void SceneEditorBezier3DGizmoReset(void) {
     memset(&g_bezier3d_gizmo_state, 0, sizeof(g_bezier3d_gizmo_state));
     g_bezier3d_gizmo_state.drag_axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
+}
+
+static void SceneEditorCamera3DGizmoReset(void) {
+    memset(&g_camera3d_gizmo_state, 0, sizeof(g_camera3d_gizmo_state));
+    g_camera3d_gizmo_state.drag_axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
+}
+
+static void SceneEditorResumeAfterPreview(SceneEditor* editor) {
+    if (!editor || !editor->window || !editor->renderer) return;
+    SDL_CaptureMouse(SDL_FALSE);
+    SDL_SetRelativeMouseMode(SDL_FALSE);
+    SceneEditorMutationQueue_Reset();
+    g_viewport_nav_state.orbit_active = false;
+    g_viewport_nav_state.last_mouse_x = 0;
+    g_viewport_nav_state.last_mouse_y = 0;
+    SceneEditorBezier3DGizmoReset();
+    SceneEditorCamera3DGizmoReset();
+    SceneEditorSyncWindowSize(editor);
+    SceneEditorLayoutChrome();
+    InitializeEditorMode(editor);
+    (void)SceneEditorViewportFitDigestOverlay(false);
+    setRenderContext(editor->renderer,
+                     editor->window,
+                     sceneSettings.windowWidth,
+                     sceneSettings.windowHeight);
+    SDL_PumpEvents();
+    SDL_FlushEvents(SDL_MOUSEMOTION, SDL_MOUSEWHEEL);
+    SDL_FlushEvents(SDL_TEXTINPUT, SDL_TEXTEDITING);
 }
 
 static bool SceneEditorDigestOverlayResolve(RuntimeSceneBridge3DDigestState* out_digest) {
@@ -923,6 +1068,7 @@ static bool SceneEditorDigestOverlayScreenRayToPlanePoint(const SceneEditorDiges
 
 static int SceneEditorDigestOverlayPickBezierPointIndex(const SceneEditorDigestOverlayProjector* projector,
                                                         const Path* path,
+                                                        const CameraPath3D* path3d,
                                                         double plane_z,
                                                         int screen_x,
                                                         int screen_y) {
@@ -939,7 +1085,7 @@ static int SceneEditorDigestOverlayPickBezierPointIndex(const SceneEditorDigestO
         if (!SceneEditorDigestOverlayProjectPoint(projector,
                                                   path->points[i].x,
                                                   path->points[i].y,
-                                                  plane_z,
+                                                  path3d ? path3d->point_z[i] : plane_z,
                                                   &px,
                                                   &py)) {
             continue;
@@ -958,6 +1104,7 @@ static int SceneEditorDigestOverlayPickBezierPointIndex(const SceneEditorDigestO
 }
 
 static bool SceneEditorDigestOverlayBezierHandleWorldPosition(const Path* path,
+                                                              const CameraPath3D* path3d,
                                                               int segment_index,
                                                               int handle_index,
                                                               double* out_x,
@@ -968,16 +1115,17 @@ static bool SceneEditorDigestOverlayBezierHandleWorldPosition(const Path* path,
                                                               double* out_anchor_z,
                                                               double plane_z) {
     int point_index = 0;
-    if (!path) return false;
+    (void)plane_z;
+    if (!path || !path3d) return false;
     if (segment_index < 0 || segment_index >= path->numPoints - 1) return false;
     if (!(handle_index == 0 || handle_index == 1)) return false;
     point_index = (handle_index == 0) ? segment_index : (segment_index + 1);
     if (out_anchor_x) *out_anchor_x = path->points[point_index].x;
     if (out_anchor_y) *out_anchor_y = path->points[point_index].y;
-    if (out_anchor_z) *out_anchor_z = plane_z;
+    if (out_anchor_z) *out_anchor_z = path3d->point_z[point_index];
     if (out_x) *out_x = path->points[point_index].x + path->handles[segment_index][handle_index].vx;
     if (out_y) *out_y = path->points[point_index].y + path->handles[segment_index][handle_index].vy;
-    if (out_z) *out_z = plane_z;
+    if (out_z) *out_z = path3d->point_z[point_index] + path3d->handles_vz[segment_index][handle_index];
     return true;
 }
 
@@ -989,17 +1137,18 @@ static bool SceneEditorDigestOverlayGetBezierSelectionWorldPosition(
     double* out_z) {
     double world_x = 0.0;
     double world_y = 0.0;
-    double plane_z = SceneEditorDigestOverlayResolveEditPlaneZ(digest, projector);
+    double world_z = 0.0;
     if (!projector || !digest) return false;
-    if (!BezierEditorGetSelectionWorldPosition(&world_x, &world_y)) return false;
+    if (!BezierEditorGetSelectionWorldPosition3D(&world_x, &world_y, &world_z)) return false;
     if (out_x) *out_x = world_x;
     if (out_y) *out_y = world_y;
-    if (out_z) *out_z = plane_z;
+    if (out_z) *out_z = world_z;
     return true;
 }
 
 static int SceneEditorDigestOverlayPickBezierHandle(const SceneEditorDigestOverlayProjector* projector,
                                                     const Path* path,
+                                                    const CameraPath3D* path3d,
                                                     double plane_z,
                                                     int screen_x,
                                                     int screen_y,
@@ -1009,30 +1158,32 @@ static int SceneEditorDigestOverlayPickBezierHandle(const SceneEditorDigestOverl
     int picked_handle = -1;
     double best_dist2 = 0.0;
     int segment = 0;
-    if (!projector || !path) return -1;
+    if (!projector || !path || !path3d) return -1;
     for (segment = 0; segment < path->numPoints - 1; ++segment) {
         int handle_index = 0;
         for (handle_index = 0; handle_index < 2; ++handle_index) {
             double hx = 0.0;
             double hy = 0.0;
+            double hz = 0.0;
             int px = 0;
             int py = 0;
             double dx = 0.0;
             double dy = 0.0;
             double dist2 = 0.0;
             if (!SceneEditorDigestOverlayBezierHandleWorldPosition(path,
+                                                                   path3d,
                                                                    segment,
                                                                    handle_index,
                                                                    &hx,
                                                                    &hy,
-                                                                   NULL,
+                                                                   &hz,
                                                                    NULL,
                                                                    NULL,
                                                                    NULL,
                                                                    plane_z)) {
                 continue;
             }
-            if (!SceneEditorDigestOverlayProjectPoint(projector, hx, hy, plane_z, &px, &py)) {
+            if (!SceneEditorDigestOverlayProjectPoint(projector, hx, hy, hz, &px, &py)) {
                 continue;
             }
             dx = (double)screen_x - (double)px;
@@ -1054,9 +1205,11 @@ static int SceneEditorDigestOverlayPickBezierHandle(const SceneEditorDigestOverl
     return picked_segment;
 }
 
-static bool SceneEditorDigestOverlayProjectBezierGizmoAxis(
+static bool SceneEditorDigestOverlayProjectGizmoAxisAtWorldPoint(
     const SceneEditorDigestOverlayProjector* projector,
-    const RuntimeSceneBridge3DDigestState* digest,
+    double base_x,
+    double base_y,
+    double base_z,
     SceneEditorBezier3DGizmoAxis axis,
     double world_length,
     int* out_anchor_x,
@@ -1064,9 +1217,6 @@ static bool SceneEditorDigestOverlayProjectBezierGizmoAxis(
     int* out_end_x,
     int* out_end_y,
     double* out_pixels_per_unit) {
-    double base_x = 0.0;
-    double base_y = 0.0;
-    double base_z = 0.0;
     double target_x = 0.0;
     double target_y = 0.0;
     double target_z = 0.0;
@@ -1077,13 +1227,6 @@ static bool SceneEditorDigestOverlayProjectBezierGizmoAxis(
     double dx = 0.0;
     double dy = 0.0;
     if (!projector) return false;
-    if (!SceneEditorDigestOverlayGetBezierSelectionWorldPosition(projector,
-                                                                 digest,
-                                                                 &base_x,
-                                                                 &base_y,
-                                                                 &base_z)) {
-        return false;
-    }
     target_x = base_x;
     target_y = base_y;
     target_z = base_z;
@@ -1113,6 +1256,40 @@ static bool SceneEditorDigestOverlayProjectBezierGizmoAxis(
         *out_pixels_per_unit = sqrt(dx * dx + dy * dy) / world_length;
     }
     return true;
+}
+
+static bool SceneEditorDigestOverlayProjectBezierGizmoAxis(
+    const SceneEditorDigestOverlayProjector* projector,
+    const RuntimeSceneBridge3DDigestState* digest,
+    SceneEditorBezier3DGizmoAxis axis,
+    double world_length,
+    int* out_anchor_x,
+    int* out_anchor_y,
+    int* out_end_x,
+    int* out_end_y,
+    double* out_pixels_per_unit) {
+    double base_x = 0.0;
+    double base_y = 0.0;
+    double base_z = 0.0;
+    if (!projector) return false;
+    if (!SceneEditorDigestOverlayGetBezierSelectionWorldPosition(projector,
+                                                                 digest,
+                                                                 &base_x,
+                                                                 &base_y,
+                                                                 &base_z)) {
+        return false;
+    }
+    return SceneEditorDigestOverlayProjectGizmoAxisAtWorldPoint(projector,
+                                                                base_x,
+                                                                base_y,
+                                                                base_z,
+                                                                axis,
+                                                                world_length,
+                                                                out_anchor_x,
+                                                                out_anchor_y,
+                                                                out_end_x,
+                                                                out_end_y,
+                                                                out_pixels_per_unit);
 }
 
 static SceneEditorBezier3DGizmoAxis SceneEditorDigestOverlayPickBezierGizmoAxis(
@@ -1165,7 +1342,8 @@ static SceneEditorBezier3DGizmoAxis SceneEditorDigestOverlayPickBezierGizmoAxis(
 }
 
 static bool SceneEditorBezier3DGizmoAxisLocked(SceneEditorBezier3DGizmoAxis axis) {
-    return axis == SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_Z;
+    (void)axis;
+    return false;
 }
 
 static void SceneEditorDigestOverlayDrawBezierGizmo(SDL_Renderer* renderer,
@@ -1242,6 +1420,69 @@ static void SceneEditorDigestOverlayDrawBezierGizmo(SDL_Renderer* renderer,
     }
 }
 
+static void SceneEditorDigestOverlayDrawPathPassive3D(SDL_Renderer* renderer,
+                                                      const SceneEditorDigestOverlayProjector* projector,
+                                                      const Path* path,
+                                                      const CameraPath3D* path3d,
+                                                      SDL_Color curve_color,
+                                                      bool reverse_endpoints) {
+    SDL_Color start_color = {0, 200, 0, 235};
+    SDL_Color end_color = {220, 40, 40, 235};
+    int i = 0;
+    if (!renderer || !projector || !path || !path3d || path->numPoints < 2) return;
+
+    {
+        Point previous = GetPositionAlongPathNormalized((Path*)path, 0.0);
+        double previous_z = CameraPath3D_GetPositionZNormalized(path, path3d, 0.0);
+        for (i = 1; i <= 48; ++i) {
+            double t = (double)i / 48.0;
+            Point current = GetPositionAlongPathNormalized((Path*)path, t);
+            double current_z = CameraPath3D_GetPositionZNormalized(path, path3d, t);
+            SceneEditorDigestOverlayDrawLine3(renderer,
+                                              projector,
+                                              previous.x,
+                                              previous.y,
+                                              previous_z,
+                                              current.x,
+                                              current.y,
+                                              current_z,
+                                              curve_color);
+            previous = current;
+            previous_z = current_z;
+        }
+    }
+
+    for (i = 0; i < path->numPoints; ++i) {
+        int px = 0;
+        int py = 0;
+        int radius = 0;
+        SDL_Rect marker = {0, 0, 0, 0};
+        SDL_Color color = curve_color;
+        if (i != 0 && i != path->numPoints - 1) {
+            continue;
+        }
+        if (!SceneEditorDigestOverlayProjectPoint(projector,
+                                                  path->points[i].x,
+                                                  path->points[i].y,
+                                                  path3d->point_z[i],
+                                                  &px,
+                                                  &py)) {
+            continue;
+        }
+        radius = 5;
+        if (reverse_endpoints) {
+            color = (i == 0) ? end_color : start_color;
+        } else {
+            color = (i == 0) ? start_color : end_color;
+        }
+        marker = (SDL_Rect){px - radius, py - radius, radius * 2, radius * 2};
+        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+        SDL_RenderFillRect(renderer, &marker);
+        SDL_SetRenderDrawColor(renderer, 20, 24, 32, 255);
+        SDL_RenderDrawRect(renderer, &marker);
+    }
+}
+
 static void SceneEditorDigestOverlayDrawBezier3D(SDL_Renderer* renderer,
                                                  const SceneEditorDigestOverlayProjector* projector,
                                                  const RuntimeSceneBridge3DDigestState* digest) {
@@ -1253,6 +1494,8 @@ static void SceneEditorDigestOverlayDrawBezier3D(SDL_Renderer* renderer,
     SDL_Color selected_handle_color = {255, 196, 98, 255};
     SDL_Color hover_handle_color = {255, 226, 138, 255};
     SDL_Color hover_point_color = {255, 240, 176, 255};
+    SDL_Color start_color = {0, 200, 0, 235};
+    SDL_Color end_color = {220, 40, 40, 235};
     int selected_segment = -1;
     int selected_handle = -1;
     int hover_segment = -1;
@@ -1266,11 +1509,13 @@ static void SceneEditorDigestOverlayDrawBezier3D(SDL_Renderer* renderer,
     SDL_GetMouseState(&mouse_x, &mouse_y);
     hover_point = SceneEditorDigestOverlayPickBezierPointIndex(projector,
                                                                &sceneSettings.bezierPath,
+                                                               &sceneSettings.bezierPath3D,
                                                                plane_z,
                                                                mouse_x,
                                                                mouse_y);
     if (SceneEditorDigestOverlayPickBezierHandle(projector,
                                                  &sceneSettings.bezierPath,
+                                                 &sceneSettings.bezierPath3D,
                                                  plane_z,
                                                  mouse_x,
                                                  mouse_y,
@@ -1283,19 +1528,26 @@ static void SceneEditorDigestOverlayDrawBezier3D(SDL_Renderer* renderer,
     }
     if (sceneSettings.bezierPath.numPoints >= 2) {
         Point previous = GetPositionAlongPathNormalized(&sceneSettings.bezierPath, 0.0);
+        double previous_z = CameraPath3D_GetPositionZNormalized(&sceneSettings.bezierPath,
+                                                                &sceneSettings.bezierPath3D,
+                                                                0.0);
         for (i = 1; i <= 48; ++i) {
             double t = (double)i / 48.0;
             Point current = GetPositionAlongPathNormalized(&sceneSettings.bezierPath, t);
+            double current_z = CameraPath3D_GetPositionZNormalized(&sceneSettings.bezierPath,
+                                                                   &sceneSettings.bezierPath3D,
+                                                                   t);
             SceneEditorDigestOverlayDrawLine3(renderer,
                                               projector,
                                               previous.x,
                                               previous.y,
-                                              plane_z,
+                                              previous_z,
                                               current.x,
                                               current.y,
-                                              plane_z,
+                                              current_z,
                                               curve_color);
             previous = current;
+            previous_z = current_z;
         }
     }
     if (BezierEditorGetSelectedHandle(&selected_segment, &selected_handle)) {
@@ -1306,8 +1558,10 @@ static void SceneEditorDigestOverlayDrawBezier3D(SDL_Renderer* renderer,
         for (handle_index = 0; handle_index < 2; ++handle_index) {
             double hx = 0.0;
             double hy = 0.0;
+            double hz = 0.0;
             double anchor_x = 0.0;
             double anchor_y = 0.0;
+            double anchor_z = 0.0;
             int px = 0;
             int py = 0;
             int ax = 0;
@@ -1327,14 +1581,15 @@ static void SceneEditorDigestOverlayDrawBezier3D(SDL_Renderer* renderer,
                 knob_half = 6;
             }
             if (!SceneEditorDigestOverlayBezierHandleWorldPosition(&sceneSettings.bezierPath,
+                                                                   &sceneSettings.bezierPath3D,
                                                                    i,
                                                                    handle_index,
                                                                    &hx,
                                                                    &hy,
-                                                                   NULL,
+                                                                   &hz,
                                                                    &anchor_x,
                                                                    &anchor_y,
-                                                                   NULL,
+                                                                   &anchor_z,
                                                                    plane_z)) {
                 continue;
             }
@@ -1342,15 +1597,15 @@ static void SceneEditorDigestOverlayDrawBezier3D(SDL_Renderer* renderer,
                                               projector,
                                               anchor_x,
                                               anchor_y,
-                                              plane_z,
+                                              anchor_z,
                                               hx,
                                               hy,
-                                              plane_z,
+                                              hz,
                                               (SDL_Color){handle_color.r, handle_color.g, handle_color.b, 120});
-            if (!SceneEditorDigestOverlayProjectPoint(projector, hx, hy, plane_z, &px, &py)) {
+            if (!SceneEditorDigestOverlayProjectPoint(projector, hx, hy, hz, &px, &py)) {
                 continue;
             }
-            if (!SceneEditorDigestOverlayProjectPoint(projector, anchor_x, anchor_y, plane_z, &ax, &ay)) {
+            if (!SceneEditorDigestOverlayProjectPoint(projector, anchor_x, anchor_y, anchor_z, &ax, &ay)) {
                 continue;
             }
             knob = (SDL_Rect){px - knob_half, py - knob_half, knob_half * 2, knob_half * 2};
@@ -1369,10 +1624,15 @@ static void SceneEditorDigestOverlayDrawBezier3D(SDL_Renderer* renderer,
         int radius = point_selected ? 6 : (point_hovered ? 5 : 4);
         SDL_Rect marker = {0, 0, 0, 0};
         SDL_Color color = point_selected ? selected_color : (point_hovered ? hover_point_color : point_color);
+        if (!point_selected && !point_hovered && i == 0) {
+            color = start_color;
+        } else if (!point_selected && !point_hovered && i == sceneSettings.bezierPath.numPoints - 1) {
+            color = end_color;
+        }
         if (!SceneEditorDigestOverlayProjectPoint(projector,
                                                   sceneSettings.bezierPath.points[i].x,
                                                   sceneSettings.bezierPath.points[i].y,
-                                                  plane_z,
+                                                  sceneSettings.bezierPath3D.point_z[i],
                                                   &px,
                                                   &py)) {
             continue;
@@ -1385,6 +1645,548 @@ static void SceneEditorDigestOverlayDrawBezier3D(SDL_Renderer* renderer,
     }
     if (selection_kind != BEZIER_EDITOR_SELECTION_NONE) {
         SceneEditorDigestOverlayDrawBezierGizmo(renderer, projector, digest);
+    }
+}
+
+static int SceneEditorDigestOverlayPickCameraPointIndex(
+    const SceneEditorDigestOverlayProjector* projector,
+    int screen_x,
+    int screen_y) {
+    int picked = -1;
+    double best_dist2 = 0.0;
+    int i = 0;
+    if (!projector) return -1;
+    for (i = 0; i < sceneSettings.cameraPath.numPoints; ++i) {
+        int px = 0;
+        int py = 0;
+        double dx = 0.0;
+        double dy = 0.0;
+        double dist2 = 0.0;
+        if (!SceneEditorDigestOverlayProjectPoint(projector,
+                                                  sceneSettings.cameraPath.points[i].x,
+                                                  sceneSettings.cameraPath.points[i].y,
+                                                  sceneSettings.cameraPath3D.point_z[i],
+                                                  &px,
+                                                  &py)) {
+            continue;
+        }
+        dx = (double)screen_x - (double)px;
+        dy = (double)screen_y - (double)py;
+        dist2 = dx * dx + dy * dy;
+        if (dist2 <= SCENE_EDITOR_BEZIER_POINT_PICK_RADIUS_PX * SCENE_EDITOR_BEZIER_POINT_PICK_RADIUS_PX) {
+            if (picked < 0 || dist2 < best_dist2) {
+                picked = i;
+                best_dist2 = dist2;
+            }
+        }
+    }
+    return picked;
+}
+
+static bool SceneEditorDigestOverlayPickCameraBezierHandle(
+    const SceneEditorDigestOverlayProjector* projector,
+    int screen_x,
+    int screen_y,
+    int* out_segment_index,
+    int* out_handle_index) {
+    int segment_index = 0;
+    int picked_segment = -1;
+    int picked_handle = -1;
+    double best_dist2 = 0.0;
+    if (!projector) return false;
+    for (segment_index = 0; segment_index < sceneSettings.cameraPath.numPoints - 1; ++segment_index) {
+        int handle_index = 0;
+        for (handle_index = 0; handle_index < 2; ++handle_index) {
+            double handle_x = 0.0;
+            double handle_y = 0.0;
+            double handle_z = 0.0;
+            double anchor_x = 0.0;
+            double anchor_y = 0.0;
+            double anchor_z = 0.0;
+            int px = 0;
+            int py = 0;
+            double dx = 0.0;
+            double dy = 0.0;
+            double dist2 = 0.0;
+            if (!CameraPath3D_GetHandleWorldPosition(&sceneSettings.cameraPath,
+                                                     &sceneSettings.cameraPath3D,
+                                                     segment_index,
+                                                     handle_index,
+                                                     &handle_x,
+                                                     &handle_y,
+                                                     &handle_z,
+                                                     &anchor_x,
+                                                     &anchor_y,
+                                                     &anchor_z)) {
+                continue;
+            }
+            if (!SceneEditorDigestOverlayProjectPoint(projector,
+                                                      handle_x,
+                                                      handle_y,
+                                                      handle_z,
+                                                      &px,
+                                                      &py)) {
+                continue;
+            }
+            dx = (double)screen_x - (double)px;
+            dy = (double)screen_y - (double)py;
+            dist2 = dx * dx + dy * dy;
+            if (dist2 <= POINT_HIT_RADIUS * POINT_HIT_RADIUS) {
+                if (picked_segment < 0 || dist2 < best_dist2) {
+                    picked_segment = segment_index;
+                    picked_handle = handle_index;
+                    best_dist2 = dist2;
+                }
+            }
+        }
+    }
+    if (picked_segment < 0) return false;
+    if (out_segment_index) *out_segment_index = picked_segment;
+    if (out_handle_index) *out_handle_index = picked_handle;
+    return true;
+}
+
+static int SceneEditorDigestOverlayPickCameraRotationHandle(
+    const SceneEditorDigestOverlayProjector* projector,
+    const RuntimeSceneBridge3DDigestState* digest,
+    int screen_x,
+    int screen_y) {
+    SceneEditorBezier3DInteractionMetrics metrics = {0};
+    int picked = -1;
+    double best_dist2 = 0.0;
+    int i = 0;
+    if (!projector || !digest) return -1;
+    metrics = SceneEditorDigestOverlayResolveBezierMetrics(digest, projector);
+    for (i = 0; i < sceneSettings.cameraPath.numPoints; ++i) {
+        double rotation = CameraEditorGetPointRotation(i);
+        double pitch = CameraEditorGetPointPitch(i);
+        double draw_angle = rotation - (M_PI * 0.5);
+        double direction_len = metrics.gizmo_world_length * 0.95;
+        double horizontal_len = cos(pitch) * direction_len;
+        double end_x = sceneSettings.cameraPath.points[i].x + cos(draw_angle) * horizontal_len;
+        double end_y = sceneSettings.cameraPath.points[i].y + sin(draw_angle) * horizontal_len;
+        double end_z = sceneSettings.cameraPath3D.point_z[i] + sin(pitch) * direction_len;
+        int px = 0;
+        int py = 0;
+        double dx = 0.0;
+        double dy = 0.0;
+        double dist2 = 0.0;
+        if (!SceneEditorDigestOverlayProjectPoint(projector, end_x, end_y, end_z, &px, &py)) {
+            continue;
+        }
+        dx = (double)screen_x - (double)px;
+        dy = (double)screen_y - (double)py;
+        dist2 = dx * dx + dy * dy;
+        if (dist2 <= POINT_HIT_RADIUS * POINT_HIT_RADIUS) {
+            if (picked < 0 || dist2 < best_dist2) {
+                picked = i;
+                best_dist2 = dist2;
+            }
+        }
+    }
+    return picked;
+}
+
+static bool SceneEditorDigestOverlayResolveSelectedCameraGizmoWorldPosition(
+    const SceneEditorDigestOverlayProjector* projector,
+    const RuntimeSceneBridge3DDigestState* digest,
+    double* out_x,
+    double* out_y,
+    double* out_z) {
+    CameraEditorSelectionKind selection_kind = CAMERA_EDITOR_SELECTION_NONE;
+    int point_index = -1;
+    SceneEditorBezier3DInteractionMetrics metrics = {0};
+    double rotation = 0.0;
+    double draw_angle = 0.0;
+    double direction_len = 0.0;
+    if (!projector || !digest) return false;
+    selection_kind = CameraEditorGetSelectionKind();
+    if (selection_kind != CAMERA_EDITOR_SELECTION_ROTATION_HANDLE) {
+        return CameraEditorGetSelectedGizmoWorldPosition(out_x, out_y, out_z);
+    }
+    point_index = CameraEditorGetSelectedPointIndex();
+    if (point_index < 0 || point_index >= sceneSettings.cameraPath.numPoints) {
+        return false;
+    }
+    metrics = SceneEditorDigestOverlayResolveBezierMetrics(digest, projector);
+    rotation = CameraEditorGetPointRotation(point_index);
+    {
+        double pitch = CameraEditorGetPointPitch(point_index);
+        double horizontal_len = cos(pitch) * (metrics.gizmo_world_length * 0.95);
+        direction_len = metrics.gizmo_world_length * 0.95;
+        draw_angle = rotation - (M_PI * 0.5);
+        if (out_x) {
+            *out_x = sceneSettings.cameraPath.points[point_index].x + cos(draw_angle) * horizontal_len;
+        }
+        if (out_y) {
+            *out_y = sceneSettings.cameraPath.points[point_index].y + sin(draw_angle) * horizontal_len;
+        }
+        if (out_z) {
+            *out_z = sceneSettings.cameraPath3D.point_z[point_index] + sin(pitch) * direction_len;
+        }
+    }
+    return true;
+}
+
+static SceneEditorBezier3DGizmoAxis SceneEditorDigestOverlayPickCameraGizmoAxis(
+    const SceneEditorDigestOverlayProjector* projector,
+    const RuntimeSceneBridge3DDigestState* digest,
+    int screen_x,
+    int screen_y) {
+    SceneEditorBezier3DInteractionMetrics metrics = {0};
+    SceneEditorBezier3DGizmoAxis best_axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
+    double base_x = 0.0;
+    double base_y = 0.0;
+    double base_z = 0.0;
+    double best_dist2 = 0.0;
+    SceneEditorBezier3DGizmoAxis axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_X;
+    if (!projector || !digest) return SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
+    if (!SceneEditorDigestOverlayResolveSelectedCameraGizmoWorldPosition(projector,
+                                                                         digest,
+                                                                         &base_x,
+                                                                         &base_y,
+                                                                         &base_z)) {
+        return SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
+    }
+    metrics = SceneEditorDigestOverlayResolveBezierMetrics(digest, projector);
+    for (axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_X;
+         axis <= SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_Z;
+         axis = (SceneEditorBezier3DGizmoAxis)(axis + 1)) {
+        int gx = 0;
+        int gy = 0;
+        double dx = 0.0;
+        double dy = 0.0;
+        double dist2 = 0.0;
+        if (!SceneEditorDigestOverlayProjectGizmoAxisAtWorldPoint(projector,
+                                                                  base_x,
+                                                                  base_y,
+                                                                  base_z,
+                                                                  axis,
+                                                                  metrics.gizmo_world_length,
+                                                                  NULL,
+                                                                  NULL,
+                                                                  &gx,
+                                                                  &gy,
+                                                                  NULL)) {
+            continue;
+        }
+        dx = (double)screen_x - (double)gx;
+        dy = (double)screen_y - (double)gy;
+        dist2 = dx * dx + dy * dy;
+        if (dist2 <= SCENE_EDITOR_BEZIER_GIZMO_PICK_RADIUS_PX * SCENE_EDITOR_BEZIER_GIZMO_PICK_RADIUS_PX) {
+            if (best_axis == SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE || dist2 < best_dist2) {
+                best_axis = axis;
+                best_dist2 = dist2;
+            }
+        }
+    }
+    return best_axis;
+}
+
+static void SceneEditorDigestOverlayDrawCameraGizmo(SDL_Renderer* renderer,
+                                                    const SceneEditorDigestOverlayProjector* projector,
+                                                    const RuntimeSceneBridge3DDigestState* digest) {
+    SceneEditorBezier3DInteractionMetrics metrics = {0};
+    double base_x = 0.0;
+    double base_y = 0.0;
+    double base_z = 0.0;
+    int anchor_x = 0;
+    int anchor_y = 0;
+    int mouse_x = 0;
+    int mouse_y = 0;
+    SceneEditorBezier3DGizmoAxis hover_axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
+    SceneEditorBezier3DGizmoAxis axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_X;
+    if (!renderer || !projector || !digest) return;
+    if (!SceneEditorDigestOverlayResolveSelectedCameraGizmoWorldPosition(projector,
+                                                                         digest,
+                                                                         &base_x,
+                                                                         &base_y,
+                                                                         &base_z)) return;
+    metrics = SceneEditorDigestOverlayResolveBezierMetrics(digest, projector);
+    SDL_GetMouseState(&mouse_x, &mouse_y);
+    hover_axis = SceneEditorDigestOverlayPickCameraGizmoAxis(projector, digest, mouse_x, mouse_y);
+    for (axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_X;
+         axis <= SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_Z;
+         axis = (SceneEditorBezier3DGizmoAxis)(axis + 1)) {
+        int end_x = 0;
+        int end_y = 0;
+        SDL_Color axis_color = {0, 0, 0, 255};
+        SDL_Rect knob = {0, 0, 0, 0};
+        int knob_half = 5;
+        bool active = (g_camera3d_gizmo_state.dragging && g_camera3d_gizmo_state.drag_axis == axis);
+        bool hovered = (hover_axis == axis);
+        switch (axis) {
+            case SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_X: axis_color = (SDL_Color){230, 96, 96, 255}; break;
+            case SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_Y: axis_color = (SDL_Color){102, 224, 132, 255}; break;
+            case SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_Z: axis_color = (SDL_Color){110, 160, 255, 255}; break;
+            default: break;
+        }
+        if (!SceneEditorDigestOverlayProjectGizmoAxisAtWorldPoint(projector,
+                                                                  base_x,
+                                                                  base_y,
+                                                                  base_z,
+                                                                  axis,
+                                                                  metrics.gizmo_world_length,
+                                                                  &anchor_x,
+                                                                  &anchor_y,
+                                                                  &end_x,
+                                                                  &end_y,
+                                                                  NULL)) {
+            continue;
+        }
+        if (active || hovered) {
+            axis_color.a = 255;
+        } else {
+            axis_color.a = 220;
+        }
+        if (active) {
+            knob_half = 7;
+        } else if (hovered) {
+            knob_half = 6;
+        }
+        SDL_SetRenderDrawColor(renderer, axis_color.r, axis_color.g, axis_color.b, axis_color.a);
+        SDL_RenderDrawLine(renderer, anchor_x, anchor_y, end_x, end_y);
+        knob = (SDL_Rect){end_x - knob_half, end_y - knob_half, knob_half * 2, knob_half * 2};
+        SDL_RenderFillRect(renderer, &knob);
+        SDL_SetRenderDrawColor(renderer, 18, 22, 28, 255);
+        SDL_RenderDrawRect(renderer, &knob);
+    }
+}
+
+static void SceneEditorDigestOverlayDrawCamera3D(SDL_Renderer* renderer,
+                                                 const SceneEditorDigestOverlayProjector* projector,
+                                                 const RuntimeSceneBridge3DDigestState* digest) {
+    SDL_Color curve_color = {210, 168, 255, 230};
+    SDL_Color point_color = {212, 238, 255, 255};
+    SDL_Color selected_color = {255, 170, 82, 255};
+    SDL_Color hover_point_color = {255, 240, 176, 255};
+    SDL_Color handle_color = {255, 186, 104, 200};
+    SDL_Color direction_color = {200, 170, 255, 220};
+    SDL_Color start_color = {0, 200, 0, 235};
+    SDL_Color end_color = {220, 40, 40, 235};
+    int selected_point = CameraEditorGetSelectedPointIndex();
+    int hover_point = -1;
+    int mouse_x = 0;
+    int mouse_y = 0;
+    int i = 0;
+    if (!renderer || !projector || !digest) return;
+    SDL_GetMouseState(&mouse_x, &mouse_y);
+    hover_point = SceneEditorDigestOverlayPickCameraPointIndex(projector, mouse_x, mouse_y);
+    for (i = 0; i < sceneSettings.cameraPath.numPoints - 1; ++i) {
+        int handle_index = 0;
+        for (handle_index = 0; handle_index < 2; ++handle_index) {
+            double anchor_x = 0.0;
+            double anchor_y = 0.0;
+            double anchor_z = 0.0;
+            double end_x = 0.0;
+            double end_y = 0.0;
+            double end_z = 0.0;
+            int anchor_px = 0;
+            int anchor_py = 0;
+            int end_px = 0;
+            int end_py = 0;
+            int knob_half = 4;
+            SDL_Rect knob = {0, 0, 0, 0};
+            bool related_selected = (selected_point == i) || (selected_point == i + 1);
+            SDL_Color draw_color = handle_color;
+            if (!CameraPath3D_GetHandleWorldPosition(&sceneSettings.cameraPath,
+                                                     &sceneSettings.cameraPath3D,
+                                                     i,
+                                                     handle_index,
+                                                     &end_x,
+                                                     &end_y,
+                                                     &end_z,
+                                                     &anchor_x,
+                                                     &anchor_y,
+                                                     &anchor_z)) {
+                continue;
+            }
+            if (!SceneEditorDigestOverlayProjectPoint(projector,
+                                                      anchor_x,
+                                                      anchor_y,
+                                                      anchor_z,
+                                                      &anchor_px,
+                                                      &anchor_py) ||
+                !SceneEditorDigestOverlayProjectPoint(projector,
+                                                      end_x,
+                                                      end_y,
+                                                      end_z,
+                                                      &end_px,
+                                                      &end_py)) {
+                continue;
+            }
+            if (related_selected) {
+                draw_color.a = 255;
+                knob_half = 5;
+            }
+            SDL_SetRenderDrawColor(renderer, draw_color.r, draw_color.g, draw_color.b, draw_color.a);
+            SDL_RenderDrawLine(renderer, anchor_px, anchor_py, end_px, end_py);
+            knob = (SDL_Rect){end_px - knob_half, end_py - knob_half, knob_half * 2, knob_half * 2};
+            SDL_RenderFillRect(renderer, &knob);
+            SDL_SetRenderDrawColor(renderer, 18, 22, 28, 255);
+            SDL_RenderDrawRect(renderer, &knob);
+        }
+    }
+    if (sceneSettings.cameraPath.numPoints >= 2) {
+        Point previous_xy = GetPositionAlongPathNormalized(&sceneSettings.cameraPath, 0.0);
+        double previous_z = CameraPath3D_GetPositionZNormalized(&sceneSettings.cameraPath,
+                                                                &sceneSettings.cameraPath3D,
+                                                                0.0);
+        for (i = 1; i <= 48; ++i) {
+            double t = (double)i / 48.0;
+            Point current_xy = GetPositionAlongPathNormalized(&sceneSettings.cameraPath, t);
+            double current_z = CameraPath3D_GetPositionZNormalized(&sceneSettings.cameraPath,
+                                                                   &sceneSettings.cameraPath3D,
+                                                                   t);
+            SceneEditorDigestOverlayDrawLine3(renderer,
+                                              projector,
+                                              previous_xy.x,
+                                              previous_xy.y,
+                                              previous_z,
+                                              current_xy.x,
+                                              current_xy.y,
+                                              current_z,
+                                              curve_color);
+            previous_xy = current_xy;
+            previous_z = current_z;
+        }
+    }
+    for (i = 0; i < sceneSettings.cameraPath.numPoints; ++i) {
+        int px = 0;
+        int py = 0;
+        bool point_selected = (i == selected_point);
+        bool point_hovered = (i == hover_point);
+        int radius = point_selected ? 6 : (point_hovered ? 5 : 4);
+        SDL_Rect marker = {0, 0, 0, 0};
+        SDL_Color color = point_selected ? selected_color : (point_hovered ? hover_point_color : point_color);
+        if (!point_selected && !point_hovered && i == 0) {
+            color = end_color;
+        } else if (!point_selected && !point_hovered && i == sceneSettings.cameraPath.numPoints - 1) {
+            color = start_color;
+        }
+        double rotation = CameraEditorGetPointRotation(i);
+        double pitch = CameraEditorGetPointPitch(i);
+        double draw_angle = rotation - (M_PI * 0.5);
+        double direction_len = 0.0;
+        double horizontal_len = 0.0;
+        double dir_end_x = 0.0;
+        double dir_end_y = 0.0;
+        double dir_end_z = 0.0;
+        int dir_end_px = 0;
+        int dir_end_py = 0;
+        SDL_Color dir_color = direction_color;
+        SDL_Rect dir_knob = {0, 0, 0, 0};
+        int dir_knob_half = point_selected ? 5 : 4;
+        if (!SceneEditorDigestOverlayProjectPoint(projector,
+                                                  sceneSettings.cameraPath.points[i].x,
+                                                  sceneSettings.cameraPath.points[i].y,
+                                                  sceneSettings.cameraPath3D.point_z[i],
+                                                  &px,
+                                                  &py)) {
+            continue;
+        }
+        marker = (SDL_Rect){px - radius, py - radius, radius * 2, radius * 2};
+        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+        SDL_RenderFillRect(renderer, &marker);
+        SDL_SetRenderDrawColor(renderer, 20, 24, 32, 255);
+        SDL_RenderDrawRect(renderer, &marker);
+
+        direction_len = SceneEditorDigestOverlayResolveBezierMetrics(digest, projector).gizmo_world_length * 0.95;
+        horizontal_len = cos(pitch) * direction_len;
+        dir_end_x = sceneSettings.cameraPath.points[i].x + cos(draw_angle) * horizontal_len;
+        dir_end_y = sceneSettings.cameraPath.points[i].y + sin(draw_angle) * horizontal_len;
+        dir_end_z = sceneSettings.cameraPath3D.point_z[i] + sin(pitch) * direction_len;
+        if (SceneEditorDigestOverlayProjectPoint(projector,
+                                                 dir_end_x,
+                                                 dir_end_y,
+                                                 dir_end_z,
+                                                 &dir_end_px,
+                                                 &dir_end_py)) {
+            if (point_selected) {
+                dir_color.a = 255;
+            }
+            SDL_SetRenderDrawColor(renderer, dir_color.r, dir_color.g, dir_color.b, dir_color.a);
+            SDL_RenderDrawLine(renderer, px, py, dir_end_px, dir_end_py);
+            dir_knob = (SDL_Rect){dir_end_px - dir_knob_half,
+                                  dir_end_py - dir_knob_half,
+                                  dir_knob_half * 2,
+                                  dir_knob_half * 2};
+            SDL_RenderFillRect(renderer, &dir_knob);
+            SDL_SetRenderDrawColor(renderer, 18, 22, 28, 255);
+            SDL_RenderDrawRect(renderer, &dir_knob);
+        }
+    }
+    if (selected_point >= 0 && selected_point < sceneSettings.cameraPath.numPoints) {
+        SceneEditorDigestOverlayDrawCameraGizmo(renderer, projector, digest);
+    }
+}
+
+static bool SceneEditorCamera3DGizmoApplyDrag(const SceneEditorDigestOverlayProjector* projector,
+                                              const RuntimeSceneBridge3DDigestState* digest,
+                                              int mouse_x,
+                                              int mouse_y) {
+    SceneEditorBezier3DInteractionMetrics metrics = {0};
+    double base_x = 0.0;
+    double base_y = 0.0;
+    double base_z = 0.0;
+    int axis_anchor_x = 0;
+    int axis_anchor_y = 0;
+    int axis_end_x = 0;
+    int axis_end_y = 0;
+    double pixels_per_unit = 0.0;
+    double axis_dx = 0.0;
+    double axis_dy = 0.0;
+    double axis_len = 0.0;
+    double mouse_dx = 0.0;
+    double mouse_dy = 0.0;
+    double projected_px = 0.0;
+    double world_delta = 0.0;
+    if (!projector || !digest || !g_camera3d_gizmo_state.dragging) return false;
+    if (!SceneEditorDigestOverlayResolveSelectedCameraGizmoWorldPosition(projector,
+                                                                         digest,
+                                                                         &base_x,
+                                                                         &base_y,
+                                                                         &base_z)) return false;
+    metrics = SceneEditorDigestOverlayResolveBezierMetrics(digest, projector);
+    if (!SceneEditorDigestOverlayProjectGizmoAxisAtWorldPoint(projector,
+                                                              g_camera3d_gizmo_state.drag_start_world_x,
+                                                              g_camera3d_gizmo_state.drag_start_world_y,
+                                                              g_camera3d_gizmo_state.drag_start_world_z,
+                                                              g_camera3d_gizmo_state.drag_axis,
+                                                              metrics.gizmo_world_length,
+                                                              &axis_anchor_x,
+                                                              &axis_anchor_y,
+                                                              &axis_end_x,
+                                                              &axis_end_y,
+                                                              &pixels_per_unit)) {
+        return false;
+    }
+    axis_dx = (double)axis_end_x - (double)axis_anchor_x;
+    axis_dy = (double)axis_end_y - (double)axis_anchor_y;
+    axis_len = sqrt(axis_dx * axis_dx + axis_dy * axis_dy);
+    if (axis_len <= 1e-6 || pixels_per_unit <= 1e-6) return false;
+    mouse_dx = (double)mouse_x - (double)g_camera3d_gizmo_state.drag_start_mouse_x;
+    mouse_dy = (double)mouse_y - (double)g_camera3d_gizmo_state.drag_start_mouse_y;
+    projected_px = mouse_dx * (axis_dx / axis_len) + mouse_dy * (axis_dy / axis_len);
+    world_delta = projected_px / pixels_per_unit;
+    if (!g_camera3d_gizmo_state.smooth_drag) {
+        world_delta = SceneEditorQuantizeWorldValue(world_delta, metrics.snap_step);
+    }
+    switch (g_camera3d_gizmo_state.drag_axis) {
+        case SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_X:
+            return CameraEditorMoveSelectedGizmoTo(g_camera3d_gizmo_state.drag_start_world_x + world_delta,
+                                                   g_camera3d_gizmo_state.drag_start_world_y,
+                                                   g_camera3d_gizmo_state.drag_start_world_z);
+        case SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_Y:
+            return CameraEditorMoveSelectedGizmoTo(g_camera3d_gizmo_state.drag_start_world_x,
+                                                   g_camera3d_gizmo_state.drag_start_world_y + world_delta,
+                                                   g_camera3d_gizmo_state.drag_start_world_z);
+        case SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_Z:
+            return CameraEditorMoveSelectedGizmoTo(g_camera3d_gizmo_state.drag_start_world_x,
+                                                   g_camera3d_gizmo_state.drag_start_world_y,
+                                                   g_camera3d_gizmo_state.drag_start_world_z + world_delta);
+        default:
+            return false;
     }
 }
 
@@ -1407,6 +2209,7 @@ static bool SceneEditorBezier3DGizmoApplyDrag(const SceneEditorDigestOverlayProj
     double world_delta = 0.0;
     double new_x = g_bezier3d_gizmo_state.drag_start_world_x;
     double new_y = g_bezier3d_gizmo_state.drag_start_world_y;
+    double new_z = g_bezier3d_gizmo_state.drag_start_world_z;
     if (!projector || !digest) return false;
     if (!g_bezier3d_gizmo_state.dragging) return false;
     metrics = SceneEditorDigestOverlayResolveBezierMetrics(digest, projector);
@@ -1439,10 +2242,13 @@ static bool SceneEditorBezier3DGizmoApplyDrag(const SceneEditorDigestOverlayProj
         case SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_Y:
             new_y += world_delta;
             break;
+        case SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_Z:
+            new_z += world_delta;
+            break;
         default:
             return false;
     }
-    return BezierEditorMoveSelectionTo(new_x, new_y);
+    return BezierEditorMoveSelectionTo3D(new_x, new_y, new_z);
 }
 
 static bool SceneEditorDigestOverlayPrimitiveScreenRect(
@@ -1839,8 +2645,23 @@ static void RenderSceneDigestOverlay(SDL_Renderer* renderer) {
         }
     }
 
+    SceneEditorDigestOverlayDrawPathPassive3D(renderer,
+                                              &projector,
+                                              &sceneSettings.bezierPath,
+                                              &sceneSettings.bezierPath3D,
+                                              (SDL_Color){128, 214, 255, 210},
+                                              false);
+    SceneEditorDigestOverlayDrawPathPassive3D(renderer,
+                                              &projector,
+                                              &sceneSettings.cameraPath,
+                                              &sceneSettings.cameraPath3D,
+                                              (SDL_Color){210, 168, 255, 210},
+                                              true);
+
     if (active_mode == 0) {
         SceneEditorDigestOverlayDrawBezier3D(renderer, &projector, &digest);
+    } else if (active_mode == 2) {
+        SceneEditorDigestOverlayDrawCamera3D(renderer, &projector, &digest);
     }
 
     SceneEditorDigestOverlayDrawLine3(renderer,
@@ -2312,7 +3133,34 @@ static bool SceneEditorResolveChromeAction(const SDL_Event* event, SceneEditorCh
         out_action->kind = SCENE_EDITOR_CHROME_ACTION_APPLY;
         return true;
     }
+    if (SceneEditorPointInRect(mx, my, &saveButton)) {
+        if (!contract.saveEnabled) return false;
+        out_action->kind = SCENE_EDITOR_CHROME_ACTION_SAVE;
+        return true;
+    }
+    if (SceneEditorPointInRect(mx, my, &backToMenuButton)) {
+        if (!contract.backToMenuEnabled) return false;
+        out_action->kind = SCENE_EDITOR_CHROME_ACTION_BACK_TO_MENU;
+        return true;
+    }
     return false;
+}
+
+static bool SceneEditorSaveCurrentAuthoring(void) {
+    char diagnostics[256];
+
+    if (animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE &&
+        animSettings.runtimeScenePath[0] != '\0') {
+        if (!SceneEditorRuntimeScenePersistAuthoring(diagnostics, sizeof(diagnostics))) {
+            fprintf(stderr,
+                    "[editor] failed to persist runtime scene authoring '%s': %s\n",
+                    animSettings.runtimeScenePath,
+                    diagnostics);
+            return false;
+        }
+    }
+    SaveAllSettings();
+    return true;
 }
 
 static void SceneEditorApplyChromeAction(SceneEditor* editor, const SceneEditorChromeAction* action) {
@@ -2328,8 +3176,6 @@ static void SceneEditorApplyChromeAction(SceneEditor* editor, const SceneEditorC
             editor->currentMode = clamped_mode;
             animSettings.editorMode = clamped_mode;
             InitializeEditorMode(editor);
-            SaveAllSettings();
-            LoadAllSettings();
             printf("Changed Mode to %d via mode router\n", editor->currentMode);
         } else {
             printf("Mode %d currently unavailable in this scene source.\n", action->mode_index);
@@ -2340,7 +3186,8 @@ static void SceneEditorApplyChromeAction(SceneEditor* editor, const SceneEditorC
         if (!contract.previewEnabled) {
             return;
         }
-        RunPreviewModeEmbedded();
+        RunPreviewModeEmbedded(editor->window, editor->renderer);
+        SceneEditorResumeAfterPreview(editor);
         return;
     }
     if (action->kind == SCENE_EDITOR_CHROME_ACTION_CYCLE_MODE) {
@@ -2352,30 +3199,36 @@ static void SceneEditorApplyChromeAction(SceneEditor* editor, const SceneEditorC
                                                               FluidSceneLocksObjects());
         animSettings.editorMode = editor->currentMode;
         InitializeEditorMode(editor);
-        SaveAllSettings();
-        LoadAllSettings();
         printf("Changed Mode to %d\n", editor->currentMode);
         return;
     }
     if (action->kind == SCENE_EDITOR_CHROME_ACTION_APPLY) {
-        char diagnostics[256];
         if (!contract.applyEnabled) {
             return;
         }
-        if (animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE &&
-            animSettings.runtimeScenePath[0] != '\0') {
-            if (!SceneEditorRuntimeScenePersistAuthoring(diagnostics, sizeof(diagnostics))) {
-                fprintf(stderr,
-                        "[editor] failed to persist runtime scene authoring '%s': %s\n",
-                        animSettings.runtimeScenePath,
-                        diagnostics);
-                return;
-            }
+        SceneEditorSetActionFeedback("Scene changes applied", 1800);
+        printf("Applied scene editor authoring in-app for mode %d\n", editor->currentMode);
+        return;
+    }
+    if (action->kind == SCENE_EDITOR_CHROME_ACTION_SAVE) {
+        if (!contract.saveEnabled) {
+            return;
         }
-        SaveAllSettings();
+        if (!SceneEditorSaveCurrentAuthoring()) {
+            SceneEditorSetActionFeedback("Scene save failed", 2200);
+            return;
+        }
+        SceneEditorSetActionFeedback("Scene saved", 1800);
+        printf("Saved scene editor authoring in mode %d\n", editor->currentMode);
+        return;
+    }
+    if (action->kind == SCENE_EDITOR_CHROME_ACTION_BACK_TO_MENU) {
+        if (!contract.backToMenuEnabled) {
+            return;
+        }
         editor->running = false;
         sceneEditorExitFlag = true;
-        printf("Changed Mode to %d\n", editor->currentMode);
+        printf("Exited scene editor from mode %d\n", editor->currentMode);
     }
 }
 
@@ -2467,6 +3320,139 @@ static bool SceneEditorDispatchControlled3DObjectCanvasCommand(const SceneEditor
     return true;
 }
 
+static bool SceneEditorDispatchControlled3DCameraCanvasCommand(const SceneEditorPaneCommand* command) {
+    RuntimeSceneBridge3DDigestState digest = {0};
+    SceneEditorDigestOverlayProjector projector = {0};
+    SceneEditorBezier3DInteractionMetrics metrics = {0};
+    double plane_z = 0.0;
+    SDL_Keymod mods = SDL_GetModState();
+    SceneEditorBezier3DGizmoAxis axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
+    int pick = -1;
+    int handle_segment = -1;
+    int handle_index = -1;
+    int rotation_pick = -1;
+    double world_x = 0.0;
+    double world_y = 0.0;
+    double world_z = 0.0;
+    if (!command || !command->event) return false;
+    if (!SceneEditorViewportRectContainsEventPoint(command->event)) return false;
+    if (!SceneEditorDigestOverlayResolve(&digest)) return false;
+    if (!SceneEditorDigestOverlayBuildProjector(&digest, &projector)) return false;
+    metrics = SceneEditorDigestOverlayResolveBezierMetrics(&digest, &projector);
+    plane_z = SceneEditorDigestOverlayResolveEditPlaneZ(&digest, &projector);
+
+    if (command->kind == SCENE_EDITOR_PANE_COMMAND_POINTER_UP) {
+        if (command->event->type == SDL_MOUSEBUTTONUP &&
+            command->event->button.button == SDL_BUTTON_LEFT &&
+            g_camera3d_gizmo_state.dragging) {
+            SceneEditorCamera3DGizmoReset();
+            return true;
+        }
+        return false;
+    }
+    if (command->kind == SCENE_EDITOR_PANE_COMMAND_POINTER_DRAG) {
+        if (command->event->type == SDL_MOUSEMOTION &&
+            g_camera3d_gizmo_state.dragging &&
+            (command->event->motion.state & SDL_BUTTON_LMASK)) {
+            return SceneEditorCamera3DGizmoApplyDrag(&projector,
+                                                     &digest,
+                                                     command->event->motion.x,
+                                                     command->event->motion.y);
+        }
+        return false;
+    }
+    if (command->kind != SCENE_EDITOR_PANE_COMMAND_POINTER_DOWN) return false;
+    if (command->event->type != SDL_MOUSEBUTTONDOWN ||
+        command->event->button.button != SDL_BUTTON_LEFT) {
+        return false;
+    }
+
+    axis = SceneEditorDigestOverlayPickCameraGizmoAxis(&projector,
+                                                       &digest,
+                                                       command->event->button.x,
+                                                       command->event->button.y);
+    if (axis != SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE) {
+        if (SceneEditorDigestOverlayResolveSelectedCameraGizmoWorldPosition(&projector,
+                                                                            &digest,
+                                                                            &g_camera3d_gizmo_state.drag_start_world_x,
+                                                                            &g_camera3d_gizmo_state.drag_start_world_y,
+                                                                            &g_camera3d_gizmo_state.drag_start_world_z)) {
+            g_camera3d_gizmo_state.dragging = true;
+            g_camera3d_gizmo_state.drag_axis = axis;
+            g_camera3d_gizmo_state.smooth_drag = ((mods & (KMOD_GUI | KMOD_CTRL)) != 0);
+            g_camera3d_gizmo_state.drag_start_mouse_x = command->event->button.x;
+            g_camera3d_gizmo_state.drag_start_mouse_y = command->event->button.y;
+            return true;
+        }
+        return false;
+    }
+
+    if (SceneEditorDigestOverlayPickCameraBezierHandle(&projector,
+                                                       command->event->button.x,
+                                                       command->event->button.y,
+                                                       &handle_segment,
+                                                       &handle_index)) {
+        SceneEditorCamera3DGizmoReset();
+        return CameraEditorSelectBezierHandle(handle_segment, handle_index);
+    }
+
+    rotation_pick = SceneEditorDigestOverlayPickCameraRotationHandle(&projector,
+                                                                     &digest,
+                                                                     command->event->button.x,
+                                                                     command->event->button.y);
+    if (rotation_pick >= 0) {
+        SceneEditorCamera3DGizmoReset();
+        return CameraEditorSelectRotationHandle(rotation_pick);
+    }
+
+    pick = SceneEditorDigestOverlayPickCameraPointIndex(&projector,
+                                                        command->event->button.x,
+                                                        command->event->button.y);
+    if (pick >= 0) {
+        SceneEditorCamera3DGizmoReset();
+        CameraEditorSetSelectedPointIndex(pick);
+        return true;
+    }
+
+    if ((mods & KMOD_SHIFT) == 0) {
+        SceneEditorCamera3DGizmoReset();
+        CameraEditorClearSelection();
+        return true;
+    }
+
+    if (!SceneEditorDigestOverlayScreenRayToPlanePoint(&projector,
+                                                       command->event->button.x,
+                                                       command->event->button.y,
+                                                       plane_z,
+                                                       &world_x,
+                                                       &world_y,
+                                                       &world_z)) {
+        return false;
+    }
+    world_x = SceneEditorQuantizeWorldValue(world_x, metrics.snap_step);
+    world_y = SceneEditorQuantizeWorldValue(world_y, metrics.snap_step);
+    world_z = SceneEditorQuantizeWorldValue(world_z, metrics.snap_step);
+    if (!CameraPath3D_InsertPoint(&sceneSettings.cameraPath3D,
+                                  &sceneSettings.cameraPath,
+                                  world_x,
+                                  world_y,
+                                  world_z,
+                                  metrics.default_handle_length)) {
+        return false;
+    }
+    if (sceneSettings.cameraPath.numPoints > 0) {
+        int new_index = sceneSettings.cameraPath.numPoints - 1;
+        double seed_rot = (new_index > 0)
+                              ? sceneSettings.cameraPath.rotations[new_index - 1]
+                              : sceneSettings.camera.rotation;
+        sceneSettings.cameraPath.rotations[new_index] = seed_rot;
+        sceneSettings.cameraPath.rotationSet[new_index] = true;
+        CameraEditorSetSelectedPointIndex(new_index);
+        return true;
+    }
+    return false;
+}
+
 static bool SceneEditorDispatchControlled3DBezierCanvasCommand(const SceneEditorPaneCommand* command) {
     RuntimeSceneBridge3DDigestState digest = {0};
     SceneEditorDigestOverlayProjector projector = {0};
@@ -2518,8 +3504,9 @@ static bool SceneEditorDispatchControlled3DBezierCanvasCommand(const SceneEditor
                                                        command->event->button.y);
     if (axis != SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE) {
         if (!SceneEditorBezier3DGizmoAxisLocked(axis) &&
-            BezierEditorGetSelectionWorldPosition(&g_bezier3d_gizmo_state.drag_start_world_x,
-                                                  &g_bezier3d_gizmo_state.drag_start_world_y)) {
+            BezierEditorGetSelectionWorldPosition3D(&g_bezier3d_gizmo_state.drag_start_world_x,
+                                                    &g_bezier3d_gizmo_state.drag_start_world_y,
+                                                    &g_bezier3d_gizmo_state.drag_start_world_z)) {
             g_bezier3d_gizmo_state.dragging = true;
             g_bezier3d_gizmo_state.drag_axis = axis;
             g_bezier3d_gizmo_state.smooth_drag = ((mods & (KMOD_GUI | KMOD_CTRL)) != 0);
@@ -2531,6 +3518,7 @@ static bool SceneEditorDispatchControlled3DBezierCanvasCommand(const SceneEditor
     }
     if (SceneEditorDigestOverlayPickBezierHandle(&projector,
                                                  &sceneSettings.bezierPath,
+                                                 &sceneSettings.bezierPath3D,
                                                  plane_z,
                                                  command->event->button.x,
                                                  command->event->button.y,
@@ -2542,6 +3530,7 @@ static bool SceneEditorDispatchControlled3DBezierCanvasCommand(const SceneEditor
     }
     pick = SceneEditorDigestOverlayPickBezierPointIndex(&projector,
                                                         &sceneSettings.bezierPath,
+                                                        &sceneSettings.bezierPath3D,
                                                         plane_z,
                                                         command->event->button.x,
                                                         command->event->button.y);
@@ -2567,7 +3556,13 @@ static bool SceneEditorDispatchControlled3DBezierCanvasCommand(const SceneEditor
     previous_point_count = sceneSettings.bezierPath.numPoints;
     world_x = SceneEditorQuantizeWorldValue(world_x, metrics.snap_step);
     world_y = SceneEditorQuantizeWorldValue(world_y, metrics.snap_step);
-    AddBezierPointPrecise(&sceneSettings.bezierPath, world_x, world_y, metrics.default_handle_length);
+    world_z = SceneEditorQuantizeWorldValue(world_z, metrics.snap_step);
+    CameraPath3D_InsertPoint(&sceneSettings.bezierPath3D,
+                             &sceneSettings.bezierPath,
+                             world_x,
+                             world_y,
+                             world_z,
+                             metrics.default_handle_length);
     if (sceneSettings.bezierPath.numPoints > previous_point_count) {
         SceneEditorBezier3DGizmoReset();
         BezierEditorSetSelectedPointIndex(sceneSettings.bezierPath.numPoints - 1);
@@ -2592,7 +3587,8 @@ static void SceneEditorRoutePaneEvent(SceneEditor* editor,
     }
     controlled_3d_viewport_command_region =
         (contract.laneViewportObjectPickEnabled ||
-         contract.laneViewportBezierPlacementEnabled) &&
+         contract.laneViewportBezierPlacementEnabled ||
+         contract.laneViewportCameraPlacementEnabled) &&
         (command->pane_hit_region == SCENE_EDITOR_PANE_HIT_CANVAS ||
          command->pane_hit_region == SCENE_EDITOR_PANE_HIT_DRAG);
     if (controlled_3d_viewport_command_region) {
@@ -2602,6 +3598,9 @@ static void SceneEditorRoutePaneEvent(SceneEditor* editor,
         } else if (contract.laneViewportObjectPickEnabled &&
                    command->target == SCENE_EDITOR_INPUT_TARGET_OBJECT_PANE) {
             result->consumed = SceneEditorDispatchControlled3DObjectCanvasCommand(command);
+        } else if (contract.laneViewportCameraPlacementEnabled &&
+                   command->target == SCENE_EDITOR_INPUT_TARGET_CAMERA_PANE) {
+            result->consumed = SceneEditorDispatchControlled3DCameraCanvasCommand(command);
         } else {
             result->consumed = false;
         }
@@ -2790,6 +3789,12 @@ static void SceneEditorNormalizeInput(SceneEditor* editor,
 
     SceneEditorInputNormalized_Reset(normalized);
     normalized->event = event;
+    if (!SceneEditorEventMatchesEditorWindow(editor, event)) {
+        normalized->action_class = SCENE_EDITOR_INPUT_ACTION_IGNORED;
+        normalized->route_policy = SCENE_EDITOR_INPUT_ROUTE_POLICY_NONE;
+        normalized->target_hint = SCENE_EDITOR_INPUT_TARGET_NONE;
+        return;
+    }
 
     if (event->type == SDL_QUIT || SceneEditorIsOwnWindowCloseEvent(editor, event)) {
         normalized->action_class = SCENE_EDITOR_INPUT_ACTION_IMMEDIATE;
@@ -3006,6 +4011,12 @@ static bool SceneEditorIsChromeShellButtonHit(int mx, int my) {
     if (SceneEditorPointInRect(mx, my, &applyButton)) {
         return true;
     }
+    if (SceneEditorPointInRect(mx, my, &saveButton)) {
+        return true;
+    }
+    if (SceneEditorPointInRect(mx, my, &backToMenuButton)) {
+        return true;
+    }
     return false;
 }
 
@@ -3014,10 +4025,11 @@ static void SceneEditorLayoutFallback(void) {
     int height = sceneSettings.windowHeight;
     int compactButtonWidth = SceneEditorMeasureButtonWidth("Delete", 70);
     int compactButtonHeight = SceneEditorMeasureButtonHeight(40);
-    int footerButtonHeight = SceneEditorMeasureButtonHeight(50);
-    int applyWidth = SceneEditorMeasureButtonWidth("Apply", 150);
-    int previewWidth = SceneEditorMeasureButtonWidth("Preview", 150);
-    int changeModeWidth = SceneEditorMeasureButtonWidth("Change Mode", 130);
+    int footerButtonHeight = SceneEditorMeasureButtonHeight(46);
+    int buttonGap = 10;
+    int footerMargin = 30;
+    int contentWidth = SceneEditorMeasureButtonWidth("Back to Menu", 320);
+    int pairWidth = (contentWidth - buttonGap) / 2;
 
     addButton = (SDL_Rect){width - compactButtonWidth - 20, 20, compactButtonWidth, compactButtonHeight};
     deleteButton = (SDL_Rect){width - compactButtonWidth - 20,
@@ -3029,18 +4041,26 @@ static void SceneEditorLayoutFallback(void) {
                               compactButtonWidth,
                               compactButtonHeight};
 
-    applyButton = (SDL_Rect){width - applyWidth - 30,
-                             height - footerButtonHeight - 30,
-                             applyWidth,
-                             footerButtonHeight};
-    previewButton = (SDL_Rect){applyButton.x - previewWidth - 20,
-                               applyButton.y,
-                               previewWidth,
-                               footerButtonHeight};
-    changeModeButton = (SDL_Rect){width - changeModeWidth - 30,
-                                  applyButton.y - footerButtonHeight - 12,
-                                  changeModeWidth,
+    backToMenuButton = (SDL_Rect){width - contentWidth - footerMargin,
+                                  height - footerButtonHeight - footerMargin,
+                                  contentWidth,
                                   footerButtonHeight};
+    applyButton = (SDL_Rect){backToMenuButton.x,
+                             backToMenuButton.y - footerButtonHeight - buttonGap,
+                             pairWidth,
+                             footerButtonHeight};
+    saveButton = (SDL_Rect){applyButton.x + pairWidth + buttonGap,
+                            applyButton.y,
+                            contentWidth - pairWidth - buttonGap,
+                            footerButtonHeight};
+    changeModeButton = (SDL_Rect){backToMenuButton.x,
+                                  applyButton.y - footerButtonHeight - buttonGap,
+                                  pairWidth,
+                                  footerButtonHeight};
+    previewButton = (SDL_Rect){changeModeButton.x + pairWidth + buttonGap,
+                               changeModeButton.y,
+                               contentWidth - pairWidth - buttonGap,
+                               footerButtonHeight};
 
     for (int i = 0; i < 3; i++) {
         modeSelectButtons[i] = (SDL_Rect){0, 0, 0, 0};
@@ -3060,7 +4080,8 @@ static void SceneEditorLayoutChrome(void) {
     int compactButtonWidth = 0;
     int compactButtonHeight = 0;
     int actionButtonHeight = 0;
-    int actionButtonWidth = 0;
+    int actionRowWidth = 0;
+    int actionHalfWidth = 0;
     int buttonGap = 10;
     int modeGap = 4;
     SDL_Rect left = {0};
@@ -3098,11 +4119,14 @@ static void SceneEditorLayoutChrome(void) {
     compactButtonWidth = SceneEditorMeasureButtonWidth("Delete", 90);
     compactButtonHeight = SceneEditorMeasureButtonHeight(36);
     actionButtonHeight = SceneEditorMeasureButtonHeight(44);
-    actionButtonWidth = SceneEditorMeasureButtonWidth("Change Mode", 146);
-
     left = g_scenePaneLayout.left_content_rect;
     right = g_scenePaneLayout.right_content_rect;
     modeRect = g_scenePaneLayout.mode_router_rect;
+    actionRowWidth = right.w;
+    if (actionRowWidth < 160) {
+        actionRowWidth = 160;
+    }
+    actionHalfWidth = (actionRowWidth - buttonGap) / 2;
 
     addButton = (SDL_Rect){left.x, left.y, compactButtonWidth, compactButtonHeight};
     deleteButton = (SDL_Rect){left.x,
@@ -3114,18 +4138,26 @@ static void SceneEditorLayoutChrome(void) {
                               compactButtonWidth,
                               compactButtonHeight};
 
-    applyButton = (SDL_Rect){right.x + right.w - actionButtonWidth,
-                             right.y + right.h - actionButtonHeight,
-                             actionButtonWidth,
-                             actionButtonHeight};
-    previewButton = (SDL_Rect){applyButton.x,
-                               applyButton.y - actionButtonHeight - buttonGap,
-                               actionButtonWidth,
-                               actionButtonHeight};
-    changeModeButton = (SDL_Rect){applyButton.x,
-                                  previewButton.y - actionButtonHeight - buttonGap,
-                                  actionButtonWidth,
+    backToMenuButton = (SDL_Rect){right.x,
+                                  right.y + right.h - actionButtonHeight,
+                                  actionRowWidth,
                                   actionButtonHeight};
+    applyButton = (SDL_Rect){right.x,
+                             backToMenuButton.y - actionButtonHeight - buttonGap,
+                             actionHalfWidth,
+                             actionButtonHeight};
+    saveButton = (SDL_Rect){applyButton.x + actionHalfWidth + buttonGap,
+                            applyButton.y,
+                            actionRowWidth - actionHalfWidth - buttonGap,
+                            actionButtonHeight};
+    changeModeButton = (SDL_Rect){right.x,
+                                  applyButton.y - actionButtonHeight - buttonGap,
+                                  actionHalfWidth,
+                                  actionButtonHeight};
+    previewButton = (SDL_Rect){changeModeButton.x + actionHalfWidth + buttonGap,
+                               changeModeButton.y,
+                               actionRowWidth - actionHalfWidth - buttonGap,
+                               actionButtonHeight};
 
     modeButtonWidth = (modeRect.w - modeGap * 2) / 3;
     if (modeButtonWidth < 80) modeButtonWidth = 80;
@@ -3280,6 +4312,7 @@ bool SceneEditorSessionBegin(SceneEditor* editor, SDL_Renderer* renderer, SDL_Wi
     g_viewport_nav_state.last_mouse_y = 0;
     SceneEditorViewportResetDigestOverlayNavigation();
     SceneEditorBezier3DGizmoReset();
+    SceneEditorCamera3DGizmoReset();
 
     if (TTF_WasInit() == 0 && TTF_Init() == -1) {
         fprintf(stderr, "Error: TTF_Init failed: %s\n", TTF_GetError());
@@ -3304,6 +4337,11 @@ bool SceneEditorSessionBegin(SceneEditor* editor, SDL_Renderer* renderer, SDL_Wi
     InitializeEditorMode(editor);
     UpdateObjects();
     sceneEditorExitFlag = false;
+    if (g_sceneEditorPreviewOnBegin) {
+        g_sceneEditorPreviewOnBegin = false;
+        RunPreviewModeEmbedded(editor->window, editor->renderer);
+        SceneEditorResumeAfterPreview(editor);
+    }
     printf("Scene Editor Session Begin. Host Size: %dx%d\n",
            sceneSettings.windowWidth,
            sceneSettings.windowHeight);
@@ -3435,10 +4473,12 @@ void RenderSceneButtons(SDL_Renderer* renderer) {
         240
     };
     SDL_Color modeInactiveFill = palette.button_fill;
-    SDL_Color modeActiveFill = palette.button_active_fill;
+    SDL_Color modeActiveFill = palette.button_fill;
     SDL_Color previewFill = palette.button_fill;
-    SDL_Color cycleFill = palette.button_active_fill;
-    SDL_Color applyFill = palette.accent_primary;
+    SDL_Color cycleFill = palette.button_fill;
+    SDL_Color applyFill = palette.button_fill;
+    SDL_Color saveFill = palette.button_fill;
+    SDL_Color backFill = palette.button_fill;
     SDL_Color disabledFill = (SDL_Color){
         SceneEditorColorOffset(palette.panel_fill.r, -6),
         SceneEditorColorOffset(palette.panel_fill.g, -6),
@@ -3452,6 +4492,10 @@ void RenderSceneButtons(SDL_Renderer* renderer) {
         255
     };
     SDL_Rect modeTitleRect = {0};
+    SDL_Rect feedbackRect = {0};
+    SDL_Color resolvedFill = {0};
+    SDL_Color resolvedText = {0};
+    bool showFeedback = false;
 
     if (!renderer) return;
     SceneEditorBuildControlSurfaceContract(&contract);
@@ -3499,49 +4543,106 @@ void RenderSceneButtons(SDL_Renderer* renderer) {
     for (int i = 0; i < 3; i++) {
         bool selectable = contract.modeSelectable[i];
         bool active = (i == contract.activeMode);
+        resolvedFill = selectable
+                           ? SceneEditorResolveButtonFill(active ? modeActiveFill : modeInactiveFill,
+                                                          disabledFill,
+                                                          true,
+                                                          SceneEditorButtonHovered(&modeSelectButtons[i]),
+                                                          active)
+                           : disabledFill;
         SDL_SetRenderDrawColor(renderer,
-                               selectable ? (active ? modeActiveFill.r : modeInactiveFill.r) : paneFill.r,
-                               selectable ? (active ? modeActiveFill.g : modeInactiveFill.g) : paneFill.g,
-                               selectable ? (active ? modeActiveFill.b : modeInactiveFill.b) : paneFill.b,
+                               resolvedFill.r,
+                               resolvedFill.g,
+                               resolvedFill.b,
                                255);
         SDL_RenderFillRect(renderer, &modeSelectButtons[i]);
         SDL_SetRenderDrawColor(renderer, borderColor.r, borderColor.g, borderColor.b, borderColor.a);
         SDL_RenderDrawRect(renderer, &modeSelectButtons[i]);
-        RenderButtonText(renderer, modeSelectButtons[i], SceneEditorModeLabel(i));
+        resolvedText = SceneEditorResolveButtonTextColor(resolvedFill, palette);
+        RenderButtonTextWithColor(renderer,
+                                  modeSelectButtons[i],
+                                  SceneEditorModeLabel(i),
+                                  resolvedText);
     }
 
-    SDL_SetRenderDrawColor(renderer,
-                           contract.applyEnabled ? applyFill.r : disabledFill.r,
-                           contract.applyEnabled ? applyFill.g : disabledFill.g,
-                           contract.applyEnabled ? applyFill.b : disabledFill.b,
-                           255);
+    resolvedFill = SceneEditorResolveButtonFill(applyFill,
+                                                disabledFill,
+                                                contract.applyEnabled,
+                                                SceneEditorButtonHovered(&applyButton),
+                                                false);
+    SDL_SetRenderDrawColor(renderer, resolvedFill.r, resolvedFill.g, resolvedFill.b, 255);
     SDL_RenderFillRect(renderer, &applyButton);
-    SDL_SetRenderDrawColor(renderer,
-                           contract.previewEnabled ? previewFill.r : disabledFill.r,
-                           contract.previewEnabled ? previewFill.g : disabledFill.g,
-                           contract.previewEnabled ? previewFill.b : disabledFill.b,
-                           255);
-    SDL_RenderFillRect(renderer, &previewButton);
-    SDL_SetRenderDrawColor(renderer,
-                           contract.cycleModeEnabled ? cycleFill.r : disabledFill.r,
-                           contract.cycleModeEnabled ? cycleFill.g : disabledFill.g,
-                           contract.cycleModeEnabled ? cycleFill.b : disabledFill.b,
-                           255);
-    SDL_RenderFillRect(renderer, &changeModeButton);
-
     SDL_SetRenderDrawColor(renderer, borderColor.r, borderColor.g, borderColor.b, borderColor.a);
     SDL_RenderDrawRect(renderer, &applyButton);
-    RenderButtonText(renderer, applyButton, contract.applyLabel);
+    resolvedText = SceneEditorResolveButtonTextColor(resolvedFill, palette);
+    RenderButtonTextWithColor(renderer, applyButton, contract.applyLabel, resolvedText);
+
+    resolvedFill = SceneEditorResolveButtonFill(previewFill,
+                                                disabledFill,
+                                                contract.previewEnabled,
+                                                SceneEditorButtonHovered(&previewButton),
+                                                false);
+    SDL_SetRenderDrawColor(renderer, resolvedFill.r, resolvedFill.g, resolvedFill.b, 255);
+    SDL_RenderFillRect(renderer, &previewButton);
+    SDL_SetRenderDrawColor(renderer, borderColor.r, borderColor.g, borderColor.b, borderColor.a);
     SDL_RenderDrawRect(renderer, &previewButton);
-    RenderButtonText(renderer, previewButton, contract.previewLabel);
+    resolvedText = SceneEditorResolveButtonTextColor(resolvedFill, palette);
+    RenderButtonTextWithColor(renderer, previewButton, contract.previewLabel, resolvedText);
+
+    resolvedFill = SceneEditorResolveButtonFill(cycleFill,
+                                                disabledFill,
+                                                contract.cycleModeEnabled,
+                                                SceneEditorButtonHovered(&changeModeButton),
+                                                false);
+    SDL_SetRenderDrawColor(renderer, resolvedFill.r, resolvedFill.g, resolvedFill.b, 255);
+    SDL_RenderFillRect(renderer, &changeModeButton);
+    SDL_SetRenderDrawColor(renderer, borderColor.r, borderColor.g, borderColor.b, borderColor.a);
     SDL_RenderDrawRect(renderer, &changeModeButton);
-    RenderButtonText(renderer, changeModeButton, contract.cycleModeLabel);
+    resolvedText = SceneEditorResolveButtonTextColor(resolvedFill, palette);
+    RenderButtonTextWithColor(renderer, changeModeButton, contract.cycleModeLabel, resolvedText);
+
+    resolvedFill = SceneEditorResolveButtonFill(saveFill,
+                                                disabledFill,
+                                                contract.saveEnabled,
+                                                SceneEditorButtonHovered(&saveButton),
+                                                false);
+    SDL_SetRenderDrawColor(renderer, resolvedFill.r, resolvedFill.g, resolvedFill.b, 255);
+    SDL_RenderFillRect(renderer, &saveButton);
+    SDL_SetRenderDrawColor(renderer, borderColor.r, borderColor.g, borderColor.b, borderColor.a);
+    SDL_RenderDrawRect(renderer, &saveButton);
+    resolvedText = SceneEditorResolveButtonTextColor(resolvedFill, palette);
+    RenderButtonTextWithColor(renderer, saveButton, contract.saveLabel, resolvedText);
+
+    resolvedFill = SceneEditorResolveButtonFill(backFill,
+                                                disabledFill,
+                                                contract.backToMenuEnabled,
+                                                SceneEditorButtonHovered(&backToMenuButton),
+                                                false);
+    SDL_SetRenderDrawColor(renderer, resolvedFill.r, resolvedFill.g, resolvedFill.b, 255);
+    SDL_RenderFillRect(renderer, &backToMenuButton);
+    SDL_SetRenderDrawColor(renderer, borderColor.r, borderColor.g, borderColor.b, borderColor.a);
+    SDL_RenderDrawRect(renderer, &backToMenuButton);
+    resolvedText = SceneEditorResolveButtonTextColor(resolvedFill, palette);
+    RenderButtonTextWithColor(renderer, backToMenuButton, contract.backToMenuLabel, resolvedText);
+
+    showFeedback = (g_sceneActionFeedbackText[0] &&
+                    g_sceneActionFeedbackUntilMs > SDL_GetTicks64());
+    if (showFeedback) {
+        feedbackRect = (SDL_Rect){
+            g_scenePaneLayoutValid ? g_scenePaneLayout.right_content_rect.x : backToMenuButton.x,
+            previewButton.y - 30,
+            g_scenePaneLayoutValid ? g_scenePaneLayout.right_content_rect.w : backToMenuButton.w,
+            24
+        };
+        resolvedText = palette.text_primary;
+        RenderLabelText(renderer, feedbackRect, g_sceneActionFeedbackText, resolvedText);
+    }
 
     SceneEditorSurfaceRenderLeftPaneContent(renderer, &g_scenePaneLayout, &contract, paneLabelColor, statusColor);
     SceneEditorSurfaceRenderRightPaneStatus(renderer,
                                             &g_scenePaneLayout,
                                             &contract,
-                                            changeModeButton.y - 10,
+                                            (showFeedback ? feedbackRect.y : previewButton.y) - 10,
                                             paneLabelColor,
                                             statusColor);
 }
@@ -3735,7 +4836,13 @@ bool SceneEditorSessionWantsExit(const SceneEditor* editor) {
 
 bool SceneEditorSessionInteractionActive(const SceneEditor* editor) {
     (void)editor;
-    return g_viewport_nav_state.orbit_active || g_bezier3d_gizmo_state.dragging;
+    return g_viewport_nav_state.orbit_active ||
+           g_bezier3d_gizmo_state.dragging ||
+           g_camera3d_gizmo_state.dragging;
+}
+
+void SceneEditorSessionRequestPreviewOnBegin(void) {
+    g_sceneEditorPreviewOnBegin = true;
 }
 
 void SceneEditorSessionEnd(SceneEditor* editor) {
@@ -3752,10 +4859,10 @@ void SceneEditorSessionEnd(SceneEditor* editor) {
     g_viewport_nav_state.last_mouse_y = 0;
     SceneEditorViewportResetDigestOverlayNavigation();
     SceneEditorBezier3DGizmoReset();
+    SceneEditorCamera3DGizmoReset();
     SceneEditorMutationQueue_Reset();
     sceneEditorExitFlag = false;
     setRenderContext(NULL, NULL, 0, 0);
-    SaveAllSettings();
 }
 
 

@@ -5,6 +5,7 @@
 #include <json-c/json.h>
 #include "path/path_system.h"  // Ensure Bézier path handling is included
 #include "camera/camera.h"
+#include "camera/camera_path_3d.h"
 #include "scene/object_manager.h"
 #include "material/material.h"
 
@@ -99,9 +100,12 @@ typedef struct {
     SceneObject sceneObjects[10];  // Stores up to 10 objects
     int objectCount;
     Path bezierPath;   // Light path
+    CameraPath3D bezierPath3D; // Light path depth authoring for controlled-3D lane
     Path cameraPath;   // Camera animation path
+    CameraPath3D cameraPath3D; // Camera depth authoring path for controlled-3D lane
     int rays;
     Camera camera;
+    double cameraZ;
     double cameraMargin;
 } SceneConfig;
 

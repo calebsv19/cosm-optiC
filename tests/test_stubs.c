@@ -19,6 +19,11 @@ void ts_render(void) {}
 // UI/editor symbols needed when linking the broad RayTracing test target.
 bool InitializeSceneEditor(SceneEditor* editor) { (void)editor; return true; }
 void SceneEditorLoop(SceneEditor* editor) { (void)editor; }
+void RunPreviewMode(void) {}
+void RunPreviewModeEmbedded(SDL_Window* host_window, SDL_Renderer* host_renderer) {
+    (void)host_window;
+    (void)host_renderer;
+}
 
 // Font symbols used by timer_hud_adapter.
 bool initFontSystem(void) { return true; }

@@ -43,7 +43,9 @@ void BezierEditorClearSelection(void);
 void BezierEditorSelectHandle(int segmentIndex, int handleIndex);
 bool BezierEditorGetSelectedHandle(int* out_segment_index, int* out_handle_index);
 bool BezierEditorGetSelectionWorldPosition(double* out_x, double* out_y);
+bool BezierEditorGetSelectionWorldPosition3D(double* out_x, double* out_y, double* out_z);
 bool BezierEditorMoveSelectionTo(double world_x, double world_y);
+bool BezierEditorMoveSelectionTo3D(double world_x, double world_y, double world_z);
 
 
 #endif // BEZIER_EDITOR_H

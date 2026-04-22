@@ -6,6 +6,7 @@
 #include "ui/text_zoom_shortcuts.h"
 #include "tools/make_video.h"
 #include "app/animation.h"
+#include "app/preview_session.h"
 #include "app/animation_input_helpers.h"
 #include "app/animation_output.h"
 #include "app/runtime_time.h"
@@ -62,8 +63,6 @@ static bool quitRequested = false;
 double t_increment;
 double t_param = 0.0;  // Parameter (0 to 1) for interpolation along the path.
 int direction = 1;      // +1 for forward, -1 for reverse.
-static const double kPreviewBg = 60.0;
-
 static const char* s_fluidManifestOverride = NULL;
 #include "render/fluid/fluid_state.h"
 
@@ -420,9 +419,22 @@ void UpdateLightPosition(double* lightX, double* lightY) {
     if (animSettings.interactiveMode) {
         GetCurrentLightPosition(lightX, lightY);
     } else {
-        Point new_position = GetPositionAlongPathNormalized(&sceneSettings.bezierPath, t_param);
-        *lightX = new_position.x;
-        *lightY = new_position.y;
+        if (sceneSettings.bezierPath.numPoints < 1) {
+            return;
+        }
+        {
+            Point new_position = (sceneSettings.bezierPath.numPoints >= 2)
+                                     ? GetPositionAlongPathNormalized(&sceneSettings.bezierPath, t_param)
+                                     : sceneSettings.bezierPath.points[0];
+            double light_z = (sceneSettings.bezierPath.numPoints >= 2)
+                                 ? CameraPath3D_GetPositionZNormalized(&sceneSettings.bezierPath,
+                                                                       &sceneSettings.bezierPath3D,
+                                                                       t_param)
+                                 : sceneSettings.bezierPath3D.point_z[0];
+            *lightX = new_position.x;
+            *lightY = new_position.y;
+            animSettings.lightHeight = light_z;
+        }
     }
 }
 
@@ -439,180 +451,15 @@ static void UpdateCameraPosition(double t) {
     double rot = (sceneSettings.cameraPath.numPoints >= 2)
                      ? GetRotationAlongPathNormalized(&sceneSettings.cameraPath, t)
                      : sceneSettings.cameraPath.rotations[0];
+    double cam_z = (sceneSettings.cameraPath.numPoints >= 2)
+                       ? CameraPath3D_GetPositionZNormalized(&sceneSettings.cameraPath,
+                                                             &sceneSettings.cameraPath3D,
+                                                             t)
+                       : sceneSettings.cameraPath3D.point_z[0];
     sceneSettings.camera.x = p.x;
     sceneSettings.camera.y = p.y;
+    sceneSettings.cameraZ = cam_z;
     sceneSettings.camera.rotation = rot;
-}
-
-static void DrawPreviewMarker(SDL_Renderer* r, Point world, SDL_Color col, int radius) {
-    SDL_SetRenderDrawColor(r, col.r, col.g, col.b, col.a);
-    SpaceModeViewContext view_ctx = SpaceModeAdapter_BuildViewContext(&sceneSettings.camera,
-                                                                       sceneSettings.windowWidth,
-                                                                       sceneSettings.windowHeight);
-    CameraPoint s = SpaceModeAdapter_WorldToScreen(&view_ctx, world.x, world.y);
-    for (int dx = -radius; dx <= radius; dx++) {
-        for (int dy = -radius; dy <= radius; dy++) {
-            if (dx * dx + dy * dy <= radius * radius) {
-                SDL_RenderDrawPoint(r, (int)lround(s.x) + dx, (int)lround(s.y) + dy);
-            }
-        }
-    }
-}
-
-static void RunPreviewInternal(bool standalone) {
-    bool didInit = false;
-    if (standalone) {
-        if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-            fprintf(stderr, "SDL_Init Error (preview): %s\n", SDL_GetError());
-            return;
-        }
-        didInit = true;
-    }
-
-    WINDOW_WIDTH = sceneSettings.windowWidth;
-    WINDOW_HEIGHT = sceneSettings.windowHeight;
-
-    SDL_Window* pWindow = SDL_CreateWindow("Preview",
-                                           SDL_WINDOWPOS_CENTERED,
-                                           SDL_WINDOWPOS_CENTERED,
-                                           WINDOW_WIDTH, WINDOW_HEIGHT,
-                                           SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
-    if (!pWindow) {
-        fprintf(stderr, "SDL_CreateWindow Error (preview): %s\n", SDL_GetError());
-        if (didInit) SDL_Quit();
-        return;
-    }
-
-#if USE_VULKAN
-    VkRendererConfig preview_cfg;
-    vk_renderer_config_set_defaults(&preview_cfg);
-    preview_cfg.enable_validation = SDL_FALSE;
-    preview_cfg.clear_color[0] = 0.0f;
-    preview_cfg.clear_color[1] = 0.0f;
-    preview_cfg.clear_color[2] = 0.0f;
-    preview_cfg.clear_color[3] = 1.0f;
-
-    if (!vk_shared_device_init(pWindow, &preview_cfg)) {
-        fprintf(stderr, "vk_shared_device_init failed (preview).\n");
-        SDL_DestroyWindow(pWindow);
-        if (didInit) SDL_Quit();
-        return;
-    }
-
-    VkRendererDevice* shared_device = vk_shared_device_get();
-    if (!shared_device) {
-        fprintf(stderr, "vk_shared_device_get failed (preview).\n");
-        SDL_DestroyWindow(pWindow);
-        if (didInit) SDL_Quit();
-        return;
-    }
-
-    VkRenderer preview_storage;
-    VkResult preview_init = vk_renderer_init_with_device(&preview_storage, shared_device, pWindow, &preview_cfg);
-    if (preview_init != VK_SUCCESS) {
-        fprintf(stderr, "vk_renderer_init failed (preview): %d\n", preview_init);
-        SDL_DestroyWindow(pWindow);
-        if (didInit) SDL_Quit();
-        return;
-    }
-    SDL_Renderer* pRenderer = (SDL_Renderer*)&preview_storage;
-    vk_renderer_set_logical_size((VkRenderer*)pRenderer, (float)WINDOW_WIDTH, (float)WINDOW_HEIGHT);
-#else
-    SDL_Renderer* pRenderer = SDL_CreateRenderer(pWindow, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    if (!pRenderer) {
-        fprintf(stderr, "SDL_CreateRenderer Error (preview): %s\n", SDL_GetError());
-        SDL_DestroyWindow(pWindow);
-        if (didInit) SDL_Quit();
-        return;
-    }
-#endif
-
-    double duration = (animSettings.previewDuration > 0.1) ? animSettings.previewDuration : 5.0;
-    uint64_t prev_ns = runtime_time_now_ns();
-    double elapsed = 0.0;
-    bool runningPreview = true;
-    Camera savedCam = sceneSettings.camera;
-
-    while (runningPreview && !quitRequested) {
-        SDL_Event e;
-        while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_QUIT ||
-                (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE)) {
-                runningPreview = false;
-                quitRequested = true;
-            }
-            if (e.type == SDL_KEYDOWN) {
-                if (animation_handle_text_zoom_shortcut(&e.key)) {
-                    continue;
-                }
-                animation_handle_fluid_overlay_key(e.key.keysym.sym);
-            }
-        }
-
-        uint64_t now_ns = runtime_time_now_ns();
-        double dt = runtime_time_diff_seconds(now_ns, prev_ns);
-        prev_ns = now_ns;
-        elapsed += dt;
-
-        double t = fmod(elapsed, duration) / duration;
-
-        // Update camera + light along paths
-        Point lightP = (sceneSettings.bezierPath.numPoints >= 2)
-                           ? GetPositionAlongPathNormalized(&sceneSettings.bezierPath, t)
-                           : sceneSettings.bezierPath.points[0];
-        Point camP = (sceneSettings.cameraPath.numPoints >= 2)
-                         ? GetPositionAlongPathNormalized(&sceneSettings.cameraPath, t)
-                         : sceneSettings.cameraPath.points[0];
-        double camRot = (sceneSettings.cameraPath.numPoints >= 2)
-                            ? GetRotationAlongPathNormalized(&sceneSettings.cameraPath, t)
-                            : sceneSettings.cameraPath.rotations[0];
-        sceneSettings.camera.x = camP.x;
-        sceneSettings.camera.y = camP.y;
-        sceneSettings.camera.rotation = camRot;
-
-        // Render preview
-        setRenderContext(pRenderer, pWindow, sceneSettings.windowWidth, sceneSettings.windowHeight);
-        render_set_clear_color(pRenderer, (Uint8)kPreviewBg, (Uint8)kPreviewBg, (Uint8)kPreviewBg + 5, 255);
-        if (!render_begin_frame()) {
-            if (render_device_lost()) {
-                runningPreview = false;
-            }
-            SDL_Delay(10);
-            continue;
-        }
-
-        SDL_Color pathColor = {90, 120, 90, 180};
-        SDL_Color camPathColor = {60, 140, 220, 220};
-        SDL_Color selectColor = {255, 255, 160, 255};
-        RenderBezierPathCameraStyled(pRenderer, &sceneSettings.bezierPath, false, &sceneSettings.camera, pathColor, (SDL_Color){0,0,0,0}, -1, selectColor, 3);
-        RenderBezierPathCameraStyled(pRenderer, &sceneSettings.cameraPath, false, &sceneSettings.camera, camPathColor, (SDL_Color){0,0,0,0}, -1, selectColor, 4);
-
-        SDL_SetRenderDrawColor(pRenderer, 220, 220, 220, 255);
-        RenderSceneObjects(pRenderer, !AnimationUseFluidScene());
-
-        DrawPreviewMarker(pRenderer, lightP, (SDL_Color){255, 230, 120, 255}, 6);
-        DrawPreviewMarker(pRenderer, camP, (SDL_Color){120, 200, 255, 255}, 6);
-
-        render_end_frame();
-    }
-
-    sceneSettings.camera = savedCam;
-#if USE_VULKAN
-    vk_renderer_wait_idle((VkRenderer*)pRenderer);
-    vk_renderer_shutdown_surface((VkRenderer*)pRenderer);
-#else
-    SDL_DestroyRenderer(pRenderer);
-#endif
-    SDL_DestroyWindow(pWindow);
-    if (didInit) SDL_Quit();
-}
-
-void RunPreviewMode(void) {
-    RunPreviewInternal(true);
-}
-
-void RunPreviewModeEmbedded(void) {
-    RunPreviewInternal(false);
 }
 
 
@@ -939,11 +786,9 @@ int ray_tracing_app_main_legacy(int argc, char* argv[]) {
             return 0;
         }
         if (animSettings.previewMode) {
+            fprintf(stderr, "[preview] clearing legacy standalone preview flag.\n");
+            animSettings.previewMode = false;
             SaveAllSettings();
-            RunPreviewMode();
-            animSettings.previewMode = false; // do not persist
-            SaveAllSettings();
-            continue; // back to menu for next choice
         }
 
         // Print selected settings

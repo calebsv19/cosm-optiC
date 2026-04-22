@@ -1,5 +1,6 @@
 #include "editor/scene_editor_runtime_scene_persistence.h"
 
+#include "camera/camera_path_3d.h"
 #include "config/config_manager.h"
 #include "config/config_scene_path_io.h"
 #include "core_io.h"
@@ -70,6 +71,15 @@ static void scene_editor_runtime_scene_scale_path(Path* dst,
     }
 }
 
+static void scene_editor_runtime_scene_scale_camera_path3d(CameraPath3D* dst,
+                                                           const CameraPath3D* src,
+                                                           const Path* path,
+                                                           double factor) {
+    if (!dst || !src || !path) return;
+    *dst = *src;
+    CameraPath3D_ScaleWorldUnits(dst, path, factor);
+}
+
 static bool scene_editor_runtime_scene_resolve_metrics(const char* runtime_scene_json,
                                                        double* out_world_scale,
                                                        long long* out_next_clock,
@@ -123,6 +133,28 @@ static bool scene_editor_runtime_scene_resolve_metrics(const char* runtime_scene
     return true;
 }
 
+static json_object* scene_editor_runtime_scene_build_object_materials_json(void) {
+    json_object* object_materials = json_object_new_array();
+    int i = 0;
+    if (!object_materials) return NULL;
+    for (i = 0; i < sceneSettings.objectCount; ++i) {
+        char object_id[64];
+        json_object* entry = NULL;
+        if (!runtime_scene_bridge_get_last_object_id_for_scene_index(i, object_id, sizeof(object_id))) {
+            continue;
+        }
+        entry = json_object_new_object();
+        if (!entry) {
+            json_object_put(object_materials);
+            return NULL;
+        }
+        json_object_object_add(entry, "object_id", json_object_new_string(object_id));
+        json_object_object_add(entry, "material_id", json_object_new_int(sceneSettings.sceneObjects[i].material_id));
+        json_object_array_add(object_materials, entry);
+    }
+    return object_materials;
+}
+
 static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
                                                            long long logical_clock,
                                                            char* out_diagnostics,
@@ -133,11 +165,16 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
     json_object* ray_tracing = NULL;
     json_object* authoring = NULL;
     json_object* light_path = NULL;
+    json_object* light_path_depth = NULL;
     json_object* camera_path = NULL;
+    json_object* camera_path_depth = NULL;
+    json_object* object_materials = NULL;
     const char* serialized = NULL;
     char* out = NULL;
     Path saved_light_path = {0};
+    CameraPath3D saved_light_path3d = {0};
     Path saved_camera_path = {0};
+    CameraPath3D saved_camera_path3d = {0};
     double authored_to_runtime = 1.0;
     size_t out_len = 0;
 
@@ -146,7 +183,15 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
     }
     authored_to_runtime = 1.0 / world_scale;
     scene_editor_runtime_scene_scale_path(&saved_light_path, &sceneSettings.bezierPath, authored_to_runtime);
+    scene_editor_runtime_scene_scale_camera_path3d(&saved_light_path3d,
+                                                   &sceneSettings.bezierPath3D,
+                                                   &saved_light_path,
+                                                   authored_to_runtime);
     scene_editor_runtime_scene_scale_path(&saved_camera_path, &sceneSettings.cameraPath, authored_to_runtime);
+    scene_editor_runtime_scene_scale_camera_path3d(&saved_camera_path3d,
+                                                   &sceneSettings.cameraPath3D,
+                                                   &saved_camera_path,
+                                                   authored_to_runtime);
 
     overlay_root = json_object_new_object();
     overlay_meta = json_object_new_object();
@@ -154,11 +199,17 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
     ray_tracing = json_object_new_object();
     authoring = json_object_new_object();
     light_path = config_scene_path_to_json_object(&saved_light_path);
+    light_path_depth = CameraPath3D_ToJsonObject(&saved_light_path3d, &saved_light_path);
     camera_path = config_scene_path_to_json_object(&saved_camera_path);
+    camera_path_depth = CameraPath3D_ToJsonObject(&saved_camera_path3d, &saved_camera_path);
+    object_materials = scene_editor_runtime_scene_build_object_materials_json();
 
     if (!overlay_root || !overlay_meta || !extensions || !ray_tracing || !authoring ||
-        !light_path || !camera_path) {
+        !light_path || !light_path_depth || !camera_path || !camera_path_depth || !object_materials) {
         scene_editor_runtime_scene_diag(out_diagnostics, out_diagnostics_size, "failed to build overlay json");
+        if (object_materials) json_object_put(object_materials);
+        if (light_path_depth) json_object_put(light_path_depth);
+        if (camera_path_depth) json_object_put(camera_path_depth);
         if (camera_path) json_object_put(camera_path);
         if (light_path) json_object_put(light_path);
         if (authoring) json_object_put(authoring);
@@ -174,7 +225,10 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
     json_object_object_add(overlay_root, "overlay_meta", overlay_meta);
 
     json_object_object_add(authoring, "light_path", light_path);
+    json_object_object_add(authoring, "light_path_depth", light_path_depth);
     json_object_object_add(authoring, "camera_path", camera_path);
+    json_object_object_add(authoring, "camera_path_depth", camera_path_depth);
+    json_object_object_add(authoring, "object_materials", object_materials);
     json_object_object_add(ray_tracing, "authoring", authoring);
     json_object_object_add(extensions, "ray_tracing", ray_tracing);
     json_object_object_add(overlay_root, "extensions", extensions);

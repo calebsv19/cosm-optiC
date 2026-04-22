@@ -1,6 +1,6 @@
 # Ray Tracing Future Intent
 
-Last updated: 2026-04-10
+Last updated: 2026-04-21
 
 ## Scaffold Alignment Intent
 1. Keep the current strong subsystem split while normalizing scaffold contracts.
@@ -104,6 +104,13 @@ Last updated: 2026-04-10
     - `../../docs/private_program_docs/ray_tracing/2026-04-02_ray_tracing_w1_w2_wrapper_hardening.md`
 - next:
   - optional `RT-CP6+`: deeper runtime/update/render/shutdown ownership extraction from `animation.c`
+
+## Current Near-Term Boundary
+
+- continue and close preview mode expansion from the retained-`3D` follow-camera execution plan
+- after preview closeout, decide whether to:
+  - widen retained preview fidelity, or
+  - open a new bounded lane for deeper native-`3D` preview/render integration
 
 ## Maintainability Decomposition Status
 - completed in the recent decomposition tranche:

@@ -31,6 +31,8 @@ typedef struct SceneEditorControlSurfaceContract {
     bool previewEnabled;
     bool cycleModeEnabled;
     bool applyEnabled;
+    bool saveEnabled;
+    bool backToMenuEnabled;
     bool sharedKeyTabCycleEnabled;
     bool sharedKeyEscapeEnabled;
     bool laneKeyFrameEnabled;
@@ -41,6 +43,7 @@ typedef struct SceneEditorControlSurfaceContract {
     bool laneCameraCanvasEditEnabled;
     bool laneViewportBezierPlacementEnabled;
     bool laneViewportObjectPickEnabled;
+    bool laneViewportCameraPlacementEnabled;
     bool laneCanvasEditEnabled;
     const char* paneLeftTitle;
     const char* paneCenterTitle;
@@ -48,6 +51,8 @@ typedef struct SceneEditorControlSurfaceContract {
     const char* previewLabel;
     const char* cycleModeLabel;
     const char* applyLabel;
+    const char* saveLabel;
+    const char* backToMenuLabel;
     char statusTitle[96];
     char statusSource[128];
     char statusPath[256];

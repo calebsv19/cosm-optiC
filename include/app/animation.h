@@ -34,7 +34,7 @@ int AnimationInit(void);
 // Runs a lightweight preview (no ray tracing).
 void RunPreviewMode(void);
 // Runs preview from within editors (assumes SDL already initialized).
-void RunPreviewModeEmbedded(void);
+void RunPreviewModeEmbedded(SDL_Window* host_window, SDL_Renderer* host_renderer);
 
 // Runs the main loop.
 void RunMainLoop(void);

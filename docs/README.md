@@ -2,6 +2,11 @@
 
 Start here for public repository documentation.
 
+Last audited: 2026-04-21.
+
+Current public focus:
+- preview mode expansion in the retained-`3D` follow-camera lane.
+
 ## Scaffold State
 - `docs/current_truth.md`: current scaffold/runtime structure and verification snapshot.
 - `docs/future_intent.md`: planned scaffold convergence path and pending migration slices.

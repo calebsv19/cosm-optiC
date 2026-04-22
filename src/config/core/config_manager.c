@@ -255,9 +255,11 @@ SceneConfig sceneSettings = {
     .windowHeight = 800,
     .objectCount = 0,  // No objects initially
     .bezierPath = { .numPoints = 0, .mode = BEZIER_CUBIC },
+    .bezierPath3D = {0},
     .cameraPath = { .numPoints = 0, .mode = BEZIER_CUBIC },
     .rays = 2000,
     .camera = { .x = 0.0, .y = 0.0, .zoom = 1.0, .rotation = 0.0 },
+    .cameraZ = 0.0,
     .cameraMargin = 80.0
 };
 
@@ -371,7 +373,16 @@ void SaveSceneConfig(void) {
 
     // Save Bézier Paths
     config_scene_save_path_to_json(config, "path", &sceneSettings.bezierPath);
+    config_scene_save_path_depth_to_json(config,
+                                         "pathDepth",
+                                         &sceneSettings.bezierPath3D,
+                                         &sceneSettings.bezierPath);
     config_scene_save_path_to_json(config, "cameraPath", &sceneSettings.cameraPath);
+    config_scene_save_camera_path_depth_to_json(config,
+                                                "cameraPathDepth",
+                                                &sceneSettings.cameraPath3D,
+                                                &sceneSettings.cameraPath);
+    json_object_object_add(config, "cameraZ", json_object_new_double(sceneSettings.cameraZ));
 
     // Write JSON Data to File
     fprintf(file, "%s", json_object_to_json_string_ext(config, JSON_C_TO_STRING_PRETTY));
@@ -718,9 +729,19 @@ void LoadSceneConfig(void) {
     if (!lightPathLoaded || sceneSettings.bezierPath.numPoints < 2) {
         printf("ERROR: Bézier path missing or invalid in scene_config.json.\n");
         sceneSettings.bezierPath.numPoints = 0;
+        CameraPath3D_Reset(&sceneSettings.bezierPath3D);
     } else {
         printf("INFO: Loaded Bézier Path with %d points and %d segments.\n",
                sceneSettings.bezierPath.numPoints, sceneSettings.bezierPath.numPoints - 1);
+        if (!config_scene_load_path_depth_from_json(config,
+                                                    "pathDepth",
+                                                    &sceneSettings.bezierPath3D,
+                                                    &sceneSettings.bezierPath)) {
+            CameraPath3D_Reset(&sceneSettings.bezierPath3D);
+            for (int i = 0; i < sceneSettings.bezierPath.numPoints && i < MAX_BEZIER_POINTS; ++i) {
+                sceneSettings.bezierPath3D.point_z[i] = animSettings.lightHeight;
+            }
+        }
     }
 
     bool cameraPathLoaded = config_scene_load_path_from_json(config, "cameraPath", &sceneSettings.cameraPath);
@@ -728,6 +749,22 @@ void LoadSceneConfig(void) {
         printf("INFO: Loaded Camera Path with %d point(s).\n", sceneSettings.cameraPath.numPoints);
     } else {
         printf("INFO: Camera path missing in config; using default at camera center.\n");
+    }
+    {
+        struct json_object* camera_z_obj = NULL;
+        if (json_object_object_get_ex(config, "cameraZ", &camera_z_obj)) {
+            sceneSettings.cameraZ = json_object_get_double(camera_z_obj);
+        }
+    }
+    if (!config_scene_load_camera_path_depth_from_json(config,
+                                                       "cameraPathDepth",
+                                                       &sceneSettings.cameraPath3D,
+                                                       &sceneSettings.cameraPath)) {
+        int i = 0;
+        CameraPath3D_Reset(&sceneSettings.cameraPath3D);
+        for (i = 0; i < sceneSettings.cameraPath.numPoints && i < MAX_BEZIER_POINTS; ++i) {
+            sceneSettings.cameraPath3D.point_z[i] = sceneSettings.cameraZ;
+        }
     }
     config_scene_ensure_camera_path_default(&sceneSettings);
 
