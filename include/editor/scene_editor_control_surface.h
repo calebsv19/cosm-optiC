@@ -63,6 +63,10 @@ typedef struct SceneEditorControlSurfaceContract {
     char statusControls[192];
 } SceneEditorControlSurfaceContract;
 
+bool SceneEditorControlSurfaceLocksObjectMode(void);
+const char* SceneEditorControlSurfaceModeLabel(int mode);
+void SceneEditorControlSurfaceBuildCurrent(int selected_object_index,
+                                           SceneEditorControlSurfaceContract* out_contract);
 void SceneEditorControlSurfaceBuild(const SceneEditorControlSurfaceInput* input,
                                     SceneEditorControlSurfaceContract* out_contract);
 

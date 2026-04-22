@@ -3,15 +3,45 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "app/animation.h"
+#include "config/config_manager.h"
 #include "editor/editor_mode_router.h"
 
-static const char* SceneEditorControlSurfaceModeLabel(int mode) {
+bool SceneEditorControlSurfaceLocksObjectMode(void) {
+    return AnimationUseFluidScene();
+}
+
+const char* SceneEditorControlSurfaceModeLabel(int mode) {
     switch (mode) {
         case 0: return "Bezier";
         case 1: return "Objects";
         case 2: return "Camera";
         default: return "Mode";
     }
+}
+
+static const char* SceneEditorControlSurfaceSourceLabel(void) {
+    switch (animSettings.sceneSource) {
+        case SCENE_SOURCE_FLUID_MANIFEST:
+            return "Fluid Manifest";
+        case SCENE_SOURCE_RUNTIME_SCENE:
+            return "Runtime Scene";
+        case SCENE_SOURCE_CONFIG_2D:
+        default:
+            return "2D Config";
+    }
+}
+
+static const char* SceneEditorControlSurfaceSourcePath(void) {
+    if (animSettings.sceneSource == SCENE_SOURCE_FLUID_MANIFEST &&
+        animSettings.fluidManifest[0]) {
+        return animSettings.fluidManifest;
+    }
+    if (animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE &&
+        animSettings.runtimeScenePath[0]) {
+        return animSettings.runtimeScenePath;
+    }
+    return "(default)";
 }
 
 static const char* SceneEditorControlSurfaceSafeText(const char* text, const char* fallback) {
@@ -64,6 +94,28 @@ static SceneEditorControlSurfaceLane SceneEditorControlSurfaceResolveLane(
         return SCENE_EDITOR_CONTROL_SURFACE_LANE_CONTROLLED_3D;
     }
     return SCENE_EDITOR_CONTROL_SURFACE_LANE_CANONICAL_2D;
+}
+
+void SceneEditorControlSurfaceBuildCurrent(int selected_object_index,
+                                           SceneEditorControlSurfaceContract* out_contract) {
+    SceneEditorControlSurfaceInput input = {0};
+    RayTracingRuntimeRoute route = {0};
+
+    if (!out_contract) return;
+
+    route = RayTracingModeBackend_ResolveRoute();
+    input.requestedMode = animSettings.editorMode;
+    input.lockObjectMode = SceneEditorControlSurfaceLocksObjectMode();
+    input.sceneSource = animSettings.sceneSource;
+    input.sourceLabel = SceneEditorControlSurfaceSourceLabel();
+    input.sourcePath = SceneEditorControlSurfaceSourcePath();
+    input.objectCount = sceneSettings.objectCount;
+    input.hasSelectedObject = (selected_object_index >= 0 &&
+                               selected_object_index < sceneSettings.objectCount);
+    input.selectedObjectIndex = selected_object_index;
+    input.route = route;
+    input.digestStatus = RayTracingModeBackend_BuildSceneDigestStatus(&route);
+    SceneEditorControlSurfaceBuild(&input, out_contract);
 }
 
 void SceneEditorControlSurfaceBuild(const SceneEditorControlSurfaceInput* input,
