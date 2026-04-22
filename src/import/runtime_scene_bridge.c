@@ -1,4 +1,5 @@
 #include "import/runtime_scene_bridge.h"
+#include "import/runtime_scene_bridge_json_utils.h"
 
 #include "camera/camera_path_3d.h"
 #include "core_scene_overlay_merge_shared.h"
@@ -20,217 +21,6 @@ static char g_last_runtime_object_ids[MAX_OBJECTS][64] = {{0}};
 static int g_last_runtime_object_id_count = 0;
 
 static void apply_ray_authoring_object_materials(json_object *authoring);
-
-static void preflight_reset(RuntimeSceneBridgePreflight *out_preflight) {
-    if (!out_preflight) return;
-    memset(out_preflight, 0, sizeof(*out_preflight));
-    out_preflight->valid_contract = false;
-}
-
-static void preflight_diag(RuntimeSceneBridgePreflight *out_preflight, const char *message) {
-    if (!out_preflight || !message) return;
-    snprintf(out_preflight->diagnostics,
-             sizeof(out_preflight->diagnostics),
-             "%s",
-             message);
-}
-
-static void bridge_diag(char *out_diagnostics, size_t out_diagnostics_size, const char *message) {
-    if (!out_diagnostics || out_diagnostics_size == 0 || !message) return;
-    snprintf(out_diagnostics, out_diagnostics_size, "%s", message);
-}
-
-static int json_array_len_or_zero(json_object *obj, const char *key) {
-    json_object *array_obj = NULL;
-    if (!obj || !key) return 0;
-    if (!json_object_object_get_ex(obj, key, &array_obj)) return 0;
-    if (!array_obj || !json_object_is_type(array_obj, json_type_array)) return 0;
-    return (int)json_object_array_length(array_obj);
-}
-
-static bool parse_vec3(json_object *obj,
-                       const char *key,
-                       double *out_x,
-                       double *out_y,
-                       double *out_z) {
-    json_object *node = NULL;
-    json_object *x = NULL;
-    json_object *y = NULL;
-    json_object *z = NULL;
-    if (!obj || !key || !out_x || !out_y || !out_z) return false;
-    if (!json_object_object_get_ex(obj, key, &node) || !json_object_is_type(node, json_type_object)) {
-        return false;
-    }
-    if (!json_object_object_get_ex(node, "x", &x) ||
-        !json_object_object_get_ex(node, "y", &y) ||
-        !json_object_object_get_ex(node, "z", &z)) {
-        return false;
-    }
-    *out_x = json_object_get_double(x);
-    *out_y = json_object_get_double(y);
-    *out_z = json_object_get_double(z);
-    return true;
-}
-
-static bool parse_bool_field(json_object *obj, const char *key, bool *out_value) {
-    json_object *value = NULL;
-    if (!obj || !key || !out_value) return false;
-    if (!json_object_object_get_ex(obj, key, &value) || !json_object_is_type(value, json_type_boolean)) {
-        return false;
-    }
-    *out_value = json_object_get_boolean(value) != 0;
-    return true;
-}
-
-static bool parse_double_field(json_object *obj, const char *key, double *out_value) {
-    json_object *value = NULL;
-    if (!obj || !key || !out_value) return false;
-    if (!json_object_object_get_ex(obj, key, &value) ||
-        (!json_object_is_type(value, json_type_double) && !json_object_is_type(value, json_type_int))) {
-        return false;
-    }
-    *out_value = json_object_get_double(value);
-    return true;
-}
-
-static const char *json_string_field_or_null(json_object *obj, const char *key) {
-    json_object *value = NULL;
-    if (!obj || !key) return NULL;
-    if (!json_object_object_get_ex(obj, key, &value) || !json_object_is_type(value, json_type_string)) {
-        return NULL;
-    }
-    return json_object_get_string(value);
-}
-
-static int clamp_color_channel(double value01) {
-    if (value01 < 0.0) value01 = 0.0;
-    if (value01 > 1.0) value01 = 1.0;
-    return (int)lround(value01 * 255.0);
-}
-
-static int color_from_material_albedo(json_object *materials_array,
-                                      const char *material_id) {
-    size_t i = 0;
-    if (!materials_array || !json_object_is_type(materials_array, json_type_array) || !material_id) {
-        return 0xFFFFFF;
-    }
-
-    for (i = 0; i < json_object_array_length(materials_array); ++i) {
-        json_object *mat = json_object_array_get_idx(materials_array, i);
-        json_object *id = NULL;
-        json_object *albedo = NULL;
-        if (!mat || !json_object_is_type(mat, json_type_object)) continue;
-        if (!json_object_object_get_ex(mat, "material_id", &id) || !json_object_is_type(id, json_type_string)) {
-            continue;
-        }
-        if (strcmp(json_object_get_string(id), material_id) != 0) continue;
-        if (!json_object_object_get_ex(mat, "albedo", &albedo) || !json_object_is_type(albedo, json_type_array)) {
-            return 0xFFFFFF;
-        }
-        if (json_object_array_length(albedo) < 3u) return 0xFFFFFF;
-        {
-            int r = clamp_color_channel(json_object_get_double(json_object_array_get_idx(albedo, 0)));
-            int g = clamp_color_channel(json_object_get_double(json_object_array_get_idx(albedo, 1)));
-            int b = clamp_color_channel(json_object_get_double(json_object_array_get_idx(albedo, 2)));
-            return (r << 16) | (g << 8) | b;
-        }
-    }
-    return 0xFFFFFF;
-}
-
-static bool validate_runtime_scene_root(json_object *root,
-                                        RuntimeSceneBridgePreflight *out_preflight) {
-    json_object *schema_family = NULL;
-    json_object *schema_variant = NULL;
-    json_object *scene_id = NULL;
-    json_object *unit_system = NULL;
-    json_object *world_scale = NULL;
-    const char *schema_family_str = NULL;
-    const char *schema_variant_str = NULL;
-    const char *scene_id_str = NULL;
-    const char *unit_system_str = NULL;
-    double world_scale_value = 1.0;
-
-    if (!root || !out_preflight) return false;
-
-    if (!json_object_object_get_ex(root, "schema_family", &schema_family) ||
-        !json_object_is_type(schema_family, json_type_string)) {
-        preflight_diag(out_preflight, "missing schema_family");
-        return false;
-    }
-    schema_family_str = json_object_get_string(schema_family);
-    if (!schema_family_str || strcmp(schema_family_str, "codework_scene") != 0) {
-        preflight_diag(out_preflight, "schema_family must be codework_scene");
-        return false;
-    }
-
-    if (!json_object_object_get_ex(root, "schema_variant", &schema_variant) ||
-        !json_object_is_type(schema_variant, json_type_string)) {
-        preflight_diag(out_preflight, "missing schema_variant");
-        return false;
-    }
-    schema_variant_str = json_object_get_string(schema_variant);
-    if (!schema_variant_str || strcmp(schema_variant_str, "scene_runtime_v1") != 0) {
-        preflight_diag(out_preflight, "schema_variant must be scene_runtime_v1");
-        return false;
-    }
-
-    if (!json_object_object_get_ex(root, "scene_id", &scene_id) ||
-        !json_object_is_type(scene_id, json_type_string)) {
-        preflight_diag(out_preflight, "missing scene_id");
-        return false;
-    }
-    scene_id_str = json_object_get_string(scene_id);
-    if (!scene_id_str || !scene_id_str[0]) {
-        preflight_diag(out_preflight, "scene_id is empty");
-        return false;
-    }
-
-    if (!json_object_object_get_ex(root, "unit_system", &unit_system) ||
-        !json_object_is_type(unit_system, json_type_string)) {
-        preflight_diag(out_preflight, "missing unit_system");
-        return false;
-    }
-    unit_system_str = json_object_get_string(unit_system);
-    if (!unit_system_str || strcmp(unit_system_str, "meters") != 0) {
-        preflight_diag(out_preflight, "unit_system must be meters");
-        return false;
-    }
-
-    if (!json_object_object_get_ex(root, "world_scale", &world_scale) ||
-        (!json_object_is_type(world_scale, json_type_double) &&
-         !json_object_is_type(world_scale, json_type_int))) {
-        preflight_diag(out_preflight, "missing world_scale");
-        return false;
-    }
-    world_scale_value = json_object_get_double(world_scale);
-    if (!(world_scale_value > 0.0) || !isfinite(world_scale_value)) {
-        preflight_diag(out_preflight, "world_scale must be finite and > 0");
-        return false;
-    }
-
-    snprintf(out_preflight->scene_id, sizeof(out_preflight->scene_id), "%s", scene_id_str);
-    out_preflight->object_count = json_array_len_or_zero(root, "objects");
-    out_preflight->material_count = json_array_len_or_zero(root, "materials");
-    out_preflight->light_count = json_array_len_or_zero(root, "lights");
-    out_preflight->camera_count = json_array_len_or_zero(root, "cameras");
-    out_preflight->valid_contract = true;
-    preflight_diag(out_preflight, "ok");
-    return true;
-}
-
-static bool validate_runtime_scene_root_diag(json_object *root,
-                                             char *out_diagnostics,
-                                             size_t out_diagnostics_size) {
-    RuntimeSceneBridgePreflight preflight;
-    preflight_reset(&preflight);
-    if (!validate_runtime_scene_root(root, &preflight)) {
-        bridge_diag(out_diagnostics, out_diagnostics_size, preflight.diagnostics);
-        return false;
-    }
-    bridge_diag(out_diagnostics, out_diagnostics_size, "ok");
-    return true;
-}
 
 static void scene_defaults_reset(void) {
     sceneSettings.objectCount = 0;
@@ -291,7 +81,7 @@ static void digest_append_primitive(json_object *object_obj,
     memset(entry, 0, sizeof(*entry));
     entry->kind = kind;
 
-    object_id = json_string_field_or_null(object_obj, "object_id");
+    object_id = runtime_scene_bridge_json_string_field_or_null(object_obj, "object_id");
     if (object_id && object_id[0]) {
         snprintf(entry->object_id, sizeof(entry->object_id), "%s", object_id);
     }
@@ -302,15 +92,15 @@ static void digest_append_primitive(json_object *object_obj,
             json_object_object_get_ex(frame, "origin", &origin_source) &&
             json_object_is_type(origin_source, json_type_object)) {
             double ox = 0.0, oy = 0.0, oz = 0.0;
-            if (parse_vec3(frame, "origin", &ox, &oy, &oz)) {
+            if (runtime_scene_bridge_parse_vec3(frame, "origin", &ox, &oy, &oz)) {
                 entry->origin_x = ox * world_scale;
                 entry->origin_y = oy * world_scale;
                 entry->origin_z = oz * world_scale;
             }
         }
-        has_width = parse_double_field(primitive_obj, "width", &width);
-        has_height = parse_double_field(primitive_obj, "height", &height);
-        has_depth = parse_double_field(primitive_obj, "depth", &depth);
+        has_width = runtime_scene_bridge_parse_double_field(primitive_obj, "width", &width);
+        has_height = runtime_scene_bridge_parse_double_field(primitive_obj, "height", &height);
+        has_depth = runtime_scene_bridge_parse_double_field(primitive_obj, "depth", &depth);
     }
 
     if ((!origin_source || !json_object_is_type(origin_source, json_type_object)) &&
@@ -374,16 +164,16 @@ static void apply_scene3d_extension_digest(json_object *root, double world_scale
         bool enabled = false;
         bool clamp_on_edit = false;
         g_last_3d_digest.has_scene_bounds = true;
-        has_enabled = parse_bool_field(bounds, "enabled", &enabled);
-        has_clamp = parse_bool_field(bounds, "clamp_on_edit", &clamp_on_edit);
+        has_enabled = runtime_scene_bridge_parse_bool_field(bounds, "enabled", &enabled);
+        has_clamp = runtime_scene_bridge_parse_bool_field(bounds, "clamp_on_edit", &clamp_on_edit);
         g_last_3d_digest.bounds_enabled = has_enabled && enabled;
         g_last_3d_digest.bounds_clamp_on_edit = has_clamp && clamp_on_edit;
-        if (parse_vec3(bounds, "min", &min_x, &min_y, &min_z)) {
+        if (runtime_scene_bridge_parse_vec3(bounds, "min", &min_x, &min_y, &min_z)) {
             g_last_3d_digest.bounds_min_x = min_x * world_scale;
             g_last_3d_digest.bounds_min_y = min_y * world_scale;
             g_last_3d_digest.bounds_min_z = min_z * world_scale;
         }
-        if (parse_vec3(bounds, "max", &max_x, &max_y, &max_z)) {
+        if (runtime_scene_bridge_parse_vec3(bounds, "max", &max_x, &max_y, &max_z)) {
             g_last_3d_digest.bounds_max_x = max_x * world_scale;
             g_last_3d_digest.bounds_max_y = max_y * world_scale;
             g_last_3d_digest.bounds_max_z = max_z * world_scale;
@@ -392,8 +182,8 @@ static void apply_scene3d_extension_digest(json_object *root, double world_scale
 
     if (json_object_object_get_ex(scene3d, "construction_plane", &construction_plane) &&
         json_object_is_type(construction_plane, json_type_object)) {
-        const char *mode = json_string_field_or_null(construction_plane, "mode");
-        const char *axis = json_string_field_or_null(construction_plane, "axis");
+        const char *mode = runtime_scene_bridge_json_string_field_or_null(construction_plane, "mode");
+        const char *axis = runtime_scene_bridge_json_string_field_or_null(construction_plane, "axis");
         double offset = 0.0;
         g_last_3d_digest.has_construction_plane = true;
         if (mode && mode[0]) {
@@ -408,7 +198,7 @@ static void apply_scene3d_extension_digest(json_object *root, double world_scale
                      "%s",
                      axis);
         }
-        if (parse_double_field(construction_plane, "offset", &offset)) {
+        if (runtime_scene_bridge_parse_double_field(construction_plane, "offset", &offset)) {
             g_last_3d_digest.construction_plane_offset = offset * world_scale;
         }
     }
@@ -436,7 +226,7 @@ static void apply_light_seed_scaled(json_object *lights_array, double world_scal
     }
     light0 = json_object_array_get_idx(lights_array, 0);
     if (!light0 || !json_object_is_type(light0, json_type_object)) return;
-    if (parse_vec3(light0, "position", &lx, &ly, &lz)) {
+    if (runtime_scene_bridge_parse_vec3(light0, "position", &lx, &ly, &lz)) {
         sceneSettings.bezierPath.numPoints = 1;
         sceneSettings.bezierPath.points[0].x = lx * world_scale;
         sceneSettings.bezierPath.points[0].y = ly * world_scale;
@@ -456,7 +246,7 @@ static void apply_camera_seed_scaled(json_object *cameras_array, double world_sc
     }
     camera0 = json_object_array_get_idx(cameras_array, 0);
     if (!camera0 || !json_object_is_type(camera0, json_type_object)) return;
-    if (parse_vec3(camera0, "position", &cx, &cy, &cz)) {
+    if (runtime_scene_bridge_parse_vec3(camera0, "position", &cx, &cy, &cz)) {
         sceneSettings.camera.x = cx * world_scale;
         sceneSettings.camera.y = cy * world_scale;
         sceneSettings.cameraZ = cz * world_scale;
@@ -585,7 +375,7 @@ static void apply_object_material(json_object *object_obj,
     }
     mat_id = json_object_get_string(id);
     if (!mat_id) return;
-    out_object->color = color_from_material_albedo(materials_array, mat_id);
+    out_object->color = runtime_scene_bridge_color_from_material_albedo(materials_array, mat_id);
 }
 
 static int runtime_scene_bridge_color_from_material_preset(int material_id) {
@@ -594,9 +384,9 @@ static int runtime_scene_bridge_color_from_material_preset(int material_id) {
     int g = 255;
     int b = 255;
     if (!preset) return 0xFFFFFF;
-    r = clamp_color_channel(preset->base_color.x);
-    g = clamp_color_channel(preset->base_color.y);
-    b = clamp_color_channel(preset->base_color.z);
+    r = runtime_scene_bridge_clamp_color_channel(preset->base_color.x);
+    g = runtime_scene_bridge_clamp_color_channel(preset->base_color.y);
+    b = runtime_scene_bridge_clamp_color_channel(preset->base_color.z);
     return (r << 16) | (g << 8) | b;
 }
 
@@ -776,7 +566,7 @@ static void apply_objects(json_object *objects_array,
                0,
                sizeof(g_last_runtime_object_ids[sceneSettings.objectCount]));
         {
-            const char *object_id = json_string_field_or_null(obj, "object_id");
+            const char *object_id = runtime_scene_bridge_json_string_field_or_null(obj, "object_id");
             if (object_id && object_id[0]) {
                 snprintf(g_last_runtime_object_ids[sceneSettings.objectCount],
                          sizeof(g_last_runtime_object_ids[sceneSettings.objectCount]),
@@ -816,16 +606,16 @@ bool runtime_scene_bridge_preflight_json(const char *runtime_scene_json,
     json_object *root = NULL;
 
     if (!runtime_scene_json || !out_preflight) return false;
-    preflight_reset(out_preflight);
+    runtime_scene_bridge_preflight_reset(out_preflight);
 
     root = json_tokener_parse(runtime_scene_json);
     if (!root || !json_object_is_type(root, json_type_object)) {
-        preflight_diag(out_preflight, "invalid JSON object");
+        runtime_scene_bridge_preflight_diag(out_preflight, "invalid JSON object");
         if (root) json_object_put(root);
         return false;
     }
 
-    if (!validate_runtime_scene_root(root, out_preflight)) {
+    if (!runtime_scene_bridge_validate_root(root, out_preflight)) {
         json_object_put(root);
         return false;
     }
@@ -842,18 +632,18 @@ bool runtime_scene_bridge_preflight_file(const char *runtime_scene_path,
     bool ok;
 
     if (!runtime_scene_path || !out_preflight) return false;
-    preflight_reset(out_preflight);
+    runtime_scene_bridge_preflight_reset(out_preflight);
 
     io_result = core_io_read_all(runtime_scene_path, &file_data);
     if (io_result.code != CORE_OK || !file_data.data || file_data.size == 0) {
-        preflight_diag(out_preflight, "failed to read runtime scene file");
+        runtime_scene_bridge_preflight_diag(out_preflight, "failed to read runtime scene file");
         core_io_buffer_free(&file_data);
         return false;
     }
 
     json_text = (char *)malloc(file_data.size + 1u);
     if (!json_text) {
-        preflight_diag(out_preflight, "out of memory");
+        runtime_scene_bridge_preflight_diag(out_preflight, "out of memory");
         core_io_buffer_free(&file_data);
         return false;
     }
@@ -877,16 +667,16 @@ bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
     double world_scale = 1.0;
 
     if (!runtime_scene_json || !out_summary) return false;
-    preflight_reset(out_summary);
+    runtime_scene_bridge_preflight_reset(out_summary);
 
     root = json_tokener_parse(runtime_scene_json);
     if (!root || !json_object_is_type(root, json_type_object)) {
-        preflight_diag(out_summary, "invalid JSON object");
+        runtime_scene_bridge_preflight_diag(out_summary, "invalid JSON object");
         if (root) json_object_put(root);
         return false;
     }
 
-    if (!validate_runtime_scene_root(root, out_summary)) {
+    if (!runtime_scene_bridge_validate_root(root, out_summary)) {
         json_object_put(root);
         return false;
     }
@@ -914,7 +704,7 @@ bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
     animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
     animSettings.useFluidScene = false;
 
-    preflight_diag(out_summary, "ok");
+    runtime_scene_bridge_preflight_diag(out_summary, "ok");
     json_object_put(root);
     return true;
 }
@@ -928,7 +718,7 @@ bool runtime_scene_bridge_apply_file(const char *runtime_scene_path,
     bool ok;
 
     if (!runtime_scene_path || !out_summary) return false;
-    preflight_reset(out_summary);
+    runtime_scene_bridge_preflight_reset(out_summary);
     snprintf(runtime_scene_path_copy,
              sizeof(runtime_scene_path_copy),
              "%s",
@@ -936,14 +726,14 @@ bool runtime_scene_bridge_apply_file(const char *runtime_scene_path,
 
     io_result = core_io_read_all(runtime_scene_path_copy, &file_data);
     if (io_result.code != CORE_OK || !file_data.data || file_data.size == 0) {
-        preflight_diag(out_summary, "failed to read runtime scene file");
+        runtime_scene_bridge_preflight_diag(out_summary, "failed to read runtime scene file");
         core_io_buffer_free(&file_data);
         return false;
     }
 
     json_text = (char *)malloc(file_data.size + 1u);
     if (!json_text) {
-        preflight_diag(out_summary, "out of memory");
+        runtime_scene_bridge_preflight_diag(out_summary, "out of memory");
         core_io_buffer_free(&file_data);
         return false;
     }
@@ -974,20 +764,20 @@ bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_j
     size_t out_len = 0;
 
     if (out_runtime_scene_json) *out_runtime_scene_json = NULL;
-    bridge_diag(out_diagnostics, out_diagnostics_size, "invalid input");
+    runtime_scene_bridge_bridge_diag(out_diagnostics, out_diagnostics_size, "invalid input");
     if (!runtime_scene_json || !overlay_json || !out_runtime_scene_json) return false;
 
     runtime_root = json_tokener_parse(runtime_scene_json);
     overlay_root = json_tokener_parse(overlay_json);
     if (!runtime_root || !json_object_is_type(runtime_root, json_type_object) ||
         !overlay_root || !json_object_is_type(overlay_root, json_type_object)) {
-        bridge_diag(out_diagnostics, out_diagnostics_size, "invalid JSON object");
+        runtime_scene_bridge_bridge_diag(out_diagnostics, out_diagnostics_size, "invalid JSON object");
         if (runtime_root) json_object_put(runtime_root);
         if (overlay_root) json_object_put(overlay_root);
         return false;
     }
 
-    if (!validate_runtime_scene_root_diag(runtime_root, out_diagnostics, out_diagnostics_size)) {
+    if (!runtime_scene_bridge_validate_root_diag(runtime_root, out_diagnostics, out_diagnostics_size)) {
         json_object_put(runtime_root);
         json_object_put(overlay_root);
         return false;
@@ -1006,7 +796,7 @@ bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_j
     serialized = json_object_to_json_string_ext(runtime_root,
                                                 JSON_C_TO_STRING_PRETTY | JSON_C_TO_STRING_NOSLASHESCAPE);
     if (!serialized) {
-        bridge_diag(out_diagnostics, out_diagnostics_size, "failed to serialize merged runtime scene");
+        runtime_scene_bridge_bridge_diag(out_diagnostics, out_diagnostics_size, "failed to serialize merged runtime scene");
         json_object_put(runtime_root);
         json_object_put(overlay_root);
         return false;
@@ -1015,14 +805,14 @@ bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_j
     out_len = strlen(serialized);
     out = (char *)malloc(out_len + 1u);
     if (!out) {
-        bridge_diag(out_diagnostics, out_diagnostics_size, "out of memory");
+        runtime_scene_bridge_bridge_diag(out_diagnostics, out_diagnostics_size, "out of memory");
         json_object_put(runtime_root);
         json_object_put(overlay_root);
         return false;
     }
     memcpy(out, serialized, out_len + 1u);
     *out_runtime_scene_json = out;
-    bridge_diag(out_diagnostics, out_diagnostics_size, "ok");
+    runtime_scene_bridge_bridge_diag(out_diagnostics, out_diagnostics_size, "ok");
 
     json_object_put(runtime_root);
     json_object_put(overlay_root);

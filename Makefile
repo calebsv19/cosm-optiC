@@ -175,6 +175,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/app/preview_retained_scene_renderer.o \
 	$(BUILD_DIR)/app/animation_fluid_scene.o \
 	$(BUILD_DIR)/app/data_paths.o \
+	$(BUILD_DIR)/config/core/config_runtime_paths.o \
 		$(BUILD_DIR)/config/io/config_file_io.o \
 	$(BUILD_DIR)/config/scene/config_scene_path_io.o \
 	$(BUILD_DIR)/config/core/config_manager.o \
@@ -185,6 +186,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/import/fluid_import.o \
 	$(BUILD_DIR)/import/fluid_pack_import.o \
 	$(BUILD_DIR)/import/scene_bundle_import.o \
+	$(BUILD_DIR)/import/runtime_scene_bridge_json_utils.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge.o \
 	$(BUILD_DIR)/ui/menu/scene_source_catalog.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_state.o \
