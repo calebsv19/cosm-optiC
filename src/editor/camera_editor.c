@@ -6,6 +6,7 @@
 #include "editor/scene_editor.h"
 #include "editor/bezier_editor.h"
 #include "editor/editor_mode_router.h"
+#include "editor/scene_editor_tool_state.h"
 #include "app/animation.h"
 #include "config/config_manager.h"
 #include "scene/object_manager.h"
@@ -20,12 +21,43 @@
 
 extern SDL_Rect addButton;
 extern SDL_Rect deleteButton;
-extern SDL_Rect toggleButton;
+extern SDL_Rect selectButton;
+static SDL_Rect cameraModeButton = {0};
+static SDL_Rect cameraRotateLeftButton = {0};
+static SDL_Rect cameraRotateRightButton = {0};
+static SDL_Rect cameraLinkButton = {0};
+
+static bool CameraEditorPointInRect(int x, int y, const SDL_Rect* rect) {
+    if (!rect || rect->w <= 0 || rect->h <= 0) return false;
+    return x >= rect->x && x <= rect->x + rect->w &&
+           y >= rect->y && y <= rect->y + rect->h;
+}
+
+static void CameraEditorDrawPaneButton(SDL_Renderer* renderer,
+                                       SDL_Rect rect,
+                                       const char* label,
+                                       bool active) {
+    RayTracingThemePalette palette = {0};
+    SDL_Color fill = {180, 180, 180, 255};
+    SDL_Color border = {95, 95, 112, 255};
+    SDL_Color text = {0, 0, 0, 255};
+    if (!renderer || rect.w <= 0 || rect.h <= 0 || !label) return;
+    if (ray_tracing_shared_theme_resolve_palette(&palette)) {
+        fill = active ? ray_tracing_theme_resolve_button_active_fill(palette) : palette.button_fill;
+        border = palette.panel_border;
+        text = ray_tracing_theme_choose_button_text(fill, palette);
+    } else if (active) {
+        fill = (SDL_Color){70, 140, 215, 255};
+        text = (SDL_Color){245, 247, 250, 255};
+    }
+    SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
+    SDL_RenderFillRect(renderer, &rect);
+    SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
+    SDL_RenderDrawRect(renderer, &rect);
+    RenderButtonTextWithColor(renderer, rect, label, text);
+}
 
 static bool cameraDragging = false;
-static bool sliderDragging = false;
-static bool addModeActive = false;
-static bool deleteModeActive = false;
 static int camDraggingPoint = -1;
 static int camDraggingVelocity = -1;
 static int camDraggingRotation = -1;
@@ -35,8 +67,6 @@ static int selectedCamHandleSegment = -1;
 static int selectedCamHandleIndex = -1;
 static int lastMouseX = 0;
 static int lastMouseY = 0;
-static SDL_Rect rotationSlider = {0};
-static int rotationSliderValue = 0; // 0..360 degrees
 static const double kRotationHandleLength = 70.0;
 static const int kRotationHandleVisRadius = 6;
 static const int kRotationHandleHitRadius = 12;
@@ -65,10 +95,6 @@ static CameraEditorAction ResolveCameraEditorAction(const SDL_Event* event) {
     if (event->type == SDL_KEYDOWN) return CAMERA_EDITOR_ACTION_KEY_DOWN;
     if (event->type == SDL_QUIT) return CAMERA_EDITOR_ACTION_QUIT;
     return CAMERA_EDITOR_ACTION_NONE;
-}
-
-static bool CameraEditorShouldSyncStartFromViewportCamera(void) {
-    return animSettings.spaceMode != SPACE_MODE_3D;
 }
 
 static void ClampCameraToFluidBounds(Camera* cam) {
@@ -169,40 +195,6 @@ static void CameraEditorResetSelectionMetadata(void) {
     selectedCamHandleIndex = -1;
 }
 
-static void SyncCameraPathStart(void) {
-    Path* path = &sceneSettings.cameraPath;
-    if (path->numPoints <= 0) {
-        if (!CameraEditorShouldSyncStartFromViewportCamera()) {
-            return;
-        }
-        path->numPoints = 1;
-        path->mode = BEZIER_CUBIC;
-        path->points[0].x = sceneSettings.camera.x;
-        path->points[0].y = sceneSettings.camera.y;
-        path->handles[0][0].vx = 0.0;
-        path->handles[0][0].vy = 0.0;
-        path->handles[0][1].vx = 0.0;
-        path->handles[0][1].vy = 0.0;
-        path->handleLink[0] = false;
-        path->rotations[0] = 0.0;
-        path->rotationSet[0] = true;
-        CameraPath3D_Reset(&sceneSettings.cameraPath3D);
-        sceneSettings.cameraPath3D.point_z[0] = sceneSettings.cameraZ;
-        return;
-    }
-
-    if (!path->rotationSet[0]) {
-        path->rotations[0] = 0.0;
-        path->rotationSet[0] = true;
-    }
-
-    if (CameraEditorShouldSyncStartFromViewportCamera()) {
-        path->points[0].x = sceneSettings.camera.x;
-        path->points[0].y = sceneSettings.camera.y;
-        sceneSettings.cameraPath3D.point_z[0] = sceneSettings.cameraZ;
-    }
-}
-
 static void OffsetCameraPath(double dx, double dy) {
     Path* path = &sceneSettings.cameraPath;
     for (int i = 0; i < path->numPoints; i++) {
@@ -257,96 +249,46 @@ static void RotateCamera(double deltaRadians) {
 static bool HandleCameraButtons(int mx, int my) {
     if (mx >= addButton.x && mx <= addButton.x + addButton.w &&
         my >= addButton.y && my <= addButton.y + addButton.h) {
-        addModeActive = !addModeActive;
-        if (addModeActive) deleteModeActive = false;
+        SceneEditorToolStateToggleOrReset(SCENE_EDITOR_TOOL_ADD);
+        return true;
+    }
+    if (mx >= selectButton.x && mx <= selectButton.x + selectButton.w &&
+        my >= selectButton.y && my <= selectButton.y + selectButton.h) {
+        SceneEditorToolStateSetActive(SCENE_EDITOR_TOOL_SELECT);
         return true;
     }
     if (mx >= deleteButton.x && mx <= deleteButton.x + deleteButton.w &&
         my >= deleteButton.y && my <= deleteButton.y + deleteButton.h) {
-        deleteModeActive = !deleteModeActive;
-        if (deleteModeActive) addModeActive = false;
+        SceneEditorToolStateToggleOrReset(SCENE_EDITOR_TOOL_DELETE);
         return true;
     }
-    if (mx >= toggleButton.x && mx <= toggleButton.x + toggleButton.w &&
-        my >= toggleButton.y && my <= toggleButton.y + toggleButton.h) {
+    if (CameraEditorPointInRect(mx, my, &cameraModeButton)) {
         ToggleBezierPathMode(&sceneSettings.cameraPath);
+        return true;
+    }
+    if (CameraEditorPointInRect(mx, my, &cameraRotateLeftButton)) {
+        RotateCamera(-0.05);
+        return true;
+    }
+    if (CameraEditorPointInRect(mx, my, &cameraRotateRightButton)) {
+        RotateCamera(0.05);
+        return true;
+    }
+    if (CameraEditorPointInRect(mx, my, &cameraLinkButton) &&
+        selectedCamPoint >= 0 &&
+        selectedCamPoint < sceneSettings.cameraPath.numPoints) {
+        sceneSettings.cameraPath.handleLink[selectedCamPoint] = !sceneSettings.cameraPath.handleLink[selectedCamPoint];
+        EnforceCamHandleLink(selectedCamPoint);
         return true;
     }
     return false;
 }
 
 CameraEditorHitRegion CameraEditorHitRegionAtPoint(int mx, int my) {
-    if (mx >= rotationSlider.x && mx <= rotationSlider.x + rotationSlider.w &&
-        my >= rotationSlider.y - 4 && my <= rotationSlider.y + rotationSlider.h + 4) {
-        return CAMERA_EDITOR_HIT_SLIDER;
-    }
     if (IsClickingButtonMain(mx, my) || SceneEditorIsPaneToolButton(mx, my)) {
         return CAMERA_EDITOR_HIT_CONTROLS;
     }
     return CAMERA_EDITOR_HIT_CANVAS;
-}
-
-static void RenderCameraButtons(SDL_Renderer* renderer) {
-    SDL_SetRenderDrawColor(renderer, addModeActive ? 0 : 255, addModeActive ? 255 : 255, 0, 255);
-    SDL_RenderFillRect(renderer, &addButton);
-    SDL_SetRenderDrawColor(renderer, deleteModeActive ? 255 : 255, deleteModeActive ? 0 : 255, 0, 255);
-    SDL_RenderFillRect(renderer, &deleteButton);
-    SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
-    SDL_RenderFillRect(renderer, &toggleButton);
-
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    SDL_RenderDrawRect(renderer, &addButton);
-    RenderButtonText(renderer, addButton, "Add");
-    SDL_RenderDrawRect(renderer, &deleteButton);
-    RenderButtonText(renderer, deleteButton, "Delete");
-    SDL_RenderDrawRect(renderer, &toggleButton);
-    RenderButtonText(renderer, toggleButton, BEZIER_MODE_STRINGS[sceneSettings.cameraPath.mode]);
-}
-
-void RenderEditorHUD(SDL_Renderer* renderer, const char* label, bool showRotation) {
-    char buffer[196];
-    SceneEditorPaneLayout pane_layout = {0};
-    SDL_Rect hud = {20, 20, 420, 30};
-    const char* routeLabel = EditorModeRouter_IsControlled3D()
-                                 ? "Space: 3D compat fallback (2D backend)"
-                                 : "Space: 2D";
-    snprintf(buffer, sizeof(buffer), "%s  |  Camera: (%.1f, %.1f)  Zoom: %.2f  |  %s",
-             label,
-             sceneSettings.camera.x,
-             sceneSettings.camera.y,
-             sceneSettings.camera.zoom,
-             routeLabel);
-    if (SceneEditorGetPaneLayout(&pane_layout)) {
-        hud.x = pane_layout.left_content_rect.x;
-        hud.y = pane_layout.left_content_rect.y + 4;
-        hud.w = pane_layout.left_content_rect.w;
-        if (hud.w < 180) hud.w = 180;
-    }
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200);
-    SDL_RenderFillRect(renderer, &hud);
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 200);
-    SDL_RenderDrawRect(renderer, &hud);
-    SDL_Color white = {255, 255, 255, 255};
-    RenderLabelText(renderer, hud, buffer, white);
-
-    if (showRotation) {
-        SDL_Rect sliderBg = rotationSlider;
-        SDL_SetRenderDrawColor(renderer, 80, 80, 80, 180);
-        SDL_RenderFillRect(renderer, &sliderBg);
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 200);
-        SDL_RenderDrawRect(renderer, &sliderBg);
-
-        double deg = sceneSettings.camera.rotation * 180.0 / M_PI;
-        while (deg < 0) deg += 360.0;
-        rotationSliderValue = (int)fmod(deg, 360.0);
-        double t = rotationSliderValue / 360.0;
-        int knobX = sliderBg.x + (int)(t * sliderBg.w);
-        SDL_Rect knob = {knobX - 4, sliderBg.y - 3, 8, sliderBg.h + 6};
-        SDL_SetRenderDrawColor(renderer, 200, 200, 255, 220);
-        SDL_RenderFillRect(renderer, &knob);
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 220);
-        SDL_RenderDrawRect(renderer, &knob);
-    }
 }
 
 static void RenderCameraViewportRect(SDL_Renderer* renderer) {
@@ -369,34 +311,15 @@ static void RenderCameraViewportRect(SDL_Renderer* renderer) {
 }
 
 void InitializeCameraEditor(void) {
-    SceneEditorPaneLayout pane_layout = {0};
-    int slider_x = 460;
-    int slider_y = 25;
-    int slider_w = 200;
-
     cameraDragging = false;
     lastMouseX = lastMouseY = 0;
-    addModeActive = false;
-    deleteModeActive = false;
+    SceneEditorToolStateReset();
     camDraggingPoint = camDraggingVelocity = -1;
     CameraEditorResetSelectionMetadata();
     sceneSettings.cameraMargin = CameraClampMarginPixels(sceneSettings.cameraMargin,
                                                         sceneSettings.windowWidth,
                                                         sceneSettings.windowHeight);
-    SyncCameraPathStart();
     EnsureCameraRotationsSeeded();
-    if (SceneEditorGetPaneLayout(&pane_layout)) {
-        slider_x = pane_layout.left_content_rect.x;
-        slider_y = toggleButton.y + toggleButton.h + 20;
-        slider_w = pane_layout.left_content_rect.w - 20;
-        if (slider_w < 120) slider_w = 120;
-        if (slider_w > 260) slider_w = 260;
-    }
-    rotationSlider = (SDL_Rect){slider_x, slider_y, slider_w, 10};
-}
-
-void CameraEditorSyncPathStartForViewport(void) {
-    SyncCameraPathStart();
 }
 
 void RenderCameraEditor(SDL_Renderer* renderer) {
@@ -404,7 +327,6 @@ void RenderCameraEditor(SDL_Renderer* renderer) {
     Camera editorCamera = BuildEditorCamera();
     SDL_Color objectColor = {255, 255, 255, 255};
     sceneSettings.camera = editorCamera;
-    SyncCameraPathStart();
 
     {
         RayTracingThemePalette palette = {0};
@@ -468,8 +390,48 @@ void RenderCameraEditor(SDL_Renderer* renderer) {
     sceneSettings.camera = original;
 
     RenderCameraViewportRect(renderer);
-    RenderEditorHUD(renderer, "Camera", true);
-    RenderCameraButtons(renderer);
+}
+
+int CameraEditorRenderPaneControls(SDL_Renderer* renderer, SDL_Rect content_bounds, int top_y, int bottom_y) {
+    const int gap = 8;
+    const int row_gap = 10;
+    const int button_h = 34;
+    char label[128];
+    int cursor_y = top_y;
+    int half_w = (content_bounds.w - row_gap) / 2;
+    cameraModeButton = (SDL_Rect){0, 0, 0, 0};
+    cameraRotateLeftButton = (SDL_Rect){0, 0, 0, 0};
+    cameraRotateRightButton = (SDL_Rect){0, 0, 0, 0};
+    cameraLinkButton = (SDL_Rect){0, 0, 0, 0};
+    if (!renderer || content_bounds.w <= 0 || top_y >= bottom_y) return top_y;
+    if (cursor_y + button_h > bottom_y) return cursor_y;
+    cameraModeButton = (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, button_h};
+    snprintf(label,
+             sizeof(label),
+             "Path Mode: %s",
+             (sceneSettings.cameraPath.mode == BEZIER_CUBIC) ? "Cubic" : "Quadratic");
+    CameraEditorDrawPaneButton(renderer, cameraModeButton, label, false);
+    cursor_y += button_h + gap;
+    if (cursor_y + button_h <= bottom_y) {
+        cameraRotateLeftButton = (SDL_Rect){content_bounds.x, cursor_y, half_w, button_h};
+        cameraRotateRightButton = (SDL_Rect){content_bounds.x + half_w + row_gap,
+                                             cursor_y,
+                                             content_bounds.w - half_w - row_gap,
+                                             button_h};
+        CameraEditorDrawPaneButton(renderer, cameraRotateLeftButton, "Rotate -", false);
+        CameraEditorDrawPaneButton(renderer, cameraRotateRightButton, "Rotate +", false);
+        cursor_y += button_h + gap;
+    }
+    if (selectedCamPoint >= 0 &&
+        selectedCamPoint < sceneSettings.cameraPath.numPoints &&
+        cursor_y + button_h <= bottom_y) {
+        bool linked = sceneSettings.cameraPath.handleLink[selectedCamPoint];
+        cameraLinkButton = (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, button_h};
+        snprintf(label, sizeof(label), "Handles: %s", linked ? "Linked" : "Independent");
+        CameraEditorDrawPaneButton(renderer, cameraLinkButton, label, linked);
+        cursor_y += button_h + gap;
+    }
+    return cursor_y;
 }
 
 void HandleCameraEditorEvents(SDL_Event* event) {
@@ -485,18 +447,6 @@ void HandleCameraEditorEvents(SDL_Event* event) {
             int mx = event->button.x;
             int my = event->button.y;
 
-            // Slider interaction (start drag)
-            if (mx >= rotationSlider.x && mx <= rotationSlider.x + rotationSlider.w &&
-                my >= rotationSlider.y - 4 && my <= rotationSlider.y + rotationSlider.h + 4) {
-                double t = (double)(mx - rotationSlider.x) / (double)rotationSlider.w;
-                t = clampd(t, 0.0, 1.0);
-                double radians = t * 2.0 * M_PI;
-                CameraSetRotation(&sceneSettings.camera, radians);
-                cameraDragging = false;
-                sliderDragging = true;
-                return;
-            }
-
             if (HandleCameraButtons(mx, my))
                 return;
             if (IsClickingButtonMain(mx, my))
@@ -505,6 +455,7 @@ void HandleCameraEditorEvents(SDL_Event* event) {
             Camera editorCam = BuildEditorCamera();
             CameraPoint worldPoint = CameraEditorScreenToWorld(&editorCam, mx, my, width, height);
             Vec2 world = vec2(worldPoint.x, worldPoint.y);
+            SceneEditorTool active_tool = SceneEditorToolStateGetEffective(SDL_GetModState());
 
             camDraggingPoint = -1;
             camDraggingVelocity = -1;
@@ -537,7 +488,7 @@ void HandleCameraEditorEvents(SDL_Event* event) {
                         selectedCamSelectionKind = CAMERA_EDITOR_SELECTION_POINT;
                         selectedCamHandleSegment = -1;
                         selectedCamHandleIndex = -1;
-                        if (deleteModeActive) {
+                        if (active_tool == SCENE_EDITOR_TOOL_DELETE) {
                             int old_count = sceneSettings.cameraPath.numPoints;
                             CameraPath3D_RemovePoint(&sceneSettings.cameraPath3D, i, old_count);
                             RemoveBezierPoint(&sceneSettings.cameraPath, i);
@@ -574,7 +525,7 @@ void HandleCameraEditorEvents(SDL_Event* event) {
                 }
             }
 
-            if (addModeActive) {
+            if (active_tool == SCENE_EDITOR_TOOL_ADD) {
                 CameraPath3D_InsertPoint(&sceneSettings.cameraPath3D,
                                          &sceneSettings.cameraPath,
                                          world.x,
@@ -602,19 +553,13 @@ void HandleCameraEditorEvents(SDL_Event* event) {
         case CAMERA_EDITOR_ACTION_MOUSE_UP:
             if (event->button.button == SDL_BUTTON_LEFT) {
                 cameraDragging = false;
-                sliderDragging = false;
                 camDraggingPoint = -1;
                 camDraggingVelocity = -1;
                 camDraggingRotation = -1;
             }
             break;
         case CAMERA_EDITOR_ACTION_MOUSE_DRAG:
-            if (sliderDragging) {
-                double t = (double)(event->motion.x - rotationSlider.x) / (double)rotationSlider.w;
-                t = clampd(t, 0.0, 1.0);
-                double radians = t * 2.0 * M_PI;
-                CameraSetRotation(&sceneSettings.camera, radians);
-            } else if (camDraggingRotation != -1) {
+            if (camDraggingRotation != -1) {
                 Camera editorCam = BuildEditorCamera();
                 CameraPoint current = CameraEditorScreenToWorld(&editorCam,
                                                                 event->motion.x,

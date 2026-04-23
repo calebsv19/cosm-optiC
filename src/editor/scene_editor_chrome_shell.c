@@ -5,6 +5,7 @@
 
 #include "config/config_manager.h"
 #include "editor/scene_editor_surface_render.h"
+#include "editor/scene_editor_tool_state.h"
 #include "engine/Render/render_pipeline.h"
 #include "render/render_helper.h"
 #include "render/text_upload_policy.h"
@@ -15,9 +16,9 @@ SDL_Rect previewButton;
 SDL_Rect changeModeButton;
 SDL_Rect saveButton;
 SDL_Rect backToMenuButton;
+SDL_Rect selectButton;
 SDL_Rect addButton;
 SDL_Rect deleteButton;
-SDL_Rect toggleButton;
 static SDL_Rect modeSelectButtons[3];
 static char g_sceneActionFeedbackText[128];
 static Uint64 g_sceneActionFeedbackUntilMs = 0u;
@@ -62,8 +63,7 @@ void SceneEditorChromeShellSetActionFeedback(const char* text, Uint32 lifetime_m
 
 static SDL_Color scene_editor_chrome_shell_resolve_button_text_color(SDL_Color fill,
                                                                      RayTracingThemePalette palette) {
-    (void)fill;
-    return palette.button_text;
+    return ray_tracing_theme_choose_button_text(fill, palette);
 }
 
 static int scene_editor_chrome_shell_resolve_tone_delta(SDL_Color base_fill,
@@ -154,6 +154,15 @@ bool SceneEditorChromeShellIsButtonHit(int mx, int my) {
     if (SceneEditorChromeShellResolveModeButtonAtPoint(mx, my) >= 0) {
         return true;
     }
+    if (scene_editor_chrome_shell_point_in_rect(mx, my, &selectButton)) {
+        return true;
+    }
+    if (scene_editor_chrome_shell_point_in_rect(mx, my, &addButton)) {
+        return true;
+    }
+    if (scene_editor_chrome_shell_point_in_rect(mx, my, &deleteButton)) {
+        return true;
+    }
     if (scene_editor_chrome_shell_point_in_rect(mx, my, &previewButton)) {
         return true;
     }
@@ -173,7 +182,6 @@ bool SceneEditorChromeShellIsButtonHit(int mx, int my) {
 }
 
 void SceneEditorChromeShellLayoutFallback(int width, int height) {
-    int compactButtonWidth = scene_editor_chrome_shell_measure_button_width("Delete", 70);
     int compactButtonHeight = scene_editor_chrome_shell_measure_button_height(40);
     int footerButtonHeight = scene_editor_chrome_shell_measure_button_height(46);
     int buttonGap = 10;
@@ -181,16 +189,18 @@ void SceneEditorChromeShellLayoutFallback(int width, int height) {
     int contentWidth = scene_editor_chrome_shell_measure_button_width("Back to Menu", 320);
     int pairWidth = (contentWidth - buttonGap) / 2;
 
-    addButton = (SDL_Rect){width - compactButtonWidth - 20, 20, compactButtonWidth, compactButtonHeight};
-    deleteButton = (SDL_Rect){width - compactButtonWidth - 20,
-                              20 + compactButtonHeight + 20,
-                              compactButtonWidth,
+    selectButton = (SDL_Rect){20,
+                              height - compactButtonHeight - footerMargin,
+                              contentWidth,
                               compactButtonHeight};
-    toggleButton = (SDL_Rect){width - compactButtonWidth - 20,
-                              20 + (compactButtonHeight + 20) * 2,
-                              compactButtonWidth,
+    addButton = (SDL_Rect){20,
+                           selectButton.y - compactButtonHeight - buttonGap,
+                           pairWidth,
+                           compactButtonHeight};
+    deleteButton = (SDL_Rect){addButton.x + pairWidth + buttonGap,
+                              addButton.y,
+                              contentWidth - pairWidth - buttonGap,
                               compactButtonHeight};
-
     backToMenuButton = (SDL_Rect){width - contentWidth - footerMargin,
                                   height - footerButtonHeight - footerMargin,
                                   contentWidth,
@@ -219,7 +229,6 @@ void SceneEditorChromeShellLayoutFallback(int width, int height) {
 
 void SceneEditorChromeShellLayoutFromPane(const SceneEditorPaneLayout* layout) {
     int compactButtonWidth = 0;
-    int compactButtonHeight = 0;
     int actionButtonHeight = 0;
     int actionRowWidth = 0;
     int actionHalfWidth = 0;
@@ -237,8 +246,6 @@ void SceneEditorChromeShellLayoutFromPane(const SceneEditorPaneLayout* layout) {
         return;
     }
 
-    compactButtonWidth = scene_editor_chrome_shell_measure_button_width("Delete", 90);
-    compactButtonHeight = scene_editor_chrome_shell_measure_button_height(36);
     actionButtonHeight = scene_editor_chrome_shell_measure_button_height(44);
     left = layout->left_content_rect;
     right = layout->right_content_rect;
@@ -249,16 +256,61 @@ void SceneEditorChromeShellLayoutFromPane(const SceneEditorPaneLayout* layout) {
     }
     actionHalfWidth = (actionRowWidth - buttonGap) / 2;
 
-    addButton = (SDL_Rect){left.x, left.y, compactButtonWidth, compactButtonHeight};
-    deleteButton = (SDL_Rect){left.x,
-                              addButton.y + compactButtonHeight + buttonGap,
+    compactButtonWidth = left.w;
+    selectButton = (SDL_Rect){left.x,
+                              left.y + left.h - actionButtonHeight,
                               compactButtonWidth,
-                              compactButtonHeight};
-    toggleButton = (SDL_Rect){left.x,
-                              deleteButton.y + compactButtonHeight + buttonGap,
-                              compactButtonWidth,
-                              compactButtonHeight};
-
+                              actionButtonHeight};
+    addButton = (SDL_Rect){left.x,
+                           selectButton.y - actionButtonHeight - buttonGap,
+                           actionHalfWidth,
+                           actionButtonHeight};
+    deleteButton = (SDL_Rect){addButton.x + actionHalfWidth + buttonGap,
+                              addButton.y,
+                              actionRowWidth - actionHalfWidth - buttonGap,
+                              actionButtonHeight};
+    if (deleteButton.x + deleteButton.w > left.x + left.w) {
+        deleteButton.w = (left.x + left.w) - deleteButton.x;
+    }
+    if (deleteButton.w < 60) {
+        deleteButton.w = 60;
+    }
+    if (addButton.w < 60) {
+        addButton.w = 60;
+    }
+    if (addButton.x + addButton.w > left.x + left.w) {
+        addButton.w = left.w;
+    }
+    if (deleteButton.x < left.x) {
+        deleteButton.x = left.x;
+    }
+    if (deleteButton.y < left.y) {
+        deleteButton.y = left.y;
+    }
+    if (addButton.y < left.y) {
+        addButton.y = left.y;
+    }
+    if (selectButton.y < left.y) {
+        selectButton.y = left.y;
+    }
+    if (selectButton.w < compactButtonWidth) {
+        selectButton.w = compactButtonWidth;
+    }
+    if (selectButton.x != left.x) {
+        selectButton.x = left.x;
+    }
+    if (addButton.x != left.x) {
+        addButton.x = left.x;
+    }
+    if (selectButton.w > left.w) {
+        selectButton.w = left.w;
+    }
+    if (addButton.x + addButton.w > left.x + left.w) {
+        addButton.w = left.w;
+    }
+    if (deleteButton.x + deleteButton.w > left.x + left.w) {
+        deleteButton.w = (left.x + left.w) - deleteButton.x;
+    }
     backToMenuButton = (SDL_Rect){right.x,
                                   right.y + right.h - actionButtonHeight,
                                   actionRowWidth,
@@ -351,6 +403,7 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
     SDL_Rect titleRect = {0};
     SDL_Rect feedbackRect = {0};
     bool showFeedback = false;
+    SceneEditorTool active_tool = SceneEditorToolStateGetActive();
 
     if (!renderer || !contract) return;
 
@@ -397,11 +450,43 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
                                                 selectable,
                                                 scene_editor_chrome_shell_button_hovered(&modeSelectButtons[i]),
                                                 active,
-                                                active ? palette.button_active_fill : palette.button_fill,
+                                                active ? ray_tracing_theme_resolve_button_active_fill(palette)
+                                                       : palette.button_fill,
                                                 disabledFill,
                                                 borderColor,
                                                 palette);
     }
+
+    scene_editor_chrome_shell_render_button(renderer,
+                                            selectButton,
+                                            SceneEditorToolStateToolLabel(SCENE_EDITOR_TOOL_SELECT),
+                                            true,
+                                            scene_editor_chrome_shell_button_hovered(&selectButton),
+                                            active_tool == SCENE_EDITOR_TOOL_SELECT,
+                                            palette.button_fill,
+                                            disabledFill,
+                                            borderColor,
+                                            palette);
+    scene_editor_chrome_shell_render_button(renderer,
+                                            addButton,
+                                            SceneEditorToolStateToolLabel(SCENE_EDITOR_TOOL_ADD),
+                                            true,
+                                            scene_editor_chrome_shell_button_hovered(&addButton),
+                                            active_tool == SCENE_EDITOR_TOOL_ADD,
+                                            palette.button_fill,
+                                            disabledFill,
+                                            borderColor,
+                                            palette);
+    scene_editor_chrome_shell_render_button(renderer,
+                                            deleteButton,
+                                            SceneEditorToolStateToolLabel(SCENE_EDITOR_TOOL_DELETE),
+                                            true,
+                                            scene_editor_chrome_shell_button_hovered(&deleteButton),
+                                            active_tool == SCENE_EDITOR_TOOL_DELETE,
+                                            palette.button_fill,
+                                            disabledFill,
+                                            borderColor,
+                                            palette);
 
     scene_editor_chrome_shell_render_button(renderer,
                                             applyButton,

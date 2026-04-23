@@ -12,6 +12,7 @@
 #include "editor/scene_editor_chrome_shell.h"
 #include "editor/scene_editor_control_surface.h"
 #include "editor/scene_editor_runtime_scene_persistence.h"
+#include "editor/scene_editor_tool_state.h"
 
 static bool scene_editor_chrome_actions_point_in_rect(int x, int y, const SDL_Rect* rect) {
     if (!rect) return false;
@@ -247,7 +248,13 @@ static bool scene_editor_dispatch_controlled_3d_object_canvas_command(
     const SceneEditorPaneCommand* command) {
     RuntimeSceneBridge3DDigestState digest = {0};
     SceneEditorDigestOverlayProjector projector = {0};
+    SceneEditorBezier3DInteractionMetrics metrics = {0};
+    double plane_z = 0.0;
+    SceneEditorTool active_tool = SceneEditorToolStateGetEffective(SDL_GetModState());
     int pick = -1;
+    double world_x = 0.0;
+    double world_y = 0.0;
+    double world_z = 0.0;
     if (!env || !env->pane_layout || !env->viewport_nav_state || !env->digest_hover_object_index) return false;
     if (!command || !command->event) return false;
     if (command->kind != SCENE_EDITOR_PANE_COMMAND_POINTER_DOWN) return false;
@@ -261,6 +268,8 @@ static bool scene_editor_dispatch_controlled_3d_object_canvas_command(
                                                 &env->pane_layout->viewport_rect,
                                                 env->viewport_nav_state,
                                                 &projector)) return false;
+    metrics = SceneEditorDigestOverlayResolveBezierMetrics(&digest, &projector);
+    plane_z = SceneEditorDigestOverlayResolveEditPlaneZ(&digest, &projector);
 
     pick = SceneEditorDigestOverlayPickObjectIndex(&projector,
                                                    &digest,
@@ -269,11 +278,29 @@ static bool scene_editor_dispatch_controlled_3d_object_canvas_command(
     if (pick < 0) {
         pick = *env->digest_hover_object_index;
     }
-    if (pick < 0) {
+    if (pick >= 0) {
+        if (active_tool == SCENE_EDITOR_TOOL_DELETE) {
+            return ObjectEditorDeleteObjectIndex(pick);
+        }
+        ObjectEditorSetSelectedObjectIndex(pick);
+        return true;
+    }
+    if (active_tool != SCENE_EDITOR_TOOL_ADD) {
+        ObjectEditorSetSelectedObjectIndex(-1);
+        return true;
+    }
+    if (!SceneEditorDigestOverlayScreenRayToPlanePoint(&projector,
+                                                       command->event->button.x,
+                                                       command->event->button.y,
+                                                       plane_z,
+                                                       &world_x,
+                                                       &world_y,
+                                                       &world_z)) {
         return false;
     }
-    ObjectEditorSetSelectedObjectIndex(pick);
-    return true;
+    world_x = SceneEditorDigestOverlayQuantizeWorldValue(world_x, metrics.snap_step);
+    world_y = SceneEditorDigestOverlayQuantizeWorldValue(world_y, metrics.snap_step);
+    return ObjectEditorAddPlacementAt(world_x, world_y);
 }
 
 static bool scene_editor_dispatch_controlled_3d_camera_canvas_command(
@@ -284,6 +311,7 @@ static bool scene_editor_dispatch_controlled_3d_camera_canvas_command(
     SceneEditorBezier3DInteractionMetrics metrics = {0};
     double plane_z = 0.0;
     SDL_Keymod mods = SDL_GetModState();
+    SceneEditorTool active_tool = SceneEditorToolStateGetEffective(mods);
     SceneEditorBezier3DGizmoAxis axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
     int pick = -1;
     int handle_segment = -1;
@@ -331,44 +359,46 @@ static bool scene_editor_dispatch_controlled_3d_camera_canvas_command(
         return false;
     }
 
-    axis = SceneEditorDigestOverlayPickCameraGizmoAxis(&projector,
-                                                       &digest,
-                                                       command->event->button.x,
-                                                       command->event->button.y);
-    if (axis != SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE) {
-        if (SceneEditorDigestOverlayResolveSelectedCameraGizmoWorldPosition(&projector,
-                                                                            &digest,
-                                                                            &env->camera_gizmo_state->drag_start_world_x,
-                                                                            &env->camera_gizmo_state->drag_start_world_y,
-                                                                            &env->camera_gizmo_state->drag_start_world_z)) {
-            env->camera_gizmo_state->dragging = true;
-            env->camera_gizmo_state->drag_axis = axis;
-            env->camera_gizmo_state->smooth_drag = ((mods & (KMOD_GUI | KMOD_CTRL)) != 0);
-            env->camera_gizmo_state->drag_start_mouse_x = command->event->button.x;
-            env->camera_gizmo_state->drag_start_mouse_y = command->event->button.y;
-            return true;
+    if (active_tool == SCENE_EDITOR_TOOL_SELECT) {
+        axis = SceneEditorDigestOverlayPickCameraGizmoAxis(&projector,
+                                                           &digest,
+                                                           command->event->button.x,
+                                                           command->event->button.y);
+        if (axis != SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE) {
+            if (SceneEditorDigestOverlayResolveSelectedCameraGizmoWorldPosition(&projector,
+                                                                                &digest,
+                                                                                &env->camera_gizmo_state->drag_start_world_x,
+                                                                                &env->camera_gizmo_state->drag_start_world_y,
+                                                                                &env->camera_gizmo_state->drag_start_world_z)) {
+                env->camera_gizmo_state->dragging = true;
+                env->camera_gizmo_state->drag_axis = axis;
+                env->camera_gizmo_state->smooth_drag = ((mods & (KMOD_GUI | KMOD_CTRL)) != 0);
+                env->camera_gizmo_state->drag_start_mouse_x = command->event->button.x;
+                env->camera_gizmo_state->drag_start_mouse_y = command->event->button.y;
+                return true;
+            }
+            return false;
         }
-        return false;
-    }
 
-    if (SceneEditorDigestOverlayPickCameraBezierHandle(&projector,
-                                                       command->event->button.x,
-                                                       command->event->button.y,
-                                                       &handle_segment,
-                                                       &handle_index)) {
-        memset(env->camera_gizmo_state, 0, sizeof(*env->camera_gizmo_state));
-        env->camera_gizmo_state->drag_axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
-        return CameraEditorSelectBezierHandle(handle_segment, handle_index);
-    }
+        if (SceneEditorDigestOverlayPickCameraBezierHandle(&projector,
+                                                           command->event->button.x,
+                                                           command->event->button.y,
+                                                           &handle_segment,
+                                                           &handle_index)) {
+            memset(env->camera_gizmo_state, 0, sizeof(*env->camera_gizmo_state));
+            env->camera_gizmo_state->drag_axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
+            return CameraEditorSelectBezierHandle(handle_segment, handle_index);
+        }
 
-    rotation_pick = SceneEditorDigestOverlayPickCameraRotationHandle(&projector,
-                                                                     &digest,
-                                                                     command->event->button.x,
-                                                                     command->event->button.y);
-    if (rotation_pick >= 0) {
-        memset(env->camera_gizmo_state, 0, sizeof(*env->camera_gizmo_state));
-        env->camera_gizmo_state->drag_axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
-        return CameraEditorSelectRotationHandle(rotation_pick);
+        rotation_pick = SceneEditorDigestOverlayPickCameraRotationHandle(&projector,
+                                                                         &digest,
+                                                                         command->event->button.x,
+                                                                         command->event->button.y);
+        if (rotation_pick >= 0) {
+            memset(env->camera_gizmo_state, 0, sizeof(*env->camera_gizmo_state));
+            env->camera_gizmo_state->drag_axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
+            return CameraEditorSelectRotationHandle(rotation_pick);
+        }
     }
 
     pick = SceneEditorDigestOverlayPickCameraPointIndex(&projector,
@@ -377,11 +407,18 @@ static bool scene_editor_dispatch_controlled_3d_camera_canvas_command(
     if (pick >= 0) {
         memset(env->camera_gizmo_state, 0, sizeof(*env->camera_gizmo_state));
         env->camera_gizmo_state->drag_axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
+        if (active_tool == SCENE_EDITOR_TOOL_DELETE) {
+            int old_count = sceneSettings.cameraPath.numPoints;
+            CameraPath3D_RemovePoint(&sceneSettings.cameraPath3D, pick, old_count);
+            RemoveBezierPoint(&sceneSettings.cameraPath, pick);
+            CameraEditorClearSelection();
+            return true;
+        }
         CameraEditorSetSelectedPointIndex(pick);
         return true;
     }
 
-    if ((mods & KMOD_SHIFT) == 0) {
+    if (active_tool != SCENE_EDITOR_TOOL_ADD) {
         memset(env->camera_gizmo_state, 0, sizeof(*env->camera_gizmo_state));
         env->camera_gizmo_state->drag_axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
         CameraEditorClearSelection();
@@ -429,6 +466,7 @@ static bool scene_editor_dispatch_controlled_3d_bezier_canvas_command(
     SceneEditorBezier3DInteractionMetrics metrics = {0};
     double plane_z = 0.0;
     SDL_Keymod mods = SDL_GetModState();
+    SceneEditorTool active_tool = SceneEditorToolStateGetEffective(mods);
     SceneEditorBezier3DGizmoAxis axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
     int handle_segment = -1;
     int handle_index = -1;
@@ -474,36 +512,38 @@ static bool scene_editor_dispatch_controlled_3d_bezier_canvas_command(
         command->event->button.button != SDL_BUTTON_LEFT) {
         return false;
     }
-    axis = SceneEditorDigestOverlayPickBezierGizmoAxis(&projector,
-                                                       &digest,
-                                                       command->event->button.x,
-                                                       command->event->button.y);
-    if (axis != SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE) {
-        if (!SceneEditorDigestOverlayBezierGizmoAxisLocked(axis) &&
-            BezierEditorGetSelectionWorldPosition3D(&env->bezier_gizmo_state->drag_start_world_x,
-                                                    &env->bezier_gizmo_state->drag_start_world_y,
-                                                    &env->bezier_gizmo_state->drag_start_world_z)) {
-            env->bezier_gizmo_state->dragging = true;
-            env->bezier_gizmo_state->drag_axis = axis;
-            env->bezier_gizmo_state->smooth_drag = ((mods & (KMOD_GUI | KMOD_CTRL)) != 0);
-            env->bezier_gizmo_state->drag_start_mouse_x = command->event->button.x;
-            env->bezier_gizmo_state->drag_start_mouse_y = command->event->button.y;
+    if (active_tool == SCENE_EDITOR_TOOL_SELECT) {
+        axis = SceneEditorDigestOverlayPickBezierGizmoAxis(&projector,
+                                                           &digest,
+                                                           command->event->button.x,
+                                                           command->event->button.y);
+        if (axis != SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE) {
+            if (!SceneEditorDigestOverlayBezierGizmoAxisLocked(axis) &&
+                BezierEditorGetSelectionWorldPosition3D(&env->bezier_gizmo_state->drag_start_world_x,
+                                                        &env->bezier_gizmo_state->drag_start_world_y,
+                                                        &env->bezier_gizmo_state->drag_start_world_z)) {
+                env->bezier_gizmo_state->dragging = true;
+                env->bezier_gizmo_state->drag_axis = axis;
+                env->bezier_gizmo_state->smooth_drag = ((mods & (KMOD_GUI | KMOD_CTRL)) != 0);
+                env->bezier_gizmo_state->drag_start_mouse_x = command->event->button.x;
+                env->bezier_gizmo_state->drag_start_mouse_y = command->event->button.y;
+                return true;
+            }
+            return false;
+        }
+        if (SceneEditorDigestOverlayPickBezierHandle(&projector,
+                                                     &sceneSettings.bezierPath,
+                                                     &sceneSettings.bezierPath3D,
+                                                     plane_z,
+                                                     command->event->button.x,
+                                                     command->event->button.y,
+                                                     &handle_segment,
+                                                     &handle_index) >= 0) {
+            memset(env->bezier_gizmo_state, 0, sizeof(*env->bezier_gizmo_state));
+            env->bezier_gizmo_state->drag_axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
+            BezierEditorSelectHandle(handle_segment, handle_index);
             return true;
         }
-        return false;
-    }
-    if (SceneEditorDigestOverlayPickBezierHandle(&projector,
-                                                 &sceneSettings.bezierPath,
-                                                 &sceneSettings.bezierPath3D,
-                                                 plane_z,
-                                                 command->event->button.x,
-                                                 command->event->button.y,
-                                                 &handle_segment,
-                                                 &handle_index) >= 0) {
-        memset(env->bezier_gizmo_state, 0, sizeof(*env->bezier_gizmo_state));
-        env->bezier_gizmo_state->drag_axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
-        BezierEditorSelectHandle(handle_segment, handle_index);
-        return true;
     }
     pick = SceneEditorDigestOverlayPickBezierPointIndex(&projector,
                                                         &sceneSettings.bezierPath,
@@ -514,10 +554,15 @@ static bool scene_editor_dispatch_controlled_3d_bezier_canvas_command(
     if (pick >= 0) {
         memset(env->bezier_gizmo_state, 0, sizeof(*env->bezier_gizmo_state));
         env->bezier_gizmo_state->drag_axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
+        if (active_tool == SCENE_EDITOR_TOOL_DELETE) {
+            RemoveBezierPoint(&sceneSettings.bezierPath, pick);
+            BezierEditorClearSelection();
+            return true;
+        }
         BezierEditorSetSelectedPointIndex(pick);
         return true;
     }
-    if ((mods & KMOD_SHIFT) == 0) {
+    if (active_tool != SCENE_EDITOR_TOOL_ADD) {
         memset(env->bezier_gizmo_state, 0, sizeof(*env->bezier_gizmo_state));
         env->bezier_gizmo_state->drag_axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
         BezierEditorClearSelection();

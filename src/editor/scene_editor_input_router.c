@@ -310,7 +310,7 @@ static SceneEditorPaneHitRegion scene_editor_resolve_pane_hit_region(SceneEditor
     }
     if (target == SCENE_EDITOR_INPUT_TARGET_CAMERA_PANE) {
         CameraEditorHitRegion hit = CameraEditorHitRegionAtPoint(mx, my);
-        if (hit == CAMERA_EDITOR_HIT_CONTROLS || hit == CAMERA_EDITOR_HIT_SLIDER) {
+        if (hit == CAMERA_EDITOR_HIT_CONTROLS) {
             return SCENE_EDITOR_PANE_HIT_CONTROLS;
         }
         return SCENE_EDITOR_PANE_HIT_CANVAS;

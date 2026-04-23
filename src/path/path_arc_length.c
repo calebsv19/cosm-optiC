@@ -1,4 +1,5 @@
 #include "path/path_system.h"
+#include "camera/camera_path_3d.h"
 
 #include <math.h>
 #include <string.h>
@@ -36,6 +37,21 @@ static double path_arc_length_distance(Point a, Point b) {
     double dx = a.x - b.x;
     double dy = a.y - b.y;
     return sqrt(dx * dx + dy * dy);
+}
+
+static double path_arc_length_endpoint_distance_sq(Point sample_xy,
+                                                   double sample_z,
+                                                   Point endpoint_xy,
+                                                   double endpoint_z,
+                                                   bool include_z) {
+    double dx = sample_xy.x - endpoint_xy.x;
+    double dy = sample_xy.y - endpoint_xy.y;
+    double distance_sq = dx * dx + dy * dy;
+    if (include_z) {
+        double dz = sample_z - endpoint_z;
+        distance_sq += dz * dz;
+    }
+    return distance_sq;
 }
 
 static double path_arc_length_interval_tolerance(double chord_length) {
@@ -206,6 +222,72 @@ double PathResolveNormalizedGlobalT(const Path* path, double t) {
         }
         return prev->global_t + (next->global_t - prev->global_t) * alpha;
     }
+}
+
+bool PathResolveTraversalEndpoints(const Path* path,
+                                   const CameraPath3D* path3d,
+                                   PathTraversalEndpoints* out_endpoints) {
+    int last_index = 0;
+    Point authored_first = {0};
+    Point authored_last = {0};
+    Point sampled_start = {0};
+    Point sampled_end = {0};
+    double authored_first_z = 0.0;
+    double authored_last_z = 0.0;
+    double sampled_start_z = 0.0;
+    double sampled_end_z = 0.0;
+    bool include_z = false;
+
+    if (!out_endpoints) return false;
+    memset(out_endpoints, 0, sizeof(*out_endpoints));
+    if (!path || path->numPoints <= 0) {
+        return false;
+    }
+
+    last_index = path->numPoints - 1;
+    authored_first = path->points[0];
+    authored_last = path->points[last_index];
+    sampled_start = GetPositionAlongPathNormalized((Path*)path, 0.0);
+    sampled_end = GetPositionAlongPathNormalized((Path*)path, 1.0);
+
+    if (path3d) {
+        include_z = true;
+        authored_first_z = path3d->point_z[0];
+        authored_last_z = path3d->point_z[last_index];
+        sampled_start_z = CameraPath3D_GetPositionZNormalized(path, path3d, 0.0);
+        sampled_end_z = CameraPath3D_GetPositionZNormalized(path, path3d, 1.0);
+    }
+
+    out_endpoints->has_z = include_z;
+    out_endpoints->start_xy = sampled_start;
+    out_endpoints->end_xy = sampled_end;
+    out_endpoints->start_z = sampled_start_z;
+    out_endpoints->end_z = sampled_end_z;
+
+    if (path->numPoints == 1) {
+        out_endpoints->start_point_index = 0;
+        out_endpoints->end_point_index = 0;
+        return true;
+    }
+
+    if (path_arc_length_endpoint_distance_sq(sampled_start,
+                                             sampled_start_z,
+                                             authored_first,
+                                             authored_first_z,
+                                             include_z) <=
+        path_arc_length_endpoint_distance_sq(sampled_start,
+                                             sampled_start_z,
+                                             authored_last,
+                                             authored_last_z,
+                                             include_z)) {
+        out_endpoints->start_point_index = 0;
+        out_endpoints->end_point_index = last_index;
+    } else {
+        out_endpoints->start_point_index = last_index;
+        out_endpoints->end_point_index = 0;
+    }
+
+    return true;
 }
 
 void PathMapNormalizedT(const Path* path, double t, int* out_segment, double* out_local_t) {

@@ -147,6 +147,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/backend/ray_tracing_mode_backend.o \
 	$(BUILD_DIR)/editor/editor_mode_router.o \
 	$(BUILD_DIR)/editor/scene_editor_control_surface.o \
+	$(BUILD_DIR)/editor/scene_editor_tool_state.o \
 	$(BUILD_DIR)/editor/scene_editor_runtime_scene_persistence.o \
 	$(BUILD_DIR)/path/path_system.o \
 	$(BUILD_DIR)/path/path_arc_length.o \

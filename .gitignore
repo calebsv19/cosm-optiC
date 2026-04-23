@@ -1,5 +1,7 @@
 # Ignore build artifacts
 build/
+build_clang_obj/
+build_fisics_obj/
 build_release/
 Frontend/
 Backend/

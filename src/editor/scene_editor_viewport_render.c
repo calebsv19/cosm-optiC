@@ -8,6 +8,7 @@
 #include "editor/camera_editor.h"
 #include "editor/editor_mode_router.h"
 #include "editor/object_editor.h"
+#include "editor/scene_editor.h"
 #include "render/ray_tracing_mode_backend.h"
 #include "render/fluid/fluid_state.h"
 
@@ -83,19 +84,37 @@ void SceneEditorViewportRenderDraw(SDL_Renderer* renderer,
                                    int current_mode,
                                    SceneEditorViewportDigestRenderFn digest_render) {
     SceneEditorViewportRenderLane lane = scene_editor_viewport_render_resolve_lane();
+    SceneEditorPaneLayout pane_layout = {0};
+    SDL_Rect previous_clip = {0};
+    bool had_clip = false;
+    bool use_clip = false;
 
     if (!renderer) return;
+    had_clip = SDL_RenderIsClipEnabled(renderer) == SDL_TRUE;
+    if (had_clip) {
+        SDL_RenderGetClipRect(renderer, &previous_clip);
+    }
+    if (SceneEditorGetPaneLayout(&pane_layout)) {
+        SDL_RenderSetClipRect(renderer, &pane_layout.viewport_rect);
+        use_clip = true;
+    }
 
     if (lane == SCENE_EDITOR_VIEWPORT_RENDER_LANE_PLANAR_2D) {
         scene_editor_viewport_render_active_mode_layer(renderer, current_mode);
         scene_editor_viewport_render_fluid_bounds(renderer);
-        return;
-    }
-    if (lane == SCENE_EDITOR_VIEWPORT_RENDER_LANE_DIGEST_3D) {
+    } else if (lane == SCENE_EDITOR_VIEWPORT_RENDER_LANE_DIGEST_3D) {
         if (digest_render) {
             digest_render(renderer);
         }
-        return;
+    } else {
+        /* Native 3D lane reserved: no viewport-owned fallback primitives in this phase. */
     }
-    /* Native 3D lane reserved: no viewport-owned fallback primitives in this phase. */
+
+    if (use_clip) {
+        if (had_clip) {
+            SDL_RenderSetClipRect(renderer, &previous_clip);
+        } else {
+            SDL_RenderSetClipRect(renderer, NULL);
+        }
+    }
 }

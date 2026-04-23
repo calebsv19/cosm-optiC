@@ -322,6 +322,8 @@ static void SceneEditorDigestOverlayDrawBezier3D(SDL_Renderer* renderer,
     SDL_Color hover_point_color = {255, 240, 176, 255};
     SDL_Color start_color = {0, 200, 0, 235};
     SDL_Color end_color = {220, 40, 40, 235};
+    PathTraversalEndpoints endpoints = {0};
+    bool have_endpoints = false;
     int selected_segment = -1;
     int selected_handle = -1;
     int hover_segment = -1;
@@ -330,6 +332,9 @@ static void SceneEditorDigestOverlayDrawBezier3D(SDL_Renderer* renderer,
     BezierEditorSelectionKind selection_kind = BezierEditorGetSelectionKind();
     int i = 0;
     if (!renderer || !projector || !gizmo_state) return;
+    have_endpoints = PathResolveTraversalEndpoints(&sceneSettings.bezierPath,
+                                                   &sceneSettings.bezierPath3D,
+                                                   &endpoints);
     hover_point = SceneEditorDigestOverlayPickBezierPointIndex(projector,
                                                                &sceneSettings.bezierPath,
                                                                &sceneSettings.bezierPath3D,
@@ -447,10 +452,12 @@ static void SceneEditorDigestOverlayDrawBezier3D(SDL_Renderer* renderer,
         int radius = point_selected ? 6 : (point_hovered ? 5 : 4);
         SDL_Rect marker = {0, 0, 0, 0};
         SDL_Color color = point_selected ? selected_color : (point_hovered ? hover_point_color : point_color);
-        if (!point_selected && !point_hovered && i == 0) {
-            color = start_color;
-        } else if (!point_selected && !point_hovered && i == sceneSettings.bezierPath.numPoints - 1) {
-            color = end_color;
+        if (!point_selected && !point_hovered) {
+            if (have_endpoints && i == endpoints.start_point_index) {
+                color = start_color;
+            } else if (have_endpoints && i == endpoints.end_point_index) {
+                color = end_color;
+            }
         }
         if (!SceneEditorDigestOverlayProjectPoint(projector,
                                                   sceneSettings.bezierPath.points[i].x,

@@ -20,6 +20,7 @@
 #include "editor/editor_mode_router.h"
 #include "editor/scene_editor_control_surface.h"
 #include "editor/scene_editor_runtime_scene_persistence.h"
+#include "editor/scene_editor_tool_state.h"
 #include "render/ray_tracing2.h"
 #include "render/ray_tracing_mode_backend.h"
 #include "render/integrator_common.h"
@@ -32,6 +33,7 @@
 #include "render/render_helper.h"
 #include "import/runtime_scene_bridge.h"
 #include "path/path_system.h"
+#include "config/config_scene_path_io.h"
 #include "core_scene_compile.h"
 #include "ui/scene_source_catalog.h"
 #include "ui/sdl_menu_state.h"
@@ -216,6 +218,44 @@ static int test_diffuse_evaluate(void) {
     double v = MaterialBSDFEvaluateCos(&m, nx, ny, inX, inY, outX, outY);
     assert_close("diffuse_evaluate_cos", v, 0.8 / M_PI, 1e-4);
     return 0;
+}
+
+static void test_scene_editor_tool_state_contract(void) {
+    SceneEditorToolStateReset();
+    assert_true("tool_state_default_select",
+                SceneEditorToolStateGetActive() == SCENE_EDITOR_TOOL_SELECT);
+    assert_true("tool_state_default_label",
+                strcmp(SceneEditorToolStateToolLabel(SceneEditorToolStateGetActive()), "Select") == 0);
+    assert_true("tool_state_select_active",
+                SceneEditorToolStateToolIsActive(SCENE_EDITOR_TOOL_SELECT));
+    assert_true("tool_state_shift_select_to_add",
+                SceneEditorToolStateGetEffective(KMOD_SHIFT) == SCENE_EDITOR_TOOL_ADD);
+
+    SceneEditorToolStateSetActive(SCENE_EDITOR_TOOL_ADD);
+    assert_true("tool_state_add_active",
+                SceneEditorToolStateGetActive() == SCENE_EDITOR_TOOL_ADD);
+    assert_true("tool_state_shift_add_stays_add",
+                SceneEditorToolStateGetEffective(KMOD_SHIFT) == SCENE_EDITOR_TOOL_ADD);
+
+    SceneEditorToolStateSetActive(SCENE_EDITOR_TOOL_DELETE);
+    assert_true("tool_state_delete_active",
+                SceneEditorToolStateGetActive() == SCENE_EDITOR_TOOL_DELETE);
+    assert_true("tool_state_shift_delete_stays_delete",
+                SceneEditorToolStateGetEffective(KMOD_SHIFT) == SCENE_EDITOR_TOOL_DELETE);
+
+    SceneEditorToolStateToggleOrReset(SCENE_EDITOR_TOOL_DELETE);
+    assert_true("tool_state_toggle_delete_to_select",
+                SceneEditorToolStateGetActive() == SCENE_EDITOR_TOOL_SELECT);
+    SceneEditorToolStateToggleOrReset(SCENE_EDITOR_TOOL_ADD);
+    assert_true("tool_state_toggle_select_to_add",
+                SceneEditorToolStateGetActive() == SCENE_EDITOR_TOOL_ADD);
+
+    SceneEditorToolStateSetActive((SceneEditorTool)99);
+    assert_true("tool_state_invalid_clamps_select",
+                SceneEditorToolStateGetActive() == SCENE_EDITOR_TOOL_SELECT);
+    assert_true("tool_state_resolve_invalid_clamps_select",
+                SceneEditorToolStateResolveEffective((SceneEditorTool)99, KMOD_NONE) ==
+                    SCENE_EDITOR_TOOL_SELECT);
 }
 
 static int test_diffuse_pdf(void) {
@@ -1165,6 +1205,72 @@ static int test_path_normalized_spacing_preserves_tail_motion(void) {
     assert_true("path_norm_tail_uniformity", max_step / min_step < 1.2);
 
     animSettings.spaceMode = original_space_mode;
+    return 0;
+}
+
+static int test_path_traversal_endpoints_follow_sampled_contract(void) {
+    Path path = {0};
+    CameraPath3D path3d = {0};
+    PathTraversalEndpoints endpoints = {0};
+    bool ok = false;
+    int original_space_mode = animSettings.spaceMode;
+
+    path.mode = BEZIER_CUBIC;
+    path.numPoints = 3;
+    path.points[0] = (Point){2.0, 3.0};
+    path.points[1] = (Point){8.0, 11.0};
+    path.points[2] = (Point){17.0, 19.0};
+    path.handles[0][0] = (Velocity){1.5, 2.0};
+    path.handles[0][1] = (Velocity){-1.0, -1.5};
+    path.handles[1][0] = (Velocity){2.5, -0.5};
+    path.handles[1][1] = (Velocity){-2.0, 1.0};
+    path3d.point_z[0] = 4.0;
+    path3d.point_z[1] = 9.0;
+    path3d.point_z[2] = 13.0;
+    path3d.handles_vz[0][0] = 1.0;
+    path3d.handles_vz[0][1] = -1.5;
+    path3d.handles_vz[1][0] = 0.5;
+    path3d.handles_vz[1][1] = -0.75;
+
+    animSettings.spaceMode = SPACE_MODE_3D;
+    ok = PathResolveTraversalEndpoints(&path, &path3d, &endpoints);
+
+    assert_true("path_traversal_endpoints_resolved", ok);
+    assert_true("path_traversal_start_index", endpoints.start_point_index == 0);
+    assert_true("path_traversal_end_index", endpoints.end_point_index == 2);
+    assert_true("path_traversal_has_z", endpoints.has_z);
+    assert_close("path_traversal_start_x", endpoints.start_xy.x, path.points[0].x, 1e-9);
+    assert_close("path_traversal_start_y", endpoints.start_xy.y, path.points[0].y, 1e-9);
+    assert_close("path_traversal_end_x", endpoints.end_xy.x, path.points[2].x, 1e-9);
+    assert_close("path_traversal_end_y", endpoints.end_xy.y, path.points[2].y, 1e-9);
+    assert_close("path_traversal_start_z", endpoints.start_z, path3d.point_z[0], 1e-9);
+    assert_close("path_traversal_end_z", endpoints.end_z, path3d.point_z[2], 1e-9);
+
+    animSettings.spaceMode = original_space_mode;
+    return 0;
+}
+
+static int test_camera_path_default_preserves_empty_authored_state(void) {
+    SceneConfig scene = {0};
+    struct json_object* root = json_object_new_object();
+    struct json_object* camera_path = json_object_new_object();
+    struct json_object* points = json_object_new_array();
+    bool loaded = false;
+
+    scene.camera.x = 12.0;
+    scene.camera.y = -4.0;
+    scene.cameraZ = 7.5;
+    config_scene_ensure_camera_path_default(&scene);
+    assert_true("camera_path_default_empty_points", scene.cameraPath.numPoints == 0);
+
+    json_object_object_add(camera_path, "mode", json_object_new_string("BEZIER_CUBIC"));
+    json_object_object_add(camera_path, "points", points);
+    json_object_object_add(root, "cameraPath", camera_path);
+    loaded = config_scene_load_camera_path_from_json(root, "cameraPath", &scene.cameraPath);
+    assert_true("camera_path_load_empty_allowed", loaded);
+    assert_true("camera_path_load_empty_points", scene.cameraPath.numPoints == 0);
+
+    json_object_put(root);
     return 0;
 }
 
@@ -3137,7 +3243,7 @@ static void test_preview_camera_projector_projection_contract(void) {
     assert_close("preview_camera_projector_forward_x", projector.forward_x, 0.0, 1e-6);
     assert_close("preview_camera_projector_forward_y", projector.forward_y, -1.0, 1e-6);
     assert_close("preview_camera_projector_forward_z", projector.forward_z, 0.0, 1e-6);
-    assert_close("preview_camera_projector_right_x", projector.right_x, -1.0, 1e-6);
+    assert_close("preview_camera_projector_right_x", projector.right_x, 1.0, 1e-6);
     assert_close("preview_camera_projector_right_y", projector.right_y, 0.0, 1e-6);
     assert_close("preview_camera_projector_right_z", projector.right_z, 0.0, 1e-6);
     assert_close("preview_camera_projector_up_x", projector.up_x, 0.0, 1e-6);
@@ -3165,7 +3271,7 @@ static void test_preview_camera_projector_projection_contract(void) {
 
     assert_true("preview_camera_projector_project_screen_right",
                 PreviewCameraProjectorProjectPoint(&projector,
-                                                   -10.0,
+                                                   10.0,
                                                    -10.0,
                                                    0.0,
                                                    &sx,
@@ -3353,8 +3459,11 @@ int main(int argc, char **argv) {
     test_runtime_scene_bridge_apply_runtime_fixture();
     test_path_eval_3d_uses_linear_handle_units();
     test_path_normalized_spacing_preserves_tail_motion();
+    test_path_traversal_endpoints_follow_sampled_contract();
+    test_camera_path_default_preserves_empty_authored_state();
     test_preview_camera_sample_evaluate_contract();
     test_preview_camera_projector_projection_contract();
+    test_scene_editor_tool_state_contract();
     test_preview_retained_scene_line_segments_contract();
     test_preview_mode_route_select_contract();
     test_preview_playback_evaluate_contract();

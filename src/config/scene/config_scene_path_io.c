@@ -149,6 +149,15 @@ bool config_scene_load_path_from_json(struct json_object* config, const char* ke
     return config_scene_load_path_from_json_object(path_data, out, false);
 }
 
+bool config_scene_load_camera_path_from_json(struct json_object* config, const char* key, Path* out) {
+    struct json_object *path_data = NULL;
+    if (!config || !key || !out) return false;
+    if (!json_object_object_get_ex(config, key, &path_data)) {
+        return false;
+    }
+    return config_scene_load_path_from_json_object(path_data, out, true);
+}
+
 void config_scene_save_path_depth_to_json(struct json_object* config,
                                           const char* key,
                                           const CameraPath3D* path3d,
@@ -201,11 +210,5 @@ void config_scene_ensure_camera_path_default(SceneConfig* scene) {
     }
 
     config_scene_reset_path(&scene->cameraPath);
-    scene->cameraPath.numPoints = 1;
-    scene->cameraPath.points[0].x = scene->camera.x;
-    scene->cameraPath.points[0].y = scene->camera.y;
-    scene->cameraPath.rotations[0] = 0.0;
-    scene->cameraPath.rotationSet[0] = true;
     CameraPath3D_Reset(&scene->cameraPath3D);
-    scene->cameraPath3D.point_z[0] = scene->cameraZ;
 }

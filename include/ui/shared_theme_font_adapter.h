@@ -17,6 +17,8 @@ typedef struct RayTracingThemePalette {
 } RayTracingThemePalette;
 
 bool ray_tracing_shared_theme_resolve_palette(RayTracingThemePalette* out_palette);
+SDL_Color ray_tracing_theme_resolve_button_active_fill(RayTracingThemePalette palette);
+SDL_Color ray_tracing_theme_choose_button_text(SDL_Color fill, RayTracingThemePalette palette);
 bool ray_tracing_shared_font_resolve_ui_regular(char* out_path, size_t out_path_size, int* out_point_size);
 bool ray_tracing_shared_theme_cycle_next(void);
 bool ray_tracing_shared_theme_cycle_prev(void);

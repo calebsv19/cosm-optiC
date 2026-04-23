@@ -640,11 +640,13 @@ void LoadSceneConfig(void) {
         }
     }
 
-    bool cameraPathLoaded = config_scene_load_path_from_json(config, "cameraPath", &sceneSettings.cameraPath);
+    bool cameraPathLoaded = config_scene_load_camera_path_from_json(config,
+                                                                    "cameraPath",
+                                                                    &sceneSettings.cameraPath);
     if (cameraPathLoaded) {
         printf("INFO: Loaded Camera Path with %d point(s).\n", sceneSettings.cameraPath.numPoints);
     } else {
-        printf("INFO: Camera path missing in config; using default at camera center.\n");
+        printf("INFO: Camera path missing in config; leaving authored camera path empty.\n");
     }
     {
         struct json_object* camera_z_obj = NULL;

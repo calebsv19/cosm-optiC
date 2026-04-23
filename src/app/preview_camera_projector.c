@@ -76,12 +76,12 @@ bool PreviewCameraProjectorBuild(const PreviewCameraSample* sample,
                                        &projector.forward_y,
                                        &projector.forward_z);
 
-    preview_camera_projector_cross(projector.forward_x,
-                                   projector.forward_y,
-                                   projector.forward_z,
-                                   world_up_x,
+    preview_camera_projector_cross(world_up_x,
                                    world_up_y,
                                    world_up_z,
+                                   projector.forward_x,
+                                   projector.forward_y,
+                                   projector.forward_z,
                                    &projector.right_x,
                                    &projector.right_y,
                                    &projector.right_z);
@@ -96,12 +96,12 @@ bool PreviewCameraProjectorBuild(const PreviewCameraSample* sample,
                                        &projector.right_y,
                                        &projector.right_z);
 
-    preview_camera_projector_cross(projector.right_x,
-                                   projector.right_y,
-                                   projector.right_z,
-                                   projector.forward_x,
+    preview_camera_projector_cross(projector.forward_x,
                                    projector.forward_y,
                                    projector.forward_z,
+                                   projector.right_x,
+                                   projector.right_y,
+                                   projector.right_z,
                                    &projector.up_x,
                                    &projector.up_y,
                                    &projector.up_z);

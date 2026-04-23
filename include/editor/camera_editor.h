@@ -7,7 +7,6 @@
 typedef enum CameraEditorHitRegion {
     CAMERA_EDITOR_HIT_NONE = 0,
     CAMERA_EDITOR_HIT_CONTROLS,
-    CAMERA_EDITOR_HIT_SLIDER,
     CAMERA_EDITOR_HIT_CANVAS
 } CameraEditorHitRegion;
 
@@ -19,16 +18,15 @@ typedef enum CameraEditorSelectionKind {
 } CameraEditorSelectionKind;
 
 double GetCurrentMarginPixels(void);
-void RenderEditorHUD(SDL_Renderer* renderer, const char* label, bool showRotation);
 
 // Camera Editor: Handles viewport adjustments and scene framing
 
 // Initialization
 void InitializeCameraEditor(void);
-void CameraEditorSyncPathStartForViewport(void);
 
 // Rendering
 void RenderCameraEditor(SDL_Renderer* renderer);
+int CameraEditorRenderPaneControls(SDL_Renderer* renderer, SDL_Rect content_bounds, int top_y, int bottom_y);
 
 // Event Handling
 void HandleCameraEditorEvents(SDL_Event* event);

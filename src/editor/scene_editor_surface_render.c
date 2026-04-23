@@ -9,6 +9,8 @@
 #include "editor/camera_editor.h"
 #include "editor/object_editor.h"
 #include "editor/object_editor_panels.h"
+#include "editor/scene_editor_chrome_shell.h"
+#include "editor/scene_editor_tool_state.h"
 #include "render/render_helper.h"
 
 static const char* SceneEditorSurfaceModeLabel(int mode) {
@@ -50,24 +52,32 @@ void SceneEditorSurfaceRenderLeftPaneContent(SDL_Renderer* renderer,
                                              SDL_Color title_color,
                                              SDL_Color body_color) {
     SDL_Rect bounds = {0, 0, 0, 0};
+    SDL_Rect object_panel_region = {0, 0, 0, 0};
     int cursor_y = 0;
     int bottom_y = 0;
     char line[256];
     int selected_index = -1;
     int selected_bezier_point = -1;
+    SceneEditorTool active_tool = SCENE_EDITOR_TOOL_SELECT;
     if (!renderer || !layout || !contract) return;
     bounds = layout->left_content_rect;
     if (bounds.w <= 0 || bounds.h <= 0) return;
     cursor_y = bounds.y + 2;
     bottom_y = bounds.y + bounds.h;
+    if (selectButton.h > 0 && selectButton.y > bounds.y) {
+        bottom_y = selectButton.y - 10;
+    }
 
     snprintf(line, sizeof(line), "Mode: %s", SceneEditorSurfaceModeLabel(contract->activeMode));
     cursor_y = SceneEditorSurfaceRenderFlowLine(renderer, bounds, cursor_y, bottom_y, line, title_color, false, 6);
+    active_tool = SceneEditorToolStateGetActive();
+    snprintf(line, sizeof(line), "Tool: %s", SceneEditorToolStateToolLabel(active_tool));
+    cursor_y = SceneEditorSurfaceRenderFlowLine(renderer, bounds, cursor_y, bottom_y, line, body_color, false, 6);
     cursor_y = SceneEditorSurfaceRenderFlowLine(renderer,
                                                 bounds,
                                                 cursor_y,
                                                 bottom_y,
-                                                "Left panel shows editor controls for the active mode.",
+                                                "Tool buttons in this pane are authoritative for Select, Add, and Delete.",
                                                 body_color,
                                                 true,
                                                 8);
@@ -99,9 +109,15 @@ void SceneEditorSurfaceRenderLeftPaneContent(SDL_Renderer* renderer,
                                                         true,
                                                         8);
         }
-        ObjectEditorPanels_UpdateLayout();
-        ObjectEditorPanels_DrawAssetList(renderer);
-        ObjectEditorPanels_DrawMaterialList(renderer);
+        cursor_y = ObjectEditorRenderPaneControls(renderer, bounds, cursor_y, bottom_y);
+        object_panel_region = bounds;
+        object_panel_region.y = cursor_y + 8;
+        object_panel_region.h = bottom_y - object_panel_region.y;
+        if (object_panel_region.h > 0) {
+            ObjectEditorPanels_UpdateLayoutForRegion(&object_panel_region);
+            ObjectEditorPanels_DrawAssetList(renderer);
+            ObjectEditorPanels_DrawMaterialList(renderer);
+        }
         return;
     }
 
@@ -127,11 +143,12 @@ void SceneEditorSurfaceRenderLeftPaneContent(SDL_Renderer* renderer,
                                                     cursor_y,
                                                     bottom_y,
                                                     contract->lane == SCENE_EDITOR_CONTROL_SURFACE_LANE_CONTROLLED_3D
-                                                        ? "3D lane: LMB selects point/handle or places a new point. Drag gizmo X/Y; Z stays locked in compat mode."
-                                                        : "2D lane: use existing Bezier controls and canvas editing.",
+                                                        ? "3D lane: active tool controls point insert/delete while gizmo handles selection and movement."
+                                                        : "2D lane: active tool controls point insert/delete; Shift temporarily overrides Select to Add.",
                                                     body_color,
                                                     true,
                                                     4);
+        BezierEditorRenderPaneControls(renderer, bounds, cursor_y, bottom_y);
         return;
     }
 
@@ -156,16 +173,17 @@ void SceneEditorSurfaceRenderLeftPaneContent(SDL_Renderer* renderer,
                  sceneSettings.cameraPath3D.point_z[selected_index]);
         cursor_y = SceneEditorSurfaceRenderFlowLine(renderer, bounds, cursor_y, bottom_y, line, body_color, true, 4);
     }
-    SceneEditorSurfaceRenderFlowLine(renderer,
-                                     bounds,
-                                     cursor_y,
-                                     bottom_y,
-                                     contract->lane == SCENE_EDITOR_CONTROL_SURFACE_LANE_CONTROLLED_3D
-                                         ? "3D lane: Shift+LMB adds a camera point, LMB selects, gizmo moves X/Y/Z."
-                                         : "Viewport navigation is shared across modes: Alt+drag orbit, MMB pan, wheel zoom.",
-                                     body_color,
-                                     true,
-                                     4);
+    cursor_y = SceneEditorSurfaceRenderFlowLine(renderer,
+                                                bounds,
+                                                cursor_y,
+                                                bottom_y,
+                                                contract->lane == SCENE_EDITOR_CONTROL_SURFACE_LANE_CONTROLLED_3D
+                                                    ? "3D lane: active tool controls point insert/delete; gizmo moves selected camera points in X/Y/Z."
+                                                    : "2D lane: active tool controls point insert/delete; Shift temporarily overrides Select to Add.",
+                                                body_color,
+                                                true,
+                                                4);
+    CameraEditorRenderPaneControls(renderer, bounds, cursor_y, bottom_y);
 }
 
 void SceneEditorSurfaceRenderRightPaneStatus(SDL_Renderer* renderer,

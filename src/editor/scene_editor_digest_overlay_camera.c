@@ -324,10 +324,15 @@ static void SceneEditorDigestOverlayDrawCamera3D(SDL_Renderer* renderer,
     SDL_Color direction_color = {200, 170, 255, 220};
     SDL_Color start_color = {0, 200, 0, 235};
     SDL_Color end_color = {220, 40, 40, 235};
+    PathTraversalEndpoints endpoints = {0};
+    bool have_endpoints = false;
     int selected_point = CameraEditorGetSelectedPointIndex();
     int hover_point = -1;
     int i = 0;
     if (!renderer || !projector || !digest || !gizmo_state) return;
+    have_endpoints = PathResolveTraversalEndpoints(&sceneSettings.cameraPath,
+                                                   &sceneSettings.cameraPath3D,
+                                                   &endpoints);
     hover_point = SceneEditorDigestOverlayPickCameraPointIndex(projector, mouse_x, mouse_y);
     for (i = 0; i < sceneSettings.cameraPath.numPoints - 1; ++i) {
         int handle_index = 0;
@@ -416,10 +421,12 @@ static void SceneEditorDigestOverlayDrawCamera3D(SDL_Renderer* renderer,
         int radius = point_selected ? 6 : (point_hovered ? 5 : 4);
         SDL_Rect marker = {0, 0, 0, 0};
         SDL_Color color = point_selected ? selected_color : (point_hovered ? hover_point_color : point_color);
-        if (!point_selected && !point_hovered && i == 0) {
-            color = end_color;
-        } else if (!point_selected && !point_hovered && i == sceneSettings.cameraPath.numPoints - 1) {
-            color = start_color;
+        if (!point_selected && !point_hovered) {
+            if (have_endpoints && i == endpoints.start_point_index) {
+                color = start_color;
+            } else if (have_endpoints && i == endpoints.end_point_index) {
+                color = end_color;
+            }
         }
         double rotation = CameraEditorGetPointRotation(i);
         double pitch = CameraEditorGetPointPitch(i);

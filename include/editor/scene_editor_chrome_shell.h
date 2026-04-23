@@ -13,9 +13,9 @@ extern SDL_Rect previewButton;
 extern SDL_Rect changeModeButton;
 extern SDL_Rect saveButton;
 extern SDL_Rect backToMenuButton;
+extern SDL_Rect selectButton;
 extern SDL_Rect addButton;
 extern SDL_Rect deleteButton;
-extern SDL_Rect toggleButton;
 
 RayTracingThemePalette SceneEditorChromeShellResolvePalette(void);
 void SceneEditorChromeShellSetActionFeedback(const char* text, Uint32 lifetime_ms);

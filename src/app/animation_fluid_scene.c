@@ -81,14 +81,7 @@ static void BuildDefaultFluidPaths(double min_x, double min_y,
     if (grid_w_world <= 1e-4 || grid_h_world <= 1e-4) return;
 
     ResetPathLocal(&sceneSettings.cameraPath, BEZIER_CUBIC);
-    sceneSettings.cameraPath.numPoints = 1;
-    sceneSettings.cameraPath.points[0].x = sceneSettings.camera.x;
-    sceneSettings.cameraPath.points[0].y = sceneSettings.camera.y;
-    sceneSettings.cameraPath.rotations[0] = sceneSettings.camera.rotation;
-    sceneSettings.cameraPath.rotationSet[0] = true;
-    sceneSettings.cameraPath.handleLink[0] = true;
     CameraPath3D_Reset(&sceneSettings.cameraPath3D);
-    sceneSettings.cameraPath3D.point_z[0] = sceneSettings.cameraZ;
 
     ResetPathLocal(&sceneSettings.bezierPath, BEZIER_CUBIC);
     CameraPath3D_Reset(&sceneSettings.bezierPath3D);

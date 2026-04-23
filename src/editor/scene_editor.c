@@ -768,12 +768,12 @@ bool IsClickingButtonMain(int mx, int my) {
 }
 
 bool SceneEditorIsPaneToolButton(int mx, int my) {
-    if ((mx >= addButton.x && mx <= addButton.x + addButton.w &&
+    if ((mx >= selectButton.x && mx <= selectButton.x + selectButton.w &&
+         my >= selectButton.y && my <= selectButton.y + selectButton.h) ||
+        (mx >= addButton.x && mx <= addButton.x + addButton.w &&
          my >= addButton.y && my <= addButton.y + addButton.h) ||
         (mx >= deleteButton.x && mx <= deleteButton.x + deleteButton.w &&
-         my >= deleteButton.y && my <= deleteButton.y + deleteButton.h) ||
-        (mx >= toggleButton.x && mx <= toggleButton.x + toggleButton.w &&
-         my >= toggleButton.y && my <= toggleButton.y + toggleButton.h)) {
+         my >= deleteButton.y && my <= deleteButton.y + deleteButton.h)) {
         return true;
     }
     return false;

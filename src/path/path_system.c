@@ -243,10 +243,13 @@ void RenderBezierPathCameraStyled(SDL_Renderer* renderer,
 
     const int radius = ResolveRadius(pointRadius);
     const int handleRadius = HANDLE_VIS_RADIUS;
+    PathTraversalEndpoints endpoints = {0};
+    bool have_endpoints = false;
 
     SDL_Color curve = UseColor(curveColor, (SDL_Color){0, 255, 0, 255});
     SDL_Color handles = UseColor(handleColor, (SDL_Color){255, 165, 0, 255});
     SDL_Color selCol = UseColor(selectedColor, (SDL_Color){255, 255, 120, 255});
+    have_endpoints = PathResolveTraversalEndpoints(path, NULL, &endpoints);
 
     DrawBezierCurveCamera(renderer, path, camera, curve);
 
@@ -276,9 +279,13 @@ void RenderBezierPathCameraStyled(SDL_Renderer* renderer,
         SDL_Color pointColor = curve;
         if (i == selectedIndex) {
             pointColor = selCol;
-        } else if (i == 0) {
+        } else if (have_endpoints && i == endpoints.start_point_index) {
             pointColor = startCol;
-        } else if (i == path->numPoints - 1) {
+        } else if (have_endpoints && i == endpoints.end_point_index) {
+            pointColor = endCol;
+        } else if (!have_endpoints && i == 0) {
+            pointColor = startCol;
+        } else if (!have_endpoints && i == path->numPoints - 1) {
             pointColor = endCol;
         }
         SDL_SetRenderDrawColor(renderer, pointColor.r, pointColor.g, pointColor.b, pointColor.a);
@@ -317,6 +324,8 @@ void RenderBezierPathCameraPassive(SDL_Renderer* renderer,
     SDL_Color curve = {0};
     SDL_Color startCol = {0, 200, 0, 220};
     SDL_Color endCol = {220, 40, 40, 220};
+    PathTraversalEndpoints endpoints = {0};
+    bool have_endpoints = false;
     SDL_Point start = {0};
     SDL_Point end = {0};
     int radius = 0;
@@ -325,12 +334,15 @@ void RenderBezierPathCameraPassive(SDL_Renderer* renderer,
 
     curve = UseColor(curveColor, (SDL_Color){0, 255, 0, 255});
     radius = ResolveRadius(endpointRadius);
+    have_endpoints = PathResolveTraversalEndpoints(path, NULL, &endpoints);
 
     DrawBezierCurveCamera(renderer, path, camera, curve);
 
-    start = ToCameraPoint(path->points[0].x, path->points[0].y, camera);
-    end = ToCameraPoint(path->points[path->numPoints - 1].x,
-                        path->points[path->numPoints - 1].y,
+    start = ToCameraPoint(path->points[have_endpoints ? endpoints.start_point_index : 0].x,
+                          path->points[have_endpoints ? endpoints.start_point_index : 0].y,
+                          camera);
+    end = ToCameraPoint(path->points[have_endpoints ? endpoints.end_point_index : (path->numPoints - 1)].x,
+                        path->points[have_endpoints ? endpoints.end_point_index : (path->numPoints - 1)].y,
                         camera);
 
     SDL_SetRenderDrawColor(renderer, startCol.r, startCol.g, startCol.b, startCol.a);

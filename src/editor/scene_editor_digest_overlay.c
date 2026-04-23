@@ -434,12 +434,14 @@ static void SceneEditorDigestOverlayDrawPathPassive3D(SDL_Renderer* renderer,
                                                       const SceneEditorDigestOverlayProjector* projector,
                                                       const Path* path,
                                                       const CameraPath3D* path3d,
-                                                      SDL_Color curve_color,
-                                                      bool reverse_endpoints) {
+                                                      SDL_Color curve_color) {
     SDL_Color start_color = {0, 200, 0, 235};
     SDL_Color end_color = {220, 40, 40, 235};
+    PathTraversalEndpoints endpoints = {0};
+    bool have_endpoints = false;
     int i = 0;
     if (!renderer || !projector || !path || !path3d || path->numPoints < 2) return;
+    have_endpoints = PathResolveTraversalEndpoints(path, path3d, &endpoints);
 
     {
         Point previous = GetPositionAlongPathNormalized((Path*)path, 0.0);
@@ -480,8 +482,12 @@ static void SceneEditorDigestOverlayDrawPathPassive3D(SDL_Renderer* renderer,
             continue;
         }
         radius = 5;
-        if (reverse_endpoints) {
-            color = (i == 0) ? end_color : start_color;
+        if (have_endpoints) {
+            if (i == endpoints.start_point_index) {
+                color = start_color;
+            } else if (i == endpoints.end_point_index) {
+                color = end_color;
+            }
         } else {
             color = (i == 0) ? start_color : end_color;
         }
@@ -529,14 +535,12 @@ int SceneEditorDigestOverlayRender(SDL_Renderer* renderer,
                                               &projector,
                                               &sceneSettings.bezierPath,
                                               &sceneSettings.bezierPath3D,
-                                              (SDL_Color){128, 214, 255, 210},
-                                              false);
+                                              (SDL_Color){128, 214, 255, 210});
     SceneEditorDigestOverlayDrawPathPassive3D(renderer,
                                               &projector,
                                               &sceneSettings.cameraPath,
                                               &sceneSettings.cameraPath3D,
-                                              (SDL_Color){210, 168, 255, 210},
-                                              true);
+                                              (SDL_Color){210, 168, 255, 210});
 
     if (active_mode == 0) {
         SceneEditorDigestOverlayRenderBezierLayer(renderer,

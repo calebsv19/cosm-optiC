@@ -44,11 +44,26 @@ typedef struct {
     BezierMode mode;
 } Path;
 
+typedef struct CameraPath3D CameraPath3D;
+
+typedef struct PathTraversalEndpoints {
+    int start_point_index;
+    int end_point_index;
+    Point start_xy;
+    Point end_xy;
+    double start_z;
+    double end_z;
+    bool has_z;
+} PathTraversalEndpoints;
+
 // Bézier Path Functions
 Point GetPositionAlongPath(Path* path, double t);
 Point GetPositionAlongPathNormalized(Path* path, double t);
 double GetRotationAlongPathNormalized(Path* path, double t);
 double PathResolveNormalizedGlobalT(const Path* path, double t);
+bool PathResolveTraversalEndpoints(const Path* path,
+                                   const CameraPath3D* path3d,
+                                   PathTraversalEndpoints* out_endpoints);
 void PathMapNormalizedT(const Path* path, double t, int* out_segment, double* out_local_t);
 double PathApproximateLength(Path* path);
 void DestroyPath(Path* path);

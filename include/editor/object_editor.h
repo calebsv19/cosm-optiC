@@ -30,6 +30,7 @@ typedef enum ObjectEditorHitRegion {
 // Object Editor Functions
 void InitializeObjectEditor(void);
 void RenderObjectEditor(SDL_Renderer* renderer);
+int ObjectEditorRenderPaneControls(SDL_Renderer* renderer, SDL_Rect content_bounds, int top_y, int bottom_y);
 void HandleObjectEditorEvents(SDL_Event* event);
 ObjectEditorHitRegion ObjectEditorHitRegionAtPoint(int mx, int my);
 
@@ -42,6 +43,8 @@ void HandleObjectEditorKeyPress(SDL_Event* event);
 // Object Manipulation
 void AddObject(int type, int x, int y);
 void RemoveObject(int index);
+bool ObjectEditorAddPlacementAt(double world_x, double world_y);
+bool ObjectEditorDeleteObjectIndex(int index);
 
 // Selection & Interaction
 void SelectObject(int index);

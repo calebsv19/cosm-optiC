@@ -18,6 +18,7 @@
 #define PANEL_MAX_HEIGHT 220
 #define ASSET_PANEL_WIDTH 200
 #define MATERIAL_ROW_HEIGHT 18
+#define PANEL_GAP 10
 
 extern SDL_Rect assetPanelRect;
 extern SDL_Rect assetToggleRect;
@@ -268,31 +269,49 @@ static SDL_Color ObjectEditorPanelColorFromPackedRGB(int packed, Uint8 alpha) {
     return color;
 }
 
-void ObjectEditorPanels_UpdateLayout(void) {
+void ObjectEditorPanels_UpdateLayoutForRegion(const SDL_Rect* region) {
     SceneEditorPaneLayout pane_layout = {0};
     int headerH = ObjectEditorHeaderHeight();
     int assetRowH = ObjectEditorAssetRowHeight();
     int materialRowH = ObjectEditorMaterialRowHeight();
     int panelMaxH = animation_config_scale_text_point_size(&animSettings, PANEL_MAX_HEIGHT, 160);
+    SDL_Rect available = {20, 40, ASSET_PANEL_WIDTH, panelMaxH * 2 + PANEL_GAP};
     int panelW = ASSET_PANEL_WIDTH;
     int x = 20;
     int y = 40;
+    int available_h = 0;
+    int max_each_h = 0;
     if (panelMaxH > sceneSettings.windowHeight - 80) {
         panelMaxH = sceneSettings.windowHeight - 80;
     }
     if (panelMaxH < 140) panelMaxH = 140;
-    if (SceneEditorGetPaneLayout(&pane_layout)) {
-        x = pane_layout.left_content_rect.x;
-        y = pane_layout.left_content_rect.y + 150;
-        panelW = pane_layout.left_content_rect.w;
-        if (panelW > ASSET_PANEL_WIDTH) panelW = ASSET_PANEL_WIDTH;
-        if (panelW < 160) panelW = 160;
+    if (region && region->w > 0 && region->h > 0) {
+        available = *region;
+    } else if (SceneEditorGetPaneLayout(&pane_layout)) {
+        available = pane_layout.left_content_rect;
+        available.y += 150;
+        available.h -= 150;
+    }
+    if (available.w < 120) available.w = 120;
+    if (available.h < 80) available.h = 80;
+
+    x = available.x;
+    y = available.y;
+    panelW = available.w;
+    available_h = available.h;
+    if (panelW > ASSET_PANEL_WIDTH) panelW = ASSET_PANEL_WIDTH;
+    if (panelW < 160 && available.w >= 160) panelW = available.w;
+    if (panelW < 120) panelW = 120;
+    max_each_h = (available_h - PANEL_GAP) / 2;
+    if (max_each_h < 80) {
+        max_each_h = available_h;
     }
     int headerW = panelW - PANEL_PADDING * 2;
     int assetRows = showImports ? importCount : (int)assetLib.count;
     if (assetRows < 1) assetRows = 1;
     int assetContent = headerH + PANEL_PADDING * 2 + assetRows * assetRowH;
     if (assetContent > panelMaxH) assetContent = panelMaxH;
+    if (assetContent > max_each_h) assetContent = max_each_h;
     assetPanelRect = (SDL_Rect){x, y, panelW, assetContent};
     assetToggleRect = (SDL_Rect){x + PANEL_PADDING,
                                  y + PANEL_PADDING,
@@ -307,18 +326,16 @@ void ObjectEditorPanels_UpdateLayout(void) {
     if (matRows < 1) matRows = 1;
     int matContent = headerH + PANEL_PADDING * 2 + matRows * materialRowH;
     if (matContent > panelMaxH) matContent = panelMaxH;
-    int matY = sceneSettings.windowHeight - matContent - 20;
-    if (SceneEditorGetPaneLayout(&pane_layout)) {
-        matY = pane_layout.left_content_rect.y + pane_layout.left_content_rect.h - matContent;
-        if (matY < assetPanelRect.y + assetPanelRect.h + 10) {
-            matY = assetPanelRect.y + assetPanelRect.h + 10;
-        }
-    }
-    materialPanelRect = (SDL_Rect){x, matY, panelW, matContent};
+    if (matContent > max_each_h) matContent = max_each_h;
+    materialPanelRect = (SDL_Rect){x, assetPanelRect.y + assetPanelRect.h + PANEL_GAP, panelW, matContent};
     materialCollapseRect = (SDL_Rect){materialPanelRect.x + materialPanelRect.w - PANEL_PADDING - 16,
                                       materialPanelRect.y + PANEL_PADDING,
                                       16,
                                       16};
+}
+
+void ObjectEditorPanels_UpdateLayout(void) {
+    ObjectEditorPanels_UpdateLayoutForRegion(NULL);
 }
 
 void ObjectEditorPanels_DrawAssetList(SDL_Renderer* renderer) {

@@ -80,6 +80,32 @@ static SDL_Color theme_color_or_default(const CoreThemePreset* preset,
     return (SDL_Color){raw.r, raw.g, raw.b, raw.a};
 }
 
+static int theme_color_luma(SDL_Color color) {
+    return (int)color.r * 299 + (int)color.g * 587 + (int)color.b * 114;
+}
+
+static int theme_color_contrast_gap(SDL_Color a, SDL_Color b) {
+    int dr = abs((int)a.r - (int)b.r);
+    int dg = abs((int)a.g - (int)b.g);
+    int db = abs((int)a.b - (int)b.b);
+    return dr + dg + db;
+}
+
+static Uint8 theme_mix_u8(Uint8 a, Uint8 b, int a_weight, int b_weight) {
+    int total = a_weight + b_weight;
+    if (total <= 0) return a;
+    return (Uint8)(((int)a * a_weight + (int)b * b_weight) / total);
+}
+
+static SDL_Color theme_mix_color(SDL_Color a, SDL_Color b, int a_weight, int b_weight) {
+    return (SDL_Color){
+        theme_mix_u8(a.r, b.r, a_weight, b_weight),
+        theme_mix_u8(a.g, b.g, a_weight, b_weight),
+        theme_mix_u8(a.b, b.b, a_weight, b_weight),
+        theme_mix_u8(a.a, b.a, a_weight, b_weight)
+    };
+}
+
 static void theme_runtime_init_if_needed(void) {
     const char* preset_name;
     CoreThemePresetId resolved_id;
@@ -188,6 +214,31 @@ bool ray_tracing_shared_theme_resolve_palette(RayTracingThemePalette* out_palett
     out_palette->accent_primary =
         theme_color_or_default(&preset, CORE_THEME_COLOR_ACCENT_PRIMARY, (SDL_Color){120, 200, 160, 255});
     return true;
+}
+
+SDL_Color ray_tracing_theme_resolve_button_active_fill(RayTracingThemePalette palette) {
+    SDL_Color fill = palette.button_active_fill;
+    SDL_Color preferred_text = palette.button_text;
+    SDL_Color anchor = palette.button_fill;
+
+    if (theme_color_contrast_gap(fill, preferred_text) >= 110) {
+        return fill;
+    }
+    if (theme_color_luma(preferred_text) >= 150) {
+        return theme_mix_color(fill, anchor, 1, 2);
+    }
+    return theme_mix_color(fill, (SDL_Color){240, 243, 247, fill.a}, 1, 2);
+}
+
+SDL_Color ray_tracing_theme_choose_button_text(SDL_Color fill, RayTracingThemePalette palette) {
+    SDL_Color preferred_text = palette.button_text;
+    if (theme_color_contrast_gap(fill, preferred_text) >= 110) {
+        return preferred_text;
+    }
+    if (theme_color_luma(fill) >= 150) {
+        return (SDL_Color){24, 28, 34, preferred_text.a ? preferred_text.a : 255};
+    }
+    return (SDL_Color){245, 247, 250, preferred_text.a ? preferred_text.a : 255};
 }
 
 bool ray_tracing_shared_theme_set_preset(const char* preset_name) {
