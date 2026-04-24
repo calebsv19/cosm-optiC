@@ -1,6 +1,6 @@
 # Ray Tracing Desktop Packaging
 
-Last updated: 2026-04-12
+Last updated: 2026-04-23
 
 ## Bundle Contract
 
@@ -55,6 +55,9 @@ Last updated: 2026-04-12
 - launcher runtime root:
   - default: `~/Library/Application Support/RayTracing/runtime`
   - tmp fallback: `${TMPDIR:-/tmp}/RayTracing/runtime`
+- launcher font baseline:
+  - default packaged `RAY_TRACING_FONT_PRESET=ide`
+  - override remains available through the environment when bounded comparison/testing is needed
 - launcher log lane:
   - `~/Library/Logs/RayTracing/launcher.log`
   - tmp fallback: `${TMPDIR:-/tmp}/raytracing-launcher.log`

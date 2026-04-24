@@ -20,6 +20,7 @@
 #include "camera/camera.h"
 #include "render/space_mode_adapter.h"
 #include "render/render_helper.h"
+#include "render/text_draw.h"
 #include "engine/Render/render_pipeline.h"
 #include "import/fluid_import.h"
 #include "import/scene_bundle_import.h"
@@ -178,6 +179,7 @@ int AnimationInit(void) {
 
 void AnimationCleanup(void) {   
     if (renderer) {
+        ray_tracing_text_reset_renderer(renderer);
 #if USE_VULKAN
         vk_renderer_wait_idle((VkRenderer*)renderer);
         vk_renderer_shutdown_surface((VkRenderer*)renderer);
@@ -747,6 +749,7 @@ void RunMainLoop(void) {
     }
     AnimationExportRenderMetricsDatasetIfEnabled();
     CleanupRayTracing();    
+    ray_tracing_text_reset_renderer(renderer);
 #if USE_VULKAN
     vk_renderer_wait_idle((VkRenderer*)renderer);
     vk_renderer_shutdown_surface((VkRenderer*)renderer);

@@ -4,6 +4,7 @@
 #include "timer_hud/timer_hud_backend.h"
 #include "engine/Render/render_pipeline.h"
 #include "engine/Render/render_font.h"
+#include "render/text_draw.h"
 #include "render/text_upload_policy.h"
 
 #include <SDL2/SDL.h>
@@ -12,8 +13,6 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include "vk_renderer.h"
-
 #define TIMER_HUD_DEFAULT_SETTINGS_PATH "config/timer_hud_settings.json"
 #define TIMER_HUD_RUNTIME_SETTINGS_PATH "data/runtime/timer_hud_settings.json"
 
@@ -70,13 +69,8 @@ static int timer_hud_measure_text(const char* text, int* out_w, int* out_h) {
     TTF_Font* font = getActiveFont();
     RenderContext* ctx = getRenderContext();
     SDL_Renderer* renderer = (ctx ? ctx->renderer : NULL);
-    int raster_w = 0;
-    int raster_h = 0;
     if (!text || !font) return 0;
-    if (TTF_SizeUTF8(font, text, &raster_w, &raster_h) != 0) return 0;
-    if (out_w) *out_w = ray_tracing_text_logical_pixels(renderer, raster_w);
-    if (out_h) *out_h = ray_tracing_text_logical_pixels(renderer, raster_h);
-    return 1;
+    return ray_tracing_text_measure_utf8(renderer, font, text, out_w, out_h);
 }
 
 static int timer_hud_line_height(void) {
@@ -118,12 +112,9 @@ static void timer_hud_draw_text(const char* text, int x, int y, int align_flags,
     int logical_h = 0;
     if (!text || !font) return;
 
-    SDL_Surface* surface = TTF_RenderUTF8_Blended(font, text,
-                                                  (SDL_Color){color.r, color.g, color.b, color.a});
-    if (!surface) return;
-
-    logical_w = ray_tracing_text_logical_pixels(ctx->renderer, surface->w);
-    logical_h = ray_tracing_text_logical_pixels(ctx->renderer, surface->h);
+    if (!ray_tracing_text_measure_utf8(ctx->renderer, font, text, &logical_w, &logical_h)) {
+        return;
+    }
     SDL_Rect dst = {x, y, logical_w, logical_h};
 
     if (align_flags & TIMER_HUD_ALIGN_CENTER)  dst.x -= logical_w / 2;
@@ -131,22 +122,11 @@ static void timer_hud_draw_text(const char* text, int x, int y, int align_flags,
     if (align_flags & TIMER_HUD_ALIGN_MIDDLE)  dst.y -= logical_h / 2;
     if (align_flags & TIMER_HUD_ALIGN_BOTTOM)  dst.y -= logical_h;
 
-#if USE_VULKAN
-    VkRendererTexture texture;
-    if (vk_renderer_upload_sdl_surface_with_filter((VkRenderer*)ctx->renderer, surface, &texture,
-                                                   ray_tracing_text_upload_filter(ctx->renderer)) == VK_SUCCESS) {
-        vk_renderer_draw_texture((VkRenderer*)ctx->renderer, &texture, NULL, &dst);
-        vk_renderer_queue_texture_destroy((VkRenderer*)ctx->renderer, &texture);
-    }
-#else
-    SDL_Texture* texture = SDL_CreateTextureFromSurface(ctx->renderer, surface);
-    if (texture) {
-        SDL_RenderCopy(ctx->renderer, texture, NULL, &dst);
-        SDL_DestroyTexture(texture);
-    }
-#endif
-
-    SDL_FreeSurface(surface);
+    (void)ray_tracing_text_draw_utf8(ctx->renderer,
+                                     font,
+                                     text,
+                                     (SDL_Color){color.r, color.g, color.b, color.a},
+                                     &dst);
 }
 
 static const TimerHUDBackend g_timer_hud_backend = {

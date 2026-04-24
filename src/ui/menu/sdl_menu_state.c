@@ -12,7 +12,6 @@
 #include "editor/editor_mode_router.h"
 #include "engine/Render/render_pipeline.h"
 #include "render/text_font_cache.h"
-#include "render/text_upload_policy.h"
 #include "ui/scene_source_catalog.h"
 
 #define TOGGLE_BUTTON_TEXT_SIZE 14
@@ -335,15 +334,15 @@ void menu_state_apply_special_slider_rules(MenuRuntimeState* state, int* target)
 static bool open_menu_font_for_current_zoom(TTF_Font** out_font) {
     int point_size = ray_tracing_text_font_cache_ui_regular_base_point_size(TOGGLE_BUTTON_TEXT_SIZE);
     TTF_Font* opened_font;
+    SDL_Renderer* renderer = getRenderContext() ? getRenderContext()->renderer : NULL;
     if (!out_font) return false;
 
     point_size = animation_config_scale_text_point_size(&animSettings,
                                                         point_size,
                                                         kMenuMinFontPointSize);
-    point_size = ray_tracing_text_raster_point_size(getRenderContext() ? getRenderContext()->renderer : NULL,
-                                                    point_size,
-                                                    kMenuMinFontPointSize);
-    opened_font = ray_tracing_text_font_cache_get_ui_regular(point_size);
+    opened_font = ray_tracing_text_font_cache_get_ui_regular(renderer,
+                                                             point_size,
+                                                             kMenuMinFontPointSize);
     if (!opened_font) return false;
     printf("Menu font loaded: size=%d cache=yes\n", point_size);
     *out_font = opened_font;

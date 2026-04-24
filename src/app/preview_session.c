@@ -12,6 +12,7 @@
 #include "render/space_mode_adapter.h"
 #include "render/ray_tracing_mode_backend.h"
 #include "engine/Render/render_pipeline.h"
+#include "render/text_draw.h"
 #include "import/runtime_scene_bridge.h"
 #include "render/vk_shared_device.h"
 
@@ -398,12 +399,14 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
 #if USE_VULKAN
         if (preview_renderer) {
             VkRenderer* preview_vk = (VkRenderer*)preview_renderer;
+            ray_tracing_text_reset_renderer(preview_renderer);
             vk_renderer_wait_idle(preview_vk);
             vk_renderer_shutdown_surface(preview_vk);
             free(preview_vk);
         }
 #else
         if (preview_renderer) {
+            ray_tracing_text_reset_renderer(preview_renderer);
             SDL_DestroyRenderer(preview_renderer);
         }
 #endif

@@ -12,6 +12,7 @@
 #include "engine/Render/render_font.h"
 #include "render/render_helper.h"
 #include "render/ray_tracing_mode_backend.h"
+#include "render/text_draw.h"
 #include "render/text_upload_policy.h"
 #include "engine/Render/render_pipeline.h"
 #include "ui/shared_theme_font_adapter.h"
@@ -85,24 +86,6 @@ static int menu_logical_pixels(int raster_pixels) {
     return ray_tracing_text_logical_pixels(menu_context_renderer(), raster_pixels);
 }
 
-static void render_surface(SDL_Renderer* renderer, SDL_Surface* surface, const SDL_Rect* dst) {
-    if (!renderer || !surface || !dst) return;
-#if USE_VULKAN
-    VkRendererTexture texture;
-    if (vk_renderer_upload_sdl_surface_with_filter((VkRenderer*)renderer, surface, &texture,
-                                                   ray_tracing_text_upload_filter(renderer)) != VK_SUCCESS) {
-        return;
-    }
-    vk_renderer_draw_texture((VkRenderer*)renderer, &texture, NULL, dst);
-    vk_renderer_queue_texture_destroy((VkRenderer*)renderer, &texture);
-#else
-    SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, surface);
-    if (!textTexture) return;
-    SDL_RenderCopy(renderer, textTexture, NULL, dst);
-    SDL_DestroyTexture(textTexture);
-#endif
-}
-
 const char* menu_space_mode_button_label(void) {
     return EditorModeRouter_SpaceButtonLabel();
 }
@@ -117,31 +100,12 @@ void RenderText(SDL_Renderer *renderer, TTF_Font *font, int x, int y, const char
     RayTracingThemePalette palette = {0};
     const bool has_shared_palette = ray_tracing_shared_theme_resolve_palette(&palette);
     SDL_Color textColor = has_shared_palette ? palette.text_primary : (SDL_Color){255, 255, 255, 255};
-    SDL_Surface *textSurface = TTF_RenderUTF8_Blended(font, buffer, textColor);
-    if (!textSurface) return;
-
-    SDL_Rect textRect = {
-        x,
-        y,
-        ray_tracing_text_logical_pixels(renderer, textSurface->w),
-        ray_tracing_text_logical_pixels(renderer, textSurface->h)
-    };
-    render_surface(renderer, textSurface, &textRect);
-    SDL_FreeSurface(textSurface);
+    (void)ray_tracing_text_draw_utf8_at(renderer, font, buffer, x, y, textColor);
 }
 
 static void render_text_color(SDL_Renderer *renderer, TTF_Font *font, int x, int y, SDL_Color color, const char *text) {
     if (!text || !*text) return;
-    SDL_Surface *textSurface = TTF_RenderUTF8_Blended(font, text, color);
-    if (!textSurface) return;
-    SDL_Rect textRect = {
-        x,
-        y,
-        ray_tracing_text_logical_pixels(renderer, textSurface->w),
-        ray_tracing_text_logical_pixels(renderer, textSurface->h)
-    };
-    render_surface(renderer, textSurface, &textRect);
-    SDL_FreeSurface(textSurface);
+    (void)ray_tracing_text_draw_utf8_at(renderer, font, text, x, y, color);
 }
 
 static void render_centered_text_color(SDL_Renderer *renderer,
@@ -149,23 +113,20 @@ static void render_centered_text_color(SDL_Renderer *renderer,
                                        const SDL_Rect *rect,
                                        SDL_Color color,
                                        const char *text) {
-    SDL_Surface *textSurface;
     SDL_Rect textRect;
+    int text_w = 0;
+    int text_h = 0;
     if (!font || !rect || !text || !text[0]) return;
-    textSurface = TTF_RenderUTF8_Blended(font, text, color);
-    if (!textSurface) return;
+    if (!ray_tracing_text_measure_utf8(renderer, font, text, &text_w, &text_h)) return;
     {
-        int logical_w = ray_tracing_text_logical_pixels(renderer, textSurface->w);
-        int logical_h = ray_tracing_text_logical_pixels(renderer, textSurface->h);
         textRect = (SDL_Rect){
-            rect->x + (rect->w - logical_w) / 2,
-            rect->y + (rect->h - logical_h) / 2,
-            logical_w,
-            logical_h
+            rect->x + (rect->w - text_w) / 2,
+            rect->y + (rect->h - text_h) / 2,
+            text_w,
+            text_h
         };
     }
-    render_surface(renderer, textSurface, &textRect);
-    SDL_FreeSurface(textSurface);
+    (void)ray_tracing_text_draw_utf8(renderer, font, text, color, &textRect);
 }
 
 static int color_luma(SDL_Color color) {

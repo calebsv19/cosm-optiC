@@ -7,7 +7,7 @@
 #include <SDL2/SDL_vulkan.h>
 #endif
 
-static const float k_ray_tracing_max_text_raster_scale = 2.5f;
+static const float k_ray_tracing_max_text_raster_scale = 4.0f;
 
 float ray_tracing_text_raster_scale(SDL_Renderer* renderer) {
     RenderContext* ctx = NULL;
@@ -50,7 +50,7 @@ float ray_tracing_text_raster_scale(SDL_Renderer* renderer) {
         scale_y = (float)drawable_h / logical_h;
     }
 
-    raster_scale = (scale_x < scale_y) ? scale_x : scale_y;
+    raster_scale = (scale_x > scale_y) ? scale_x : scale_y;
     if (!isfinite(raster_scale) || raster_scale < 1.0f) {
         raster_scale = 1.0f;
     }

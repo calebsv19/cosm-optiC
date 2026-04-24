@@ -1,8 +1,8 @@
 #include "engine/Render/render_font.h"
 #include "engine/Render/render_pipeline.h"
 #include "config/config_manager.h"
+#include "render/text_draw.h"
 #include "render/text_font_cache.h"
-#include "render/text_upload_policy.h"
 #include <stdio.h>
 
 static TTF_Font* activeFont = NULL;
@@ -31,8 +31,7 @@ static bool loadDefaultFont(void) {
     renderer = getRenderContext() ? getRenderContext()->renderer : NULL;
     base_point_size = ray_tracing_text_font_cache_ui_regular_base_point_size(kBasePointSize);
     requested_point_size = animation_config_scale_text_point_size(&animSettings, base_point_size, kMinPointSize);
-    requested_point_size = ray_tracing_text_raster_point_size(renderer, requested_point_size, kMinPointSize);
-    cached_font = ray_tracing_text_font_cache_get_ui_regular(requested_point_size);
+    cached_font = ray_tracing_text_font_cache_get_ui_regular(renderer, requested_point_size, kMinPointSize);
     if (!cached_font) {
         fprintf(stderr, "[TimerHUD] Failed to open runtime font: %s\n", TTF_GetError());
         return false;
@@ -48,6 +47,7 @@ bool initFontSystem(void) {
 
 void shutdownFontSystem(void) {
     activeFont = NULL;
+    ray_tracing_text_reset_renderer(getRenderContext() ? getRenderContext()->renderer : NULL);
     ray_tracing_text_font_cache_shutdown();
 }
 
@@ -74,7 +74,6 @@ bool refreshActiveFontFromAnimationConfig(void) {
     if (scaled_point_size <= 0) {
         scaled_point_size = kMinPointSize;
     }
-    scaled_point_size = ray_tracing_text_raster_point_size(renderer, scaled_point_size, kMinPointSize);
     if (!ensureTTF()) {
         return false;
     }
@@ -82,7 +81,7 @@ bool refreshActiveFontFromAnimationConfig(void) {
         return true;
     }
 
-    refreshed = ray_tracing_text_font_cache_get_ui_regular(scaled_point_size);
+    refreshed = ray_tracing_text_font_cache_get_ui_regular(renderer, scaled_point_size, kMinPointSize);
     if (!refreshed) {
         fprintf(stderr, "[TimerHUD] Failed to reload runtime font (%d): %s\n",
                 scaled_point_size, TTF_GetError());

@@ -13,6 +13,7 @@
 #include "config/config_manager.h"
 #include "editor/scene_editor.h"
 #include "engine/Render/render_pipeline.h"
+#include "render/text_draw.h"
 #include "render/text_font_cache.h"
 #include "render/vk_shared_device.h"
 #include "ui/shared_theme_font_adapter.h"
@@ -141,6 +142,7 @@ static void shutdown_menu(SDL_Window* window,
     setRenderContext(NULL, NULL, 0, 0);
 
     if (renderer) {
+        ray_tracing_text_reset_renderer(renderer);
 #if USE_VULKAN
         vk_renderer_wait_idle((VkRenderer*)renderer);
         vk_renderer_shutdown_surface((VkRenderer*)renderer);

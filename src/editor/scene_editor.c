@@ -21,6 +21,7 @@
 #include "editor/scene_editor_surface_render.h"
 #include "editor/scene_editor_viewport_nav.h"
 #include "engine/Render/render_pipeline.h"
+#include "render/text_draw.h"
 #include "render/text_font_cache.h"
 #include "render/text_upload_policy.h"
 #include "render/vk_shared_device.h"
@@ -316,6 +317,7 @@ static bool SceneEditorHandleSystemInput(SceneEditor* editor,
                 ray_tracing_shared_theme_cycle_prev();
             }
             ray_tracing_shared_theme_save_persisted();
+            ray_tracing_text_reset_renderer(editor->renderer);
             ray_tracing_text_font_cache_shutdown();
             result->target = SCENE_EDITOR_INPUT_TARGET_SYSTEM;
             result->consumed = true;
@@ -663,11 +665,13 @@ bool InitializeSceneEditor(SceneEditor* editor) {
         fprintf(stderr, "Error: TTF_Init failed: %s\n", TTF_GetError());
 #if USE_VULKAN
         if (editor->owns_renderer && editor->renderer) {
+            ray_tracing_text_reset_renderer(editor->renderer);
             vk_renderer_wait_idle((VkRenderer*)editor->renderer);
             vk_renderer_shutdown_surface((VkRenderer*)editor->renderer);
         }
 #else
         if (editor->owns_renderer && editor->renderer) {
+            ray_tracing_text_reset_renderer(editor->renderer);
             SDL_DestroyRenderer(editor->renderer);
         }
 #endif
@@ -820,9 +824,11 @@ void DestroySceneEditor(SceneEditor* editor) {
     editor->running = false;
     if (editor->renderer && editor->owns_renderer) {
 #if USE_VULKAN
+        ray_tracing_text_reset_renderer(editor->renderer);
         vk_renderer_wait_idle((VkRenderer*)editor->renderer);
         vk_renderer_shutdown_surface((VkRenderer*)editor->renderer);
 #else
+        ray_tracing_text_reset_renderer(editor->renderer);
         SDL_DestroyRenderer(editor->renderer);
 #endif
     }

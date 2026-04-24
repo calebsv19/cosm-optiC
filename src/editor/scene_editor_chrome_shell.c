@@ -8,7 +8,7 @@
 #include "editor/scene_editor_tool_state.h"
 #include "engine/Render/render_pipeline.h"
 #include "render/render_helper.h"
-#include "render/text_upload_policy.h"
+#include "render/text_draw.h"
 #include "render/text_font_cache.h"
 
 SDL_Rect applyButton = {1000, 700, 150, 50};
@@ -108,13 +108,11 @@ static int scene_editor_chrome_shell_measure_button_width(const char* label, int
     int point_size = animation_config_scale_text_point_size(&animSettings, 26, 12);
 
     if (!label || !label[0]) return min_width;
-    point_size = ray_tracing_text_raster_point_size(renderer, point_size, 12);
-    font = ray_tracing_text_font_cache_get_ui_regular(point_size);
+    font = ray_tracing_text_font_cache_get_ui_regular(renderer, point_size, 12);
     if (!font) return min_width;
-    if (TTF_SizeUTF8(font, label, &text_w, &text_h) != 0) {
+    if (!ray_tracing_text_measure_utf8(renderer, font, label, &text_w, &text_h)) {
         return min_width;
     }
-    text_w = ray_tracing_text_logical_pixels(renderer, text_w);
     if (text_w + 28 > min_width) {
         min_width = text_w + 28;
     }

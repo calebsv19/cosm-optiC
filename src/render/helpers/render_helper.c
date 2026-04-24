@@ -3,14 +3,13 @@
 #include "camera/camera.h"
 #include "math/vec2.h"
 #include "render/text_font_cache.h"
-#include "render/text_upload_policy.h"
+#include "render/text_draw.h"
 #include <SDL2/SDL.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "vk_renderer.h"
 
 static double clamp_double(double value, double min_value, double max_value) {
     if (value < min_value) return min_value;
@@ -18,8 +17,10 @@ static double clamp_double(double value, double min_value, double max_value) {
     return value;
 }
 
-static TTF_Font* RenderHelperOpenUIFontAtPointSize(int point_size) {
-    return ray_tracing_text_font_cache_get_ui_regular(point_size);
+static TTF_Font* RenderHelperOpenUIFontAtPointSize(SDL_Renderer* renderer,
+                                                   int logical_point_size,
+                                                   int min_point_size) {
+    return ray_tracing_text_font_cache_get_ui_regular(renderer, logical_point_size, min_point_size);
 }
 
 double RenderHelper_DepthScaleForObjectZ(double object_z) {
@@ -31,25 +32,6 @@ double RenderHelper_DepthScaleForObjectZ(double object_z) {
 double RenderHelper_DepthYOffsetPixelsForObjectZ(double object_z, double camera_zoom) {
     if (camera_zoom < 0.01) camera_zoom = 0.01;
     return object_z * 18.0 * camera_zoom;
-}
-
-static void RenderSurface(SDL_Renderer* renderer, SDL_Surface* surface, const SDL_Rect* dst, float raster_scale) {
-    if (!renderer || !surface || !dst) return;
-#if USE_VULKAN
-    VkRendererTexture texture;
-    (void)raster_scale;
-    if (vk_renderer_upload_sdl_surface_with_filter((VkRenderer*)renderer, surface, &texture,
-                                                   ray_tracing_text_upload_filter(renderer)) != VK_SUCCESS) {
-        return;
-    }
-    vk_renderer_draw_texture((VkRenderer*)renderer, &texture, NULL, dst);
-    vk_renderer_queue_texture_destroy((VkRenderer*)renderer, &texture);
-#else
-    SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, surface);
-    if (!textTexture) return;
-    SDL_RenderCopy(renderer, textTexture, NULL, dst);
-    SDL_DestroyTexture(textTexture);
-#endif
 }
 
 int CalculateObjectBrightness(SceneObject* obj, double lightX, double lightY) {
@@ -275,14 +257,10 @@ static int RenderTextBlockWithColor(SDL_Renderer* renderer,
                                     bool center_vertical) {
     int minFontSize = 10;  // Minimum readable font size
     int baseFontSize = 0;
-    float raster_scale = 1.0f;
-    int rasterFontSize = 0;
-    int minRasterFontSize = 0;
-    int chosenRasterFontSize = 0;
+    int chosenPointSize = 0;
     TTF_Font* font = NULL;
     int measured_w = 0;
     int measured_h = 0;
-    SDL_Surface* textSurface = NULL;
     SDL_Rect textRect = {0};
     int wrap_width = 0;
 
@@ -290,61 +268,57 @@ static int RenderTextBlockWithColor(SDL_Renderer* renderer,
     if (area.w <= 0 || area.h <= 0) return 0;
     baseFontSize = animation_config_scale_text_point_size(&animSettings, maxFontSize, minFontSize);
     if (baseFontSize < minFontSize) baseFontSize = minFontSize;
-    raster_scale = ray_tracing_text_raster_scale(renderer);
-    rasterFontSize = ray_tracing_text_raster_point_size(renderer, baseFontSize, minFontSize);
-    minRasterFontSize = ray_tracing_text_raster_point_size(renderer, minFontSize, minFontSize);
-    if (minRasterFontSize < 4) minRasterFontSize = 4;
-    if (rasterFontSize < minRasterFontSize) rasterFontSize = minRasterFontSize;
-
-    chosenRasterFontSize = rasterFontSize;
+    chosenPointSize = baseFontSize;
     if (!wrapped) {
-        while (chosenRasterFontSize > minRasterFontSize) {
+        while (chosenPointSize > minFontSize) {
             int draw_width = 0;
-            int draw_width_logical = 0;
-            TTF_Font* tempFont = RenderHelperOpenUIFontAtPointSize(chosenRasterFontSize);
+            TTF_Font* tempFont = RenderHelperOpenUIFontAtPointSize(renderer, chosenPointSize, minFontSize);
             if (!tempFont) return 0;
-            if (TTF_SizeUTF8(tempFont, text, &draw_width, NULL) != 0) {
+            if (!ray_tracing_text_measure_utf8(renderer, tempFont, text, &draw_width, NULL)) {
                 return 0;
             }
-            draw_width_logical = ray_tracing_text_logical_pixels(renderer, draw_width);
-            if (draw_width_logical <= area.w - 10) {
+            if (draw_width <= area.w - 10) {
                 break;
             }
-            chosenRasterFontSize--;
+            chosenPointSize--;
         }
     }
 
-    font = RenderHelperOpenUIFontAtPointSize(chosenRasterFontSize);
+    font = RenderHelperOpenUIFontAtPointSize(renderer, chosenPointSize, minFontSize);
     if (!font) return 0;
 
     if (wrapped) {
-        wrap_width = (int)lroundf((float)area.w * raster_scale);
+        wrap_width = area.w;
         if (wrap_width < 1) wrap_width = 1;
-        textSurface = TTF_RenderUTF8_Blended_Wrapped(font, text, textColor, (Uint32)wrap_width);
     } else {
-        textSurface = TTF_RenderUTF8_Blended(font, text, textColor);
+        if (!ray_tracing_text_measure_utf8(renderer, font, text, &measured_w, &measured_h)) {
+            return 0;
+        }
     }
-    if (!textSurface) {
-        return 0;
+    if (!wrapped) {
+        if (measured_w < 1) measured_w = 1;
+        if (measured_h < 1) measured_h = 1;
     }
-    measured_w = ray_tracing_text_logical_pixels(renderer, textSurface->w);
-    measured_h = ray_tracing_text_logical_pixels(renderer, textSurface->h);
-    if (measured_w < 1) measured_w = 1;
-    if (measured_h < 1) measured_h = 1;
-    if (center_horizontal) {
+    if (!wrapped && center_horizontal) {
         textRect.x = area.x + (area.w - measured_w) / 2;
     } else {
         textRect.x = area.x;
     }
-    if (center_vertical) {
+    if (!wrapped && center_vertical) {
         textRect.y = area.y + (area.h - measured_h) / 2;
     } else {
         textRect.y = area.y;
     }
-    textRect.w = measured_w;
-    textRect.h = measured_h;
-    RenderSurface(renderer, textSurface, &textRect, raster_scale);
-    SDL_FreeSurface(textSurface);
+    textRect.w = wrapped ? 0 : measured_w;
+    textRect.h = wrapped ? 0 : measured_h;
+    if (wrapped) {
+        if (!ray_tracing_text_draw_utf8_wrapped(renderer, font, text, wrap_width, textColor, &textRect)) {
+            return 0;
+        }
+        measured_h = textRect.h;
+    } else if (!ray_tracing_text_draw_utf8(renderer, font, text, textColor, &textRect)) {
+        return 0;
+    }
     return measured_h;
 }
 

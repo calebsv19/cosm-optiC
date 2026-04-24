@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 static int fail(const char* msg) {
     fprintf(stderr, "shared_theme_font_adapter_test: %s\n", msg);
@@ -33,6 +34,12 @@ int main(void) {
     }
     if (!ray_tracing_shared_font_resolve_ui_regular(path, sizeof(path), &point_size)) {
         return fail("font should be enabled by default");
+    }
+    if (strstr(path, "Lato-Regular.ttf") == NULL) {
+        return fail("default shared font should resolve to the IDE/Lato baseline");
+    }
+    if (point_size != 11) {
+        return fail("default shared font should resolve to the BASIC IDE tier size");
     }
 
     setenv("RAY_TRACING_USE_SHARED_THEME_FONT", "1", 1);

@@ -355,12 +355,12 @@ bool ray_tracing_shared_font_resolve_ui_regular(char* out_path, size_t out_path_
 
     preset_name = getenv("RAY_TRACING_FONT_PRESET");
     if (!preset_name || !preset_name[0]) {
-        preset_name = "daw_default";
+        preset_name = "ide";
     }
 
     r = core_font_get_preset_by_name(preset_name, &preset);
     if (r.code != CORE_OK) {
-        r = core_font_get_preset(CORE_FONT_PRESET_DAW_DEFAULT, &preset);
+        r = core_font_get_preset(CORE_FONT_PRESET_IDE, &preset);
         if (r.code != CORE_OK) {
             return false;
         }
@@ -375,7 +375,7 @@ bool ray_tracing_shared_font_resolve_ui_regular(char* out_path, size_t out_path_
         !copy_existing_path(out_path, out_path_size, "config/default.ttf")) {
         return false;
     }
-    r = core_font_point_size_for_tier(&role, CORE_FONT_TEXT_SIZE_HEADER, &tier_size);
+    r = core_font_point_size_for_tier(&role, CORE_FONT_TEXT_SIZE_BASIC, &tier_size);
     if (r.code == CORE_OK && tier_size > 0) {
         *out_point_size = tier_size;
     } else {
