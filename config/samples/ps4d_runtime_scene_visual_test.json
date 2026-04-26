@@ -235,7 +235,7 @@
     },
     "overlay_merge":{
       "producer_clocks":{
-        "ray_tracing":22
+        "ray_tracing":25
       }
     },
     "ray_tracing":{
@@ -377,15 +377,15 @@
         "object_materials":[
           {
             "object_id":"plane_floor",
-            "material_id":0
+            "material_id":3
           },
           {
             "object_id":"prism_center",
-            "material_id":1
+            "material_id":2
           },
           {
             "object_id":"prism_offset",
-            "material_id":2
+            "material_id":1
           }
         ]
       }
