@@ -1,6 +1,6 @@
 # Ray Tracing Desktop Packaging
 
-Last updated: 2026-04-23
+Last updated: 2026-04-25
 
 ## Bundle Contract
 
@@ -25,6 +25,31 @@ Last updated: 2026-04-23
   - `make -C ray_tracing package-desktop-open`
   - `make -C ray_tracing package-desktop-remove`
   - `make -C ray_tracing package-desktop-refresh`
+
+Optional icon inputs:
+
+- default local icon store:
+  - `ray_tracing/tools/packaging/macos/local_app_icon/AppIcon.icns`
+  - `ray_tracing/tools/packaging/macos/local_app_icon/AppIcon.iconset`
+- plain `make -C ray_tracing package-desktop-refresh` now consumes that local store by default when present
+- the local icon store is intentionally gitignored so icon refreshes do not pollute repo state
+
+```sh
+make -C ray_tracing package-desktop-refresh \
+  PACKAGE_APP_ICONSET_SRC="/absolute/path/AppIcon.iconset"
+```
+
+or
+
+```sh
+make -C ray_tracing package-desktop-refresh \
+  PACKAGE_APP_ICON_SRC="/absolute/path/AppIcon.icns"
+```
+
+If the local store or either override variable is present, packaging will bundle `Contents/Resources/AppIcon.icns` and the app plist will advertise `CFBundleIconFile=AppIcon`.
+
+Local asset note:
+- because `tools/packaging/macos/local_app_icon/` is gitignored, a fresh clone does not automatically carry your chosen app icon until you copy one into that directory
 - release/readiness:
   - `make -C ray_tracing release-contract`
   - `make -C ray_tracing release-bundle-audit`

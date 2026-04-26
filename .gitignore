@@ -23,6 +23,7 @@ data/runtime/
 data/snapshots/
 tmp/
 /dist/
+tools/packaging/macos/local_app_icon/
 
 # Optional: temporary files and OS-specific junk
 *.log

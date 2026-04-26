@@ -119,6 +119,13 @@ Data-path contract lane (`DP S0-S5`) status:
     - `make -C /Users/calebsv/Desktop/CodeWork/ray_tracing test-stable` passing
     - `make -C /Users/calebsv/Desktop/CodeWork/ray_tracing package-desktop-refresh` passing
   - the older “13 route/integrator failures” note no longer represents current test-stable status
+  - packaged icon contract is now explicit:
+    - plist advertises `CFBundleIconFile=AppIcon`
+    - default icon source is `tools/packaging/macos/local_app_icon/AppIcon.icns`
+    - default iconset source is `tools/packaging/macos/local_app_icon/AppIcon.iconset`
+    - `package-desktop*` also accepts either `PACKAGE_APP_ICON_SRC=/absolute/path/AppIcon.icns` or `PACKAGE_APP_ICONSET_SRC=/absolute/path/AppIcon.iconset`
+    - bundle output path is `Contents/Resources/AppIcon.icns`
+    - the local icon store is intentionally gitignored and treated as a local distribution asset
 
 ## Release Readiness Snapshot
 - `RT-RL0` complete:
