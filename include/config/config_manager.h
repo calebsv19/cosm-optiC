@@ -61,6 +61,7 @@ typedef struct {
     int tileSize;
     double rouletteThreshold;
     int integratorMode;
+    int integratorMode3D;
     bool previewMode;
     double previewDuration;
     int pathSamplesPerPixel;

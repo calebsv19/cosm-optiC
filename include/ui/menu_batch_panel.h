@@ -11,6 +11,8 @@
 
 typedef struct {
     SDL_Rect panelRect;
+    SDL_Rect videoFileLabelRect;
+    SDL_Rect headerDividerRect;
     SDL_Rect frameDirValueRect;
     SDL_Rect frameDirEditRect;
     SDL_Rect frameDirFolderRect;

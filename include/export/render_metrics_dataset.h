@@ -12,6 +12,9 @@ typedef struct RayTracingRenderMetricsSnapshot {
     int target_fps;
     double frame_duration_seconds;
     int integrator_mode;
+    int integrator_mode_3d;
+    int route_family;
+    bool integrator_uses_3d_catalog;
     int bounce_limit;
     int path_samples_per_pixel;
     int path_max_depth;
@@ -24,6 +27,7 @@ typedef struct RayTracingRenderMetricsSnapshot {
     bool interactive_mode;
     bool deep_render_mode;
     bool bounce_mode;
+    char integrator_status_label[96];
 } RayTracingRenderMetricsSnapshot;
 
 bool ray_tracing_render_metrics_dataset_export_json(const RayTracingRenderMetricsSnapshot *snapshot,

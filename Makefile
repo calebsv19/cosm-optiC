@@ -16,6 +16,12 @@ PACKAGE_FRAMEWORKS_DIR := $(PACKAGE_CONTENTS_DIR)/Frameworks
 PACKAGE_INFO_PLIST_SRC := tools/packaging/macos/Info.plist
 PACKAGE_LAUNCHER_SRC := tools/packaging/macos/raytracing-launcher
 PACKAGE_DYLIB_BUNDLER := tools/packaging/macos/bundle-dylibs.sh
+PACKAGE_LOCAL_ICON_DIR := tools/packaging/macos/local_app_icon
+PACKAGE_APP_ICON_NAME := AppIcon
+PACKAGE_APP_ICON_FILE := $(PACKAGE_APP_ICON_NAME).icns
+PACKAGE_APP_ICON_SRC ?= $(PACKAGE_LOCAL_ICON_DIR)/$(PACKAGE_APP_ICON_FILE)
+PACKAGE_APP_ICONSET_SRC ?= $(PACKAGE_LOCAL_ICON_DIR)/$(PACKAGE_APP_ICON_NAME).iconset
+PACKAGE_BUNDLED_ICON_PATH := $(PACKAGE_RESOURCES_DIR)/$(PACKAGE_APP_ICON_FILE)
 PACKAGE_FFMPEG_SRC ?= $(shell command -v ffmpeg 2>/dev/null)
 DESKTOP_APP_DIR ?= $(HOME)/Desktop/$(PACKAGE_APP_NAME)
 PACKAGE_ADHOC_SIGN_IDENTITY ?= -
@@ -151,9 +157,11 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/integrators/integrator_common.o \
 	$(BUILD_DIR)/render/accel/irradiance_cache.o \
 	$(BUILD_DIR)/render/adapters/space_mode_adapter.o \
+	$(BUILD_DIR)/render/helpers/ray_tracing_integrator_catalog.o \
 	$(BUILD_DIR)/render/backend/ray_tracing_mode_backend.o \
 	$(BUILD_DIR)/render/runtime_camera_3d_rays.o \
 	$(BUILD_DIR)/render/runtime_direct_light_3d.o \
+	$(BUILD_DIR)/render/runtime_diffuse_bounce_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \
@@ -190,6 +198,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/app/preview_camera_sample.o \
 	$(BUILD_DIR)/app/preview_camera_projector.o \
 	$(BUILD_DIR)/app/preview_retained_scene_renderer.o \
+	$(BUILD_DIR)/app/animation_output.o \
 	$(BUILD_DIR)/app/render_export_batch.o \
 	$(BUILD_DIR)/app/animation_fluid_scene.o \
 	$(BUILD_DIR)/app/data_paths.o \
@@ -468,6 +477,15 @@ package-desktop: all
 	@cp "$(PACKAGE_LAUNCHER_SRC)" "$(PACKAGE_MACOS_DIR)/raytracing-launcher"
 	@"$(PACKAGE_DYLIB_BUNDLER)" "$(PACKAGE_MACOS_DIR)/raytracing-bin" "$(PACKAGE_FRAMEWORKS_DIR)"
 	@chmod +x "$(PACKAGE_MACOS_DIR)/raytracing-bin" "$(PACKAGE_MACOS_DIR)/raytracing-launcher"
+	@if [ -f "$(PACKAGE_APP_ICON_SRC)" ]; then \
+		cp "$(PACKAGE_APP_ICON_SRC)" "$(PACKAGE_BUNDLED_ICON_PATH)"; \
+		echo "Bundled app icon from $(PACKAGE_APP_ICON_SRC)"; \
+	elif [ -d "$(PACKAGE_APP_ICONSET_SRC)" ]; then \
+		/usr/bin/iconutil -c icns -o "$(PACKAGE_BUNDLED_ICON_PATH)" "$(PACKAGE_APP_ICONSET_SRC)" || exit 1; \
+		echo "Bundled app icon from $(PACKAGE_APP_ICONSET_SRC)"; \
+	else \
+		echo "warning: no app icon source found at $(PACKAGE_APP_ICON_SRC) or $(PACKAGE_APP_ICONSET_SRC)"; \
+	fi
 	@if [ -n "$(PACKAGE_FFMPEG_SRC)" ] && [ -x "$(PACKAGE_FFMPEG_SRC)" ]; then \
 		cp "$(PACKAGE_FFMPEG_SRC)" "$(PACKAGE_TOOLS_DIR)/ffmpeg"; \
 		chmod +x "$(PACKAGE_TOOLS_DIR)/ffmpeg"; \
@@ -496,6 +514,9 @@ package-desktop-smoke: package-desktop
 	@test -f "$(PACKAGE_FRAMEWORKS_DIR)/libvulkan.1.dylib" || (echo "Missing bundled libvulkan.1.dylib"; exit 1)
 	@test -f "$(PACKAGE_FRAMEWORKS_DIR)/libMoltenVK.dylib" || (echo "Missing bundled libMoltenVK.dylib"; exit 1)
 	@test -f "$(PACKAGE_CONTENTS_DIR)/Info.plist" || (echo "Missing Info.plist"; exit 1)
+	@if [ -f "$(PACKAGE_APP_ICON_SRC)" ] || [ -d "$(PACKAGE_APP_ICONSET_SRC)" ]; then \
+		test -f "$(PACKAGE_BUNDLED_ICON_PATH)" || (echo "Missing bundled AppIcon.icns"; exit 1); \
+	fi
 	@test -f "$(PACKAGE_RESOURCES_DIR)/config/animation_config.json" || (echo "Missing config/animation_config.json"; exit 1)
 	@test -f "$(PACKAGE_RESOURCES_DIR)/config/scene_config.json" || (echo "Missing config/scene_config.json"; exit 1)
 	@test -f "$(PACKAGE_RESOURCES_DIR)/config/default.ttf" || (echo "Missing config/default.ttf"; exit 1)
@@ -778,21 +799,3 @@ clean:
 	rm -rf $(BUILD_DIR) $(TARGET) $(REL_BUILD_DIR) $(REL_TARGET) $(RAY_TRACE_TOOL_BIN) $(RAY_TRACE_TOOL_BIN).dSYM
 
 -include $(DEP)
-PACKAGE_LOCAL_ICON_DIR := tools/packaging/macos/local_app_icon
-PACKAGE_APP_ICON_NAME := AppIcon
-PACKAGE_APP_ICON_FILE := $(PACKAGE_APP_ICON_NAME).icns
-PACKAGE_APP_ICON_SRC ?= $(PACKAGE_LOCAL_ICON_DIR)/$(PACKAGE_APP_ICON_FILE)
-PACKAGE_APP_ICONSET_SRC ?= $(PACKAGE_LOCAL_ICON_DIR)/$(PACKAGE_APP_ICON_NAME).iconset
-PACKAGE_BUNDLED_ICON_PATH := $(PACKAGE_RESOURCES_DIR)/$(PACKAGE_APP_ICON_FILE)
-	@if [ -f "$(PACKAGE_APP_ICON_SRC)" ]; then \
-		cp "$(PACKAGE_APP_ICON_SRC)" "$(PACKAGE_BUNDLED_ICON_PATH)"; \
-		echo "Bundled app icon from $(PACKAGE_APP_ICON_SRC)"; \
-	elif [ -d "$(PACKAGE_APP_ICONSET_SRC)" ]; then \
-		/usr/bin/iconutil -c icns -o "$(PACKAGE_BUNDLED_ICON_PATH)" "$(PACKAGE_APP_ICONSET_SRC)" || exit 1; \
-		echo "Bundled app icon from $(PACKAGE_APP_ICONSET_SRC)"; \
-	else \
-		echo "warning: no app icon source found at $(PACKAGE_APP_ICON_SRC) or $(PACKAGE_APP_ICONSET_SRC)"; \
-	fi
-	@if [ -f "$(PACKAGE_APP_ICON_SRC)" ] || [ -d "$(PACKAGE_APP_ICONSET_SRC)" ]; then \
-		test -f "$(PACKAGE_BUNDLED_ICON_PATH)" || (echo "Missing bundled AppIcon.icns"; exit 1); \
-	fi

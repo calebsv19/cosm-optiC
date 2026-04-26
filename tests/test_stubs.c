@@ -39,6 +39,10 @@ void ts_set_settings_path(const char* path) { (void)path; }
 __attribute__((weak))
 #endif
 bool AnimationUseFluidScene(void) { return false; }
+int frameCounter = 0;
+int loopCount = 0;
+double currentTime = 0.0;
+SDL_Renderer* renderer = NULL;
 double AnimationCurrentNormalizedT(void) { return 0.0; }
 RenderContext* getRenderContext(void) { return NULL; }
 bool render_begin_frame(void) { return true; }

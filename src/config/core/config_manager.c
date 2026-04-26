@@ -3,6 +3,7 @@
 #include "config/config_scene_path_io.h"
 #include "config/core/config_runtime_paths.h"
 #include "app/data_paths.h"
+#include "render/ray_tracing_integrator_catalog.h"
 #include "scene/object_manager.h"
 #include "material/material_manager.h"
 #include <stdio.h>       // For file handling (fopen, fprintf, fclose, perror)
@@ -121,6 +122,7 @@ AnimationConfig animSettings = {
     .tileSize = 16,
     .rouletteThreshold = 0.01,
     .integratorMode = 0,
+    .integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT,
     .pathSamplesPerPixel = 4,
     .pathMaxDepth = 4,
     .pathDirectLighting = true,
@@ -336,7 +338,9 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "tilePreviewEnabled", json_object_new_boolean(animSettings.tilePreviewEnabled));
     json_object_object_add(config, "tileSize", json_object_new_int(animSettings.tileSize));
     json_object_object_add(config, "rouletteThreshold", json_object_new_double(animSettings.rouletteThreshold));
+    RayTracingIntegratorCatalog_NormalizeAnimationConfig(&animSettings);
     json_object_object_add(config, "integratorMode", json_object_new_int(animSettings.integratorMode));
+    json_object_object_add(config, "integratorMode3D", json_object_new_int(animSettings.integratorMode3D));
     json_object_object_add(config, "previewDuration", json_object_new_double(animSettings.previewDuration));
     json_object_object_add(config, "pathSamplesPerPixel", json_object_new_int(animSettings.pathSamplesPerPixel));
     json_object_object_add(config, "pathMaxDepth", json_object_new_int(animSettings.pathMaxDepth));
@@ -821,11 +825,14 @@ void LoadAnimationConfig(void) {
         animSettings.rouletteThreshold = json_object_get_double(temp);
     if (json_object_object_get_ex(config, "integratorMode", &temp))
         animSettings.integratorMode = json_object_get_int(temp);
-    if (animSettings.integratorMode < 0) {
-        animSettings.integratorMode = 0;
-    } else if (animSettings.integratorMode > 2) {
-        animSettings.integratorMode = 2;
+    if (json_object_object_get_ex(config, "integratorMode3D", &temp)) {
+        animSettings.integratorMode3D = json_object_get_int(temp);
+    } else if (json_object_object_get_ex(config, "integrator_mode_3d", &temp)) {
+        animSettings.integratorMode3D = json_object_get_int(temp);
+    } else {
+        animSettings.integratorMode3D = RayTracingIntegratorCatalog_Default3D();
     }
+    RayTracingIntegratorCatalog_NormalizeAnimationConfig(&animSettings);
     if (json_object_object_get_ex(config, "previewDuration", &temp)) {
         animSettings.previewDuration = json_object_get_double(temp);
         if (animSettings.previewDuration <= 0.1) animSettings.previewDuration = 5.0;
@@ -976,6 +983,7 @@ void LoadAnimationConfig(void) {
     animSettings.spaceMode = animation_config_space_mode_clamp(animSettings.spaceMode);
     animation_config_sync_scene_source_legacy_fields(&animSettings);
     animSettings.textZoomStep = animation_config_text_zoom_step_clamp(animSettings.textZoomStep);
+    RayTracingIntegratorCatalog_NormalizeAnimationConfig(&animSettings);
 	
     printf(" Loaded animation config successfully.\n");
     json_object_put(config);

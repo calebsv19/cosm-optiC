@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "config/config_manager.h"
+#include "render/ray_tracing_integrator_catalog.h"
 #include "ui/sdl_menu_render.h"
 
 #define MENU_WIDTH 1200
@@ -20,7 +21,10 @@
 #define MENU_BOTTOM_ACTION_HEIGHT 64
 #define MENU_CENTER_CONTROLS_MIN_HEIGHT 196
 #define MENU_CENTER_CONTROLS_MAX_HEIGHT 232
-#define MENU_MANIFEST_RESERVE_HEIGHT 260
+#define MENU_MANIFEST_PANEL_MIN_HEIGHT 140
+#define MENU_MANIFEST_PANEL_MAX_HEIGHT 260
+#define MENU_MANIFEST_PANEL_GAP 6
+#define MENU_LEFT_PANEL_CONTENT_INSET 18
 #define MENU_PANEL_BOTTOM_GAP 18
 #define MENU_BATCH_MIN_HEIGHT 150
 
@@ -52,7 +56,9 @@ void menu_layout_build_base(TTF_Font* font,
                             const MenuRuntimeState* state,
                             MenuScreenLayout* out_layout) {
     MenuScreenLayout layout;
-    const bool show_path_toggles = (animSettings.integratorMode == 1);
+    const RayTracingIntegratorMenuState integrator_menu =
+        RayTracingIntegratorCatalog_BuildMenuState(&animSettings);
+    const bool show_path_toggles = integrator_menu.showPathToggles;
     const int left_panel_w = min_int(MENU_LEFT_PANEL_MAX_WIDTH,
                                      max_int(MENU_LEFT_PANEL_MIN_WIDTH,
                                              max_int(measure_button_width(font,
@@ -140,15 +146,27 @@ void menu_layout_finalize_with_buttons(MenuScreenLayout* layout,
     batch_bottom = layout->bottomActionRowRect.y - MENU_PANEL_BOTTOM_GAP;
 
     if (state && state->manifestDropdownOpen) {
-        int reserve_top = buttons->loadSceneRect.y + buttons->loadSceneRect.h + 6;
-        layout->manifestReserveRect = (SDL_Rect){
-            layout->leftPanelRect.x,
-            reserve_top,
-            layout->centerBatchRect.x + layout->centerBatchRect.w - layout->leftPanelRect.x,
-            MENU_MANIFEST_RESERVE_HEIGHT
-        };
-        batch_top = max_int(batch_top,
-                            layout->manifestReserveRect.y + layout->manifestReserveRect.h + MENU_ZONE_GAP);
+        const int panel_x = buttons->loadSceneRect.x;
+        const int panel_y = buttons->inputRootValueRect.y + buttons->inputRootValueRect.h + MENU_MANIFEST_PANEL_GAP;
+        const int panel_right_limit = layout->leftPanelRect.x + layout->leftPanelRect.w - MENU_LEFT_PANEL_CONTENT_INSET;
+        const int control_right = buttons->inputRootApplyRect.x + buttons->inputRootApplyRect.w;
+        const int panel_bottom_limit = layout->leftPanelRect.y + layout->leftPanelRect.h - MENU_LEFT_PANEL_CONTENT_INSET;
+        const int panel_w = min_int(panel_right_limit, control_right) - panel_x;
+        int panel_h = panel_bottom_limit - panel_y;
+
+        if (panel_h > MENU_MANIFEST_PANEL_MAX_HEIGHT) {
+            panel_h = MENU_MANIFEST_PANEL_MAX_HEIGHT;
+        }
+        if (panel_h < MENU_MANIFEST_PANEL_MIN_HEIGHT &&
+            panel_bottom_limit - panel_y >= MENU_MANIFEST_PANEL_MIN_HEIGHT) {
+            panel_h = MENU_MANIFEST_PANEL_MIN_HEIGHT;
+        }
+
+        if (panel_w > 0 && panel_h > 0) {
+            layout->manifestReserveRect = (SDL_Rect){panel_x, panel_y, panel_w, panel_h};
+        } else {
+            layout->manifestReserveRect = (SDL_Rect){0, 0, 0, 0};
+        }
     } else {
         layout->manifestReserveRect = (SDL_Rect){0, 0, 0, 0};
     }
@@ -158,12 +176,6 @@ void menu_layout_finalize_with_buttons(MenuScreenLayout* layout,
     }
     if (batch_top < layout->centerControlsRect.y + layout->centerControlsRect.h + MENU_ZONE_GAP) {
         batch_top = layout->centerControlsRect.y + layout->centerControlsRect.h + MENU_ZONE_GAP;
-    }
-    if (state && state->manifestDropdownOpen) {
-        int reserve_limit = layout->manifestReserveRect.y + layout->manifestReserveRect.h + MENU_ZONE_GAP;
-        if (batch_top < reserve_limit) {
-            batch_top = reserve_limit;
-        }
     }
     if (batch_bottom < batch_top) {
         batch_bottom = batch_top;

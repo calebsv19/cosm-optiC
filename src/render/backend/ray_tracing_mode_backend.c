@@ -2,6 +2,7 @@
 
 #include "import/runtime_scene_bridge.h"
 #include "render/integrators/integrator_common.h"
+#include "render/ray_tracing_integrator_catalog.h"
 #include "render/runtime_scene_3d_builder.h"
 #include <math.h>
 #include <stdio.h>
@@ -38,6 +39,7 @@ RayTracingRuntimeRoute RayTracingModeBackend_ResolveRoute(void) {
     bool native_ready = false;
     double native_camera_z = 0.0;
     int native_primitive_count = 0;
+    RayTracingResolvedIntegratorState integrator_state;
     route.requestedMode = SpaceModeAdapter_ResolveMode(animSettings.spaceMode);
     route.projectionMode = route.requestedMode;
     route.backendLane = RAY_TRACING_BACKEND_CANONICAL_2D;
@@ -48,15 +50,14 @@ RayTracingRuntimeRoute RayTracingModeBackend_ResolveRoute(void) {
     route.rayOriginYOffset = 0.0;
     route.scaffoldPrimitiveCount = 0;
 
-    route.integratorMode = animSettings.integratorMode;
-    if (route.integratorMode < 0) route.integratorMode = 0;
-    if (route.integratorMode > 2) route.integratorMode = 2;
-
     route.useTiles = animSettings.useTiledRenderer;
     route.tileSize = route.useTiles ? ClampTileSize(animSettings.tileSize) : 0;
-    route.buildIrradianceCache = (route.integratorMode == 1);
-    route.tilePreviewEnabled =
-        route.useTiles && animSettings.tilePreviewEnabled && (route.integratorMode == 1);
+    route.integratorMode = RAY_TRACING_2D_INTEGRATOR_FORWARD_LIGHT;
+    route.integratorMode3D = RayTracingIntegratorCatalog_Default3D();
+    route.integratorUses3DCatalog = false;
+    route.buildIrradianceCache = false;
+    route.tilePreviewEnabled = false;
+    route.integratorFallbackReason = RAY_TRACING_INTEGRATOR_FALLBACK_NONE;
 
     if (route.requestedMode == SPACE_MODE_3D) {
         runtime_scene_bridge_get_last_3d_scaffold_state(&scaffold);
@@ -87,6 +88,18 @@ RayTracingRuntimeRoute RayTracingModeBackend_ResolveRoute(void) {
         }
     }
 
+    integrator_state = RayTracingIntegratorCatalog_ResolveRuntime(&animSettings,
+                                                                  route.requestedMode,
+                                                                  route.routeFamily == RAY_TRACING_ROUTE_NATIVE_3D,
+                                                                  route.routeFamily == RAY_TRACING_ROUTE_COMPAT_3D_FALLBACK,
+                                                                  route.useTiles,
+                                                                  animSettings.tilePreviewEnabled);
+    route.integratorMode = integrator_state.activeLegacy2DMode;
+    route.integratorMode3D = (RayTracing3DIntegratorId)integrator_state.active3DMode;
+    route.integratorUses3DCatalog = integrator_state.uses3DCatalog;
+    route.buildIrradianceCache = integrator_state.buildIrradianceCache;
+    route.tilePreviewEnabled = integrator_state.tilePreviewEnabled;
+    route.integratorFallbackReason = integrator_state.fallbackReason;
     route.fallbackTo2DProjection = compat_fallback;
     return route;
 }
@@ -278,4 +291,23 @@ const char* RayTracingModeBackend_Name(const RayTracingRuntimeRoute* route) {
     if (RayTracingModeBackend_IsNative3D(route)) return "3D(native)";
     if (RayTracingModeBackend_IsCompat3DFallback(route)) return "3D(compat-fallback)";
     return "2D(canonical)";
+}
+
+const char* RayTracingModeBackend_IntegratorStatusLabel(const RayTracingRuntimeRoute* route) {
+    if (!route) return "integrator: Forward Light";
+    if (route->integratorFallbackReason != RAY_TRACING_INTEGRATOR_FALLBACK_NONE) {
+        return RayTracingIntegratorCatalog_FallbackReasonLabel(route->integratorFallbackReason);
+    }
+    if (route->integratorUses3DCatalog) {
+        return RayTracingIntegratorCatalog_3DStatusLabel(route->integratorMode3D);
+    }
+    switch (route->integratorMode) {
+        case RAY_TRACING_2D_INTEGRATOR_HYBRID:
+            return "integrator: Hybrid";
+        case RAY_TRACING_2D_INTEGRATOR_DIRECT_LIGHT:
+            return "integrator: Direct Light";
+        case RAY_TRACING_2D_INTEGRATOR_FORWARD_LIGHT:
+        default:
+            return "integrator: Forward Light";
+    }
 }

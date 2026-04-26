@@ -21,6 +21,9 @@
 #define BATCH_PANEL_CTRL_BUTTON_W 56
 #define BATCH_PANEL_ACTION_HEIGHT 34
 #define BATCH_PANEL_ACTION_W 118
+#define BATCH_PANEL_HEADER_TEXT_OFFSET_Y 4
+#define BATCH_PANEL_HEADER_DIVIDER_GAP 20
+#define BATCH_PANEL_HEADER_TO_ROWS_GAP 8
 
 static bool point_in_rect(const SDL_Rect *rect, int x, int y) {
     if (!rect) return false;
@@ -177,7 +180,20 @@ void menu_batch_panel_build_layout(TTF_Font* font,
     value_width = layout.panelRect.w - (BATCH_PANEL_CTRL_BUTTON_W * 3) - 22 - BATCH_PANEL_INSET * 2;
     if (value_width < 180) value_width = 180;
 
-    row_y = layout.panelRect.y + MENU_PANEL_CHROME_TITLE_BAND + 14;
+    layout.videoFileLabelRect = (SDL_Rect){
+        layout.panelRect.x + BATCH_PANEL_INSET,
+        layout.panelRect.y + MENU_PANEL_CHROME_TITLE_BAND + BATCH_PANEL_HEADER_TEXT_OFFSET_Y,
+        layout.panelRect.w - BATCH_PANEL_INSET * 2,
+        16
+    };
+    layout.headerDividerRect = (SDL_Rect){
+        layout.panelRect.x + BATCH_PANEL_INSET,
+        layout.videoFileLabelRect.y + BATCH_PANEL_HEADER_DIVIDER_GAP,
+        layout.panelRect.w - BATCH_PANEL_INSET * 2,
+        1
+    };
+
+    row_y = layout.headerDividerRect.y + BATCH_PANEL_HEADER_TO_ROWS_GAP;
     layout.frameDirValueRect = (SDL_Rect){layout.panelRect.x + BATCH_PANEL_INSET,
                                           row_y,
                                           value_width,
@@ -420,14 +436,11 @@ void menu_batch_panel_render(SDL_Renderer* renderer,
                                   sizeof(video_file));
     menu_render_draw_text_color(renderer,
                                 font,
-                                layout->panelRect.x + BATCH_PANEL_INSET,
-                                layout->panelRect.y + MENU_PANEL_CHROME_TITLE_BAND + 2,
+                                layout->videoFileLabelRect.x,
+                                layout->videoFileLabelRect.y,
                                 info_color,
                                 video_file);
-    divider = (SDL_Rect){layout->panelRect.x + BATCH_PANEL_INSET,
-                         layout->panelRect.y + MENU_PANEL_CHROME_TITLE_BAND + 12,
-                         layout->panelRect.w - BATCH_PANEL_INSET * 2,
-                         1};
+    divider = layout->headerDividerRect;
     if (has_shared_palette) {
         SDL_SetRenderDrawColor(renderer,
                                palette.panel_border.r, palette.panel_border.g,

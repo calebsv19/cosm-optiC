@@ -13,6 +13,7 @@
 #include "config/config_manager.h"
 #include "editor/editor_mode_router.h"
 #include "engine/Render/render_pipeline.h"
+#include "render/ray_tracing_integrator_catalog.h"
 #include "render/text_font_cache.h"
 #include "ui/scene_source_catalog.h"
 
@@ -252,6 +253,7 @@ static void sync_forward_decay_slider_from_settings(MenuRuntimeState* state) {
 
 void menu_state_sync_from_anim(MenuRuntimeState* state) {
     if (!state) return;
+    RayTracingIntegratorCatalog_NormalizeAnimationConfig(&animSettings);
     sync_roulette_slider_from_settings(state);
     sync_env_slider_from_settings(state);
     sync_cache_slider_from_settings(state);
@@ -434,6 +436,7 @@ void menu_state_reset_defaults(MenuRuntimeState* state) {
     animSettings.tileSize = 16;
     animSettings.rouletteThreshold = 0.01;
     animSettings.integratorMode = 0;
+    animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT;
     animSettings.pathSamplesPerPixel = 4;
     animSettings.pathMaxDepth = 4;
     animSettings.pathDirectLighting = true;

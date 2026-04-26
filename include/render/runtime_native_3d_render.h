@@ -4,13 +4,49 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "render/runtime_camera_3d_rays.h"
+#include "render/runtime_scene_3d.h"
+#include "render/ray_tracing_integrator_catalog.h"
+
 typedef struct {
     int hitPixelCount;
     int visiblePixelCount;
+    int bouncePixelCount;
+    int secondaryRayCount;
+    int secondaryHitCount;
+    int secondaryContributingHitCount;
     double maxRadiance;
+    double maxBounceRadiance;
+    double totalBounceRadiance;
 } RuntimeNative3DRenderStats;
 
+typedef struct {
+    RuntimeScene3D scene;
+    RuntimeCameraProjector3D projector;
+    int width;
+    int height;
+    bool valid;
+} RuntimeNative3DPreparedFrame;
+
+void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
+                                           const RuntimeNative3DRenderStats* src);
+bool RuntimeNative3DPrepareFrame(RuntimeNative3DPreparedFrame* out_frame,
+                                 int width,
+                                 int height,
+                                 double normalized_t,
+                                 double live_light_x,
+                                 double live_light_y);
+void RuntimeNative3DPreparedFrame_Free(RuntimeNative3DPreparedFrame* frame);
+bool RuntimeNative3DRenderPreparedRegion(uint8_t* pixel_buffer,
+                                         RayTracing3DIntegratorId integrator_id,
+                                         const RuntimeNative3DPreparedFrame* frame,
+                                         int start_x,
+                                         int start_y,
+                                         int end_x,
+                                         int end_y,
+                                         RuntimeNative3DRenderStats* out_stats);
 bool RuntimeNative3DRenderToPixelBuffer(uint8_t* pixel_buffer,
+                                        RayTracing3DIntegratorId integrator_id,
                                         int width,
                                         int height,
                                         double normalized_t,

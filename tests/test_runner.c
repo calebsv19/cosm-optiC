@@ -12,6 +12,7 @@
 #include "config/config_manager.h"
 #include "app/data_paths.h"
 #include "app/animation.h"
+#include "app/animation_output.h"
 #include "app/render_export_batch.h"
 #include "app/preview_mode_route.h"
 #include "app/preview_playback.h"
@@ -26,6 +27,7 @@
 #include "render/ray_tracing_mode_backend.h"
 #include "render/runtime_camera_3d_rays.h"
 #include "render/runtime_direct_light_3d.h"
+#include "render/runtime_diffuse_bounce_3d.h"
 #include "render/runtime_native_3d_render.h"
 #include "render/runtime_ray_3d.h"
 #include "render/runtime_scene_3d.h"
@@ -39,18 +41,21 @@
 #include "render/light_pdf.h"
 #include "render/ray_types.h"
 #include "render/render_helper.h"
+#include "render/ray_tracing_integrator_catalog.h"
 #include "import/runtime_scene_bridge.h"
 #include "path/path_system.h"
 #include "config/config_scene_path_io.h"
 #include "core_scene_compile.h"
 #include "ui/menu_batch_panel.h"
 #include "ui/menu_layout.h"
+#include "ui/menu_panel_chrome.h"
 #include "ui/sdl_menu_render.h"
 #include "ui/scene_source_catalog.h"
 #include "ui/sdl_menu_state.h"
 #include "fluid_pack_import_test.h"
 #include "kit_viz_fluid_overlay_adapter_test.h"
 #include "render_metrics_dataset_test.h"
+#include "cJSON.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -127,6 +132,27 @@ static bool path_exists(const char *path) {
     struct stat st;
     if (!path || !path[0]) return false;
     return stat(path, &st) == 0;
+}
+
+static void restore_env_or_unset(const char* name, const char* value) {
+    if (!name) return;
+    if (value) {
+        setenv(name, value, 1);
+    } else {
+        unsetenv(name);
+    }
+}
+
+static cJSON* find_named_dataset_entry(cJSON* items, const char* name) {
+    if (!cJSON_IsArray(items) || !name) return NULL;
+    cJSON* entry = NULL;
+    cJSON_ArrayForEach(entry, items) {
+        cJSON* entry_name = cJSON_GetObjectItem(entry, "name");
+        if (cJSON_IsString(entry_name) && strcmp(entry_name->valuestring, name) == 0) {
+            return entry;
+        }
+    }
+    return NULL;
 }
 
 static bool path_list_contains(const char *const *paths,
@@ -530,6 +556,40 @@ static int test_animation_scene_source_roundtrip_runtime_lane(void) {
     return 0;
 }
 
+static int test_animation_integrator_split_roundtrip_and_default_3d(void) {
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+    const char* json_missing_3d_integrator =
+        "{\n"
+        "  \"spaceMode\": 1,\n"
+        "  \"integratorMode\": 1\n"
+        "}\n";
+
+    assert_true("integrator_split_write_missing_3d",
+                write_text_file(kRuntimeAnimationConfigPath, json_missing_3d_integrator));
+    LoadAnimationConfig();
+    assert_true("integrator_split_missing_3d_defaulted",
+                animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT);
+    assert_true("integrator_split_2d_preserved_on_load",
+                animSettings.integratorMode == RAY_TRACING_2D_INTEGRATOR_HYBRID);
+
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.integratorMode = RAY_TRACING_2D_INTEGRATOR_HYBRID;
+    animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DISNEY;
+    SaveAnimationConfig();
+    animSettings.integratorMode = RAY_TRACING_2D_INTEGRATOR_FORWARD_LIGHT;
+    animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT;
+    LoadAnimationConfig();
+
+    assert_true("integrator_split_roundtrip_2d_persisted",
+                animSettings.integratorMode == RAY_TRACING_2D_INTEGRATOR_HYBRID);
+    assert_true("integrator_split_roundtrip_3d_persisted",
+                animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DISNEY);
+
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
 static int test_animation_scene_source_select_runtime_failure_rolls_back(void) {
     static const char *kFixtureRuntimePath = "third_party/codework_shared/assets/scenes/trio_contract/scene_runtime_min.json";
     static const char *kMissingRuntimePath = "/tmp/ray_tracing_missing_scene_source_contract.json";
@@ -857,7 +917,7 @@ static int test_menu_batch_panel_click_starts_frame_dir_edit(void) {
     event.button.clicks = 1;
 
     assert_true("menu_batch_frame_edit_click_consumed",
-                menu_batch_panel_handle_click(&event, &state, &layout));
+                menu_batch_panel_handle_click(&event, NULL, NULL, &state, &layout));
     assert_true("menu_batch_frame_edit_active", state.editingFrameDir);
     assert_true("menu_batch_frame_edit_buffer",
                 strcmp(state.pathInputBuffer, animSettings.frameDir) == 0);
@@ -905,7 +965,7 @@ static int test_menu_batch_panel_clear_button_updates_frame_count(void) {
     event.button.clicks = 1;
 
     assert_true("menu_batch_clear_click_consumed",
-                menu_batch_panel_handle_click(&event, &state, &layout));
+                menu_batch_panel_handle_click(&event, NULL, NULL, &state, &layout));
     assert_true("menu_batch_clear_removed_frame0", !path_exists(frame0));
     assert_true("menu_batch_clear_removed_frame1", !path_exists(frame1));
     assert_true("menu_batch_clear_count_zero", state.exportBatchStatus.frame_count == 0u);
@@ -946,7 +1006,7 @@ static int test_menu_layout_builds_non_overlapping_primary_zones(void) {
     return 0;
 }
 
-static int test_menu_layout_reserves_manifest_dropdown_space(void) {
+static int test_menu_layout_keeps_manifest_dropdown_inside_left_panel(void) {
     MenuRuntimeState state;
     MenuButtonLayout buttons;
     MenuScreenLayout screen;
@@ -961,13 +1021,21 @@ static int test_menu_layout_reserves_manifest_dropdown_space(void) {
 
     state.manifestDropdownOpen = true;
     menu_layout_build_base(NULL, &state, &screen);
-    buttons.loadSceneRect = (SDL_Rect){48, 276, 340, 36};
+    menu_render_build_button_layout(NULL, &state, &screen, &buttons);
 
     menu_layout_finalize_with_buttons(&screen, &buttons, &state);
 
-    assert_true("menu_layout_manifest_reserve_visible", screen.manifestReserveRect.h == 260);
-    assert_true("menu_layout_batch_below_manifest_reserve",
-                screen.centerBatchRect.y >= screen.manifestReserveRect.y + screen.manifestReserveRect.h);
+    assert_true("menu_layout_manifest_overlay_visible", screen.manifestReserveRect.w > 0 && screen.manifestReserveRect.h > 0);
+    assert_true("menu_layout_manifest_overlay_below_input_row",
+                screen.manifestReserveRect.y >= buttons.inputRootValueRect.y + buttons.inputRootValueRect.h);
+    assert_true("menu_layout_manifest_overlay_inside_left_panel_left",
+                screen.manifestReserveRect.x >= screen.leftPanelRect.x);
+    assert_true("menu_layout_manifest_overlay_inside_left_panel_right",
+                test_rect_right(&screen.manifestReserveRect) <= test_rect_right(&screen.leftPanelRect));
+    assert_true("menu_layout_manifest_overlay_inside_left_panel_bottom",
+                test_rect_bottom(&screen.manifestReserveRect) <= test_rect_bottom(&screen.leftPanelRect));
+    assert_true("menu_layout_batch_y_unchanged_when_manifest_opens",
+                screen.centerBatchRect.y == screen.centerControlsRect.y + screen.centerControlsRect.h + 18);
     assert_true("menu_layout_batch_above_footer",
                 screen.centerBatchRect.y + screen.centerBatchRect.h <= screen.bottomActionRowRect.y);
     animSettings = saved_anim;
@@ -1041,6 +1109,110 @@ static int test_menu_batch_panel_layout_centers_inside_batch_zone(void) {
     assert_true("menu_batch_panel_centered_horizontally",
                 abs((batch.panelRect.x - screen.centerBatchRect.x) -
                     (test_rect_right(&screen.centerBatchRect) - test_rect_right(&batch.panelRect))) <= 2);
+
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_menu_batch_panel_header_does_not_overlap_route_rows(void) {
+    MenuRuntimeState state;
+    MenuScreenLayout screen;
+    MenuButtonLayout buttons;
+    MenuBatchPanelLayout batch;
+    AnimationConfig saved_anim = animSettings;
+
+    memset(&state, 0, sizeof(state));
+    memset(&screen, 0, sizeof(screen));
+    memset(&buttons, 0, sizeof(buttons));
+    memset(&batch, 0, sizeof(batch));
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.integratorMode = 2;
+    animSettings.spaceMode = SPACE_MODE_3D;
+
+    menu_layout_build_base(NULL, &state, &screen);
+    menu_render_build_button_layout(NULL, &state, &screen, &buttons);
+    menu_layout_finalize_with_buttons(&screen, &buttons, &state);
+    menu_batch_panel_build_layout(NULL, &state, &screen, &batch);
+
+    assert_true("menu_batch_header_label_inside_panel",
+                batch.videoFileLabelRect.y >= batch.panelRect.y + MENU_PANEL_CHROME_TITLE_BAND);
+    assert_true("menu_batch_header_divider_below_label",
+                batch.headerDividerRect.y > batch.videoFileLabelRect.y);
+    assert_true("menu_batch_frame_row_below_header_divider",
+                batch.frameDirValueRect.y >= batch.headerDividerRect.y + batch.headerDividerRect.h + 6);
+    assert_true("menu_batch_video_row_below_frame_row",
+                batch.videoRootValueRect.y >= batch.frameDirValueRect.y + batch.frameDirValueRect.h + 8);
+
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_integrator_catalog_menu_routes_by_space_mode(void) {
+    AnimationConfig saved_anim = animSettings;
+    RayTracingIntegratorMenuState menu_state;
+    MenuButtonLayout buttons;
+    MenuRuntimeState state;
+    MenuScreenLayout screen;
+
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.integratorMode = RAY_TRACING_2D_INTEGRATOR_HYBRID;
+    animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DISNEY;
+    animSettings.spaceMode = SPACE_MODE_3D;
+
+    menu_state = RayTracingIntegratorCatalog_BuildMenuState(&animSettings);
+    assert_true("integrator_menu_3d_uses_3d_catalog", menu_state.uses3DCatalog);
+    assert_true("integrator_menu_3d_label",
+                strcmp(menu_state.buttonLabel, "Integrator: 3D Direct Light") == 0);
+    assert_true("integrator_menu_3d_no_path_toggles", !menu_state.showPathToggles);
+    assert_true("integrator_menu_3d_visible_count_two", menu_state.visibleCount == 2);
+
+    animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE;
+    menu_state = RayTracingIntegratorCatalog_BuildMenuState(&animSettings);
+    assert_true("integrator_menu_3d_diffuse_label",
+                strcmp(menu_state.buttonLabel, "Integrator: 3D Diffuse Bounce") == 0);
+
+    memset(&buttons, 0, sizeof(buttons));
+    memset(&state, 0, sizeof(state));
+    memset(&screen, 0, sizeof(screen));
+    menu_layout_build_base(NULL, &state, &screen);
+    menu_render_build_button_layout(NULL, &state, &screen, &buttons);
+    assert_true("integrator_menu_3d_layout_no_path_toggles", !buttons.showPathToggles);
+
+    animSettings.spaceMode = SPACE_MODE_2D;
+    menu_state = RayTracingIntegratorCatalog_BuildMenuState(&animSettings);
+    assert_true("integrator_menu_2d_uses_legacy_catalog", !menu_state.uses3DCatalog);
+    assert_true("integrator_menu_2d_label",
+                strcmp(menu_state.buttonLabel, "Integrator: Hybrid") == 0);
+    assert_true("integrator_menu_2d_show_path_toggles", menu_state.showPathToggles);
+
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_integrator_catalog_cycle_preserves_inactive_mode(void) {
+    AnimationConfig saved_anim = animSettings;
+
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.integratorMode = RAY_TRACING_2D_INTEGRATOR_HYBRID;
+    animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DISNEY;
+    animSettings.spaceMode = SPACE_MODE_3D;
+
+    RayTracingIntegratorCatalog_CycleActiveSelection(&animSettings);
+    assert_true("integrator_cycle_3d_keeps_2d",
+                animSettings.integratorMode == RAY_TRACING_2D_INTEGRATOR_HYBRID);
+    assert_true("integrator_cycle_3d_advanced_to_diffuse_bounce",
+                animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE);
+
+    RayTracingIntegratorCatalog_CycleActiveSelection(&animSettings);
+    assert_true("integrator_cycle_3d_wraps_to_direct_light",
+                animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT);
+
+    animSettings.spaceMode = SPACE_MODE_2D;
+    RayTracingIntegratorCatalog_CycleActiveSelection(&animSettings);
+    assert_true("integrator_cycle_2d_advanced_to_direct",
+                animSettings.integratorMode == RAY_TRACING_2D_INTEGRATOR_DIRECT_LIGHT);
+    assert_true("integrator_cycle_2d_keeps_3d",
+                animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT);
 
     animSettings = saved_anim;
     return 0;
@@ -2672,6 +2844,203 @@ static int test_runtime_direct_light_3d_authored_light_motion_contract(void) {
     return 0;
 }
 
+static int test_runtime_diffuse_bounce_3d_shadowed_hit_lift_contract(void) {
+    RuntimeScene3D scene;
+    HitInfo3D hit = {0};
+    RuntimeDirectLight3DResult direct_result = {0};
+    RuntimeDiffuseBounce3DResult diffuse_result = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    scene.hasLight = true;
+    scene.light.position = vec3(2.0, -2.0, 0.0);
+    scene.light.intensity = 10.0;
+    scene.light.falloffDistance = 10.0;
+    scene.light.falloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    scene.primitiveCapacity = 2;
+    scene.triangleMesh.triangleCapacity = 2;
+    scene.primitives = (RuntimePrimitive3D*)calloc((size_t)scene.primitiveCapacity,
+                                                   sizeof(*scene.primitives));
+    scene.triangleMesh.triangles =
+        (RuntimeTriangle3D*)calloc((size_t)scene.triangleMesh.triangleCapacity,
+                                   sizeof(*scene.triangleMesh.triangles));
+    assert_true("runtime_diffuse_bounce_shadowed_alloc_primitives", scene.primitives != NULL);
+    assert_true("runtime_diffuse_bounce_shadowed_alloc_triangles", scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        return 0;
+    }
+
+    scene.primitiveCount = 2;
+    scene.triangleMesh.triangleCount = 2;
+    scene.primitives[0].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene.primitives[0].source.sceneObjectIndex = 7;
+    snprintf(scene.primitives[0].source.objectId,
+             sizeof(scene.primitives[0].source.objectId),
+             "%s",
+             "floor");
+    scene.primitives[1].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene.primitives[1].source.sceneObjectIndex = 8;
+    snprintf(scene.primitives[1].source.objectId,
+             sizeof(scene.primitives[1].source.objectId),
+             "%s",
+             "bounce_card");
+
+    scene.triangleMesh.triangles[0].p0 = vec3(-3.0, -5.0, -3.0);
+    scene.triangleMesh.triangles[0].p1 = vec3(-3.0, -5.0, 3.0);
+    scene.triangleMesh.triangles[0].p2 = vec3(3.0, -5.0, -3.0);
+    scene.triangleMesh.triangles[0].normal = vec3(0.0, 1.0, 0.0);
+    scene.triangleMesh.triangles[0].primitiveIndex = 0;
+    scene.triangleMesh.triangles[0].sceneObjectIndex = 7;
+
+    scene.triangleMesh.triangles[1].p0 = vec3(0.75, -4.8, -1.0);
+    scene.triangleMesh.triangles[1].p1 = vec3(0.75, -3.1, 0.0);
+    scene.triangleMesh.triangles[1].p2 = vec3(0.75, -4.8, 1.0);
+    scene.triangleMesh.triangles[1].normal = vec3(1.0, 0.0, 0.0);
+    scene.triangleMesh.triangles[1].primitiveIndex = 1;
+    scene.triangleMesh.triangles[1].sceneObjectIndex = 8;
+
+    hit.t = 5.0;
+    hit.position = vec3(0.0, -5.0, 0.0);
+    hit.normal = vec3(0.0, 1.0, 0.0);
+    hit.triangleIndex = 0;
+    hit.primitiveIndex = 0;
+    hit.sceneObjectIndex = 7;
+    hit.source = scene.primitives[0].source;
+    hit.baryU = 0.333333333333;
+    hit.baryV = 0.333333333333;
+    hit.baryW = 0.333333333334;
+
+    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, &direct_result);
+    assert_true("runtime_diffuse_bounce_shadowed_direct_ok", ok);
+    assert_true("runtime_diffuse_bounce_shadowed_direct_not_visible", !direct_result.visible);
+    assert_close("runtime_diffuse_bounce_shadowed_direct_zero",
+                 direct_result.radiance,
+                 0.0,
+                 1e-9);
+
+    ok = RuntimeDiffuseBounce3D_ShadeHit(&scene, &hit, &diffuse_result);
+    assert_true("runtime_diffuse_bounce_shadowed_diffuse_ok", ok);
+    assert_true("runtime_diffuse_bounce_shadowed_diffuse_hit", diffuse_result.hit);
+    assert_close("runtime_diffuse_bounce_shadowed_direct_preserved",
+                 diffuse_result.directRadiance,
+                 0.0,
+                 1e-9);
+    assert_true("runtime_diffuse_bounce_shadowed_secondary_rays_24",
+                diffuse_result.secondaryRayCount == 24);
+    assert_true("runtime_diffuse_bounce_shadowed_secondary_hits_positive",
+                diffuse_result.secondaryHitCount > 0);
+    assert_true("runtime_diffuse_bounce_shadowed_secondary_lit_hits_positive",
+                diffuse_result.secondaryContributingHitCount > 0);
+    assert_true("runtime_diffuse_bounce_shadowed_bounce_positive",
+                diffuse_result.bounceRadiance > 0.0);
+    assert_true("runtime_diffuse_bounce_shadowed_total_positive",
+                diffuse_result.radiance > 0.0);
+
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
+static int test_runtime_diffuse_bounce_3d_seed_branch_contract(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_diffuse_bounce_seed\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"lit_wall\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":8.0,\"height\":8.0,"
+            "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+            "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":0.0,\"y\":-2.0,\"z\":0.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeScene3D scene;
+    RuntimeCameraProjector3D projector = {0};
+    RuntimePrimaryHit3DResult primary_hit = {0};
+    RuntimeDirectLight3DResult direct_result = {0};
+    RuntimeDiffuseBounce3DResult diffuse_result = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_diffuse_bounce_seed_apply_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    animSettings.lightIntensity = 10.0;
+    animSettings.forwardDecay = 10.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    sceneSettings.camera.rotation = 0.0;
+    sceneSettings.camera.zoom = 1.0;
+
+    ok = RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(&scene, 0.0);
+    assert_true("runtime_diffuse_bounce_seed_build_ok", ok);
+    ok = RuntimeCameraProjector3D_Build(&scene.camera, 101, 101, &projector);
+    assert_true("runtime_diffuse_bounce_seed_projector_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    ok = RuntimeDirectLight3D_TracePrimaryHit(&scene, &projector, 50.0, 50.0, &primary_hit);
+    assert_true("runtime_diffuse_bounce_seed_primary_hit_ok", ok);
+    assert_true("runtime_diffuse_bounce_seed_primary_hit_found", primary_hit.hit);
+
+    ok = RuntimeDirectLight3D_ShadePixel(&scene, &projector, 50.0, 50.0, &direct_result);
+    assert_true("runtime_diffuse_bounce_seed_direct_ok", ok);
+    ok = RuntimeDiffuseBounce3D_ShadePixel(&scene, &projector, 50.0, 50.0, &diffuse_result);
+    assert_true("runtime_diffuse_bounce_seed_diffuse_ok", ok);
+    assert_true("runtime_diffuse_bounce_seed_diffuse_hit", diffuse_result.hit);
+    assert_true("runtime_diffuse_bounce_seed_same_triangle",
+                diffuse_result.hitInfo.triangleIndex == primary_hit.hitInfo.triangleIndex);
+    assert_true("runtime_diffuse_bounce_seed_secondary_rays_24",
+                diffuse_result.secondaryRayCount == 24);
+    assert_true("runtime_diffuse_bounce_seed_secondary_hits_zero",
+                diffuse_result.secondaryHitCount == 0);
+    assert_close("runtime_diffuse_bounce_seed_direct_match",
+                 diffuse_result.directRadiance,
+                 direct_result.radiance,
+                 1e-9);
+    assert_close("runtime_diffuse_bounce_seed_total_match",
+                 diffuse_result.radiance,
+                 direct_result.radiance,
+                 1e-9);
+    assert_close("runtime_diffuse_bounce_seed_bounce_zero",
+                 diffuse_result.bounceRadiance,
+                 0.0,
+                 1e-9);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 static int test_runtime_native_3d_render_live_buffer_contract(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -2705,8 +3074,11 @@ static int test_runtime_native_3d_render_live_buffer_contract(void) {
         "}";
     RuntimeSceneBridgePreflight summary = {0};
     RuntimeNative3DRenderStats centered_stats = {0};
+    RuntimeNative3DRenderStats diffuse_stats = {0};
     RuntimeNative3DRenderStats offset_stats = {0};
+    RayTracingRuntimeRoute route;
     uint8_t centered_pixels[51 * 51];
+    uint8_t diffuse_pixels[51 * 51];
     uint8_t offset_pixels[51 * 51];
     bool ok = false;
 
@@ -2722,13 +3094,21 @@ static int test_runtime_native_3d_render_live_buffer_contract(void) {
     animSettings.forwardDecay = 10.0;
     animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
     animSettings.interactiveMode = false;
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DISNEY;
     sceneSettings.camera.x = 0.0;
     sceneSettings.camera.y = 0.0;
     sceneSettings.cameraZ = 0.0;
     sceneSettings.camera.rotation = 0.0;
     sceneSettings.camera.zoom = 1.0;
 
+    route = RayTracingModeBackend_ResolveRoute();
+    assert_true("runtime_native_3d_render_route_native", RayTracingModeBackend_IsNative3D(&route));
+    assert_true("runtime_native_3d_render_route_3d_direct_light",
+                route.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT);
+
     ok = RuntimeNative3DRenderToPixelBuffer(centered_pixels,
+                                            route.integratorMode3D,
                                             51,
                                             51,
                                             0.0,
@@ -2745,7 +3125,34 @@ static int test_runtime_native_3d_render_live_buffer_contract(void) {
     assert_true("runtime_native_3d_render_centered_pixel_positive",
                 centered_pixels[(25 * 51) + 25] > 0);
 
+    ok = RuntimeNative3DRenderToPixelBuffer(diffuse_pixels,
+                                            RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
+                                            51,
+                                            51,
+                                            0.0,
+                                            0.0,
+                                            -2.0,
+                                            &diffuse_stats);
+    assert_true("runtime_native_3d_render_diffuse_seed_ok", ok);
+    assert_true("runtime_native_3d_render_diffuse_seed_hits_positive",
+                diffuse_stats.hitPixelCount > 0);
+    assert_true("runtime_native_3d_render_diffuse_seed_visible_positive",
+                diffuse_stats.visiblePixelCount > 0);
+    assert_true("runtime_native_3d_render_diffuse_seed_secondary_rays_positive",
+                diffuse_stats.secondaryRayCount > 0);
+    assert_true("runtime_native_3d_render_diffuse_seed_secondary_hits_zero",
+                diffuse_stats.secondaryHitCount == 0);
+    assert_true("runtime_native_3d_render_diffuse_seed_bounce_pixels_zero",
+                diffuse_stats.bouncePixelCount == 0);
+    assert_close("runtime_native_3d_render_diffuse_seed_radiance_match",
+                 diffuse_stats.maxRadiance,
+                 centered_stats.maxRadiance,
+                 1e-9);
+    assert_true("runtime_native_3d_render_diffuse_seed_pixel_match",
+                diffuse_pixels[(25 * 51) + 25] == centered_pixels[(25 * 51) + 25]);
+
     ok = RuntimeNative3DRenderToPixelBuffer(offset_pixels,
+                                            route.integratorMode3D,
                                             51,
                                             51,
                                             0.0,
@@ -2756,8 +3163,431 @@ static int test_runtime_native_3d_render_live_buffer_contract(void) {
     assert_true("runtime_native_3d_render_offset_pixel_changes",
                 centered_pixels[(25 * 51) + 25] != offset_pixels[(25 * 51) + 25]);
 
+    memset(offset_pixels, 255, sizeof(offset_pixels));
+    memset(&offset_stats, 0, sizeof(offset_stats));
+    ok = RuntimeNative3DRenderToPixelBuffer(offset_pixels,
+                                            RAY_TRACING_3D_INTEGRATOR_DISNEY,
+                                            51,
+                                            51,
+                                            0.0,
+                                            3.0,
+                                            -2.0,
+                                            &offset_stats);
+    assert_true("runtime_native_3d_render_unshipped_rejected", !ok);
+    assert_true("runtime_native_3d_render_unshipped_hits_zero",
+                offset_stats.hitPixelCount == 0);
+    assert_true("runtime_native_3d_render_unshipped_pixel_cleared",
+                offset_pixels[(25 * 51) + 25] == 0);
+
     sceneSettings = saved_scene;
     animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_native_3d_render_prepared_region_parity(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_native_3d_tiled_parity\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"floor\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":8.0,\"height\":8.0,"
+            "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+            "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":0.0,\"y\":-2.0,\"z\":0.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeNative3DRenderStats full_stats = {0};
+    RuntimeNative3DRenderStats tiled_stats = {0};
+    RuntimeNative3DPreparedFrame frame = {0};
+    TileGrid grid = {0};
+    uint8_t full_pixels[51 * 51];
+    uint8_t tiled_pixels[51 * 51];
+    bool ok = false;
+
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_native_3d_tile_parity_apply_ok", ok);
+    if (!ok) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    animSettings.lightIntensity = 10.0;
+    animSettings.forwardDecay = 10.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    animSettings.interactiveMode = false;
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE;
+    sceneSettings.camera.x = 0.0;
+    sceneSettings.camera.y = 0.0;
+    sceneSettings.cameraZ = 0.0;
+    sceneSettings.camera.rotation = 0.0;
+    sceneSettings.camera.zoom = 1.0;
+
+    ok = RuntimeNative3DRenderToPixelBuffer(full_pixels,
+                                            RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
+                                            51,
+                                            51,
+                                            0.0,
+                                            0.0,
+                                            -2.0,
+                                            &full_stats);
+    assert_true("runtime_native_3d_tile_parity_full_ok", ok);
+
+    memset(tiled_pixels, 0, sizeof(tiled_pixels));
+    ok = RuntimeNative3DPrepareFrame(&frame, 51, 51, 0.0, 0.0, -2.0);
+    assert_true("runtime_native_3d_tile_parity_prepare_ok", ok);
+    if (ok) {
+        TileGridEnsure(&grid, 51, 51, 16);
+        for (size_t ti = 0; ti < grid.count; ++ti) {
+            const IntegratorTile* tile = &grid.tiles[ti];
+            RuntimeNative3DRenderStats tile_stats = {0};
+            ok = RuntimeNative3DRenderPreparedRegion(tiled_pixels,
+                                                     RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
+                                                     &frame,
+                                                     tile->originX,
+                                                     tile->originY,
+                                                     tile->originX + tile->width,
+                                                     tile->originY + tile->height,
+                                                     &tile_stats);
+            assert_true("runtime_native_3d_tile_parity_region_ok", ok);
+            if (!ok) break;
+            RuntimeNative3DRenderStats_Accumulate(&tiled_stats, &tile_stats);
+        }
+    }
+
+    assert_true("runtime_native_3d_tile_parity_pixels_match",
+                memcmp(full_pixels, tiled_pixels, sizeof(full_pixels)) == 0);
+    assert_true("runtime_native_3d_tile_parity_hit_count_match",
+                full_stats.hitPixelCount == tiled_stats.hitPixelCount);
+    assert_true("runtime_native_3d_tile_parity_visible_count_match",
+                full_stats.visiblePixelCount == tiled_stats.visiblePixelCount);
+    assert_true("runtime_native_3d_tile_parity_bounce_pixels_match",
+                full_stats.bouncePixelCount == tiled_stats.bouncePixelCount);
+    assert_true("runtime_native_3d_tile_parity_secondary_rays_match",
+                full_stats.secondaryRayCount == tiled_stats.secondaryRayCount);
+    assert_true("runtime_native_3d_tile_parity_secondary_hits_match",
+                full_stats.secondaryHitCount == tiled_stats.secondaryHitCount);
+    assert_true("runtime_native_3d_tile_parity_secondary_lit_hits_match",
+                full_stats.secondaryContributingHitCount ==
+                    tiled_stats.secondaryContributingHitCount);
+    assert_close("runtime_native_3d_tile_parity_max_radiance_match",
+                 full_stats.maxRadiance,
+                 tiled_stats.maxRadiance,
+                 1e-9);
+    assert_close("runtime_native_3d_tile_parity_max_bounce_match",
+                 full_stats.maxBounceRadiance,
+                 tiled_stats.maxBounceRadiance,
+                 1e-9);
+    assert_close("runtime_native_3d_tile_parity_total_bounce_match",
+                 full_stats.totalBounceRadiance,
+                 tiled_stats.totalBounceRadiance,
+                 1e-9);
+
+    TileGridFree(&grid);
+    RuntimeNative3DPreparedFrame_Free(&frame);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_animation_output_render_metrics_route_truth_contract(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    int saved_frame_counter = frameCounter;
+    int saved_loop_count = loopCount;
+    double saved_current_time = currentTime;
+    const char* export_env = getenv("RAY_TRACING_EXPORT_RENDER_METRICS_DATASET");
+    const char* path_env = getenv("RAY_TRACING_RENDER_METRICS_DATASET_PATH");
+    char* export_env_backup = export_env ? strdup(export_env) : NULL;
+    char* path_env_backup = path_env ? strdup(path_env) : NULL;
+    char tmp_template[] = "/tmp/ray_tracing_metrics_route_truthXXXXXX";
+    int fd = mkstemp(tmp_template);
+    char json_path[1024];
+    char* json_text = NULL;
+    const char *runtime_json_native =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_metrics_native_route\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"floor\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":6.0,\"height\":6.0,"
+              "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"axis_u\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+              "\"axis_v\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+              "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"block\","
+            "\"object_type\":\"rect_prism_primitive\","
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-3.0,\"z\":0.5},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}},"
+            "\"primitive\":{\"kind\":\"rect_prism_primitive\","
+              "\"width\":2.0,\"height\":2.0,\"depth\":1.0}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":1.0,\"y\":-1.5,\"z\":2.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":2.0,\"z\":8.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    const char *runtime_json_compat =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_metrics_compat_route\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"obj_box\","
+            "\"object_type\":\"box\","
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"obj_plane\","
+            "\"object_type\":\"plane\","
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":20.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    cJSON* root = NULL;
+    cJSON* metadata = NULL;
+    cJSON* items = NULL;
+    cJSON* table = NULL;
+    cJSON* row0 = NULL;
+
+    if (fd < 0) {
+        assert_true("animation_output_metrics_route_truth_mkstemp", false);
+        free(export_env_backup);
+        free(path_env_backup);
+        return 0;
+    }
+    close(fd);
+
+    if (snprintf(json_path, sizeof(json_path), "%s.json", tmp_template) >= (int)sizeof(json_path)) {
+        assert_true("animation_output_metrics_route_truth_path_overflow", false);
+        unlink(tmp_template);
+        free(export_env_backup);
+        free(path_env_backup);
+        return 0;
+    }
+    if (rename(tmp_template, json_path) != 0) {
+        assert_true("animation_output_metrics_route_truth_path_rename", false);
+        unlink(tmp_template);
+        free(export_env_backup);
+        free(path_env_backup);
+        return 0;
+    }
+
+    setenv("RAY_TRACING_EXPORT_RENDER_METRICS_DATASET", "1", 1);
+    setenv("RAY_TRACING_RENDER_METRICS_DATASET_PATH", json_path, 1);
+    frameCounter = 7;
+    loopCount = 3;
+    currentTime = 1.5;
+
+    memset(&animSettings, 0, sizeof(animSettings));
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    animSettings.spaceMode = SPACE_MODE_2D;
+    animSettings.integratorMode = RAY_TRACING_2D_INTEGRATOR_HYBRID;
+    animSettings.fps = 30;
+    animSettings.frameDuration = 1.0 / 30.0;
+    AnimationExportRenderMetricsDatasetIfEnabled();
+    json_text = read_text_file_alloc(json_path, NULL);
+    assert_true("animation_output_metrics_route_truth_2d_json", json_text != NULL);
+    if (json_text) {
+        root = cJSON_Parse(json_text);
+        metadata = root ? cJSON_GetObjectItem(root, "metadata") : NULL;
+        items = root ? cJSON_GetObjectItem(root, "items") : NULL;
+        table = find_named_dataset_entry(items, "render_metrics_table_v2");
+        row0 = table ? cJSON_GetObjectItem(table, "row0") : NULL;
+        assert_true("animation_output_metrics_route_truth_2d_parse", root != NULL);
+        assert_true("animation_output_metrics_route_truth_2d_row0", row0 != NULL);
+        assert_true("animation_output_metrics_route_truth_2d_legacy_mode",
+                    cJSON_GetObjectItem(row0, "integrator_mode") &&
+                    cJSON_GetObjectItem(row0, "integrator_mode")->valueint == 1);
+        assert_true("animation_output_metrics_route_truth_2d_route_family",
+                    cJSON_GetObjectItem(row0, "route_family") &&
+                    cJSON_GetObjectItem(row0, "route_family")->valueint == 0);
+        assert_true("animation_output_metrics_route_truth_2d_uses_3d_false",
+                    cJSON_GetObjectItem(row0, "integrator_uses_3d_catalog") &&
+                    !cJSON_IsTrue(cJSON_GetObjectItem(row0, "integrator_uses_3d_catalog")));
+        assert_true("animation_output_metrics_route_truth_2d_status_label",
+                    metadata &&
+                    cJSON_GetObjectItem(metadata, "integrator_status_label") &&
+                    strcmp(cJSON_GetObjectItem(metadata, "integrator_status_label")->valuestring,
+                           "integrator: Hybrid") == 0);
+        cJSON_Delete(root);
+        root = NULL;
+        free(json_text);
+        json_text = NULL;
+    }
+
+    memset(&animSettings, 0, sizeof(animSettings));
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.integratorMode = RAY_TRACING_2D_INTEGRATOR_FORWARD_LIGHT;
+    animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT;
+    assert_true("animation_output_metrics_route_truth_native_apply_ok",
+                runtime_scene_bridge_apply_json(runtime_json_native, &summary));
+    AnimationExportRenderMetricsDatasetIfEnabled();
+    json_text = read_text_file_alloc(json_path, NULL);
+    assert_true("animation_output_metrics_route_truth_native_json", json_text != NULL);
+    if (json_text) {
+        root = cJSON_Parse(json_text);
+        metadata = root ? cJSON_GetObjectItem(root, "metadata") : NULL;
+        items = root ? cJSON_GetObjectItem(root, "items") : NULL;
+        table = find_named_dataset_entry(items, "render_metrics_table_v2");
+        row0 = table ? cJSON_GetObjectItem(table, "row0") : NULL;
+        assert_true("animation_output_metrics_route_truth_native_parse", root != NULL);
+        assert_true("animation_output_metrics_route_truth_native_row0", row0 != NULL);
+        assert_true("animation_output_metrics_route_truth_native_legacy_field_preserved",
+                    cJSON_GetObjectItem(row0, "integrator_mode") &&
+                    cJSON_GetObjectItem(row0, "integrator_mode")->valueint == 0);
+        assert_true("animation_output_metrics_route_truth_native_3d_mode",
+                    cJSON_GetObjectItem(row0, "integrator_mode_3d") &&
+                    cJSON_GetObjectItem(row0, "integrator_mode_3d")->valueint == 0);
+        assert_true("animation_output_metrics_route_truth_native_route_family",
+                    cJSON_GetObjectItem(row0, "route_family") &&
+                    cJSON_GetObjectItem(row0, "route_family")->valueint == 2);
+        assert_true("animation_output_metrics_route_truth_native_uses_3d_true",
+                    cJSON_GetObjectItem(row0, "integrator_uses_3d_catalog") &&
+                    cJSON_IsTrue(cJSON_GetObjectItem(row0, "integrator_uses_3d_catalog")));
+        assert_true("animation_output_metrics_route_truth_native_status_label",
+                    metadata &&
+                    cJSON_GetObjectItem(metadata, "integrator_status_label") &&
+                    strcmp(cJSON_GetObjectItem(metadata, "integrator_status_label")->valuestring,
+                           "integrator: 3D Direct Light") == 0);
+        cJSON_Delete(root);
+        root = NULL;
+        free(json_text);
+        json_text = NULL;
+    }
+
+    memset(&animSettings, 0, sizeof(animSettings));
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.integratorMode = RAY_TRACING_2D_INTEGRATOR_FORWARD_LIGHT;
+    animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE;
+    assert_true("animation_output_metrics_route_truth_native_diffuse_apply_ok",
+                runtime_scene_bridge_apply_json(runtime_json_native, &summary));
+    AnimationExportRenderMetricsDatasetIfEnabled();
+    json_text = read_text_file_alloc(json_path, NULL);
+    assert_true("animation_output_metrics_route_truth_native_diffuse_json", json_text != NULL);
+    if (json_text) {
+        root = cJSON_Parse(json_text);
+        metadata = root ? cJSON_GetObjectItem(root, "metadata") : NULL;
+        items = root ? cJSON_GetObjectItem(root, "items") : NULL;
+        table = find_named_dataset_entry(items, "render_metrics_table_v2");
+        row0 = table ? cJSON_GetObjectItem(table, "row0") : NULL;
+        assert_true("animation_output_metrics_route_truth_native_diffuse_parse", root != NULL);
+        assert_true("animation_output_metrics_route_truth_native_diffuse_row0", row0 != NULL);
+        assert_true("animation_output_metrics_route_truth_native_diffuse_3d_mode",
+                    cJSON_GetObjectItem(row0, "integrator_mode_3d") &&
+                    cJSON_GetObjectItem(row0, "integrator_mode_3d")->valueint == 1);
+        assert_true("animation_output_metrics_route_truth_native_diffuse_route_family",
+                    cJSON_GetObjectItem(row0, "route_family") &&
+                    cJSON_GetObjectItem(row0, "route_family")->valueint == 2);
+        assert_true("animation_output_metrics_route_truth_native_diffuse_uses_3d_true",
+                    cJSON_GetObjectItem(row0, "integrator_uses_3d_catalog") &&
+                    cJSON_IsTrue(cJSON_GetObjectItem(row0, "integrator_uses_3d_catalog")));
+        assert_true("animation_output_metrics_route_truth_native_diffuse_status_label",
+                    metadata &&
+                    cJSON_GetObjectItem(metadata, "integrator_status_label") &&
+                    strcmp(cJSON_GetObjectItem(metadata, "integrator_status_label")->valuestring,
+                           "integrator: 3D Diffuse Bounce") == 0);
+        cJSON_Delete(root);
+        root = NULL;
+        free(json_text);
+        json_text = NULL;
+    }
+
+    memset(&animSettings, 0, sizeof(animSettings));
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.integratorMode = RAY_TRACING_2D_INTEGRATOR_FORWARD_LIGHT;
+    animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DISNEY;
+    assert_true("animation_output_metrics_route_truth_compat_apply_ok",
+                runtime_scene_bridge_apply_json(runtime_json_compat, &summary));
+    AnimationExportRenderMetricsDatasetIfEnabled();
+    json_text = read_text_file_alloc(json_path, NULL);
+    assert_true("animation_output_metrics_route_truth_compat_json", json_text != NULL);
+    if (json_text) {
+        root = cJSON_Parse(json_text);
+        metadata = root ? cJSON_GetObjectItem(root, "metadata") : NULL;
+        items = root ? cJSON_GetObjectItem(root, "items") : NULL;
+        table = find_named_dataset_entry(items, "render_metrics_table_v2");
+        row0 = table ? cJSON_GetObjectItem(table, "row0") : NULL;
+        assert_true("animation_output_metrics_route_truth_compat_parse", root != NULL);
+        assert_true("animation_output_metrics_route_truth_compat_row0", row0 != NULL);
+        assert_true("animation_output_metrics_route_truth_compat_3d_mode",
+                    cJSON_GetObjectItem(row0, "integrator_mode_3d") &&
+                    cJSON_GetObjectItem(row0, "integrator_mode_3d")->valueint == 0);
+        assert_true("animation_output_metrics_route_truth_compat_route_family",
+                    cJSON_GetObjectItem(row0, "route_family") &&
+                    cJSON_GetObjectItem(row0, "route_family")->valueint == 1);
+        assert_true("animation_output_metrics_route_truth_compat_uses_3d_true",
+                    cJSON_GetObjectItem(row0, "integrator_uses_3d_catalog") &&
+                    cJSON_IsTrue(cJSON_GetObjectItem(row0, "integrator_uses_3d_catalog")));
+        assert_true("animation_output_metrics_route_truth_compat_status_label",
+                    metadata &&
+                    cJSON_GetObjectItem(metadata, "integrator_status_label") &&
+                    strcmp(cJSON_GetObjectItem(metadata, "integrator_status_label")->valuestring,
+                           "integrator fallback: compat 3D Direct Light") == 0);
+        cJSON_Delete(root);
+        root = NULL;
+        free(json_text);
+        json_text = NULL;
+    }
+
+    unlink(json_path);
+    restore_env_or_unset("RAY_TRACING_EXPORT_RENDER_METRICS_DATASET", export_env_backup);
+    restore_env_or_unset("RAY_TRACING_RENDER_METRICS_DATASET_PATH", path_env_backup);
+    free(export_env_backup);
+    free(path_env_backup);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    frameCounter = saved_frame_counter;
+    loopCount = saved_loop_count;
+    currentTime = saved_current_time;
     return 0;
 }
 
@@ -3976,6 +4806,9 @@ static int test_mode_backend_route_2d_defaults(void) {
     assert_true("route2d_tiles_enabled", route.useTiles);
     assert_true("route2d_tile_preview_enabled", route.tilePreviewEnabled);
     assert_true("route2d_cache_enabled", route.buildIrradianceCache);
+    assert_true("route2d_not_3d_catalog", !route.integratorUses3DCatalog);
+    assert_true("route2d_status_label_hybrid",
+                strstr(RayTracingModeBackend_IntegratorStatusLabel(&route), "Hybrid") != NULL);
     return 0;
 }
 
@@ -4015,7 +4848,8 @@ static int test_mode_backend_route_3d_controlled_lane(void) {
     RuntimeSceneBridgePreflight summary;
     memset(&animSettings, 0, sizeof(animSettings));
     animSettings.spaceMode = SPACE_MODE_3D;
-    animSettings.integratorMode = 2;
+    animSettings.integratorMode = RAY_TRACING_2D_INTEGRATOR_HYBRID;
+    animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DISNEY;
     animSettings.useTiledRenderer = true;
     animSettings.tileSize = 16;
     animSettings.tilePreviewEnabled = true;
@@ -4039,8 +4873,15 @@ static int test_mode_backend_route_3d_controlled_lane(void) {
     assert_close("route3d_runtime_camera_z", route.runtimeCameraZ, 20.0, 1e-9);
     assert_true("route3d_ray_origin_y_offset_nonzero", fabs(route.rayOriginYOffset) > 0.0);
     assert_true("route3d_scaffold_primitive_count", route.scaffoldPrimitiveCount == 3);
-    assert_true("route3d_integrator_preserved", route.integratorMode == 2);
+    assert_true("route3d_compat_forces_direct_light_legacy_mode",
+                route.integratorMode == RAY_TRACING_2D_INTEGRATOR_DIRECT_LIGHT);
+    assert_true("route3d_compat_forces_direct_light_3d_mode",
+                route.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT);
+    assert_true("route3d_compat_uses_3d_catalog", route.integratorUses3DCatalog);
+    assert_true("route3d_compat_cache_off", !route.buildIrradianceCache);
     assert_true("route3d_tile_preview_off", !route.tilePreviewEnabled);
+    assert_true("route3d_compat_status_label",
+                strstr(RayTracingModeBackend_IntegratorStatusLabel(&route), "compat 3D Direct Light") != NULL);
     return 0;
 }
 
@@ -4088,7 +4929,11 @@ static int test_mode_backend_route_3d_native_lane(void) {
 
     memset(&animSettings, 0, sizeof(animSettings));
     animSettings.spaceMode = SPACE_MODE_3D;
-    animSettings.integratorMode = 2;
+    animSettings.integratorMode = RAY_TRACING_2D_INTEGRATOR_FORWARD_LIGHT;
+    animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DISNEY;
+    animSettings.useTiledRenderer = true;
+    animSettings.tileSize = 16;
+    animSettings.tilePreviewEnabled = true;
     assert_true("route3d_native_seed_runtime_apply_ok",
                 runtime_scene_bridge_apply_json(runtime_json_route_3d_native, &summary));
 
@@ -4115,6 +4960,24 @@ static int test_mode_backend_route_3d_native_lane(void) {
     assert_close("route3d_native_runtime_camera_z", route.runtimeCameraZ, 8.0, 1e-9);
     assert_close("route3d_native_ray_origin_y_offset_zero", route.rayOriginYOffset, 0.0, 1e-9);
     assert_true("route3d_native_scaffold_primitive_count", route.scaffoldPrimitiveCount == 2);
+    assert_true("route3d_native_legacy_mode_direct_light",
+                route.integratorMode == RAY_TRACING_2D_INTEGRATOR_DIRECT_LIGHT);
+    assert_true("route3d_native_3d_mode_direct_light",
+                route.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT);
+    assert_true("route3d_native_uses_3d_catalog", route.integratorUses3DCatalog);
+    assert_true("route3d_native_cache_off", !route.buildIrradianceCache);
+    assert_true("route3d_native_tiles_enabled", route.useTiles);
+    assert_true("route3d_native_tile_preview_on", route.tilePreviewEnabled);
+    assert_true("route3d_native_status_label_reserved_clamp",
+                strstr(RayTracingModeBackend_IntegratorStatusLabel(&route), "reserved 3D") != NULL);
+
+    animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE;
+    route = RayTracingModeBackend_ResolveRoute();
+    assert_true("route3d_native_3d_mode_diffuse_bounce",
+                route.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE);
+    assert_true("route3d_native_status_label_diffuse_bounce",
+                strstr(RayTracingModeBackend_IntegratorStatusLabel(&route),
+                       "3D Diffuse Bounce") != NULL);
 
     sceneSettings = saved_scene;
     animSettings = saved_anim;
@@ -5416,6 +6279,7 @@ int main(int argc, char **argv) {
     test_scene_object_z_missing_fallback();
     test_animation_scene_source_legacy_migration();
     test_animation_scene_source_roundtrip_runtime_lane();
+    test_animation_integrator_split_roundtrip_and_default_3d();
     test_animation_scene_source_select_runtime_failure_rolls_back();
     test_animation_scene_source_select_runtime_persists_on_save();
     test_animation_apply_active_scene_source_invalid_fluid_falls_back_2d();
@@ -5427,9 +6291,12 @@ int main(int argc, char **argv) {
     test_menu_batch_panel_click_starts_frame_dir_edit();
     test_menu_batch_panel_clear_button_updates_frame_count();
     test_menu_layout_builds_non_overlapping_primary_zones();
-    test_menu_layout_reserves_manifest_dropdown_space();
+    test_menu_layout_keeps_manifest_dropdown_inside_left_panel();
     test_menu_button_layout_respects_owned_screen_zones();
     test_menu_batch_panel_layout_centers_inside_batch_zone();
+    test_menu_batch_panel_header_does_not_overlap_route_rows();
+    test_integrator_catalog_menu_routes_by_space_mode();
+    test_integrator_catalog_cycle_preserves_inactive_mode();
     test_menu_fit_text_to_width_supports_in_place_buffer();
     test_manifest_default_roots_expands_runtime_and_legacy_paths();
     test_scene_source_catalog_collect_admits_runtime_and_manifest_lanes();
@@ -5461,7 +6328,11 @@ int main(int argc, char **argv) {
     test_runtime_direct_light_3d_shade_pixel_visible_contract();
     test_runtime_direct_light_3d_shade_pixel_shadowed_contract();
     test_runtime_direct_light_3d_authored_light_motion_contract();
+    test_runtime_diffuse_bounce_3d_shadowed_hit_lift_contract();
+    test_runtime_diffuse_bounce_3d_seed_branch_contract();
     test_runtime_native_3d_render_live_buffer_contract();
+    test_runtime_native_3d_render_prepared_region_parity();
+    test_animation_output_render_metrics_route_truth_contract();
     test_scene_compile_and_preflight_roundtrip();
     test_runtime_scene_bridge_apply_runtime_fixture();
     test_path_eval_3d_uses_linear_handle_units();

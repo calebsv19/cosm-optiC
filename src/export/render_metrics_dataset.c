@@ -9,6 +9,8 @@
 #include <string.h>
 
 static const char *k_default_dataset_path = "data/runtime/render_metrics.dataset.json";
+static const char *k_dataset_profile = "ray_tracing_render_metrics_v2";
+static const char *k_metrics_table_name = "render_metrics_table_v2";
 
 static bool append_dataset_items_json(cJSON *items, const CoreDataset *dataset) {
     if (!items || !dataset) return false;
@@ -82,7 +84,7 @@ bool ray_tracing_render_metrics_dataset_export_json(const RayTracingRenderMetric
     CoreDataset dataset;
     core_dataset_init(&dataset);
 
-    CoreResult r = core_dataset_add_metadata_string(&dataset, "profile", "ray_tracing_render_metrics_v1");
+    CoreResult r = core_dataset_add_metadata_string(&dataset, "profile", k_dataset_profile);
     if (r.code != CORE_OK) goto fail;
     r = core_dataset_add_metadata_string(&dataset, "schema_family", "ray_tracing_render_metrics");
     if (r.code != CORE_OK) goto fail;
@@ -90,11 +92,17 @@ bool ray_tracing_render_metrics_dataset_export_json(const RayTracingRenderMetric
     if (r.code != CORE_OK) goto fail;
     r = core_dataset_add_metadata_string(&dataset, "dataset_schema", "ray_tracing.render_metrics");
     if (r.code != CORE_OK) goto fail;
-    r = core_dataset_add_metadata_i64(&dataset, "dataset_contract_version", 1);
+    r = core_dataset_add_metadata_i64(&dataset, "dataset_contract_version", 2);
     if (r.code != CORE_OK) goto fail;
-    r = core_dataset_add_metadata_i64(&dataset, "schema_version", 1);
+    r = core_dataset_add_metadata_i64(&dataset, "schema_version", 2);
     if (r.code != CORE_OK) goto fail;
-    r = core_dataset_add_metadata_string(&dataset, "metrics_table", "render_metrics_table_v1");
+    r = core_dataset_add_metadata_string(&dataset, "metrics_table", k_metrics_table_name);
+    if (r.code != CORE_OK) goto fail;
+    r = core_dataset_add_metadata_string(&dataset,
+                                         "integrator_status_label",
+                                         snapshot->integrator_status_label[0]
+                                             ? snapshot->integrator_status_label
+                                             : "integrator: Forward Light");
     if (r.code != CORE_OK) goto fail;
 
     const int64_t rays_per_frame = (snapshot->scene_rays > 0) ? (int64_t)snapshot->scene_rays : 0;
@@ -107,14 +115,16 @@ bool ray_tracing_render_metrics_dataset_export_json(const RayTracingRenderMetric
     {
         const char *cols[] = {
             "frames_rendered", "loops_completed", "runtime_seconds", "target_fps", "frame_duration_seconds",
-            "scene_object_count", "scene_rays", "integrator_mode", "sample_estimate", "bounce_limit",
+            "scene_object_count", "scene_rays", "integrator_mode", "integrator_mode_3d",
+            "route_family", "integrator_uses_3d_catalog", "sample_estimate", "bounce_limit",
             "path_samples_per_pixel", "path_max_depth", "use_tiled_renderer", "tile_size",
             "light_intensity", "cache_variance_cutoff", "cache_halo_radius", "environment_brightness",
             "interactive_mode", "deep_render_mode", "bounce_mode"
         };
         CoreTableColumnType types[] = {
             CORE_TABLE_COL_I64, CORE_TABLE_COL_I64, CORE_TABLE_COL_F64, CORE_TABLE_COL_I64, CORE_TABLE_COL_F64,
-            CORE_TABLE_COL_I64, CORE_TABLE_COL_I64, CORE_TABLE_COL_I64, CORE_TABLE_COL_I64, CORE_TABLE_COL_I64,
+            CORE_TABLE_COL_I64, CORE_TABLE_COL_I64, CORE_TABLE_COL_I64, CORE_TABLE_COL_I64,
+            CORE_TABLE_COL_I64, CORE_TABLE_COL_BOOL, CORE_TABLE_COL_I64, CORE_TABLE_COL_I64,
             CORE_TABLE_COL_I64, CORE_TABLE_COL_I64, CORE_TABLE_COL_BOOL, CORE_TABLE_COL_I64,
             CORE_TABLE_COL_F64, CORE_TABLE_COL_F64, CORE_TABLE_COL_F64, CORE_TABLE_COL_F64,
             CORE_TABLE_COL_BOOL, CORE_TABLE_COL_BOOL, CORE_TABLE_COL_BOOL
@@ -127,6 +137,9 @@ bool ray_tracing_render_metrics_dataset_export_json(const RayTracingRenderMetric
         int64_t scene_object_count_col[] = {(int64_t)snapshot->scene_object_count};
         int64_t scene_rays_col[] = {(int64_t)snapshot->scene_rays};
         int64_t integrator_mode_col[] = {(int64_t)snapshot->integrator_mode};
+        int64_t integrator_mode_3d_col[] = {(int64_t)snapshot->integrator_mode_3d};
+        int64_t route_family_col[] = {(int64_t)snapshot->route_family};
+        bool integrator_uses_3d_catalog_col[] = {snapshot->integrator_uses_3d_catalog};
         int64_t sample_estimate_col[] = {sample_estimate};
         int64_t bounce_limit_col[] = {(int64_t)snapshot->bounce_limit};
         int64_t path_samples_per_pixel_col[] = {(int64_t)snapshot->path_samples_per_pixel};
@@ -142,14 +155,15 @@ bool ray_tracing_render_metrics_dataset_export_json(const RayTracingRenderMetric
         bool bounce_mode_col[] = {snapshot->bounce_mode};
         const void *column_data[] = {
             frames_rendered_col, loops_completed_col, runtime_seconds_col, target_fps_col, frame_duration_seconds_col,
-            scene_object_count_col, scene_rays_col, integrator_mode_col, sample_estimate_col, bounce_limit_col,
+            scene_object_count_col, scene_rays_col, integrator_mode_col, integrator_mode_3d_col,
+            route_family_col, integrator_uses_3d_catalog_col, sample_estimate_col, bounce_limit_col,
             path_samples_per_pixel_col, path_max_depth_col, use_tiled_renderer_col, tile_size_col,
             light_intensity_col, cache_variance_cutoff_col, cache_halo_radius_col, environment_brightness_col,
             interactive_mode_col, deep_render_mode_col, bounce_mode_col
         };
 
         r = core_dataset_add_table_typed(&dataset,
-                                         "render_metrics_table_v1",
+                                         k_metrics_table_name,
                                          cols,
                                          types,
                                          (uint32_t)(sizeof(cols) / sizeof(cols[0])),
@@ -168,11 +182,11 @@ bool ray_tracing_render_metrics_dataset_export_json(const RayTracingRenderMetric
         goto fail;
     }
 
-    cJSON_AddStringToObject(root, "profile", "ray_tracing_render_metrics_v1");
+    cJSON_AddStringToObject(root, "profile", k_dataset_profile);
     cJSON_AddStringToObject(root, "schema_family", "ray_tracing_render_metrics");
     cJSON_AddStringToObject(root, "schema_variant", "runtime");
     cJSON_AddStringToObject(root, "dataset_schema", "ray_tracing.render_metrics");
-    cJSON_AddNumberToObject(root, "schema_version", 1);
+    cJSON_AddNumberToObject(root, "schema_version", 2);
 
     for (size_t i = 0; i < dataset.metadata_count; ++i) {
         const CoreMetadataItem *m = &dataset.metadata[i];

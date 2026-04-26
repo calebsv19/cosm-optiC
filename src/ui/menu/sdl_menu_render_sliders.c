@@ -4,6 +4,7 @@
 
 #include "app/animation.h"
 #include "config/config_manager.h"
+#include "render/ray_tracing_integrator_catalog.h"
 #include "ui/menu_panel_chrome.h"
 #include "ui/shared_theme_font_adapter.h"
 #include "engine/Render/render_pipeline.h"
@@ -100,7 +101,7 @@ void menu_render_build_slider_layout(TTF_Font* font,
                "Falloff Distance");
     layout.nextY += SLIDER_SECTION_GAP;
 
-    if (animSettings.integratorMode == 1) {
+    if (RayTracingIntegratorCatalog_BuildMenuState(&animSettings).showPathToggles) {
         ADD_SLIDER(&animSettings.pathSamplesPerPixel, 1, 128, "Path SPP");
         ADD_SLIDER(&animSettings.pathMaxDepth, 1, 16, "Path Depth");
     }

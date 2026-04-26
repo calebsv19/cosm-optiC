@@ -12,6 +12,7 @@
 #include "editor/editor_mode_router.h"
 #include "editor/scene_editor.h"
 #include "engine/Render/render_font.h"
+#include "render/ray_tracing_integrator_catalog.h"
 #include "ui/menu_batch_panel.h"
 #include "ui/shared_theme_font_adapter.h"
 #include "ui/text_zoom_shortcuts.h"
@@ -534,7 +535,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     }
 
     if (point_in_rect(&buttons.integratorRect, x, y)) {
-        animSettings.integratorMode = (animSettings.integratorMode + 1) % 3;
+        RayTracingIntegratorCatalog_CycleActiveSelection(&animSettings);
         menu_state_sync_from_anim(state);
         return;
     }
@@ -593,8 +594,10 @@ void menu_input_handle_mouse_click(SDL_Event* event,
             finish_root_edit(state, true);
         }
         menu_state_sync_from_anim(state);
-        printf("[Menu] Start pressed: integrator=%d falloffMode=%d decay=%.2f softness=%.2f intensity=%.2f\n",
+        printf("[Menu] Start pressed: spaceMode=%d integrator2D=%d integrator3D=%d falloffMode=%d decay=%.2f softness=%.2f intensity=%.2f\n",
+               animSettings.spaceMode,
                animSettings.integratorMode,
+               animSettings.integratorMode3D,
                animSettings.forwardFalloffMode,
                animSettings.forwardDecay,
                animSettings.lightDecaySoftness,

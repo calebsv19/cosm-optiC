@@ -8,6 +8,12 @@
 
 typedef struct {
     bool hit;
+    Ray3D primaryRay;
+    HitInfo3D hitInfo;
+} RuntimePrimaryHit3DResult;
+
+typedef struct {
+    bool hit;
     bool visible;
     Ray3D primaryRay;
     HitInfo3D hitInfo;
@@ -16,6 +22,12 @@ typedef struct {
     double attenuation;
     double radiance;
 } RuntimeDirectLight3DResult;
+
+bool RuntimeDirectLight3D_TracePrimaryHit(const RuntimeScene3D* scene,
+                                          const RuntimeCameraProjector3D* projector,
+                                          double pixel_x,
+                                          double pixel_y,
+                                          RuntimePrimaryHit3DResult* out_result);
 
 bool RuntimeDirectLight3D_ShadeHit(const RuntimeScene3D* scene,
                                    const HitInfo3D* hit,

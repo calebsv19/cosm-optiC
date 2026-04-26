@@ -5,6 +5,7 @@
 
 #include "camera/camera.h"
 #include "config/config_manager.h"
+#include "render/ray_tracing_integrator_catalog.h"
 #include "render/space_mode_adapter.h"
 
 typedef enum {
@@ -37,8 +38,11 @@ typedef struct {
     bool useTiles;
     int tileSize;
     int integratorMode;
+    RayTracing3DIntegratorId integratorMode3D;
+    bool integratorUses3DCatalog;
     bool buildIrradianceCache;
     bool tilePreviewEnabled;
+    RayTracingIntegratorFallbackReason integratorFallbackReason;
 } RayTracingRuntimeRoute;
 
 typedef struct {
@@ -112,5 +116,6 @@ bool RayTracingModeBackend_IsCompat3DFallback(const RayTracingRuntimeRoute* rout
 bool RayTracingModeBackend_IsNative3D(const RayTracingRuntimeRoute* route);
 bool RayTracingModeBackend_IsControlled3D(const RayTracingRuntimeRoute* route);
 const char* RayTracingModeBackend_Name(const RayTracingRuntimeRoute* route);
+const char* RayTracingModeBackend_IntegratorStatusLabel(const RayTracingRuntimeRoute* route);
 
 #endif

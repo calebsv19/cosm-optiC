@@ -10,6 +10,7 @@
 #include "config/config_manager.h"
 #include "editor/editor_mode_router.h"
 #include "engine/Render/render_font.h"
+#include "render/ray_tracing_integrator_catalog.h"
 #include "render/render_helper.h"
 #include "render/ray_tracing_mode_backend.h"
 #include "render/text_draw.h"
@@ -72,7 +73,6 @@
 #define ROOT_ROW_HEIGHT 34
 #define ROOT_ROW_SPACING 8
 #define ROOT_CTRL_BUTTON_W 56
-#define MANIFEST_PANEL_EXTRA_WIDTH 40
 #define MANIFEST_PANEL_MIN_HEIGHT 140
 #define MANIFEST_PANEL_MAX_HEIGHT 260
 #define MANIFEST_ITEM_PADDING 6
@@ -232,26 +232,42 @@ static void format_manifest_button_label(MenuRuntimeState* state, char *out, siz
 static void render_manifest_dropdown(SDL_Renderer *renderer,
                                      TTF_Font *font,
                                      MenuRuntimeState* state,
-                                     const SDL_Rect* loadButtonRect,
+                                     const MenuButtonLayout* buttons,
                                      const MenuScreenLayout* screen_layout) {
     RayTracingThemePalette palette = {0};
     const bool has_shared_palette = ray_tracing_shared_theme_resolve_palette(&palette);
-    int panelX;
-    int panelY;
-    int panelW;
-    int available;
-    if (!state || !loadButtonRect) return;
-    panelX = loadButtonRect->x;
-    panelY = loadButtonRect->y + loadButtonRect->h + 6;
-    panelW = loadButtonRect->w + MANIFEST_PANEL_EXTRA_WIDTH;
-    available = (screen_layout ? screen_layout->bottomActionRowRect.y : BOTTOM_BUTTON_MARGIN_Y_PREVIEW) - 10 - panelY;
-    int panelH = MANIFEST_PANEL_MIN_HEIGHT;
-    if (available > MANIFEST_PANEL_MIN_HEIGHT) panelH = available;
-    if (panelH > MANIFEST_PANEL_MAX_HEIGHT) panelH = MANIFEST_PANEL_MAX_HEIGHT;
-    int minH = SDL_MENU_MANIFEST_ITEM_HEIGHT + MANIFEST_ITEM_PADDING * 2 + 4;
-    if (panelH < minH) panelH = minH;
+    SDL_Rect panel_rect = {0, 0, 0, 0};
+    if (!state || !buttons) return;
 
-    state->manifestPanelRect = (SDL_Rect){panelX, panelY, panelW, panelH};
+    if (screen_layout && screen_layout->manifestReserveRect.w > 0 && screen_layout->manifestReserveRect.h > 0) {
+        panel_rect = screen_layout->manifestReserveRect;
+    } else {
+        int available = 0;
+        panel_rect.x = buttons->loadSceneRect.x;
+        panel_rect.y = buttons->inputRootValueRect.y + buttons->inputRootValueRect.h + 6;
+        panel_rect.w = (buttons->inputRootApplyRect.x + buttons->inputRootApplyRect.w) - panel_rect.x;
+        available = (screen_layout ? (screen_layout->leftPanelRect.y + screen_layout->leftPanelRect.h - 18)
+                                   : (BOTTOM_BUTTON_MARGIN_Y_PREVIEW - 10)) - panel_rect.y;
+        panel_rect.h = MANIFEST_PANEL_MIN_HEIGHT;
+        if (available > MANIFEST_PANEL_MIN_HEIGHT) panel_rect.h = available;
+        if (panel_rect.h > MANIFEST_PANEL_MAX_HEIGHT) panel_rect.h = MANIFEST_PANEL_MAX_HEIGHT;
+    }
+
+    {
+        const int minH = SDL_MENU_MANIFEST_ITEM_HEIGHT + MANIFEST_ITEM_PADDING * 2 + 4;
+        if (panel_rect.h < minH) panel_rect.h = minH;
+    }
+    if (panel_rect.w <= 0 || panel_rect.h <= 0) {
+        state->manifestPanelRect = (SDL_Rect){0, 0, 0, 0};
+        state->manifestListRect = (SDL_Rect){0, 0, 0, 0};
+        state->manifestScrollbarRect = (SDL_Rect){0, 0, 0, 0};
+        state->manifestScrollbarVisible = false;
+        state->manifestThumbHeight = 0.0f;
+        state->manifestTrackHeight = 0.0f;
+        return;
+    }
+
+    state->manifestPanelRect = panel_rect;
     if (has_shared_palette) {
         SDL_SetRenderDrawColor(renderer,
                                palette.panel_fill.r, palette.panel_fill.g,
@@ -269,11 +285,11 @@ static void render_manifest_dropdown(SDL_Renderer *renderer,
     }
     SDL_RenderDrawRect(renderer, &state->manifestPanelRect);
 
-    int listX = panelX + MANIFEST_ITEM_PADDING;
-    int listY = panelY + MANIFEST_ITEM_PADDING;
-    int listW = panelW - MANIFEST_ITEM_PADDING * 2 - MANIFEST_SCROLLBAR_WIDTH - 4;
+    int listX = panel_rect.x + MANIFEST_ITEM_PADDING;
+    int listY = panel_rect.y + MANIFEST_ITEM_PADDING;
+    int listW = panel_rect.w - MANIFEST_ITEM_PADDING * 2 - MANIFEST_SCROLLBAR_WIDTH - 4;
     if (listW < 40) listW = 40;
-    int listH = panelH - MANIFEST_ITEM_PADDING * 2;
+    int listH = panel_rect.h - MANIFEST_ITEM_PADDING * 2;
     state->manifestListRect = (SDL_Rect){listX, listY, listW, listH};
 
     int visible_indices[SDL_MENU_MAX_MANIFEST_OPTIONS];
@@ -300,7 +316,7 @@ static void render_manifest_dropdown(SDL_Renderer *renderer,
         float thumbY = (trackRange > 0.0f && state->manifestMaxScroll > 0.0f)
                            ? (float)listY + (state->manifestScroll / state->manifestMaxScroll) * trackRange
                            : (float)listY;
-        int scrollX = panelX + panelW - MANIFEST_SCROLLBAR_WIDTH - MANIFEST_ITEM_PADDING;
+        int scrollX = panel_rect.x + panel_rect.w - MANIFEST_SCROLLBAR_WIDTH - MANIFEST_ITEM_PADDING;
         SDL_Rect track = {scrollX, listY, MANIFEST_SCROLLBAR_WIDTH, listH};
         if (has_shared_palette) {
             SDL_SetRenderDrawColor(renderer,
@@ -557,7 +573,9 @@ void menu_render_build_button_layout(TTF_Font* font,
                                      MenuButtonLayout* out_layout) {
     MenuButtonLayout layout;
     char manifestLabel[160];
-    const char* integratorLabel = "Integrator: Forward Light";
+    const RayTracingIntegratorMenuState integrator_menu =
+        RayTracingIntegratorCatalog_BuildMenuState(&animSettings);
+    const char* integratorLabel = integrator_menu.buttonLabel;
     int leftX = TOGGLE_BUTTON_MARGIN_X;
     int subX = SUBSETTING_BUTTON_MARGIN_X;
     int maxLeftWidth = 320;
@@ -571,7 +589,7 @@ void menu_render_build_button_layout(TTF_Font* font,
     int footerButtonY = BOTTOM_BUTTON_MARGIN_Y_EXIT;
 
     memset(&layout, 0, sizeof(layout));
-    layout.showPathToggles = (animSettings.integratorMode == 1);
+    layout.showPathToggles = integrator_menu.showPathToggles;
     layout.showLightHeight = false;
     if (screen_layout) {
         leftX = screen_layout->leftPanelRect.x + 18;
@@ -603,8 +621,6 @@ void menu_render_build_button_layout(TTF_Font* font,
                                                     SUBSETTING_BUTTON_WIDTH, SUBSETTING_BUTTON_HEIGHT,
                                                     "Auto MP4", maxLeftWidth);
 
-    if (animSettings.integratorMode == 1) integratorLabel = "Integrator: Hybrid";
-    else if (animSettings.integratorMode == 2) integratorLabel = "Integrator: Direct Light";
     layout.integratorRect = build_adaptive_button_rect(font, leftX,
                                                        layout.autoMp4Rect.y + layout.autoMp4Rect.h + 10,
                                                        INTEGRATOR_BUTTON_WIDTH, INTEGRATOR_BUTTON_HEIGHT,
@@ -789,10 +805,9 @@ void menu_render_frame(SDL_Renderer* renderer, TTF_Font* font, MenuRuntimeState*
     menu_render_draw_button_rect(renderer, font, &buttons.bounceRect, "Bounce Mode", animSettings.bounceMode);
     menu_render_draw_button_rect(renderer, font, &buttons.autoMp4Rect, "Auto MP4", animSettings.autoMP4);
 
-    const char* integratorLabel = "Integrator: Forward Light";
-    if (animSettings.integratorMode == 1) integratorLabel = "Integrator: Hybrid";
-    else if (animSettings.integratorMode == 2) integratorLabel = "Integrator: Direct Light";
-    menu_render_draw_button_rect(renderer, font, &buttons.integratorRect, integratorLabel, true);
+    const RayTracingIntegratorMenuState integrator_menu =
+        RayTracingIntegratorCatalog_BuildMenuState(&animSettings);
+    menu_render_draw_button_rect(renderer, font, &buttons.integratorRect, integrator_menu.buttonLabel, true);
 
     if (buttons.showPathToggles) {
         menu_render_draw_button_rect(renderer, font, &buttons.pathRouletteRect,
@@ -806,7 +821,7 @@ void menu_render_frame(SDL_Renderer* renderer, TTF_Font* font, MenuRuntimeState*
     format_manifest_button_label(state, manifestLabel, sizeof(manifestLabel));
     menu_render_draw_button_rect(renderer, font, &buttons.loadSceneRect, manifestLabel, state->manifestDropdownOpen);
     if (state->manifestDropdownOpen) {
-        render_manifest_dropdown(renderer, font, state, &buttons.loadSceneRect, &screenLayout);
+        render_manifest_dropdown(renderer, font, state, &buttons, &screenLayout);
     } else {
         state->manifestPanelRect = (SDL_Rect){0, 0, 0, 0};
         state->manifestListRect = (SDL_Rect){0, 0, 0, 0};
@@ -882,7 +897,11 @@ void menu_render_frame(SDL_Renderer* renderer, TTF_Font* font, MenuRuntimeState*
             hintLine2Y = hintLine1Y + 16;
         }
 
-        snprintf(hintLine1, sizeof(hintLine1), "%s", EditorModeRouter_RuntimeHintLabel());
+        snprintf(hintLine1,
+                 sizeof(hintLine1),
+                 "%s | %s",
+                 EditorModeRouter_RuntimeHintLabel(),
+                 RayTracingModeBackend_IntegratorStatusLabel(&route));
         menu_render_fit_text_to_width(font, hintLine1, hintMaxWidth, hintFit, sizeof(hintFit));
         menu_render_draw_text_color(renderer,
                                     font,

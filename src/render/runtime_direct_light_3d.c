@@ -26,6 +26,30 @@ static double runtime_direct_light_3d_attenuation(const RuntimeLight3D* light,
     }
 }
 
+bool RuntimeDirectLight3D_TracePrimaryHit(const RuntimeScene3D* scene,
+                                          const RuntimeCameraProjector3D* projector,
+                                          double pixel_x,
+                                          double pixel_y,
+                                          RuntimePrimaryHit3DResult* out_result) {
+    RuntimePrimaryHit3DResult result = {0};
+
+    if (!scene || !projector || !out_result) return false;
+
+    result.primaryRay = RuntimeCameraProjector3D_MakePrimaryRay(projector, pixel_x, pixel_y);
+    if (!RuntimeRay3D_TraceSceneFirstHit(scene,
+                                         &result.primaryRay,
+                                         projector->nearPlane,
+                                         HUGE_VAL,
+                                         &result.hitInfo)) {
+        *out_result = result;
+        return false;
+    }
+
+    result.hit = true;
+    *out_result = result;
+    return true;
+}
+
 bool RuntimeDirectLight3D_ShadeHit(const RuntimeScene3D* scene,
                                    const HitInfo3D* hit,
                                    RuntimeDirectLight3DResult* out_result) {
@@ -71,26 +95,27 @@ bool RuntimeDirectLight3D_ShadePixel(const RuntimeScene3D* scene,
                                      double pixel_y,
                                      RuntimeDirectLight3DResult* out_result) {
     RuntimeDirectLight3DResult result = {0};
-    HitInfo3D hit = {0};
+    RuntimePrimaryHit3DResult primary_hit = {0};
 
     if (!scene || !projector || !out_result) return false;
     if (!scene->hasLight) return false;
 
-    result.primaryRay = RuntimeCameraProjector3D_MakePrimaryRay(projector, pixel_x, pixel_y);
-    if (!RuntimeRay3D_TraceSceneFirstHit(scene,
-                                         &result.primaryRay,
-                                         projector->nearPlane,
-                                         HUGE_VAL,
-                                         &hit)) {
+    if (!RuntimeDirectLight3D_TracePrimaryHit(scene,
+                                              projector,
+                                              pixel_x,
+                                              pixel_y,
+                                              &primary_hit)) {
+        result.primaryRay = primary_hit.primaryRay;
         *out_result = result;
         return false;
     }
 
-    if (!RuntimeDirectLight3D_ShadeHit(scene, &hit, &result)) {
+    if (!RuntimeDirectLight3D_ShadeHit(scene, &primary_hit.hitInfo, &result)) {
+        result.primaryRay = primary_hit.primaryRay;
         *out_result = result;
         return false;
     }
-    result.primaryRay = RuntimeCameraProjector3D_MakePrimaryRay(projector, pixel_x, pixel_y);
+    result.primaryRay = primary_hit.primaryRay;
     *out_result = result;
     return true;
 }
