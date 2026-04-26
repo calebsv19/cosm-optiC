@@ -508,7 +508,7 @@ static int test_animation_scene_source_roundtrip_runtime_lane(void) {
     strncpy(animSettings.fluidManifest, "import/should_not_drive_runtime_lane.json",
             sizeof(animSettings.fluidManifest) - 1);
     animSettings.fluidManifest[sizeof(animSettings.fluidManifest) - 1] = '\0';
-    strncpy(animSettings.runtimeScenePath, "../shared/assets/scenes/trio_contract/scene_runtime_min.json",
+    strncpy(animSettings.runtimeScenePath, "third_party/codework_shared/assets/scenes/trio_contract/scene_runtime_min.json",
             sizeof(animSettings.runtimeScenePath) - 1);
     animSettings.runtimeScenePath[sizeof(animSettings.runtimeScenePath) - 1] = '\0';
 
@@ -524,14 +524,14 @@ static int test_animation_scene_source_roundtrip_runtime_lane(void) {
     assert_true("scene_source_roundtrip_runtime_not_fluid", !animSettings.useFluidScene);
     assert_true("scene_source_roundtrip_runtime_path",
                 strcmp(animSettings.runtimeScenePath,
-                       "../shared/assets/scenes/trio_contract/scene_runtime_min.json") == 0);
+                       "third_party/codework_shared/assets/scenes/trio_contract/scene_runtime_min.json") == 0);
 
     restore_runtime_animation_config(backup, backup_size);
     return 0;
 }
 
 static int test_animation_scene_source_select_runtime_failure_rolls_back(void) {
-    static const char *kFixtureRuntimePath = "../shared/assets/scenes/trio_contract/scene_runtime_min.json";
+    static const char *kFixtureRuntimePath = "third_party/codework_shared/assets/scenes/trio_contract/scene_runtime_min.json";
     static const char *kMissingRuntimePath = "/tmp/ray_tracing_missing_scene_source_contract.json";
     size_t backup_size = 0;
     char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
@@ -565,7 +565,7 @@ static int test_animation_scene_source_select_runtime_failure_rolls_back(void) {
 }
 
 static int test_animation_scene_source_select_runtime_persists_on_save(void) {
-    static const char *kFixtureRuntimePath = "../shared/assets/scenes/trio_contract/scene_runtime_min.json";
+    static const char *kFixtureRuntimePath = "third_party/codework_shared/assets/scenes/trio_contract/scene_runtime_min.json";
     size_t backup_size = 0;
     char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
 
@@ -601,7 +601,7 @@ static int test_animation_scene_source_select_runtime_persists_on_save(void) {
 
 static int test_animation_apply_active_scene_source_invalid_fluid_falls_back_2d(void) {
     static const char *kMissingFluidPath = "/tmp/ray_tracing_missing_fluid_manifest.json";
-    static const char *kRuntimeFixturePath = "../shared/assets/scenes/trio_contract/scene_runtime_min.json";
+    static const char *kRuntimeFixturePath = "third_party/codework_shared/assets/scenes/trio_contract/scene_runtime_min.json";
     size_t backup_size = 0;
     char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
 
@@ -1231,7 +1231,7 @@ static int test_depth_projection_scalars(void) {
 
 static int test_runtime_scene_bridge_preflight_accepts_runtime_contract(void) {
     RuntimeSceneBridgePreflight preflight;
-    bool ok = runtime_scene_bridge_preflight_file("../shared/assets/scenes/trio_contract/scene_runtime_min.json",
+    bool ok = runtime_scene_bridge_preflight_file("third_party/codework_shared/assets/scenes/trio_contract/scene_runtime_min.json",
                                                   &preflight);
     assert_true("runtime_scene_preflight_accept_fixture", ok);
     if (ok) {
@@ -1245,7 +1245,7 @@ static int test_runtime_scene_bridge_preflight_accepts_runtime_contract(void) {
 
 static int test_runtime_scene_bridge_rejects_authoring_variant(void) {
     RuntimeSceneBridgePreflight preflight;
-    bool ok = runtime_scene_bridge_preflight_file("../shared/assets/scenes/trio_contract/scene_authoring_min.json",
+    bool ok = runtime_scene_bridge_preflight_file("third_party/codework_shared/assets/scenes/trio_contract/scene_authoring_min.json",
                                                   &preflight);
     assert_true("runtime_scene_preflight_reject_authoring", !ok);
     if (!ok) {
@@ -2803,7 +2803,7 @@ static int test_scene_compile_and_preflight_roundtrip(void) {
 static int test_runtime_scene_bridge_apply_runtime_fixture(void) {
     RuntimeSceneBridgePreflight summary;
     RuntimeSceneBridgePreflight alias_summary;
-    bool ok = runtime_scene_bridge_apply_file("../shared/assets/scenes/trio_contract/scene_runtime_min.json",
+    bool ok = runtime_scene_bridge_apply_file("third_party/codework_shared/assets/scenes/trio_contract/scene_runtime_min.json",
                                               &summary);
     assert_true("runtime_scene_apply_fixture_ok", ok);
     if (!ok) return 0;
@@ -2826,7 +2826,7 @@ static int test_runtime_scene_bridge_apply_runtime_fixture(void) {
                 animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE);
     assert_true("runtime_scene_apply_source_runtime_scene_path",
                 strcmp(animSettings.runtimeScenePath,
-                       "../shared/assets/scenes/trio_contract/scene_runtime_min.json") == 0);
+                       "third_party/codework_shared/assets/scenes/trio_contract/scene_runtime_min.json") == 0);
 
     // Regression: menu apply path passes animSettings.runtimeScenePath as input.
     ok = runtime_scene_bridge_apply_file(animSettings.runtimeScenePath, &alias_summary);
@@ -2835,7 +2835,7 @@ static int test_runtime_scene_bridge_apply_runtime_fixture(void) {
         assert_true("runtime_scene_apply_alias_buffer_valid_contract", alias_summary.valid_contract);
         assert_true("runtime_scene_apply_alias_buffer_path_retained",
                     strcmp(animSettings.runtimeScenePath,
-                           "../shared/assets/scenes/trio_contract/scene_runtime_min.json") == 0);
+                           "third_party/codework_shared/assets/scenes/trio_contract/scene_runtime_min.json") == 0);
     }
     return 0;
 }
@@ -3569,9 +3569,9 @@ static int test_runtime_scene_bridge_writeback_space_mode_tiebreak_accepts_lexic
 static int test_runtime_scene_bridge_trio_fixture_compile_writeback_apply(void) {
     size_t authoring_size = 0;
     size_t overlay_size = 0;
-    char *authoring_json = read_text_file_alloc("../shared/assets/scenes/trio_contract/scene_authoring_interop_min.json",
+    char *authoring_json = read_text_file_alloc("third_party/codework_shared/assets/scenes/trio_contract/scene_authoring_interop_min.json",
                                                 &authoring_size);
-    char *overlay_json = read_text_file_alloc("../shared/assets/scenes/trio_contract/ray_overlay_min.json",
+    char *overlay_json = read_text_file_alloc("third_party/codework_shared/assets/scenes/trio_contract/ray_overlay_min.json",
                                               &overlay_size);
     char diagnostics[256];
     char *runtime_json = NULL;

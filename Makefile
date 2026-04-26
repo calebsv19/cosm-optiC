@@ -40,23 +40,25 @@ APPLE_NOTARY_PROFILE ?=
 APPLE_TEAM_ID ?=
 STAPLE_MAX_ATTEMPTS ?= 6
 STAPLE_RETRY_DELAY_SEC ?= 15
-VK_RENDERER_DIR := ../shared/vk_renderer
-CORE_BASE_DIR := ../shared/core/core_base
-CORE_IO_DIR := ../shared/core/core_io
-CORE_DATA_DIR := ../shared/core/core_data
-CORE_PACK_DIR := ../shared/core/core_pack
-CORE_TIME_DIR := ../shared/core/core_time
-CORE_SCENE_DIR := ../shared/core/core_scene
-CORE_SCENE_COMPILE_DIR := ../shared/core/core_scene_compile
-CORE_OBJECT_DIR := ../shared/core/core_object
-CORE_UNITS_DIR := ../shared/core/core_units
-CORE_TRACE_DIR := ../shared/core/core_trace
-CORE_SPACE_DIR := ../shared/core/core_space
-CORE_THEME_DIR := ../shared/core/core_theme
-CORE_FONT_DIR := ../shared/core/core_font
-KIT_RENDER_DIR := ../shared/kit/kit_render
-KIT_VIZ_DIR := ../shared/kit/kit_viz
-KIT_RUNTIME_DIAG_DIR := ../shared/kit/kit_runtime_diag
+SHARED_ROOT ?= third_party/codework_shared
+SHARED_ASSETS_DIR := $(SHARED_ROOT)/assets
+VK_RENDERER_DIR := $(SHARED_ROOT)/vk_renderer
+CORE_BASE_DIR := $(SHARED_ROOT)/core/core_base
+CORE_IO_DIR := $(SHARED_ROOT)/core/core_io
+CORE_DATA_DIR := $(SHARED_ROOT)/core/core_data
+CORE_PACK_DIR := $(SHARED_ROOT)/core/core_pack
+CORE_TIME_DIR := $(SHARED_ROOT)/core/core_time
+CORE_SCENE_DIR := $(SHARED_ROOT)/core/core_scene
+CORE_SCENE_COMPILE_DIR := $(SHARED_ROOT)/core/core_scene_compile
+CORE_OBJECT_DIR := $(SHARED_ROOT)/core/core_object
+CORE_UNITS_DIR := $(SHARED_ROOT)/core/core_units
+CORE_TRACE_DIR := $(SHARED_ROOT)/core/core_trace
+CORE_SPACE_DIR := $(SHARED_ROOT)/core/core_space
+CORE_THEME_DIR := $(SHARED_ROOT)/core/core_theme
+CORE_FONT_DIR := $(SHARED_ROOT)/core/core_font
+KIT_RENDER_DIR := $(SHARED_ROOT)/kit/kit_render
+KIT_VIZ_DIR := $(SHARED_ROOT)/kit/kit_viz
+KIT_RUNTIME_DIAG_DIR := $(SHARED_ROOT)/kit/kit_runtime_diag
 UNAME_S := $(shell uname -s)
 
 SDL_CFLAGS := $(shell sdl2-config --cflags)
@@ -111,7 +113,7 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_stubs.o \
 	$(BUILD_DIR)/tests/fluid_pack_import_test.o \
 	$(BUILD_DIR)/tests/kit_viz_fluid_overlay_adapter_test.o \
 	$(BUILD_DIR)/tests/render_metrics_dataset_test.o
-TIMER_HUD_DIR := ../shared/timer_hud
+TIMER_HUD_DIR := $(SHARED_ROOT)/timer_hud
 TIMER_HUD_INCLUDE := -I$(TIMER_HUD_DIR)/include -I$(TIMER_HUD_DIR)/external
 
 CFLAGS += $(TIMER_HUD_INCLUDE) -I$(VK_RENDERER_DIR)/include $(VULKAN_CFLAGS) \
@@ -472,7 +474,7 @@ package-desktop: all
 	fi
 	@cp -R config "$(PACKAGE_RESOURCES_DIR)/"
 	@mkdir -p "$(PACKAGE_RESOURCES_DIR)/shared/assets/fonts"
-	@cp -R "../shared/assets/fonts/." "$(PACKAGE_RESOURCES_DIR)/shared/assets/fonts/"
+	@cp -R "$(SHARED_ASSETS_DIR)/fonts/." "$(PACKAGE_RESOURCES_DIR)/shared/assets/fonts/"
 	@mkdir -p "$(PACKAGE_RESOURCES_DIR)/data/runtime" "$(PACKAGE_RESOURCES_DIR)/data/runtime/frames" "$(PACKAGE_RESOURCES_DIR)/data/runtime/videos" "$(PACKAGE_RESOURCES_DIR)/data/snapshots"
 	@mkdir -p "$(PACKAGE_RESOURCES_DIR)/vk_renderer" "$(PACKAGE_RESOURCES_DIR)/shaders"
 	@cp -R "$(VK_RENDERER_DIR)/shaders" "$(PACKAGE_RESOURCES_DIR)/vk_renderer/"

@@ -1,14 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "../../../../shared/shape/tests/shape_sanity.h"
-#include "../../../../shared/shape/tests/shape_sanity.c"
-#include "../../../../shared/shape/geo/shape_library.c"
-#include "../../../../shared/shape/geo/shape_asset.c"
-#include "../../../../shared/shape/ShapeLib/shape_core.c"
-#include "../../../../shared/shape/ShapeLib/shape_flatten.c"
-#include "../../../../shared/shape/ShapeLib/shape_json.c"
-#include "../../../../shared/shape/external/cjson/cJSON.c"
+#include "../../../third_party/codework_shared/shape/tests/shape_sanity.h"
+#include "../../../third_party/codework_shared/shape/tests/shape_sanity.c"
+#include "../../../third_party/codework_shared/shape/geo/shape_library.c"
+#include "../../../third_party/codework_shared/shape/geo/shape_asset.c"
+#include "../../../third_party/codework_shared/shape/ShapeLib/shape_core.c"
+#include "../../../third_party/codework_shared/shape/ShapeLib/shape_flatten.c"
+#include "../../../third_party/codework_shared/shape/ShapeLib/shape_json.c"
+#include "../../../third_party/codework_shared/shape/external/cjson/cJSON.c"
 
 int main(int argc, char **argv) {
     const char *dir = NULL;

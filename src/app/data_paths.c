@@ -150,7 +150,7 @@ static void append_workspace_program_roots(const char *base_dir,
     }
     if (snprintf(candidate_shared,
                  sizeof(candidate_shared),
-                 "%s/shared/assets/scenes",
+                 "%s/ray_tracing/third_party/codework_shared/assets/scenes",
                  base_dir) >= (int)sizeof(candidate_shared)) {
         return;
     }
@@ -343,7 +343,7 @@ size_t ray_tracing_manifest_default_roots(const char ***out_roots) {
         "../ray_tracing/data/runtime/scenes",
         "../ray_tracing/config/samples",
         "../physics_sim/config/samples",
-        "../shared/assets/scenes"
+        "third_party/codework_shared/assets/scenes"
     };
     static const char *roots[32];
     size_t count = 0;
