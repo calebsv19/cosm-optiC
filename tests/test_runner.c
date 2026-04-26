@@ -29,11 +29,13 @@
 #include "render/runtime_direct_light_3d.h"
 #include "render/runtime_diffuse_bounce_3d.h"
 #include "render/runtime_native_3d_render.h"
+#include "render/runtime_native_3d_tile_occupancy.h"
 #include "render/runtime_ray_3d.h"
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_scene_3d_builder.h"
 #include "render/runtime_visibility_3d.h"
 #include "render/integrator_common.h"
+#include "render/ray_tracing2_preview.h"
 #include "render/integrators/direct_light_integrator.h"
 #include "render/integrators/forward_light_integrator.h"
 #include "render/integrators/hybrid/camera_path_integrator.h"
@@ -3259,9 +3261,18 @@ static int test_runtime_native_3d_render_prepared_region_parity(void) {
     assert_true("runtime_native_3d_tile_parity_prepare_ok", ok);
     if (ok) {
         TileGridEnsure(&grid, 51, 51, 16);
+        ok = RuntimeNative3DPrepareFrameTileOccupancy(&frame, grid.tileSize);
+        assert_true("runtime_native_3d_tile_parity_occupancy_prepare_ok", ok);
         for (size_t ti = 0; ti < grid.count; ++ti) {
             const IntegratorTile* tile = &grid.tiles[ti];
             RuntimeNative3DRenderStats tile_stats = {0};
+            if (!RuntimeNative3DPreparedRegionMayContainGeometry(&frame,
+                                                                 tile->originX,
+                                                                 tile->originY,
+                                                                 tile->originX + tile->width,
+                                                                 tile->originY + tile->height)) {
+                continue;
+            }
             ok = RuntimeNative3DRenderPreparedRegion(tiled_pixels,
                                                      RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
                                                      &frame,
@@ -3308,6 +3319,123 @@ static int test_runtime_native_3d_render_prepared_region_parity(void) {
     RuntimeNative3DPreparedFrame_Free(&frame);
     sceneSettings = saved_scene;
     animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_native_3d_tile_occupancy_contract(void) {
+    RuntimeScene3D scene = {0};
+    RuntimeCamera3D camera = {0};
+    RuntimeCameraProjector3D projector = {0};
+    RuntimeNative3DTileOccupancy occupancy = {0};
+    RuntimeTriangle3D* triangle = NULL;
+    int occupied_tiles = 0;
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    RuntimeNative3DTileOccupancy_Init(&occupancy);
+
+    triangle = (RuntimeTriangle3D*)calloc(1, sizeof(*triangle));
+    assert_true("runtime_native_3d_tile_occupancy_triangle_alloc", triangle != NULL);
+    if (!triangle) {
+        RuntimeNative3DTileOccupancy_Free(&occupancy);
+        RuntimeScene3D_Free(&scene);
+        return 0;
+    }
+
+    triangle->p0 = vec3(-1.0, -5.0, -1.0);
+    triangle->p1 = vec3(1.0, -5.0, -1.0);
+    triangle->p2 = vec3(0.0, -5.0, 1.0);
+    triangle->normal = vec3(0.0, -1.0, 0.0);
+    scene.triangleMesh.triangles = triangle;
+    scene.triangleMesh.triangleCount = 1;
+    scene.triangleMesh.triangleCapacity = 1;
+
+    camera.position = vec3(0.0, 0.0, 0.0);
+    camera.rotation = 0.0;
+    camera.lookPitch = 0.0;
+    camera.zoom = 1.0;
+    camera.nearPlane = 0.1;
+
+    ok = RuntimeCameraProjector3D_Build(&camera, 64, 64, &projector);
+    assert_true("runtime_native_3d_tile_occupancy_projector_ok", ok);
+    ok = RuntimeNative3DTileOccupancy_Build(&occupancy, &scene, &projector, 16);
+    assert_true("runtime_native_3d_tile_occupancy_build_ok", ok);
+
+    for (int ty = 0; ty < 4; ++ty) {
+        for (int tx = 0; tx < 4; ++tx) {
+            if (RuntimeNative3DTileOccupancy_RegionMayContainGeometry(&occupancy,
+                                                                      tx * 16,
+                                                                      ty * 16,
+                                                                      (tx + 1) * 16,
+                                                                      (ty + 1) * 16)) {
+                occupied_tiles += 1;
+            }
+        }
+    }
+
+    assert_true("runtime_native_3d_tile_occupancy_positive_tiles",
+                occupied_tiles > 0);
+    assert_true("runtime_native_3d_tile_occupancy_culls_some_tiles",
+                occupied_tiles < 16);
+    assert_true("runtime_native_3d_tile_occupancy_center_tile_hit",
+                RuntimeNative3DTileOccupancy_RegionMayContainGeometry(&occupancy,
+                                                                      16,
+                                                                      16,
+                                                                      32,
+                                                                      32));
+    assert_true("runtime_native_3d_tile_occupancy_corner_tile_empty",
+                !RuntimeNative3DTileOccupancy_RegionMayContainGeometry(&occupancy,
+                                                                       0,
+                                                                       0,
+                                                                       16,
+                                                                       16));
+
+    RuntimeNative3DTileOccupancy_Free(&occupancy);
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
+static int test_runtime_native_3d_dirty_rect_preview_base_parity(void) {
+    enum { kWidth = 8, kHeight = 6 };
+    Uint8 luminance[kWidth * kHeight];
+    uint32_t full_abgr[kWidth * kHeight];
+    uint32_t dirty_abgr[kWidth * kHeight];
+    SDL_Rect rect_a = {.x = 0, .y = 0, .w = 4, .h = 3};
+    SDL_Rect rect_b = {.x = 4, .y = 0, .w = 4, .h = 3};
+    SDL_Rect rect_c = {.x = 0, .y = 3, .w = 8, .h = 3};
+
+    for (int y = 0; y < kHeight; ++y) {
+        for (int x = 0; x < kWidth; ++x) {
+            luminance[y * kWidth + x] = (Uint8)((x * 17) + (y * 29));
+        }
+    }
+
+    memset(full_abgr, 0, sizeof(full_abgr));
+    memset(dirty_abgr, 0, sizeof(dirty_abgr));
+
+    RayTracingPreview_CopyLuminanceRectToABGR(full_abgr,
+                                              kWidth,
+                                              kHeight,
+                                              luminance,
+                                              NULL);
+    RayTracingPreview_CopyLuminanceRectToABGR(dirty_abgr,
+                                              kWidth,
+                                              kHeight,
+                                              luminance,
+                                              &rect_a);
+    RayTracingPreview_CopyLuminanceRectToABGR(dirty_abgr,
+                                              kWidth,
+                                              kHeight,
+                                              luminance,
+                                              &rect_b);
+    RayTracingPreview_CopyLuminanceRectToABGR(dirty_abgr,
+                                              kWidth,
+                                              kHeight,
+                                              luminance,
+                                              &rect_c);
+
+    assert_true("runtime_native_3d_dirty_rect_preview_base_parity_match",
+                memcmp(full_abgr, dirty_abgr, sizeof(full_abgr)) == 0);
     return 0;
 }
 
@@ -6332,6 +6460,8 @@ int main(int argc, char **argv) {
     test_runtime_diffuse_bounce_3d_seed_branch_contract();
     test_runtime_native_3d_render_live_buffer_contract();
     test_runtime_native_3d_render_prepared_region_parity();
+    test_runtime_native_3d_tile_occupancy_contract();
+    test_runtime_native_3d_dirty_rect_preview_base_parity();
     test_animation_output_render_metrics_route_truth_contract();
     test_scene_compile_and_preflight_roundtrip();
     test_runtime_scene_bridge_apply_runtime_fixture();

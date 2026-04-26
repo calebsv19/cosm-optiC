@@ -95,9 +95,18 @@ typedef struct {
 } Native3DLightMarkerScreenInfo;
 static bool PresentNative3DTilePreviewFrame(SDL_Renderer* renderer,
                                             const IntegratorContext* preview_ctx,
+                                            const IntegratorTile* dirty_tile,
                                             const Uint8* preview_buffer,
                                             const Native3DLightMarkerScreenInfo* marker,
-                                            bool have_marker);
+                                            bool have_marker,
+                                            bool reset_dirty_preview);
+static bool PresentNative3DTilePreviewFrameTimed(SDL_Renderer* renderer,
+                                                 const IntegratorContext* preview_ctx,
+                                                 const IntegratorTile* dirty_tile,
+                                                 const Uint8* preview_buffer,
+                                                 const Native3DLightMarkerScreenInfo* marker,
+                                                 bool have_marker,
+                                                 bool reset_dirty_preview);
 static bool ResolveNative3DLightMarkerScreenInfo(int width,
                                                  int height,
                                                  double normalized_t,
@@ -762,6 +771,7 @@ void CleanupRayTracing(void) {
         free(tilePreviewBuffer);
         tilePreviewBuffer = NULL;
     }
+    RayTracingPreview_ShutdownNative3DDirtyRect();
     if (energyBuffer != NULL) {
         free(energyBuffer);
         energyBuffer = NULL;
@@ -874,9 +884,12 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
         int blurRadius = 0;
         bool nativeRenderOk = false;
         double normalized_t = AnimationCurrentNormalizedT();
+        bool tileFrameTimerActive = false;
 
         ts_start_timer("Buffer Calc");
         if (useTiles && tileGrid.tiles && tileGrid.count > 0) {
+            ts_start_timer("Tile Frame Calc");
+            tileFrameTimerActive = true;
             nativeRenderOk = RenderNative3DTilesPreview(renderer,
                                                         WIDTH,
                                                         HEIGHT,
@@ -898,6 +911,9 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
                                                                 &nativeStats);
         }
         ts_stop_timer("Buffer Calc");
+        if (tileFrameTimerActive) {
+            ts_stop_timer("Tile Frame Calc");
+        }
         if (!nativeRenderOk) {
             memset(pixelBuffer, 0, pixelCount * sizeof(Uint8));
         } else {
@@ -1322,13 +1338,16 @@ static bool RenderNative3DTilesPreview(SDL_Renderer* renderer,
                                      light_y)) {
         return false;
     }
+    (void)RuntimeNative3DPrepareFrameTileOccupancy(&frame, grid->tileSize);
 
     if (present_progress && renderer) {
-        if (!PresentNative3DTilePreviewFrame(renderer,
-                                             &preview_ctx,
-                                             pixelBuffer,
-                                             &marker,
-                                             have_marker)) {
+        if (!PresentNative3DTilePreviewFrameTimed(renderer,
+                                                  &preview_ctx,
+                                                  NULL,
+                                                  pixelBuffer,
+                                                  &marker,
+                                                  have_marker,
+                                                  true)) {
             RuntimeNative3DPreparedFrame_Free(&frame);
             return false;
         }
@@ -1337,6 +1356,14 @@ static bool RenderNative3DTilesPreview(SDL_Renderer* renderer,
     for (size_t ti = 0; ti < grid->count; ++ti) {
         const IntegratorTile* tile = &grid->tiles[ti];
         RuntimeNative3DRenderStats tile_stats = {0};
+
+        if (!RuntimeNative3DPreparedRegionMayContainGeometry(&frame,
+                                                             tile->originX,
+                                                             tile->originY,
+                                                             tile->originX + tile->width,
+                                                             tile->originY + tile->height)) {
+            continue;
+        }
 
         if (!RuntimeNative3DRenderPreparedRegion(pixelBuffer,
                                                  integrator_id,
@@ -1353,11 +1380,13 @@ static bool RenderNative3DTilesPreview(SDL_Renderer* renderer,
         RuntimeNative3DRenderStats_Accumulate(&stats, &tile_stats);
 
         if (present_progress && renderer && (ti + 1U) < grid->count) {
-            if (!PresentNative3DTilePreviewFrame(renderer,
-                                                 &preview_ctx,
-                                                 pixelBuffer,
-                                                 &marker,
-                                                 have_marker)) {
+            if (!PresentNative3DTilePreviewFrameTimed(renderer,
+                                                      &preview_ctx,
+                                                      tile,
+                                                      pixelBuffer,
+                                                      &marker,
+                                                      have_marker,
+                                                      false)) {
                 RuntimeNative3DPreparedFrame_Free(&frame);
                 return false;
             }
@@ -1373,12 +1402,31 @@ static bool RenderNative3DTilesPreview(SDL_Renderer* renderer,
 
 static bool PresentNative3DTilePreviewFrame(SDL_Renderer* renderer,
                                             const IntegratorContext* preview_ctx,
+                                            const IntegratorTile* dirty_tile,
                                             const Uint8* preview_buffer,
                                             const Native3DLightMarkerScreenInfo* marker,
-                                            bool have_marker) {
+                                            bool have_marker,
+                                            bool reset_dirty_preview) {
     if (!renderer || !preview_ctx || !preview_buffer) return false;
 
-    DrawPreviewBuffer(renderer, preview_ctx, preview_buffer);
+    SDL_Rect dirty_rect = {0};
+    SDL_Rect* dirty_rect_ptr = NULL;
+    if (dirty_tile) {
+        dirty_rect.x = dirty_tile->originX;
+        dirty_rect.y = dirty_tile->originY;
+        dirty_rect.w = dirty_tile->width;
+        dirty_rect.h = dirty_tile->height;
+        dirty_rect_ptr = &dirty_rect;
+    }
+
+    if (!RayTracingPreview_DrawNative3DPreviewBase(renderer,
+                                                   preview_buffer,
+                                                   preview_ctx->width,
+                                                   preview_ctx->height,
+                                                   dirty_rect_ptr,
+                                                   reset_dirty_preview)) {
+        return false;
+    }
     if (have_marker && marker) {
         DrawResolvedNative3DLightMarker(renderer, marker);
     }
@@ -1388,6 +1436,27 @@ static bool PresentNative3DTilePreviewFrame(SDL_Renderer* renderer,
         return false;
     }
     return render_begin_frame();
+}
+
+static bool PresentNative3DTilePreviewFrameTimed(SDL_Renderer* renderer,
+                                                 const IntegratorContext* preview_ctx,
+                                                 const IntegratorTile* dirty_tile,
+                                                 const Uint8* preview_buffer,
+                                                 const Native3DLightMarkerScreenInfo* marker,
+                                                 bool have_marker,
+                                                 bool reset_dirty_preview) {
+    ts_stop_timer("Buffer Calc");
+    ts_start_timer("Tile Preview Present");
+    bool ok = PresentNative3DTilePreviewFrame(renderer,
+                                              preview_ctx,
+                                              dirty_tile,
+                                              preview_buffer,
+                                              marker,
+                                              have_marker,
+                                              reset_dirty_preview);
+    ts_stop_timer("Tile Preview Present");
+    ts_start_timer("Buffer Calc");
+    return ok;
 }
 
 static void RenderHybridTilesPreview(SDL_Renderer* renderer,

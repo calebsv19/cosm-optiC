@@ -163,6 +163,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_direct_light_3d.o \
 	$(BUILD_DIR)/render/runtime_diffuse_bounce_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render.o \
+	$(BUILD_DIR)/render/runtime_native_3d_tile_occupancy.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_samples.o \

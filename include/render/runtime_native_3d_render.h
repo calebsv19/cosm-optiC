@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "render/runtime_camera_3d_rays.h"
+#include "render/runtime_native_3d_tile_occupancy.h"
 #include "render/runtime_scene_3d.h"
 #include "render/ray_tracing_integrator_catalog.h"
 
@@ -23,6 +24,7 @@ typedef struct {
 typedef struct {
     RuntimeScene3D scene;
     RuntimeCameraProjector3D projector;
+    RuntimeNative3DTileOccupancy tileOccupancy;
     int width;
     int height;
     bool valid;
@@ -45,6 +47,12 @@ bool RuntimeNative3DRenderPreparedRegion(uint8_t* pixel_buffer,
                                          int end_x,
                                          int end_y,
                                          RuntimeNative3DRenderStats* out_stats);
+bool RuntimeNative3DPrepareFrameTileOccupancy(RuntimeNative3DPreparedFrame* frame, int tile_size);
+bool RuntimeNative3DPreparedRegionMayContainGeometry(const RuntimeNative3DPreparedFrame* frame,
+                                                     int start_x,
+                                                     int start_y,
+                                                     int end_x,
+                                                     int end_y);
 bool RuntimeNative3DRenderToPixelBuffer(uint8_t* pixel_buffer,
                                         RayTracing3DIntegratorId integrator_id,
                                         int width,

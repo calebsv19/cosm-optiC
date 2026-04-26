@@ -257,6 +257,7 @@ bool RuntimeNative3DPrepareFrame(RuntimeNative3DPreparedFrame* out_frame,
 
     if (!out_frame || width <= 0 || height <= 0) return false;
 
+    RuntimeNative3DTileOccupancy_Init(&frame.tileOccupancy);
     RuntimeScene3D_Init(&frame.scene);
     if (!runtime_native_3d_render_build_live_scene(&frame.scene,
                                                    normalized_t,
@@ -280,6 +281,7 @@ bool RuntimeNative3DPrepareFrame(RuntimeNative3DPreparedFrame* out_frame,
 
 void RuntimeNative3DPreparedFrame_Free(RuntimeNative3DPreparedFrame* frame) {
     if (!frame) return;
+    RuntimeNative3DTileOccupancy_Free(&frame->tileOccupancy);
     RuntimeScene3D_Free(&frame->scene);
     memset(frame, 0, sizeof(*frame));
 }
@@ -307,6 +309,27 @@ bool RuntimeNative3DRenderPreparedRegion(uint8_t* pixel_buffer,
                                                         &frame->scene,
                                                         &frame->projector,
                                                         out_stats);
+}
+
+bool RuntimeNative3DPrepareFrameTileOccupancy(RuntimeNative3DPreparedFrame* frame, int tile_size) {
+    if (!frame || !frame->valid) return false;
+    return RuntimeNative3DTileOccupancy_Build(&frame->tileOccupancy,
+                                              &frame->scene,
+                                              &frame->projector,
+                                              tile_size);
+}
+
+bool RuntimeNative3DPreparedRegionMayContainGeometry(const RuntimeNative3DPreparedFrame* frame,
+                                                     int start_x,
+                                                     int start_y,
+                                                     int end_x,
+                                                     int end_y) {
+    if (!frame || !frame->valid) return true;
+    return RuntimeNative3DTileOccupancy_RegionMayContainGeometry(&frame->tileOccupancy,
+                                                                 start_x,
+                                                                 start_y,
+                                                                 end_x,
+                                                                 end_y);
 }
 
 bool RuntimeNative3DRenderToPixelBuffer(uint8_t* pixel_buffer,
