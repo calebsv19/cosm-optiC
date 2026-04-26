@@ -35,7 +35,7 @@ EditorModeCapabilities EditorModeRouter_GetCapabilities(void) {
     RayTracingRuntimeRoute route = ResolveRoute();
     EditorModeCapabilities caps;
 
-    caps.isControlled3D = RayTracingModeBackend_IsCompat3DFallback(&route);
+    caps.isControlled3D = RayTracingModeBackend_IsControlled3D(&route);
     caps.uses2DProjectionFallback = route.fallbackTo2DProjection;
     caps.canEditXY = true;
     caps.canEditZ = false;
@@ -51,14 +51,22 @@ bool EditorModeRouter_IsControlled3D(void) {
 }
 
 const char* EditorModeRouter_SpaceButtonLabel(void) {
-    if (EditorModeRouter_IsControlled3D()) {
+    RayTracingRuntimeRoute route = ResolveRoute();
+    if (RayTracingModeBackend_IsNative3D(&route)) {
+        return "Space: 3D (Native)";
+    }
+    if (RayTracingModeBackend_IsCompat3DFallback(&route)) {
         return "Space: 3D (Compat Fallback)";
     }
     return "Space: 2D";
 }
 
 const char* EditorModeRouter_RuntimeHintLabel(void) {
-    if (EditorModeRouter_IsControlled3D()) {
+    RayTracingRuntimeRoute route = ResolveRoute();
+    if (RayTracingModeBackend_IsNative3D(&route)) {
+        return "3D native route active: bounded runtime scene contracts are ready.";
+    }
+    if (RayTracingModeBackend_IsCompat3DFallback(&route)) {
         return "3D compat fallback active: editor routes through 2D projection/backend.";
     }
     return "2D backend active.";

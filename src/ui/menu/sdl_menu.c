@@ -12,11 +12,13 @@
 #include "app/scene_loop_policy.h"
 #include "config/config_manager.h"
 #include "editor/scene_editor.h"
+#include "engine/Render/render_font.h"
 #include "engine/Render/render_pipeline.h"
 #include "render/text_draw.h"
 #include "render/text_font_cache.h"
 #include "render/vk_shared_device.h"
 #include "ui/shared_theme_font_adapter.h"
+#include "ui/menu_batch_panel.h"
 #include "ui/sdl_menu_input.h"
 #include "ui/sdl_menu_render.h"
 #include "ui/sdl_menu_state.h"
@@ -154,7 +156,7 @@ static void shutdown_menu(SDL_Window* window,
         SDL_DestroyWindow(window);
     }
     (void)font;
-    ray_tracing_text_font_cache_shutdown();
+    shutdownFontSystem();
     if (TTF_WasInit() != 0) {
         TTF_Quit();
     }
@@ -190,7 +192,8 @@ static bool menu_state_interaction_active(const MenuRuntimeState* state) {
            state->editingBounce ||
            state->editingFrame ||
            state->editingInputRoot ||
-           state->editingOutputRoot;
+           state->editingOutputRoot ||
+           menu_batch_panel_edit_active(state);
 }
 
 static bool menu_process_event(SDL_Window* window,
@@ -254,6 +257,9 @@ static bool menu_process_event(SDL_Window* window,
             menu_input_handle_mouse_motion(&mutable_event, menu_state);
             return true;
         case SDL_TEXTINPUT:
+            if (menu_batch_panel_append_text(menu_state, mutable_event.text.text)) {
+                return true;
+            }
             if (menu_state->editingInputRoot || menu_state->editingOutputRoot) {
                 if (strlen(menu_state->pathInputBuffer) + strlen(mutable_event.text.text) <
                     sizeof(menu_state->pathInputBuffer)) {

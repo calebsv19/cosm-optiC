@@ -3,7 +3,10 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "scene/object_manager.h"
+
 #define RUNTIME_SCENE_BRIDGE_MAX_DIGEST_PRIMITIVES 16
+#define RUNTIME_SCENE_BRIDGE_MAX_PRIMITIVE_SEEDS MAX_OBJECTS
 
 typedef struct RuntimeSceneBridgePreflight {
     bool valid_contract;
@@ -65,6 +68,38 @@ typedef struct RuntimeSceneBridge3DDigestState {
     RuntimeSceneBridgePrimitiveDigest primitives[RUNTIME_SCENE_BRIDGE_MAX_DIGEST_PRIMITIVES];
 } RuntimeSceneBridge3DDigestState;
 
+typedef struct RuntimeSceneBridgePrimitiveSeed {
+    RuntimeSceneBridgePrimitiveKind kind;
+    char object_id[64];
+    int scene_object_index;
+    bool has_dimensions;
+    double origin_x;
+    double origin_y;
+    double origin_z;
+    double axis_u_x;
+    double axis_u_y;
+    double axis_u_z;
+    double axis_v_x;
+    double axis_v_y;
+    double axis_v_z;
+    double normal_x;
+    double normal_y;
+    double normal_z;
+    double width;
+    double height;
+    double depth;
+} RuntimeSceneBridgePrimitiveSeed;
+
+typedef struct RuntimeSceneBridge3DPrimitiveSeedState {
+    bool valid;
+    int primitive_count;
+    int plane_primitive_count;
+    int rect_prism_primitive_count;
+    int excluded_primitive_count;
+    RuntimeSceneBridgePrimitiveSeed
+        primitives[RUNTIME_SCENE_BRIDGE_MAX_PRIMITIVE_SEEDS];
+} RuntimeSceneBridge3DPrimitiveSeedState;
+
 bool runtime_scene_bridge_preflight_json(const char *runtime_scene_json,
                                          RuntimeSceneBridgePreflight *out_preflight);
 bool runtime_scene_bridge_preflight_file(const char *runtime_scene_path,
@@ -83,6 +118,8 @@ bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_j
 
 void runtime_scene_bridge_get_last_3d_scaffold_state(RuntimeSceneBridge3DScaffoldState *out_state);
 void runtime_scene_bridge_get_last_3d_digest_state(RuntimeSceneBridge3DDigestState *out_state);
+void runtime_scene_bridge_get_last_3d_primitive_seed_state(
+    RuntimeSceneBridge3DPrimitiveSeedState *out_state);
 bool runtime_scene_bridge_get_last_object_id_for_scene_index(int scene_index,
                                                              char *out_object_id,
                                                              size_t out_object_id_size);

@@ -5,11 +5,12 @@
 #include <SDL2/SDL_ttf.h>
 #include <stdbool.h>
 
+#include "ui/menu_layout.h"
 #include "ui/sdl_menu_state.h"
 
 #define SDL_MENU_MAX_SLIDERS 24
 
-typedef struct {
+typedef struct MenuSlider {
     int *value;
     int min;
     int max;
@@ -22,7 +23,7 @@ typedef struct {
     const char *label;
 } MenuSlider;
 
-typedef struct {
+typedef struct SliderLayout {
     MenuSlider items[SDL_MENU_MAX_SLIDERS];
     size_t count;
     int nextY;
@@ -35,7 +36,7 @@ typedef struct {
     float scroll;
 } SliderLayout;
 
-typedef struct {
+typedef struct MenuButtonLayout {
     SDL_Rect interactiveRect;
     SDL_Rect deepRenderRect;
     SDL_Rect bounceRect;
@@ -72,10 +73,11 @@ const char* menu_space_mode_button_label(void);
 
 void menu_render_build_button_layout(TTF_Font* font,
                                      MenuRuntimeState* state,
+                                     const MenuScreenLayout* screen_layout,
                                      MenuButtonLayout* out_layout);
 void menu_render_build_slider_layout(TTF_Font* font,
                                      MenuRuntimeState* state,
-                                     const MenuButtonLayout* buttons,
+                                     const MenuScreenLayout* screen_layout,
                                      SliderLayout* out_layout);
 void menu_render_draw_sliders(SDL_Renderer* renderer,
                               TTF_Font* font,
@@ -83,6 +85,29 @@ void menu_render_draw_sliders(SDL_Renderer* renderer,
                               const SliderLayout* layout);
 
 void menu_render_frame(SDL_Renderer* renderer, TTF_Font* font, MenuRuntimeState* state);
+
+void menu_render_draw_text_color(SDL_Renderer *renderer,
+                                 TTF_Font *font,
+                                 int x,
+                                 int y,
+                                 SDL_Color color,
+                                 const char *text);
+void menu_render_fit_text_to_width(TTF_Font *font,
+                                   const char *text,
+                                   int max_width,
+                                   char *out,
+                                   size_t out_size);
+void menu_render_draw_button_rect(SDL_Renderer *renderer,
+                                  TTF_Font *font,
+                                  const SDL_Rect* rect,
+                                  const char *text,
+                                  bool active);
+void menu_render_draw_root_row(SDL_Renderer *renderer,
+                               TTF_Font *font,
+                               const SDL_Rect *value_rect,
+                               const char *label,
+                               const char *value,
+                               bool editing);
 
 void RenderText(SDL_Renderer *renderer, TTF_Font *font, int x, int y, const char *format, ...);
 void RenderButton(SDL_Renderer *renderer, TTF_Font *font, int x, int y, int width, int height, const char *text, bool active);

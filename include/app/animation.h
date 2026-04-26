@@ -51,6 +51,9 @@ void SaveSceneConfig(void);
 // Saves a single frame of animation to disk.
 void SaveFrame(int frameNumber);
 
+// Returns the current normalized playback position used by the live runtime loop.
+double AnimationCurrentNormalizedT(void);
+
 // Indicates whether a fluid scene should override the default scene.
 bool AnimationUseFluidScene(void);
 

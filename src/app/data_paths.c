@@ -13,6 +13,8 @@ static const char *k_default_shape_asset_dir = "config/objects";
 static const char *k_default_import_dir = "import";
 static const char *k_default_frame_root = "data/runtime/frames";
 static const char *k_default_frame_dir = "data/runtime/frames/default";
+static const char *k_default_video_output_root = "data/runtime/videos";
+static const char *k_default_video_output_filename = "output.mp4";
 static const char *k_default_video_output_path = "data/runtime/videos/output.mp4";
 
 static bool dir_exists(const char *path) {
@@ -214,6 +216,14 @@ const char *ray_tracing_default_frame_dir(void) {
     return k_default_frame_dir;
 }
 
+const char *ray_tracing_default_video_output_root(void) {
+    return k_default_video_output_root;
+}
+
+const char *ray_tracing_default_video_output_filename(void) {
+    return k_default_video_output_filename;
+}
+
 const char *ray_tracing_default_video_output_path(void) {
     return k_default_video_output_path;
 }
@@ -228,6 +238,12 @@ const char *ray_tracing_env_output_root(void) {
     const char *env = getenv("RAY_TRACING_OUTPUT_ROOT");
     if (env && env[0]) return env;
     return k_default_output_root;
+}
+
+const char *ray_tracing_env_video_output_root(void) {
+    const char *env = getenv("RAY_TRACING_VIDEO_OUTPUT_ROOT");
+    if (env && env[0]) return env;
+    return k_default_video_output_root;
 }
 
 bool ray_tracing_compose_path(const char *root,
@@ -248,6 +264,39 @@ bool ray_tracing_compose_path(const char *root,
         snprintf(out, out_size, "%s/%s", root, leaf);
     }
     return true;
+}
+
+bool ray_tracing_resolve_frame_output_dir(const char *configured_frame_dir,
+                                          char *out,
+                                          size_t out_size) {
+    const char *candidate = configured_frame_dir;
+    if (!out || out_size == 0) return false;
+    if (!candidate || !candidate[0]) {
+        candidate = k_default_frame_dir;
+    }
+    return snprintf(out, out_size, "%s", candidate) < (int)out_size;
+}
+
+bool ray_tracing_resolve_video_output_root(const char *configured_video_output_root,
+                                           char *out,
+                                           size_t out_size) {
+    const char *candidate = configured_video_output_root;
+    if (!out || out_size == 0) return false;
+    if (!candidate || !candidate[0]) {
+        candidate = ray_tracing_env_video_output_root();
+    }
+    return snprintf(out, out_size, "%s", candidate) < (int)out_size;
+}
+
+bool ray_tracing_resolve_video_output_path(const char *configured_video_output_root,
+                                           char *out,
+                                           size_t out_size) {
+    char root[PATH_MAX];
+    if (!out || out_size == 0) return false;
+    if (!ray_tracing_resolve_video_output_root(configured_video_output_root, root, sizeof(root))) {
+        return false;
+    }
+    return ray_tracing_compose_path(root, k_default_video_output_filename, out, out_size);
 }
 
 const char *ray_tracing_resolve_shape_asset_dir(const char *shape_asset_env,

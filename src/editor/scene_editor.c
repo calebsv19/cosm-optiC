@@ -20,6 +20,7 @@
 #include "editor/scene_editor_session_runtime.h"
 #include "editor/scene_editor_surface_render.h"
 #include "editor/scene_editor_viewport_nav.h"
+#include "engine/Render/render_font.h"
 #include "engine/Render/render_pipeline.h"
 #include "render/text_draw.h"
 #include "render/text_font_cache.h"
@@ -318,6 +319,7 @@ static bool SceneEditorHandleSystemInput(SceneEditor* editor,
             }
             ray_tracing_shared_theme_save_persisted();
             ray_tracing_text_reset_renderer(editor->renderer);
+            invalidateActiveFontHandle();
             ray_tracing_text_font_cache_shutdown();
             result->target = SCENE_EDITOR_INPUT_TARGET_SYSTEM;
             result->consumed = true;

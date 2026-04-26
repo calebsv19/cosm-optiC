@@ -1,10 +1,12 @@
 #include "app/animation_output.h"
 
 #include "app/animation.h"
+#include "app/data_paths.h"
 #include "config/config_manager.h"
 #include "export/render_metrics_dataset.h"
 
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -79,11 +81,16 @@ static void EnsureDirectoryExists(const char* path) {
 }
 
 void SaveFrame(int frameNumber) {
+    char frame_dir[PATH_MAX];
+    if (!ray_tracing_resolve_frame_output_dir(animSettings.frameDir, frame_dir, sizeof(frame_dir))) {
+        fprintf(stderr, "SaveFrame failed to resolve frame directory.\n");
+        return;
+    }
 #if USE_VULKAN
-    EnsureDirectoryExists(animSettings.frameDir);
+    EnsureDirectoryExists(frame_dir);
 
-    char filename[256];
-    snprintf(filename, sizeof(filename), "%s/frame_%04d.bmp", animSettings.frameDir, frameNumber);
+    char filename[PATH_MAX];
+    snprintf(filename, sizeof(filename), "%s/frame_%04d.bmp", frame_dir, frameNumber);
 
     VkResult capture_result = vk_renderer_request_capture((VkRenderer*)renderer, filename);
     if (capture_result != VK_SUCCESS) {
@@ -91,10 +98,10 @@ void SaveFrame(int frameNumber) {
     }
     return;
 #else
-    EnsureDirectoryExists(animSettings.frameDir);
+    EnsureDirectoryExists(frame_dir);
 
-    char filename[256];
-    snprintf(filename, sizeof(filename), "%s/frame_%04d.bmp", animSettings.frameDir, frameNumber);
+    char filename[PATH_MAX];
+    snprintf(filename, sizeof(filename), "%s/frame_%04d.bmp", frame_dir, frameNumber);
 
     printf("Saving frame to: %s\n", filename);
 

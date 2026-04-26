@@ -109,6 +109,7 @@ AnimationConfig animSettings = {
     .inputRoot = "config",
     .outputRoot = "data/runtime",
     .frameDir = FRAME_DIR_DEFAULT,
+    .videoOutputRoot = "data/runtime/videos",
     .loopMode = "Normal",
     .lightMode = 0,
     .blurMode = 0,
@@ -317,6 +318,8 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "outputRoot", json_object_new_string(animSettings.outputRoot));
     config_runtime_paths_normalize_frame_dir();
     json_object_object_add(config, "frameDir", json_object_new_string(animSettings.frameDir));
+    config_runtime_paths_normalize_video_output_root();
+    json_object_object_add(config, "videoOutputRoot", json_object_new_string(animSettings.videoOutputRoot));
     json_object_object_add(config, "maxLoopCount", json_object_new_int(animSettings.maxLoopCount));
     json_object_object_add(config, "loopMode", json_object_new_string(animSettings.loopMode));
     json_object_object_add(config, "lightMode", json_object_new_int(animSettings.lightMode));
@@ -761,6 +764,27 @@ void LoadAnimationConfig(void) {
         }
     }
     config_runtime_paths_normalize_frame_dir();
+    if (json_object_object_get_ex(config, "videoOutputRoot", &temp) &&
+        json_object_is_type(temp, json_type_string)) {
+        const char *root = json_object_get_string(temp);
+        if (root) {
+            strncpy(animSettings.videoOutputRoot, root, sizeof(animSettings.videoOutputRoot) - 1);
+            animSettings.videoOutputRoot[sizeof(animSettings.videoOutputRoot) - 1] = '\0';
+        }
+    } else {
+        char migrated_video_root[sizeof(animSettings.videoOutputRoot)];
+        if (ray_tracing_compose_path(animSettings.outputRoot,
+                                     "videos",
+                                     migrated_video_root,
+                                     sizeof(migrated_video_root))) {
+            strncpy(animSettings.videoOutputRoot,
+                    migrated_video_root,
+                    sizeof(animSettings.videoOutputRoot) - 1);
+            animSettings.videoOutputRoot[sizeof(animSettings.videoOutputRoot) - 1] = '\0';
+        }
+    }
+    config_runtime_paths_normalize_video_output_root();
+    (void)setenv("RAY_TRACING_VIDEO_OUTPUT_ROOT", animSettings.videoOutputRoot, 1);
     if (json_object_object_get_ex(config, "lightMode", &temp))
         animSettings.lightMode = json_object_get_int(temp);
     if (json_object_object_get_ex(config, "blurMode", &temp))
@@ -935,8 +959,15 @@ void LoadAnimationConfig(void) {
                                                          "output",
                                                          true,
                                                          true);
+    root_corrected |= config_runtime_paths_validate_root(animSettings.videoOutputRoot,
+                                                         sizeof(animSettings.videoOutputRoot),
+                                                         ray_tracing_default_video_output_root(),
+                                                         "video output",
+                                                         true,
+                                                         true);
     (void)setenv("RAY_TRACING_INPUT_ROOT", animSettings.inputRoot, 1);
     (void)setenv("RAY_TRACING_OUTPUT_ROOT", animSettings.outputRoot, 1);
+    (void)setenv("RAY_TRACING_VIDEO_OUTPUT_ROOT", animSettings.videoOutputRoot, 1);
     if (root_corrected) {
         SaveAnimationConfig();
         fprintf(stderr,

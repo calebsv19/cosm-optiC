@@ -2,10 +2,11 @@
 
 Start here for public repository documentation.
 
-Last audited: 2026-04-21.
+Last audited: 2026-04-24.
 
 Current public focus:
-- preview mode expansion in the retained-`3D` follow-camera lane.
+- internal `3D` runtime/render foundation in `ray_tracing` itself
+- direct-light `3D` proof before VF3D / `physics_sim` ingestion
 
 ## Scaffold State
 - `docs/current_truth.md`: current scaffold/runtime structure and verification snapshot.

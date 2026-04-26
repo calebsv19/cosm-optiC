@@ -10,6 +10,7 @@ typedef enum {
 
 bool initFontSystem(void);
 void shutdownFontSystem(void);
+void invalidateActiveFontHandle(void);
 bool loadFontByID(FontID id);
 TTF_Font* getActiveFont(void);
 bool refreshActiveFontFromAnimationConfig(void);

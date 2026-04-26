@@ -4,6 +4,7 @@ set -eu
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 APP_CONTENTS_DIR="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 RES_DIR="$APP_CONTENTS_DIR/Resources"
+TOOLS_DIR="$RES_DIR/bin"
 APP_SUPPORT_DIR_DEFAULT="${HOME}/Library/Application Support/RayTracing"
 APP_SUPPORT_DIR="${RAY_TRACING_APP_SUPPORT_DIR:-$APP_SUPPORT_DIR_DEFAULT}"
 RUNTIME_DIR_DEFAULT="$APP_SUPPORT_DIR/runtime"
@@ -56,6 +57,10 @@ export RAY_TRACING_USE_SHARED_THEME_FONT="${RAY_TRACING_USE_SHARED_THEME_FONT:-1
 export RAY_TRACING_USE_SHARED_FONT="${RAY_TRACING_USE_SHARED_FONT:-1}"
 export RAY_TRACING_FONT_PRESET="${RAY_TRACING_FONT_PRESET:-ide}"
 export RAY_TRACING_RENDER_METRICS_DATASET_PATH="${RAY_TRACING_RENDER_METRICS_DATASET_PATH:-$RUNTIME_DIR/data/runtime/render_metrics.dataset.json}"
+if [ -x "$TOOLS_DIR/ffmpeg" ] && [ -z "${RAY_TRACING_FFMPEG_BIN:-}" ]; then
+    export RAY_TRACING_FFMPEG_BIN="$TOOLS_DIR/ffmpeg"
+fi
+export PATH="$TOOLS_DIR:/opt/homebrew/bin:/usr/local/bin:${PATH:-/usr/bin:/bin:/usr/sbin:/sbin}"
 
 if [ -f "$MOLTENVK_DYLIB" ]; then
     VK_RUNTIME_DIR="$RUNTIME_DIR/vk"
@@ -96,6 +101,8 @@ if [ "${1:-}" = "--print-config" ]; then
     echo "RAY_TRACING_USE_SHARED_FONT=$RAY_TRACING_USE_SHARED_FONT"
     echo "RAY_TRACING_FONT_PRESET=$RAY_TRACING_FONT_PRESET"
     echo "RAY_TRACING_RENDER_METRICS_DATASET_PATH=$RAY_TRACING_RENDER_METRICS_DATASET_PATH"
+    echo "RAY_TRACING_FFMPEG_BIN=${RAY_TRACING_FFMPEG_BIN:-}"
+    echo "PATH=$PATH"
     echo "VK_ICD_FILENAMES=${VK_ICD_FILENAMES:-}"
     echo "VK_DRIVER_FILES=${VK_DRIVER_FILES:-}"
     echo "MOLTENVK_DYLIB=$MOLTENVK_DYLIB"
@@ -112,6 +119,9 @@ if [ "${1:-}" = "--self-test" ]; then
     [ -d "$RUNTIME_DIR/data/runtime" ] || { echo "missing: runtime dir" >&2; exit 1; }
     [ -d "$RUNTIME_DIR/data/runtime/frames" ] || { echo "missing: runtime frames dir" >&2; exit 1; }
     [ -d "$RUNTIME_DIR/data/runtime/videos" ] || { echo "missing: runtime videos dir" >&2; exit 1; }
+    if [ -n "${RAY_TRACING_FFMPEG_BIN:-}" ]; then
+        [ -x "$RAY_TRACING_FFMPEG_BIN" ] || { echo "missing: configured ffmpeg binary" >&2; exit 1; }
+    fi
     [ -f "$RUNTIME_DIR/vk_renderer/shaders/textured.vert.spv" ] || { echo "missing: bundled vk_renderer shader" >&2; exit 1; }
     [ -f "$RUNTIME_DIR/shaders/textured.vert.spv" ] || { echo "missing: bundled runtime shader" >&2; exit 1; }
     [ -f "$MOLTENVK_DYLIB" ] || { echo "missing: bundled MoltenVK dylib" >&2; exit 1; }
@@ -123,6 +133,8 @@ if [ "${1:-}" = "--self-test" ]; then
     echo "SHAPE_ASSET_DIR=$SHAPE_ASSET_DIR"
     echo "RAY_TRACING_FONT_PRESET=$RAY_TRACING_FONT_PRESET"
     echo "RAY_TRACING_RENDER_METRICS_DATASET_PATH=$RAY_TRACING_RENDER_METRICS_DATASET_PATH"
+    echo "RAY_TRACING_FFMPEG_BIN=${RAY_TRACING_FFMPEG_BIN:-}"
+    echo "PATH=$PATH"
     echo "VK_ICD_FILENAMES=${VK_ICD_FILENAMES:-}"
     echo "VK_DRIVER_FILES=${VK_DRIVER_FILES:-}"
     echo "MOLTENVK_DYLIB=$MOLTENVK_DYLIB"

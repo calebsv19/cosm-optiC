@@ -10,15 +10,27 @@ const char *ray_tracing_default_shape_asset_dir(void);
 const char *ray_tracing_default_import_dir(void);
 const char *ray_tracing_default_frame_root(void);
 const char *ray_tracing_default_frame_dir(void);
+const char *ray_tracing_default_video_output_root(void);
+const char *ray_tracing_default_video_output_filename(void);
 const char *ray_tracing_default_video_output_path(void);
 
 const char *ray_tracing_env_input_root(void);
 const char *ray_tracing_env_output_root(void);
+const char *ray_tracing_env_video_output_root(void);
 
 bool ray_tracing_compose_path(const char *root,
                               const char *leaf,
                               char *out,
                               size_t out_size);
+bool ray_tracing_resolve_frame_output_dir(const char *configured_frame_dir,
+                                          char *out,
+                                          size_t out_size);
+bool ray_tracing_resolve_video_output_root(const char *configured_video_output_root,
+                                           char *out,
+                                           size_t out_size);
+bool ray_tracing_resolve_video_output_path(const char *configured_video_output_root,
+                                           char *out,
+                                           size_t out_size);
 
 const char *ray_tracing_resolve_shape_asset_dir(const char *shape_asset_env,
                                                 char *out,

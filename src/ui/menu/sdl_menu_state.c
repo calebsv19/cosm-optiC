@@ -1,5 +1,7 @@
 #include "ui/sdl_menu_state.h"
 
+#include "ui/menu_batch_panel.h"
+
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -381,9 +383,15 @@ void menu_state_init(MenuRuntimeState* state) {
     if (animSettings.outputRoot[0]) {
         (void)setenv("RAY_TRACING_OUTPUT_ROOT", animSettings.outputRoot, 1);
     }
+    if (animSettings.videoOutputRoot[0]) {
+        (void)setenv("RAY_TRACING_VIDEO_OUTPUT_ROOT", animSettings.videoOutputRoot, 1);
+    }
     state->editingInputRoot = false;
     state->editingOutputRoot = false;
+    state->editingFrameDir = false;
+    state->editingVideoOutputRoot = false;
     state->pathInputBuffer[0] = '\0';
+    menu_batch_panel_refresh(state);
     state->sliderScroll = 0.0f;
     state->sliderMaxScroll = 0.0f;
     state->sliderPanelRect = (SDL_Rect){0, 0, 0, 0};
@@ -404,8 +412,23 @@ void menu_state_reset_defaults(MenuRuntimeState* state) {
     animSettings.inputRoot[sizeof(animSettings.inputRoot) - 1] = '\0';
     strncpy(animSettings.outputRoot, ray_tracing_default_output_root(), sizeof(animSettings.outputRoot) - 1);
     animSettings.outputRoot[sizeof(animSettings.outputRoot) - 1] = '\0';
+    strncpy(animSettings.frameDir, ray_tracing_default_frame_dir(), sizeof(animSettings.frameDir) - 1);
+    animSettings.frameDir[sizeof(animSettings.frameDir) - 1] = '\0';
+    strncpy(animSettings.videoOutputRoot,
+            ray_tracing_default_video_output_root(),
+            sizeof(animSettings.videoOutputRoot) - 1);
+    animSettings.videoOutputRoot[sizeof(animSettings.videoOutputRoot) - 1] = '\0';
     (void)setenv("RAY_TRACING_INPUT_ROOT", animSettings.inputRoot, 1);
     (void)setenv("RAY_TRACING_OUTPUT_ROOT", animSettings.outputRoot, 1);
+    (void)setenv("RAY_TRACING_VIDEO_OUTPUT_ROOT", animSettings.videoOutputRoot, 1);
+    if (state) {
+        state->editingInputRoot = false;
+        state->editingOutputRoot = false;
+        state->editingFrameDir = false;
+        state->editingVideoOutputRoot = false;
+        state->pathInputBuffer[0] = '\0';
+        menu_batch_panel_refresh(state);
+    }
     animSettings.useTiledRenderer = false;
     animSettings.tilePreviewEnabled = false;
     animSettings.tileSize = 16;

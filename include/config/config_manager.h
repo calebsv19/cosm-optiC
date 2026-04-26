@@ -49,6 +49,7 @@ typedef struct {
     char inputRoot[256];
     char outputRoot[256];
     char frameDir[256];
+    char videoOutputRoot[256];
     char loopMode[64];
     int lightMode;
     int blurMode;

@@ -14,8 +14,7 @@
 
 typedef enum SceneEditorViewportRenderLane {
     SCENE_EDITOR_VIEWPORT_RENDER_LANE_PLANAR_2D = 0,
-    SCENE_EDITOR_VIEWPORT_RENDER_LANE_DIGEST_3D = 1,
-    SCENE_EDITOR_VIEWPORT_RENDER_LANE_NATIVE_3D_RESERVED = 2
+    SCENE_EDITOR_VIEWPORT_RENDER_LANE_DIGEST_3D = 1
 } SceneEditorViewportRenderLane;
 
 static void scene_editor_viewport_render_fluid_bounds(SDL_Renderer* renderer) {
@@ -52,11 +51,8 @@ static void scene_editor_viewport_render_fluid_bounds(SDL_Renderer* renderer) {
 
 static SceneEditorViewportRenderLane scene_editor_viewport_render_resolve_lane(void) {
     RayTracingRuntimeRoute route = RayTracingModeBackend_ResolveRoute();
-    if (RayTracingModeBackend_IsCompat3DFallback(&route)) {
+    if (RayTracingModeBackend_IsControlled3D(&route)) {
         return SCENE_EDITOR_VIEWPORT_RENDER_LANE_DIGEST_3D;
-    }
-    if (RayTracingModeBackend_IsNative3D(&route)) {
-        return SCENE_EDITOR_VIEWPORT_RENDER_LANE_NATIVE_3D_RESERVED;
     }
     return SCENE_EDITOR_VIEWPORT_RENDER_LANE_PLANAR_2D;
 }
@@ -102,12 +98,10 @@ void SceneEditorViewportRenderDraw(SDL_Renderer* renderer,
     if (lane == SCENE_EDITOR_VIEWPORT_RENDER_LANE_PLANAR_2D) {
         scene_editor_viewport_render_active_mode_layer(renderer, current_mode);
         scene_editor_viewport_render_fluid_bounds(renderer);
-    } else if (lane == SCENE_EDITOR_VIEWPORT_RENDER_LANE_DIGEST_3D) {
+    } else {
         if (digest_render) {
             digest_render(renderer);
         }
-    } else {
-        /* Native 3D lane reserved: no viewport-owned fallback primitives in this phase. */
     }
 
     if (use_clip) {

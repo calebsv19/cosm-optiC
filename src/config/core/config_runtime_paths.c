@@ -57,6 +57,16 @@ void config_runtime_paths_normalize_data_roots(void) {
     }
 }
 
+void config_runtime_paths_normalize_video_output_root(void) {
+    const char *default_video_root = ray_tracing_default_video_output_root();
+    if (animSettings.videoOutputRoot[0] == '\0') {
+        strncpy(animSettings.videoOutputRoot,
+                default_video_root,
+                sizeof(animSettings.videoOutputRoot) - 1);
+        animSettings.videoOutputRoot[sizeof(animSettings.videoOutputRoot) - 1] = '\0';
+    }
+}
+
 bool config_runtime_paths_validate_root(char *target,
                                         size_t target_size,
                                         const char *default_path,

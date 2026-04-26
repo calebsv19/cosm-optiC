@@ -11,10 +11,12 @@ PACKAGE_APP_DIR := $(DIST_DIR)/$(PACKAGE_APP_NAME)
 PACKAGE_CONTENTS_DIR := $(PACKAGE_APP_DIR)/Contents
 PACKAGE_MACOS_DIR := $(PACKAGE_CONTENTS_DIR)/MacOS
 PACKAGE_RESOURCES_DIR := $(PACKAGE_CONTENTS_DIR)/Resources
+PACKAGE_TOOLS_DIR := $(PACKAGE_RESOURCES_DIR)/bin
 PACKAGE_FRAMEWORKS_DIR := $(PACKAGE_CONTENTS_DIR)/Frameworks
 PACKAGE_INFO_PLIST_SRC := tools/packaging/macos/Info.plist
 PACKAGE_LAUNCHER_SRC := tools/packaging/macos/raytracing-launcher
 PACKAGE_DYLIB_BUNDLER := tools/packaging/macos/bundle-dylibs.sh
+PACKAGE_FFMPEG_SRC ?= $(shell command -v ffmpeg 2>/dev/null)
 DESKTOP_APP_DIR ?= $(HOME)/Desktop/$(PACKAGE_APP_NAME)
 PACKAGE_ADHOC_SIGN_IDENTITY ?= -
 
@@ -148,6 +150,14 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/accel/irradiance_cache.o \
 	$(BUILD_DIR)/render/adapters/space_mode_adapter.o \
 	$(BUILD_DIR)/render/backend/ray_tracing_mode_backend.o \
+	$(BUILD_DIR)/render/runtime_camera_3d_rays.o \
+	$(BUILD_DIR)/render/runtime_direct_light_3d.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render.o \
+	$(BUILD_DIR)/render/runtime_ray_3d.o \
+	$(BUILD_DIR)/render/runtime_scene_3d.o \
+	$(BUILD_DIR)/render/runtime_scene_3d_samples.o \
+	$(BUILD_DIR)/render/runtime_scene_3d_builder.o \
+	$(BUILD_DIR)/render/runtime_visibility_3d.o \
 	$(BUILD_DIR)/editor/editor_mode_router.o \
 	$(BUILD_DIR)/editor/scene_editor_control_surface.o \
 	$(BUILD_DIR)/editor/scene_editor_tool_state.o \
@@ -178,6 +188,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/app/preview_camera_sample.o \
 	$(BUILD_DIR)/app/preview_camera_projector.o \
 	$(BUILD_DIR)/app/preview_retained_scene_renderer.o \
+	$(BUILD_DIR)/app/render_export_batch.o \
 	$(BUILD_DIR)/app/animation_fluid_scene.o \
 	$(BUILD_DIR)/app/data_paths.o \
 	$(BUILD_DIR)/config/core/config_runtime_paths.o \
@@ -185,6 +196,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/config/scene/config_scene_path_io.o \
 	$(BUILD_DIR)/config/core/config_manager.o \
 	$(BUILD_DIR)/ui/menu/shared_theme_font_adapter.o \
+	$(BUILD_DIR)/tools/make_video.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_core.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_json.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_flatten.o \
@@ -193,6 +205,11 @@ TEST_DEPS := \
 	$(BUILD_DIR)/import/scene_bundle_import.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_json_utils.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge.o \
+	$(BUILD_DIR)/ui/menu/sdl_menu_render.o \
+	$(BUILD_DIR)/ui/menu/sdl_menu_render_sliders.o \
+	$(BUILD_DIR)/ui/menu/menu_layout.o \
+	$(BUILD_DIR)/ui/menu/menu_panel_chrome.o \
+	$(BUILD_DIR)/ui/menu/menu_batch_panel.o \
 	$(BUILD_DIR)/ui/menu/scene_source_catalog.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_state.o \
 	$(BUILD_DIR)/render/adapters/kit_viz_fluid_overlay_adapter.o \
@@ -270,6 +287,8 @@ CORE_FONT_OBJS := $(patsubst $(CORE_FONT_DIR)/src/%.c,$(BUILD_DIR)/core_font/%.o
 KIT_RENDER_OBJS := $(patsubst $(KIT_RENDER_DIR)/src/%.c,$(BUILD_DIR)/kit_render/%.o,$(KIT_RENDER_SRCS))
 KIT_VIZ_OBJS := $(patsubst $(KIT_VIZ_DIR)/src/%.c,$(BUILD_DIR)/kit_viz/%.o,$(KIT_VIZ_SRCS))
 KIT_RUNTIME_DIAG_OBJS := $(patsubst $(KIT_RUNTIME_DIAG_DIR)/src/%.c,$(BUILD_DIR)/kit_runtime_diag/%.o,$(KIT_RUNTIME_DIAG_SRCS))
+
+TEST_DEPS += $(KIT_RENDER_OBJS)
 
 OBJ := $(OBJ) $(TIMER_HUD_OBJS) $(TIMER_HUD_EXTERNAL_OBJS) \
 	$(patsubst $(VK_RENDERER_DIR)/src/%.c,$(BUILD_DIR)/vk_renderer/%.o,$(VK_RENDERER_SRCS)) \
@@ -441,12 +460,16 @@ visual-harness: $(TARGET)
 package-desktop: all
 	@echo "Preparing desktop package..."
 	@rm -rf "$(PACKAGE_APP_DIR)"
-	@mkdir -p "$(PACKAGE_MACOS_DIR)" "$(PACKAGE_RESOURCES_DIR)" "$(PACKAGE_FRAMEWORKS_DIR)"
+	@mkdir -p "$(PACKAGE_MACOS_DIR)" "$(PACKAGE_RESOURCES_DIR)" "$(PACKAGE_FRAMEWORKS_DIR)" "$(PACKAGE_TOOLS_DIR)"
 	@cp "$(PACKAGE_INFO_PLIST_SRC)" "$(PACKAGE_CONTENTS_DIR)/Info.plist"
 	@cp "$(TARGET)" "$(PACKAGE_MACOS_DIR)/raytracing-bin"
 	@cp "$(PACKAGE_LAUNCHER_SRC)" "$(PACKAGE_MACOS_DIR)/raytracing-launcher"
 	@"$(PACKAGE_DYLIB_BUNDLER)" "$(PACKAGE_MACOS_DIR)/raytracing-bin" "$(PACKAGE_FRAMEWORKS_DIR)"
 	@chmod +x "$(PACKAGE_MACOS_DIR)/raytracing-bin" "$(PACKAGE_MACOS_DIR)/raytracing-launcher"
+	@if [ -n "$(PACKAGE_FFMPEG_SRC)" ] && [ -x "$(PACKAGE_FFMPEG_SRC)" ]; then \
+		cp "$(PACKAGE_FFMPEG_SRC)" "$(PACKAGE_TOOLS_DIR)/ffmpeg"; \
+		chmod +x "$(PACKAGE_TOOLS_DIR)/ffmpeg"; \
+	fi
 	@cp -R config "$(PACKAGE_RESOURCES_DIR)/"
 	@mkdir -p "$(PACKAGE_RESOURCES_DIR)/shared/assets/fonts"
 	@cp -R "../shared/assets/fonts/." "$(PACKAGE_RESOURCES_DIR)/shared/assets/fonts/"
@@ -459,6 +482,9 @@ package-desktop: all
 	done
 	@/usr/bin/codesign --force --sign "$(PACKAGE_ADHOC_SIGN_IDENTITY)" --timestamp=none "$(PACKAGE_MACOS_DIR)/raytracing-bin"
 	@/usr/bin/codesign --force --sign "$(PACKAGE_ADHOC_SIGN_IDENTITY)" --timestamp=none "$(PACKAGE_MACOS_DIR)/raytracing-launcher"
+	@if [ -x "$(PACKAGE_TOOLS_DIR)/ffmpeg" ]; then \
+		/usr/bin/codesign --force --sign "$(PACKAGE_ADHOC_SIGN_IDENTITY)" --timestamp=none "$(PACKAGE_TOOLS_DIR)/ffmpeg"; \
+	fi
 	@/usr/bin/codesign --force --sign "$(PACKAGE_ADHOC_SIGN_IDENTITY)" --timestamp=none "$(PACKAGE_APP_DIR)"
 	@echo "Desktop package ready: $(PACKAGE_APP_DIR)"
 

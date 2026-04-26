@@ -27,6 +27,11 @@
 #include "camera/camera.h"
 #include "render/space_mode_adapter.h"
 #include "render/ray_tracing_mode_backend.h"
+#include "render/runtime_camera_3d_rays.h"
+#include "render/runtime_native_3d_render.h"
+#include "render/runtime_ray_3d.h"
+#include "render/runtime_scene_3d_builder.h"
+#include "render/runtime_scene_3d_samples.h"
 #include "geo/shape_asset.h"
 #include "geo/shape_adapter.h"
 #include "import/shape_import.h"
@@ -69,6 +74,17 @@ static void RenderHybridTilesPreview(SDL_Renderer* renderer,
                                      const CameraIntegratorSettings* settings,
                                      double camX,
                                      double camY);
+static bool BuildNative3DLiveSceneForOverlay(RuntimeScene3D* out_scene,
+                                             double normalized_t,
+                                             double light_x,
+                                             double light_y);
+static double ResolveNative3DLightMarkerWorldRadius(const RuntimeScene3D* scene);
+static void DrawNative3DLightMarker(SDL_Renderer* renderer,
+                                    int width,
+                                    int height,
+                                    double normalized_t,
+                                    double light_x,
+                                    double light_y);
 
 static FluidManifest g_fluidManifest = {0};
 static FluidFrame g_fluidFrame = {0};
@@ -77,6 +93,182 @@ static FluidGridBounds g_grid = {0};
 static bool g_manifestLoaded = false;
 static CoreSpaceDesc g_fluidSpaceDesc = {0};
 static bool g_fluidSpaceValid = false;
+
+static bool BuildNative3DLiveSceneForOverlay(RuntimeScene3D* out_scene,
+                                             double normalized_t,
+                                             double light_x,
+                                             double light_y) {
+    RuntimeScene3D scene;
+    RuntimeCamera3D sampled_camera = {0};
+
+    if (!out_scene) return false;
+
+    RuntimeScene3D_Init(&scene);
+    if (!RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(&scene, normalized_t)) {
+        RuntimeScene3D_Free(&scene);
+        return false;
+    }
+
+    scene.light.position = vec3(light_x, light_y, animSettings.lightHeight);
+    scene.light.radius = (scene.light.radius > 0.0) ? scene.light.radius : 10.0;
+    scene.light.intensity = animSettings.lightIntensity;
+    scene.light.falloffDistance = animSettings.forwardDecay;
+    scene.light.falloffMode = animSettings.forwardFalloffMode;
+    scene.hasLight = true;
+
+    scene.camera.position = vec3(sceneSettings.camera.x, sceneSettings.camera.y, sceneSettings.cameraZ);
+    scene.camera.rotation = sceneSettings.camera.rotation;
+    scene.camera.zoom = (sceneSettings.camera.zoom > 0.0) ? sceneSettings.camera.zoom : 1.0;
+    scene.camera.nearPlane = (scene.camera.nearPlane > 0.0) ? scene.camera.nearPlane : 0.1;
+    scene.camera.lookPitch = 0.0;
+    if (!animSettings.interactiveMode &&
+        RuntimeScene3DSampleAuthoredCamera(normalized_t, &sampled_camera)) {
+        scene.camera.lookPitch = sampled_camera.lookPitch;
+    }
+    scene.hasCamera = true;
+
+    if (scene.primitiveCount <= 0 ||
+        scene.triangleMesh.triangleCount <= 0 ||
+        !scene.hasLight ||
+        !scene.hasCamera) {
+        RuntimeScene3D_Free(&scene);
+        return false;
+    }
+
+    *out_scene = scene;
+    return true;
+}
+
+static double ResolveNative3DLightMarkerWorldRadius(const RuntimeScene3D* scene) {
+    double min_x = 0.0;
+    double min_y = 0.0;
+    double min_z = 0.0;
+    double max_x = 0.0;
+    double max_y = 0.0;
+    double max_z = 0.0;
+    bool seeded = false;
+    int i = 0;
+    double span_max = 0.0;
+    double radius = 0.0;
+
+    if (!scene || scene->triangleMesh.triangleCount <= 0) {
+        return 0.12;
+    }
+
+    for (i = 0; i < scene->triangleMesh.triangleCount; ++i) {
+        const RuntimeTriangle3D* tri = &scene->triangleMesh.triangles[i];
+        const Vec3 points[3] = {tri->p0, tri->p1, tri->p2};
+        int p = 0;
+        for (p = 0; p < 3; ++p) {
+            const Vec3 point = points[p];
+            if (!seeded) {
+                min_x = max_x = point.x;
+                min_y = max_y = point.y;
+                min_z = max_z = point.z;
+                seeded = true;
+            } else {
+                if (point.x < min_x) min_x = point.x;
+                if (point.x > max_x) max_x = point.x;
+                if (point.y < min_y) min_y = point.y;
+                if (point.y > max_y) max_y = point.y;
+                if (point.z < min_z) min_z = point.z;
+                if (point.z > max_z) max_z = point.z;
+            }
+        }
+    }
+
+    if (!seeded) {
+        return 0.12;
+    }
+
+    span_max = fmax(max_x - min_x, fmax(max_y - min_y, max_z - min_z));
+    if (!(span_max > 0.0) || !isfinite(span_max)) {
+        return 0.12;
+    }
+
+    radius = span_max * 0.015;
+    if (radius < 0.05) radius = 0.05;
+    if (radius > 0.25) radius = 0.25;
+    return radius;
+}
+
+static void DrawNative3DLightMarker(SDL_Renderer* renderer,
+                                    int width,
+                                    int height,
+                                    double normalized_t,
+                                    double light_x,
+                                    double light_y) {
+    RuntimeScene3D scene;
+    RuntimeCameraProjector3D projector = {0};
+    Vec3 light_position = vec3(0.0, 0.0, 0.0);
+    Vec3 to_light = vec3(0.0, 0.0, 0.0);
+    Ray3D ray = {0};
+    HitInfo3D blocker_hit = {0};
+    double screen_x = 0.0;
+    double screen_y = 0.0;
+    double camera_depth = 0.0;
+    bool inside = false;
+    double light_radius_world = 0.0;
+    double light_distance = 0.0;
+    double radius_pixels = 0.0;
+    int resolved_radius = 0;
+
+    if (!renderer || width <= 0 || height <= 0) return;
+    if (!BuildNative3DLiveSceneForOverlay(&scene, normalized_t, light_x, light_y)) return;
+
+    if (!RuntimeCameraProjector3D_Build(&scene.camera, width, height, &projector)) {
+        RuntimeScene3D_Free(&scene);
+        return;
+    }
+    light_position = scene.light.position;
+    if (!RuntimeCameraProjector3D_ProjectPoint(&projector,
+                                               light_position,
+                                               &screen_x,
+                                               &screen_y,
+                                               &camera_depth,
+                                               &inside)) {
+        RuntimeScene3D_Free(&scene);
+        return;
+    }
+    if (!inside || camera_depth <= projector.nearPlane) {
+        RuntimeScene3D_Free(&scene);
+        return;
+    }
+
+    to_light = vec3_sub(light_position, projector.origin);
+    light_distance = vec3_length(to_light);
+    if (light_distance <= projector.nearPlane) {
+        RuntimeScene3D_Free(&scene);
+        return;
+    }
+    ray = RuntimeRay3D_Make(projector.origin, to_light);
+    if (RuntimeRay3D_TraceSceneFirstHit(&scene,
+                                        &ray,
+                                        projector.nearPlane,
+                                        light_distance - 1e-4,
+                                        &blocker_hit)) {
+        RuntimeScene3D_Free(&scene);
+        return;
+    }
+
+    light_radius_world = ResolveNative3DLightMarkerWorldRadius(&scene);
+    radius_pixels = light_radius_world *
+                    ((double)width / (2.0 * projector.tanHalfFovX * camera_depth));
+    if (!isfinite(radius_pixels) || radius_pixels <= 0.0) {
+        radius_pixels = 2.0;
+    }
+    resolved_radius = (int)lround(radius_pixels);
+    if (resolved_radius < 2) resolved_radius = 2;
+    if (resolved_radius > 24) resolved_radius = 24;
+
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    RenderCircle(renderer,
+                 (int)lround(screen_x),
+                 (int)lround(screen_y),
+                 resolved_radius,
+                 true);
+    RuntimeScene3D_Free(&scene);
+}
 
 #if USE_VULKAN
 static SDL_Surface* g_luma_surface = NULL;
@@ -460,6 +652,7 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
     double gridCellSize = fmax(4.0, (animSettings.tileSize > 0 ? animSettings.tileSize : 16));
     double camera_origin_x = viewCarrier.originX;
     double camera_origin_y = viewCarrier.originY;
+    bool native3D = RayTracingModeBackend_IsNative3D(&route);
 
     // Clamp camera to grid if fluid bounds are known.
     if (g_grid.valid) {
@@ -514,6 +707,55 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
     
     memset(pixelBuffer, 0, pixelCount * sizeof(Uint8)); // Clear buffer
     memset(tilePreviewBuffer, 0, pixelCount * sizeof(Uint8));
+
+    if (native3D) {
+        RuntimeNative3DRenderStats nativeStats = {0};
+        int blurRadius = 0;
+        bool nativeRenderOk = false;
+
+        ts_start_timer("Buffer Calc");
+        nativeRenderOk = RuntimeNative3DRenderToPixelBuffer(pixelBuffer,
+                                                            WIDTH,
+                                                            HEIGHT,
+                                                            AnimationCurrentNormalizedT(),
+                                                            light.x,
+                                                            light.y,
+                                                            &nativeStats);
+        ts_stop_timer("Buffer Calc");
+        if (!nativeRenderOk) {
+            memset(pixelBuffer, 0, pixelCount * sizeof(Uint8));
+        }
+
+        if (animSettings.blurMode == 1) blurRadius = 1;
+        else if (animSettings.blurMode == 2) blurRadius = 2;
+        else if (animSettings.blurMode == 3) blurRadius = 3;
+
+        ts_start_timer("Buffer Present");
+        if (blurRadius > 0) {
+            RayTracingPreview_ApplySeparableBlur(pixelBuffer, WIDTH, HEIGHT, blurRadius);
+        }
+#if USE_VULKAN
+        draw_luminance_buffer(renderer, pixelBuffer, WIDTH, HEIGHT);
+#else
+        for (int y = 0; y < HEIGHT; y++) {
+            for (int x = 0; x < WIDTH; x++) {
+                Uint8 brightness = pixelBuffer[y * WIDTH + x];
+                if (brightness > 0) {
+                    SDL_SetRenderDrawColor(renderer, brightness, brightness, brightness, 255);
+                    SDL_RenderDrawPoint(renderer, x, y);
+                }
+            }
+        }
+#endif
+        DrawNative3DLightMarker(renderer,
+                                WIDTH,
+                                HEIGHT,
+                                AnimationCurrentNormalizedT(),
+                                light.x,
+                                light.y);
+        ts_stop_timer("Buffer Present");
+        return;
+    }
 
     uint64_t frameSeed = runtime_time_now_ns();
     int materialCount = BuildMaterialTable();

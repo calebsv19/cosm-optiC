@@ -4,11 +4,12 @@
 
 #include "ui/sdl_menu.h"
 #include "ui/text_zoom_shortcuts.h"
-#include "tools/make_video.h"
 #include "app/animation.h"
 #include "app/preview_session.h"
 #include "app/animation_input_helpers.h"
 #include "app/animation_output.h"
+#include "app/data_paths.h"
+#include "app/render_export_batch.h"
 #include "app/runtime_time.h"
 #include "config/config_manager.h"
 #include "scene/object_manager.h"
@@ -33,6 +34,7 @@
 #include "render/vk_shared_device.h"
 #include "kit_runtime_diag.h"
 #include <json-c/json.h>
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -440,6 +442,10 @@ void UpdateLightPosition(double* lightX, double* lightY) {
     }
 }
 
+double AnimationCurrentNormalizedT(void) {
+    return t_param;
+}
+
 static void UpdateCameraPosition(double t) {
     if (animSettings.interactiveMode) {
         return;
@@ -800,7 +806,24 @@ int ray_tracing_app_main_legacy(int argc, char* argv[]) {
                animSettings.deepRenderMode ? "Deep Render" :
                animSettings.bounceMode ? "Bounce Animation" : "Standard Animation");
         printf("Auto MP4 after render: %s\n", animSettings.autoMP4 ? "Enabled" : "Disabled");
-        printf("Saving frames in directory: %s\n", animSettings.frameDir);
+        {
+            char frame_dir[PATH_MAX];
+            char video_output_path[PATH_MAX];
+            if (ray_tracing_resolve_frame_output_dir(animSettings.frameDir,
+                                                     frame_dir,
+                                                     sizeof(frame_dir))) {
+                printf("Saving frames in directory: %s\n", frame_dir);
+            } else {
+                printf("Saving frames in directory: <unresolved>\n");
+            }
+            if (ray_tracing_resolve_video_output_path(animSettings.videoOutputRoot,
+                                                      video_output_path,
+                                                      sizeof(video_output_path))) {
+                printf("Auto MP4 output path: %s\n", video_output_path);
+            } else {
+                printf("Auto MP4 output path: <unresolved>\n");
+            }
+        }
 
         // Initialize animation
         if (AnimationInit() != 0) {
@@ -814,8 +837,15 @@ int ray_tracing_app_main_legacy(int argc, char* argv[]) {
         RunMainLoop();
 
         if (animSettings.autoMP4 && animSettings.deepRenderMode) {
+            RayTracingRenderExportStatus export_status;
             printf("Generating MP4 automatically...\n");
-            MakeVideo("output.mp4");
+            if (!ray_tracing_render_export_make_video(&export_status)) {
+                fprintf(stderr, "[export] %s\n", export_status.message);
+            } else {
+                printf("[export] %s: %s\n",
+                       export_status.message,
+                       export_status.video_output_path);
+            }
         }
 
         AnimationCleanup();

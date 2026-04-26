@@ -2,6 +2,7 @@
 #include <SDL2/SDL_ttf.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include "editor/scene_editor.h"
 #include "app/animation.h"
@@ -38,7 +39,15 @@ void ts_set_settings_path(const char* path) { (void)path; }
 __attribute__((weak))
 #endif
 bool AnimationUseFluidScene(void) { return false; }
+double AnimationCurrentNormalizedT(void) { return 0.0; }
 RenderContext* getRenderContext(void) { return NULL; }
 bool render_begin_frame(void) { return true; }
 void render_end_frame(void) {}
 bool render_device_lost(void) { return false; }
+void render_set_clear_color(SDL_Renderer* renderer, Uint8 r, Uint8 g, Uint8 b, Uint8 a) {
+    (void)renderer;
+    (void)r;
+    (void)g;
+    (void)b;
+    (void)a;
+}

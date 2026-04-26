@@ -608,9 +608,6 @@ void SceneEditorChromeActionsRoutePaneEvent(SceneEditor* editor,
     if (env->handle_viewport_navigation && env->handle_viewport_navigation(editor, command, result)) {
         return;
     }
-    if (contract.lane == SCENE_EDITOR_CONTROL_SURFACE_LANE_NATIVE_3D_RESERVED) {
-        return;
-    }
     controlled_3d_viewport_command_region =
         (contract.laneViewportObjectPickEnabled ||
          contract.laneViewportBezierPlacementEnabled ||

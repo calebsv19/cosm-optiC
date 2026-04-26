@@ -1,6 +1,6 @@
 # Ray Tracing Current Truth
 
-Last updated: 2026-04-21
+Last updated: 2026-04-25
 
 ## Program Identity
 - repository directory: `ray_tracing/`
@@ -13,11 +13,44 @@ Last updated: 2026-04-21
 
 ## Latest Lane Snapshot
 
-- preset-authoring connection lane is complete through `P5-S5`
-- active next boundary is preview mode expansion from:
-  - `docs/private_program_docs/ray_tracing/active/preset_authoring_connection/preview_mode_expansion/2026-04-21_ray_tracing_preview_mode_follow_camera_execution_plan.md`
-- preview expansion progress recorded in active private docs:
-  - `S0` through `S5` complete (camera sampling, projector extraction, retained-scene preview render, branch ownership/fallback surfacing, playback parity)
+- editor/preview stabilization is complete and archived in private docs:
+  - `docs/private_program_docs/ray_tracing/archive/2026-04-24_scene_editor_preview_stabilization_snapshot/`
+- current active implementation boundary is the menu/export support lane:
+  - `docs/private_program_docs/ray_tracing/active/menu_export_batch_refresh/2026-04-24_ray_tracing_menu_export_batch_refresh_execution_plan.md`
+- paused primary runtime-validation lane remains:
+  - `docs/private_program_docs/ray_tracing/active/runtime_3d_behavior_extension/2026-04-24_ray_tracing_runtime_3d_behavior_extension_execution_plan.md`
+- current completed runtime foundation state:
+  - retained `plane` + `rect_prism` bridge seeds compile into renderer-owned native primitives and triangles
+  - native runtime scene now carries authored light and camera samples at normalized `t`
+  - native `Ray3D` / `HitInfo3D` foundations now exist for triangle hits and first-hit scene traversal
+  - native direct-light visibility now casts offset shadow rays against `RuntimeScene3D` triangles without XY fallback
+  - native primary rays now generate directly from `RuntimeCamera3D` for the bounded proof scene
+  - native direct-light shading now evaluates first camera hits with authored falloff, surface-facing response, and native blocker visibility
+  - bounded proof tests now cover visible, shadowed, and authored-light-motion response for the native direct-light slice
+  - backend route selection now emits native `3D` only when retained seeds are in-scope and buildable into a runtime scene with triangles plus authored light/camera samples
+  - live native `3D` rendering now builds `RuntimeScene3D` at the current playback `t`, applies live light/camera overrides, and shades pixels through the native direct-light path
+  - when the bounded native route is active, the frame no longer falls back through the legacy XY integrator or legacy object overlay pass
+  - the native light marker now projects through the native camera projector, uses a bounded scene-scale world radius for display, and is skipped when runtime geometry blocks the camera-to-light line
+  - scene editor and embedded preview still use the retained digest viewport/control path for runtime-scene presets when the active render route is native `3D`
+  - editor/menu route labels now distinguish native `3D` from compat fallback
+  - `R3-S1` is complete in the runtime lane; proof-fixture validation remains the next runtime boundary once export/video usability work is complete
+- current export/video support state:
+  - `frameDir` remains the explicit frame-export destination
+  - `videoOutputRoot` is now persisted as explicit runtime config state with default/migration/validation support
+  - resolved path helpers now build the active video output file from `videoOutputRoot`
+  - app-owned export batch helpers now count frames, clear frame dumps, and drive MP4 creation through one runtime seam
+  - auto-MP4 no longer hardcodes `output.mp4`; it now uses the same resolved export/video contract as the new batch adapter
+  - the main menu now exposes a grouped `Data I/O + Batch` panel with:
+    - `Render Frames Root`
+    - `Video Output Root`
+    - cached active frame count
+    - `Clear Frames`
+    - `Make Video`
+  - the new export roots support inline edit and macOS folder-pick selection directly from the menu
+- priority order is now:
+  - validate export/video workflow usability inside the app/menu
+  - resume proof-fixture validation for the live native route against the bounded proof scene and authored light motion
+  - only then open VF3D / `physics_sim` ingestion work
 
 ## Current Structure
 - required scaffold lanes are present:
@@ -37,6 +70,7 @@ Last updated: 2026-04-21
     - `src/ui/menu/sdl_menu_input.c` (keyboard/mouse/edit interactions)
     - `src/ui/menu/sdl_menu_render.c` (layout and draw pass)
     - `src/ui/menu/sdl_menu_state.c` (menu runtime state + manifest list management)
+    - `src/ui/menu/menu_batch_panel.c` (grouped export/video panel layout, render, and batch interactions)
   - config file path/JSON helpers were extracted into:
     - `include/config/config_file_io.h`
     - `src/config/io/config_file_io.c`
@@ -74,14 +108,17 @@ Legacy test lane:
 Data-path contract lane (`DP S0-S5`) status:
 - completed on 2026-04-08.
 - current user-facing contract:
-  - explicit menu controls for `inputRoot` and `outputRoot` (edit/folder/apply + keyboard-first shortcuts).
+  - explicit menu controls for `inputRoot` plus a grouped `Data I/O + Batch` panel for frame/video export roots.
   - startup root validation with deterministic fallback and immediate runtime-config persistence on correction.
   - manifest discovery roots are input/output-root aware with legacy fallback roots retained.
+  - render/export workflow follow-up now persists explicit `videoOutputRoot` config and uses runtime helpers for resolved frame/video export paths.
 - current verification snapshot:
-  - `make -C ray_tracing all` passes
-  - `make -C ray_tracing package-desktop-refresh` passes
-  - `codesign --verify --deep --strict ~/Desktop/optiC.app` passes
-  - `make -C ray_tracing test-stable` still reports the existing 13 route/integrator failures (known lane debt, unchanged by DP lane).
+  - this section is stale if interpreted as current global failure state
+  - current recent program-level verification evidence from the stabilized editor/preview lane shows:
+    - `make -C /Users/calebsv/Desktop/CodeWork/ray_tracing all` passing
+    - `make -C /Users/calebsv/Desktop/CodeWork/ray_tracing test-stable` passing
+    - `make -C /Users/calebsv/Desktop/CodeWork/ray_tracing package-desktop-refresh` passing
+  - the older “13 route/integrator failures” note no longer represents current test-stable status
 
 ## Release Readiness Snapshot
 - `RT-RL0` complete:

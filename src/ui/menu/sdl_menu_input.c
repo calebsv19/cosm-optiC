@@ -12,6 +12,7 @@
 #include "editor/editor_mode_router.h"
 #include "editor/scene_editor.h"
 #include "engine/Render/render_font.h"
+#include "ui/menu_batch_panel.h"
 #include "ui/shared_theme_font_adapter.h"
 #include "ui/text_zoom_shortcuts.h"
 
@@ -19,6 +20,13 @@ static bool point_in_rect(const SDL_Rect *rect, int x, int y) {
     if (!rect) return false;
     return x >= rect->x && x <= rect->x + rect->w &&
            y >= rect->y && y <= rect->y + rect->h;
+}
+
+static bool path_edit_active(const MenuRuntimeState *state) {
+    if (!state) return false;
+    return state->editingInputRoot ||
+           state->editingOutputRoot ||
+           menu_batch_panel_edit_active(state);
 }
 
 static bool pick_folder_macos(const char *prompt, char *out_path, size_t out_cap) {
@@ -54,6 +62,8 @@ static void begin_input_root_edit(MenuRuntimeState *state) {
     if (!state) return;
     state->editingInputRoot = true;
     state->editingOutputRoot = false;
+    state->editingFrameDir = false;
+    state->editingVideoOutputRoot = false;
     snprintf(state->pathInputBuffer, sizeof(state->pathInputBuffer), "%s", animSettings.inputRoot);
 }
 
@@ -61,6 +71,8 @@ static void begin_output_root_edit(MenuRuntimeState *state) {
     if (!state) return;
     state->editingOutputRoot = true;
     state->editingInputRoot = false;
+    state->editingFrameDir = false;
+    state->editingVideoOutputRoot = false;
     snprintf(state->pathInputBuffer, sizeof(state->pathInputBuffer), "%s", animSettings.outputRoot);
 }
 
@@ -87,6 +99,10 @@ static void apply_output_root(MenuRuntimeState *state, const char *path) {
 
 static void finish_root_edit(MenuRuntimeState *state, bool apply) {
     if (!state) return;
+    if (menu_batch_panel_edit_active(state)) {
+        menu_batch_panel_finish_edit(state, apply);
+        return;
+    }
     if (apply && state->pathInputBuffer[0]) {
         if (state->editingInputRoot) {
             apply_input_root(state, state->pathInputBuffer);
@@ -208,8 +224,11 @@ void menu_input_handle_key(SDL_Event* event,
 
     switch (event->key.keysym.sym) {
         case SDLK_BACKSPACE:
-            if ((state->editingInputRoot || state->editingOutputRoot) &&
-                strlen(state->pathInputBuffer) > 0) {
+            if (menu_batch_panel_edit_active(state)) {
+                menu_batch_panel_backspace_edit(state);
+                break;
+            }
+            if ((state->editingInputRoot || state->editingOutputRoot) && strlen(state->pathInputBuffer) > 0) {
                 state->pathInputBuffer[strlen(state->pathInputBuffer) - 1] = '\0';
                 break;
             }
@@ -218,7 +237,7 @@ void menu_input_handle_key(SDL_Event* event,
             }
             break;
         case SDLK_RETURN:
-            if (state->editingInputRoot || state->editingOutputRoot) {
+            if (path_edit_active(state)) {
                 finish_root_edit(state, true);
                 break;
             }
@@ -232,7 +251,7 @@ void menu_input_handle_key(SDL_Event* event,
             state->inputBuffer[0] = '\0';
             break;
         case SDLK_ESCAPE:
-            if (state->editingInputRoot || state->editingOutputRoot) {
+            if (path_edit_active(state)) {
                 finish_root_edit(state, false);
                 break;
             }
@@ -329,9 +348,14 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     if (!event || !running || !menuExitedNormally || !font || !state || !*font) return;
 
     MenuButtonLayout buttons;
+    MenuScreenLayout screenLayout;
     SliderLayout layout;
-    menu_render_build_button_layout(*font, state, &buttons);
-    menu_render_build_slider_layout(*font, state, &buttons, &layout);
+    MenuBatchPanelLayout batchLayout;
+    menu_layout_build_base(*font, state, &screenLayout);
+    menu_render_build_button_layout(*font, state, &screenLayout, &buttons);
+    menu_layout_finalize_with_buttons(&screenLayout, &buttons, state);
+    menu_render_build_slider_layout(*font, state, &screenLayout, &layout);
+    menu_batch_panel_build_layout(*font, state, &screenLayout, &batchLayout);
     handle_slider_click(event, &layout, state);
 
     int x = event->button.x;
@@ -394,6 +418,10 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         return;
     }
 
+    if (menu_batch_panel_handle_click(event, renderer, *font, state, &batchLayout)) {
+        return;
+    }
+
     if (point_in_rect(&buttons.inputRootFolderRect, x, y)) {
         char selected[PATH_MAX];
         if (pick_folder_macos("Choose optiC Input Root", selected, sizeof(selected))) {
@@ -401,19 +429,8 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         }
         return;
     }
-    if (point_in_rect(&buttons.outputRootFolderRect, x, y)) {
-        char selected[PATH_MAX];
-        if (pick_folder_macos("Choose optiC Output Root", selected, sizeof(selected))) {
-            apply_output_root(state, selected);
-        }
-        return;
-    }
     if (point_in_rect(&buttons.inputRootEditRect, x, y) || point_in_rect(&buttons.inputRootValueRect, x, y)) {
         begin_input_root_edit(state);
-        return;
-    }
-    if (point_in_rect(&buttons.outputRootEditRect, x, y) || point_in_rect(&buttons.outputRootValueRect, x, y)) {
-        begin_output_root_edit(state);
         return;
     }
     if (point_in_rect(&buttons.inputRootApplyRect, x, y)) {
@@ -421,14 +438,6 @@ void menu_input_handle_mouse_click(SDL_Event* event,
             finish_root_edit(state, true);
         } else {
             apply_input_root(state, animSettings.inputRoot);
-        }
-        return;
-    }
-    if (point_in_rect(&buttons.outputRootApplyRect, x, y)) {
-        if (state->editingOutputRoot) {
-            finish_root_edit(state, true);
-        } else {
-            apply_output_root(state, animSettings.outputRoot);
         }
         return;
     }
@@ -483,11 +492,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
             state->manifestScroll = 0.0f;
             state->manifestScrollbarDragging = false;
         }
-        mode_status = (animSettings.spaceMode == SPACE_MODE_3D)
-                          ? (EditorModeRouter_IsControlled3D()
-                                 ? "3D compat fallback active (2D backend)"
-                                 : "Space: 3D active")
-                          : "Space: 2D active";
+        mode_status = EditorModeRouter_SpaceButtonLabel();
         snprintf(state->statusLabel,
                  sizeof(state->statusLabel),
                  "%s",
@@ -547,7 +552,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     }
 
     if (point_in_rect(&buttons.saveRect, x, y)) {
-        if (state->editingInputRoot || state->editingOutputRoot) {
+        if (path_edit_active(state)) {
             finish_root_edit(state, true);
         }
         SaveAllSettings();
@@ -568,7 +573,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     }
 
     if (point_in_rect(&buttons.previewRect, x, y)) {
-        if (state->editingInputRoot || state->editingOutputRoot) {
+        if (path_edit_active(state)) {
             finish_root_edit(state, true);
         }
         menu_state_sync_from_anim(state);
@@ -584,7 +589,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     }
 
     if (point_in_rect(&buttons.startRect, x, y)) {
-        if (state->editingInputRoot || state->editingOutputRoot) {
+        if (path_edit_active(state)) {
             finish_root_edit(state, true);
         }
         menu_state_sync_from_anim(state);

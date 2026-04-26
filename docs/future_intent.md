@@ -1,6 +1,6 @@
 # Ray Tracing Future Intent
 
-Last updated: 2026-04-21
+Last updated: 2026-04-25
 
 ## Scaffold Alignment Intent
 1. Keep the current strong subsystem split while normalizing scaffold contracts.
@@ -107,10 +107,17 @@ Last updated: 2026-04-21
 
 ## Current Near-Term Boundary
 
-- continue and close preview mode expansion from the retained-`3D` follow-camera execution plan
-- after preview closeout, decide whether to:
-  - widen retained preview fidelity, or
-  - open a new bounded lane for deeper native-`3D` preview/render integration
+- the preview/editor stabilization lane is no longer the active frontier
+- current next boundary is:
+  - finish the menu/export support lane by validating the newly-landed in-app `Data I/O + Batch` workflow end-to-end
+  - then validate the now-live bounded native `3D` route against an obvious proof fixture
+- defer VF3D / `physics_sim` ingestion until the internal runtime slice is verified
+
+Immediate priority order:
+1. menu/export support lane closeout through manual and auto-MP4 validation on the new grouped menu panel
+2. proof-fixture validation for the bounded native `3D` runtime path
+3. render-path proof that authored light motion visibly changes surface illumination through the live route
+4. only then: ingestion / cross-program handoff work
 
 ## Maintainability Decomposition Status
 - completed in the recent decomposition tranche:
@@ -127,6 +134,7 @@ Last updated: 2026-04-21
     - `src/ui/menu/sdl_menu_input.c`
     - `src/ui/menu/sdl_menu_render.c`
     - `src/ui/menu/sdl_menu_state.c`
+    - `src/ui/menu/menu_batch_panel.c`
 - next:
   - keep extracting high-churn helper families out of `src/app/animation.c` while preserving wrapper ownership and existing behavior.
 

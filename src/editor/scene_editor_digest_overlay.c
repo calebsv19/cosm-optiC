@@ -18,7 +18,7 @@ static bool scene_editor_digest_overlay_point_in_rect(int x, int y, const SDL_Re
 bool SceneEditorDigestOverlayResolve(RuntimeSceneBridge3DDigestState* out_digest) {
     RayTracingRuntimeRoute route = RayTracingModeBackend_ResolveRoute();
     RuntimeSceneBridge3DDigestState digest = {0};
-    if (!RayTracingModeBackend_IsCompat3DFallback(&route)) {
+    if (!RayTracingModeBackend_IsControlled3D(&route)) {
         if (out_digest) {
             memset(out_digest, 0, sizeof(*out_digest));
         }

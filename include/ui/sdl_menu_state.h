@@ -7,6 +7,8 @@
 #include <limits.h>
 #include <stddef.h>
 
+#include "app/render_export_batch.h"
+
 #define SDL_MENU_MAX_MANIFEST_OPTIONS 128
 #define SDL_MENU_MANIFEST_ITEM_HEIGHT 26
 
@@ -47,6 +49,8 @@ typedef struct {
     bool editingFrame;
     bool editingInputRoot;
     bool editingOutputRoot;
+    bool editingFrameDir;
+    bool editingVideoOutputRoot;
     char pathInputBuffer[PATH_MAX];
 
     int rouletteSliderValue;
@@ -62,6 +66,7 @@ typedef struct {
     Uint32 statusExpireMs;
     SDL_Color statusColor;
     char statusLabel[64];
+    RayTracingRenderExportStatus exportBatchStatus;
     MenuViewMode activeView;
     int activeSceneSource;
     MenuSceneLibraryLane activeSceneLibraryLane;

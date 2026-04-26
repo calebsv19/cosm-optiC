@@ -4,6 +4,7 @@
 
 #include "app/animation.h"
 #include "config/config_manager.h"
+#include "ui/menu_panel_chrome.h"
 #include "ui/shared_theme_font_adapter.h"
 #include "engine/Render/render_pipeline.h"
 #include "render/text_upload_policy.h"
@@ -13,8 +14,8 @@
 #define MENU_MARGIN_X 30
 #define MENU_MARGIN_Y 30
 #define SLIDER_WIDTH 250
-#define SLIDER_HEIGHT 8
-#define SLIDER_SPACING 10
+#define SLIDER_HEIGHT 6
+#define SLIDER_SPACING 4
 #define SLIDER_MARGIN_X (MENU_WIDTH - SLIDER_WIDTH - MENU_MARGIN_X - 40)
 #define SLIDER_MARGIN_Y MENU_MARGIN_Y
 #define SLIDER_SECTION_GAP 30
@@ -23,24 +24,18 @@ static int max_int(int a, int b) {
     return (a > b) ? a : b;
 }
 
-static int min_int(int a, int b) {
-    return (a < b) ? a : b;
-}
-
 void menu_render_build_slider_layout(TTF_Font* font,
                                      MenuRuntimeState* state,
-                                     const MenuButtonLayout* buttons,
+                                     const MenuScreenLayout* screen_layout,
                                      SliderLayout* out_layout) {
     SliderLayout layout = {0};
     int textHeight = 18;
-    int valueReserve = 110;
+    int valueReserve = 102;
     int sliderX = SLIDER_MARGIN_X;
     int sliderWidth = SLIDER_WIDTH;
     int rightLimit = MENU_WIDTH - MENU_MARGIN_X - 10;
-    int centerRight = 0;
     int panelTop = SLIDER_MARGIN_Y - 4;
-    int panelBottom = MENU_HEIGHT - MENU_MARGIN_Y - 10;
-    int panelHeight;
+    int panelHeight = 0;
     int visibleBottom;
     int scrollOffset;
 
@@ -50,12 +45,11 @@ void menu_render_build_slider_layout(TTF_Font* font,
                                                      textHeight);
     }
     if (textHeight < 12) textHeight = 12;
-    if (buttons) {
-        centerRight = buttons->falloffRect.x + buttons->falloffRect.w;
-        centerRight = max_int(centerRight, buttons->tileRect.x + buttons->tileRect.w);
-        centerRight = max_int(centerRight, buttons->tilePreviewRect.x + buttons->tilePreviewRect.w);
-        sliderX = max_int(sliderX, centerRight + 24);
-        panelBottom = min_int(panelBottom, buttons->spaceModeRect.y - 12);
+    if (screen_layout) {
+        sliderX = screen_layout->sliderPanelRect.x + 12;
+        rightLimit = screen_layout->sliderPanelRect.x + screen_layout->sliderPanelRect.w - 10;
+        panelTop = screen_layout->sliderPanelRect.y;
+        panelHeight = screen_layout->sliderPanelRect.h;
     }
     sliderWidth = rightLimit - sliderX - valueReserve;
     if (sliderWidth < 130) {
@@ -63,13 +57,12 @@ void menu_render_build_slider_layout(TTF_Font* font,
         sliderX = rightLimit - valueReserve - sliderWidth;
     }
     if (sliderX < SLIDER_MARGIN_X) sliderX = SLIDER_MARGIN_X;
-    layout.trackHeight = max_int(SLIDER_HEIGHT, (textHeight * 3) / 8);
+    layout.trackHeight = max_int(SLIDER_HEIGHT, textHeight / 3);
     layout.knobWidth = max_int(8, (textHeight * 3) / 8);
-    layout.knobHeight = layout.trackHeight + 6;
-    panelHeight = panelBottom - panelTop;
+    layout.knobHeight = layout.trackHeight + 4;
     if (panelHeight < 120) panelHeight = 120;
     layout.panelRect = (SDL_Rect){sliderX - 12, panelTop, rightLimit - (sliderX - 12), panelHeight};
-    layout.nextY = panelTop + 8;
+    layout.nextY = panelTop + MENU_PANEL_CHROME_TITLE_BAND + 8;
 
     menu_state_sync_from_anim(state);
 
@@ -77,16 +70,16 @@ void menu_render_build_slider_layout(TTF_Font* font,
     do { \
         if (layout.count < SDL_MENU_MAX_SLIDERS) { \
             int labelY_ = layout.nextY; \
-            int trackY_ = labelY_ + textHeight + 4; \
+            int trackY_ = labelY_ + textHeight + 2; \
             SDL_Rect track_ = { sliderX, trackY_, sliderWidth, layout.trackHeight }; \
-            SDL_Rect hit_ = { sliderX, trackY_ - 8, sliderWidth, layout.trackHeight + 16 }; \
+            SDL_Rect hit_ = { sliderX, trackY_ - 6, sliderWidth, layout.trackHeight + 12 }; \
             layout.items[layout.count++] = (MenuSlider){ \
                 targetPtr, minVal, maxVal, track_, hit_, \
                 sliderX, labelY_, \
                 sliderX + sliderWidth + 10, trackY_ - ((textHeight - layout.trackHeight) / 2), \
                 labelText \
             }; \
-            layout.nextY = trackY_ + layout.trackHeight + SLIDER_SPACING + 2; \
+            layout.nextY = trackY_ + layout.trackHeight + SLIDER_SPACING; \
         } \
     } while (0)
 
@@ -149,22 +142,7 @@ void menu_render_draw_sliders(SDL_Renderer* renderer,
     if (!state || !layout) return;
     if (layout->panelRect.w > 0 && layout->panelRect.h > 0) {
         SDL_Rect panel = layout->panelRect;
-        if (has_shared_palette) {
-            SDL_SetRenderDrawColor(renderer,
-                                   palette.panel_fill.r, palette.panel_fill.g,
-                                   palette.panel_fill.b, palette.panel_fill.a);
-        } else {
-            SDL_SetRenderDrawColor(renderer, 22, 22, 24, 220);
-        }
-        SDL_RenderFillRect(renderer, &panel);
-        if (has_shared_palette) {
-            SDL_SetRenderDrawColor(renderer,
-                                   palette.panel_border.r, palette.panel_border.g,
-                                   palette.panel_border.b, palette.panel_border.a);
-        } else {
-            SDL_SetRenderDrawColor(renderer, 80, 80, 90, 255);
-        }
-        SDL_RenderDrawRect(renderer, &panel);
+        menu_panel_chrome_draw(renderer, font, &panel, "Render Settings", false);
         SDL_RenderSetClipRect(renderer, &panel);
     }
 

@@ -2,14 +2,42 @@
 
 #include "import/runtime_scene_bridge.h"
 #include "render/integrators/integrator_common.h"
+#include "render/runtime_scene_3d_builder.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+
+static bool ray_tracing_mode_backend_native_route_ready(double* out_camera_z,
+                                                        int* out_primitive_count) {
+    RuntimeSceneBridge3DPrimitiveSeedState seed_state = {0};
+    RuntimeScene3D scene = {0};
+    bool ready = false;
+
+    runtime_scene_bridge_get_last_3d_primitive_seed_state(&seed_state);
+    if (!seed_state.valid) return false;
+    if (seed_state.primitive_count <= 0) return false;
+    if (seed_state.excluded_primitive_count > 0) return false;
+
+    RuntimeScene3D_Init(&scene);
+    ready = RuntimeScene3DBuilder_BuildFromPrimitiveSeedStateAtT(&scene, &seed_state, 0.0) &&
+            scene.primitiveCount > 0 && scene.triangleMesh.triangleCount > 0 &&
+            scene.hasLight && scene.hasCamera;
+    if (ready) {
+        if (out_camera_z) *out_camera_z = scene.camera.position.z;
+        if (out_primitive_count) *out_primitive_count = scene.primitiveCount;
+    }
+
+    RuntimeScene3D_Free(&scene);
+    return ready;
+}
 
 RayTracingRuntimeRoute RayTracingModeBackend_ResolveRoute(void) {
     RayTracingRuntimeRoute route;
     RuntimeSceneBridge3DScaffoldState scaffold = {0};
     bool compat_fallback = false;
+    bool native_ready = false;
+    double native_camera_z = 0.0;
+    int native_primitive_count = 0;
     route.requestedMode = SpaceModeAdapter_ResolveMode(animSettings.spaceMode);
     route.projectionMode = route.requestedMode;
     route.backendLane = RAY_TRACING_BACKEND_CANONICAL_2D;
@@ -44,6 +72,18 @@ RayTracingRuntimeRoute RayTracingModeBackend_ResolveRoute(void) {
             double z_mag = fabs(route.runtimeCameraZ);
             route.rayOriginYOffset = fmin(240.0, z_mag * 0.25);
             if (route.runtimeCameraZ < 0.0) route.rayOriginYOffset = -route.rayOriginYOffset;
+        }
+
+        native_ready = ray_tracing_mode_backend_native_route_ready(&native_camera_z,
+                                                                   &native_primitive_count);
+        if (native_ready) {
+            route.routeFamily = RAY_TRACING_ROUTE_NATIVE_3D;
+            route.projectionMode = SPACE_MODE_3D;
+            route.fallbackTo2DProjection = false;
+            route.runtimeCameraZ = native_camera_z;
+            route.rayOriginYOffset = 0.0;
+            route.scaffoldPrimitiveCount = native_primitive_count;
+            compat_fallback = false;
         }
     }
 
@@ -163,7 +203,7 @@ RayTracingSceneDigestStatus RayTracingModeBackend_BuildSceneDigestStatus(
     RuntimeSceneBridge3DDigestState digest = {0};
     memset(&status, 0, sizeof(status));
 
-    if (!route || !RayTracingModeBackend_IsCompat3DFallback(route)) {
+    if (!route || route->requestedMode != SPACE_MODE_3D) {
         return status;
     }
 
@@ -211,7 +251,9 @@ SpaceModeViewContext RayTracingModeBackend_BuildViewContext(const Camera* camera
 }
 
 bool RayTracingModeBackend_IsControlled3D(const RayTracingRuntimeRoute* route) {
-    return RayTracingModeBackend_IsCompat3DFallback(route);
+    if (!route) return false;
+    return RayTracingModeBackend_IsCompat3DFallback(route) ||
+           RayTracingModeBackend_IsNative3D(route);
 }
 
 RayTracingRouteFamily RayTracingModeBackend_RouteFamily(const RayTracingRuntimeRoute* route) {

@@ -10,6 +10,11 @@ static int activePointSize = 16;
 static const int kBasePointSize = 16;
 static const int kMinPointSize = 6;
 
+void invalidateActiveFontHandle(void) {
+    activeFont = NULL;
+    activePointSize = kBasePointSize;
+}
+
 static bool ensureTTF(void) {
     if (TTF_WasInit() == 0) {
         if (TTF_Init() == -1) {
@@ -46,7 +51,7 @@ bool initFontSystem(void) {
 }
 
 void shutdownFontSystem(void) {
-    activeFont = NULL;
+    invalidateActiveFontHandle();
     ray_tracing_text_reset_renderer(getRenderContext() ? getRenderContext()->renderer : NULL);
     ray_tracing_text_font_cache_shutdown();
 }

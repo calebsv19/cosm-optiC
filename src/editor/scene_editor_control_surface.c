@@ -87,10 +87,7 @@ static const char* SceneEditorControlSurfaceCompactPath(const char* path,
 
 static SceneEditorControlSurfaceLane SceneEditorControlSurfaceResolveLane(
     const RayTracingRuntimeRoute* route) {
-    if (RayTracingModeBackend_IsNative3D(route)) {
-        return SCENE_EDITOR_CONTROL_SURFACE_LANE_NATIVE_3D_RESERVED;
-    }
-    if (RayTracingModeBackend_IsCompat3DFallback(route)) {
+    if (RayTracingModeBackend_IsControlled3D(route)) {
         return SCENE_EDITOR_CONTROL_SURFACE_LANE_CONTROLLED_3D;
     }
     return SCENE_EDITOR_CONTROL_SURFACE_LANE_CANONICAL_2D;
@@ -142,16 +139,16 @@ void SceneEditorControlSurfaceBuild(const SceneEditorControlSurfaceInput* input,
     contract.modeSelectable[2] = true;
 
     contract.lane = SceneEditorControlSurfaceResolveLane(&input->route);
-    contract.previewEnabled = (contract.lane != SCENE_EDITOR_CONTROL_SURFACE_LANE_NATIVE_3D_RESERVED);
+    contract.previewEnabled = true;
     contract.cycleModeEnabled = true;
     contract.applyEnabled = true;
     contract.saveEnabled = true;
     contract.backToMenuEnabled = true;
     contract.sharedKeyTabCycleEnabled = true;
     contract.sharedKeyEscapeEnabled = true;
-    contract.laneKeyFrameEnabled = (contract.lane != SCENE_EDITOR_CONTROL_SURFACE_LANE_NATIVE_3D_RESERVED);
+    contract.laneKeyFrameEnabled = true;
     contract.laneGestureOrbitEnabled = (contract.lane == SCENE_EDITOR_CONTROL_SURFACE_LANE_CONTROLLED_3D);
-    contract.laneWheelZoomEnabled = (contract.lane != SCENE_EDITOR_CONTROL_SURFACE_LANE_NATIVE_3D_RESERVED);
+    contract.laneWheelZoomEnabled = true;
     canonical_2d_lane = (contract.lane == SCENE_EDITOR_CONTROL_SURFACE_LANE_CANONICAL_2D);
     controlled_3d_lane = (contract.lane == SCENE_EDITOR_CONTROL_SURFACE_LANE_CONTROLLED_3D);
 
@@ -223,10 +220,6 @@ void SceneEditorControlSurfaceBuild(const SceneEditorControlSurfaceInput* input,
 
     if (contract.lane == SCENE_EDITOR_CONTROL_SURFACE_LANE_CANONICAL_2D) {
         snprintf(contract.statusDigest, sizeof(contract.statusDigest), "Digest: n/a (2D lane)");
-    } else if (contract.lane == SCENE_EDITOR_CONTROL_SURFACE_LANE_NATIVE_3D_RESERVED) {
-        snprintf(contract.statusDigest,
-                 sizeof(contract.statusDigest),
-                 "Digest: unavailable (native 3D lane reserved)");
     } else if (!input->digestStatus.valid) {
         snprintf(contract.statusDigest, sizeof(contract.statusDigest), "Digest: pending runtime 3D payload");
     } else {
@@ -265,9 +258,15 @@ void SceneEditorControlSurfaceBuild(const SceneEditorControlSurfaceInput* input,
                  sizeof(contract.statusControls),
                  "Controls: Shared TAB cycle ESC close | 2D LMB edit MMB pan Wheel zoom F frame");
     } else if (contract.lane == SCENE_EDITOR_CONTROL_SURFACE_LANE_CONTROLLED_3D) {
-        snprintf(contract.statusRuntime,
-                 sizeof(contract.statusRuntime),
-                 "Runtime: 3D compat fallback active; shared shell with digest viewport.");
+        if (RayTracingModeBackend_IsNative3D(&input->route)) {
+            snprintf(contract.statusRuntime,
+                     sizeof(contract.statusRuntime),
+                     "Runtime: 3D native render route active; editor uses retained digest viewport controls.");
+        } else {
+            snprintf(contract.statusRuntime,
+                     sizeof(contract.statusRuntime),
+                     "Runtime: 3D compat fallback active; shared shell with digest viewport.");
+        }
         if (contract.activeMode == 0) {
             snprintf(contract.statusControls,
                      sizeof(contract.statusControls),
@@ -281,13 +280,6 @@ void SceneEditorControlSurfaceBuild(const SceneEditorControlSurfaceInput* input,
                      sizeof(contract.statusControls),
                      "Controls: TAB cycle ESC close Alt+drag orbit MMB pan Wheel zoom F frame LMB select camera Shift+LMB add camera point Cmd+drag smooth");
         }
-    } else {
-        snprintf(contract.statusRuntime,
-                 sizeof(contract.statusRuntime),
-                 "Runtime: 3D native lane reserved; editor control provider pending.");
-        snprintf(contract.statusControls,
-                 sizeof(contract.statusControls),
-                 "Controls: Shared TAB cycle ESC close | native 3D controls pending (preview/frame disabled).");
     }
 
     *out_contract = contract;

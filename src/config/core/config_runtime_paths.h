@@ -6,6 +6,7 @@
 
 void config_runtime_paths_normalize_frame_dir(void);
 void config_runtime_paths_normalize_data_roots(void);
+void config_runtime_paths_normalize_video_output_root(void);
 bool config_runtime_paths_validate_root(char *target,
                                         size_t target_size,
                                         const char *default_path,
