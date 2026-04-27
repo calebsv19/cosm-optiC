@@ -1,0 +1,44 @@
+#ifndef RENDER_RUNTIME_NATIVE_3D_TEMPORAL_ACCUM_H
+#define RENDER_RUNTIME_NATIVE_3D_TEMPORAL_ACCUM_H
+
+#include <stdbool.h>
+#include <stdint.h>
+
+typedef struct {
+    float* accumulationBuffer;
+    int width;
+    int height;
+    int completedSubpasses;
+} RuntimeNative3DTemporalAccumulation;
+
+void RuntimeNative3DTemporalAccumulation_Init(RuntimeNative3DTemporalAccumulation* accumulation);
+void RuntimeNative3DTemporalAccumulation_Free(RuntimeNative3DTemporalAccumulation* accumulation);
+bool RuntimeNative3DTemporalAccumulation_Ensure(RuntimeNative3DTemporalAccumulation* accumulation,
+                                                int width,
+                                                int height);
+void RuntimeNative3DTemporalAccumulation_Clear(RuntimeNative3DTemporalAccumulation* accumulation);
+bool RuntimeNative3DTemporalAccumulation_AddRegion(RuntimeNative3DTemporalAccumulation* accumulation,
+                                                   const float* luminance_region,
+                                                   int luminance_stride,
+                                                   int start_x,
+                                                   int start_y,
+                                                   int end_x,
+                                                   int end_y);
+void RuntimeNative3DTemporalAccumulation_CommitSubpass(
+    RuntimeNative3DTemporalAccumulation* accumulation);
+void RuntimeNative3DTemporalAccumulation_ResolveRegionToPixelBuffer(
+    const RuntimeNative3DTemporalAccumulation* accumulation,
+    uint8_t* pixel_buffer,
+    int pixel_stride,
+    int start_x,
+    int start_y,
+    int end_x,
+    int end_y);
+void RuntimeNative3DTemporalAccumulation_ResolveToPixelBufferAtOffset(
+    const RuntimeNative3DTemporalAccumulation* accumulation,
+    uint8_t* pixel_buffer,
+    int pixel_stride,
+    int dst_origin_x,
+    int dst_origin_y);
+
+#endif

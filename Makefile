@@ -162,10 +162,13 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_camera_3d_rays.o \
 	$(BUILD_DIR)/render/runtime_direct_light_3d.o \
 	$(BUILD_DIR)/render/runtime_diffuse_bounce_3d.o \
+	$(BUILD_DIR)/render/runtime_light_emitter_3d.o \
 	$(BUILD_DIR)/render/runtime_emission_transparency_3d.o \
 	$(BUILD_DIR)/render/runtime_material_payload_3d.o \
 	$(BUILD_DIR)/render/runtime_material_response_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render.o \
+	$(BUILD_DIR)/render/runtime_native_3d_resolution.o \
+	$(BUILD_DIR)/render/runtime_native_3d_temporal_accum.o \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_occupancy.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \

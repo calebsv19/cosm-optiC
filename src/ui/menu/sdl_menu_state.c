@@ -34,6 +34,55 @@ static double clamp_double(double value, double min_v, double max_v) {
     return value;
 }
 
+static int clamp_secondary_diffuse_samples_3d_menu(int value) {
+    if (value < RUNTIME_3D_SECONDARY_SAMPLES_MIN) {
+        value = RUNTIME_3D_SECONDARY_SAMPLES_MIN;
+    }
+    if (value > RUNTIME_3D_SECONDARY_SAMPLES_MAX) {
+        value = RUNTIME_3D_SECONDARY_SAMPLES_MAX;
+    }
+    value = ((value + (RUNTIME_3D_SECONDARY_SAMPLES_STEP / 2)) /
+             RUNTIME_3D_SECONDARY_SAMPLES_STEP) *
+            RUNTIME_3D_SECONDARY_SAMPLES_STEP;
+    if (value < RUNTIME_3D_SECONDARY_SAMPLES_MIN) {
+        value = RUNTIME_3D_SECONDARY_SAMPLES_MIN;
+    }
+    if (value > RUNTIME_3D_SECONDARY_SAMPLES_MAX) {
+        value = RUNTIME_3D_SECONDARY_SAMPLES_MAX;
+    }
+    return value;
+}
+
+static int clamp_transmission_samples_3d_menu(int value) {
+    if (value < RUNTIME_3D_TRANSMISSION_SAMPLES_MIN) {
+        value = RUNTIME_3D_TRANSMISSION_SAMPLES_MIN;
+    }
+    if (value > RUNTIME_3D_TRANSMISSION_SAMPLES_MAX) {
+        value = RUNTIME_3D_TRANSMISSION_SAMPLES_MAX;
+    }
+    return value;
+}
+
+static int clamp_temporal_frames_3d_menu(int value) {
+    if (value < RUNTIME_3D_TEMPORAL_FRAMES_MIN) {
+        value = RUNTIME_3D_TEMPORAL_FRAMES_MIN;
+    }
+    if (value > RUNTIME_3D_TEMPORAL_FRAMES_MAX) {
+        value = RUNTIME_3D_TEMPORAL_FRAMES_MAX;
+    }
+    return value;
+}
+
+static int clamp_render_scale_3d_menu(int value) {
+    if (value < RUNTIME_3D_RENDER_SCALE_MIN) {
+        value = RUNTIME_3D_RENDER_SCALE_MIN;
+    }
+    if (value > RUNTIME_3D_RENDER_SCALE_MAX) {
+        value = RUNTIME_3D_RENDER_SCALE_MAX;
+    }
+    return value;
+}
+
 static MenuSceneLibraryLane menu_library_lane_from_source(int source) {
     int clamped = animation_config_scene_source_clamp(source);
     if (clamped == SCENE_SOURCE_FLUID_MANIFEST) return MENU_SCENE_LIBRARY_FLUID_MANIFEST;
@@ -251,6 +300,46 @@ static void sync_forward_decay_slider_from_settings(MenuRuntimeState* state) {
     state->forwardDecaySliderValue = (int)lround(distance);
 }
 
+static void sync_secondary_diffuse_samples_3d_slider_from_settings(MenuRuntimeState* state) {
+    if (!state) return;
+    if (state->draggingSlider &&
+        state->selectedSlider == &state->secondaryDiffuseSamples3DSliderValue) {
+        return;
+    }
+    state->secondaryDiffuseSamples3DSliderValue =
+        clamp_secondary_diffuse_samples_3d_menu(animSettings.secondaryDiffuseSamples3D);
+}
+
+static void sync_transmission_samples_3d_slider_from_settings(MenuRuntimeState* state) {
+    if (!state) return;
+    if (state->draggingSlider &&
+        state->selectedSlider == &state->transmissionSamples3DSliderValue) {
+        return;
+    }
+    state->transmissionSamples3DSliderValue =
+        clamp_transmission_samples_3d_menu(animSettings.transmissionSamples3D);
+}
+
+static void sync_temporal_frames_3d_slider_from_settings(MenuRuntimeState* state) {
+    if (!state) return;
+    if (state->draggingSlider &&
+        state->selectedSlider == &state->temporalFrames3DSliderValue) {
+        return;
+    }
+    state->temporalFrames3DSliderValue =
+        clamp_temporal_frames_3d_menu(animSettings.temporalFrames3D);
+}
+
+static void sync_render_scale_3d_slider_from_settings(MenuRuntimeState* state) {
+    if (!state) return;
+    if (state->draggingSlider &&
+        state->selectedSlider == &state->renderScale3DSliderValue) {
+        return;
+    }
+    state->renderScale3DSliderValue =
+        clamp_render_scale_3d_menu(animSettings.renderScale3D);
+}
+
 void menu_state_sync_from_anim(MenuRuntimeState* state) {
     if (!state) return;
     RayTracingIntegratorCatalog_NormalizeAnimationConfig(&animSettings);
@@ -260,6 +349,10 @@ void menu_state_sync_from_anim(MenuRuntimeState* state) {
     sync_light_slider_from_settings(state);
     sync_decay_softness_slider_from_settings(state);
     sync_forward_decay_slider_from_settings(state);
+    sync_secondary_diffuse_samples_3d_slider_from_settings(state);
+    sync_transmission_samples_3d_slider_from_settings(state);
+    sync_temporal_frames_3d_slider_from_settings(state);
+    sync_render_scale_3d_slider_from_settings(state);
     menu_state_sync_source_and_library(state);
 }
 
@@ -327,6 +420,22 @@ void menu_state_apply_special_slider_rules(MenuRuntimeState* state, int* target)
             state->forwardDecaySliderValue = SDL_MENU_FORWARD_FALLOFF_DISTANCE_MAX;
         }
         animSettings.forwardDecay = state->forwardDecaySliderValue;
+    } else if (target == &state->secondaryDiffuseSamples3DSliderValue) {
+        state->secondaryDiffuseSamples3DSliderValue =
+            clamp_secondary_diffuse_samples_3d_menu(state->secondaryDiffuseSamples3DSliderValue);
+        animSettings.secondaryDiffuseSamples3D = state->secondaryDiffuseSamples3DSliderValue;
+    } else if (target == &state->transmissionSamples3DSliderValue) {
+        state->transmissionSamples3DSliderValue =
+            clamp_transmission_samples_3d_menu(state->transmissionSamples3DSliderValue);
+        animSettings.transmissionSamples3D = state->transmissionSamples3DSliderValue;
+    } else if (target == &state->temporalFrames3DSliderValue) {
+        state->temporalFrames3DSliderValue =
+            clamp_temporal_frames_3d_menu(state->temporalFrames3DSliderValue);
+        animSettings.temporalFrames3D = state->temporalFrames3DSliderValue;
+    } else if (target == &state->renderScale3DSliderValue) {
+        state->renderScale3DSliderValue =
+            clamp_render_scale_3d_menu(state->renderScale3DSliderValue);
+        animSettings.renderScale3D = state->renderScale3DSliderValue;
     } else if (target == &sceneSettings.windowWidth || target == &sceneSettings.windowHeight) {
         if (sceneSettings.windowWidth < 200) sceneSettings.windowWidth = 200;
         if (sceneSettings.windowHeight < 200) sceneSettings.windowHeight = 200;
@@ -374,6 +483,10 @@ void menu_state_init(MenuRuntimeState* state) {
     state->lightIntensitySliderValue = 500;
     state->lightDecaySoftnessSliderValue = 100;
     state->forwardDecaySliderValue = 2000;
+    state->secondaryDiffuseSamples3DSliderValue = RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT;
+    state->transmissionSamples3DSliderValue = RUNTIME_3D_TRANSMISSION_SAMPLES_DEFAULT;
+    state->temporalFrames3DSliderValue = RUNTIME_3D_TEMPORAL_FRAMES_DEFAULT;
+    state->renderScale3DSliderValue = RUNTIME_3D_RENDER_SCALE_DEFAULT;
     state->manifestDropdownOpen = false;
     menu_state_sync_load_scene_dropdown_flags(state);
     menu_state_sync_from_anim(state);
@@ -461,6 +574,10 @@ void menu_state_reset_defaults(MenuRuntimeState* state) {
     double diag = hypot(sceneSettings.windowWidth, sceneSettings.windowHeight);
     animSettings.forwardDecay = (diag > 0.0) ? diag : 2000.0;
     animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_QUADRATIC;
+    animSettings.secondaryDiffuseSamples3D = RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT;
+    animSettings.transmissionSamples3D = RUNTIME_3D_TRANSMISSION_SAMPLES_DEFAULT;
+    animSettings.temporalFrames3D = RUNTIME_3D_TEMPORAL_FRAMES_DEFAULT;
+    animSettings.renderScale3D = RUNTIME_3D_RENDER_SCALE_DEFAULT;
     menu_state_sync_from_anim(state);
     if (state) {
         state->oldWindowWidth = sceneSettings.windowWidth;

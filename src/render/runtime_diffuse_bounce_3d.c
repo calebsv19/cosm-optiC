@@ -6,10 +6,27 @@
 static const double kRuntimeDiffuseBounce3DEpsilon = 1e-4;
 static const double kRuntimeDiffuseBounce3DMaxDistance = 8.0;
 static const double kRuntimeDiffuseBounce3DEnergyScale = 0.75;
-static const int kRuntimeDiffuseBounce3DSampleCols = 6;
-static const int kRuntimeDiffuseBounce3DSampleRows = 4;
-static const int kRuntimeDiffuseBounce3DSampleCount =
-    kRuntimeDiffuseBounce3DSampleCols * kRuntimeDiffuseBounce3DSampleRows;
+
+static int runtime_diffuse_bounce_3d_resolve_sample_count(void) {
+    int value = animSettings.secondaryDiffuseSamples3D;
+
+    if (value < RUNTIME_3D_SECONDARY_SAMPLES_MIN) {
+        value = RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT;
+    }
+    if (value > RUNTIME_3D_SECONDARY_SAMPLES_MAX) {
+        value = RUNTIME_3D_SECONDARY_SAMPLES_MAX;
+    }
+    value = ((value + (RUNTIME_3D_SECONDARY_SAMPLES_STEP / 2)) /
+             RUNTIME_3D_SECONDARY_SAMPLES_STEP) *
+            RUNTIME_3D_SECONDARY_SAMPLES_STEP;
+    if (value < RUNTIME_3D_SECONDARY_SAMPLES_MIN) {
+        value = RUNTIME_3D_SECONDARY_SAMPLES_MIN;
+    }
+    if (value > RUNTIME_3D_SECONDARY_SAMPLES_MAX) {
+        value = RUNTIME_3D_SECONDARY_SAMPLES_MAX;
+    }
+    return value;
+}
 
 static Vec3 runtime_diffuse_bounce_3d_default_tangent(Vec3 normal) {
     Vec3 guide = fabs(normal.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
@@ -48,16 +65,24 @@ static uint32_t runtime_diffuse_bounce_3d_hash_u32(uint32_t x) {
     return x;
 }
 
-static uint32_t runtime_diffuse_bounce_3d_seed_from_hit(const HitInfo3D* hit) {
+static uint32_t runtime_diffuse_bounce_3d_seed_from_hit(
+    const HitInfo3D* hit,
+    const RuntimeNative3DSamplingContext* sampling) {
     uint32_t sx = 0U;
     uint32_t sy = 0U;
     uint32_t sz = 0U;
+    uint32_t sequence = 0U;
     if (!hit) return 0U;
+    if (sampling) {
+        sequence = sampling->sampleSequence;
+    }
     sx = (uint32_t)(fabs(hit->position.x) * 4096.0);
     sy = (uint32_t)(fabs(hit->position.y) * 4096.0);
     sz = (uint32_t)(fabs(hit->position.z) * 4096.0);
     return runtime_diffuse_bounce_3d_hash_u32(
-        sx ^ (sy * 73856093U) ^ (sz * 19349663U) ^ ((uint32_t)(hit->triangleIndex + 1) * 83492791U));
+        sx ^ (sy * 73856093U) ^ (sz * 19349663U) ^
+        ((uint32_t)(hit->triangleIndex + 1) * 83492791U) ^
+        runtime_diffuse_bounce_3d_hash_u32(sequence ^ 0x9e3779b9U));
 }
 
 static double runtime_diffuse_bounce_3d_hash01(uint32_t base_seed, uint32_t salt) {
@@ -69,16 +94,16 @@ static Vec3 runtime_diffuse_bounce_3d_sample_direction(const HitInfo3D* hit,
                                                        Vec3 normal,
                                                        Vec3 tangent,
                                                        Vec3 bitangent,
+                                                       const RuntimeNative3DSamplingContext* sampling,
+                                                       int sample_count,
                                                        int sample_index) {
-    uint32_t base_seed = runtime_diffuse_bounce_3d_seed_from_hit(hit);
-    int col = sample_index % kRuntimeDiffuseBounce3DSampleCols;
-    int row = sample_index / kRuntimeDiffuseBounce3DSampleCols;
+    uint32_t base_seed = runtime_diffuse_bounce_3d_seed_from_hit(hit, sampling);
     double jitter_u =
         runtime_diffuse_bounce_3d_hash01(base_seed, (uint32_t)(sample_index * 2 + 1));
     double jitter_v =
         runtime_diffuse_bounce_3d_hash01(base_seed, (uint32_t)(sample_index * 2 + 2));
-    double u = ((double)col + jitter_u) / (double)kRuntimeDiffuseBounce3DSampleCols;
-    double v = ((double)row + jitter_v) / (double)kRuntimeDiffuseBounce3DSampleRows;
+    double u = jitter_u;
+    double v = ((double)sample_index + jitter_v) / (double)sample_count;
     double phi = 2.0 * M_PI * u;
     double radius = sqrt(v);
     double local_x = radius * cos(phi);
@@ -92,12 +117,14 @@ static Vec3 runtime_diffuse_bounce_3d_sample_direction(const HitInfo3D* hit,
 
 bool RuntimeDiffuseBounce3D_ShadeHit(const RuntimeScene3D* scene,
                                      const HitInfo3D* hit,
+                                     const RuntimeNative3DSamplingContext* sampling,
                                      RuntimeDiffuseBounce3DResult* out_result) {
     RuntimeDiffuseBounce3DResult result = {0};
     RuntimeDirectLight3DResult direct_result = {0};
     Vec3 tangent = vec3(0.0, 0.0, 0.0);
     Vec3 bitangent = vec3(0.0, 0.0, 0.0);
     double accumulated = 0.0;
+    int sample_count = 0;
 
     if (!scene || !hit || !out_result) return false;
     if (!scene->hasLight) return false;
@@ -112,15 +139,18 @@ bool RuntimeDiffuseBounce3D_ShadeHit(const RuntimeScene3D* scene,
     result.directRadiance = direct_result.radiance;
 
     runtime_diffuse_bounce_3d_build_basis(hit->normal, &tangent, &bitangent);
-    result.secondaryRayCount = kRuntimeDiffuseBounce3DSampleCount;
+    sample_count = runtime_diffuse_bounce_3d_resolve_sample_count();
+    result.secondaryRayCount = sample_count;
 
-    for (int i = 0; i < kRuntimeDiffuseBounce3DSampleCount; ++i) {
+    for (int i = 0; i < sample_count; ++i) {
         HitInfo3D secondary_hit = {0};
         RuntimeDirectLight3DResult secondary_direct = {0};
         Vec3 sample_dir = runtime_diffuse_bounce_3d_sample_direction(hit,
                                                                      hit->normal,
                                                                      tangent,
                                                                      bitangent,
+                                                                     sampling,
+                                                                     sample_count,
                                                                      i);
         Ray3D bounce_ray = RuntimeRay3D_MakeOffset(hit->position,
                                                    hit->normal,
@@ -163,7 +193,7 @@ bool RuntimeDiffuseBounce3D_ShadeHit(const RuntimeScene3D* scene,
         accumulated += sample_energy;
     }
 
-    result.bounceRadiance = fmin(accumulated / (double)kRuntimeDiffuseBounce3DSampleCount,
+    result.bounceRadiance = fmin(accumulated / (double)sample_count,
                                  fmax(scene->light.intensity * 0.35, 0.0));
     result.radiance = result.directRadiance + result.bounceRadiance;
     *out_result = result;
@@ -174,6 +204,7 @@ bool RuntimeDiffuseBounce3D_ShadePixel(const RuntimeScene3D* scene,
                                        const RuntimeCameraProjector3D* projector,
                                        double pixel_x,
                                        double pixel_y,
+                                       const RuntimeNative3DSamplingContext* sampling,
                                        RuntimeDiffuseBounce3DResult* out_result) {
     RuntimeDiffuseBounce3DResult result = {0};
     RuntimePrimaryHit3DResult primary_hit = {0};
@@ -191,7 +222,7 @@ bool RuntimeDiffuseBounce3D_ShadePixel(const RuntimeScene3D* scene,
         return false;
     }
 
-    if (!RuntimeDiffuseBounce3D_ShadeHit(scene, &primary_hit.hitInfo, &result)) {
+    if (!RuntimeDiffuseBounce3D_ShadeHit(scene, &primary_hit.hitInfo, sampling, &result)) {
         result.primaryRay = primary_hit.primaryRay;
         *out_result = result;
         return false;

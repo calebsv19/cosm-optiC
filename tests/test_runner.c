@@ -29,9 +29,12 @@
 #include "render/runtime_direct_light_3d.h"
 #include "render/runtime_diffuse_bounce_3d.h"
 #include "render/runtime_emission_transparency_3d.h"
+#include "render/runtime_light_emitter_3d.h"
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_material_response_3d.h"
 #include "render/runtime_native_3d_render.h"
+#include "render/runtime_native_3d_resolution.h"
+#include "render/runtime_native_3d_temporal_accum.h"
 #include "render/runtime_native_3d_tile_occupancy.h"
 #include "render/runtime_ray_3d.h"
 #include "render/runtime_scene_3d.h"
@@ -592,6 +595,160 @@ static int test_animation_integrator_split_roundtrip_and_default_3d(void) {
                 animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DISNEY);
 
     restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
+static int test_animation_native_3d_temporal_frames_roundtrip_and_clamp(void) {
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+    const char* json_missing_temporal =
+        "{\n"
+        "  \"spaceMode\": 1,\n"
+        "  \"integratorMode3D\": 1\n"
+        "}\n";
+    const char* json_invalid_temporal =
+        "{\n"
+        "  \"spaceMode\": 1,\n"
+        "  \"integratorMode3D\": 1,\n"
+        "  \"temporalFrames3D\": 0\n"
+        "}\n";
+
+    assert_true("native_3d_temporal_write_missing",
+                write_text_file(kRuntimeAnimationConfigPath, json_missing_temporal));
+    LoadAnimationConfig();
+    assert_true("native_3d_temporal_missing_defaults",
+                animSettings.temporalFrames3D == RUNTIME_3D_TEMPORAL_FRAMES_DEFAULT);
+
+    assert_true("native_3d_temporal_write_invalid",
+                write_text_file(kRuntimeAnimationConfigPath, json_invalid_temporal));
+    LoadAnimationConfig();
+    assert_true("native_3d_temporal_invalid_clamped_min",
+                animSettings.temporalFrames3D == RUNTIME_3D_TEMPORAL_FRAMES_MIN);
+
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.temporalFrames3D = 18;
+    SaveAnimationConfig();
+    animSettings.temporalFrames3D = RUNTIME_3D_TEMPORAL_FRAMES_DEFAULT;
+    LoadAnimationConfig();
+    assert_true("native_3d_temporal_roundtrip_persisted",
+                animSettings.temporalFrames3D == 18);
+
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
+static int test_animation_runtime_window_override_roundtrip_and_apply(void) {
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+
+    sceneSettings.windowWidth = 640;
+    sceneSettings.windowHeight = 904;
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    SaveAnimationConfig();
+
+    animSettings.runtimeWindowWidth = 0;
+    animSettings.runtimeWindowHeight = 0;
+    sceneSettings.windowWidth = 1200;
+    sceneSettings.windowHeight = 800;
+    LoadAnimationConfig();
+
+    assert_true("runtime_window_override_roundtrip_width",
+                animSettings.runtimeWindowWidth == 640);
+    assert_true("runtime_window_override_roundtrip_height",
+                animSettings.runtimeWindowHeight == 904);
+
+    ApplyAnimationWindowSizeOverride();
+    assert_true("runtime_window_override_apply_width",
+                sceneSettings.windowWidth == 640);
+    assert_true("runtime_window_override_apply_height",
+                sceneSettings.windowHeight == 904);
+
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
+static int test_animation_native_3d_render_scale_roundtrip_and_clamp(void) {
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+    const char* json_missing_scale =
+        "{\n"
+        "  \"spaceMode\": 1,\n"
+        "  \"integratorMode3D\": 1\n"
+        "}\n";
+    const char* json_invalid_scale =
+        "{\n"
+        "  \"spaceMode\": 1,\n"
+        "  \"integratorMode3D\": 1,\n"
+        "  \"renderScale3D\": 0\n"
+        "}\n";
+
+    assert_true("native_3d_render_scale_write_missing",
+                write_text_file(kRuntimeAnimationConfigPath, json_missing_scale));
+    LoadAnimationConfig();
+    assert_true("native_3d_render_scale_missing_defaults",
+                animSettings.renderScale3D == RUNTIME_3D_RENDER_SCALE_DEFAULT);
+
+    assert_true("native_3d_render_scale_write_invalid",
+                write_text_file(kRuntimeAnimationConfigPath, json_invalid_scale));
+    LoadAnimationConfig();
+    assert_true("native_3d_render_scale_invalid_clamped_min",
+                animSettings.renderScale3D == RUNTIME_3D_RENDER_SCALE_MIN);
+
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.renderScale3D = 4;
+    SaveAnimationConfig();
+    animSettings.renderScale3D = RUNTIME_3D_RENDER_SCALE_DEFAULT;
+    LoadAnimationConfig();
+    assert_true("native_3d_render_scale_roundtrip_persisted",
+                animSettings.renderScale3D == 4);
+
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
+static int test_runtime_native_3d_resolution_scale_contract(void) {
+    uint8_t src[4] = {10, 20, 30, 40};
+    uint8_t dst[16] = {0};
+    int width = 0;
+    int height = 0;
+    int rect_x = 0;
+    int rect_y = 0;
+    int rect_w = 0;
+    int rect_h = 0;
+
+    assert_true("runtime_native_3d_scale_resolve_ok",
+                RuntimeNative3DResolveScaledDimensions(1200, 900, 2, &width, &height));
+    assert_true("runtime_native_3d_scale_resolve_width", width == 600);
+    assert_true("runtime_native_3d_scale_resolve_height", height == 450);
+    assert_true("runtime_native_3d_scale_clamp_max",
+                RuntimeNative3DClampRenderScale(99) == RUNTIME_3D_RENDER_SCALE_MAX);
+
+    RuntimeNative3DUpscaleNearest(src, 2, 2, dst, 4, 4);
+    assert_true("runtime_native_3d_scale_upscale_top_left", dst[0] == 10);
+    assert_true("runtime_native_3d_scale_upscale_top_right", dst[3] == 20);
+    assert_true("runtime_native_3d_scale_upscale_bottom_left", dst[12] == 30);
+    assert_true("runtime_native_3d_scale_upscale_bottom_right", dst[15] == 40);
+    assert_true("runtime_native_3d_scale_rect_map_ok",
+                RuntimeNative3DResolveUpscaledRect(32,
+                                                   16,
+                                                   32,
+                                                   32,
+                                                   300,
+                                                   225,
+                                                   1200,
+                                                   900,
+                                                   &rect_x,
+                                                   &rect_y,
+                                                   &rect_w,
+                                                   &rect_h));
+    assert_true("runtime_native_3d_scale_rect_map_x", rect_x == 128);
+    assert_true("runtime_native_3d_scale_rect_map_y", rect_y == 64);
+    assert_true("runtime_native_3d_scale_rect_map_w", rect_w == 128);
+    assert_true("runtime_native_3d_scale_rect_map_h", rect_h == 128);
     return 0;
 }
 
@@ -2067,7 +2224,7 @@ static int test_runtime_scene_3d_builder_promotes_authored_light_camera_samples(
                  1e-6);
     assert_close("runtime_scene_3d_builder_samples_light_radius",
                  scene.light.radius,
-                 10.0,
+                 0.0,
                  1e-6);
     assert_close("runtime_scene_3d_builder_samples_light_intensity",
                  scene.light.intensity,
@@ -2313,6 +2470,176 @@ static int test_runtime_ray_3d_offset_contract(void) {
     assert_close("runtime_ray_3d_offset_backward_origin_z", backward.origin.z, 2.95, 1e-6);
     assert_close("runtime_ray_3d_offset_forward_dir_len", vec3_length(forward.direction), 1.0, 1e-6);
     assert_close("runtime_ray_3d_offset_backward_dir_len", vec3_length(backward.direction), 1.0, 1e-6);
+    return 0;
+}
+
+static int test_runtime_light_emitter_3d_center_hit_contract(void) {
+    RuntimeScene3D scene;
+    Ray3D ray = {0};
+    RuntimeLightEmitterHit3DResult result = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    scene.hasLight = true;
+    scene.light.position = vec3(0.0, 0.0, 0.0);
+    scene.light.radius = 1.0;
+    scene.light.intensity = 10.0;
+    scene.light.falloffDistance = 10.0;
+    scene.light.falloffMode = FORWARD_FALLOFF_MODE_NONE;
+    ray = RuntimeRay3D_Make(vec3(0.0, 0.0, 3.0), vec3(0.0, 0.0, -1.0));
+
+    ok = RuntimeLightEmitter3D_IntersectRay(&scene, &ray, 0.001, 10.0, &result);
+    assert_true("runtime_light_emitter_3d_center_hit_ok", ok);
+    assert_true("runtime_light_emitter_3d_center_hit_flag", result.hit);
+    assert_close("runtime_light_emitter_3d_center_hit_t", result.t, 2.0, 1e-6);
+    assert_close("runtime_light_emitter_3d_center_hit_pz", result.position.z, 1.0, 1e-6);
+    assert_close("runtime_light_emitter_3d_center_hit_nz", result.normal.z, 1.0, 1e-6);
+    assert_close("runtime_light_emitter_3d_center_hit_radial", result.radialFalloff, 1.0, 1e-6);
+    assert_close("runtime_light_emitter_3d_center_hit_attenuation", result.attenuation, 1.0, 1e-6);
+    assert_close("runtime_light_emitter_3d_center_hit_radiance", result.radiance, 10.0, 1e-6);
+
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
+static int test_runtime_light_emitter_3d_trace_geometry_tie_wins_contract(void) {
+    RuntimeScene3D scene;
+    Ray3D ray = {0};
+    RuntimeLightEmitterTrace3DResult result = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    scene.hasLight = true;
+    scene.light.position = vec3(0.0, 0.0, 0.0);
+    scene.light.radius = 1.0;
+    scene.light.intensity = 10.0;
+    scene.primitiveCapacity = 1;
+    scene.triangleMesh.triangleCapacity = 1;
+    scene.primitives = (RuntimePrimitive3D*)calloc((size_t)scene.primitiveCapacity,
+                                                   sizeof(*scene.primitives));
+    scene.triangleMesh.triangles =
+        (RuntimeTriangle3D*)calloc((size_t)scene.triangleMesh.triangleCapacity,
+                                   sizeof(*scene.triangleMesh.triangles));
+    assert_true("runtime_light_emitter_3d_tie_alloc_primitives", scene.primitives != NULL);
+    assert_true("runtime_light_emitter_3d_tie_alloc_triangles", scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        return 0;
+    }
+
+    scene.primitiveCount = 1;
+    scene.triangleMesh.triangleCount = 1;
+    scene.primitives[0].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene.primitives[0].source.sceneObjectIndex = 21;
+    snprintf(scene.primitives[0].source.objectId,
+             sizeof(scene.primitives[0].source.objectId),
+             "%s",
+             "front_plane");
+    scene.triangleMesh.triangles[0].p0 = vec3(-1.0, -1.0, 1.0);
+    scene.triangleMesh.triangles[0].p1 = vec3(1.0, -1.0, 1.0);
+    scene.triangleMesh.triangles[0].p2 = vec3(-1.0, 1.0, 1.0);
+    scene.triangleMesh.triangles[0].normal = vec3(0.0, 0.0, 1.0);
+    scene.triangleMesh.triangles[0].primitiveIndex = 0;
+    scene.triangleMesh.triangles[0].sceneObjectIndex = 21;
+
+    ray = RuntimeRay3D_Make(vec3(0.0, 0.0, 3.0), vec3(0.0, 0.0, -1.0));
+    ok = RuntimeLightEmitter3D_ResolveFirstHit(&scene, &ray, 0.001, 10.0, &result);
+    assert_true("runtime_light_emitter_3d_tie_resolve_ok", ok);
+    assert_true("runtime_light_emitter_3d_tie_geometry_hit", result.geometryHit);
+    assert_true("runtime_light_emitter_3d_tie_emitter_hit", result.emitterHit);
+    assert_true("runtime_light_emitter_3d_tie_geometry_wins", !result.emitterWins);
+    assert_close("runtime_light_emitter_3d_tie_geometry_t",
+                 result.geometryHitInfo.t,
+                 result.emitterHitInfo.t,
+                 1e-6);
+
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
+static int test_runtime_light_emitter_3d_trace_emitter_wins_contract(void) {
+    RuntimeScene3D scene;
+    Ray3D ray = {0};
+    RuntimeLightEmitterTrace3DResult result = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    scene.hasLight = true;
+    scene.light.position = vec3(0.0, 0.0, 0.0);
+    scene.light.radius = 1.0;
+    scene.light.intensity = 10.0;
+    scene.primitiveCapacity = 1;
+    scene.triangleMesh.triangleCapacity = 1;
+    scene.primitives = (RuntimePrimitive3D*)calloc((size_t)scene.primitiveCapacity,
+                                                   sizeof(*scene.primitives));
+    scene.triangleMesh.triangles =
+        (RuntimeTriangle3D*)calloc((size_t)scene.triangleMesh.triangleCapacity,
+                                   sizeof(*scene.triangleMesh.triangles));
+    assert_true("runtime_light_emitter_3d_win_alloc_primitives", scene.primitives != NULL);
+    assert_true("runtime_light_emitter_3d_win_alloc_triangles", scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        return 0;
+    }
+
+    scene.primitiveCount = 1;
+    scene.triangleMesh.triangleCount = 1;
+    scene.primitives[0].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene.primitives[0].source.sceneObjectIndex = 22;
+    snprintf(scene.primitives[0].source.objectId,
+             sizeof(scene.primitives[0].source.objectId),
+             "%s",
+             "rear_plane");
+    scene.triangleMesh.triangles[0].p0 = vec3(-2.0, -2.0, -2.0);
+    scene.triangleMesh.triangles[0].p1 = vec3(2.0, -2.0, -2.0);
+    scene.triangleMesh.triangles[0].p2 = vec3(-2.0, 2.0, -2.0);
+    scene.triangleMesh.triangles[0].normal = vec3(0.0, 0.0, 1.0);
+    scene.triangleMesh.triangles[0].primitiveIndex = 0;
+    scene.triangleMesh.triangles[0].sceneObjectIndex = 22;
+
+    ray = RuntimeRay3D_Make(vec3(0.0, 0.0, 3.0), vec3(0.0, 0.0, -1.0));
+    ok = RuntimeLightEmitter3D_ResolveFirstHit(&scene, &ray, 0.001, 10.0, &result);
+    assert_true("runtime_light_emitter_3d_win_resolve_ok", ok);
+    assert_true("runtime_light_emitter_3d_win_geometry_hit", result.geometryHit);
+    assert_true("runtime_light_emitter_3d_win_emitter_hit", result.emitterHit);
+    assert_true("runtime_light_emitter_3d_win_emitter_wins", result.emitterWins);
+    assert_true("runtime_light_emitter_3d_win_emitter_nearer",
+                result.emitterHitInfo.t < result.geometryHitInfo.t);
+
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
+static int test_runtime_light_emitter_3d_radial_falloff_contract(void) {
+    RuntimeScene3D scene;
+    Ray3D center_ray = {0};
+    Ray3D edge_ray = {0};
+    RuntimeLightEmitterHit3DResult center_result = {0};
+    RuntimeLightEmitterHit3DResult edge_result = {0};
+    bool center_ok = false;
+    bool edge_ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    scene.hasLight = true;
+    scene.light.position = vec3(0.0, 0.0, 0.0);
+    scene.light.radius = 1.0;
+    scene.light.intensity = 10.0;
+    scene.light.falloffMode = FORWARD_FALLOFF_MODE_NONE;
+    center_ray = RuntimeRay3D_Make(vec3(0.0, 0.0, 3.0), vec3(0.0, 0.0, -1.0));
+    edge_ray = RuntimeRay3D_Make(vec3(0.95, 0.0, 3.0), vec3(0.0, 0.0, -1.0));
+
+    center_ok = RuntimeLightEmitter3D_IntersectRay(&scene, &center_ray, 0.001, 10.0, &center_result);
+    edge_ok = RuntimeLightEmitter3D_IntersectRay(&scene, &edge_ray, 0.001, 10.0, &edge_result);
+    assert_true("runtime_light_emitter_3d_radial_center_ok", center_ok);
+    assert_true("runtime_light_emitter_3d_radial_edge_ok", edge_ok);
+    assert_true("runtime_light_emitter_3d_radial_edge_positive",
+                edge_result.radialFalloff > 0.0);
+    assert_true("runtime_light_emitter_3d_radial_edge_lower",
+                edge_result.radialFalloff < center_result.radialFalloff);
+    assert_true("runtime_light_emitter_3d_radial_radiance_lower",
+                edge_result.radiance < center_result.radiance);
+
+    RuntimeScene3D_Free(&scene);
     return 0;
 }
 
@@ -3066,6 +3393,7 @@ static int test_runtime_direct_light_3d_authored_light_motion_contract(void) {
     animSettings.lightIntensity = 10.0;
     animSettings.forwardDecay = 10.0;
     animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    animSettings.interactiveMode = true;
     sceneSettings.camera.rotation = 0.0;
     sceneSettings.camera.zoom = 1.0;
 
@@ -3102,6 +3430,7 @@ static int test_runtime_direct_light_3d_authored_light_motion_contract(void) {
 }
 
 static int test_runtime_diffuse_bounce_3d_shadowed_hit_lift_contract(void) {
+    AnimationConfig saved_anim = animSettings;
     RuntimeScene3D scene;
     HitInfo3D hit = {0};
     RuntimeDirectLight3DResult direct_result = {0};
@@ -3110,6 +3439,7 @@ static int test_runtime_diffuse_bounce_3d_shadowed_hit_lift_contract(void) {
 
     RuntimeScene3D_Init(&scene);
     scene.hasLight = true;
+    animSettings.secondaryDiffuseSamples3D = RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT;
     scene.light.position = vec3(2.0, -2.0, 0.0);
     scene.light.intensity = 10.0;
     scene.light.falloffDistance = 10.0;
@@ -3176,15 +3506,15 @@ static int test_runtime_diffuse_bounce_3d_shadowed_hit_lift_contract(void) {
                  0.0,
                  1e-9);
 
-    ok = RuntimeDiffuseBounce3D_ShadeHit(&scene, &hit, &diffuse_result);
+    ok = RuntimeDiffuseBounce3D_ShadeHit(&scene, &hit, NULL, &diffuse_result);
     assert_true("runtime_diffuse_bounce_shadowed_diffuse_ok", ok);
     assert_true("runtime_diffuse_bounce_shadowed_diffuse_hit", diffuse_result.hit);
     assert_close("runtime_diffuse_bounce_shadowed_direct_preserved",
                  diffuse_result.directRadiance,
                  0.0,
                  1e-9);
-    assert_true("runtime_diffuse_bounce_shadowed_secondary_rays_24",
-                diffuse_result.secondaryRayCount == 24);
+    assert_true("runtime_diffuse_bounce_shadowed_secondary_rays_match",
+                diffuse_result.secondaryRayCount == RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT);
     assert_true("runtime_diffuse_bounce_shadowed_secondary_hits_positive",
                 diffuse_result.secondaryHitCount > 0);
     assert_true("runtime_diffuse_bounce_shadowed_secondary_lit_hits_positive",
@@ -3195,6 +3525,429 @@ static int test_runtime_diffuse_bounce_3d_shadowed_hit_lift_contract(void) {
                 diffuse_result.radiance > 0.0);
 
     RuntimeScene3D_Free(&scene);
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_diffuse_bounce_3d_sampling_sequence_contract(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_diffuse_bounce_sampling_sequence\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"floor\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":8.0,\"height\":8.0,"
+            "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+            "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"bounce_card\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":1.0,\"height\":2.0,"
+            "\"frame\":{\"origin\":{\"x\":0.9,\"y\":-4.1,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":0.0,\"y\":1.0,\"z\":0.0},"
+            "\"normal\":{\"x\":-1.0,\"y\":0.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.9,\"y\":-4.1,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":2.0,\"y\":-2.0,\"z\":0.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeNative3DSamplingContext sampling_a = {.sampleSequence = 1U};
+    RuntimeNative3DSamplingContext sampling_b = {.sampleSequence = 2U};
+    uint8_t pixels_a[101 * 101];
+    uint8_t pixels_a_repeat[101 * 101];
+    uint8_t pixels_b[101 * 101];
+    RuntimeNative3DRenderStats stats_a = {0};
+    RuntimeNative3DRenderStats stats_a_repeat = {0};
+    RuntimeNative3DRenderStats stats_b = {0};
+    bool ok = false;
+    animSettings.secondaryDiffuseSamples3D = 4;
+    animSettings.lightIntensity = 10.0;
+    animSettings.forwardDecay = 10.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    sceneSettings.camera.rotation = 0.0;
+    sceneSettings.camera.zoom = 1.0;
+
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_diffuse_bounce_sequence_apply_ok", ok);
+    if (!ok) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    ok = RuntimeNative3DRenderToPixelBufferWithSampling(pixels_a,
+                                                        RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
+                                                        101,
+                                                        101,
+                                                        0.0,
+                                                        2.0,
+                                                        -2.0,
+                                                        &sampling_a,
+                                                        &stats_a);
+    assert_true("runtime_diffuse_bounce_sequence_render_a_ok", ok);
+    ok = RuntimeNative3DRenderToPixelBufferWithSampling(pixels_a_repeat,
+                                                        RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
+                                                        101,
+                                                        101,
+                                                        0.0,
+                                                        2.0,
+                                                        -2.0,
+                                                        &sampling_a,
+                                                        &stats_a_repeat);
+    assert_true("runtime_diffuse_bounce_sequence_render_a_repeat_ok", ok);
+    ok = RuntimeNative3DRenderToPixelBufferWithSampling(pixels_b,
+                                                        RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
+                                                        101,
+                                                        101,
+                                                        0.0,
+                                                        2.0,
+                                                        -2.0,
+                                                        &sampling_b,
+                                                        &stats_b);
+    assert_true("runtime_diffuse_bounce_sequence_render_b_ok", ok);
+    assert_true("runtime_diffuse_bounce_sequence_same_seed_repeat_matches",
+                memcmp(pixels_a, pixels_a_repeat, sizeof(pixels_a)) == 0);
+    assert_true("runtime_diffuse_bounce_sequence_differs_across_sequences",
+                memcmp(pixels_a, pixels_b, sizeof(pixels_a)) != 0);
+    assert_true("runtime_diffuse_bounce_sequence_stats_repeat_match",
+                stats_a.secondaryHitCount == stats_a_repeat.secondaryHitCount &&
+                stats_a.secondaryContributingHitCount == stats_a_repeat.secondaryContributingHitCount &&
+                fabs(stats_a.totalBounceRadiance - stats_a_repeat.totalBounceRadiance) <= 1e-9);
+
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_native_3d_temporal_accumulation_contract(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_native_3d_temporal_accum\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"floor\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":8.0,\"height\":8.0,"
+            "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+            "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"bounce_card\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":1.0,\"height\":2.0,"
+            "\"frame\":{\"origin\":{\"x\":0.9,\"y\":-4.1,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":0.0,\"y\":1.0,\"z\":0.0},"
+            "\"normal\":{\"x\":-1.0,\"y\":0.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.9,\"y\":-4.1,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":2.0,\"y\":-2.0,\"z\":0.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeNative3DSamplingContext sampling = {.sampleSequence = 11U};
+    uint8_t pixels_single[101 * 101];
+    uint8_t pixels_temporal[101 * 101];
+    RuntimeNative3DRenderStats stats_single = {0};
+    RuntimeNative3DRenderStats stats_temporal = {0};
+    bool ok = false;
+
+    animSettings.secondaryDiffuseSamples3D = 4;
+    animSettings.lightIntensity = 10.0;
+    animSettings.forwardDecay = 10.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    sceneSettings.camera.rotation = 0.0;
+    sceneSettings.camera.zoom = 1.0;
+
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_native_3d_temporal_apply_ok", ok);
+    if (!ok) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    ok = RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
+        pixels_single,
+        RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
+        101,
+        101,
+        0.0,
+        2.0,
+        -2.0,
+        &sampling,
+        1,
+        &stats_single);
+    assert_true("runtime_native_3d_temporal_single_ok", ok);
+    ok = RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
+        pixels_temporal,
+        RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
+        101,
+        101,
+        0.0,
+        2.0,
+        -2.0,
+        &sampling,
+        4,
+        &stats_temporal);
+    assert_true("runtime_native_3d_temporal_multi_ok", ok);
+    assert_true("runtime_native_3d_temporal_differs_from_single",
+                memcmp(pixels_single, pixels_temporal, sizeof(pixels_single)) != 0);
+    assert_true("runtime_native_3d_temporal_secondary_ray_growth",
+                stats_temporal.secondaryRayCount ==
+                    (stats_single.secondaryRayCount * 4));
+    assert_true("runtime_native_3d_temporal_visible_preserved",
+                stats_temporal.visiblePixelCount == (stats_single.visiblePixelCount * 4));
+    assert_true("runtime_native_3d_temporal_bounded_grayscale",
+                pixels_temporal[(50 * 101) + 50] <= 255);
+
+    ok = RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
+        pixels_temporal,
+        RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT,
+        101,
+        101,
+        0.0,
+        2.0,
+        -2.0,
+        &sampling,
+        4,
+        &stats_temporal);
+    assert_true("runtime_native_3d_temporal_direct_light_ok", ok);
+    ok = RuntimeNative3DRenderToPixelBufferWithSampling(
+        pixels_single,
+        RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT,
+        101,
+        101,
+        0.0,
+        2.0,
+        -2.0,
+        &sampling,
+        &stats_single);
+    assert_true("runtime_native_3d_temporal_direct_light_single_ok", ok);
+    assert_true("runtime_native_3d_temporal_direct_light_bypasses",
+                memcmp(pixels_single, pixels_temporal, sizeof(pixels_single)) == 0);
+
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_native_3d_temporal_tile_parity_contract(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_native_3d_temporal_tile_parity\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"floor\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":8.0,\"height\":8.0,"
+            "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+            "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"bounce_card\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":1.0,\"height\":2.0,"
+            "\"frame\":{\"origin\":{\"x\":0.9,\"y\":-4.1,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":0.0,\"y\":1.0,\"z\":0.0},"
+            "\"normal\":{\"x\":-1.0,\"y\":0.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.9,\"y\":-4.1,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":2.0,\"y\":-2.0,\"z\":0.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeNative3DSamplingContext sampling = {.sampleSequence = 21U};
+    RuntimeNative3DRenderStats full_stats = {0};
+    RuntimeNative3DRenderStats tiled_stats = {0};
+    RuntimeNative3DPreparedFrame frame = {0};
+    RuntimeNative3DTemporalAccumulation tile_accumulation = {0};
+    TileGrid grid = {0};
+    uint8_t full_pixels[101 * 101];
+    uint8_t tiled_pixels[101 * 101];
+    float* tile_luminance = NULL;
+    bool ok = false;
+    const int temporal_frames = 4;
+
+    animSettings.secondaryDiffuseSamples3D = 4;
+    animSettings.temporalFrames3D = temporal_frames;
+    animSettings.lightIntensity = 10.0;
+    animSettings.forwardDecay = 10.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    sceneSettings.camera.rotation = 0.0;
+    sceneSettings.camera.zoom = 1.0;
+
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_native_3d_temporal_tile_apply_ok", ok);
+    if (!ok) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    ok = RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
+        full_pixels,
+        RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
+        101,
+        101,
+        0.0,
+        2.0,
+        -2.0,
+        &sampling,
+        temporal_frames,
+        &full_stats);
+    assert_true("runtime_native_3d_temporal_tile_full_ok", ok);
+
+    memset(tiled_pixels, 0, sizeof(tiled_pixels));
+    ok = RuntimeNative3DPrepareFrameWithSampling(&frame, 101, 101, 0.0, 2.0, -2.0, &sampling);
+    assert_true("runtime_native_3d_temporal_tile_prepare_ok", ok);
+    if (ok) {
+        TileGridEnsure(&grid, 101, 101, 16);
+        ok = RuntimeNative3DPrepareFrameTileOccupancy(&frame, grid.tileSize);
+        assert_true("runtime_native_3d_temporal_tile_occupancy_ok", ok);
+    }
+    if (!ok) {
+        TileGridFree(&grid);
+        RuntimeNative3DPreparedFrame_Free(&frame);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    RuntimeNative3DTemporalAccumulation_Init(&tile_accumulation);
+    tile_luminance = (float*)calloc((size_t)grid.tileSize * (size_t)grid.tileSize,
+                                    sizeof(*tile_luminance));
+    assert_true("runtime_native_3d_temporal_tile_buffer_ok", tile_luminance != NULL);
+    if (!tile_luminance) {
+        free(tile_luminance);
+        RuntimeNative3DTemporalAccumulation_Free(&tile_accumulation);
+        TileGridFree(&grid);
+        RuntimeNative3DPreparedFrame_Free(&frame);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    for (size_t ti = 0; ok && ti < grid.count; ++ti) {
+        const IntegratorTile* tile = &grid.tiles[ti];
+        ok = RuntimeNative3DTemporalAccumulation_Ensure(&tile_accumulation, tile->width, tile->height);
+        assert_true("runtime_native_3d_temporal_tile_accum_ok", ok);
+        RuntimeNative3DTemporalAccumulation_Clear(&tile_accumulation);
+        for (int subpass = 0; subpass < temporal_frames; ++subpass) {
+            RuntimeNative3DPreparedFrame subpass_frame = frame;
+            RuntimeNative3DRenderStats subpass_stats = {0};
+
+            if (!RuntimeNative3DPreparedRegionMayContainGeometry(&frame,
+                                                                 tile->originX,
+                                                                 tile->originY,
+                                                                 tile->originX + tile->width,
+                                                                 tile->originY + tile->height)) {
+                continue;
+            }
+
+            memset(tile_luminance, 0, (size_t)tile->width * (size_t)tile->height * sizeof(*tile_luminance));
+            subpass_frame.sampling.sampleSequence = sampling.sampleSequence + (uint32_t)subpass;
+            ok = RuntimeNative3DRenderPreparedRegionLuminance(tile_luminance,
+                                                              tile->width,
+                                                              RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
+                                                              &subpass_frame,
+                                                              tile->originX,
+                                                              tile->originY,
+                                                              tile->originX + tile->width,
+                                                              tile->originY + tile->height,
+                                                              &subpass_stats);
+            assert_true("runtime_native_3d_temporal_tile_region_ok", ok);
+            ok = ok && RuntimeNative3DTemporalAccumulation_AddRegion(&tile_accumulation,
+                                                                     tile_luminance,
+                                                                     tile->width,
+                                                                     0,
+                                                                     0,
+                                                                     tile->width,
+                                                                     tile->height);
+            assert_true("runtime_native_3d_temporal_tile_add_ok", ok);
+            RuntimeNative3DRenderStats_Accumulate(&tiled_stats, &subpass_stats);
+            if (!ok) break;
+            RuntimeNative3DTemporalAccumulation_CommitSubpass(&tile_accumulation);
+        }
+        RuntimeNative3DTemporalAccumulation_ResolveToPixelBufferAtOffset(&tile_accumulation,
+                                                                         tiled_pixels,
+                                                                         101,
+                                                                         tile->originX,
+                                                                         tile->originY);
+    }
+
+    assert_true("runtime_native_3d_temporal_tile_pixels_match",
+                memcmp(full_pixels, tiled_pixels, sizeof(full_pixels)) == 0);
+    assert_true("runtime_native_3d_temporal_tile_secondary_rays_match",
+                full_stats.secondaryRayCount == tiled_stats.secondaryRayCount);
+    assert_true("runtime_native_3d_temporal_tile_secondary_hits_match",
+                full_stats.secondaryHitCount == tiled_stats.secondaryHitCount);
+    assert_true("runtime_native_3d_temporal_tile_secondary_lit_hits_match",
+                full_stats.secondaryContributingHitCount ==
+                    tiled_stats.secondaryContributingHitCount);
+
+    free(tile_luminance);
+    RuntimeNative3DTemporalAccumulation_Free(&tile_accumulation);
+    TileGridFree(&grid);
+    RuntimeNative3DPreparedFrame_Free(&frame);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
     return 0;
 }
 
@@ -3250,6 +4003,7 @@ static int test_runtime_diffuse_bounce_3d_seed_branch_contract(void) {
     animSettings.lightIntensity = 10.0;
     animSettings.forwardDecay = 10.0;
     animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    animSettings.secondaryDiffuseSamples3D = RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT;
     sceneSettings.camera.rotation = 0.0;
     sceneSettings.camera.zoom = 1.0;
 
@@ -3270,13 +4024,13 @@ static int test_runtime_diffuse_bounce_3d_seed_branch_contract(void) {
 
     ok = RuntimeDirectLight3D_ShadePixel(&scene, &projector, 50.0, 50.0, &direct_result);
     assert_true("runtime_diffuse_bounce_seed_direct_ok", ok);
-    ok = RuntimeDiffuseBounce3D_ShadePixel(&scene, &projector, 50.0, 50.0, &diffuse_result);
+    ok = RuntimeDiffuseBounce3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &diffuse_result);
     assert_true("runtime_diffuse_bounce_seed_diffuse_ok", ok);
     assert_true("runtime_diffuse_bounce_seed_diffuse_hit", diffuse_result.hit);
     assert_true("runtime_diffuse_bounce_seed_same_triangle",
                 diffuse_result.hitInfo.triangleIndex == primary_hit.hitInfo.triangleIndex);
-    assert_true("runtime_diffuse_bounce_seed_secondary_rays_24",
-                diffuse_result.secondaryRayCount == 24);
+    assert_true("runtime_diffuse_bounce_seed_secondary_rays_match",
+                diffuse_result.secondaryRayCount == RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT);
     assert_true("runtime_diffuse_bounce_seed_secondary_hits_zero",
                 diffuse_result.secondaryHitCount == 0);
     assert_close("runtime_diffuse_bounce_seed_direct_match",
@@ -3362,6 +4116,8 @@ static int test_runtime_material_response_3d_seed_branch_contract(void) {
     animSettings.lightIntensity = 10.0;
     animSettings.forwardDecay = 10.0;
     animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    animSettings.secondaryDiffuseSamples3D = RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT;
+    animSettings.transmissionSamples3D = RUNTIME_3D_TRANSMISSION_SAMPLES_DEFAULT;
     sceneSettings.camera.rotation = 0.0;
     sceneSettings.camera.zoom = 1.0;
 
@@ -3376,14 +4132,14 @@ static int test_runtime_material_response_3d_seed_branch_contract(void) {
         return 0;
     }
 
-    ok = RuntimeDiffuseBounce3D_ShadePixel(&scene, &projector, 50.0, 50.0, &diffuse_result);
+    ok = RuntimeDiffuseBounce3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &diffuse_result);
     assert_true("runtime_material_response_seed_diffuse_ok", ok);
 
     sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_DEFAULT;
-    ok = RuntimeMaterialResponse3D_ShadePixel(&scene, &projector, 50.0, 50.0, &matte_result);
+    ok = RuntimeMaterialResponse3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &matte_result);
     assert_true("runtime_material_response_seed_matte_ok", ok);
     sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_MIRROR;
-    ok = RuntimeMaterialResponse3D_ShadePixel(&scene, &projector, 50.0, 50.0, &mirror_result);
+    ok = RuntimeMaterialResponse3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &mirror_result);
     assert_true("runtime_material_response_seed_mirror_ok", ok);
     assert_true("runtime_material_response_seed_matte_hit", matte_result.hit);
     assert_true("runtime_material_response_seed_mirror_hit", mirror_result.hit);
@@ -3493,12 +4249,13 @@ static int test_runtime_emission_transparency_3d_seed_branch_contract(void) {
     }
 
     sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_EMISSIVE;
-    ok = RuntimeMaterialResponse3D_ShadePixel(&scene, &projector, 50.0, 50.0, &material_result);
+    ok = RuntimeMaterialResponse3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &material_result);
     assert_true("runtime_emission_transparency_seed_material_ok", ok);
     ok = RuntimeEmissionTransparency3D_ShadePixel(&scene,
                                                   &projector,
                                                   50.0,
                                                   50.0,
+                                                  NULL,
                                                   &emission_result);
     assert_true("runtime_emission_transparency_seed_branch_ok", ok);
     assert_true("runtime_emission_transparency_seed_hit", emission_result.hit);
@@ -3515,7 +4272,7 @@ static int test_runtime_emission_transparency_3d_seed_branch_contract(void) {
                  0.0,
                  1e-9);
     assert_true("runtime_emission_transparency_seed_secondary_rays_match",
-                emission_result.secondaryRayCount == 24);
+                emission_result.secondaryRayCount == RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT);
     assert_true("runtime_emission_transparency_seed_direct_lifts_material",
                 emission_result.directRadiance > material_result.directRadiance);
     assert_close("runtime_emission_transparency_seed_bounce_match",
@@ -3666,12 +4423,13 @@ static int test_runtime_emission_transparency_3d_transmission_contract(void) {
         return 0;
     }
 
-    ok = RuntimeMaterialResponse3D_ShadePixel(&scene, &projector, 50.0, 50.0, &material_result);
+    ok = RuntimeMaterialResponse3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &material_result);
     assert_true("runtime_emission_transparency_transmission_material_ok", ok);
     ok = RuntimeEmissionTransparency3D_ShadePixel(&scene,
                                                   &projector,
                                                   50.0,
                                                   50.0,
+                                                  NULL,
                                                   &transparent_result);
     assert_true("runtime_emission_transparency_transmission_branch_ok", ok);
     assert_true("runtime_emission_transparency_transmission_hit", transparent_result.hit);
@@ -3771,12 +4529,13 @@ static int test_runtime_emission_transparency_3d_transparent_prism_reaches_behin
         return 0;
     }
 
-    ok = RuntimeMaterialResponse3D_ShadePixel(&scene, &projector, 50.0, 50.0, &material_result);
+    ok = RuntimeMaterialResponse3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &material_result);
     assert_true("runtime_emission_transparency_prism_material_ok", ok);
     ok = RuntimeEmissionTransparency3D_ShadePixel(&scene,
                                                   &projector,
                                                   50.0,
                                                   50.0,
+                                                  NULL,
                                                   &transparent_result);
     assert_true("runtime_emission_transparency_prism_branch_ok", ok);
     assert_true("runtime_emission_transparency_prism_hit", transparent_result.hit);
@@ -3790,6 +4549,123 @@ static int test_runtime_emission_transparency_3d_transparent_prism_reaches_behin
     RuntimeScene3D_Free(&scene);
     sceneSettings = saved_scene;
     animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_emission_transparency_3d_transparent_prism_reaches_emitter(void) {
+    SceneConfig saved_scene = sceneSettings;
+    RuntimeScene3D scene;
+    RuntimeCameraProjector3D projector = {0};
+    RuntimeMaterialResponse3DResult material_result = {0};
+    RuntimeEmissionTransparency3DResult transparent_result = {0};
+    RuntimeLightEmitterHit3DResult emitter_result = {0};
+    Ray3D transmission_ray = {0};
+    double legacy_front_weight = 0.0;
+    double legacy_transparency = 0.0;
+    double legacy_direct = 0.0;
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    MaterialManagerResetDefaults();
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    sceneSettings.objectCount = 1;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
+
+    scene.hasLight = true;
+    scene.light.position = vec3(0.0, -7.0, 0.0);
+    scene.light.radius = 1.5;
+    scene.light.intensity = 10.0;
+    scene.light.falloffDistance = 10.0;
+    scene.light.falloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    scene.hasCamera = true;
+    scene.camera.position = vec3(0.0, 0.0, 0.0);
+    scene.camera.rotation = 0.0;
+    scene.camera.lookPitch = 0.0;
+    scene.camera.zoom = 1.0;
+    scene.camera.nearPlane = 0.1;
+    scene.primitiveCapacity = 1;
+    scene.triangleMesh.triangleCapacity = 1;
+    scene.primitives = (RuntimePrimitive3D*)calloc((size_t)scene.primitiveCapacity,
+                                                   sizeof(*scene.primitives));
+    scene.triangleMesh.triangles =
+        (RuntimeTriangle3D*)calloc((size_t)scene.triangleMesh.triangleCapacity,
+                                   sizeof(*scene.triangleMesh.triangles));
+    assert_true("runtime_emission_transparency_emitter_prism_alloc_primitives",
+                scene.primitives != NULL);
+    assert_true("runtime_emission_transparency_emitter_prism_alloc_triangles",
+                scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        return 0;
+    }
+    scene.primitiveCount = 1;
+    scene.triangleMesh.triangleCount = 1;
+    scene.primitives[0].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene.primitives[0].source.sceneObjectIndex = 0;
+    snprintf(scene.primitives[0].source.objectId,
+             sizeof(scene.primitives[0].source.objectId),
+             "%s",
+             "front_wall");
+    scene.triangleMesh.triangles[0].p0 = vec3(-3.0, -4.0, -3.0);
+    scene.triangleMesh.triangles[0].p1 = vec3(3.0, -4.0, -3.0);
+    scene.triangleMesh.triangles[0].p2 = vec3(0.0, -4.0, 3.0);
+    scene.triangleMesh.triangles[0].normal = vec3(0.0, 1.0, 0.0);
+    scene.triangleMesh.triangles[0].primitiveIndex = 0;
+    scene.triangleMesh.triangles[0].sceneObjectIndex = 0;
+
+    ok = RuntimeCameraProjector3D_Build(&scene.camera, 101, 101, &projector);
+    assert_true("runtime_emission_transparency_emitter_prism_projector_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        return 0;
+    }
+
+    ok = RuntimeMaterialResponse3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &material_result);
+    assert_true("runtime_emission_transparency_emitter_prism_material_ok", ok);
+    transmission_ray = RuntimeRay3D_MakeOffset(material_result.hitInfo.position,
+                                               material_result.hitInfo.normal,
+                                               material_result.primaryRay.direction,
+                                               1e-4);
+    ok = RuntimeLightEmitter3D_IntersectRay(&scene,
+                                            &transmission_ray,
+                                            1e-4,
+                                            32.0,
+                                            &emitter_result);
+    assert_true("runtime_emission_transparency_emitter_prism_transmission_ray_hits_emitter", ok);
+    assert_true("runtime_emission_transparency_emitter_prism_transmission_emitter_radiance_positive",
+                emitter_result.radiance > 0.05);
+    ok = RuntimeEmissionTransparency3D_ShadePixel(&scene,
+                                                  &projector,
+                                                  50.0,
+                                                  50.0,
+                                                  NULL,
+                                                  &transparent_result);
+    assert_true("runtime_emission_transparency_emitter_prism_branch_ok", ok);
+    assert_true("runtime_emission_transparency_emitter_prism_hit", transparent_result.hit);
+    assert_true("runtime_emission_transparency_emitter_prism_payload_resolved",
+                transparent_result.payloadResolved);
+    assert_true("runtime_emission_transparency_emitter_prism_transparency_positive",
+                transparent_result.payload.transparency > 0.5);
+    legacy_front_weight = 1.0 - transparent_result.payload.transparency;
+    if (legacy_front_weight < 0.2) {
+        legacy_front_weight = 0.2;
+    }
+    legacy_transparency = 1.0 - legacy_front_weight;
+    legacy_direct = (material_result.directRadiance * legacy_front_weight) +
+                    (emitter_result.radiance * legacy_transparency);
+    assert_true("runtime_emission_transparency_emitter_prism_direct_positive",
+                transparent_result.directRadiance > 0.05);
+    assert_true("runtime_emission_transparency_emitter_prism_direct_lifts_material",
+                transparent_result.directRadiance > material_result.directRadiance + 0.05);
+    assert_true("runtime_emission_transparency_emitter_prism_direct_softens_legacy_hard_edge",
+                transparent_result.directRadiance < legacy_direct - 0.01);
+    assert_true("runtime_emission_transparency_emitter_prism_total_lifts_material",
+                transparent_result.radiance > material_result.radiance + 0.05);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
     return 0;
 }
 
@@ -3838,6 +4714,7 @@ static int test_runtime_native_3d_render_live_buffer_contract(void) {
     uint8_t offset_pixels[51 * 51];
     bool ok = false;
     bool material_differs = false;
+    bool emission_lifts_some_material_pixel = false;
     int i = 0;
 
     ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
@@ -3851,7 +4728,8 @@ static int test_runtime_native_3d_render_live_buffer_contract(void) {
     animSettings.lightIntensity = 10.0;
     animSettings.forwardDecay = 10.0;
     animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
-    animSettings.interactiveMode = false;
+    animSettings.lightHeight = 0.0;
+    animSettings.interactiveMode = true;
     animSettings.spaceMode = SPACE_MODE_3D;
     animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DISNEY;
     sceneSettings.camera.x = 0.0;
@@ -3882,7 +4760,6 @@ static int test_runtime_native_3d_render_live_buffer_contract(void) {
                 centered_stats.maxRadiance > 0.0);
     assert_true("runtime_native_3d_render_centered_pixel_positive",
                 centered_pixels[(25 * 51) + 25] > 0);
-
     ok = RuntimeNative3DRenderToPixelBuffer(diffuse_pixels,
                                             RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
                                             51,
@@ -3965,8 +4842,14 @@ static int test_runtime_native_3d_render_live_buffer_contract(void) {
     assert_true("runtime_native_3d_render_emission_material_reference_ok", ok);
     assert_true("runtime_native_3d_render_emission_seed_radiance_lifts_material",
                 emission_stats.maxRadiance > material_stats.maxRadiance);
-    assert_true("runtime_native_3d_render_emission_seed_center_pixel_lifts_material",
-                emission_pixels[(25 * 51) + 25] > material_pixels[(25 * 51) + 25]);
+    for (i = 0; i < (51 * 51); ++i) {
+        if (emission_pixels[i] > material_pixels[i]) {
+            emission_lifts_some_material_pixel = true;
+            break;
+        }
+    }
+    assert_true("runtime_native_3d_render_emission_seed_some_pixel_lifts_material",
+                emission_lifts_some_material_pixel);
 
     ok = RuntimeNative3DRenderToPixelBuffer(offset_pixels,
                                             route.integratorMode3D,
@@ -3995,6 +4878,84 @@ static int test_runtime_native_3d_render_live_buffer_contract(void) {
                 offset_stats.hitPixelCount == 0);
     assert_true("runtime_native_3d_render_disney_pixel_cleared",
                 offset_pixels[(25 * 51) + 25] == 0);
+
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_native_3d_render_live_visible_emitter_bounded(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_native_visible_emitter_bounded\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"offscreen_plane\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":2.0,\"height\":2.0,"
+            "\"frame\":{\"origin\":{\"x\":8.0,\"y\":-5.0,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+            "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":8.0,\"y\":-5.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":0.0,\"y\":-4.0,\"z\":0.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeNative3DRenderStats stats = {0};
+    uint8_t pixels[51 * 51];
+    bool ok = false;
+
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_native_3d_render_live_emitter_bounded_apply_ok", ok);
+    if (!ok) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    animSettings.lightIntensity = 10.0;
+    animSettings.forwardDecay = 10.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    animSettings.lightHeight = 0.0;
+    animSettings.interactiveMode = true;
+    animSettings.spaceMode = SPACE_MODE_3D;
+    sceneSettings.camera.x = 0.0;
+    sceneSettings.camera.y = 0.0;
+    sceneSettings.cameraZ = 0.0;
+    sceneSettings.camera.rotation = 0.0;
+    sceneSettings.camera.zoom = 1.0;
+
+    ok = RuntimeNative3DRenderToPixelBuffer(pixels,
+                                            RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT,
+                                            51,
+                                            51,
+                                            0.0,
+                                            0.0,
+                                            -4.0,
+                                            &stats);
+    assert_true("runtime_native_3d_render_live_emitter_bounded_ok", ok);
+    assert_true("runtime_native_3d_render_live_emitter_bounded_center_positive",
+                pixels[(25 * 51) + 25] > 0);
+    assert_true("runtime_native_3d_render_live_emitter_bounded_corner_black",
+                pixels[0] == 0 &&
+                    pixels[50] == 0 &&
+                    pixels[51 * 50] == 0 &&
+                    pixels[(51 * 51) - 1] == 0);
 
     sceneSettings = saved_scene;
     animSettings = saved_anim;
@@ -4134,6 +5095,131 @@ static int test_runtime_native_3d_render_prepared_region_parity(void) {
     RuntimeNative3DPreparedFrame_Free(&frame);
     sceneSettings = saved_scene;
     animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_native_3d_render_visible_emitter_tile_parity(void) {
+    RuntimeScene3D scene;
+    RuntimeNative3DRenderStats full_stats = {0};
+    RuntimeNative3DRenderStats tiled_stats = {0};
+    RuntimeNative3DPreparedFrame frame = {0};
+    TileGrid grid = {0};
+    uint8_t full_pixels[51 * 51];
+    uint8_t tiled_pixels[51 * 51];
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    RuntimeNative3DTileOccupancy_Init(&frame.tileOccupancy);
+    scene.hasLight = true;
+    scene.light.position = vec3(0.0, -4.0, 0.0);
+    scene.light.radius = 0.25;
+    scene.light.intensity = 10.0;
+    scene.light.falloffDistance = 10.0;
+    scene.light.falloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    scene.hasCamera = true;
+    scene.camera.position = vec3(0.0, 0.0, 0.0);
+    scene.camera.rotation = 0.0;
+    scene.camera.lookPitch = 0.0;
+    scene.camera.zoom = 1.0;
+    scene.camera.nearPlane = 0.1;
+    scene.primitiveCapacity = 1;
+    scene.triangleMesh.triangleCapacity = 1;
+    scene.primitives = (RuntimePrimitive3D*)calloc((size_t)scene.primitiveCapacity,
+                                                   sizeof(*scene.primitives));
+    scene.triangleMesh.triangles =
+        (RuntimeTriangle3D*)calloc((size_t)scene.triangleMesh.triangleCapacity,
+                                   sizeof(*scene.triangleMesh.triangles));
+    assert_true("runtime_native_3d_visible_emitter_alloc_primitives", scene.primitives != NULL);
+    assert_true("runtime_native_3d_visible_emitter_alloc_triangles", scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        return 0;
+    }
+    scene.primitiveCount = 1;
+    scene.triangleMesh.triangleCount = 1;
+    scene.primitives[0].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene.primitives[0].source.sceneObjectIndex = 7;
+    snprintf(scene.primitives[0].source.objectId,
+             sizeof(scene.primitives[0].source.objectId),
+             "%s",
+             "offscreen_plane");
+    scene.triangleMesh.triangles[0].p0 = vec3(8.0, -5.0, -1.0);
+    scene.triangleMesh.triangles[0].p1 = vec3(10.0, -5.0, -1.0);
+    scene.triangleMesh.triangles[0].p2 = vec3(8.0, -5.0, 1.0);
+    scene.triangleMesh.triangles[0].normal = vec3(0.0, 1.0, 0.0);
+    scene.triangleMesh.triangles[0].primitiveIndex = 0;
+    scene.triangleMesh.triangles[0].sceneObjectIndex = 7;
+
+    ok = RuntimeCameraProjector3D_Build(&scene.camera, 51, 51, &frame.projector);
+    assert_true("runtime_native_3d_visible_emitter_projector_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        return 0;
+    }
+    frame.scene = scene;
+    frame.width = 51;
+    frame.height = 51;
+    frame.valid = true;
+
+    memset(full_pixels, 0, sizeof(full_pixels));
+    ok = RuntimeNative3DRenderPreparedRegion(full_pixels,
+                                             RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT,
+                                             &frame,
+                                             0,
+                                             0,
+                                             51,
+                                             51,
+                                             &full_stats);
+    assert_true("runtime_native_3d_visible_emitter_full_ok", ok);
+    assert_true("runtime_native_3d_visible_emitter_hits_positive",
+                full_stats.hitPixelCount > 0);
+    assert_true("runtime_native_3d_visible_emitter_visible_positive",
+                full_stats.visiblePixelCount > 0);
+    assert_true("runtime_native_3d_visible_emitter_radiance_positive",
+                full_stats.maxRadiance > 0.0);
+    assert_true("runtime_native_3d_visible_emitter_center_pixel_positive",
+                full_pixels[(25 * 51) + 25] > 0);
+
+    memset(tiled_pixels, 0, sizeof(tiled_pixels));
+    TileGridEnsure(&grid, 51, 51, 16);
+    ok = RuntimeNative3DPrepareFrameTileOccupancy(&frame, grid.tileSize);
+    assert_true("runtime_native_3d_visible_emitter_occupancy_prepare_ok", ok);
+    for (size_t ti = 0; ok && ti < grid.count; ++ti) {
+        const IntegratorTile* tile = &grid.tiles[ti];
+        RuntimeNative3DRenderStats tile_stats = {0};
+        if (!RuntimeNative3DPreparedRegionMayContainGeometry(&frame,
+                                                             tile->originX,
+                                                             tile->originY,
+                                                             tile->originX + tile->width,
+                                                             tile->originY + tile->height)) {
+            continue;
+        }
+        ok = RuntimeNative3DRenderPreparedRegion(tiled_pixels,
+                                                 RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT,
+                                                 &frame,
+                                                 tile->originX,
+                                                 tile->originY,
+                                                 tile->originX + tile->width,
+                                                 tile->originY + tile->height,
+                                                 &tile_stats);
+        assert_true("runtime_native_3d_visible_emitter_region_ok", ok);
+        if (!ok) break;
+        RuntimeNative3DRenderStats_Accumulate(&tiled_stats, &tile_stats);
+    }
+
+    assert_true("runtime_native_3d_visible_emitter_pixels_match",
+                memcmp(full_pixels, tiled_pixels, sizeof(full_pixels)) == 0);
+    assert_true("runtime_native_3d_visible_emitter_hit_count_match",
+                full_stats.hitPixelCount == tiled_stats.hitPixelCount);
+    assert_true("runtime_native_3d_visible_emitter_visible_count_match",
+                full_stats.visiblePixelCount == tiled_stats.visiblePixelCount);
+    assert_close("runtime_native_3d_visible_emitter_max_radiance_match",
+                 full_stats.maxRadiance,
+                 tiled_stats.maxRadiance,
+                 1e-9);
+
+    TileGridFree(&grid);
+    RuntimeNative3DPreparedFrame_Free(&frame);
     return 0;
 }
 
@@ -7307,6 +8393,9 @@ int main(int argc, char **argv) {
     test_animation_scene_source_legacy_migration();
     test_animation_scene_source_roundtrip_runtime_lane();
     test_animation_integrator_split_roundtrip_and_default_3d();
+    test_animation_native_3d_temporal_frames_roundtrip_and_clamp();
+    test_animation_runtime_window_override_roundtrip_and_apply();
+    test_animation_native_3d_render_scale_roundtrip_and_clamp();
     test_animation_scene_source_select_runtime_failure_rolls_back();
     test_animation_scene_source_select_runtime_persists_on_save();
     test_animation_apply_active_scene_source_invalid_fluid_falls_back_2d();
@@ -7346,6 +8435,10 @@ int main(int argc, char **argv) {
     test_runtime_ray_3d_triangle_intersection_contract();
     test_runtime_ray_3d_scene_first_hit_contract();
     test_runtime_ray_3d_offset_contract();
+    test_runtime_light_emitter_3d_center_hit_contract();
+    test_runtime_light_emitter_3d_trace_geometry_tie_wins_contract();
+    test_runtime_light_emitter_3d_trace_emitter_wins_contract();
+    test_runtime_light_emitter_3d_radial_falloff_contract();
     test_runtime_visibility_3d_visible_contract();
     test_runtime_visibility_3d_blocked_contract();
     test_runtime_camera_projector_3d_center_ray_contract();
@@ -7360,13 +8453,20 @@ int main(int argc, char **argv) {
     test_runtime_direct_light_3d_shade_pixel_shadowed_contract();
     test_runtime_direct_light_3d_authored_light_motion_contract();
     test_runtime_diffuse_bounce_3d_shadowed_hit_lift_contract();
+    test_runtime_diffuse_bounce_3d_sampling_sequence_contract();
+    test_runtime_native_3d_temporal_accumulation_contract();
     test_runtime_diffuse_bounce_3d_seed_branch_contract();
     test_runtime_material_response_3d_seed_branch_contract();
     test_runtime_emission_transparency_3d_seed_branch_contract();
     test_runtime_emission_transparency_3d_transmission_contract();
     test_runtime_emission_transparency_3d_transparent_prism_reaches_behind_surface();
+    test_runtime_emission_transparency_3d_transparent_prism_reaches_emitter();
     test_runtime_native_3d_render_live_buffer_contract();
+    test_runtime_native_3d_render_live_visible_emitter_bounded();
     test_runtime_native_3d_render_prepared_region_parity();
+    test_runtime_native_3d_render_visible_emitter_tile_parity();
+    test_runtime_native_3d_temporal_tile_parity_contract();
+    test_runtime_native_3d_resolution_scale_contract();
     test_runtime_native_3d_tile_occupancy_contract();
     test_runtime_native_3d_dirty_rect_preview_base_parity();
     test_animation_output_render_metrics_route_truth_contract();

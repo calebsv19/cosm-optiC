@@ -24,12 +24,14 @@ typedef struct {
 
 bool RuntimeMaterialResponse3D_ShadeHit(const RuntimeScene3D* scene,
                                         const HitInfo3D* hit,
+                                        const RuntimeNative3DSamplingContext* sampling,
                                         RuntimeMaterialResponse3DResult* out_result);
 
 bool RuntimeMaterialResponse3D_ShadePixel(const RuntimeScene3D* scene,
                                           const RuntimeCameraProjector3D* projector,
                                           double pixel_x,
                                           double pixel_y,
+                                          const RuntimeNative3DSamplingContext* sampling,
                                           RuntimeMaterialResponse3DResult* out_result);
 
 #endif

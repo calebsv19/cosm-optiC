@@ -103,6 +103,84 @@ static bool runtime_native_3d_tile_occupancy_mark_triangle(RuntimeNative3DTileOc
     return true;
 }
 
+static bool runtime_native_3d_tile_occupancy_mark_emitter(RuntimeNative3DTileOccupancy* occupancy,
+                                                          const RuntimeCameraProjector3D* projector,
+                                                          const RuntimeScene3D* scene) {
+    double screen_x = 0.0;
+    double screen_y = 0.0;
+    double camera_depth = 0.0;
+    bool inside = false;
+    double radius_pixels = 0.0;
+    int pixel_min_x = 0;
+    int pixel_max_x = 0;
+    int pixel_min_y = 0;
+    int pixel_max_y = 0;
+    int tile_min_x = 0;
+    int tile_max_x = 0;
+    int tile_min_y = 0;
+    int tile_max_y = 0;
+
+    if (!occupancy || !projector || !scene || !scene->hasLight) return true;
+    if (!(scene->light.radius > 1e-9)) return true;
+    if (!RuntimeCameraProjector3D_ProjectPoint(projector,
+                                               scene->light.position,
+                                               &screen_x,
+                                               &screen_y,
+                                               &camera_depth,
+                                               &inside) ||
+        camera_depth <= projector->nearPlane) {
+        return true;
+    }
+
+    radius_pixels = scene->light.radius *
+                    ((double)projector->viewportWidth /
+                     (2.0 * projector->tanHalfFovX * camera_depth));
+    if (!(radius_pixels > 0.0) || !isfinite(radius_pixels)) {
+        return true;
+    }
+
+    pixel_min_x = (int)floor(screen_x - radius_pixels);
+    pixel_max_x = (int)ceil(screen_x + radius_pixels);
+    pixel_min_y = (int)floor(screen_y - radius_pixels);
+    pixel_max_y = (int)ceil(screen_y + radius_pixels);
+
+    if (pixel_max_x <= 0 || pixel_max_y <= 0 ||
+        pixel_min_x >= occupancy->viewportWidth ||
+        pixel_min_y >= occupancy->viewportHeight) {
+        return true;
+    }
+
+    pixel_min_x = runtime_native_3d_tile_occupancy_clamp_int(pixel_min_x,
+                                                             0,
+                                                             occupancy->viewportWidth - 1);
+    pixel_max_x = runtime_native_3d_tile_occupancy_clamp_int(pixel_max_x,
+                                                             pixel_min_x + 1,
+                                                             occupancy->viewportWidth);
+    pixel_min_y = runtime_native_3d_tile_occupancy_clamp_int(pixel_min_y,
+                                                             0,
+                                                             occupancy->viewportHeight - 1);
+    pixel_max_y = runtime_native_3d_tile_occupancy_clamp_int(pixel_max_y,
+                                                             pixel_min_y + 1,
+                                                             occupancy->viewportHeight);
+
+    tile_min_x = pixel_min_x / occupancy->tileSize;
+    tile_max_x = (pixel_max_x - 1) / occupancy->tileSize;
+    tile_min_y = pixel_min_y / occupancy->tileSize;
+    tile_max_y = (pixel_max_y - 1) / occupancy->tileSize;
+
+    tile_min_x = runtime_native_3d_tile_occupancy_clamp_int(tile_min_x, 0, occupancy->tilesX - 1);
+    tile_max_x = runtime_native_3d_tile_occupancy_clamp_int(tile_max_x, tile_min_x, occupancy->tilesX - 1);
+    tile_min_y = runtime_native_3d_tile_occupancy_clamp_int(tile_min_y, 0, occupancy->tilesY - 1);
+    tile_max_y = runtime_native_3d_tile_occupancy_clamp_int(tile_max_y, tile_min_y, occupancy->tilesY - 1);
+
+    for (int ty = tile_min_y; ty <= tile_max_y; ++ty) {
+        for (int tx = tile_min_x; tx <= tile_max_x; ++tx) {
+            occupancy->tiles[(size_t)ty * (size_t)occupancy->tilesX + (size_t)tx] = 1u;
+        }
+    }
+    return true;
+}
+
 bool RuntimeNative3DTileOccupancy_Build(RuntimeNative3DTileOccupancy* occupancy,
                                         const RuntimeScene3D* scene,
                                         const RuntimeCameraProjector3D* projector,
@@ -144,6 +222,10 @@ bool RuntimeNative3DTileOccupancy_Build(RuntimeNative3DTileOccupancy* occupancy,
             runtime_native_3d_tile_occupancy_disable(occupancy);
             return false;
         }
+    }
+    if (!runtime_native_3d_tile_occupancy_mark_emitter(occupancy, projector, scene)) {
+        runtime_native_3d_tile_occupancy_disable(occupancy);
+        return false;
     }
     return true;
 }

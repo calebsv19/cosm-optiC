@@ -87,6 +87,7 @@ static void runtime_material_response_3d_apply_weights(
 
 bool RuntimeMaterialResponse3D_ShadeHit(const RuntimeScene3D* scene,
                                         const HitInfo3D* hit,
+                                        const RuntimeNative3DSamplingContext* sampling,
                                         RuntimeMaterialResponse3DResult* out_result) {
     RuntimeMaterialResponse3DResult result = {0};
     RuntimeDiffuseBounce3DResult diffuse_result = {0};
@@ -96,7 +97,7 @@ bool RuntimeMaterialResponse3D_ShadeHit(const RuntimeScene3D* scene,
     if (!RuntimeMaterialPayload3D_ResolveFromHit(hit, &result.payload)) {
         return false;
     }
-    if (!RuntimeDiffuseBounce3D_ShadeHit(scene, hit, &diffuse_result)) {
+    if (!RuntimeDiffuseBounce3D_ShadeHit(scene, hit, sampling, &diffuse_result)) {
         return false;
     }
 
@@ -122,6 +123,7 @@ bool RuntimeMaterialResponse3D_ShadePixel(const RuntimeScene3D* scene,
                                           const RuntimeCameraProjector3D* projector,
                                           double pixel_x,
                                           double pixel_y,
+                                          const RuntimeNative3DSamplingContext* sampling,
                                           RuntimeMaterialResponse3DResult* out_result) {
     RuntimeMaterialResponse3DResult result = {0};
     RuntimePrimaryHit3DResult primary_hit = {0};
@@ -145,7 +147,7 @@ bool RuntimeMaterialResponse3D_ShadePixel(const RuntimeScene3D* scene,
         *out_result = result;
         return false;
     }
-    if (!RuntimeDiffuseBounce3D_ShadeHit(scene, &primary_hit.hitInfo, &diffuse_result)) {
+    if (!RuntimeDiffuseBounce3D_ShadeHit(scene, &primary_hit.hitInfo, sampling, &diffuse_result)) {
         result.primaryRay = primary_hit.primaryRay;
         *out_result = result;
         return false;

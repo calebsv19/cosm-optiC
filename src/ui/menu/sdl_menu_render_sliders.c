@@ -99,6 +99,24 @@ void menu_render_build_slider_layout(TTF_Font* font,
                SDL_MENU_FORWARD_FALLOFF_DISTANCE_MIN,
                SDL_MENU_FORWARD_FALLOFF_DISTANCE_MAX,
                "Falloff Distance");
+    if (animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D) {
+        ADD_SLIDER(&state->secondaryDiffuseSamples3DSliderValue,
+                   RUNTIME_3D_SECONDARY_SAMPLES_MIN,
+                   RUNTIME_3D_SECONDARY_SAMPLES_MAX,
+                   "3D Secondary Samples");
+        ADD_SLIDER(&state->transmissionSamples3DSliderValue,
+                   RUNTIME_3D_TRANSMISSION_SAMPLES_MIN,
+                   RUNTIME_3D_TRANSMISSION_SAMPLES_MAX,
+                   "3D Transmission Samples");
+        ADD_SLIDER(&state->temporalFrames3DSliderValue,
+                   RUNTIME_3D_TEMPORAL_FRAMES_MIN,
+                   RUNTIME_3D_TEMPORAL_FRAMES_MAX,
+                   "3D Temporal Frames");
+        ADD_SLIDER(&state->renderScale3DSliderValue,
+                   RUNTIME_3D_RENDER_SCALE_MIN,
+                   RUNTIME_3D_RENDER_SCALE_MAX,
+                   "3D Render Scale");
+    }
     layout.nextY += SLIDER_SECTION_GAP;
 
     if (RayTracingIntegratorCatalog_BuildMenuState(&animSettings).showPathToggles) {
@@ -204,6 +222,18 @@ void menu_render_draw_sliders(SDL_Renderer* renderer,
         } else if (slider->value == &state->forwardDecaySliderValue) {
             RenderText(renderer, font, slider->valueX, slider->valueY,
                        "%d", state->forwardDecaySliderValue);
+        } else if (slider->value == &state->secondaryDiffuseSamples3DSliderValue) {
+            RenderText(renderer, font, slider->valueX, slider->valueY,
+                       "%d", state->secondaryDiffuseSamples3DSliderValue);
+        } else if (slider->value == &state->transmissionSamples3DSliderValue) {
+            RenderText(renderer, font, slider->valueX, slider->valueY,
+                       "%d", state->transmissionSamples3DSliderValue);
+        } else if (slider->value == &state->temporalFrames3DSliderValue) {
+            RenderText(renderer, font, slider->valueX, slider->valueY,
+                       "%d", state->temporalFrames3DSliderValue);
+        } else if (slider->value == &state->renderScale3DSliderValue) {
+            RenderText(renderer, font, slider->valueX, slider->valueY,
+                       "%dx", state->renderScale3DSliderValue);
         } else {
             RenderText(renderer, font, slider->valueX, slider->valueY,
                        "%d", *slider->value);

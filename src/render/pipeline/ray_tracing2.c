@@ -30,6 +30,8 @@
 #include "render/runtime_camera_3d_rays.h"
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_native_3d_render.h"
+#include "render/runtime_native_3d_resolution.h"
+#include "render/runtime_native_3d_temporal_accum.h"
 #include "render/runtime_ray_3d.h"
 #include "render/runtime_scene_3d_builder.h"
 #include "render/runtime_scene_3d_samples.h"
@@ -55,8 +57,11 @@
 static Circle light = {100, 100, 10};  // Default position (updated dynamically)
 Uint8* pixelBuffer = NULL;  // Global but uninitialized
 static Uint8* tilePreviewBuffer = NULL;
+static Uint8* native3DRenderBuffer = NULL;
+static size_t native3DRenderBufferCapacity = 0u;
 float* energyBuffer = NULL;
 float* directEnergyBufferCPU = NULL;
+static uint32_t s_native3DSampleSequence = 1U;
 static TileGrid tileGrid = {0};
 static UniformGrid uniformGrid = {0};
 static IrradianceCache irradianceCache = {0};
@@ -76,13 +81,18 @@ static void RenderHybridTilesPreview(SDL_Renderer* renderer,
                                      double camX,
                                      double camY);
 static bool RenderNative3DTilesPreview(SDL_Renderer* renderer,
-                                       int width,
-                                       int height,
+                                       Uint8* host_buffer,
+                                       int host_width,
+                                       int host_height,
+                                       Uint8* render_buffer,
+                                       int render_width,
+                                       int render_height,
                                        TileGrid* grid,
                                        RayTracing3DIntegratorId integrator_id,
                                        double normalized_t,
                                        double light_x,
                                        double light_y,
+                                       const RuntimeNative3DSamplingContext* sampling,
                                        bool present_progress,
                                        RuntimeNative3DRenderStats* out_stats);
 static bool BuildNative3DLiveSceneForOverlay(RuntimeScene3D* out_scene,
@@ -98,29 +108,85 @@ static bool PresentNative3DTilePreviewFrame(SDL_Renderer* renderer,
                                             const IntegratorContext* preview_ctx,
                                             const IntegratorTile* dirty_tile,
                                             const Uint8* preview_buffer,
-                                            const Native3DLightMarkerScreenInfo* marker,
-                                            bool have_marker,
                                             bool reset_dirty_preview);
 static bool PresentNative3DTilePreviewFrameTimed(SDL_Renderer* renderer,
                                                  const IntegratorContext* preview_ctx,
                                                  const IntegratorTile* dirty_tile,
                                                  const Uint8* preview_buffer,
-                                                 const Native3DLightMarkerScreenInfo* marker,
-                                                 bool have_marker,
                                                  bool reset_dirty_preview);
+static bool ResolveNative3DHostDirtyTile(const IntegratorTile* render_tile,
+                                         int render_width,
+                                         int render_height,
+                                         int host_width,
+                                         int host_height,
+                                         IntegratorTile* out_host_tile);
 static bool ResolveNative3DLightMarkerScreenInfo(int width,
                                                  int height,
                                                  double normalized_t,
                                                  double light_x,
                                                  double light_y,
                                                  Native3DLightMarkerScreenInfo* out_info);
+
+static bool EnsureNative3DRenderBuffer(size_t pixel_count) {
+    Uint8* resized = NULL;
+    if (pixel_count == 0u) {
+        return false;
+    }
+    if (native3DRenderBuffer && native3DRenderBufferCapacity >= pixel_count) {
+        return true;
+    }
+    resized = (Uint8*)realloc(native3DRenderBuffer, pixel_count * sizeof(Uint8));
+    if (!resized) {
+        return false;
+    }
+    native3DRenderBuffer = resized;
+    native3DRenderBufferCapacity = pixel_count;
+    return true;
+}
 static void DrawResolvedNative3DLightMarker(SDL_Renderer* renderer,
                                             const Native3DLightMarkerScreenInfo* marker);
-static void DrawFilledCircleToARGBSurface(SDL_Surface* surface,
-                                          int center_x,
-                                          int center_y,
-                                          int radius,
-                                          uint32_t argb_color);
+static void __attribute__((unused)) DrawFilledCircleToARGBSurface(SDL_Surface* surface,
+                                                                  int center_x,
+                                                                  int center_y,
+                                                                  int radius,
+                                                                  uint32_t argb_color);
+
+static RuntimeNative3DSamplingContext NextNative3DSamplingContext(void) {
+    RuntimeNative3DSamplingContext sampling = {0};
+    sampling.sampleSequence = s_native3DSampleSequence++;
+    if (sampling.sampleSequence == 0U) {
+        sampling.sampleSequence = s_native3DSampleSequence++;
+    }
+    return sampling;
+}
+
+static int ResolveNative3DTemporalFrames(RayTracing3DIntegratorId integrator_id) {
+    int frames = animSettings.temporalFrames3D;
+    if (integrator_id == RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT) {
+        return 1;
+    }
+    if (frames < RUNTIME_3D_TEMPORAL_FRAMES_MIN) {
+        frames = RUNTIME_3D_TEMPORAL_FRAMES_MIN;
+    }
+    if (frames > RUNTIME_3D_TEMPORAL_FRAMES_MAX) {
+        frames = RUNTIME_3D_TEMPORAL_FRAMES_MAX;
+    }
+    return frames;
+}
+
+static RuntimeNative3DSamplingContext ResolveNative3DSubpassSampling(
+    const RuntimeNative3DSamplingContext* sampling,
+    uint32_t subpass_index) {
+    RuntimeNative3DSamplingContext resolved = {0};
+    if (sampling) {
+        resolved = *sampling;
+    }
+    resolved.sampleSequence += subpass_index;
+    if (resolved.sampleSequence == 0U) {
+        resolved.sampleSequence = subpass_index + 1U;
+    }
+    return resolved;
+}
 
 static void LogNative3DRenderStatsIfNeeded(RayTracing3DIntegratorId integrator_id,
                                            const RuntimeNative3DRenderStats* stats) {
@@ -142,12 +208,12 @@ static void LogNative3DRenderStatsIfNeeded(RayTracing3DIntegratorId integrator_i
            avg_bounce);
 }
 static double ResolveNative3DLightMarkerWorldRadius(const RuntimeScene3D* scene);
-static void DrawNative3DLightMarker(SDL_Renderer* renderer,
-                                    int width,
-                                    int height,
-                                    double normalized_t,
-                                    double light_x,
-                                    double light_y);
+static void __attribute__((unused)) DrawNative3DLightMarker(SDL_Renderer* renderer,
+                                                            int width,
+                                                            int height,
+                                                            double normalized_t,
+                                                            double light_x,
+                                                            double light_y);
 
 static FluidManifest g_fluidManifest = {0};
 static FluidFrame g_fluidFrame = {0};
@@ -372,11 +438,11 @@ static bool ResolveNative3DLightMarkerScreenInfo(int width,
     return true;
 }
 
-static void DrawFilledCircleToARGBSurface(SDL_Surface* surface,
-                                          int center_x,
-                                          int center_y,
-                                          int radius,
-                                          uint32_t argb_color) {
+static void __attribute__((unused)) DrawFilledCircleToARGBSurface(SDL_Surface* surface,
+                                                                  int center_x,
+                                                                  int center_y,
+                                                                  int radius,
+                                                                  uint32_t argb_color) {
     int min_y = 0;
     int max_y = 0;
     if (!surface || radius <= 0) return;
@@ -410,12 +476,12 @@ static void DrawResolvedNative3DLightMarker(SDL_Renderer* renderer,
                  true);
 }
 
-static void DrawNative3DLightMarker(SDL_Renderer* renderer,
-                                    int width,
-                                    int height,
-                                    double normalized_t,
-                                    double light_x,
-                                    double light_y) {
+static void __attribute__((unused)) DrawNative3DLightMarker(SDL_Renderer* renderer,
+                                                            int width,
+                                                            int height,
+                                                            double normalized_t,
+                                                            double light_x,
+                                                            double light_y) {
     Native3DLightMarkerScreenInfo marker = {0};
 
     if (!renderer || width <= 0 || height <= 0) return;
@@ -433,7 +499,6 @@ static void DrawNative3DLightMarker(SDL_Renderer* renderer,
 
 bool ExportCurrentNative3DFrameBMP(const char* filename) {
     SDL_Surface* surface = NULL;
-    Native3DLightMarkerScreenInfo marker = {0};
     int width = sceneSettings.windowWidth;
     int height = sceneSettings.windowHeight;
 
@@ -455,19 +520,6 @@ bool ExportCurrentNative3DFrameBMP(const char* filename) {
             row[x] = ((uint32_t)0xFF << 24) | ((uint32_t)b << 16) |
                      ((uint32_t)b << 8) | (uint32_t)b;
         }
-    }
-
-    if (ResolveNative3DLightMarkerScreenInfo(width,
-                                             height,
-                                             AnimationCurrentNormalizedT(),
-                                             light.x,
-                                             light.y,
-                                             &marker)) {
-        DrawFilledCircleToARGBSurface(surface,
-                                      marker.centerX,
-                                      marker.centerY,
-                                      marker.radius,
-                                      0xFFFFFFFFu);
     }
 
     if (SDL_SaveBMP(surface, filename) != 0) {
@@ -811,6 +863,11 @@ void CleanupRayTracing(void) {
         free(tilePreviewBuffer);
         tilePreviewBuffer = NULL;
     }
+    if (native3DRenderBuffer != NULL) {
+        free(native3DRenderBuffer);
+        native3DRenderBuffer = NULL;
+        native3DRenderBufferCapacity = 0u;
+    }
     RayTracingPreview_ShutdownNative3DDirtyRect();
     if (energyBuffer != NULL) {
         free(energyBuffer);
@@ -921,34 +978,66 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
 
     if (native3D) {
         RuntimeNative3DRenderStats nativeStats = {0};
+        RuntimeNative3DSamplingContext nativeSampling = NextNative3DSamplingContext();
         int blurRadius = 0;
         bool nativeRenderOk = false;
         double normalized_t = AnimationCurrentNormalizedT();
         bool tileFrameTimerActive = false;
+        int renderScale = RuntimeNative3DClampRenderScale(animSettings.renderScale3D);
+        int renderWidth = WIDTH;
+        int renderHeight = HEIGHT;
+        size_t renderPixelCount = 0u;
+
+        if (!RuntimeNative3DResolveScaledDimensions(WIDTH,
+                                                    HEIGHT,
+                                                    renderScale,
+                                                    &renderWidth,
+                                                    &renderHeight)) {
+            memset(pixelBuffer, 0, pixelCount * sizeof(Uint8));
+            return;
+        }
+        renderPixelCount = (size_t)renderWidth * (size_t)renderHeight;
+        if (!EnsureNative3DRenderBuffer(renderPixelCount)) {
+            printf("ERROR: Failed to allocate native 3D render buffer during render.\n");
+            memset(pixelBuffer, 0, pixelCount * sizeof(Uint8));
+            return;
+        }
+        memset(native3DRenderBuffer, 0, renderPixelCount * sizeof(Uint8));
+        memset(pixelBuffer, 0, pixelCount * sizeof(Uint8));
 
         ts_start_timer("Buffer Calc");
         if (useTiles && tileGrid.tiles && tileGrid.count > 0) {
+            TileGridEnsure(&tileGrid, renderWidth, renderHeight, tileSize);
+            TileGridClear(&tileGrid);
             ts_start_timer("Tile Frame Calc");
             tileFrameTimerActive = true;
             nativeRenderOk = RenderNative3DTilesPreview(renderer,
+                                                        pixelBuffer,
                                                         WIDTH,
                                                         HEIGHT,
+                                                        native3DRenderBuffer,
+                                                        renderWidth,
+                                                        renderHeight,
                                                         &tileGrid,
                                                         route.integratorMode3D,
                                                         normalized_t,
                                                         light.x,
                                                         light.y,
+                                                        &nativeSampling,
                                                         route.tilePreviewEnabled,
                                                         &nativeStats);
         } else {
-            nativeRenderOk = RuntimeNative3DRenderToPixelBuffer(pixelBuffer,
-                                                                route.integratorMode3D,
-                                                                WIDTH,
-                                                                HEIGHT,
-                                                                normalized_t,
-                                                                light.x,
-                                                                light.y,
-                                                                &nativeStats);
+            nativeRenderOk = RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
+                native3DRenderBuffer,
+                route.integratorMode3D,
+                renderWidth,
+                renderHeight,
+                normalized_t,
+                light.x,
+                light.y,
+                &nativeSampling,
+                ResolveNative3DTemporalFrames(route.integratorMode3D),
+                &nativeStats);
         }
         ts_stop_timer("Buffer Calc");
         if (tileFrameTimerActive) {
@@ -965,8 +1054,19 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
         else if (animSettings.blurMode == 3) blurRadius = 3;
 
         ts_start_timer("Buffer Present");
-        if (blurRadius > 0) {
-            RayTracingPreview_ApplySeparableBlur(pixelBuffer, WIDTH, HEIGHT, blurRadius);
+        if (nativeRenderOk) {
+            if (blurRadius > 0) {
+                RayTracingPreview_ApplySeparableBlur(native3DRenderBuffer,
+                                                     renderWidth,
+                                                     renderHeight,
+                                                     blurRadius);
+            }
+            RuntimeNative3DUpscaleNearest(native3DRenderBuffer,
+                                          renderWidth,
+                                          renderHeight,
+                                          pixelBuffer,
+                                          WIDTH,
+                                          HEIGHT);
         }
 #if USE_VULKAN
         draw_luminance_buffer(renderer, pixelBuffer, WIDTH, HEIGHT);
@@ -981,12 +1081,6 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
             }
         }
 #endif
-        DrawNative3DLightMarker(renderer,
-                                WIDTH,
-                                HEIGHT,
-                                normalized_t,
-                                light.x,
-                                light.y);
         ts_stop_timer("Buffer Present");
         return;
     }
@@ -1337,57 +1431,81 @@ static void DrawPreviewBuffer(SDL_Renderer* renderer,
 }
 
 static bool RenderNative3DTilesPreview(SDL_Renderer* renderer,
-                                       int width,
-                                       int height,
+                                       Uint8* host_buffer,
+                                       int host_width,
+                                       int host_height,
+                                       Uint8* render_buffer,
+                                       int render_width,
+                                       int render_height,
                                        TileGrid* grid,
                                        RayTracing3DIntegratorId integrator_id,
                                        double normalized_t,
                                        double light_x,
-                                      double light_y,
-                                      bool present_progress,
-                                      RuntimeNative3DRenderStats* out_stats) {
+                                       double light_y,
+                                       const RuntimeNative3DSamplingContext* sampling,
+                                       bool present_progress,
+                                       RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DPreparedFrame frame = {0};
     RuntimeNative3DRenderStats stats = {0};
+    RuntimeNative3DTemporalAccumulation tileAccumulation = {0};
     IntegratorContext preview_ctx = {
-        .width = width,
-        .height = height
+        .width = host_width,
+        .height = host_height
     };
-    Native3DLightMarkerScreenInfo marker = {0};
-    bool have_marker = false;
-    size_t total = (size_t)width * (size_t)height;
+    float* tileLuminance = NULL;
+    size_t total = (size_t)render_width * (size_t)render_height;
+    int maxTilePixels = 0;
+    const int temporal_frames = ResolveNative3DTemporalFrames(integrator_id);
 
     if (out_stats) {
         memset(out_stats, 0, sizeof(*out_stats));
     }
-    if (!pixelBuffer || width <= 0 || height <= 0 || !grid || !grid->tiles || grid->count == 0) {
+    if (!host_buffer || !render_buffer || host_width <= 0 || host_height <= 0 ||
+        render_width <= 0 || render_height <= 0 ||
+        !grid || !grid->tiles || grid->count == 0) {
         return false;
     }
 
-    memset(pixelBuffer, 0, total * sizeof(Uint8));
-    have_marker = ResolveNative3DLightMarkerScreenInfo(width,
-                                                       height,
-                                                       normalized_t,
-                                                       light_x,
-                                                       light_y,
-                                                       &marker);
-    if (!RuntimeNative3DPrepareFrame(&frame,
-                                     width,
-                                     height,
-                                     normalized_t,
-                                     light_x,
-                                     light_y)) {
+    memset(render_buffer, 0, total * sizeof(Uint8));
+    RuntimeNative3DTemporalAccumulation_Init(&tileAccumulation);
+    if (!RuntimeNative3DPrepareFrameWithSampling(&frame,
+                                                 render_width,
+                                                 render_height,
+                                                 normalized_t,
+                                                 light_x,
+                                                 light_y,
+                                                 sampling)) {
+        RuntimeNative3DTemporalAccumulation_Free(&tileAccumulation);
         return false;
     }
     (void)RuntimeNative3DPrepareFrameTileOccupancy(&frame, grid->tileSize);
+    maxTilePixels = grid->tileSize * grid->tileSize;
+    if (maxTilePixels <= 0) {
+        RuntimeNative3DTemporalAccumulation_Free(&tileAccumulation);
+        RuntimeNative3DPreparedFrame_Free(&frame);
+        return false;
+    }
+    tileLuminance = (float*)calloc((size_t)maxTilePixels, sizeof(*tileLuminance));
+    if (!tileLuminance) {
+        RuntimeNative3DTemporalAccumulation_Free(&tileAccumulation);
+        RuntimeNative3DPreparedFrame_Free(&frame);
+        return false;
+    }
 
     if (present_progress && renderer) {
+        RuntimeNative3DUpscaleNearest(render_buffer,
+                                      render_width,
+                                      render_height,
+                                      host_buffer,
+                                      host_width,
+                                      host_height);
         if (!PresentNative3DTilePreviewFrameTimed(renderer,
                                                   &preview_ctx,
                                                   NULL,
-                                                  pixelBuffer,
-                                                  &marker,
-                                                  have_marker,
+                                                  host_buffer,
                                                   true)) {
+            free(tileLuminance);
+            RuntimeNative3DTemporalAccumulation_Free(&tileAccumulation);
             RuntimeNative3DPreparedFrame_Free(&frame);
             return false;
         }
@@ -1395,7 +1513,10 @@ static bool RenderNative3DTilesPreview(SDL_Renderer* renderer,
 
     for (size_t ti = 0; ti < grid->count; ++ti) {
         const IntegratorTile* tile = &grid->tiles[ti];
-        RuntimeNative3DRenderStats tile_stats = {0};
+        IntegratorTile host_dirty_tile = {0};
+        const IntegratorTile* present_tile = NULL;
+        const int tile_stride = tile->width;
+        const int tile_pixels = tile->width * tile->height;
 
         if (!RuntimeNative3DPreparedRegionMayContainGeometry(&frame,
                                                              tile->originX,
@@ -1405,34 +1526,96 @@ static bool RenderNative3DTilesPreview(SDL_Renderer* renderer,
             continue;
         }
 
-        if (!RuntimeNative3DRenderPreparedRegion(pixelBuffer,
-                                                 integrator_id,
-                                                 &frame,
-                                                 tile->originX,
-                                                 tile->originY,
-                                                 tile->originX + tile->width,
-                                                 tile->originY + tile->height,
-                                                 &tile_stats)) {
-            memset(pixelBuffer, 0, total * sizeof(Uint8));
+        if (!RuntimeNative3DTemporalAccumulation_Ensure(&tileAccumulation, tile->width, tile->height)) {
+            memset(render_buffer, 0, total * sizeof(Uint8));
+            free(tileLuminance);
+            RuntimeNative3DTemporalAccumulation_Free(&tileAccumulation);
             RuntimeNative3DPreparedFrame_Free(&frame);
             return false;
         }
-        RuntimeNative3DRenderStats_Accumulate(&stats, &tile_stats);
+        RuntimeNative3DTemporalAccumulation_Clear(&tileAccumulation);
+        if (present_progress && renderer &&
+            ResolveNative3DHostDirtyTile(tile,
+                                         render_width,
+                                         render_height,
+                                         host_width,
+                                         host_height,
+                                         &host_dirty_tile)) {
+            present_tile = &host_dirty_tile;
+        }
 
-        if (present_progress && renderer && (ti + 1U) < grid->count) {
-            if (!PresentNative3DTilePreviewFrameTimed(renderer,
-                                                      &preview_ctx,
-                                                      tile,
-                                                      pixelBuffer,
-                                                      &marker,
-                                                      have_marker,
-                                                      false)) {
+        for (int subpass = 0; subpass < temporal_frames; ++subpass) {
+            RuntimeNative3DPreparedFrame subpass_frame = frame;
+            RuntimeNative3DRenderStats subpass_stats = {0};
+            RuntimeNative3DSamplingContext subpass_sampling =
+                ResolveNative3DSubpassSampling(sampling, (uint32_t)subpass);
+            subpass_frame.sampling = subpass_sampling;
+            memset(tileLuminance, 0, (size_t)tile_pixels * sizeof(*tileLuminance));
+            if (!RuntimeNative3DRenderPreparedRegionLuminance(tileLuminance,
+                                                              tile_stride,
+                                                              integrator_id,
+                                                              &subpass_frame,
+                                                              tile->originX,
+                                                              tile->originY,
+                                                              tile->originX + tile->width,
+                                                              tile->originY + tile->height,
+                                                              &subpass_stats) ||
+                !RuntimeNative3DTemporalAccumulation_AddRegion(&tileAccumulation,
+                                                               tileLuminance,
+                                                               tile_stride,
+                                                               0,
+                                                               0,
+                                                               tile->width,
+                                                               tile->height)) {
+                memset(render_buffer, 0, total * sizeof(Uint8));
+                free(tileLuminance);
+                RuntimeNative3DTemporalAccumulation_Free(&tileAccumulation);
                 RuntimeNative3DPreparedFrame_Free(&frame);
                 return false;
             }
+            RuntimeNative3DTemporalAccumulation_CommitSubpass(&tileAccumulation);
+            RuntimeNative3DRenderStats_Accumulate(&stats, &subpass_stats);
+
+            if (present_progress && renderer) {
+                RuntimeNative3DTemporalAccumulation_ResolveToPixelBufferAtOffset(&tileAccumulation,
+                                                                                 render_buffer,
+                                                                                 render_width,
+                                                                                 tile->originX,
+                                                                                 tile->originY);
+                RuntimeNative3DUpscaleNearest(render_buffer,
+                                              render_width,
+                                              render_height,
+                                              host_buffer,
+                                              host_width,
+                                              host_height);
+                if (!PresentNative3DTilePreviewFrameTimed(renderer,
+                                                          &preview_ctx,
+                                                          present_tile,
+                                                          host_buffer,
+                                                          false)) {
+                    free(tileLuminance);
+                    RuntimeNative3DTemporalAccumulation_Free(&tileAccumulation);
+                    RuntimeNative3DPreparedFrame_Free(&frame);
+                    return false;
+                }
+            }
         }
+
+        RuntimeNative3DTemporalAccumulation_ResolveToPixelBufferAtOffset(&tileAccumulation,
+                                                                         render_buffer,
+                                                                         render_width,
+                                                                         tile->originX,
+                                                                         tile->originY);
     }
 
+    RuntimeNative3DUpscaleNearest(render_buffer,
+                                  render_width,
+                                  render_height,
+                                  host_buffer,
+                                  host_width,
+                                  host_height);
+    free(tileLuminance);
+    RuntimeNative3DTemporalAccumulation_Free(&tileAccumulation);
     RuntimeNative3DPreparedFrame_Free(&frame);
     if (out_stats) {
         *out_stats = stats;
@@ -1444,8 +1627,6 @@ static bool PresentNative3DTilePreviewFrame(SDL_Renderer* renderer,
                                             const IntegratorContext* preview_ctx,
                                             const IntegratorTile* dirty_tile,
                                             const Uint8* preview_buffer,
-                                            const Native3DLightMarkerScreenInfo* marker,
-                                            bool have_marker,
                                             bool reset_dirty_preview) {
     if (!renderer || !preview_ctx || !preview_buffer) return false;
 
@@ -1467,9 +1648,6 @@ static bool PresentNative3DTilePreviewFrame(SDL_Renderer* renderer,
                                                    reset_dirty_preview)) {
         return false;
     }
-    if (have_marker && marker) {
-        DrawResolvedNative3DLightMarker(renderer, marker);
-    }
     ts_render();
     render_end_frame();
     if (render_device_lost()) {
@@ -1482,8 +1660,6 @@ static bool PresentNative3DTilePreviewFrameTimed(SDL_Renderer* renderer,
                                                  const IntegratorContext* preview_ctx,
                                                  const IntegratorTile* dirty_tile,
                                                  const Uint8* preview_buffer,
-                                                 const Native3DLightMarkerScreenInfo* marker,
-                                                 bool have_marker,
                                                  bool reset_dirty_preview) {
     ts_stop_timer("Buffer Calc");
     ts_start_timer("Tile Preview Present");
@@ -1491,12 +1667,37 @@ static bool PresentNative3DTilePreviewFrameTimed(SDL_Renderer* renderer,
                                               preview_ctx,
                                               dirty_tile,
                                               preview_buffer,
-                                              marker,
-                                              have_marker,
                                               reset_dirty_preview);
     ts_stop_timer("Tile Preview Present");
     ts_start_timer("Buffer Calc");
     return ok;
+}
+
+static bool ResolveNative3DHostDirtyTile(const IntegratorTile* render_tile,
+                                         int render_width,
+                                         int render_height,
+                                         int host_width,
+                                         int host_height,
+                                         IntegratorTile* out_host_tile) {
+    if (!render_tile || !out_host_tile) {
+        return false;
+    }
+    if (!RuntimeNative3DResolveUpscaledRect(render_tile->originX,
+                                            render_tile->originY,
+                                            render_tile->width,
+                                            render_tile->height,
+                                            render_width,
+                                            render_height,
+                                            host_width,
+                                            host_height,
+                                            &out_host_tile->originX,
+                                            &out_host_tile->originY,
+                                            &out_host_tile->width,
+                                            &out_host_tile->height)) {
+        return false;
+    }
+    out_host_tile->energy = NULL;
+    return true;
 }
 
 static void RenderHybridTilesPreview(SDL_Renderer* renderer,

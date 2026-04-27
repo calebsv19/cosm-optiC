@@ -91,10 +91,12 @@ int AnimationInit(void) {
         animSettings.sceneSource = SCENE_SOURCE_FLUID_MANIFEST;
     }
     LoadSceneConfig();
+    ApplyAnimationWindowSizeOverride();
     if (!AnimationRestoreActiveSceneSource(true)) {
         fprintf(stderr,
                 "[startup] active scene source could not be applied; fallback persisted.\n");
     }
+    ApplyAnimationWindowSizeOverride();
     UpdateObjects();
     WINDOW_WIDTH = sceneSettings.windowWidth;       
     WINDOW_HEIGHT = sceneSettings.windowHeight; 

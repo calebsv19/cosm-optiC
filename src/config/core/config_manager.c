@@ -143,6 +143,12 @@ AnimationConfig animSettings = {
     .cacheHaloRadius = 3.5,
     .lightDecaySoftness = 1.0,
     .lightHeight = 8.0,
+    .secondaryDiffuseSamples3D = RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT,
+    .transmissionSamples3D = RUNTIME_3D_TRANSMISSION_SAMPLES_DEFAULT,
+    .temporalFrames3D = RUNTIME_3D_TEMPORAL_FRAMES_DEFAULT,
+    .renderScale3D = RUNTIME_3D_RENDER_SCALE_DEFAULT,
+    .runtimeWindowWidth = 0,
+    .runtimeWindowHeight = 0,
     .sceneSource = SCENE_SOURCE_CONFIG_2D,
     .useFluidScene = false,
     .fluidManifest = "",
@@ -168,6 +174,81 @@ static double DefaultForwardFalloffDistance(void) {
     return hypot(w, h);
 }
 
+static int ClampSecondaryDiffuseSamples3D(int value) {
+    if (value < RUNTIME_3D_SECONDARY_SAMPLES_MIN) {
+        value = RUNTIME_3D_SECONDARY_SAMPLES_MIN;
+    }
+    if (value > RUNTIME_3D_SECONDARY_SAMPLES_MAX) {
+        value = RUNTIME_3D_SECONDARY_SAMPLES_MAX;
+    }
+    value = ((value + (RUNTIME_3D_SECONDARY_SAMPLES_STEP / 2)) /
+             RUNTIME_3D_SECONDARY_SAMPLES_STEP) *
+            RUNTIME_3D_SECONDARY_SAMPLES_STEP;
+    if (value < RUNTIME_3D_SECONDARY_SAMPLES_MIN) {
+        value = RUNTIME_3D_SECONDARY_SAMPLES_MIN;
+    }
+    if (value > RUNTIME_3D_SECONDARY_SAMPLES_MAX) {
+        value = RUNTIME_3D_SECONDARY_SAMPLES_MAX;
+    }
+    return value;
+}
+
+static int ClampTransmissionSamples3D(int value) {
+    if (value < RUNTIME_3D_TRANSMISSION_SAMPLES_MIN) {
+        value = RUNTIME_3D_TRANSMISSION_SAMPLES_MIN;
+    }
+    if (value > RUNTIME_3D_TRANSMISSION_SAMPLES_MAX) {
+        value = RUNTIME_3D_TRANSMISSION_SAMPLES_MAX;
+    }
+    return value;
+}
+
+static int ClampTemporalFrames3D(int value) {
+    if (value < RUNTIME_3D_TEMPORAL_FRAMES_MIN) {
+        value = RUNTIME_3D_TEMPORAL_FRAMES_MIN;
+    }
+    if (value > RUNTIME_3D_TEMPORAL_FRAMES_MAX) {
+        value = RUNTIME_3D_TEMPORAL_FRAMES_MAX;
+    }
+    return value;
+}
+
+static int ClampRenderScale3D(int value) {
+    if (value < RUNTIME_3D_RENDER_SCALE_MIN) {
+        value = RUNTIME_3D_RENDER_SCALE_MIN;
+    }
+    if (value > RUNTIME_3D_RENDER_SCALE_MAX) {
+        value = RUNTIME_3D_RENDER_SCALE_MAX;
+    }
+    return value;
+}
+
+static int ClampRuntimeWindowDimension(int value, int fallback) {
+    if (value <= 0) {
+        value = fallback;
+    }
+    if (value < 200) {
+        value = 200;
+    }
+    if (value % 2 != 0) {
+        value += 1;
+    }
+    return value;
+}
+
+void ApplyAnimationWindowSizeOverride(void) {
+    if (animation_config_scene_source_is_fluid(animSettings.sceneSource)) {
+        return;
+    }
+    if (animSettings.runtimeWindowWidth <= 0 || animSettings.runtimeWindowHeight <= 0) {
+        return;
+    }
+    sceneSettings.windowWidth =
+        ClampRuntimeWindowDimension(animSettings.runtimeWindowWidth, sceneSettings.windowWidth);
+    sceneSettings.windowHeight =
+        ClampRuntimeWindowDimension(animSettings.runtimeWindowHeight, sceneSettings.windowHeight);
+}
+
 void SaveAllSettings(void) {
     MaterialManagerInit();
     animation_config_sync_scene_source_legacy_fields(&animSettings);
@@ -186,6 +267,7 @@ void LoadAllSettings(void) {
     }
     LoadSceneConfig();
     LoadAnimationConfig();
+    ApplyAnimationWindowSizeOverride();
 }
 
 void SaveSceneConfig(void) {
@@ -305,6 +387,8 @@ void SaveAnimationConfig(void) {
 
     struct json_object* config = json_object_new_object();
     animation_config_sync_scene_source_legacy_fields(&animSettings);
+    animSettings.runtimeWindowWidth = ClampRuntimeWindowDimension(sceneSettings.windowWidth, 1200);
+    animSettings.runtimeWindowHeight = ClampRuntimeWindowDimension(sceneSettings.windowHeight, 800);
 
     json_object_object_add(config, "interactiveMode", json_object_new_boolean(animSettings.interactiveMode));
     json_object_object_add(config, "deepRenderMode", json_object_new_boolean(animSettings.deepRenderMode));
@@ -359,6 +443,24 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "cacheHaloRadius", json_object_new_double(animSettings.cacheHaloRadius));
     json_object_object_add(config, "lightDecaySoftness", json_object_new_double(animSettings.lightDecaySoftness));
     json_object_object_add(config, "lightHeight", json_object_new_double(animSettings.lightHeight));
+    json_object_object_add(config,
+                           "secondaryDiffuseSamples3D",
+                           json_object_new_int(animSettings.secondaryDiffuseSamples3D));
+    json_object_object_add(config,
+                           "transmissionSamples3D",
+                           json_object_new_int(animSettings.transmissionSamples3D));
+    json_object_object_add(config,
+                           "temporalFrames3D",
+                           json_object_new_int(animSettings.temporalFrames3D));
+    json_object_object_add(config,
+                           "renderScale3D",
+                           json_object_new_int(animSettings.renderScale3D));
+    json_object_object_add(config,
+                           "runtimeWindowWidth",
+                           json_object_new_int(animSettings.runtimeWindowWidth));
+    json_object_object_add(config,
+                           "runtimeWindowHeight",
+                           json_object_new_int(animSettings.runtimeWindowHeight));
     json_object_object_add(config, "sceneSource",
                            json_object_new_int(animation_config_scene_source_clamp(animSettings.sceneSource)));
     json_object_object_add(config, "useFluidScene", json_object_new_boolean(animSettings.useFluidScene));
@@ -885,6 +987,36 @@ void LoadAnimationConfig(void) {
     } else {
         animSettings.lightHeight = 8.0;
     }
+    if (json_object_object_get_ex(config, "secondaryDiffuseSamples3D", &temp)) {
+        animSettings.secondaryDiffuseSamples3D = json_object_get_int(temp);
+    } else {
+        animSettings.secondaryDiffuseSamples3D = RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT;
+    }
+    if (json_object_object_get_ex(config, "transmissionSamples3D", &temp)) {
+        animSettings.transmissionSamples3D = json_object_get_int(temp);
+    } else {
+        animSettings.transmissionSamples3D = RUNTIME_3D_TRANSMISSION_SAMPLES_DEFAULT;
+    }
+    if (json_object_object_get_ex(config, "temporalFrames3D", &temp)) {
+        animSettings.temporalFrames3D = json_object_get_int(temp);
+    } else {
+        animSettings.temporalFrames3D = RUNTIME_3D_TEMPORAL_FRAMES_DEFAULT;
+    }
+    if (json_object_object_get_ex(config, "renderScale3D", &temp)) {
+        animSettings.renderScale3D = json_object_get_int(temp);
+    } else {
+        animSettings.renderScale3D = RUNTIME_3D_RENDER_SCALE_DEFAULT;
+    }
+    if (json_object_object_get_ex(config, "runtimeWindowWidth", &temp)) {
+        animSettings.runtimeWindowWidth = json_object_get_int(temp);
+    } else {
+        animSettings.runtimeWindowWidth = 0;
+    }
+    if (json_object_object_get_ex(config, "runtimeWindowHeight", &temp)) {
+        animSettings.runtimeWindowHeight = json_object_get_int(temp);
+    } else {
+        animSettings.runtimeWindowHeight = 0;
+    }
     if (json_object_object_get_ex(config, "sceneSource", &temp)) {
         animSettings.sceneSource = animation_config_scene_source_clamp(json_object_get_int(temp));
         has_scene_source = true;
@@ -954,6 +1086,18 @@ void LoadAnimationConfig(void) {
     if (!isfinite(animSettings.lightHeight) || animSettings.lightHeight < 0.0) {
         animSettings.lightHeight = 8.0;
     }
+    animSettings.secondaryDiffuseSamples3D =
+        ClampSecondaryDiffuseSamples3D(animSettings.secondaryDiffuseSamples3D);
+    animSettings.transmissionSamples3D =
+        ClampTransmissionSamples3D(animSettings.transmissionSamples3D);
+    animSettings.temporalFrames3D =
+        ClampTemporalFrames3D(animSettings.temporalFrames3D);
+    animSettings.renderScale3D =
+        ClampRenderScale3D(animSettings.renderScale3D);
+    animSettings.runtimeWindowWidth =
+        ClampRuntimeWindowDimension(animSettings.runtimeWindowWidth, sceneSettings.windowWidth);
+    animSettings.runtimeWindowHeight =
+        ClampRuntimeWindowDimension(animSettings.runtimeWindowHeight, sceneSettings.windowHeight);
     root_corrected |= config_runtime_paths_validate_root(animSettings.inputRoot,
                                                          sizeof(animSettings.inputRoot),
                                                          ray_tracing_default_input_root(),

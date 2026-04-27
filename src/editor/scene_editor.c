@@ -516,9 +516,11 @@ static bool SceneEditorLoadSessionState(SceneEditor* editor) {
     }
     LoadAnimationConfig();
     LoadSceneConfig();
+    ApplyAnimationWindowSizeOverride();
     if (!AnimationRestoreActiveSceneSource(true)) {
         fprintf(stderr, "[editor] failed to apply active scene source; fallback persisted.\n");
     }
+    ApplyAnimationWindowSizeOverride();
     if (animSettings.editorMode < 0) {
         animSettings.editorMode = 0;
     }
@@ -812,6 +814,7 @@ void SetSceneMode(SceneEditor* editor, int mode) {
 
 void ResetSceneEditor(SceneEditor* editor) {
     LoadSceneConfig();  // Reload all scene settings
+    ApplyAnimationWindowSizeOverride();
     editor->currentMode = 0;  // Default to Bezier Editor Mode
     animSettings.editorMode = 0;
     InitializeEditorMode(editor);

@@ -44,8 +44,12 @@ Grouped on the far right. Current set (values persist via config):
 - Tile Size (4–256): tile size for tiled renderer (clamped to multiples of 4).
 - Roulette Threshold (0.001–2.000): Russian roulette threshold (slider shows threshold*1000).
 - Light Intensity (0–20.00): scene light intensity (slider shows *100).
-- Falloff Distance (100–40000): forward decay distance (in world units).
 - Falloff Softness (0.10–5.00): scales how quickly light energy decays with distance (higher = slower decay/longer reach) for forward/direct/hybrid integrators.
+- Falloff Distance (100–40000): forward decay distance (in world units).
+- 3D Secondary Samples (4–64, only in 3D mode): secondary diffuse/emissive bounce sample count for native `3D`, clamped to multiples of 4.
+- 3D Transmission Samples (4–32, only in 3D mode): transparent-view transmission sample count for native `3D`.
+- 3D Temporal Frames (1–32, only in 3D mode): per-resolved-frame native `3D` stochastic subpass count before grayscale tonemap resolve. `1` disables temporal accumulation.
+- 3D Render Scale (1–8, only in 3D mode): native `3D` internal render downscale factor. `1x` traces at full host resolution; higher values trace fewer pixels and nearest-upscale back into the normal window.
 - Path SPP (1–128, only when Camera Path integrator is active): samples per pixel for camera path integrator.
 - Path Depth (1–16, only when Camera Path integrator is active): max path depth.
 

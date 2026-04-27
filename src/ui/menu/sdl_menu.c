@@ -112,6 +112,7 @@ static bool initialize_menu(SDL_Window** window,
 
     LoadAnimationConfig();
     LoadSceneConfig();
+    ApplyAnimationWindowSizeOverride();
     animSettings.previewMode = false;
 
     menu_state_init(state);

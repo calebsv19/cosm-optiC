@@ -59,6 +59,10 @@ typedef struct {
     int lightIntensitySliderValue;
     int lightDecaySoftnessSliderValue;
     int forwardDecaySliderValue;
+    int secondaryDiffuseSamples3DSliderValue;
+    int transmissionSamples3DSliderValue;
+    int temporalFrames3DSliderValue;
+    int renderScale3DSliderValue;
 
     int oldWindowWidth;
     int oldWindowHeight;
