@@ -115,7 +115,22 @@ VIDEO_FPS ?= 30
 TEST_DIR := tests
 TEST_BIN := $(BUILD_DIR)/tests/test_runner
 TEST_SRC := $(TEST_DIR)/test_runner.c
-TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_stubs.o \
+TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_registry.o \
+	$(BUILD_DIR)/tests/test_support.o $(BUILD_DIR)/tests/test_config_animation.o \
+	$(BUILD_DIR)/tests/test_ui_menu_contracts.o \
+	$(BUILD_DIR)/tests/test_runtime_scene_bridge_core.o \
+	$(BUILD_DIR)/tests/test_runtime_scene_bridge_writeback.o \
+	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry.o \
+	$(BUILD_DIR)/tests/test_runtime_lighting_materials.o \
+	$(BUILD_DIR)/tests/test_runtime_diffuse_temporal.o \
+	$(BUILD_DIR)/tests/test_runtime_emission_transparency.o \
+	$(BUILD_DIR)/tests/test_runtime_native_3d_render.o \
+	$(BUILD_DIR)/tests/test_runtime_render_metrics_export.o \
+	$(BUILD_DIR)/tests/test_runtime_preview_editor.o \
+	$(BUILD_DIR)/tests/test_runtime_scene_editor.o \
+	$(BUILD_DIR)/tests/test_runtime_path_policy.o \
+	$(BUILD_DIR)/tests/test_runtime_mode_backend_policy.o \
+	$(BUILD_DIR)/tests/test_stubs.o \
 	$(BUILD_DIR)/tests/fluid_pack_import_test.o \
 	$(BUILD_DIR)/tests/kit_viz_fluid_overlay_adapter_test.o \
 	$(BUILD_DIR)/tests/render_metrics_dataset_test.o
