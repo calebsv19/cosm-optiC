@@ -8,6 +8,7 @@
 #include "render/runtime_camera_3d_rays.h"
 #include "render/runtime_direct_light_3d.h"
 #include "render/runtime_diffuse_bounce_3d.h"
+#include "render/runtime_emission_transparency_3d.h"
 #include "render/runtime_material_response_3d.h"
 #include "render/ray_tracing_integrator_catalog.h"
 #include "render/runtime_scene_3d_builder.h"
@@ -249,6 +250,69 @@ static bool runtime_native_3d_render_shade_material(
     return true;
 }
 
+static bool runtime_native_3d_render_shade_emission_transparency(
+    uint8_t* pixel_buffer,
+    int width,
+    int height,
+    int start_x,
+    int start_y,
+    int end_x,
+    int end_y,
+    const RuntimeScene3D* scene,
+    const RuntimeCameraProjector3D* projector,
+    RuntimeNative3DRenderStats* out_stats) {
+    RuntimeNative3DRenderStats stats = {0};
+
+    if (!pixel_buffer || width <= 0 || height <= 0 || !scene || !projector) return false;
+    if (start_x < 0) start_x = 0;
+    if (start_y < 0) start_y = 0;
+    if (end_x > width) end_x = width;
+    if (end_y > height) end_y = height;
+    if (start_x >= end_x || start_y >= end_y) {
+        if (out_stats) {
+            *out_stats = stats;
+        }
+        return true;
+    }
+
+    for (int y = start_y; y < end_y; ++y) {
+        for (int x = start_x; x < end_x; ++x) {
+            RuntimeEmissionTransparency3DResult result = {0};
+            size_t idx = (size_t)y * (size_t)width + (size_t)x;
+            if (!RuntimeEmissionTransparency3D_ShadePixel(scene,
+                                                          projector,
+                                                          (double)x,
+                                                          (double)y,
+                                                          &result)) {
+                continue;
+            }
+            stats.hitPixelCount += 1;
+            if (result.visible) {
+                stats.visiblePixelCount += 1;
+            }
+            if (result.bounceRadiance > 0.0) {
+                stats.bouncePixelCount += 1;
+                stats.totalBounceRadiance += result.bounceRadiance;
+            }
+            stats.secondaryRayCount += result.secondaryRayCount;
+            stats.secondaryHitCount += result.secondaryHitCount;
+            stats.secondaryContributingHitCount += result.secondaryContributingHitCount;
+            if (result.radiance > stats.maxRadiance) {
+                stats.maxRadiance = result.radiance;
+            }
+            if (result.bounceRadiance > stats.maxBounceRadiance) {
+                stats.maxBounceRadiance = result.bounceRadiance;
+            }
+            pixel_buffer[idx] = (uint8_t)(TonemapCurve((float)result.radiance) * 255.0f);
+        }
+    }
+
+    if (out_stats) {
+        *out_stats = stats;
+    }
+    return true;
+}
+
 static bool runtime_native_3d_render_dispatch_integrator(uint8_t* pixel_buffer,
                                                          int integrator_id,
                                                          int width,
@@ -297,6 +361,16 @@ static bool runtime_native_3d_render_dispatch_integrator(uint8_t* pixel_buffer,
                                                            projector,
                                                            out_stats);
         case RAY_TRACING_3D_INTEGRATOR_EMISSION_TRANSPARENCY:
+            return runtime_native_3d_render_shade_emission_transparency(pixel_buffer,
+                                                                        width,
+                                                                        height,
+                                                                        start_x,
+                                                                        start_y,
+                                                                        end_x,
+                                                                        end_y,
+                                                                        scene,
+                                                                        projector,
+                                                                        out_stats);
         case RAY_TRACING_3D_INTEGRATOR_DISNEY:
         default:
             return false;

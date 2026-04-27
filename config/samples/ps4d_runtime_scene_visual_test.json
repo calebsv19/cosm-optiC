@@ -235,7 +235,7 @@
     },
     "overlay_merge":{
       "producer_clocks":{
-        "ray_tracing":25
+        "ray_tracing":30
       }
     },
     "ray_tracing":{
@@ -244,8 +244,8 @@
           "mode":"BEZIER_CUBIC",
           "points":[
             {
-              "x":-2.75,
-              "y":1.5,
+              "x":5.0,
+              "y":-2.75,
               "rotation":0.0,
               "handleLink":false,
               "velocity1":{
@@ -296,7 +296,7 @@
         "light_path_depth":{
           "points":[
             {
-              "z":2.75,
+              "z":0.0,
               "lookPitch":0.0,
               "velocity1":{
                 "vz":-0.0
@@ -337,7 +337,7 @@
             {
               "x":-3.0,
               "y":10.0,
-              "rotation":0.39325326645496772,
+              "rotation":0.54609051792166707,
               "handleLink":false,
               "velocity1":{
                 "vx":-0.78570416691943379,
@@ -359,8 +359,8 @@
         "camera_path_depth":{
           "points":[
             {
-              "z":6.0,
-              "lookPitch":-0.52759966456661322,
+              "z":2.0,
+              "lookPitch":-0.16195429970193578,
               "velocity1":{
                 "vz":0.34999999999999964
               }
@@ -377,15 +377,15 @@
         "object_materials":[
           {
             "object_id":"plane_floor",
-            "material_id":3
+            "material_id":1
           },
           {
             "object_id":"prism_center",
-            "material_id":2
+            "material_id":4
           },
           {
             "object_id":"prism_offset",
-            "material_id":1
+            "material_id":5
           }
         ]
       }

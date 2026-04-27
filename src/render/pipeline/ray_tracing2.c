@@ -28,6 +28,7 @@
 #include "render/space_mode_adapter.h"
 #include "render/ray_tracing_mode_backend.h"
 #include "render/runtime_camera_3d_rays.h"
+#include "render/runtime_material_payload_3d.h"
 #include "render/runtime_native_3d_render.h"
 #include "render/runtime_ray_3d.h"
 #include "render/runtime_scene_3d_builder.h"
@@ -254,6 +255,48 @@ static double ResolveNative3DLightMarkerWorldRadius(const RuntimeScene3D* scene)
     return radius;
 }
 
+static bool RuntimeNative3DLightMarkerPathVisible(const RuntimeScene3D* scene,
+                                                  Vec3 origin,
+                                                  Vec3 light_position,
+                                                  double t_min,
+                                                  double light_distance) {
+    Ray3D ray = {0};
+    double remaining_distance = 0.0;
+    int skip_count = 0;
+    static const int kMaxTransparentMarkerSkips = 16;
+
+    if (!scene) return false;
+    if (!(light_distance > t_min)) return false;
+
+    ray = RuntimeRay3D_Make(origin, vec3_sub(light_position, origin));
+    remaining_distance = light_distance;
+    while (skip_count < kMaxTransparentMarkerSkips &&
+           remaining_distance > t_min) {
+        HitInfo3D blocker_hit = {0};
+        RuntimeMaterialPayload3D payload = {0};
+
+        if (!RuntimeRay3D_TraceSceneFirstHit(scene,
+                                             &ray,
+                                             t_min,
+                                             remaining_distance - 1e-4,
+                                             &blocker_hit)) {
+            return true;
+        }
+        if (!RuntimeMaterialPayload3D_ResolveFromHit(&blocker_hit, &payload) ||
+            !(payload.transparency > 0.0)) {
+            return false;
+        }
+        remaining_distance -= blocker_hit.t;
+        ray = RuntimeRay3D_MakeOffset(blocker_hit.position,
+                                      blocker_hit.normal,
+                                      ray.direction,
+                                      1e-4);
+        skip_count += 1;
+    }
+
+    return remaining_distance > t_min;
+}
+
 static bool ResolveNative3DLightMarkerScreenInfo(int width,
                                                  int height,
                                                  double normalized_t,
@@ -264,8 +307,6 @@ static bool ResolveNative3DLightMarkerScreenInfo(int width,
     RuntimeCameraProjector3D projector = {0};
     Vec3 light_position = vec3(0.0, 0.0, 0.0);
     Vec3 to_light = vec3(0.0, 0.0, 0.0);
-    Ray3D ray = {0};
-    HitInfo3D blocker_hit = {0};
     double screen_x = 0.0;
     double screen_y = 0.0;
     double camera_depth = 0.0;
@@ -304,12 +345,11 @@ static bool ResolveNative3DLightMarkerScreenInfo(int width,
         RuntimeScene3D_Free(&scene);
         return false;
     }
-    ray = RuntimeRay3D_Make(projector.origin, to_light);
-    if (RuntimeRay3D_TraceSceneFirstHit(&scene,
-                                        &ray,
-                                        projector.nearPlane,
-                                        light_distance - 1e-4,
-                                        &blocker_hit)) {
+    if (!RuntimeNative3DLightMarkerPathVisible(&scene,
+                                               projector.origin,
+                                               light_position,
+                                               projector.nearPlane,
+                                               light_distance)) {
         RuntimeScene3D_Free(&scene);
         return false;
     }

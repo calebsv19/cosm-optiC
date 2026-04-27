@@ -35,6 +35,7 @@ bool RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(int scene_object_index
                                                           RuntimeMaterialPayload3D* out_payload) {
     RuntimeMaterialPayload3D payload = {0};
     SceneObject object_copy;
+    const Material* material = NULL;
 
     if (!out_payload) return false;
     RuntimeMaterialPayload3D_Reset(out_payload);
@@ -49,6 +50,9 @@ bool RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(int scene_object_index
     payload.sceneObjectIndex = scene_object_index;
     payload.materialId = object_copy.material_id;
     MaterialBSDFInitFromSceneObject(&object_copy, &payload.bsdf);
+    material = MaterialManagerGet(payload.materialId);
+    payload.emissive = payload.bsdf.emissive;
+    payload.transparency = material ? material->transparency : 0.0;
     payload.valid = true;
 
     *out_payload = payload;

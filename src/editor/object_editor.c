@@ -146,6 +146,9 @@ static int ObjectEditorResolveMaterialPreviewColor(int material_id) {
             case MATERIAL_PRESET_EMISSIVE:
                 r = 255; g = 220; b = 92;
                 break;
+            case MATERIAL_PRESET_TRANSPARENT:
+                r = 144; g = 232; b = 255;
+                break;
             case MATERIAL_PRESET_DEFAULT:
             default:
                 r = 220; g = 220; b = 220;

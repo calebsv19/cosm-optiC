@@ -68,18 +68,31 @@ void MaterialLibraryInit(MaterialLibrary* lib) {
     };
     MaterialAdd(lib, glossy); // MATERIAL_PRESET_GLOSSY
 
-    // Preset 4: Emissive placeholder (not used yet)
+    // Preset 4: Emissive
     Material emissive = {
         .diffuse = 0.0f,
         .specular = 0.0f,
         .reflectivity = 0.0f,
         .roughness = 1.0f,
         .base_color = vec3(1.0f, 1.0f, 1.0f),
-        .emissive = vec3(0.1f, 0.1f, 0.1f),
+        .emissive = vec3(1.0f, 1.0f, 1.0f),
         .metallic = 0.0f,
         .transparency = 0.0f
     };
     MaterialAdd(lib, emissive); // MATERIAL_PRESET_EMISSIVE
+
+    // Preset 5: Transparent
+    Material transparent = {
+        .diffuse = 0.05f,
+        .specular = 0.0f,
+        .reflectivity = 0.0f,
+        .roughness = 1.0f,
+        .base_color = vec3(1.0f, 1.0f, 1.0f),
+        .emissive = vec3(0.0f, 0.0f, 0.0f),
+        .metallic = 0.0f,
+        .transparency = 0.9f
+    };
+    MaterialAdd(lib, transparent); // MATERIAL_PRESET_TRANSPARENT
 }
 
 int MaterialAdd(MaterialLibrary* lib, Material mat) {

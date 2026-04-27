@@ -86,6 +86,17 @@ static bool LoadMaterialFromJsonFile(const char* path, Material* out) {
     return true;
 }
 
+static int MaterialManagerPresetIdForFilename(const char* filename) {
+    if (!filename) return -1;
+    if (strcmp(filename, "default.json") == 0) return MATERIAL_PRESET_DEFAULT;
+    if (strcmp(filename, "mirror.json") == 0) return MATERIAL_PRESET_MIRROR;
+    if (strcmp(filename, "rough_metal.json") == 0) return MATERIAL_PRESET_ROUGH_METAL;
+    if (strcmp(filename, "glossy.json") == 0) return MATERIAL_PRESET_GLOSSY;
+    if (strcmp(filename, "emissive.json") == 0) return MATERIAL_PRESET_EMISSIVE;
+    if (strcmp(filename, "transparent.json") == 0) return MATERIAL_PRESET_TRANSPARENT;
+    return -1;
+}
+
 void MaterialManagerLoadDir(const char* dirPath) {
     if (!gInit) MaterialManagerInit();
     if (!dirPath) return;
@@ -93,10 +104,10 @@ void MaterialManagerLoadDir(const char* dirPath) {
     if (!dir) return;
     struct dirent* ent = NULL;
     MaterialLibrary lib = {0};
-    MaterialLibraryInit(&lib); // start with defaults as base indexes
-    lib.count = 0; // will refill
+    MaterialLibraryInit(&lib);
 
     while ((ent = readdir(dir)) != NULL) {
+        int preset_id = -1;
         if (ent->d_name[0] == '.') continue;
         const char* dot = strrchr(ent->d_name, '.');
         if (!dot || strcmp(dot, ".json") != 0) continue;
@@ -108,7 +119,12 @@ void MaterialManagerLoadDir(const char* dirPath) {
             .base_color = vec3(1,1,1), .emissive = vec3(0,0,0), .metallic = 0.0f, .transparency = 0.0f
         };
         if (LoadMaterialFromJsonFile(path, &m)) {
-            MaterialAdd(&lib, m);
+            preset_id = MaterialManagerPresetIdForFilename(ent->d_name);
+            if (preset_id >= 0 && preset_id < MAX_MATERIALS) {
+                lib.materials[preset_id] = m;
+            } else {
+                MaterialAdd(&lib, m);
+            }
         }
     }
     closedir(dir);

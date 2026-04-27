@@ -15,7 +15,6 @@
 #define ASSET_ROW_HEIGHT 22
 #define PANEL_HEADER_HEIGHT 26
 #define PANEL_PADDING 6
-#define PANEL_MAX_HEIGHT 220
 #define ASSET_PANEL_WIDTH 200
 #define MATERIAL_ROW_HEIGHT 18
 #define PANEL_GAP 10
@@ -251,6 +250,9 @@ static int ObjectEditorResolveMaterialSwatchColor(int material_id) {
             case MATERIAL_PRESET_EMISSIVE:
                 r = 255; g = 220; b = 92;
                 break;
+            case MATERIAL_PRESET_TRANSPARENT:
+                r = 144; g = 232; b = 255;
+                break;
             case MATERIAL_PRESET_DEFAULT:
             default:
                 r = 220; g = 220; b = 220;
@@ -274,17 +276,17 @@ void ObjectEditorPanels_UpdateLayoutForRegion(const SDL_Rect* region) {
     int headerH = ObjectEditorHeaderHeight();
     int assetRowH = ObjectEditorAssetRowHeight();
     int materialRowH = ObjectEditorMaterialRowHeight();
-    int panelMaxH = animation_config_scale_text_point_size(&animSettings, PANEL_MAX_HEIGHT, 160);
-    SDL_Rect available = {20, 40, ASSET_PANEL_WIDTH, panelMaxH * 2 + PANEL_GAP};
+    int panelMaxH = 0;
+    SDL_Rect available = {20, 40, ASSET_PANEL_WIDTH, 360};
     int panelW = ASSET_PANEL_WIDTH;
     int x = 20;
     int y = 40;
     int available_h = 0;
-    int max_each_h = 0;
-    if (panelMaxH > sceneSettings.windowHeight - 80) {
-        panelMaxH = sceneSettings.windowHeight - 80;
-    }
-    if (panelMaxH < 140) panelMaxH = 140;
+    int assetMinContent = 0;
+    int materialMinContent = 0;
+    int assetContent = 0;
+    int matContent = 0;
+    int overflow = 0;
     if (region && region->w > 0 && region->h > 0) {
         available = *region;
     } else if (SceneEditorGetPaneLayout(&pane_layout)) {
@@ -299,19 +301,17 @@ void ObjectEditorPanels_UpdateLayoutForRegion(const SDL_Rect* region) {
     y = available.y;
     panelW = available.w;
     available_h = available.h;
+    panelMaxH = available_h;
     if (panelW > ASSET_PANEL_WIDTH) panelW = ASSET_PANEL_WIDTH;
     if (panelW < 160 && available.w >= 160) panelW = available.w;
     if (panelW < 120) panelW = 120;
-    max_each_h = (available_h - PANEL_GAP) / 2;
-    if (max_each_h < 80) {
-        max_each_h = available_h;
-    }
     int headerW = panelW - PANEL_PADDING * 2;
     int assetRows = showImports ? importCount : (int)assetLib.count;
     if (assetRows < 1) assetRows = 1;
-    int assetContent = headerH + PANEL_PADDING * 2 + assetRows * assetRowH;
+    assetMinContent = headerH + PANEL_PADDING * 2 + assetRowH;
+    materialMinContent = headerH + PANEL_PADDING * 2 + materialRowH;
+    assetContent = headerH + PANEL_PADDING * 2 + 4 + assetRows * assetRowH;
     if (assetContent > panelMaxH) assetContent = panelMaxH;
-    if (assetContent > max_each_h) assetContent = max_each_h;
     assetPanelRect = (SDL_Rect){x, y, panelW, assetContent};
     assetToggleRect = (SDL_Rect){x + PANEL_PADDING,
                                  y + PANEL_PADDING,
@@ -324,9 +324,34 @@ void ObjectEditorPanels_UpdateLayoutForRegion(const SDL_Rect* region) {
 
     int matRows = MaterialManagerCount();
     if (matRows < 1) matRows = 1;
-    int matContent = headerH + PANEL_PADDING * 2 + matRows * materialRowH;
+    matContent = headerH + PANEL_PADDING * 2 + 4 + matRows * materialRowH;
     if (matContent > panelMaxH) matContent = panelMaxH;
-    if (matContent > max_each_h) matContent = max_each_h;
+
+    overflow = assetContent + PANEL_GAP + matContent - available_h;
+    if (overflow > 0 && assetContent > assetMinContent) {
+        int reducible = assetContent - assetMinContent;
+        int trim = overflow < reducible ? overflow : reducible;
+        assetContent -= trim;
+        overflow -= trim;
+    }
+    if (overflow > 0 && matContent > materialMinContent) {
+        int reducible = matContent - materialMinContent;
+        int trim = overflow < reducible ? overflow : reducible;
+        matContent -= trim;
+        overflow -= trim;
+    }
+    if (overflow > 0) {
+        int totalAvailable = available_h - PANEL_GAP;
+        if (totalAvailable < 0) totalAvailable = available_h;
+        if (matContent > totalAvailable) matContent = totalAvailable;
+        if (assetContent > totalAvailable - matContent) {
+            assetContent = totalAvailable - matContent;
+        }
+        if (assetContent < assetMinContent) assetContent = assetMinContent;
+        if (matContent < materialMinContent) matContent = materialMinContent;
+    }
+
+    assetPanelRect.h = assetContent;
     materialPanelRect = (SDL_Rect){x, assetPanelRect.y + assetPanelRect.h + PANEL_GAP, panelW, matContent};
     materialCollapseRect = (SDL_Rect){materialPanelRect.x + materialPanelRect.w - PANEL_PADDING - 16,
                                       materialPanelRect.y + PANEL_PADDING,
@@ -525,6 +550,7 @@ void ObjectEditorPanels_DrawMaterialList(SDL_Renderer* renderer) {
             case MATERIAL_PRESET_ROUGH_METAL: label = "Rough Metal"; break;
             case MATERIAL_PRESET_GLOSSY: label = "Glossy"; break;
             case MATERIAL_PRESET_EMISSIVE: label = "Emissive"; break;
+            case MATERIAL_PRESET_TRANSPARENT: label = "Transparent"; break;
             default: break;
         }
         RenderLabelTextLeft(renderer, labelRect, label, textColor);

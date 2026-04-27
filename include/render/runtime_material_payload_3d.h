@@ -11,6 +11,8 @@ typedef struct {
     int sceneObjectIndex;
     int materialId;
     MaterialBSDF bsdf;
+    double emissive;
+    double transparency;
 } RuntimeMaterialPayload3D;
 
 void RuntimeMaterialPayload3D_Reset(RuntimeMaterialPayload3D* payload);
