@@ -31,6 +31,7 @@
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_native_3d_render.h"
 #include "render/runtime_native_3d_resolution.h"
+#include "render/runtime_native_3d_adaptive_sampling.h"
 #include "render/runtime_native_3d_temporal_accum.h"
 #include "render/runtime_ray_3d.h"
 #include "render/runtime_scene_3d_builder.h"
@@ -1448,6 +1449,7 @@ static bool RenderNative3DTilesPreview(SDL_Renderer* renderer,
     RuntimeNative3DPreparedFrame frame = {0};
     RuntimeNative3DRenderStats stats = {0};
     RuntimeNative3DTemporalAccumulation tileAccumulation = {0};
+    RuntimeNative3DAdaptiveSamplingMask adaptiveMask = {0};
     IntegratorContext preview_ctx = {
         .width = host_width,
         .height = host_height
@@ -1456,6 +1458,8 @@ static bool RenderNative3DTilesPreview(SDL_Renderer* renderer,
     size_t total = (size_t)render_width * (size_t)render_height;
     int maxTilePixels = 0;
     const int temporal_frames = ResolveNative3DTemporalFrames(integrator_id);
+    const bool use_adaptive_sampling =
+        RuntimeNative3DAdaptiveSampling_ShouldUse(integrator_id, temporal_frames);
 
     if (out_stats) {
         memset(out_stats, 0, sizeof(*out_stats));
@@ -1468,6 +1472,7 @@ static bool RenderNative3DTilesPreview(SDL_Renderer* renderer,
 
     memset(render_buffer, 0, total * sizeof(Uint8));
     RuntimeNative3DTemporalAccumulation_Init(&tileAccumulation);
+    RuntimeNative3DAdaptiveSamplingMask_Init(&adaptiveMask);
     if (!RuntimeNative3DPrepareFrameWithSampling(&frame,
                                                  render_width,
                                                  render_height,
@@ -1475,18 +1480,21 @@ static bool RenderNative3DTilesPreview(SDL_Renderer* renderer,
                                                  light_x,
                                                  light_y,
                                                  sampling)) {
+        RuntimeNative3DAdaptiveSamplingMask_Free(&adaptiveMask);
         RuntimeNative3DTemporalAccumulation_Free(&tileAccumulation);
         return false;
     }
     (void)RuntimeNative3DPrepareFrameTileOccupancy(&frame, grid->tileSize);
     maxTilePixels = grid->tileSize * grid->tileSize;
     if (maxTilePixels <= 0) {
+        RuntimeNative3DAdaptiveSamplingMask_Free(&adaptiveMask);
         RuntimeNative3DTemporalAccumulation_Free(&tileAccumulation);
         RuntimeNative3DPreparedFrame_Free(&frame);
         return false;
     }
     tileLuminance = (float*)calloc((size_t)maxTilePixels, sizeof(*tileLuminance));
     if (!tileLuminance) {
+        RuntimeNative3DAdaptiveSamplingMask_Free(&adaptiveMask);
         RuntimeNative3DTemporalAccumulation_Free(&tileAccumulation);
         RuntimeNative3DPreparedFrame_Free(&frame);
         return false;
@@ -1505,6 +1513,7 @@ static bool RenderNative3DTilesPreview(SDL_Renderer* renderer,
                                                   host_buffer,
                                                   true)) {
             free(tileLuminance);
+            RuntimeNative3DAdaptiveSamplingMask_Free(&adaptiveMask);
             RuntimeNative3DTemporalAccumulation_Free(&tileAccumulation);
             RuntimeNative3DPreparedFrame_Free(&frame);
             return false;
@@ -1529,11 +1538,28 @@ static bool RenderNative3DTilesPreview(SDL_Renderer* renderer,
         if (!RuntimeNative3DTemporalAccumulation_Ensure(&tileAccumulation, tile->width, tile->height)) {
             memset(render_buffer, 0, total * sizeof(Uint8));
             free(tileLuminance);
+            RuntimeNative3DAdaptiveSamplingMask_Free(&adaptiveMask);
             RuntimeNative3DTemporalAccumulation_Free(&tileAccumulation);
             RuntimeNative3DPreparedFrame_Free(&frame);
             return false;
         }
         RuntimeNative3DTemporalAccumulation_Clear(&tileAccumulation);
+        if (use_adaptive_sampling &&
+            (!RuntimeNative3DAdaptiveSamplingMask_Ensure(&adaptiveMask, tile->width, tile->height) ||
+             !RuntimeNative3DAdaptiveSampling_BuildStableEmitterMask(&adaptiveMask,
+                                                                    &frame.scene,
+                                                                    &frame.projector,
+                                                                    tile->originX,
+                                                                    tile->originY,
+                                                                    tile->originX + tile->width,
+                                                                    tile->originY + tile->height))) {
+            memset(render_buffer, 0, total * sizeof(Uint8));
+            free(tileLuminance);
+            RuntimeNative3DAdaptiveSamplingMask_Free(&adaptiveMask);
+            RuntimeNative3DTemporalAccumulation_Free(&tileAccumulation);
+            RuntimeNative3DPreparedFrame_Free(&frame);
+            return false;
+        }
         if (present_progress && renderer &&
             ResolveNative3DHostDirtyTile(tile,
                                          render_width,
@@ -1549,26 +1575,39 @@ static bool RenderNative3DTilesPreview(SDL_Renderer* renderer,
             RuntimeNative3DRenderStats subpass_stats = {0};
             RuntimeNative3DSamplingContext subpass_sampling =
                 ResolveNative3DSubpassSampling(sampling, (uint32_t)subpass);
+            const uint8_t* active_mask =
+                (use_adaptive_sampling && subpass > 0) ? adaptiveMask.activeSampleMask : NULL;
+            const int active_mask_stride =
+                (use_adaptive_sampling && subpass > 0) ? adaptiveMask.width : 0;
+            if (active_mask && !RuntimeNative3DAdaptiveSampling_HasActiveSamples(&adaptiveMask)) {
+                break;
+            }
             subpass_frame.sampling = subpass_sampling;
             memset(tileLuminance, 0, (size_t)tile_pixels * sizeof(*tileLuminance));
-            if (!RuntimeNative3DRenderPreparedRegionLuminance(tileLuminance,
-                                                              tile_stride,
-                                                              integrator_id,
-                                                              &subpass_frame,
-                                                              tile->originX,
-                                                              tile->originY,
-                                                              tile->originX + tile->width,
-                                                              tile->originY + tile->height,
-                                                              &subpass_stats) ||
-                !RuntimeNative3DTemporalAccumulation_AddRegion(&tileAccumulation,
-                                                               tileLuminance,
-                                                               tile_stride,
-                                                               0,
-                                                               0,
-                                                               tile->width,
-                                                               tile->height)) {
+            if (!RuntimeNative3DAdaptiveSampling_RenderPreparedRegionLuminanceMasked(
+                    tileLuminance,
+                    tile_stride,
+                    integrator_id,
+                    &subpass_frame,
+                    tile->originX,
+                    tile->originY,
+                    tile->originX + tile->width,
+                    tile->originY + tile->height,
+                    active_mask,
+                    active_mask_stride,
+                    &subpass_stats) ||
+                !RuntimeNative3DTemporalAccumulation_AddRegionSamples(&tileAccumulation,
+                                                                      tileLuminance,
+                                                                      tile_stride,
+                                                                      0,
+                                                                      0,
+                                                                      tile->width,
+                                                                      tile->height,
+                                                                      active_mask,
+                                                                      active_mask_stride)) {
                 memset(render_buffer, 0, total * sizeof(Uint8));
                 free(tileLuminance);
+                RuntimeNative3DAdaptiveSamplingMask_Free(&adaptiveMask);
                 RuntimeNative3DTemporalAccumulation_Free(&tileAccumulation);
                 RuntimeNative3DPreparedFrame_Free(&frame);
                 return false;
@@ -1594,6 +1633,7 @@ static bool RenderNative3DTilesPreview(SDL_Renderer* renderer,
                                                           host_buffer,
                                                           false)) {
                     free(tileLuminance);
+                    RuntimeNative3DAdaptiveSamplingMask_Free(&adaptiveMask);
                     RuntimeNative3DTemporalAccumulation_Free(&tileAccumulation);
                     RuntimeNative3DPreparedFrame_Free(&frame);
                     return false;
@@ -1615,6 +1655,7 @@ static bool RenderNative3DTilesPreview(SDL_Renderer* renderer,
                                   host_width,
                                   host_height);
     free(tileLuminance);
+    RuntimeNative3DAdaptiveSamplingMask_Free(&adaptiveMask);
     RuntimeNative3DTemporalAccumulation_Free(&tileAccumulation);
     RuntimeNative3DPreparedFrame_Free(&frame);
     if (out_stats) {

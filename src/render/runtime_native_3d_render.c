@@ -12,6 +12,7 @@
 #include "render/runtime_emission_transparency_3d.h"
 #include "render/runtime_light_emitter_3d.h"
 #include "render/runtime_material_response_3d.h"
+#include "render/runtime_native_3d_adaptive_sampling.h"
 #include "render/runtime_native_3d_temporal_accum.h"
 #include "render/ray_tracing_integrator_catalog.h"
 #include "render/runtime_scene_3d_builder.h"
@@ -818,12 +819,15 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
     RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DPreparedFrame frame = {0};
     RuntimeNative3DTemporalAccumulation accumulation = {0};
+    RuntimeNative3DAdaptiveSamplingMask adaptive_mask = {0};
     float* subpass_luminance = NULL;
     bool ok = false;
     const int effective_temporal_frames =
         (integrator_id == RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT || temporal_frames <= 1)
             ? 1
             : temporal_frames;
+    const bool use_adaptive_sampling =
+        RuntimeNative3DAdaptiveSampling_ShouldUse(integrator_id, effective_temporal_frames);
 
     if (!pixel_buffer || width <= 0 || height <= 0) return false;
     if (out_stats) {
@@ -854,32 +858,62 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
         return false;
     }
     RuntimeNative3DTemporalAccumulation_Clear(&accumulation);
+    if (use_adaptive_sampling) {
+        RuntimeNative3DAdaptiveSamplingMask_Init(&adaptive_mask);
+        ok = RuntimeNative3DAdaptiveSamplingMask_Ensure(&adaptive_mask, width, height) &&
+             RuntimeNative3DAdaptiveSampling_BuildStableEmitterMask(&adaptive_mask,
+                                                                    &frame.scene,
+                                                                    &frame.projector,
+                                                                    0,
+                                                                    0,
+                                                                    width,
+                                                                    height);
+        if (!ok) {
+            free(subpass_luminance);
+            RuntimeNative3DAdaptiveSamplingMask_Free(&adaptive_mask);
+            RuntimeNative3DTemporalAccumulation_Free(&accumulation);
+            RuntimeNative3DPreparedFrame_Free(&frame);
+            return false;
+        }
+    }
 
     for (int subpass = 0; subpass < effective_temporal_frames; ++subpass) {
         RuntimeNative3DPreparedFrame subpass_frame = frame;
         RuntimeNative3DRenderStats subpass_stats = {0};
+        const uint8_t* active_mask =
+            (use_adaptive_sampling && subpass > 0) ? adaptive_mask.activeSampleMask : NULL;
+        const int active_mask_stride =
+            (use_adaptive_sampling && subpass > 0) ? adaptive_mask.width : 0;
+        if (active_mask && !RuntimeNative3DAdaptiveSampling_HasActiveSamples(&adaptive_mask)) {
+            break;
+        }
         memset(subpass_luminance, 0, (size_t)width * (size_t)height * sizeof(*subpass_luminance));
         subpass_frame.sampling =
             runtime_native_3d_render_resolve_subpass_sampling(sampling, (uint32_t)subpass);
-        ok = RuntimeNative3DRenderPreparedRegionLuminance(subpass_luminance,
-                                                          width,
-                                                          integrator_id,
-                                                          &subpass_frame,
-                                                          0,
-                                                          0,
-                                                          width,
-                                                          height,
-                                                          &subpass_stats);
+        ok = RuntimeNative3DAdaptiveSampling_RenderPreparedRegionLuminanceMasked(
+            subpass_luminance,
+            width,
+            integrator_id,
+            &subpass_frame,
+            0,
+            0,
+            width,
+            height,
+            active_mask,
+            active_mask_stride,
+            &subpass_stats);
         if (!ok) {
             break;
         }
-        ok = RuntimeNative3DTemporalAccumulation_AddRegion(&accumulation,
-                                                           subpass_luminance,
-                                                           width,
-                                                           0,
-                                                           0,
-                                                           width,
-                                                           height);
+        ok = RuntimeNative3DTemporalAccumulation_AddRegionSamples(&accumulation,
+                                                                  subpass_luminance,
+                                                                  width,
+                                                                  0,
+                                                                  0,
+                                                                  width,
+                                                                  height,
+                                                                  active_mask,
+                                                                  active_mask_stride);
         if (!ok) {
             break;
         }
@@ -899,6 +933,7 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
                                                                        height);
     }
     free(subpass_luminance);
+    RuntimeNative3DAdaptiveSamplingMask_Free(&adaptive_mask);
     RuntimeNative3DTemporalAccumulation_Free(&accumulation);
     RuntimeNative3DPreparedFrame_Free(&frame);
     return ok;

@@ -181,6 +181,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_emission_transparency_3d.o \
 	$(BUILD_DIR)/render/runtime_material_payload_3d.o \
 	$(BUILD_DIR)/render/runtime_material_response_3d.o \
+	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render.o \
 	$(BUILD_DIR)/render/runtime_native_3d_resolution.o \
 	$(BUILD_DIR)/render/runtime_native_3d_temporal_accum.o \

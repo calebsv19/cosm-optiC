@@ -11,6 +11,7 @@
 #include "render/runtime_emission_transparency_3d.h"
 #include "render/runtime_light_emitter_3d.h"
 #include "render/runtime_material_response_3d.h"
+#include "render/runtime_native_3d_render.h"
 #include "render/runtime_ray_3d.h"
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_scene_3d_builder.h"
@@ -515,10 +516,113 @@ static int test_runtime_emission_transparency_3d_transparent_prism_reaches_emitt
     return 0;
 }
 
+static int test_runtime_emission_transparency_3d_temporal_skips_stable_emitters(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_emission_transparency_adaptive_emitter\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"emissive_wall\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":8.0,\"height\":8.0,"
+            "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+            "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}},"
+            "\"material_ref\":{\"id\":\"mat_emissive\"}"
+          "}"
+        "],"
+        "\"materials\":["
+          "{"
+            "\"material_id\":\"mat_emissive\","
+            "\"emissive\":[1.0, 1.0, 1.0],"
+            "\"transparency\":0.0"
+          "}"
+        "],"
+        "\"lights\":[{\"position\":{\"x\":0.0,\"y\":-2.0,\"z\":0.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{"
+          "\"ray_tracing\":{"
+            "\"authoring\":{"
+              "\"object_materials\":[{\"scene_object_index\":0,\"material_id\":4}]"
+            "}"
+          "}"
+        "}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeNative3DRenderStats single_stats = {0};
+    RuntimeNative3DRenderStats temporal_stats = {0};
+    uint8_t single_pixels[101 * 101];
+    uint8_t temporal_pixels[101 * 101];
+    bool ok = false;
+
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_emission_transparency_adaptive_apply_ok", ok);
+    if (!ok) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_EMISSIVE;
+    animSettings.lightIntensity = 10.0;
+    animSettings.forwardDecay = 10.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    animSettings.secondaryDiffuseSamples3D = RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT;
+    animSettings.transmissionSamples3D = RUNTIME_3D_TRANSMISSION_SAMPLES_DEFAULT;
+    sceneSettings.camera.rotation = 0.0;
+    sceneSettings.camera.zoom = 1.0;
+
+    ok = RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
+        single_pixels,
+        RAY_TRACING_3D_INTEGRATOR_EMISSION_TRANSPARENCY,
+        101,
+        101,
+        0.0,
+        0.0,
+        -2.0,
+        NULL,
+        1,
+        &single_stats);
+    assert_true("runtime_emission_transparency_adaptive_single_ok", ok);
+    ok = RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
+        temporal_pixels,
+        RAY_TRACING_3D_INTEGRATOR_EMISSION_TRANSPARENCY,
+        101,
+        101,
+        0.0,
+        0.0,
+        -2.0,
+        NULL,
+        4,
+        &temporal_stats);
+    assert_true("runtime_emission_transparency_adaptive_temporal_ok", ok);
+    assert_true("runtime_emission_transparency_adaptive_secondary_not_multiplied",
+                temporal_stats.secondaryRayCount == single_stats.secondaryRayCount);
+    assert_true("runtime_emission_transparency_adaptive_center_preserved",
+                temporal_pixels[(50 * 101) + 50] == single_pixels[(50 * 101) + 50]);
+
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 int run_test_runtime_emission_transparency_tests(void) {
     test_runtime_emission_transparency_3d_seed_branch_contract();
     test_runtime_emission_transparency_3d_transmission_contract();
     test_runtime_emission_transparency_3d_transparent_prism_reaches_behind_surface();
     test_runtime_emission_transparency_3d_transparent_prism_reaches_emitter();
+    test_runtime_emission_transparency_3d_temporal_skips_stable_emitters();
     return 0;
 }

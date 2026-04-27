@@ -6,6 +6,7 @@
 
 typedef struct {
     float* accumulationBuffer;
+    uint16_t* sampleCountBuffer;
     int width;
     int height;
     int completedSubpasses;
@@ -24,6 +25,16 @@ bool RuntimeNative3DTemporalAccumulation_AddRegion(RuntimeNative3DTemporalAccumu
                                                    int start_y,
                                                    int end_x,
                                                    int end_y);
+bool RuntimeNative3DTemporalAccumulation_AddRegionSamples(
+    RuntimeNative3DTemporalAccumulation* accumulation,
+    const float* luminance_region,
+    int luminance_stride,
+    int start_x,
+    int start_y,
+    int end_x,
+    int end_y,
+    const uint8_t* sample_mask,
+    int sample_mask_stride);
 void RuntimeNative3DTemporalAccumulation_CommitSubpass(
     RuntimeNative3DTemporalAccumulation* accumulation);
 void RuntimeNative3DTemporalAccumulation_ResolveRegionToPixelBuffer(

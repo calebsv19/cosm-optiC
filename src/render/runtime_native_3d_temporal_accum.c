@@ -14,6 +14,7 @@ void RuntimeNative3DTemporalAccumulation_Init(RuntimeNative3DTemporalAccumulatio
 void RuntimeNative3DTemporalAccumulation_Free(RuntimeNative3DTemporalAccumulation* accumulation) {
     if (!accumulation) return;
     free(accumulation->accumulationBuffer);
+    free(accumulation->sampleCountBuffer);
     memset(accumulation, 0, sizeof(*accumulation));
 }
 
@@ -21,9 +22,11 @@ bool RuntimeNative3DTemporalAccumulation_Ensure(RuntimeNative3DTemporalAccumulat
                                                 int width,
                                                 int height) {
     float* resized = NULL;
+    uint16_t* resized_counts = NULL;
     size_t count = 0;
     if (!accumulation || width <= 0 || height <= 0) return false;
     if (accumulation->accumulationBuffer &&
+        accumulation->sampleCountBuffer &&
         accumulation->width == width &&
         accumulation->height == height) {
         return true;
@@ -31,12 +34,17 @@ bool RuntimeNative3DTemporalAccumulation_Ensure(RuntimeNative3DTemporalAccumulat
 
     count = (size_t)width * (size_t)height;
     resized = (float*)calloc(count, sizeof(*resized));
-    if (!resized) {
+    resized_counts = (uint16_t*)calloc(count, sizeof(*resized_counts));
+    if (!resized || !resized_counts) {
+        free(resized);
+        free(resized_counts);
         return false;
     }
 
     free(accumulation->accumulationBuffer);
+    free(accumulation->sampleCountBuffer);
     accumulation->accumulationBuffer = resized;
+    accumulation->sampleCountBuffer = resized_counts;
     accumulation->width = width;
     accumulation->height = height;
     accumulation->completedSubpasses = 0;
@@ -51,6 +59,9 @@ void RuntimeNative3DTemporalAccumulation_Clear(RuntimeNative3DTemporalAccumulati
     }
     count = (size_t)accumulation->width * (size_t)accumulation->height;
     memset(accumulation->accumulationBuffer, 0, count * sizeof(*accumulation->accumulationBuffer));
+    if (accumulation->sampleCountBuffer) {
+        memset(accumulation->sampleCountBuffer, 0, count * sizeof(*accumulation->sampleCountBuffer));
+    }
     accumulation->completedSubpasses = 0;
 }
 
@@ -79,6 +90,52 @@ bool RuntimeNative3DTemporalAccumulation_AddRegion(RuntimeNative3DTemporalAccumu
             const size_t region_index =
                 (size_t)local_y * (size_t)luminance_stride + (size_t)local_x;
             accumulation->accumulationBuffer[accumulation_index] += luminance_region[region_index];
+        }
+    }
+    return true;
+}
+
+bool RuntimeNative3DTemporalAccumulation_AddRegionSamples(
+    RuntimeNative3DTemporalAccumulation* accumulation,
+    const float* luminance_region,
+    int luminance_stride,
+    int start_x,
+    int start_y,
+    int end_x,
+    int end_y,
+    const uint8_t* sample_mask,
+    int sample_mask_stride) {
+    if (!accumulation || !accumulation->accumulationBuffer || !accumulation->sampleCountBuffer ||
+        !luminance_region || luminance_stride <= 0) {
+        return false;
+    }
+    if (sample_mask && sample_mask_stride <= 0) {
+        return false;
+    }
+    if (start_x < 0 || start_y < 0 || end_x > accumulation->width || end_y > accumulation->height ||
+        start_x >= end_x || start_y >= end_y) {
+        return false;
+    }
+
+    for (int y = start_y; y < end_y; ++y) {
+        const int local_y = y - start_y;
+        for (int x = start_x; x < end_x; ++x) {
+            const int local_x = x - start_x;
+            const size_t accumulation_index =
+                (size_t)y * (size_t)accumulation->width + (size_t)x;
+            const size_t region_index =
+                (size_t)local_y * (size_t)luminance_stride + (size_t)local_x;
+            if (sample_mask) {
+                const size_t mask_index =
+                    (size_t)local_y * (size_t)sample_mask_stride + (size_t)local_x;
+                if (!sample_mask[mask_index]) {
+                    continue;
+                }
+            }
+            accumulation->accumulationBuffer[accumulation_index] += luminance_region[region_index];
+            if (accumulation->sampleCountBuffer[accumulation_index] < UINT16_MAX) {
+                accumulation->sampleCountBuffer[accumulation_index] += 1u;
+            }
         }
     }
     return true;
@@ -115,8 +172,12 @@ void RuntimeNative3DTemporalAccumulation_ResolveRegionToPixelBuffer(
             const size_t accumulation_index =
                 (size_t)y * (size_t)accumulation->width + (size_t)x;
             const size_t pixel_index = (size_t)y * (size_t)pixel_stride + (size_t)x;
+            const uint16_t sample_count =
+                accumulation->sampleCountBuffer ? accumulation->sampleCountBuffer[accumulation_index]
+                                                : 0u;
+            const float pixel_weight = sample_count > 0u ? (1.0f / (float)sample_count) : weight;
             const float resolved_luminance =
-                accumulation->accumulationBuffer[accumulation_index] * weight;
+                accumulation->accumulationBuffer[accumulation_index] * pixel_weight;
             pixel_buffer[pixel_index] = (uint8_t)(TonemapCurve(resolved_luminance) * 255.0f);
         }
     }
@@ -146,8 +207,12 @@ void RuntimeNative3DTemporalAccumulation_ResolveToPixelBufferAtOffset(
             const size_t accumulation_index =
                 (size_t)y * (size_t)accumulation->width + (size_t)x;
             const size_t pixel_index = (size_t)dst_y * (size_t)pixel_stride + (size_t)dst_x;
+            const uint16_t sample_count =
+                accumulation->sampleCountBuffer ? accumulation->sampleCountBuffer[accumulation_index]
+                                                : 0u;
+            const float pixel_weight = sample_count > 0u ? (1.0f / (float)sample_count) : weight;
             const float resolved_luminance =
-                accumulation->accumulationBuffer[accumulation_index] * weight;
+                accumulation->accumulationBuffer[accumulation_index] * pixel_weight;
             pixel_buffer[pixel_index] = (uint8_t)(TonemapCurve(resolved_luminance) * 255.0f);
         }
     }
