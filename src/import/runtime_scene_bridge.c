@@ -548,8 +548,15 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
         json_object *entry = json_object_array_get_idx(object_materials, i);
         json_object *object_id_obj = NULL;
         json_object *material_id_obj = NULL;
+        json_object *object_color_obj = NULL;
+        json_object *transparency_obj = NULL;
+        json_object *emissive_strength_obj = NULL;
         const char *object_id = NULL;
         int material_id = MaterialManagerDefaultId();
+        int object_color = 0xFFFFFF;
+        bool has_object_color = false;
+        double transparency = 1.0;
+        double emissive_strength = 1.0;
         int scene_index = 0;
         if (!entry || !json_object_is_type(entry, json_type_object)) continue;
         if (!json_object_object_get_ex(entry, "object_id", &object_id_obj) ||
@@ -563,6 +570,22 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
         }
         object_id = json_object_get_string(object_id_obj);
         material_id = json_object_get_int(material_id_obj);
+        if (json_object_object_get_ex(entry, "object_color", &object_color_obj) &&
+            (json_object_is_type(object_color_obj, json_type_int) ||
+             json_object_is_type(object_color_obj, json_type_double))) {
+            object_color = json_object_get_int(object_color_obj) & 0xFFFFFF;
+            has_object_color = true;
+        }
+        if (json_object_object_get_ex(entry, "transparency", &transparency_obj) &&
+            (json_object_is_type(transparency_obj, json_type_int) ||
+             json_object_is_type(transparency_obj, json_type_double))) {
+            transparency = json_object_get_double(transparency_obj);
+        }
+        if (json_object_object_get_ex(entry, "emissive_strength", &emissive_strength_obj) &&
+            (json_object_is_type(emissive_strength_obj, json_type_int) ||
+             json_object_is_type(emissive_strength_obj, json_type_double))) {
+            emissive_strength = json_object_get_double(emissive_strength_obj);
+        }
         if (!object_id || !object_id[0]) continue;
         for (scene_index = 0;
              scene_index < sceneSettings.objectCount && scene_index < g_last_runtime_object_id_count;
@@ -570,6 +593,13 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
             if (strcmp(g_last_runtime_object_ids[scene_index], object_id) == 0) {
                 runtime_scene_bridge_apply_object_material_preset(&sceneSettings.sceneObjects[scene_index],
                                                                   material_id);
+                if (has_object_color) {
+                    sceneSettings.sceneObjects[scene_index].color = object_color;
+                }
+                sceneSettings.sceneObjects[scene_index].transparency =
+                    fmax(0.0, fmin(1.0, transparency));
+                sceneSettings.sceneObjects[scene_index].emissiveStrength =
+                    fmax(0.0, fmin(1.0, emissive_strength));
                 break;
             }
         }

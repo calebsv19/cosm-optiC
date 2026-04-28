@@ -3,6 +3,7 @@
 #include "config/config_manager.h"
 #include "editor/scene_editor.h"
 #include "editor/editor_mode_router.h"
+#include "editor/object_editor_object_ops.h"
 #include "editor/scene_editor_tool_state.h"
 #include "editor/object_editor_panels.h"
 #include "app/animation.h"
@@ -70,10 +71,12 @@ int importCount = 0;
 SDL_Rect materialPanelRect;
 SDL_Rect materialCollapseRect;
 int selectedMaterialIndex = -1;
+int selectedColorIndex = -1;
 bool assetsCollapsed = false;
 bool materialsCollapsed = false;
 int assetScroll = 0;
 int materialScroll = 0;
+static ObjectEditorPanelSliderKind activeMaterialSlider = OBJECT_EDITOR_PANEL_SLIDER_NONE;
 
 static bool ObjectEditorAddToolActive(void) {
     return SceneEditorToolStateToolIsActive(SCENE_EDITOR_TOOL_ADD);
@@ -113,58 +116,13 @@ static void ObjectEditorDrawPaneButton(SDL_Renderer* renderer,
     RenderButtonTextWithColor(renderer, rect, label, text);
 }
 
-static int ClampColorByte(double unit) {
-    int out = (int)lround(unit * 255.0);
-    if (out < 0) return 0;
-    if (out > 255) return 255;
-    return out;
-}
-
-static int ObjectEditorResolveMaterialPreviewColor(int material_id) {
-    const Material* mat = MaterialManagerGet(material_id);
-    int r = 220;
-    int g = 220;
-    int b = 220;
-
-    if (mat) {
-        r = ClampColorByte((double)mat->base_color.x);
-        g = ClampColorByte((double)mat->base_color.y);
-        b = ClampColorByte((double)mat->base_color.z);
-    }
-
-    if (abs(r - g) < 8 && abs(g - b) < 8) {
-        switch (material_id) {
-            case MATERIAL_PRESET_MIRROR:
-                r = 156; g = 196; b = 255;
-                break;
-            case MATERIAL_PRESET_ROUGH_METAL:
-                r = 214; g = 170; b = 116;
-                break;
-            case MATERIAL_PRESET_GLOSSY:
-                r = 236; g = 120; b = 120;
-                break;
-            case MATERIAL_PRESET_EMISSIVE:
-                r = 255; g = 220; b = 92;
-                break;
-            case MATERIAL_PRESET_TRANSPARENT:
-                r = 144; g = 232; b = 255;
-                break;
-            case MATERIAL_PRESET_DEFAULT:
-            default:
-                r = 220; g = 220; b = 220;
-                break;
-        }
-    }
-
-    return (r << 16) | (g << 8) | b;
-}
-
-static void ObjectEditorAssignMaterialToObject(SceneObject* obj, int material_id) {
-    if (!obj) return;
-    if (material_id < 0 || material_id >= MaterialManagerCount()) return;
-    obj->material_id = material_id;
-    obj->color = ObjectEditorResolveMaterialPreviewColor(material_id);
-    MarkObjectDirty(obj);
+static SDL_Color ObjectEditorColorFromPackedRGB(int packed, Uint8 alpha) {
+    SDL_Color color = {0};
+    color.r = (Uint8)((packed >> 16) & 0xFF);
+    color.g = (Uint8)((packed >> 8) & 0xFF);
+    color.b = (Uint8)(packed & 0xFF);
+    color.a = alpha;
+    return color;
 }
 
 typedef enum ObjectEditorAction {
@@ -318,7 +276,7 @@ void FinalizePolygonCreation(void) {
 
     // Initialize object as a new polygon
     InitObject(newObj, OBJECT_POLYGON, centerX, centerY, 0, 0, adjustedPoints, polygonPointCount);
-    ObjectEditorAssignMaterialToObject(newObj, MaterialManagerDefaultId());
+    ObjectEditorObjectAssignMaterial(newObj, MaterialManagerDefaultId());
 
     sceneSettings.objectCount++;
     polygonPointCount = 0;  // Reset for next polygon
@@ -350,7 +308,7 @@ numPoints) {
         InitObject(newObj, type, x, y, param1, param2, points, numPoints);
     }
 
-    ObjectEditorAssignMaterialToObject(newObj, MaterialManagerDefaultId());
+    ObjectEditorObjectAssignMaterial(newObj, MaterialManagerDefaultId());
     sceneSettings.objectCount++;
     UpdateObject(newObj);
     printf("Added Object %d at (%.2f, %.2f)\n", index, x, y);
@@ -421,6 +379,7 @@ bool ObjectEditorDeleteObjectIndex(int index) {
     if (selectedObjectIndex == index) {
         selectedObjectIndex = -1;
         selectedMaterialIndex = -1;
+        selectedColorIndex = -1;
     } else if (selectedObjectIndex > index) {
         selectedObjectIndex -= 1;
     }
@@ -527,14 +486,12 @@ void RenderHandles(SDL_Renderer* renderer, SceneObject* obj, const Camera* camer
 
 void RenderObjectEditor(SDL_Renderer* renderer) {
     RayTracingThemePalette palette = {0};
-    SDL_Color objectColor = {255, 255, 255, 255};
     if (ray_tracing_shared_theme_resolve_palette(&palette)) {
         SDL_SetRenderDrawColor(renderer,
                                palette.background_fill.r,
                                palette.background_fill.g,
                                palette.background_fill.b,
                                255);
-        objectColor = palette.text_primary;
     } else {
         SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
     }
@@ -550,7 +507,8 @@ void RenderObjectEditor(SDL_Renderer* renderer) {
     bool fillObjects = !AnimationUseFluidScene();
     for (int i = 0; i < sceneSettings.objectCount; i++) {
         SceneObject* obj = &sceneSettings.sceneObjects[i];
-        SDL_SetRenderDrawColor(renderer, objectColor.r, objectColor.g, objectColor.b, 255);
+        SDL_Color drawColor = ObjectEditorColorFromPackedRGB(obj->color, 255);
+        SDL_SetRenderDrawColor(renderer, drawColor.r, drawColor.g, drawColor.b, drawColor.a);
         RenderSceneObject(renderer, obj, fillObjects);
 
         if (i == selectedObjectIndex) {
@@ -690,6 +648,8 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
                         if (idx < (int)assetLib.count) {
                             selectedAssetIndex = idx;
                             selectedObjectIndex = -1;
+                            selectedMaterialIndex = -1;
+                            selectedColorIndex = -1;
                         }
                     }
                 }
@@ -710,6 +670,31 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
                 if (idx >= 0 && idx < MaterialManagerCount()) {
                     selectedMaterialIndex = idx;
                     ObjectEditorAssignMaterialToSelected(idx);
+                    return;
+                }
+                idx = ObjectEditorPanels_ColorIndexAtPoint(mx, my);
+                if (idx >= 0) {
+                    selectedColorIndex = idx;
+                    ObjectEditorAssignColorToSelected(
+                        ObjectEditorPanels_PackedColorForIndex(idx));
+                    return;
+                }
+                {
+                    ObjectEditorPanelSliderKind slider_kind =
+                        OBJECT_EDITOR_PANEL_SLIDER_NONE;
+                    double slider_value = 0.0;
+                    if (ObjectEditorPanels_SliderValueAtPoint(mx,
+                                                              my,
+                                                              &slider_kind,
+                                                              &slider_value)) {
+                        activeMaterialSlider = slider_kind;
+                        if (slider_kind == OBJECT_EDITOR_PANEL_SLIDER_TRANSPARENCY) {
+                            ObjectEditorAssignTransparencyToSelected(slider_value);
+                        } else if (slider_kind ==
+                                   OBJECT_EDITOR_PANEL_SLIDER_EMISSIVE_STRENGTH) {
+                            ObjectEditorAssignEmissiveStrengthToSelected(slider_value);
+                        }
+                    }
                 }
                 return;
             }
@@ -724,6 +709,9 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
         lastWorldY = worldY;
 
         selectedObjectIndex = -1;
+        selectedMaterialIndex = -1;
+        selectedColorIndex = -1;
+        activeMaterialSlider = OBJECT_EDITOR_PANEL_SLIDER_NONE;
         draggingRotationHandle = false;
 
         if (SceneEditorToolStateGetEffective(SDL_GetModState()) == SCENE_EDITOR_TOOL_ADD &&
@@ -822,6 +810,8 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
             selectedAssetIndex = -1; // only one selection active
             if (selectedObjectIndex >= 0 && selectedObjectIndex < sceneSettings.objectCount) {
                 selectedMaterialIndex = sceneSettings.sceneObjects[selectedObjectIndex].material_id;
+                selectedColorIndex = ObjectEditorPanels_ColorIndexForPackedRGB(
+                    sceneSettings.sceneObjects[selectedObjectIndex].color);
             }
             return;
         }
@@ -856,6 +846,18 @@ void HandleObjectEditorMouseDrag(SDL_Event* event) {
                                            my);
             viewportPanLastMouseX = mx;
             viewportPanLastMouseY = my;
+        } else if (activeMaterialSlider != OBJECT_EDITOR_PANEL_SLIDER_NONE) {
+            double slider_value = 0.0;
+            if (ObjectEditorPanels_SliderValueForKindAtX(activeMaterialSlider,
+                                                         mx,
+                                                         &slider_value)) {
+                if (activeMaterialSlider == OBJECT_EDITOR_PANEL_SLIDER_TRANSPARENCY) {
+                    ObjectEditorAssignTransparencyToSelected(slider_value);
+                } else if (activeMaterialSlider ==
+                           OBJECT_EDITOR_PANEL_SLIDER_EMISSIVE_STRENGTH) {
+                    ObjectEditorAssignEmissiveStrengthToSelected(slider_value);
+                }
+            }
         } else if (selectedObjectIndex != -1) {
             SceneObject* obj = &sceneSettings.sceneObjects[selectedObjectIndex];
 
@@ -896,6 +898,7 @@ void HandleObjectEditorMouseRelease(SDL_Event* event) {
     if (event->button.button == SDL_BUTTON_LEFT) {
         viewportPanDragging = false;
         draggingRotationHandle = false;
+        activeMaterialSlider = OBJECT_EDITOR_PANEL_SLIDER_NONE;
     }
 }
 
@@ -904,6 +907,8 @@ static void ClearSelections(void) {
     selectedAssetIndex = -1;
     selectedObjectIndex = -1;
     selectedMaterialIndex = -1;
+    selectedColorIndex = -1;
+    activeMaterialSlider = OBJECT_EDITOR_PANEL_SLIDER_NONE;
 }
 
 static void DeleteSelected(void) {
@@ -921,6 +926,9 @@ static void DeleteSelected(void) {
         printf("Deleting Object %d\n", selectedObjectIndex);
         RemoveSceneObject(selectedObjectIndex);
         selectedObjectIndex = -1;
+        selectedMaterialIndex = -1;
+        selectedColorIndex = -1;
+        activeMaterialSlider = OBJECT_EDITOR_PANEL_SLIDER_NONE;
     }
 }
 
@@ -1013,18 +1021,48 @@ void ObjectEditorSetSelectedObjectIndex(int index) {
     if (index < 0 || index >= sceneSettings.objectCount) {
         selectedObjectIndex = -1;
         selectedMaterialIndex = -1;
+        selectedColorIndex = -1;
     } else {
         selectedObjectIndex = index;
         selectedMaterialIndex = sceneSettings.sceneObjects[index].material_id;
+        selectedColorIndex = ObjectEditorPanels_ColorIndexForPackedRGB(
+            sceneSettings.sceneObjects[index].color);
     }
     selectedAssetIndex = -1;
     draggingRotationHandle = false;
+    activeMaterialSlider = OBJECT_EDITOR_PANEL_SLIDER_NONE;
 }
 
 void ObjectEditorAssignMaterialToSelected(int material_id) {
     if (selectedObjectIndex < 0 || selectedObjectIndex >= sceneSettings.objectCount) {
         return;
     }
-    ObjectEditorAssignMaterialToObject(&sceneSettings.sceneObjects[selectedObjectIndex], material_id);
+    ObjectEditorObjectAssignMaterial(&sceneSettings.sceneObjects[selectedObjectIndex], material_id);
     selectedMaterialIndex = material_id;
+}
+
+void ObjectEditorAssignColorToSelected(int packed_color) {
+    if (selectedObjectIndex < 0 || selectedObjectIndex >= sceneSettings.objectCount) {
+        return;
+    }
+    ObjectEditorObjectAssignColor(&sceneSettings.sceneObjects[selectedObjectIndex], packed_color);
+    selectedColorIndex = ObjectEditorPanels_ColorIndexForPackedRGB(
+        sceneSettings.sceneObjects[selectedObjectIndex].color);
+}
+
+void ObjectEditorAssignTransparencyToSelected(double transparency) {
+    if (selectedObjectIndex < 0 || selectedObjectIndex >= sceneSettings.objectCount) {
+        return;
+    }
+    ObjectEditorObjectAssignTransparency(&sceneSettings.sceneObjects[selectedObjectIndex],
+                                         transparency);
+}
+
+void ObjectEditorAssignEmissiveStrengthToSelected(double emissive_strength) {
+    if (selectedObjectIndex < 0 || selectedObjectIndex >= sceneSettings.objectCount) {
+        return;
+    }
+    ObjectEditorObjectAssignEmissiveStrength(
+        &sceneSettings.sceneObjects[selectedObjectIndex],
+        emissive_strength);
 }

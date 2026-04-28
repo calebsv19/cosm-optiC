@@ -2,7 +2,212 @@
 
 #include <math.h>
 
+#include "render/runtime_material_payload_3d.h"
+
 static const double kRuntimeVisibility3DEpsilon = 1e-4;
+static const double kRuntimeVisibility3DMinimumTransmittance = 1e-4;
+static const int kRuntimeVisibility3DMaxTransparentSurfaceSkips = 24;
+static const double kRuntimeVisibility3DAbsorptionDistanceScale = 0.75;
+
+static double runtime_visibility_3d_clamp(double value,
+                                          double min_value,
+                                          double max_value) {
+    if (value < min_value) return min_value;
+    if (value > max_value) return max_value;
+    return value;
+}
+
+static double runtime_visibility_3d_luminance(double r, double g, double b) {
+    return runtime_visibility_3d_clamp(0.2126 * r + 0.7152 * g + 0.0722 * b, 0.0, 1.0);
+}
+
+RuntimeVisibility3DTransmittance RuntimeVisibility3D_UnitTransmittance(void) {
+    RuntimeVisibility3DTransmittance result = {1.0, 1.0, 1.0, 1.0};
+    return result;
+}
+
+void RuntimeVisibility3D_ApplyTransparentPayloadAbsorption(
+    const RuntimeMaterialPayload3D* payload,
+    double segment_distance,
+    RuntimeVisibility3DTransmittance* io_transmittance) {
+    double transparency = 0.0;
+    double tint_r = 1.0;
+    double tint_g = 1.0;
+    double tint_b = 1.0;
+    double base_r = 1.0;
+    double base_g = 1.0;
+    double base_b = 1.0;
+    double distance_weight = 1.0;
+
+    if (!payload || !payload->valid || !io_transmittance) return;
+
+    transparency = runtime_visibility_3d_clamp(payload->transparency, 0.0, 1.0);
+    if (!(transparency > 0.0)) {
+        io_transmittance->luma = 0.0;
+        io_transmittance->r = 0.0;
+        io_transmittance->g = 0.0;
+        io_transmittance->b = 0.0;
+        return;
+    }
+
+    tint_r = runtime_visibility_3d_clamp(payload->baseColorR, 0.0, 1.0);
+    tint_g = runtime_visibility_3d_clamp(payload->baseColorG, 0.0, 1.0);
+    tint_b = runtime_visibility_3d_clamp(payload->baseColorB, 0.0, 1.0);
+    distance_weight = fmax(1.0, segment_distance * kRuntimeVisibility3DAbsorptionDistanceScale);
+
+    /* White glass stays neutral; colored glass attenuates off-channels more
+     * strongly as path length through the surface grows. */
+    base_r = runtime_visibility_3d_clamp((1.0 - transparency) + (transparency * tint_r),
+                                         kRuntimeVisibility3DMinimumTransmittance,
+                                         1.0);
+    base_g = runtime_visibility_3d_clamp((1.0 - transparency) + (transparency * tint_g),
+                                         kRuntimeVisibility3DMinimumTransmittance,
+                                         1.0);
+    base_b = runtime_visibility_3d_clamp((1.0 - transparency) + (transparency * tint_b),
+                                         kRuntimeVisibility3DMinimumTransmittance,
+                                         1.0);
+
+    io_transmittance->r *= pow(base_r, distance_weight);
+    io_transmittance->g *= pow(base_g, distance_weight);
+    io_transmittance->b *= pow(base_b, distance_weight);
+    io_transmittance->luma = runtime_visibility_3d_luminance(io_transmittance->r,
+                                                             io_transmittance->g,
+                                                             io_transmittance->b);
+}
+
+static bool runtime_visibility_3d_hit_matches_source(const HitInfo3D* a,
+                                                     const HitInfo3D* b) {
+    if (!a || !b) return false;
+    return a->sceneObjectIndex == b->sceneObjectIndex &&
+           a->triangleIndex == b->triangleIndex;
+}
+
+static bool runtime_visibility_3d_hit_matches_target(const HitInfo3D* hit,
+                                                     int scene_object_index,
+                                                     int triangle_index) {
+    if (!hit || scene_object_index < 0) return false;
+    if (hit->sceneObjectIndex != scene_object_index) return false;
+    if (triangle_index < 0) return true;
+    return hit->triangleIndex == triangle_index;
+}
+
+static RuntimeVisibility3DTransmittance runtime_visibility_3d_trace_transmittance_rgb(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* source_hit,
+    Vec3 ray_origin,
+    Vec3 ray_normal,
+    Vec3 ray_dir,
+    double ray_length,
+    int target_scene_object_index,
+    int target_triangle_index) {
+    Ray3D current_ray = {0};
+    double remaining_distance = ray_length;
+    RuntimeVisibility3DTransmittance transmittance = RuntimeVisibility3D_UnitTransmittance();
+    int skip_count = 0;
+
+    if (!scene) {
+        RuntimeVisibility3DTransmittance zero = {0};
+        return zero;
+    }
+    if (!(ray_length > kRuntimeVisibility3DEpsilon)) return transmittance;
+
+    current_ray = RuntimeRay3D_MakeOffset(ray_origin,
+                                          ray_normal,
+                                          ray_dir,
+                                          kRuntimeVisibility3DEpsilon);
+    while (skip_count < kRuntimeVisibility3DMaxTransparentSurfaceSkips &&
+           remaining_distance > kRuntimeVisibility3DEpsilon) {
+        HitInfo3D blocker_hit = {0};
+        RuntimeMaterialPayload3D payload = {0};
+        int transparent_object_index = -1;
+        HitInfo3D current_surface = {0};
+        double segment_distance = 0.0;
+
+        if (!RuntimeRay3D_TraceSceneFirstHit(scene,
+                                             &current_ray,
+                                             kRuntimeVisibility3DEpsilon,
+                                             remaining_distance,
+                                             &blocker_hit)) {
+            return transmittance;
+        }
+        if (source_hit && runtime_visibility_3d_hit_matches_source(&blocker_hit, source_hit)) {
+            remaining_distance -= blocker_hit.t;
+            current_ray = RuntimeRay3D_MakeOffset(blocker_hit.position,
+                                                  blocker_hit.normal,
+                                                  ray_dir,
+                                                  kRuntimeVisibility3DEpsilon);
+            skip_count += 1;
+            continue;
+        }
+        if (runtime_visibility_3d_hit_matches_target(&blocker_hit,
+                                                     target_scene_object_index,
+                                                     target_triangle_index)) {
+            return transmittance;
+        }
+        if (!RuntimeMaterialPayload3D_ResolveFromHit(&blocker_hit, &payload)) {
+            RuntimeVisibility3DTransmittance zero = {0};
+            return zero;
+        }
+        if (!(payload.transparency > 0.0)) {
+            RuntimeVisibility3DTransmittance zero = {0};
+            return zero;
+        }
+
+        transparent_object_index = blocker_hit.sceneObjectIndex;
+        current_surface = blocker_hit;
+        for (;;) {
+            remaining_distance -= current_surface.t;
+            current_ray = RuntimeRay3D_MakeOffset(current_surface.position,
+                                                  current_surface.normal,
+                                                  ray_dir,
+                                                  kRuntimeVisibility3DEpsilon);
+            skip_count += 1;
+            if (skip_count >= kRuntimeVisibility3DMaxTransparentSurfaceSkips ||
+                !(remaining_distance > kRuntimeVisibility3DEpsilon)) {
+                RuntimeVisibility3D_ApplyTransparentPayloadAbsorption(&payload,
+                                                                      fmax(segment_distance, 1.0),
+                                                                      &transmittance);
+                return transmittance;
+            }
+            if (!RuntimeRay3D_TraceSceneFirstHit(scene,
+                                                 &current_ray,
+                                                 kRuntimeVisibility3DEpsilon,
+                                                 remaining_distance,
+                                                 &blocker_hit)) {
+                RuntimeVisibility3D_ApplyTransparentPayloadAbsorption(&payload,
+                                                                      fmax(segment_distance, 1.0),
+                                                                      &transmittance);
+                return transmittance;
+            }
+            if (runtime_visibility_3d_hit_matches_target(&blocker_hit,
+                                                         target_scene_object_index,
+                                                         target_triangle_index)) {
+                RuntimeVisibility3D_ApplyTransparentPayloadAbsorption(&payload,
+                                                                      fmax(segment_distance, 1.0),
+                                                                      &transmittance);
+                return transmittance;
+            }
+            if (blocker_hit.sceneObjectIndex != transparent_object_index) {
+                break;
+            }
+            segment_distance += blocker_hit.t;
+            current_surface = blocker_hit;
+        }
+
+        RuntimeVisibility3D_ApplyTransparentPayloadAbsorption(&payload,
+                                                              fmax(segment_distance, 1.0),
+                                                              &transmittance);
+        if (!(transmittance.luma > kRuntimeVisibility3DMinimumTransmittance)) {
+            RuntimeVisibility3DTransmittance zero = {0};
+            return zero;
+        }
+
+        /* The current ray has already been advanced beyond the transparent
+         * shell, so continue tracing from there to find the next blocker. */
+    }
+
+    return transmittance;
+}
 
 bool RuntimeVisibility3D_TraceToLight(const RuntimeScene3D* scene,
                                       Vec3 surface_position,
@@ -50,24 +255,170 @@ bool RuntimeVisibility3D_TraceToLight(const RuntimeScene3D* scene,
     return blocked;
 }
 
+RuntimeVisibility3DTransmittance RuntimeVisibility3D_TransmittanceToLightRGB(
+    const RuntimeScene3D* scene,
+    Vec3 surface_position,
+    Vec3 surface_normal,
+    Vec3 light_position) {
+    Vec3 to_light = vec3(0.0, 0.0, 0.0);
+    double light_distance = 0.0;
+
+    if (!scene) {
+        RuntimeVisibility3DTransmittance zero = {0};
+        return zero;
+    }
+
+    to_light = vec3_sub(light_position, surface_position);
+    light_distance = vec3_length(to_light);
+    if (light_distance <= kRuntimeVisibility3DEpsilon) {
+        return RuntimeVisibility3D_UnitTransmittance();
+    }
+
+    return runtime_visibility_3d_trace_transmittance_rgb(scene,
+                                                         NULL,
+                                                         surface_position,
+                                                         surface_normal,
+                                                         vec3_scale(to_light, 1.0 / light_distance),
+                                                         light_distance,
+                                                         -1,
+                                                         -1);
+}
+
+double RuntimeVisibility3D_TransmittanceToLight(const RuntimeScene3D* scene,
+                                                Vec3 surface_position,
+                                                Vec3 surface_normal,
+                                                Vec3 light_position) {
+    Vec3 to_light = vec3(0.0, 0.0, 0.0);
+    double light_distance = 0.0;
+
+    if (!scene) return 0.0;
+
+    to_light = vec3_sub(light_position, surface_position);
+    light_distance = vec3_length(to_light);
+    if (light_distance <= kRuntimeVisibility3DEpsilon) {
+        return 1.0;
+    }
+
+    return RuntimeVisibility3D_TransmittanceToLightRGB(scene,
+                                                       surface_position,
+                                                       surface_normal,
+                                                       light_position)
+        .luma;
+}
+
 bool RuntimeVisibility3D_HasLineOfSightToLight(const RuntimeScene3D* scene,
                                                Vec3 surface_position,
                                                Vec3 surface_normal,
                                                Vec3 light_position) {
-    return !RuntimeVisibility3D_TraceToLight(scene,
-                                             surface_position,
-                                             surface_normal,
-                                             light_position,
-                                             NULL,
-                                             NULL);
+    return RuntimeVisibility3D_TransmittanceToLight(scene,
+                                                    surface_position,
+                                                    surface_normal,
+                                                    light_position) > kRuntimeVisibility3DMinimumTransmittance;
+}
+
+RuntimeVisibility3DTransmittance RuntimeVisibility3D_TransmittanceFromHitRGB(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* surface_hit,
+    const RuntimeLight3D* light) {
+    Vec3 to_light = vec3(0.0, 0.0, 0.0);
+    double light_distance = 0.0;
+
+    if (!scene || !surface_hit || !light) {
+        RuntimeVisibility3DTransmittance zero = {0};
+        return zero;
+    }
+
+    to_light = vec3_sub(light->position, surface_hit->position);
+    light_distance = vec3_length(to_light);
+    if (light_distance <= kRuntimeVisibility3DEpsilon) {
+        return RuntimeVisibility3D_UnitTransmittance();
+    }
+
+    return runtime_visibility_3d_trace_transmittance_rgb(scene,
+                                                         surface_hit,
+                                                         surface_hit->position,
+                                                         surface_hit->normal,
+                                                         vec3_scale(to_light, 1.0 / light_distance),
+                                                         light_distance,
+                                                         -1,
+                                                         -1);
+}
+
+double RuntimeVisibility3D_TransmittanceFromHit(const RuntimeScene3D* scene,
+                                                const HitInfo3D* surface_hit,
+                                                const RuntimeLight3D* light) {
+    Vec3 to_light = vec3(0.0, 0.0, 0.0);
+    double light_distance = 0.0;
+
+    if (!scene || !surface_hit || !light) return 0.0;
+
+    to_light = vec3_sub(light->position, surface_hit->position);
+    light_distance = vec3_length(to_light);
+    if (light_distance <= kRuntimeVisibility3DEpsilon) {
+        return 1.0;
+    }
+
+    return RuntimeVisibility3D_TransmittanceFromHitRGB(scene, surface_hit, light).luma;
+}
+
+RuntimeVisibility3DTransmittance RuntimeVisibility3D_TransmittanceFromHitToPointRGB(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* surface_hit,
+    Vec3 target_position,
+    int target_scene_object_index,
+    int target_triangle_index) {
+    Vec3 to_target = vec3(0.0, 0.0, 0.0);
+    double target_distance = 0.0;
+
+    if (!scene || !surface_hit) {
+        RuntimeVisibility3DTransmittance zero = {0};
+        return zero;
+    }
+
+    to_target = vec3_sub(target_position, surface_hit->position);
+    target_distance = vec3_length(to_target);
+    if (target_distance <= kRuntimeVisibility3DEpsilon) {
+        return RuntimeVisibility3D_UnitTransmittance();
+    }
+
+    return runtime_visibility_3d_trace_transmittance_rgb(scene,
+                                                         surface_hit,
+                                                         surface_hit->position,
+                                                         surface_hit->normal,
+                                                         vec3_scale(to_target, 1.0 / target_distance),
+                                                         target_distance,
+                                                         target_scene_object_index,
+                                                         target_triangle_index);
+}
+
+double RuntimeVisibility3D_TransmittanceFromHitToPoint(const RuntimeScene3D* scene,
+                                                       const HitInfo3D* surface_hit,
+                                                       Vec3 target_position,
+                                                       int target_scene_object_index,
+                                                       int target_triangle_index) {
+    Vec3 to_target = vec3(0.0, 0.0, 0.0);
+    double target_distance = 0.0;
+
+    if (!scene || !surface_hit) return 0.0;
+
+    to_target = vec3_sub(target_position, surface_hit->position);
+    target_distance = vec3_length(to_target);
+    if (target_distance <= kRuntimeVisibility3DEpsilon) {
+        return 1.0;
+    }
+
+    return RuntimeVisibility3D_TransmittanceFromHitToPointRGB(scene,
+                                                              surface_hit,
+                                                              target_position,
+                                                              target_scene_object_index,
+                                                              target_triangle_index)
+        .luma;
 }
 
 bool RuntimeVisibility3D_HasLineOfSightFromHit(const RuntimeScene3D* scene,
                                                const HitInfo3D* surface_hit,
                                                const RuntimeLight3D* light) {
-    if (!surface_hit || !light) return false;
-    return RuntimeVisibility3D_HasLineOfSightToLight(scene,
-                                                     surface_hit->position,
-                                                     surface_hit->normal,
-                                                     light->position);
+    return RuntimeVisibility3D_TransmittanceFromHit(scene,
+                                                    surface_hit,
+                                                    light) > kRuntimeVisibility3DMinimumTransmittance;
 }

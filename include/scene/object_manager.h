@@ -29,8 +29,10 @@ typedef struct {
     char texture[256];     // Texture path
     int color;             // Color (integer for now, e.g., RGB packed)
     double opacity;        // Opacity (0.0 to 1.0)
+    double transparency;   // Transparent-material strength multiplier (0.0 to 1.0)
     double reflectivity;   // 0 (matte) .. 1 (mirror)
     double roughness;      // 0 (sharp) .. 1 (diffuse)
+    double emissiveStrength; // Emissive-material strength multiplier (0.0 to 1.0)
     int textureId;         // Procedural texture selector
     int material_id;       // Material preset reference
 

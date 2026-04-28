@@ -93,6 +93,7 @@ void menu_render_build_slider_layout(TTF_Font* font,
     ADD_SLIDER(&sceneSettings.windowHeight, 200, 2400, "Height");
     ADD_SLIDER(&animSettings.tileSize, 4, 256, "Tile Size");
     ADD_SLIDER(&state->rouletteSliderValue, 1, 2000, "Roulette Threshold");
+    ADD_SLIDER(&state->envSliderValue, 0, 255, "Environment");
     ADD_SLIDER(&state->lightIntensitySliderValue, 0, 2000, "Light Intensity");
     ADD_SLIDER(&state->lightDecaySoftnessSliderValue, 10, 1000, "Falloff Softness");
     ADD_SLIDER(&state->forwardDecaySliderValue,
@@ -209,7 +210,7 @@ void menu_render_draw_sliders(SDL_Renderer* renderer,
                        "%.3f", state->rouletteSliderValue / 1000.0);
         } else if (slider->value == &state->envSliderValue) {
             RenderText(renderer, font, slider->valueX, slider->valueY,
-                       "%.2f", state->envSliderValue / 100.0);
+                       "%d", state->envSliderValue);
         } else if (slider->value == &state->cacheWeightSliderValue) {
             RenderText(renderer, font, slider->valueX, slider->valueY,
                        "%.2f", state->cacheWeightSliderValue / 100.0);

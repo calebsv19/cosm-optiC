@@ -9,8 +9,10 @@ static void InitDefaultMaterial(SceneObject* obj) {
     obj->texture[0] = '\0';
     obj->color = 0xFFFFFF;
     obj->opacity = 1.0;
+    obj->transparency = 1.0;
     obj->reflectivity = 0.35;
     obj->roughness = 0.65;
+    obj->emissiveStrength = 1.0;
     obj->textureId = 0;
     obj->material_id = MaterialManagerDefaultId();
 }

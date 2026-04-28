@@ -19,16 +19,16 @@ bool RuntimeNative3DTemporalAccumulation_Ensure(RuntimeNative3DTemporalAccumulat
                                                 int height);
 void RuntimeNative3DTemporalAccumulation_Clear(RuntimeNative3DTemporalAccumulation* accumulation);
 bool RuntimeNative3DTemporalAccumulation_AddRegion(RuntimeNative3DTemporalAccumulation* accumulation,
-                                                   const float* luminance_region,
-                                                   int luminance_stride,
+                                                   const float* radiance_region,
+                                                   int radiance_stride,
                                                    int start_x,
                                                    int start_y,
                                                    int end_x,
                                                    int end_y);
 bool RuntimeNative3DTemporalAccumulation_AddRegionSamples(
     RuntimeNative3DTemporalAccumulation* accumulation,
-    const float* luminance_region,
-    int luminance_stride,
+    const float* radiance_region,
+    int radiance_stride,
     int start_x,
     int start_y,
     int end_x,
@@ -37,10 +37,18 @@ bool RuntimeNative3DTemporalAccumulation_AddRegionSamples(
     int sample_mask_stride);
 void RuntimeNative3DTemporalAccumulation_CommitSubpass(
     RuntimeNative3DTemporalAccumulation* accumulation);
+bool RuntimeNative3DTemporalAccumulation_ResolveRegionToRadianceBuffer(
+    const RuntimeNative3DTemporalAccumulation* accumulation,
+    float* radiance_buffer,
+    int radiance_stride,
+    int start_x,
+    int start_y,
+    int end_x,
+    int end_y);
 void RuntimeNative3DTemporalAccumulation_ResolveRegionToPixelBuffer(
     const RuntimeNative3DTemporalAccumulation* accumulation,
     uint8_t* pixel_buffer,
-    int pixel_stride,
+    int pixel_width,
     int start_x,
     int start_y,
     int end_x,
@@ -48,7 +56,7 @@ void RuntimeNative3DTemporalAccumulation_ResolveRegionToPixelBuffer(
 void RuntimeNative3DTemporalAccumulation_ResolveToPixelBufferAtOffset(
     const RuntimeNative3DTemporalAccumulation* accumulation,
     uint8_t* pixel_buffer,
-    int pixel_stride,
+    int pixel_width,
     int dst_origin_x,
     int dst_origin_y);
 

@@ -101,6 +101,8 @@ typedef struct {
     double cacheHaloRadius;       // Multiplier for light radius to suppress GI near the emitter
     double lightDecaySoftness;    // >1.0 flattens decay, <1.0 steepens decay
     double lightHeight;           // Z-height of the light above the ground plane for Disney path/2.5D shading
+    bool topFillLightEnabled;     // Shared native 3D overhead fill light toggle
+    bool disneyDenoiseEnabled;    // Disney-only native 3D denoise post-pass toggle
     int secondaryDiffuseSamples3D;
     int transmissionSamples3D;
     int temporalFrames3D;

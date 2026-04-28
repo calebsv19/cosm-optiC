@@ -456,6 +456,68 @@ static int test_runtime_scene_bridge_apply_runtime_fixture(void) {
     return 0;
 }
 
+static int test_runtime_scene_bridge_authoring_overlay_object_color_preserved(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_overlay_object_color\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"obj_color\","
+          "\"object_type\":\"rect_prism_primitive\","
+          "\"transform\":{"
+            "\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+          "},"
+          "\"primitive\":{"
+            "\"kind\":\"rect_prism_primitive\","
+            "\"width\":1.0,"
+            "\"height\":1.0,"
+            "\"depth\":1.0"
+          "}"
+        "}],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{"
+          "\"ray_tracing\":{"
+            "\"authoring\":{"
+              "\"object_materials\":[{"
+                "\"object_id\":\"obj_color\","
+                "\"material_id\":3,"
+                "\"object_color\":255,"
+                "\"transparency\":0.4,"
+                "\"emissive_strength\":0.7"
+              "}]"
+            "}"
+          "}"
+        "}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    bool ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_scene_apply_authoring_overlay_object_color_ok", ok);
+    if (ok) {
+        assert_true("runtime_scene_apply_authoring_overlay_material_id",
+                    sceneSettings.sceneObjects[0].material_id == 3);
+        assert_true("runtime_scene_apply_authoring_overlay_object_color",
+                    sceneSettings.sceneObjects[0].color == 0x0000FF);
+        assert_close("runtime_scene_apply_authoring_overlay_transparency",
+                     sceneSettings.sceneObjects[0].transparency,
+                     0.4,
+                     1e-9);
+        assert_close("runtime_scene_apply_authoring_overlay_emissive_strength",
+                     sceneSettings.sceneObjects[0].emissiveStrength,
+                     0.7,
+                     1e-9);
+    }
+    return 0;
+}
+
 static int test_runtime_scene_bridge_apply_compile_output(void) {
     const char *authoring_json =
         "{"
@@ -532,6 +594,7 @@ int run_test_runtime_scene_bridge_core_tests(void) {
     test_runtime_scene_bridge_apply_ps4d_fixture_retains_primitive_seed_truth();
     test_scene_compile_and_preflight_roundtrip();
     test_runtime_scene_bridge_apply_runtime_fixture();
+    test_runtime_scene_bridge_authoring_overlay_object_color_preserved();
     test_runtime_scene_bridge_apply_compile_output();
 
     return test_support_failures() - before;

@@ -246,6 +246,87 @@ static int test_animation_native_3d_temporal_frames_roundtrip_and_clamp(void) {
     return 0;
 }
 
+static int test_animation_native_3d_top_fill_roundtrip_and_default(void) {
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+    const char* json_missing_top_fill =
+        "{\n"
+        "  \"spaceMode\": 1,\n"
+        "  \"integratorMode3D\": 1\n"
+        "}\n";
+
+    assert_true("native_3d_top_fill_write_missing",
+                write_text_file(kRuntimeAnimationConfigPath, json_missing_top_fill));
+    LoadAnimationConfig();
+    assert_true("native_3d_top_fill_missing_defaults_off",
+                !animSettings.topFillLightEnabled);
+
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.topFillLightEnabled = true;
+    SaveAnimationConfig();
+    animSettings.topFillLightEnabled = false;
+    LoadAnimationConfig();
+    assert_true("native_3d_top_fill_roundtrip_persisted",
+                animSettings.topFillLightEnabled);
+
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
+static int test_animation_native_3d_disney_denoise_roundtrip_and_default(void) {
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+    const char* json_missing_denoise =
+        "{\n"
+        "  \"spaceMode\": 1,\n"
+        "  \"integratorMode3D\": 4\n"
+        "}\n";
+
+    assert_true("native_3d_denoise_write_missing",
+                write_text_file(kRuntimeAnimationConfigPath, json_missing_denoise));
+    LoadAnimationConfig();
+    assert_true("native_3d_denoise_missing_defaults_on",
+                animSettings.disneyDenoiseEnabled);
+
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.disneyDenoiseEnabled = false;
+    SaveAnimationConfig();
+    animSettings.disneyDenoiseEnabled = true;
+    LoadAnimationConfig();
+    assert_true("native_3d_denoise_roundtrip_persisted",
+                !animSettings.disneyDenoiseEnabled);
+
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
+static int test_animation_environment_brightness_byte_floor_roundtrip_and_legacy_migration(void) {
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+    const char* json_legacy_environment =
+        "{\n"
+        "  \"environmentBrightness\": 0.35\n"
+        "}\n";
+
+    assert_true("environment_floor_legacy_write",
+                write_text_file(kRuntimeAnimationConfigPath, json_legacy_environment));
+    LoadAnimationConfig();
+    assert_true("environment_floor_legacy_migrated_to_byte_domain",
+                animSettings.environmentBrightness >= 0.0 &&
+                animSettings.environmentBrightness <= 255.0 &&
+                fabs(animSettings.environmentBrightness - 121.0) <= 1.0);
+
+    animSettings.environmentBrightness = 128.0;
+    SaveAnimationConfig();
+    animSettings.environmentBrightness = 0.0;
+    LoadAnimationConfig();
+    assert_true("environment_floor_roundtrip_persisted",
+                fabs(animSettings.environmentBrightness - 128.0) <= 1e-6);
+
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
 static int test_animation_runtime_window_override_roundtrip_and_apply(void) {
     size_t backup_size = 0;
     char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
@@ -680,6 +761,9 @@ int run_test_config_animation_tests(void) {
     test_animation_scene_source_roundtrip_runtime_lane();
     test_animation_integrator_split_roundtrip_and_default_3d();
     test_animation_native_3d_temporal_frames_roundtrip_and_clamp();
+    test_animation_native_3d_top_fill_roundtrip_and_default();
+    test_animation_native_3d_disney_denoise_roundtrip_and_default();
+    test_animation_environment_brightness_byte_floor_roundtrip_and_legacy_migration();
     test_animation_runtime_window_override_roundtrip_and_apply();
     test_animation_native_3d_render_scale_roundtrip_and_clamp();
     test_runtime_native_3d_resolution_scale_contract();

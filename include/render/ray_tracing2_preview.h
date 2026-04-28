@@ -17,6 +17,11 @@ bool RayTracingPreview_UpdateNative3DDirtyRect(SDL_Renderer* renderer,
                                                int width,
                                                int height,
                                                const SDL_Rect* dirtyRect);
+bool RayTracingPreview_UpdateNative3DDirtyRectABGR(SDL_Renderer* renderer,
+                                                   const Uint8* previewBuffer,
+                                                   int width,
+                                                   int height,
+                                                   const SDL_Rect* dirtyRect);
 bool RayTracingPreview_DrawNative3DDirtyRect(SDL_Renderer* renderer, int width, int height);
 bool RayTracingPreview_DrawNative3DPreviewBase(SDL_Renderer* renderer,
                                                const Uint8* previewBuffer,
@@ -24,6 +29,13 @@ bool RayTracingPreview_DrawNative3DPreviewBase(SDL_Renderer* renderer,
                                                int height,
                                                const SDL_Rect* dirtyRect,
                                                bool resetDirtyPreview);
+bool RayTracingPreview_DrawNative3DPreviewBaseABGR(SDL_Renderer* renderer,
+                                                   const Uint8* previewBuffer,
+                                                   int width,
+                                                   int height,
+                                                   const SDL_Rect* dirtyRect,
+                                                   bool resetDirtyPreview);
+void RayTracingPreview_ApplySeparableBlurABGR(Uint8* buffer, int width, int height, int radius);
 void RayTracingPreview_ShutdownNative3DDirtyRect(void);
 
 #endif

@@ -23,11 +23,38 @@ static double Clamp01(double v) {
     return Clamp(v, 0.0, 1.0);
 }
 
+static void ExtractBaseColor(const SceneObject* obj, double* out_r, double* out_g, double* out_b) {
+    int packed = 0xFFFFFF;
+    double r = 1.0;
+    double g = 1.0;
+    double b = 1.0;
+
+    if (obj) {
+        packed = obj->color & 0xFFFFFF;
+    }
+
+    /* The current I6 authoring palette does not expose black yet.
+     * Preserve older scenes that still carry zero-initialized colors by
+     * treating 0x000000 as an unset legacy value rather than a deliberate
+     * black surface choice. */
+    if (packed != 0) {
+        r = (double)((packed >> 16) & 0xFF) / 255.0;
+        g = (double)((packed >> 8) & 0xFF) / 255.0;
+        b = (double)(packed & 0xFF) / 255.0;
+    }
+
+    if (out_r) *out_r = Clamp01(r);
+    if (out_g) *out_g = Clamp01(g);
+    if (out_b) *out_b = Clamp01(b);
+}
+
 static double ExtractBaseAlbedo(const SceneObject* obj) {
-    double r = (double)((obj->color >> 16) & 0xFF) / 255.0;
-    double g = (double)((obj->color >> 8) & 0xFF) / 255.0;
-    double b = (double)(obj->color & 0xFF) / 255.0;
-    double luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    double r = 0.0;
+    double g = 0.0;
+    double b = 0.0;
+    double luma = 0.0;
+    ExtractBaseColor(obj, &r, &g, &b);
+    luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
     return Clamp01(luma);
 }
 
@@ -221,6 +248,10 @@ void MaterialBSDFInitFromSceneObject(const SceneObject* obj, MaterialBSDF* mater
     if (!obj || !material) return;
     const Material* preset = MaterialManagerGet(obj->material_id);
     memset(material, 0, sizeof(*material));
+    ExtractBaseColor(obj,
+                     &material->baseColorR,
+                     &material->baseColorG,
+                     &material->baseColorB);
     double objLuma = ExtractBaseAlbedo(obj);
     double presetLuma = 1.0;
     if (preset) {
@@ -252,7 +283,7 @@ void MaterialBSDFInitFromSceneObject(const SceneObject* obj, MaterialBSDF* mater
     if (preset) {
         emissiveLuma = Clamp01(0.2126 * preset->emissive.x + 0.7152 * preset->emissive.y + 0.0722 * preset->emissive.z);
     }
-    material->emissive = emissiveLuma;
+    material->emissive = Clamp01(emissiveLuma * Clamp01(obj->emissiveStrength));
 }
 
 double MaterialBSDFDiffuseProbability(const MaterialBSDF* material) {

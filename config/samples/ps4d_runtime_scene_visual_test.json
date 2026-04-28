@@ -235,7 +235,7 @@
     },
     "overlay_merge":{
       "producer_clocks":{
-        "ray_tracing":30
+        "ray_tracing":60
       }
     },
     "ray_tracing":{
@@ -244,27 +244,27 @@
           "mode":"BEZIER_CUBIC",
           "points":[
             {
-              "x":5.0,
-              "y":-2.75,
+              "x":-2.75,
+              "y":1.25,
               "rotation":0.0,
               "handleLink":false,
               "velocity1":{
                 "vx":-0.90000000000000036,
-                "vy":-5.6500000000000004
+                "vy":1.0999999999999996
               }
             },
             {
-              "x":-1.25,
-              "y":-2.25,
+              "x":-6.0,
+              "y":1.75,
               "rotation":0.0,
               "handleLink":true,
               "velocity1":{
-                "vx":-5.0999999999999996,
-                "vy":0.10000000000000009
+                "vx":-1.3499999999999996,
+                "vy":1.6000000000000001
               },
               "velocity2":{
-                "vx":5.0999999999999996,
-                "vy":-0.10000000000000009
+                "vx":1.3499999999999996,
+                "vy":-1.6000000000000001
               }
             },
             {
@@ -274,21 +274,21 @@
               "handleLink":true,
               "velocity1":{
                 "vx":2.9500000000000002,
-                "vy":-0.20000000000000018
+                "vy":-0.45000000000000018
               },
               "velocity2":{
                 "vx":-2.9500000000000002,
-                "vy":0.20000000000000018
+                "vy":0.45000000000000018
               }
             },
             {
-              "x":-2.0,
-              "y":1.0,
+              "x":1.5,
+              "y":-2.5,
               "rotation":0.0,
               "handleLink":false,
               "velocity2":{
-                "vx":3.7999999999999998,
-                "vy":2.7000000000000002
+                "vx":1.0499999999999998,
+                "vy":6.7000000000000002
               }
             }
           ]
@@ -296,20 +296,20 @@
         "light_path_depth":{
           "points":[
             {
-              "z":0.0,
+              "z":0.25,
               "lookPitch":0.0,
               "velocity1":{
-                "vz":-0.0
+                "vz":4.25
               }
             },
             {
-              "z":0.0,
+              "z":1.25,
               "lookPitch":0.0,
               "velocity1":{
-                "vz":-0.19999999999999996
+                "vz":-1.45
               },
               "velocity2":{
-                "vz":0.0
+                "vz":1.75
               }
             },
             {
@@ -319,7 +319,7 @@
                 "vz":-0.25
               },
               "velocity2":{
-                "vz":0.19999999999999996
+                "vz":1.45
               }
             },
             {
@@ -335,22 +335,22 @@
           "mode":"BEZIER_CUBIC",
           "points":[
             {
-              "x":-3.0,
-              "y":10.0,
-              "rotation":0.54609051792166707,
+              "x":-8.0,
+              "y":7.0,
+              "rotation":0.99213777375894963,
               "handleLink":false,
               "velocity1":{
-                "vx":-0.78570416691943379,
+                "vx":-5.7857041669194338,
                 "vy":0.50042498938379509
               }
             },
             {
-              "x":-6.0,
-              "y":8.0,
-              "rotation":0.804979777995806,
+              "x":-7.0,
+              "y":1.0,
+              "rotation":1.4701838533779992,
               "handleLink":true,
               "velocity2":{
-                "vx":0.52156661778009905,
+                "vx":-2.4784333822199009,
                 "vy":1.7465542773337326
               }
             }
@@ -359,15 +359,15 @@
         "camera_path_depth":{
           "points":[
             {
-              "z":2.0,
-              "lookPitch":-0.16195429970193578,
+              "z":4.75,
+              "lookPitch":-0.42895206675035985,
               "velocity1":{
                 "vz":0.34999999999999964
               }
             },
             {
-              "z":5.5,
-              "lookPitch":-0.41221785641365993,
+              "z":3.5,
+              "lookPitch":-0.63269950327653313,
               "velocity2":{
                 "vz":-1.0999999999999996
               }
@@ -377,15 +377,24 @@
         "object_materials":[
           {
             "object_id":"plane_floor",
-            "material_id":1
+            "material_id":4,
+            "object_color":255,
+            "transparency":1.0,
+            "emissive_strength":0.093023255813953487
           },
           {
             "object_id":"prism_center",
-            "material_id":4
+            "material_id":2,
+            "object_color":16711680,
+            "transparency":1.0,
+            "emissive_strength":0.10465116279069768
           },
           {
             "object_id":"prism_offset",
-            "material_id":5
+            "material_id":5,
+            "object_color":65280,
+            "transparency":0.31395348837209303,
+            "emissive_strength":1.0
           }
         ]
       }

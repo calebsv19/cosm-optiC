@@ -10,6 +10,7 @@
 #include "render_metrics_dataset_test.h"
 #include "test_runtime_diffuse_temporal.h"
 #include "test_runtime_emission_transparency.h"
+#include "test_runtime_native_3d_denoise.h"
 #include "test_runtime_native_3d_render.h"
 #include "test_runtime_render_metrics_export.h"
 #include "test_runtime_preview_editor.h"
@@ -70,6 +71,7 @@ int test_runner_main(int argc, char** argv) {
         {"runtime_lighting_materials", run_test_runtime_lighting_materials_tests},
         {"runtime_diffuse_temporal", run_test_runtime_diffuse_temporal_tests},
         {"runtime_emission_transparency", run_test_runtime_emission_transparency_tests},
+        {"runtime_native_3d_denoise", run_test_runtime_native_3d_denoise_tests},
         {"runtime_native_3d_render", run_test_runtime_native_3d_render_tests},
         {"runtime_render_metrics_export", run_test_runtime_render_metrics_export_tests},
         {"runtime_preview_editor", run_test_runtime_preview_editor_tests},

@@ -17,8 +17,8 @@ Presets (MaterialLibrary):
 - `MATERIAL_PRESET_MIRROR` (1): High reflectivity, zero roughness.
 - `MATERIAL_PRESET_ROUGH_METAL` (2): Metallic, higher roughness and specular.
 - `MATERIAL_PRESET_GLOSSY` (3): Mid reflectivity, low roughness.
-- `MATERIAL_PRESET_EMISSIVE` (4): Preset-driven emissive surface with intentionally strong grayscale test output.
-- `MATERIAL_PRESET_TRANSPARENT` (5): Preset-driven transmissive surface with high transparency and reduced front-face diffuse weight for clearer grayscale readback.
+- `MATERIAL_PRESET_EMISSIVE` (4): Preset-driven emissive surface with moderated grayscale test output.
+- `MATERIAL_PRESET_TRANSPARENT` (5): Preset-driven transmissive surface with moderately high transparency and reduced front-face diffuse weight for clearer grayscale readback.
 
 Notes:
 - Presets use neutral base colors so SceneObject color can serve as albedo.

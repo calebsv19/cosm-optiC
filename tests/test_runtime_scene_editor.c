@@ -5,6 +5,8 @@
 #include <unistd.h>
 
 #include "app/animation.h"
+#include "editor/object_editor.h"
+#include "editor/object_editor_object_ops.h"
 #include "editor/editor_mode_router.h"
 #include "editor/scene_editor_control_surface.h"
 #include "editor/scene_editor_runtime_scene_persistence.h"
@@ -227,6 +229,9 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip_object_material
     animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
     snprintf(animSettings.runtimeScenePath, sizeof(animSettings.runtimeScenePath), "%s", runtime_path);
     sceneSettings.sceneObjects[0].material_id = 3;
+    sceneSettings.sceneObjects[0].color = 0x00FF00;
+    sceneSettings.sceneObjects[0].transparency = 0.35;
+    sceneSettings.sceneObjects[0].emissiveStrength = 0.65;
 
     ok = SceneEditorRuntimeScenePersistAuthoring(diagnostics, sizeof(diagnostics));
     assert_true("runtime_scene_authoring_material_persist_writeback_ok", ok);
@@ -246,13 +251,79 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip_object_material
                     strstr(persisted_json, "\"box_a\"") != NULL);
         assert_true("runtime_scene_authoring_material_persist_has_material_id",
                     strstr(persisted_json, "\"material_id\":3") != NULL);
+        assert_true("runtime_scene_authoring_material_persist_has_object_color",
+                    strstr(persisted_json, "\"object_color\":65280") != NULL);
+        assert_true("runtime_scene_authoring_material_persist_has_transparency",
+                    strstr(persisted_json, "\"transparency\":") != NULL);
+        assert_true("runtime_scene_authoring_material_persist_has_emissive_strength",
+                    strstr(persisted_json, "\"emissive_strength\":") != NULL);
     }
 
     assert_true("runtime_scene_authoring_material_persist_hydrated_material_id",
                 sceneSettings.sceneObjects[0].material_id == 3);
+    assert_true("runtime_scene_authoring_material_persist_hydrated_object_color",
+                sceneSettings.sceneObjects[0].color == 0x00FF00);
+    assert_close("runtime_scene_authoring_material_persist_hydrated_transparency",
+                 sceneSettings.sceneObjects[0].transparency,
+                 0.35,
+                 1e-9);
+    assert_close("runtime_scene_authoring_material_persist_hydrated_emissive_strength",
+                 sceneSettings.sceneObjects[0].emissiveStrength,
+                 0.65,
+                 1e-9);
 
     free(persisted_json);
     unlink(runtime_path);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_object_editor_material_assignment_preserves_object_color(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    sceneSettings.objectCount = 1;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_DEFAULT;
+    sceneSettings.sceneObjects[0].color = 0x00FF00;
+
+    ObjectEditorObjectAssignMaterial(&sceneSettings.sceneObjects[0], MATERIAL_PRESET_GLOSSY);
+
+    assert_true("object_editor_assign_material_updates_material_id",
+                sceneSettings.sceneObjects[0].material_id == MATERIAL_PRESET_GLOSSY);
+    assert_true("object_editor_assign_material_preserves_color",
+                sceneSettings.sceneObjects[0].color == 0x00FF00);
+
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_object_editor_slider_assignments_update_object_fields(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    sceneSettings.objectCount = 1;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
+    sceneSettings.sceneObjects[0].transparency = 1.0;
+    sceneSettings.sceneObjects[0].emissiveStrength = 1.0;
+
+    ObjectEditorObjectAssignTransparency(&sceneSettings.sceneObjects[0], 0.25);
+    ObjectEditorObjectAssignEmissiveStrength(&sceneSettings.sceneObjects[0], 0.75);
+
+    assert_close("object_editor_assign_transparency_updates_object",
+                 sceneSettings.sceneObjects[0].transparency,
+                 0.25,
+                 1e-9);
+    assert_close("object_editor_assign_emissive_strength_updates_object",
+                 sceneSettings.sceneObjects[0].emissiveStrength,
+                 0.75,
+                 1e-9);
+
     sceneSettings = saved_scene;
     animSettings = saved_anim;
     return 0;
@@ -652,6 +723,8 @@ int run_test_runtime_scene_editor_tests(void) {
     test_scene_editor_tool_state_contract();
     test_scene_editor_runtime_scene_persistence_roundtrip();
     test_scene_editor_runtime_scene_persistence_roundtrip_object_materials();
+    test_object_editor_material_assignment_preserves_object_color();
+    test_object_editor_slider_assignments_update_object_fields();
     test_editor_mode_router_capabilities_2d();
     test_editor_mode_router_capabilities_3d_scaffold();
     test_editor_mode_router_capabilities_3d_native();

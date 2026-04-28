@@ -56,6 +56,14 @@ static double runtime_diffuse_bounce_3d_distance_decay(double distance) {
     return 1.0 / (1.0 + distance * distance);
 }
 
+static double runtime_diffuse_bounce_3d_clamp(double value,
+                                              double min_value,
+                                              double max_value) {
+    if (value < min_value) return min_value;
+    if (value > max_value) return max_value;
+    return value;
+}
+
 static uint32_t runtime_diffuse_bounce_3d_hash_u32(uint32_t x) {
     x ^= x >> 16;
     x *= 0x7feb352dU;
@@ -124,6 +132,10 @@ bool RuntimeDiffuseBounce3D_ShadeHit(const RuntimeScene3D* scene,
     Vec3 tangent = vec3(0.0, 0.0, 0.0);
     Vec3 bitangent = vec3(0.0, 0.0, 0.0);
     double accumulated = 0.0;
+    double accumulated_r = 0.0;
+    double accumulated_g = 0.0;
+    double accumulated_b = 0.0;
+    double bounce_limit = 0.0;
     int sample_count = 0;
 
     if (!scene || !hit || !out_result) return false;
@@ -137,6 +149,9 @@ bool RuntimeDiffuseBounce3D_ShadeHit(const RuntimeScene3D* scene,
     result.visible = direct_result.visible;
     result.hitInfo = direct_result.hitInfo;
     result.directRadiance = direct_result.radiance;
+    result.directRadianceR = direct_result.radianceR;
+    result.directRadianceG = direct_result.radianceG;
+    result.directRadianceB = direct_result.radianceB;
 
     runtime_diffuse_bounce_3d_build_basis(hit->normal, &tangent, &bitangent);
     sample_count = runtime_diffuse_bounce_3d_resolve_sample_count();
@@ -159,6 +174,9 @@ bool RuntimeDiffuseBounce3D_ShadeHit(const RuntimeScene3D* scene,
         double secondary_facing = 0.0;
         double segment_distance = 0.0;
         double sample_energy = 0.0;
+        double sample_energy_r = 0.0;
+        double sample_energy_g = 0.0;
+        double sample_energy_b = 0.0;
 
         if (!RuntimeRay3D_TraceSceneFirstHit(scene,
                                              &bounce_ray,
@@ -190,12 +208,42 @@ bool RuntimeDiffuseBounce3D_ShadeHit(const RuntimeScene3D* scene,
                         secondary_facing *
                         runtime_diffuse_bounce_3d_distance_decay(segment_distance) *
                         kRuntimeDiffuseBounce3DEnergyScale;
+        sample_energy_r = secondary_direct.radianceR *
+                          secondary_facing *
+                          runtime_diffuse_bounce_3d_distance_decay(segment_distance) *
+                          kRuntimeDiffuseBounce3DEnergyScale;
+        sample_energy_g = secondary_direct.radianceG *
+                          secondary_facing *
+                          runtime_diffuse_bounce_3d_distance_decay(segment_distance) *
+                          kRuntimeDiffuseBounce3DEnergyScale;
+        sample_energy_b = secondary_direct.radianceB *
+                          secondary_facing *
+                          runtime_diffuse_bounce_3d_distance_decay(segment_distance) *
+                          kRuntimeDiffuseBounce3DEnergyScale;
         accumulated += sample_energy;
+        accumulated_r += sample_energy_r;
+        accumulated_g += sample_energy_g;
+        accumulated_b += sample_energy_b;
     }
 
-    result.bounceRadiance = fmin(accumulated / (double)sample_count,
-                                 fmax(scene->light.intensity * 0.35, 0.0));
+    bounce_limit = fmax(scene->light.intensity * 0.35, 0.0);
+    result.bounceRadiance = fmin(accumulated / (double)sample_count, bounce_limit);
+    result.bounceRadianceR = runtime_diffuse_bounce_3d_clamp(
+        accumulated_r / (double)sample_count,
+        0.0,
+        bounce_limit);
+    result.bounceRadianceG = runtime_diffuse_bounce_3d_clamp(
+        accumulated_g / (double)sample_count,
+        0.0,
+        bounce_limit);
+    result.bounceRadianceB = runtime_diffuse_bounce_3d_clamp(
+        accumulated_b / (double)sample_count,
+        0.0,
+        bounce_limit);
     result.radiance = result.directRadiance + result.bounceRadiance;
+    result.radianceR = result.directRadianceR + result.bounceRadianceR;
+    result.radianceG = result.directRadianceG + result.bounceRadianceG;
+    result.radianceB = result.directRadianceB + result.bounceRadianceB;
     *out_result = result;
     return true;
 }

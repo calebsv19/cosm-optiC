@@ -322,6 +322,44 @@ static int test_animation_output_render_metrics_route_truth_contract(void) {
     animSettings.spaceMode = SPACE_MODE_3D;
     animSettings.integratorMode = RAY_TRACING_2D_INTEGRATOR_FORWARD_LIGHT;
     animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DISNEY;
+    assert_true("animation_output_metrics_route_truth_native_disney_apply_ok",
+                runtime_scene_bridge_apply_json(runtime_json_native, &summary));
+    AnimationExportRenderMetricsDatasetIfEnabled();
+    json_text = read_text_file_alloc(json_path, NULL);
+    assert_true("animation_output_metrics_route_truth_native_disney_json", json_text != NULL);
+    if (json_text) {
+        root = cJSON_Parse(json_text);
+        metadata = root ? cJSON_GetObjectItem(root, "metadata") : NULL;
+        items = root ? cJSON_GetObjectItem(root, "items") : NULL;
+        table = find_named_dataset_entry(items, "render_metrics_table_v2");
+        row0 = table ? cJSON_GetObjectItem(table, "row0") : NULL;
+        assert_true("animation_output_metrics_route_truth_native_disney_parse", root != NULL);
+        assert_true("animation_output_metrics_route_truth_native_disney_row0", row0 != NULL);
+        assert_true("animation_output_metrics_route_truth_native_disney_3d_mode",
+                    cJSON_GetObjectItem(row0, "integrator_mode_3d") &&
+                    cJSON_GetObjectItem(row0, "integrator_mode_3d")->valueint == 4);
+        assert_true("animation_output_metrics_route_truth_native_disney_route_family",
+                    cJSON_GetObjectItem(row0, "route_family") &&
+                    cJSON_GetObjectItem(row0, "route_family")->valueint == 2);
+        assert_true("animation_output_metrics_route_truth_native_disney_uses_3d_true",
+                    cJSON_GetObjectItem(row0, "integrator_uses_3d_catalog") &&
+                    cJSON_IsTrue(cJSON_GetObjectItem(row0, "integrator_uses_3d_catalog")));
+        assert_true("animation_output_metrics_route_truth_native_disney_status_label",
+                    metadata &&
+                    cJSON_GetObjectItem(metadata, "integrator_status_label") &&
+                    strcmp(cJSON_GetObjectItem(metadata, "integrator_status_label")->valuestring,
+                           "integrator: 3D Disney") == 0);
+        cJSON_Delete(root);
+        root = NULL;
+        free(json_text);
+        json_text = NULL;
+    }
+
+    memset(&animSettings, 0, sizeof(animSettings));
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.integratorMode = RAY_TRACING_2D_INTEGRATOR_FORWARD_LIGHT;
+    animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DISNEY;
     assert_true("animation_output_metrics_route_truth_compat_apply_ok",
                 runtime_scene_bridge_apply_json(runtime_json_compat, &summary));
     AnimationExportRenderMetricsDatasetIfEnabled();

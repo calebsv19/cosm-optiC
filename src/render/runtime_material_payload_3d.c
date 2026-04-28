@@ -1,5 +1,6 @@
 #include "render/runtime_material_payload_3d.h"
 
+#include <math.h>
 #include <string.h>
 
 #include "config/config_manager.h"
@@ -22,6 +23,12 @@ static int runtime_material_payload_3d_clamp_material_id(int material_id) {
         return default_id;
     }
     return material_id;
+}
+
+static double runtime_material_payload_3d_clamp01(double value) {
+    if (value < 0.0) return 0.0;
+    if (value > 1.0) return 1.0;
+    return value;
 }
 
 void RuntimeMaterialPayload3D_Reset(RuntimeMaterialPayload3D* payload) {
@@ -51,8 +58,15 @@ bool RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(int scene_object_index
     payload.materialId = object_copy.material_id;
     MaterialBSDFInitFromSceneObject(&object_copy, &payload.bsdf);
     material = MaterialManagerGet(payload.materialId);
+    payload.baseColorR = payload.bsdf.baseColorR;
+    payload.baseColorG = payload.bsdf.baseColorG;
+    payload.baseColorB = payload.bsdf.baseColorB;
     payload.emissive = payload.bsdf.emissive;
-    payload.transparency = material ? material->transparency : 0.0;
+    payload.transparency =
+        material ? runtime_material_payload_3d_clamp01(
+                       material->transparency *
+                       runtime_material_payload_3d_clamp01(object_copy.transparency))
+                 : 0.0;
     payload.valid = true;
 
     *out_payload = payload;

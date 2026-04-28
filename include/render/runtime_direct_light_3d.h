@@ -21,6 +21,9 @@ typedef struct {
     double ndotl;
     double attenuation;
     double radiance;
+    double radianceR;
+    double radianceG;
+    double radianceB;
 } RuntimeDirectLight3DResult;
 
 bool RuntimeDirectLight3D_TracePrimaryHit(const RuntimeScene3D* scene,

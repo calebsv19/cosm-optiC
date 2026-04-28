@@ -1,6 +1,7 @@
 #include "render/runtime_native_3d_resolution.h"
 
 #include "config/config_manager.h"
+#include "render/runtime_native_3d_render.h"
 
 int RuntimeNative3DClampRenderScale(int value) {
     if (value < RUNTIME_3D_RENDER_SCALE_MIN) {
@@ -98,6 +99,33 @@ void RuntimeNative3DUpscaleNearest(const uint8_t* src,
         for (int x = 0; x < dst_width; ++x) {
             int src_x = ((int64_t)x * (int64_t)src_width) / (int64_t)dst_width;
             dst[dst_row + (size_t)x] = src[src_row + (size_t)src_x];
+        }
+    }
+}
+
+void RuntimeNative3DUpscaleNearestABGR(const uint8_t* src,
+                                       int src_width,
+                                       int src_height,
+                                       uint8_t* dst,
+                                       int dst_width,
+                                       int dst_height) {
+    if (!src || !dst || src_width <= 0 || src_height <= 0 || dst_width <= 0 || dst_height <= 0) {
+        return;
+    }
+
+    for (int y = 0; y < dst_height; ++y) {
+        int src_y = ((int64_t)y * (int64_t)src_height) / (int64_t)dst_height;
+        size_t dst_row = (size_t)y * (size_t)dst_width * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+        size_t src_row = (size_t)src_y * (size_t)src_width * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+        for (int x = 0; x < dst_width; ++x) {
+            int src_x = ((int64_t)x * (int64_t)src_width) / (int64_t)dst_width;
+            size_t dst_index =
+                dst_row + (size_t)x * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+            size_t src_index =
+                src_row + (size_t)src_x * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+            for (int c = 0; c < RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES; ++c) {
+                dst[dst_index + (size_t)c] = src[src_index + (size_t)c];
+            }
         }
     }
 }

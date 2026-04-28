@@ -518,6 +518,28 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         animSettings.tilePreviewEnabled = !animSettings.tilePreviewEnabled;
         return;
     }
+    if (point_in_rect(&buttons.denoiseRect, x, y)) {
+        animSettings.disneyDenoiseEnabled = !animSettings.disneyDenoiseEnabled;
+        snprintf(state->statusLabel,
+                 sizeof(state->statusLabel),
+                 "Disney Denoise: %s",
+                 animSettings.disneyDenoiseEnabled ? "ON" : "OFF");
+        state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
+        state->statusColor = (SDL_Color){160, 210, 255, 255};
+        state->statusExpireMs = SDL_GetTicks() + 1800;
+        return;
+    }
+    if (point_in_rect(&buttons.topFillRect, x, y)) {
+        animSettings.topFillLightEnabled = !animSettings.topFillLightEnabled;
+        snprintf(state->statusLabel,
+                 sizeof(state->statusLabel),
+                 "Top Fill: %s",
+                 animSettings.topFillLightEnabled ? "ON" : "OFF");
+        state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
+        state->statusColor = (SDL_Color){160, 210, 255, 255};
+        state->statusExpireMs = SDL_GetTicks() + 1800;
+        return;
+    }
 
     if (buttons.showLightHeight && point_in_rect(&buttons.lightHeightRect, x, y)) {
         double options[] = {2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 16.0, 20.0};

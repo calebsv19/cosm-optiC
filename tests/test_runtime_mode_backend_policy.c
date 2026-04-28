@@ -194,14 +194,14 @@ static int test_mode_backend_route_3d_native_lane(void) {
     assert_true("route3d_native_scaffold_primitive_count", route.scaffoldPrimitiveCount == 2);
     assert_true("route3d_native_legacy_mode_direct_light",
                 route.integratorMode == RAY_TRACING_2D_INTEGRATOR_DIRECT_LIGHT);
-    assert_true("route3d_native_3d_mode_direct_light",
-                route.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT);
+    assert_true("route3d_native_3d_mode_disney",
+                route.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DISNEY);
     assert_true("route3d_native_uses_3d_catalog", route.integratorUses3DCatalog);
     assert_true("route3d_native_cache_off", !route.buildIrradianceCache);
     assert_true("route3d_native_tiles_enabled", route.useTiles);
     assert_true("route3d_native_tile_preview_on", route.tilePreviewEnabled);
-    assert_true("route3d_native_status_label_reserved_clamp",
-                strstr(RayTracingModeBackend_IntegratorStatusLabel(&route), "reserved 3D") != NULL);
+    assert_true("route3d_native_status_label_disney",
+                strstr(RayTracingModeBackend_IntegratorStatusLabel(&route), "3D Disney") != NULL);
 
     animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE;
     route = RayTracingModeBackend_ResolveRoute();

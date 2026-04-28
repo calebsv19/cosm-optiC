@@ -95,7 +95,8 @@ void RuntimeNative3DAdaptiveSamplingMask_Clear(RuntimeNative3DAdaptiveSamplingMa
 bool RuntimeNative3DAdaptiveSampling_ShouldUse(RayTracing3DIntegratorId integrator_id,
                                                int temporal_frames) {
     return temporal_frames > 1 &&
-           integrator_id == RAY_TRACING_3D_INTEGRATOR_EMISSION_TRANSPARENCY;
+           (integrator_id == RAY_TRACING_3D_INTEGRATOR_EMISSION_TRANSPARENCY ||
+            integrator_id == RAY_TRACING_3D_INTEGRATOR_DISNEY);
 }
 
 bool RuntimeNative3DAdaptiveSampling_BuildStableEmitterMask(
@@ -148,9 +149,9 @@ bool RuntimeNative3DAdaptiveSampling_HasActiveSamples(
     return false;
 }
 
-bool RuntimeNative3DAdaptiveSampling_RenderPreparedRegionLuminanceMasked(
-    float* luminance_buffer,
-    int luminance_stride,
+bool RuntimeNative3DAdaptiveSampling_RenderPreparedRegionRadianceRGBMasked(
+    float* radiance_buffer,
+    int radiance_stride,
     RayTracing3DIntegratorId integrator_id,
     const RuntimeNative3DPreparedFrame* frame,
     int start_x,
@@ -166,17 +167,17 @@ bool RuntimeNative3DAdaptiveSampling_RenderPreparedRegionLuminanceMasked(
         memset(out_stats, 0, sizeof(*out_stats));
     }
     if (!active_mask) {
-        return RuntimeNative3DRenderPreparedRegionLuminance(luminance_buffer,
-                                                            luminance_stride,
-                                                            integrator_id,
-                                                            frame,
-                                                            start_x,
-                                                            start_y,
-                                                            end_x,
-                                                            end_y,
-                                                            out_stats);
+        return RuntimeNative3DRenderPreparedRegionRadianceRGB(radiance_buffer,
+                                                              radiance_stride,
+                                                              integrator_id,
+                                                              frame,
+                                                              start_x,
+                                                              start_y,
+                                                              end_x,
+                                                              end_y,
+                                                              out_stats);
     }
-    if (!luminance_buffer || luminance_stride <= 0 || active_mask_stride <= 0 ||
+    if (!radiance_buffer || radiance_stride <= 0 || active_mask_stride <= 0 ||
         !frame || !frame->valid || start_x >= end_x || start_y >= end_y) {
         return false;
     }
@@ -195,19 +196,19 @@ bool RuntimeNative3DAdaptiveSampling_RenderPreparedRegionLuminanceMasked(
             }
             if ((!active || x == end_x) && run_start >= 0) {
                 RuntimeNative3DRenderStats run_stats = {0};
-                float* run_buffer =
-                    luminance_buffer +
-                    ((size_t)local_y * (size_t)luminance_stride +
-                     (size_t)(run_start - start_x));
-                if (!RuntimeNative3DRenderPreparedRegionLuminance(run_buffer,
-                                                                   luminance_stride,
-                                                                   integrator_id,
-                                                                   frame,
-                                                                   run_start,
-                                                                   y,
-                                                                   x,
-                                                                   y + 1,
-                                                                   &run_stats)) {
+                float* run_buffer = radiance_buffer +
+                                    (((size_t)local_y * (size_t)radiance_stride +
+                                      (size_t)(run_start - start_x)) *
+                                     RUNTIME_NATIVE_3D_RADIANCE_CHANNELS);
+                if (!RuntimeNative3DRenderPreparedRegionRadianceRGB(run_buffer,
+                                                                    radiance_stride,
+                                                                    integrator_id,
+                                                                    frame,
+                                                                    run_start,
+                                                                    y,
+                                                                    x,
+                                                                    y + 1,
+                                                                    &run_stats)) {
                     return false;
                 }
                 RuntimeNative3DRenderStats_Accumulate(&stats, &run_stats);

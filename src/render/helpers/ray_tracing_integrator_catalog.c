@@ -22,6 +22,8 @@ static const char* label_2d(int value) {
 
 static const char* label_3d_button(int value) {
     switch (RayTracingIntegratorCatalog_Clamp3DToShipped(value)) {
+        case RAY_TRACING_3D_INTEGRATOR_DISNEY:
+            return "Integrator: 3D Disney";
         case RAY_TRACING_3D_INTEGRATOR_EMISSION_TRANSPARENCY:
             return "Integrator: 3D Emission / Transparency";
         case RAY_TRACING_3D_INTEGRATOR_MATERIAL:
@@ -36,6 +38,8 @@ static const char* label_3d_button(int value) {
 
 static const char* label_3d_status(int value) {
     switch (RayTracingIntegratorCatalog_Clamp3DToShipped(value)) {
+        case RAY_TRACING_3D_INTEGRATOR_DISNEY:
+            return "integrator: 3D Disney";
         case RAY_TRACING_3D_INTEGRATOR_EMISSION_TRANSPARENCY:
             return "integrator: 3D Emission / Transparency";
         case RAY_TRACING_3D_INTEGRATOR_MATERIAL:
@@ -70,8 +74,8 @@ bool RayTracingIntegratorCatalog_Is3DShipped(int value) {
         case RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE:
         case RAY_TRACING_3D_INTEGRATOR_MATERIAL:
         case RAY_TRACING_3D_INTEGRATOR_EMISSION_TRANSPARENCY:
-            return true;
         case RAY_TRACING_3D_INTEGRATOR_DISNEY:
+            return true;
         default:
             return false;
     }
@@ -79,6 +83,8 @@ bool RayTracingIntegratorCatalog_Is3DShipped(int value) {
 
 int RayTracingIntegratorCatalog_Clamp3DToShipped(int value) {
     switch (RayTracingIntegratorCatalog_Clamp3D(value)) {
+        case RAY_TRACING_3D_INTEGRATOR_DISNEY:
+            return RAY_TRACING_3D_INTEGRATOR_DISNEY;
         case RAY_TRACING_3D_INTEGRATOR_EMISSION_TRANSPARENCY:
             return RAY_TRACING_3D_INTEGRATOR_EMISSION_TRANSPARENCY;
         case RAY_TRACING_3D_INTEGRATOR_MATERIAL:
@@ -118,7 +124,7 @@ RayTracingIntegratorMenuState RayTracingIntegratorCatalog_BuildMenuState(
     state.uses3DCatalog = (space_mode == SPACE_MODE_3D);
     if (state.uses3DCatalog) {
         state.buttonLabel = label_3d_button(state.active3D);
-        state.visibleCount = 4;
+        state.visibleCount = 5;
         state.showPathToggles = false;
     } else {
         state.buttonLabel = label_2d(state.active2D);
@@ -147,6 +153,9 @@ void RayTracingIntegratorCatalog_CycleActiveSelection(AnimationConfig* cfg) {
                 cfg->integratorMode3D = RAY_TRACING_3D_INTEGRATOR_EMISSION_TRANSPARENCY;
                 break;
             case RAY_TRACING_3D_INTEGRATOR_EMISSION_TRANSPARENCY:
+                cfg->integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DISNEY;
+                break;
+            case RAY_TRACING_3D_INTEGRATOR_DISNEY:
             default:
                 cfg->integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT;
                 break;

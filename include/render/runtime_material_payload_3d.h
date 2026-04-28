@@ -11,6 +11,9 @@ typedef struct {
     int sceneObjectIndex;
     int materialId;
     MaterialBSDF bsdf;
+    double baseColorR;
+    double baseColorG;
+    double baseColorB;
     double emissive;
     double transparency;
 } RuntimeMaterialPayload3D;

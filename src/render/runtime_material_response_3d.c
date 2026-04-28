@@ -81,8 +81,17 @@ static void runtime_material_response_3d_apply_weights(
     bounce_scale = runtime_material_response_3d_bounce_scale(payload);
 
     out_result->directRadiance = diffuse_result->directRadiance * direct_scale;
+    out_result->directRadianceR = diffuse_result->directRadianceR * direct_scale;
+    out_result->directRadianceG = diffuse_result->directRadianceG * direct_scale;
+    out_result->directRadianceB = diffuse_result->directRadianceB * direct_scale;
     out_result->bounceRadiance = diffuse_result->bounceRadiance * bounce_scale;
+    out_result->bounceRadianceR = diffuse_result->bounceRadianceR * bounce_scale;
+    out_result->bounceRadianceG = diffuse_result->bounceRadianceG * bounce_scale;
+    out_result->bounceRadianceB = diffuse_result->bounceRadianceB * bounce_scale;
     out_result->radiance = out_result->directRadiance + out_result->bounceRadiance;
+    out_result->radianceR = out_result->directRadianceR + out_result->bounceRadianceR;
+    out_result->radianceG = out_result->directRadianceG + out_result->bounceRadianceG;
+    out_result->radianceB = out_result->directRadianceB + out_result->bounceRadianceB;
 }
 
 bool RuntimeMaterialResponse3D_ShadeHit(const RuntimeScene3D* scene,

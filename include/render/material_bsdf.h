@@ -13,6 +13,9 @@ typedef enum {
 
 typedef struct MaterialBSDF {
     double albedo;        // grayscale reflectance [0,1]
+    double baseColorR;    // authored RGB base-color truth [0,1]
+    double baseColorG;
+    double baseColorB;
     double opacity;       // alpha channel [0,1]
     double reflectivity;  // specular weight [0,1]
     double roughness;     // microfacet alpha mapped from [0,1]

@@ -33,9 +33,9 @@ bool RuntimeNative3DAdaptiveSampling_BuildStableEmitterMask(
     int end_y);
 bool RuntimeNative3DAdaptiveSampling_HasActiveSamples(
     const RuntimeNative3DAdaptiveSamplingMask* mask);
-bool RuntimeNative3DAdaptiveSampling_RenderPreparedRegionLuminanceMasked(
-    float* luminance_buffer,
-    int luminance_stride,
+bool RuntimeNative3DAdaptiveSampling_RenderPreparedRegionRadianceRGBMasked(
+    float* radiance_buffer,
+    int radiance_stride,
     RayTracing3DIntegratorId integrator_id,
     const RuntimeNative3DPreparedFrame* frame,
     int start_x,

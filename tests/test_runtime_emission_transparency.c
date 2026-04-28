@@ -96,6 +96,8 @@ static int test_runtime_emission_transparency_3d_seed_branch_contract(void) {
     }
 
     sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_EMISSIVE;
+    sceneSettings.sceneObjects[0].color = 0xFF0000;
+    sceneSettings.sceneObjects[0].emissiveStrength = 1.0;
     ok = RuntimeMaterialResponse3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &material_result);
     assert_true("runtime_emission_transparency_seed_material_ok", ok);
     ok = RuntimeEmissionTransparency3D_ShadePixel(&scene,
@@ -122,10 +124,19 @@ static int test_runtime_emission_transparency_3d_seed_branch_contract(void) {
                 emission_result.secondaryRayCount == RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT);
     assert_true("runtime_emission_transparency_seed_direct_lifts_material",
                 emission_result.directRadiance > material_result.directRadiance);
-    assert_close("runtime_emission_transparency_seed_bounce_match",
-                 emission_result.bounceRadiance,
-                 material_result.bounceRadiance,
+    assert_true("runtime_emission_transparency_seed_emissive_direct_positive",
+                emission_result.emissiveDirectRadiance > 0.0);
+    assert_true("runtime_emission_transparency_seed_emissive_red_direct_positive",
+                emission_result.emissiveDirectRadianceR > 0.0);
+    assert_true("runtime_emission_transparency_seed_emissive_red_direct_dominates_blue",
+                emission_result.emissiveDirectRadianceR >
+                    emission_result.emissiveDirectRadianceB + 1e-6);
+    assert_close("runtime_emission_transparency_seed_transmitted_direct_zero",
+                 emission_result.transmittedDirectRadiance,
+                 0.0,
                  1e-9);
+    assert_true("runtime_emission_transparency_seed_bounce_nonnegative",
+                emission_result.bounceRadiance >= 0.0);
     assert_true("runtime_emission_transparency_seed_total_lifts_material",
                 emission_result.radiance > material_result.radiance);
 
@@ -358,7 +369,11 @@ static int test_runtime_emission_transparency_3d_transparent_prism_reaches_behin
     }
 
     sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
+    sceneSettings.sceneObjects[0].color = 0x0000FF;
     sceneSettings.sceneObjects[1].material_id = MATERIAL_PRESET_EMISSIVE;
+    sceneSettings.sceneObjects[1].color = 0xFFFFFF;
+    sceneSettings.sceneObjects[0].transparency = 1.0;
+    sceneSettings.sceneObjects[1].emissiveStrength = 1.0;
     animSettings.lightIntensity = 10.0;
     animSettings.forwardDecay = 10.0;
     animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
@@ -392,6 +407,14 @@ static int test_runtime_emission_transparency_3d_transparent_prism_reaches_behin
                 transparent_result.payload.transparency > 0.5);
     assert_true("runtime_emission_transparency_prism_reaches_emissive_surface",
                 transparent_result.directRadiance > material_result.directRadiance + 0.1);
+    assert_true("runtime_emission_transparency_prism_transmitted_direct_positive",
+                transparent_result.transmittedDirectRadiance > 0.0);
+    assert_true("runtime_emission_transparency_prism_transmitted_blue_dominates_red",
+                transparent_result.transmittedDirectRadianceB >
+                    transparent_result.transmittedDirectRadianceR + 1e-6);
+    assert_true("runtime_emission_transparency_prism_final_blue_dominates_red",
+                transparent_result.directRadianceB >
+                    transparent_result.directRadianceR + 1e-6);
 
     RuntimeScene3D_Free(&scene);
     sceneSettings = saved_scene;
@@ -417,6 +440,8 @@ static int test_runtime_emission_transparency_3d_transparent_prism_reaches_emitt
     memset(&sceneSettings, 0, sizeof(sceneSettings));
     sceneSettings.objectCount = 1;
     sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
+    sceneSettings.sceneObjects[0].color = 0x0000FF;
+    sceneSettings.sceneObjects[0].transparency = 1.0;
 
     scene.hasLight = true;
     scene.light.position = vec3(0.0, -7.0, 0.0);
@@ -508,6 +533,9 @@ static int test_runtime_emission_transparency_3d_transparent_prism_reaches_emitt
                 transparent_result.directRadiance > material_result.directRadiance + 0.05);
     assert_true("runtime_emission_transparency_emitter_prism_direct_softens_legacy_hard_edge",
                 transparent_result.directRadiance < legacy_direct - 0.01);
+    assert_true("runtime_emission_transparency_emitter_prism_blue_filters_white_emitter",
+                transparent_result.directRadianceB >
+                    transparent_result.directRadianceR + 1e-6);
     assert_true("runtime_emission_transparency_emitter_prism_total_lifts_material",
                 transparent_result.radiance > material_result.radiance + 0.05);
 
@@ -563,8 +591,8 @@ static int test_runtime_emission_transparency_3d_temporal_skips_stable_emitters(
     RuntimeSceneBridgePreflight summary = {0};
     RuntimeNative3DRenderStats single_stats = {0};
     RuntimeNative3DRenderStats temporal_stats = {0};
-    uint8_t single_pixels[101 * 101];
-    uint8_t temporal_pixels[101 * 101];
+    uint8_t single_pixels[101 * 101 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    uint8_t temporal_pixels[101 * 101 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
     bool ok = false;
 
     ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
@@ -576,6 +604,7 @@ static int test_runtime_emission_transparency_3d_temporal_skips_stable_emitters(
     }
 
     sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_EMISSIVE;
+    sceneSettings.sceneObjects[0].emissiveStrength = 1.0;
     animSettings.lightIntensity = 10.0;
     animSettings.forwardDecay = 10.0;
     animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
@@ -611,7 +640,8 @@ static int test_runtime_emission_transparency_3d_temporal_skips_stable_emitters(
     assert_true("runtime_emission_transparency_adaptive_secondary_not_multiplied",
                 temporal_stats.secondaryRayCount == single_stats.secondaryRayCount);
     assert_true("runtime_emission_transparency_adaptive_center_preserved",
-                temporal_pixels[(50 * 101) + 50] == single_pixels[(50 * 101) + 50]);
+                temporal_pixels[(((50 * 101) + 50) * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES) + 2] ==
+                    single_pixels[(((50 * 101) + 50) * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES) + 2]);
 
     sceneSettings = saved_scene;
     animSettings = saved_anim;

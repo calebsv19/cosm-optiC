@@ -2,6 +2,7 @@
 #define RENDER_RUNTIME_NATIVE_3D_RENDER_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "render/runtime_camera_3d_rays.h"
@@ -10,6 +11,9 @@
 #include "render/runtime_native_3d_tile_occupancy.h"
 #include "render/runtime_scene_3d.h"
 #include "render/ray_tracing_integrator_catalog.h"
+
+#define RUNTIME_NATIVE_3D_RADIANCE_CHANNELS 3
+#define RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES 4
 
 typedef struct {
     int hitPixelCount;
@@ -57,6 +61,15 @@ bool RuntimeNative3DRenderPreparedRegion(uint8_t* pixel_buffer,
                                          int end_x,
                                          int end_y,
                                          RuntimeNative3DRenderStats* out_stats);
+bool RuntimeNative3DRenderPreparedRegionRadianceRGB(float* radiance_buffer,
+                                                    int radiance_stride,
+                                                    RayTracing3DIntegratorId integrator_id,
+                                                    const RuntimeNative3DPreparedFrame* frame,
+                                                    int start_x,
+                                                    int start_y,
+                                                    int end_x,
+                                                    int end_y,
+                                                    RuntimeNative3DRenderStats* out_stats);
 bool RuntimeNative3DRenderPreparedRegionLuminance(float* luminance_buffer,
                                                   int luminance_stride,
                                                   RayTracing3DIntegratorId integrator_id,
@@ -72,6 +85,14 @@ bool RuntimeNative3DPreparedRegionMayContainGeometry(const RuntimeNative3DPrepar
                                                      int start_y,
                                                      int end_x,
                                                      int end_y);
+void RuntimeNative3DResolveRadianceRegionToPixels(uint8_t* pixel_buffer,
+                                                  int pixel_width,
+                                                  const float* radiance_buffer,
+                                                  int radiance_stride,
+                                                  int start_x,
+                                                  int start_y,
+                                                  int end_x,
+                                                  int end_y);
 bool RuntimeNative3DRenderToPixelBuffer(uint8_t* pixel_buffer,
                                         RayTracing3DIntegratorId integrator_id,
                                         int width,
@@ -100,5 +121,7 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
     const RuntimeNative3DSamplingContext* sampling,
     int temporal_frames,
     RuntimeNative3DRenderStats* out_stats);
+uint8_t RuntimeNative3DResolveEnvironmentByte(void);
+void RuntimeNative3DFillPixelBufferEnvironment(uint8_t* pixel_buffer, size_t pixel_count);
 
 #endif

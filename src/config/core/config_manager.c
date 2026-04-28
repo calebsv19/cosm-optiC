@@ -37,6 +37,14 @@ static double ClampDoubleValue(double value, double minValue, double maxValue) {
     return value;
 }
 
+static double animation_config_legacy_environment_radiance_to_byte_floor(double radiance) {
+    double mapped = 0.0;
+    if (!(radiance > 0.0)) return 0.0;
+    mapped = radiance / (1.0 + radiance);
+    mapped = pow(ClampDoubleValue(mapped, 0.0, 1.0), 0.55);
+    return ClampDoubleValue(lround(mapped * 255.0), 0.0, 255.0);
+}
+
 int animation_config_text_zoom_step_clamp(int step) {
     if (step < TEXT_ZOOM_STEP_MIN) return TEXT_ZOOM_STEP_MIN;
     if (step > TEXT_ZOOM_STEP_MAX) return TEXT_ZOOM_STEP_MAX;
@@ -143,6 +151,8 @@ AnimationConfig animSettings = {
     .cacheHaloRadius = 3.5,
     .lightDecaySoftness = 1.0,
     .lightHeight = 8.0,
+    .topFillLightEnabled = false,
+    .disneyDenoiseEnabled = true,
     .secondaryDiffuseSamples3D = RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT,
     .transmissionSamples3D = RUNTIME_3D_TRANSMISSION_SAMPLES_DEFAULT,
     .temporalFrames3D = RUNTIME_3D_TEMPORAL_FRAMES_DEFAULT,
@@ -318,8 +328,10 @@ void SaveSceneConfig(void) {
         json_object_object_add(jsonObj, "texture", json_object_new_string(obj->texture));
         json_object_object_add(jsonObj, "color", json_object_new_int(obj->color));
         json_object_object_add(jsonObj, "opacity", json_object_new_double(obj->opacity));
+        json_object_object_add(jsonObj, "transparency", json_object_new_double(obj->transparency));
         json_object_object_add(jsonObj, "reflectivity", json_object_new_double(obj->reflectivity));
         json_object_object_add(jsonObj, "roughness", json_object_new_double(obj->roughness));
+        json_object_object_add(jsonObj, "emissiveStrength", json_object_new_double(obj->emissiveStrength));
         json_object_object_add(jsonObj, "textureId", json_object_new_int(obj->textureId));
         json_object_object_add(jsonObj, "materialId", json_object_new_int(obj->material_id));
         json_object_object_add(jsonObj, "materialId", json_object_new_int(obj->material_id));
@@ -432,6 +444,7 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "pathRussianRoulette", json_object_new_boolean(animSettings.pathRussianRoulette));
     json_object_object_add(config, "pathEnableMIS", json_object_new_boolean(animSettings.pathEnableMIS));
     json_object_object_add(config, "environmentBrightness", json_object_new_double(animSettings.environmentBrightness));
+    json_object_object_add(config, "environmentBrightnessUsesByteFloor", json_object_new_boolean(true));
     json_object_object_add(config, "pathSeed", json_object_new_int(animSettings.pathSeed));
     json_object_object_add(config, "cacheContributionWeight", json_object_new_double(animSettings.cacheContributionWeight));
     json_object_object_add(config, "bsdfModel", json_object_new_int(animSettings.bsdfModel));
@@ -443,6 +456,10 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "cacheHaloRadius", json_object_new_double(animSettings.cacheHaloRadius));
     json_object_object_add(config, "lightDecaySoftness", json_object_new_double(animSettings.lightDecaySoftness));
     json_object_object_add(config, "lightHeight", json_object_new_double(animSettings.lightHeight));
+    json_object_object_add(config, "topFillLightEnabled",
+                           json_object_new_boolean(animSettings.topFillLightEnabled));
+    json_object_object_add(config, "disneyDenoiseEnabled",
+                           json_object_new_boolean(animSettings.disneyDenoiseEnabled));
     json_object_object_add(config,
                            "secondaryDiffuseSamples3D",
                            json_object_new_int(animSettings.secondaryDiffuseSamples3D));
@@ -545,7 +562,8 @@ static void LoadCameraConfig(struct json_object* config) {
 }
 
 void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
-    struct json_object *texture, *color, *opacity, *reflectivity, *roughness, *textureId, *materialId;
+    struct json_object *texture, *color, *opacity, *transparency, *reflectivity, *roughness,
+        *emissiveStrength, *textureId, *materialId;
 
     // Load texture path
     if (json_object_object_get_ex(obj, "texture", &texture)) {
@@ -569,6 +587,12 @@ void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
         sceneObject->opacity = 1.0; // Default: Fully opaque
     }
 
+    if (json_object_object_get_ex(obj, "transparency", &transparency)) {
+        sceneObject->transparency = json_object_get_double(transparency);
+    } else {
+        sceneObject->transparency = 1.0;
+    }
+
     if (json_object_object_get_ex(obj, "reflectivity", &reflectivity)) {
         sceneObject->reflectivity = json_object_get_double(reflectivity);
     } else {
@@ -579,6 +603,12 @@ void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
         sceneObject->roughness = json_object_get_double(roughness);
     } else {
         sceneObject->roughness = 0.65;
+    }
+
+    if (json_object_object_get_ex(obj, "emissiveStrength", &emissiveStrength)) {
+        sceneObject->emissiveStrength = json_object_get_double(emissiveStrength);
+    } else {
+        sceneObject->emissiveStrength = 1.0;
     }
 
     if (json_object_object_get_ex(obj, "textureId", &textureId)) {
@@ -951,8 +981,19 @@ void LoadAnimationConfig(void) {
         animSettings.pathRussianRoulette = json_object_get_boolean(temp);
     if (json_object_object_get_ex(config, "pathEnableMIS", &temp))
         animSettings.pathEnableMIS = json_object_get_boolean(temp);
-    if (json_object_object_get_ex(config, "environmentBrightness", &temp))
-        animSettings.environmentBrightness = json_object_get_double(temp);
+    if (json_object_object_get_ex(config, "environmentBrightness", &temp)) {
+        struct json_object* env_mode = NULL;
+        const bool uses_byte_floor =
+            json_object_object_get_ex(config, "environmentBrightnessUsesByteFloor", &env_mode) &&
+            json_object_get_boolean(env_mode);
+        const double raw_environment = json_object_get_double(temp);
+        if (uses_byte_floor) {
+            animSettings.environmentBrightness = ClampDoubleValue(raw_environment, 0.0, 255.0);
+        } else {
+            animSettings.environmentBrightness =
+                animation_config_legacy_environment_radiance_to_byte_floor(raw_environment);
+        }
+    }
     if (json_object_object_get_ex(config, "pathSeed", &temp))
         animSettings.pathSeed = json_object_get_int(temp);
     if (json_object_object_get_ex(config, "cacheContributionWeight", &temp))
@@ -986,6 +1027,18 @@ void LoadAnimationConfig(void) {
         animSettings.lightHeight = json_object_get_double(temp);
     } else {
         animSettings.lightHeight = 8.0;
+    }
+    if (json_object_object_get_ex(config, "topFillLightEnabled", &temp) &&
+        json_object_is_type(temp, json_type_boolean)) {
+        animSettings.topFillLightEnabled = json_object_get_boolean(temp);
+    } else {
+        animSettings.topFillLightEnabled = false;
+    }
+    if (json_object_object_get_ex(config, "disneyDenoiseEnabled", &temp) &&
+        json_object_is_type(temp, json_type_boolean)) {
+        animSettings.disneyDenoiseEnabled = json_object_get_boolean(temp);
+    } else {
+        animSettings.disneyDenoiseEnabled = true;
     }
     if (json_object_object_get_ex(config, "secondaryDiffuseSamples3D", &temp)) {
         animSettings.secondaryDiffuseSamples3D = json_object_get_int(temp);

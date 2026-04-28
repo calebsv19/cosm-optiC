@@ -15,8 +15,17 @@ typedef struct {
     HitInfo3D hitInfo;
     RuntimeMaterialPayload3D payload;
     double directRadiance;
+    double directRadianceR;
+    double directRadianceG;
+    double directRadianceB;
     double bounceRadiance;
+    double bounceRadianceR;
+    double bounceRadianceG;
+    double bounceRadianceB;
     double radiance;
+    double radianceR;
+    double radianceG;
+    double radianceB;
     int secondaryRayCount;
     int secondaryHitCount;
     int secondaryContributingHitCount;

@@ -7,9 +7,12 @@
 #include "config/config_manager.h"
 #include "render/integrators/hybrid/integrator_tonemap.h"
 #include "render/runtime_camera_3d_rays.h"
+#include "render/runtime_disney_3d.h"
 #include "render/runtime_direct_light_3d.h"
 #include "render/runtime_diffuse_bounce_3d.h"
 #include "render/runtime_emission_transparency_3d.h"
+#include "render/runtime_native_3d_denoise.h"
+#include "render/runtime_native_3d_feature_buffer.h"
 #include "render/runtime_light_emitter_3d.h"
 #include "render/runtime_material_response_3d.h"
 #include "render/runtime_native_3d_adaptive_sampling.h"
@@ -155,45 +158,101 @@ static bool runtime_native_3d_render_trace_visible_emitter(
     return true;
 }
 
-static void runtime_native_3d_render_write_emitter_luminance(float* luminance_buffer,
-                                                             size_t pixel_index,
-                                                             const RuntimeLightEmitterHit3DResult* hit,
-                                                             RuntimeNative3DRenderStats* io_stats) {
-    if (!luminance_buffer || !hit || !io_stats) return;
+static void runtime_native_3d_render_write_scalar_radiance_rgb(float* radiance_buffer,
+                                                               size_t pixel_index,
+                                                               double radiance) {
+    const size_t base = pixel_index * (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
+    if (!radiance_buffer) return;
+    radiance_buffer[base] = (float)radiance;
+    radiance_buffer[base + 1u] = (float)radiance;
+    radiance_buffer[base + 2u] = (float)radiance;
+}
+
+static void runtime_native_3d_render_write_radiance_rgb(float* radiance_buffer,
+                                                        size_t pixel_index,
+                                                        double radiance_r,
+                                                        double radiance_g,
+                                                        double radiance_b) {
+    const size_t base = pixel_index * (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
+    if (!radiance_buffer) return;
+    radiance_buffer[base] = (float)radiance_r;
+    radiance_buffer[base + 1u] = (float)radiance_g;
+    radiance_buffer[base + 2u] = (float)radiance_b;
+}
+
+uint8_t RuntimeNative3DResolveEnvironmentByte(void) {
+    double value = animSettings.environmentBrightness;
+    if (value < 0.0) value = 0.0;
+    if (value > 255.0) value = 255.0;
+    return (uint8_t)lround(value);
+}
+
+void RuntimeNative3DFillPixelBufferEnvironment(uint8_t* pixel_buffer, size_t pixel_count) {
+    const uint8_t environment = RuntimeNative3DResolveEnvironmentByte();
+    if (!pixel_buffer) return;
+
+    for (size_t i = 0; i < pixel_count; ++i) {
+        const size_t base = i * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+        pixel_buffer[base] = environment;
+        pixel_buffer[base + 1u] = environment;
+        pixel_buffer[base + 2u] = environment;
+        pixel_buffer[base + 3u] = 0xFFu;
+    }
+}
+
+static void runtime_native_3d_render_write_background_radiance(float* radiance_buffer,
+                                                               size_t pixel_index) {
+    runtime_native_3d_render_write_scalar_radiance_rgb(radiance_buffer, pixel_index, 0.0);
+}
+
+static void runtime_native_3d_render_write_emitter_radiance(float* radiance_buffer,
+                                                            size_t pixel_index,
+                                                            const RuntimeLightEmitterHit3DResult* hit,
+                                                            RuntimeNative3DRenderStats* io_stats) {
+    if (!radiance_buffer || !hit || !io_stats) return;
 
     io_stats->hitPixelCount += 1;
     io_stats->visiblePixelCount += 1;
     if (hit->radiance > io_stats->maxRadiance) {
         io_stats->maxRadiance = hit->radiance;
     }
-    luminance_buffer[pixel_index] = (float)hit->radiance;
+    runtime_native_3d_render_write_scalar_radiance_rgb(radiance_buffer, pixel_index, hit->radiance);
 }
 
-static void runtime_native_3d_render_resolve_luminance_region_to_pixels(
+void RuntimeNative3DResolveRadianceRegionToPixels(
     uint8_t* pixel_buffer,
-    int pixel_stride,
-    const float* luminance_buffer,
-    int luminance_stride,
+    int pixel_width,
+    const float* radiance_buffer,
+    int radiance_stride,
     int start_x,
     int start_y,
     int end_x,
     int end_y) {
-    if (!pixel_buffer || !luminance_buffer || pixel_stride <= 0 || luminance_stride <= 0) return;
+    const uint8_t environment = RuntimeNative3DResolveEnvironmentByte();
+    if (!pixel_buffer || !radiance_buffer || pixel_width <= 0 || radiance_stride <= 0) return;
     for (int y = start_y; y < end_y; ++y) {
         const int local_y = y - start_y;
         for (int x = start_x; x < end_x; ++x) {
             const int local_x = x - start_x;
-            const size_t pixel_index = (size_t)y * (size_t)pixel_stride + (size_t)x;
-            const size_t luminance_index =
-                (size_t)local_y * (size_t)luminance_stride + (size_t)local_x;
-            pixel_buffer[pixel_index] =
-                (uint8_t)(TonemapCurve(luminance_buffer[luminance_index]) * 255.0f);
+            const size_t pixel_base =
+                ((size_t)y * (size_t)pixel_width + (size_t)x) *
+                (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+            const size_t radiance_base =
+                ((size_t)local_y * (size_t)radiance_stride + (size_t)local_x) *
+                (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
+            pixel_buffer[pixel_base] = TonemapCurveToByteWithFloor(
+                radiance_buffer[radiance_base], environment);
+            pixel_buffer[pixel_base + 1u] = TonemapCurveToByteWithFloor(
+                radiance_buffer[radiance_base + 1u], environment);
+            pixel_buffer[pixel_base + 2u] = TonemapCurveToByteWithFloor(
+                radiance_buffer[radiance_base + 2u], environment);
+            pixel_buffer[pixel_base + 3u] = 0xFFu;
         }
     }
 }
 
-static bool runtime_native_3d_render_shade_direct_light(float* luminance_buffer,
-                                                        int luminance_stride,
+static bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
+                                                        int radiance_stride,
                                                         int width,
                                                         int height,
                                                         int start_x,
@@ -205,7 +264,7 @@ static bool runtime_native_3d_render_shade_direct_light(float* luminance_buffer,
                                                         RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DRenderStats stats = {0};
 
-    if (!luminance_buffer || luminance_stride <= 0 || width <= 0 || height <= 0 || !scene ||
+    if (!radiance_buffer || radiance_stride <= 0 || width <= 0 || height <= 0 || !scene ||
         !projector) {
         return false;
     }
@@ -226,16 +285,13 @@ static bool runtime_native_3d_render_shade_direct_light(float* luminance_buffer,
             RuntimeLightEmitterHit3DResult emitter_hit = {0};
             const int local_y = y - start_y;
             const int local_x = x - start_x;
-            size_t idx = (size_t)local_y * (size_t)luminance_stride + (size_t)local_x;
+            size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
             if (runtime_native_3d_render_trace_visible_emitter(scene,
                                                                projector,
                                                                (double)x,
                                                                (double)y,
                                                                &emitter_hit)) {
-                runtime_native_3d_render_write_emitter_luminance(luminance_buffer,
-                                                                 idx,
-                                                                 &emitter_hit,
-                                                                 &stats);
+                runtime_native_3d_render_write_emitter_radiance(radiance_buffer, idx, &emitter_hit, &stats);
                 continue;
             }
             if (!RuntimeDirectLight3D_ShadePixel(scene,
@@ -243,6 +299,7 @@ static bool runtime_native_3d_render_shade_direct_light(float* luminance_buffer,
                                                  (double)x,
                                                  (double)y,
                                                  &result)) {
+                runtime_native_3d_render_write_background_radiance(radiance_buffer, idx);
                 continue;
             }
             stats.hitPixelCount += 1;
@@ -252,7 +309,11 @@ static bool runtime_native_3d_render_shade_direct_light(float* luminance_buffer,
             if (result.radiance > stats.maxRadiance) {
                 stats.maxRadiance = result.radiance;
             }
-            luminance_buffer[idx] = (float)result.radiance;
+            runtime_native_3d_render_write_radiance_rgb(radiance_buffer,
+                                                        idx,
+                                                        result.radianceR,
+                                                        result.radianceG,
+                                                        result.radianceB);
         }
     }
 
@@ -262,8 +323,8 @@ static bool runtime_native_3d_render_shade_direct_light(float* luminance_buffer,
     return true;
 }
 
-static bool runtime_native_3d_render_shade_diffuse_bounce(float* luminance_buffer,
-                                                          int luminance_stride,
+static bool runtime_native_3d_render_shade_diffuse_bounce(float* radiance_buffer,
+                                                          int radiance_stride,
                                                           int width,
                                                           int height,
                                                           int start_x,
@@ -276,7 +337,7 @@ static bool runtime_native_3d_render_shade_diffuse_bounce(float* luminance_buffe
                                                           RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DRenderStats stats = {0};
 
-    if (!luminance_buffer || luminance_stride <= 0 || width <= 0 || height <= 0 || !scene ||
+    if (!radiance_buffer || radiance_stride <= 0 || width <= 0 || height <= 0 || !scene ||
         !projector) {
         return false;
     }
@@ -297,16 +358,13 @@ static bool runtime_native_3d_render_shade_diffuse_bounce(float* luminance_buffe
             RuntimeLightEmitterHit3DResult emitter_hit = {0};
             const int local_y = y - start_y;
             const int local_x = x - start_x;
-            size_t idx = (size_t)local_y * (size_t)luminance_stride + (size_t)local_x;
+            size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
             if (runtime_native_3d_render_trace_visible_emitter(scene,
                                                                projector,
                                                                (double)x,
                                                                (double)y,
                                                                &emitter_hit)) {
-                runtime_native_3d_render_write_emitter_luminance(luminance_buffer,
-                                                                 idx,
-                                                                 &emitter_hit,
-                                                                 &stats);
+                runtime_native_3d_render_write_emitter_radiance(radiance_buffer, idx, &emitter_hit, &stats);
                 continue;
             }
             if (!RuntimeDiffuseBounce3D_ShadePixel(scene,
@@ -315,6 +373,7 @@ static bool runtime_native_3d_render_shade_diffuse_bounce(float* luminance_buffe
                                                    (double)y,
                                                    sampling,
                                                    &result)) {
+                runtime_native_3d_render_write_background_radiance(radiance_buffer, idx);
                 continue;
             }
             stats.hitPixelCount += 1;
@@ -334,7 +393,11 @@ static bool runtime_native_3d_render_shade_diffuse_bounce(float* luminance_buffe
             if (result.bounceRadiance > stats.maxBounceRadiance) {
                 stats.maxBounceRadiance = result.bounceRadiance;
             }
-            luminance_buffer[idx] = (float)result.radiance;
+            runtime_native_3d_render_write_radiance_rgb(radiance_buffer,
+                                                        idx,
+                                                        result.radianceR,
+                                                        result.radianceG,
+                                                        result.radianceB);
         }
     }
 
@@ -344,8 +407,8 @@ static bool runtime_native_3d_render_shade_diffuse_bounce(float* luminance_buffe
     return true;
 }
 
-static bool runtime_native_3d_render_shade_material(float* luminance_buffer,
-                                                    int luminance_stride,
+static bool runtime_native_3d_render_shade_material(float* radiance_buffer,
+                                                    int radiance_stride,
                                                     int width,
                                                     int height,
                                                     int start_x,
@@ -358,7 +421,7 @@ static bool runtime_native_3d_render_shade_material(float* luminance_buffer,
                                                     RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DRenderStats stats = {0};
 
-    if (!luminance_buffer || luminance_stride <= 0 || width <= 0 || height <= 0 || !scene ||
+    if (!radiance_buffer || radiance_stride <= 0 || width <= 0 || height <= 0 || !scene ||
         !projector) {
         return false;
     }
@@ -379,16 +442,13 @@ static bool runtime_native_3d_render_shade_material(float* luminance_buffer,
             RuntimeLightEmitterHit3DResult emitter_hit = {0};
             const int local_y = y - start_y;
             const int local_x = x - start_x;
-            size_t idx = (size_t)local_y * (size_t)luminance_stride + (size_t)local_x;
+            size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
             if (runtime_native_3d_render_trace_visible_emitter(scene,
                                                                projector,
                                                                (double)x,
                                                                (double)y,
                                                                &emitter_hit)) {
-                runtime_native_3d_render_write_emitter_luminance(luminance_buffer,
-                                                                 idx,
-                                                                 &emitter_hit,
-                                                                 &stats);
+                runtime_native_3d_render_write_emitter_radiance(radiance_buffer, idx, &emitter_hit, &stats);
                 continue;
             }
             if (!RuntimeMaterialResponse3D_ShadePixel(scene,
@@ -397,6 +457,7 @@ static bool runtime_native_3d_render_shade_material(float* luminance_buffer,
                                                       (double)y,
                                                       sampling,
                                                       &result)) {
+                runtime_native_3d_render_write_background_radiance(radiance_buffer, idx);
                 continue;
             }
             stats.hitPixelCount += 1;
@@ -416,7 +477,11 @@ static bool runtime_native_3d_render_shade_material(float* luminance_buffer,
             if (result.bounceRadiance > stats.maxBounceRadiance) {
                 stats.maxBounceRadiance = result.bounceRadiance;
             }
-            luminance_buffer[idx] = (float)result.radiance;
+            runtime_native_3d_render_write_radiance_rgb(radiance_buffer,
+                                                        idx,
+                                                        result.radianceR,
+                                                        result.radianceG,
+                                                        result.radianceB);
         }
     }
 
@@ -427,8 +492,8 @@ static bool runtime_native_3d_render_shade_material(float* luminance_buffer,
 }
 
 static bool runtime_native_3d_render_shade_emission_transparency(
-    float* luminance_buffer,
-    int luminance_stride,
+    float* radiance_buffer,
+    int radiance_stride,
     int width,
     int height,
     int start_x,
@@ -441,7 +506,7 @@ static bool runtime_native_3d_render_shade_emission_transparency(
     RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DRenderStats stats = {0};
 
-    if (!luminance_buffer || luminance_stride <= 0 || width <= 0 || height <= 0 || !scene ||
+    if (!radiance_buffer || radiance_stride <= 0 || width <= 0 || height <= 0 || !scene ||
         !projector) {
         return false;
     }
@@ -462,16 +527,13 @@ static bool runtime_native_3d_render_shade_emission_transparency(
             RuntimeLightEmitterHit3DResult emitter_hit = {0};
             const int local_y = y - start_y;
             const int local_x = x - start_x;
-            size_t idx = (size_t)local_y * (size_t)luminance_stride + (size_t)local_x;
+            size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
             if (runtime_native_3d_render_trace_visible_emitter(scene,
                                                                projector,
                                                                (double)x,
                                                                (double)y,
                                                                &emitter_hit)) {
-                runtime_native_3d_render_write_emitter_luminance(luminance_buffer,
-                                                                 idx,
-                                                                 &emitter_hit,
-                                                                 &stats);
+                runtime_native_3d_render_write_emitter_radiance(radiance_buffer, idx, &emitter_hit, &stats);
                 continue;
             }
             if (!RuntimeEmissionTransparency3D_ShadePixel(scene,
@@ -480,6 +542,7 @@ static bool runtime_native_3d_render_shade_emission_transparency(
                                                           (double)y,
                                                           sampling,
                                                           &result)) {
+                runtime_native_3d_render_write_background_radiance(radiance_buffer, idx);
                 continue;
             }
             stats.hitPixelCount += 1;
@@ -499,7 +562,11 @@ static bool runtime_native_3d_render_shade_emission_transparency(
             if (result.bounceRadiance > stats.maxBounceRadiance) {
                 stats.maxBounceRadiance = result.bounceRadiance;
             }
-            luminance_buffer[idx] = (float)result.radiance;
+            runtime_native_3d_render_write_radiance_rgb(radiance_buffer,
+                                                        idx,
+                                                        result.radianceR,
+                                                        result.radianceG,
+                                                        result.radianceB);
         }
     }
 
@@ -509,8 +576,92 @@ static bool runtime_native_3d_render_shade_emission_transparency(
     return true;
 }
 
-static bool runtime_native_3d_render_dispatch_integrator(float* luminance_buffer,
-                                                         int luminance_stride,
+static bool runtime_native_3d_render_shade_disney(float* radiance_buffer,
+                                                  int radiance_stride,
+                                                  int width,
+                                                  int height,
+                                                  int start_x,
+                                                  int start_y,
+                                                  int end_x,
+                                                  int end_y,
+                                                  const RuntimeScene3D* scene,
+                                                  const RuntimeCameraProjector3D* projector,
+                                                  const RuntimeNative3DSamplingContext* sampling,
+                                                  RuntimeNative3DRenderStats* out_stats) {
+    RuntimeNative3DRenderStats stats = {0};
+
+    if (!radiance_buffer || radiance_stride <= 0 || width <= 0 || height <= 0 || !scene ||
+        !projector) {
+        return false;
+    }
+    if (start_x < 0) start_x = 0;
+    if (start_y < 0) start_y = 0;
+    if (end_x > width) end_x = width;
+    if (end_y > height) end_y = height;
+    if (start_x >= end_x || start_y >= end_y) {
+        if (out_stats) {
+            *out_stats = stats;
+        }
+        return true;
+    }
+
+    for (int y = start_y; y < end_y; ++y) {
+        for (int x = start_x; x < end_x; ++x) {
+            RuntimeDisney3DResult result = {0};
+            RuntimeLightEmitterHit3DResult emitter_hit = {0};
+            const int local_y = y - start_y;
+            const int local_x = x - start_x;
+            size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
+            if (runtime_native_3d_render_trace_visible_emitter(scene,
+                                                               projector,
+                                                               (double)x,
+                                                               (double)y,
+                                                               &emitter_hit)) {
+                runtime_native_3d_render_write_emitter_radiance(radiance_buffer, idx, &emitter_hit, &stats);
+                continue;
+            }
+            if (!RuntimeDisney3D_ShadePixel(scene,
+                                            projector,
+                                            (double)x,
+                                            (double)y,
+                                            sampling,
+                                            &result)) {
+                runtime_native_3d_render_write_background_radiance(radiance_buffer, idx);
+                continue;
+            }
+            stats.hitPixelCount += 1;
+            if (result.visible) {
+                stats.visiblePixelCount += 1;
+            }
+            if (result.bounceRadiance > 0.0) {
+                stats.bouncePixelCount += 1;
+                stats.totalBounceRadiance += result.bounceRadiance;
+            }
+            stats.secondaryRayCount += result.secondaryRayCount;
+            stats.secondaryHitCount += result.secondaryHitCount;
+            stats.secondaryContributingHitCount += result.secondaryContributingHitCount;
+            if (result.radiance > stats.maxRadiance) {
+                stats.maxRadiance = result.radiance;
+            }
+            if (result.bounceRadiance > stats.maxBounceRadiance) {
+                stats.maxBounceRadiance = result.bounceRadiance;
+            }
+            runtime_native_3d_render_write_radiance_rgb(radiance_buffer,
+                                                        idx,
+                                                        result.radianceR,
+                                                        result.radianceG,
+                                                        result.radianceB);
+        }
+    }
+
+    if (out_stats) {
+        *out_stats = stats;
+    }
+    return true;
+}
+
+static bool runtime_native_3d_render_dispatch_integrator(float* radiance_buffer,
+                                                         int radiance_stride,
                                                          int integrator_id,
                                                          int width,
                                                          int height,
@@ -526,8 +677,8 @@ static bool runtime_native_3d_render_dispatch_integrator(float* luminance_buffer
      * focused shader paths without overloading the entrypoint itself. */
     switch ((RayTracing3DIntegratorId)integrator_id) {
         case RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT:
-            return runtime_native_3d_render_shade_direct_light(luminance_buffer,
-                                                               luminance_stride,
+            return runtime_native_3d_render_shade_direct_light(radiance_buffer,
+                                                               radiance_stride,
                                                                width,
                                                                height,
                                                                start_x,
@@ -538,8 +689,8 @@ static bool runtime_native_3d_render_dispatch_integrator(float* luminance_buffer
                                                                projector,
                                                                out_stats);
         case RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE:
-            return runtime_native_3d_render_shade_diffuse_bounce(luminance_buffer,
-                                                                 luminance_stride,
+            return runtime_native_3d_render_shade_diffuse_bounce(radiance_buffer,
+                                                                 radiance_stride,
                                                                  width,
                                                                  height,
                                                                  start_x,
@@ -551,8 +702,8 @@ static bool runtime_native_3d_render_dispatch_integrator(float* luminance_buffer
                                                                  sampling,
                                                                  out_stats);
         case RAY_TRACING_3D_INTEGRATOR_MATERIAL:
-            return runtime_native_3d_render_shade_material(luminance_buffer,
-                                                           luminance_stride,
+            return runtime_native_3d_render_shade_material(radiance_buffer,
+                                                           radiance_stride,
                                                            width,
                                                            height,
                                                            start_x,
@@ -564,8 +715,8 @@ static bool runtime_native_3d_render_dispatch_integrator(float* luminance_buffer
                                                            sampling,
                                                            out_stats);
         case RAY_TRACING_3D_INTEGRATOR_EMISSION_TRANSPARENCY:
-            return runtime_native_3d_render_shade_emission_transparency(luminance_buffer,
-                                                                        luminance_stride,
+            return runtime_native_3d_render_shade_emission_transparency(radiance_buffer,
+                                                                        radiance_stride,
                                                                         width,
                                                                         height,
                                                                         start_x,
@@ -577,6 +728,18 @@ static bool runtime_native_3d_render_dispatch_integrator(float* luminance_buffer
                                                                         sampling,
                                                                         out_stats);
         case RAY_TRACING_3D_INTEGRATOR_DISNEY:
+            return runtime_native_3d_render_shade_disney(radiance_buffer,
+                                                         radiance_stride,
+                                                         width,
+                                                         height,
+                                                         start_x,
+                                                         start_y,
+                                                         end_x,
+                                                         end_y,
+                                                         scene,
+                                                         projector,
+                                                         sampling,
+                                                         out_stats);
         default:
             return false;
     }
@@ -666,7 +829,7 @@ bool RuntimeNative3DRenderPreparedRegion(uint8_t* pixel_buffer,
                                          int end_x,
                                          int end_y,
                                          RuntimeNative3DRenderStats* out_stats) {
-    float* luminance_buffer = NULL;
+    float* radiance_buffer = NULL;
     const int region_width = end_x - start_x;
     const int region_height = end_y - start_y;
     bool ok = false;
@@ -676,47 +839,48 @@ bool RuntimeNative3DRenderPreparedRegion(uint8_t* pixel_buffer,
     }
     if (!pixel_buffer || !frame || !frame->valid) return false;
     if (region_width <= 0 || region_height <= 0) return true;
-    luminance_buffer =
-        (float*)calloc((size_t)region_width * (size_t)region_height, sizeof(*luminance_buffer));
-    if (!luminance_buffer) return false;
-    ok = RuntimeNative3DRenderPreparedRegionLuminance(luminance_buffer,
-                                                      region_width,
-                                                      integrator_id,
-                                                      frame,
-                                                      start_x,
-                                                      start_y,
-                                                      end_x,
-                                                      end_y,
-                                                      out_stats);
+    radiance_buffer = (float*)calloc((size_t)region_width * (size_t)region_height *
+                                         RUNTIME_NATIVE_3D_RADIANCE_CHANNELS,
+                                     sizeof(*radiance_buffer));
+    if (!radiance_buffer) return false;
+    ok = RuntimeNative3DRenderPreparedRegionRadianceRGB(radiance_buffer,
+                                                        region_width,
+                                                        integrator_id,
+                                                        frame,
+                                                        start_x,
+                                                        start_y,
+                                                        end_x,
+                                                        end_y,
+                                                        out_stats);
     if (ok) {
-        runtime_native_3d_render_resolve_luminance_region_to_pixels(pixel_buffer,
-                                                                    frame->width,
-                                                                    luminance_buffer,
-                                                                    region_width,
-                                                                    start_x,
-                                                                    start_y,
-                                                                    end_x,
-                                                                    end_y);
+        RuntimeNative3DResolveRadianceRegionToPixels(pixel_buffer,
+                                                     frame->width,
+                                                     radiance_buffer,
+                                                     region_width,
+                                                     start_x,
+                                                     start_y,
+                                                     end_x,
+                                                     end_y);
     }
-    free(luminance_buffer);
+    free(radiance_buffer);
     return ok;
 }
 
-bool RuntimeNative3DRenderPreparedRegionLuminance(float* luminance_buffer,
-                                                  int luminance_stride,
-                                                  RayTracing3DIntegratorId integrator_id,
-                                                  const RuntimeNative3DPreparedFrame* frame,
-                                                  int start_x,
-                                                  int start_y,
-                                                  int end_x,
-                                                  int end_y,
-                                                  RuntimeNative3DRenderStats* out_stats) {
+bool RuntimeNative3DRenderPreparedRegionRadianceRGB(float* radiance_buffer,
+                                                    int radiance_stride,
+                                                    RayTracing3DIntegratorId integrator_id,
+                                                    const RuntimeNative3DPreparedFrame* frame,
+                                                    int start_x,
+                                                    int start_y,
+                                                    int end_x,
+                                                    int end_y,
+                                                    RuntimeNative3DRenderStats* out_stats) {
     if (out_stats) {
         memset(out_stats, 0, sizeof(*out_stats));
     }
-    if (!luminance_buffer || luminance_stride <= 0 || !frame || !frame->valid) return false;
-    return runtime_native_3d_render_dispatch_integrator(luminance_buffer,
-                                                        luminance_stride,
+    if (!radiance_buffer || radiance_stride <= 0 || !frame || !frame->valid) return false;
+    return runtime_native_3d_render_dispatch_integrator(radiance_buffer,
+                                                        radiance_stride,
                                                         integrator_id,
                                                         frame->width,
                                                         frame->height,
@@ -728,6 +892,54 @@ bool RuntimeNative3DRenderPreparedRegionLuminance(float* luminance_buffer,
                                                         &frame->projector,
                                                         &frame->sampling,
                                                         out_stats);
+}
+
+bool RuntimeNative3DRenderPreparedRegionLuminance(float* luminance_buffer,
+                                                  int luminance_stride,
+                                                  RayTracing3DIntegratorId integrator_id,
+                                                  const RuntimeNative3DPreparedFrame* frame,
+                                                  int start_x,
+                                                  int start_y,
+                                                  int end_x,
+                                                  int end_y,
+                                                  RuntimeNative3DRenderStats* out_stats) {
+    float* radiance_buffer = NULL;
+    const int region_width = end_x - start_x;
+    const int region_height = end_y - start_y;
+    bool ok = false;
+    if (out_stats) {
+        memset(out_stats, 0, sizeof(*out_stats));
+    }
+    if (!luminance_buffer || luminance_stride <= 0 || !frame || !frame->valid) return false;
+    if (region_width <= 0 || region_height <= 0) return true;
+    radiance_buffer = (float*)calloc((size_t)region_width * (size_t)region_height *
+                                         RUNTIME_NATIVE_3D_RADIANCE_CHANNELS,
+                                     sizeof(*radiance_buffer));
+    if (!radiance_buffer) return false;
+    ok = RuntimeNative3DRenderPreparedRegionRadianceRGB(radiance_buffer,
+                                                        region_width,
+                                                        integrator_id,
+                                                        frame,
+                                                        start_x,
+                                                        start_y,
+                                                        end_x,
+                                                        end_y,
+                                                        out_stats);
+    if (ok) {
+        for (int y = 0; y < region_height; ++y) {
+            for (int x = 0; x < region_width; ++x) {
+                const size_t dst_index = (size_t)y * (size_t)luminance_stride + (size_t)x;
+                const size_t src_base =
+                    ((size_t)y * (size_t)region_width + (size_t)x) *
+                    (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
+                luminance_buffer[dst_index] = 0.2126f * radiance_buffer[src_base] +
+                                              0.7152f * radiance_buffer[src_base + 1u] +
+                                              0.0722f * radiance_buffer[src_base + 2u];
+            }
+        }
+    }
+    free(radiance_buffer);
+    return ok;
 }
 
 bool RuntimeNative3DPrepareFrameTileOccupancy(RuntimeNative3DPreparedFrame* frame, int tile_size) {
@@ -820,7 +1032,9 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
     RuntimeNative3DPreparedFrame frame = {0};
     RuntimeNative3DTemporalAccumulation accumulation = {0};
     RuntimeNative3DAdaptiveSamplingMask adaptive_mask = {0};
-    float* subpass_luminance = NULL;
+    RuntimeNative3DFeatureBuffer feature_buffer = {0};
+    float* subpass_radiance = NULL;
+    float* resolved_radiance = NULL;
     bool ok = false;
     const int effective_temporal_frames =
         (integrator_id == RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT || temporal_frames <= 1)
@@ -828,15 +1042,26 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
             : temporal_frames;
     const bool use_adaptive_sampling =
         RuntimeNative3DAdaptiveSampling_ShouldUse(integrator_id, effective_temporal_frames);
+    const bool use_denoise =
+        RuntimeNative3DDenoise_ShouldApply(integrator_id,
+                                           effective_temporal_frames,
+                                           animSettings.disneyDenoiseEnabled);
 
     if (!pixel_buffer || width <= 0 || height <= 0) return false;
     if (out_stats) {
         memset(out_stats, 0, sizeof(*out_stats));
     }
 
-    memset(pixel_buffer, 0, (size_t)width * (size_t)height);
-    subpass_luminance = (float*)calloc((size_t)width * (size_t)height, sizeof(*subpass_luminance));
-    if (!subpass_luminance) {
+    RuntimeNative3DFillPixelBufferEnvironment(pixel_buffer, (size_t)width * (size_t)height);
+    subpass_radiance = (float*)calloc((size_t)width * (size_t)height *
+                                          RUNTIME_NATIVE_3D_RADIANCE_CHANNELS,
+                                      sizeof(*subpass_radiance));
+    resolved_radiance = (float*)calloc((size_t)width * (size_t)height *
+                                           RUNTIME_NATIVE_3D_RADIANCE_CHANNELS,
+                                       sizeof(*resolved_radiance));
+    if (!subpass_radiance || !resolved_radiance) {
+        free(subpass_radiance);
+        free(resolved_radiance);
         return false;
     }
     ok = RuntimeNative3DPrepareFrameWithSampling(&frame,
@@ -847,17 +1072,36 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
                                                  live_light_y,
                                                  sampling);
     if (!ok) {
-        free(subpass_luminance);
+        free(subpass_radiance);
+        free(resolved_radiance);
         return false;
     }
     RuntimeNative3DTemporalAccumulation_Init(&accumulation);
     ok = RuntimeNative3DTemporalAccumulation_Ensure(&accumulation, width, height);
     if (!ok) {
-        free(subpass_luminance);
+        free(subpass_radiance);
+        free(resolved_radiance);
         RuntimeNative3DPreparedFrame_Free(&frame);
         return false;
     }
     RuntimeNative3DTemporalAccumulation_Clear(&accumulation);
+    RuntimeNative3DFeatureBuffer_Init(&feature_buffer);
+    if (use_denoise &&
+        (!RuntimeNative3DFeatureBuffer_Ensure(&feature_buffer, width, height) ||
+         !RuntimeNative3DFeatureBuffer_RenderRegion(&feature_buffer,
+                                                   &frame.scene,
+                                                   &frame.projector,
+                                                   0,
+                                                   0,
+                                                   width,
+                                                   height))) {
+        free(subpass_radiance);
+        free(resolved_radiance);
+        RuntimeNative3DFeatureBuffer_Free(&feature_buffer);
+        RuntimeNative3DTemporalAccumulation_Free(&accumulation);
+        RuntimeNative3DPreparedFrame_Free(&frame);
+        return false;
+    }
     if (use_adaptive_sampling) {
         RuntimeNative3DAdaptiveSamplingMask_Init(&adaptive_mask);
         ok = RuntimeNative3DAdaptiveSamplingMask_Ensure(&adaptive_mask, width, height) &&
@@ -869,7 +1113,9 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
                                                                     width,
                                                                     height);
         if (!ok) {
-            free(subpass_luminance);
+            free(subpass_radiance);
+            free(resolved_radiance);
+            RuntimeNative3DFeatureBuffer_Free(&feature_buffer);
             RuntimeNative3DAdaptiveSamplingMask_Free(&adaptive_mask);
             RuntimeNative3DTemporalAccumulation_Free(&accumulation);
             RuntimeNative3DPreparedFrame_Free(&frame);
@@ -887,11 +1133,14 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
         if (active_mask && !RuntimeNative3DAdaptiveSampling_HasActiveSamples(&adaptive_mask)) {
             break;
         }
-        memset(subpass_luminance, 0, (size_t)width * (size_t)height * sizeof(*subpass_luminance));
+        memset(subpass_radiance,
+               0,
+               (size_t)width * (size_t)height * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS *
+                   sizeof(*subpass_radiance));
         subpass_frame.sampling =
             runtime_native_3d_render_resolve_subpass_sampling(sampling, (uint32_t)subpass);
-        ok = RuntimeNative3DAdaptiveSampling_RenderPreparedRegionLuminanceMasked(
-            subpass_luminance,
+        ok = RuntimeNative3DAdaptiveSampling_RenderPreparedRegionRadianceRGBMasked(
+            subpass_radiance,
             width,
             integrator_id,
             &subpass_frame,
@@ -906,7 +1155,7 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
             break;
         }
         ok = RuntimeNative3DTemporalAccumulation_AddRegionSamples(&accumulation,
-                                                                  subpass_luminance,
+                                                                  subpass_radiance,
                                                                   width,
                                                                   0,
                                                                   0,
@@ -924,15 +1173,30 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
     }
 
     if (ok) {
-        RuntimeNative3DTemporalAccumulation_ResolveRegionToPixelBuffer(&accumulation,
-                                                                       pixel_buffer,
-                                                                       width,
-                                                                       0,
-                                                                       0,
-                                                                       width,
-                                                                       height);
+        ok = RuntimeNative3DTemporalAccumulation_ResolveRegionToRadianceBuffer(&accumulation,
+                                                                               resolved_radiance,
+                                                                               width,
+                                                                               0,
+                                                                               0,
+                                                                               width,
+                                                                               height);
     }
-    free(subpass_luminance);
+    if (ok && use_denoise) {
+        ok = RuntimeNative3DDenoise_Apply(resolved_radiance, width, &feature_buffer);
+    }
+    if (ok) {
+        RuntimeNative3DResolveRadianceRegionToPixels(pixel_buffer,
+                                                     width,
+                                                     resolved_radiance,
+                                                     width,
+                                                     0,
+                                                     0,
+                                                     width,
+                                                     height);
+    }
+    free(subpass_radiance);
+    free(resolved_radiance);
+    RuntimeNative3DFeatureBuffer_Free(&feature_buffer);
     RuntimeNative3DAdaptiveSamplingMask_Free(&adaptive_mask);
     RuntimeNative3DTemporalAccumulation_Free(&accumulation);
     RuntimeNative3DPreparedFrame_Free(&frame);

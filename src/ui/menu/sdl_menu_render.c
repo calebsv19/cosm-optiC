@@ -582,6 +582,9 @@ void menu_render_build_button_layout(TTF_Font* font,
     int leftColumnRight;
     int centerX;
     int centerMaxWidth;
+    int centerLeftX;
+    int centerRightX;
+    int centerColumnMaxWidth;
     int rightEdge = MENU_WIDTH - MENU_MARGIN_X;
     int footerRightLimit = MENU_WIDTH - MENU_MARGIN_X;
     int leftTopY = TOGGLE_BUTTON_MARGIN_Y;
@@ -672,29 +675,67 @@ void menu_render_build_button_layout(TTF_Font* font,
     leftColumnRight = max_int(leftColumnRight, layout.loadSceneRect.x + layout.loadSceneRect.w);
     leftColumnRight = max_int(leftColumnRight, layout.inputRootApplyRect.x + layout.inputRootApplyRect.w);
     centerX = leftColumnRight + 24;
-    centerMaxWidth = (screen_layout ? (screen_layout->centerControlsRect.x + screen_layout->centerControlsRect.w) : SLIDER_MARGIN_X) - centerX - 16;
+    centerMaxWidth =
+        (screen_layout ? (screen_layout->centerControlsRect.x + screen_layout->centerControlsRect.w)
+                       : SLIDER_MARGIN_X) -
+        centerX - 16;
     if (centerMaxWidth < 120) centerMaxWidth = 120;
     if (screen_layout && centerX < screen_layout->centerControlsRect.x + 12) {
         centerX = screen_layout->centerControlsRect.x + 12;
     }
-    layout.falloffRect = build_adaptive_button_rect(font, centerX,
+    centerLeftX = centerX;
+    centerRightX = centerX + centerMaxWidth / 2;
+    centerColumnMaxWidth = centerMaxWidth;
+    if (screen_layout) {
+        int content_left = screen_layout->centerControlsRect.x + 12;
+        int content_right = screen_layout->centerControlsRect.x +
+                            screen_layout->centerControlsRect.w - 12;
+        int content_width = content_right - content_left;
+        int column_gap = 14;
+        int column_width = (content_width - column_gap) / 2;
+        if (column_width < 120) {
+            column_width = 120;
+        }
+        centerLeftX = content_left;
+        centerRightX = centerLeftX + column_width + column_gap;
+        centerColumnMaxWidth = column_width;
+    } else {
+        int column_gap = 14;
+        centerColumnMaxWidth = (centerMaxWidth - column_gap) / 2;
+        if (centerColumnMaxWidth < 120) {
+            centerColumnMaxWidth = 120;
+        }
+        centerRightX = centerLeftX + centerColumnMaxWidth + column_gap;
+    }
+    layout.falloffRect = build_adaptive_button_rect(font, centerLeftX,
                                                     screen_layout ? (screen_layout->centerControlsRect.y + MENU_PANEL_CHROME_TITLE_BAND + 12) : (TOGGLE_BUTTON_MARGIN_Y + 10),
                                                     FORWARD_FALLOFF_BUTTON_WIDTH, FORWARD_FALLOFF_BUTTON_HEIGHT,
-                                                    "Quadratic (1/r^2)", centerMaxWidth);
-    layout.tileRect = build_adaptive_button_rect(font, centerX,
+                                                    "Quadratic (1/r^2)", centerColumnMaxWidth);
+    layout.tileRect = build_adaptive_button_rect(font, centerLeftX,
                                                  layout.falloffRect.y + layout.falloffRect.h + FORWARD_FALLOFF_BUTTON_SPACING,
                                                  TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT,
                                                  animSettings.useTiledRenderer ? "Tile Renderer: ON" : "Tile Renderer: OFF",
-                                                 centerMaxWidth);
-    layout.tilePreviewRect = build_adaptive_button_rect(font, centerX,
+                                                 centerColumnMaxWidth);
+    layout.tilePreviewRect = build_adaptive_button_rect(font, centerLeftX,
                                                         layout.tileRect.y + layout.tileRect.h + FORWARD_FALLOFF_BUTTON_SPACING,
                                                         TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT,
                                                         animSettings.tilePreviewEnabled ? "Tile Preview: ON" : "Tile Preview: OFF",
-                                                        centerMaxWidth);
-    layout.lightHeightRect = build_adaptive_button_rect(font, centerX,
-                                                        layout.tilePreviewRect.y + layout.tilePreviewRect.h + FORWARD_FALLOFF_BUTTON_SPACING,
+                                                        centerColumnMaxWidth);
+    layout.denoiseRect = build_adaptive_button_rect(font, centerRightX,
+                                                    layout.falloffRect.y,
+                                                    TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT,
+                                                    animSettings.disneyDenoiseEnabled ? "Disney Denoise: ON"
+                                                                                     : "Disney Denoise: OFF",
+                                                    centerColumnMaxWidth);
+    layout.topFillRect = build_adaptive_button_rect(font, centerRightX,
+                                                    layout.denoiseRect.y + layout.denoiseRect.h + FORWARD_FALLOFF_BUTTON_SPACING,
+                                                    TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT,
+                                                    animSettings.topFillLightEnabled ? "Top Fill: ON" : "Top Fill: OFF",
+                                                    centerColumnMaxWidth);
+    layout.lightHeightRect = build_adaptive_button_rect(font, centerRightX,
+                                                        layout.topFillRect.y + layout.topFillRect.h + FORWARD_FALLOFF_BUTTON_SPACING,
                                                         TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT,
-                                                        "Light Height", centerMaxWidth);
+                                                        "Light Height", centerColumnMaxWidth);
 
     layout.startRect = build_adaptive_button_rect_right(font, rightEdge,
                                                         screen_layout ? (routeTopY + (BOTTOM_BUTTON_HEIGHT_START + 8) * 3) : BOTTOM_BUTTON_MARGIN_Y_START,
@@ -851,6 +892,13 @@ void menu_render_frame(SDL_Renderer* renderer, TTF_Font* font, MenuRuntimeState*
 
     const char* previewLabel = animSettings.tilePreviewEnabled ? "Tile Preview: ON" : "Tile Preview: OFF";
     menu_render_draw_button_rect(renderer, font, &buttons.tilePreviewRect, previewLabel, animSettings.tilePreviewEnabled);
+
+    const char* denoiseLabel = animSettings.disneyDenoiseEnabled ? "Disney Denoise: ON"
+                                                                 : "Disney Denoise: OFF";
+    menu_render_draw_button_rect(renderer, font, &buttons.denoiseRect, denoiseLabel, animSettings.disneyDenoiseEnabled);
+
+    const char* topFillLabel = animSettings.topFillLightEnabled ? "Top Fill: ON" : "Top Fill: OFF";
+    menu_render_draw_button_rect(renderer, font, &buttons.topFillRect, topFillLabel, animSettings.topFillLightEnabled);
 
     if (buttons.showLightHeight) {
         char heightLabel[64];

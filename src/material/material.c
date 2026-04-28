@@ -75,7 +75,7 @@ void MaterialLibraryInit(MaterialLibrary* lib) {
         .reflectivity = 0.0f,
         .roughness = 1.0f,
         .base_color = vec3(1.0f, 1.0f, 1.0f),
-        .emissive = vec3(1.0f, 1.0f, 1.0f),
+        .emissive = vec3(0.5f, 0.5f, 0.5f),
         .metallic = 0.0f,
         .transparency = 0.0f
     };
@@ -90,7 +90,7 @@ void MaterialLibraryInit(MaterialLibrary* lib) {
         .base_color = vec3(1.0f, 1.0f, 1.0f),
         .emissive = vec3(0.0f, 0.0f, 0.0f),
         .metallic = 0.0f,
-        .transparency = 0.9f
+        .transparency = 0.75f
     };
     MaterialAdd(lib, transparent); // MATERIAL_PRESET_TRANSPARENT
 }

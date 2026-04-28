@@ -107,6 +107,79 @@ CLI_BIN_DIR := tools/cli/bin
 CLI_TOOLS := $(CLI_BIN_DIR)/shape_asset_tool $(CLI_BIN_DIR)/shape_import_tool $(CLI_BIN_DIR)/shape_sanity_tool
 RAY_TRACE_TOOL_SRC := $(SRC_DIR)/tools/cli/ray_trace_tool.c
 RAY_TRACE_TOOL_BIN := ray_trace_tool
+NATIVE3D_AUDIT_SRC := $(SRC_DIR)/tools/cli/native3d_render_audit.c
+NATIVE3D_AUDIT_BIN := $(BUILD_DIR)/tools/cli/native3d_render_audit
+NATIVE3D_AUDIT_OBJ := $(BUILD_DIR)/tools/cli/native3d_render_audit.o
+NATIVE3D_AUDIT_DEPS = \
+	$(BUILD_DIR)/render/materials/material_bsdf.o \
+	$(BUILD_DIR)/material/material_manager.o \
+	$(BUILD_DIR)/material/material.o \
+	$(BUILD_DIR)/render/integrators/integrator_common.o \
+	$(BUILD_DIR)/render/integrators/hybrid/integrator_tonemap.o \
+	$(BUILD_DIR)/render/adapters/space_mode_adapter.o \
+	$(BUILD_DIR)/render/helpers/ray_tracing_integrator_catalog.o \
+	$(BUILD_DIR)/render/backend/ray_tracing_mode_backend.o \
+	$(BUILD_DIR)/render/runtime_camera_3d_rays.o \
+	$(BUILD_DIR)/render/runtime_direct_light_3d.o \
+	$(BUILD_DIR)/render/runtime_diffuse_bounce_3d.o \
+	$(BUILD_DIR)/render/runtime_emissive_direct_3d.o \
+	$(BUILD_DIR)/render/runtime_light_emitter_3d.o \
+	$(BUILD_DIR)/render/runtime_disney_3d.o \
+	$(BUILD_DIR)/render/runtime_emission_transparency_3d.o \
+	$(BUILD_DIR)/render/runtime_native_3d_feature_buffer.o \
+	$(BUILD_DIR)/render/runtime_native_3d_denoise.o \
+	$(BUILD_DIR)/render/runtime_material_payload_3d.o \
+	$(BUILD_DIR)/render/runtime_material_response_3d.o \
+	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render.o \
+	$(BUILD_DIR)/render/runtime_native_3d_resolution.o \
+	$(BUILD_DIR)/render/runtime_native_3d_temporal_accum.o \
+	$(BUILD_DIR)/render/runtime_native_3d_tile_occupancy.o \
+	$(BUILD_DIR)/render/runtime_ray_3d.o \
+	$(BUILD_DIR)/render/runtime_scene_3d.o \
+	$(BUILD_DIR)/render/runtime_scene_3d_samples.o \
+	$(BUILD_DIR)/render/runtime_scene_3d_builder.o \
+	$(BUILD_DIR)/render/runtime_visibility_3d.o \
+	$(BUILD_DIR)/scene/object_manager.o \
+	$(BUILD_DIR)/geo/shape_adapter.o \
+	$(BUILD_DIR)/geo/geolib/shape_asset.o \
+	$(BUILD_DIR)/geo/geolib/shape_library.o \
+	$(BUILD_DIR)/import/shape_import.o \
+	$(BUILD_DIR)/import/fluid_import.o \
+	$(BUILD_DIR)/import/fluid_pack_import.o \
+	$(BUILD_DIR)/import/scene_bundle_import.o \
+	$(BUILD_DIR)/import/runtime_scene_bridge_json_utils.o \
+	$(BUILD_DIR)/import/runtime_scene_bridge.o \
+	$(BUILD_DIR)/path/path_system.o \
+	$(BUILD_DIR)/path/path_arc_length.o \
+	$(BUILD_DIR)/camera/camera.o \
+	$(BUILD_DIR)/camera/camera_path_3d.o \
+	$(BUILD_DIR)/app/animation_fluid_scene.o \
+	$(BUILD_DIR)/app/data_paths.o \
+	$(BUILD_DIR)/config/core/config_runtime_paths.o \
+	$(BUILD_DIR)/config/io/config_file_io.o \
+	$(BUILD_DIR)/config/scene/config_scene_path_io.o \
+	$(BUILD_DIR)/config/core/config_manager.o \
+	$(BUILD_DIR)/render/fluid/fluid_state.o \
+	$(BUILD_DIR)/tools/ShapeLib/shape_core.o \
+	$(BUILD_DIR)/tools/ShapeLib/shape_json.o \
+	$(BUILD_DIR)/tools/ShapeLib/shape_flatten.o \
+	$(BUILD_DIR)/timer_hud_external/cJSON.o \
+	$(CORE_BASE_OBJS) \
+	$(CORE_IO_OBJS) \
+	$(CORE_DATA_OBJS) \
+	$(CORE_PACK_OBJS) \
+	$(CORE_TIME_OBJS) \
+	$(CORE_SCENE_OBJS) \
+	$(CORE_SCENE_COMPILE_OBJS) \
+	$(CORE_OBJECT_OBJS) \
+	$(CORE_UNITS_OBJS) \
+	$(CORE_SPACE_OBJS) \
+	$(CORE_THEME_OBJS) \
+	$(CORE_FONT_OBJS) \
+	$(patsubst $(VK_RENDERER_DIR)/src/%.c,$(BUILD_DIR)/vk_renderer/%.o,$(VK_RENDERER_SRCS)) \
+	$(KIT_VIZ_OBJS) \
+	$(KIT_RUNTIME_DIAG_OBJS)
 
 VIDEO_FRAMES_DIR ?= data/runtime/frames/default
 VIDEO_OUTPUT ?= data/runtime/videos/output.mp4
@@ -124,6 +197,7 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials.o \
 	$(BUILD_DIR)/tests/test_runtime_diffuse_temporal.o \
 	$(BUILD_DIR)/tests/test_runtime_emission_transparency.o \
+	$(BUILD_DIR)/tests/test_runtime_native_3d_denoise.o \
 	$(BUILD_DIR)/tests/test_runtime_native_3d_render.o \
 	$(BUILD_DIR)/tests/test_runtime_render_metrics_export.o \
 	$(BUILD_DIR)/tests/test_runtime_preview_editor.o \
@@ -174,11 +248,15 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/adapters/space_mode_adapter.o \
 	$(BUILD_DIR)/render/helpers/ray_tracing_integrator_catalog.o \
 	$(BUILD_DIR)/render/backend/ray_tracing_mode_backend.o \
-	$(BUILD_DIR)/render/runtime_camera_3d_rays.o \
-	$(BUILD_DIR)/render/runtime_direct_light_3d.o \
-	$(BUILD_DIR)/render/runtime_diffuse_bounce_3d.o \
-	$(BUILD_DIR)/render/runtime_light_emitter_3d.o \
-	$(BUILD_DIR)/render/runtime_emission_transparency_3d.o \
+		$(BUILD_DIR)/render/runtime_camera_3d_rays.o \
+		$(BUILD_DIR)/render/runtime_direct_light_3d.o \
+		$(BUILD_DIR)/render/runtime_diffuse_bounce_3d.o \
+		$(BUILD_DIR)/render/runtime_emissive_direct_3d.o \
+		$(BUILD_DIR)/render/runtime_light_emitter_3d.o \
+		$(BUILD_DIR)/render/runtime_disney_3d.o \
+		$(BUILD_DIR)/render/runtime_emission_transparency_3d.o \
+	$(BUILD_DIR)/render/runtime_native_3d_feature_buffer.o \
+	$(BUILD_DIR)/render/runtime_native_3d_denoise.o \
 	$(BUILD_DIR)/render/runtime_material_payload_3d.o \
 	$(BUILD_DIR)/render/runtime_material_response_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \
@@ -192,6 +270,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder.o \
 	$(BUILD_DIR)/render/runtime_visibility_3d.o \
 	$(BUILD_DIR)/editor/editor_mode_router.o \
+	$(BUILD_DIR)/editor/object_editor_object_ops.o \
 	$(BUILD_DIR)/editor/scene_editor_control_surface.o \
 	$(BUILD_DIR)/editor/scene_editor_tool_state.o \
 	$(BUILD_DIR)/editor/scene_editor_runtime_scene_persistence.o \
@@ -342,7 +421,7 @@ STABLE_TEST_TARGETS := \
 
 LEGACY_TEST_TARGETS :=
 
-.PHONY: all clean run run-ide-theme run-daw-theme run-headless-smoke visual-harness package-desktop package-desktop-smoke package-desktop-self-test package-desktop-copy-desktop package-desktop-sync package-desktop-open package-desktop-remove package-desktop-refresh release-contract release-clean release-build release-bundle-audit release-sign release-verify release-verify-signed release-notarize release-staple release-verify-notarized release-artifact release-distribute release-desktop-refresh debug format video release relrun test test-stable test-legacy test-shared-theme-font-adapter test-manifest-to-trace-export test-fluid-pack-contract-parity test-trio-scene-contract-diff
+.PHONY: all clean run run-ide-theme run-daw-theme run-headless-smoke visual-harness package-desktop package-desktop-smoke package-desktop-self-test package-desktop-copy-desktop package-desktop-sync package-desktop-open package-desktop-remove package-desktop-refresh release-contract release-clean release-build release-bundle-audit release-sign release-verify release-verify-signed release-notarize release-staple release-verify-notarized release-artifact release-distribute release-desktop-refresh debug format video release relrun test test-stable test-legacy test-shared-theme-font-adapter test-manifest-to-trace-export test-fluid-pack-contract-parity test-trio-scene-contract-diff native3d-render-audit
 
 all: $(TARGET)
 
@@ -383,6 +462,13 @@ $(CLI_BIN_DIR)/shape_sanity_tool: build/tools/cli/shape_sanity_tool.o
 
 ray_trace_tool: $(RAY_TRACE_TOOL_SRCS)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g $(RAY_TRACE_TOOL_INCS) -o $(RAY_TRACE_TOOL_BIN) $(RAY_TRACE_TOOL_SRCS) -lm
+
+native3d-render-audit: $(NATIVE3D_AUDIT_BIN)
+	@$(NATIVE3D_AUDIT_BIN)
+
+$(NATIVE3D_AUDIT_BIN): $(NATIVE3D_AUDIT_OBJ) $(NATIVE3D_AUDIT_DEPS)
+	@mkdir -p $(dir $@)
+	$(CC) $(NATIVE3D_AUDIT_OBJ) $(NATIVE3D_AUDIT_DEPS) -o $@ $(LDFLAGS)
 
 manifest_to_trace: ray_trace_tool
 	@if [ -z "$(MANIFEST)" ] || [ -z "$(TRACE)" ]; then \

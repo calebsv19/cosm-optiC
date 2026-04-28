@@ -257,9 +257,9 @@ static void sync_env_slider_from_settings(MenuRuntimeState* state) {
     if (state->draggingSlider && state->selectedSlider == &state->envSliderValue) {
         return;
     }
-    state->envSliderValue = (int)lround(animSettings.environmentBrightness * 100.0);
+    state->envSliderValue = (int)lround(animSettings.environmentBrightness);
     if (state->envSliderValue < 0) state->envSliderValue = 0;
-    if (state->envSliderValue > 200) state->envSliderValue = 200;
+    if (state->envSliderValue > 255) state->envSliderValue = 255;
 }
 
 static void sync_cache_slider_from_settings(MenuRuntimeState* state) {
@@ -398,8 +398,8 @@ void menu_state_apply_special_slider_rules(MenuRuntimeState* state, int* target)
         if (animSettings.pathMaxDepth < 1) animSettings.pathMaxDepth = 1;
     } else if (target == &state->envSliderValue) {
         if (state->envSliderValue < 0) state->envSliderValue = 0;
-        if (state->envSliderValue > 200) state->envSliderValue = 200;
-        animSettings.environmentBrightness = state->envSliderValue / 100.0;
+        if (state->envSliderValue > 255) state->envSliderValue = 255;
+        animSettings.environmentBrightness = (double)state->envSliderValue;
     } else if (target == &state->cacheWeightSliderValue) {
         if (state->cacheWeightSliderValue < 0) state->cacheWeightSliderValue = 0;
         if (state->cacheWeightSliderValue > 100) state->cacheWeightSliderValue = 100;
@@ -560,6 +560,8 @@ void menu_state_reset_defaults(MenuRuntimeState* state) {
     animSettings.cacheContributionWeight = 1.0;
     animSettings.bsdfModel = 1;
     animSettings.lightIntensity = 5.0;
+    animSettings.topFillLightEnabled = false;
+    animSettings.disneyDenoiseEnabled = true;
     animSettings.spaceMode = SPACE_MODE_2D;
     animSettings.sceneSource = SCENE_SOURCE_CONFIG_2D;
     animSettings.useFluidScene = false;

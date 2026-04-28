@@ -15,6 +15,20 @@ float TonemapCurve(float x)
     return m;
 }
 
+float TonemapCurveWithFloor(float x, float floor)
+{
+    float clamped_floor = clamp01(floor);
+    float tone = TonemapCurve(x);
+    return clamped_floor + ((1.0f - clamped_floor) * tone);
+}
+
+uint8_t TonemapCurveToByteWithFloor(float x, uint8_t floor_byte)
+{
+    float floor = (float)floor_byte / 255.0f;
+    float tone = TonemapCurveWithFloor(x, floor);
+    return (uint8_t)lroundf(clamp01(tone) * 255.0f);
+}
+
 void TonemapTiles(TonemapContext* ctx)
 {
     if (!ctx || !ctx->tiles || !ctx->pixelBuffer)

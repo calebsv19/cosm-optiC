@@ -182,7 +182,7 @@ static int test_menu_button_layout_respects_owned_screen_zones(void) {
                 test_rect_right(&buttons.inputRootApplyRect) <= test_rect_right(&screen.leftPanelRect));
     assert_true("menu_buttons_center_controls_inside_center_zone",
                 buttons.falloffRect.x >= screen.centerControlsRect.x &&
-                test_rect_right(&buttons.tilePreviewRect) <= test_rect_right(&screen.centerControlsRect));
+                test_rect_right(&buttons.topFillRect) <= test_rect_right(&screen.centerControlsRect));
     assert_true("menu_buttons_route_stack_inside_route_zone",
                 buttons.spaceModeRect.x >= screen.routeStackRect.x &&
                 test_rect_right(&buttons.previewRect) <= test_rect_right(&screen.routeStackRect) &&
@@ -279,9 +279,9 @@ static int test_integrator_catalog_menu_routes_by_space_mode(void) {
     menu_state = RayTracingIntegratorCatalog_BuildMenuState(&animSettings);
     assert_true("integrator_menu_3d_uses_3d_catalog", menu_state.uses3DCatalog);
     assert_true("integrator_menu_3d_label",
-                strcmp(menu_state.buttonLabel, "Integrator: 3D Direct Light") == 0);
+                strcmp(menu_state.buttonLabel, "Integrator: 3D Disney") == 0);
     assert_true("integrator_menu_3d_no_path_toggles", !menu_state.showPathToggles);
-    assert_true("integrator_menu_3d_visible_count_four", menu_state.visibleCount == 4);
+    assert_true("integrator_menu_3d_visible_count_five", menu_state.visibleCount == 5);
 
     animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE;
     menu_state = RayTracingIntegratorCatalog_BuildMenuState(&animSettings);
@@ -305,6 +305,18 @@ static int test_integrator_catalog_menu_routes_by_space_mode(void) {
     menu_layout_build_base(NULL, &state, &screen);
     menu_render_build_button_layout(NULL, &state, &screen, &buttons);
     assert_true("integrator_menu_3d_layout_no_path_toggles", !buttons.showPathToggles);
+    assert_true("integrator_menu_top_fill_button_in_center_controls",
+                buttons.topFillRect.x >= screen.centerControlsRect.x &&
+                buttons.topFillRect.x + buttons.topFillRect.w <=
+                    screen.centerControlsRect.x + screen.centerControlsRect.w);
+    assert_true("integrator_menu_denoise_button_in_center_controls",
+                buttons.denoiseRect.x >= screen.centerControlsRect.x &&
+                buttons.denoiseRect.x + buttons.denoiseRect.w <=
+                    screen.centerControlsRect.x + screen.centerControlsRect.w);
+    assert_true("integrator_menu_denoise_button_right_of_tile_column",
+                buttons.denoiseRect.x > buttons.tilePreviewRect.x);
+    assert_true("integrator_menu_top_fill_button_below_denoise",
+                buttons.topFillRect.y >= buttons.denoiseRect.y + buttons.denoiseRect.h);
 
     animSettings.spaceMode = SPACE_MODE_2D;
     menu_state = RayTracingIntegratorCatalog_BuildMenuState(&animSettings);
@@ -313,6 +325,39 @@ static int test_integrator_catalog_menu_routes_by_space_mode(void) {
                 strcmp(menu_state.buttonLabel, "Integrator: Hybrid") == 0);
     assert_true("integrator_menu_2d_show_path_toggles", menu_state.showPathToggles);
 
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_menu_slider_layout_includes_environment_control(void) {
+    AnimationConfig saved_anim = animSettings;
+    MenuRuntimeState state;
+    MenuScreenLayout screen;
+    SliderLayout sliders;
+    bool found_environment = false;
+
+    memset(&state, 0, sizeof(state));
+    memset(&screen, 0, sizeof(screen));
+    memset(&sliders, 0, sizeof(sliders));
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.environmentBrightness = 128.0;
+
+    menu_layout_build_base(NULL, &state, &screen);
+    menu_render_build_slider_layout(NULL, &state, &screen, &sliders);
+
+    for (size_t i = 0; i < sliders.count; ++i) {
+        if (sliders.items[i].label &&
+            strcmp(sliders.items[i].label, "Environment") == 0 &&
+            sliders.items[i].value == &state.envSliderValue) {
+            found_environment = true;
+            break;
+        }
+    }
+
+    assert_true("menu_slider_layout_environment_present", found_environment);
+    assert_true("menu_slider_layout_environment_value_synced",
+                state.envSliderValue == 128);
     animSettings = saved_anim;
     return 0;
 }
@@ -328,6 +373,10 @@ static int test_integrator_catalog_cycle_preserves_inactive_mode(void) {
     RayTracingIntegratorCatalog_CycleActiveSelection(&animSettings);
     assert_true("integrator_cycle_3d_keeps_2d",
                 animSettings.integratorMode == RAY_TRACING_2D_INTEGRATOR_HYBRID);
+    assert_true("integrator_cycle_3d_wraps_disney_to_direct_light",
+                animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT);
+
+    RayTracingIntegratorCatalog_CycleActiveSelection(&animSettings);
     assert_true("integrator_cycle_3d_advanced_to_diffuse_bounce",
                 animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE);
 
@@ -341,15 +390,15 @@ static int test_integrator_catalog_cycle_preserves_inactive_mode(void) {
                     RAY_TRACING_3D_INTEGRATOR_EMISSION_TRANSPARENCY);
 
     RayTracingIntegratorCatalog_CycleActiveSelection(&animSettings);
-    assert_true("integrator_cycle_3d_wraps_to_direct_light",
-                animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT);
+    assert_true("integrator_cycle_3d_advanced_to_disney",
+                animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DISNEY);
 
     animSettings.spaceMode = SPACE_MODE_2D;
     RayTracingIntegratorCatalog_CycleActiveSelection(&animSettings);
     assert_true("integrator_cycle_2d_advanced_to_direct",
                 animSettings.integratorMode == RAY_TRACING_2D_INTEGRATOR_DIRECT_LIGHT);
     assert_true("integrator_cycle_2d_keeps_3d",
-                animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT);
+                animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DISNEY);
 
     animSettings = saved_anim;
     return 0;
@@ -550,6 +599,7 @@ int run_test_ui_menu_contract_tests(void) {
     test_menu_batch_panel_layout_centers_inside_batch_zone();
     test_menu_batch_panel_header_does_not_overlap_route_rows();
     test_integrator_catalog_menu_routes_by_space_mode();
+    test_menu_slider_layout_includes_environment_control();
     test_integrator_catalog_cycle_preserves_inactive_mode();
     test_menu_fit_text_to_width_supports_in_place_buffer();
     test_manifest_default_roots_expands_runtime_and_legacy_paths();

@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "render/integrators/integrator_common.h"
+#include "render/runtime_native_3d_render.h"
 
 #if USE_VULKAN
 #include "vk_renderer.h"
@@ -30,6 +31,39 @@ static uint32_t PackLuminanceToABGR(Uint8 value) {
            ((uint32_t)value << 16) |
            ((uint32_t)value << 8) |
            (uint32_t)value;
+}
+
+static void CopyABGRRectToABGR(uint32_t* dstPixels,
+                               int width,
+                               int height,
+                               const Uint8* srcABGR,
+                               const SDL_Rect* dirtyRect) {
+    SDL_Rect rect = {0, 0, width, height};
+    if (!dstPixels || !srcABGR || width <= 0 || height <= 0) return;
+    if (dirtyRect) {
+        rect = *dirtyRect;
+        if (rect.x < 0 || rect.y < 0 ||
+            rect.w <= 0 || rect.h <= 0 ||
+            rect.x + rect.w > width ||
+            rect.y + rect.h > height) {
+            return;
+        }
+    }
+
+    for (int row = 0; row < rect.h; ++row) {
+        int py = rect.y + row;
+        size_t srcBase =
+            ((size_t)py * (size_t)width + (size_t)rect.x) * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+        size_t dstBase = (size_t)py * (size_t)width + (size_t)rect.x;
+        for (int col = 0; col < rect.w; ++col) {
+            size_t srcIndex = srcBase + (size_t)col * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+            dstPixels[dstBase + (size_t)col] =
+                ((uint32_t)srcABGR[srcIndex + 3u] << 24) |
+                ((uint32_t)srcABGR[srcIndex + 2u] << 16) |
+                ((uint32_t)srcABGR[srcIndex + 1u] << 8) |
+                (uint32_t)srcABGR[srcIndex];
+        }
+    }
 }
 
 void RayTracingPreview_CopyLuminanceRectToABGR(uint32_t* dstPixels,
@@ -188,6 +222,78 @@ void RayTracingPreview_ApplySeparableBlur(Uint8* buffer, int width, int height, 
     free(output);
 }
 
+void RayTracingPreview_ApplySeparableBlurABGR(Uint8* buffer, int width, int height, int radius) {
+    if (radius <= 0 || !buffer) return;
+    int kernelSize = radius * 2 + 1;
+    float* kernel = (float*)malloc((size_t)kernelSize * sizeof(float));
+    if (!kernel) return;
+    BuildGaussianKernel(kernel, radius);
+
+    size_t total = (size_t)width * (size_t)height;
+    float* temp = (float*)malloc(total * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES * sizeof(float));
+    float* output = (float*)malloc(total * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES * sizeof(float));
+    if (!temp || !output) {
+        free(kernel);
+        free(temp);
+        free(output);
+        return;
+    }
+
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            for (int channel = 0; channel < 3; ++channel) {
+                float accum = 0.0f;
+                for (int k = -radius; k <= radius; k++) {
+                    int sx = x + k;
+                    if (sx < 0) sx = 0;
+                    if (sx >= width) sx = width - 1;
+                    size_t srcIndex =
+                        ((size_t)y * (size_t)width + (size_t)sx) *
+                            RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES +
+                        (size_t)channel;
+                    accum += kernel[k + radius] * buffer[srcIndex];
+                }
+                temp[(((size_t)y * (size_t)width + (size_t)x) *
+                      RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES) +
+                     (size_t)channel] = accum;
+            }
+        }
+    }
+
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            for (int channel = 0; channel < 3; ++channel) {
+                float accum = 0.0f;
+                for (int k = -radius; k <= radius; k++) {
+                    int sy = y + k;
+                    if (sy < 0) sy = 0;
+                    if (sy >= height) sy = height - 1;
+                    size_t srcIndex =
+                        ((size_t)sy * (size_t)width + (size_t)x) *
+                            RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES +
+                        (size_t)channel;
+                    accum += kernel[k + radius] * temp[srcIndex];
+                }
+                output[(((size_t)y * (size_t)width + (size_t)x) *
+                        RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES) +
+                       (size_t)channel] = accum;
+            }
+        }
+    }
+
+    for (size_t i = 0; i < total; ++i) {
+        const size_t base = i * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+        buffer[base] = (Uint8)Clamp(output[base], 0, 255);
+        buffer[base + 1u] = (Uint8)Clamp(output[base + 1u], 0, 255);
+        buffer[base + 2u] = (Uint8)Clamp(output[base + 2u], 0, 255);
+        buffer[base + 3u] = 0xFFu;
+    }
+
+    free(kernel);
+    free(temp);
+    free(output);
+}
+
 bool RayTracingPreview_ResetNative3DDirtyRect(SDL_Renderer* renderer, int width, int height) {
 #if USE_VULKAN
     size_t byteStride = (size_t)width * sizeof(uint32_t);
@@ -222,15 +328,18 @@ bool RayTracingPreview_UpdateNative3DDirtyRect(SDL_Renderer* renderer,
                                                int height,
                                                const SDL_Rect* dirtyRect) {
 #if USE_VULKAN
-    if (!previewBuffer || !dirtyRect || dirtyRect->w <= 0 || dirtyRect->h <= 0) {
+    SDL_Rect fullRect = {0, 0, width, height};
+    const SDL_Rect* uploadRect = dirtyRect ? dirtyRect : &fullRect;
+
+    if (!previewBuffer || uploadRect->w <= 0 || uploadRect->h <= 0) {
         return false;
     }
     if (!Native3DDirtyRectCache_Ensure(renderer, width, height)) {
         return false;
     }
-    if (dirtyRect->x < 0 || dirtyRect->y < 0 ||
-        dirtyRect->x + dirtyRect->w > width ||
-        dirtyRect->y + dirtyRect->h > height) {
+    if (uploadRect->x < 0 || uploadRect->y < 0 ||
+        uploadRect->x + uploadRect->w > width ||
+        uploadRect->y + uploadRect->h > height) {
         return false;
     }
 
@@ -238,18 +347,65 @@ bool RayTracingPreview_UpdateNative3DDirtyRect(SDL_Renderer* renderer,
                                               width,
                                               height,
                                               previewBuffer,
-                                              dirtyRect);
+                                              uploadRect);
 
     return vk_renderer_texture_update_rgba_subrect(
                (VkRenderer*)renderer,
                &s_native3DDirtyRectCache.texture,
                s_native3DDirtyRectCache.pixels +
-                   ((size_t)dirtyRect->y * (size_t)width + (size_t)dirtyRect->x),
+                   ((size_t)uploadRect->y * (size_t)width + (size_t)uploadRect->x),
                (size_t)width * sizeof(uint32_t),
-               (uint32_t)dirtyRect->x,
-               (uint32_t)dirtyRect->y,
-               (uint32_t)dirtyRect->w,
-               (uint32_t)dirtyRect->h) == VK_SUCCESS;
+               (uint32_t)uploadRect->x,
+               (uint32_t)uploadRect->y,
+               (uint32_t)uploadRect->w,
+               (uint32_t)uploadRect->h) == VK_SUCCESS;
+#else
+    (void)renderer;
+    (void)previewBuffer;
+    (void)width;
+    (void)height;
+    (void)dirtyRect;
+    return true;
+#endif
+}
+
+bool RayTracingPreview_UpdateNative3DDirtyRectABGR(SDL_Renderer* renderer,
+                                                   const Uint8* previewBuffer,
+                                                   int width,
+                                                   int height,
+                                                   const SDL_Rect* dirtyRect) {
+#if USE_VULKAN
+    SDL_Rect fullRect = {0, 0, width, height};
+    const SDL_Rect* uploadRect = dirtyRect ? dirtyRect : &fullRect;
+
+    if (!previewBuffer || uploadRect->w <= 0 || uploadRect->h <= 0) {
+        return false;
+    }
+    if (!Native3DDirtyRectCache_Ensure(renderer, width, height)) {
+        return false;
+    }
+    if (uploadRect->x < 0 || uploadRect->y < 0 ||
+        uploadRect->x + uploadRect->w > width ||
+        uploadRect->y + uploadRect->h > height) {
+        return false;
+    }
+
+    CopyABGRRectToABGR(s_native3DDirtyRectCache.pixels,
+                       width,
+                       height,
+                       previewBuffer,
+                       uploadRect);
+
+    return vk_renderer_texture_update_rgba_subrect(
+               (VkRenderer*)renderer,
+               &s_native3DDirtyRectCache.texture,
+               s_native3DDirtyRectCache.pixels +
+                   ((size_t)uploadRect->y * (size_t)width + (size_t)uploadRect->x),
+               (size_t)width * sizeof(uint32_t),
+               (uint32_t)uploadRect->x,
+               (uint32_t)uploadRect->y,
+               (uint32_t)uploadRect->w,
+               (uint32_t)uploadRect->h) == VK_SUCCESS;
 #else
     (void)renderer;
     (void)previewBuffer;
@@ -318,6 +474,37 @@ bool RayTracingPreview_DrawNative3DPreviewBase(SDL_Renderer* renderer,
             SDL_RenderDrawPoint(renderer, x, y);
         }
     }
+    return true;
+#endif
+}
+
+bool RayTracingPreview_DrawNative3DPreviewBaseABGR(SDL_Renderer* renderer,
+                                                   const Uint8* previewBuffer,
+                                                   int width,
+                                                   int height,
+                                                   const SDL_Rect* dirtyRect,
+                                                   bool resetDirtyPreview) {
+#if USE_VULKAN
+    bool ok = false;
+    if (!renderer || !previewBuffer || width <= 0 || height <= 0) return false;
+    if (resetDirtyPreview) {
+        ok = RayTracingPreview_ResetNative3DDirtyRect(renderer, width, height);
+        if (!ok) return false;
+    }
+    ok = RayTracingPreview_UpdateNative3DDirtyRectABGR(renderer,
+                                                       previewBuffer,
+                                                       width,
+                                                       height,
+                                                       dirtyRect);
+    if (!ok) return false;
+    return RayTracingPreview_DrawNative3DDirtyRect(renderer, width, height);
+#else
+    (void)renderer;
+    (void)previewBuffer;
+    (void)width;
+    (void)height;
+    (void)dirtyRect;
+    (void)resetDirtyPreview;
     return true;
 #endif
 }

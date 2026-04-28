@@ -150,6 +150,15 @@ static json_object* scene_editor_runtime_scene_build_object_materials_json(void)
         }
         json_object_object_add(entry, "object_id", json_object_new_string(object_id));
         json_object_object_add(entry, "material_id", json_object_new_int(sceneSettings.sceneObjects[i].material_id));
+        json_object_object_add(entry,
+                               "object_color",
+                               json_object_new_int(sceneSettings.sceneObjects[i].color & 0xFFFFFF));
+        json_object_object_add(entry,
+                               "transparency",
+                               json_object_new_double(sceneSettings.sceneObjects[i].transparency));
+        json_object_object_add(entry,
+                               "emissive_strength",
+                               json_object_new_double(sceneSettings.sceneObjects[i].emissiveStrength));
         json_object_array_add(object_materials, entry);
     }
     return object_materials;
