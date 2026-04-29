@@ -13,9 +13,11 @@
 #define SCENE_EDITOR_DIGEST_OVERLAY_DEFAULT_PITCH_DEG (24.0)
 #define SCENE_EDITOR_DIGEST_OVERLAY_MIN_PITCH_DEG (-80.0)
 #define SCENE_EDITOR_DIGEST_OVERLAY_MAX_PITCH_DEG (80.0)
-#define SCENE_EDITOR_DIGEST_OVERLAY_MIN_ZOOM (0.03)
-#define SCENE_EDITOR_DIGEST_OVERLAY_MAX_ZOOM (4.0)
+#define SCENE_EDITOR_DIGEST_OVERLAY_MIN_ZOOM (0.001)
+#define SCENE_EDITOR_DIGEST_OVERLAY_MAX_ZOOM (24.0)
 #define SCENE_EDITOR_DIGEST_OVERLAY_FRAME_FIT_FACTOR (0.72)
+#define SCENE_EDITOR_DIGEST_OVERLAY_DYNAMIC_MIN_FACTOR (0.10)
+#define SCENE_EDITOR_DIGEST_OVERLAY_DYNAMIC_MAX_FACTOR (20.0)
 
 static bool scene_editor_viewport_nav_point_in_rect(int x, int y, const SDL_Rect* rect) {
     if (!rect) return true;
@@ -93,25 +95,37 @@ static void scene_editor_viewport_nav_orbit_by_mouse_delta(SceneEditorDigestOver
 }
 
 static bool scene_editor_viewport_nav_digest_zoom_by_wheel(SceneEditorDigestOverlayNavState* nav_state,
+                                                           const SDL_Rect* viewport_rect,
                                                            int wheel_y) {
     RuntimeSceneBridge3DDigestState digest = {0};
+    double fit_zoom = 1.0;
+    double min_zoom = SCENE_EDITOR_DIGEST_OVERLAY_MIN_ZOOM;
+    double max_zoom = SCENE_EDITOR_DIGEST_OVERLAY_MAX_ZOOM;
     if (!nav_state || wheel_y == 0) {
         return false;
     }
     if (!SceneEditorDigestOverlayResolve(&digest)) {
         return false;
     }
+    if (viewport_rect &&
+        SceneEditorViewportNavFitDigestOverlay(nav_state, viewport_rect, false)) {
+        fit_zoom = nav_state->overlay_zoom;
+        min_zoom = fmax(SCENE_EDITOR_DIGEST_OVERLAY_MIN_ZOOM,
+                        fit_zoom * SCENE_EDITOR_DIGEST_OVERLAY_DYNAMIC_MIN_FACTOR);
+        max_zoom = fmin(SCENE_EDITOR_DIGEST_OVERLAY_MAX_ZOOM,
+                        fit_zoom * SCENE_EDITOR_DIGEST_OVERLAY_DYNAMIC_MAX_FACTOR);
+        if (max_zoom < min_zoom) {
+            max_zoom = min_zoom;
+        }
+        nav_state->overlay_zoom = fit_zoom;
+    }
     if (wheel_y > 0) {
         nav_state->overlay_zoom *= 1.12;
     } else {
         nav_state->overlay_zoom *= 0.90;
     }
-    if (nav_state->overlay_zoom < SCENE_EDITOR_DIGEST_OVERLAY_MIN_ZOOM) {
-        nav_state->overlay_zoom = SCENE_EDITOR_DIGEST_OVERLAY_MIN_ZOOM;
-    }
-    if (nav_state->overlay_zoom > SCENE_EDITOR_DIGEST_OVERLAY_MAX_ZOOM) {
-        nav_state->overlay_zoom = SCENE_EDITOR_DIGEST_OVERLAY_MAX_ZOOM;
-    }
+    if (nav_state->overlay_zoom < min_zoom) nav_state->overlay_zoom = min_zoom;
+    if (nav_state->overlay_zoom > max_zoom) nav_state->overlay_zoom = max_zoom;
     return true;
 }
 
@@ -323,7 +337,9 @@ bool SceneEditorViewportNavHandleCommand(const SceneEditorViewportNavCommand* co
         int my = 0;
         int wheel_y = event->wheel.y;
         if (wheel_y != 0 && command->wheel_zoom_enabled) {
-            if (scene_editor_viewport_nav_digest_zoom_by_wheel(nav_state, wheel_y)) {
+            if (scene_editor_viewport_nav_digest_zoom_by_wheel(nav_state,
+                                                               command->viewport_rect,
+                                                               wheel_y)) {
                 consumed = true;
             } else {
                 SDL_GetMouseState(&mx, &my);

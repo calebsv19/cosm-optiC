@@ -269,6 +269,78 @@ static int test_runtime_scene_bridge_apply_3d_primitives_scaffold(void) {
     return 0;
 }
 
+static int test_runtime_scene_bridge_apply_authoring_helpers_do_not_block_native_3d(void) {
+    const char *runtime_json_helpers =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_helpers_native_3d\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"floor\","
+            "\"object_type\":\"plane_primitive\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":6.0,\"height\":6.0,"
+              "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"axis_u\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+              "\"axis_v\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+              "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"block\","
+            "\"object_type\":\"rect_prism_primitive\","
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-3.0,\"z\":0.5},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}},"
+            "\"primitive\":{\"kind\":\"rect_prism_primitive\","
+              "\"width\":2.0,\"height\":2.0,\"depth\":1.0}"
+          "},"
+          "{"
+            "\"object_id\":\"author_points\","
+            "\"object_type\":\"point_set\","
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"author_curve\","
+            "\"object_type\":\"curve_path\","
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"author_edges\","
+            "\"object_type\":\"edge_set\","
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":1.0,\"y\":-1.5,\"z\":2.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":2.0,\"z\":8.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeSceneBridge3DPrimitiveSeedState seeds;
+    bool ok = runtime_scene_bridge_apply_json(runtime_json_helpers, &summary);
+    assert_true("runtime_scene_apply_helpers_native3d_ok", ok);
+    if (!ok) return 0;
+
+    runtime_scene_bridge_get_last_3d_primitive_seed_state(&seeds);
+    assert_true("runtime_scene_apply_helpers_native3d_seeds_valid", seeds.valid);
+    assert_true("runtime_scene_apply_helpers_native3d_retained_count", seeds.primitive_count == 2);
+    assert_true("runtime_scene_apply_helpers_native3d_plane_count", seeds.plane_primitive_count == 1);
+    assert_true("runtime_scene_apply_helpers_native3d_prism_count",
+                seeds.rect_prism_primitive_count == 1);
+    assert_true("runtime_scene_apply_helpers_native3d_excluded_count",
+                seeds.excluded_primitive_count == 0);
+    return 0;
+}
+
 static int test_runtime_scene_bridge_apply_ps4d_fixture_retains_digest_truth(void) {
     RuntimeSceneBridgePreflight summary;
     RuntimeSceneBridge3DScaffoldState scaffold;
@@ -491,7 +563,7 @@ static int test_runtime_scene_bridge_authoring_overlay_object_color_preserved(vo
                 "\"object_id\":\"obj_color\","
                 "\"material_id\":3,"
                 "\"object_color\":255,"
-                "\"transparency\":0.4,"
+                "\"alpha\":0.4,"
                 "\"emissive_strength\":0.7"
               "}]"
             "}"
@@ -506,8 +578,8 @@ static int test_runtime_scene_bridge_authoring_overlay_object_color_preserved(vo
                     sceneSettings.sceneObjects[0].material_id == 3);
         assert_true("runtime_scene_apply_authoring_overlay_object_color",
                     sceneSettings.sceneObjects[0].color == 0x0000FF);
-        assert_close("runtime_scene_apply_authoring_overlay_transparency",
-                     sceneSettings.sceneObjects[0].transparency,
+        assert_close("runtime_scene_apply_authoring_overlay_alpha",
+                     sceneSettings.sceneObjects[0].alpha,
                      0.4,
                      1e-9);
         assert_close("runtime_scene_apply_authoring_overlay_emissive_strength",
@@ -515,6 +587,47 @@ static int test_runtime_scene_bridge_authoring_overlay_object_color_preserved(vo
                      0.7,
                      1e-9);
     }
+    return 0;
+}
+
+static int test_runtime_scene_bridge_authoring_overlay_light_settings_preserved(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_overlay_light_settings\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":2.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":1.0,\"y\":2.0,\"z\":3.0}}],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{"
+          "\"ray_tracing\":{"
+            "\"authoring\":{"
+              "\"light_settings\":{"
+                "\"intensity\":7.5,"
+                "\"radius\":1.25"
+              "}"
+            "}"
+          "}"
+        "}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    bool ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_scene_apply_authoring_overlay_light_settings_ok", ok);
+    if (!ok) return 0;
+    assert_close("runtime_scene_apply_authoring_overlay_light_intensity",
+                 animSettings.lightIntensity,
+                 7.5,
+                 1e-9);
+    assert_close("runtime_scene_apply_authoring_overlay_light_radius",
+                 animSettings.lightRadius,
+                 1.25,
+                 1e-9);
     return 0;
 }
 
@@ -590,11 +703,13 @@ int run_test_runtime_scene_bridge_core_tests(void) {
     test_runtime_scene_bridge_apply_uses_world_scale_mapping();
     test_runtime_scene_bridge_apply_preserves_editor_mode_state();
     test_runtime_scene_bridge_apply_3d_primitives_scaffold();
+    test_runtime_scene_bridge_apply_authoring_helpers_do_not_block_native_3d();
     test_runtime_scene_bridge_apply_ps4d_fixture_retains_digest_truth();
     test_runtime_scene_bridge_apply_ps4d_fixture_retains_primitive_seed_truth();
     test_scene_compile_and_preflight_roundtrip();
     test_runtime_scene_bridge_apply_runtime_fixture();
     test_runtime_scene_bridge_authoring_overlay_object_color_preserved();
+    test_runtime_scene_bridge_authoring_overlay_light_settings_preserved();
     test_runtime_scene_bridge_apply_compile_output();
 
     return test_support_failures() - before;

@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdint.h>
 
+#include "render/runtime_native_3d_sampling.h"
 #include "render/runtime_emissive_direct_3d.h"
 #include "render/runtime_light_emitter_3d.h"
 #include "render/runtime_material_response_3d.h"
@@ -148,11 +149,6 @@ static uint32_t runtime_emission_transparency_3d_seed_from_hit(
         runtime_emission_transparency_3d_hash_u32(sequence ^ 0x85ebca6bU));
 }
 
-static double runtime_emission_transparency_3d_hash01(uint32_t base_seed, uint32_t salt) {
-    uint32_t bits = runtime_emission_transparency_3d_hash_u32(base_seed ^ salt);
-    return (double)bits / 4294967295.0;
-}
-
 static Vec3 runtime_emission_transparency_3d_sample_direction(const HitInfo3D* hit,
                                                               Vec3 normal,
                                                               Vec3 tangent,
@@ -161,17 +157,27 @@ static Vec3 runtime_emission_transparency_3d_sample_direction(const HitInfo3D* h
                                                               int sample_count,
                                                               int sample_index) {
     uint32_t base_seed = runtime_emission_transparency_3d_seed_from_hit(hit, sampling);
-    double jitter_u =
-        runtime_emission_transparency_3d_hash01(base_seed, (uint32_t)(sample_index * 2 + 1));
-    double jitter_v =
-        runtime_emission_transparency_3d_hash01(base_seed, (uint32_t)(sample_index * 2 + 2));
-    double u = jitter_u;
-    double v = ((double)sample_index + jitter_v) / (double)sample_count;
+    double u = 0.5;
+    double v = 0.5;
     double phi = 2.0 * M_PI * u;
     double radius = sqrt(v);
     double local_x = radius * cos(phi);
     double local_y = radius * sin(phi);
     double local_z = sqrt(fmax(0.0, 1.0 - v));
+
+    RuntimeNative3DSampling_Stratified2D(sampling,
+                                         base_seed,
+                                         sample_count,
+                                         sample_index,
+                                         0u,
+                                         &u,
+                                         &v);
+    phi = 2.0 * M_PI * u;
+    radius = sqrt(v);
+    local_x = radius * cos(phi);
+    local_y = radius * sin(phi);
+    local_z = sqrt(fmax(0.0, 1.0 - v));
+
     Vec3 world_dir = vec3_add(vec3_add(vec3_scale(tangent, local_x),
                                        vec3_scale(bitangent, local_y)),
                               vec3_scale(normal, local_z));
@@ -199,6 +205,7 @@ static Vec3 runtime_emission_transparency_3d_sample_transmission_direction(
     Vec3 bitangent,
     double cone_radius,
     const RuntimeNative3DSamplingContext* sampling,
+    int sample_count,
     int sample_index) {
     uint32_t base_seed = runtime_emission_transparency_3d_seed_from_hit(hit, sampling);
     double u = 0.0;
@@ -213,10 +220,13 @@ static Vec3 runtime_emission_transparency_3d_sample_transmission_direction(
         return vec3_normalize(base_dir);
     }
 
-    u = runtime_emission_transparency_3d_hash01(base_seed,
-                                                (uint32_t)(sample_index * 2 + 101));
-    v = runtime_emission_transparency_3d_hash01(base_seed,
-                                                (uint32_t)(sample_index * 2 + 102));
+    RuntimeNative3DSampling_Stratified2D(sampling,
+                                         base_seed ^ 0x51f15e1dU,
+                                         sample_count,
+                                         sample_index,
+                                         17u,
+                                         &u,
+                                         &v);
     phi = 2.0 * M_PI * u;
     radius = cone_radius * sqrt(v);
     offset_x = cos(phi) * radius;
@@ -496,6 +506,7 @@ static bool runtime_emission_transparency_3d_sample_transmission(
                                                                                          bitangent,
                                                                                          cone_radius,
                                                                                          sampling,
+                                                                                         sample_count,
                                                                                          i);
         RuntimeVisibility3DTransmittance source_filter = RuntimeVisibility3D_UnitTransmittance();
         if (!runtime_emission_transparency_3d_trace_transmission(scene,

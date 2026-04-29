@@ -29,7 +29,7 @@ typedef struct {
     char texture[256];     // Texture path
     int color;             // Color (integer for now, e.g., RGB packed)
     double opacity;        // Opacity (0.0 to 1.0)
-    double transparency;   // Transparent-material strength multiplier (0.0 to 1.0)
+    double alpha;          // Authoring alpha / transmission strength multiplier (0.0 to 1.0)
     double reflectivity;   // 0 (matte) .. 1 (mirror)
     double roughness;      // 0 (sharp) .. 1 (diffuse)
     double emissiveStrength; // Emissive-material strength multiplier (0.0 to 1.0)
@@ -73,6 +73,13 @@ bool IsInsideObject(int mx, int my, SceneObject* obj);
 void ComputeObjectBounds(const SceneObject* obj, double* minX, double* minY, double* maxX, double* maxY);
 void MarkObjectDirty(SceneObject* obj);
 bool IsObjectDirty(SceneObject* obj);
+
+int SceneObjectPackRGBBytes(Uint8 r, Uint8 g, Uint8 b);
+Uint8 SceneObjectColorR(const SceneObject* obj);
+Uint8 SceneObjectColorG(const SceneObject* obj);
+Uint8 SceneObjectColorB(const SceneObject* obj);
+Uint8 SceneObjectAlphaByte(const SceneObject* obj);
+double SceneObjectAlphaFromByte(Uint8 alpha);
 
 void SegmentPathInit(SegmentPath* path);
 void SegmentPathFree(SegmentPath* path);

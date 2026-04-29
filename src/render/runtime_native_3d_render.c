@@ -1006,7 +1006,8 @@ bool RuntimeNative3DRenderToPixelBufferWithSampling(uint8_t* pixel_buffer,
 
 static RuntimeNative3DSamplingContext runtime_native_3d_render_resolve_subpass_sampling(
     const RuntimeNative3DSamplingContext* sampling,
-    uint32_t sequence_offset) {
+    uint32_t sequence_offset,
+    int total_subpasses) {
     RuntimeNative3DSamplingContext resolved = {0};
     if (sampling) {
         resolved = *sampling;
@@ -1015,6 +1016,9 @@ static RuntimeNative3DSamplingContext runtime_native_3d_render_resolve_subpass_s
     if (resolved.sampleSequence == 0U) {
         resolved.sampleSequence = sequence_offset + 1U;
     }
+    resolved.temporalSubpassIndex = (uint16_t)((sequence_offset > 65535u) ? 65535u : sequence_offset);
+    resolved.temporalSubpassCount =
+        (uint16_t)((total_subpasses <= 1) ? 1 : ((total_subpasses > 65535) ? 65535 : total_subpasses));
     return resolved;
 }
 
@@ -1138,7 +1142,9 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
                (size_t)width * (size_t)height * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS *
                    sizeof(*subpass_radiance));
         subpass_frame.sampling =
-            runtime_native_3d_render_resolve_subpass_sampling(sampling, (uint32_t)subpass);
+            runtime_native_3d_render_resolve_subpass_sampling(sampling,
+                                                              (uint32_t)subpass,
+                                                              effective_temporal_frames);
         ok = RuntimeNative3DAdaptiveSampling_RenderPreparedRegionRadianceRGBMasked(
             subpass_radiance,
             width,

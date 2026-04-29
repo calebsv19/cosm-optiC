@@ -66,6 +66,7 @@ void menu_render_build_slider_layout(TTF_Font* font,
     layout.nextY = panelTop + MENU_PANEL_CHROME_TITLE_BAND + 8;
 
     menu_state_sync_from_anim(state);
+    const bool is_3d = animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D;
 
 #define ADD_SLIDER(targetPtr, minVal, maxVal, labelText) \
     do { \
@@ -84,7 +85,9 @@ void menu_render_build_slider_layout(TTF_Font* font,
         } \
     } while (0)
 
-    ADD_SLIDER(&animSettings.bounceLimit, 0, 100, "Bounce Limit");
+    if (!is_3d) {
+        ADD_SLIDER(&animSettings.bounceLimit, 0, 100, "Bounce Limit");
+    }
     ADD_SLIDER(&animSettings.frameLimit, 1, 5000, "Frame Limit");
     ADD_SLIDER(&animSettings.framesForTravel, 1, 5000, "Path Points");
     ADD_SLIDER(&animSettings.fps, 1, 240, "FPS");
@@ -92,7 +95,9 @@ void menu_render_build_slider_layout(TTF_Font* font,
     ADD_SLIDER(&sceneSettings.windowWidth, 200, 4000, "Width");
     ADD_SLIDER(&sceneSettings.windowHeight, 200, 2400, "Height");
     ADD_SLIDER(&animSettings.tileSize, 4, 256, "Tile Size");
-    ADD_SLIDER(&state->rouletteSliderValue, 1, 2000, "Roulette Threshold");
+    if (!is_3d) {
+        ADD_SLIDER(&state->rouletteSliderValue, 1, 2000, "Roulette Threshold");
+    }
     ADD_SLIDER(&state->envSliderValue, 0, 255, "Environment");
     ADD_SLIDER(&state->lightIntensitySliderValue, 0, 2000, "Light Intensity");
     ADD_SLIDER(&state->lightDecaySoftnessSliderValue, 10, 1000, "Falloff Softness");
@@ -100,7 +105,15 @@ void menu_render_build_slider_layout(TTF_Font* font,
                SDL_MENU_FORWARD_FALLOFF_DISTANCE_MIN,
                SDL_MENU_FORWARD_FALLOFF_DISTANCE_MAX,
                "Falloff Distance");
-    if (animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D) {
+    if (is_3d) {
+        ADD_SLIDER(&state->bounceDepth3DSliderValue,
+                   RUNTIME_3D_BOUNCE_DEPTH_MIN,
+                   RUNTIME_3D_BOUNCE_DEPTH_MAX,
+                   "3D Bounce Depth");
+        ADD_SLIDER(&state->rouletteThreshold3DSliderValue,
+                   0,
+                   100,
+                   "3D Roulette Threshold");
         ADD_SLIDER(&state->secondaryDiffuseSamples3DSliderValue,
                    RUNTIME_3D_SECONDARY_SAMPLES_MIN,
                    RUNTIME_3D_SECONDARY_SAMPLES_MAX,
@@ -223,6 +236,12 @@ void menu_render_draw_sliders(SDL_Renderer* renderer,
         } else if (slider->value == &state->forwardDecaySliderValue) {
             RenderText(renderer, font, slider->valueX, slider->valueY,
                        "%d", state->forwardDecaySliderValue);
+        } else if (slider->value == &state->bounceDepth3DSliderValue) {
+            RenderText(renderer, font, slider->valueX, slider->valueY,
+                       "%d", state->bounceDepth3DSliderValue);
+        } else if (slider->value == &state->rouletteThreshold3DSliderValue) {
+            RenderText(renderer, font, slider->valueX, slider->valueY,
+                       "%.3f", state->rouletteThreshold3DSliderValue / 1000.0);
         } else if (slider->value == &state->secondaryDiffuseSamples3DSliderValue) {
             RenderText(renderer, font, slider->valueX, slider->valueY,
                        "%d", state->secondaryDiffuseSamples3DSliderValue);

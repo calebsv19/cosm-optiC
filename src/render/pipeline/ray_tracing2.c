@@ -204,7 +204,8 @@ static int ResolveNative3DTemporalFrames(RayTracing3DIntegratorId integrator_id)
 
 static RuntimeNative3DSamplingContext ResolveNative3DSubpassSampling(
     const RuntimeNative3DSamplingContext* sampling,
-    uint32_t subpass_index) {
+    uint32_t subpass_index,
+    int total_subpasses) {
     RuntimeNative3DSamplingContext resolved = {0};
     if (sampling) {
         resolved = *sampling;
@@ -213,6 +214,9 @@ static RuntimeNative3DSamplingContext ResolveNative3DSubpassSampling(
     if (resolved.sampleSequence == 0U) {
         resolved.sampleSequence = subpass_index + 1U;
     }
+    resolved.temporalSubpassIndex = (uint16_t)((subpass_index > 65535u) ? 65535u : subpass_index);
+    resolved.temporalSubpassCount =
+        (uint16_t)((total_subpasses <= 1) ? 1 : ((total_subpasses > 65535) ? 65535 : total_subpasses));
     return resolved;
 }
 
@@ -1720,7 +1724,7 @@ static bool RenderNative3DTilesPreview(SDL_Renderer* renderer,
             RuntimeNative3DPreparedFrame subpass_frame = frame;
             RuntimeNative3DRenderStats subpass_stats = {0};
             RuntimeNative3DSamplingContext subpass_sampling =
-                ResolveNative3DSubpassSampling(sampling, (uint32_t)subpass);
+                ResolveNative3DSubpassSampling(sampling, (uint32_t)subpass, temporal_frames);
             const uint8_t* active_mask =
                 (use_adaptive_sampling && subpass > 0) ? adaptiveMask.activeSampleMask : NULL;
             const int active_mask_stride =

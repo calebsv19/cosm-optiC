@@ -295,48 +295,195 @@ static void test_preview_camera_projector_projection_contract(void) {
 }
 
 static void test_preview_retained_scene_line_segments_contract(void) {
+    const char* runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"preview_line_segments_contract\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"floor\","
+            "\"object_type\":\"plane_primitive\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":8.0,\"height\":6.0,"
+              "\"frame\":{\"origin\":{\"x\":0.0,\"y\":0.0,\"z\":-1.0},"
+              "\"axis_u\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+              "\"axis_v\":{\"x\":0.0,\"y\":1.0,\"z\":0.0},"
+              "\"normal\":{\"x\":0.0,\"y\":0.0,\"z\":1.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":-1.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"block\","
+            "\"object_type\":\"rect_prism_primitive\","
+            "\"primitive\":{\"kind\":\"rect_prism_primitive\","
+              "\"width\":2.0,\"height\":3.0,\"depth\":4.0,"
+              "\"frame\":{\"origin\":{\"x\":1.0,\"y\":2.0,\"z\":1.5},"
+              "\"axis_u\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+              "\"axis_v\":{\"x\":0.0,\"y\":1.0,\"z\":0.0},"
+              "\"normal\":{\"x\":0.0,\"y\":0.0,\"z\":1.0}}},"
+            "\"transform\":{\"position\":{\"x\":1.0,\"y\":2.0,\"z\":1.5},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":8.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{"
+          "\"line_drawing\":{"
+            "\"scene3d\":{"
+              "\"bounds\":{\"enabled\":true,\"clamp_on_edit\":true,"
+                "\"min\":{\"x\":-6.0,\"y\":-5.0,\"z\":-1.0},"
+                "\"max\":{\"x\":6.0,\"y\":5.0,\"z\":5.5}},"
+              "\"construction_plane\":{\"mode\":\"axis_aligned\",\"axis\":\"xy\",\"offset\":-1.0}"
+            "}"
+          "}"
+        "}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
     RuntimeSceneBridge3DDigestState digest = {0};
     PreviewRetainedSceneLineSegment segments[PREVIEW_RETAINED_SCENE_MAX_LINE_SEGMENTS];
     int count = 0;
+    bool ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
 
-    digest.valid = true;
-    digest.has_scene_bounds = true;
-    digest.bounds_enabled = true;
-    digest.bounds_min_x = -6.0;
-    digest.bounds_min_y = -5.0;
-    digest.bounds_min_z = -1.0;
-    digest.bounds_max_x = 6.0;
-    digest.bounds_max_y = 5.0;
-    digest.bounds_max_z = 5.5;
-    digest.has_construction_plane = true;
-    digest.construction_plane_offset = -1.0;
-    digest.primitive_count = 2;
-    digest.primitives[0].kind = RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE;
-    digest.primitives[0].origin_x = 0.0;
-    digest.primitives[0].origin_y = 0.0;
-    digest.primitives[0].origin_z = -1.0;
-    digest.primitives[0].has_dimensions = true;
-    digest.primitives[0].width = 8.0;
-    digest.primitives[0].height = 6.0;
-    digest.primitives[1].kind = RUNTIME_SCENE_BRIDGE_PRIMITIVE_RECT_PRISM;
-    digest.primitives[1].origin_x = 1.0;
-    digest.primitives[1].origin_y = 2.0;
-    digest.primitives[1].origin_z = 1.5;
-    digest.primitives[1].has_dimensions = true;
-    digest.primitives[1].width = 2.0;
-    digest.primitives[1].height = 3.0;
-    digest.primitives[1].depth = 4.0;
+    assert_true("preview_retained_scene_contract_apply_ok", ok);
+    if (!ok) return;
+    runtime_scene_bridge_get_last_3d_digest_state(&digest);
 
     count = PreviewRetainedSceneBuildLineSegments(&digest,
                                                   segments,
                                                   PREVIEW_RETAINED_SCENE_MAX_LINE_SEGMENTS);
     assert_close("preview_retained_scene_line_count", (double)count, 32.0, 1e-6);
-    assert_close("preview_retained_scene_bounds_first_ax", segments[0].ax, -6.0, 1e-6);
-    assert_close("preview_retained_scene_bounds_first_ay", segments[0].ay, -5.0, 1e-6);
+    assert_close("preview_retained_scene_bounds_first_ax", segments[0].ax, -4.0, 1e-6);
+    assert_close("preview_retained_scene_bounds_first_ay", segments[0].ay, -3.0, 1e-6);
     assert_close("preview_retained_scene_bounds_first_az", segments[0].az, -1.0, 1e-6);
     assert_close("preview_retained_scene_plane_start", segments[12].az, -1.0, 1e-6);
     assert_close("preview_retained_scene_primitive_plane_z", segments[16].az, -1.0, 1e-6);
     assert_close("preview_retained_scene_prism_last_bz", segments[31].bz, 3.5, 1e-6);
+}
+
+static void test_preview_retained_scene_uses_primitive_seed_truth(void) {
+    const char* runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"preview_seed_truth\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"tilted_plane\","
+            "\"object_type\":\"plane_primitive\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":6.0,\"height\":4.0,"
+              "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-4.0,\"z\":1.0},"
+              "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+              "\"axis_v\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+              "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-4.0,\"z\":1.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":2.0,\"z\":8.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{"
+          "\"line_drawing\":{"
+            "\"scene3d\":{"
+              "\"bounds\":{\"enabled\":true,\"clamp_on_edit\":true,"
+                "\"min\":{\"x\":-8.0,\"y\":-8.0,\"z\":-8.0},"
+                "\"max\":{\"x\":8.0,\"y\":8.0,\"z\":8.0}},"
+              "\"construction_plane\":{\"mode\":\"axis_aligned\",\"axis\":\"xy\",\"offset\":-1.0}"
+            "}"
+          "}"
+        "}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeSceneBridge3DDigestState digest = {0};
+    PreviewRetainedSceneLineSegment segments[PREVIEW_RETAINED_SCENE_MAX_LINE_SEGMENTS];
+    int count = 0;
+    bool has_tilted_plane_edge = false;
+    bool has_seed_bounds_extent = false;
+    bool ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("preview_retained_scene_seed_truth_apply_ok", ok);
+    if (!ok) return;
+
+    runtime_scene_bridge_get_last_3d_digest_state(&digest);
+    count = PreviewRetainedSceneBuildLineSegments(&digest,
+                                                  segments,
+                                                  PREVIEW_RETAINED_SCENE_MAX_LINE_SEGMENTS);
+    assert_true("preview_retained_scene_seed_truth_segment_count", count == 20);
+    for (int i = 16; i < 20 && i < count; ++i) {
+        if (fabs(segments[i].az - segments[i].bz) > 1e-6) {
+            has_tilted_plane_edge = true;
+            break;
+        }
+    }
+    for (int i = 0; i < 12 && i < count; ++i) {
+        if (fabs(segments[i].az - 4.0) < 1e-6 || fabs(segments[i].bz - 4.0) < 1e-6) {
+            has_seed_bounds_extent = true;
+            break;
+        }
+    }
+    assert_true("preview_retained_scene_seed_truth_plane_uses_tilted_z", has_tilted_plane_edge);
+    assert_true("preview_retained_scene_seed_truth_bounds_use_seed_extents", has_seed_bounds_extent);
+}
+
+static void test_preview_retained_scene_prism_edges_do_not_cross(void) {
+    const char* runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"preview_prism_edge_contract\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"box\","
+            "\"object_type\":\"rect_prism_primitive\","
+            "\"primitive\":{\"kind\":\"rect_prism_primitive\","
+              "\"width\":2.0,\"height\":2.0,\"depth\":2.0,"
+              "\"frame\":{\"origin\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+              "\"axis_u\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+              "\"axis_v\":{\"x\":0.0,\"y\":1.0,\"z\":0.0},"
+              "\"normal\":{\"x\":0.0,\"y\":0.0,\"z\":1.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":8.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeSceneBridge3DDigestState digest = {0};
+    PreviewRetainedSceneLineSegment segments[PREVIEW_RETAINED_SCENE_MAX_LINE_SEGMENTS];
+    int count = 0;
+    bool ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("preview_retained_scene_prism_edge_apply_ok", ok);
+    if (!ok) return;
+
+    runtime_scene_bridge_get_last_3d_digest_state(&digest);
+    count = PreviewRetainedSceneBuildLineSegments(&digest,
+                                                  segments,
+                                                  PREVIEW_RETAINED_SCENE_MAX_LINE_SEGMENTS);
+    assert_true("preview_retained_scene_prism_edge_line_count", count == 12);
+    assert_close("preview_retained_scene_prism_edge_0_ax", segments[0].ax, -1.0, 1e-6);
+    assert_close("preview_retained_scene_prism_edge_0_bx", segments[0].bx, -1.0, 1e-6);
+    assert_close("preview_retained_scene_prism_edge_0_by", segments[0].by, -1.0, 1e-6);
+    assert_close("preview_retained_scene_prism_edge_1_bz", segments[1].bz, 1.0, 1e-6);
+    assert_close("preview_retained_scene_prism_edge_2_bx", segments[2].bx, -1.0, 1e-6);
+    assert_close("preview_retained_scene_prism_edge_3_bz", segments[3].bz, -1.0, 1e-6);
 }
 
 static void test_preview_mode_route_select_contract(void) {
@@ -417,6 +564,8 @@ int run_test_runtime_preview_editor_tests(void) {
     test_preview_camera_sample_evaluate_contract();
     test_preview_camera_projector_projection_contract();
     test_preview_retained_scene_line_segments_contract();
+    test_preview_retained_scene_uses_primitive_seed_truth();
+    test_preview_retained_scene_prism_edges_do_not_cross();
     test_preview_mode_route_select_contract();
     test_preview_playback_evaluate_contract();
     return 0;

@@ -6,9 +6,11 @@
 #include "import/runtime_scene_bridge.h"
 #include "render/integrators/integrator_common.h"
 #include "render/runtime_camera_3d_rays.h"
+#include "render/runtime_native_3d_blue_noise.h"
 #include "render/runtime_diffuse_bounce_3d.h"
 #include "render/runtime_direct_light_3d.h"
 #include "render/runtime_native_3d_render.h"
+#include "render/runtime_native_3d_sampling.h"
 #include "render/runtime_native_3d_temporal_accum.h"
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_scene_3d_builder.h"
@@ -72,6 +74,8 @@ static int test_runtime_diffuse_bounce_3d_shadowed_hit_lift_contract(void) {
 
     RuntimeScene3D_Init(&scene);
     animSettings.secondaryDiffuseSamples3D = RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT;
+    animSettings.bounceDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
     animSettings.lightIntensity = 10.0;
     animSettings.forwardDecay = 10.0;
     animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
@@ -196,6 +200,8 @@ static int test_runtime_diffuse_bounce_3d_sampling_sequence_contract(void) {
     RuntimeNative3DRenderStats stats_b = {0};
     bool ok = false;
     animSettings.secondaryDiffuseSamples3D = 4;
+    animSettings.bounceDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
     animSettings.lightIntensity = 10.0;
     animSettings.forwardDecay = 10.0;
     animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
@@ -257,6 +263,128 @@ static int test_runtime_diffuse_bounce_3d_sampling_sequence_contract(void) {
     return 0;
 }
 
+static int test_runtime_diffuse_bounce_3d_recursive_depth_contract(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_diffuse_bounce_recursive_depth\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"floor\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":6.0,\"height\":6.0,"
+            "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+            "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"ceiling\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":6.0,\"height\":6.0,"
+            "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-3.0,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+            "\"normal\":{\"x\":0.0,\"y\":-1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-3.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"left_wall\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":2.0,\"height\":2.0,"
+            "\"frame\":{\"origin\":{\"x\":-1.0,\"y\":-4.0,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":0.0,\"y\":1.0,\"z\":0.0},"
+            "\"normal\":{\"x\":1.0,\"y\":0.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":-1.0,\"y\":-4.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"right_wall\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":2.0,\"height\":2.0,"
+            "\"frame\":{\"origin\":{\"x\":1.0,\"y\":-4.0,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":0.0,\"y\":1.0,\"z\":0.0},"
+            "\"normal\":{\"x\":-1.0,\"y\":0.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":1.0,\"y\":-4.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":0.8,\"y\":-3.4,\"z\":0.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeScene3D scene;
+    RuntimeCameraProjector3D projector = {0};
+    RuntimeDiffuseBounce3DResult depth_one = {0};
+    RuntimeDiffuseBounce3DResult depth_three = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    animSettings.secondaryDiffuseSamples3D = 12;
+    animSettings.bounceDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
+    animSettings.lightIntensity = 10.0;
+    animSettings.forwardDecay = 8.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    sceneSettings.camera.rotation = 0.0;
+    sceneSettings.camera.zoom = 1.0;
+
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_diffuse_bounce_recursive_apply_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    ok = RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(&scene, 0.0);
+    assert_true("runtime_diffuse_bounce_recursive_build_ok", ok);
+    ok = RuntimeCameraProjector3D_Build(&scene.camera, 101, 101, &projector);
+    assert_true("runtime_diffuse_bounce_recursive_projector_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    ok = RuntimeDiffuseBounce3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &depth_one);
+    assert_true("runtime_diffuse_bounce_recursive_depth_one_ok", ok);
+    assert_true("runtime_diffuse_bounce_recursive_depth_one_hit", depth_one.hit);
+
+    animSettings.bounceDepth3D = 3;
+    ok = RuntimeDiffuseBounce3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &depth_three);
+    assert_true("runtime_diffuse_bounce_recursive_depth_three_ok", ok);
+    assert_true("runtime_diffuse_bounce_recursive_depth_three_hit", depth_three.hit);
+    assert_true("runtime_diffuse_bounce_recursive_depth_more_secondary_rays",
+                depth_three.secondaryRayCount > depth_one.secondaryRayCount);
+    assert_true("runtime_diffuse_bounce_recursive_depth_more_secondary_hits",
+                depth_three.secondaryHitCount > depth_one.secondaryHitCount);
+    assert_true("runtime_diffuse_bounce_recursive_depth_bounce_not_reduced",
+                depth_three.bounceRadiance >= depth_one.bounceRadiance - 1e-9);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 static int test_runtime_native_3d_temporal_accumulation_contract(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -308,6 +436,8 @@ static int test_runtime_native_3d_temporal_accumulation_contract(void) {
     bool ok = false;
 
     animSettings.secondaryDiffuseSamples3D = 4;
+    animSettings.bounceDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
     animSettings.lightIntensity = 10.0;
     animSettings.forwardDecay = 10.0;
     animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
@@ -387,6 +517,110 @@ static int test_runtime_native_3d_temporal_accumulation_contract(void) {
     return 0;
 }
 
+static int test_runtime_native_3d_temporal_accumulation_ema_and_clamp_contract(void) {
+    RuntimeNative3DTemporalAccumulation accumulation = {0};
+    float sample_a[3] = {0.2f, 0.2f, 0.2f};
+    float sample_b[3] = {50.0f, 50.0f, 50.0f};
+    float resolved[3] = {0.0f, 0.0f, 0.0f};
+    bool ok = false;
+
+    RuntimeNative3DTemporalAccumulation_Init(&accumulation);
+    ok = RuntimeNative3DTemporalAccumulation_Ensure(&accumulation, 1, 1);
+    assert_true("runtime_native_3d_temporal_accum_ema_alloc_ok", ok);
+    if (!ok) {
+        RuntimeNative3DTemporalAccumulation_Free(&accumulation);
+        return 0;
+    }
+
+    RuntimeNative3DTemporalAccumulation_Clear(&accumulation);
+    ok = RuntimeNative3DTemporalAccumulation_AddRegion(&accumulation, sample_a, 1, 0, 0, 1, 1);
+    assert_true("runtime_native_3d_temporal_accum_ema_add_a_ok", ok);
+    RuntimeNative3DTemporalAccumulation_CommitSubpass(&accumulation);
+    ok = ok && RuntimeNative3DTemporalAccumulation_AddRegion(&accumulation, sample_b, 1, 0, 0, 1, 1);
+    assert_true("runtime_native_3d_temporal_accum_ema_add_b_ok", ok);
+    RuntimeNative3DTemporalAccumulation_CommitSubpass(&accumulation);
+    ok = ok && RuntimeNative3DTemporalAccumulation_ResolveRegionToRadianceBuffer(&accumulation,
+                                                                                  resolved,
+                                                                                  1,
+                                                                                  0,
+                                                                                  0,
+                                                                                  1,
+                                                                                  1);
+    assert_true("runtime_native_3d_temporal_accum_ema_resolve_ok", ok);
+    assert_true("runtime_native_3d_temporal_accum_ema_clamps_firefly",
+                resolved[0] < 5.0f);
+    assert_true("runtime_native_3d_temporal_accum_ema_lifts_history",
+                resolved[0] > sample_a[0]);
+
+    RuntimeNative3DTemporalAccumulation_Free(&accumulation);
+    return 0;
+}
+
+static int test_runtime_native_3d_sampling_stratified_subpass_contract(void) {
+    RuntimeNative3DSamplingContext subpass_a = {
+        .sampleSequence = 31u,
+        .temporalSubpassIndex = 0u,
+        .temporalSubpassCount = 4u
+    };
+    RuntimeNative3DSamplingContext subpass_b = {
+        .sampleSequence = 32u,
+        .temporalSubpassIndex = 1u,
+        .temporalSubpassCount = 4u
+    };
+    double u_a = 0.0;
+    double v_a = 0.0;
+    double u_a_repeat = 0.0;
+    double v_a_repeat = 0.0;
+    double u_b = 0.0;
+    double v_b = 0.0;
+
+    RuntimeNative3DSampling_Stratified2D(&subpass_a, 0x12345678u, 4, 2, 7u, &u_a, &v_a);
+    RuntimeNative3DSampling_Stratified2D(&subpass_a, 0x12345678u, 4, 2, 7u, &u_a_repeat, &v_a_repeat);
+    RuntimeNative3DSampling_Stratified2D(&subpass_b, 0x12345678u, 4, 2, 7u, &u_b, &v_b);
+
+    assert_true("runtime_native_3d_sampling_stratified_repeat_u_match",
+                fabs(u_a - u_a_repeat) <= 1e-12);
+    assert_true("runtime_native_3d_sampling_stratified_repeat_v_match",
+                fabs(v_a - v_a_repeat) <= 1e-12);
+    assert_true("runtime_native_3d_sampling_stratified_subpasses_diverge",
+                fabs(u_a - u_b) > 1e-6 || fabs(v_a - v_b) > 1e-6);
+    assert_true("runtime_native_3d_sampling_stratified_bounds_a",
+                u_a >= 0.0 && u_a <= 1.0 && v_a >= 0.0 && v_a <= 1.0);
+    assert_true("runtime_native_3d_sampling_stratified_bounds_b",
+                u_b >= 0.0 && u_b <= 1.0 && v_b >= 0.0 && v_b <= 1.0);
+    return 0;
+}
+
+static int test_runtime_native_3d_blue_noise_jitter_contract(void) {
+    double u_a = 0.0;
+    double v_a = 0.0;
+    double u_a_repeat = 0.0;
+    double v_a_repeat = 0.0;
+    double u_b = 0.0;
+    double v_b = 0.0;
+    double u_dim = 0.0;
+    double v_dim = 0.0;
+
+    RuntimeNative3DBlueNoise_Jitter2D(31u, 0x12345678u, 7u, &u_a, &v_a);
+    RuntimeNative3DBlueNoise_Jitter2D(31u, 0x12345678u, 7u, &u_a_repeat, &v_a_repeat);
+    RuntimeNative3DBlueNoise_Jitter2D(32u, 0x12345678u, 7u, &u_b, &v_b);
+    RuntimeNative3DBlueNoise_Jitter2D(31u, 0x12345678u, 8u, &u_dim, &v_dim);
+
+    assert_true("runtime_native_3d_blue_noise_repeat_u_match",
+                fabs(u_a - u_a_repeat) <= 1e-12);
+    assert_true("runtime_native_3d_blue_noise_repeat_v_match",
+                fabs(v_a - v_a_repeat) <= 1e-12);
+    assert_true("runtime_native_3d_blue_noise_sequence_diverges",
+                fabs(u_a - u_b) > 1e-6 || fabs(v_a - v_b) > 1e-6);
+    assert_true("runtime_native_3d_blue_noise_dimension_diverges",
+                fabs(u_a - u_dim) > 1e-6 || fabs(v_a - v_dim) > 1e-6);
+    assert_true("runtime_native_3d_blue_noise_bounds_a",
+                u_a >= 0.0 && u_a <= 1.0 && v_a >= 0.0 && v_a <= 1.0);
+    assert_true("runtime_native_3d_blue_noise_bounds_b",
+                u_b >= 0.0 && u_b <= 1.0 && v_b >= 0.0 && v_b <= 1.0);
+    return 0;
+}
+
 static int test_runtime_native_3d_temporal_tile_parity_contract(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -443,6 +677,8 @@ static int test_runtime_native_3d_temporal_tile_parity_contract(void) {
     const int temporal_frames = 4;
 
     animSettings.secondaryDiffuseSamples3D = 4;
+    animSettings.bounceDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
     animSettings.temporalFrames3D = temporal_frames;
     animSettings.lightIntensity = 10.0;
     animSettings.forwardDecay = 10.0;
@@ -471,7 +707,7 @@ static int test_runtime_native_3d_temporal_tile_parity_contract(void) {
         &full_stats);
     assert_true("runtime_native_3d_temporal_tile_full_ok", ok);
 
-    memset(tiled_pixels, 0, sizeof(tiled_pixels));
+    RuntimeNative3DFillPixelBufferEnvironment(tiled_pixels, 101u * 101u);
     ok = RuntimeNative3DPrepareFrameWithSampling(&frame, 101, 101, 0.0, 2.0, -2.0, &sampling);
     assert_true("runtime_native_3d_temporal_tile_prepare_ok", ok);
     if (ok) {
@@ -524,6 +760,8 @@ static int test_runtime_native_3d_temporal_tile_parity_contract(void) {
                    (size_t)tile->width * (size_t)tile->height *
                        RUNTIME_NATIVE_3D_RADIANCE_CHANNELS * sizeof(*tile_radiance));
             subpass_frame.sampling.sampleSequence = sampling.sampleSequence + (uint32_t)subpass;
+            subpass_frame.sampling.temporalSubpassIndex = (uint16_t)subpass;
+            subpass_frame.sampling.temporalSubpassCount = (uint16_t)temporal_frames;
             ok = RuntimeNative3DRenderPreparedRegionRadianceRGB(tile_radiance,
                                                                 tile->width,
                                                                 RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
@@ -625,6 +863,8 @@ static int test_runtime_diffuse_bounce_3d_seed_branch_contract(void) {
     animSettings.forwardDecay = 10.0;
     animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
     animSettings.secondaryDiffuseSamples3D = RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT;
+    animSettings.bounceDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
     sceneSettings.camera.rotation = 0.0;
     sceneSettings.camera.zoom = 1.0;
 
@@ -679,7 +919,11 @@ int run_test_runtime_diffuse_temporal_tests(void) {
 
     test_runtime_diffuse_bounce_3d_shadowed_hit_lift_contract();
     test_runtime_diffuse_bounce_3d_sampling_sequence_contract();
+    test_runtime_diffuse_bounce_3d_recursive_depth_contract();
     test_runtime_native_3d_temporal_accumulation_contract();
+    test_runtime_native_3d_temporal_accumulation_ema_and_clamp_contract();
+    test_runtime_native_3d_blue_noise_jitter_contract();
+    test_runtime_native_3d_sampling_stratified_subpass_contract();
     test_runtime_native_3d_temporal_tile_parity_contract();
     test_runtime_diffuse_bounce_3d_seed_branch_contract();
 

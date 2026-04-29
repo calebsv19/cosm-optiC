@@ -192,6 +192,7 @@ static bool menu_state_interaction_active(const MenuRuntimeState* state) {
            state->manifestScrollbarDragging ||
            state->editingBounce ||
            state->editingFrame ||
+           state->editingStartFrame ||
            state->editingInputRoot ||
            state->editingOutputRoot ||
            menu_batch_panel_edit_active(state);
@@ -267,7 +268,9 @@ static bool menu_process_event(SDL_Window* window,
                     strcat(menu_state->pathInputBuffer, mutable_event.text.text);
                     return true;
                 }
-            } else if (menu_state->editingBounce || menu_state->editingFrame) {
+            } else if (menu_state->editingBounce ||
+                       menu_state->editingFrame ||
+                       menu_state->editingStartFrame) {
                 if (strlen(menu_state->inputBuffer) < sizeof(menu_state->inputBuffer) - 1) {
                     strcat(menu_state->inputBuffer, mutable_event.text.text);
                     return true;

@@ -62,6 +62,7 @@ double currentTime;
 int frameCounter;
 int loopCount;
 static bool quitRequested = false;
+static int s_deepRenderStartFrameIndex = 0;
 
 double t_increment;
 double t_param = 0.0;  // Parameter (0 to 1) for interpolation along the path.
@@ -70,6 +71,54 @@ static const char* s_fluidManifestOverride = NULL;
 #include "render/fluid/fluid_state.h"
 
 void UpdateSimulation(double* accumulator, double* currentTime, int* loopCount);
+
+static int ClampNonNegativeFrameIndex(int value) {
+    return (value < 0) ? 0 : value;
+}
+
+static int ResolveDeepRenderStartFrameIndex(void) {
+    int configured_start = ClampNonNegativeFrameIndex(animSettings.startFrameIndex);
+    if (!animSettings.resumeFromExistingFrames) {
+        return configured_start;
+    }
+    {
+        RayTracingRenderExportStatus status = {0};
+        if (ray_tracing_render_export_describe_active(&status)) {
+            return ClampNonNegativeFrameIndex(status.next_frame_index);
+        }
+    }
+    return configured_start;
+}
+
+static double AnimationNormalizedTForAbsoluteFrameIndex(int absolute_frame_index) {
+    double span = 1.0;
+    double progress = 0.0;
+    if (absolute_frame_index < 0) absolute_frame_index = 0;
+    if (animSettings.framesForTravel > 0) {
+        span = (double)animSettings.framesForTravel;
+    }
+    progress = (double)absolute_frame_index / span;
+
+    if (animSettings.bounceMode) {
+        double cycle = fmod(progress, 2.0);
+        if (cycle < 0.0) cycle += 2.0;
+        return (cycle <= 1.0) ? cycle : (2.0 - cycle);
+    }
+    if (strcmp(animSettings.loopMode, "loop") == 0) {
+        double wrapped = fmod(progress, 1.0);
+        if (wrapped < 0.0) wrapped += 1.0;
+        return wrapped;
+    }
+    if (progress < 0.0) progress = 0.0;
+    if (progress > 1.0) progress = 1.0;
+    return progress;
+}
+
+static void PrepareDeepRenderFrameStateForLocalIndex(int local_frame_counter) {
+    int absolute_frame_index = s_deepRenderStartFrameIndex + ClampNonNegativeFrameIndex(local_frame_counter);
+    t_param = AnimationNormalizedTForAbsoluteFrameIndex(absolute_frame_index);
+    currentTime = (double)absolute_frame_index * animSettings.frameDuration;
+}
 
 static bool EnvEnabled(const char *name) {
     const char *v = getenv(name);
@@ -495,8 +544,10 @@ void RenderFrame(double lightX, double lightY, int* frameCounter, bool* running)
         
     // Handle deep render mode frame saving
     if (animSettings.deepRenderMode) {
+        int absoluteFrameIndex = s_deepRenderStartFrameIndex + *frameCounter;
         ts_start_timer("Frame Save");
-        SaveFrame((*frameCounter)++);
+        SaveFrame(absoluteFrameIndex);
+        (*frameCounter)++;
         ts_stop_timer("Frame Save");
         if (*frameCounter >= animSettings.frameLimit) {
             printf("Deep render mode complete. Final frame saved.\n");
@@ -535,6 +586,9 @@ typedef struct RayTracingFrameRouteBridge {
 static void DeriveRenderInputs(RayTracingFrameRenderInputs* out_inputs) {
     if (!out_inputs) {
         return;
+    }
+    if (animSettings.deepRenderMode) {
+        PrepareDeepRenderFrameStateForLocalIndex(frameCounter);
     }
     UpdateLightPosition(&out_inputs->light_x, &out_inputs->light_y);
     UpdateCameraPosition(t_param);
@@ -620,7 +674,14 @@ void RunMainLoop(void) {
     currentTime = 0.0;
     frameCounter = 0;
     loopCount = 0;
-    t_param = 1.0 / animSettings.framesForTravel;
+    s_deepRenderStartFrameIndex = 0;
+    if (animSettings.deepRenderMode) {
+        s_deepRenderStartFrameIndex = ResolveDeepRenderStartFrameIndex();
+        t_param = AnimationNormalizedTForAbsoluteFrameIndex(s_deepRenderStartFrameIndex);
+        currentTime = (double)s_deepRenderStartFrameIndex * animSettings.frameDuration;
+    } else {
+        t_param = 1.0 / animSettings.framesForTravel;
+    }
     
     printf("DEBUG: RunMainLoop started with interactiveMode=%d, deepRenderMode=%d\n",
            animSettings.interactiveMode, animSettings.deepRenderMode);
@@ -652,7 +713,7 @@ void RunMainLoop(void) {
             .accumulator = &accumulator,
             .current_time = &currentTime,
             .loop_count = &loopCount,
-            .should_update = (!animSettings.interactiveMode || animSettings.deepRenderMode),
+            .should_update = (!animSettings.interactiveMode && !animSettings.deepRenderMode),
         };
         RayTracingFrameUpdateRequest update_request = {
             .update_fn = UpdateFrameViaBridge,

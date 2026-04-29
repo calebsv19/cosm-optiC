@@ -23,9 +23,9 @@ void ObjectEditorObjectAssignColor(SceneObject* obj, int packed_color) {
     MarkObjectDirty(obj);
 }
 
-void ObjectEditorObjectAssignTransparency(SceneObject* obj, double transparency) {
+void ObjectEditorObjectAssignAlpha(SceneObject* obj, double alpha) {
     if (!obj) return;
-    obj->transparency = object_editor_object_ops_clamp01(transparency);
+    obj->alpha = object_editor_object_ops_clamp01(alpha);
     MarkObjectDirty(obj);
 }
 

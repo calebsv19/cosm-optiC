@@ -327,10 +327,12 @@ const char *ray_tracing_resolve_import_dir(char *out, size_t out_size) {
 }
 
 size_t ray_tracing_manifest_default_roots(const char ***out_roots) {
+    static char input_root_direct[PATH_MAX];
     static char input_volume_frames[PATH_MAX];
     static char input_scenes[PATH_MAX];
     static char input_samples[PATH_MAX];
     static char input_shared_scenes[PATH_MAX];
+    static char output_root_direct[PATH_MAX];
     static char output_volume_frames[PATH_MAX];
     static char output_runtime_scenes[PATH_MAX];
     static char discovered_workspace_roots[16][PATH_MAX];
@@ -351,6 +353,9 @@ size_t ray_tracing_manifest_default_roots(const char ***out_roots) {
     const char *input_root = ray_tracing_env_input_root();
     const char *output_root = ray_tracing_env_output_root();
 
+    if (snprintf(input_root_direct, sizeof(input_root_direct), "%s", input_root) < (int)sizeof(input_root_direct)) {
+        roots[count++] = input_root_direct;
+    }
     if (ray_tracing_compose_path(input_root, "export/volume_frames",
                                  input_volume_frames, sizeof(input_volume_frames))) {
         roots[count++] = input_volume_frames;
@@ -366,6 +371,9 @@ size_t ray_tracing_manifest_default_roots(const char ***out_roots) {
     if (ray_tracing_compose_path(input_root, "assets/scenes",
                                  input_shared_scenes, sizeof(input_shared_scenes))) {
         roots[count++] = input_shared_scenes;
+    }
+    if (snprintf(output_root_direct, sizeof(output_root_direct), "%s", output_root) < (int)sizeof(output_root_direct)) {
+        roots[count++] = output_root_direct;
     }
     if (ray_tracing_compose_path(output_root, "volume_frames",
                                  output_volume_frames, sizeof(output_volume_frames))) {

@@ -53,6 +53,26 @@ static int clamp_secondary_diffuse_samples_3d_menu(int value) {
     return value;
 }
 
+static int clamp_bounce_depth_3d_menu(int value) {
+    if (value < RUNTIME_3D_BOUNCE_DEPTH_MIN) {
+        value = RUNTIME_3D_BOUNCE_DEPTH_MIN;
+    }
+    if (value > RUNTIME_3D_BOUNCE_DEPTH_MAX) {
+        value = RUNTIME_3D_BOUNCE_DEPTH_MAX;
+    }
+    return value;
+}
+
+static int clamp_roulette_threshold_3d_menu(int value) {
+    if (value < 0) {
+        value = 0;
+    }
+    if (value > 100) {
+        value = 100;
+    }
+    return value;
+}
+
 static int clamp_transmission_samples_3d_menu(int value) {
     if (value < RUNTIME_3D_TRANSMISSION_SAMPLES_MIN) {
         value = RUNTIME_3D_TRANSMISSION_SAMPLES_MIN;
@@ -112,7 +132,10 @@ void menu_state_build_manifest_label(const char *path, char *out, size_t out_siz
     const char *filename = strrchr(path, '/');
     filename = filename ? filename + 1 : path;
 
-    if (strcmp(filename, "manifest.json") == 0 || strcmp(filename, "scene_bundle.json") == 0) {
+    if (strcmp(filename, "manifest.json") == 0 ||
+        strcmp(filename, "scene_bundle.json") == 0 ||
+        strcmp(filename, "scene_runtime.json") == 0 ||
+        strcmp(filename, "scene_authoring.json") == 0) {
         char parent_buf[PATH_MAX];
         size_t len = (size_t)(filename - path - 1);
         if (len >= sizeof(parent_buf)) len = sizeof(parent_buf) - 1;
@@ -310,6 +333,26 @@ static void sync_secondary_diffuse_samples_3d_slider_from_settings(MenuRuntimeSt
         clamp_secondary_diffuse_samples_3d_menu(animSettings.secondaryDiffuseSamples3D);
 }
 
+static void sync_bounce_depth_3d_slider_from_settings(MenuRuntimeState* state) {
+    if (!state) return;
+    if (state->draggingSlider &&
+        state->selectedSlider == &state->bounceDepth3DSliderValue) {
+        return;
+    }
+    state->bounceDepth3DSliderValue =
+        clamp_bounce_depth_3d_menu(animSettings.bounceDepth3D);
+}
+
+static void sync_roulette_threshold_3d_slider_from_settings(MenuRuntimeState* state) {
+    if (!state) return;
+    if (state->draggingSlider &&
+        state->selectedSlider == &state->rouletteThreshold3DSliderValue) {
+        return;
+    }
+    state->rouletteThreshold3DSliderValue =
+        clamp_roulette_threshold_3d_menu((int)lround(animSettings.rouletteThreshold3D * 1000.0));
+}
+
 static void sync_transmission_samples_3d_slider_from_settings(MenuRuntimeState* state) {
     if (!state) return;
     if (state->draggingSlider &&
@@ -349,6 +392,8 @@ void menu_state_sync_from_anim(MenuRuntimeState* state) {
     sync_light_slider_from_settings(state);
     sync_decay_softness_slider_from_settings(state);
     sync_forward_decay_slider_from_settings(state);
+    sync_bounce_depth_3d_slider_from_settings(state);
+    sync_roulette_threshold_3d_slider_from_settings(state);
     sync_secondary_diffuse_samples_3d_slider_from_settings(state);
     sync_transmission_samples_3d_slider_from_settings(state);
     sync_temporal_frames_3d_slider_from_settings(state);
@@ -420,6 +465,15 @@ void menu_state_apply_special_slider_rules(MenuRuntimeState* state, int* target)
             state->forwardDecaySliderValue = SDL_MENU_FORWARD_FALLOFF_DISTANCE_MAX;
         }
         animSettings.forwardDecay = state->forwardDecaySliderValue;
+    } else if (target == &state->bounceDepth3DSliderValue) {
+        state->bounceDepth3DSliderValue =
+            clamp_bounce_depth_3d_menu(state->bounceDepth3DSliderValue);
+        animSettings.bounceDepth3D = state->bounceDepth3DSliderValue;
+    } else if (target == &state->rouletteThreshold3DSliderValue) {
+        state->rouletteThreshold3DSliderValue =
+            clamp_roulette_threshold_3d_menu(state->rouletteThreshold3DSliderValue);
+        animSettings.rouletteThreshold3D =
+            state->rouletteThreshold3DSliderValue / 1000.0;
     } else if (target == &state->secondaryDiffuseSamples3DSliderValue) {
         state->secondaryDiffuseSamples3DSliderValue =
             clamp_secondary_diffuse_samples_3d_menu(state->secondaryDiffuseSamples3DSliderValue);
@@ -483,6 +537,9 @@ void menu_state_init(MenuRuntimeState* state) {
     state->lightIntensitySliderValue = 500;
     state->lightDecaySoftnessSliderValue = 100;
     state->forwardDecaySliderValue = 2000;
+    state->bounceDepth3DSliderValue = RUNTIME_3D_BOUNCE_DEPTH_DEFAULT;
+    state->rouletteThreshold3DSliderValue =
+        (int)lround(RUNTIME_3D_ROULETTE_THRESHOLD_DEFAULT * 1000.0);
     state->secondaryDiffuseSamples3DSliderValue = RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT;
     state->transmissionSamples3DSliderValue = RUNTIME_3D_TRANSMISSION_SAMPLES_DEFAULT;
     state->temporalFrames3DSliderValue = RUNTIME_3D_TEMPORAL_FRAMES_DEFAULT;
@@ -505,6 +562,7 @@ void menu_state_init(MenuRuntimeState* state) {
     state->editingOutputRoot = false;
     state->editingFrameDir = false;
     state->editingVideoOutputRoot = false;
+    state->editingStartFrame = false;
     state->pathInputBuffer[0] = '\0';
     menu_batch_panel_refresh(state);
     state->sliderScroll = 0.0f;
@@ -522,6 +580,8 @@ void menu_state_reset_defaults(MenuRuntimeState* state) {
     animSettings.bounceLimit = SDL_MENU_DEFAULT_BOUNCE_LIMIT;
     animSettings.frameLimit = SDL_MENU_DEFAULT_FRAME_LIMIT;
     animSettings.framesForTravel = SDL_MENU_DEFAULT_FRAME_FOR_TRAVEL;
+    animSettings.startFrameIndex = 0;
+    animSettings.resumeFromExistingFrames = false;
     animSettings.fps = 30;
     strncpy(animSettings.inputRoot, ray_tracing_default_input_root(), sizeof(animSettings.inputRoot) - 1);
     animSettings.inputRoot[sizeof(animSettings.inputRoot) - 1] = '\0';
@@ -541,6 +601,7 @@ void menu_state_reset_defaults(MenuRuntimeState* state) {
         state->editingOutputRoot = false;
         state->editingFrameDir = false;
         state->editingVideoOutputRoot = false;
+        state->editingStartFrame = false;
         state->pathInputBuffer[0] = '\0';
         menu_batch_panel_refresh(state);
     }
@@ -576,6 +637,8 @@ void menu_state_reset_defaults(MenuRuntimeState* state) {
     double diag = hypot(sceneSettings.windowWidth, sceneSettings.windowHeight);
     animSettings.forwardDecay = (diag > 0.0) ? diag : 2000.0;
     animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_QUADRATIC;
+    animSettings.bounceDepth3D = RUNTIME_3D_BOUNCE_DEPTH_DEFAULT;
+    animSettings.rouletteThreshold3D = RUNTIME_3D_ROULETTE_THRESHOLD_DEFAULT;
     animSettings.secondaryDiffuseSamples3D = RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT;
     animSettings.transmissionSamples3D = RUNTIME_3D_TRANSMISSION_SAMPLES_DEFAULT;
     animSettings.temporalFrames3D = RUNTIME_3D_TEMPORAL_FRAMES_DEFAULT;

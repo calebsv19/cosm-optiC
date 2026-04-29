@@ -113,6 +113,8 @@ static int test_runtime_native_3d_render_live_buffer_contract(void) {
     animSettings.lightIntensity = 10.0;
     animSettings.forwardDecay = 10.0;
     animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    animSettings.bounceDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
     animSettings.lightHeight = 0.0;
     animSettings.interactiveMode = true;
     animSettings.spaceMode = SPACE_MODE_3D;

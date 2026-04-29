@@ -2,6 +2,7 @@
 
 #include <math.h>
 
+#include "render/runtime_native_3d_sampling.h"
 #include "render/runtime_visibility_3d.h"
 
 static const double kRuntimeEmissiveDirect3DEpsilon = 1e-4;
@@ -26,12 +27,6 @@ static uint32_t runtime_emissive_direct_3d_hash_u32(uint32_t x) {
     x *= 0x846ca68bU;
     x ^= x >> 16;
     return x;
-}
-
-static double runtime_emissive_direct_3d_hash01(uint32_t seed,
-                                                uint32_t salt) {
-    uint32_t bits = runtime_emissive_direct_3d_hash_u32(seed ^ salt);
-    return (double)bits / 4294967295.0;
 }
 
 static uint32_t runtime_emissive_direct_3d_seed_from_hit(
@@ -71,6 +66,7 @@ static double runtime_emissive_direct_3d_triangle_area(const RuntimeTriangle3D* 
 
 static Vec3 runtime_emissive_direct_3d_sample_triangle_point(
     const RuntimeTriangle3D* triangle,
+    const RuntimeNative3DSamplingContext* sampling,
     uint32_t base_seed,
     int triangle_index) {
     double u = 0.0;
@@ -78,8 +74,13 @@ static Vec3 runtime_emissive_direct_3d_sample_triangle_point(
 
     if (!triangle) return vec3(0.0, 0.0, 0.0);
 
-    u = runtime_emissive_direct_3d_hash01(base_seed, (uint32_t)(triangle_index * 2 + 1));
-    v = runtime_emissive_direct_3d_hash01(base_seed, (uint32_t)(triangle_index * 2 + 2));
+    RuntimeNative3DSampling_Stratified2D(sampling,
+                                         base_seed ^ (uint32_t)(triangle_index * 2654435761U),
+                                         1,
+                                         0,
+                                         (uint32_t)triangle_index,
+                                         &u,
+                                         &v);
     if ((u + v) > 1.0) {
         u = 1.0 - u;
         v = 1.0 - v;
@@ -129,7 +130,10 @@ bool RuntimeEmissiveDirect3D_ShadeHit(const RuntimeScene3D* scene,
             continue;
         }
 
-        sample_point = runtime_emissive_direct_3d_sample_triangle_point(triangle, base_seed, i);
+        sample_point = runtime_emissive_direct_3d_sample_triangle_point(triangle,
+                                                                        sampling,
+                                                                        base_seed,
+                                                                        i);
         to_emitter = vec3_sub(sample_point, hit->position);
         distance = vec3_length(to_emitter);
         if (!(distance > kRuntimeEmissiveDirect3DEpsilon)) {

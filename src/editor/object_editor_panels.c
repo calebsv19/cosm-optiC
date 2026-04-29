@@ -20,8 +20,6 @@
 #define ASSET_PANEL_WIDTH 200
 #define MATERIAL_ROW_HEIGHT 18
 #define PANEL_GAP 10
-#define COLOR_SWATCH_COUNT 4
-#define COLOR_SWATCH_GAP 6
 #define OBJECT_EDITOR_SLIDER_TRACK_HEIGHT 8
 #define OBJECT_EDITOR_SLIDER_KNOB_WIDTH 12
 
@@ -36,23 +34,10 @@ extern int importCount;
 extern SDL_Rect materialPanelRect;
 extern SDL_Rect materialCollapseRect;
 extern int selectedMaterialIndex;
-extern int selectedColorIndex;
 extern bool assetsCollapsed;
 extern bool materialsCollapsed;
 extern int assetScroll;
 extern int materialScroll;
-
-typedef struct {
-    const char* label;
-    int packed;
-} ObjectEditorColorPreset;
-
-static const ObjectEditorColorPreset kObjectEditorColorPresets[COLOR_SWATCH_COUNT] = {
-    {"White", 0xFFFFFF},
-    {"Red", 0xFF0000},
-    {"Green", 0x00FF00},
-    {"Blue", 0x0000FF},
-};
 
 static int ObjectEditorHeaderHeight(void) {
     return animation_config_scale_text_point_size(&animSettings, PANEL_HEADER_HEIGHT, 20);
@@ -66,15 +51,15 @@ static int ObjectEditorMaterialRowHeight(void) {
     return animation_config_scale_text_point_size(&animSettings, MATERIAL_ROW_HEIGHT, 16);
 }
 
-static int ObjectEditorColorSwatchSize(void) {
+static int ObjectEditorColorPreviewSize(void) {
     return animation_config_scale_text_point_size(&animSettings, 22, 18);
 }
 
-static int ObjectEditorColorSectionHeight(void) {
-    return animation_config_scale_text_point_size(&animSettings, 46, 40);
+static int ObjectEditorColorSliderSectionHeight(void) {
+    return animation_config_scale_text_point_size(&animSettings, 30, 26);
 }
 
-static int ObjectEditorSliderSectionHeight(void) {
+static int ObjectEditorAuxSliderSectionHeight(void) {
     return animation_config_scale_text_point_size(&animSettings, 44, 38);
 }
 
@@ -192,31 +177,80 @@ static const SceneObject* ObjectEditorPanels_SelectedObject(void) {
     return &sceneSettings.sceneObjects[selected_object_index];
 }
 
-static int ObjectEditorPanels_VisibleSliderCount(void) {
-    const SceneObject* selected = ObjectEditorPanels_SelectedObject();
-    if (!selected) return 0;
-    if (selected->material_id == MATERIAL_PRESET_TRANSPARENT) return 1;
-    if (selected->material_id == MATERIAL_PRESET_EMISSIVE) return 1;
-    return 0;
+static bool ObjectEditorPanels_ObjectUsesAlpha(const SceneObject* selected) {
+    return selected && selected->material_id == MATERIAL_PRESET_TRANSPARENT;
 }
 
-static ObjectEditorPanelSliderKind ObjectEditorPanels_SliderKindForOrdinal(int ordinal) {
+static bool ObjectEditorPanels_ObjectUsesEmissiveStrength(const SceneObject* selected) {
+    return selected && selected->material_id == MATERIAL_PRESET_EMISSIVE;
+}
+
+static int ObjectEditorPanels_ColorSliderCount(void) {
+    const SceneObject* selected = ObjectEditorPanels_SelectedObject();
+    if (!selected) return 0;
+    return 3 + (ObjectEditorPanels_ObjectUsesAlpha(selected) ? 1 : 0);
+}
+
+static int ObjectEditorPanels_AuxSliderCount(void) {
+    const SceneObject* selected = ObjectEditorPanels_SelectedObject();
+    return ObjectEditorPanels_ObjectUsesEmissiveStrength(selected) ? 1 : 0;
+}
+
+static int ObjectEditorColorSectionHeight(void) {
+    int color_slider_count = ObjectEditorPanels_ColorSliderCount();
+    int label_h = animation_config_scale_text_point_size(&animSettings, 14, 12);
+    int preview = ObjectEditorColorPreviewSize();
+    int row_h = ObjectEditorColorSliderSectionHeight();
+    if (color_slider_count <= 0) return 0;
+    return label_h + 6 + preview + 8 + color_slider_count * row_h +
+           (color_slider_count - 1) * 4;
+}
+
+static int ObjectEditorAuxSectionHeight(void) {
+    int aux_slider_count = ObjectEditorPanels_AuxSliderCount();
+    if (aux_slider_count <= 0) return 0;
+    return aux_slider_count * ObjectEditorAuxSliderSectionHeight() +
+           (aux_slider_count - 1) * 6 + 8;
+}
+
+static ObjectEditorPanelSliderKind ObjectEditorPanels_ColorSliderKindForOrdinal(int ordinal) {
+    const SceneObject* selected = ObjectEditorPanels_SelectedObject();
+    if (!selected) return OBJECT_EDITOR_PANEL_SLIDER_NONE;
+    switch (ordinal) {
+        case 0: return OBJECT_EDITOR_PANEL_SLIDER_COLOR_R;
+        case 1: return OBJECT_EDITOR_PANEL_SLIDER_COLOR_G;
+        case 2: return OBJECT_EDITOR_PANEL_SLIDER_COLOR_B;
+        case 3:
+            return ObjectEditorPanels_ObjectUsesAlpha(selected)
+                       ? OBJECT_EDITOR_PANEL_SLIDER_COLOR_A
+                       : OBJECT_EDITOR_PANEL_SLIDER_NONE;
+        default:
+            return OBJECT_EDITOR_PANEL_SLIDER_NONE;
+    }
+}
+
+static ObjectEditorPanelSliderKind ObjectEditorPanels_AuxSliderKindForOrdinal(int ordinal) {
     const SceneObject* selected = ObjectEditorPanels_SelectedObject();
     if (!selected || ordinal != 0) return OBJECT_EDITOR_PANEL_SLIDER_NONE;
-    if (selected->material_id == MATERIAL_PRESET_TRANSPARENT) {
-        return OBJECT_EDITOR_PANEL_SLIDER_TRANSPARENCY;
-    }
-    if (selected->material_id == MATERIAL_PRESET_EMISSIVE) {
-        return OBJECT_EDITOR_PANEL_SLIDER_EMISSIVE_STRENGTH;
-    }
-    return OBJECT_EDITOR_PANEL_SLIDER_NONE;
+    return ObjectEditorPanels_ObjectUsesEmissiveStrength(selected)
+               ? OBJECT_EDITOR_PANEL_SLIDER_EMISSIVE_STRENGTH
+               : OBJECT_EDITOR_PANEL_SLIDER_NONE;
 }
 
 static double ObjectEditorPanels_ValueForSliderKind(ObjectEditorPanelSliderKind kind) {
     const SceneObject* selected = ObjectEditorPanels_SelectedObject();
     if (!selected) return 0.0;
-    if (kind == OBJECT_EDITOR_PANEL_SLIDER_TRANSPARENCY) {
-        return selected->transparency;
+    if (kind == OBJECT_EDITOR_PANEL_SLIDER_COLOR_R) {
+        return (double)SceneObjectColorR(selected) / 255.0;
+    }
+    if (kind == OBJECT_EDITOR_PANEL_SLIDER_COLOR_G) {
+        return (double)SceneObjectColorG(selected) / 255.0;
+    }
+    if (kind == OBJECT_EDITOR_PANEL_SLIDER_COLOR_B) {
+        return (double)SceneObjectColorB(selected) / 255.0;
+    }
+    if (kind == OBJECT_EDITOR_PANEL_SLIDER_COLOR_A) {
+        return selected->alpha;
     }
     if (kind == OBJECT_EDITOR_PANEL_SLIDER_EMISSIVE_STRENGTH) {
         return selected->emissiveStrength;
@@ -225,8 +259,17 @@ static double ObjectEditorPanels_ValueForSliderKind(ObjectEditorPanelSliderKind 
 }
 
 static const char* ObjectEditorPanels_LabelForSliderKind(ObjectEditorPanelSliderKind kind) {
-    if (kind == OBJECT_EDITOR_PANEL_SLIDER_TRANSPARENCY) {
-        return "Transparency";
+    if (kind == OBJECT_EDITOR_PANEL_SLIDER_COLOR_R) {
+        return "R";
+    }
+    if (kind == OBJECT_EDITOR_PANEL_SLIDER_COLOR_G) {
+        return "G";
+    }
+    if (kind == OBJECT_EDITOR_PANEL_SLIDER_COLOR_B) {
+        return "B";
+    }
+    if (kind == OBJECT_EDITOR_PANEL_SLIDER_COLOR_A) {
+        return "A";
     }
     if (kind == OBJECT_EDITOR_PANEL_SLIDER_EMISSIVE_STRENGTH) {
         return "Emitter Strength";
@@ -234,14 +277,104 @@ static const char* ObjectEditorPanels_LabelForSliderKind(ObjectEditorPanelSlider
     return "";
 }
 
-static void ObjectEditorResolveSliderMetrics(int ordinal,
-                                             SDL_Rect* out_section,
-                                             SDL_Rect* out_label,
-                                             SDL_Rect* out_value,
-                                             SDL_Rect* out_track,
-                                             SDL_Rect* out_knob) {
+static void ObjectEditorResolveColorSectionMetrics(SDL_Rect* out_section,
+                                                   SDL_Rect* out_label,
+                                                   SDL_Rect* out_preview) {
     int header_h = ObjectEditorHeaderHeight();
-    int section_h = ObjectEditorSliderSectionHeight();
+    int color_h = ObjectEditorColorSectionHeight();
+    int preview_size = ObjectEditorColorPreviewSize();
+    int label_h = animation_config_scale_text_point_size(&animSettings, 14, 12);
+    SDL_Rect section = {
+        materialPanelRect.x + PANEL_PADDING,
+        materialPanelRect.y + PANEL_PADDING + header_h + 4,
+        materialPanelRect.w - PANEL_PADDING * 2,
+        color_h
+    };
+    SDL_Rect label = {
+        section.x,
+        section.y,
+        section.w - preview_size - 8,
+        label_h
+    };
+    SDL_Rect preview = {
+        section.x + section.w - preview_size,
+        section.y,
+        preview_size,
+        preview_size
+    };
+
+    if (out_section) *out_section = section;
+    if (out_label) *out_label = label;
+    if (out_preview) *out_preview = preview;
+}
+
+static void ObjectEditorResolveColorSliderMetrics(int ordinal,
+                                                  SDL_Rect* out_section,
+                                                  SDL_Rect* out_label,
+                                                  SDL_Rect* out_value,
+                                                  SDL_Rect* out_track,
+                                                  SDL_Rect* out_knob) {
+    SDL_Rect color_section = {0};
+    SDL_Rect preview = {0};
+    int section_h = ObjectEditorColorSliderSectionHeight();
+    SDL_Rect section = {0};
+    SDL_Rect label = {0};
+    SDL_Rect value = {0};
+    SDL_Rect track = {0};
+
+    ObjectEditorResolveColorSectionMetrics(&color_section, &label, &preview);
+    section = (SDL_Rect){
+        color_section.x,
+        preview.y + preview.h + 8 + ordinal * (section_h + 4),
+        color_section.w,
+        section_h
+    };
+    label = (SDL_Rect){
+        section.x,
+        section.y,
+        animation_config_scale_text_point_size(&animSettings, 16, 14),
+        animation_config_scale_text_point_size(&animSettings, 14, 12)
+    };
+    value = (SDL_Rect){
+        section.x + section.w - animation_config_scale_text_point_size(&animSettings, 48, 40),
+        section.y,
+        animation_config_scale_text_point_size(&animSettings, 48, 40),
+        label.h
+    };
+    track = (SDL_Rect){
+        label.x + label.w + 6,
+        section.y + 2,
+        value.x - (label.x + label.w + 12),
+        animation_config_scale_text_point_size(&animSettings,
+                                               OBJECT_EDITOR_SLIDER_TRACK_HEIGHT,
+                                               6)
+    };
+
+    if (out_section) *out_section = section;
+    if (out_label) *out_label = label;
+    if (out_value) *out_value = value;
+    if (out_track) *out_track = track;
+    if (out_knob) {
+        double value_norm = ObjectEditorPanels_ValueForSliderKind(
+            ObjectEditorPanels_ColorSliderKindForOrdinal(ordinal));
+        int knob_x = track.x +
+                     (int)lround(value_norm *
+                                 (double)(track.w - OBJECT_EDITOR_SLIDER_KNOB_WIDTH));
+        *out_knob = (SDL_Rect){knob_x,
+                               track.y - 4 + (track.h - OBJECT_EDITOR_SLIDER_TRACK_HEIGHT) / 2,
+                               OBJECT_EDITOR_SLIDER_KNOB_WIDTH,
+                               track.h + 8};
+    }
+}
+
+static void ObjectEditorResolveAuxSliderMetrics(int ordinal,
+                                                SDL_Rect* out_section,
+                                                SDL_Rect* out_label,
+                                                SDL_Rect* out_value,
+                                                SDL_Rect* out_track,
+                                                SDL_Rect* out_knob) {
+    int header_h = ObjectEditorHeaderHeight();
+    int section_h = ObjectEditorAuxSliderSectionHeight();
     int color_h = ObjectEditorColorSectionHeight();
     SDL_Rect section = {
         materialPanelRect.x + PANEL_PADDING,
@@ -276,8 +409,8 @@ static void ObjectEditorResolveSliderMetrics(int ordinal,
     if (out_value) *out_value = value;
     if (out_track) *out_track = track;
     if (out_knob) {
-        double value_norm =
-            ObjectEditorPanels_ValueForSliderKind(ObjectEditorPanels_SliderKindForOrdinal(ordinal));
+        double value_norm = ObjectEditorPanels_ValueForSliderKind(
+            ObjectEditorPanels_AuxSliderKindForOrdinal(ordinal));
         int knob_x = track.x +
                      (int)lround(value_norm *
                                  (double)(track.w - OBJECT_EDITOR_SLIDER_KNOB_WIDTH));
@@ -295,18 +428,16 @@ static void ObjectEditorResolveMaterialListMetrics(int* out_list_y,
     int row_h = ObjectEditorMaterialRowHeight();
     int header_h = ObjectEditorHeaderHeight();
     int color_h = ObjectEditorColorSectionHeight();
-    int slider_h = 0;
+    int aux_h = ObjectEditorAuxSectionHeight();
     int list_y = 0;
     int visible = ObjectEditorMaterialVisibleCount();
     int row_area_h = materialPanelRect.h - (list_y - materialPanelRect.y) - PANEL_PADDING;
     int max_rows = 1;
     int max_scroll = 0;
-    if (ObjectEditorPanels_VisibleSliderCount() > 0) {
-        slider_h = ObjectEditorPanels_VisibleSliderCount() *
-                       ObjectEditorSliderSectionHeight() +
-                   8;
-    }
-    list_y = materialPanelRect.y + PANEL_PADDING + header_h + 4 + color_h + slider_h + 4;
+    list_y = materialPanelRect.y + PANEL_PADDING + header_h + 4;
+    if (color_h > 0) list_y += color_h + 8;
+    if (aux_h > 0) list_y += aux_h;
+    list_y += 4;
     row_area_h = materialPanelRect.h - (list_y - materialPanelRect.y) - PANEL_PADDING;
     if (row_area_h < row_h) row_area_h = row_h;
     max_rows = row_area_h / row_h;
@@ -317,42 +448,6 @@ static void ObjectEditorResolveMaterialListMetrics(int* out_list_y,
     if (out_row_h) *out_row_h = row_h;
     if (out_max_rows) *out_max_rows = max_rows;
     if (out_max_scroll) *out_max_scroll = max_scroll;
-}
-
-static void ObjectEditorResolveColorSectionMetrics(SDL_Rect* out_section,
-                                                   SDL_Rect* out_label,
-                                                   SDL_Rect swatches[COLOR_SWATCH_COUNT]) {
-    int header_h = ObjectEditorHeaderHeight();
-    int swatch_size = ObjectEditorColorSwatchSize();
-    int section_h = ObjectEditorColorSectionHeight();
-    SDL_Rect section = {
-        materialPanelRect.x + PANEL_PADDING,
-        materialPanelRect.y + PANEL_PADDING + header_h + 4,
-        materialPanelRect.w - PANEL_PADDING * 2,
-        section_h
-    };
-    SDL_Rect label = {
-        section.x,
-        section.y,
-        section.w,
-        animation_config_scale_text_point_size(&animSettings, 14, 12)
-    };
-    int swatch_y = label.y + label.h + 4;
-    int total_swatches_w =
-        COLOR_SWATCH_COUNT * swatch_size + (COLOR_SWATCH_COUNT - 1) * COLOR_SWATCH_GAP;
-    int swatch_x = section.x + (section.w - total_swatches_w) / 2;
-
-    if (out_section) *out_section = section;
-    if (out_label) *out_label = label;
-    if (!swatches) return;
-    for (int i = 0; i < COLOR_SWATCH_COUNT; ++i) {
-        swatches[i] = (SDL_Rect){
-            swatch_x + i * (swatch_size + COLOR_SWATCH_GAP),
-            swatch_y,
-            swatch_size,
-            swatch_size
-        };
-    }
 }
 
 int ObjectEditorPanels_AssetMaxScroll(void) {
@@ -405,23 +500,6 @@ int ObjectEditorPanels_MaterialIndexAtPoint(int mx, int my) {
     return idx;
 }
 
-int ObjectEditorPanels_ColorIndexAtPoint(int mx, int my) {
-    SDL_Rect swatches[COLOR_SWATCH_COUNT];
-    if (materialsCollapsed) return -1;
-    if (mx < materialPanelRect.x || mx >= materialPanelRect.x + materialPanelRect.w ||
-        my < materialPanelRect.y || my >= materialPanelRect.y + materialPanelRect.h) {
-        return -1;
-    }
-    ObjectEditorResolveColorSectionMetrics(NULL, NULL, swatches);
-    for (int i = 0; i < COLOR_SWATCH_COUNT; ++i) {
-        if (mx >= swatches[i].x && mx < swatches[i].x + swatches[i].w &&
-            my >= swatches[i].y && my < swatches[i].y + swatches[i].h) {
-            return i;
-        }
-    }
-    return -1;
-}
-
 static bool ObjectEditorPanels_PointInRect(int mx, int my, const SDL_Rect* rect) {
     return rect && mx >= rect->x && mx < rect->x + rect->w && my >= rect->y &&
            my < rect->y + rect->h;
@@ -441,12 +519,23 @@ bool ObjectEditorPanels_SliderValueAtPoint(int mx,
                                            int my,
                                            ObjectEditorPanelSliderKind* out_kind,
                                            double* out_value) {
-    int slider_count = ObjectEditorPanels_VisibleSliderCount();
-    for (int i = 0; i < slider_count; ++i) {
+    int color_slider_count = ObjectEditorPanels_ColorSliderCount();
+    int aux_slider_count = ObjectEditorPanels_AuxSliderCount();
+    for (int i = 0; i < color_slider_count; ++i) {
         SDL_Rect section = {0};
         SDL_Rect track = {0};
-        ObjectEditorPanelSliderKind kind = ObjectEditorPanels_SliderKindForOrdinal(i);
-        ObjectEditorResolveSliderMetrics(i, &section, NULL, NULL, &track, NULL);
+        ObjectEditorPanelSliderKind kind = ObjectEditorPanels_ColorSliderKindForOrdinal(i);
+        ObjectEditorResolveColorSliderMetrics(i, &section, NULL, NULL, &track, NULL);
+        if (!ObjectEditorPanels_PointInRect(mx, my, &section)) continue;
+        if (out_kind) *out_kind = kind;
+        if (out_value) *out_value = ObjectEditorPanels_SliderValueFromTrackX(&track, mx);
+        return kind != OBJECT_EDITOR_PANEL_SLIDER_NONE;
+    }
+    for (int i = 0; i < aux_slider_count; ++i) {
+        SDL_Rect section = {0};
+        SDL_Rect track = {0};
+        ObjectEditorPanelSliderKind kind = ObjectEditorPanels_AuxSliderKindForOrdinal(i);
+        ObjectEditorResolveAuxSliderMetrics(i, &section, NULL, NULL, &track, NULL);
         if (!ObjectEditorPanels_PointInRect(mx, my, &section)) continue;
         if (out_kind) *out_kind = kind;
         if (out_value) *out_value = ObjectEditorPanels_SliderValueFromTrackX(&track, mx);
@@ -458,32 +547,23 @@ bool ObjectEditorPanels_SliderValueAtPoint(int mx,
 bool ObjectEditorPanels_SliderValueForKindAtX(ObjectEditorPanelSliderKind kind,
                                               int mx,
                                               double* out_value) {
-    int slider_count = ObjectEditorPanels_VisibleSliderCount();
-    for (int i = 0; i < slider_count; ++i) {
+    int color_slider_count = ObjectEditorPanels_ColorSliderCount();
+    int aux_slider_count = ObjectEditorPanels_AuxSliderCount();
+    for (int i = 0; i < color_slider_count; ++i) {
         SDL_Rect track = {0};
-        if (ObjectEditorPanels_SliderKindForOrdinal(i) != kind) continue;
-        ObjectEditorResolveSliderMetrics(i, NULL, NULL, NULL, &track, NULL);
+        if (ObjectEditorPanels_ColorSliderKindForOrdinal(i) != kind) continue;
+        ObjectEditorResolveColorSliderMetrics(i, NULL, NULL, NULL, &track, NULL);
+        if (out_value) *out_value = ObjectEditorPanels_SliderValueFromTrackX(&track, mx);
+        return true;
+    }
+    for (int i = 0; i < aux_slider_count; ++i) {
+        SDL_Rect track = {0};
+        if (ObjectEditorPanels_AuxSliderKindForOrdinal(i) != kind) continue;
+        ObjectEditorResolveAuxSliderMetrics(i, NULL, NULL, NULL, &track, NULL);
         if (out_value) *out_value = ObjectEditorPanels_SliderValueFromTrackX(&track, mx);
         return true;
     }
     return false;
-}
-
-int ObjectEditorPanels_PackedColorForIndex(int index) {
-    if (index < 0 || index >= COLOR_SWATCH_COUNT) {
-        return 0xFFFFFF;
-    }
-    return kObjectEditorColorPresets[index].packed;
-}
-
-int ObjectEditorPanels_ColorIndexForPackedRGB(int packed) {
-    int rgb = packed & 0xFFFFFF;
-    for (int i = 0; i < COLOR_SWATCH_COUNT; ++i) {
-        if (kObjectEditorColorPresets[i].packed == rgb) {
-            return i;
-        }
-    }
-    return -1;
 }
 
 static int ObjectEditorResolveMaterialSwatchColor(int material_id) {
@@ -548,7 +628,7 @@ void ObjectEditorPanels_UpdateLayoutForRegion(const SDL_Rect* region) {
     int assetContent = 0;
     int matContent = 0;
     int colorContent = 0;
-    int sliderContent = 0;
+    int auxSliderContent = 0;
     int overflow = 0;
     if (region && region->w > 0 && region->h > 0) {
         available = *region;
@@ -570,15 +650,12 @@ void ObjectEditorPanels_UpdateLayoutForRegion(const SDL_Rect* region) {
     if (panelW < 120) panelW = 120;
     int headerW = panelW - PANEL_PADDING * 2;
     int assetRows = showImports ? importCount : (int)assetLib.count;
-    colorContent = ObjectEditorColorSectionHeight() + 4;
-    if (ObjectEditorPanels_VisibleSliderCount() > 0) {
-        sliderContent = ObjectEditorPanels_VisibleSliderCount() *
-                            ObjectEditorSliderSectionHeight() +
-                        8;
-    }
+    colorContent = ObjectEditorColorSectionHeight();
+    auxSliderContent = ObjectEditorAuxSectionHeight();
     if (assetRows < 1) assetRows = 1;
     assetMinContent = headerH + PANEL_PADDING * 2 + assetRowH;
-    materialMinContent = headerH + PANEL_PADDING * 2 + colorContent + sliderContent +
+    materialMinContent = headerH + PANEL_PADDING * 2 +
+                         (colorContent > 0 ? colorContent + 8 : 0) + auxSliderContent +
                          materialRowH;
     assetContent = headerH + PANEL_PADDING * 2 + 4 + assetRows * assetRowH;
     if (assetContent > panelMaxH) assetContent = panelMaxH;
@@ -594,7 +671,8 @@ void ObjectEditorPanels_UpdateLayoutForRegion(const SDL_Rect* region) {
 
     int matRows = MaterialManagerCount();
     if (matRows < 1) matRows = 1;
-    matContent = headerH + PANEL_PADDING * 2 + colorContent + sliderContent + 4 +
+    matContent = headerH + PANEL_PADDING * 2 +
+                 (colorContent > 0 ? colorContent + 8 : 0) + auxSliderContent + 4 +
                  matRows * materialRowH;
     if (matContent > panelMaxH) matContent = panelMaxH;
 
@@ -739,8 +817,9 @@ void ObjectEditorPanels_DrawMaterialList(SDL_Renderer* renderer) {
     SDL_Rect headerBar = {0};
     SDL_Rect titleRect = {0};
     SDL_Rect colorLabelRect = {0};
-    SDL_Rect colorSwatches[COLOR_SWATCH_COUNT];
-    int slider_count = 0;
+    SDL_Rect colorPreviewRect = {0};
+    int color_slider_count = 0;
+    int aux_slider_count = 0;
     int listY = 0;
     int maxRows = 0;
 #if !USE_VULKAN
@@ -785,52 +864,89 @@ void ObjectEditorPanels_DrawMaterialList(SDL_Renderer* renderer) {
         return;
     }
 
-    ObjectEditorResolveColorSectionMetrics(NULL, &colorLabelRect, colorSwatches);
-    RenderLabelTextLeft(renderer, colorLabelRect, "Object Color", mutedColor);
-    for (int i = 0; i < COLOR_SWATCH_COUNT; ++i) {
-        SDL_Color swatchColor =
-            ObjectEditorPanelColorFromPackedRGB(kObjectEditorColorPresets[i].packed, 255);
-        bool selected = (i == selectedColorIndex);
-        SDL_Rect border = {
-            colorSwatches[i].x - 2,
-            colorSwatches[i].y - 2,
-            colorSwatches[i].w + 4,
-            colorSwatches[i].h + 4
-        };
+    ObjectEditorResolveColorSectionMetrics(NULL, &colorLabelRect, &colorPreviewRect);
+    if (ObjectEditorPanels_ColorSliderCount() > 0) {
+        const SceneObject* selected = ObjectEditorPanels_SelectedObject();
+        SDL_Color previewColor = selected
+                                     ? ObjectEditorPanelColorFromPackedRGB(
+                                           selected->color,
+                                           ObjectEditorPanels_ObjectUsesAlpha(selected)
+                                               ? SceneObjectAlphaByte(selected)
+                                               : 255)
+                                     : (SDL_Color){255, 255, 255, 255};
+        RenderLabelTextLeft(renderer, colorLabelRect, "Object Color", mutedColor);
         SDL_SetRenderDrawColor(renderer,
-                               selected ? activeRowFill.r : inactiveRowFill.r,
-                               selected ? activeRowFill.g : inactiveRowFill.g,
-                               selected ? activeRowFill.b : inactiveRowFill.b,
-                               selected ? 255 : 220);
-        SDL_RenderFillRect(renderer, &border);
+                               inactiveRowFill.r,
+                               inactiveRowFill.g,
+                               inactiveRowFill.b,
+                               220);
+        SDL_RenderFillRect(renderer, &colorPreviewRect);
         SDL_SetRenderDrawColor(renderer,
-                               borderColor.r,
-                               borderColor.g,
-                               borderColor.b,
-                               selected ? 255 : 200);
-        SDL_RenderDrawRect(renderer, &border);
-        SDL_SetRenderDrawColor(renderer, swatchColor.r, swatchColor.g, swatchColor.b, swatchColor.a);
-        SDL_RenderFillRect(renderer, &colorSwatches[i]);
-        SDL_SetRenderDrawColor(renderer, borderColor.r, borderColor.g, borderColor.b, borderColor.a);
-        SDL_RenderDrawRect(renderer, &colorSwatches[i]);
+                               previewColor.r,
+                               previewColor.g,
+                               previewColor.b,
+                               previewColor.a);
+        SDL_RenderFillRect(renderer, &colorPreviewRect);
+        SDL_SetRenderDrawColor(renderer, borderColor.r, borderColor.g, borderColor.b, 255);
+        SDL_RenderDrawRect(renderer, &colorPreviewRect);
     }
 
-    slider_count = ObjectEditorPanels_VisibleSliderCount();
-    for (int i = 0; i < slider_count; ++i) {
+    color_slider_count = ObjectEditorPanels_ColorSliderCount();
+    for (int i = 0; i < color_slider_count; ++i) {
         SDL_Rect labelRect = {0};
         SDL_Rect valueRect = {0};
         SDL_Rect trackRect = {0};
         SDL_Rect knobRect = {0};
-        ObjectEditorPanelSliderKind kind = ObjectEditorPanels_SliderKindForOrdinal(i);
+        ObjectEditorPanelSliderKind kind = ObjectEditorPanels_ColorSliderKindForOrdinal(i);
         double value = ObjectEditorPanels_ValueForSliderKind(kind);
         char valueText[32];
 
-        ObjectEditorResolveSliderMetrics(i,
-                                         NULL,
-                                         &labelRect,
-                                         &valueRect,
-                                         &trackRect,
-                                         &knobRect);
+        ObjectEditorResolveColorSliderMetrics(i,
+                                              NULL,
+                                              &labelRect,
+                                              &valueRect,
+                                              &trackRect,
+                                              &knobRect);
+        RenderLabelTextLeft(renderer,
+                            labelRect,
+                            ObjectEditorPanels_LabelForSliderKind(kind),
+                            mutedColor);
+        snprintf(valueText, sizeof(valueText), "%d", (int)lround(value * 255.0));
+        RenderLabelText(renderer, valueRect, valueText, textColor);
+        SDL_SetRenderDrawColor(renderer,
+                               inactiveRowFill.r,
+                               inactiveRowFill.g,
+                               inactiveRowFill.b,
+                               220);
+        SDL_RenderFillRect(renderer, &trackRect);
+        SDL_SetRenderDrawColor(renderer, borderColor.r, borderColor.g, borderColor.b, 220);
+        SDL_RenderDrawRect(renderer, &trackRect);
+        SDL_SetRenderDrawColor(renderer,
+                               activeRowFill.r,
+                               activeRowFill.g,
+                               activeRowFill.b,
+                               activeRowFill.a);
+        SDL_RenderFillRect(renderer, &knobRect);
+        SDL_SetRenderDrawColor(renderer, borderColor.r, borderColor.g, borderColor.b, 255);
+        SDL_RenderDrawRect(renderer, &knobRect);
+    }
+
+    aux_slider_count = ObjectEditorPanels_AuxSliderCount();
+    for (int i = 0; i < aux_slider_count; ++i) {
+        SDL_Rect labelRect = {0};
+        SDL_Rect valueRect = {0};
+        SDL_Rect trackRect = {0};
+        SDL_Rect knobRect = {0};
+        ObjectEditorPanelSliderKind kind = ObjectEditorPanels_AuxSliderKindForOrdinal(i);
+        double value = ObjectEditorPanels_ValueForSliderKind(kind);
+        char valueText[32];
+
+        ObjectEditorResolveAuxSliderMetrics(i,
+                                            NULL,
+                                            &labelRect,
+                                            &valueRect,
+                                            &trackRect,
+                                            &knobRect);
         RenderLabelTextLeft(renderer,
                             labelRect,
                             ObjectEditorPanels_LabelForSliderKind(kind),

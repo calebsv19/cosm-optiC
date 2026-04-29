@@ -22,6 +22,7 @@ static char g_last_runtime_object_ids[MAX_OBJECTS][64] = {{0}};
 static int g_last_runtime_object_id_count = 0;
 
 static void apply_ray_authoring_object_materials(json_object *authoring);
+static void apply_ray_authoring_light_settings(json_object *authoring, double world_scale);
 
 static void scene_defaults_reset(void) {
     sceneSettings.objectCount = 0;
@@ -53,6 +54,13 @@ static void scaffold_state_reset(void) {
 static bool primitive_seed_kind_supported_by_r0(RuntimeSceneBridgePrimitiveKind kind) {
     return kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE ||
            kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_RECT_PRISM;
+}
+
+static bool runtime_scene_bridge_is_authoring_helper_object_type(const char *object_type) {
+    if (!object_type || !object_type[0]) return false;
+    return strcmp(object_type, "curve_path") == 0 ||
+           strcmp(object_type, "point_set") == 0 ||
+           strcmp(object_type, "edge_set") == 0;
 }
 
 static RuntimeSceneBridgePrimitiveKind digest_kind_from_labels(const char *object_type,
@@ -162,6 +170,8 @@ static void primitive_seed_append(json_object *object_obj,
                                   int scene_object_index) {
     RuntimeSceneBridgePrimitiveSeed *entry = NULL;
     const char *object_id = NULL;
+    const char *object_type = runtime_scene_bridge_json_string_field_or_null(object_obj,
+                                                                             "object_type");
     json_object *frame = NULL;
     json_object *position_source = NULL;
     double width = 0.0;
@@ -175,6 +185,10 @@ static void primitive_seed_append(json_object *object_obj,
     bool has_depth = false;
 
     if (!primitive_seed_kind_supported_by_r0(kind)) {
+        if (kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_UNKNOWN &&
+            runtime_scene_bridge_is_authoring_helper_object_type(object_type)) {
+            return;
+        }
         g_last_3d_primitive_seeds.excluded_primitive_count += 1;
         return;
     }
@@ -492,7 +506,33 @@ static void apply_ray_authoring_paths(json_object *root, double world_scale) {
             }
         }
     }
+    apply_ray_authoring_light_settings(authoring, world_scale);
     apply_ray_authoring_object_materials(authoring);
+}
+
+static void apply_ray_authoring_light_settings(json_object *authoring, double world_scale) {
+    json_object *light_settings = NULL;
+    json_object *intensity_obj = NULL;
+    json_object *radius_obj = NULL;
+    if (!authoring) return;
+    if (!json_object_object_get_ex(authoring, "light_settings", &light_settings) ||
+        !json_object_is_type(light_settings, json_type_object)) {
+        return;
+    }
+    if (json_object_object_get_ex(light_settings, "intensity", &intensity_obj) &&
+        (json_object_is_type(intensity_obj, json_type_int) ||
+         json_object_is_type(intensity_obj, json_type_double))) {
+        animSettings.lightIntensity = json_object_get_double(intensity_obj);
+    }
+    (void)world_scale;
+    if (json_object_object_get_ex(light_settings, "radius", &radius_obj) &&
+        (json_object_is_type(radius_obj, json_type_int) ||
+         json_object_is_type(radius_obj, json_type_double))) {
+        animSettings.lightRadius = json_object_get_double(radius_obj);
+        if (animSettings.lightRadius < 0.0) {
+            animSettings.lightRadius = 0.0;
+        }
+    }
 }
 
 static void apply_object_material(json_object *object_obj,
@@ -549,13 +589,14 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
         json_object *object_id_obj = NULL;
         json_object *material_id_obj = NULL;
         json_object *object_color_obj = NULL;
+        json_object *alpha_obj = NULL;
         json_object *transparency_obj = NULL;
         json_object *emissive_strength_obj = NULL;
         const char *object_id = NULL;
         int material_id = MaterialManagerDefaultId();
         int object_color = 0xFFFFFF;
         bool has_object_color = false;
-        double transparency = 1.0;
+        double alpha = 1.0;
         double emissive_strength = 1.0;
         int scene_index = 0;
         if (!entry || !json_object_is_type(entry, json_type_object)) continue;
@@ -576,10 +617,14 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
             object_color = json_object_get_int(object_color_obj) & 0xFFFFFF;
             has_object_color = true;
         }
-        if (json_object_object_get_ex(entry, "transparency", &transparency_obj) &&
+        if (json_object_object_get_ex(entry, "alpha", &alpha_obj) &&
+            (json_object_is_type(alpha_obj, json_type_int) ||
+             json_object_is_type(alpha_obj, json_type_double))) {
+            alpha = json_object_get_double(alpha_obj);
+        } else if (json_object_object_get_ex(entry, "transparency", &transparency_obj) &&
             (json_object_is_type(transparency_obj, json_type_int) ||
              json_object_is_type(transparency_obj, json_type_double))) {
-            transparency = json_object_get_double(transparency_obj);
+            alpha = json_object_get_double(transparency_obj);
         }
         if (json_object_object_get_ex(entry, "emissive_strength", &emissive_strength_obj) &&
             (json_object_is_type(emissive_strength_obj, json_type_int) ||
@@ -596,8 +641,8 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
                 if (has_object_color) {
                     sceneSettings.sceneObjects[scene_index].color = object_color;
                 }
-                sceneSettings.sceneObjects[scene_index].transparency =
-                    fmax(0.0, fmin(1.0, transparency));
+                sceneSettings.sceneObjects[scene_index].alpha =
+                    fmax(0.0, fmin(1.0, alpha));
                 sceneSettings.sceneObjects[scene_index].emissiveStrength =
                     fmax(0.0, fmin(1.0, emissive_strength));
                 break;

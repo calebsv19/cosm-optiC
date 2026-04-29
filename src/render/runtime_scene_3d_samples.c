@@ -88,10 +88,7 @@ bool RuntimeScene3DSampleAuthoredLight(double normalized_t, RuntimeLight3D* out_
                                                           &sceneSettings.bezierPath3D,
                                                           normalized_t,
                                                           animSettings.lightHeight));
-    /* The authored light path supplies placement only. Leave radius unresolved so
-     * the live native 3D renderer can apply its bounded analytic emitter size
-     * instead of inheriting the legacy marker-sized disk radius. */
-    light.radius = 0.0;
+    light.radius = animSettings.lightRadius;
     light.intensity = animSettings.lightIntensity;
     light.falloffDistance = animSettings.forwardDecay;
     light.falloffMode = animSettings.forwardFalloffMode;

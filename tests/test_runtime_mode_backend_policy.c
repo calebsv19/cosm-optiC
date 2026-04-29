@@ -224,6 +224,96 @@ static int test_mode_backend_route_3d_native_lane(void) {
     return 0;
 }
 
+static int test_mode_backend_route_3d_native_lane_with_authoring_helpers(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json_route_3d_native_helpers =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_route_3d_native_helpers\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"floor\","
+            "\"object_type\":\"plane_primitive\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":6.0,\"height\":6.0,"
+              "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"axis_u\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+              "\"axis_v\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+              "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"block\","
+            "\"object_type\":\"rect_prism_primitive\","
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-3.0,\"z\":0.5},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}},"
+            "\"primitive\":{\"kind\":\"rect_prism_primitive\","
+              "\"width\":2.0,\"height\":2.0,\"depth\":1.0}"
+          "},"
+          "{"
+            "\"object_id\":\"author_points\","
+            "\"object_type\":\"point_set\","
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"author_curve\","
+            "\"object_type\":\"curve_path\","
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"author_edges\","
+            "\"object_type\":\"edge_set\","
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":1.0,\"y\":-1.5,\"z\":2.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":2.0,\"z\":8.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RayTracingRuntimeRoute route;
+
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.integratorMode = RAY_TRACING_2D_INTEGRATOR_FORWARD_LIGHT;
+    animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DISNEY;
+    animSettings.useTiledRenderer = true;
+    animSettings.tileSize = 16;
+    animSettings.tilePreviewEnabled = true;
+    assert_true("route3d_native_helpers_seed_runtime_apply_ok",
+                runtime_scene_bridge_apply_json(runtime_json_route_3d_native_helpers, &summary));
+
+    route = RayTracingModeBackend_ResolveRoute();
+
+    assert_true("route3d_native_helpers_family_native",
+                route.routeFamily == RAY_TRACING_ROUTE_NATIVE_3D);
+    assert_true("route3d_native_helpers_helper",
+                RayTracingModeBackend_IsNative3D(&route));
+    assert_true("route3d_native_helpers_no_fallback_projection",
+                !route.fallbackTo2DProjection);
+    assert_true("route3d_native_helpers_projection_mode_3d",
+                route.projectionMode == SPACE_MODE_3D);
+    assert_true("route3d_native_helpers_scaffold_count_two",
+                route.scaffoldPrimitiveCount == 2);
+    assert_true("route3d_native_helpers_status_label_disney",
+                strstr(RayTracingModeBackend_IntegratorStatusLabel(&route), "3D Disney") != NULL);
+
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 
 static int test_mode_backend_scene_digest_status_2d_canonical_empty(void) {
     RayTracingRuntimeRoute route;
@@ -585,6 +675,7 @@ int run_test_runtime_mode_backend_policy_tests(void) {
     test_mode_backend_route_2d_defaults();
     test_mode_backend_route_3d_controlled_lane();
     test_mode_backend_route_3d_native_lane();
+    test_mode_backend_route_3d_native_lane_with_authoring_helpers();
     test_mode_backend_scene_digest_status_2d_canonical_empty();
     test_mode_backend_scene_digest_status_ps4d_fixture();
     test_mode_backend_scene_digest_status_3d_native_fixture();

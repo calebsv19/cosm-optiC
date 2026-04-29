@@ -42,10 +42,12 @@ Grouped on the far right. Current set (values persist via config):
 - Width (200–4000): render/window width.
 - Height (200–2400): render/window height.
 - Tile Size (4–256): tile size for tiled renderer (clamped to multiples of 4).
-- Roulette Threshold (0.001–2.000): Russian roulette threshold (slider shows threshold*1000).
+- Roulette Threshold (0.001–2.000, only outside 3D mode): legacy Russian roulette threshold for the older path/integrator lane (slider shows threshold*1000).
 - Light Intensity (0–20.00): scene light intensity (slider shows *100).
 - Falloff Softness (0.10–5.00): scales how quickly light energy decays with distance (higher = slower decay/longer reach) for forward/direct/hybrid integrators.
 - Falloff Distance (100–40000): forward decay distance (in world units).
+- 3D Bounce Depth (1–8, only in 3D mode): hard cap for recursive diffuse continuation depth in native `3D`.
+- 3D Roulette Threshold (0.000–0.100, only in 3D mode): throughput-luminance threshold where native `3D` diffuse paths begin Russian roulette termination (`0.000` disables it).
 - 3D Secondary Samples (4–64, only in 3D mode): secondary diffuse/emissive bounce sample count for native `3D`, clamped to multiples of 4.
 - 3D Transmission Samples (4–32, only in 3D mode): transparent-view transmission sample count for native `3D`.
 - 3D Temporal Frames (1–32, only in 3D mode): per-resolved-frame native `3D` stochastic subpass count before grayscale tonemap resolve. `1` disables temporal accumulation.

@@ -81,6 +81,8 @@ static int test_runtime_emission_transparency_3d_seed_branch_contract(void) {
     animSettings.lightIntensity = 10.0;
     animSettings.forwardDecay = 10.0;
     animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    animSettings.bounceDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
     sceneSettings.camera.rotation = 0.0;
     sceneSettings.camera.zoom = 1.0;
 
@@ -372,7 +374,7 @@ static int test_runtime_emission_transparency_3d_transparent_prism_reaches_behin
     sceneSettings.sceneObjects[0].color = 0x0000FF;
     sceneSettings.sceneObjects[1].material_id = MATERIAL_PRESET_EMISSIVE;
     sceneSettings.sceneObjects[1].color = 0xFFFFFF;
-    sceneSettings.sceneObjects[0].transparency = 1.0;
+    sceneSettings.sceneObjects[0].alpha = 1.0;
     sceneSettings.sceneObjects[1].emissiveStrength = 1.0;
     animSettings.lightIntensity = 10.0;
     animSettings.forwardDecay = 10.0;
@@ -441,7 +443,7 @@ static int test_runtime_emission_transparency_3d_transparent_prism_reaches_emitt
     sceneSettings.objectCount = 1;
     sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
     sceneSettings.sceneObjects[0].color = 0x0000FF;
-    sceneSettings.sceneObjects[0].transparency = 1.0;
+    sceneSettings.sceneObjects[0].alpha = 1.0;
 
     scene.hasLight = true;
     scene.light.position = vec3(0.0, -7.0, 0.0);
@@ -609,6 +611,8 @@ static int test_runtime_emission_transparency_3d_temporal_skips_stable_emitters(
     animSettings.forwardDecay = 10.0;
     animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
     animSettings.secondaryDiffuseSamples3D = RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT;
+    animSettings.bounceDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
     animSettings.transmissionSamples3D = RUNTIME_3D_TRANSMISSION_SAMPLES_DEFAULT;
     sceneSettings.camera.rotation = 0.0;
     sceneSettings.camera.zoom = 1.0;

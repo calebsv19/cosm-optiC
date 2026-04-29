@@ -34,7 +34,7 @@ static int test_runtime_material_payload_3d_scene_object_resolution_contract(voi
     InitObject(&sceneSettings.sceneObjects[1], OBJECT_CIRCLE, 5.0, -2.0, 6.0, 0.0, NULL, 0);
     sceneSettings.sceneObjects[1].color = 0x804020;
     sceneSettings.sceneObjects[1].opacity = 0.75;
-    sceneSettings.sceneObjects[1].transparency = 0.5;
+    sceneSettings.sceneObjects[1].alpha = 0.5;
     sceneSettings.sceneObjects[1].reflectivity = 0.35;
     sceneSettings.sceneObjects[1].roughness = 0.15;
     sceneSettings.sceneObjects[1].material_id = 999;
@@ -105,7 +105,7 @@ static int test_runtime_material_payload_3d_object_multipliers_contract(void) {
     InitObject(&sceneSettings.sceneObjects[1], OBJECT_CIRCLE, 5.0, -2.0, 6.0, 0.0, NULL, 0);
 
     sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
-    sceneSettings.sceneObjects[0].transparency = 0.25;
+    sceneSettings.sceneObjects[0].alpha = 0.25;
     ok = RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(0, &payload);
     assert_true("runtime_material_payload_multiplier_transparency_ok", ok);
     assert_close("runtime_material_payload_multiplier_transparency_scaled",
@@ -721,7 +721,7 @@ static int test_runtime_direct_light_3d_transparent_blocker_partial_shadow_contr
     sceneSettings.sceneObjects[0].color = 0xFFFFFF;
     sceneSettings.sceneObjects[1].material_id = MATERIAL_PRESET_TRANSPARENT;
     sceneSettings.sceneObjects[1].color = 0x0000FF;
-    sceneSettings.sceneObjects[1].transparency = 1.0;
+    sceneSettings.sceneObjects[1].alpha = 1.0;
 
     scene.hasLight = true;
     scene.light.position = vec3(2.0, -2.0, 0.0);
@@ -1190,7 +1190,7 @@ static int test_runtime_disney_3d_opaque_receiver_preserves_transport_support(vo
     sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_GLOSSY;
     sceneSettings.sceneObjects[1].material_id = MATERIAL_PRESET_TRANSPARENT;
     sceneSettings.sceneObjects[2].material_id = MATERIAL_PRESET_EMISSIVE;
-    sceneSettings.sceneObjects[1].transparency = 1.0;
+    sceneSettings.sceneObjects[1].alpha = 1.0;
     sceneSettings.sceneObjects[2].emissiveStrength = 1.0;
     animSettings.lightIntensity = 10.0;
     animSettings.forwardDecay = 10.0;

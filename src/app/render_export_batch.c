@@ -1,6 +1,7 @@
 #include "app/render_export_batch.h"
 
 #include <dirent.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,6 +18,22 @@ static bool is_frame_dump_name(const char *name) {
     len = strlen(name);
     if (len < 11) return false;
     return strcmp(name + len - 4, ".bmp") == 0;
+}
+
+static bool parse_frame_dump_index(const char *name, int *out_index) {
+    const char *digits = NULL;
+    const char *ext = NULL;
+    char *end = NULL;
+    long parsed = 0;
+    if (out_index) *out_index = -1;
+    if (!is_frame_dump_name(name)) return false;
+    digits = name + 6;
+    ext = strrchr(name, '.');
+    if (!digits || !ext || ext <= digits) return false;
+    parsed = strtol(digits, &end, 10);
+    if (end != ext || parsed < 0 || parsed > INT_MAX) return false;
+    if (out_index) *out_index = (int)parsed;
+    return true;
 }
 
 static bool ffmpeg_available(void) {
@@ -49,11 +66,15 @@ static bool resolve_active_paths(RayTracingRenderExportStatus *status) {
     return true;
 }
 
-static size_t count_frames_in_dir(const char *dir_path, bool *had_io_error) {
+static size_t summarize_frames_in_dir(const char *dir_path,
+                                      bool *had_io_error,
+                                      int *out_highest_frame_index) {
     DIR *dir = NULL;
     struct dirent *entry = NULL;
     size_t count = 0;
+    int highest = -1;
     if (had_io_error) *had_io_error = false;
+    if (out_highest_frame_index) *out_highest_frame_index = -1;
     if (!dir_path || !dir_path[0]) {
         if (had_io_error) *had_io_error = true;
         return 0;
@@ -63,11 +84,17 @@ static size_t count_frames_in_dir(const char *dir_path, bool *had_io_error) {
         return 0;
     }
     while ((entry = readdir(dir)) != NULL) {
-        if (is_frame_dump_name(entry->d_name)) {
-            count += 1u;
+        int frame_index = -1;
+        if (!parse_frame_dump_index(entry->d_name, &frame_index)) continue;
+        count += 1u;
+        if (frame_index > highest) {
+            highest = frame_index;
         }
     }
     closedir(dir);
+    if (out_highest_frame_index) {
+        *out_highest_frame_index = highest;
+    }
     return count;
 }
 
@@ -111,6 +138,8 @@ void ray_tracing_render_export_status_reset(RayTracingRenderExportStatus *status
     if (!status) return;
     memset(status, 0, sizeof(*status));
     status->code = RAY_TRACING_RENDER_EXPORT_OK;
+    status->highest_frame_index = -1;
+    status->next_frame_index = 0;
 }
 
 static void render_export_progress_bridge_emit(size_t current_frame,
@@ -138,7 +167,12 @@ bool ray_tracing_render_export_describe_active(RayTracingRenderExportStatus *sta
     if (!status) return false;
     ray_tracing_render_export_status_reset(status);
     if (!resolve_active_paths(status)) return false;
-    status->frame_count = count_frames_in_dir(status->frame_dir, &had_io_error);
+    status->frame_count = summarize_frames_in_dir(status->frame_dir,
+                                                  &had_io_error,
+                                                  &status->highest_frame_index);
+    status->next_frame_index = (status->highest_frame_index >= 0)
+                                   ? (status->highest_frame_index + 1)
+                                   : 0;
     snprintf(status->message,
              sizeof(status->message),
              "Frames ready: %zu",
@@ -161,6 +195,8 @@ bool ray_tracing_render_export_clear_active_frames(RayTracingRenderExportStatus 
         return false;
     }
     status->frame_count = 0;
+    status->highest_frame_index = -1;
+    status->next_frame_index = 0;
     if (had_io_error) {
         status->code = RAY_TRACING_RENDER_EXPORT_IO_ERROR;
         snprintf(status->message, sizeof(status->message), "Failed clearing frames");
@@ -187,7 +223,12 @@ bool ray_tracing_render_export_make_video_with_progress(
     if (!status) return false;
     ray_tracing_render_export_status_reset(status);
     if (!resolve_active_paths(status)) return false;
-    status->frame_count = count_frames_in_dir(status->frame_dir, &had_io_error);
+    status->frame_count = summarize_frames_in_dir(status->frame_dir,
+                                                  &had_io_error,
+                                                  &status->highest_frame_index);
+    status->next_frame_index = (status->highest_frame_index >= 0)
+                                   ? (status->highest_frame_index + 1)
+                                   : 0;
     if (had_io_error || status->frame_count == 0u) {
         status->code = RAY_TRACING_RENDER_EXPORT_NO_FRAMES;
         snprintf(status->message, sizeof(status->message), "No frames found");

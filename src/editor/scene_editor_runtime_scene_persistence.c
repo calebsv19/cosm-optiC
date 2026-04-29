@@ -154,8 +154,8 @@ static json_object* scene_editor_runtime_scene_build_object_materials_json(void)
                                "object_color",
                                json_object_new_int(sceneSettings.sceneObjects[i].color & 0xFFFFFF));
         json_object_object_add(entry,
-                               "transparency",
-                               json_object_new_double(sceneSettings.sceneObjects[i].transparency));
+                               "alpha",
+                               json_object_new_double(sceneSettings.sceneObjects[i].alpha));
         json_object_object_add(entry,
                                "emissive_strength",
                                json_object_new_double(sceneSettings.sceneObjects[i].emissiveStrength));
@@ -175,6 +175,7 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
     json_object* authoring = NULL;
     json_object* light_path = NULL;
     json_object* light_path_depth = NULL;
+    json_object* light_settings = NULL;
     json_object* camera_path = NULL;
     json_object* camera_path_depth = NULL;
     json_object* object_materials = NULL;
@@ -209,15 +210,18 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
     authoring = json_object_new_object();
     light_path = config_scene_path_to_json_object(&saved_light_path);
     light_path_depth = CameraPath3D_ToJsonObject(&saved_light_path3d, &saved_light_path);
+    light_settings = json_object_new_object();
     camera_path = config_scene_path_to_json_object(&saved_camera_path);
     camera_path_depth = CameraPath3D_ToJsonObject(&saved_camera_path3d, &saved_camera_path);
     object_materials = scene_editor_runtime_scene_build_object_materials_json();
 
     if (!overlay_root || !overlay_meta || !extensions || !ray_tracing || !authoring ||
-        !light_path || !light_path_depth || !camera_path || !camera_path_depth || !object_materials) {
+        !light_path || !light_path_depth || !light_settings ||
+        !camera_path || !camera_path_depth || !object_materials) {
         scene_editor_runtime_scene_diag(out_diagnostics, out_diagnostics_size, "failed to build overlay json");
         if (object_materials) json_object_put(object_materials);
         if (light_path_depth) json_object_put(light_path_depth);
+        if (light_settings) json_object_put(light_settings);
         if (camera_path_depth) json_object_put(camera_path_depth);
         if (camera_path) json_object_put(camera_path);
         if (light_path) json_object_put(light_path);
@@ -233,8 +237,13 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
     json_object_object_add(overlay_meta, "logical_clock", json_object_new_int64(logical_clock));
     json_object_object_add(overlay_root, "overlay_meta", overlay_meta);
 
+    json_object_object_add(light_settings, "intensity", json_object_new_double(animSettings.lightIntensity));
+    json_object_object_add(light_settings,
+                           "radius",
+                           json_object_new_double(animSettings.lightRadius));
     json_object_object_add(authoring, "light_path", light_path);
     json_object_object_add(authoring, "light_path_depth", light_path_depth);
+    json_object_object_add(authoring, "light_settings", light_settings);
     json_object_object_add(authoring, "camera_path", camera_path);
     json_object_object_add(authoring, "camera_path_depth", camera_path_depth);
     json_object_object_add(authoring, "object_materials", object_materials);

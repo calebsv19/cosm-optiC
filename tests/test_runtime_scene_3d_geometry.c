@@ -251,6 +251,7 @@ static int test_runtime_scene_3d_builder_promotes_authored_light_camera_samples(
     }
 
     animSettings.lightIntensity = 42.0;
+    animSettings.lightRadius = 3.25;
     animSettings.forwardDecay = 17.5;
     animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
 
@@ -284,7 +285,7 @@ static int test_runtime_scene_3d_builder_promotes_authored_light_camera_samples(
                  1e-6);
     assert_close("runtime_scene_3d_builder_samples_light_radius",
                  scene.light.radius,
-                 0.0,
+                 3.25,
                  1e-6);
     assert_close("runtime_scene_3d_builder_samples_light_intensity",
                  scene.light.intensity,
@@ -367,6 +368,7 @@ static int test_runtime_scene_3d_builder_falls_back_to_seeded_camera_state(void)
     sceneSettings.camera.rotation = 0.75;
     sceneSettings.camera.zoom = 1.5;
     animSettings.lightIntensity = 11.0;
+    animSettings.lightRadius = 1.5;
     animSettings.forwardDecay = 9.0;
     animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_NONE;
 
@@ -385,6 +387,10 @@ static int test_runtime_scene_3d_builder_falls_back_to_seeded_camera_state(void)
     assert_close("runtime_scene_3d_builder_camera_fallback_light_z",
                  scene.light.position.z,
                  4.0,
+                 1e-6);
+    assert_close("runtime_scene_3d_builder_camera_fallback_light_radius",
+                 scene.light.radius,
+                 1.5,
                  1e-6);
     assert_true("runtime_scene_3d_builder_camera_fallback_light_mode",
                 scene.light.falloffMode == FORWARD_FALLOFF_MODE_NONE);

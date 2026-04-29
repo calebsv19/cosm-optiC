@@ -1,493 +1,60 @@
 # Ray Tracing Current Truth
 
-Last updated: 2026-04-25
+Last updated: 2026-04-27
 
 ## Program Identity
-- repository directory: `ray_tracing/`
-- public product name in README: `RayTracing Project`
-- primary runtime entry path today:
+- Repository directory: `ray_tracing/`
+- Public product name: `RayTracing Project`
+- Primary runtime entry:
   - `src/app/animation.c` (`main()` delegates through `ray_tracing_app_main(...)`)
-- canonical lifecycle wrapper entry:
-    - `include/ray_tracing/ray_tracing_app_main.h`
-    - `src/app/ray_tracing_app_main.c`
+  - wrapper shell: `include/ray_tracing/ray_tracing_app_main.h`, `src/app/ray_tracing_app_main.c`
 
-## Latest Lane Snapshot
+## Current Shipped State
+- Editor/preview stabilization lane is complete and archived.
+- Active implementation boundary is menu/export support with runtime `3D` proof validation paused behind it.
+- Native `3D` route foundation is active (`R3-S1` complete):
+  - retained primitive bridge seeds build runtime triangles
+  - native camera/light samples route through native scene structures
+  - first-hit + direct-light + blocker visibility path exists on native geometry
+  - bounded tests cover visible/shadowed/light-motion response
+- Export/video workflow state:
+  - `frameDir` remains frame export root
+  - `videoOutputRoot` is persisted runtime config state
+  - menu now exposes grouped Data I/O + batch actions (`Render Frames Root`, `Video Output Root`, `Clear Frames`, `Make Video`)
 
-- editor/preview stabilization is complete and archived in private docs:
-  - `docs/private_program_docs/ray_tracing/archive/2026-04-24_scene_editor_preview_stabilization_snapshot/`
-- current active implementation boundary is the menu/export support lane:
-  - `docs/private_program_docs/ray_tracing/active/menu_export_batch_refresh/2026-04-24_ray_tracing_menu_export_batch_refresh_execution_plan.md`
-- paused primary runtime-validation lane remains:
-  - `docs/private_program_docs/ray_tracing/active/runtime_3d_behavior_extension/2026-04-24_ray_tracing_runtime_3d_behavior_extension_execution_plan.md`
-- current completed runtime foundation state:
-  - retained `plane` + `rect_prism` bridge seeds compile into renderer-owned native primitives and triangles
-  - native runtime scene now carries authored light and camera samples at normalized `t`
-  - native `Ray3D` / `HitInfo3D` foundations now exist for triangle hits and first-hit scene traversal
-  - native direct-light visibility now casts offset shadow rays against `RuntimeScene3D` triangles without XY fallback
-  - native primary rays now generate directly from `RuntimeCamera3D` for the bounded proof scene
-  - native direct-light shading now evaluates first camera hits with authored falloff, surface-facing response, and native blocker visibility
-  - bounded proof tests now cover visible, shadowed, and authored-light-motion response for the native direct-light slice
-  - backend route selection now emits native `3D` only when retained seeds are in-scope and buildable into a runtime scene with triangles plus authored light/camera samples
-  - live native `3D` rendering now builds `RuntimeScene3D` at the current playback `t`, applies live light/camera overrides, and shades pixels through the native direct-light path
-  - when the bounded native route is active, the frame no longer falls back through the legacy XY integrator or legacy object overlay pass
-  - the native light marker now projects through the native camera projector, uses a bounded scene-scale world radius for display, and is skipped when runtime geometry blocks the camera-to-light line
-  - scene editor and embedded preview still use the retained digest viewport/control path for runtime-scene presets when the active render route is native `3D`
-  - editor/menu route labels now distinguish native `3D` from compat fallback
-  - `R3-S1` is complete in the runtime lane; proof-fixture validation remains the next runtime boundary once export/video usability work is complete
-- current export/video support state:
-  - `frameDir` remains the explicit frame-export destination
-  - `videoOutputRoot` is now persisted as explicit runtime config state with default/migration/validation support
-  - resolved path helpers now build the active video output file from `videoOutputRoot`
-  - app-owned export batch helpers now count frames, clear frame dumps, and drive MP4 creation through one runtime seam
-  - auto-MP4 no longer hardcodes `output.mp4`; it now uses the same resolved export/video contract as the new batch adapter
-  - the main menu now exposes a grouped `Data I/O + Batch` panel with:
-    - `Render Frames Root`
-    - `Video Output Root`
-    - cached active frame count
-    - `Clear Frames`
-    - `Make Video`
-  - the new export roots support inline edit and macOS folder-pick selection directly from the menu
-- priority order is now:
-  - validate export/video workflow usability inside the app/menu
-  - resume proof-fixture validation for the live native route against the bounded proof scene and authored light motion
-  - only then open VF3D / `physics_sim` ingestion work
-
-## Current Structure
-- required scaffold lanes are present:
-  - `docs/`, `src/`, `include/`, `tests/`, `build/`
-- normalized top-level support lanes are present:
-  - `config/` (tracked defaults)
-  - `assets/` (static asset/docs lane)
-  - `data/` (runtime/snapshot lanes)
-  - `tmp/` (temp/archive lane; ignored)
-- active source subsystem lanes:
+## Structure
+- Required lanes: `docs/`, `src/`, `include/`, `tests/`, `build/`
+- Support lanes: `config/`, `assets/`, `data/`, `tmp/`
+- Active source subsystems:
   - `app`, `camera`, `config`, `editor`, `engine`, `export`, `geo`, `import`, `material`, `path`, `render`, `scene`, `tools`, `ui`
-- header strategy:
-  - include-dominant with public interfaces primarily under `include/` and a smaller private-header set under `src/`
-  - decomposition snapshot (`2026-04-09`):
-  - menu flow is now split into focused modules:
-    - `src/ui/menu/sdl_menu.c` (orchestration and event loop only)
-    - `src/ui/menu/sdl_menu_input.c` (keyboard/mouse/edit interactions)
-    - `src/ui/menu/sdl_menu_render.c` (layout and draw pass)
-    - `src/ui/menu/sdl_menu_state.c` (menu runtime state + manifest list management)
-    - `src/ui/menu/menu_batch_panel.c` (grouped export/video panel layout, render, and batch interactions)
-  - config file path/JSON helpers were extracted into:
-    - `include/config/config_file_io.h`
-    - `src/config/io/config_file_io.c`
-  - runtime helper slices extracted from `src/app/animation.c`:
-    - `src/app/animation_fluid_scene.c`
-    - `src/app/animation_input_helpers.c`
-    - `src/app/animation_output.c`
-    - `src/app/data_paths.c`
-  - editor/render helper slices extracted:
-    - `src/editor/object_editor_panels.c`
-    - `src/render/pipeline/ray_tracing2_preview.c`
 
-## Runtime/Verification Contract (Current)
-- build:
+## Verification Contract
+- Build:
   - `make -C ray_tracing clean && make -C ray_tracing`
-- scaffold smoke gate (non-interactive):
+- Smoke/harness:
   - `make -C ray_tracing run-headless-smoke`
-- visual harness build gate:
   - `make -C ray_tracing visual-harness`
+- Stable tests:
+  - `make -C ray_tracing test-stable`
+- Legacy lane:
+  - `make -C ray_tracing test-legacy`
 
-Stable test lane:
-- `make -C ray_tracing test-stable`
-- current composition:
-  - `test`
-  - `test-manifest-to-trace-export`
-  - `test-fluid-pack-contract-parity`
-  - `test-trio-scene-contract-diff`
-  - `test-shared-theme-font-adapter`
+## Release and Packaging Snapshot
+- Release-readiness and desktop packaging lanes are active and maintained.
+- Standard package flow is available through `package-desktop*` targets.
+- Release flow includes contract/audit/sign/notary/staple/verify/distribute gates.
 
-Legacy test lane:
-- `make -C ray_tracing test-legacy`
-- current composition:
-  - empty lane placeholder (returns success and prints status)
+## Runtime Data Policy
+- Tracked defaults remain under `config/`.
+- Runtime/generated state remains under `data/runtime` and other ignored runtime lanes.
+- Export/video roots are runtime-config driven and menu-editable.
 
-Data-path contract lane (`DP S0-S5`) status:
-- completed on 2026-04-08.
-- current user-facing contract:
-  - explicit menu controls for `inputRoot` plus a grouped `Data I/O + Batch` panel for frame/video export roots.
-  - startup root validation with deterministic fallback and immediate runtime-config persistence on correction.
-  - manifest discovery roots are input/output-root aware with legacy fallback roots retained.
-  - render/export workflow follow-up now persists explicit `videoOutputRoot` config and uses runtime helpers for resolved frame/video export paths.
-- current verification snapshot:
-  - this section is stale if interpreted as current global failure state
-  - current recent program-level verification evidence from the stabilized editor/preview lane shows:
-    - `make -C /Users/calebsv/Desktop/CodeWork/ray_tracing all` passing
-    - `make -C /Users/calebsv/Desktop/CodeWork/ray_tracing test-stable` passing
-    - `make -C /Users/calebsv/Desktop/CodeWork/ray_tracing package-desktop-refresh` passing
-  - the older “13 route/integrator failures” note no longer represents current test-stable status
-  - packaged icon contract is now explicit:
-    - plist advertises `CFBundleIconFile=AppIcon`
-    - default icon source is `tools/packaging/macos/local_app_icon/AppIcon.icns`
-    - default iconset source is `tools/packaging/macos/local_app_icon/AppIcon.iconset`
-    - `package-desktop*` also accepts either `PACKAGE_APP_ICON_SRC=/absolute/path/AppIcon.icns` or `PACKAGE_APP_ICONSET_SRC=/absolute/path/AppIcon.iconset`
-    - bundle output path is `Contents/Resources/AppIcon.icns`
-    - the local icon store is intentionally gitignored and treated as a local distribution asset
+## Current Boundary
+- Complete menu/export usability and batch flow hardening first.
+- Then resume runtime proof-fixture validation for bounded native `3D` behavior.
+- After that, proceed to VF3D / `physics_sim` ingestion expansion.
 
-## Release Readiness Snapshot
-- `RT-RL0` complete:
-  - release contract is now locked in `Makefile` with:
-    - `RELEASE_PRODUCT_NAME := optiC`
-    - `RELEASE_PROGRAM_KEY := ray_tracing`
-    - `RELEASE_BUNDLE_ID := com.cosm.optic`
-  - `VERSION` file is now canonical (`VERSION` -> `0.1.0`)
-  - `make -C ray_tracing release-contract` is available as contract sanity output.
-- `RT-RL1` complete:
-  - package stage now bundles Frameworks closure via:
-    - `tools/packaging/macos/bundle-dylibs.sh`
-  - package smoke now hard-fails if either Vulkan runtime dylib is missing:
-    - `libvulkan.1.dylib`
-    - `libMoltenVK.dylib`
-  - launcher now establishes writable runtime root outside app bundle:
-    - default: `~/Library/Application Support/RayTracing/runtime`
-    - fallback: `${TMPDIR}/RayTracing/runtime`
-  - launcher now writes deterministic runtime ICD JSON and exports:
-    - `VK_ICD_FILENAMES`
-    - `VK_DRIVER_FILES`
-  - release bundle audit gate is active:
-    - `make -C ray_tracing release-bundle-audit`
-    - validates bundle id, portable dylib closure, writable runtime paths, and Vulkan ICD env output.
-- `RT-RL2` complete:
-  - Developer ID signing gate is active and passing:
-    - `make -C ray_tracing release-verify-signed APPLE_SIGN_IDENTITY="Developer ID Application: ... (J4ZR8UWD8G)"`
-  - notarization + staple + notarized verification passed:
-    - `make -C ray_tracing release-notarize APPLE_SIGN_IDENTITY="Developer ID Application: ... (J4ZR8UWD8G)" APPLE_NOTARY_PROFILE="cosm-notary"`
-    - `make -C ray_tracing release-staple`
-    - `make -C ray_tracing release-verify-notarized`
-  - accepted notary submission id:
-    - `fbacac91-d960-45cb-a732-3388c0b9cf1e`
-  - pre-notary `spctl` rejection (`Unnotarized Developer ID`) is now treated as expected in `release-verify`; notarized validation remains strict in `release-verify-notarized`.
-- `RT-RL3` complete:
-  - release artifact generation is active and passing:
-    - `make -C ray_tracing release-artifact`
-    - emits:
-      - `build/release/optiC-0.1.0-macOS-stable.zip`
-      - `build/release/optiC-0.1.0-macOS-stable.zip.sha256`
-      - `build/release/optiC-0.1.0-macOS-stable.manifest.txt`
-  - release desktop refresh flow is active and passing:
-    - `make -C ray_tracing release-desktop-refresh`
-    - refreshes `/Users/calebsv/Desktop/optiC.app` from the existing release app.
-- `RT-RL4` complete:
-  - Finder-launch/runtime evidence captured from launcher log:
-    - launch entries now show runtime-rooted cwd:
-      - `/Users/calebsv/Library/Application Support/RayTracing/runtime`
-    - wrapper exits are clean:
-      - `exit_code=0`
-      - `wrapper_error=0`
-  - desktop trust verification evidence captured:
-    - `spctl --assess --type execute --verbose=2 /Users/calebsv/Desktop/optiC.app`
-      - `accepted`
-      - `source=Notarized Developer ID`
-    - `codesign --verify --deep --strict /Users/calebsv/Desktop/optiC.app` passed.
-- `RT-RL5` complete:
-  - full one-shot release pipeline proof command passed:
-    - `make -C ray_tracing release-distribute APPLE_SIGN_IDENTITY="Developer ID Application: CALEB SUMNER VITZTHUM (J4ZR8UWD8G)" APPLE_NOTARY_PROFILE="cosm-notary"`
-  - latest accepted notary submission ids captured:
-    - `fbacac91-d960-45cb-a732-3388c0b9cf1e`
-    - `779ef7fd-3529-495d-94ee-9d797d73fd35`
-  - release artifact lane is now canonical for distribution:
-    - `build/release/optiC-0.1.0-macOS-stable.zip`
-    - `build/release/optiC-0.1.0-macOS-stable.zip.sha256`
-    - `build/release/optiC-0.1.0-macOS-stable.manifest.txt`
-
-## Lifecycle Wrapper Snapshot
-- locked lifecycle wrapper symbols are active:
-  - `ray_tracing_app_bootstrap`
-  - `ray_tracing_app_config_load`
-  - `ray_tracing_app_state_seed`
-  - `ray_tracing_app_subsystems_init`
-  - `ray_tracing_runtime_start`
-  - `ray_tracing_app_run_loop`
-  - `ray_tracing_app_shutdown`
-- behavior-preserving delegation path:
-  - `main()` now calls `ray_tracing_app_main(...)`
-  - previous startup/runtime body is retained in `ray_tracing_app_main_legacy(...)` in `src/app/animation.c`
-
-Current baseline result (`RT-S0`):
-- all commands pass
-- one warning observed during build:
-  - `src/render/materials/material_bsdf.c`: unused function `SelectModel`
-
-## Shared Dependency Snapshot
-Shared libs consumed by current build:
-- `core_base`, `core_io`, `core_data`, `core_pack`, `core_time`, `core_scene`, `core_trace`, `core_space`, `core_theme`, `core_font`
-- `kit_viz`
-- `vk_renderer`
-- `timer_hud`
-
-## Runtime Config and Generated State Snapshot
-- tracked defaults/config state lives in:
-  - `config/scene_config.json`
-  - `config/animation_config.json`
-  - `config/timer_hud_settings.json`
-  - `config/materials/`
-  - `config/objects/`
-- mutable runtime state writes to ignored lanes:
-  - `data/runtime/scene_config.json`
-  - `data/runtime/animation_config.json`
-  - `data/runtime/timer_hud_settings.json`
-  - `data/runtime/render_metrics.dataset.json`
-- generated outputs currently include:
-  - `build/`
-  - `data/runtime/frames/**/*.bmp` (ignored by lane)
-  - `data/runtime/videos/*.mp4` (ignored by lane)
-  - toolchain artifact lane:
-    - `*.dSYM/` (ignored)
-- runtime defaults-vs-state split is scaffold-locked (`RT-S4`)
-- space mode runtime contract is active (`RT-U1`):
-  - canonical enum/state: `SPACE_MODE_2D`, `SPACE_MODE_3D` via `AnimationConfig.spaceMode`
-  - persisted keys:
-    - `config/animation_config.json` default includes `"spaceMode": 0`
-    - `data/runtime/animation_config.json` stores mutable runtime `spaceMode`
-    - loader fallback key supported: `space_mode`
-  - menu-level selector is visible in right-column controls:
-    - `Space: 2D` / `Space: 3D (Scaffold)`
-  - editor tool mode remains separate (`Editor: Path/Scene/Camera`)
-- mode adapter seam is active (`RT-U2`):
-  - canonical adapter files:
-    - `include/render/space_mode_adapter.h`
-    - `src/render/adapters/space_mode_adapter.c`
-  - editor and render callsites now route screen/world conversion through adapter APIs
-  - key render ray/hit setup paths now use adapter entrypoints (`MakeRay`, `MakeOffsetRay`, `ResetHit`)
-  - render/path ray math remains 2D-equivalent at adapter seam level; NP-4 adds real z-aware visual behavior in render lane without schema fork.
-- backend separation + mode routing is active (`RT-U4`):
-  - canonical runtime route files:
-    - `include/render/ray_tracing_mode_backend.h`
-    - `src/render/backend/ray_tracing_mode_backend.c`
-  - route contract now centralizes:
-    - mode lane selection (`2D` canonical, `3D` controlled)
-    - projection fallback (`SPACE_MODE_3D` -> controlled 2D projection lane)
-    - integrator/tile/cache routing flags consumed by `ray_tracing2.c`
-  - `ray_tracing2.c` render/event paths now consume backend route state instead of scattered mode branches
-  - route coverage in tests:
-    - `tests/test_runner.c` (`route2d_*`, `route3d_*` assertions)
-- UX/editor parity layer is active (`RT-U5`):
-  - canonical editor router files:
-    - `include/editor/editor_mode_router.h`
-    - `src/editor/editor_mode_router.c`
-  - editor mode cycle/clamp behavior is centralized through router policy in menu/editor flows
-  - editor conversion wrappers now use backend-routed view context builders for consistent controlled-3D fallback behavior
-  - mode-aware hints now surface controlled-3D state explicitly:
-    - menu `Space` control label/hint
-    - scene editor hint banner
-    - editor HUD route status text
-  - router coverage in tests:
-    - `tests/test_runner.c` (`test_editor_mode_router_*`)
-- additive object depth contract is active (`RT-U3`):
-  - `SceneObject` includes `z` metadata (`include/scene/object_manager.h`)
-  - scene save path writes `objects[].z`
-  - scene load path accepts optional `z`, defaults to `0.0` when omitted
-  - compatibility tests now cover:
-    - `z` roundtrip persistence
-    - omitted-`z` fallback behavior
-- trio runtime-scene bridge is active and scaffolded for interop (`TP-S3` complete):
-  - bridge APIs:
-    - preflight/apply:
-      - `runtime_scene_bridge_preflight_json/file`
-      - `runtime_scene_bridge_apply_json/file`
-    - namespace-safe writeback:
-      - `runtime_scene_bridge_writeback_ray_overlay_json`
-  - contract behavior:
-    - consumes `scene_runtime_v1`
-    - maps runtime scene payload into ray runtime state
-    - writeback guardrails are now shared-promoted via:
-      - `shared/core/core_scene_compile/include/core_scene_overlay_merge_shared.h`
-    - writeback only permits `extensions.ray_tracing.*` plus approved runtime lane `space_mode_default`
-    - `space_mode_default` writeback values are constrained to `"2d"` or `"3d"` only
-    - `extensions.ray_tracing` payload must be a JSON object
-    - writeback now requires provenance metadata:
-      - `overlay_meta.producer = "ray_tracing"`
-      - `overlay_meta.logical_clock >= 0`
-    - deterministic merge guards:
-      - stale producer-clock overlays are rejected
-      - canonical `space_mode_default` writes use logical-clock ordering with lexical producer tie-break
-    - preserves unrelated runtime fields and foreign extension namespaces
-  - coverage in `tests/test_runner.c`:
-    - runtime preflight/compile/apply checks
-    - writeback nondestructive merge + policy rejection checks
-    - shared interop fixture roundtrip check (`TP-S5`):
-      - authoring fixture compile -> ray overlay writeback -> preflight/apply
-      - validates preservation of non-ray namespaces (`line_drawing`, `physics_sim`)
-
-## Scaffold Migration State
-- private migration plan:
-  - `../../docs/private_program_docs/ray_tracing/2026-03-28_ray_tracing_scaffold_standardization_switchover_plan.md`
-- baseline freeze:
-  - `../../docs/private_program_docs/ray_tracing/2026-03-28_rt_s0_baseline_freeze_and_mapping.md`
-- completed phases:
-  - `RT-S0`, `RT-S1`, `RT-S2`, `RT-S3`, `RT-S4`, `RT-S5`
-- completed post-scaffold lanes:
-  - completed font-size standardization lane:
-    - `../../docs/private_program_docs/ray_tracing/2026-03-30_ray_tracing_post_scaffold_font_size_pass_plan.md`
-    - `RT-F0` through `RT-F5` complete
-  - completed trio 2D/3D parity lane:
-    - `../../docs/private_program_docs/ray_tracing/2026-03-30_ray_tracing_2d_3d_parity_with_line_drawing_plan.md`
-    - `RT-U0` complete (baseline freeze + risk map)
-    - `RT-U1` complete (space mode runtime contract + menu selector)
-    - `RT-U2` complete (mode adapter seam for camera/world/ray routing)
-    - `RT-U3` complete (additive scene/object `z` contract upgrade)
-    - `RT-U4` complete (backend separation + explicit mode routing)
-    - `RT-U5` complete (UX/editor parity layer)
-    - `RT-U6` complete (verification/docs/memory closeout)
-    - closeout log:
-      - `../../docs/private_program_docs/ray_tracing/2026-03-30_rt_u6_verification_docs_memory_closeout.md`
-  - completed trio shared-scene bridge lane (`TP-S3`):
-    - `../../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_pre_deep_readiness.md`
-    - `../../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_deep_runtime_mapping.md`
-    - `../../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_writeback_guardrails_closeout.md`
-  - `test-stable` remains the baseline non-interactive regression gate
-
-## NP-4 3D Behavior Slice (Current)
-- app-local 3D behavior slice is now active over shared runtime scene contract:
-  - z-aware depth projection in render lane (3D mode):
-    - projected vertical offset from object `z`,
-    - depth-scaled object size,
-    - depth-ordered draw pass for stable overlap.
-  - helper APIs:
-    - `RenderHelper_DepthScaleForObjectZ(...)`
-    - `RenderHelper_DepthYOffsetPixelsForObjectZ(...)`
-  - regression coverage:
-    - `tests/test_runner.c` (`test_depth_projection_scalars`)
-
-## Connection Pass State
-- `RT-CP0` through `RT-CP5` are complete:
-  - `../../docs/private_program_docs/ray_tracing/2026-04-01_ray_tracing_connection_pass_cp0_cp5_execution.md`
-- cross-program wrapper initiative update (`W1` + `W2`) complete:
-  - wrapper diagnostics are now canonicalized in `src/app/ray_tracing_app_main.c`:
-    - structured wrapper error taxonomy + function-context boundary logging
-    - stage transition violation diagnostics (`expected`/`actual`/`next`)
-    - normalized dispatch summary reporting (`dispatch_count`, `dispatch_succeeded`, `last_dispatch_exit_code`)
-    - deterministic wrapper exit summary diagnostics
-  - execution closeout log:
-    - `../../docs/private_program_docs/ray_tracing/2026-04-02_ray_tracing_w1_w2_wrapper_hardening.md`
-  - verification snapshot:
-    - `make -C ray_tracing clean && make -C ray_tracing` -> PASS
-    - `make -C ray_tracing test-stable` -> PASS
-    - `make -C ray_tracing run-headless-smoke` -> PASS
-    - `make -C ray_tracing visual-harness` -> PASS
-- current ownership summary:
-  - wrapper (`src/app/ray_tracing_app_main.c`) owns typed context + guarded staged flow + explicit runtime dispatch seam + split dispatch flow stages + deterministic lifecycle ownership release ordering
-  - legacy body (`src/app/animation.c`, `ray_tracing_app_main_legacy(...)`) still owns most runtime initialization/routing/teardown
-- next slices:
-  - optional `RT-CP6+`: deeper extraction of runtime/update/render/shutdown ownership from legacy lane
-- `RS1` render-split lane started (`S0`/`S1`):
-  - shared diagnostics contract adoption landed in legacy runtime loop (`src/app/animation.c`):
-    - `kit_runtime_diag_compute_timings(...)`
-    - `kit_runtime_diag_input_totals_accumulate(...)`
-  - per-frame runtime timing and input counter roll-up are now emitted under opt-in env gate:
-    - `RAY_TRACING_RUNTIME_DIAG=1`
-  - `RS1-S2` landed:
-    - explicit frame derive/submit split in main loop:
-      - `DeriveRenderInputs(...)`
-      - `SubmitRenderFrame(...)`
-    - diagnostics marks now include explicit derive/submit timing windows (`render_derive_ms`, `render_submit_ms`)
-  - `RS1-S3` landed:
-    - frame submit now routes through wrapper-owned render handoff:
-      - `ray_tracing_app_render_submit(...)`
-      - wrapper handoff diagnostics counters track attempts/success/rejections
-    - legacy loop preserves behavior with direct submit fallback if wrapper handoff declines.
-  - `RS1-S4` landed:
-    - frame update and route phases now route through wrapper-owned handoff helpers:
-      - `ray_tracing_app_frame_update(...)`
-      - `ray_tracing_app_frame_route(...)`
-    - wrapper diagnostics counters now include update/route handoff attempts/success/rejections.
-    - legacy loop preserves behavior with direct update/route fallbacks if wrapper handoff declines.
-  - `RS1-S5` landed:
-    - frame event intake phase now routes through wrapper-owned handoff helper:
-      - `ray_tracing_app_frame_events(...)`
-    - wrapper diagnostics counters now include event-intake handoff attempts/success/rejections.
-    - legacy loop preserves behavior with direct event handling fallback if wrapper handoff declines.
-  - behavior status:
-    - no intentional render/input policy changes; this remains a structure/diagnostics split.
-- `IR1` setup landed for upcoming editor complexity:
-  - legacy input loop now uses explicit phase helpers in `animation.c`:
-    - `InputFrame_Intake(...)`
-    - `InputFrame_Normalize(...)`
-    - `InputFrame_Route(...)`
-    - `InputFrame_Invalidate(...)`
-    - `RunInputRoutingFrame(...)`
-  - explicit raw-event + normalized-action frame model added (`RayTracingInputFrame`).
-  - explicit input invalidation output contract added (`RayTracingInputRoutingResult`) for target/full invalidation and reason bits.
-  - behavior parity preserved for existing quit/escape/zoom/fluid/ray-input routes.
-  - scene editor top-level now uses explicit target routing contract in `scene_editor.c`:
-    - `system -> chrome -> pane` routing stages
-    - typed routing result with invalidation intent outputs and reason bits
-    - behavior-preserving forwarding to Bezier/Object/Camera editor handlers
-  - `IR1-S2` landed in scene editor:
-    - explicit normalized action contract:
-      - `SceneEditorInputNormalized` (`action_class`, `route_policy`, `target_hint`, `event`)
-      - route-policy surface: `global`, `chrome`, `active_pane`, `none`
-    - explicit per-event diagnostics contract:
-      - `SceneEditorInputDiagFrame` (raw/normalized/ignored/immediate/queued, routed target counters, invalidation counters)
-      - opt-in diagnostics gate: `RAY_TRACING_EDITOR_INPUT_DIAG=1`
-    - behavior parity remains intact:
-      - existing quit/tab/text-zoom/chrome button/mode-pane forwarding behavior is unchanged
-  - `IR1-S3` landed in scene editor:
-    - concrete pane hit-region routing contract is explicit before pane dispatch:
-      - `controls`, `list panel`, `canvas`, `drag`
-      - mode-local hit-region adapters now exist in editor modules:
-        - `BezierEditorHitRegionAtPoint(...)`
-        - `ObjectEditorHitRegionAtPoint(...)`
-        - `CameraEditorHitRegionAtPoint(...)`
-    - expanded invalidation-policy classes are explicit in route outputs:
-      - `target_ui`, `target_pane`, `target_interaction`, `full_exit`
-      - reason bits now classify pane-controls/canvas/drag causes
-    - opt-in diagnostics now include pane-hit class counters.
-  - `IR1-S4` landed in pane handlers:
-    - pane-local canonical action adapters are now explicit before deep mutation paths:
-      - `BezierEditorAction` + `ResolveBezierEditorAction(...)`
-      - `ObjectEditorAction` + `ResolveObjectEditorAction(...)`
-      - `CameraEditorAction` + `ResolveCameraEditorAction(...)`
-    - behavior parity is preserved while per-pane command normalization is now explicit.
-  - `IR1-S5` landed in scene editor routing:
-    - explicit scene-editor pane command contract added before pane dispatch:
-      - `SceneEditorPaneCommandKind`
-      - `SceneEditorPaneCommand`
-      - `SceneEditorResolvePaneCommand(...)`
-    - active-pane route now resolves `pane command -> pane dispatch` explicitly instead of direct raw-event pane dispatch.
-    - behavior parity preserved; pane handlers remain mutation owners.
-
-## RT3D Execution State
-- active execution plan:
-  - `../../docs/private_program_docs/ray_tracing/2026-04-02_ray_tracing_rt3d_execution_plan.md`
-- `RT3D-0` runtime intake is complete:
-  - runtime bridge remains strict to `scene_runtime_v1`
-  - authoring payloads are rejected by runtime-only intake path
-  - malformed runtime payload diagnostics are explicitly regression-tested (`missing schema_variant`)
-  - optional lane fallback (`materials`/`lights`/`cameras` omitted) is deterministic and regression-tested
-- `RT3D-0` verification snapshot:
-  - `make -C ray_tracing test` -> PASS
-  - `./bin/run_trio_scene_pipeline.sh` -> PASS
-- `RT3D-1` render-domain mapping is complete:
-  - runtime bridge now enforces canonical runtime units (`unit_system=meters`, finite positive `world_scale`)
-  - runtime bridge mapping applies `world_scale` consistently for object/camera/light mapping
-  - mapping boundary remains bridge-local; editor mode state mutation is explicitly regression-tested as unchanged
-- `RT3D-1` verification snapshot:
-  - `make -C ray_tracing test` -> PASS
-  - `./bin/run_trio_scene_pipeline.sh` -> PASS
-- `RT3D-2` overlay writeback constraints is complete:
-  - allow-list remains `extensions.ray_tracing.*` plus `space_mode_default`
-  - canonical runtime-core overlay writes remain blocked (including `unit_system`/`world_scale`)
-  - deterministic merge/conflict paths are regression-covered (stale clock + tie-break handling)
-- `RT3D-2` verification snapshot:
-  - `make -C ray_tracing test` -> PASS
-  - `./bin/run_trio_scene_pipeline.sh` -> PASS
-- `RT3D-3` early backend stabilization is complete:
-  - runtime intake now tracks 3D scaffold state (camera seed `z` + primitive baseline counts)
-  - controlled 3D backend route consumes scaffold state and computes deterministic ray-origin offset
-  - camera-path integrator controlled-3D lane now uses scaffold-aware camera origin input
-  - baseline primitives are scaffold-mapped in runtime apply path (`box`, `plane`, `triangle_mesh`)
-  - canonical 2D lane remains unchanged and still passes the same deterministic gates
-- `RT3D-3` verification snapshot:
-  - `make -C ray_tracing test` -> PASS
-  - `./bin/run_trio_scene_pipeline.sh` -> PASS
-- `RT3D-4` closeout complete:
-  - full local stable lane rerun:
-    - `make -C ray_tracing test-stable` -> PASS
-  - trio interop smoke rerun:
-    - `./bin/run_trio_scene_pipeline.sh` -> PASS
-  - lane status:
-    - `RT3D-0` through `RT3D-4` complete
+## History and Deep Lane References
+- Full phase-by-phase details and archived slices are in private docs:
+  - `/Users/calebsv/Desktop/CodeWork/docs/private_program_docs/ray_tracing/`
+- This file is the compressed public current-state contract.

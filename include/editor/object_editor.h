@@ -55,7 +55,7 @@ int ObjectEditorGetSelectedObjectIndex(void);
 void ObjectEditorSetSelectedObjectIndex(int index);
 void ObjectEditorAssignMaterialToSelected(int material_id);
 void ObjectEditorAssignColorToSelected(int packed_color);
-void ObjectEditorAssignTransparencyToSelected(double transparency);
+void ObjectEditorAssignAlphaToSelected(double alpha);
 void ObjectEditorAssignEmissiveStrengthToSelected(double emissive_strength);
 
 #endif // OBJECT_EDITOR_H

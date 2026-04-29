@@ -39,6 +39,14 @@ typedef enum {
 #define RUNTIME_3D_SECONDARY_SAMPLES_STEP 4
 #define RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT 48
 
+#define RUNTIME_3D_BOUNCE_DEPTH_MIN 1
+#define RUNTIME_3D_BOUNCE_DEPTH_MAX 8
+#define RUNTIME_3D_BOUNCE_DEPTH_DEFAULT 3
+
+#define RUNTIME_3D_ROULETTE_THRESHOLD_MIN 0.0
+#define RUNTIME_3D_ROULETTE_THRESHOLD_MAX 0.1
+#define RUNTIME_3D_ROULETTE_THRESHOLD_DEFAULT 0.01
+
 #define RUNTIME_3D_TRANSMISSION_SAMPLES_MIN 4
 #define RUNTIME_3D_TRANSMISSION_SAMPLES_MAX 32
 #define RUNTIME_3D_TRANSMISSION_SAMPLES_DEFAULT 16
@@ -60,6 +68,8 @@ typedef struct {
     int bounceLimit;
     int frameLimit;
     int framesForTravel;
+    int startFrameIndex;
+    bool resumeFromExistingFrames;
     int maxLoopCount;
     int fps;
     double frameDuration;
@@ -100,9 +110,12 @@ typedef struct {
     double cacheVarianceCutoff;   // Variance rejection threshold for irradiance cache bins
     double cacheHaloRadius;       // Multiplier for light radius to suppress GI near the emitter
     double lightDecaySoftness;    // >1.0 flattens decay, <1.0 steepens decay
+    double lightRadius;           // Authored light source radius in world units (0 = auto)
     double lightHeight;           // Z-height of the light above the ground plane for Disney path/2.5D shading
     bool topFillLightEnabled;     // Shared native 3D overhead fill light toggle
     bool disneyDenoiseEnabled;    // Disney-only native 3D denoise post-pass toggle
+    int bounceDepth3D;
+    double rouletteThreshold3D;
     int secondaryDiffuseSamples3D;
     int transmissionSamples3D;
     int temporalFrames3D;

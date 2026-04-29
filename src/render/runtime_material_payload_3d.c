@@ -65,7 +65,7 @@ bool RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(int scene_object_index
     payload.transparency =
         material ? runtime_material_payload_3d_clamp01(
                        material->transparency *
-                       runtime_material_payload_3d_clamp01(object_copy.transparency))
+                       runtime_material_payload_3d_clamp01(object_copy.alpha))
                  : 0.0;
     payload.valid = true;
 

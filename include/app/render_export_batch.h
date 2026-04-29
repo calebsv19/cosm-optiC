@@ -19,6 +19,8 @@ typedef struct {
     RayTracingRenderExportCode code;
     size_t frame_count;
     size_t files_cleared;
+    int highest_frame_index;
+    int next_frame_index;
     size_t progress_current_frame;
     size_t progress_total_frames;
     int progress_percent;

@@ -71,7 +71,6 @@ int importCount = 0;
 SDL_Rect materialPanelRect;
 SDL_Rect materialCollapseRect;
 int selectedMaterialIndex = -1;
-int selectedColorIndex = -1;
 bool assetsCollapsed = false;
 bool materialsCollapsed = false;
 int assetScroll = 0;
@@ -123,6 +122,46 @@ static SDL_Color ObjectEditorColorFromPackedRGB(int packed, Uint8 alpha) {
     color.b = (Uint8)(packed & 0xFF);
     color.a = alpha;
     return color;
+}
+
+static int ObjectEditorPackedColorWithChannel(int packed_color,
+                                              ObjectEditorPanelSliderKind kind,
+                                              Uint8 channel_value) {
+    Uint8 r = (Uint8)((packed_color >> 16) & 0xFF);
+    Uint8 g = (Uint8)((packed_color >> 8) & 0xFF);
+    Uint8 b = (Uint8)(packed_color & 0xFF);
+    if (kind == OBJECT_EDITOR_PANEL_SLIDER_COLOR_R) r = channel_value;
+    if (kind == OBJECT_EDITOR_PANEL_SLIDER_COLOR_G) g = channel_value;
+    if (kind == OBJECT_EDITOR_PANEL_SLIDER_COLOR_B) b = channel_value;
+    return SceneObjectPackRGBBytes(r, g, b);
+}
+
+static void ObjectEditorApplySliderValueToSelected(ObjectEditorPanelSliderKind kind,
+                                                   double slider_value) {
+    Uint8 channel_value = 0u;
+    if (selectedObjectIndex < 0 || selectedObjectIndex >= sceneSettings.objectCount) {
+        return;
+    }
+    if (slider_value < 0.0) slider_value = 0.0;
+    if (slider_value > 1.0) slider_value = 1.0;
+
+    if (kind == OBJECT_EDITOR_PANEL_SLIDER_COLOR_R ||
+        kind == OBJECT_EDITOR_PANEL_SLIDER_COLOR_G ||
+        kind == OBJECT_EDITOR_PANEL_SLIDER_COLOR_B) {
+        channel_value = (Uint8)lround(slider_value * 255.0);
+        ObjectEditorAssignColorToSelected(
+            ObjectEditorPackedColorWithChannel(sceneSettings.sceneObjects[selectedObjectIndex].color,
+                                               kind,
+                                               channel_value));
+        return;
+    }
+    if (kind == OBJECT_EDITOR_PANEL_SLIDER_COLOR_A) {
+        ObjectEditorAssignAlphaToSelected(slider_value);
+        return;
+    }
+    if (kind == OBJECT_EDITOR_PANEL_SLIDER_EMISSIVE_STRENGTH) {
+        ObjectEditorAssignEmissiveStrengthToSelected(slider_value);
+    }
 }
 
 typedef enum ObjectEditorAction {
@@ -379,7 +418,6 @@ bool ObjectEditorDeleteObjectIndex(int index) {
     if (selectedObjectIndex == index) {
         selectedObjectIndex = -1;
         selectedMaterialIndex = -1;
-        selectedColorIndex = -1;
     } else if (selectedObjectIndex > index) {
         selectedObjectIndex -= 1;
     }
@@ -649,7 +687,6 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
                             selectedAssetIndex = idx;
                             selectedObjectIndex = -1;
                             selectedMaterialIndex = -1;
-                            selectedColorIndex = -1;
                         }
                     }
                 }
@@ -672,13 +709,6 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
                     ObjectEditorAssignMaterialToSelected(idx);
                     return;
                 }
-                idx = ObjectEditorPanels_ColorIndexAtPoint(mx, my);
-                if (idx >= 0) {
-                    selectedColorIndex = idx;
-                    ObjectEditorAssignColorToSelected(
-                        ObjectEditorPanels_PackedColorForIndex(idx));
-                    return;
-                }
                 {
                     ObjectEditorPanelSliderKind slider_kind =
                         OBJECT_EDITOR_PANEL_SLIDER_NONE;
@@ -688,12 +718,9 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
                                                               &slider_kind,
                                                               &slider_value)) {
                         activeMaterialSlider = slider_kind;
-                        if (slider_kind == OBJECT_EDITOR_PANEL_SLIDER_TRANSPARENCY) {
-                            ObjectEditorAssignTransparencyToSelected(slider_value);
-                        } else if (slider_kind ==
-                                   OBJECT_EDITOR_PANEL_SLIDER_EMISSIVE_STRENGTH) {
-                            ObjectEditorAssignEmissiveStrengthToSelected(slider_value);
-                        }
+                        ObjectEditorApplySliderValueToSelected(slider_kind,
+                                                               slider_value);
+                        return;
                     }
                 }
                 return;
@@ -710,7 +737,6 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
 
         selectedObjectIndex = -1;
         selectedMaterialIndex = -1;
-        selectedColorIndex = -1;
         activeMaterialSlider = OBJECT_EDITOR_PANEL_SLIDER_NONE;
         draggingRotationHandle = false;
 
@@ -810,8 +836,6 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
             selectedAssetIndex = -1; // only one selection active
             if (selectedObjectIndex >= 0 && selectedObjectIndex < sceneSettings.objectCount) {
                 selectedMaterialIndex = sceneSettings.sceneObjects[selectedObjectIndex].material_id;
-                selectedColorIndex = ObjectEditorPanels_ColorIndexForPackedRGB(
-                    sceneSettings.sceneObjects[selectedObjectIndex].color);
             }
             return;
         }
@@ -851,12 +875,8 @@ void HandleObjectEditorMouseDrag(SDL_Event* event) {
             if (ObjectEditorPanels_SliderValueForKindAtX(activeMaterialSlider,
                                                          mx,
                                                          &slider_value)) {
-                if (activeMaterialSlider == OBJECT_EDITOR_PANEL_SLIDER_TRANSPARENCY) {
-                    ObjectEditorAssignTransparencyToSelected(slider_value);
-                } else if (activeMaterialSlider ==
-                           OBJECT_EDITOR_PANEL_SLIDER_EMISSIVE_STRENGTH) {
-                    ObjectEditorAssignEmissiveStrengthToSelected(slider_value);
-                }
+                ObjectEditorApplySliderValueToSelected(activeMaterialSlider,
+                                                       slider_value);
             }
         } else if (selectedObjectIndex != -1) {
             SceneObject* obj = &sceneSettings.sceneObjects[selectedObjectIndex];
@@ -907,7 +927,6 @@ static void ClearSelections(void) {
     selectedAssetIndex = -1;
     selectedObjectIndex = -1;
     selectedMaterialIndex = -1;
-    selectedColorIndex = -1;
     activeMaterialSlider = OBJECT_EDITOR_PANEL_SLIDER_NONE;
 }
 
@@ -927,7 +946,6 @@ static void DeleteSelected(void) {
         RemoveSceneObject(selectedObjectIndex);
         selectedObjectIndex = -1;
         selectedMaterialIndex = -1;
-        selectedColorIndex = -1;
         activeMaterialSlider = OBJECT_EDITOR_PANEL_SLIDER_NONE;
     }
 }
@@ -1021,12 +1039,9 @@ void ObjectEditorSetSelectedObjectIndex(int index) {
     if (index < 0 || index >= sceneSettings.objectCount) {
         selectedObjectIndex = -1;
         selectedMaterialIndex = -1;
-        selectedColorIndex = -1;
     } else {
         selectedObjectIndex = index;
         selectedMaterialIndex = sceneSettings.sceneObjects[index].material_id;
-        selectedColorIndex = ObjectEditorPanels_ColorIndexForPackedRGB(
-            sceneSettings.sceneObjects[index].color);
     }
     selectedAssetIndex = -1;
     draggingRotationHandle = false;
@@ -1046,16 +1061,14 @@ void ObjectEditorAssignColorToSelected(int packed_color) {
         return;
     }
     ObjectEditorObjectAssignColor(&sceneSettings.sceneObjects[selectedObjectIndex], packed_color);
-    selectedColorIndex = ObjectEditorPanels_ColorIndexForPackedRGB(
-        sceneSettings.sceneObjects[selectedObjectIndex].color);
 }
 
-void ObjectEditorAssignTransparencyToSelected(double transparency) {
+void ObjectEditorAssignAlphaToSelected(double alpha) {
     if (selectedObjectIndex < 0 || selectedObjectIndex >= sceneSettings.objectCount) {
         return;
     }
-    ObjectEditorObjectAssignTransparency(&sceneSettings.sceneObjects[selectedObjectIndex],
-                                         transparency);
+    ObjectEditorObjectAssignAlpha(&sceneSettings.sceneObjects[selectedObjectIndex],
+                                  alpha);
 }
 
 void ObjectEditorAssignEmissiveStrengthToSelected(double emissive_strength) {

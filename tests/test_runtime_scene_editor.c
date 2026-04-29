@@ -117,6 +117,8 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip(void) {
     sceneSettings.camera.x = 10.0;
     sceneSettings.camera.y = 4.0;
     sceneSettings.camera.rotation = 0.25;
+    animSettings.lightIntensity = 6.75;
+    animSettings.lightRadius = 2.25;
 
     ok = SceneEditorRuntimeScenePersistAuthoring(diagnostics, sizeof(diagnostics));
     assert_true("runtime_scene_authoring_persist_ok", ok);
@@ -134,6 +136,8 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip(void) {
                     strstr(persisted_json, "\"authoring\"") != NULL);
         assert_true("runtime_scene_authoring_persist_has_light_path",
                     strstr(persisted_json, "\"light_path\"") != NULL);
+        assert_true("runtime_scene_authoring_persist_has_light_settings",
+                    strstr(persisted_json, "\"light_settings\"") != NULL);
         assert_true("runtime_scene_authoring_persist_has_camera_path",
                     strstr(persisted_json, "\"camera_path\"") != NULL);
     }
@@ -157,6 +161,14 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip(void) {
     assert_close("runtime_scene_authoring_persist_camera_rot",
                  sceneSettings.camera.rotation,
                  0.25,
+                 1e-6);
+    assert_close("runtime_scene_authoring_persist_light_intensity",
+                 animSettings.lightIntensity,
+                 6.75,
+                 1e-6);
+    assert_close("runtime_scene_authoring_persist_light_radius",
+                 animSettings.lightRadius,
+                 2.25,
                  1e-6);
 
     free(persisted_json);
@@ -230,7 +242,7 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip_object_material
     snprintf(animSettings.runtimeScenePath, sizeof(animSettings.runtimeScenePath), "%s", runtime_path);
     sceneSettings.sceneObjects[0].material_id = 3;
     sceneSettings.sceneObjects[0].color = 0x00FF00;
-    sceneSettings.sceneObjects[0].transparency = 0.35;
+    sceneSettings.sceneObjects[0].alpha = 0.35;
     sceneSettings.sceneObjects[0].emissiveStrength = 0.65;
 
     ok = SceneEditorRuntimeScenePersistAuthoring(diagnostics, sizeof(diagnostics));
@@ -253,8 +265,8 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip_object_material
                     strstr(persisted_json, "\"material_id\":3") != NULL);
         assert_true("runtime_scene_authoring_material_persist_has_object_color",
                     strstr(persisted_json, "\"object_color\":65280") != NULL);
-        assert_true("runtime_scene_authoring_material_persist_has_transparency",
-                    strstr(persisted_json, "\"transparency\":") != NULL);
+        assert_true("runtime_scene_authoring_material_persist_has_alpha",
+                    strstr(persisted_json, "\"alpha\":") != NULL);
         assert_true("runtime_scene_authoring_material_persist_has_emissive_strength",
                     strstr(persisted_json, "\"emissive_strength\":") != NULL);
     }
@@ -263,8 +275,8 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip_object_material
                 sceneSettings.sceneObjects[0].material_id == 3);
     assert_true("runtime_scene_authoring_material_persist_hydrated_object_color",
                 sceneSettings.sceneObjects[0].color == 0x00FF00);
-    assert_close("runtime_scene_authoring_material_persist_hydrated_transparency",
-                 sceneSettings.sceneObjects[0].transparency,
+    assert_close("runtime_scene_authoring_material_persist_hydrated_alpha",
+                 sceneSettings.sceneObjects[0].alpha,
                  0.35,
                  1e-9);
     assert_close("runtime_scene_authoring_material_persist_hydrated_emissive_strength",
@@ -309,14 +321,14 @@ static int test_object_editor_slider_assignments_update_object_fields(void) {
     memset(&animSettings, 0, sizeof(animSettings));
     sceneSettings.objectCount = 1;
     sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
-    sceneSettings.sceneObjects[0].transparency = 1.0;
+    sceneSettings.sceneObjects[0].alpha = 1.0;
     sceneSettings.sceneObjects[0].emissiveStrength = 1.0;
 
-    ObjectEditorObjectAssignTransparency(&sceneSettings.sceneObjects[0], 0.25);
+    ObjectEditorObjectAssignAlpha(&sceneSettings.sceneObjects[0], 0.25);
     ObjectEditorObjectAssignEmissiveStrength(&sceneSettings.sceneObjects[0], 0.75);
 
-    assert_close("object_editor_assign_transparency_updates_object",
-                 sceneSettings.sceneObjects[0].transparency,
+    assert_close("object_editor_assign_alpha_updates_object",
+                 sceneSettings.sceneObjects[0].alpha,
                  0.25,
                  1e-9);
     assert_close("object_editor_assign_emissive_strength_updates_object",

@@ -765,17 +765,55 @@ void menu_render_build_button_layout(TTF_Font* font,
                                                             BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START,
                                                             menu_space_mode_button_label(), 0);
     if (screen_layout) {
-        int stackWidth = screen_layout->routeStackRect.w - 20;
-        layout.spaceModeRect.x = screen_layout->routeStackRect.x + 10;
-        layout.spaceModeRect.w = stackWidth;
-        layout.sceneModeRect.x = screen_layout->routeStackRect.x + 10;
-        layout.sceneModeRect.w = stackWidth;
-        layout.sceneEditorRect.x = screen_layout->routeStackRect.x + 10;
-        layout.sceneEditorRect.w = stackWidth;
-        layout.startRect.x = screen_layout->routeStackRect.x + 10;
-        layout.startRect.w = stackWidth;
-        layout.previewRect.x = screen_layout->routeStackRect.x + 10;
-        layout.previewRect.w = stackWidth;
+        const int stackGap = 12;
+        const int stackWidth = screen_layout->routeStackRect.w - 20;
+        int leftControlWidth = 190;
+        int rightStackWidth = 0;
+        int leftControlX = screen_layout->routeStackRect.x + 10;
+        int rightStackX = 0;
+
+        if (leftControlWidth > stackWidth - stackGap - 120) {
+            leftControlWidth = max_int(120, (stackWidth - stackGap) / 2);
+        }
+        rightStackWidth = stackWidth - leftControlWidth - stackGap;
+        if (rightStackWidth < 120) {
+            rightStackWidth = 120;
+            leftControlWidth = stackWidth - stackGap - rightStackWidth;
+        }
+        rightStackX = leftControlX + leftControlWidth + stackGap;
+
+        layout.resumeFramesRect = build_adaptive_button_rect(font,
+                                                             leftControlX,
+                                                             layout.sceneEditorRect.y,
+                                                             leftControlWidth,
+                                                             BOTTOM_BUTTON_HEIGHT_START,
+                                                             "Resume Existing: OFF",
+                                                             leftControlWidth);
+        layout.startFrameRect = build_adaptive_button_rect(font,
+                                                           leftControlX,
+                                                           layout.startRect.y,
+                                                           leftControlWidth,
+                                                           BOTTOM_BUTTON_HEIGHT_START,
+                                                           "Start Frame: 0",
+                                                           leftControlWidth);
+        layout.nextFrameRect = build_adaptive_button_rect(font,
+                                                          leftControlX,
+                                                          layout.previewRect.y,
+                                                          leftControlWidth,
+                                                          BOTTOM_BUTTON_HEIGHT_START,
+                                                          "Next Existing: 0",
+                                                          leftControlWidth);
+
+        layout.spaceModeRect.x = rightStackX;
+        layout.spaceModeRect.w = rightStackWidth;
+        layout.sceneModeRect.x = rightStackX;
+        layout.sceneModeRect.w = rightStackWidth;
+        layout.sceneEditorRect.x = rightStackX;
+        layout.sceneEditorRect.w = rightStackWidth;
+        layout.startRect.x = rightStackX;
+        layout.startRect.w = rightStackWidth;
+        layout.previewRect.x = rightStackX;
+        layout.previewRect.w = rightStackWidth;
     }
     layout.exitRect = build_adaptive_button_rect(font,
                                                  screen_layout ? (screen_layout->bottomActionRowRect.x + 14) : BOTTOM_BUTTON_MARGIN_X_EXIT,
@@ -904,6 +942,46 @@ void menu_render_frame(SDL_Renderer* renderer, TTF_Font* font, MenuRuntimeState*
         char heightLabel[64];
         snprintf(heightLabel, sizeof(heightLabel), "Light Height: %.1f", animSettings.lightHeight);
         menu_render_draw_button_rect(renderer, font, &buttons.lightHeightRect, heightLabel, true);
+    }
+
+    if (buttons.resumeFramesRect.w > 0 && buttons.resumeFramesRect.h > 0) {
+        char resumeLabel[64];
+        char startFrameLabel[64];
+        char nextFrameLabel[64];
+        snprintf(resumeLabel,
+                 sizeof(resumeLabel),
+                 "Resume Existing: %s",
+                 animSettings.resumeFromExistingFrames ? "ON" : "OFF");
+        if (state->editingStartFrame && state->inputBuffer[0] != '\0') {
+            snprintf(startFrameLabel,
+                     sizeof(startFrameLabel),
+                     "Start Frame: %s",
+                     state->inputBuffer);
+        } else {
+            snprintf(startFrameLabel,
+                     sizeof(startFrameLabel),
+                     "Start Frame: %d",
+                     animSettings.startFrameIndex);
+        }
+        snprintf(nextFrameLabel,
+                 sizeof(nextFrameLabel),
+                 "Next Existing: %d",
+                 state->exportBatchStatus.next_frame_index);
+        menu_render_draw_button_rect(renderer,
+                                     font,
+                                     &buttons.resumeFramesRect,
+                                     resumeLabel,
+                                     animSettings.resumeFromExistingFrames);
+        menu_render_draw_button_rect(renderer,
+                                     font,
+                                     &buttons.startFrameRect,
+                                     startFrameLabel,
+                                     state->editingStartFrame || !animSettings.resumeFromExistingFrames);
+        menu_render_draw_button_rect(renderer,
+                                     font,
+                                     &buttons.nextFrameRect,
+                                     nextFrameLabel,
+                                     false);
     }
 
     menu_render_draw_sliders(renderer, font, state, &sliderLayout);

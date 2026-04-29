@@ -128,6 +128,8 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_emission_transparency_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_feature_buffer.o \
 	$(BUILD_DIR)/render/runtime_native_3d_denoise.o \
+	$(BUILD_DIR)/render/runtime_native_3d_blue_noise.o \
+	$(BUILD_DIR)/render/runtime_native_3d_sampling.o \
 	$(BUILD_DIR)/render/runtime_material_payload_3d.o \
 	$(BUILD_DIR)/render/runtime_material_response_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \
@@ -257,6 +259,8 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_emission_transparency_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_feature_buffer.o \
 	$(BUILD_DIR)/render/runtime_native_3d_denoise.o \
+	$(BUILD_DIR)/render/runtime_native_3d_blue_noise.o \
+	$(BUILD_DIR)/render/runtime_native_3d_sampling.o \
 	$(BUILD_DIR)/render/runtime_material_payload_3d.o \
 	$(BUILD_DIR)/render/runtime_material_response_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \

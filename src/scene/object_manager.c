@@ -9,7 +9,7 @@ static void InitDefaultMaterial(SceneObject* obj) {
     obj->texture[0] = '\0';
     obj->color = 0xFFFFFF;
     obj->opacity = 1.0;
-    obj->transparency = 1.0;
+    obj->alpha = 1.0;
     obj->reflectivity = 0.35;
     obj->roughness = 0.65;
     obj->emissiveStrength = 1.0;
@@ -196,6 +196,36 @@ void MarkObjectDirty(SceneObject* obj) {
 // Checks if an object needs to be updated
 bool IsObjectDirty(SceneObject* obj) {
     return obj->dirty;
+}
+
+int SceneObjectPackRGBBytes(Uint8 r, Uint8 g, Uint8 b) {
+    return ((int)r << 16) | ((int)g << 8) | (int)b;
+}
+
+Uint8 SceneObjectColorR(const SceneObject* obj) {
+    int packed = obj ? (obj->color & 0xFFFFFF) : 0xFFFFFF;
+    return (Uint8)((packed >> 16) & 0xFF);
+}
+
+Uint8 SceneObjectColorG(const SceneObject* obj) {
+    int packed = obj ? (obj->color & 0xFFFFFF) : 0xFFFFFF;
+    return (Uint8)((packed >> 8) & 0xFF);
+}
+
+Uint8 SceneObjectColorB(const SceneObject* obj) {
+    int packed = obj ? (obj->color & 0xFFFFFF) : 0xFFFFFF;
+    return (Uint8)(packed & 0xFF);
+}
+
+Uint8 SceneObjectAlphaByte(const SceneObject* obj) {
+    double alpha = obj ? obj->alpha : 1.0;
+    if (alpha < 0.0) alpha = 0.0;
+    if (alpha > 1.0) alpha = 1.0;
+    return (Uint8)lround(alpha * 255.0);
+}
+
+double SceneObjectAlphaFromByte(Uint8 alpha) {
+    return (double)alpha / 255.0;
 }
 
 void SegmentPathInit(SegmentPath* path) {

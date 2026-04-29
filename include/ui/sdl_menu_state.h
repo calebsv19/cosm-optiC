@@ -47,6 +47,7 @@ typedef struct {
     char inputBuffer[10];
     bool editingBounce;
     bool editingFrame;
+    bool editingStartFrame;
     bool editingInputRoot;
     bool editingOutputRoot;
     bool editingFrameDir;
@@ -59,6 +60,8 @@ typedef struct {
     int lightIntensitySliderValue;
     int lightDecaySoftnessSliderValue;
     int forwardDecaySliderValue;
+    int bounceDepth3DSliderValue;
+    int rouletteThreshold3DSliderValue;
     int secondaryDiffuseSamples3DSliderValue;
     int transmissionSamples3DSliderValue;
     int temporalFrames3DSliderValue;

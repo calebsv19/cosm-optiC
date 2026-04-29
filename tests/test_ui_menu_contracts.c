@@ -188,6 +188,13 @@ static int test_menu_button_layout_respects_owned_screen_zones(void) {
                 test_rect_right(&buttons.previewRect) <= test_rect_right(&screen.routeStackRect) &&
                 buttons.spaceModeRect.y >= screen.routeStackRect.y &&
                 test_rect_bottom(&buttons.previewRect) <= test_rect_bottom(&screen.routeStackRect));
+    assert_true("menu_buttons_frame_resume_controls_inside_route_zone",
+                buttons.resumeFramesRect.x >= screen.routeStackRect.x &&
+                test_rect_right(&buttons.nextFrameRect) <= test_rect_right(&screen.routeStackRect) &&
+                buttons.resumeFramesRect.y >= screen.routeStackRect.y &&
+                test_rect_bottom(&buttons.nextFrameRect) <= test_rect_bottom(&screen.routeStackRect));
+    assert_true("menu_buttons_frame_resume_controls_left_of_start_stack",
+                test_rect_right(&buttons.nextFrameRect) <= buttons.startRect.x);
     assert_true("menu_buttons_footer_inside_bottom_row",
                 buttons.exitRect.y >= screen.bottomActionRowRect.y &&
                 test_rect_bottom(&buttons.exitRect) <= test_rect_bottom(&screen.bottomActionRowRect) &&
@@ -358,6 +365,78 @@ static int test_menu_slider_layout_includes_environment_control(void) {
     assert_true("menu_slider_layout_environment_present", found_environment);
     assert_true("menu_slider_layout_environment_value_synced",
                 state.envSliderValue == 128);
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_menu_slider_layout_routes_bounce_controls_by_space_mode(void) {
+    AnimationConfig saved_anim = animSettings;
+    MenuRuntimeState state;
+    MenuScreenLayout screen;
+    SliderLayout sliders;
+    bool found_legacy_bounce = false;
+    bool found_legacy_roulette = false;
+    bool found_3d_bounce = false;
+    bool found_3d_roulette = false;
+
+    memset(&state, 0, sizeof(state));
+    memset(&screen, 0, sizeof(screen));
+    memset(&sliders, 0, sizeof(sliders));
+    memset(&animSettings, 0, sizeof(animSettings));
+
+    animSettings.spaceMode = SPACE_MODE_2D;
+    menu_layout_build_base(NULL, &state, &screen);
+    menu_render_build_slider_layout(NULL, &state, &screen, &sliders);
+    for (size_t i = 0; i < sliders.count; ++i) {
+        if (sliders.items[i].label &&
+            strcmp(sliders.items[i].label, "Bounce Limit") == 0) {
+            found_legacy_bounce = true;
+        }
+        if (sliders.items[i].label &&
+            strcmp(sliders.items[i].label, "Roulette Threshold") == 0) {
+            found_legacy_roulette = true;
+        }
+    }
+    assert_true("menu_slider_layout_2d_legacy_bounce_present", found_legacy_bounce);
+    assert_true("menu_slider_layout_2d_legacy_roulette_present", found_legacy_roulette);
+
+    memset(&sliders, 0, sizeof(sliders));
+    found_legacy_bounce = false;
+    found_legacy_roulette = false;
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.bounceDepth3D = 4;
+    animSettings.rouletteThreshold3D = 0.02;
+    menu_layout_build_base(NULL, &state, &screen);
+    menu_render_build_slider_layout(NULL, &state, &screen, &sliders);
+    for (size_t i = 0; i < sliders.count; ++i) {
+        if (sliders.items[i].label &&
+            strcmp(sliders.items[i].label, "Bounce Limit") == 0) {
+            found_legacy_bounce = true;
+        }
+        if (sliders.items[i].label &&
+            strcmp(sliders.items[i].label, "Roulette Threshold") == 0) {
+            found_legacy_roulette = true;
+        }
+        if (sliders.items[i].label &&
+            strcmp(sliders.items[i].label, "3D Bounce Depth") == 0 &&
+            sliders.items[i].value == &state.bounceDepth3DSliderValue) {
+            found_3d_bounce = true;
+        }
+        if (sliders.items[i].label &&
+            strcmp(sliders.items[i].label, "3D Roulette Threshold") == 0 &&
+            sliders.items[i].value == &state.rouletteThreshold3DSliderValue) {
+            found_3d_roulette = true;
+        }
+    }
+    assert_true("menu_slider_layout_3d_legacy_bounce_hidden", !found_legacy_bounce);
+    assert_true("menu_slider_layout_3d_legacy_roulette_hidden", !found_legacy_roulette);
+    assert_true("menu_slider_layout_3d_bounce_present", found_3d_bounce);
+    assert_true("menu_slider_layout_3d_roulette_present", found_3d_roulette);
+    assert_true("menu_slider_layout_3d_bounce_synced",
+                state.bounceDepth3DSliderValue == 4);
+    assert_true("menu_slider_layout_3d_roulette_synced",
+                state.rouletteThreshold3DSliderValue == 20);
+
     animSettings = saved_anim;
     return 0;
 }
@@ -541,6 +620,16 @@ static int test_scene_source_catalog_collect_admits_runtime_and_manifest_lanes(v
     return 0;
 }
 
+static int test_menu_state_manifest_label_uses_scene_directory_name(void) {
+    char label[128];
+    menu_state_build_manifest_label("/tmp/scene_library/My Lobby/scene_runtime.json",
+                                    label,
+                                    sizeof(label));
+    assert_true("menu_manifest_label_runtime_dir_name",
+                strcmp(label, "My Lobby") == 0);
+    return 0;
+}
+
 static int test_menu_state_manifest_option_visibility_matrix(void) {
     const int original_space_mode = animSettings.spaceMode;
     MenuRuntimeState state = {0};
@@ -600,10 +689,12 @@ int run_test_ui_menu_contract_tests(void) {
     test_menu_batch_panel_header_does_not_overlap_route_rows();
     test_integrator_catalog_menu_routes_by_space_mode();
     test_menu_slider_layout_includes_environment_control();
+    test_menu_slider_layout_routes_bounce_controls_by_space_mode();
     test_integrator_catalog_cycle_preserves_inactive_mode();
     test_menu_fit_text_to_width_supports_in_place_buffer();
     test_manifest_default_roots_expands_runtime_and_legacy_paths();
     test_scene_source_catalog_collect_admits_runtime_and_manifest_lanes();
+    test_menu_state_manifest_label_uses_scene_directory_name();
     test_menu_state_manifest_option_visibility_matrix();
     test_depth_projection_scalars();
 

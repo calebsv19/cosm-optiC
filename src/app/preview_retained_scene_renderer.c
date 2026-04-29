@@ -16,6 +16,32 @@ static SDL_Color preview_retained_scene_primitive_color(int primitive_index) {
     return k_palette[index % palette_count];
 }
 
+static void preview_retained_scene_accumulate_extents(double x,
+                                                      double y,
+                                                      double z,
+                                                      bool* seeded,
+                                                      double* min_x,
+                                                      double* min_y,
+                                                      double* min_z,
+                                                      double* max_x,
+                                                      double* max_y,
+                                                      double* max_z) {
+    if (!seeded || !min_x || !min_y || !min_z || !max_x || !max_y || !max_z) return;
+    if (!*seeded) {
+        *min_x = *max_x = x;
+        *min_y = *max_y = y;
+        *min_z = *max_z = z;
+        *seeded = true;
+        return;
+    }
+    if (x < *min_x) *min_x = x;
+    if (x > *max_x) *max_x = x;
+    if (y < *min_y) *min_y = y;
+    if (y > *max_y) *max_y = y;
+    if (z < *min_z) *min_z = z;
+    if (z > *max_z) *max_z = z;
+}
+
 static void preview_retained_scene_append_segment(
     PreviewRetainedSceneLineSegment* segments,
     int max_segments,
@@ -83,6 +109,175 @@ static void preview_retained_scene_append_box(
                                               corners[b][2],
                                               color);
     }
+}
+
+static void preview_retained_scene_append_plane_seed(
+    PreviewRetainedSceneLineSegment* segments,
+    int max_segments,
+    int* io_count,
+    const RuntimeSceneBridgePrimitiveSeed* primitive,
+    SDL_Color color) {
+    double half_w = 0.0;
+    double half_h = 0.0;
+    double corners[4][3] = {{0.0}};
+    if (!primitive || !primitive->has_dimensions) return;
+    half_w = fmax(0.05, fabs(primitive->width) * 0.5);
+    half_h = fmax(0.05, fabs(primitive->height) * 0.5);
+
+    corners[0][0] = primitive->origin_x - primitive->axis_u_x * half_w - primitive->axis_v_x * half_h;
+    corners[0][1] = primitive->origin_y - primitive->axis_u_y * half_w - primitive->axis_v_y * half_h;
+    corners[0][2] = primitive->origin_z - primitive->axis_u_z * half_w - primitive->axis_v_z * half_h;
+    corners[1][0] = primitive->origin_x + primitive->axis_u_x * half_w - primitive->axis_v_x * half_h;
+    corners[1][1] = primitive->origin_y + primitive->axis_u_y * half_w - primitive->axis_v_y * half_h;
+    corners[1][2] = primitive->origin_z + primitive->axis_u_z * half_w - primitive->axis_v_z * half_h;
+    corners[2][0] = primitive->origin_x + primitive->axis_u_x * half_w + primitive->axis_v_x * half_h;
+    corners[2][1] = primitive->origin_y + primitive->axis_u_y * half_w + primitive->axis_v_y * half_h;
+    corners[2][2] = primitive->origin_z + primitive->axis_u_z * half_w + primitive->axis_v_z * half_h;
+    corners[3][0] = primitive->origin_x - primitive->axis_u_x * half_w + primitive->axis_v_x * half_h;
+    corners[3][1] = primitive->origin_y - primitive->axis_u_y * half_w + primitive->axis_v_y * half_h;
+    corners[3][2] = primitive->origin_z - primitive->axis_u_z * half_w + primitive->axis_v_z * half_h;
+
+    preview_retained_scene_append_segment(segments, max_segments, io_count,
+                                          corners[0][0], corners[0][1], corners[0][2],
+                                          corners[1][0], corners[1][1], corners[1][2],
+                                          color);
+    preview_retained_scene_append_segment(segments, max_segments, io_count,
+                                          corners[1][0], corners[1][1], corners[1][2],
+                                          corners[2][0], corners[2][1], corners[2][2],
+                                          color);
+    preview_retained_scene_append_segment(segments, max_segments, io_count,
+                                          corners[2][0], corners[2][1], corners[2][2],
+                                          corners[3][0], corners[3][1], corners[3][2],
+                                          color);
+    preview_retained_scene_append_segment(segments, max_segments, io_count,
+                                          corners[3][0], corners[3][1], corners[3][2],
+                                          corners[0][0], corners[0][1], corners[0][2],
+                                          color);
+}
+
+static void preview_retained_scene_append_prism_seed(
+    PreviewRetainedSceneLineSegment* segments,
+    int max_segments,
+    int* io_count,
+    const RuntimeSceneBridgePrimitiveSeed* primitive,
+    SDL_Color color) {
+    static const int k_edges[12][2] = {
+        {0, 1}, {1, 3}, {3, 2}, {2, 0},
+        {4, 5}, {5, 7}, {7, 6}, {6, 4},
+        {0, 4}, {1, 5}, {2, 6}, {3, 7}
+    };
+    double half_w = 0.0;
+    double half_h = 0.0;
+    double half_d = 0.0;
+    double corners[8][3] = {{0.0}};
+    int corner = 0;
+    int sx = 0;
+    int sy = 0;
+    int sz = 0;
+    int i = 0;
+    if (!primitive || !primitive->has_dimensions) return;
+    half_w = fmax(0.05, fabs(primitive->width) * 0.5);
+    half_h = fmax(0.05, fabs(primitive->height) * 0.5);
+    half_d = fmax(0.05, fabs(primitive->depth) * 0.5);
+    for (sx = -1; sx <= 1; sx += 2) {
+        for (sy = -1; sy <= 1; sy += 2) {
+            for (sz = -1; sz <= 1; sz += 2) {
+                corners[corner][0] = primitive->origin_x +
+                                     primitive->axis_u_x * half_w * (double)sx +
+                                     primitive->axis_v_x * half_h * (double)sy +
+                                     primitive->normal_x * half_d * (double)sz;
+                corners[corner][1] = primitive->origin_y +
+                                     primitive->axis_u_y * half_w * (double)sx +
+                                     primitive->axis_v_y * half_h * (double)sy +
+                                     primitive->normal_y * half_d * (double)sz;
+                corners[corner][2] = primitive->origin_z +
+                                     primitive->axis_u_z * half_w * (double)sx +
+                                     primitive->axis_v_z * half_h * (double)sy +
+                                     primitive->normal_z * half_d * (double)sz;
+                corner += 1;
+            }
+        }
+    }
+    for (i = 0; i < 12; ++i) {
+        int a = k_edges[i][0];
+        int b = k_edges[i][1];
+        preview_retained_scene_append_segment(segments, max_segments, io_count,
+                                              corners[a][0], corners[a][1], corners[a][2],
+                                              corners[b][0], corners[b][1], corners[b][2],
+                                              color);
+    }
+}
+
+static bool preview_retained_scene_resolve_seed_extents(
+    const RuntimeSceneBridge3DPrimitiveSeedState* seeds,
+    double* out_min_x,
+    double* out_min_y,
+    double* out_min_z,
+    double* out_max_x,
+    double* out_max_y,
+    double* out_max_z) {
+    bool seeded = false;
+    int i = 0;
+    if (!seeds || !seeds->valid || seeds->primitive_count <= 0) return false;
+    for (i = 0; i < seeds->primitive_count; ++i) {
+        const RuntimeSceneBridgePrimitiveSeed* primitive = &seeds->primitives[i];
+        if (primitive->kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE && primitive->has_dimensions) {
+            double half_w = fabs(primitive->width) * 0.5;
+            double half_h = fabs(primitive->height) * 0.5;
+            int sx = 0;
+            int sy = 0;
+            for (sx = -1; sx <= 1; sx += 2) {
+                for (sy = -1; sy <= 1; sy += 2) {
+                    preview_retained_scene_accumulate_extents(
+                        primitive->origin_x + primitive->axis_u_x * half_w * (double)sx +
+                            primitive->axis_v_x * half_h * (double)sy,
+                        primitive->origin_y + primitive->axis_u_y * half_w * (double)sx +
+                            primitive->axis_v_y * half_h * (double)sy,
+                        primitive->origin_z + primitive->axis_u_z * half_w * (double)sx +
+                            primitive->axis_v_z * half_h * (double)sy,
+                        &seeded,
+                        out_min_x, out_min_y, out_min_z,
+                        out_max_x, out_max_y, out_max_z);
+                }
+            }
+        } else if ((primitive->kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_RECT_PRISM ||
+                    primitive->kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_BOX) &&
+                   primitive->has_dimensions) {
+            double half_w = fabs(primitive->width) * 0.5;
+            double half_h = fabs(primitive->height) * 0.5;
+            double half_d = fabs(primitive->depth) * 0.5;
+            int sx = 0;
+            int sy = 0;
+            int sz = 0;
+            for (sx = -1; sx <= 1; sx += 2) {
+                for (sy = -1; sy <= 1; sy += 2) {
+                    for (sz = -1; sz <= 1; sz += 2) {
+                        preview_retained_scene_accumulate_extents(
+                            primitive->origin_x + primitive->axis_u_x * half_w * (double)sx +
+                                primitive->axis_v_x * half_h * (double)sy +
+                                primitive->normal_x * half_d * (double)sz,
+                            primitive->origin_y + primitive->axis_u_y * half_w * (double)sx +
+                                primitive->axis_v_y * half_h * (double)sy +
+                                primitive->normal_y * half_d * (double)sz,
+                            primitive->origin_z + primitive->axis_u_z * half_w * (double)sx +
+                                primitive->axis_v_z * half_h * (double)sy +
+                                primitive->normal_z * half_d * (double)sz,
+                            &seeded,
+                            out_min_x, out_min_y, out_min_z,
+                            out_max_x, out_max_y, out_max_z);
+                    }
+                }
+            }
+        } else {
+            preview_retained_scene_accumulate_extents(primitive->origin_x,
+                                                      primitive->origin_y,
+                                                      primitive->origin_z,
+                                                      &seeded,
+                                                      out_min_x, out_min_y, out_min_z,
+                                                      out_max_x, out_max_y, out_max_z);
+        }
+    }
+    return seeded;
 }
 
 static void preview_retained_scene_append_plane_rect(
@@ -251,13 +446,29 @@ static void preview_retained_scene_draw_filled_circle(SDL_Renderer* renderer,
 int PreviewRetainedSceneBuildLineSegments(const RuntimeSceneBridge3DDigestState* digest,
                                           PreviewRetainedSceneLineSegment* out_segments,
                                           int max_segments) {
+    RuntimeSceneBridge3DPrimitiveSeedState seeds = {0};
     int count = 0;
     int i = 0;
+    double seed_min_x = 0.0;
+    double seed_min_y = 0.0;
+    double seed_min_z = 0.0;
+    double seed_max_x = 0.0;
+    double seed_max_y = 0.0;
+    double seed_max_z = 0.0;
+    bool has_seed_extents = false;
 
     if (out_segments && max_segments > 0) {
         memset(out_segments, 0, sizeof(*out_segments) * (size_t)max_segments);
     }
     if (!digest || !digest->valid || !out_segments || max_segments <= 0) return 0;
+    runtime_scene_bridge_get_last_3d_primitive_seed_state(&seeds);
+    has_seed_extents = preview_retained_scene_resolve_seed_extents(&seeds,
+                                                                   &seed_min_x,
+                                                                   &seed_min_y,
+                                                                   &seed_min_z,
+                                                                   &seed_max_x,
+                                                                   &seed_max_y,
+                                                                   &seed_max_z);
 
     if (digest->has_scene_bounds) {
         SDL_Color bounds_color = digest->bounds_enabled
@@ -266,25 +477,47 @@ int PreviewRetainedSceneBuildLineSegments(const RuntimeSceneBridge3DDigestState*
         preview_retained_scene_append_box(out_segments,
                                           max_segments,
                                           &count,
-                                          digest->bounds_min_x,
-                                          digest->bounds_min_y,
-                                          digest->bounds_min_z,
-                                          digest->bounds_max_x,
-                                          digest->bounds_max_y,
-                                          digest->bounds_max_z,
+                                          has_seed_extents ? seed_min_x : digest->bounds_min_x,
+                                          has_seed_extents ? seed_min_y : digest->bounds_min_y,
+                                          has_seed_extents ? seed_min_z : digest->bounds_min_z,
+                                          has_seed_extents ? seed_max_x : digest->bounds_max_x,
+                                          has_seed_extents ? seed_max_y : digest->bounds_max_y,
+                                          has_seed_extents ? seed_max_z : digest->bounds_max_z,
                                           bounds_color);
     }
 
-    if (digest->has_scene_bounds && digest->has_construction_plane) {
+    if (digest->has_construction_plane && (has_seed_extents || digest->has_scene_bounds)) {
         preview_retained_scene_append_plane_rect(out_segments,
                                                  max_segments,
                                                  &count,
-                                                 digest->bounds_min_x,
-                                                 digest->bounds_min_y,
-                                                 digest->bounds_max_x,
-                                                 digest->bounds_max_y,
+                                                 has_seed_extents ? seed_min_x : digest->bounds_min_x,
+                                                 has_seed_extents ? seed_min_y : digest->bounds_min_y,
+                                                 has_seed_extents ? seed_max_x : digest->bounds_max_x,
+                                                 has_seed_extents ? seed_max_y : digest->bounds_max_y,
                                                  digest->construction_plane_offset,
                                                  (SDL_Color){205, 176, 106, 220});
+    }
+
+    if (seeds.valid && seeds.primitive_count > 0) {
+        for (i = 0; i < seeds.primitive_count; ++i) {
+            const RuntimeSceneBridgePrimitiveSeed* primitive = &seeds.primitives[i];
+            SDL_Color color = preview_retained_scene_primitive_color(primitive->scene_object_index);
+            if (primitive->kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE) {
+                preview_retained_scene_append_plane_seed(out_segments,
+                                                         max_segments,
+                                                         &count,
+                                                         primitive,
+                                                         color);
+            } else if (primitive->kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_RECT_PRISM ||
+                       primitive->kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_BOX) {
+                preview_retained_scene_append_prism_seed(out_segments,
+                                                         max_segments,
+                                                         &count,
+                                                         primitive,
+                                                         color);
+            }
+        }
+        return count;
     }
 
     for (i = 0; i < digest->primitive_count; ++i) {

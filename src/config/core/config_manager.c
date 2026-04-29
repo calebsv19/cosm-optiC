@@ -112,6 +112,8 @@ AnimationConfig animSettings = {
     .bounceLimit = 10,
     .frameLimit = 50,
     .framesForTravel = 40,
+    .startFrameIndex = 0,
+    .resumeFromExistingFrames = false,
     .maxLoopCount = 1,
     .fps = 30,
     .frameDuration = 1.0 / 30.0,
@@ -150,9 +152,12 @@ AnimationConfig animSettings = {
     .cacheVarianceCutoff = 0.35,
     .cacheHaloRadius = 3.5,
     .lightDecaySoftness = 1.0,
+    .lightRadius = 0.0,
     .lightHeight = 8.0,
     .topFillLightEnabled = false,
     .disneyDenoiseEnabled = true,
+    .bounceDepth3D = RUNTIME_3D_BOUNCE_DEPTH_DEFAULT,
+    .rouletteThreshold3D = RUNTIME_3D_ROULETTE_THRESHOLD_DEFAULT,
     .secondaryDiffuseSamples3D = RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT,
     .transmissionSamples3D = RUNTIME_3D_TRANSMISSION_SAMPLES_DEFAULT,
     .temporalFrames3D = RUNTIME_3D_TEMPORAL_FRAMES_DEFAULT,
@@ -201,6 +206,22 @@ static int ClampSecondaryDiffuseSamples3D(int value) {
         value = RUNTIME_3D_SECONDARY_SAMPLES_MAX;
     }
     return value;
+}
+
+static int ClampBounceDepth3D(int value) {
+    if (value < RUNTIME_3D_BOUNCE_DEPTH_MIN) {
+        value = RUNTIME_3D_BOUNCE_DEPTH_MIN;
+    }
+    if (value > RUNTIME_3D_BOUNCE_DEPTH_MAX) {
+        value = RUNTIME_3D_BOUNCE_DEPTH_MAX;
+    }
+    return value;
+}
+
+static double ClampRouletteThreshold3D(double value) {
+    return ClampDoubleValue(value,
+                            RUNTIME_3D_ROULETTE_THRESHOLD_MIN,
+                            RUNTIME_3D_ROULETTE_THRESHOLD_MAX);
 }
 
 static int ClampTransmissionSamples3D(int value) {
@@ -328,7 +349,7 @@ void SaveSceneConfig(void) {
         json_object_object_add(jsonObj, "texture", json_object_new_string(obj->texture));
         json_object_object_add(jsonObj, "color", json_object_new_int(obj->color));
         json_object_object_add(jsonObj, "opacity", json_object_new_double(obj->opacity));
-        json_object_object_add(jsonObj, "transparency", json_object_new_double(obj->transparency));
+        json_object_object_add(jsonObj, "alpha", json_object_new_double(obj->alpha));
         json_object_object_add(jsonObj, "reflectivity", json_object_new_double(obj->reflectivity));
         json_object_object_add(jsonObj, "roughness", json_object_new_double(obj->roughness));
         json_object_object_add(jsonObj, "emissiveStrength", json_object_new_double(obj->emissiveStrength));
@@ -409,6 +430,10 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "bounceLimit", json_object_new_int(animSettings.bounceLimit));
     json_object_object_add(config, "frameLimit", json_object_new_int(animSettings.frameLimit));
     json_object_object_add(config, "framesForTravel", json_object_new_int(animSettings.framesForTravel));
+    json_object_object_add(config, "startFrameIndex", json_object_new_int(animSettings.startFrameIndex));
+    json_object_object_add(config,
+                           "resumeFromExistingFrames",
+                           json_object_new_boolean(animSettings.resumeFromExistingFrames));
     json_object_object_add(config, "fps", json_object_new_int(animSettings.fps));
     json_object_object_add(config, "frameDuration", json_object_new_double(animSettings.frameDuration));
     config_runtime_paths_normalize_data_roots();
@@ -455,11 +480,18 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "cacheVarianceCutoff", json_object_new_double(animSettings.cacheVarianceCutoff));
     json_object_object_add(config, "cacheHaloRadius", json_object_new_double(animSettings.cacheHaloRadius));
     json_object_object_add(config, "lightDecaySoftness", json_object_new_double(animSettings.lightDecaySoftness));
+    json_object_object_add(config, "lightRadius", json_object_new_double(animSettings.lightRadius));
     json_object_object_add(config, "lightHeight", json_object_new_double(animSettings.lightHeight));
     json_object_object_add(config, "topFillLightEnabled",
                            json_object_new_boolean(animSettings.topFillLightEnabled));
     json_object_object_add(config, "disneyDenoiseEnabled",
                            json_object_new_boolean(animSettings.disneyDenoiseEnabled));
+    json_object_object_add(config,
+                           "bounceDepth3D",
+                           json_object_new_int(animSettings.bounceDepth3D));
+    json_object_object_add(config,
+                           "rouletteThreshold3D",
+                           json_object_new_double(animSettings.rouletteThreshold3D));
     json_object_object_add(config,
                            "secondaryDiffuseSamples3D",
                            json_object_new_int(animSettings.secondaryDiffuseSamples3D));
@@ -562,7 +594,7 @@ static void LoadCameraConfig(struct json_object* config) {
 }
 
 void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
-    struct json_object *texture, *color, *opacity, *transparency, *reflectivity, *roughness,
+    struct json_object *texture, *color, *opacity, *alpha, *transparency, *reflectivity, *roughness,
         *emissiveStrength, *textureId, *materialId;
 
     // Load texture path
@@ -587,10 +619,12 @@ void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
         sceneObject->opacity = 1.0; // Default: Fully opaque
     }
 
-    if (json_object_object_get_ex(obj, "transparency", &transparency)) {
-        sceneObject->transparency = json_object_get_double(transparency);
+    if (json_object_object_get_ex(obj, "alpha", &alpha)) {
+        sceneObject->alpha = json_object_get_double(alpha);
+    } else if (json_object_object_get_ex(obj, "transparency", &transparency)) {
+        sceneObject->alpha = json_object_get_double(transparency);
     } else {
-        sceneObject->transparency = 1.0;
+        sceneObject->alpha = 1.0;
     }
 
     if (json_object_object_get_ex(obj, "reflectivity", &reflectivity)) {
@@ -828,6 +862,8 @@ void LoadSceneConfig(void) {
 
 void LoadAnimationConfig(void) {
     const char* loaded_path = NULL;
+    animSettings.startFrameIndex = 0;
+    animSettings.resumeFromExistingFrames = false;
     FILE* file = config_io_open_read_with_fallback(ANIMATION_CONFIG_RUNTIME_FILE,
                                                    ANIMATION_CONFIG_DEFAULT_FILE,
                                                    ANIMATION_CONFIG_LEGACY_FILE,
@@ -865,6 +901,17 @@ void LoadAnimationConfig(void) {
         animSettings.frameLimit = json_object_get_int(temp);
     if (json_object_object_get_ex(config, "framesForTravel", &temp))
         animSettings.framesForTravel = json_object_get_int(temp);
+    if (json_object_object_get_ex(config, "startFrameIndex", &temp)) {
+        animSettings.startFrameIndex = json_object_get_int(temp);
+    } else {
+        animSettings.startFrameIndex = 0;
+    }
+    if (json_object_object_get_ex(config, "resumeFromExistingFrames", &temp) &&
+        json_object_is_type(temp, json_type_boolean)) {
+        animSettings.resumeFromExistingFrames = json_object_get_boolean(temp);
+    } else {
+        animSettings.resumeFromExistingFrames = false;
+    }
     if (json_object_object_get_ex(config, "fps", &temp)) {
         animSettings.fps = json_object_get_int(temp);
         animSettings.frameDuration = (animSettings.fps > 0) ? 1.0 / animSettings.fps : 1.0 / 30.0;
@@ -1023,6 +1070,11 @@ void LoadAnimationConfig(void) {
     } else {
         animSettings.lightDecaySoftness = 1.0;
     }
+    if (json_object_object_get_ex(config, "lightRadius", &temp)) {
+        animSettings.lightRadius = json_object_get_double(temp);
+    } else {
+        animSettings.lightRadius = 0.0;
+    }
     if (json_object_object_get_ex(config, "lightHeight", &temp)) {
         animSettings.lightHeight = json_object_get_double(temp);
     } else {
@@ -1039,6 +1091,16 @@ void LoadAnimationConfig(void) {
         animSettings.disneyDenoiseEnabled = json_object_get_boolean(temp);
     } else {
         animSettings.disneyDenoiseEnabled = true;
+    }
+    if (json_object_object_get_ex(config, "bounceDepth3D", &temp)) {
+        animSettings.bounceDepth3D = json_object_get_int(temp);
+    } else {
+        animSettings.bounceDepth3D = RUNTIME_3D_BOUNCE_DEPTH_DEFAULT;
+    }
+    if (json_object_object_get_ex(config, "rouletteThreshold3D", &temp)) {
+        animSettings.rouletteThreshold3D = json_object_get_double(temp);
+    } else {
+        animSettings.rouletteThreshold3D = RUNTIME_3D_ROULETTE_THRESHOLD_DEFAULT;
     }
     if (json_object_object_get_ex(config, "secondaryDiffuseSamples3D", &temp)) {
         animSettings.secondaryDiffuseSamples3D = json_object_get_int(temp);
@@ -1106,6 +1168,9 @@ void LoadAnimationConfig(void) {
 
     bool root_corrected = false;
     animSettings.cacheContributionWeight = ClampDoubleValue(animSettings.cacheContributionWeight, 0.0, 1.0);
+    if (animSettings.startFrameIndex < 0) {
+        animSettings.startFrameIndex = 0;
+    }
     animSettings.bsdfModel = (animSettings.bsdfModel != 0) ? 1 : 0;
     animSettings.lightIntensity = ClampDoubleValue(animSettings.lightIntensity, 0.0, 20.0);
     if (animSettings.forwardDecay <= 1.0) {
@@ -1136,11 +1201,21 @@ void LoadAnimationConfig(void) {
     if (animSettings.lightDecaySoftness > 10.0) {
         animSettings.lightDecaySoftness = 10.0;
     }
+    if (!isfinite(animSettings.lightRadius) || animSettings.lightRadius < 0.0) {
+        animSettings.lightRadius = 0.0;
+    }
+    if (animSettings.lightRadius > 25.0) {
+        animSettings.lightRadius = 25.0;
+    }
     if (!isfinite(animSettings.lightHeight) || animSettings.lightHeight < 0.0) {
         animSettings.lightHeight = 8.0;
     }
     animSettings.secondaryDiffuseSamples3D =
         ClampSecondaryDiffuseSamples3D(animSettings.secondaryDiffuseSamples3D);
+    animSettings.bounceDepth3D =
+        ClampBounceDepth3D(animSettings.bounceDepth3D);
+    animSettings.rouletteThreshold3D =
+        ClampRouletteThreshold3D(animSettings.rouletteThreshold3D);
     animSettings.transmissionSamples3D =
         ClampTransmissionSamples3D(animSettings.transmissionSamples3D);
     animSettings.temporalFrames3D =

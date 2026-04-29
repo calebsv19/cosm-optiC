@@ -246,6 +246,56 @@ static int test_animation_native_3d_temporal_frames_roundtrip_and_clamp(void) {
     return 0;
 }
 
+static int test_animation_native_3d_bounce_depth_and_roulette_roundtrip_and_clamp(void) {
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+    const char* json_missing_native_3d_bounce =
+        "{\n"
+        "  \"spaceMode\": 1,\n"
+        "  \"integratorMode3D\": 1\n"
+        "}\n";
+    const char* json_invalid_native_3d_bounce =
+        "{\n"
+        "  \"spaceMode\": 1,\n"
+        "  \"integratorMode3D\": 1,\n"
+        "  \"bounceDepth3D\": 0,\n"
+        "  \"rouletteThreshold3D\": 0.5\n"
+        "}\n";
+
+    assert_true("native_3d_bounce_write_missing",
+                write_text_file(kRuntimeAnimationConfigPath, json_missing_native_3d_bounce));
+    LoadAnimationConfig();
+    assert_true("native_3d_bounce_missing_depth_defaults",
+                animSettings.bounceDepth3D == RUNTIME_3D_BOUNCE_DEPTH_DEFAULT);
+    assert_true("native_3d_bounce_missing_roulette_defaults",
+                fabs(animSettings.rouletteThreshold3D -
+                     RUNTIME_3D_ROULETTE_THRESHOLD_DEFAULT) <= 1e-9);
+
+    assert_true("native_3d_bounce_write_invalid",
+                write_text_file(kRuntimeAnimationConfigPath, json_invalid_native_3d_bounce));
+    LoadAnimationConfig();
+    assert_true("native_3d_bounce_invalid_depth_clamped_min",
+                animSettings.bounceDepth3D == RUNTIME_3D_BOUNCE_DEPTH_MIN);
+    assert_true("native_3d_bounce_invalid_roulette_clamped_max",
+                fabs(animSettings.rouletteThreshold3D -
+                     RUNTIME_3D_ROULETTE_THRESHOLD_MAX) <= 1e-9);
+
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.bounceDepth3D = 5;
+    animSettings.rouletteThreshold3D = 0.025;
+    SaveAnimationConfig();
+    animSettings.bounceDepth3D = RUNTIME_3D_BOUNCE_DEPTH_DEFAULT;
+    animSettings.rouletteThreshold3D = RUNTIME_3D_ROULETTE_THRESHOLD_DEFAULT;
+    LoadAnimationConfig();
+    assert_true("native_3d_bounce_roundtrip_depth_persisted",
+                animSettings.bounceDepth3D == 5);
+    assert_true("native_3d_bounce_roundtrip_roulette_persisted",
+                fabs(animSettings.rouletteThreshold3D - 0.025) <= 1e-9);
+
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
 static int test_animation_native_3d_top_fill_roundtrip_and_default(void) {
     size_t backup_size = 0;
     char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
@@ -717,6 +767,54 @@ static int test_render_export_batch_counts_and_clears_frames(void) {
     return 0;
 }
 
+static int test_render_export_batch_reports_highest_and_next_frame(void) {
+    char tmp_template[] = "/tmp/ray_tracing_export_frames_next_XXXXXX";
+    char *tmp_root = mkdtemp(tmp_template);
+    char frame0[PATH_MAX];
+    char frame5[PATH_MAX];
+    char frame12[PATH_MAX];
+    char original_frame_dir[sizeof(animSettings.frameDir)];
+    char original_video_root[sizeof(animSettings.videoOutputRoot)];
+    RayTracingRenderExportStatus status = {0};
+
+    assert_true("export_batch_next_tmpdir_created", tmp_root != NULL);
+    if (!tmp_root) return 0;
+
+    snprintf(frame0, sizeof(frame0), "%s/frame_0000.bmp", tmp_root);
+    snprintf(frame5, sizeof(frame5), "%s/frame_0005.bmp", tmp_root);
+    snprintf(frame12, sizeof(frame12), "%s/frame_0012.bmp", tmp_root);
+    assert_true("export_batch_next_write_frame0", write_text_file(frame0, "a"));
+    assert_true("export_batch_next_write_frame5", write_text_file(frame5, "b"));
+    assert_true("export_batch_next_write_frame12", write_text_file(frame12, "c"));
+
+    strncpy(original_frame_dir, animSettings.frameDir, sizeof(original_frame_dir) - 1);
+    original_frame_dir[sizeof(original_frame_dir) - 1] = '\0';
+    strncpy(original_video_root, animSettings.videoOutputRoot, sizeof(original_video_root) - 1);
+    original_video_root[sizeof(original_video_root) - 1] = '\0';
+
+    strncpy(animSettings.frameDir, tmp_root, sizeof(animSettings.frameDir) - 1);
+    animSettings.frameDir[sizeof(animSettings.frameDir) - 1] = '\0';
+    strncpy(animSettings.videoOutputRoot, tmp_root, sizeof(animSettings.videoOutputRoot) - 1);
+    animSettings.videoOutputRoot[sizeof(animSettings.videoOutputRoot) - 1] = '\0';
+
+    assert_true("export_batch_next_describe_ok",
+                ray_tracing_render_export_describe_active(&status));
+    assert_true("export_batch_next_count_three", status.frame_count == 3u);
+    assert_true("export_batch_next_highest_twelve", status.highest_frame_index == 12);
+    assert_true("export_batch_next_next_thirteen", status.next_frame_index == 13);
+
+    strncpy(animSettings.frameDir, original_frame_dir, sizeof(animSettings.frameDir) - 1);
+    animSettings.frameDir[sizeof(animSettings.frameDir) - 1] = '\0';
+    strncpy(animSettings.videoOutputRoot, original_video_root, sizeof(original_video_root) - 1);
+    animSettings.videoOutputRoot[sizeof(animSettings.videoOutputRoot) - 1] = '\0';
+
+    unlink(frame0);
+    unlink(frame5);
+    unlink(frame12);
+    rmdir(tmp_root);
+    return 0;
+}
+
 static int test_render_export_batch_make_video_rejects_empty_frame_dir(void) {
     char tmp_template[] = "/tmp/ray_tracing_export_video_empty_XXXXXX";
     char *tmp_root = mkdtemp(tmp_template);
@@ -751,6 +849,53 @@ static int test_render_export_batch_make_video_rejects_empty_frame_dir(void) {
     return 0;
 }
 
+static int test_animation_deep_render_frame_resume_roundtrip_and_clamp(void) {
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+    const char* json_missing_start_resume =
+        "{\n"
+        "  \"spaceMode\": 1,\n"
+        "  \"deepRenderMode\": true\n"
+        "}\n";
+    const char* json_invalid_start_resume =
+        "{\n"
+        "  \"spaceMode\": 1,\n"
+        "  \"deepRenderMode\": true,\n"
+        "  \"startFrameIndex\": -7,\n"
+        "  \"resumeFromExistingFrames\": true\n"
+        "}\n";
+
+    assert_true("deep_render_start_resume_write_missing",
+                write_text_file(kRuntimeAnimationConfigPath, json_missing_start_resume));
+    LoadAnimationConfig();
+    assert_true("deep_render_start_missing_defaults_zero",
+                animSettings.startFrameIndex == 0);
+    assert_true("deep_render_resume_missing_defaults_off",
+                !animSettings.resumeFromExistingFrames);
+
+    assert_true("deep_render_start_resume_write_invalid",
+                write_text_file(kRuntimeAnimationConfigPath, json_invalid_start_resume));
+    LoadAnimationConfig();
+    assert_true("deep_render_start_invalid_clamped_zero",
+                animSettings.startFrameIndex == 0);
+    assert_true("deep_render_resume_invalid_preserved_true",
+                animSettings.resumeFromExistingFrames);
+
+    animSettings.startFrameIndex = 117;
+    animSettings.resumeFromExistingFrames = true;
+    SaveAnimationConfig();
+    animSettings.startFrameIndex = 0;
+    animSettings.resumeFromExistingFrames = false;
+    LoadAnimationConfig();
+    assert_true("deep_render_start_roundtrip_persisted",
+                animSettings.startFrameIndex == 117);
+    assert_true("deep_render_resume_roundtrip_persisted",
+                animSettings.resumeFromExistingFrames);
+
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
 
 int run_test_config_animation_tests(void) {
     int before = test_support_failures();
@@ -761,6 +906,7 @@ int run_test_config_animation_tests(void) {
     test_animation_scene_source_roundtrip_runtime_lane();
     test_animation_integrator_split_roundtrip_and_default_3d();
     test_animation_native_3d_temporal_frames_roundtrip_and_clamp();
+    test_animation_native_3d_bounce_depth_and_roulette_roundtrip_and_clamp();
     test_animation_native_3d_top_fill_roundtrip_and_default();
     test_animation_native_3d_disney_denoise_roundtrip_and_default();
     test_animation_environment_brightness_byte_floor_roundtrip_and_legacy_migration();
@@ -773,7 +919,9 @@ int run_test_config_animation_tests(void) {
     test_animation_restore_active_scene_source_persists_fallback_correction();
     test_animation_video_output_root_migrates_from_output_root();
     test_data_paths_resolve_video_output_path_uses_configured_root();
+    test_animation_deep_render_frame_resume_roundtrip_and_clamp();
     test_render_export_batch_counts_and_clears_frames();
+    test_render_export_batch_reports_highest_and_next_frame();
     test_render_export_batch_make_video_rejects_empty_frame_dir();
 
     return test_support_failures() - before;

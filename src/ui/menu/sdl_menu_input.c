@@ -116,6 +116,28 @@ static void finish_root_edit(MenuRuntimeState *state, bool apply) {
     state->pathInputBuffer[0] = '\0';
 }
 
+static void begin_start_frame_edit(MenuRuntimeState *state) {
+    if (!state) return;
+    state->editingStartFrame = true;
+    state->editingBounce = false;
+    state->editingFrame = false;
+    state->editingInputRoot = false;
+    state->editingOutputRoot = false;
+    state->inputBuffer[0] = '\0';
+    snprintf(state->inputBuffer, sizeof(state->inputBuffer), "%d", animSettings.startFrameIndex);
+}
+
+static void finish_start_frame_edit(MenuRuntimeState *state, bool apply) {
+    if (!state) return;
+    if (apply && state->inputBuffer[0]) {
+        int newValue = atoi(state->inputBuffer);
+        if (newValue < 0) newValue = 0;
+        animSettings.startFrameIndex = newValue;
+    }
+    state->editingStartFrame = false;
+    state->inputBuffer[0] = '\0';
+}
+
 static void handle_slider_click(SDL_Event* event,
                                 const SliderLayout* layout,
                                 MenuRuntimeState* state) {
@@ -233,13 +255,18 @@ void menu_input_handle_key(SDL_Event* event,
                 state->pathInputBuffer[strlen(state->pathInputBuffer) - 1] = '\0';
                 break;
             }
-            if ((state->editingBounce || state->editingFrame) && strlen(state->inputBuffer) > 0) {
+            if ((state->editingBounce || state->editingFrame || state->editingStartFrame) &&
+                strlen(state->inputBuffer) > 0) {
                 state->inputBuffer[strlen(state->inputBuffer) - 1] = '\0';
             }
             break;
         case SDLK_RETURN:
             if (path_edit_active(state)) {
                 finish_root_edit(state, true);
+                break;
+            }
+            if (state->editingStartFrame) {
+                finish_start_frame_edit(state, true);
                 break;
             }
             if (strlen(state->inputBuffer) > 0) {
@@ -254,6 +281,10 @@ void menu_input_handle_key(SDL_Event* event,
         case SDLK_ESCAPE:
             if (path_edit_active(state)) {
                 finish_root_edit(state, false);
+                break;
+            }
+            if (state->editingStartFrame) {
+                finish_start_frame_edit(state, false);
                 break;
             }
             *running = false;
@@ -562,6 +593,35 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         return;
     }
 
+    if (buttons.resumeFramesRect.w > 0 && point_in_rect(&buttons.resumeFramesRect, x, y)) {
+        animSettings.resumeFromExistingFrames = !animSettings.resumeFromExistingFrames;
+        state->editingStartFrame = false;
+        state->inputBuffer[0] = '\0';
+        menu_batch_panel_refresh(state);
+        return;
+    }
+
+    if (buttons.startFrameRect.w > 0 && point_in_rect(&buttons.startFrameRect, x, y)) {
+        animSettings.resumeFromExistingFrames = false;
+        begin_start_frame_edit(state);
+        return;
+    }
+
+    if (buttons.nextFrameRect.w > 0 && point_in_rect(&buttons.nextFrameRect, x, y)) {
+        animSettings.resumeFromExistingFrames = false;
+        animSettings.startFrameIndex = state->exportBatchStatus.next_frame_index;
+        state->editingStartFrame = false;
+        state->inputBuffer[0] = '\0';
+        snprintf(state->statusLabel,
+                 sizeof(state->statusLabel),
+                 "Start frame set to %d",
+                 animSettings.startFrameIndex);
+        state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
+        state->statusColor = (SDL_Color){160, 210, 255, 255};
+        state->statusExpireMs = SDL_GetTicks() + 1800;
+        return;
+    }
+
     if (buttons.showPathToggles) {
         if (point_in_rect(&buttons.pathRouletteRect, x, y)) {
             animSettings.pathRussianRoulette = !animSettings.pathRussianRoulette;
@@ -577,6 +637,9 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     if (point_in_rect(&buttons.saveRect, x, y)) {
         if (path_edit_active(state)) {
             finish_root_edit(state, true);
+        }
+        if (state->editingStartFrame) {
+            finish_start_frame_edit(state, true);
         }
         SaveAllSettings();
         strncpy(state->statusLabel, "Saved", sizeof(state->statusLabel) - 1);
@@ -599,6 +662,9 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         if (path_edit_active(state)) {
             finish_root_edit(state, true);
         }
+        if (state->editingStartFrame) {
+            finish_start_frame_edit(state, true);
+        }
         menu_state_sync_from_anim(state);
         animSettings.previewMode = false;
         SaveAllSettings();
@@ -614,6 +680,9 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     if (point_in_rect(&buttons.startRect, x, y)) {
         if (path_edit_active(state)) {
             finish_root_edit(state, true);
+        }
+        if (state->editingStartFrame) {
+            finish_start_frame_edit(state, true);
         }
         menu_state_sync_from_anim(state);
         printf("[Menu] Start pressed: spaceMode=%d integrator2D=%d integrator3D=%d falloffMode=%d decay=%.2f softness=%.2f intensity=%.2f\n",

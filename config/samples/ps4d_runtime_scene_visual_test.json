@@ -235,7 +235,7 @@
     },
     "overlay_merge":{
       "producer_clocks":{
-        "ray_tracing":60
+        "ray_tracing":66
       }
     },
     "ray_tracing":{
@@ -244,8 +244,8 @@
           "mode":"BEZIER_CUBIC",
           "points":[
             {
-              "x":-2.75,
-              "y":1.25,
+              "x":-5.75,
+              "y":-1.75,
               "rotation":0.0,
               "handleLink":false,
               "velocity1":{
@@ -296,7 +296,7 @@
         "light_path_depth":{
           "points":[
             {
-              "z":0.25,
+              "z":-0.5,
               "lookPitch":0.0,
               "velocity1":{
                 "vz":4.25
@@ -336,8 +336,8 @@
           "points":[
             {
               "x":-8.0,
-              "y":7.0,
-              "rotation":0.99213777375894963,
+              "y":4.0,
+              "rotation":1.2022041491093067,
               "handleLink":false,
               "velocity1":{
                 "vx":-5.7857041669194338,
@@ -360,7 +360,7 @@
           "points":[
             {
               "z":4.75,
-              "lookPitch":-0.42895206675035985,
+              "lookPitch":-0.45120080191441547,
               "velocity1":{
                 "vz":0.34999999999999964
               }
@@ -378,22 +378,22 @@
           {
             "object_id":"plane_floor",
             "material_id":4,
-            "object_color":255,
-            "transparency":1.0,
+            "object_color":10339301,
+            "alpha":1.0,
             "emissive_strength":0.093023255813953487
           },
           {
             "object_id":"prism_center",
-            "material_id":2,
-            "object_color":16711680,
-            "transparency":1.0,
+            "material_id":3,
+            "object_color":13907743,
+            "alpha":1.0,
             "emissive_strength":0.10465116279069768
           },
           {
             "object_id":"prism_offset",
             "material_id":5,
-            "object_color":65280,
-            "transparency":0.31395348837209303,
+            "object_color":3316497,
+            "alpha":0.61682242990654201,
             "emissive_strength":1.0
           }
         ]
