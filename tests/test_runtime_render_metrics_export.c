@@ -407,6 +407,8 @@ static int test_animation_output_render_metrics_route_truth_contract(void) {
 }
 
 int run_test_runtime_render_metrics_export_tests(void) {
+    int before = test_support_failures();
+
     test_animation_output_render_metrics_route_truth_contract();
-    return 0;
+    return test_support_failures() - before;
 }

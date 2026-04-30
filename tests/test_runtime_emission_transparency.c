@@ -653,10 +653,12 @@ static int test_runtime_emission_transparency_3d_temporal_skips_stable_emitters(
 }
 
 int run_test_runtime_emission_transparency_tests(void) {
+    int before = test_support_failures();
+
     test_runtime_emission_transparency_3d_seed_branch_contract();
     test_runtime_emission_transparency_3d_transmission_contract();
     test_runtime_emission_transparency_3d_transparent_prism_reaches_behind_surface();
     test_runtime_emission_transparency_3d_transparent_prism_reaches_emitter();
     test_runtime_emission_transparency_3d_temporal_skips_stable_emitters();
-    return 0;
+    return test_support_failures() - before;
 }

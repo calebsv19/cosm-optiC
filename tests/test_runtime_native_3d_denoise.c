@@ -97,8 +97,10 @@ static int test_runtime_native_3d_denoise_respects_depth_breaks(void) {
 }
 
 int run_test_runtime_native_3d_denoise_tests(void) {
+    int before = test_support_failures();
+
     test_runtime_native_3d_denoise_apply_policy();
     test_runtime_native_3d_denoise_respects_normal_breaks();
     test_runtime_native_3d_denoise_respects_depth_breaks();
-    return test_support_failures();
+    return test_support_failures() - before;
 }

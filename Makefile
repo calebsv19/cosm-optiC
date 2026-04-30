@@ -134,6 +134,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_material_response_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render_shading.o \
 	$(BUILD_DIR)/render/runtime_native_3d_resolution.o \
 	$(BUILD_DIR)/render/runtime_native_3d_temporal_accum.o \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_occupancy.o \
@@ -151,6 +152,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/import/fluid_pack_import.o \
 	$(BUILD_DIR)/import/scene_bundle_import.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_json_utils.o \
+	$(BUILD_DIR)/import/runtime_scene_bridge_authoring.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge.o \
 	$(BUILD_DIR)/path/path_system.o \
 	$(BUILD_DIR)/path/path_arc_length.o \
@@ -159,10 +161,13 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/app/animation_fluid_scene.o \
 	$(BUILD_DIR)/app/data_paths.o \
 	$(BUILD_DIR)/config/core/config_runtime_paths.o \
+	$(BUILD_DIR)/config/core/config_animation_persistence.o \
 	$(BUILD_DIR)/config/io/config_file_io.o \
 	$(BUILD_DIR)/config/scene/config_scene_path_io.o \
 	$(BUILD_DIR)/config/core/config_manager.o \
 	$(BUILD_DIR)/render/fluid/fluid_state.o \
+	$(BUILD_DIR)/render/pipeline/ray_tracing2_native3d_overlay.o \
+	$(BUILD_DIR)/render/pipeline/ray_tracing2_preview_present.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_core.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_json.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_flatten.o \
@@ -197,10 +202,15 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_scene_bridge_writeback.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry.o \
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials.o \
+	$(BUILD_DIR)/tests/test_runtime_lighting_materials_payload_suite.o \
+	$(BUILD_DIR)/tests/test_runtime_lighting_materials_direct_light_suite.o \
+	$(BUILD_DIR)/tests/test_runtime_lighting_materials_transport_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_diffuse_temporal.o \
 	$(BUILD_DIR)/tests/test_runtime_emission_transparency.o \
 	$(BUILD_DIR)/tests/test_runtime_native_3d_denoise.o \
 	$(BUILD_DIR)/tests/test_runtime_native_3d_render.o \
+	$(BUILD_DIR)/tests/test_runtime_native_3d_render_live_suite.o \
+	$(BUILD_DIR)/tests/test_runtime_native_3d_render_prepared_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_render_metrics_export.o \
 	$(BUILD_DIR)/tests/test_runtime_preview_editor.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_editor.o \
@@ -265,6 +275,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_material_response_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render_shading.o \
 	$(BUILD_DIR)/render/runtime_native_3d_resolution.o \
 	$(BUILD_DIR)/render/runtime_native_3d_temporal_accum.o \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_occupancy.o \
@@ -287,7 +298,9 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/text_font_cache.o \
 	$(BUILD_DIR)/render/text_draw.o \
 	$(BUILD_DIR)/render/text_upload_policy.o \
+		$(BUILD_DIR)/render/pipeline/ray_tracing2_native3d_overlay.o \
 		$(BUILD_DIR)/render/pipeline/ray_tracing2_preview.o \
+		$(BUILD_DIR)/render/pipeline/ray_tracing2_preview_present.o \
 		$(BUILD_DIR)/render/pipeline/ray_tracing2.o \
 	$(BUILD_DIR)/render/fluid/fluid_state.o \
 	$(BUILD_DIR)/render/fluid/fluid_overlay.o \
@@ -309,6 +322,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/app/animation_fluid_scene.o \
 	$(BUILD_DIR)/app/data_paths.o \
 	$(BUILD_DIR)/config/core/config_runtime_paths.o \
+	$(BUILD_DIR)/config/core/config_animation_persistence.o \
 		$(BUILD_DIR)/config/io/config_file_io.o \
 	$(BUILD_DIR)/config/scene/config_scene_path_io.o \
 	$(BUILD_DIR)/config/core/config_manager.o \
@@ -321,8 +335,10 @@ TEST_DEPS := \
 	$(BUILD_DIR)/import/fluid_pack_import.o \
 	$(BUILD_DIR)/import/scene_bundle_import.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_json_utils.o \
+	$(BUILD_DIR)/import/runtime_scene_bridge_authoring.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_render.o \
+	$(BUILD_DIR)/ui/menu/sdl_menu_render_manifest.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_render_sliders.o \
 	$(BUILD_DIR)/ui/menu/menu_layout.o \
 	$(BUILD_DIR)/ui/menu/menu_panel_chrome.o \

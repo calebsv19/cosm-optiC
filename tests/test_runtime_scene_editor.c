@@ -732,6 +732,8 @@ static int test_scene_editor_control_surface_selected_object_status(void) {
 
 
 int run_test_runtime_scene_editor_tests(void) {
+    int before = test_support_failures();
+
     test_scene_editor_tool_state_contract();
     test_scene_editor_runtime_scene_persistence_roundtrip();
     test_scene_editor_runtime_scene_persistence_roundtrip_object_materials();
@@ -747,5 +749,5 @@ int run_test_runtime_scene_editor_tests(void) {
     test_scene_editor_control_surface_controlled_3d_bezier_mode_enablement();
     test_scene_editor_control_surface_controlled_3d_object_mode_canvas_enablement();
     test_scene_editor_control_surface_selected_object_status();
-    return 0;
+    return test_support_failures() - before;
 }

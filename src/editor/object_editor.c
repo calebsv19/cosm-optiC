@@ -1,4 +1,5 @@
 #include "editor/object_editor.h"
+#include "editor/object_editor_internal.h"
 #include "scene/object_manager.h"
 #include "config/config_manager.h"
 #include "editor/scene_editor.h"
@@ -26,15 +27,15 @@
 int width, height;
 
 // **Tracks which object is currently selected**
-static int selectedObjectIndex = -1;
-static int handleRadius = 5;
-static bool draggingRotationHandle = false;  // ✅ Tracks whether the handle is being moved
-static double lastWorldX = 0.0;
-static double lastWorldY = 0.0;
-static bool viewportPanDragging = false;
-static int viewportPanLastMouseX = 0;
-static int viewportPanLastMouseY = 0;
-static bool renderHandles = true;
+int selectedObjectIndex = -1;
+int handleRadius = 5;
+bool draggingRotationHandle = false;
+double lastWorldX = 0.0;
+double lastWorldY = 0.0;
+bool viewportPanDragging = false;
+int viewportPanLastMouseX = 0;
+int viewportPanLastMouseY = 0;
+bool renderHandles = true;
 #define MAX_ASSET_LIST 128
 #define ASSET_PANEL_WIDTH 200
 #define ASSET_ROW_HEIGHT 22
@@ -51,7 +52,7 @@ int polygonPointCount = 0;
 extern SDL_Rect addButton;  // the existing definition from scene_editor.c
 extern SDL_Rect deleteButton;  // the existing definition from scene_editor.c
 extern SDL_Rect selectButton;  // the visible shared tool button
-static SDL_Rect objectHandlesButton = {0};
+SDL_Rect objectHandlesButton = {0};
 // Nested Buttons for Add Mode (Placed to the left of Add Button)
 SDL_Rect circleButton;  
 SDL_Rect squareButton;
@@ -75,17 +76,17 @@ bool assetsCollapsed = false;
 bool materialsCollapsed = false;
 int assetScroll = 0;
 int materialScroll = 0;
-static ObjectEditorPanelSliderKind activeMaterialSlider = OBJECT_EDITOR_PANEL_SLIDER_NONE;
+ObjectEditorPanelSliderKind activeMaterialSlider = OBJECT_EDITOR_PANEL_SLIDER_NONE;
 
-static bool ObjectEditorAddToolActive(void) {
+bool ObjectEditorAddToolActive(void) {
     return SceneEditorToolStateToolIsActive(SCENE_EDITOR_TOOL_ADD);
 }
 
-static bool ObjectEditorDeleteToolActive(void) {
+bool ObjectEditorDeleteToolActive(void) {
     return SceneEditorToolStateToolIsActive(SCENE_EDITOR_TOOL_DELETE);
 }
 
-static bool ObjectEditorPointInRect(int x, int y, const SDL_Rect* rect) {
+bool ObjectEditorPointInRect(int x, int y, const SDL_Rect* rect) {
     if (!rect || rect->w <= 0 || rect->h <= 0) return false;
     return x >= rect->x && x <= rect->x + rect->w &&
            y >= rect->y && y <= rect->y + rect->h;
@@ -136,8 +137,8 @@ static int ObjectEditorPackedColorWithChannel(int packed_color,
     return SceneObjectPackRGBBytes(r, g, b);
 }
 
-static void ObjectEditorApplySliderValueToSelected(ObjectEditorPanelSliderKind kind,
-                                                   double slider_value) {
+void ObjectEditorApplySliderValueToSelected(ObjectEditorPanelSliderKind kind,
+                                            double slider_value) {
     Uint8 channel_value = 0u;
     if (selectedObjectIndex < 0 || selectedObjectIndex >= sceneSettings.objectCount) {
         return;
@@ -164,38 +165,13 @@ static void ObjectEditorApplySliderValueToSelected(ObjectEditorPanelSliderKind k
     }
 }
 
-typedef enum ObjectEditorAction {
-    OBJECT_EDITOR_ACTION_NONE = 0,
-    OBJECT_EDITOR_ACTION_QUIT,
-    OBJECT_EDITOR_ACTION_ESCAPE,
-    OBJECT_EDITOR_ACTION_MOUSE_DOWN,
-    OBJECT_EDITOR_ACTION_MOUSE_UP,
-    OBJECT_EDITOR_ACTION_MOUSE_DRAG,
-    OBJECT_EDITOR_ACTION_MOUSE_WHEEL,
-    OBJECT_EDITOR_ACTION_KEY_DOWN
-} ObjectEditorAction;
-
-static ObjectEditorAction ResolveObjectEditorAction(const SDL_Event* event) {
-    if (!event) return OBJECT_EDITOR_ACTION_NONE;
-    if (event->type == SDL_QUIT) return OBJECT_EDITOR_ACTION_QUIT;
-    if (event->type == SDL_KEYDOWN && event->key.keysym.sym == SDLK_ESCAPE) {
-        return OBJECT_EDITOR_ACTION_ESCAPE;
-    }
-    if (event->type == SDL_MOUSEBUTTONDOWN) return OBJECT_EDITOR_ACTION_MOUSE_DOWN;
-    if (event->type == SDL_MOUSEBUTTONUP) return OBJECT_EDITOR_ACTION_MOUSE_UP;
-    if (event->type == SDL_MOUSEMOTION) return OBJECT_EDITOR_ACTION_MOUSE_DRAG;
-    if (event->type == SDL_MOUSEWHEEL) return OBJECT_EDITOR_ACTION_MOUSE_WHEEL;
-    if (event->type == SDL_KEYDOWN) return OBJECT_EDITOR_ACTION_KEY_DOWN;
-    return OBJECT_EDITOR_ACTION_NONE;
-}
-
-static const char* ShapeAssetDir(void) {
+const char* ShapeAssetDir(void) {
     static char resolved_dir[PATH_MAX];
     const char* dir = getenv("SHAPE_ASSET_DIR");
     return ray_tracing_resolve_shape_asset_dir(dir, resolved_dir, sizeof(resolved_dir));
 }
 
-static Camera BuildObjectEditorCamera(void) {
+Camera BuildObjectEditorCamera(void) {
     double margin = GetCurrentMarginPixels();
     return CameraBuildPreviewCamera(&sceneSettings.camera,
                                     margin,
@@ -203,14 +179,14 @@ static Camera BuildObjectEditorCamera(void) {
                                     sceneSettings.windowHeight);
 }
 
-static CameraPoint ScreenToWorldObjectEditor(const Camera* camera, int sx, int sy) {
+CameraPoint ScreenToWorldObjectEditor(const Camera* camera, int sx, int sy) {
     SpaceModeViewContext view_ctx = EditorModeRouter_BuildViewContext(camera,
                                                                       sceneSettings.windowWidth,
                                                                       sceneSettings.windowHeight);
     return SpaceModeAdapter_ScreenToWorld(&view_ctx, sx, sy);
 }
 
-static void PanViewportObjectByScreenDelta(int prev_x, int prev_y, int cur_x, int cur_y) {
+void PanViewportObjectByScreenDelta(int prev_x, int prev_y, int cur_x, int cur_y) {
     Camera previewCam = BuildObjectEditorCamera();
     CameraPoint prev = ScreenToWorldObjectEditor(&previewCam, prev_x, prev_y);
     CameraPoint cur = ScreenToWorldObjectEditor(&previewCam, cur_x, cur_y);
@@ -239,7 +215,7 @@ static void RenderCameraViewportOverlay(SDL_Renderer* renderer, double margin) {
     SDL_RenderDrawRect(renderer, &rect);
 }
 
-static void RefreshAssetLibrary(void) {
+void RefreshAssetLibrary(void) {
     shape_library_free(&assetLib);
     shape_library_load_dir(ShapeAssetDir(), &assetLib);
     if (selectedAssetIndex >= (int)assetLib.count) selectedAssetIndex = -1;
@@ -325,8 +301,13 @@ void FinalizePolygonCreation(void) {
 }
 
 
-void AddSceneObject(ObjectType type, double x, double y, double param1, double param2, double points[][2], int 
-numPoints) {
+void AddSceneObject(ObjectType type,
+                    double x,
+                    double y,
+                    double param1,
+                    double param2,
+                    double points[][2],
+                    int numPoints) {
     if (sceneSettings.objectCount >= MAX_OBJECTS) {
         printf("ERROR: Cannot add more objects. Maximum limit reached.\n");
         return;
@@ -424,89 +405,6 @@ bool ObjectEditorDeleteObjectIndex(int index) {
     return true;
 }
 
-bool IsClickingButton(int mx, int my) {
-    if (SceneEditorIsPaneToolButton(mx, my)) {
-        return true;  // Click is inside a UI button
-    }
-
-    if (ObjectEditorPointInRect(mx, my, &objectHandlesButton)) {
-        return true;
-    }
-
-    if (ObjectEditorPointInRect(mx, my, &circleButton) ||
-        ObjectEditorPointInRect(mx, my, &squareButton) ||
-        ObjectEditorPointInRect(mx, my, &polygonButton)) {
-        return true;
-    }
-
-    // Check polygon creation confirmation/cancel buttons
-    if (polygonCreationActive) {
-        if (ObjectEditorPointInRect(mx, my, &confirmPolygonButton) ||
-            ObjectEditorPointInRect(mx, my, &cancelPolygonButton)) {
-            return true;
-        }
-    }
-
-    return false;  // Click is not inside a UI button
-}
-
-ObjectEditorHitRegion ObjectEditorHitRegionAtPoint(int mx, int my) {
-    if (IsClickingButtonMain(mx, my) || IsClickingButton(mx, my)) {
-        return OBJECT_EDITOR_HIT_CONTROLS;
-    }
-    if (mx >= assetPanelRect.x && mx <= assetPanelRect.x + assetPanelRect.w &&
-        my >= assetPanelRect.y && my <= assetPanelRect.y + assetPanelRect.h) {
-        return OBJECT_EDITOR_HIT_ASSET_PANEL;
-    }
-    if (mx >= materialPanelRect.x && mx <= materialPanelRect.x + materialPanelRect.w &&
-        my >= materialPanelRect.y && my <= materialPanelRect.y + materialPanelRect.h) {
-        return OBJECT_EDITOR_HIT_MATERIAL_PANEL;
-    }
-    return OBJECT_EDITOR_HIT_CANVAS;
-}
-
-
-bool CheckObjectClick(double mx, double my) {
-    for (int i = 0; i < sceneSettings.objectCount; i++) {
-        SceneObject* obj = &sceneSettings.sceneObjects[i];
-
-        // Compute rotation handle position
-        double handleDistance = obj->radius * obj->scale;
-        double handleX = obj->x + cos(obj->rotation) * handleDistance;
-        double handleY = obj->y + sin(obj->rotation) * handleDistance;
-
-        double dx = mx - handleX;
-        double dy = my - handleY;
-
-        // Check if user clicked the rotation handle
-        if ((dx * dx + dy * dy) <= (handleRadius * handleRadius)) {
-            ObjectEditorSetSelectedObjectIndex(i);
-            draggingRotationHandle = true;
-            printf("Dragging Rotation Handle for Object %d\n", i);
-            return true;
-        }
-
-        // Check if clicking inside the object
-        if (IsInsideObject((int)mx, (int)my, obj)) {
-            if (ObjectEditorAddToolActive()) {
-                printf("Add Mode Active - Adding New Object\n");
-                AddSceneObject(OBJECT_POLYGON, mx, my, 50, 50, NULL, 4);
-                return true;
-            }
-            if (ObjectEditorDeleteToolActive()) {
-                printf("Delete Mode Active - Removing Object %d\n", i);
-                RemoveSceneObject(i);
-                return true;
-            }
-
-            ObjectEditorSetSelectedObjectIndex(i);
-            printf("Selected Object %d\n", i);
-            return true;
-        }
-    }
-    return false;
-}
-
 void RenderHandles(SDL_Renderer* renderer, SceneObject* obj, const Camera* camera){
        double handleDistance = obj->radius * obj->scale;
 
@@ -579,403 +477,6 @@ void RenderObjectEditor(SDL_Renderer* renderer) {
     RenderCameraViewportOverlay(renderer, GetCurrentMarginPixels());
 }
 
-
-void HandleObjectEditorEvents(SDL_Event* event) {
-    ObjectEditorAction action = ResolveObjectEditorAction(event);
-    switch (action) {
-        case OBJECT_EDITOR_ACTION_QUIT:
-            sceneEditorExitFlag = true;  // Ensure clicking "X" closes the editor properly
-            printf("Window closed manually. Exiting Object Editor.\n");
-            return;
-        case OBJECT_EDITOR_ACTION_ESCAPE:
-            sceneEditorExitFlag = true;  // Also close with ESC
-            return;
-        case OBJECT_EDITOR_ACTION_MOUSE_DOWN:
-            if (showImports || selectedAssetIndex >= 0) {
-                // allow selection without toggling add mode
-            }
-            HandleObjectEditorMouseClick(event);
-            break;
-        case OBJECT_EDITOR_ACTION_MOUSE_UP:
-            HandleObjectEditorMouseRelease(event);
-            break;
-        case OBJECT_EDITOR_ACTION_MOUSE_DRAG:
-            HandleObjectEditorMouseDrag(event);
-            break;
-        case OBJECT_EDITOR_ACTION_MOUSE_WHEEL: {
-            int mx, my;
-            SDL_GetMouseState(&mx, &my);
-            int scrollDir = event->wheel.y > 0 ? -1 : 1;
-            if (mx >= assetPanelRect.x && mx <= assetPanelRect.x + assetPanelRect.w &&
-                my >= assetPanelRect.y && my <= assetPanelRect.y + assetPanelRect.h && !assetsCollapsed) {
-                int maxScroll = ObjectEditorPanels_AssetMaxScroll();
-                assetScroll += scrollDir;
-                if (assetScroll < 0) assetScroll = 0;
-                if (assetScroll > maxScroll) assetScroll = maxScroll;
-            }
-            if (mx >= materialPanelRect.x && mx <= materialPanelRect.x + materialPanelRect.w &&
-                my >= materialPanelRect.y && my <= materialPanelRect.y + materialPanelRect.h && !materialsCollapsed) {
-                int maxScroll = ObjectEditorPanels_MaterialMaxScroll();
-                materialScroll += scrollDir;
-                if (materialScroll < 0) materialScroll = 0;
-                if (materialScroll > maxScroll) materialScroll = maxScroll;
-            }
-            break;
-        }
-        case OBJECT_EDITOR_ACTION_KEY_DOWN:
-            HandleObjectEditorKeyPress(event);
-            break;
-        case OBJECT_EDITOR_ACTION_NONE:
-        default:
-            break;
-    }
-}
-
-void HandleObjectEditorMouseClick(SDL_Event* event) {
-    if (event->button.button == SDL_BUTTON_LEFT) {
-        int mx = event->button.x;
-        int my = event->button.y;
-        viewportPanDragging = false;
-        if (mx >= assetPanelRect.x && mx <= assetPanelRect.x + assetPanelRect.w &&
-            my >= assetPanelRect.y && my <= assetPanelRect.y + assetPanelRect.h) {
-            if (mx >= assetCollapseRect.x && mx <= assetCollapseRect.x + assetCollapseRect.w &&
-                my >= assetCollapseRect.y && my <= assetCollapseRect.y + assetCollapseRect.h) {
-                assetsCollapsed = !assetsCollapsed;
-                return;
-            }
-            // Toggle button
-            if (mx >= assetToggleRect.x && mx <= assetToggleRect.x + assetToggleRect.w &&
-                my >= assetToggleRect.y && my <= assetToggleRect.y + assetToggleRect.h) {
-                showImports = !showImports;
-                selectedAssetIndex = -1;
-                return;
-            }
-            if (!assetsCollapsed) {
-                int idx = ObjectEditorPanels_AssetIndexAtPoint(mx, my);
-                if (idx >= 0) {
-                    if (showImports) {
-                        if (idx < importCount) {
-                                if (event->button.clicks >= 2) {
-                                    // Convert import to asset on double-click
-                                    char path[PATH_MAX];
-                                    char import_root_buf[PATH_MAX];
-                                    const char *import_root =
-                                        ray_tracing_resolve_import_dir(import_root_buf, sizeof(import_root_buf));
-                                    snprintf(path, sizeof(path), "%s/%s", import_root, importNames[idx]);
-                                ShapeDocument doc = {0};
-                                if (shape_import_load(path, &doc) && doc.shapeCount > 0) {
-                                    ShapeAsset asset = {0};
-                                    if (shape_asset_from_shapelib_shape(&doc.shapes[0], 0.5f, &asset)) {
-                                        const char* base = importNames[idx];
-                                        const char* dot = strrchr(base, '.');
-                                        size_t len = dot ? (size_t)(dot - base) : strlen(base);
-                                        char outPath[PATH_MAX];
-                                        snprintf(outPath, sizeof(outPath), "%s/%.*s.asset.json", ShapeAssetDir(), (int)len, base);
-                                        if (shape_asset_save_file(&asset, outPath)) {
-                                            printf("Saved asset to %s\n", outPath);
-                                            RefreshAssetLibrary();
-                                            showImports = false;
-                                        }
-                                        shape_asset_free(&asset);
-                                    }
-                                }
-                                ShapeDocument_Free(&doc);
-                            }
-                        }
-                    } else {
-                        if (idx < (int)assetLib.count) {
-                            selectedAssetIndex = idx;
-                            selectedObjectIndex = -1;
-                            selectedMaterialIndex = -1;
-                        }
-                    }
-                }
-                return;
-            }
-            // Collapsed: allow click to pass through to scene
-        }
-
-        if (mx >= materialPanelRect.x && mx <= materialPanelRect.x + materialPanelRect.w &&
-            my >= materialPanelRect.y && my <= materialPanelRect.y + materialPanelRect.h) {
-            if (mx >= materialCollapseRect.x && mx <= materialCollapseRect.x + materialCollapseRect.w &&
-                my >= materialCollapseRect.y && my <= materialCollapseRect.y + materialCollapseRect.h) {
-                materialsCollapsed = !materialsCollapsed;
-                return;
-            }
-            if (!materialsCollapsed) {
-                int idx = ObjectEditorPanels_MaterialIndexAtPoint(mx, my);
-                if (idx >= 0 && idx < MaterialManagerCount()) {
-                    selectedMaterialIndex = idx;
-                    ObjectEditorAssignMaterialToSelected(idx);
-                    return;
-                }
-                {
-                    ObjectEditorPanelSliderKind slider_kind =
-                        OBJECT_EDITOR_PANEL_SLIDER_NONE;
-                    double slider_value = 0.0;
-                    if (ObjectEditorPanels_SliderValueAtPoint(mx,
-                                                              my,
-                                                              &slider_kind,
-                                                              &slider_value)) {
-                        activeMaterialSlider = slider_kind;
-                        ObjectEditorApplySliderValueToSelected(slider_kind,
-                                                               slider_value);
-                        return;
-                    }
-                }
-                return;
-            }
-            // Collapsed: allow click to pass through to scene
-        }
-
-        Camera previewCam = BuildObjectEditorCamera();
-        CameraPoint worldPoint = ScreenToWorldObjectEditor(&previewCam, mx, my);
-        double worldX = worldPoint.x;
-        double worldY = worldPoint.y;
-        lastWorldX = worldX;
-        lastWorldY = worldY;
-
-        selectedObjectIndex = -1;
-        selectedMaterialIndex = -1;
-        activeMaterialSlider = OBJECT_EDITOR_PANEL_SLIDER_NONE;
-        draggingRotationHandle = false;
-
-        if (SceneEditorToolStateGetEffective(SDL_GetModState()) == SCENE_EDITOR_TOOL_ADD &&
-            selectedAssetIndex >= 0 &&
-            !polygonCreationActive) {
-            if (sceneSettings.objectCount >= MAX_OBJECTS) {
-                printf("ERROR: Cannot add more objects. Maximum limit reached.\n");
-                return;
-            }
-            if (selectedAssetIndex < (int)assetLib.count) {
-                const ShapeAsset* asset = &assetLib.assets[selectedAssetIndex];
-                ShapeAssetBounds b = {0};
-                shape_asset_bounds(asset, &b);
-                double max_dim = fmax((double)(b.max_x - b.min_x), (double)(b.max_y - b.min_y));
-                double desired = 80.0;
-                double scale = (max_dim > 1e-6) ? (desired / max_dim) : 1.0;
-                ShapeToSceneOptions opts = {.scale = scale, .offset_x = worldX, .offset_y = worldY};
-                shape_asset_append_to_scene(asset, &opts);
-            }
-            SceneEditorToolStateSetActive(SCENE_EDITOR_TOOL_SELECT);
-            selectedAssetIndex = -1;
-            return;
-        }
-
-        // Prevent accidental shape creation when clicking UI buttons
-        bool clickedButton = IsClickingButtonMain(mx, my) || IsClickingButton(mx, my);
-	
-
-        // Handle UI Buttons Clicks
-        if (mx >= selectButton.x && mx <= selectButton.x + selectButton.w && my >= selectButton.y &&
-                my <= selectButton.y + selectButton.h) {
-            polygonCreationActive = false;
-            SceneEditorToolStateSetActive(SCENE_EDITOR_TOOL_SELECT);
-            return;
-        }
-        if (mx >= addButton.x && mx <= addButton.x + addButton.w && my >= addButton.y && 
-		my <= addButton.y + addButton.h) {
-            SceneEditorToolStateToggleOrReset(SCENE_EDITOR_TOOL_ADD);
-	    polygonCreationActive = false;
-            return;
-        }
-        if (mx >= deleteButton.x && mx <= deleteButton.x + deleteButton.w && my >= deleteButton.y && 
-		my <= deleteButton.y + deleteButton.h) {
-	    polygonCreationActive = false;
-            SceneEditorToolStateToggleOrReset(SCENE_EDITOR_TOOL_DELETE);
-            return;
-        }
-        if (ObjectEditorPointInRect(mx, my, &objectHandlesButton)) {
-            renderHandles = !renderHandles;
-            return;
-        }
-        if (ObjectEditorPointInRect(mx, my, &circleButton)) {
-	    polygonCreationActive = false;
-            shapeMode = SHAPE_CIRCLE;
-            return;
-        } 
-        if (ObjectEditorPointInRect(mx, my, &squareButton)) {
-	    polygonCreationActive = false;
-            shapeMode = SHAPE_SQUARE;
-            return;
-        } 
-        if (ObjectEditorPointInRect(mx, my, &polygonButton)) {
-            shapeMode = SHAPE_POLYGON;
-            polygonCreationActive = true;
-            polygonPointCount = 0;
-            return;
-        }
-
-        // Handle Polygon Creation Confirmation
-        if (polygonCreationActive) {
-            if (ObjectEditorPointInRect(mx, my, &confirmPolygonButton)) {
-                FinalizePolygonCreation();
-                return;
-            }
-            if (ObjectEditorPointInRect(mx, my, &cancelPolygonButton)) {
-                polygonPointCount = 0;
-                polygonCreationActive = false;
-                return;
-            }
-        }
-
-        // **Prevent accidental shape creation when clicking buttons**
-        if (!clickedButton &&
-            SceneEditorToolStateGetEffective(SDL_GetModState()) == SCENE_EDITOR_TOOL_ADD &&
-            !polygonCreationActive) {
-            if (shapeMode == SHAPE_CIRCLE) {
-                AddSceneObject(OBJECT_CIRCLE, worldX, worldY, 25, 0, NULL, 0);
-            } else if (shapeMode == SHAPE_SQUARE) {
-                AddSceneObject(OBJECT_POLYGON, worldX, worldY, 50, 50, NULL, 4);
-            }
-            return;
-        }
-
-        // Call CheckObjectClick to handle object interaction
-        if (CheckObjectClick(worldX, worldY)) {
-            selectedAssetIndex = -1; // only one selection active
-            if (selectedObjectIndex >= 0 && selectedObjectIndex < sceneSettings.objectCount) {
-                selectedMaterialIndex = sceneSettings.sceneObjects[selectedObjectIndex].material_id;
-            }
-            return;
-        }
-
-        if (!clickedButton &&
-            !ObjectEditorAddToolActive() &&
-            !ObjectEditorDeleteToolActive() &&
-            !polygonCreationActive &&
-            selectedObjectIndex == -1) {
-            viewportPanDragging = true;
-            viewportPanLastMouseX = mx;
-            viewportPanLastMouseY = my;
-        }
-    }
-}
-
-void HandleObjectEditorMouseDrag(SDL_Event* event) {
-    if (event->motion.state & SDL_BUTTON_LMASK) {
-        int mx = event->motion.x;
-        int my = event->motion.y;
-        Camera previewCam = BuildObjectEditorCamera();
-        CameraPoint worldPoint = ScreenToWorldObjectEditor(&previewCam, mx, my);
-        double worldX = worldPoint.x;
-        double worldY = worldPoint.y;
-
-        if (viewportPanDragging &&
-            selectedObjectIndex == -1 &&
-            !draggingRotationHandle) {
-            PanViewportObjectByScreenDelta(viewportPanLastMouseX,
-                                           viewportPanLastMouseY,
-                                           mx,
-                                           my);
-            viewportPanLastMouseX = mx;
-            viewportPanLastMouseY = my;
-        } else if (activeMaterialSlider != OBJECT_EDITOR_PANEL_SLIDER_NONE) {
-            double slider_value = 0.0;
-            if (ObjectEditorPanels_SliderValueForKindAtX(activeMaterialSlider,
-                                                         mx,
-                                                         &slider_value)) {
-                ObjectEditorApplySliderValueToSelected(activeMaterialSlider,
-                                                       slider_value);
-            }
-        } else if (selectedObjectIndex != -1) {
-            SceneObject* obj = &sceneSettings.sceneObjects[selectedObjectIndex];
-
-            if (draggingRotationHandle) {
-                // Compute new rotation based on cursor position
-                double newAngle = atan2(worldY - obj->y, worldX - obj->x);
-                obj->rotation = newAngle;
-
-                // Compute new distance from object center to handle position
-                double newDistance = sqrt((worldX - obj->x) * (worldX - obj->x) +
-                                          (worldY - obj->y) * (worldY - obj->y));
-
-                // Adjust scaling based on new distance, ensuring uniform scaling
-                double initialDistance = obj->radius;
-                if (initialDistance > 0) {
-                    obj->scale = newDistance / initialDistance;
-                }
-
-                printf("Updated Rotation: %.2f radians, Scale: %.2f\n", obj->rotation, obj->scale);
-
-            } else {
-                // Move the object naturally based on cursor movement
-                int dx = (int)lround(worldX - lastWorldX);
-                int dy = (int)lround(worldY - lastWorldY);
-                MoveObject(obj, dx, dy);
-            }
-
-            MarkObjectDirty(obj);
-        }
-
-        lastWorldX = worldX;
-        lastWorldY = worldY;
-    }
-}
-
-
-void HandleObjectEditorMouseRelease(SDL_Event* event) {
-    if (event->button.button == SDL_BUTTON_LEFT) {
-        viewportPanDragging = false;
-        draggingRotationHandle = false;
-        activeMaterialSlider = OBJECT_EDITOR_PANEL_SLIDER_NONE;
-    }
-}
-
-
-static void ClearSelections(void) {
-    selectedAssetIndex = -1;
-    selectedObjectIndex = -1;
-    selectedMaterialIndex = -1;
-    activeMaterialSlider = OBJECT_EDITOR_PANEL_SLIDER_NONE;
-}
-
-static void DeleteSelected(void) {
-    if (selectedAssetIndex >= 0 && !showImports) {
-        if (selectedAssetIndex < (int)assetLib.count && assetLib.assets[selectedAssetIndex].name) {
-            char path[PATH_MAX];
-            snprintf(path, sizeof(path), "%s/%s.asset.json", ShapeAssetDir(), assetLib.assets[selectedAssetIndex].name);
-            remove(path);
-            RefreshAssetLibrary();
-            selectedAssetIndex = -1;
-        }
-        return;
-    }
-    if (selectedObjectIndex != -1) {
-        printf("Deleting Object %d\n", selectedObjectIndex);
-        RemoveSceneObject(selectedObjectIndex);
-        selectedObjectIndex = -1;
-        selectedMaterialIndex = -1;
-        activeMaterialSlider = OBJECT_EDITOR_PANEL_SLIDER_NONE;
-    }
-}
-
-void HandleObjectEditorKeyPress(SDL_Event* event) {
-    if (event->type == SDL_KEYDOWN) {
-        SDL_Keycode key = event->key.keysym.sym;
-        if (key == SDLK_DELETE || key == SDLK_BACKSPACE || key == SDLK_KP_PERIOD) {
-            DeleteSelected();
-            return;
-        }
-        switch (key) {
-            case SDLK_a:
-                ClearSelections();
-                SceneEditorToolStateToggleOrReset(SCENE_EDITOR_TOOL_ADD);
-                printf("Add Mode: %s\n", ObjectEditorAddToolActive() ? "ON" : "OFF");
-                break;
-
-            case SDLK_d:
-                ClearSelections();
-                SceneEditorToolStateToggleOrReset(SCENE_EDITOR_TOOL_DELETE);
-                printf("Delete Mode: %s\n", ObjectEditorDeleteToolActive() ? "ON" : "OFF");
-                break;
-    
-            case SDLK_t: // Toggle between cubic and quadratic Bézier paths
-                ToggleBezierPathMode(&sceneSettings.bezierPath);
-                break;
-        }
-    }
-}
 
 int ObjectEditorRenderPaneControls(SDL_Renderer* renderer, SDL_Rect content_bounds, int top_y, int bottom_y) {
     const int gap = 8;

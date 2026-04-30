@@ -2,15 +2,16 @@
 
 Start here for public repository documentation.
 
-Last audited: 2026-04-24.
+Last audited: 2026-04-29.
 
 Current public focus:
-- internal `3D` runtime/render foundation in `ray_tracing` itself
-- direct-light `3D` proof before VF3D / `physics_sim` ingestion
+- shipped native `3D` runtime ladder through `Disney`
+- deep-render start/resume and export workflow
+- post-`I6` renderer-lane selection before VF3D / `physics_sim` ingestion
 
-## Scaffold State
-- `docs/current_truth.md`: current scaffold/runtime structure and verification snapshot.
-- `docs/future_intent.md`: planned scaffold convergence path and pending migration slices.
+## Current State
+- `docs/current_truth.md`: current runtime contract and active boundaries.
+- `docs/future_intent.md`: near-term renderer and workflow direction.
 - `docs/desktop_packaging.md`: `.app` packaging commands, launcher diagnostics, and release-readiness workflow.
 
 Current verification contract:

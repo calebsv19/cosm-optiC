@@ -145,9 +145,11 @@ static int test_camera_path_default_preserves_empty_authored_state(void) {
 
 
 int run_test_runtime_path_policy_tests(void) {
+    int before = test_support_failures();
+
     test_path_eval_3d_uses_linear_handle_units();
     test_path_normalized_spacing_preserves_tail_motion();
     test_path_traversal_endpoints_follow_sampled_contract();
     test_camera_path_default_preserves_empty_authored_state();
-    return 0;
+    return test_support_failures() - before;
 }

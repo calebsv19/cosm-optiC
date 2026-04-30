@@ -1,6 +1,6 @@
 # Ray Tracing Current Truth
 
-Last updated: 2026-04-27
+Last updated: 2026-04-29
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -10,17 +10,30 @@ Last updated: 2026-04-27
   - wrapper shell: `include/ray_tracing/ray_tracing_app_main.h`, `src/app/ray_tracing_app_main.c`
 
 ## Current Shipped State
-- Editor/preview stabilization lane is complete and archived.
-- Active implementation boundary is menu/export support with runtime `3D` proof validation paused behind it.
-- Native `3D` route foundation is active (`R3-S1` complete):
-  - retained primitive bridge seeds build runtime triangles
-  - native camera/light samples route through native scene structures
-  - first-hit + direct-light + blocker visibility path exists on native geometry
-  - bounded tests cover visible/shadowed/light-motion response
+- Legacy `2D` rendering and editor flows remain present.
+- Native `3D` runtime ladder is shipped through:
+  - `Direct Light`
+  - `Diffuse Bounce`
+  - `Material`
+  - `Emission / Transparency`
+  - `Disney`
+- Native `3D` output is RGB-aware through the full shipped ladder.
+- Native `3D` support layers now include:
+  - tile preview
+  - dirty-rect preview updates
+  - tile occupancy culling
+  - temporal accumulation upgrades
+  - stratified + blue-noise sampling support
+  - Disney-only denoise
+  - optional top-fill lighting
+- Deep-render export now supports:
+  - absolute start-frame selection
+  - resume from highest existing saved frame
+  - shared absolute-frame truth across output numbering and path sampling
 - Export/video workflow state:
   - `frameDir` remains frame export root
-  - `videoOutputRoot` is persisted runtime config state
-  - menu now exposes grouped Data I/O + batch actions (`Render Frames Root`, `Video Output Root`, `Clear Frames`, `Make Video`)
+  - `videoOutputRoot` remains persisted runtime config state
+  - menu exposes grouped Data I/O + batch actions
 
 ## Structure
 - Required lanes: `docs/`, `src/`, `include/`, `tests/`, `build/`
@@ -50,9 +63,10 @@ Last updated: 2026-04-27
 - Export/video roots are runtime-config driven and menu-editable.
 
 ## Current Boundary
-- Complete menu/export usability and batch flow hardening first.
-- Then resume runtime proof-fixture validation for bounded native `3D` behavior.
-- After that, proceed to VF3D / `physics_sim` ingestion expansion.
+- Do not reopen closed `I5`/`I6` slices.
+- Choose the next post-`I6` renderer lane cleanly.
+- Keep deep-render start/resume behavior stable while adjacent runtime-scene buckets settle.
+- Defer VF3D / `physics_sim` ingestion expansion until the next internal renderer boundary is chosen.
 
 ## History and Deep Lane References
 - Full phase-by-phase details and archived slices are in private docs:

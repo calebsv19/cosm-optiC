@@ -560,6 +560,8 @@ static void test_preview_playback_evaluate_contract(void) {
 
 
 int run_test_runtime_preview_editor_tests(void) {
+    int before = test_support_failures();
+
     test_runtime_camera_projector_3d_preview_projection_parity();
     test_preview_camera_sample_evaluate_contract();
     test_preview_camera_projector_projection_contract();
@@ -568,5 +570,5 @@ int run_test_runtime_preview_editor_tests(void) {
     test_preview_retained_scene_prism_edges_do_not_cross();
     test_preview_mode_route_select_contract();
     test_preview_playback_evaluate_contract();
-    return 0;
+    return test_support_failures() - before;
 }

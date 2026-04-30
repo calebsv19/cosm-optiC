@@ -672,6 +672,8 @@ static int test_runtime_scene_3d_r0_ownership_contract_defaults(void) {
 
 
 int run_test_runtime_mode_backend_policy_tests(void) {
+    int before = test_support_failures();
+
     test_mode_backend_route_2d_defaults();
     test_mode_backend_route_3d_controlled_lane();
     test_mode_backend_route_3d_native_lane();
@@ -686,5 +688,5 @@ int run_test_runtime_mode_backend_policy_tests(void) {
     test_mode_backend_primitive_prep_plan_native3d_placeholder_contract();
     test_runtime_scene_3d_r0_scope_contract_defaults();
     test_runtime_scene_3d_r0_ownership_contract_defaults();
-    return 0;
+    return test_support_failures() - before;
 }
