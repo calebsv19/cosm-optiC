@@ -145,9 +145,12 @@ void menu_layout_finalize_with_buttons(MenuScreenLayout* layout,
     batch_top = layout->centerControlsRect.y + layout->centerControlsRect.h + MENU_ZONE_GAP;
     batch_bottom = layout->bottomActionRowRect.y - MENU_PANEL_BOTTOM_GAP;
 
-    if (state && state->manifestDropdownOpen) {
-        const int panel_x = buttons->loadSceneRect.x;
-        const int panel_y = buttons->inputRootValueRect.y + buttons->inputRootValueRect.h + MENU_MANIFEST_PANEL_GAP;
+    if (state && (state->manifestDropdownOpen || state->volumeDropdownOpen)) {
+        const bool use_volume_anchor = state->volumeDropdownOpen;
+        const int panel_x = use_volume_anchor ? buttons->attachVolumeRect.x : buttons->loadSceneRect.x;
+        const int panel_y = use_volume_anchor
+                                ? (buttons->volumeClearRect.y + buttons->volumeClearRect.h + MENU_MANIFEST_PANEL_GAP)
+                                : (buttons->inputRootValueRect.y + buttons->inputRootValueRect.h + MENU_MANIFEST_PANEL_GAP);
         const int panel_right_limit = layout->leftPanelRect.x + layout->leftPanelRect.w - MENU_LEFT_PANEL_CONTENT_INSET;
         const int control_right = buttons->inputRootApplyRect.x + buttons->inputRootApplyRect.w;
         const int panel_bottom_limit = layout->leftPanelRect.y + layout->leftPanelRect.h - MENU_LEFT_PANEL_CONTENT_INSET;

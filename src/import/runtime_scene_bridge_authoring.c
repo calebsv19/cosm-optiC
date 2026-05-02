@@ -152,9 +152,15 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
              scene_index < sceneSettings.objectCount && scene_index < g_last_runtime_object_id_count;
              ++scene_index) {
             if (strcmp(g_last_runtime_object_ids[scene_index], object_id) == 0) {
+                bool preserve_helper_tint =
+                    SceneObjectIsGuideOnly(&sceneSettings.sceneObjects[scene_index]);
+                int preserved_color = sceneSettings.sceneObjects[scene_index].color;
                 runtime_scene_bridge_apply_object_material_preset(
                     &sceneSettings.sceneObjects[scene_index], material_id);
-                if (has_object_color) {
+                if (preserve_helper_tint) {
+                    /* Physics-sim helper emitters keep their program-assigned tint. */
+                    sceneSettings.sceneObjects[scene_index].color = preserved_color;
+                } else if (has_object_color) {
                     sceneSettings.sceneObjects[scene_index].color = object_color;
                 }
                 sceneSettings.sceneObjects[scene_index].alpha = fmax(0.0, fmin(1.0, alpha));

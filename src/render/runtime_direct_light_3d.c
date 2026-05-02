@@ -5,6 +5,7 @@
 
 #include "config/config_manager.h"
 #include "render/runtime_material_payload_3d.h"
+#include "render/runtime_volume_3d_integrate.h"
 
 static const double kRuntimeDirectLight3DTopFillIntensityScale = 0.08;
 static const double kRuntimeDirectLight3DTopFillIntensityMax = 0.75;
@@ -45,6 +46,22 @@ static double runtime_direct_light_3d_clamp(double value,
     if (value < min_value) return min_value;
     if (value > max_value) return max_value;
     return value;
+}
+
+static void runtime_direct_light_3d_apply_transmittance(
+    const RuntimeVisibility3DTransmittance* transmittance,
+    RuntimeDirectLight3DResult* io_result) {
+    if (!transmittance || !io_result) return;
+
+    io_result->radianceR *= transmittance->r;
+    io_result->radianceG *= transmittance->g;
+    io_result->radianceB *= transmittance->b;
+    io_result->radiance = runtime_direct_light_3d_peak(io_result->radianceR,
+                                                       io_result->radianceG,
+                                                       io_result->radianceB);
+    if (!(transmittance->luma > 1e-9)) {
+        io_result->visible = false;
+    }
 }
 
 static double runtime_direct_light_3d_top_fill_radiance(const HitInfo3D* hit,
@@ -98,6 +115,7 @@ bool RuntimeDirectLight3D_TracePrimaryHit(const RuntimeScene3D* scene,
     if (!scene || !projector || !out_result) return false;
 
     result.primaryRay = RuntimeCameraProjector3D_MakePrimaryRay(projector, pixel_x, pixel_y);
+    result.primaryTransmittance = RuntimeVisibility3D_UnitTransmittance();
     if (!RuntimeRay3D_TraceSceneFirstHit(scene,
                                          &result.primaryRay,
                                          projector->nearPlane,
@@ -108,6 +126,11 @@ bool RuntimeDirectLight3D_TracePrimaryHit(const RuntimeScene3D* scene,
     }
 
     result.hit = true;
+    result.primaryTransmittance =
+        RuntimeVolume3D_TransmittanceAlongRayRGB(&scene->volume,
+                                                 &result.primaryRay,
+                                                 projector->nearPlane,
+                                                 result.hitInfo.t);
     *out_result = result;
     return true;
 }
@@ -199,6 +222,8 @@ bool RuntimeDirectLight3D_ShadePixel(const RuntimeScene3D* scene,
         *out_result = result;
         return false;
     }
+
+    runtime_direct_light_3d_apply_transmittance(&primary_hit.primaryTransmittance, &result);
     result.primaryRay = primary_hit.primaryRay;
     *out_result = result;
     return true;

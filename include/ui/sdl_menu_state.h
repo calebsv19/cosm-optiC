@@ -25,6 +25,12 @@ typedef struct {
     int source;
 } ManifestOption;
 
+typedef struct {
+    char name[128];
+    char path[PATH_MAX];
+    int kind;
+} VolumeSourceOption;
+
 typedef enum {
     MENU_SCENE_LIBRARY_2D_CONFIG = 0,
     MENU_SCENE_LIBRARY_FLUID_MANIFEST = 1,
@@ -94,6 +100,27 @@ typedef struct {
     float manifestScroll;
     float manifestMaxScroll;
 
+    VolumeSourceOption volumeOptions[SDL_MENU_MAX_MANIFEST_OPTIONS];
+    size_t volumeOptionCount;
+    bool volumeDropdownOpen;
+    SDL_Rect volumePanelRect;
+    SDL_Rect volumeListRect;
+    SDL_Rect volumeScrollbarRect;
+    bool volumeScrollbarVisible;
+    bool volumeScrollbarDragging;
+    float volumeThumbHeight;
+    float volumeTrackHeight;
+    int volumeDragStartY;
+    float volumeScrollStart;
+    float volumeScroll;
+    float volumeMaxScroll;
+    bool volumeSummaryValid;
+    char volumeSummaryLine1[160];
+    char volumeSummaryLine2[160];
+    char volumeSummaryPath[PATH_MAX];
+    int volumeSummaryKind;
+    bool volumeSummaryEnabled;
+
     SDL_Rect sliderPanelRect;
     float sliderScroll;
     float sliderMaxScroll;
@@ -105,10 +132,14 @@ void menu_state_sync_from_anim(MenuRuntimeState* state);
 
 void menu_state_manifest_clamp_scroll(MenuRuntimeState* state);
 void menu_state_manifest_scroll_by(MenuRuntimeState* state, float delta);
+void menu_state_volume_clamp_scroll(MenuRuntimeState* state);
+void menu_state_volume_scroll_by(MenuRuntimeState* state, float delta);
 float menu_state_slider_clamp_scroll(float value, float maxScroll);
 
 void menu_state_refresh_manifest_options(MenuRuntimeState* state);
+void menu_state_refresh_volume_options(MenuRuntimeState* state);
 void menu_state_set_load_scene_enabled(MenuRuntimeState* state, bool enabled);
+void menu_state_set_volume_load_enabled(MenuRuntimeState* state, bool enabled);
 void menu_state_apply_special_slider_rules(MenuRuntimeState* state, int* target);
 void menu_state_reanchor_camera_after_resize(int previousWidth, int previousHeight);
 

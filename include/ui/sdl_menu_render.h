@@ -45,6 +45,9 @@ typedef struct MenuButtonLayout {
     SDL_Rect pathRouletteRect;
     SDL_Rect pathBsdfRect;
     SDL_Rect loadSceneRect;
+    SDL_Rect attachVolumeRect;
+    SDL_Rect volumeToggleRect;
+    SDL_Rect volumeClearRect;
     SDL_Rect inputRootValueRect;
     SDL_Rect inputRootEditRect;
     SDL_Rect inputRootFolderRect;

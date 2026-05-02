@@ -53,6 +53,12 @@ int animation_config_scene_source_clamp(int source) {
     return source;
 }
 
+int animation_config_volume_source_kind_clamp(int kind) {
+    if (kind < VOLUME_SOURCE_NONE) return VOLUME_SOURCE_NONE;
+    if (kind > VOLUME_SOURCE_PACK) return VOLUME_SOURCE_NONE;
+    return kind;
+}
+
 bool animation_config_scene_source_is_fluid(int source) {
     return animation_config_scene_source_clamp(source) == SCENE_SOURCE_FLUID_MANIFEST;
 }
@@ -69,6 +75,18 @@ static void animation_config_sync_scene_source_legacy_fields(AnimationConfig* cf
         cfg->sceneSource = SCENE_SOURCE_CONFIG_2D;
     }
     cfg->useFluidScene = animation_config_scene_source_is_fluid(cfg->sceneSource);
+}
+
+static void animation_config_sync_volume_source_fields(AnimationConfig* cfg) {
+    if (!cfg) return;
+    cfg->volumeSourceKind = animation_config_volume_source_kind_clamp(cfg->volumeSourceKind);
+    if (cfg->volumeSourceKind == VOLUME_SOURCE_NONE) {
+        cfg->volumeInteractionEnabled = false;
+    }
+    if (cfg->volumeSourceKind != VOLUME_SOURCE_NONE &&
+        cfg->volumeSourcePath[0] == '\0') {
+        cfg->volumeInteractionEnabled = false;
+    }
 }
 
 int animation_config_scale_text_point_size(const AnimationConfig* cfg,
@@ -198,6 +216,7 @@ void SaveAnimationConfig(void) {
 
     struct json_object* config = json_object_new_object();
     animation_config_sync_scene_source_legacy_fields(&animSettings);
+    animation_config_sync_volume_source_fields(&animSettings);
     animSettings.runtimeWindowWidth = ClampRuntimeWindowDimension(sceneSettings.windowWidth, 1200);
     animSettings.runtimeWindowHeight = ClampRuntimeWindowDimension(sceneSettings.windowHeight, 800);
 
@@ -293,6 +312,22 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "useFluidScene", json_object_new_boolean(animSettings.useFluidScene));
     json_object_object_add(config, "fluidManifest", json_object_new_string(animSettings.fluidManifest));
     json_object_object_add(config, "runtimeScenePath", json_object_new_string(animSettings.runtimeScenePath));
+    json_object_object_add(config,
+                           "volumeInteractionEnabled",
+                           json_object_new_boolean(animSettings.volumeInteractionEnabled));
+    json_object_object_add(config,
+                           "volumeSourceKind",
+                           json_object_new_int(animation_config_volume_source_kind_clamp(
+                               animSettings.volumeSourceKind)));
+    json_object_object_add(config,
+                           "volumeSourcePath",
+                           json_object_new_string(animSettings.volumeSourcePath));
+    json_object_object_add(config,
+                           "volumeAffectsLighting",
+                           json_object_new_boolean(animSettings.volumeAffectsLighting));
+    json_object_object_add(config,
+                           "volumeDebugOverlayEnabled",
+                           json_object_new_boolean(animSettings.volumeDebugOverlayEnabled));
     json_object_object_add(config, "lightHeight", json_object_new_double(animSettings.lightHeight));
     fprintf(file, "%s", json_object_to_json_string_ext(config, JSON_C_TO_STRING_PRETTY));
     fclose(file);
@@ -601,6 +636,42 @@ void LoadAnimationConfig(void) {
     } else {
         animSettings.runtimeScenePath[0] = '\0';
     }
+    if (json_object_object_get_ex(config, "volumeInteractionEnabled", &temp) &&
+        json_object_is_type(temp, json_type_boolean)) {
+        animSettings.volumeInteractionEnabled = json_object_get_boolean(temp);
+    } else {
+        animSettings.volumeInteractionEnabled = false;
+    }
+    if (json_object_object_get_ex(config, "volumeSourceKind", &temp)) {
+        animSettings.volumeSourceKind =
+            animation_config_volume_source_kind_clamp(json_object_get_int(temp));
+    } else {
+        animSettings.volumeSourceKind = VOLUME_SOURCE_NONE;
+    }
+    if (json_object_object_get_ex(config, "volumeSourcePath", &temp) &&
+        json_object_is_type(temp, json_type_string)) {
+        const char* path = json_object_get_string(temp);
+        if (path) {
+            strncpy(animSettings.volumeSourcePath,
+                    path,
+                    sizeof(animSettings.volumeSourcePath) - 1);
+            animSettings.volumeSourcePath[sizeof(animSettings.volumeSourcePath) - 1] = '\0';
+        }
+    } else {
+        animSettings.volumeSourcePath[0] = '\0';
+    }
+    if (json_object_object_get_ex(config, "volumeAffectsLighting", &temp) &&
+        json_object_is_type(temp, json_type_boolean)) {
+        animSettings.volumeAffectsLighting = json_object_get_boolean(temp);
+    } else {
+        animSettings.volumeAffectsLighting = true;
+    }
+    if (json_object_object_get_ex(config, "volumeDebugOverlayEnabled", &temp) &&
+        json_object_is_type(temp, json_type_boolean)) {
+        animSettings.volumeDebugOverlayEnabled = json_object_get_boolean(temp);
+    } else {
+        animSettings.volumeDebugOverlayEnabled = false;
+    }
     if (!has_scene_source) {
         animSettings.sceneSource = animSettings.useFluidScene
                                        ? SCENE_SOURCE_FLUID_MANIFEST
@@ -695,6 +766,7 @@ void LoadAnimationConfig(void) {
     }
     animSettings.spaceMode = animation_config_space_mode_clamp(animSettings.spaceMode);
     animation_config_sync_scene_source_legacy_fields(&animSettings);
+    animation_config_sync_volume_source_fields(&animSettings);
     animSettings.textZoomStep = animation_config_text_zoom_step_clamp(animSettings.textZoomStep);
     RayTracingIntegratorCatalog_NormalizeAnimationConfig(&animSettings);
 

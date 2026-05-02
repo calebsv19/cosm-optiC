@@ -54,6 +54,7 @@ SDL_Color ObjectEditorPanels_PanelButtonFill(const RayTracingThemePalette* palet
 int ObjectEditorPanels_AssetVisibleCount(void);
 int ObjectEditorPanels_MaterialVisibleCount(void);
 const SceneObject* ObjectEditorPanels_SelectedObject(void);
+bool ObjectEditorPanels_ObjectColorLocked(const SceneObject* selected);
 bool ObjectEditorPanels_ObjectUsesAlpha(const SceneObject* selected);
 bool ObjectEditorPanels_ObjectUsesEmissiveStrength(const SceneObject* selected);
 int ObjectEditorPanels_ColorSliderCount(void);

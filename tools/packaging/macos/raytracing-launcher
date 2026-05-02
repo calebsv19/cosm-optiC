@@ -15,6 +15,68 @@ MOLTENVK_DYLIB="$APP_CONTENTS_DIR/Frameworks/libMoltenVK.dylib"
 VK_RUNTIME_DIR=""
 VK_ICD_FILE=""
 
+ensure_bundle_link() {
+    target="$1"
+    source="$2"
+    required_rels="${3:-}"
+    if [ -L "$target" ]; then
+        return 0
+    fi
+    if [ -e "$target" ]; then
+        if [ -n "$required_rels" ]; then
+            old_ifs="${IFS}"
+            IFS=':'
+            all_present=1
+            for required_rel in $required_rels; do
+                if [ ! -e "$target/$required_rel" ]; then
+                    all_present=0
+                    break
+                fi
+            done
+            IFS="${old_ifs}"
+            if [ "$all_present" -eq 1 ]; then
+                return 0
+            fi
+        fi
+        rm -rf "$target" 2>/dev/null || true
+    fi
+    if [ -e "$source" ]; then
+        ln -s "$source" "$target"
+    fi
+}
+
+ensure_bundle_copy() {
+    target="$1"
+    source="$2"
+    required_rels="${3:-}"
+    if [ -L "$target" ]; then
+        rm -rf "$target" 2>/dev/null || true
+    fi
+    if [ -e "$target" ] && [ -n "$required_rels" ]; then
+        old_ifs="${IFS}"
+        IFS=':'
+        all_present=1
+        for required_rel in $required_rels; do
+            if [ ! -e "$target/$required_rel" ]; then
+                all_present=0
+                break
+            fi
+        done
+        IFS="${old_ifs}"
+        if [ "$all_present" -eq 1 ]; then
+            return 0
+        fi
+        rm -rf "$target" 2>/dev/null || true
+    fi
+    [ -e "$source" ] || return 0
+    mkdir -p "$(dirname "$target")" 2>/dev/null || true
+    if [ -d "$source" ]; then
+        /usr/bin/ditto "$source" "$target"
+    else
+        cp "$source" "$target"
+    fi
+}
+
 mkdir -p "$LOG_DIR" 2>/dev/null || true
 if ! touch "$LOG_FILE" 2>/dev/null; then
     LOG_FILE="${TMPDIR:-/tmp}/raytracing-launcher.log"
@@ -36,16 +98,10 @@ setup_runtime_root() {
         "$RUNTIME_DIR/data/runtime/videos" \
         "$RUNTIME_DIR/data/snapshots" 2>/dev/null || true
 
-    for lane in config shared shaders vk_renderer; do
-        target="$RUNTIME_DIR/$lane"
-        source="$RES_DIR/$lane"
-        if [ -L "$target" ] || [ -e "$target" ]; then
-            continue
-        fi
-        if [ -e "$source" ]; then
-            ln -s "$source" "$target"
-        fi
-    done
+    ensure_bundle_copy "$RUNTIME_DIR/config" "$RES_DIR/config" "scene_config.json:animation_config.json:default.ttf"
+    ensure_bundle_copy "$RUNTIME_DIR/shared" "$RES_DIR/shared" "assets/fonts/Montserrat-Regular.ttf"
+    ensure_bundle_copy "$RUNTIME_DIR/shaders" "$RES_DIR/shaders" "textured.vert.spv:textured.frag.spv:line.vert.spv:line.frag.spv"
+    ensure_bundle_copy "$RUNTIME_DIR/vk_renderer" "$RES_DIR/vk_renderer" "shaders/textured.vert.spv:shaders/textured.frag.spv:shaders/line.vert.spv:shaders/line.frag.spv"
 }
 
 setup_runtime_root
@@ -123,7 +179,11 @@ if [ "${1:-}" = "--self-test" ]; then
         [ -x "$RAY_TRACING_FFMPEG_BIN" ] || { echo "missing: configured ffmpeg binary" >&2; exit 1; }
     fi
     [ -f "$RUNTIME_DIR/vk_renderer/shaders/textured.vert.spv" ] || { echo "missing: bundled vk_renderer shader" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/vk_renderer/shaders/line.vert.spv" ] || { echo "missing: bundled vk_renderer line shader" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/vk_renderer/shaders/line.frag.spv" ] || { echo "missing: bundled vk_renderer line shader" >&2; exit 1; }
     [ -f "$RUNTIME_DIR/shaders/textured.vert.spv" ] || { echo "missing: bundled runtime shader" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/shaders/line.vert.spv" ] || { echo "missing: bundled runtime line shader" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/shaders/line.frag.spv" ] || { echo "missing: bundled runtime line shader" >&2; exit 1; }
     [ -f "$MOLTENVK_DYLIB" ] || { echo "missing: bundled MoltenVK dylib" >&2; exit 1; }
     [ -d "$RUNTIME_DIR" ] || { echo "missing: runtime state dir ($RUNTIME_DIR)" >&2; exit 1; }
     echo "self-test: ok"
@@ -144,4 +204,7 @@ fi
 cd "$RUNTIME_DIR"
 printf '%s launch begin pid=%s cwd=%s runtime_dir=%s shader_root=%s shape_asset_dir=%s args=%s\n' \
     "$(date '+%Y-%m-%d %H:%M:%S')" "$$" "$RUNTIME_DIR" "$RUNTIME_DIR" "$VK_RENDERER_SHADER_ROOT" "$SHAPE_ASSET_DIR" "$*" >>"$LOG_FILE" 2>/dev/null || true
-exec "$SCRIPT_DIR/raytracing-bin" "$@" >>"$LOG_FILE" 2>&1
+"$SCRIPT_DIR/raytracing-bin" "$@" >>"$LOG_FILE" 2>&1
+status=$?
+printf '%s launch end pid=%s status=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$$" "$status" >>"$LOG_FILE" 2>/dev/null || true
+exit "$status"

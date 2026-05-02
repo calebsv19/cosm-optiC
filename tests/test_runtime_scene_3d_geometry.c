@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -10,8 +11,20 @@
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_scene_3d_builder.h"
 #include "render/runtime_visibility_3d.h"
+#include "render/runtime_volume_3d.h"
 #include "test_runtime_scene_3d_geometry.h"
 #include "test_support.h"
+
+static bool test_runtime_scene_3d_geometry_trace_enabled(void) {
+    const char* env = getenv("TEST_RUNTIME_SCENE_3D_GEOMETRY_TRACE");
+    return env && env[0] && strcmp(env, "0") != 0;
+}
+
+static void test_runtime_scene_3d_geometry_trace(const char* name) {
+    if (!test_runtime_scene_3d_geometry_trace_enabled() || !name) return;
+    fprintf(stderr, "TEST CASE: %s\n", name);
+    fflush(stderr);
+}
 
 static int test_runtime_scene_3d_builder_uses_retained_seed_scope(void) {
     const char *runtime_json_primitives =
@@ -79,6 +92,36 @@ static int test_runtime_scene_3d_builder_uses_retained_seed_scope(void) {
                  scene.primitives[0].shape.plane.height,
                  4.0,
                  1e-9);
+
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
+static int test_runtime_scene_3d_volume_contract_defaults(void) {
+    RuntimeScene3D scene;
+
+    RuntimeScene3D_Init(&scene);
+
+    assert_true("runtime_scene_3d_volume_contract_renderer_owns_geometry",
+                scene.ownership.rendererOwnsGeometryTruth);
+    assert_true("runtime_scene_3d_volume_contract_renderer_owns_volume",
+                scene.ownership.rendererOwnsVolumeAttachmentTruth);
+    assert_true("runtime_scene_3d_volume_contract_attachment_optional",
+                scene.ownership.volumeAttachmentIsOptional);
+    assert_true("runtime_scene_3d_volume_contract_sources_separate",
+                scene.ownership.geometryAndVolumeSourcesRemainSeparate);
+    assert_true("runtime_scene_3d_volume_contract_legacy_fluid_separate",
+                scene.ownership.legacyPlanarFluidOverlayRemainsSeparate);
+    assert_true("runtime_scene_3d_volume_contract_source_none",
+                scene.volume.sourceKind == RUNTIME_VOLUME_3D_SOURCE_NONE);
+    assert_true("runtime_scene_3d_volume_contract_disabled",
+                !scene.volume.enabled);
+    assert_true("runtime_scene_3d_volume_contract_no_data",
+                !scene.volume.hasData);
+    assert_true("runtime_scene_3d_volume_contract_affects_lighting_default",
+                scene.volume.affectsLighting);
+    assert_true("runtime_scene_3d_volume_contract_debug_default_off",
+                !scene.volume.debugOverlayEnabled);
 
     RuntimeScene3D_Free(&scene);
     return 0;
@@ -806,6 +849,72 @@ static int test_runtime_visibility_3d_blocked_contract(void) {
     return 0;
 }
 
+static int test_runtime_visibility_3d_volume_transport_contract(void) {
+    RuntimeScene3D scene;
+    HitInfo3D surface_hit = {0};
+    RuntimeLight3D light = {0};
+    HitInfo3D blocker_hit = {0};
+    RuntimeVisibility3DTransmittance transmittance = {0};
+    double light_distance = 0.0;
+    bool blocked = false;
+    bool visible = false;
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    scene.volume.enabled = true;
+    scene.volume.affectsLighting = true;
+    ok = RuntimeVolumeGrid3D_Configure(&scene.volume.grid,
+                                       1u,
+                                       2u,
+                                       2u,
+                                       6u,
+                                       0.0,
+                                       0u,
+                                       0.02,
+                                       vec3(-0.5, -0.5, 0.5),
+                                       0.5,
+                                       vec3(0.0, 0.0, 1.0),
+                                       0u);
+    assert_true("runtime_visibility_3d_volume_layout_ok", ok);
+    ok = RuntimeVolumeAttachment3D_AllocateOwnedChannels(
+        &scene.volume,
+        RUNTIME_VOLUME_3D_CHANNEL_DENSITY | RUNTIME_VOLUME_3D_CHANNEL_SOLID_MASK);
+    assert_true("runtime_visibility_3d_volume_alloc_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        return 0;
+    }
+    for (uint64_t i = 0; i < scene.volume.grid.cellCount; ++i) {
+        scene.volume.channels.density[i] = 0.5f;
+        scene.volume.channels.solidMask[i] = 0u;
+    }
+
+    surface_hit.position = vec3(0.0, 0.0, 0.0);
+    surface_hit.normal = vec3(0.0, 0.0, 1.0);
+    light.position = vec3(0.0, 0.0, 3.0);
+
+    blocked = RuntimeVisibility3D_TraceToLight(&scene,
+                                               surface_hit.position,
+                                               surface_hit.normal,
+                                               light.position,
+                                               &blocker_hit,
+                                               &light_distance);
+    transmittance = RuntimeVisibility3D_TransmittanceFromHitRGB(&scene, &surface_hit, &light);
+    visible = RuntimeVisibility3D_HasLineOfSightFromHit(&scene, &surface_hit, &light);
+
+    assert_true("runtime_visibility_3d_volume_not_geometry_blocked", !blocked);
+    assert_true("runtime_visibility_3d_volume_visible", visible);
+    assert_close("runtime_visibility_3d_volume_distance", light_distance, 3.0, 1e-6);
+    assert_true("runtime_visibility_3d_volume_luma_reduced",
+                transmittance.luma < 0.3 && transmittance.luma > 0.1);
+    assert_close("runtime_visibility_3d_volume_rg_equal", transmittance.r, transmittance.g, 1e-9);
+    assert_close("runtime_visibility_3d_volume_rb_equal", transmittance.r, transmittance.b, 1e-9);
+    assert_true("runtime_visibility_3d_volume_reset_triangle", blocker_hit.triangleIndex == -1);
+
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
 static int test_runtime_camera_projector_3d_center_ray_contract(void) {
     RuntimeCamera3D camera = {0};
     RuntimeCameraProjector3D projector = {0};
@@ -895,21 +1004,41 @@ static int test_runtime_camera_projector_3d_zoom_contract(void) {
 int run_test_runtime_scene_3d_geometry_tests(void) {
     int before = test_support_failures();
 
+    test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_volume_contract_defaults");
+    test_runtime_scene_3d_volume_contract_defaults();
+    test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_builder_uses_retained_seed_scope");
     test_runtime_scene_3d_builder_uses_retained_seed_scope();
+    test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_builder_builds_ps4d_triangle_scene");
     test_runtime_scene_3d_builder_builds_ps4d_triangle_scene();
+    test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_builder_promotes_authored_light_camera_samples");
     test_runtime_scene_3d_builder_promotes_authored_light_camera_samples();
+    test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_builder_falls_back_to_seeded_camera_state");
     test_runtime_scene_3d_builder_falls_back_to_seeded_camera_state();
+    test_runtime_scene_3d_geometry_trace("test_runtime_ray_3d_triangle_intersection_contract");
     test_runtime_ray_3d_triangle_intersection_contract();
+    test_runtime_scene_3d_geometry_trace("test_runtime_ray_3d_scene_first_hit_contract");
     test_runtime_ray_3d_scene_first_hit_contract();
+    test_runtime_scene_3d_geometry_trace("test_runtime_ray_3d_offset_contract");
     test_runtime_ray_3d_offset_contract();
+    test_runtime_scene_3d_geometry_trace("test_runtime_light_emitter_3d_center_hit_contract");
     test_runtime_light_emitter_3d_center_hit_contract();
+    test_runtime_scene_3d_geometry_trace("test_runtime_light_emitter_3d_trace_geometry_tie_wins_contract");
     test_runtime_light_emitter_3d_trace_geometry_tie_wins_contract();
+    test_runtime_scene_3d_geometry_trace("test_runtime_light_emitter_3d_trace_emitter_wins_contract");
     test_runtime_light_emitter_3d_trace_emitter_wins_contract();
+    test_runtime_scene_3d_geometry_trace("test_runtime_light_emitter_3d_radial_falloff_contract");
     test_runtime_light_emitter_3d_radial_falloff_contract();
+    test_runtime_scene_3d_geometry_trace("test_runtime_visibility_3d_visible_contract");
     test_runtime_visibility_3d_visible_contract();
+    test_runtime_scene_3d_geometry_trace("test_runtime_visibility_3d_blocked_contract");
     test_runtime_visibility_3d_blocked_contract();
+    test_runtime_scene_3d_geometry_trace("test_runtime_visibility_3d_volume_transport_contract");
+    test_runtime_visibility_3d_volume_transport_contract();
+    test_runtime_scene_3d_geometry_trace("test_runtime_camera_projector_3d_center_ray_contract");
     test_runtime_camera_projector_3d_center_ray_contract();
+    test_runtime_scene_3d_geometry_trace("test_runtime_camera_projector_3d_pitch_contract");
     test_runtime_camera_projector_3d_pitch_contract();
+    test_runtime_scene_3d_geometry_trace("test_runtime_camera_projector_3d_zoom_contract");
     test_runtime_camera_projector_3d_zoom_contract();
 
     return test_support_failures() - before;

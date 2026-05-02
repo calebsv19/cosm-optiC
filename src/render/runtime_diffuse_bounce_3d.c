@@ -99,6 +99,34 @@ static double runtime_diffuse_bounce_3d_peak(double r, double g, double b) {
     return peak;
 }
 
+static void runtime_diffuse_bounce_3d_apply_transmittance(
+    const RuntimeVisibility3DTransmittance* transmittance,
+    RuntimeDiffuseBounce3DResult* io_result) {
+    if (!transmittance || !io_result) return;
+
+    io_result->directRadianceR *= transmittance->r;
+    io_result->directRadianceG *= transmittance->g;
+    io_result->directRadianceB *= transmittance->b;
+    io_result->bounceRadianceR *= transmittance->r;
+    io_result->bounceRadianceG *= transmittance->g;
+    io_result->bounceRadianceB *= transmittance->b;
+    io_result->directRadiance = runtime_diffuse_bounce_3d_peak(io_result->directRadianceR,
+                                                               io_result->directRadianceG,
+                                                               io_result->directRadianceB);
+    io_result->bounceRadiance = runtime_diffuse_bounce_3d_peak(io_result->bounceRadianceR,
+                                                               io_result->bounceRadianceG,
+                                                               io_result->bounceRadianceB);
+    io_result->radianceR = io_result->directRadianceR + io_result->bounceRadianceR;
+    io_result->radianceG = io_result->directRadianceG + io_result->bounceRadianceG;
+    io_result->radianceB = io_result->directRadianceB + io_result->bounceRadianceB;
+    io_result->radiance = runtime_diffuse_bounce_3d_peak(io_result->radianceR,
+                                                         io_result->radianceG,
+                                                         io_result->radianceB);
+    if (!(transmittance->luma > 1e-9)) {
+        io_result->visible = false;
+    }
+}
+
 static double runtime_diffuse_bounce_3d_luma(double r, double g, double b) {
     return (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
 }
@@ -442,6 +470,7 @@ bool RuntimeDiffuseBounce3D_ShadePixel(const RuntimeScene3D* scene,
         return false;
     }
 
+    runtime_diffuse_bounce_3d_apply_transmittance(&primary_hit.primaryTransmittance, &result);
     result.primaryRay = primary_hit.primaryRay;
     *out_result = result;
     return true;

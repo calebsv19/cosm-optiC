@@ -38,6 +38,8 @@ typedef enum RuntimeSceneBridgePrimitiveKind {
 typedef struct RuntimeSceneBridgePrimitiveDigest {
     RuntimeSceneBridgePrimitiveKind kind;
     char object_id[64];
+    int scene_object_index;
+    bool guide_only;
     double origin_x;
     double origin_y;
     double origin_z;
@@ -72,6 +74,7 @@ typedef struct RuntimeSceneBridgePrimitiveSeed {
     RuntimeSceneBridgePrimitiveKind kind;
     char object_id[64];
     int scene_object_index;
+    bool guide_only;
     bool has_dimensions;
     double origin_x;
     double origin_y;

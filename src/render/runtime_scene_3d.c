@@ -44,14 +44,19 @@ void RuntimeScene3D_Init(RuntimeScene3D* scene) {
     scene->scope.triangleMeshEnabled = false;
 
     scene->ownership.rendererOwnsGeometryTruth = true;
+    scene->ownership.rendererOwnsVolumeAttachmentTruth = true;
     scene->ownership.sceneObjectsRemainCompatOnly = true;
     scene->ownership.previewDigestIsNonAuthoritative = true;
+    scene->ownership.volumeAttachmentIsOptional = true;
+    scene->ownership.geometryAndVolumeSourcesRemainSeparate = true;
+    scene->ownership.legacyPlanarFluidOverlayRemainsSeparate = true;
 
     scene->light.falloffMode = FORWARD_FALLOFF_MODE_QUADRATIC;
     scene->camera.zoom = 1.0;
     scene->camera.nearPlane = 0.1;
 
     RuntimeTriangleMesh3D_Init(&scene->triangleMesh);
+    RuntimeVolumeAttachment3D_Init(&scene->volume);
 }
 
 void RuntimeScene3D_Reset(RuntimeScene3D* scene) {
@@ -74,6 +79,7 @@ void RuntimeScene3D_Free(RuntimeScene3D* scene) {
     scene->primitiveCount = 0;
     scene->primitiveCapacity = 0;
     RuntimeTriangleMesh3D_Free(&scene->triangleMesh);
+    RuntimeVolumeAttachment3D_Free(&scene->volume);
     scene->hasLight = false;
     scene->hasCamera = false;
 }

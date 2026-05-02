@@ -49,6 +49,23 @@ static void runtime_native_3d_temporal_accum_resolve_history_rgb(
     if (out_b) *out_b = b;
 }
 
+static float runtime_native_3d_temporal_accum_resolve_history_floor(
+    const RuntimeNative3DTemporalAccumulation* accumulation,
+    size_t accumulation_base,
+    uint16_t sample_count) {
+    float correction = runtime_native_3d_temporal_accum_bias_correction(sample_count);
+    float floor = (float)RuntimeNative3DResolveEnvironmentByte() / 255.0f;
+
+    if (sample_count > 0u && accumulation && accumulation->accumulationBuffer) {
+        floor = accumulation->accumulationBuffer[accumulation_base +
+                                                 RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL];
+        if (correction > 1e-6f) {
+            floor /= correction;
+        }
+    }
+    return floor;
+}
+
 static void runtime_native_3d_temporal_accum_clamp_sample_to_history(float history_r,
                                                                      float history_g,
                                                                      float history_b,
@@ -202,6 +219,9 @@ bool RuntimeNative3DTemporalAccumulation_AddRegionSamples(
                 float sample_r = radiance_region[region_base];
                 float sample_g = radiance_region[region_base + 1u];
                 float sample_b = radiance_region[region_base + 2u];
+                float sample_floor =
+                    radiance_region[region_base +
+                                    RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL];
 
                 if (sample_count > 0u) {
                     float history_r = 0.0f;
@@ -228,6 +248,13 @@ bool RuntimeNative3DTemporalAccumulation_AddRegionSamples(
                     accumulation->accumulationBuffer[accumulation_base + 2u] +=
                         kRuntimeNative3DTemporalEMAAlpha *
                         (sample_b - accumulation->accumulationBuffer[accumulation_base + 2u]);
+                    accumulation->accumulationBuffer
+                        [accumulation_base + RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL] +=
+                        kRuntimeNative3DTemporalEMAAlpha *
+                        (sample_floor -
+                         accumulation->accumulationBuffer
+                             [accumulation_base +
+                              RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL]);
                 } else {
                     accumulation->accumulationBuffer[accumulation_base] =
                         kRuntimeNative3DTemporalEMAAlpha * sample_r;
@@ -235,6 +262,9 @@ bool RuntimeNative3DTemporalAccumulation_AddRegionSamples(
                         kRuntimeNative3DTemporalEMAAlpha * sample_g;
                     accumulation->accumulationBuffer[accumulation_base + 2u] =
                         kRuntimeNative3DTemporalEMAAlpha * sample_b;
+                    accumulation->accumulationBuffer
+                        [accumulation_base + RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL] =
+                        kRuntimeNative3DTemporalEMAAlpha * sample_floor;
                 }
             }
             if (accumulation->sampleCountBuffer[accumulation_index] < UINT16_MAX) {
@@ -285,15 +315,22 @@ bool RuntimeNative3DTemporalAccumulation_ResolveRegionToRadianceBuffer(
             float resolved_r = 0.0f;
             float resolved_g = 0.0f;
             float resolved_b = 0.0f;
+            float resolved_floor = 0.0f;
             runtime_native_3d_temporal_accum_resolve_history_rgb(accumulation,
                                                                  accumulation_base,
                                                                  sample_count,
                                                                  &resolved_r,
                                                                  &resolved_g,
                                                                  &resolved_b);
+            resolved_floor = runtime_native_3d_temporal_accum_resolve_history_floor(
+                accumulation,
+                accumulation_base,
+                sample_count);
             radiance_buffer[radiance_base] = resolved_r;
             radiance_buffer[radiance_base + 1u] = resolved_g;
             radiance_buffer[radiance_base + 2u] = resolved_b;
+            radiance_buffer[radiance_base + RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL] =
+                resolved_floor;
         }
     }
     return true;
@@ -307,7 +344,6 @@ void RuntimeNative3DTemporalAccumulation_ResolveRegionToPixelBuffer(
     int start_y,
     int end_x,
     int end_y) {
-    const uint8_t environment = RuntimeNative3DResolveEnvironmentByte();
     if (!accumulation || !accumulation->accumulationBuffer || !pixel_buffer || pixel_width <= 0) {
         return;
     }
@@ -331,16 +367,25 @@ void RuntimeNative3DTemporalAccumulation_ResolveRegionToPixelBuffer(
             float resolved_r = 0.0f;
             float resolved_g = 0.0f;
             float resolved_b = 0.0f;
+            float resolved_floor = 0.0f;
             runtime_native_3d_temporal_accum_resolve_history_rgb(accumulation,
                                                                  accumulation_base,
                                                                  sample_count,
                                                                  &resolved_r,
                                                                  &resolved_g,
                                                                  &resolved_b);
+            resolved_floor = runtime_native_3d_temporal_accum_resolve_history_floor(
+                accumulation,
+                accumulation_base,
+                sample_count);
+            {
+                const uint8_t environment = (uint8_t)lroundf(
+                    fminf(fmaxf(resolved_floor, 0.0f), 1.0f) * 255.0f);
             pixel_buffer[pixel_base] = TonemapCurveToByteWithFloor(resolved_r, environment);
             pixel_buffer[pixel_base + 1u] = TonemapCurveToByteWithFloor(resolved_g, environment);
             pixel_buffer[pixel_base + 2u] = TonemapCurveToByteWithFloor(resolved_b, environment);
             pixel_buffer[pixel_base + 3u] = 0xFFu;
+            }
         }
     }
 }
@@ -351,7 +396,6 @@ void RuntimeNative3DTemporalAccumulation_ResolveToPixelBufferAtOffset(
     int pixel_width,
     int dst_origin_x,
     int dst_origin_y) {
-    const uint8_t environment = RuntimeNative3DResolveEnvironmentByte();
     if (!accumulation || !accumulation->accumulationBuffer || !pixel_buffer || pixel_width <= 0) {
         return;
     }
@@ -376,16 +420,25 @@ void RuntimeNative3DTemporalAccumulation_ResolveToPixelBufferAtOffset(
             float resolved_r = 0.0f;
             float resolved_g = 0.0f;
             float resolved_b = 0.0f;
+            float resolved_floor = 0.0f;
             runtime_native_3d_temporal_accum_resolve_history_rgb(accumulation,
                                                                  accumulation_base,
                                                                  sample_count,
                                                                  &resolved_r,
                                                                  &resolved_g,
                                                                  &resolved_b);
+            resolved_floor = runtime_native_3d_temporal_accum_resolve_history_floor(
+                accumulation,
+                accumulation_base,
+                sample_count);
+            {
+                const uint8_t environment = (uint8_t)lroundf(
+                    fminf(fmaxf(resolved_floor, 0.0f), 1.0f) * 255.0f);
             pixel_buffer[pixel_base] = TonemapCurveToByteWithFloor(resolved_r, environment);
             pixel_buffer[pixel_base + 1u] = TonemapCurveToByteWithFloor(resolved_g, environment);
             pixel_buffer[pixel_base + 2u] = TonemapCurveToByteWithFloor(resolved_b, environment);
             pixel_buffer[pixel_base + 3u] = 0xFFu;
+            }
         }
     }
 }

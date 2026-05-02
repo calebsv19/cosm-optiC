@@ -34,6 +34,13 @@ typedef enum {
     SCENE_SOURCE_RUNTIME_SCENE = 2
 } SceneSource;
 
+typedef enum {
+    VOLUME_SOURCE_NONE = 0,
+    VOLUME_SOURCE_MANIFEST = 1,
+    VOLUME_SOURCE_RAW_VF3D = 2,
+    VOLUME_SOURCE_PACK = 3
+} VolumeSourceKind;
+
 #define RUNTIME_3D_SECONDARY_SAMPLES_MIN 4
 #define RUNTIME_3D_SECONDARY_SAMPLES_MAX 64
 #define RUNTIME_3D_SECONDARY_SAMPLES_STEP 4
@@ -125,11 +132,21 @@ typedef struct {
     // Integrator mode: 0 = forward, 1 = hybrid (camera-path GI), 2 = direct light (Disney path paused).
     int cameraIntegratorMode;
 
-    // Fluid import
+    // Legacy scene source lane. This still chooses between the historical
+    // 2D config, planar fluid manifest, or runtime geometry scene.
     SceneSource sceneSource;
     bool useFluidScene;
     char fluidManifest[256];
     char runtimeScenePath[256];
+
+    // Native 3D participating-media lane. This remains separate from the
+    // legacy sceneSource contract so runtime geometry and optional VF3D
+    // atmosphere can coexist.
+    bool volumeInteractionEnabled;
+    int volumeSourceKind;
+    char volumeSourcePath[256];
+    bool volumeAffectsLighting;
+    bool volumeDebugOverlayEnabled;
 } AnimationConfig;
 
 
@@ -172,6 +189,7 @@ int animation_config_scale_text_point_size(const AnimationConfig* cfg,
                                            int min_point_size);
 int animation_config_space_mode_clamp(int mode);
 int animation_config_scene_source_clamp(int source);
+int animation_config_volume_source_kind_clamp(int kind);
 bool animation_config_scene_source_is_fluid(int source);
 
 #endif // CONFIG_MANAGER_H

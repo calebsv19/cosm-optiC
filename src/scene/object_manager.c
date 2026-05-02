@@ -15,6 +15,7 @@ static void InitDefaultMaterial(SceneObject* obj) {
     obj->emissiveStrength = 1.0;
     obj->textureId = 0;
     obj->material_id = MaterialManagerDefaultId();
+    obj->guideOnly = false;
 }
 
 void InitObject(SceneObject* obj, int type, double x, double y, double param1, double param2, double points[][2], int numPoints) {
@@ -196,6 +197,14 @@ void MarkObjectDirty(SceneObject* obj) {
 // Checks if an object needs to be updated
 bool IsObjectDirty(SceneObject* obj) {
     return obj->dirty;
+}
+
+bool SceneObjectIsGuideOnly(const SceneObject* obj) {
+    return obj && obj->guideOnly;
+}
+
+bool SceneObjectParticipatesInRender(const SceneObject* obj) {
+    return obj && !obj->guideOnly;
 }
 
 int SceneObjectPackRGBBytes(Uint8 r, Uint8 g, Uint8 b) {

@@ -6,7 +6,9 @@
 #include <string.h>
 
 #include "config/config_manager.h"
+#include "import/fluid_volume_import_3d.h"
 #include "render/integrators/hybrid/integrator_tonemap.h"
+#include "render/runtime_volume_3d_integrate.h"
 #include "render/runtime_native_3d_render_internal.h"
 #include "render/runtime_camera_3d_rays.h"
 #include "render/runtime_native_3d_denoise.h"
@@ -128,6 +130,59 @@ static bool runtime_native_3d_render_build_live_scene(RuntimeScene3D* scene,
            scene->hasCamera;
 }
 
+static RuntimeVolume3DSourceKind runtime_native_3d_render_map_volume_source_kind(
+    int config_kind) {
+    switch (config_kind) {
+        case VOLUME_SOURCE_MANIFEST:
+            return RUNTIME_VOLUME_3D_SOURCE_MANIFEST;
+        case VOLUME_SOURCE_RAW_VF3D:
+            return RUNTIME_VOLUME_3D_SOURCE_RAW_VF3D;
+        case VOLUME_SOURCE_PACK:
+            return RUNTIME_VOLUME_3D_SOURCE_PACK;
+        case VOLUME_SOURCE_NONE:
+        default:
+            return RUNTIME_VOLUME_3D_SOURCE_NONE;
+    }
+}
+
+static bool runtime_native_3d_render_attach_configured_volume(RuntimeScene3D* scene) {
+    RuntimeVolume3DSourceKind source_kind = RUNTIME_VOLUME_3D_SOURCE_NONE;
+    char diagnostics[128] = {0};
+
+    if (!scene) return false;
+
+    scene->volume.affectsLighting = animSettings.volumeAffectsLighting;
+    scene->volume.debugOverlayEnabled = animSettings.volumeDebugOverlayEnabled;
+    if (!animSettings.volumeInteractionEnabled) {
+        return true;
+    }
+
+    source_kind = runtime_native_3d_render_map_volume_source_kind(animSettings.volumeSourceKind);
+    if (source_kind == RUNTIME_VOLUME_3D_SOURCE_NONE ||
+        animSettings.volumeSourcePath[0] == '\0') {
+        return false;
+    }
+
+    if (!fluid_volume_import_3d_load_source(animSettings.volumeSourcePath,
+                                            source_kind,
+                                            &scene->volume,
+                                            diagnostics,
+                                            sizeof(diagnostics))) {
+        RuntimeVolumeAttachment3D_Reset(&scene->volume);
+        return false;
+    }
+
+    scene->volume.affectsLighting = animSettings.volumeAffectsLighting;
+    scene->volume.debugOverlayEnabled = animSettings.volumeDebugOverlayEnabled;
+    return true;
+}
+
+static double runtime_native_3d_render_clamp_unit(double value) {
+    if (value < 0.0) return 0.0;
+    if (value > 1.0) return 1.0;
+    return value;
+}
+
 uint8_t RuntimeNative3DResolveEnvironmentByte(void) {
     double value = animSettings.environmentBrightness;
     if (value < 0.0) value = 0.0;
@@ -157,7 +212,6 @@ void RuntimeNative3DResolveRadianceRegionToPixels(
     int start_y,
     int end_x,
     int end_y) {
-    const uint8_t environment = RuntimeNative3DResolveEnvironmentByte();
     if (!pixel_buffer || !radiance_buffer || pixel_width <= 0 || radiance_stride <= 0) return;
     for (int y = start_y; y < end_y; ++y) {
         const int local_y = y - start_y;
@@ -169,6 +223,11 @@ void RuntimeNative3DResolveRadianceRegionToPixels(
             const size_t radiance_base =
                 ((size_t)local_y * (size_t)radiance_stride + (size_t)local_x) *
                 (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
+            const uint8_t environment = (uint8_t)lround(
+                runtime_native_3d_render_clamp_unit(
+                    radiance_buffer[radiance_base +
+                                    RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL]) *
+                255.0);
             pixel_buffer[pixel_base] = TonemapCurveToByteWithFloor(
                 radiance_buffer[radiance_base], environment);
             pixel_buffer[pixel_base + 1u] = TonemapCurveToByteWithFloor(
@@ -230,6 +289,10 @@ bool RuntimeNative3DPrepareFrameWithSampling(RuntimeNative3DPreparedFrame* out_f
                                                    normalized_t,
                                                    live_light_x,
                                                    live_light_y)) {
+        RuntimeScene3D_Free(&frame.scene);
+        return false;
+    }
+    if (!runtime_native_3d_render_attach_configured_volume(&frame.scene)) {
         RuntimeScene3D_Free(&frame.scene);
         return false;
     }
@@ -387,6 +450,9 @@ bool RuntimeNative3DPreparedRegionMayContainGeometry(const RuntimeNative3DPrepar
                                                      int end_x,
                                                      int end_y) {
     if (!frame || !frame->valid) return true;
+    if (RuntimeVolume3D_HasActiveExtinction(&frame->scene.volume)) {
+        return true;
+    }
     return RuntimeNative3DTileOccupancy_RegionMayContainGeometry(&frame->tileOccupancy,
                                                                  start_x,
                                                                  start_y,

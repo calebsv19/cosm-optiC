@@ -1,6 +1,7 @@
 #include "import/runtime_scene_bridge.h"
 #include "import/runtime_scene_bridge_internal.h"
 #include "import/runtime_scene_bridge_json_utils.h"
+#include "import/runtime_scene_volume_defaults.h"
 
 #include "camera/camera_path_3d.h"
 #include "core_scene_overlay_merge_shared.h"
@@ -61,6 +62,68 @@ static bool runtime_scene_bridge_is_authoring_helper_object_type(const char *obj
            strcmp(object_type, "edge_set") == 0;
 }
 
+static int runtime_scene_bridge_physics_emitter_packed_color(const char *type_str) {
+    if (type_str && strcmp(type_str, "Jet") == 0) {
+        return SceneObjectPackRGBBytes(74, 232, 124);
+    }
+    if (type_str && strcmp(type_str, "Sink") == 0) {
+        return SceneObjectPackRGBBytes(232, 96, 136);
+    }
+    return SceneObjectPackRGBBytes(246, 233, 90);
+}
+
+static bool runtime_scene_bridge_object_has_active_physics_emitter_overlay(json_object *root,
+                                                                           const char *object_id,
+                                                                           int *out_packed_color) {
+    json_object *extensions = NULL;
+    json_object *physics_sim = NULL;
+    json_object *object_overlays = NULL;
+    size_t count = 0u;
+    size_t i = 0u;
+    if (out_packed_color) *out_packed_color = 0;
+    if (!root || !object_id || !object_id[0]) return false;
+    if (!json_object_object_get_ex(root, "extensions", &extensions) ||
+        !json_object_is_type(extensions, json_type_object) ||
+        !json_object_object_get_ex(extensions, "physics_sim", &physics_sim) ||
+        !json_object_is_type(physics_sim, json_type_object) ||
+        !json_object_object_get_ex(physics_sim, "object_overlays", &object_overlays) ||
+        !json_object_is_type(object_overlays, json_type_array)) {
+        return false;
+    }
+    count = json_object_array_length(object_overlays);
+    for (i = 0u; i < count; ++i) {
+        json_object *entry = json_object_array_get_idx(object_overlays, (int)i);
+        json_object *entry_object_id = NULL;
+        json_object *emitter = NULL;
+        json_object *active = NULL;
+        json_object *type = NULL;
+        const char *entry_object_id_str = NULL;
+        const char *type_str = NULL;
+        if (!entry || !json_object_is_type(entry, json_type_object)) continue;
+        if (!json_object_object_get_ex(entry, "object_id", &entry_object_id) ||
+            !json_object_is_type(entry_object_id, json_type_string)) {
+            continue;
+        }
+        entry_object_id_str = json_object_get_string(entry_object_id);
+        if (!entry_object_id_str || strcmp(entry_object_id_str, object_id) != 0) continue;
+        if (!json_object_object_get_ex(entry, "emitter", &emitter) ||
+            !json_object_is_type(emitter, json_type_object) ||
+            !json_object_object_get_ex(emitter, "active", &active) ||
+            !json_object_is_type(active, json_type_boolean)) {
+            return false;
+        }
+        if (json_object_object_get_ex(emitter, "type", &type) &&
+            json_object_is_type(type, json_type_string)) {
+            type_str = json_object_get_string(type);
+        }
+        if (out_packed_color) {
+            *out_packed_color = runtime_scene_bridge_physics_emitter_packed_color(type_str);
+        }
+        return json_object_get_boolean(active) != 0;
+    }
+    return false;
+}
+
 static RuntimeSceneBridgePrimitiveKind digest_kind_from_labels(const char *object_type,
                                                                const char *primitive_kind) {
     const char *label = primitive_kind && primitive_kind[0] ? primitive_kind : object_type;
@@ -76,7 +139,9 @@ static void digest_append_primitive(json_object *object_obj,
                                     json_object *transform_obj,
                                     json_object *primitive_obj,
                                     RuntimeSceneBridgePrimitiveKind kind,
-                                    double world_scale) {
+                                    double world_scale,
+                                    int scene_object_index,
+                                    bool guide_only) {
     RuntimeSceneBridgePrimitiveDigest *entry = NULL;
     const char *object_id = NULL;
     json_object *frame = NULL;
@@ -93,6 +158,8 @@ static void digest_append_primitive(json_object *object_obj,
     entry = &g_last_3d_digest.primitives[g_last_3d_digest.primitive_count];
     memset(entry, 0, sizeof(*entry));
     entry->kind = kind;
+    entry->scene_object_index = scene_object_index;
+    entry->guide_only = guide_only;
 
     object_id = runtime_scene_bridge_json_string_field_or_null(object_obj, "object_id");
     if (object_id && object_id[0]) {
@@ -165,7 +232,8 @@ static void primitive_seed_append(json_object *object_obj,
                                   json_object *primitive_obj,
                                   RuntimeSceneBridgePrimitiveKind kind,
                                   double world_scale,
-                                  int scene_object_index) {
+                                  int scene_object_index,
+                                  bool guide_only) {
     RuntimeSceneBridgePrimitiveSeed *entry = NULL;
     const char *object_id = NULL;
     const char *object_type = runtime_scene_bridge_json_string_field_or_null(object_obj,
@@ -182,6 +250,9 @@ static void primitive_seed_append(json_object *object_obj,
     bool has_height = false;
     bool has_depth = false;
 
+    if (guide_only) {
+        return;
+    }
     if (!primitive_seed_kind_supported_by_r0(kind)) {
         if (kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_UNKNOWN &&
             runtime_scene_bridge_is_authoring_helper_object_type(object_type)) {
@@ -199,6 +270,7 @@ static void primitive_seed_append(json_object *object_obj,
     memset(entry, 0, sizeof(*entry));
     entry->kind = kind;
     entry->scene_object_index = scene_object_index;
+    entry->guide_only = false;
     primitive_seed_reset_basis(entry);
 
     object_id = runtime_scene_bridge_json_string_field_or_null(object_obj, "object_id");
@@ -315,7 +387,8 @@ static void apply_object_flags(json_object *object_obj, SceneObject *out_object)
     }
 }
 
-static void apply_objects(json_object *objects_array,
+static void apply_objects(json_object *root,
+                          json_object *objects_array,
                           json_object *materials_array,
                           double world_scale,
                           RuntimeSceneBridgePreflight *out_summary) {
@@ -364,8 +437,11 @@ static void apply_objects(json_object *objects_array,
         bool is_plane = false;
         bool is_triangle_mesh = false;
         bool is_box = false;
+        bool is_guide_only = false;
+        int guide_overlay_color = 0;
         RuntimeSceneBridgePrimitiveKind digest_kind = RUNTIME_SCENE_BRIDGE_PRIMITIVE_UNKNOWN;
         SceneObject *dst = NULL;
+        const char *object_id = NULL;
         if (!obj || !json_object_is_type(obj, json_type_object)) continue;
 
         if (json_object_object_get_ex(obj, "object_type", &object_type) &&
@@ -427,7 +503,7 @@ static void apply_objects(json_object *objects_array,
                0,
                sizeof(g_last_runtime_object_ids[sceneSettings.objectCount]));
         {
-            const char *object_id = runtime_scene_bridge_json_string_field_or_null(obj, "object_id");
+            object_id = runtime_scene_bridge_json_string_field_or_null(obj, "object_id");
             if (object_id && object_id[0]) {
                 snprintf(g_last_runtime_object_ids[sceneSettings.objectCount],
                          sizeof(g_last_runtime_object_ids[sceneSettings.objectCount]),
@@ -435,6 +511,11 @@ static void apply_objects(json_object *objects_array,
                          object_id);
             }
         }
+        is_guide_only =
+            runtime_scene_bridge_is_authoring_helper_object_type(type_str) ||
+            runtime_scene_bridge_object_has_active_physics_emitter_overlay(root,
+                                                                           object_id,
+                                                                           &guide_overlay_color);
         if (is_circle) {
             InitObject(dst, OBJECT_CIRCLE, x, y, 10.0, 0.0, NULL, 0);
         } else if (is_plane) {
@@ -452,15 +533,26 @@ static void apply_objects(json_object *objects_array,
         dst->z = z * world_scale;
         dst->scale = ((sx + sy + sz) / 3.0) * world_scale;
         if (dst->scale <= 0.01) dst->scale = 0.01;
+        dst->guideOnly = is_guide_only;
         apply_object_material(obj, materials_array, dst);
         apply_object_flags(obj, dst);
-        digest_append_primitive(obj, transform, primitive, digest_kind, world_scale);
+        if (is_guide_only && guide_overlay_color != 0) {
+            dst->color = guide_overlay_color;
+        }
+        digest_append_primitive(obj,
+                                transform,
+                                primitive,
+                                digest_kind,
+                                world_scale,
+                                sceneSettings.objectCount,
+                                is_guide_only);
         primitive_seed_append(obj,
                               transform,
                               primitive,
                               digest_kind,
                               world_scale,
-                              sceneSettings.objectCount);
+                              sceneSettings.objectCount,
+                              is_guide_only);
         sceneSettings.objectCount++;
         g_last_runtime_object_id_count = sceneSettings.objectCount;
     }
@@ -560,7 +652,7 @@ bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
     json_object_object_get_ex(root, "lights", &lights);
     json_object_object_get_ex(root, "cameras", &cameras);
 
-    apply_objects(objects, materials, world_scale, out_summary);
+    apply_objects(root, objects, materials, world_scale, out_summary);
     runtime_scene_bridge_apply_light_seed_scaled(lights, world_scale);
     runtime_scene_bridge_apply_camera_seed_scaled(cameras, world_scale);
     runtime_scene_bridge_apply_ray_authoring_paths(root, world_scale);
@@ -582,11 +674,16 @@ bool runtime_scene_bridge_apply_file(const char *runtime_scene_path,
     CoreBuffer file_data = {0};
     CoreResult io_result;
     char runtime_scene_path_copy[sizeof(animSettings.runtimeScenePath)];
+    char previous_runtime_scene_path[sizeof(animSettings.runtimeScenePath)];
     char *json_text = NULL;
     bool ok;
 
     if (!runtime_scene_path || !out_summary) return false;
     runtime_scene_bridge_preflight_reset(out_summary);
+    snprintf(previous_runtime_scene_path,
+             sizeof(previous_runtime_scene_path),
+             "%s",
+             animSettings.runtimeScenePath);
     snprintf(runtime_scene_path_copy,
              sizeof(runtime_scene_path_copy),
              "%s",
@@ -615,6 +712,9 @@ bool runtime_scene_bridge_apply_file(const char *runtime_scene_path,
                  sizeof(animSettings.runtimeScenePath),
                  "%s",
                  runtime_scene_path_copy);
+        runtime_scene_volume_defaults_apply_transition(&animSettings,
+                                                       previous_runtime_scene_path,
+                                                       runtime_scene_path_copy);
     }
     free(json_text);
     return ok;

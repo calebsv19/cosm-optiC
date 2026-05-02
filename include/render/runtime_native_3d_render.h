@@ -12,7 +12,9 @@
 #include "render/runtime_scene_3d.h"
 #include "render/ray_tracing_integrator_catalog.h"
 
-#define RUNTIME_NATIVE_3D_RADIANCE_CHANNELS 3
+#define RUNTIME_NATIVE_3D_RADIANCE_COLOR_CHANNELS 3
+#define RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL 3
+#define RUNTIME_NATIVE_3D_RADIANCE_CHANNELS 4
 #define RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES 4
 
 typedef struct {

@@ -18,10 +18,18 @@ SDL_Color menu_render_choose_readable_text(SDL_Color background,
 void menu_render_format_manifest_button_label(MenuRuntimeState* state,
                                               char *out,
                                               size_t out_size);
+void menu_render_format_volume_button_label(MenuRuntimeState* state,
+                                            char *out,
+                                            size_t out_size);
 void menu_render_draw_manifest_dropdown(SDL_Renderer *renderer,
                                         TTF_Font *font,
                                         MenuRuntimeState* state,
                                         const MenuButtonLayout* buttons,
                                         const MenuScreenLayout* screen_layout);
+void menu_render_draw_volume_dropdown(SDL_Renderer *renderer,
+                                      TTF_Font *font,
+                                      MenuRuntimeState* state,
+                                      const MenuButtonLayout* buttons,
+                                      const MenuScreenLayout* screen_layout);
 
 #endif

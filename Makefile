@@ -36,10 +36,10 @@ RELEASE_CHANNEL ?= stable
 RELEASE_PRODUCT_NAME := optiC
 RELEASE_PROGRAM_KEY := ray_tracing
 RELEASE_BUNDLE_ID := com.cosm.optic
-RELEASE_ARTIFACT_BASENAME := $(RELEASE_PRODUCT_NAME)-$(RELEASE_VERSION)-macOS-$(RELEASE_CHANNEL)
+RELEASE_ARTIFACT_BASENAME = $(RELEASE_PRODUCT_NAME)-$(RELEASE_VERSION)-$(RELEASE_PLATFORM)-$(RELEASE_ARCH)-$(RELEASE_CHANNEL)
 RELEASE_DIR := build/release
-RELEASE_APP_ZIP := $(RELEASE_DIR)/$(RELEASE_ARTIFACT_BASENAME).zip
-RELEASE_MANIFEST := $(RELEASE_DIR)/$(RELEASE_ARTIFACT_BASENAME).manifest.txt
+RELEASE_APP_ZIP = $(RELEASE_DIR)/$(RELEASE_ARTIFACT_BASENAME).zip
+RELEASE_MANIFEST = $(RELEASE_DIR)/$(RELEASE_ARTIFACT_BASENAME).manifest.txt
 RELEASE_CODESIGN_IDENTITY ?= $(if $(strip $(APPLE_SIGN_IDENTITY)),$(APPLE_SIGN_IDENTITY),$(PACKAGE_ADHOC_SIGN_IDENTITY))
 APPLE_SIGN_IDENTITY ?=
 APPLE_NOTARY_PROFILE ?=
@@ -66,14 +66,53 @@ KIT_RENDER_DIR := $(SHARED_ROOT)/kit/kit_render
 KIT_VIZ_DIR := $(SHARED_ROOT)/kit/kit_viz
 KIT_RUNTIME_DIAG_DIR := $(SHARED_ROOT)/kit/kit_runtime_diag
 UNAME_S := $(shell uname -s)
+PKG_CONFIG ?= pkg-config
+TARGET_CONTRACT_HELPER ?= ../bin/desktop_release_target_contract.sh
+HOST_ARCH := $(shell uname -m)
+TARGET_ARCH ?= $(HOST_ARCH)
+RELEASE_PLATFORM ?= $(UNAME_S)
+RELEASE_ARCH ?= $(TARGET_ARCH)
+TARGET_HOMEBREW_PREFIX :=
+TARGET_ALT_HOMEBREW_PREFIX :=
+TARGET_PKG_CONFIG_LIBDIR :=
+TARGET_DEP_SEARCH_ROOTS :=
+ARCH_FLAGS :=
 
-SDL_CFLAGS := $(shell sdl2-config --cflags)
-SDL_LIBS   := $(shell sdl2-config --libs)
-SDL_PREFIX := $(shell sdl2-config --prefix 2>/dev/null)
-SDL_EXTRA_INC := $(if $(SDL_PREFIX),-I$(SDL_PREFIX)/include,)
+ifeq ($(UNAME_S),Darwin)
+HOST_ARCH := $(strip $(shell "$(TARGET_CONTRACT_HELPER)" get host_arch))
+TARGET_ARCH_INPUT := $(TARGET_ARCH)
+TARGET_ARCH := $(strip $(shell TARGET_ARCH="$(TARGET_ARCH_INPUT)" "$(TARGET_CONTRACT_HELPER)" get target_arch))
+RELEASE_PLATFORM := $(strip $(shell TARGET_ARCH="$(TARGET_ARCH)" "$(TARGET_CONTRACT_HELPER)" get release_platform))
+RELEASE_ARCH := $(strip $(shell TARGET_ARCH="$(TARGET_ARCH)" "$(TARGET_CONTRACT_HELPER)" get release_arch))
+TARGET_HOMEBREW_PREFIX := $(strip $(shell TARGET_ARCH="$(TARGET_ARCH)" "$(TARGET_CONTRACT_HELPER)" get homebrew_prefix))
+TARGET_ALT_HOMEBREW_PREFIX := $(strip $(shell TARGET_ARCH="$(TARGET_ARCH)" "$(TARGET_CONTRACT_HELPER)" get alt_homebrew_prefix))
+TARGET_PKG_CONFIG_LIBDIR := $(TARGET_HOMEBREW_PREFIX)/lib/pkgconfig:$(TARGET_HOMEBREW_PREFIX)/share/pkgconfig
+TARGET_DEP_SEARCH_ROOTS := $(TARGET_HOMEBREW_PREFIX):$(TARGET_ALT_HOMEBREW_PREFIX)
+ARCH_FLAGS := -arch $(TARGET_ARCH)
+endif
+
+SDL_CFLAGS :=
+SDL_LIBS :=
+SDL_PREFIX :=
+SDL_EXTRA_INC :=
+JSON_CFLAGS :=
+JSON_LIBS :=
 
 VULKAN_CFLAGS :=
 VULKAN_LIBS :=
+
+ifneq ($(UNAME_S),Darwin)
+SDL_CONFIG := $(shell command -v sdl2-config 2>/dev/null)
+SDL_CFLAGS := $(shell $(SDL_CONFIG) --cflags 2>/dev/null)
+SDL_LIBS := $(shell $(SDL_CONFIG) --libs 2>/dev/null)
+SDL_PREFIX := $(shell $(SDL_CONFIG) --prefix 2>/dev/null)
+SDL_EXTRA_INC := $(if $(SDL_PREFIX),-I$(SDL_PREFIX)/include,)
+JSON_CFLAGS := $(shell pkg-config --cflags json-c 2>/dev/null)
+JSON_LIBS := $(shell pkg-config --libs json-c 2>/dev/null)
+ifeq ($(strip $(JSON_LIBS)),)
+JSON_LIBS := -ljson-c
+endif
+endif
 
 ifeq ($(UNAME_S),Linux)
     VULKAN_CFLAGS := $(shell pkg-config --cflags vulkan 2>/dev/null)
@@ -85,21 +124,37 @@ ifeq ($(UNAME_S),Linux)
 endif
 
 ifeq ($(UNAME_S),Darwin)
-    VULKAN_CFLAGS := $(shell pkg-config --cflags vulkan 2>/dev/null)
-    VULKAN_LIBS := $(shell pkg-config --libs vulkan 2>/dev/null)
+    SDL_CFLAGS := $(shell env PKG_CONFIG_LIBDIR="$(TARGET_PKG_CONFIG_LIBDIR)" $(PKG_CONFIG) --cflags sdl2 2>/dev/null)
+    SDL_LIBS := $(shell env PKG_CONFIG_LIBDIR="$(TARGET_PKG_CONFIG_LIBDIR)" $(PKG_CONFIG) --libs sdl2 2>/dev/null)
+    SDL_PREFIX := $(TARGET_HOMEBREW_PREFIX)
+    SDL_EXTRA_INC := $(if $(SDL_PREFIX),-I$(SDL_PREFIX)/include,)
+    JSON_CFLAGS := $(shell env PKG_CONFIG_LIBDIR="$(TARGET_PKG_CONFIG_LIBDIR)" $(PKG_CONFIG) --cflags json-c 2>/dev/null)
+    JSON_LIBS := $(shell env PKG_CONFIG_LIBDIR="$(TARGET_PKG_CONFIG_LIBDIR)" $(PKG_CONFIG) --libs json-c 2>/dev/null)
+    ifeq ($(strip $(JSON_LIBS)),)
+        JSON_LIBS := -L$(TARGET_HOMEBREW_PREFIX)/lib -ljson-c
+    endif
+    ifeq ($(strip $(JSON_CFLAGS)),)
+        JSON_CFLAGS := -I$(TARGET_HOMEBREW_PREFIX)/include
+    endif
+    VULKAN_CFLAGS := $(shell env PKG_CONFIG_LIBDIR="$(TARGET_PKG_CONFIG_LIBDIR)" $(PKG_CONFIG) --cflags vulkan 2>/dev/null)
+    VULKAN_LIBS := $(shell env PKG_CONFIG_LIBDIR="$(TARGET_PKG_CONFIG_LIBDIR)" $(PKG_CONFIG) --libs vulkan 2>/dev/null)
     ifeq ($(strip $(VULKAN_CFLAGS)$(VULKAN_LIBS)),)
-        VULKAN_CFLAGS := -I/opt/homebrew/include
-        VULKAN_LIBS := -L/opt/homebrew/lib -lvulkan
+        VULKAN_CFLAGS := -I$(TARGET_HOMEBREW_PREFIX)/include
+        VULKAN_LIBS := -L$(TARGET_HOMEBREW_PREFIX)/lib -lvulkan
     endif
     VULKAN_LIBS += -framework Metal -framework QuartzCore -framework Cocoa -framework IOKit -framework CoreVideo
     CFLAGS += -DVK_USE_PLATFORM_METAL_EXT
 endif
 
-CFLAGS  := $(CSTD) -Wall -Wextra -Wpedantic -g $(SDL_CFLAGS) $(SDL_EXTRA_INC) -I$(INC_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -DMAIN_DRIVER
-LDFLAGS := $(SDL_LIBS) -lSDL2_ttf -ljson-c -lm
+CFLAGS  := $(CSTD) -Wall -Wextra -Wpedantic -g $(ARCH_FLAGS) $(SDL_CFLAGS) $(SDL_EXTRA_INC) $(JSON_CFLAGS) -I$(INC_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -DMAIN_DRIVER
+LDFLAGS := $(ARCH_FLAGS) $(SDL_LIBS) -lSDL2_ttf $(JSON_LIBS) -lm
 
-CFLAGS_RELEASE := $(CSTD) -Wall -Wextra -Wpedantic -O3 $(SDL_CFLAGS) $(SDL_EXTRA_INC) -I$(INC_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -DMAIN_DRIVER -DNDEBUG \
+CFLAGS_RELEASE := $(CSTD) -Wall -Wextra -Wpedantic -O3 $(ARCH_FLAGS) $(SDL_CFLAGS) $(SDL_EXTRA_INC) $(JSON_CFLAGS) -I$(INC_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -DMAIN_DRIVER -DNDEBUG \
 	-ffast-math -fno-math-errno -march=native
+ifeq ($(UNAME_S),Darwin)
+CFLAGS += -DVK_USE_PLATFORM_METAL_EXT
+CFLAGS_RELEASE += -DVK_USE_PLATFORM_METAL_EXT
+endif
 REL_BUILD_DIR := build_release
 REL_TARGET := Ray_anim_release
 
@@ -140,6 +195,11 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_occupancy.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \
+	$(BUILD_DIR)/render/runtime_volume_3d.o \
+	$(BUILD_DIR)/render/runtime_volume_3d_sampling.o \
+	$(BUILD_DIR)/render/runtime_volume_3d_integrate.o \
+	$(BUILD_DIR)/render/runtime_volume_3d_scatter.o \
+	$(BUILD_DIR)/render/runtime_volume_3d_debug.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_samples.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder.o \
 	$(BUILD_DIR)/render/runtime_visibility_3d.o \
@@ -149,6 +209,9 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/geo/geolib/shape_library.o \
 	$(BUILD_DIR)/import/shape_import.o \
 	$(BUILD_DIR)/import/fluid_import.o \
+	$(BUILD_DIR)/import/fluid_volume_import_3d.o \
+	$(BUILD_DIR)/import/fluid_volume_source_import_3d.o \
+	$(BUILD_DIR)/import/fluid_volume_pack_import_3d.o \
 	$(BUILD_DIR)/import/fluid_pack_import.o \
 	$(BUILD_DIR)/import/scene_bundle_import.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_json_utils.o \
@@ -201,6 +264,7 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_scene_bridge_core.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_bridge_writeback.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry.o \
+	$(BUILD_DIR)/tests/test_runtime_volume_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials.o \
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials_payload_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials_direct_light_suite.o \
@@ -216,6 +280,8 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_scene_editor.o \
 	$(BUILD_DIR)/tests/test_runtime_path_policy.o \
 	$(BUILD_DIR)/tests/test_runtime_mode_backend_policy.o \
+	$(BUILD_DIR)/tests/test_fluid_volume_import_3d.o \
+	$(BUILD_DIR)/tests/test_fluid_volume_pack_import_3d.o \
 	$(BUILD_DIR)/tests/test_stubs.o \
 	$(BUILD_DIR)/tests/fluid_pack_import_test.o \
 	$(BUILD_DIR)/tests/kit_viz_fluid_overlay_adapter_test.o \
@@ -281,6 +347,11 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_occupancy.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \
+	$(BUILD_DIR)/render/runtime_volume_3d.o \
+	$(BUILD_DIR)/render/runtime_volume_3d_sampling.o \
+	$(BUILD_DIR)/render/runtime_volume_3d_integrate.o \
+	$(BUILD_DIR)/render/runtime_volume_3d_scatter.o \
+	$(BUILD_DIR)/render/runtime_volume_3d_debug.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_samples.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder.o \
 	$(BUILD_DIR)/render/runtime_visibility_3d.o \
@@ -326,24 +397,32 @@ TEST_DEPS := \
 		$(BUILD_DIR)/config/io/config_file_io.o \
 	$(BUILD_DIR)/config/scene/config_scene_path_io.o \
 	$(BUILD_DIR)/config/core/config_manager.o \
+	$(BUILD_DIR)/ui/menu/scene_source_ui_labels.o \
+	$(BUILD_DIR)/ui/menu/volume_source_ui_labels.o \
 	$(BUILD_DIR)/ui/menu/shared_theme_font_adapter.o \
 	$(BUILD_DIR)/tools/make_video.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_core.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_json.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_flatten.o \
 	$(BUILD_DIR)/import/fluid_import.o \
+	$(BUILD_DIR)/import/fluid_volume_import_3d.o \
+	$(BUILD_DIR)/import/fluid_volume_source_import_3d.o \
+	$(BUILD_DIR)/import/fluid_volume_pack_import_3d.o \
 	$(BUILD_DIR)/import/fluid_pack_import.o \
 	$(BUILD_DIR)/import/scene_bundle_import.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_json_utils.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_authoring.o \
+	$(BUILD_DIR)/import/runtime_scene_volume_defaults.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_render.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_render_manifest.o \
+	$(BUILD_DIR)/ui/menu/sdl_menu_render_volume.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_render_sliders.o \
 	$(BUILD_DIR)/ui/menu/menu_layout.o \
 	$(BUILD_DIR)/ui/menu/menu_panel_chrome.o \
 	$(BUILD_DIR)/ui/menu/menu_batch_panel.o \
 	$(BUILD_DIR)/ui/menu/scene_source_catalog.o \
+	$(BUILD_DIR)/ui/menu/volume_source_catalog.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_state.o \
 	$(BUILD_DIR)/render/adapters/kit_viz_fluid_overlay_adapter.o \
 	$(BUILD_DIR)/core_base/core_base.o \
@@ -604,7 +683,7 @@ package-desktop: all
 	@cp "$(PACKAGE_INFO_PLIST_SRC)" "$(PACKAGE_CONTENTS_DIR)/Info.plist"
 	@cp "$(TARGET)" "$(PACKAGE_MACOS_DIR)/raytracing-bin"
 	@cp "$(PACKAGE_LAUNCHER_SRC)" "$(PACKAGE_MACOS_DIR)/raytracing-launcher"
-	@"$(PACKAGE_DYLIB_BUNDLER)" "$(PACKAGE_MACOS_DIR)/raytracing-bin" "$(PACKAGE_FRAMEWORKS_DIR)"
+	@PACKAGE_DEP_SEARCH_ROOTS="$(TARGET_DEP_SEARCH_ROOTS)" "$(PACKAGE_DYLIB_BUNDLER)" "$(PACKAGE_MACOS_DIR)/raytracing-bin" "$(PACKAGE_FRAMEWORKS_DIR)"
 	@chmod +x "$(PACKAGE_MACOS_DIR)/raytracing-bin" "$(PACKAGE_MACOS_DIR)/raytracing-launcher"
 	@if [ -f "$(PACKAGE_APP_ICON_SRC)" ]; then \
 		cp "$(PACKAGE_APP_ICON_SRC)" "$(PACKAGE_BUNDLED_ICON_PATH)"; \
@@ -615,9 +694,12 @@ package-desktop: all
 	else \
 		echo "warning: no app icon source found at $(PACKAGE_APP_ICON_SRC) or $(PACKAGE_APP_ICONSET_SRC)"; \
 	fi
-	@if [ -n "$(PACKAGE_FFMPEG_SRC)" ] && [ -x "$(PACKAGE_FFMPEG_SRC)" ]; then \
+	@if [ -n "$(PACKAGE_FFMPEG_SRC)" ] && [ -x "$(PACKAGE_FFMPEG_SRC)" ] && \
+		/usr/bin/lipo -archs "$(PACKAGE_FFMPEG_SRC)" 2>/dev/null | /usr/bin/grep -Eq '(^| )$(TARGET_ARCH)($| )'; then \
 		cp "$(PACKAGE_FFMPEG_SRC)" "$(PACKAGE_TOOLS_DIR)/ffmpeg"; \
 		chmod +x "$(PACKAGE_TOOLS_DIR)/ffmpeg"; \
+	else \
+		echo "Skipping bundled ffmpeg for TARGET_ARCH=$(TARGET_ARCH)"; \
 	fi
 	@cp -R config "$(PACKAGE_RESOURCES_DIR)/"
 	@mkdir -p "$(PACKAGE_RESOURCES_DIR)/shared/assets/fonts"
@@ -757,7 +839,7 @@ release-sign: release-bundle-audit
 	fi
 	@echo "release-sign complete."
 
-release-verify:
+release-verify: release-sign
 	@codesign --verify --deep --strict "$(PACKAGE_APP_DIR)"
 	@if [ "$(RELEASE_CODESIGN_IDENTITY)" = "-" ]; then \
 		echo "release-verify note: ad-hoc identity in use; skipping spctl Gatekeeper assessment"; \
@@ -828,7 +910,7 @@ release-verify-notarized: release-verify
 	@xcrun stapler validate "$(PACKAGE_APP_DIR)"
 	@echo "release-verify-notarized passed."
 
-release-artifact:
+release-artifact: release-verify
 	@mkdir -p "$(RELEASE_DIR)"
 	@/usr/bin/ditto -c -k --sequesterRsrc --keepParent "$(PACKAGE_APP_DIR)" "$(RELEASE_APP_ZIP)"
 	@shasum -a 256 "$(RELEASE_APP_ZIP)" > "$(RELEASE_APP_ZIP).sha256"
@@ -838,6 +920,8 @@ release-artifact:
 		echo "bundle_id=$(RELEASE_BUNDLE_ID)"; \
 		echo "version=$(RELEASE_VERSION)"; \
 		echo "channel=$(RELEASE_CHANNEL)"; \
+		echo "platform=$(RELEASE_PLATFORM)"; \
+		echo "arch=$(RELEASE_ARCH)"; \
 		echo "artifact=$(RELEASE_APP_ZIP)"; \
 		echo "sha256_file=$(RELEASE_APP_ZIP).sha256"; \
 	} > "$(RELEASE_MANIFEST)"

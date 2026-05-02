@@ -12,6 +12,67 @@ static bool scene_editor_digest_overlay_objects_point_in_rect(int x, int y, cons
     return x >= rect->x && y >= rect->y && x < rect->x + rect->w && y < rect->y + rect->h;
 }
 
+static void scene_editor_digest_overlay_draw_dashed_screen_line(SDL_Renderer* renderer,
+                                                                int x0,
+                                                                int y0,
+                                                                int x1,
+                                                                int y1) {
+    double dx = 0.0;
+    double dy = 0.0;
+    double length = 0.0;
+    double ux = 0.0;
+    double uy = 0.0;
+    double offset = 0.0;
+    const int dash_len = 7;
+    const int gap_len = 5;
+    if (!renderer) return;
+    dx = (double)(x1 - x0);
+    dy = (double)(y1 - y0);
+    length = hypot(dx, dy);
+    if (length <= 1.0) {
+        SDL_RenderDrawPoint(renderer, x0, y0);
+        SDL_RenderDrawPoint(renderer, x1, y1);
+        return;
+    }
+    ux = dx / length;
+    uy = dy / length;
+    while (offset < length) {
+        double dash_end = offset + (double)dash_len;
+        int ax = 0;
+        int ay = 0;
+        int bx = 0;
+        int by = 0;
+        if (dash_end > length) dash_end = length;
+        ax = (int)lround((double)x0 + ux * offset);
+        ay = (int)lround((double)y0 + uy * offset);
+        bx = (int)lround((double)x0 + ux * dash_end);
+        by = (int)lround((double)y0 + uy * dash_end);
+        SDL_RenderDrawLine(renderer, ax, ay, bx, by);
+        offset = dash_end + (double)gap_len;
+    }
+}
+
+static void scene_editor_digest_overlay_draw_dashed_line3(
+    SDL_Renderer* renderer,
+    const SceneEditorDigestOverlayProjector* projector,
+    double ax,
+    double ay,
+    double az,
+    double bx,
+    double by,
+    double bz,
+    SDL_Color color) {
+    int x0 = 0;
+    int y0 = 0;
+    int x1 = 0;
+    int y1 = 0;
+    if (!renderer || !projector) return;
+    if (!SceneEditorDigestOverlayProjectPoint(projector, ax, ay, az, &x0, &y0)) return;
+    if (!SceneEditorDigestOverlayProjectPoint(projector, bx, by, bz, &x1, &y1)) return;
+    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+    scene_editor_digest_overlay_draw_dashed_screen_line(renderer, x0, y0, x1, y1);
+}
+
 static bool SceneEditorDigestOverlayPrimitiveScreenRect(
     const SceneEditorDigestOverlayProjector* projector,
     const RuntimeSceneBridgePrimitiveDigest* primitive,
@@ -312,6 +373,48 @@ static void scene_editor_digest_overlay_draw_seed_plane(SDL_Renderer* renderer,
     }
 }
 
+static void scene_editor_digest_overlay_draw_seed_plane_guide(
+    SDL_Renderer* renderer,
+    const SceneEditorDigestOverlayProjector* projector,
+    const RuntimeSceneBridgePrimitiveSeed* primitive,
+    SDL_Color color) {
+    double corners[4][3] = {{0.0}};
+    double half_w = 0.0;
+    double half_h = 0.0;
+    int corner = 0;
+    int sx = 0;
+    int sy = 0;
+    static const int edges[4][2] = {
+        {0, 1}, {1, 3}, {3, 2}, {2, 0}
+    };
+    if (!renderer || !projector || !primitive || !primitive->has_dimensions) return;
+    half_w = fmax(0.05, fabs(primitive->width) * 0.5);
+    half_h = fmax(0.05, fabs(primitive->height) * 0.5);
+    for (sx = -1; sx <= 1; sx += 2) {
+        for (sy = -1; sy <= 1; sy += 2) {
+            corners[corner][0] = primitive->origin_x +
+                                 primitive->axis_u_x * half_w * (double)sx +
+                                 primitive->axis_v_x * half_h * (double)sy;
+            corners[corner][1] = primitive->origin_y +
+                                 primitive->axis_u_y * half_w * (double)sx +
+                                 primitive->axis_v_y * half_h * (double)sy;
+            corners[corner][2] = primitive->origin_z +
+                                 primitive->axis_u_z * half_w * (double)sx +
+                                 primitive->axis_v_z * half_h * (double)sy;
+            corner += 1;
+        }
+    }
+    for (corner = 0; corner < 4; ++corner) {
+        int a = edges[corner][0];
+        int b = edges[corner][1];
+        scene_editor_digest_overlay_draw_dashed_line3(renderer,
+                                                      projector,
+                                                      corners[a][0], corners[a][1], corners[a][2],
+                                                      corners[b][0], corners[b][1], corners[b][2],
+                                                      color);
+    }
+}
+
 int SceneEditorDigestOverlayPickObjectIndex(const SceneEditorDigestOverlayProjector* projector,
                                             const RuntimeSceneBridge3DDigestState* digest,
                                             int mx,
@@ -337,6 +440,42 @@ int SceneEditorDigestOverlayPickObjectIndex(const SceneEditorDigestOverlayProjec
             double dist2 = 0.0;
             const int pad = 6;
             if (!scene_editor_digest_overlay_resolve_seed_screen_rect(projector, primitive, &rect, &center)) {
+                continue;
+            }
+            expanded.x = rect.x - pad;
+            expanded.y = rect.y - pad;
+            expanded.w = rect.w + pad * 2;
+            expanded.h = rect.h + pad * 2;
+            area = (double)expanded.w * (double)expanded.h;
+            if (scene_editor_digest_overlay_objects_point_in_rect(mx, my, &expanded)) {
+                if (pick_index < 0 || area < pick_area) {
+                    pick_index = primitive->scene_object_index;
+                    pick_area = area;
+                }
+                continue;
+            }
+            dx = (double)mx - (double)center.x;
+            dy = (double)my - (double)center.y;
+            dist2 = dx * dx + dy * dy;
+            if (dist2 <= 26.0 * 26.0) {
+                if (pick_index < 0 || dist2 < fallback_dist2) {
+                    pick_index = primitive->scene_object_index;
+                    fallback_dist2 = dist2;
+                }
+            }
+        }
+        for (i = 0; i < digest->primitive_count && i < sceneSettings.objectCount; ++i) {
+            const RuntimeSceneBridgePrimitiveDigest* primitive = &digest->primitives[i];
+            SDL_Rect rect = {0, 0, 0, 0};
+            SDL_Point center = {0, 0};
+            SDL_Rect expanded = {0, 0, 0, 0};
+            double area = 0.0;
+            double dx = 0.0;
+            double dy = 0.0;
+            double dist2 = 0.0;
+            const int pad = 6;
+            if (!primitive->guide_only) continue;
+            if (!SceneEditorDigestOverlayPrimitiveScreenRect(projector, primitive, &rect, &center)) {
                 continue;
             }
             expanded.x = rect.x - pad;
@@ -542,6 +681,71 @@ static void SceneEditorDigestOverlayDrawPrism(SDL_Renderer* renderer,
                                     color);
 }
 
+static void SceneEditorDigestOverlayDrawPrismGuide(SDL_Renderer* renderer,
+                                                   const SceneEditorDigestOverlayProjector* projector,
+                                                   const RuntimeSceneBridgePrimitiveDigest* primitive,
+                                                   SDL_Color color) {
+    double half_w = 0.0;
+    double half_h = 0.0;
+    double half_d = 0.0;
+    if (!renderer || !projector || !primitive) return;
+    if (!(primitive->kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_RECT_PRISM ||
+          primitive->kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_BOX)) {
+        return;
+    }
+    half_w = fmax(0.05, fabs(primitive->width) * 0.5);
+    half_h = fmax(0.05, fabs(primitive->height) * 0.5);
+    half_d = fmax(0.05, fabs(primitive->depth) * 0.5);
+    scene_editor_digest_overlay_draw_dashed_line3(renderer, projector,
+                                                  primitive->origin_x - half_w, primitive->origin_y - half_h, primitive->origin_z - half_d,
+                                                  primitive->origin_x + half_w, primitive->origin_y - half_h, primitive->origin_z - half_d,
+                                                  color);
+    scene_editor_digest_overlay_draw_dashed_line3(renderer, projector,
+                                                  primitive->origin_x + half_w, primitive->origin_y - half_h, primitive->origin_z - half_d,
+                                                  primitive->origin_x + half_w, primitive->origin_y + half_h, primitive->origin_z - half_d,
+                                                  color);
+    scene_editor_digest_overlay_draw_dashed_line3(renderer, projector,
+                                                  primitive->origin_x + half_w, primitive->origin_y + half_h, primitive->origin_z - half_d,
+                                                  primitive->origin_x - half_w, primitive->origin_y + half_h, primitive->origin_z - half_d,
+                                                  color);
+    scene_editor_digest_overlay_draw_dashed_line3(renderer, projector,
+                                                  primitive->origin_x - half_w, primitive->origin_y + half_h, primitive->origin_z - half_d,
+                                                  primitive->origin_x - half_w, primitive->origin_y - half_h, primitive->origin_z - half_d,
+                                                  color);
+    scene_editor_digest_overlay_draw_dashed_line3(renderer, projector,
+                                                  primitive->origin_x - half_w, primitive->origin_y - half_h, primitive->origin_z + half_d,
+                                                  primitive->origin_x + half_w, primitive->origin_y - half_h, primitive->origin_z + half_d,
+                                                  color);
+    scene_editor_digest_overlay_draw_dashed_line3(renderer, projector,
+                                                  primitive->origin_x + half_w, primitive->origin_y - half_h, primitive->origin_z + half_d,
+                                                  primitive->origin_x + half_w, primitive->origin_y + half_h, primitive->origin_z + half_d,
+                                                  color);
+    scene_editor_digest_overlay_draw_dashed_line3(renderer, projector,
+                                                  primitive->origin_x + half_w, primitive->origin_y + half_h, primitive->origin_z + half_d,
+                                                  primitive->origin_x - half_w, primitive->origin_y + half_h, primitive->origin_z + half_d,
+                                                  color);
+    scene_editor_digest_overlay_draw_dashed_line3(renderer, projector,
+                                                  primitive->origin_x - half_w, primitive->origin_y + half_h, primitive->origin_z + half_d,
+                                                  primitive->origin_x - half_w, primitive->origin_y - half_h, primitive->origin_z + half_d,
+                                                  color);
+    scene_editor_digest_overlay_draw_dashed_line3(renderer, projector,
+                                                  primitive->origin_x - half_w, primitive->origin_y - half_h, primitive->origin_z - half_d,
+                                                  primitive->origin_x - half_w, primitive->origin_y - half_h, primitive->origin_z + half_d,
+                                                  color);
+    scene_editor_digest_overlay_draw_dashed_line3(renderer, projector,
+                                                  primitive->origin_x + half_w, primitive->origin_y - half_h, primitive->origin_z - half_d,
+                                                  primitive->origin_x + half_w, primitive->origin_y - half_h, primitive->origin_z + half_d,
+                                                  color);
+    scene_editor_digest_overlay_draw_dashed_line3(renderer, projector,
+                                                  primitive->origin_x + half_w, primitive->origin_y + half_h, primitive->origin_z - half_d,
+                                                  primitive->origin_x + half_w, primitive->origin_y + half_h, primitive->origin_z + half_d,
+                                                  color);
+    scene_editor_digest_overlay_draw_dashed_line3(renderer, projector,
+                                                  primitive->origin_x - half_w, primitive->origin_y + half_h, primitive->origin_z - half_d,
+                                                  primitive->origin_x - half_w, primitive->origin_y + half_h, primitive->origin_z + half_d,
+                                                  color);
+}
+
 static void scene_editor_digest_overlay_draw_seed_prism(
     SDL_Renderer* renderer,
     const SceneEditorDigestOverlayProjector* projector,
@@ -592,6 +796,59 @@ static void scene_editor_digest_overlay_draw_seed_prism(
                                           corners[a][0], corners[a][1], corners[a][2],
                                           corners[b][0], corners[b][1], corners[b][2],
                                           color);
+    }
+}
+
+static void scene_editor_digest_overlay_draw_seed_prism_guide(
+    SDL_Renderer* renderer,
+    const SceneEditorDigestOverlayProjector* projector,
+    const RuntimeSceneBridgePrimitiveSeed* primitive,
+    SDL_Color color) {
+    static const int edges[12][2] = {
+        {0, 1}, {1, 3}, {3, 2}, {2, 0},
+        {4, 5}, {5, 7}, {7, 6}, {6, 4},
+        {0, 4}, {1, 5}, {2, 6}, {3, 7}
+    };
+    double corners[8][3] = {{0.0}};
+    double half_w = 0.0;
+    double half_h = 0.0;
+    double half_d = 0.0;
+    int sx = 0;
+    int sy = 0;
+    int sz = 0;
+    int corner = 0;
+    int edge = 0;
+    if (!renderer || !projector || !primitive || !primitive->has_dimensions) return;
+    half_w = fmax(0.05, fabs(primitive->width) * 0.5);
+    half_h = fmax(0.05, fabs(primitive->height) * 0.5);
+    half_d = fmax(0.05, fabs(primitive->depth) * 0.5);
+    for (sx = -1; sx <= 1; sx += 2) {
+        for (sy = -1; sy <= 1; sy += 2) {
+            for (sz = -1; sz <= 1; sz += 2) {
+                corners[corner][0] = primitive->origin_x +
+                                     primitive->axis_u_x * half_w * (double)sx +
+                                     primitive->axis_v_x * half_h * (double)sy +
+                                     primitive->normal_x * half_d * (double)sz;
+                corners[corner][1] = primitive->origin_y +
+                                     primitive->axis_u_y * half_w * (double)sx +
+                                     primitive->axis_v_y * half_h * (double)sy +
+                                     primitive->normal_y * half_d * (double)sz;
+                corners[corner][2] = primitive->origin_z +
+                                     primitive->axis_u_z * half_w * (double)sx +
+                                     primitive->axis_v_z * half_h * (double)sy +
+                                     primitive->normal_z * half_d * (double)sz;
+                corner += 1;
+            }
+        }
+    }
+    for (edge = 0; edge < 12; ++edge) {
+        int a = edges[edge][0];
+        int b = edges[edge][1];
+        scene_editor_digest_overlay_draw_dashed_line3(renderer,
+                                                      projector,
+                                                      corners[a][0], corners[a][1], corners[a][2],
+                                                      corners[b][0], corners[b][1], corners[b][2],
+                                                      color);
     }
 }
 
@@ -649,15 +906,29 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
                                             ? (SDL_Color){255, 120, 70, 255}
                                             : (SDL_Color){84, 224, 255, 245};
             if (primitive->kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE) {
-                scene_editor_digest_overlay_draw_seed_plane(renderer,
-                                                            projector,
-                                                            primitive,
-                                                            primitive_color);
+                if (primitive->guide_only) {
+                    scene_editor_digest_overlay_draw_seed_plane_guide(renderer,
+                                                                      projector,
+                                                                      primitive,
+                                                                      primitive_color);
+                } else {
+                    scene_editor_digest_overlay_draw_seed_plane(renderer,
+                                                                projector,
+                                                                primitive,
+                                                                primitive_color);
+                }
             } else {
-                scene_editor_digest_overlay_draw_seed_prism(renderer,
-                                                            projector,
-                                                            primitive,
-                                                            primitive_color);
+                if (primitive->guide_only) {
+                    scene_editor_digest_overlay_draw_seed_prism_guide(renderer,
+                                                                      projector,
+                                                                      primitive,
+                                                                      primitive_color);
+                } else {
+                    scene_editor_digest_overlay_draw_seed_prism(renderer,
+                                                                projector,
+                                                                primitive,
+                                                                primitive_color);
+                }
             }
             if (is_selected || is_hover) {
                 scene_editor_digest_overlay_draw_seed_selection_marker(renderer,
@@ -666,48 +937,126 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
                                                                        highlight_color);
             }
         }
+        for (i = 0; i < digest->primitive_count && i < sceneSettings.objectCount; ++i) {
+            const RuntimeSceneBridgePrimitiveDigest* primitive = &digest->primitives[i];
+            SDL_Color primitive_color =
+                SceneEditorDigestOverlayResolvePrimitiveColor(primitive->scene_object_index);
+            bool is_selected = (active_mode == 1 &&
+                                selected_object_index == primitive->scene_object_index);
+            bool is_hover = (active_mode == 1 &&
+                             hover_object_index == primitive->scene_object_index);
+            SDL_Color highlight_color = is_selected
+                                            ? (SDL_Color){255, 120, 70, 255}
+                                            : (SDL_Color){84, 224, 255, 245};
+            if (!primitive->guide_only) continue;
+            if (primitive->kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE && primitive->has_dimensions) {
+                double half_w = fmax(0.05, fabs(primitive->width) * 0.5);
+                double half_h = fmax(0.05, fabs(primitive->height) * 0.5);
+                scene_editor_digest_overlay_draw_dashed_line3(renderer,
+                                                              projector,
+                                                              primitive->origin_x - half_w, primitive->origin_y - half_h, primitive->origin_z,
+                                                              primitive->origin_x + half_w, primitive->origin_y - half_h, primitive->origin_z,
+                                                              primitive_color);
+                scene_editor_digest_overlay_draw_dashed_line3(renderer,
+                                                              projector,
+                                                              primitive->origin_x + half_w, primitive->origin_y - half_h, primitive->origin_z,
+                                                              primitive->origin_x + half_w, primitive->origin_y + half_h, primitive->origin_z,
+                                                              primitive_color);
+                scene_editor_digest_overlay_draw_dashed_line3(renderer,
+                                                              projector,
+                                                              primitive->origin_x + half_w, primitive->origin_y + half_h, primitive->origin_z,
+                                                              primitive->origin_x - half_w, primitive->origin_y + half_h, primitive->origin_z,
+                                                              primitive_color);
+                scene_editor_digest_overlay_draw_dashed_line3(renderer,
+                                                              projector,
+                                                              primitive->origin_x - half_w, primitive->origin_y + half_h, primitive->origin_z,
+                                                              primitive->origin_x - half_w, primitive->origin_y - half_h, primitive->origin_z,
+                                                              primitive_color);
+            } else {
+                SceneEditorDigestOverlayDrawPrismGuide(renderer,
+                                                       projector,
+                                                       primitive,
+                                                       primitive_color);
+            }
+            if (is_selected || is_hover) {
+                SceneEditorDigestOverlayDrawSelectionMarker(renderer, projector, primitive, highlight_color);
+            }
+        }
         return;
     }
 
     for (i = 0; i < digest->primitive_count; ++i) {
         const RuntimeSceneBridgePrimitiveDigest* primitive = &digest->primitives[i];
-        SDL_Color primitive_color = SceneEditorDigestOverlayResolvePrimitiveColor(i);
-        bool is_selected = (active_mode == 1 && selected_object_index == i);
-        bool is_hover = (active_mode == 1 && hover_object_index == i);
+        SDL_Color primitive_color =
+            SceneEditorDigestOverlayResolvePrimitiveColor(primitive->scene_object_index);
+        bool is_selected = (active_mode == 1 &&
+                            selected_object_index == primitive->scene_object_index);
+        bool is_hover = (active_mode == 1 &&
+                         hover_object_index == primitive->scene_object_index);
         SDL_Color highlight_color = is_selected
                                         ? (SDL_Color){255, 120, 70, 255}
                                         : (SDL_Color){84, 224, 255, 245};
         if (primitive->kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE && primitive->has_dimensions) {
             double half_w = fmax(0.05, fabs(primitive->width) * 0.5);
             double half_h = fmax(0.05, fabs(primitive->height) * 0.5);
-            SceneEditorDigestOverlayDrawLine3(renderer,
-                                              projector,
-                                              primitive->origin_x - half_w, primitive->origin_y - half_h, primitive->origin_z,
-                                              primitive->origin_x + half_w, primitive->origin_y - half_h, primitive->origin_z,
-                                              primitive_color);
-            SceneEditorDigestOverlayDrawLine3(renderer,
-                                              projector,
-                                              primitive->origin_x + half_w, primitive->origin_y - half_h, primitive->origin_z,
-                                              primitive->origin_x + half_w, primitive->origin_y + half_h, primitive->origin_z,
-                                              primitive_color);
-            SceneEditorDigestOverlayDrawLine3(renderer,
-                                              projector,
-                                              primitive->origin_x + half_w, primitive->origin_y + half_h, primitive->origin_z,
-                                              primitive->origin_x - half_w, primitive->origin_y + half_h, primitive->origin_z,
-                                              primitive_color);
-            SceneEditorDigestOverlayDrawLine3(renderer,
-                                              projector,
-                                              primitive->origin_x - half_w, primitive->origin_y + half_h, primitive->origin_z,
-                                              primitive->origin_x - half_w, primitive->origin_y - half_h, primitive->origin_z,
-                                              primitive_color);
+            if (primitive->guide_only) {
+                scene_editor_digest_overlay_draw_dashed_line3(renderer,
+                                                              projector,
+                                                              primitive->origin_x - half_w, primitive->origin_y - half_h, primitive->origin_z,
+                                                              primitive->origin_x + half_w, primitive->origin_y - half_h, primitive->origin_z,
+                                                              primitive_color);
+                scene_editor_digest_overlay_draw_dashed_line3(renderer,
+                                                              projector,
+                                                              primitive->origin_x + half_w, primitive->origin_y - half_h, primitive->origin_z,
+                                                              primitive->origin_x + half_w, primitive->origin_y + half_h, primitive->origin_z,
+                                                              primitive_color);
+                scene_editor_digest_overlay_draw_dashed_line3(renderer,
+                                                              projector,
+                                                              primitive->origin_x + half_w, primitive->origin_y + half_h, primitive->origin_z,
+                                                              primitive->origin_x - half_w, primitive->origin_y + half_h, primitive->origin_z,
+                                                              primitive_color);
+                scene_editor_digest_overlay_draw_dashed_line3(renderer,
+                                                              projector,
+                                                              primitive->origin_x - half_w, primitive->origin_y + half_h, primitive->origin_z,
+                                                              primitive->origin_x - half_w, primitive->origin_y - half_h, primitive->origin_z,
+                                                              primitive_color);
+            } else {
+                SceneEditorDigestOverlayDrawLine3(renderer,
+                                                  projector,
+                                                  primitive->origin_x - half_w, primitive->origin_y - half_h, primitive->origin_z,
+                                                  primitive->origin_x + half_w, primitive->origin_y - half_h, primitive->origin_z,
+                                                  primitive_color);
+                SceneEditorDigestOverlayDrawLine3(renderer,
+                                                  projector,
+                                                  primitive->origin_x + half_w, primitive->origin_y - half_h, primitive->origin_z,
+                                                  primitive->origin_x + half_w, primitive->origin_y + half_h, primitive->origin_z,
+                                                  primitive_color);
+                SceneEditorDigestOverlayDrawLine3(renderer,
+                                                  projector,
+                                                  primitive->origin_x + half_w, primitive->origin_y + half_h, primitive->origin_z,
+                                                  primitive->origin_x - half_w, primitive->origin_y + half_h, primitive->origin_z,
+                                                  primitive_color);
+                SceneEditorDigestOverlayDrawLine3(renderer,
+                                                  projector,
+                                                  primitive->origin_x - half_w, primitive->origin_y + half_h, primitive->origin_z,
+                                                  primitive->origin_x - half_w, primitive->origin_y - half_h, primitive->origin_z,
+                                                  primitive_color);
+            }
             if (is_selected || is_hover) {
                 SceneEditorDigestOverlayDrawSelectionMarker(renderer, projector, primitive, highlight_color);
             }
         } else {
-            SceneEditorDigestOverlayDrawPrism(renderer,
-                                              projector,
-                                              primitive,
-                                              primitive_color);
+            if (primitive->guide_only) {
+                SceneEditorDigestOverlayDrawPrismGuide(renderer,
+                                                       projector,
+                                                       primitive,
+                                                       primitive_color);
+            } else {
+                SceneEditorDigestOverlayDrawPrism(renderer,
+                                                  projector,
+                                                  primitive,
+                                                  primitive_color);
+            }
             if (is_selected || is_hover) {
                 SceneEditorDigestOverlayDrawSelectionMarker(renderer, projector, primitive, highlight_color);
             }

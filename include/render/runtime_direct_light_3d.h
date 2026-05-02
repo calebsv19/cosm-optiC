@@ -9,6 +9,7 @@
 typedef struct {
     bool hit;
     Ray3D primaryRay;
+    RuntimeVisibility3DTransmittance primaryTransmittance;
     HitInfo3D hitInfo;
 } RuntimePrimaryHit3DResult;
 

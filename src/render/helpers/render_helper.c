@@ -93,6 +93,101 @@ static void BuildScreenShapePoints(SceneObject* obj, int screenPoints[MAX_POINTS
     }
 }
 
+static void RenderDashedLine(SDL_Renderer* renderer,
+                             int x0,
+                             int y0,
+                             int x1,
+                             int y1,
+                             int dash_len,
+                             int gap_len) {
+    double dx = 0.0;
+    double dy = 0.0;
+    double length = 0.0;
+    double ux = 0.0;
+    double uy = 0.0;
+    double offset = 0.0;
+    if (!renderer) return;
+    if (dash_len <= 0) dash_len = 6;
+    if (gap_len < 0) gap_len = 0;
+    dx = (double)(x1 - x0);
+    dy = (double)(y1 - y0);
+    length = hypot(dx, dy);
+    if (length <= 1.0) {
+        SDL_RenderDrawPoint(renderer, x0, y0);
+        SDL_RenderDrawPoint(renderer, x1, y1);
+        return;
+    }
+    ux = dx / length;
+    uy = dy / length;
+    while (offset < length) {
+        double dash_end = offset + (double)dash_len;
+        int ax = 0;
+        int ay = 0;
+        int bx = 0;
+        int by = 0;
+        if (dash_end > length) dash_end = length;
+        ax = (int)lround((double)x0 + ux * offset);
+        ay = (int)lround((double)y0 + uy * offset);
+        bx = (int)lround((double)x0 + ux * dash_end);
+        by = (int)lround((double)y0 + uy * dash_end);
+        SDL_RenderDrawLine(renderer, ax, ay, bx, by);
+        offset = dash_end + (double)gap_len;
+    }
+}
+
+static void RenderGuideCircle(SDL_Renderer* renderer, int x, int y, int radius) {
+    const double kTau = 6.28318530717958647692;
+    int segments = 0;
+    int i = 0;
+    if (!renderer) return;
+    if (radius < 2) radius = 2;
+    segments = (int)fmax(12.0, floor((double)radius * 1.6));
+    for (i = 0; i < segments; ++i) {
+        if ((i % 2) != 0) continue;
+        {
+            double a0 = ((double)i / (double)segments) * kTau;
+            double a1 = ((double)(i + 1) / (double)segments) * kTau;
+            int x0 = x + (int)lround(cos(a0) * (double)radius);
+            int y0 = y + (int)lround(sin(a0) * (double)radius);
+            int x1 = x + (int)lround(cos(a1) * (double)radius);
+            int y1 = y + (int)lround(sin(a1) * (double)radius);
+            SDL_RenderDrawLine(renderer, x0, y0, x1, y1);
+        }
+    }
+}
+
+static void RenderGuideShape(SDL_Renderer* renderer, SceneObject* obj) {
+    int screenPoints[MAX_POINTS][2];
+    int i = 0;
+    if (!renderer || !obj) return;
+    SDL_SetRenderDrawColor(renderer,
+                           SceneObjectColorR(obj),
+                           SceneObjectColorG(obj),
+                           SceneObjectColorB(obj),
+                           SceneObjectAlphaByte(obj));
+    if (strcmp(obj->type, "circle") == 0) {
+        double depth_scale = (animSettings.spaceMode == SPACE_MODE_3D)
+                                 ? RenderHelper_DepthScaleForObjectZ(obj->z)
+                                 : 1.0;
+        CameraPoint center = ToScreenDepthProjected(obj->x, obj->y, obj->z);
+        int radius = (int)lround(obj->radius * obj->scale * sceneSettings.camera.zoom * depth_scale);
+        RenderGuideCircle(renderer, (int)lround(center.x), (int)lround(center.y), radius);
+        return;
+    }
+    if (obj->numPoints <= 1) return;
+    BuildScreenShapePoints(obj, screenPoints);
+    for (i = 0; i < obj->numPoints; ++i) {
+        int nextIndex = (i + 1) % obj->numPoints;
+        RenderDashedLine(renderer,
+                         screenPoints[i][0],
+                         screenPoints[i][1],
+                         screenPoints[nextIndex][0],
+                         screenPoints[nextIndex][1],
+                         7,
+                         5);
+    }
+}
+
 void RenderFillShape(SDL_Renderer* renderer, SceneObject* obj) {
     if (obj->numPoints < 3) {
         return;
@@ -416,7 +511,10 @@ int RenderLabelTextWrappedLeft(SDL_Renderer* renderer, SDL_Rect area, const char
                 
 
 void RenderSceneObject(SDL_Renderer* renderer, SceneObject* obj, bool fillObjects) {
-
+    if (SceneObjectIsGuideOnly(obj)) {
+        RenderGuideShape(renderer, obj);
+        return;
+    }
 
     if (strcmp(obj->type, "circle") == 0) {
         double depth_scale = (animSettings.spaceMode == SPACE_MODE_3D)
@@ -453,16 +551,6 @@ void RenderSceneObjects(SDL_Renderer* renderer, bool fillObjects) {
 
     for (int i = 0; i < count; i++) {
         SceneObject* obj = &sceneSettings.sceneObjects[draw_order[i]];
-
-        if (strcmp(obj->type, "circle") == 0) {
-            double depth_scale = (animSettings.spaceMode == SPACE_MODE_3D)
-                                     ? RenderHelper_DepthScaleForObjectZ(obj->z)
-                                     : 1.0;
-            CameraPoint center = ToScreenDepthProjected(obj->x, obj->y, obj->z);
-            int radius = (int)lround(obj->radius * obj->scale * sceneSettings.camera.zoom * depth_scale);
-            RenderCircle(renderer, (int)lround(center.x), (int)lround(center.y), radius, fillObjects);
-        } else {
-            RenderShape(renderer, obj, fillObjects);
-        }
+        RenderSceneObject(renderer, obj, fillObjects);
     }
 }

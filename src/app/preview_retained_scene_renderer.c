@@ -3,6 +3,8 @@
 #include <math.h>
 #include <string.h>
 
+#include "config/config_manager.h"
+
 static SDL_Color preview_retained_scene_primitive_color(int primitive_index) {
     static const SDL_Color k_palette[] = {
         {240, 240, 240, 255},
@@ -12,6 +14,15 @@ static SDL_Color preview_retained_scene_primitive_color(int primitive_index) {
     };
     const int palette_count = (int)(sizeof(k_palette) / sizeof(k_palette[0]));
     int index = primitive_index;
+    if (index >= 0 && index < sceneSettings.objectCount) {
+        SceneObject* obj = &sceneSettings.sceneObjects[index];
+        return (SDL_Color){
+            SceneObjectColorR(obj),
+            SceneObjectColorG(obj),
+            SceneObjectColorB(obj),
+            SceneObjectAlphaByte(obj)
+        };
+    }
     if (index < 0) index = 0;
     return k_palette[index % palette_count];
 }

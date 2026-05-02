@@ -341,6 +341,243 @@ static int test_runtime_scene_bridge_apply_authoring_helpers_do_not_block_native
     return 0;
 }
 
+static int test_runtime_scene_bridge_apply_authoring_tag_does_not_mark_real_geometry_guide_only(void) {
+    const char *runtime_json_authored_geometry =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_authored_geometry_native_3d\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"floor\","
+            "\"object_type\":\"plane_primitive\","
+            "\"tags\":[\"authoring\",\"preview\"],"
+            "\"primitive\":{\"kind\":\"plane\",\"width\":6.0,\"height\":6.0,"
+              "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"axis_u\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+              "\"axis_v\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+              "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"panel\","
+            "\"object_type\":\"rect_prism_primitive\","
+            "\"tags\":[\"authoring\"],"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.5},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}},"
+            "\"primitive\":{\"kind\":\"rect_prism_primitive\","
+              "\"width\":1.0,\"height\":1.0,\"depth\":2.0}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":0.0,\"y\":1.0,\"z\":3.0},\"intensity\":1.0}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":2.0,\"z\":8.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeSceneBridge3DPrimitiveSeedState seeds = {0};
+    RuntimeSceneBridge3DDigestState digest = {0};
+    bool ok = runtime_scene_bridge_apply_json(runtime_json_authored_geometry, &summary);
+    assert_true("runtime_scene_apply_authoring_tag_geometry_ok", ok);
+    if (!ok) return 0;
+
+    assert_true("runtime_scene_apply_authoring_tag_geometry_object_count_two",
+                sceneSettings.objectCount == 2);
+    assert_true("runtime_scene_apply_authoring_tag_floor_not_guide",
+                !SceneObjectIsGuideOnly(&sceneSettings.sceneObjects[0]));
+    assert_true("runtime_scene_apply_authoring_tag_panel_not_guide",
+                !SceneObjectIsGuideOnly(&sceneSettings.sceneObjects[1]));
+    assert_true("runtime_scene_apply_authoring_tag_floor_render_participant",
+                SceneObjectParticipatesInRender(&sceneSettings.sceneObjects[0]));
+    assert_true("runtime_scene_apply_authoring_tag_panel_render_participant",
+                SceneObjectParticipatesInRender(&sceneSettings.sceneObjects[1]));
+
+    runtime_scene_bridge_get_last_3d_primitive_seed_state(&seeds);
+    assert_true("runtime_scene_apply_authoring_tag_seeds_valid", seeds.valid);
+    assert_true("runtime_scene_apply_authoring_tag_seed_count_two",
+                seeds.primitive_count == 2);
+
+    runtime_scene_bridge_get_last_3d_digest_state(&digest);
+    assert_true("runtime_scene_apply_authoring_tag_digest_valid", digest.valid);
+    assert_true("runtime_scene_apply_authoring_tag_digest_count_two",
+                digest.primitive_count == 2);
+    assert_true("runtime_scene_apply_authoring_tag_floor_digest_not_guide",
+                !digest.primitives[0].guide_only);
+    assert_true("runtime_scene_apply_authoring_tag_panel_digest_not_guide",
+                !digest.primitives[1].guide_only);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_apply_physics_emitter_overlay_marks_guide_only(void) {
+    const char *runtime_json_emitter_helper =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_emitter_helper_native_3d\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"floor\","
+            "\"object_type\":\"plane_primitive\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":6.0,\"height\":6.0,"
+              "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"axis_u\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+              "\"axis_v\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+              "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"emitter_guide\","
+            "\"object_type\":\"rect_prism_primitive\","
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.5},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}},"
+            "\"primitive\":{\"kind\":\"rect_prism_primitive\","
+              "\"width\":1.0,\"height\":1.0,\"depth\":2.0}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":2.0,\"z\":8.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{"
+          "\"physics_sim\":{"
+            "\"object_overlays\":[{"
+              "\"object_id\":\"emitter_guide\","
+              "\"motion_mode\":\"Static\","
+              "\"initial_velocity\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+              "\"emitter\":{"
+                "\"active\":true,"
+                "\"type\":\"Jet\","
+                "\"radius\":1.0,"
+                "\"strength\":1.0,"
+                "\"direction\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}"
+              "}"
+            "}]"
+          "}"
+        "}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeSceneBridge3DPrimitiveSeedState seeds = {0};
+    RuntimeSceneBridge3DDigestState digest = {0};
+    bool ok = runtime_scene_bridge_apply_json(runtime_json_emitter_helper, &summary);
+    assert_true("runtime_scene_apply_emitter_helper_ok", ok);
+    if (!ok) return 0;
+
+    assert_true("runtime_scene_apply_emitter_helper_object_count_two",
+                sceneSettings.objectCount == 2);
+    assert_true("runtime_scene_apply_emitter_helper_floor_not_guide",
+                !SceneObjectIsGuideOnly(&sceneSettings.sceneObjects[0]));
+    assert_true("runtime_scene_apply_emitter_helper_object_guide_only",
+                SceneObjectIsGuideOnly(&sceneSettings.sceneObjects[1]));
+    assert_true("runtime_scene_apply_emitter_helper_object_not_render_participant",
+                !SceneObjectParticipatesInRender(&sceneSettings.sceneObjects[1]));
+    assert_true("runtime_scene_apply_emitter_helper_object_tinted_jet_green",
+                sceneSettings.sceneObjects[1].color == SceneObjectPackRGBBytes(74, 232, 124));
+
+    runtime_scene_bridge_get_last_3d_primitive_seed_state(&seeds);
+    assert_true("runtime_scene_apply_emitter_helper_seeds_valid", seeds.valid);
+    assert_true("runtime_scene_apply_emitter_helper_retained_seed_count_one",
+                seeds.primitive_count == 1);
+    assert_true("runtime_scene_apply_emitter_helper_seed_floor_index_zero",
+                seeds.primitives[0].scene_object_index == 0);
+
+    runtime_scene_bridge_get_last_3d_digest_state(&digest);
+    assert_true("runtime_scene_apply_emitter_helper_digest_valid", digest.valid);
+    assert_true("runtime_scene_apply_emitter_helper_digest_count_two",
+                digest.primitive_count == 2);
+    assert_true("runtime_scene_apply_emitter_helper_digest_floor_scene_object_index_zero",
+                digest.primitives[0].scene_object_index == 0);
+    assert_true("runtime_scene_apply_emitter_helper_digest_emitter_scene_object_index_one",
+                digest.primitives[1].scene_object_index == 1);
+    assert_true("runtime_scene_apply_emitter_helper_digest_guide_flag",
+                digest.primitives[1].guide_only);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_authoring_overlay_does_not_override_helper_tint(void) {
+    const char *runtime_json_emitter_helper =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_emitter_helper_tint_lock\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"floor\","
+            "\"object_type\":\"plane_primitive\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":6.0,\"height\":6.0,"
+              "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"axis_u\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+              "\"axis_v\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+              "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"emitter_guide\","
+            "\"object_type\":\"rect_prism_primitive\","
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.5},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}},"
+            "\"primitive\":{\"kind\":\"rect_prism_primitive\","
+              "\"width\":1.0,\"height\":1.0,\"depth\":2.0}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":2.0,\"z\":8.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{"
+          "\"physics_sim\":{"
+            "\"object_overlays\":[{"
+              "\"object_id\":\"emitter_guide\","
+              "\"motion_mode\":\"Static\","
+              "\"initial_velocity\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+              "\"emitter\":{"
+                "\"active\":true,"
+                "\"type\":\"Jet\","
+                "\"radius\":1.0,"
+                "\"strength\":1.0,"
+                "\"direction\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}"
+              "}"
+            "}]"
+          "},"
+          "\"ray_tracing\":{"
+            "\"authoring\":{"
+              "\"object_materials\":[{"
+                "\"object_id\":\"emitter_guide\","
+                "\"material_id\":0,"
+                "\"object_color\":16777215,"
+                "\"alpha\":1.0,"
+                "\"emissive_strength\":1.0"
+              "}]"
+            "}"
+          "}"
+        "}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    bool ok = runtime_scene_bridge_apply_json(runtime_json_emitter_helper, &summary);
+    assert_true("runtime_scene_apply_emitter_helper_tint_lock_ok", ok);
+    if (!ok) return 0;
+    assert_true("runtime_scene_apply_emitter_helper_tint_lock_stays_guide_only",
+                SceneObjectIsGuideOnly(&sceneSettings.sceneObjects[1]));
+    assert_true("runtime_scene_apply_emitter_helper_tint_lock_keeps_jet_green",
+                sceneSettings.sceneObjects[1].color == SceneObjectPackRGBBytes(74, 232, 124));
+    return 0;
+}
+
 static int test_runtime_scene_bridge_apply_ps4d_fixture_retains_digest_truth(void) {
     RuntimeSceneBridgePreflight summary;
     RuntimeSceneBridge3DScaffoldState scaffold;
@@ -704,6 +941,9 @@ int run_test_runtime_scene_bridge_core_tests(void) {
     test_runtime_scene_bridge_apply_preserves_editor_mode_state();
     test_runtime_scene_bridge_apply_3d_primitives_scaffold();
     test_runtime_scene_bridge_apply_authoring_helpers_do_not_block_native_3d();
+    test_runtime_scene_bridge_apply_authoring_tag_does_not_mark_real_geometry_guide_only();
+    test_runtime_scene_bridge_apply_physics_emitter_overlay_marks_guide_only();
+    test_runtime_scene_bridge_authoring_overlay_does_not_override_helper_tint();
     test_runtime_scene_bridge_apply_ps4d_fixture_retains_digest_truth();
     test_runtime_scene_bridge_apply_ps4d_fixture_retains_primitive_seed_truth();
     test_scene_compile_and_preflight_roundtrip();

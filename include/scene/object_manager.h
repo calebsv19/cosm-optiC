@@ -37,6 +37,7 @@ typedef struct {
     int material_id;       // Material preset reference
 
     bool dirty;            // Needs update?
+    bool guideOnly;        // Authoring helper visible in editor/preview, excluded from render geometry
 } SceneObject;
 
 typedef struct {
@@ -73,6 +74,8 @@ bool IsInsideObject(int mx, int my, SceneObject* obj);
 void ComputeObjectBounds(const SceneObject* obj, double* minX, double* minY, double* maxX, double* maxY);
 void MarkObjectDirty(SceneObject* obj);
 bool IsObjectDirty(SceneObject* obj);
+bool SceneObjectIsGuideOnly(const SceneObject* obj);
+bool SceneObjectParticipatesInRender(const SceneObject* obj);
 
 int SceneObjectPackRGBBytes(Uint8 r, Uint8 g, Uint8 b);
 Uint8 SceneObjectColorR(const SceneObject* obj);

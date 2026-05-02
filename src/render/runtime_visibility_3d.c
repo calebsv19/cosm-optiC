@@ -3,6 +3,7 @@
 #include <math.h>
 
 #include "render/runtime_material_payload_3d.h"
+#include "render/runtime_volume_3d_integrate.h"
 
 static const double kRuntimeVisibility3DEpsilon = 1e-4;
 static const double kRuntimeVisibility3DMinimumTransmittance = 1e-4;
@@ -19,6 +20,24 @@ static double runtime_visibility_3d_clamp(double value,
 
 static double runtime_visibility_3d_luminance(double r, double g, double b) {
     return runtime_visibility_3d_clamp(0.2126 * r + 0.7152 * g + 0.0722 * b, 0.0, 1.0);
+}
+
+static RuntimeVisibility3DTransmittance runtime_visibility_3d_zero_transmittance(void) {
+    RuntimeVisibility3DTransmittance zero = {0};
+    return zero;
+}
+
+static void runtime_visibility_3d_multiply_transmittance(
+    RuntimeVisibility3DTransmittance* io_transmittance,
+    const RuntimeVisibility3DTransmittance* segment_transmittance) {
+    if (!io_transmittance || !segment_transmittance) return;
+
+    io_transmittance->r *= segment_transmittance->r;
+    io_transmittance->g *= segment_transmittance->g;
+    io_transmittance->b *= segment_transmittance->b;
+    io_transmittance->luma = runtime_visibility_3d_luminance(io_transmittance->r,
+                                                             io_transmittance->g,
+                                                             io_transmittance->b);
 }
 
 RuntimeVisibility3DTransmittance RuntimeVisibility3D_UnitTransmittance(void) {
@@ -101,15 +120,26 @@ static RuntimeVisibility3DTransmittance runtime_visibility_3d_trace_transmittanc
     int target_scene_object_index,
     int target_triangle_index) {
     Ray3D current_ray = {0};
+    Ray3D segment_ray = {0};
     double remaining_distance = ray_length;
     RuntimeVisibility3DTransmittance transmittance = RuntimeVisibility3D_UnitTransmittance();
+    RuntimeVisibility3DTransmittance volume_transmittance = RuntimeVisibility3D_UnitTransmittance();
     int skip_count = 0;
 
     if (!scene) {
-        RuntimeVisibility3DTransmittance zero = {0};
-        return zero;
+        return runtime_visibility_3d_zero_transmittance();
     }
     if (!(ray_length > kRuntimeVisibility3DEpsilon)) return transmittance;
+
+    segment_ray = RuntimeRay3D_Make(ray_origin, ray_dir);
+    volume_transmittance = RuntimeVolume3D_TransmittanceAlongRayRGB(&scene->volume,
+                                                                    &segment_ray,
+                                                                    kRuntimeVisibility3DEpsilon,
+                                                                    ray_length);
+    runtime_visibility_3d_multiply_transmittance(&transmittance, &volume_transmittance);
+    if (!(transmittance.luma > kRuntimeVisibility3DMinimumTransmittance)) {
+        return runtime_visibility_3d_zero_transmittance();
+    }
 
     current_ray = RuntimeRay3D_MakeOffset(ray_origin,
                                           ray_normal,
@@ -145,12 +175,10 @@ static RuntimeVisibility3DTransmittance runtime_visibility_3d_trace_transmittanc
             return transmittance;
         }
         if (!RuntimeMaterialPayload3D_ResolveFromHit(&blocker_hit, &payload)) {
-            RuntimeVisibility3DTransmittance zero = {0};
-            return zero;
+            return runtime_visibility_3d_zero_transmittance();
         }
         if (!(payload.transparency > 0.0)) {
-            RuntimeVisibility3DTransmittance zero = {0};
-            return zero;
+            return runtime_visibility_3d_zero_transmittance();
         }
 
         transparent_object_index = blocker_hit.sceneObjectIndex;
@@ -198,8 +226,7 @@ static RuntimeVisibility3DTransmittance runtime_visibility_3d_trace_transmittanc
                                                               fmax(segment_distance, 1.0),
                                                               &transmittance);
         if (!(transmittance.luma > kRuntimeVisibility3DMinimumTransmittance)) {
-            RuntimeVisibility3DTransmittance zero = {0};
-            return zero;
+            return runtime_visibility_3d_zero_transmittance();
         }
 
         /* The current ray has already been advanced beyond the transparent

@@ -89,7 +89,12 @@ AnimationConfig animSettings = {
     .sceneSource = SCENE_SOURCE_CONFIG_2D,
     .useFluidScene = false,
     .fluidManifest = "",
-    .runtimeScenePath = ""
+    .runtimeScenePath = "",
+    .volumeInteractionEnabled = false,
+    .volumeSourceKind = VOLUME_SOURCE_NONE,
+    .volumeSourcePath = "",
+    .volumeAffectsLighting = true,
+    .volumeDebugOverlayEnabled = false
 };
 
 SceneConfig sceneSettings = {

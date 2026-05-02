@@ -845,6 +845,7 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
 
     // ✅ Draw objects using the new method
     for (int i = 0; i < sceneSettings.objectCount; i++) {
+        if (!SceneObjectParticipatesInRender(&sceneSettings.sceneObjects[i])) continue;
         int brightness = CalculateObjectBrightness(&sceneSettings.sceneObjects[i], light.x, light.y);
         SDL_SetRenderDrawColor(renderer, brightness, brightness, brightness, 255);
         RenderSceneObject(renderer, &sceneSettings.sceneObjects[i], true);

@@ -561,11 +561,17 @@ void ObjectEditorAssignColorToSelected(int packed_color) {
     if (selectedObjectIndex < 0 || selectedObjectIndex >= sceneSettings.objectCount) {
         return;
     }
+    if (SceneObjectIsGuideOnly(&sceneSettings.sceneObjects[selectedObjectIndex])) {
+        return;
+    }
     ObjectEditorObjectAssignColor(&sceneSettings.sceneObjects[selectedObjectIndex], packed_color);
 }
 
 void ObjectEditorAssignAlphaToSelected(double alpha) {
     if (selectedObjectIndex < 0 || selectedObjectIndex >= sceneSettings.objectCount) {
+        return;
+    }
+    if (SceneObjectIsGuideOnly(&sceneSettings.sceneObjects[selectedObjectIndex])) {
         return;
     }
     ObjectEditorObjectAssignAlpha(&sceneSettings.sceneObjects[selectedObjectIndex],

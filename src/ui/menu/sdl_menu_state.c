@@ -13,9 +13,14 @@
 #include "config/config_manager.h"
 #include "editor/editor_mode_router.h"
 #include "engine/Render/render_pipeline.h"
+#include "import/fluid_volume_import_3d.h"
 #include "render/ray_tracing_integrator_catalog.h"
+#include "render/runtime_volume_3d_debug.h"
 #include "render/text_font_cache.h"
 #include "ui/scene_source_catalog.h"
+#include "ui/scene_source_ui_labels.h"
+#include "ui/volume_source_catalog.h"
+#include "ui/volume_source_ui_labels.h"
 
 #define TOGGLE_BUTTON_TEXT_SIZE 14
 static const int kMenuMinFontPointSize = 6;
@@ -118,11 +123,19 @@ static void menu_state_sync_load_scene_dropdown_flags(MenuRuntimeState* state) {
     }
 }
 
+static void menu_state_sync_volume_dropdown_flags(MenuRuntimeState* state) {
+    if (!state) return;
+    if (!state->volumeDropdownOpen) {
+        state->volumeScrollbarDragging = false;
+    }
+}
+
 static void menu_state_sync_source_and_library(MenuRuntimeState* state) {
     if (!state) return;
     state->activeSceneSource = animation_config_scene_source_clamp(animSettings.sceneSource);
     state->activeSceneLibraryLane = menu_library_lane_from_source(state->activeSceneSource);
     menu_state_sync_load_scene_dropdown_flags(state);
+    menu_state_sync_volume_dropdown_flags(state);
 }
 
 void menu_state_build_manifest_label(const char *path, char *out, size_t out_size) {
@@ -166,18 +179,10 @@ static void add_manifest_option_from_catalog_entry(MenuRuntimeState* state,
     strncpy(opt->path, entry->path, sizeof(opt->path) - 1);
     opt->path[sizeof(opt->path) - 1] = '\0';
     opt->source = animation_config_scene_source_clamp(entry->source);
-    menu_state_build_manifest_label(entry->path, opt->name, sizeof(opt->name));
-    if (opt->source == SCENE_SOURCE_RUNTIME_SCENE) {
-        char decorated[sizeof(opt->name)];
-        snprintf(decorated, sizeof(decorated), "runtime: %s", opt->name);
-        strncpy(opt->name, decorated, sizeof(opt->name) - 1);
-        opt->name[sizeof(opt->name) - 1] = '\0';
-    } else if (opt->source == SCENE_SOURCE_FLUID_MANIFEST) {
-        char decorated[sizeof(opt->name)];
-        snprintf(decorated, sizeof(decorated), "fluid: %s", opt->name);
-        strncpy(opt->name, decorated, sizeof(opt->name) - 1);
-        opt->name[sizeof(opt->name) - 1] = '\0';
-    }
+    scene_source_ui_format_catalog_option_label(entry->path,
+                                                opt->source,
+                                                opt->name,
+                                                sizeof(opt->name));
 }
 
 static void add_manifest_option_2d_config(MenuRuntimeState* state) {
@@ -202,6 +207,136 @@ static int manifest_option_compare(const void *lhs, const void *rhs) {
     cmp = strcmp(a->name, b->name);
     if (cmp != 0) return cmp;
     return strcmp(a->path, b->path);
+}
+
+static int volume_option_compare(const void *lhs, const void *rhs) {
+    const VolumeSourceOption *a = (const VolumeSourceOption *)lhs;
+    const VolumeSourceOption *b = (const VolumeSourceOption *)rhs;
+    int a_kind = animation_config_volume_source_kind_clamp(a ? a->kind : VOLUME_SOURCE_NONE);
+    int b_kind = animation_config_volume_source_kind_clamp(b ? b->kind : VOLUME_SOURCE_NONE);
+    int cmp = 0;
+    if (!a || !b) return 0;
+    if (a_kind != b_kind) return a_kind - b_kind;
+    cmp = strcmp(a->name, b->name);
+    if (cmp != 0) return cmp;
+    return strcmp(a->path, b->path);
+}
+
+static void add_volume_option_from_catalog_entry(MenuRuntimeState* state,
+                                                 const VolumeSourceCatalogEntry *entry) {
+    VolumeSourceOption *opt = NULL;
+    if (!state || !entry || !entry->path[0]) return;
+    if (state->volumeOptionCount >= SDL_MENU_MAX_MANIFEST_OPTIONS) return;
+
+    opt = &state->volumeOptions[state->volumeOptionCount++];
+    strncpy(opt->path, entry->path, sizeof(opt->path) - 1);
+    opt->path[sizeof(opt->path) - 1] = '\0';
+    opt->kind = animation_config_volume_source_kind_clamp(entry->kind);
+    volume_source_ui_format_catalog_option_label(entry->path,
+                                                 opt->kind,
+                                                 opt->name,
+                                                 sizeof(opt->name));
+}
+
+static void menu_state_clear_volume_summary(MenuRuntimeState* state) {
+    if (!state) return;
+    state->volumeSummaryValid = false;
+    state->volumeSummaryLine1[0] = '\0';
+    state->volumeSummaryLine2[0] = '\0';
+    state->volumeSummaryPath[0] = '\0';
+    state->volumeSummaryKind = VOLUME_SOURCE_NONE;
+    state->volumeSummaryEnabled = false;
+}
+
+static void menu_state_refresh_volume_debug_summary(MenuRuntimeState* state) {
+    RuntimeVolumeAttachment3D attachment = {0};
+    RuntimeVolumeDebugSummary3D summary;
+    RuntimeVolume3DSourceKind runtime_kind = RUNTIME_VOLUME_3D_SOURCE_NONE;
+    char diagnostics[128] = {0};
+
+    if (!state) return;
+    if (!animSettings.volumeSourcePath[0] ||
+        animation_config_volume_source_kind_clamp(animSettings.volumeSourceKind) == VOLUME_SOURCE_NONE) {
+        menu_state_clear_volume_summary(state);
+        snprintf(state->volumeSummaryLine1, sizeof(state->volumeSummaryLine1), "Volume: none");
+        snprintf(state->volumeSummaryLine2, sizeof(state->volumeSummaryLine2), "Attach an external VF3D, pack, or bundle");
+        return;
+    }
+
+    if (strcmp(state->volumeSummaryPath, animSettings.volumeSourcePath) == 0 &&
+        state->volumeSummaryKind == animation_config_volume_source_kind_clamp(animSettings.volumeSourceKind) &&
+        state->volumeSummaryEnabled == animSettings.volumeInteractionEnabled &&
+        state->volumeSummaryValid) {
+        return;
+    }
+
+    menu_state_clear_volume_summary(state);
+    runtime_kind = (RuntimeVolume3DSourceKind)animation_config_volume_source_kind_clamp(animSettings.volumeSourceKind);
+    switch (runtime_kind) {
+        case RUNTIME_VOLUME_3D_SOURCE_MANIFEST:
+        case RUNTIME_VOLUME_3D_SOURCE_RAW_VF3D:
+        case RUNTIME_VOLUME_3D_SOURCE_PACK:
+            break;
+        case RUNTIME_VOLUME_3D_SOURCE_NONE:
+        default:
+            snprintf(state->volumeSummaryLine1, sizeof(state->volumeSummaryLine1), "Volume: unsupported");
+            snprintf(state->volumeSummaryLine2, sizeof(state->volumeSummaryLine2), "Configured kind is invalid");
+            return;
+    }
+
+    if (!fluid_volume_import_3d_load_source(animSettings.volumeSourcePath,
+                                            runtime_kind,
+                                            &attachment,
+                                            diagnostics,
+                                            sizeof(diagnostics))) {
+        snprintf(state->volumeSummaryLine1,
+                 sizeof(state->volumeSummaryLine1),
+                 "Volume unresolved");
+        snprintf(state->volumeSummaryLine2,
+                 sizeof(state->volumeSummaryLine2),
+                 "%s",
+                 diagnostics[0] ? diagnostics : "Attach failed");
+        return;
+    }
+
+    RuntimeVolumeDebugSummary3D_Reset(&summary);
+    if (!RuntimeVolumeDebugSummary3D_Build(&attachment, &summary)) {
+        RuntimeVolumeAttachment3D_Reset(&attachment);
+        snprintf(state->volumeSummaryLine1, sizeof(state->volumeSummaryLine1), "Volume summary failed");
+        snprintf(state->volumeSummaryLine2, sizeof(state->volumeSummaryLine2), "Debug summary unavailable");
+        return;
+    }
+
+    snprintf(state->volumeSummaryLine1,
+             sizeof(state->volumeSummaryLine1),
+             "%s | %ux%ux%u | %s",
+             summary.sourceKind == RUNTIME_VOLUME_3D_SOURCE_MANIFEST ? "Manifest" :
+             summary.sourceKind == RUNTIME_VOLUME_3D_SOURCE_RAW_VF3D ? "VF3D" : "Pack",
+             summary.gridW,
+             summary.gridH,
+             summary.gridD,
+             animSettings.volumeInteractionEnabled ? "on" : "off");
+    if (summary.hasDensityRange) {
+        snprintf(state->volumeSummaryLine2,
+                 sizeof(state->volumeSummaryLine2),
+                 "Density %.4f..%.4f nz=%llu%s",
+                 summary.densityMin,
+                 summary.densityMax,
+                 (unsigned long long)summary.densityNonZeroCellCount,
+                 summary.sourceKind == RUNTIME_VOLUME_3D_SOURCE_MANIFEST ? " first-frame" : "");
+    } else {
+        snprintf(state->volumeSummaryLine2,
+                 sizeof(state->volumeSummaryLine2),
+                 "Density range unavailable%s",
+                 summary.sourceKind == RUNTIME_VOLUME_3D_SOURCE_MANIFEST ? " first-frame" : "");
+    }
+
+    strncpy(state->volumeSummaryPath, animSettings.volumeSourcePath, sizeof(state->volumeSummaryPath) - 1);
+    state->volumeSummaryPath[sizeof(state->volumeSummaryPath) - 1] = '\0';
+    state->volumeSummaryKind = animation_config_volume_source_kind_clamp(animSettings.volumeSourceKind);
+    state->volumeSummaryEnabled = animSettings.volumeInteractionEnabled;
+    state->volumeSummaryValid = true;
+    RuntimeVolumeAttachment3D_Reset(&attachment);
 }
 
 bool menu_state_manifest_option_visible(const MenuRuntimeState* state,
@@ -248,6 +383,30 @@ void menu_state_refresh_manifest_options(MenuRuntimeState* state) {
     state->manifestMaxScroll = 0.0f;
 }
 
+void menu_state_refresh_volume_options(MenuRuntimeState* state) {
+    VolumeSourceCatalogEntry catalog_entries[SDL_MENU_MAX_MANIFEST_OPTIONS];
+    const char **roots = NULL;
+    size_t root_count = 0;
+    size_t catalog_entry_count = 0;
+    if (!state) return;
+    state->volumeOptionCount = 0;
+    root_count = ray_tracing_manifest_default_roots(&roots);
+    catalog_entry_count = volume_source_catalog_collect(catalog_entries,
+                                                        SDL_MENU_MAX_MANIFEST_OPTIONS,
+                                                        roots,
+                                                        root_count,
+                                                        animSettings.volumeSourcePath);
+    for (size_t i = 0; i < catalog_entry_count; ++i) {
+        add_volume_option_from_catalog_entry(state, &catalog_entries[i]);
+    }
+    qsort(state->volumeOptions,
+          state->volumeOptionCount,
+          sizeof(state->volumeOptions[0]),
+          volume_option_compare);
+    state->volumeScroll = 0.0f;
+    state->volumeMaxScroll = 0.0f;
+}
+
 void menu_state_manifest_clamp_scroll(MenuRuntimeState* state) {
     if (!state) return;
     if (state->manifestScroll < 0.0f) state->manifestScroll = 0.0f;
@@ -258,6 +417,18 @@ void menu_state_manifest_scroll_by(MenuRuntimeState* state, float delta) {
     if (!state) return;
     state->manifestScroll += delta;
     menu_state_manifest_clamp_scroll(state);
+}
+
+void menu_state_volume_clamp_scroll(MenuRuntimeState* state) {
+    if (!state) return;
+    if (state->volumeScroll < 0.0f) state->volumeScroll = 0.0f;
+    if (state->volumeScroll > state->volumeMaxScroll) state->volumeScroll = state->volumeMaxScroll;
+}
+
+void menu_state_volume_scroll_by(MenuRuntimeState* state, float delta) {
+    if (!state) return;
+    state->volumeScroll += delta;
+    menu_state_volume_clamp_scroll(state);
 }
 
 float menu_state_slider_clamp_scroll(float value, float max_scroll) {
@@ -399,6 +570,7 @@ void menu_state_sync_from_anim(MenuRuntimeState* state) {
     sync_temporal_frames_3d_slider_from_settings(state);
     sync_render_scale_3d_slider_from_settings(state);
     menu_state_sync_source_and_library(state);
+    menu_state_refresh_volume_debug_summary(state);
 }
 
 void menu_state_reanchor_camera_after_resize(int previousWidth, int previousHeight) {
@@ -420,11 +592,26 @@ void menu_state_set_load_scene_enabled(MenuRuntimeState* state, bool enabled) {
     if (!state) return;
     if (enabled) {
         state->manifestDropdownOpen = true;
+        state->volumeDropdownOpen = false;
         menu_state_refresh_manifest_options(state);
         state->manifestScroll = 0.0f;
         state->manifestScrollbarDragging = false;
     } else {
         state->manifestDropdownOpen = false;
+    }
+    menu_state_sync_source_and_library(state);
+}
+
+void menu_state_set_volume_load_enabled(MenuRuntimeState* state, bool enabled) {
+    if (!state) return;
+    if (enabled) {
+        state->volumeDropdownOpen = true;
+        state->manifestDropdownOpen = false;
+        menu_state_refresh_volume_options(state);
+        state->volumeScroll = 0.0f;
+        state->volumeScrollbarDragging = false;
+    } else {
+        state->volumeDropdownOpen = false;
     }
     menu_state_sync_source_and_library(state);
 }
@@ -545,10 +732,12 @@ void menu_state_init(MenuRuntimeState* state) {
     state->temporalFrames3DSliderValue = RUNTIME_3D_TEMPORAL_FRAMES_DEFAULT;
     state->renderScale3DSliderValue = RUNTIME_3D_RENDER_SCALE_DEFAULT;
     state->manifestDropdownOpen = false;
+    state->volumeDropdownOpen = false;
     menu_state_sync_load_scene_dropdown_flags(state);
     menu_state_sync_from_anim(state);
     menu_state_sync_source_and_library(state);
     menu_state_refresh_manifest_options(state);
+    menu_state_refresh_volume_options(state);
     if (animSettings.inputRoot[0]) {
         (void)setenv("RAY_TRACING_INPUT_ROOT", animSettings.inputRoot, 1);
     }
@@ -564,6 +753,7 @@ void menu_state_init(MenuRuntimeState* state) {
     state->editingVideoOutputRoot = false;
     state->editingStartFrame = false;
     state->pathInputBuffer[0] = '\0';
+    menu_state_clear_volume_summary(state);
     menu_batch_panel_refresh(state);
     state->sliderScroll = 0.0f;
     state->sliderMaxScroll = 0.0f;
@@ -628,6 +818,7 @@ void menu_state_reset_defaults(MenuRuntimeState* state) {
     animSettings.useFluidScene = false;
     animSettings.fluidManifest[0] = '\0';
     animSettings.runtimeScenePath[0] = '\0';
+    AnimationClearVolumeSource();
     animSettings.textZoomStep = 0;
     animSettings.previewMode = false;
     animSettings.previewDuration = 5.0;
@@ -644,6 +835,10 @@ void menu_state_reset_defaults(MenuRuntimeState* state) {
     animSettings.temporalFrames3D = RUNTIME_3D_TEMPORAL_FRAMES_DEFAULT;
     animSettings.renderScale3D = RUNTIME_3D_RENDER_SCALE_DEFAULT;
     menu_state_sync_from_anim(state);
+    if (state) {
+        menu_state_refresh_manifest_options(state);
+        menu_state_refresh_volume_options(state);
+    }
     if (state) {
         state->oldWindowWidth = sceneSettings.windowWidth;
         state->oldWindowHeight = sceneSettings.windowHeight;

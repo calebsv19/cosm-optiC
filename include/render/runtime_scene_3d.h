@@ -5,6 +5,7 @@
 
 #include "config/config_manager.h"
 #include "math/vec3.h"
+#include "render/runtime_volume_3d.h"
 
 #define RUNTIME_SCENE_3D_MAX_OBJECT_ID 64
 
@@ -23,8 +24,12 @@ typedef struct {
 
 typedef struct {
     bool rendererOwnsGeometryTruth;
+    bool rendererOwnsVolumeAttachmentTruth;
     bool sceneObjectsRemainCompatOnly;
     bool previewDigestIsNonAuthoritative;
+    bool volumeAttachmentIsOptional;
+    bool geometryAndVolumeSourcesRemainSeparate;
+    bool legacyPlanarFluidOverlayRemainsSeparate;
 } RuntimeScene3DOwnershipContract;
 
 typedef struct {
@@ -99,6 +104,7 @@ typedef struct {
     int primitiveCount;
     int primitiveCapacity;
     RuntimeTriangleMesh3D triangleMesh;
+    RuntimeVolumeAttachment3D volume;
     RuntimeLight3D light;
     bool hasLight;
     RuntimeCamera3D camera;

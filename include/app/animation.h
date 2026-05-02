@@ -69,6 +69,13 @@ bool AnimationApplyActiveSceneSource(void);
 // On apply failure, previous source lane/path state is restored.
 bool AnimationSelectSceneSource(int source, const char *path, bool apply_immediately);
 
+// Transactionally set the native 3D volume source lane and optionally validate/apply it.
+// On apply failure, previous volume-source state is restored.
+bool AnimationSelectVolumeSource(int kind, const char *path, bool apply_immediately);
+
+// Clears the native 3D volume source lane and disables atmosphere interaction.
+void AnimationClearVolumeSource(void);
+
 // Apply persisted active source at startup/editor session boundaries.
 // When persist_on_failure is true, fallback corrections are saved for deterministic reopen.
 bool AnimationRestoreActiveSceneSource(bool persist_on_failure);

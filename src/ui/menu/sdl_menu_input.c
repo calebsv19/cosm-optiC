@@ -14,8 +14,10 @@
 #include "engine/Render/render_font.h"
 #include "render/ray_tracing_integrator_catalog.h"
 #include "ui/menu_batch_panel.h"
+#include "ui/scene_source_ui_labels.h"
 #include "ui/shared_theme_font_adapter.h"
 #include "ui/text_zoom_shortcuts.h"
+#include "ui/volume_source_ui_labels.h"
 
 static bool point_in_rect(const SDL_Rect *rect, int x, int y) {
     if (!rect) return false;
@@ -82,6 +84,7 @@ static void apply_input_root(MenuRuntimeState *state, const char *path) {
     snprintf(animSettings.inputRoot, sizeof(animSettings.inputRoot), "%s", path);
     (void)setenv("RAY_TRACING_INPUT_ROOT", animSettings.inputRoot, 1);
     menu_state_refresh_manifest_options(state);
+    menu_state_refresh_volume_options(state);
     snprintf(state->statusLabel, sizeof(state->statusLabel), "Input root set");
     state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
     state->statusColor = (SDL_Color){120, 220, 180, 255};
@@ -328,6 +331,14 @@ void menu_input_handle_mouse_motion(SDL_Event* event, MenuRuntimeState* state) {
         state->manifestScroll = newScroll;
         menu_state_manifest_clamp_scroll(state);
     }
+    if (state->volumeScrollbarDragging && state->volumeDropdownOpen && state->volumeScrollbarVisible) {
+        float trackRange = state->volumeTrackHeight - state->volumeThumbHeight;
+        if (trackRange < 1.0f) trackRange = 1.0f;
+        int deltaY = event->motion.y - state->volumeDragStartY;
+        float newScroll = state->volumeScrollStart + ((float)deltaY * state->volumeMaxScroll / trackRange);
+        state->volumeScroll = newScroll;
+        menu_state_volume_clamp_scroll(state);
+    }
 
     if (!state->draggingSlider || !state->selectedSlider) return;
 
@@ -362,6 +373,11 @@ void menu_input_handle_mouse_wheel(SDL_Event *event, MenuRuntimeState* state) {
     if (state->manifestDropdownOpen && point_in_rect(&state->manifestPanelRect, mx, my)) {
         float delta = (float)event->wheel.y * (float)(SDL_MENU_MANIFEST_ITEM_HEIGHT * 2);
         menu_state_manifest_scroll_by(state, -delta);
+        return;
+    }
+    if (state->volumeDropdownOpen && point_in_rect(&state->volumePanelRect, mx, my)) {
+        float delta = (float)event->wheel.y * (float)(SDL_MENU_MANIFEST_ITEM_HEIGHT * 2);
+        menu_state_volume_scroll_by(state, -delta);
         return;
     }
     if (point_in_rect(&state->sliderPanelRect, mx, my) && state->sliderMaxScroll > 0.5f) {
@@ -422,13 +438,10 @@ void menu_input_handle_mouse_click(SDL_Event* event,
                                                          state->manifestOptions[idx].path,
                                                          true);
                     if (ok) {
-                        if (source == SCENE_SOURCE_RUNTIME_SCENE) {
-                            strncpy(state->statusLabel, "Runtime scene set", sizeof(state->statusLabel) - 1);
-                        } else if (source == SCENE_SOURCE_FLUID_MANIFEST) {
-                            strncpy(state->statusLabel, "Scene set", sizeof(state->statusLabel) - 1);
-                        } else {
-                            strncpy(state->statusLabel, "2D config active", sizeof(state->statusLabel) - 1);
-                        }
+                        scene_source_ui_format_scene_select_status(source,
+                                                                   state->manifestOptions[idx].path,
+                                                                   state->statusLabel,
+                                                                   sizeof(state->statusLabel));
                         SaveAnimationConfig();
                         state->statusColor = (SDL_Color){140, 220, 200, 255};
                     } else {
@@ -444,9 +457,82 @@ void menu_input_handle_mouse_click(SDL_Event* event,
             return;
         }
     }
+    if (state->volumeDropdownOpen) {
+        if (point_in_rect(&state->volumePanelRect, x, y)) {
+            if (state->volumeScrollbarVisible && point_in_rect(&state->volumeScrollbarRect, x, y)) {
+                state->volumeScrollbarDragging = true;
+                state->volumeDragStartY = y;
+                state->volumeScrollStart = state->volumeScroll;
+                return;
+            }
+            if (state->volumeOptionCount > 0 && point_in_rect(&state->volumeListRect, x, y)) {
+                int relativeY = y - state->volumeListRect.y + (int)state->volumeScroll;
+                int idx = relativeY / SDL_MENU_MANIFEST_ITEM_HEIGHT;
+                if (idx >= 0 && idx < (int)state->volumeOptionCount) {
+                    int kind = animation_config_volume_source_kind_clamp(state->volumeOptions[idx].kind);
+                    bool ok = AnimationSelectVolumeSource(kind,
+                                                          state->volumeOptions[idx].path,
+                                                          true);
+                    if (ok) {
+                        volume_source_ui_format_attach_status(kind,
+                                                              state->volumeOptions[idx].path,
+                                                              true,
+                                                              state->statusLabel,
+                                                              sizeof(state->statusLabel));
+                        SaveAnimationConfig();
+                        state->statusColor = (SDL_Color){140, 220, 200, 255};
+                    } else {
+                        strncpy(state->statusLabel, "Volume attach failed", sizeof(state->statusLabel) - 1);
+                        state->statusColor = (SDL_Color){240, 120, 120, 255};
+                    }
+                    state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
+                    state->statusExpireMs = SDL_GetTicks() + 1800;
+                    menu_state_sync_from_anim(state);
+                    return;
+                }
+            }
+            return;
+        }
+    }
 
     if (point_in_rect(&buttons.loadSceneRect, x, y)) {
         menu_state_set_load_scene_enabled(state, !state->manifestDropdownOpen);
+        return;
+    }
+    if (buttons.attachVolumeRect.w > 0 && point_in_rect(&buttons.attachVolumeRect, x, y)) {
+        menu_state_set_volume_load_enabled(state, !state->volumeDropdownOpen);
+        return;
+    }
+    if (buttons.volumeToggleRect.w > 0 && point_in_rect(&buttons.volumeToggleRect, x, y)) {
+        if (animSettings.volumeSourcePath[0] &&
+            animation_config_volume_source_kind_clamp(animSettings.volumeSourceKind) != VOLUME_SOURCE_NONE) {
+            animSettings.volumeInteractionEnabled = !animSettings.volumeInteractionEnabled;
+            menu_state_sync_from_anim(state);
+            SaveAnimationConfig();
+            snprintf(state->statusLabel,
+                     sizeof(state->statusLabel),
+                     "Atmosphere: %s",
+                     animSettings.volumeInteractionEnabled ? "ON" : "OFF");
+            state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
+            state->statusColor = (SDL_Color){160, 210, 255, 255};
+            state->statusExpireMs = SDL_GetTicks() + 1800;
+        } else {
+            strncpy(state->statusLabel, "No volume selected", sizeof(state->statusLabel) - 1);
+            state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
+            state->statusColor = (SDL_Color){240, 180, 120, 255};
+            state->statusExpireMs = SDL_GetTicks() + 1800;
+        }
+        return;
+    }
+    if (buttons.volumeClearRect.w > 0 && point_in_rect(&buttons.volumeClearRect, x, y)) {
+        AnimationClearVolumeSource();
+        menu_state_sync_from_anim(state);
+        menu_state_refresh_volume_options(state);
+        SaveAnimationConfig();
+        strncpy(state->statusLabel, "Volume cleared", sizeof(state->statusLabel) - 1);
+        state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
+        state->statusColor = (SDL_Color){200, 180, 120, 255};
+        state->statusExpireMs = SDL_GetTicks() + 1800;
         return;
     }
 
@@ -520,9 +606,17 @@ void menu_input_handle_mouse_click(SDL_Event* event,
                                      : SPACE_MODE_3D;
         menu_state_sync_from_anim(state);
         menu_state_refresh_manifest_options(state);
+        menu_state_refresh_volume_options(state);
         if (state->manifestDropdownOpen) {
             state->manifestScroll = 0.0f;
             state->manifestScrollbarDragging = false;
+        }
+        if (animSettings.spaceMode != SPACE_MODE_3D) {
+            state->volumeDropdownOpen = false;
+        }
+        if (state->volumeDropdownOpen) {
+            state->volumeScroll = 0.0f;
+            state->volumeScrollbarDragging = false;
         }
         mode_status = EditorModeRouter_SpaceButtonLabel();
         snprintf(state->statusLabel,

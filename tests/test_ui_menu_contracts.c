@@ -1,6 +1,7 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "app/animation.h"
@@ -13,8 +14,28 @@
 #include "ui/menu_layout.h"
 #include "ui/menu_panel_chrome.h"
 #include "ui/scene_source_catalog.h"
+#include "ui/scene_source_ui_labels.h"
 #include "ui/sdl_menu_render.h"
 #include "ui/sdl_menu_state.h"
+#include "ui/volume_source_catalog.h"
+#include "ui/volume_source_ui_labels.h"
+
+static bool test_volume_catalog_entry_path(const VolumeSourceCatalogEntry* entries,
+                                           size_t count,
+                                           const char* path) {
+    char resolved_target[PATH_MAX];
+    const char* use_target = path;
+    if (!entries || !path) return false;
+    if (realpath(path, resolved_target)) {
+        use_target = resolved_target;
+    }
+    for (size_t i = 0; i < count; ++i) {
+        if (strcmp(entries[i].path, use_target) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
 
 static int test_menu_batch_panel_click_starts_frame_dir_edit(void) {
     MenuRuntimeState state;
@@ -199,6 +220,36 @@ static int test_menu_button_layout_respects_owned_screen_zones(void) {
                 buttons.exitRect.y >= screen.bottomActionRowRect.y &&
                 test_rect_bottom(&buttons.exitRect) <= test_rect_bottom(&screen.bottomActionRowRect) &&
                 test_rect_right(&buttons.saveRect) <= test_rect_right(&screen.bottomActionRowRect));
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_menu_button_layout_exposes_volume_controls_in_3d_only(void) {
+    MenuRuntimeState state;
+    MenuScreenLayout screen;
+    MenuButtonLayout buttons;
+    AnimationConfig saved_anim = animSettings;
+
+    memset(&state, 0, sizeof(state));
+    memset(&screen, 0, sizeof(screen));
+    memset(&buttons, 0, sizeof(buttons));
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.integratorMode = 2;
+    animSettings.spaceMode = SPACE_MODE_3D;
+
+    menu_layout_build_base(NULL, &state, &screen);
+    menu_render_build_button_layout(NULL, &state, &screen, &buttons);
+    assert_true("menu_buttons_volume_attach_visible_3d", buttons.attachVolumeRect.w > 0);
+    assert_true("menu_buttons_volume_toggle_visible_3d", buttons.volumeToggleRect.w > 0);
+    assert_true("menu_buttons_volume_clear_visible_3d", buttons.volumeClearRect.w > 0);
+
+    animSettings.spaceMode = SPACE_MODE_2D;
+    memset(&buttons, 0, sizeof(buttons));
+    menu_render_build_button_layout(NULL, &state, &screen, &buttons);
+    assert_true("menu_buttons_volume_attach_hidden_2d", buttons.attachVolumeRect.w == 0);
+    assert_true("menu_buttons_volume_toggle_hidden_2d", buttons.volumeToggleRect.w == 0);
+    assert_true("menu_buttons_volume_clear_hidden_2d", buttons.volumeClearRect.w == 0);
+
     animSettings = saved_anim;
     return 0;
 }
@@ -661,6 +712,206 @@ static int test_menu_state_manifest_option_visibility_matrix(void) {
     return 0;
 }
 
+static int test_scene_source_ui_runtime_labels_expose_paired_and_disabled_state(void) {
+    AnimationConfig saved_anim = animSettings;
+    char tmp_template[] = "/tmp/ray_tracing_scene_source_ui_XXXXXX";
+    char* tmp_root = mkdtemp(tmp_template);
+    char runtime_path[PATH_MAX] = {0};
+    char bundle_path[PATH_MAX] = {0};
+    char option_label[128] = {0};
+    char button_label[128] = {0};
+    char status_label[64] = {0};
+    const char* runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_ui_state\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[]"
+        "}";
+    const char* bundle_json =
+        "{\n"
+        "  \"bundle_type\": \"physics_scene_bundle_v1\",\n"
+        "  \"bundle_version\": 1,\n"
+        "  \"profile\": \"physics\",\n"
+        "  \"fluid_source\": {\n"
+        "    \"kind\": \"pack\",\n"
+        "    \"path\": \"frame_000017.pack\"\n"
+        "  }\n"
+        "}\n";
+
+    assert_true("scene_source_ui_tmpdir_created", tmp_root != NULL);
+    if (!tmp_root) return 0;
+
+    snprintf(runtime_path, sizeof(runtime_path), "%s/scene_runtime.json", tmp_root);
+    snprintf(bundle_path, sizeof(bundle_path), "%s/scene_bundle.json", tmp_root);
+    assert_true("scene_source_ui_write_runtime", write_text_file(runtime_path, runtime_json));
+    assert_true("scene_source_ui_write_bundle", write_text_file(bundle_path, bundle_json));
+
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    snprintf(animSettings.runtimeScenePath, sizeof(animSettings.runtimeScenePath), "%s", runtime_path);
+    animSettings.volumeInteractionEnabled = true;
+    animSettings.volumeSourceKind = VOLUME_SOURCE_MANIFEST;
+    snprintf(animSettings.volumeSourcePath, sizeof(animSettings.volumeSourcePath), "%s", bundle_path);
+
+    scene_source_ui_format_catalog_option_label(runtime_path,
+                                                SCENE_SOURCE_RUNTIME_SCENE,
+                                                option_label,
+                                                sizeof(option_label));
+    scene_source_ui_format_active_button_label(button_label, sizeof(button_label));
+    scene_source_ui_format_scene_select_status(SCENE_SOURCE_RUNTIME_SCENE,
+                                               runtime_path,
+                                               status_label,
+                                               sizeof(status_label));
+    assert_true("scene_source_ui_option_auto_atmosphere",
+                strstr(option_label, "atmosphere") != NULL);
+    assert_true("scene_source_ui_button_auto_atmosphere",
+                strstr(button_label, "Atmosphere") != NULL);
+    assert_true("scene_source_ui_status_auto_atmosphere",
+                strcmp(status_label, "Runtime scene + atmosphere") == 0);
+
+    animSettings.volumeInteractionEnabled = false;
+    scene_source_ui_format_catalog_option_label(runtime_path,
+                                                SCENE_SOURCE_RUNTIME_SCENE,
+                                                option_label,
+                                                sizeof(option_label));
+    scene_source_ui_format_active_button_label(button_label, sizeof(button_label));
+    scene_source_ui_format_scene_select_status(SCENE_SOURCE_RUNTIME_SCENE,
+                                               runtime_path,
+                                               status_label,
+                                               sizeof(status_label));
+    assert_true("scene_source_ui_option_atmosphere_off",
+                strstr(option_label, "atmosphere off") != NULL);
+    assert_true("scene_source_ui_button_atmosphere_off",
+                strstr(button_label, "Atmosphere Off") != NULL);
+    assert_true("scene_source_ui_status_atmosphere_off",
+                strcmp(status_label, "Runtime scene; atmosphere off") == 0);
+
+    animSettings.volumeInteractionEnabled = true;
+    animSettings.volumeSourceKind = VOLUME_SOURCE_PACK;
+    snprintf(animSettings.volumeSourcePath,
+             sizeof(animSettings.volumeSourcePath),
+             "%s",
+             "/tmp/custom_runtime_volume.pack");
+    scene_source_ui_format_catalog_option_label(runtime_path,
+                                                SCENE_SOURCE_RUNTIME_SCENE,
+                                                option_label,
+                                                sizeof(option_label));
+    scene_source_ui_format_active_button_label(button_label, sizeof(button_label));
+    scene_source_ui_format_scene_select_status(SCENE_SOURCE_RUNTIME_SCENE,
+                                               runtime_path,
+                                               status_label,
+                                               sizeof(status_label));
+    assert_true("scene_source_ui_option_custom_volume",
+                strstr(option_label, "custom volume") != NULL);
+    assert_true("scene_source_ui_button_custom_volume",
+                strstr(button_label, "Custom Volume") != NULL);
+    assert_true("scene_source_ui_status_custom_volume",
+                strcmp(status_label, "Runtime scene + custom volume") == 0);
+
+    remove(runtime_path);
+    remove(bundle_path);
+    rmdir(tmp_root);
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_volume_source_catalog_collects_bundle_and_direct_files(void) {
+    char root_template[] = "/tmp/ray_tracing_volume_catalog_XXXXXX";
+    char* root = mkdtemp(root_template);
+    char child_dir[PATH_MAX];
+    char bundle_path[PATH_MAX];
+    char pack_path[PATH_MAX];
+    char vf3d_path[PATH_MAX];
+    const char* roots[1];
+    VolumeSourceCatalogEntry entries[16];
+    size_t count = 0;
+
+    assert_true("volume_source_catalog_tmpdir", root != NULL);
+    if (!root) return 0;
+
+    snprintf(child_dir, sizeof(child_dir), "%s/Waist", root);
+    assert_true("volume_source_catalog_child_mkdir", mkdir(child_dir, 0700) == 0);
+    snprintf(bundle_path, sizeof(bundle_path), "%s/scene_bundle.json", child_dir);
+    snprintf(pack_path, sizeof(pack_path), "%s/frame_000000.pack", child_dir);
+    snprintf(vf3d_path, sizeof(vf3d_path), "%s/frame_000000.vf3d", child_dir);
+    assert_true("volume_source_catalog_write_bundle", write_text_file(bundle_path, "{}"));
+    assert_true("volume_source_catalog_write_pack", write_text_file(pack_path, "pack"));
+    assert_true("volume_source_catalog_write_vf3d", write_text_file(vf3d_path, "vf3d"));
+
+    roots[0] = root;
+    count = volume_source_catalog_collect(entries, 16, roots, 1, "");
+    assert_true("volume_source_catalog_count_nonzero", count >= 3u);
+    assert_true("volume_source_catalog_has_bundle",
+                test_volume_catalog_entry_path(entries, count, bundle_path));
+    assert_true("volume_source_catalog_has_pack",
+                test_volume_catalog_entry_path(entries, count, pack_path));
+    assert_true("volume_source_catalog_has_vf3d",
+                test_volume_catalog_entry_path(entries, count, vf3d_path));
+
+    remove(bundle_path);
+    remove(pack_path);
+    remove(vf3d_path);
+    rmdir(child_dir);
+    rmdir(root);
+    return 0;
+}
+
+static int test_volume_source_ui_labels_expose_auto_custom_and_none(void) {
+    char tmp_template[] = "/tmp/ray_tracing_volume_ui_XXXXXX";
+    char* tmp_root = mkdtemp(tmp_template);
+    char runtime_path[PATH_MAX];
+    char manifest_path[PATH_MAX];
+    char label[160];
+    AnimationConfig saved_anim = animSettings;
+
+    assert_true("volume_source_ui_tmpdir_created", tmp_root != NULL);
+    if (!tmp_root) return 0;
+
+    snprintf(runtime_path, sizeof(runtime_path), "%s/scene_runtime.json", tmp_root);
+    snprintf(manifest_path, sizeof(manifest_path), "%s/manifest.json", tmp_root);
+    assert_true("volume_source_ui_runtime_written", write_text_file(runtime_path, "{}"));
+    assert_true("volume_source_ui_manifest_written",
+                write_text_file(manifest_path,
+                                "{"
+                                "\"frame_contract\":\"vf3d\","
+                                "\"space_mode\":\"3d\","
+                                "\"frames\":[{\"path\":\"frame_000000.vf3d\"}]"
+                                "}"));
+
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    snprintf(animSettings.runtimeScenePath, sizeof(animSettings.runtimeScenePath), "%s", runtime_path);
+    animSettings.volumeSourceKind = VOLUME_SOURCE_MANIFEST;
+    snprintf(animSettings.volumeSourcePath, sizeof(animSettings.volumeSourcePath), "%s", manifest_path);
+    animSettings.volumeInteractionEnabled = true;
+    volume_source_ui_format_active_button_label(label, sizeof(label));
+    assert_true("volume_source_ui_auto_label", strstr(label, "[Auto]") != NULL);
+
+    animSettings.volumeSourceKind = VOLUME_SOURCE_PACK;
+    snprintf(animSettings.volumeSourcePath, sizeof(animSettings.volumeSourcePath), "%s", "/tmp/custom.pack");
+    animSettings.volumeInteractionEnabled = false;
+    volume_source_ui_format_active_button_label(label, sizeof(label));
+    assert_true("volume_source_ui_custom_off_label", strstr(label, "[Custom Off]") != NULL);
+
+    AnimationClearVolumeSource();
+    volume_source_ui_format_active_button_label(label, sizeof(label));
+    assert_true("volume_source_ui_none_label", strstr(label, "[None]") != NULL);
+
+    remove(runtime_path);
+    remove(manifest_path);
+    rmdir(tmp_root);
+    animSettings = saved_anim;
+    return 0;
+}
+
 static int test_depth_projection_scalars(void) {
     double scale_far = RenderHelper_DepthScaleForObjectZ(4.0);
     double scale_near = RenderHelper_DepthScaleForObjectZ(-4.0);
@@ -685,6 +936,7 @@ int run_test_ui_menu_contract_tests(void) {
     test_menu_layout_builds_non_overlapping_primary_zones();
     test_menu_layout_keeps_manifest_dropdown_inside_left_panel();
     test_menu_button_layout_respects_owned_screen_zones();
+    test_menu_button_layout_exposes_volume_controls_in_3d_only();
     test_menu_batch_panel_layout_centers_inside_batch_zone();
     test_menu_batch_panel_header_does_not_overlap_route_rows();
     test_integrator_catalog_menu_routes_by_space_mode();
@@ -694,8 +946,11 @@ int run_test_ui_menu_contract_tests(void) {
     test_menu_fit_text_to_width_supports_in_place_buffer();
     test_manifest_default_roots_expands_runtime_and_legacy_paths();
     test_scene_source_catalog_collect_admits_runtime_and_manifest_lanes();
+    test_volume_source_catalog_collects_bundle_and_direct_files();
     test_menu_state_manifest_label_uses_scene_directory_name();
     test_menu_state_manifest_option_visibility_matrix();
+    test_scene_source_ui_runtime_labels_expose_paired_and_disabled_state();
+    test_volume_source_ui_labels_expose_auto_custom_and_none();
     test_depth_projection_scalars();
 
     return test_support_failures() - before;

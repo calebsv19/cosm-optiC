@@ -173,6 +173,84 @@ static int test_animation_scene_source_roundtrip_runtime_lane(void) {
     return 0;
 }
 
+static int test_animation_volume_source_roundtrip_and_defaults(void) {
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+    const char* json_missing_volume =
+        "{\n"
+        "  \"sceneSource\": 2,\n"
+        "  \"runtimeScenePath\": \"third_party/codework_shared/assets/scenes/trio_contract/scene_runtime_min.json\"\n"
+        "}\n";
+    const char* json_invalid_volume =
+        "{\n"
+        "  \"volumeInteractionEnabled\": true,\n"
+        "  \"volumeSourceKind\": 99,\n"
+        "  \"volumeSourcePath\": \"/tmp/invalid.vf3d\",\n"
+        "  \"volumeAffectsLighting\": false,\n"
+        "  \"volumeDebugOverlayEnabled\": true\n"
+        "}\n";
+
+    animSettings.volumeInteractionEnabled = true;
+    animSettings.volumeSourceKind = VOLUME_SOURCE_PACK;
+    strncpy(animSettings.volumeSourcePath, "/tmp/stale_volume.pack",
+            sizeof(animSettings.volumeSourcePath) - 1);
+    animSettings.volumeSourcePath[sizeof(animSettings.volumeSourcePath) - 1] = '\0';
+    animSettings.volumeAffectsLighting = false;
+    animSettings.volumeDebugOverlayEnabled = true;
+
+    assert_true("volume_source_missing_write_runtime",
+                write_text_file(kRuntimeAnimationConfigPath, json_missing_volume));
+    LoadAnimationConfig();
+    assert_true("volume_source_missing_defaults_disabled",
+                !animSettings.volumeInteractionEnabled);
+    assert_true("volume_source_missing_defaults_kind_none",
+                animSettings.volumeSourceKind == VOLUME_SOURCE_NONE);
+    assert_true("volume_source_missing_defaults_path_empty",
+                animSettings.volumeSourcePath[0] == '\0');
+    assert_true("volume_source_missing_defaults_affects_lighting",
+                animSettings.volumeAffectsLighting);
+    assert_true("volume_source_missing_defaults_debug_off",
+                !animSettings.volumeDebugOverlayEnabled);
+
+    animSettings.volumeInteractionEnabled = true;
+    animSettings.volumeSourceKind = VOLUME_SOURCE_PACK;
+    strncpy(animSettings.volumeSourcePath, "/tmp/volume_fixture.pack",
+            sizeof(animSettings.volumeSourcePath) - 1);
+    animSettings.volumeSourcePath[sizeof(animSettings.volumeSourcePath) - 1] = '\0';
+    animSettings.volumeAffectsLighting = false;
+    animSettings.volumeDebugOverlayEnabled = true;
+    SaveAnimationConfig();
+
+    animSettings.volumeInteractionEnabled = false;
+    animSettings.volumeSourceKind = VOLUME_SOURCE_NONE;
+    animSettings.volumeSourcePath[0] = '\0';
+    animSettings.volumeAffectsLighting = true;
+    animSettings.volumeDebugOverlayEnabled = false;
+    LoadAnimationConfig();
+
+    assert_true("volume_source_roundtrip_enabled",
+                animSettings.volumeInteractionEnabled);
+    assert_true("volume_source_roundtrip_kind_pack",
+                animSettings.volumeSourceKind == VOLUME_SOURCE_PACK);
+    assert_true("volume_source_roundtrip_path",
+                strcmp(animSettings.volumeSourcePath, "/tmp/volume_fixture.pack") == 0);
+    assert_true("volume_source_roundtrip_affects_lighting_false",
+                !animSettings.volumeAffectsLighting);
+    assert_true("volume_source_roundtrip_debug_true",
+                animSettings.volumeDebugOverlayEnabled);
+
+    assert_true("volume_source_invalid_write_runtime",
+                write_text_file(kRuntimeAnimationConfigPath, json_invalid_volume));
+    LoadAnimationConfig();
+    assert_true("volume_source_invalid_clamped_none",
+                animSettings.volumeSourceKind == VOLUME_SOURCE_NONE);
+    assert_true("volume_source_invalid_disabled",
+                !animSettings.volumeInteractionEnabled);
+
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
 static int test_animation_integrator_split_roundtrip_and_default_3d(void) {
     size_t backup_size = 0;
     char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
@@ -561,6 +639,161 @@ static int test_animation_scene_source_select_runtime_persists_on_save(void) {
     return 0;
 }
 
+static int test_animation_scene_source_select_runtime_updates_auto_paired_volume_and_preserves_disable(void) {
+    char dir_a_template[] = "/tmp/ray_tracing_scene_pair_a_XXXXXX";
+    char dir_b_template[] = "/tmp/ray_tracing_scene_pair_b_XXXXXX";
+    char* dir_a = mkdtemp(dir_a_template);
+    char* dir_b = mkdtemp(dir_b_template);
+    char runtime_path_a[PATH_MAX] = {0};
+    char runtime_path_b[PATH_MAX] = {0};
+    char bundle_path_a[PATH_MAX] = {0};
+    char bundle_path_b[PATH_MAX] = {0};
+    const char* runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_pair\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{\"object_id\":\"obj\",\"object_type\":\"circle\","
+        "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+        "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}}],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    const char* bundle_json =
+        "{\n"
+        "  \"bundle_type\": \"physics_scene_bundle_v1\",\n"
+        "  \"bundle_version\": 1,\n"
+        "  \"profile\": \"physics\",\n"
+        "  \"fluid_source\": {\n"
+        "    \"kind\": \"pack\",\n"
+        "    \"path\": \"frame_000017.pack\"\n"
+        "  }\n"
+        "}\n";
+
+    assert_true("scene_source_pair_disable_dir_a", dir_a != NULL);
+    assert_true("scene_source_pair_disable_dir_b", dir_b != NULL);
+    if (!dir_a || !dir_b) {
+        if (dir_a) rmdir(dir_a);
+        if (dir_b) rmdir(dir_b);
+        return 0;
+    }
+
+    assert_true("scene_source_pair_disable_runtime_a",
+                snprintf(runtime_path_a, sizeof(runtime_path_a), "%s/scene_runtime.json", dir_a) <
+                    (int)sizeof(runtime_path_a));
+    assert_true("scene_source_pair_disable_runtime_b",
+                snprintf(runtime_path_b, sizeof(runtime_path_b), "%s/scene_runtime.json", dir_b) <
+                    (int)sizeof(runtime_path_b));
+    assert_true("scene_source_pair_disable_bundle_a",
+                snprintf(bundle_path_a, sizeof(bundle_path_a), "%s/scene_bundle.json", dir_a) <
+                    (int)sizeof(bundle_path_a));
+    assert_true("scene_source_pair_disable_bundle_b",
+                snprintf(bundle_path_b, sizeof(bundle_path_b), "%s/scene_bundle.json", dir_b) <
+                    (int)sizeof(bundle_path_b));
+    assert_true("scene_source_pair_disable_write_runtime_a",
+                write_text_file(runtime_path_a, runtime_json));
+    assert_true("scene_source_pair_disable_write_runtime_b",
+                write_text_file(runtime_path_b, runtime_json));
+    assert_true("scene_source_pair_disable_write_bundle_a",
+                write_text_file(bundle_path_a, bundle_json));
+    assert_true("scene_source_pair_disable_write_bundle_b",
+                write_text_file(bundle_path_b, bundle_json));
+
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    animSettings.useFluidScene = false;
+    snprintf(animSettings.runtimeScenePath,
+             sizeof(animSettings.runtimeScenePath),
+             "%s",
+             runtime_path_a);
+    animSettings.volumeInteractionEnabled = false;
+    animSettings.volumeSourceKind = VOLUME_SOURCE_MANIFEST;
+    snprintf(animSettings.volumeSourcePath,
+             sizeof(animSettings.volumeSourcePath),
+             "%s",
+             bundle_path_a);
+
+    assert_true("scene_source_pair_disable_select_runtime_b",
+                AnimationSelectSceneSource(SCENE_SOURCE_RUNTIME_SCENE,
+                                           runtime_path_b,
+                                           false));
+    assert_true("scene_source_pair_disable_runtime_path_updated",
+                strcmp(animSettings.runtimeScenePath, runtime_path_b) == 0);
+    assert_true("scene_source_pair_disable_volume_kind_manifest",
+                animSettings.volumeSourceKind == VOLUME_SOURCE_MANIFEST);
+    assert_true("scene_source_pair_disable_volume_path_updated",
+                strcmp(animSettings.volumeSourcePath, bundle_path_b) == 0);
+    assert_true("scene_source_pair_disable_disabled_preserved",
+                !animSettings.volumeInteractionEnabled);
+
+    unlink(bundle_path_a);
+    unlink(bundle_path_b);
+    unlink(runtime_path_a);
+    unlink(runtime_path_b);
+    rmdir(dir_a);
+    rmdir(dir_b);
+    return 0;
+}
+
+static int test_animation_volume_source_select_without_apply_updates_lane_and_clear_resets(void) {
+    AnimationConfig saved_anim = animSettings;
+
+    memset(&animSettings, 0, sizeof(animSettings));
+    assert_true("volume_source_select_no_apply_ok",
+                AnimationSelectVolumeSource(VOLUME_SOURCE_PACK,
+                                            "/tmp/example_volume.pack",
+                                            false));
+    assert_true("volume_source_select_no_apply_enabled",
+                animSettings.volumeInteractionEnabled);
+    assert_true("volume_source_select_no_apply_kind_pack",
+                animSettings.volumeSourceKind == VOLUME_SOURCE_PACK);
+    assert_true("volume_source_select_no_apply_path",
+                strcmp(animSettings.volumeSourcePath, "/tmp/example_volume.pack") == 0);
+
+    AnimationClearVolumeSource();
+    assert_true("volume_source_clear_disabled",
+                !animSettings.volumeInteractionEnabled);
+    assert_true("volume_source_clear_kind_none",
+                animSettings.volumeSourceKind == VOLUME_SOURCE_NONE);
+    assert_true("volume_source_clear_path_empty",
+                animSettings.volumeSourcePath[0] == '\0');
+
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_animation_volume_source_select_missing_apply_rolls_back(void) {
+    AnimationConfig saved_anim = animSettings;
+
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.volumeInteractionEnabled = false;
+    animSettings.volumeSourceKind = VOLUME_SOURCE_MANIFEST;
+    snprintf(animSettings.volumeSourcePath,
+             sizeof(animSettings.volumeSourcePath),
+             "%s",
+             "/tmp/baseline_volume.scene_bundle.json");
+
+    assert_true("volume_source_select_missing_rejected",
+                !AnimationSelectVolumeSource(VOLUME_SOURCE_MANIFEST,
+                                             "/tmp/missing_volume.scene_bundle.json",
+                                             true));
+    assert_true("volume_source_select_missing_rolls_back_enabled",
+                !animSettings.volumeInteractionEnabled);
+    assert_true("volume_source_select_missing_rolls_back_kind",
+                animSettings.volumeSourceKind == VOLUME_SOURCE_MANIFEST);
+    assert_true("volume_source_select_missing_rolls_back_path",
+                strcmp(animSettings.volumeSourcePath, "/tmp/baseline_volume.scene_bundle.json") == 0);
+
+    animSettings = saved_anim;
+    return 0;
+}
+
 static int test_animation_apply_active_scene_source_invalid_fluid_falls_back_2d(void) {
     static const char *kMissingFluidPath = "/tmp/ray_tracing_missing_fluid_manifest.json";
     static const char *kRuntimeFixturePath = "third_party/codework_shared/assets/scenes/trio_contract/scene_runtime_min.json";
@@ -904,6 +1137,7 @@ int run_test_config_animation_tests(void) {
     test_scene_object_z_missing_fallback();
     test_animation_scene_source_legacy_migration();
     test_animation_scene_source_roundtrip_runtime_lane();
+    test_animation_volume_source_roundtrip_and_defaults();
     test_animation_integrator_split_roundtrip_and_default_3d();
     test_animation_native_3d_temporal_frames_roundtrip_and_clamp();
     test_animation_native_3d_bounce_depth_and_roulette_roundtrip_and_clamp();
@@ -915,6 +1149,9 @@ int run_test_config_animation_tests(void) {
     test_runtime_native_3d_resolution_scale_contract();
     test_animation_scene_source_select_runtime_failure_rolls_back();
     test_animation_scene_source_select_runtime_persists_on_save();
+    test_animation_scene_source_select_runtime_updates_auto_paired_volume_and_preserves_disable();
+    test_animation_volume_source_select_without_apply_updates_lane_and_clear_resets();
+    test_animation_volume_source_select_missing_apply_rolls_back();
     test_animation_apply_active_scene_source_invalid_fluid_falls_back_2d();
     test_animation_restore_active_scene_source_persists_fallback_correction();
     test_animation_video_output_root_migrates_from_output_root();

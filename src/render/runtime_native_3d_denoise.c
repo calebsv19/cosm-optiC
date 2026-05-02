@@ -9,6 +9,8 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+#include "render/runtime_native_3d_render.h"
+
 enum {
     RUNTIME_NATIVE_3D_DENOISE_RADIUS = 2
 };
@@ -46,7 +48,7 @@ bool RuntimeNative3DDenoise_Apply(float* radiance_buffer,
     }
 
     pixel_count = (size_t)features->width * (size_t)features->height;
-    filtered = (float*)calloc(pixel_count * 3u, sizeof(*filtered));
+    filtered = (float*)calloc(pixel_count * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS, sizeof(*filtered));
     if (!filtered) return false;
 
     for (int y = 0; y < features->height; ++y) {
@@ -54,7 +56,8 @@ bool RuntimeNative3DDenoise_Apply(float* radiance_buffer,
             const size_t center_index = (size_t)y * (size_t)features->width + (size_t)x;
             const size_t center_normal_base = center_index * 3u;
             const size_t center_radiance_base =
-                ((size_t)y * (size_t)radiance_stride + (size_t)x) * 3u;
+                ((size_t)y * (size_t)radiance_stride + (size_t)x) *
+                (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
             float total_weight = 0.0f;
             float accum_r = 0.0f;
             float accum_g = 0.0f;
@@ -64,6 +67,9 @@ bool RuntimeNative3DDenoise_Apply(float* radiance_buffer,
                 filtered[center_radiance_base] = radiance_buffer[center_radiance_base];
                 filtered[center_radiance_base + 1u] = radiance_buffer[center_radiance_base + 1u];
                 filtered[center_radiance_base + 2u] = radiance_buffer[center_radiance_base + 2u];
+                filtered[center_radiance_base + RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL] =
+                    radiance_buffer[center_radiance_base +
+                                    RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL];
                 continue;
             }
 
@@ -86,7 +92,8 @@ bool RuntimeNative3DDenoise_Apply(float* radiance_buffer,
                                                     (size_t)nx;
                         const size_t sample_normal_base = sample_index * 3u;
                         const size_t sample_radiance_base =
-                            ((size_t)ny * (size_t)radiance_stride + (size_t)nx) * 3u;
+                            ((size_t)ny * (size_t)radiance_stride + (size_t)nx) *
+                            (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
                         float ndot = 0.0f;
                         float depth_delta = 0.0f;
                         float weight = 0.0f;
@@ -115,15 +122,23 @@ bool RuntimeNative3DDenoise_Apply(float* radiance_buffer,
                 filtered[center_radiance_base] = accum_r / total_weight;
                 filtered[center_radiance_base + 1u] = accum_g / total_weight;
                 filtered[center_radiance_base + 2u] = accum_b / total_weight;
+                filtered[center_radiance_base + RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL] =
+                    radiance_buffer[center_radiance_base +
+                                    RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL];
             } else {
                 filtered[center_radiance_base] = radiance_buffer[center_radiance_base];
                 filtered[center_radiance_base + 1u] = radiance_buffer[center_radiance_base + 1u];
                 filtered[center_radiance_base + 2u] = radiance_buffer[center_radiance_base + 2u];
+                filtered[center_radiance_base + RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL] =
+                    radiance_buffer[center_radiance_base +
+                                    RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL];
             }
         }
     }
 
-    memcpy(radiance_buffer, filtered, pixel_count * 3u * sizeof(*filtered));
+    memcpy(radiance_buffer,
+           filtered,
+           pixel_count * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS * sizeof(*filtered));
     free(filtered);
     return true;
 }

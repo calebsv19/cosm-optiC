@@ -6,7 +6,9 @@
 #include "geo/shape_adapter.h"
 #include "geo/shape_asset.h"
 #include "import/fluid_import.h"
+#include "import/fluid_volume_import_3d.h"
 #include "import/runtime_scene_bridge.h"
+#include "import/runtime_scene_volume_defaults.h"
 #include "import/scene_bundle_import.h"
 #include "import/shape_import.h"
 #include "render/fluid/fluid_state.h"
@@ -340,6 +342,9 @@ typedef struct {
     bool use_fluid_scene;
     char fluid_manifest[sizeof(animSettings.fluidManifest)];
     char runtime_scene_path[sizeof(animSettings.runtimeScenePath)];
+    bool volume_interaction_enabled;
+    int volume_source_kind;
+    char volume_source_path[sizeof(animSettings.volumeSourcePath)];
 } AnimationSceneSourceSnapshot;
 
 static void animation_scene_source_snapshot_capture(AnimationSceneSourceSnapshot *out_snapshot) {
@@ -354,6 +359,12 @@ static void animation_scene_source_snapshot_capture(AnimationSceneSourceSnapshot
             animSettings.runtimeScenePath,
             sizeof(out_snapshot->runtime_scene_path) - 1);
     out_snapshot->runtime_scene_path[sizeof(out_snapshot->runtime_scene_path) - 1] = '\0';
+    out_snapshot->volume_interaction_enabled = animSettings.volumeInteractionEnabled;
+    out_snapshot->volume_source_kind = animSettings.volumeSourceKind;
+    strncpy(out_snapshot->volume_source_path,
+            animSettings.volumeSourcePath,
+            sizeof(out_snapshot->volume_source_path) - 1);
+    out_snapshot->volume_source_path[sizeof(out_snapshot->volume_source_path) - 1] = '\0';
 }
 
 static void animation_scene_source_snapshot_restore(const AnimationSceneSourceSnapshot *snapshot) {
@@ -368,9 +379,16 @@ static void animation_scene_source_snapshot_restore(const AnimationSceneSourceSn
             snapshot->runtime_scene_path,
             sizeof(animSettings.runtimeScenePath) - 1);
     animSettings.runtimeScenePath[sizeof(animSettings.runtimeScenePath) - 1] = '\0';
+    animSettings.volumeInteractionEnabled = snapshot->volume_interaction_enabled;
+    animSettings.volumeSourceKind = snapshot->volume_source_kind;
+    strncpy(animSettings.volumeSourcePath,
+            snapshot->volume_source_path,
+            sizeof(animSettings.volumeSourcePath) - 1);
+    animSettings.volumeSourcePath[sizeof(animSettings.volumeSourcePath) - 1] = '\0';
 }
 
 static bool animation_scene_source_assign_candidate(int source, const char *path) {
+    char previous_runtime_scene_path[sizeof(animSettings.runtimeScenePath)] = {0};
     source = animation_config_scene_source_clamp(source);
     if (source == SCENE_SOURCE_CONFIG_2D) {
         animSettings.sceneSource = SCENE_SOURCE_CONFIG_2D;
@@ -391,14 +409,78 @@ static bool animation_scene_source_assign_candidate(int source, const char *path
         return true;
     }
     if (source == SCENE_SOURCE_RUNTIME_SCENE) {
+        snprintf(previous_runtime_scene_path,
+                 sizeof(previous_runtime_scene_path),
+                 "%s",
+                 animSettings.runtimeScenePath);
         animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
         animSettings.useFluidScene = false;
         strncpy(animSettings.runtimeScenePath, path, sizeof(animSettings.runtimeScenePath) - 1);
         animSettings.runtimeScenePath[sizeof(animSettings.runtimeScenePath) - 1] = '\0';
         animSettings.fluidManifest[0] = '\0';
+        runtime_scene_volume_defaults_apply_transition(&animSettings,
+                                                       previous_runtime_scene_path,
+                                                       animSettings.runtimeScenePath);
         return true;
     }
     return false;
+}
+
+static RuntimeVolume3DSourceKind animation_volume_source_kind_to_runtime_kind(int kind) {
+    switch (animation_config_volume_source_kind_clamp(kind)) {
+        case VOLUME_SOURCE_MANIFEST:
+            return RUNTIME_VOLUME_3D_SOURCE_MANIFEST;
+        case VOLUME_SOURCE_RAW_VF3D:
+            return RUNTIME_VOLUME_3D_SOURCE_RAW_VF3D;
+        case VOLUME_SOURCE_PACK:
+            return RUNTIME_VOLUME_3D_SOURCE_PACK;
+        case VOLUME_SOURCE_NONE:
+        default:
+            return RUNTIME_VOLUME_3D_SOURCE_NONE;
+    }
+}
+
+bool AnimationSelectVolumeSource(int kind, const char *path, bool apply_immediately) {
+    AnimationSceneSourceSnapshot snapshot = {0};
+    RuntimeVolumeAttachment3D attachment = {0};
+    RuntimeVolume3DSourceKind runtime_kind = RUNTIME_VOLUME_3D_SOURCE_NONE;
+    char diagnostics[128] = {0};
+
+    kind = animation_config_volume_source_kind_clamp(kind);
+    if (kind == VOLUME_SOURCE_NONE || !path || !path[0]) {
+        return false;
+    }
+
+    animation_scene_source_snapshot_capture(&snapshot);
+    animSettings.volumeSourceKind = kind;
+    strncpy(animSettings.volumeSourcePath, path, sizeof(animSettings.volumeSourcePath) - 1);
+    animSettings.volumeSourcePath[sizeof(animSettings.volumeSourcePath) - 1] = '\0';
+    animSettings.volumeInteractionEnabled = true;
+
+    if (!apply_immediately) {
+        return true;
+    }
+
+    runtime_kind = animation_volume_source_kind_to_runtime_kind(kind);
+    if (runtime_kind == RUNTIME_VOLUME_3D_SOURCE_NONE ||
+        !fluid_volume_import_3d_load_source(path,
+                                            runtime_kind,
+                                            &attachment,
+                                            diagnostics,
+                                            sizeof(diagnostics))) {
+        animation_scene_source_snapshot_restore(&snapshot);
+        RuntimeVolumeAttachment3D_Reset(&attachment);
+        return false;
+    }
+
+    RuntimeVolumeAttachment3D_Reset(&attachment);
+    return true;
+}
+
+void AnimationClearVolumeSource(void) {
+    animSettings.volumeInteractionEnabled = false;
+    animSettings.volumeSourceKind = VOLUME_SOURCE_NONE;
+    animSettings.volumeSourcePath[0] = '\0';
 }
 
 bool AnimationApplyFluidScene(const char *manifest_path) {

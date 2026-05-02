@@ -5,10 +5,11 @@
 
 #include "app/animation.h"
 #include "config/config_manager.h"
+#include "ui/scene_source_ui_labels.h"
 #include "ui/shared_theme_font_adapter.h"
 
-static const char* menu_active_scene_source_path(void) {
-    int source = animation_config_scene_source_clamp(animSettings.sceneSource);
+static const char* menu_render_selected_scene_source_path(void) {
+    const int source = animation_config_scene_source_clamp(animSettings.sceneSource);
     if (source == SCENE_SOURCE_RUNTIME_SCENE) {
         return animSettings.runtimeScenePath;
     }
@@ -20,7 +21,7 @@ static const char* menu_active_scene_source_path(void) {
 
 static bool manifest_option_is_selected(const ManifestOption *option) {
     int selected_source = animation_config_scene_source_clamp(animSettings.sceneSource);
-    const char *selected_path = menu_active_scene_source_path();
+    const char *selected_path = menu_render_selected_scene_source_path();
     int option_source = animation_config_scene_source_clamp(option ? option->source : SCENE_SOURCE_CONFIG_2D);
     if (!option) return false;
     if (selected_source != option_source) return false;
@@ -31,28 +32,8 @@ static bool manifest_option_is_selected(const ManifestOption *option) {
 void menu_render_format_manifest_button_label(MenuRuntimeState* state,
                                               char *out,
                                               size_t out_size) {
-    if (!state || !out || out_size == 0) return;
-    const char *base = "Load Scene";
-    const char *path = menu_active_scene_source_path();
-    int source = animation_config_scene_source_clamp(animSettings.sceneSource);
-    if (source == SCENE_SOURCE_CONFIG_2D) {
-        snprintf(out, out_size, "%s [2D config]", base);
-        return;
-    }
-    if (!path[0]) {
-        snprintf(out, out_size, "%s", base);
-        return;
-    }
-    char label[128];
-    menu_state_build_manifest_label(path, label, sizeof(label));
-    if (source == SCENE_SOURCE_RUNTIME_SCENE) {
-        snprintf(out, out_size, "%s [Runtime]: %s", base, label);
-    } else {
-        snprintf(out, out_size, "%s [Fluid]: %s", base, label);
-    }
-    if (strlen(out) >= out_size) {
-        out[out_size - 1] = '\0';
-    }
+    (void)state;
+    scene_source_ui_format_active_button_label(out, out_size);
 }
 
 void menu_render_draw_manifest_dropdown(SDL_Renderer *renderer,

@@ -136,8 +136,14 @@ const SceneObject* ObjectEditorPanels_SelectedObject(void) {
     return &sceneSettings.sceneObjects[selected_object_index];
 }
 
+bool ObjectEditorPanels_ObjectColorLocked(const SceneObject* selected) {
+    return selected && SceneObjectIsGuideOnly(selected);
+}
+
 bool ObjectEditorPanels_ObjectUsesAlpha(const SceneObject* selected) {
-    return selected && selected->material_id == MATERIAL_PRESET_TRANSPARENT;
+    return selected &&
+           !ObjectEditorPanels_ObjectColorLocked(selected) &&
+           selected->material_id == MATERIAL_PRESET_TRANSPARENT;
 }
 
 bool ObjectEditorPanels_ObjectUsesEmissiveStrength(const SceneObject* selected) {
@@ -147,6 +153,7 @@ bool ObjectEditorPanels_ObjectUsesEmissiveStrength(const SceneObject* selected) 
 int ObjectEditorPanels_ColorSliderCount(void) {
     const SceneObject* selected = ObjectEditorPanels_SelectedObject();
     if (!selected) return 0;
+    if (ObjectEditorPanels_ObjectColorLocked(selected)) return 0;
     return 3 + (ObjectEditorPanels_ObjectUsesAlpha(selected) ? 1 : 0);
 }
 

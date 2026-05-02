@@ -91,13 +91,23 @@ void SceneEditorSurfaceRenderLeftPaneContent(SDL_Renderer* renderer,
             const char* type = (obj->type[0] ? obj->type : "unknown");
             snprintf(line, sizeof(line), "Selected #%d type=%s mat=%d", selected_index, type, obj->material_id);
             cursor_y = SceneEditorSurfaceRenderFlowLine(renderer, bounds, cursor_y, bottom_y, line, body_color, true, 4);
-            snprintf(line,
-                     sizeof(line),
-                     "Pos %.2f, %.2f, %.2f  Color #%06X",
-                     obj->x,
-                     obj->y,
-                     obj->z,
-                     (obj->color & 0xFFFFFF));
+            if (SceneObjectIsGuideOnly(obj)) {
+                snprintf(line,
+                         sizeof(line),
+                         "Pos %.2f, %.2f, %.2f  Helper Tint Locked #%06X",
+                         obj->x,
+                         obj->y,
+                         obj->z,
+                         (obj->color & 0xFFFFFF));
+            } else {
+                snprintf(line,
+                         sizeof(line),
+                         "Pos %.2f, %.2f, %.2f  Color #%06X",
+                         obj->x,
+                         obj->y,
+                         obj->z,
+                         (obj->color & 0xFFFFFF));
+            }
             cursor_y = SceneEditorSurfaceRenderFlowLine(renderer, bounds, cursor_y, bottom_y, line, body_color, true, 8);
         } else {
             cursor_y = SceneEditorSurfaceRenderFlowLine(renderer,

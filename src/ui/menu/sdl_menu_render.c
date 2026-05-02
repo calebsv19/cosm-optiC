@@ -20,6 +20,7 @@
 #include "ui/menu_batch_panel.h"
 #include "ui/menu_panel_chrome.h"
 #include "ui/shared_theme_font_adapter.h"
+#include "ui/volume_source_ui_labels.h"
 
 #define MENU_WIDTH 1200
 #define MENU_HEIGHT 900
@@ -353,6 +354,7 @@ void menu_render_build_button_layout(TTF_Font* font,
                                      MenuButtonLayout* out_layout) {
     MenuButtonLayout layout;
     char manifestLabel[160];
+    char volumeLabel[160];
     const RayTracingIntegratorMenuState integrator_menu =
         RayTracingIntegratorCatalog_BuildMenuState(&animSettings);
     const char* integratorLabel = integrator_menu.buttonLabel;
@@ -440,7 +442,38 @@ void menu_render_build_button_layout(TTF_Font* font,
                                                 root_y, ROOT_CTRL_BUTTON_W, ROOT_ROW_HEIGHT};
         layout.inputRootApplyRect = (SDL_Rect){layout.inputRootFolderRect.x + ROOT_CTRL_BUTTON_W + 2,
                                                root_y, ROOT_CTRL_BUTTON_W, ROOT_ROW_HEIGHT};
-
+        layout.attachVolumeRect = (SDL_Rect){0, 0, 0, 0};
+        layout.volumeToggleRect = (SDL_Rect){0, 0, 0, 0};
+        layout.volumeClearRect = (SDL_Rect){0, 0, 0, 0};
+        if (animSettings.spaceMode == SPACE_MODE_3D) {
+            int volume_buttons_y = root_y + ROOT_ROW_HEIGHT + ROOT_ROW_SPACING + 4;
+            int half_width = (maxLeftWidth - 6) / 2;
+            if (half_width < 120) half_width = 120;
+            volume_source_ui_format_active_button_label(volumeLabel, sizeof(volumeLabel));
+            layout.attachVolumeRect = build_adaptive_button_rect(font,
+                                                                 leftX,
+                                                                 volume_buttons_y,
+                                                                 LOAD_SCENE_BUTTON_WIDTH,
+                                                                 LOAD_SCENE_BUTTON_HEIGHT,
+                                                                 volumeLabel,
+                                                                 maxLeftWidth);
+            layout.volumeToggleRect = build_adaptive_button_rect(font,
+                                                                 leftX,
+                                                                 layout.attachVolumeRect.y + layout.attachVolumeRect.h + 6,
+                                                                 half_width,
+                                                                 ROOT_ROW_HEIGHT,
+                                                                 animSettings.volumeInteractionEnabled
+                                                                     ? "Atmosphere: ON"
+                                                                     : "Atmosphere: OFF",
+                                                                 half_width);
+            layout.volumeClearRect = build_adaptive_button_rect(font,
+                                                                leftX + maxLeftWidth - half_width,
+                                                                layout.volumeToggleRect.y,
+                                                                half_width,
+                                                                ROOT_ROW_HEIGHT,
+                                                                "Clear Volume",
+                                                                half_width);
+        }
     }
 
     leftColumnRight = max_int(layout.interactiveRect.x + layout.interactiveRect.w,
@@ -454,6 +487,8 @@ void menu_render_build_button_layout(TTF_Font* font,
     }
     leftColumnRight = max_int(leftColumnRight, layout.loadSceneRect.x + layout.loadSceneRect.w);
     leftColumnRight = max_int(leftColumnRight, layout.inputRootApplyRect.x + layout.inputRootApplyRect.w);
+    leftColumnRight = max_int(leftColumnRight, layout.attachVolumeRect.x + layout.attachVolumeRect.w);
+    leftColumnRight = max_int(leftColumnRight, layout.volumeClearRect.x + layout.volumeClearRect.w);
     centerX = leftColumnRight + 24;
     centerMaxWidth =
         (screen_layout ? (screen_layout->centerControlsRect.x + screen_layout->centerControlsRect.w)
@@ -696,6 +731,62 @@ void menu_render_frame(SDL_Renderer* renderer, TTF_Font* font, MenuRuntimeState*
     menu_render_draw_button_rect(renderer, font, &buttons.inputRootEditRect, "Edit", state->editingInputRoot);
     menu_render_draw_button_rect(renderer, font, &buttons.inputRootFolderRect, "Folder", false);
     menu_render_draw_button_rect(renderer, font, &buttons.inputRootApplyRect, "Apply", false);
+    if (buttons.attachVolumeRect.w > 0 && buttons.attachVolumeRect.h > 0) {
+        char volumeLabel[160];
+        menu_render_format_volume_button_label(state, volumeLabel, sizeof(volumeLabel));
+        menu_render_draw_button_rect(renderer, font, &buttons.attachVolumeRect, volumeLabel, state->volumeDropdownOpen);
+        if (state->volumeDropdownOpen) {
+            menu_render_draw_volume_dropdown(renderer, font, state, &buttons, &screenLayout);
+        } else {
+            state->volumePanelRect = (SDL_Rect){0, 0, 0, 0};
+            state->volumeListRect = (SDL_Rect){0, 0, 0, 0};
+            state->volumeScrollbarRect = (SDL_Rect){0, 0, 0, 0};
+            state->volumeScrollbarVisible = false;
+            state->volumeThumbHeight = 0.0f;
+            state->volumeTrackHeight = 0.0f;
+        }
+        menu_render_draw_button_rect(renderer,
+                                     font,
+                                     &buttons.volumeToggleRect,
+                                     animSettings.volumeInteractionEnabled ? "Atmosphere: ON"
+                                                                          : "Atmosphere: OFF",
+                                     animSettings.volumeInteractionEnabled);
+        menu_render_draw_button_rect(renderer, font, &buttons.volumeClearRect, "Clear Volume", false);
+        if (state->volumeSummaryLine1[0]) {
+            SDL_Color summary_color = has_shared_palette ? palette.text_muted
+                                                         : (SDL_Color){210, 210, 210, 255};
+            int summary_x = buttons.attachVolumeRect.x + 4;
+            int summary_y = buttons.volumeToggleRect.y + buttons.volumeToggleRect.h + 8;
+            int summary_w = screenLayout.leftPanelRect.x + screenLayout.leftPanelRect.w - summary_x - 18;
+            char summary_fit[192];
+            menu_render_fit_text_to_width(font,
+                                          state->volumeSummaryLine1,
+                                          summary_w,
+                                          summary_fit,
+                                          sizeof(summary_fit));
+            menu_render_draw_text_color(renderer, font, summary_x, summary_y, summary_color, summary_fit);
+            if (state->volumeSummaryLine2[0]) {
+                menu_render_fit_text_to_width(font,
+                                              state->volumeSummaryLine2,
+                                              summary_w,
+                                              summary_fit,
+                                              sizeof(summary_fit));
+                menu_render_draw_text_color(renderer,
+                                            font,
+                                            summary_x,
+                                            summary_y + 16,
+                                            summary_color,
+                                            summary_fit);
+            }
+        }
+    } else {
+        state->volumePanelRect = (SDL_Rect){0, 0, 0, 0};
+        state->volumeListRect = (SDL_Rect){0, 0, 0, 0};
+        state->volumeScrollbarRect = (SDL_Rect){0, 0, 0, 0};
+        state->volumeScrollbarVisible = false;
+        state->volumeThumbHeight = 0.0f;
+        state->volumeTrackHeight = 0.0f;
+    }
     const char* falloffLabel = "Quadratic (1/r^2)";
     if (animSettings.forwardFalloffMode == FORWARD_FALLOFF_MODE_LINEAR) {
         falloffLabel = "Linear (1/r)";

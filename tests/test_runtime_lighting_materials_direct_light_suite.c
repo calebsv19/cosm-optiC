@@ -16,6 +16,7 @@
 #include "render/runtime_material_response_3d.h"
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_scene_3d_builder.h"
+#include "render/runtime_volume_3d.h"
 #include "test_runtime_lighting_materials.h"
 #include "test_runtime_lighting_materials_internal.h"
 #include "test_support.h"
@@ -609,6 +610,101 @@ static int test_runtime_direct_light_3d_authored_light_motion_contract(void) {
     return 0;
 }
 
+static int test_runtime_direct_light_3d_volume_hit_to_light_attenuation_contract(void) {
+    RuntimeScene3D scene;
+    HitInfo3D hit = {0};
+    RuntimeDirectLight3DResult baseline = {0};
+    RuntimeDirectLight3DResult attenuated = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    scene.hasLight = true;
+    scene.light.position = vec3(0.0, -2.0, 2.0);
+    scene.light.intensity = 10.0;
+    scene.light.falloffDistance = 10.0;
+    scene.light.falloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    scene.primitiveCapacity = 1;
+    scene.triangleMesh.triangleCapacity = 1;
+    scene.primitives = (RuntimePrimitive3D*)calloc((size_t)scene.primitiveCapacity,
+                                                   sizeof(*scene.primitives));
+    scene.triangleMesh.triangles =
+        (RuntimeTriangle3D*)calloc((size_t)scene.triangleMesh.triangleCapacity,
+                                   sizeof(*scene.triangleMesh.triangles));
+    assert_true("runtime_direct_light_3d_volume_shadow_alloc_primitives", scene.primitives != NULL);
+    assert_true("runtime_direct_light_3d_volume_shadow_alloc_triangles", scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        return 0;
+    }
+
+    scene.primitiveCount = 1;
+    scene.triangleMesh.triangleCount = 1;
+    scene.primitives[0].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene.primitives[0].source.sceneObjectIndex = 0;
+    scene.triangleMesh.triangles[0].p0 = vec3(-3.0, -5.0, -3.0);
+    scene.triangleMesh.triangles[0].p1 = vec3(-3.0, -5.0, 3.0);
+    scene.triangleMesh.triangles[0].p2 = vec3(3.0, -5.0, -3.0);
+    scene.triangleMesh.triangles[0].normal = vec3(0.0, 1.0, 0.0);
+    scene.triangleMesh.triangles[0].primitiveIndex = 0;
+    scene.triangleMesh.triangles[0].sceneObjectIndex = 0;
+
+    hit.t = 5.0;
+    hit.position = vec3(0.0, -5.0, 0.0);
+    hit.normal = vec3(0.0, 1.0, 0.0);
+    hit.triangleIndex = 0;
+    hit.primitiveIndex = 0;
+    hit.sceneObjectIndex = 0;
+    hit.source = scene.primitives[0].source;
+    hit.baryU = 0.333333333333;
+    hit.baryV = 0.333333333333;
+    hit.baryW = 0.333333333334;
+
+    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, &baseline);
+    assert_true("runtime_direct_light_3d_volume_shadow_baseline_ok", ok);
+    assert_true("runtime_direct_light_3d_volume_shadow_baseline_visible", baseline.visible);
+    assert_true("runtime_direct_light_3d_volume_shadow_baseline_positive", baseline.radiance > 0.0);
+
+    scene.volume.enabled = true;
+    scene.volume.affectsLighting = true;
+    ok = RuntimeVolumeGrid3D_Configure(&scene.volume.grid,
+                                       1u,
+                                       2u,
+                                       6u,
+                                       4u,
+                                       0.0,
+                                       0u,
+                                       0.02,
+                                       vec3(-0.5, -4.5, 0.5),
+                                       0.5,
+                                       vec3(0.0, 0.0, 1.0),
+                                       0u);
+    assert_true("runtime_direct_light_3d_volume_shadow_layout_ok", ok);
+    ok = RuntimeVolumeAttachment3D_AllocateOwnedChannels(
+        &scene.volume,
+        RUNTIME_VOLUME_3D_CHANNEL_DENSITY | RUNTIME_VOLUME_3D_CHANNEL_SOLID_MASK);
+    assert_true("runtime_direct_light_3d_volume_shadow_alloc_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        return 0;
+    }
+    for (uint64_t i = 0; i < scene.volume.grid.cellCount; ++i) {
+        scene.volume.channels.density[i] = 0.6f;
+        scene.volume.channels.solidMask[i] = 0u;
+    }
+
+    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, &attenuated);
+    assert_true("runtime_direct_light_3d_volume_shadow_attenuated_ok", ok);
+    assert_true("runtime_direct_light_3d_volume_shadow_attenuated_visible", attenuated.visible);
+    assert_true("runtime_direct_light_3d_volume_shadow_attenuated_positive", attenuated.radiance > 0.0);
+    assert_true("runtime_direct_light_3d_volume_shadow_darker",
+                attenuated.radiance < baseline.radiance);
+    assert_true("runtime_direct_light_3d_volume_shadow_red_darker",
+                attenuated.radianceR < baseline.radianceR);
+
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
 int run_test_runtime_lighting_materials_direct_light_suite(void) {
     test_runtime_direct_light_3d_shade_pixel_visible_contract();
     test_runtime_direct_light_3d_shade_pixel_shadowed_contract();
@@ -617,5 +713,6 @@ int run_test_runtime_lighting_materials_direct_light_suite(void) {
     test_runtime_direct_light_3d_top_fill_lifts_upward_faces();
     test_runtime_direct_light_3d_transparent_blocker_partial_shadow_contract();
     test_runtime_direct_light_3d_authored_light_motion_contract();
+    test_runtime_direct_light_3d_volume_hit_to_light_attenuation_contract();
     return 0;
 }

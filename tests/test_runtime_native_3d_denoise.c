@@ -1,5 +1,6 @@
 #include <string.h>
 
+#include "render/runtime_native_3d_render.h"
 #include "render/runtime_native_3d_denoise.h"
 #include "render/runtime_native_3d_feature_buffer.h"
 #include "test_runtime_native_3d_denoise.h"
@@ -27,17 +28,15 @@ static int test_runtime_native_3d_denoise_apply_policy(void) {
 
 static int test_runtime_native_3d_denoise_respects_normal_breaks(void) {
     RuntimeNative3DFeatureBuffer features = {0};
-    float radiance[9] = {
-        1.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 0.0f
-    };
+    float radiance[3 * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS] = {0};
     bool ok = RuntimeNative3DFeatureBuffer_Ensure(&features, 3, 1);
     assert_true("runtime_native_3d_denoise_normal_features_alloc", ok);
     if (!ok) {
         RuntimeNative3DFeatureBuffer_Free(&features);
         return 0;
     }
+
+    radiance[0] = 1.0f;
 
     memset(features.hitMaskBuffer, 1, 3u);
     features.depthBuffer[0] = 1.0f;
@@ -55,8 +54,10 @@ static int test_runtime_native_3d_denoise_respects_normal_breaks(void) {
 
     ok = RuntimeNative3DDenoise_Apply(radiance, 3, &features);
     assert_true("runtime_native_3d_denoise_normal_apply_ok", ok);
-    assert_true("runtime_native_3d_denoise_normal_center_lifts", radiance[3] > 0.05f);
-    assert_true("runtime_native_3d_denoise_normal_discontinuity_stays_dark", radiance[6] < 0.01f);
+    assert_true("runtime_native_3d_denoise_normal_center_lifts",
+                radiance[RUNTIME_NATIVE_3D_RADIANCE_CHANNELS] > 0.05f);
+    assert_true("runtime_native_3d_denoise_normal_discontinuity_stays_dark",
+                radiance[2 * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS] < 0.01f);
 
     RuntimeNative3DFeatureBuffer_Free(&features);
     return 0;
@@ -64,17 +65,15 @@ static int test_runtime_native_3d_denoise_respects_normal_breaks(void) {
 
 static int test_runtime_native_3d_denoise_respects_depth_breaks(void) {
     RuntimeNative3DFeatureBuffer features = {0};
-    float radiance[9] = {
-        1.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 0.0f
-    };
+    float radiance[3 * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS] = {0};
     bool ok = RuntimeNative3DFeatureBuffer_Ensure(&features, 3, 1);
     assert_true("runtime_native_3d_denoise_depth_features_alloc", ok);
     if (!ok) {
         RuntimeNative3DFeatureBuffer_Free(&features);
         return 0;
     }
+
+    radiance[0] = 1.0f;
 
     memset(features.hitMaskBuffer, 1, 3u);
     features.depthBuffer[0] = 1.0f;
@@ -89,8 +88,10 @@ static int test_runtime_native_3d_denoise_respects_depth_breaks(void) {
 
     ok = RuntimeNative3DDenoise_Apply(radiance, 3, &features);
     assert_true("runtime_native_3d_denoise_depth_apply_ok", ok);
-    assert_true("runtime_native_3d_denoise_depth_center_lifts", radiance[3] > 0.05f);
-    assert_true("runtime_native_3d_denoise_depth_far_stays_dark", radiance[6] < 0.01f);
+    assert_true("runtime_native_3d_denoise_depth_center_lifts",
+                radiance[RUNTIME_NATIVE_3D_RADIANCE_CHANNELS] > 0.05f);
+    assert_true("runtime_native_3d_denoise_depth_far_stays_dark",
+                radiance[2 * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS] < 0.01f);
 
     RuntimeNative3DFeatureBuffer_Free(&features);
     return 0;

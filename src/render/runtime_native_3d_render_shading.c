@@ -9,6 +9,8 @@
 #include "render/runtime_emission_transparency_3d.h"
 #include "render/runtime_light_emitter_3d.h"
 #include "render/runtime_material_response_3d.h"
+#include "render/runtime_volume_3d_integrate.h"
+#include "render/runtime_volume_3d_scatter.h"
 
 static bool runtime_native_3d_render_trace_visible_emitter(
     const RuntimeScene3D* scene,
@@ -32,48 +34,176 @@ static bool runtime_native_3d_render_trace_visible_emitter(
     }
 
     *out_emitter_hit = trace.emitterHitInfo;
+    {
+        const RuntimeVisibility3DTransmittance transmittance =
+            RuntimeVolume3D_TransmittanceAlongRayRGB(&scene->volume,
+                                                     &primary_ray,
+                                                     projector->nearPlane,
+                                                     trace.emitterHitInfo.t);
+        out_emitter_hit->radiance *= transmittance.luma;
+    }
     return true;
-}
-
-static void runtime_native_3d_render_write_scalar_radiance_rgb(float* radiance_buffer,
-                                                               size_t pixel_index,
-                                                               double radiance) {
-    const size_t base = pixel_index * (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
-    if (!radiance_buffer) return;
-    radiance_buffer[base] = (float)radiance;
-    radiance_buffer[base + 1u] = (float)radiance;
-    radiance_buffer[base + 2u] = (float)radiance;
 }
 
 static void runtime_native_3d_render_write_radiance_rgb(float* radiance_buffer,
                                                         size_t pixel_index,
                                                         double radiance_r,
                                                         double radiance_g,
-                                                        double radiance_b) {
+                                                        double radiance_b,
+                                                        double background_floor) {
     const size_t base = pixel_index * (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
     if (!radiance_buffer) return;
     radiance_buffer[base] = (float)radiance_r;
     radiance_buffer[base + 1u] = (float)radiance_g;
     radiance_buffer[base + 2u] = (float)radiance_b;
+    radiance_buffer[base + RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL] =
+        (float)background_floor;
+}
+
+static double runtime_native_3d_render_peak_rgb(double radiance_r,
+                                                double radiance_g,
+                                                double radiance_b) {
+    double peak = radiance_r;
+    if (radiance_g > peak) peak = radiance_g;
+    if (radiance_b > peak) peak = radiance_b;
+    return peak;
+}
+
+static double runtime_native_3d_render_environment_floor_scalar(void) {
+    return (double)RuntimeNative3DResolveEnvironmentByte() / 255.0;
+}
+
+static double runtime_native_3d_render_background_floor_scalar(
+    const RuntimeScene3D* scene,
+    const RuntimeCameraProjector3D* projector,
+    const Ray3D* primary_ray) {
+    const RuntimeVisibility3DTransmittance transmittance =
+        RuntimeVolume3D_TransmittanceAlongRayRGB(&scene->volume,
+                                                 primary_ray,
+                                                 projector->nearPlane,
+                                                 HUGE_VAL);
+    return runtime_native_3d_render_environment_floor_scalar() * transmittance.luma;
+}
+
+static RuntimeVolume3DScatterResult runtime_native_3d_render_primary_scatter(
+    const RuntimeScene3D* scene,
+    const RuntimeCameraProjector3D* projector,
+    double pixel_x,
+    double pixel_y,
+    double t_max) {
+    Ray3D primary_ray = {0};
+
+    if (!scene || !projector) {
+        RuntimeVolume3DScatterResult zero = {0};
+        return zero;
+    }
+
+    primary_ray = RuntimeCameraProjector3D_MakePrimaryRay(projector, pixel_x, pixel_y);
+    return RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(scene,
+                                                              &primary_ray,
+                                                              projector->nearPlane,
+                                                              t_max);
+}
+
+static void runtime_native_3d_render_apply_scatter_rgb(
+    double* io_radiance_r,
+    double* io_radiance_g,
+    double* io_radiance_b,
+    double* io_peak_radiance,
+    bool* io_visible,
+    const RuntimeVolume3DScatterResult* scatter) {
+    double radiance_r = 0.0;
+    double radiance_g = 0.0;
+    double radiance_b = 0.0;
+
+    if (!io_radiance_r || !io_radiance_g || !io_radiance_b || !io_peak_radiance || !scatter ||
+        !scatter->active) {
+        return;
+    }
+
+    radiance_r = *io_radiance_r + scatter->radianceR;
+    radiance_g = *io_radiance_g + scatter->radianceG;
+    radiance_b = *io_radiance_b + scatter->radianceB;
+    *io_radiance_r = radiance_r;
+    *io_radiance_g = radiance_g;
+    *io_radiance_b = radiance_b;
+    *io_peak_radiance = runtime_native_3d_render_peak_rgb(radiance_r, radiance_g, radiance_b);
+    if (io_visible) {
+        *io_visible = true;
+    }
 }
 
 static void runtime_native_3d_render_write_background_radiance(float* radiance_buffer,
-                                                               size_t pixel_index) {
-    runtime_native_3d_render_write_scalar_radiance_rgb(radiance_buffer, pixel_index, 0.0);
+                                                               size_t pixel_index,
+                                                               const RuntimeScene3D* scene,
+                                                               const RuntimeCameraProjector3D* projector,
+                                                               const Ray3D* primary_ray,
+                                                               const RuntimeVolume3DScatterResult* scatter) {
+    double background_floor = runtime_native_3d_render_environment_floor_scalar();
+    double scatter_r = 0.0;
+    double scatter_g = 0.0;
+    double scatter_b = 0.0;
+
+    if (scene && projector && primary_ray) {
+        background_floor =
+            runtime_native_3d_render_background_floor_scalar(scene, projector, primary_ray);
+    }
+    if (scatter && scatter->active) {
+        scatter_r = scatter->radianceR;
+        scatter_g = scatter->radianceG;
+        scatter_b = scatter->radianceB;
+    }
+    runtime_native_3d_render_write_radiance_rgb(radiance_buffer,
+                                                pixel_index,
+                                                scatter_r,
+                                                scatter_g,
+                                                scatter_b,
+                                                background_floor);
 }
 
-static void runtime_native_3d_render_write_emitter_radiance(float* radiance_buffer,
-                                                            size_t pixel_index,
-                                                            const RuntimeLightEmitterHit3DResult* hit,
-                                                            RuntimeNative3DRenderStats* io_stats) {
-    if (!radiance_buffer || !hit || !io_stats) return;
+static void runtime_native_3d_render_write_emitter_radiance_with_scatter(
+    float* radiance_buffer,
+    size_t pixel_index,
+    const RuntimeScene3D* scene,
+    const RuntimeCameraProjector3D* projector,
+    double pixel_x,
+    double pixel_y,
+    const RuntimeLightEmitterHit3DResult* hit,
+    RuntimeNative3DRenderStats* io_stats) {
+    RuntimeVolume3DScatterResult scatter = {0};
+    double radiance_r = 0.0;
+    double radiance_g = 0.0;
+    double radiance_b = 0.0;
+    double peak = 0.0;
 
+    if (!radiance_buffer || !scene || !projector || !hit || !io_stats) return;
+
+    scatter = runtime_native_3d_render_primary_scatter(scene,
+                                                       projector,
+                                                       pixel_x,
+                                                       pixel_y,
+                                                       hit->t);
+    radiance_r = hit->radiance;
+    radiance_g = hit->radiance;
+    radiance_b = hit->radiance;
+    peak = hit->radiance;
+    runtime_native_3d_render_apply_scatter_rgb(&radiance_r,
+                                               &radiance_g,
+                                               &radiance_b,
+                                               &peak,
+                                               NULL,
+                                               &scatter);
     io_stats->hitPixelCount += 1;
     io_stats->visiblePixelCount += 1;
-    if (hit->radiance > io_stats->maxRadiance) {
-        io_stats->maxRadiance = hit->radiance;
+    if (peak > io_stats->maxRadiance) {
+        io_stats->maxRadiance = peak;
     }
-    runtime_native_3d_render_write_scalar_radiance_rgb(radiance_buffer, pixel_index, hit->radiance);
+    runtime_native_3d_render_write_radiance_rgb(radiance_buffer,
+                                                pixel_index,
+                                                radiance_r,
+                                                radiance_g,
+                                                radiance_b,
+                                                runtime_native_3d_render_environment_floor_scalar());
 }
 
 static bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
@@ -108,6 +238,7 @@ static bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
         for (int x = start_x; x < end_x; ++x) {
             RuntimeDirectLight3DResult result = {0};
             RuntimeLightEmitterHit3DResult emitter_hit = {0};
+            RuntimeVolume3DScatterResult scatter = {0};
             const int local_y = y - start_y;
             const int local_x = x - start_x;
             size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
@@ -116,7 +247,14 @@ static bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
                                                                (double)x,
                                                                (double)y,
                                                                &emitter_hit)) {
-                runtime_native_3d_render_write_emitter_radiance(radiance_buffer, idx, &emitter_hit, &stats);
+                runtime_native_3d_render_write_emitter_radiance_with_scatter(radiance_buffer,
+                                                                             idx,
+                                                                             scene,
+                                                                             projector,
+                                                                             (double)x,
+                                                                             (double)y,
+                                                                             &emitter_hit,
+                                                                             &stats);
                 continue;
             }
             if (!RuntimeDirectLight3D_ShadePixel(scene,
@@ -124,13 +262,37 @@ static bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
                                                  (double)x,
                                                  (double)y,
                                                  &result)) {
-                runtime_native_3d_render_write_background_radiance(radiance_buffer, idx);
+                scatter = runtime_native_3d_render_primary_scatter(scene,
+                                                                   projector,
+                                                                   (double)x,
+                                                                   (double)y,
+                                                                   HUGE_VAL);
+                runtime_native_3d_render_write_background_radiance(radiance_buffer,
+                                                                   idx,
+                                                                   scene,
+                                                                   projector,
+                                                                   &result.primaryRay,
+                                                                   &scatter);
+                if (scatter.active && scatter.radiance > stats.maxRadiance) {
+                    stats.maxRadiance = scatter.radiance;
+                }
                 continue;
             }
+            scatter = runtime_native_3d_render_primary_scatter(scene,
+                                                               projector,
+                                                               (double)x,
+                                                               (double)y,
+                                                               result.hitInfo.t);
             stats.hitPixelCount += 1;
-            if (result.visible) {
+            if (result.visible || scatter.active) {
                 stats.visiblePixelCount += 1;
             }
+            runtime_native_3d_render_apply_scatter_rgb(&result.radianceR,
+                                                       &result.radianceG,
+                                                       &result.radianceB,
+                                                       &result.radiance,
+                                                       &result.visible,
+                                                       &scatter);
             if (result.radiance > stats.maxRadiance) {
                 stats.maxRadiance = result.radiance;
             }
@@ -138,7 +300,8 @@ static bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
                                                         idx,
                                                         result.radianceR,
                                                         result.radianceG,
-                                                        result.radianceB);
+                                                        result.radianceB,
+                                                        runtime_native_3d_render_environment_floor_scalar());
         }
     }
 
@@ -181,6 +344,7 @@ static bool runtime_native_3d_render_shade_diffuse_bounce(float* radiance_buffer
         for (int x = start_x; x < end_x; ++x) {
             RuntimeDiffuseBounce3DResult result = {0};
             RuntimeLightEmitterHit3DResult emitter_hit = {0};
+            RuntimeVolume3DScatterResult scatter = {0};
             const int local_y = y - start_y;
             const int local_x = x - start_x;
             size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
@@ -189,7 +353,14 @@ static bool runtime_native_3d_render_shade_diffuse_bounce(float* radiance_buffer
                                                                (double)x,
                                                                (double)y,
                                                                &emitter_hit)) {
-                runtime_native_3d_render_write_emitter_radiance(radiance_buffer, idx, &emitter_hit, &stats);
+                runtime_native_3d_render_write_emitter_radiance_with_scatter(radiance_buffer,
+                                                                             idx,
+                                                                             scene,
+                                                                             projector,
+                                                                             (double)x,
+                                                                             (double)y,
+                                                                             &emitter_hit,
+                                                                             &stats);
                 continue;
             }
             if (!RuntimeDiffuseBounce3D_ShadePixel(scene,
@@ -198,10 +369,34 @@ static bool runtime_native_3d_render_shade_diffuse_bounce(float* radiance_buffer
                                                    (double)y,
                                                    sampling,
                                                    &result)) {
-                runtime_native_3d_render_write_background_radiance(radiance_buffer, idx);
+                scatter = runtime_native_3d_render_primary_scatter(scene,
+                                                                   projector,
+                                                                   (double)x,
+                                                                   (double)y,
+                                                                   HUGE_VAL);
+                runtime_native_3d_render_write_background_radiance(radiance_buffer,
+                                                                   idx,
+                                                                   scene,
+                                                                   projector,
+                                                                   &result.primaryRay,
+                                                                   &scatter);
+                if (scatter.active && scatter.radiance > stats.maxRadiance) {
+                    stats.maxRadiance = scatter.radiance;
+                }
                 continue;
             }
+            scatter = runtime_native_3d_render_primary_scatter(scene,
+                                                               projector,
+                                                               (double)x,
+                                                               (double)y,
+                                                               result.hitInfo.t);
             stats.hitPixelCount += 1;
+            runtime_native_3d_render_apply_scatter_rgb(&result.radianceR,
+                                                       &result.radianceG,
+                                                       &result.radianceB,
+                                                       &result.radiance,
+                                                       &result.visible,
+                                                       &scatter);
             if (result.visible) {
                 stats.visiblePixelCount += 1;
             }
@@ -222,7 +417,8 @@ static bool runtime_native_3d_render_shade_diffuse_bounce(float* radiance_buffer
                                                         idx,
                                                         result.radianceR,
                                                         result.radianceG,
-                                                        result.radianceB);
+                                                        result.radianceB,
+                                                        runtime_native_3d_render_environment_floor_scalar());
         }
     }
 
@@ -265,6 +461,7 @@ static bool runtime_native_3d_render_shade_material(float* radiance_buffer,
         for (int x = start_x; x < end_x; ++x) {
             RuntimeMaterialResponse3DResult result = {0};
             RuntimeLightEmitterHit3DResult emitter_hit = {0};
+            RuntimeVolume3DScatterResult scatter = {0};
             const int local_y = y - start_y;
             const int local_x = x - start_x;
             size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
@@ -273,7 +470,14 @@ static bool runtime_native_3d_render_shade_material(float* radiance_buffer,
                                                                (double)x,
                                                                (double)y,
                                                                &emitter_hit)) {
-                runtime_native_3d_render_write_emitter_radiance(radiance_buffer, idx, &emitter_hit, &stats);
+                runtime_native_3d_render_write_emitter_radiance_with_scatter(radiance_buffer,
+                                                                             idx,
+                                                                             scene,
+                                                                             projector,
+                                                                             (double)x,
+                                                                             (double)y,
+                                                                             &emitter_hit,
+                                                                             &stats);
                 continue;
             }
             if (!RuntimeMaterialResponse3D_ShadePixel(scene,
@@ -282,10 +486,34 @@ static bool runtime_native_3d_render_shade_material(float* radiance_buffer,
                                                       (double)y,
                                                       sampling,
                                                       &result)) {
-                runtime_native_3d_render_write_background_radiance(radiance_buffer, idx);
+                scatter = runtime_native_3d_render_primary_scatter(scene,
+                                                                   projector,
+                                                                   (double)x,
+                                                                   (double)y,
+                                                                   HUGE_VAL);
+                runtime_native_3d_render_write_background_radiance(radiance_buffer,
+                                                                   idx,
+                                                                   scene,
+                                                                   projector,
+                                                                   &result.primaryRay,
+                                                                   &scatter);
+                if (scatter.active && scatter.radiance > stats.maxRadiance) {
+                    stats.maxRadiance = scatter.radiance;
+                }
                 continue;
             }
+            scatter = runtime_native_3d_render_primary_scatter(scene,
+                                                               projector,
+                                                               (double)x,
+                                                               (double)y,
+                                                               result.hitInfo.t);
             stats.hitPixelCount += 1;
+            runtime_native_3d_render_apply_scatter_rgb(&result.radianceR,
+                                                       &result.radianceG,
+                                                       &result.radianceB,
+                                                       &result.radiance,
+                                                       &result.visible,
+                                                       &scatter);
             if (result.visible) {
                 stats.visiblePixelCount += 1;
             }
@@ -306,7 +534,8 @@ static bool runtime_native_3d_render_shade_material(float* radiance_buffer,
                                                         idx,
                                                         result.radianceR,
                                                         result.radianceG,
-                                                        result.radianceB);
+                                                        result.radianceB,
+                                                        runtime_native_3d_render_environment_floor_scalar());
         }
     }
 
@@ -350,6 +579,7 @@ static bool runtime_native_3d_render_shade_emission_transparency(
         for (int x = start_x; x < end_x; ++x) {
             RuntimeEmissionTransparency3DResult result = {0};
             RuntimeLightEmitterHit3DResult emitter_hit = {0};
+            RuntimeVolume3DScatterResult scatter = {0};
             const int local_y = y - start_y;
             const int local_x = x - start_x;
             size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
@@ -358,7 +588,14 @@ static bool runtime_native_3d_render_shade_emission_transparency(
                                                                (double)x,
                                                                (double)y,
                                                                &emitter_hit)) {
-                runtime_native_3d_render_write_emitter_radiance(radiance_buffer, idx, &emitter_hit, &stats);
+                runtime_native_3d_render_write_emitter_radiance_with_scatter(radiance_buffer,
+                                                                             idx,
+                                                                             scene,
+                                                                             projector,
+                                                                             (double)x,
+                                                                             (double)y,
+                                                                             &emitter_hit,
+                                                                             &stats);
                 continue;
             }
             if (!RuntimeEmissionTransparency3D_ShadePixel(scene,
@@ -367,10 +604,34 @@ static bool runtime_native_3d_render_shade_emission_transparency(
                                                           (double)y,
                                                           sampling,
                                                           &result)) {
-                runtime_native_3d_render_write_background_radiance(radiance_buffer, idx);
+                scatter = runtime_native_3d_render_primary_scatter(scene,
+                                                                   projector,
+                                                                   (double)x,
+                                                                   (double)y,
+                                                                   HUGE_VAL);
+                runtime_native_3d_render_write_background_radiance(radiance_buffer,
+                                                                   idx,
+                                                                   scene,
+                                                                   projector,
+                                                                   &result.primaryRay,
+                                                                   &scatter);
+                if (scatter.active && scatter.radiance > stats.maxRadiance) {
+                    stats.maxRadiance = scatter.radiance;
+                }
                 continue;
             }
+            scatter = runtime_native_3d_render_primary_scatter(scene,
+                                                               projector,
+                                                               (double)x,
+                                                               (double)y,
+                                                               result.hitInfo.t);
             stats.hitPixelCount += 1;
+            runtime_native_3d_render_apply_scatter_rgb(&result.radianceR,
+                                                       &result.radianceG,
+                                                       &result.radianceB,
+                                                       &result.radiance,
+                                                       &result.visible,
+                                                       &scatter);
             if (result.visible) {
                 stats.visiblePixelCount += 1;
             }
@@ -391,7 +652,8 @@ static bool runtime_native_3d_render_shade_emission_transparency(
                                                         idx,
                                                         result.radianceR,
                                                         result.radianceG,
-                                                        result.radianceB);
+                                                        result.radianceB,
+                                                        runtime_native_3d_render_environment_floor_scalar());
         }
     }
 
@@ -434,6 +696,7 @@ static bool runtime_native_3d_render_shade_disney(float* radiance_buffer,
         for (int x = start_x; x < end_x; ++x) {
             RuntimeDisney3DResult result = {0};
             RuntimeLightEmitterHit3DResult emitter_hit = {0};
+            RuntimeVolume3DScatterResult scatter = {0};
             const int local_y = y - start_y;
             const int local_x = x - start_x;
             size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
@@ -442,7 +705,14 @@ static bool runtime_native_3d_render_shade_disney(float* radiance_buffer,
                                                                (double)x,
                                                                (double)y,
                                                                &emitter_hit)) {
-                runtime_native_3d_render_write_emitter_radiance(radiance_buffer, idx, &emitter_hit, &stats);
+                runtime_native_3d_render_write_emitter_radiance_with_scatter(radiance_buffer,
+                                                                             idx,
+                                                                             scene,
+                                                                             projector,
+                                                                             (double)x,
+                                                                             (double)y,
+                                                                             &emitter_hit,
+                                                                             &stats);
                 continue;
             }
             if (!RuntimeDisney3D_ShadePixel(scene,
@@ -451,10 +721,34 @@ static bool runtime_native_3d_render_shade_disney(float* radiance_buffer,
                                             (double)y,
                                             sampling,
                                             &result)) {
-                runtime_native_3d_render_write_background_radiance(radiance_buffer, idx);
+                scatter = runtime_native_3d_render_primary_scatter(scene,
+                                                                   projector,
+                                                                   (double)x,
+                                                                   (double)y,
+                                                                   HUGE_VAL);
+                runtime_native_3d_render_write_background_radiance(radiance_buffer,
+                                                                   idx,
+                                                                   scene,
+                                                                   projector,
+                                                                   &result.primaryRay,
+                                                                   &scatter);
+                if (scatter.active && scatter.radiance > stats.maxRadiance) {
+                    stats.maxRadiance = scatter.radiance;
+                }
                 continue;
             }
+            scatter = runtime_native_3d_render_primary_scatter(scene,
+                                                               projector,
+                                                               (double)x,
+                                                               (double)y,
+                                                               result.hitInfo.t);
             stats.hitPixelCount += 1;
+            runtime_native_3d_render_apply_scatter_rgb(&result.radianceR,
+                                                       &result.radianceG,
+                                                       &result.radianceB,
+                                                       &result.radiance,
+                                                       &result.visible,
+                                                       &scatter);
             if (result.visible) {
                 stats.visiblePixelCount += 1;
             }
@@ -475,7 +769,8 @@ static bool runtime_native_3d_render_shade_disney(float* radiance_buffer,
                                                         idx,
                                                         result.radianceR,
                                                         result.radianceG,
-                                                        result.radianceB);
+                                                        result.radianceB,
+                                                        runtime_native_3d_render_environment_floor_scalar());
         }
     }
 

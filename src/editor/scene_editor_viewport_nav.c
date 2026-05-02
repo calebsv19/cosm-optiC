@@ -139,6 +139,7 @@ static bool scene_editor_viewport_nav_frame_to_scene(void) {
     const double margin_world = 18.0;
     for (i = 0; i < sceneSettings.objectCount; ++i) {
         SceneObject* obj = &sceneSettings.sceneObjects[i];
+        if (SceneObjectIsGuideOnly(obj)) continue;
         double radius = obj->radius * obj->scale;
         if (radius <= 0.0 && obj->numPoints > 0) {
             radius = 6.0;
