@@ -498,11 +498,19 @@ static void vk_renderer_debug_capture_dump(VkRenderer* renderer) {
         FILE* file = fopen(output_path, "wb");
         if (file) {
             fprintf(file, "P6\n%u %u\n255\n", width, height);
+            const bool source_is_rgba =
+                renderer &&
+                (renderer->context.swapchain.image_format == VK_FORMAT_R8G8B8A8_UNORM ||
+                 renderer->context.swapchain.image_format == VK_FORMAT_R8G8B8A8_SRGB);
             for (uint32_t y = 0; y < height; ++y) {
                 const uint8_t* row = pixels + ((size_t)y * width * 4u);
                 for (uint32_t x = 0; x < width; ++x) {
                     const uint8_t* p = row + x * 4u;
-                    uint8_t rgb[3] = {p[2], p[1], p[0]};
+                    uint8_t rgb[3] = {
+                        source_is_rgba ? p[0] : p[2],
+                        p[1],
+                        source_is_rgba ? p[2] : p[0]
+                    };
                     fwrite(rgb, 1, sizeof(rgb), file);
                 }
             }

@@ -172,6 +172,31 @@ CoreResult kit_pane_splitter_interaction_set_hover(KitPaneSplitterInteraction *i
     return core_result_ok();
 }
 
+CoreResult kit_pane_splitter_interaction_set_hover_from_hits(KitPaneSplitterInteraction *interaction,
+                                                             const CorePaneSplitterHit *hits,
+                                                             uint32_t hit_count,
+                                                             float point_x,
+                                                             float point_y) {
+    CorePaneSplitterHit hit = {0};
+
+    if (!interaction || !hits) {
+        return kit_pane_invalid("invalid cached splitter hover request");
+    }
+    if (interaction->drag_active) {
+        return core_result_ok();
+    }
+
+    if (!core_pane_hit_test_splitter_hits(hits, hit_count, point_x, point_y, &hit)) {
+        interaction->hover_active = 0;
+        pane_clear_splitter_hit(&interaction->hover_hit);
+        return kit_pane_not_found("cached splitter not found at point");
+    }
+
+    interaction->hover_active = 1;
+    interaction->hover_hit = hit;
+    return core_result_ok();
+}
+
 CoreResult kit_pane_splitter_interaction_begin_drag(KitPaneSplitterInteraction *interaction,
                                                     const CorePaneNode *nodes,
                                                     uint32_t node_count,
@@ -194,6 +219,30 @@ CoreResult kit_pane_splitter_interaction_begin_drag(KitPaneSplitterInteraction *
                                      point_y,
                                      &hit)) {
         return kit_pane_not_found("splitter not found at drag begin point");
+    }
+
+    interaction->hover_active = 1;
+    interaction->drag_active = 1;
+    interaction->hover_hit = hit;
+    interaction->drag_hit = hit;
+    interaction->drag_last_x = point_x;
+    interaction->drag_last_y = point_y;
+    return core_result_ok();
+}
+
+CoreResult kit_pane_splitter_interaction_begin_drag_from_hits(KitPaneSplitterInteraction *interaction,
+                                                              const CorePaneSplitterHit *hits,
+                                                              uint32_t hit_count,
+                                                              float point_x,
+                                                              float point_y) {
+    CorePaneSplitterHit hit = {0};
+
+    if (!interaction || !hits) {
+        return kit_pane_invalid("invalid cached splitter drag begin request");
+    }
+
+    if (!core_pane_hit_test_splitter_hits(hits, hit_count, point_x, point_y, &hit)) {
+        return kit_pane_not_found("cached splitter not found at drag begin point");
     }
 
     interaction->hover_active = 1;

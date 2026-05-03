@@ -38,6 +38,17 @@ Implemented now:
 4. reusable splitter interaction controller for hover/begin-drag/update-drag/end-drag,
 5. null-backend test coverage for command emission and splitter interaction state.
 
+## Recent Changes (`v0.3.0`)
+
+1. Added cached-hit interaction entry points so hosts can drive hover/drag from explicit splitter registries (`kit_pane_splitter_interaction_set_hover_from_hits(...)` and `kit_pane_splitter_interaction_begin_drag_from_hits(...)`).
+2. This matches the IDE-style divider registry model without forcing editor-specific split-tree behavior into shared code.
+
+## Previous Changes (`v0.2.0`)
+
+1. Added baseline pane chrome/splitter rendering helpers.
+2. Added reusable `KitPaneSplitterInteraction` hover/drag state.
+3. Added null-backend interaction coverage.
+
 ## Planned Growth
 
 1. header action-slot rendering helpers,
