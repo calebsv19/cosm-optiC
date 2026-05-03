@@ -59,6 +59,12 @@ CoreResult kit_pane_splitter_interaction_set_hover(KitPaneSplitterInteraction *i
                                                    float point_x,
                                                    float point_y);
 
+CoreResult kit_pane_splitter_interaction_set_hover_from_hits(KitPaneSplitterInteraction *interaction,
+                                                             const CorePaneSplitterHit *hits,
+                                                             uint32_t hit_count,
+                                                             float point_x,
+                                                             float point_y);
+
 CoreResult kit_pane_splitter_interaction_begin_drag(KitPaneSplitterInteraction *interaction,
                                                     const CorePaneNode *nodes,
                                                     uint32_t node_count,
@@ -66,6 +72,12 @@ CoreResult kit_pane_splitter_interaction_begin_drag(KitPaneSplitterInteraction *
                                                     CorePaneRect bounds,
                                                     float point_x,
                                                     float point_y);
+
+CoreResult kit_pane_splitter_interaction_begin_drag_from_hits(KitPaneSplitterInteraction *interaction,
+                                                              const CorePaneSplitterHit *hits,
+                                                              uint32_t hit_count,
+                                                              float point_x,
+                                                              float point_y);
 
 CoreResult kit_pane_splitter_interaction_update_drag(KitPaneSplitterInteraction *interaction,
                                                      CorePaneNode *nodes,
