@@ -54,11 +54,15 @@ static int measure_button_width(TTF_Font* font,
 
 void menu_layout_build_base(TTF_Font* font,
                             const MenuRuntimeState* state,
+                            int window_width,
+                            int window_height,
                             MenuScreenLayout* out_layout) {
     MenuScreenLayout layout;
     const RayTracingIntegratorMenuState integrator_menu =
         RayTracingIntegratorCatalog_BuildMenuState(&animSettings);
     const bool show_path_toggles = integrator_menu.showPathToggles;
+    const int menu_width = (window_width > 0) ? window_width : MENU_WIDTH;
+    const int menu_height = (window_height > 0) ? window_height : MENU_HEIGHT;
     const int left_panel_w = min_int(MENU_LEFT_PANEL_MAX_WIDTH,
                                      max_int(MENU_LEFT_PANEL_MIN_WIDTH,
                                              max_int(measure_button_width(font,
@@ -66,12 +70,12 @@ void menu_layout_build_base(TTF_Font* font,
                                                                           340,
                                                                           360),
                                                      140 + (56 * 3) + 12) + 20));
-    const int bottom_row_y = MENU_HEIGHT - MENU_MARGIN_Y - MENU_BOTTOM_ACTION_HEIGHT;
+    const int bottom_row_y = menu_height - MENU_MARGIN_Y - MENU_BOTTOM_ACTION_HEIGHT;
     const int route_stack_h = MENU_ROUTE_STACK_BUTTON_HEIGHT * 5 + MENU_ROUTE_STACK_GAP * 4 + 20;
     const int route_stack_y = bottom_row_y - MENU_PANEL_BOTTOM_GAP - route_stack_h;
     const int slider_bottom = route_stack_y - MENU_PANEL_BOTTOM_GAP;
     const int center_left = MENU_MARGIN_X + left_panel_w + MENU_ZONE_GAP;
-    const int slider_x = MENU_WIDTH - MENU_MARGIN_X - MENU_SLIDER_PANEL_WIDTH;
+    const int slider_x = menu_width - MENU_MARGIN_X - MENU_SLIDER_PANEL_WIDTH;
     int center_width = slider_x - MENU_ZONE_GAP - center_left;
     int center_controls_h = MENU_CENTER_CONTROLS_MIN_HEIGHT + (show_path_toggles ? 56 : 0);
     int center_batch_y = 0;
@@ -87,7 +91,7 @@ void menu_layout_build_base(TTF_Font* font,
     }
 
     memset(&layout, 0, sizeof(layout));
-    layout.menuRect = (SDL_Rect){0, 0, MENU_WIDTH, MENU_HEIGHT};
+    layout.menuRect = (SDL_Rect){0, 0, menu_width, menu_height};
     layout.leftPanelRect = (SDL_Rect){
         MENU_MARGIN_X,
         MENU_MARGIN_Y,
@@ -101,7 +105,7 @@ void menu_layout_build_base(TTF_Font* font,
         slider_bottom - MENU_MARGIN_Y
     };
     layout.routeStackRect = (SDL_Rect){
-        MENU_WIDTH - MENU_MARGIN_X - MENU_ROUTE_STACK_WIDTH,
+        menu_width - MENU_MARGIN_X - MENU_ROUTE_STACK_WIDTH,
         route_stack_y,
         MENU_ROUTE_STACK_WIDTH,
         route_stack_h
@@ -109,7 +113,7 @@ void menu_layout_build_base(TTF_Font* font,
     layout.bottomActionRowRect = (SDL_Rect){
         MENU_MARGIN_X,
         bottom_row_y,
-        MENU_WIDTH - MENU_MARGIN_X * 2,
+        menu_width - MENU_MARGIN_X * 2,
         MENU_BOTTOM_ACTION_HEIGHT
     };
     layout.centerControlsRect = (SDL_Rect){

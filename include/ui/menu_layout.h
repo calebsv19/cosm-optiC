@@ -21,6 +21,8 @@ typedef struct {
 
 void menu_layout_build_base(TTF_Font* font,
                             const MenuRuntimeState* state,
+                            int window_width,
+                            int window_height,
                             MenuScreenLayout* out_layout);
 void menu_layout_finalize_with_buttons(MenuScreenLayout* layout,
                                        const MenuButtonLayout* buttons,

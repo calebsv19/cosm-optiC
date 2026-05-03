@@ -1,6 +1,7 @@
 #include "editor/scene_editor_chrome_shell.h"
 
 #include <SDL2/SDL_ttf.h>
+#include <math.h>
 #include <stdio.h>
 
 #include "config/config_manager.h"
@@ -49,6 +50,40 @@ static Uint8 scene_editor_chrome_shell_color_offset(Uint8 value, int offset) {
     if (out < 0) return 0;
     if (out > 255) return 255;
     return (Uint8)out;
+}
+
+static SDL_Rect scene_editor_chrome_shell_rect_from_core(CorePaneRect rect) {
+    SDL_Rect out = {0};
+    out.x = (int)lroundf(rect.x);
+    out.y = (int)lroundf(rect.y);
+    out.w = (int)lroundf(rect.width);
+    out.h = (int)lroundf(rect.height);
+    if (out.w < 0) out.w = 0;
+    if (out.h < 0) out.h = 0;
+    return out;
+}
+
+static void scene_editor_chrome_shell_render_splitter_overlay(SDL_Renderer* renderer,
+                                                              const CorePaneRect* splitter_rect,
+                                                              bool hovered,
+                                                              bool active) {
+    SDL_Rect draw_rect = {0};
+    SDL_Color fill = {210, 215, 225, 128};
+
+    if (!renderer || !splitter_rect) return;
+    draw_rect = scene_editor_chrome_shell_rect_from_core(*splitter_rect);
+    if (draw_rect.w <= 0 || draw_rect.h <= 0) return;
+
+    if (active) {
+        fill = (SDL_Color){230, 178, 92, 228};
+    } else if (hovered) {
+        fill = (SDL_Color){214, 220, 232, 170};
+    }
+
+    SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
+    SDL_RenderFillRect(renderer, &draw_rect);
+    SDL_SetRenderDrawColor(renderer, 24, 26, 33, 220);
+    SDL_RenderDrawRect(renderer, &draw_rect);
 }
 
 void SceneEditorChromeShellSetActionFeedback(const char* text, Uint32 lifetime_ms) {
@@ -374,7 +409,10 @@ static void scene_editor_chrome_shell_render_button(SDL_Renderer* renderer,
 void SceneEditorChromeShellRender(SDL_Renderer* renderer,
                                   const SceneEditorPaneLayout* layout,
                                   bool layout_valid,
-                                  const SceneEditorControlSurfaceContract* contract) {
+                                  const SceneEditorControlSurfaceContract* contract,
+                                  const CorePaneRect* splitter_rect,
+                                  bool splitter_hovered,
+                                  bool splitter_active) {
     RayTracingThemePalette palette = SceneEditorChromeShellResolvePalette();
     SDL_Color paneLabelColor = palette.text_primary;
     SDL_Color statusColor = palette.text_muted;
@@ -438,6 +476,11 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
         SDL_SetRenderDrawColor(renderer, paneBorder.r, paneBorder.g, paneBorder.b, 220);
         SDL_RenderDrawRect(renderer, &layout->viewport_rect);
     }
+
+    scene_editor_chrome_shell_render_splitter_overlay(renderer,
+                                                      splitter_rect,
+                                                      splitter_hovered,
+                                                      splitter_active);
 
     for (int i = 0; i < 3; i++) {
         bool selectable = contract->modeSelectable[i];

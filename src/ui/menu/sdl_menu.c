@@ -25,11 +25,30 @@
 
 #define MENU_WIDTH 1200
 #define MENU_HEIGHT 900
+#define MENU_MIN_WIDTH 1080
+#define MENU_MIN_HEIGHT 760
 #define MENU_IDLE_HEARTBEAT_MS 250u
 
 #if USE_VULKAN
 static VkRenderer g_menu_renderer_storage;
 #endif
+
+static void menu_refresh_render_context(SDL_Window* window, SDL_Renderer* renderer) {
+    int window_width = MENU_WIDTH;
+    int window_height = MENU_HEIGHT;
+
+    if (!window || !renderer) {
+        return;
+    }
+    SDL_GetWindowSize(window, &window_width, &window_height);
+    if (window_width <= 0) {
+        window_width = MENU_WIDTH;
+    }
+    if (window_height <= 0) {
+        window_height = MENU_HEIGHT;
+    }
+    setRenderContext(renderer, window, window_width, window_height);
+}
 
 static bool initialize_menu(SDL_Window** window,
                             SDL_Renderer** renderer,
@@ -55,13 +74,14 @@ static bool initialize_menu(SDL_Window** window,
                                SDL_WINDOWPOS_CENTERED,
                                MENU_WIDTH,
                                MENU_HEIGHT,
-                               SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
+                               SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
     if (!*window) {
         printf("Window Creation Failed: %s\n", SDL_GetError());
         TTF_Quit();
         SDL_Quit();
         return false;
     }
+    SDL_SetWindowMinimumSize(*window, MENU_MIN_WIDTH, MENU_MIN_HEIGHT);
 
 #if USE_VULKAN
     VkRendererConfig cfg;
@@ -116,7 +136,7 @@ static bool initialize_menu(SDL_Window** window,
     animSettings.previewMode = false;
 
     menu_state_init(state);
-    setRenderContext(*renderer, *window, MENU_WIDTH, MENU_HEIGHT);
+    menu_refresh_render_context(*window, *renderer);
 
     *font = NULL;
     menu_state_reload_font(font);
@@ -278,9 +298,14 @@ static bool menu_process_event(SDL_Window* window,
             }
             return false;
         case SDL_WINDOWEVENT:
-            return mutable_event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
-                   mutable_event.window.event == SDL_WINDOWEVENT_RESIZED ||
-                   mutable_event.window.event == SDL_WINDOWEVENT_EXPOSED;
+            if (mutable_event.window.windowID == SDL_GetWindowID(window) &&
+                (mutable_event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
+                 mutable_event.window.event == SDL_WINDOWEVENT_RESIZED ||
+                 mutable_event.window.event == SDL_WINDOWEVENT_EXPOSED)) {
+                menu_refresh_render_context(window, renderer);
+                return true;
+            }
+            return false;
         default:
             return false;
     }
@@ -378,7 +403,7 @@ bool RunMenu(void) {
                 continue;
             }
 
-            setRenderContext(renderer, window, MENU_WIDTH, MENU_HEIGHT);
+            menu_refresh_render_context(window, renderer);
             if (menuState.activeView == MENU_VIEW_SCENE_EDITOR) {
                 if (!sceneEditorSessionActive) {
                     if (SceneEditorSessionBegin(&sceneEditor, renderer, window)) {

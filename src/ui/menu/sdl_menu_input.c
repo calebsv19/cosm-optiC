@@ -12,6 +12,7 @@
 #include "editor/editor_mode_router.h"
 #include "editor/scene_editor.h"
 #include "engine/Render/render_font.h"
+#include "engine/Render/render_pipeline.h"
 #include "render/ray_tracing_integrator_catalog.h"
 #include "ui/menu_batch_panel.h"
 #include "ui/scene_source_ui_labels.h"
@@ -399,7 +400,13 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     MenuScreenLayout screenLayout;
     SliderLayout layout;
     MenuBatchPanelLayout batchLayout;
-    menu_layout_build_base(*font, state, &screenLayout);
+    RenderContext* render_ctx = getRenderContext();
+    int menu_width = 1200;
+    int menu_height = 900;
+    if (render_ctx && render_ctx->window) {
+        SDL_GetWindowSize(render_ctx->window, &menu_width, &menu_height);
+    }
+    menu_layout_build_base(*font, state, menu_width, menu_height, &screenLayout);
     menu_render_build_button_layout(*font, state, &screenLayout, &buttons);
     menu_layout_finalize_with_buttons(&screenLayout, &buttons, state);
     menu_render_build_slider_layout(*font, state, &screenLayout, &layout);

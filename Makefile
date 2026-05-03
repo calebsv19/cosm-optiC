@@ -60,9 +60,11 @@ CORE_OBJECT_DIR := $(SHARED_ROOT)/core/core_object
 CORE_UNITS_DIR := $(SHARED_ROOT)/core/core_units
 CORE_TRACE_DIR := $(SHARED_ROOT)/core/core_trace
 CORE_SPACE_DIR := $(SHARED_ROOT)/core/core_space
+CORE_PANE_DIR := $(SHARED_ROOT)/core/core_pane
 CORE_THEME_DIR := $(SHARED_ROOT)/core/core_theme
 CORE_FONT_DIR := $(SHARED_ROOT)/core/core_font
 KIT_RENDER_DIR := $(SHARED_ROOT)/kit/kit_render
+KIT_PANE_DIR := $(SHARED_ROOT)/kit/kit_pane
 KIT_VIZ_DIR := $(SHARED_ROOT)/kit/kit_viz
 KIT_RUNTIME_DIAG_DIR := $(SHARED_ROOT)/kit/kit_runtime_diag
 UNAME_S := $(shell uname -s)
@@ -185,8 +187,8 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_native_3d_denoise.o \
 	$(BUILD_DIR)/render/runtime_native_3d_blue_noise.o \
 	$(BUILD_DIR)/render/runtime_native_3d_sampling.o \
-	$(BUILD_DIR)/render/runtime_material_payload_3d.o \
-	$(BUILD_DIR)/render/runtime_material_response_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_material_payload_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_material_response_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading.o \
@@ -290,13 +292,13 @@ TIMER_HUD_DIR := $(SHARED_ROOT)/timer_hud
 TIMER_HUD_INCLUDE := -I$(TIMER_HUD_DIR)/include -I$(TIMER_HUD_DIR)/external
 
 CFLAGS += $(TIMER_HUD_INCLUDE) -I$(VK_RENDERER_DIR)/include $(VULKAN_CFLAGS) \
-	-I$(CORE_BASE_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_DATA_DIR)/include -I$(CORE_PACK_DIR)/include -I$(CORE_TIME_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_SCENE_COMPILE_DIR)/include -I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include -I$(CORE_TRACE_DIR)/include -I$(CORE_SPACE_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(KIT_RENDER_DIR)/include -I$(KIT_VIZ_DIR)/include -I$(KIT_RUNTIME_DIAG_DIR)/include \
+	-I$(CORE_BASE_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_DATA_DIR)/include -I$(CORE_PACK_DIR)/include -I$(CORE_TIME_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_SCENE_COMPILE_DIR)/include -I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include -I$(CORE_TRACE_DIR)/include -I$(CORE_SPACE_DIR)/include -I$(CORE_PANE_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(KIT_RENDER_DIR)/include -I$(KIT_PANE_DIR)/include -I$(KIT_VIZ_DIR)/include -I$(KIT_RUNTIME_DIAG_DIR)/include \
 	-DKIT_RENDER_ENABLE_VK_BACKEND=0 \
 	-DUSE_VULKAN=1 -DVK_RENDERER_SHADER_ROOT=\"$(abspath $(VK_RENDERER_DIR))\" \
 	-include $(VK_RENDERER_DIR)/include/vk_renderer_sdl.h
 LDFLAGS += $(VULKAN_LIBS)
 CFLAGS_RELEASE += $(TIMER_HUD_INCLUDE) -I$(VK_RENDERER_DIR)/include $(VULKAN_CFLAGS) \
-	-I$(CORE_BASE_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_DATA_DIR)/include -I$(CORE_PACK_DIR)/include -I$(CORE_TIME_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_SCENE_COMPILE_DIR)/include -I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include -I$(CORE_TRACE_DIR)/include -I$(CORE_SPACE_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(KIT_RENDER_DIR)/include -I$(KIT_VIZ_DIR)/include -I$(KIT_RUNTIME_DIAG_DIR)/include \
+	-I$(CORE_BASE_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_DATA_DIR)/include -I$(CORE_PACK_DIR)/include -I$(CORE_TIME_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_SCENE_COMPILE_DIR)/include -I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include -I$(CORE_TRACE_DIR)/include -I$(CORE_SPACE_DIR)/include -I$(CORE_PANE_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(KIT_RENDER_DIR)/include -I$(KIT_PANE_DIR)/include -I$(KIT_VIZ_DIR)/include -I$(KIT_RUNTIME_DIAG_DIR)/include \
 	-DKIT_RENDER_ENABLE_VK_BACKEND=0 \
 	-DUSE_VULKAN=1 -DVK_RENDERER_SHADER_ROOT=\"$(abspath $(VK_RENDERER_DIR))\" \
 	-include $(VK_RENDERER_DIR)/include/vk_renderer_sdl.h
@@ -337,8 +339,8 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_native_3d_denoise.o \
 	$(BUILD_DIR)/render/runtime_native_3d_blue_noise.o \
 	$(BUILD_DIR)/render/runtime_native_3d_sampling.o \
-	$(BUILD_DIR)/render/runtime_material_payload_3d.o \
-	$(BUILD_DIR)/render/runtime_material_response_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_material_payload_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_material_response_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading.o \
@@ -475,6 +477,7 @@ CORE_SCENE_COMPILE_SRCS := $(CORE_SCENE_COMPILE_DIR)/src/core_scene_compile.c
 CORE_OBJECT_SRCS := $(CORE_OBJECT_DIR)/src/core_object.c
 CORE_UNITS_SRCS := $(CORE_UNITS_DIR)/src/core_units.c
 CORE_SPACE_SRCS := $(CORE_SPACE_DIR)/src/core_space.c
+CORE_PANE_SRCS := $(CORE_PANE_DIR)/src/core_pane.c
 CORE_THEME_SRCS := $(CORE_THEME_DIR)/src/core_theme.c
 CORE_FONT_SRCS := $(CORE_FONT_DIR)/src/core_font.c
 KIT_RENDER_SRCS := \
@@ -482,6 +485,7 @@ KIT_RENDER_SRCS := \
 	$(KIT_RENDER_DIR)/src/kit_render_external_text.c \
 	$(KIT_RENDER_DIR)/src/kit_render_backend_null.c \
 	$(KIT_RENDER_DIR)/src/kit_render_backend_vk.c
+KIT_PANE_SRCS := $(KIT_PANE_DIR)/src/kit_pane.c
 KIT_VIZ_SRCS := $(KIT_VIZ_DIR)/src/kit_viz.c
 KIT_RUNTIME_DIAG_SRCS := $(KIT_RUNTIME_DIAG_DIR)/src/kit_runtime_diag.c
 CORE_BASE_OBJS := $(patsubst $(CORE_BASE_DIR)/src/%.c,$(BUILD_DIR)/core_base/%.o,$(CORE_BASE_SRCS))
@@ -494,9 +498,11 @@ CORE_SCENE_COMPILE_OBJS := $(patsubst $(CORE_SCENE_COMPILE_DIR)/src/%.c,$(BUILD_
 CORE_OBJECT_OBJS := $(patsubst $(CORE_OBJECT_DIR)/src/%.c,$(BUILD_DIR)/core_object/%.o,$(CORE_OBJECT_SRCS))
 CORE_UNITS_OBJS := $(patsubst $(CORE_UNITS_DIR)/src/%.c,$(BUILD_DIR)/core_units/%.o,$(CORE_UNITS_SRCS))
 CORE_SPACE_OBJS := $(patsubst $(CORE_SPACE_DIR)/src/%.c,$(BUILD_DIR)/core_space/%.o,$(CORE_SPACE_SRCS))
+CORE_PANE_OBJS := $(patsubst $(CORE_PANE_DIR)/src/%.c,$(BUILD_DIR)/core_pane/%.o,$(CORE_PANE_SRCS))
 CORE_THEME_OBJS := $(patsubst $(CORE_THEME_DIR)/src/%.c,$(BUILD_DIR)/core_theme/%.o,$(CORE_THEME_SRCS))
 CORE_FONT_OBJS := $(patsubst $(CORE_FONT_DIR)/src/%.c,$(BUILD_DIR)/core_font/%.o,$(CORE_FONT_SRCS))
 KIT_RENDER_OBJS := $(patsubst $(KIT_RENDER_DIR)/src/%.c,$(BUILD_DIR)/kit_render/%.o,$(KIT_RENDER_SRCS))
+KIT_PANE_OBJS := $(patsubst $(KIT_PANE_DIR)/src/%.c,$(BUILD_DIR)/kit_pane/%.o,$(KIT_PANE_SRCS))
 KIT_VIZ_OBJS := $(patsubst $(KIT_VIZ_DIR)/src/%.c,$(BUILD_DIR)/kit_viz/%.o,$(KIT_VIZ_SRCS))
 KIT_RUNTIME_DIAG_OBJS := $(patsubst $(KIT_RUNTIME_DIAG_DIR)/src/%.c,$(BUILD_DIR)/kit_runtime_diag/%.o,$(KIT_RUNTIME_DIAG_SRCS))
 
@@ -504,7 +510,7 @@ TEST_DEPS += $(KIT_RENDER_OBJS)
 
 OBJ := $(OBJ) $(TIMER_HUD_OBJS) $(TIMER_HUD_EXTERNAL_OBJS) \
 	$(patsubst $(VK_RENDERER_DIR)/src/%.c,$(BUILD_DIR)/vk_renderer/%.o,$(VK_RENDERER_SRCS)) \
-	$(CORE_BASE_OBJS) $(CORE_IO_OBJS) $(CORE_DATA_OBJS) $(CORE_PACK_OBJS) $(CORE_TIME_OBJS) $(CORE_SCENE_OBJS) $(CORE_SCENE_COMPILE_OBJS) $(CORE_OBJECT_OBJS) $(CORE_UNITS_OBJS) $(CORE_SPACE_OBJS) $(CORE_THEME_OBJS) $(CORE_FONT_OBJS) $(KIT_RENDER_OBJS) $(KIT_VIZ_OBJS) $(KIT_RUNTIME_DIAG_OBJS)
+	$(CORE_BASE_OBJS) $(CORE_IO_OBJS) $(CORE_DATA_OBJS) $(CORE_PACK_OBJS) $(CORE_TIME_OBJS) $(CORE_SCENE_OBJS) $(CORE_SCENE_COMPILE_OBJS) $(CORE_OBJECT_OBJS) $(CORE_UNITS_OBJS) $(CORE_SPACE_OBJS) $(CORE_PANE_OBJS) $(CORE_THEME_OBJS) $(CORE_FONT_OBJS) $(KIT_RENDER_OBJS) $(KIT_PANE_OBJS) $(KIT_VIZ_OBJS) $(KIT_RUNTIME_DIAG_OBJS)
 DEP := $(OBJ:.o=.d)
 
 .PHONY: add-disney-flag
@@ -513,6 +519,7 @@ add-disney-flag:
 
 STABLE_TEST_TARGETS := \
 	test \
+	test-scene-editor-pane-host-contract \
 	test-manifest-to-trace-export \
 	test-fluid-pack-contract-parity \
 	test-trio-scene-contract-diff \
@@ -520,7 +527,7 @@ STABLE_TEST_TARGETS := \
 
 LEGACY_TEST_TARGETS :=
 
-.PHONY: all clean run run-ide-theme run-daw-theme run-headless-smoke visual-harness package-desktop package-desktop-smoke package-desktop-self-test package-desktop-copy-desktop package-desktop-sync package-desktop-open package-desktop-remove package-desktop-refresh release-contract release-clean release-build release-bundle-audit release-sign release-verify release-verify-signed release-notarize release-staple release-verify-notarized release-artifact release-distribute release-desktop-refresh debug format video release relrun test test-stable test-legacy test-shared-theme-font-adapter test-manifest-to-trace-export test-fluid-pack-contract-parity test-trio-scene-contract-diff native3d-render-audit
+.PHONY: all clean run run-ide-theme run-daw-theme run-headless-smoke visual-harness package-desktop package-desktop-smoke package-desktop-self-test package-desktop-copy-desktop package-desktop-sync package-desktop-open package-desktop-remove package-desktop-refresh release-contract release-clean release-build release-bundle-audit release-sign release-verify release-verify-signed release-notarize release-staple release-verify-notarized release-artifact release-distribute release-desktop-refresh debug format video release relrun test test-stable test-legacy test-shared-theme-font-adapter test-scene-editor-pane-host-contract test-manifest-to-trace-export test-fluid-pack-contract-parity test-trio-scene-contract-diff native3d-render-audit
 
 all: $(TARGET)
 
@@ -637,6 +644,10 @@ $(BUILD_DIR)/core_space/%.o: $(CORE_SPACE_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
+$(BUILD_DIR)/core_pane/%.o: $(CORE_PANE_DIR)/src/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
 $(BUILD_DIR)/core_theme/%.o: $(CORE_THEME_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
@@ -646,6 +657,10 @@ $(BUILD_DIR)/core_font/%.o: $(CORE_FONT_DIR)/src/%.c
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 $(BUILD_DIR)/kit_render/%.o: $(KIT_RENDER_DIR)/src/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD_DIR)/kit_pane/%.o: $(KIT_PANE_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
@@ -978,6 +993,28 @@ $(SHARED_THEME_FONT_ADAPTER_TEST_BIN): $(SHARED_THEME_FONT_ADAPTER_TEST_SRCS)
 
 test-shared-theme-font-adapter: $(SHARED_THEME_FONT_ADAPTER_TEST_BIN)
 	@$(SHARED_THEME_FONT_ADAPTER_TEST_BIN) || (echo "shared theme/font adapter test failed."; exit 1)
+
+SCENE_EDITOR_PANE_HOST_TEST_BIN := $(BUILD_DIR)/tests/scene_editor_pane_host_contract_test
+SCENE_EDITOR_PANE_HOST_TEST_SRCS := \
+	$(TEST_DIR)/scene_editor_pane_host_contract_test.c \
+	$(TEST_DIR)/kit_render_backend_vk_stub.c \
+	$(SRC_DIR)/editor/scene_editor_pane_host.c \
+	$(CORE_PANE_DIR)/src/core_pane.c \
+	$(KIT_PANE_DIR)/src/kit_pane.c \
+	$(KIT_RENDER_DIR)/src/kit_render.c \
+	$(KIT_RENDER_DIR)/src/kit_render_backend_null.c \
+	$(CORE_THEME_DIR)/src/core_theme.c \
+	$(CORE_FONT_DIR)/src/core_font.c \
+	$(CORE_BASE_DIR)/src/core_base.c
+
+$(SCENE_EDITOR_PANE_HOST_TEST_BIN): $(SCENE_EDITOR_PANE_HOST_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g -DKIT_RENDER_ENABLE_VK_BACKEND=0 \
+		-I$(INC_DIR) -I$(SRC_DIR) -I$(CORE_PANE_DIR)/include -I$(KIT_PANE_DIR)/include -I$(KIT_RENDER_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-o $@ $(SCENE_EDITOR_PANE_HOST_TEST_SRCS) -lm
+
+test-scene-editor-pane-host-contract: $(SCENE_EDITOR_PANE_HOST_TEST_BIN)
+	@$(SCENE_EDITOR_PANE_HOST_TEST_BIN) || (echo "scene editor pane host contract test failed."; exit 1)
 
 test-manifest-to-trace-export: ray_trace_tool
 	tests/integration/run_manifest_to_trace_export.sh

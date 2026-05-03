@@ -20,6 +20,9 @@
 #include "ui/volume_source_catalog.h"
 #include "ui/volume_source_ui_labels.h"
 
+#define TEST_MENU_WIDTH 1200
+#define TEST_MENU_HEIGHT 900
+
 static bool test_volume_catalog_entry_path(const VolumeSourceCatalogEntry* entries,
                                            size_t count,
                                            const char* path) {
@@ -129,7 +132,7 @@ static int test_menu_layout_builds_non_overlapping_primary_zones(void) {
     animSettings.integratorMode = 2;
     animSettings.spaceMode = SPACE_MODE_3D;
 
-    menu_layout_build_base(NULL, &state, &screen);
+    menu_layout_build_base(NULL, &state, TEST_MENU_WIDTH, TEST_MENU_HEIGHT, &screen);
 
     assert_true("menu_layout_left_panel_has_width", screen.leftPanelRect.w >= 350);
     assert_true("menu_layout_slider_panel_has_width", screen.sliderPanelRect.w >= 300);
@@ -158,7 +161,7 @@ static int test_menu_layout_keeps_manifest_dropdown_inside_left_panel(void) {
     animSettings.spaceMode = SPACE_MODE_3D;
 
     state.manifestDropdownOpen = true;
-    menu_layout_build_base(NULL, &state, &screen);
+    menu_layout_build_base(NULL, &state, TEST_MENU_WIDTH, TEST_MENU_HEIGHT, &screen);
     menu_render_build_button_layout(NULL, &state, &screen, &buttons);
 
     menu_layout_finalize_with_buttons(&screen, &buttons, &state);
@@ -194,7 +197,7 @@ static int test_menu_button_layout_respects_owned_screen_zones(void) {
     animSettings.spaceMode = SPACE_MODE_3D;
     animSettings.editorMode = 0;
 
-    menu_layout_build_base(NULL, &state, &screen);
+    menu_layout_build_base(NULL, &state, TEST_MENU_WIDTH, TEST_MENU_HEIGHT, &screen);
     menu_render_build_button_layout(NULL, &state, &screen, &buttons);
     menu_layout_finalize_with_buttons(&screen, &buttons, &state);
 
@@ -237,7 +240,7 @@ static int test_menu_button_layout_exposes_volume_controls_in_3d_only(void) {
     animSettings.integratorMode = 2;
     animSettings.spaceMode = SPACE_MODE_3D;
 
-    menu_layout_build_base(NULL, &state, &screen);
+    menu_layout_build_base(NULL, &state, TEST_MENU_WIDTH, TEST_MENU_HEIGHT, &screen);
     menu_render_build_button_layout(NULL, &state, &screen, &buttons);
     assert_true("menu_buttons_volume_attach_visible_3d", buttons.attachVolumeRect.w > 0);
     assert_true("menu_buttons_volume_toggle_visible_3d", buttons.volumeToggleRect.w > 0);
@@ -269,7 +272,7 @@ static int test_menu_batch_panel_layout_centers_inside_batch_zone(void) {
     animSettings.integratorMode = 2;
     animSettings.spaceMode = SPACE_MODE_3D;
 
-    menu_layout_build_base(NULL, &state, &screen);
+    menu_layout_build_base(NULL, &state, TEST_MENU_WIDTH, TEST_MENU_HEIGHT, &screen);
     menu_render_build_button_layout(NULL, &state, &screen, &buttons);
     menu_layout_finalize_with_buttons(&screen, &buttons, &state);
     menu_batch_panel_build_layout(NULL, &state, &screen, &batch);
@@ -304,7 +307,7 @@ static int test_menu_batch_panel_header_does_not_overlap_route_rows(void) {
     animSettings.integratorMode = 2;
     animSettings.spaceMode = SPACE_MODE_3D;
 
-    menu_layout_build_base(NULL, &state, &screen);
+    menu_layout_build_base(NULL, &state, TEST_MENU_WIDTH, TEST_MENU_HEIGHT, &screen);
     menu_render_build_button_layout(NULL, &state, &screen, &buttons);
     menu_layout_finalize_with_buttons(&screen, &buttons, &state);
     menu_batch_panel_build_layout(NULL, &state, &screen, &batch);
@@ -360,7 +363,7 @@ static int test_integrator_catalog_menu_routes_by_space_mode(void) {
     memset(&buttons, 0, sizeof(buttons));
     memset(&state, 0, sizeof(state));
     memset(&screen, 0, sizeof(screen));
-    menu_layout_build_base(NULL, &state, &screen);
+    menu_layout_build_base(NULL, &state, TEST_MENU_WIDTH, TEST_MENU_HEIGHT, &screen);
     menu_render_build_button_layout(NULL, &state, &screen, &buttons);
     assert_true("integrator_menu_3d_layout_no_path_toggles", !buttons.showPathToggles);
     assert_true("integrator_menu_top_fill_button_in_center_controls",
@@ -401,7 +404,7 @@ static int test_menu_slider_layout_includes_environment_control(void) {
     animSettings.spaceMode = SPACE_MODE_3D;
     animSettings.environmentBrightness = 128.0;
 
-    menu_layout_build_base(NULL, &state, &screen);
+    menu_layout_build_base(NULL, &state, TEST_MENU_WIDTH, TEST_MENU_HEIGHT, &screen);
     menu_render_build_slider_layout(NULL, &state, &screen, &sliders);
 
     for (size_t i = 0; i < sliders.count; ++i) {
@@ -436,7 +439,7 @@ static int test_menu_slider_layout_routes_bounce_controls_by_space_mode(void) {
     memset(&animSettings, 0, sizeof(animSettings));
 
     animSettings.spaceMode = SPACE_MODE_2D;
-    menu_layout_build_base(NULL, &state, &screen);
+    menu_layout_build_base(NULL, &state, TEST_MENU_WIDTH, TEST_MENU_HEIGHT, &screen);
     menu_render_build_slider_layout(NULL, &state, &screen, &sliders);
     for (size_t i = 0; i < sliders.count; ++i) {
         if (sliders.items[i].label &&
@@ -457,7 +460,7 @@ static int test_menu_slider_layout_routes_bounce_controls_by_space_mode(void) {
     animSettings.spaceMode = SPACE_MODE_3D;
     animSettings.bounceDepth3D = 4;
     animSettings.rouletteThreshold3D = 0.02;
-    menu_layout_build_base(NULL, &state, &screen);
+    menu_layout_build_base(NULL, &state, TEST_MENU_WIDTH, TEST_MENU_HEIGHT, &screen);
     menu_render_build_slider_layout(NULL, &state, &screen, &sliders);
     for (size_t i = 0; i < sliders.count; ++i) {
         if (sliders.items[i].label &&

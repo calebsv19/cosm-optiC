@@ -42,6 +42,9 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
     if (!editor || !event) {
         return;
     }
+    if (SceneEditorHandlePaneSplitterEvent(editor, event)) {
+        return;
+    }
     callbacks = SceneEditorBuildInputRouterCallbacks(editor);
     SceneEditorInputRouterHandleEvent(event, &callbacks);
 }

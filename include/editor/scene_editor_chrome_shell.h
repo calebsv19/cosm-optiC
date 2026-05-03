@@ -26,6 +26,9 @@ void SceneEditorChromeShellLayoutFromPane(const SceneEditorPaneLayout* layout);
 void SceneEditorChromeShellRender(SDL_Renderer* renderer,
                                   const SceneEditorPaneLayout* layout,
                                   bool layout_valid,
-                                  const SceneEditorControlSurfaceContract* contract);
+                                  const SceneEditorControlSurfaceContract* contract,
+                                  const CorePaneRect* splitter_rect,
+                                  bool splitter_hovered,
+                                  bool splitter_active);
 
 #endif

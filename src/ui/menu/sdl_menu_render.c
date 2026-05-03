@@ -668,9 +668,16 @@ void menu_render_frame(SDL_Renderer* renderer, TTF_Font* font, MenuRuntimeState*
     MenuBatchPanelLayout batchPanel;
     RayTracingRuntimeRoute route;
     RayTracingSceneDigestStatus digestStatus;
+    RenderContext* render_ctx = NULL;
+    int menu_width = MENU_WIDTH;
+    int menu_height = MENU_HEIGHT;
     if (!state) return;
 
-    menu_layout_build_base(font, state, &screenLayout);
+    render_ctx = getRenderContext();
+    if (render_ctx && render_ctx->window) {
+        SDL_GetWindowSize(render_ctx->window, &menu_width, &menu_height);
+    }
+    menu_layout_build_base(font, state, menu_width, menu_height, &screenLayout);
     menu_render_build_button_layout(font, state, &screenLayout, &buttons);
     menu_layout_finalize_with_buttons(&screenLayout, &buttons, state);
     menu_render_build_slider_layout(font, state, &screenLayout, &sliderLayout);
@@ -879,7 +886,7 @@ void menu_render_frame(SDL_Renderer* renderer, TTF_Font* font, MenuRuntimeState*
                                                       230}
                                         : (SDL_Color){210, 210, 210, 230};
         int hintX = buttons.spaceModeRect.x;
-        int hintMaxWidth = MENU_WIDTH - hintX - MENU_MARGIN_X;
+        int hintMaxWidth = screenLayout.menuRect.w - hintX - MENU_MARGIN_X;
         int hintLine1Y = 0;
         int hintLine2Y = 0;
         char hintLine1[192];

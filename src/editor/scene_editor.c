@@ -53,6 +53,8 @@ bool sceneEditorExitFlag = false;  //  Used to signal Scene Editor should exit
 static void InitializeEditorMode(SceneEditor* editor);
 static void SceneEditorLayoutChrome(void);
 void SceneEditorSyncWindowSize(SceneEditor* editor);
+void SceneEditorRefreshPaneSplitterHover(SceneEditor* editor);
+bool SceneEditorHandlePaneSplitterEvent(SceneEditor* editor, SDL_Event* event);
 static void SceneEditorResumeAfterPreview(SceneEditor* editor);
 
 #define SCENE_EDITOR_DIGEST_OVERLAY_DEFAULT_YAW_DEG (-35.0)
@@ -508,6 +510,65 @@ void SceneEditorSyncWindowSize(SceneEditor* editor) {
 #endif
     }
     SceneEditorLayoutChrome();
+    SceneEditorRefreshPaneSplitterHover(editor);
+}
+
+void SceneEditorRefreshPaneSplitterHover(SceneEditor* editor) {
+    int mouse_x = 0;
+    int mouse_y = 0;
+
+    if (!editor || !editor->window || !g_scenePaneHost.initialized) return;
+    SDL_GetMouseState(&mouse_x, &mouse_y);
+    scene_editor_pane_host_update_pointer(&g_scenePaneHost, (float)mouse_x, (float)mouse_y);
+}
+
+bool SceneEditorHandlePaneSplitterEvent(SceneEditor* editor, SDL_Event* event) {
+    if (!editor || !event || !g_scenePaneHost.initialized) {
+        return false;
+    }
+    if (!SceneEditorEventMatchesEditorWindow(editor, event)) {
+        return false;
+    }
+
+    switch (event->type) {
+        case SDL_MOUSEMOTION:
+            if (scene_editor_pane_host_splitter_drag_active(&g_scenePaneHost)) {
+                if (scene_editor_pane_host_update_splitter_drag(&g_scenePaneHost,
+                                                                (float)event->motion.x,
+                                                                (float)event->motion.y)) {
+                    SceneEditorLayoutChrome();
+                }
+                return true;
+            }
+            scene_editor_pane_host_update_pointer(&g_scenePaneHost,
+                                                  (float)event->motion.x,
+                                                  (float)event->motion.y);
+            return false;
+        case SDL_MOUSEBUTTONDOWN:
+            if (event->button.button != SDL_BUTTON_LEFT) {
+                return false;
+            }
+            scene_editor_pane_host_update_pointer(&g_scenePaneHost,
+                                                  (float)event->button.x,
+                                                  (float)event->button.y);
+            return scene_editor_pane_host_begin_splitter_drag(&g_scenePaneHost,
+                                                              (float)event->button.x,
+                                                              (float)event->button.y);
+        case SDL_MOUSEBUTTONUP:
+            if (scene_editor_pane_host_splitter_drag_active(&g_scenePaneHost)) {
+                scene_editor_pane_host_end_splitter_drag(&g_scenePaneHost);
+                scene_editor_pane_host_update_pointer(&g_scenePaneHost,
+                                                      (float)event->button.x,
+                                                      (float)event->button.y);
+                return true;
+            }
+            scene_editor_pane_host_update_pointer(&g_scenePaneHost,
+                                                  (float)event->button.x,
+                                                  (float)event->button.y);
+            return false;
+        default:
+            return false;
+    }
 }
 
 static bool SceneEditorLoadSessionState(SceneEditor* editor) {
@@ -572,6 +633,7 @@ bool SceneEditorSessionBegin(SceneEditor* editor, SDL_Renderer* renderer, SDL_Wi
     setRenderContext(editor->renderer, editor->window,
                      sceneSettings.windowWidth, sceneSettings.windowHeight);
     SceneEditorLayoutChrome();
+    SceneEditorRefreshPaneSplitterHover(editor);
     (void)SceneEditorViewportNavFitDigestOverlay(&g_viewport_nav_state,
                                                  g_scenePaneLayoutValid ? &g_scenePaneLayout.viewport_rect : NULL,
                                                  true);
@@ -608,7 +670,7 @@ bool InitializeSceneEditor(SceneEditor* editor) {
     //  Create the window using stored scene settings
     editor->window = SDL_CreateWindow("Scene Editor", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                       sceneSettings.windowWidth, sceneSettings.windowHeight,
-                                      SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
+                                      SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
     if (!editor->window) {
         fprintf(stderr, "Error: Failed to create scene window.\n");
         return false;
@@ -691,6 +753,7 @@ bool InitializeSceneEditor(SceneEditor* editor) {
     setRenderContext(editor->renderer, editor->window,
                      sceneSettings.windowWidth, sceneSettings.windowHeight);
     SceneEditorLayoutChrome();
+    SceneEditorRefreshPaneSplitterHover(editor);
 
     InitializeEditorMode(editor);
 
@@ -704,13 +767,24 @@ bool InitializeSceneEditor(SceneEditor* editor) {
 
 void RenderSceneButtons(SDL_Renderer* renderer) {
     SceneEditorControlSurfaceContract contract = {0};
+    CorePaneRect splitter_rect = {0};
+    bool splitter_visible = false;
+    bool splitter_hovered = false;
+    bool splitter_active = false;
 
     if (!renderer) return;
     SceneEditorControlSurfaceBuildCurrent(ObjectEditorGetSelectedObjectIndex(), &contract);
+    splitter_visible = scene_editor_pane_host_visible_splitter(&g_scenePaneHost,
+                                                               &splitter_rect,
+                                                               &splitter_hovered,
+                                                               &splitter_active);
     SceneEditorChromeShellRender(renderer,
                                  &g_scenePaneLayout,
                                  g_scenePaneLayoutValid,
-                                 &contract);
+                                 &contract,
+                                 splitter_visible ? &splitter_rect : NULL,
+                                 splitter_hovered,
+                                 splitter_active);
 }
 
 void SceneEditorLoop(SceneEditor* editor) {
@@ -738,6 +812,7 @@ bool SceneEditorSessionWantsExit(const SceneEditor* editor) {
 bool SceneEditorSessionInteractionActive(const SceneEditor* editor) {
     (void)editor;
     return g_viewport_nav_state.orbit_active ||
+           scene_editor_pane_host_splitter_drag_active(&g_scenePaneHost) ||
            g_bezier3d_gizmo_state.dragging ||
            g_camera3d_gizmo_state.dragging;
 }
@@ -761,6 +836,7 @@ void SceneEditorSessionEnd(SceneEditor* editor) {
     SceneEditorViewportNavResetDigestOverlayNavigation(&g_viewport_nav_state);
     SceneEditorBezier3DGizmoReset();
     SceneEditorCamera3DGizmoReset();
+    scene_editor_pane_host_end_splitter_drag(&g_scenePaneHost);
     SceneEditorInputRouterReset();
     sceneEditorExitFlag = false;
     setRenderContext(NULL, NULL, 0, 0);
@@ -844,6 +920,7 @@ void DestroySceneEditor(SceneEditor* editor) {
     editor->window = NULL;
     editor->owns_window = false;
     editor->owns_renderer = false;
+    scene_editor_pane_host_end_splitter_drag(&g_scenePaneHost);
     SceneEditorInputRouterReset();
     setRenderContext(NULL, NULL, 0, 0);
     printf("Scene Editor Closed. Returning to main menu...\n");
