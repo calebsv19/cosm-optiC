@@ -122,11 +122,97 @@ static int test_splitter_draw_state_changes(void) {
     return 0;
 }
 
+static int test_splitter_interaction_tracks_hover_and_drag(void) {
+    CorePaneNode nodes[3];
+    CorePaneRect bounds = { 0.0f, 0.0f, 1000.0f, 600.0f };
+    CorePaneRect current_bounds = {0};
+    KitPaneSplitterInteraction interaction;
+    CoreResult result;
+    int hovered = 0;
+    int active = 0;
+    int changed = 0;
+
+    nodes[0] = (CorePaneNode){
+        .type = CORE_PANE_NODE_SPLIT,
+        .id = 1u,
+        .axis = CORE_PANE_AXIS_HORIZONTAL,
+        .ratio_01 = 0.25f,
+        .child_a = 1u,
+        .child_b = 2u,
+        .constraints = { 100.0f, 200.0f }
+    };
+    nodes[1] = (CorePaneNode){ .type = CORE_PANE_NODE_LEAF, .id = 10u };
+    nodes[2] = (CorePaneNode){ .type = CORE_PANE_NODE_LEAF, .id = 11u };
+
+    kit_pane_splitter_interaction_init(&interaction, 10.0f);
+
+    result = kit_pane_splitter_interaction_set_hover(&interaction,
+                                                     nodes,
+                                                     3u,
+                                                     0u,
+                                                     bounds,
+                                                     250.0f,
+                                                     300.0f);
+    if (result.code != CORE_OK) {
+        return 1;
+    }
+    if (!kit_pane_splitter_interaction_current(&interaction, &current_bounds, &hovered, &active)) {
+        return 1;
+    }
+    if (!hovered || active) {
+        return 1;
+    }
+
+    result = kit_pane_splitter_interaction_begin_drag(&interaction,
+                                                      nodes,
+                                                      3u,
+                                                      0u,
+                                                      bounds,
+                                                      250.0f,
+                                                      300.0f);
+    if (result.code != CORE_OK) {
+        return 1;
+    }
+
+    result = kit_pane_splitter_interaction_update_drag(&interaction,
+                                                       nodes,
+                                                       3u,
+                                                       320.0f,
+                                                       300.0f,
+                                                       &changed);
+    if (result.code != CORE_OK || !changed) {
+        return 1;
+    }
+    if (nodes[0].ratio_01 <= 0.25f) {
+        return 1;
+    }
+    if (!kit_pane_splitter_interaction_current(&interaction, &current_bounds, &hovered, &active)) {
+        return 1;
+    }
+    if (!hovered || !active) {
+        return 1;
+    }
+    if (current_bounds.x <= 245.0f) {
+        fprintf(stderr, "expected splitter bounds to move with drag, x=%f\n", current_bounds.x);
+        return 1;
+    }
+
+    kit_pane_splitter_interaction_end_drag(&interaction);
+    if (kit_pane_splitter_interaction_current(&interaction, &current_bounds, &hovered, &active)) {
+        return 1;
+    }
+
+    return 0;
+}
+
 int main(void) {
     if (test_chrome_draw_emits_expected_commands() != 0) {
         return 1;
     }
     if (test_splitter_draw_state_changes() != 0) {
+        return 1;
+    }
+    if (test_splitter_interaction_tracks_hover_and_drag() != 0) {
         return 1;
     }
 
