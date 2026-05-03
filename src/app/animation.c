@@ -9,6 +9,7 @@
 #include "app/animation_input_helpers.h"
 #include "app/animation_output.h"
 #include "app/data_paths.h"
+#include "app/ray_tracing_core_sim_runtime_frame.h"
 #include "app/render_export_batch.h"
 #include "app/runtime_time.h"
 #include "config/config_manager.h"
@@ -63,6 +64,7 @@ int frameCounter;
 int loopCount;
 static bool quitRequested = false;
 static int s_deepRenderStartFrameIndex = 0;
+static CoreSimLoopState s_runtime_frame_loop;
 
 double t_increment;
 double t_param = 0.0;  // Parameter (0 to 1) for interpolation along the path.
@@ -638,6 +640,12 @@ typedef struct RayTracingRenderSubmitBridge {
     bool *running;
 } RayTracingRenderSubmitBridge;
 
+typedef struct RayTracingLoopConditionsBridge {
+    bool *running;
+    int *loop_count;
+    int *frame_counter;
+} RayTracingLoopConditionsBridge;
+
 static bool SubmitRenderFrameViaBridge(void *user_data) {
     RayTracingRenderSubmitBridge *bridge = (RayTracingRenderSubmitBridge *)user_data;
     if (!bridge || !bridge->inputs || !bridge->frame_counter || !bridge->running) {
@@ -668,6 +676,20 @@ void CheckLoopConditions(bool* running, int loopCount, int frameCounter) {
     }
 }
 
+static bool CheckLoopConditionsViaBridge(void *user_data) {
+    RayTracingLoopConditionsBridge *bridge = (RayTracingLoopConditionsBridge *)user_data;
+    if (!bridge || !bridge->running || !bridge->loop_count || !bridge->frame_counter) {
+        return false;
+    }
+    CheckLoopConditions(bridge->running, *bridge->loop_count, *bridge->frame_counter);
+    return true;
+}
+
+static double RayTracingRuntimeNowSeconds(void *user_data) {
+    (void)user_data;
+    return (double)runtime_time_now_ns() / 1000000000.0;
+}
+
 void RunMainLoop(void) {
     running = true;
     accumulator = 0.0;
@@ -689,11 +711,16 @@ void RunMainLoop(void) {
     const bool runtime_diag_enabled = EnvEnabled("RAY_TRACING_RUNTIME_DIAG");
     double runtime_diag_next_log = 0.0;
     KitRuntimeDiagInputTotals input_totals = {0};
+
+    if (!ray_tracing_core_sim_runtime_frame_loop_init(&s_runtime_frame_loop)) {
+        fprintf(stderr, "ray_tracing: failed to initialize core_sim runtime frame loop.\n");
+        running = false;
+    }
     
     while (running && !quitRequested) {
-        const double frame_begin = (double)runtime_time_now_ns() / 1000000000.0;
         KitRuntimeDiagInputFrame input_frame = {0};
         RayTracingInputRoutingResult input_result = {0};
+        RayTracingFrameRenderInputs render_inputs = {0};
         RayTracingFrameEventsBridge events_bridge = {
             .running = &running,
             .input_frame = &input_frame,
@@ -703,12 +730,6 @@ void RunMainLoop(void) {
             .events_fn = HandleFrameEventsViaBridge,
             .user_data = &events_bridge,
         };
-        RayTracingFrameEventsOutcome events_outcome = {0};
-        if (!ray_tracing_app_frame_events(&events_request, &events_outcome) ||
-            !events_outcome.handled) {
-            RunInputRoutingFrame(&running, &input_frame, &input_result);
-        }
-        const double after_events = (double)runtime_time_now_ns() / 1000000000.0;
         RayTracingFrameUpdateBridge update_bridge = {
             .accumulator = &accumulator,
             .current_time = &currentTime,
@@ -719,17 +740,6 @@ void RunMainLoop(void) {
             .update_fn = UpdateFrameViaBridge,
             .user_data = &update_bridge,
         };
-        RayTracingFrameUpdateOutcome update_outcome = {0};
-        if (!ray_tracing_app_frame_update(&update_request, &update_outcome) ||
-            !update_outcome.updated) {
-            if (update_bridge.should_update) {
-                UpdateSimulation(&accumulator, &currentTime, &loopCount);
-            }
-        }
-        const double after_update = (double)runtime_time_now_ns() / 1000000000.0;
-
-        const double after_route = (double)runtime_time_now_ns() / 1000000000.0;
-        RayTracingFrameRenderInputs render_inputs = {0};
         RayTracingFrameRouteBridge route_bridge = {
             .render_inputs = &render_inputs,
         };
@@ -737,13 +747,6 @@ void RunMainLoop(void) {
             .route_fn = RouteFrameViaBridge,
             .user_data = &route_bridge,
         };
-        RayTracingFrameRouteOutcome route_outcome = {0};
-        if (!ray_tracing_app_frame_route(&route_request, &route_outcome) ||
-            !route_outcome.routed) {
-            DeriveRenderInputs(&render_inputs);
-        }
-        const double after_render_derive = (double)runtime_time_now_ns() / 1000000000.0;
-        const double before_present = (double)runtime_time_now_ns() / 1000000000.0;
         RayTracingRenderSubmitBridge submit_bridge = {
             .inputs = &render_inputs,
             .frame_counter = &frameCounter,
@@ -753,30 +756,60 @@ void RunMainLoop(void) {
             .submit_fn = SubmitRenderFrameViaBridge,
             .user_data = &submit_bridge,
         };
-        RayTracingRenderSubmitOutcome submit_outcome = {0};
-        if (!ray_tracing_app_render_submit(&submit_request, &submit_outcome) ||
-            !submit_outcome.submitted) {
-            SubmitRenderFrame(&render_inputs, &frameCounter, &running);
+        RayTracingLoopConditionsBridge loop_conditions_bridge = {
+            .running = &running,
+            .loop_count = &loopCount,
+            .frame_counter = &frameCounter,
+        };
+        RayTracingCoreSimRuntimeFrameRequest runtime_frame_request = {
+            .frame_dt_seconds = s_runtime_frame_loop.policy.fixed_dt_seconds,
+            .now_seconds_fn = RayTracingRuntimeNowSeconds,
+            .now_user_data = NULL,
+            .events_request = events_request,
+            .update_request = update_request,
+            .route_request = route_request,
+            .submit_request = submit_request,
+            .loop_conditions_request = {
+                .check_fn = CheckLoopConditionsViaBridge,
+                .user_data = &loop_conditions_bridge,
+            },
+        };
+        RayTracingCoreSimRuntimeFrameResult runtime_frame_result = {0};
+
+        if (!ray_tracing_core_sim_runtime_frame_step(&s_runtime_frame_loop,
+                                                     &runtime_frame_request,
+                                                     &runtime_frame_result)) {
+            fprintf(stderr,
+                    "ray_tracing: core_sim runtime frame failed status=%s pass=%s message=%s\n",
+                    core_sim_status_name(runtime_frame_result.sim_outcome.status),
+                    runtime_frame_result.sim_outcome.failed_pass_name
+                        ? runtime_frame_result.sim_outcome.failed_pass_name
+                        : "unknown",
+                    runtime_frame_result.sim_outcome.message
+                        ? runtime_frame_result.sim_outcome.message
+                        : "n/a");
+            running = false;
         }
-        const double after_render = (double)runtime_time_now_ns() / 1000000000.0;
-        CheckLoopConditions(&running, loopCount, frameCounter);
         kit_runtime_diag_input_totals_accumulate(&input_totals, &input_frame);
 
         if (runtime_diag_enabled) {
+            const RayTracingCoreSimRuntimeFrameStageMarks *frame_marks =
+                &runtime_frame_result.stage_marks;
             KitRuntimeDiagStageMarks marks = {
-                .frame_begin = frame_begin,
-                .after_events = after_events,
-                .after_update = after_update,
-                .after_queue = after_update,
-                .after_integrate = after_update,
-                .after_route = after_route,
-                .after_render_derive = after_render_derive,
-                .before_present = before_present,
-                .after_render = after_render,
+                .frame_begin = frame_marks->frame_begin,
+                .after_events = frame_marks->after_events,
+                .after_update = frame_marks->after_update,
+                .after_queue = frame_marks->after_update,
+                .after_integrate = frame_marks->after_update,
+                .after_route = frame_marks->after_route,
+                .after_render_derive = frame_marks->after_render_derive,
+                .before_present = frame_marks->before_present,
+                .after_render = frame_marks->after_render,
             };
             KitRuntimeDiagTimings timings = {0};
             kit_runtime_diag_compute_timings(&marks, &timings);
-            if (runtime_diag_next_log <= 0.0 || after_render >= runtime_diag_next_log) {
+            if (runtime_diag_next_log <= 0.0 ||
+                frame_marks->after_render >= runtime_diag_next_log) {
                 printf("[rt_diag] frame=%.1fms events=%.1f update=%.1f route=%.1f derive=%.1f submit=%.1f render=%.1f present=%.1f input(frame_raw=%u frame_actions=%u) input(total_raw=%llu total_actions=%llu)\n",
                        timings.frame_ms,
                        timings.events_ms,
@@ -790,7 +823,7 @@ void RunMainLoop(void) {
                        input_frame.action_count,
                        (unsigned long long)input_totals.raw_event_count,
                        (unsigned long long)input_totals.action_count);
-                runtime_diag_next_log = after_render + 1.0;
+                runtime_diag_next_log = frame_marks->after_render + 1.0;
             }
         }
 
