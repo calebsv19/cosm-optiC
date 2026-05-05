@@ -15,12 +15,24 @@ typedef struct SceneEditorViewportNavCommand {
     bool key_frame_enabled;
     bool gesture_orbit_enabled;
     bool wheel_zoom_enabled;
+    int active_mode;
+    int selected_object_index;
 } SceneEditorViewportNavCommand;
 
 void SceneEditorViewportNavResetDigestOverlayNavigation(SceneEditorDigestOverlayNavState* nav_state);
 bool SceneEditorViewportNavFitDigestOverlay(SceneEditorDigestOverlayNavState* nav_state,
                                             const SDL_Rect* viewport_rect,
                                             bool reset_angles);
+bool SceneEditorViewportNavFitDigestOverlayForTarget(SceneEditorDigestOverlayNavState* nav_state,
+                                                     const SDL_Rect* viewport_rect,
+                                                     bool reset_angles,
+                                                     int active_mode,
+                                                     int selected_object_index);
+bool SceneEditorViewportNavApplyDigestWheelZoom(SceneEditorDigestOverlayNavState* nav_state,
+                                                const SDL_Rect* viewport_rect,
+                                                int wheel_y,
+                                                int active_mode,
+                                                int selected_object_index);
 bool SceneEditorViewportNavHandleCommand(const SceneEditorViewportNavCommand* command,
                                          SceneEditorDigestOverlayNavState* nav_state,
                                          bool* out_interaction_drag);

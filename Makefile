@@ -189,6 +189,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_native_3d_blue_noise.o \
 	$(BUILD_DIR)/render/runtime_native_3d_sampling.o \
 	$(BUILD_DIR)/render/materials/runtime_material_payload_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_material_texture_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_response_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render.o \
@@ -263,10 +264,14 @@ TEST_BIN := $(BUILD_DIR)/tests/test_runner
 TEST_SRC := $(TEST_DIR)/test_runner.c
 TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_registry.o \
 	$(BUILD_DIR)/tests/test_support.o $(BUILD_DIR)/tests/test_config_animation.o \
+	$(BUILD_DIR)/tests/test_config_animation_source_volume_suite.o \
+	$(BUILD_DIR)/tests/test_config_animation_settings_export_suite.o \
 	$(BUILD_DIR)/tests/test_ui_menu_contracts.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_bridge_core.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_bridge_writeback.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry.o \
+	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry_builder_suite.o \
+	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry_trace_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_volume_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials.o \
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials_payload_suite.o \
@@ -278,6 +283,8 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_native_3d_render.o \
 	$(BUILD_DIR)/tests/test_runtime_native_3d_render_live_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_native_3d_render_prepared_suite.o \
+	$(BUILD_DIR)/tests/test_runtime_native_3d_render_prepared_parity_volume_suite.o \
+	$(BUILD_DIR)/tests/test_runtime_native_3d_render_prepared_scatter_preview_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_render_metrics_export.o \
 	$(BUILD_DIR)/tests/test_runtime_preview_editor.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_editor.o \
@@ -341,6 +348,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_native_3d_blue_noise.o \
 	$(BUILD_DIR)/render/runtime_native_3d_sampling.o \
 	$(BUILD_DIR)/render/materials/runtime_material_payload_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_material_texture_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_response_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render.o \
@@ -359,9 +367,15 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder.o \
 	$(BUILD_DIR)/render/runtime_visibility_3d.o \
 	$(BUILD_DIR)/editor/editor_mode_router.o \
+	$(BUILD_DIR)/editor/material_editor.o \
 	$(BUILD_DIR)/editor/object_editor_object_ops.o \
+	$(BUILD_DIR)/editor/object_editor_selection_tracker.o \
 	$(BUILD_DIR)/editor/scene_editor_control_surface.o \
+	$(BUILD_DIR)/editor/scene_editor_digest_overlay_projector.o \
+	$(BUILD_DIR)/editor/scene_editor_material_face_placement.o \
+	$(BUILD_DIR)/editor/scene_editor_material_preview.o \
 	$(BUILD_DIR)/editor/scene_editor_tool_state.o \
+	$(BUILD_DIR)/editor/scene_editor_viewport_nav_zoom.o \
 	$(BUILD_DIR)/editor/scene_editor_runtime_scene_persistence.o \
 	$(BUILD_DIR)/path/path_system.o \
 	$(BUILD_DIR)/path/path_arc_length.o \
@@ -418,6 +432,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/import/runtime_scene_volume_defaults.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_render.o \
+	$(BUILD_DIR)/ui/menu/sdl_menu_render_controls.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_render_manifest.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_render_volume.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_render_sliders.o \

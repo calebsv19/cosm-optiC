@@ -137,7 +137,8 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
                                           SDL_WINDOWPOS_CENTERED,
                                           sceneSettings.windowWidth,
                                           sceneSettings.windowHeight,
-                                          SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
+                                          SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN |
+                                              SDL_WINDOW_ALLOW_HIGHDPI);
         if (!preview_window) {
             fprintf(stderr, "SDL_CreateWindow Error (preview): %s\n", SDL_GetError());
             if (didInit) SDL_Quit();

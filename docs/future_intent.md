@@ -1,6 +1,6 @@
 # Ray Tracing Future Intent
 
-Last updated: 2026-04-29
+Last updated: 2026-05-04
 
 ## Direction
 
@@ -19,6 +19,12 @@ Keep `ray_tracing` stable as a hybrid editor/runtime while treating the shipped 
 3. Keep menu/editor/runtime truth aligned.
    - Preserve current object color/material separation.
    - Preserve current RGBA object-authoring controls, object-level transparency/emissive multipliers, and the current runtime-scene persistence behavior.
+   - Build on the object-centered Material editor mode instead of overloading the top-level object editor.
+   - Expose the retained scene-placement Material view only when there is a real workflow for comparing object origin framing against in-scene placement.
+   - Preserve the broader object-focused Material zoom range so texture work can be inspected close up and previewed from a distance.
+   - Build on the texture-sampled filled triangle Material preview, all-face-group list, active-face texture kind and placement controls, copy-to-selected placement, and generated-face persistence by growing toward custom per-triangle/per-plane material texture placement.
+   - Preserve the split between geometry scene selection and optional atmosphere attachment.
+   - Keep menu-render control helpers and scene-digest picking helpers as dedicated seams instead of collapsing them back into monolithic host files.
 
 4. Defer VF3D / `physics_sim` ingestion until the next internal renderer boundary is chosen and stabilized.
 
@@ -31,11 +37,17 @@ Keep `ray_tracing` stable as a hybrid editor/runtime while treating the shipped 
   - `src/app/animation.c`
   - `src/render/pipeline/ray_tracing2.c`
   - `src/ui/menu/sdl_menu*.c`
+- Keep verification families decomposed when the behavior boundary is already clear:
+  - config persistence/export
+  - prepared native `3D` parity/scatter behavior
+  - runtime scene `3D` geometry builder vs trace contracts
 - Keep support-layer changes shared across the shipped native `3D` ladder when the behavior is truly common:
   - temporal accumulation
   - sampling
   - denoise
   - preview/update behavior
+- Keep procedural texture work app-local until a stable cross-app material graph/schema exists; current rust/fog overlays are native `3D` renderer behavior, not shared-core contracts.
+- Keep the Material editor's object-wide controls as the fallback while custom group topology, durable group controls, and path-traced renderer parity catch up to the generated-face placement schema.
 
 ## Non-Goals
 

@@ -99,8 +99,11 @@ static int clamp_temporal_frames_3d_menu(int value) {
 }
 
 static int clamp_render_scale_3d_menu(int value) {
-    if (value < RUNTIME_3D_RENDER_SCALE_MIN) {
-        value = RUNTIME_3D_RENDER_SCALE_MIN;
+    if (value == RUNTIME_3D_RENDER_SCALE_HIDPI) {
+        return RUNTIME_3D_RENDER_SCALE_HIDPI;
+    }
+    if (value < 1) {
+        value = RUNTIME_3D_RENDER_SCALE_DEFAULT;
     }
     if (value > RUNTIME_3D_RENDER_SCALE_MAX) {
         value = RUNTIME_3D_RENDER_SCALE_MAX;

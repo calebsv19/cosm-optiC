@@ -73,6 +73,15 @@ bool SceneEditorDigestOverlayResolveExtents(const RuntimeSceneBridge3DDigestStat
                                             double* out_max_y,
                                             double* out_max_z,
                                             double* out_span_max);
+bool SceneEditorDigestOverlayResolveObjectExtents(const RuntimeSceneBridge3DDigestState* digest,
+                                                  int scene_object_index,
+                                                  double* out_min_x,
+                                                  double* out_min_y,
+                                                  double* out_min_z,
+                                                  double* out_max_x,
+                                                  double* out_max_y,
+                                                  double* out_max_z,
+                                                  double* out_span_max);
 bool SceneEditorDigestOverlayBuildProjectorWithView(const RuntimeSceneBridge3DDigestState* digest,
                                                     const SDL_Rect* viewport,
                                                     double yaw_deg,
@@ -83,6 +92,12 @@ bool SceneEditorDigestOverlayBuildProjector(const RuntimeSceneBridge3DDigestStat
                                             const SDL_Rect* viewport,
                                             const SceneEditorDigestOverlayNavState* nav_state,
                                             SceneEditorDigestOverlayProjector* out_projector);
+bool SceneEditorDigestOverlayBuildObjectProjector(const RuntimeSceneBridge3DDigestState* digest,
+                                                  const SDL_Rect* viewport,
+                                                  const SceneEditorDigestOverlayNavState* nav_state,
+                                                  int scene_object_index,
+                                                  bool focused_origin,
+                                                  SceneEditorDigestOverlayProjector* out_projector);
 SceneEditorBezier3DInteractionMetrics SceneEditorDigestOverlayResolveBezierMetrics(
     const RuntimeSceneBridge3DDigestState* digest,
     const SceneEditorDigestOverlayProjector* projector);

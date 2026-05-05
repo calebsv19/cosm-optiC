@@ -7,6 +7,8 @@
 #include "config/config_manager.h"
 #include "editor/bezier_editor.h"
 #include "editor/camera_editor.h"
+#include "editor/editor_mode_router.h"
+#include "editor/material_editor.h"
 #include "editor/object_editor.h"
 #include "editor/object_editor_panels.h"
 #include "editor/scene_editor_chrome_shell.h"
@@ -15,9 +17,10 @@
 
 static const char* SceneEditorSurfaceModeLabel(int mode) {
     switch (mode) {
-        case 0: return "Bezier";
-        case 1: return "Objects";
-        case 2: return "Camera";
+        case EDITOR_MODE_PATH: return "Bezier";
+        case EDITOR_MODE_OBJECT: return "Objects";
+        case EDITOR_MODE_CAMERA: return "Camera";
+        case EDITOR_MODE_MATERIAL: return "Material";
         default: return "Mode";
     }
 }
@@ -82,7 +85,39 @@ void SceneEditorSurfaceRenderLeftPaneContent(SDL_Renderer* renderer,
                                                 true,
                                                 8);
 
-    if (contract->activeMode == 1) {
+    if (contract->activeMode == EDITOR_MODE_MATERIAL) {
+        selected_index = MaterialEditorResolveFocusedObjectIndex();
+        if (selected_index >= 0 && selected_index < sceneSettings.objectCount) {
+            SceneObject* obj = &sceneSettings.sceneObjects[selected_index];
+            snprintf(line,
+                     sizeof(line),
+                     "Focused #%d mat=%d tex=%d",
+                     selected_index,
+                     obj->material_id,
+                     obj->textureId);
+            cursor_y = SceneEditorSurfaceRenderFlowLine(renderer, bounds, cursor_y, bottom_y, line, body_color, true, 4);
+            snprintf(line,
+                     sizeof(line),
+                     "Color #%06X  strength=%.2f scale=%.2f",
+                     (obj->color & 0xFFFFFF),
+                     obj->textureStrength,
+                     obj->textureScale);
+            cursor_y = SceneEditorSurfaceRenderFlowLine(renderer, bounds, cursor_y, bottom_y, line, body_color, true, 8);
+        } else {
+            cursor_y = SceneEditorSurfaceRenderFlowLine(renderer,
+                                                        bounds,
+                                                        cursor_y,
+                                                        bottom_y,
+                                                        "No focused object. Select an object in Objects mode, then return here.",
+                                                        body_color,
+                                                        true,
+                                                        8);
+        }
+        MaterialEditorRenderPaneControls(renderer, bounds, cursor_y, bottom_y);
+        return;
+    }
+
+    if (contract->activeMode == EDITOR_MODE_OBJECT) {
         selected_index = ObjectEditorGetSelectedObjectIndex();
         snprintf(line, sizeof(line), "Objects: %d", sceneSettings.objectCount);
         cursor_y = SceneEditorSurfaceRenderFlowLine(renderer, bounds, cursor_y, bottom_y, line, body_color, false, 4);
@@ -131,7 +166,7 @@ void SceneEditorSurfaceRenderLeftPaneContent(SDL_Renderer* renderer,
         return;
     }
 
-    if (contract->activeMode == 0) {
+    if (contract->activeMode == EDITOR_MODE_PATH) {
         int handle_segment = -1;
         int handle_index = -1;
         selected_bezier_point = BezierEditorGetSelectedPointIndex();

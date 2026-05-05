@@ -6,6 +6,7 @@
 
 #include "editor/bezier_editor.h"
 #include "editor/camera_editor.h"
+#include "editor/material_editor.h"
 #include "editor/object_editor.h"
 
 #define SCENE_EDITOR_MAX_QUEUED_CHROME_MUTATIONS 32
@@ -246,7 +247,8 @@ static bool scene_editor_resolve_pane_command(SceneEditorInputTarget target,
 
     if (target != SCENE_EDITOR_INPUT_TARGET_BEZIER_PANE &&
         target != SCENE_EDITOR_INPUT_TARGET_OBJECT_PANE &&
-        target != SCENE_EDITOR_INPUT_TARGET_CAMERA_PANE) {
+        target != SCENE_EDITOR_INPUT_TARGET_CAMERA_PANE &&
+        target != SCENE_EDITOR_INPUT_TARGET_MATERIAL_PANE) {
         return false;
     }
 
@@ -313,6 +315,12 @@ static SceneEditorPaneHitRegion scene_editor_resolve_pane_hit_region(SceneEditor
         if (hit == CAMERA_EDITOR_HIT_CONTROLS) {
             return SCENE_EDITOR_PANE_HIT_CONTROLS;
         }
+        return SCENE_EDITOR_PANE_HIT_CANVAS;
+    }
+    if (target == SCENE_EDITOR_INPUT_TARGET_MATERIAL_PANE) {
+        MaterialEditorHitRegion hit = MaterialEditorHitRegionAtPoint(mx, my);
+        if (hit == MATERIAL_EDITOR_HIT_CONTROLS) return SCENE_EDITOR_PANE_HIT_CONTROLS;
+        if (hit == MATERIAL_EDITOR_HIT_LIST_PANEL) return SCENE_EDITOR_PANE_HIT_LIST_PANEL;
         return SCENE_EDITOR_PANE_HIT_CANVAS;
     }
 

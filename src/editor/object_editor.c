@@ -6,6 +6,7 @@
 #include "editor/editor_mode_router.h"
 #include "editor/object_editor_object_ops.h"
 #include "editor/scene_editor_tool_state.h"
+#include "editor/object_editor_selection_tracker.h"
 #include "editor/object_editor_panels.h"
 #include "app/animation.h"
 #include "app/data_paths.h"
@@ -402,6 +403,7 @@ bool ObjectEditorDeleteObjectIndex(int index) {
     } else if (selectedObjectIndex > index) {
         selectedObjectIndex -= 1;
     }
+    ObjectEditorSelectionTrackerNotifyDelete(index);
     return true;
 }
 
@@ -536,12 +538,18 @@ int ObjectEditorGetSelectedObjectIndex(void) {
     return selectedObjectIndex;
 }
 
+int ObjectEditorGetLastSelectedObjectIndex(void) {
+    return ObjectEditorSelectionTrackerLast(sceneSettings.objectCount);
+}
+
 void ObjectEditorSetSelectedObjectIndex(int index) {
     if (index < 0 || index >= sceneSettings.objectCount) {
         selectedObjectIndex = -1;
         selectedMaterialIndex = -1;
+        ObjectEditorSelectionTrackerSetCurrent(-1, sceneSettings.objectCount);
     } else {
         selectedObjectIndex = index;
+        ObjectEditorSelectionTrackerSetCurrent(index, sceneSettings.objectCount);
         selectedMaterialIndex = sceneSettings.sceneObjects[index].material_id;
     }
     selectedAssetIndex = -1;

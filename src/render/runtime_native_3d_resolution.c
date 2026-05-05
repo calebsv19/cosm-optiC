@@ -4,13 +4,44 @@
 #include "render/runtime_native_3d_render.h"
 
 int RuntimeNative3DClampRenderScale(int value) {
-    if (value < RUNTIME_3D_RENDER_SCALE_MIN) {
-        value = RUNTIME_3D_RENDER_SCALE_MIN;
+    if (value == RUNTIME_3D_RENDER_SCALE_HIDPI) {
+        return RUNTIME_3D_RENDER_SCALE_HIDPI;
+    }
+    if (value < 1) {
+        value = RUNTIME_3D_RENDER_SCALE_DEFAULT;
     }
     if (value > RUNTIME_3D_RENDER_SCALE_MAX) {
         value = RUNTIME_3D_RENDER_SCALE_MAX;
     }
     return value;
+}
+
+bool RuntimeNative3DRenderScaleUsesHiDPI(int value) {
+    return RuntimeNative3DClampRenderScale(value) == RUNTIME_3D_RENDER_SCALE_HIDPI;
+}
+
+bool RuntimeNative3DResolveHostDimensions(int logical_width,
+                                          int logical_height,
+                                          int drawable_width,
+                                          int drawable_height,
+                                          int scale,
+                                          int* out_width,
+                                          int* out_height) {
+    if (!out_width || !out_height || logical_width <= 0 || logical_height <= 0) {
+        return false;
+    }
+
+    if (RuntimeNative3DRenderScaleUsesHiDPI(scale) &&
+        drawable_width > logical_width &&
+        drawable_height > logical_height) {
+        *out_width = drawable_width;
+        *out_height = drawable_height;
+        return true;
+    }
+
+    *out_width = logical_width;
+    *out_height = logical_height;
+    return true;
 }
 
 bool RuntimeNative3DResolveScaledDimensions(int host_width,
@@ -26,6 +57,9 @@ bool RuntimeNative3DResolveScaledDimensions(int host_width,
         return false;
     }
 
+    if (clamped_scale == RUNTIME_3D_RENDER_SCALE_HIDPI) {
+        clamped_scale = 1;
+    }
     resolved_width = host_width / clamped_scale;
     resolved_height = host_height / clamped_scale;
     if (resolved_width < 1) resolved_width = 1;

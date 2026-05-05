@@ -18,6 +18,7 @@
 ## Implemented Today
 
 - native `3D` output is now RGB-aware through the full shipped ladder
+- native `3D` config now persists a dedicated `3D` integrator lane plus bounded temporal-frame, bounce-depth, roulette, denoise, top-fill, and atmosphere-source settings independently of legacy `2D` state
 - native `3D` support layers include:
   - tile preview
   - dirty-rect preview updates
@@ -28,11 +29,12 @@
   - optional top-fill lighting
 - object authoring separates material assignment from color authoring and now uses compact RGBA sliders
 - per-object transparency and emissive-strength controls persist through runtime-scene save/reapply lanes
+- runtime-scene digest overlays keep guide-only helpers visible and pickable while excluding them from real native `3D` geometry participation
 - deep-render controls can:
   - start at a chosen absolute frame index
   - resume from the next existing saved frame
   - keep output numbering and timeline sampling on the same absolute-frame contract
-- the menu/export surface includes current frame-root and video-output-root batch actions
+- the menu/export surface includes current frame-root and video-output-root batch actions, and the native `3D` menu keeps geometry-scene selection separate from optional atmosphere attachment
 
 ## Build and Run
 
@@ -73,6 +75,7 @@ This renumbers captured BMP frames from `data/runtime/frames/default/` by defaul
 
 - Scene Editor modes still cycle across Bézier path, Object, and Camera editing.
 - Native `3D` route activation now reflects the retained runtime-scene path rather than older preview-only truth.
+- Native `3D` menu controls and scene-editor digest picking now live behind dedicated helper seams instead of one monolithic UI/editor file.
 - Fluid overlays remain available for imported physics data; see `docs/KEYBINDS.md` for the current control list.
 
 ## Docs

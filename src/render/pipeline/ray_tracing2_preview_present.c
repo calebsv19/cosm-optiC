@@ -65,6 +65,18 @@ static SDL_Surface* get_abgr_surface(int width, int height) {
 }
 #endif
 
+static SDL_Rect resolve_full_window_destination(SDL_Renderer* renderer,
+                                                int fallback_width,
+                                                int fallback_height) {
+    SDL_Rect dst = {0, 0, fallback_width, fallback_height};
+    RenderContext* ctx = getRenderContext();
+    if (ctx && ctx->renderer == renderer && ctx->logical_width > 0 && ctx->logical_height > 0) {
+        dst.w = ctx->logical_width;
+        dst.h = ctx->logical_height;
+    }
+    return dst;
+}
+
 static RuntimeNative3DSamplingContext ResolveNative3DSubpassSampling(
     const RuntimeNative3DSamplingContext* sampling,
     uint32_t subpass_index,
@@ -210,7 +222,7 @@ static void DrawPreviewBuffer(SDL_Renderer* renderer,
                               const Uint8* preview_buffer) {
     if (!renderer || !ctx || !preview_buffer) return;
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    SDL_Rect bg = {0, 0, ctx->width, ctx->height};
+    SDL_Rect bg = resolve_full_window_destination(renderer, ctx->width, ctx->height);
     SDL_RenderFillRect(renderer, &bg);
 
 #if USE_VULKAN
@@ -258,7 +270,7 @@ void RayTracing2PreviewPresent_DrawLuminanceBuffer(SDL_Renderer* renderer,
                                                    VK_FILTER_NEAREST) != VK_SUCCESS) {
         return;
     }
-    SDL_Rect dst_rect = {0, 0, width, height};
+    SDL_Rect dst_rect = resolve_full_window_destination(renderer, width, height);
     vk_renderer_draw_texture((VkRenderer*)renderer, &texture, NULL, &dst_rect);
     vk_renderer_queue_texture_destroy((VkRenderer*)renderer, &texture);
 #else
@@ -273,8 +285,21 @@ void RayTracing2PreviewPresent_DrawABGRBuffer(SDL_Renderer* renderer,
                                               const Uint8* buffer,
                                               int width,
                                               int height) {
+    RayTracing2PreviewPresent_DrawABGRBufferToRect(renderer,
+                                                   buffer,
+                                                   width,
+                                                   height,
+                                                   resolve_full_window_destination(renderer, width, height));
+}
+
+void RayTracing2PreviewPresent_DrawABGRBufferToRect(SDL_Renderer* renderer,
+                                                    const Uint8* buffer,
+                                                    int width,
+                                                    int height,
+                                                    SDL_Rect dst_rect) {
 #if USE_VULKAN
     if (!renderer || !buffer || width <= 0 || height <= 0) return;
+    if (dst_rect.w <= 0 || dst_rect.h <= 0) return;
     SDL_Surface* surface = get_abgr_surface(width, height);
     if (!surface) return;
 
@@ -293,13 +318,14 @@ void RayTracing2PreviewPresent_DrawABGRBuffer(SDL_Renderer* renderer,
     }
 
     VkRendererTexture texture;
+    VkFilter filter = (dst_rect.w == width && dst_rect.h == height) ? VK_FILTER_NEAREST
+                                                                    : VK_FILTER_LINEAR;
     if (vk_renderer_upload_sdl_surface_with_filter((VkRenderer*)renderer,
                                                    surface,
                                                    &texture,
-                                                   VK_FILTER_NEAREST) != VK_SUCCESS) {
+                                                   filter) != VK_SUCCESS) {
         return;
     }
-    SDL_Rect dst_rect = {0, 0, width, height};
     vk_renderer_draw_texture((VkRenderer*)renderer, &texture, NULL, &dst_rect);
     vk_renderer_queue_texture_destroy((VkRenderer*)renderer, &texture);
 #else
@@ -307,6 +333,7 @@ void RayTracing2PreviewPresent_DrawABGRBuffer(SDL_Renderer* renderer,
     (void)buffer;
     (void)width;
     (void)height;
+    (void)dst_rect;
 #endif
 }
 

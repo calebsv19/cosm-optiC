@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "fluid_pack_import_test.h"
+#include "test_config_animation_internal.h"
 #include "test_fluid_volume_pack_import_3d.h"
 #include "test_fluid_volume_import_3d.h"
 #include "import/runtime_scene_bridge.h"
@@ -67,11 +68,13 @@ static int run_bridge_apply_file_mode(const char* runtime_scene_path) {
 int test_runner_main(int argc, char** argv) {
     static const TestGroup groups[] = {
         {"config_animation", run_test_config_animation_tests},
+        {"config_animation_settings_export", run_test_config_animation_settings_export_suite},
         {"ui_menu_contracts", run_test_ui_menu_contract_tests},
         {"runtime_scene_bridge_core", run_test_runtime_scene_bridge_core_tests},
         {"runtime_scene_bridge_writeback", run_test_runtime_scene_bridge_writeback_tests},
         {"runtime_scene_3d_geometry", run_test_runtime_scene_3d_geometry_tests},
         {"runtime_volume_3d", run_test_runtime_volume_3d_tests},
+        {"runtime_lighting_materials_payload", run_test_runtime_lighting_materials_payload_tests},
         {"runtime_lighting_materials", run_test_runtime_lighting_materials_tests},
         {"runtime_diffuse_temporal", run_test_runtime_diffuse_temporal_tests},
         {"runtime_emission_transparency", run_test_runtime_emission_transparency_tests},

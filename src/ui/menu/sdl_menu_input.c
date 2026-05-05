@@ -599,8 +599,10 @@ void menu_input_handle_mouse_click(SDL_Event* event,
             animSettings.editorMode = EditorModeRouter_NextEditorMode(animSettings.editorMode,
                                                                        false,
                                                                        AnimationUseFluidScene());
-            const char* newModeText = (animSettings.editorMode == 0) ? "Path" :
-                                      (animSettings.editorMode == 1) ? "Scene" : "Camera";
+            const char* newModeText = (animSettings.editorMode == EDITOR_MODE_PATH) ? "Path" :
+                                      (animSettings.editorMode == EDITOR_MODE_OBJECT) ? "Scene" :
+                                      (animSettings.editorMode == EDITOR_MODE_CAMERA) ? "Camera" :
+                                      "Material";
             printf("Scene Editor Mode Toggled: %s\n", newModeText);
             return;
         }

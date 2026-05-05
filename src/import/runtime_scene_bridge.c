@@ -8,6 +8,7 @@
 #include "config/config_manager.h"
 #include "config/config_scene_path_io.h"
 #include "core_io.h"
+#include "editor/scene_editor_material_face_placement.h"
 #include "material/material_manager.h"
 #include "scene/object_manager.h"
 
@@ -40,6 +41,7 @@ static void scene_defaults_reset(void) {
     sceneSettings.cameraPath.points[0].y = 0.0;
     sceneSettings.cameraPath.mode = BEZIER_CUBIC;
     CameraPath3D_Reset(&sceneSettings.cameraPath3D);
+    SceneEditorMaterialFacePlacementResetAll();
     memset(g_last_runtime_object_ids, 0, sizeof(g_last_runtime_object_ids));
     g_last_runtime_object_id_count = 0;
 }

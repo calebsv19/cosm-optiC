@@ -8,6 +8,7 @@
 #include "editor/bezier_editor.h"
 #include "editor/camera_editor.h"
 #include "editor/editor_mode_router.h"
+#include "editor/material_editor.h"
 #include "editor/object_editor.h"
 #include "editor/scene_editor_chrome_shell.h"
 #include "editor/scene_editor_control_surface.h"
@@ -113,7 +114,7 @@ void SceneEditorChromeActionsApply(SceneEditor* editor,
     SceneEditorControlSurfaceBuildCurrent(ObjectEditorGetSelectedObjectIndex(), &contract);
     if (action->kind == SCENE_EDITOR_CHROME_ACTION_MODE_SELECT) {
         bool selectable = (action->mode_index >= 0 &&
-                           action->mode_index < 3 &&
+                           action->mode_index < EDITOR_MODE_COUNT &&
                            contract.modeSelectable[action->mode_index]);
         if (selectable) {
             int clamped_mode = EditorModeRouter_ClampEditorMode(action->mode_index,
@@ -227,6 +228,20 @@ static bool scene_editor_dispatch_camera_pane_command(const SceneEditorPaneComma
     }
 }
 
+static bool scene_editor_dispatch_material_pane_command(const SceneEditorPaneCommand* command) {
+    if (!command || !command->event) return false;
+    switch (command->kind) {
+        case SCENE_EDITOR_PANE_COMMAND_POINTER_DOWN:
+        case SCENE_EDITOR_PANE_COMMAND_POINTER_UP:
+        case SCENE_EDITOR_PANE_COMMAND_POINTER_DRAG:
+        case SCENE_EDITOR_PANE_COMMAND_WHEEL:
+            HandleMaterialEditorEvents(command->event);
+            return true;
+        default:
+            return false;
+    }
+}
+
 static bool scene_editor_contract_canvas_allowed_for_target(
     const SceneEditorControlSurfaceContract* contract,
     SceneEditorInputTarget target) {
@@ -238,6 +253,8 @@ static bool scene_editor_contract_canvas_allowed_for_target(
             return contract->laneObjectCanvasEditEnabled;
         case SCENE_EDITOR_INPUT_TARGET_CAMERA_PANE:
             return contract->laneCameraCanvasEditEnabled;
+        case SCENE_EDITOR_INPUT_TARGET_MATERIAL_PANE:
+            return contract->activeMode == EDITOR_MODE_MATERIAL && contract->laneCanvasEditEnabled;
         default:
             return false;
     }
@@ -596,6 +613,43 @@ static bool scene_editor_dispatch_controlled_3d_bezier_canvas_command(
     return false;
 }
 
+static bool scene_editor_dispatch_material_canvas_command(
+    const SceneEditorChromeActionsEnvironment* env,
+    const SceneEditorPaneCommand* command) {
+    RuntimeSceneBridge3DDigestState digest = {0};
+    SceneEditorDigestOverlayProjector projector = {0};
+    int focused_object_index = -1;
+    bool focused_origin = false;
+    bool additive = false;
+    if (!env || !env->pane_layout || !env->viewport_nav_state) return false;
+    if (!command || !command->event) return false;
+    if (command->kind != SCENE_EDITOR_PANE_COMMAND_POINTER_DOWN) return false;
+    if (command->event->type != SDL_MOUSEBUTTONDOWN ||
+        command->event->button.button != SDL_BUTTON_LEFT) {
+        return false;
+    }
+    if (!scene_editor_chrome_actions_viewport_rect_contains_event_point(env, command->event)) {
+        return false;
+    }
+    focused_object_index = MaterialEditorResolveFocusedObjectIndex();
+    if (focused_object_index < 0) return false;
+    if (!SceneEditorDigestOverlayResolve(&digest)) return false;
+    focused_origin = MaterialEditorGetViewMode() == MATERIAL_EDITOR_VIEW_FOCUSED_ORIGIN;
+    if (!SceneEditorDigestOverlayBuildObjectProjector(&digest,
+                                                      &env->pane_layout->viewport_rect,
+                                                      env->viewport_nav_state,
+                                                      focused_object_index,
+                                                      focused_origin,
+                                                      &projector)) {
+        return false;
+    }
+    additive = (SDL_GetModState() & KMOD_SHIFT) != 0;
+    return MaterialEditorHandleCanvasPointerDown(&projector,
+                                                 command->event->button.x,
+                                                 command->event->button.y,
+                                                 additive);
+}
+
 void SceneEditorChromeActionsRoutePaneEvent(SceneEditor* editor,
                                             const SceneEditorChromeActionsEnvironment* env,
                                             const SceneEditorPaneCommand* command,
@@ -650,6 +704,19 @@ void SceneEditorChromeActionsRoutePaneEvent(SceneEditor* editor,
         !canvas_allowed_for_target) {
         return;
     }
+    if (command->target == SCENE_EDITOR_INPUT_TARGET_MATERIAL_PANE &&
+        command->pane_hit_region == SCENE_EDITOR_PANE_HIT_CANVAS) {
+        result->consumed = scene_editor_dispatch_material_canvas_command(env, command);
+        if (result->consumed) {
+            result->target = command->target;
+            result->pane_hit_region = (uint8_t)command->pane_hit_region;
+            result->requested_target_invalidation = true;
+            result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_PANE |
+                                                SCENE_EDITOR_INVALIDATE_REASON_PANE_CANVAS;
+            result->invalidation_class = SCENE_EDITOR_INVALIDATION_TARGET_PANE;
+        }
+        return;
+    }
     switch (command->target) {
         case SCENE_EDITOR_INPUT_TARGET_BEZIER_PANE:
             result->consumed = scene_editor_dispatch_bezier_pane_command(command);
@@ -659,6 +726,9 @@ void SceneEditorChromeActionsRoutePaneEvent(SceneEditor* editor,
             break;
         case SCENE_EDITOR_INPUT_TARGET_CAMERA_PANE:
             result->consumed = scene_editor_dispatch_camera_pane_command(command);
+            break;
+        case SCENE_EDITOR_INPUT_TARGET_MATERIAL_PANE:
+            result->consumed = scene_editor_dispatch_material_pane_command(command);
             break;
         default:
             result->consumed = false;

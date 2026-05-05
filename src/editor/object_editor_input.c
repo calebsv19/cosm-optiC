@@ -89,7 +89,7 @@ bool CheckObjectClick(double mx, double my) {
             }
             if (ObjectEditorDeleteToolActive()) {
                 printf("Delete Mode Active - Removing Object %d\n", i);
-                RemoveSceneObject(i);
+                ObjectEditorDeleteObjectIndex(i);
                 return true;
             }
 
@@ -103,8 +103,7 @@ bool CheckObjectClick(double mx, double my) {
 
 static void ClearSelections(void) {
     selectedAssetIndex = -1;
-    selectedObjectIndex = -1;
-    selectedMaterialIndex = -1;
+    ObjectEditorSetSelectedObjectIndex(-1);
     activeMaterialSlider = OBJECT_EDITOR_PANEL_SLIDER_NONE;
 }
 
@@ -125,9 +124,7 @@ static void DeleteSelected(void) {
     }
     if (selectedObjectIndex != -1) {
         printf("Deleting Object %d\n", selectedObjectIndex);
-        RemoveSceneObject(selectedObjectIndex);
-        selectedObjectIndex = -1;
-        selectedMaterialIndex = -1;
+        ObjectEditorDeleteObjectIndex(selectedObjectIndex);
         activeMaterialSlider = OBJECT_EDITOR_PANEL_SLIDER_NONE;
     }
 }
@@ -256,8 +253,7 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
                     } else {
                         if (idx < (int)assetLib.count) {
                             selectedAssetIndex = idx;
-                            selectedObjectIndex = -1;
-                            selectedMaterialIndex = -1;
+                            ObjectEditorSetSelectedObjectIndex(-1);
                         }
                     }
                 }
@@ -302,8 +298,7 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
         lastWorldX = worldX;
         lastWorldY = worldY;
 
-        selectedObjectIndex = -1;
-        selectedMaterialIndex = -1;
+        ObjectEditorSetSelectedObjectIndex(-1);
         activeMaterialSlider = OBJECT_EDITOR_PANEL_SLIDER_NONE;
         draggingRotationHandle = false;
 

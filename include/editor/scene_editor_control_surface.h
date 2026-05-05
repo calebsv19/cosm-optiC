@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 
+#include "editor/editor_mode_router.h"
 #include "render/ray_tracing_mode_backend.h"
 
 typedef enum SceneEditorControlSurfaceLane {
@@ -27,7 +28,7 @@ typedef struct SceneEditorControlSurfaceInput {
 typedef struct SceneEditorControlSurfaceContract {
     SceneEditorControlSurfaceLane lane;
     int activeMode;
-    bool modeSelectable[3];
+    bool modeSelectable[EDITOR_MODE_COUNT];
     bool previewEnabled;
     bool cycleModeEnabled;
     bool applyEnabled;

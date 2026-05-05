@@ -60,8 +60,8 @@ static void timer_hud_backend_init(void) {
 static int timer_hud_get_screen_size(int* out_w, int* out_h) {
     RenderContext* ctx = getRenderContext();
     if (!ctx || !ctx->renderer) return 0;
-    if (out_w) *out_w = ctx->width;
-    if (out_h) *out_h = ctx->height;
+    if (out_w) *out_w = ctx->logical_width > 0 ? ctx->logical_width : ctx->width;
+    if (out_h) *out_h = ctx->logical_height > 0 ? ctx->logical_height : ctx->height;
     return 1;
 }
 

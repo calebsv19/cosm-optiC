@@ -2,6 +2,7 @@
 #include "editor/scene_editor.h"
 #include "editor/bezier_editor.h"
 #include "editor/object_editor.h"   //  Required for object editing
+#include "editor/material_editor.h"
 #include "editor/object_editor_panels.h"
 #include "editor/camera_editor.h"   //  Required for camera adjustments
 #include "config/config_manager.h"  //  Required for loading/saving scene settings
@@ -190,6 +191,7 @@ static void SceneEditorResumeAfterPreview(SceneEditor* editor) {
 void RenderSceneDigestOverlay(SDL_Renderer* renderer) {
     int active_mode = EditorModeRouter_ClampEditorMode(animSettings.editorMode,
                                                        SceneEditorControlSurfaceLocksObjectMode());
+    int selected_object_index = ObjectEditorGetSelectedObjectIndex();
     int mouse_x = 0;
     int mouse_y = 0;
     if (!renderer || !g_scenePaneLayoutValid) {
@@ -197,11 +199,14 @@ void RenderSceneDigestOverlay(SDL_Renderer* renderer) {
         return;
     }
     SDL_GetMouseState(&mouse_x, &mouse_y);
+    if (active_mode == EDITOR_MODE_MATERIAL) {
+        selected_object_index = MaterialEditorResolveFocusedObjectIndex();
+    }
     g_digest_hover_object_index = SceneEditorDigestOverlayRender(renderer,
                                                                  &g_scenePaneLayout.viewport_rect,
                                                                  &g_viewport_nav_state,
                                                                  active_mode,
-                                                                 ObjectEditorGetSelectedObjectIndex(),
+                                                                 selected_object_index,
                                                                  mouse_x,
                                                                  mouse_y,
                                                                  &g_bezier3d_gizmo_state,
@@ -223,6 +228,10 @@ static bool SceneEditorHandleViewportNavigation(SceneEditor* editor,
     nav_command.key_frame_enabled = contract.laneKeyFrameEnabled;
     nav_command.gesture_orbit_enabled = contract.laneGestureOrbitEnabled;
     nav_command.wheel_zoom_enabled = contract.laneWheelZoomEnabled;
+    nav_command.active_mode = contract.activeMode;
+    nav_command.selected_object_index = (contract.activeMode == EDITOR_MODE_MATERIAL)
+                                            ? MaterialEditorResolveFocusedObjectIndex()
+                                            : ObjectEditorGetSelectedObjectIndex();
     result->consumed = SceneEditorViewportNavHandleCommand(&nav_command,
                                                            &g_viewport_nav_state,
                                                            &interaction_drag);
@@ -247,13 +256,16 @@ static bool SceneEditorHandleViewportNavigation(SceneEditor* editor,
 static SceneEditorInputTarget SceneEditorResolvePaneTarget(const SceneEditor* editor) {
     if (!editor) return SCENE_EDITOR_INPUT_TARGET_NONE;
     switch (editor->currentMode) {
-        case 0:
+        case EDITOR_MODE_PATH:
             return SCENE_EDITOR_INPUT_TARGET_BEZIER_PANE;
-        case 1:
+        case EDITOR_MODE_OBJECT:
             return SceneEditorControlSurfaceLocksObjectMode() ? SCENE_EDITOR_INPUT_TARGET_NONE
                                                               : SCENE_EDITOR_INPUT_TARGET_OBJECT_PANE;
-        case 2:
+        case EDITOR_MODE_CAMERA:
             return SCENE_EDITOR_INPUT_TARGET_CAMERA_PANE;
+        case EDITOR_MODE_MATERIAL:
+            return SceneEditorControlSurfaceLocksObjectMode() ? SCENE_EDITOR_INPUT_TARGET_NONE
+                                                              : SCENE_EDITOR_INPUT_TARGET_MATERIAL_PANE;
         default:
             return SCENE_EDITOR_INPUT_TARGET_NONE;
     }
@@ -585,7 +597,7 @@ static bool SceneEditorLoadSessionState(SceneEditor* editor) {
     if (animSettings.editorMode < 0) {
         animSettings.editorMode = 0;
     }
-    editor->currentMode = EditorModeRouter_ClampEditorMode(animSettings.editorMode % 3,
+    editor->currentMode = EditorModeRouter_ClampEditorMode(animSettings.editorMode,
                                                            SceneEditorControlSurfaceLocksObjectMode());
     return true;
 }
@@ -670,7 +682,8 @@ bool InitializeSceneEditor(SceneEditor* editor) {
     //  Create the window using stored scene settings
     editor->window = SDL_CreateWindow("Scene Editor", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                       sceneSettings.windowWidth, sceneSettings.windowHeight,
-                                      SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
+                                      SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE |
+                                          SDL_WINDOW_ALLOW_HIGHDPI);
     if (!editor->window) {
         fprintf(stderr, "Error: Failed to create scene window.\n");
         return false;
@@ -880,7 +893,7 @@ void ToggleSceneMode(SceneEditor* editor) {
 
 // Set Scene Mode
 void SetSceneMode(SceneEditor* editor, int mode) {
-    if (mode >= 0 && mode <= 2) {
+    if (mode >= 0 && mode < EDITOR_MODE_COUNT) {
         editor->currentMode = EditorModeRouter_ClampEditorMode(mode,
                                                                SceneEditorControlSurfaceLocksObjectMode());
         animSettings.editorMode = editor->currentMode;
@@ -928,14 +941,17 @@ void DestroySceneEditor(SceneEditor* editor) {
 
 static void InitializeEditorMode(SceneEditor* editor) {
     switch (editor->currentMode) {
-        case 0:
+        case EDITOR_MODE_PATH:
             InitializeBezierEditor();
             break;
-        case 1:
+        case EDITOR_MODE_OBJECT:
             InitializeObjectEditor();
             break;
-        case 2:
+        case EDITOR_MODE_CAMERA:
             InitializeCameraEditor();
+            break;
+        case EDITOR_MODE_MATERIAL:
+            InitializeMaterialEditor();
             break;
         default:
             break;

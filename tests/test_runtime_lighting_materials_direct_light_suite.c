@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include "app/animation.h"
+#include "editor/scene_editor_material_face_placement.h"
 #include "import/runtime_scene_bridge.h"
 #include "material/material_manager.h"
 #include "render/material_bsdf.h"
@@ -21,13 +22,26 @@
 #include "test_runtime_lighting_materials_internal.h"
 #include "test_support.h"
 
+static void runtime_lighting_materials_direct_reset_authoring_state(void) {
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialFacePlacementResetAll();
+    MaterialManagerResetDefaults();
+}
+
 static int test_runtime_direct_light_3d_shade_pixel_visible_contract(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
     RuntimeScene3D scene;
     RuntimeCameraProjector3D projector = {0};
     RuntimeDirectLight3DResult result = {0};
     bool ok = false;
 
     RuntimeScene3D_Init(&scene);
+    runtime_lighting_materials_direct_reset_authoring_state();
+    sceneSettings.objectCount = 1;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_DEFAULT;
+    sceneSettings.sceneObjects[0].color = 0xFFFFFF;
     scene.hasLight = true;
     scene.light.position = vec3(0.0, -2.0, 0.0);
     scene.light.intensity = 10.0;
@@ -51,13 +65,15 @@ static int test_runtime_direct_light_3d_shade_pixel_visible_contract(void) {
     assert_true("runtime_direct_light_3d_visible_alloc_triangles", scene.triangleMesh.triangles != NULL);
     if (!scene.primitives || !scene.triangleMesh.triangles) {
         RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
         return 0;
     }
 
     scene.primitiveCount = 1;
     scene.triangleMesh.triangleCount = 1;
     scene.primitives[0].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
-    scene.primitives[0].source.sceneObjectIndex = 5;
+    scene.primitives[0].source.sceneObjectIndex = 0;
     snprintf(scene.primitives[0].source.objectId,
              sizeof(scene.primitives[0].source.objectId),
              "%s",
@@ -67,12 +83,14 @@ static int test_runtime_direct_light_3d_shade_pixel_visible_contract(void) {
     scene.triangleMesh.triangles[0].p2 = vec3(3.0, -5.0, -3.0);
     scene.triangleMesh.triangles[0].normal = vec3(0.0, 1.0, 0.0);
     scene.triangleMesh.triangles[0].primitiveIndex = 0;
-    scene.triangleMesh.triangles[0].sceneObjectIndex = 5;
+    scene.triangleMesh.triangles[0].sceneObjectIndex = 0;
 
     ok = RuntimeCameraProjector3D_Build(&scene.camera, 101, 101, &projector);
     assert_true("runtime_direct_light_3d_visible_projector_ok", ok);
     if (!ok) {
         RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
         return 0;
     }
 
@@ -85,16 +103,26 @@ static int test_runtime_direct_light_3d_shade_pixel_visible_contract(void) {
     assert_true("runtime_direct_light_3d_visible_radiance_positive", result.radiance > 0.0);
 
     RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
     return 0;
 }
 
 static int test_runtime_direct_light_3d_shade_pixel_shadowed_contract(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
     RuntimeScene3D scene;
     HitInfo3D hit = {0};
     RuntimeDirectLight3DResult result = {0};
     bool ok = false;
 
     RuntimeScene3D_Init(&scene);
+    runtime_lighting_materials_direct_reset_authoring_state();
+    sceneSettings.objectCount = 2;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_DEFAULT;
+    sceneSettings.sceneObjects[0].color = 0xFFFFFF;
+    sceneSettings.sceneObjects[1].material_id = MATERIAL_PRESET_DEFAULT;
+    sceneSettings.sceneObjects[1].color = 0xFFFFFF;
     scene.hasLight = true;
     scene.light.position = vec3(2.0, -2.0, 0.0);
     scene.light.intensity = 10.0;
@@ -111,19 +139,21 @@ static int test_runtime_direct_light_3d_shade_pixel_shadowed_contract(void) {
     assert_true("runtime_direct_light_3d_shadowed_alloc_triangles", scene.triangleMesh.triangles != NULL);
     if (!scene.primitives || !scene.triangleMesh.triangles) {
         RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
         return 0;
     }
 
     scene.primitiveCount = 2;
     scene.triangleMesh.triangleCount = 2;
     scene.primitives[0].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
-    scene.primitives[0].source.sceneObjectIndex = 5;
+    scene.primitives[0].source.sceneObjectIndex = 0;
     snprintf(scene.primitives[0].source.objectId,
              sizeof(scene.primitives[0].source.objectId),
              "%s",
              "lit_wall");
     scene.primitives[1].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
-    scene.primitives[1].source.sceneObjectIndex = 6;
+    scene.primitives[1].source.sceneObjectIndex = 1;
     snprintf(scene.primitives[1].source.objectId,
              sizeof(scene.primitives[1].source.objectId),
              "%s",
@@ -133,20 +163,20 @@ static int test_runtime_direct_light_3d_shade_pixel_shadowed_contract(void) {
     scene.triangleMesh.triangles[0].p2 = vec3(3.0, -5.0, -3.0);
     scene.triangleMesh.triangles[0].normal = vec3(0.0, 1.0, 0.0);
     scene.triangleMesh.triangles[0].primitiveIndex = 0;
-    scene.triangleMesh.triangles[0].sceneObjectIndex = 5;
+    scene.triangleMesh.triangles[0].sceneObjectIndex = 0;
     scene.triangleMesh.triangles[1].p0 = vec3(1.0, -4.5, -2.0);
     scene.triangleMesh.triangles[1].p1 = vec3(1.0, -2.5, 0.0);
     scene.triangleMesh.triangles[1].p2 = vec3(1.0, -4.5, 2.0);
     scene.triangleMesh.triangles[1].normal = vec3(1.0, 0.0, 0.0);
     scene.triangleMesh.triangles[1].primitiveIndex = 1;
-    scene.triangleMesh.triangles[1].sceneObjectIndex = 6;
+    scene.triangleMesh.triangles[1].sceneObjectIndex = 1;
 
     hit.t = 5.0;
     hit.position = vec3(0.0, -5.0, 0.0);
     hit.normal = vec3(0.0, 1.0, 0.0);
     hit.triangleIndex = 0;
     hit.primitiveIndex = 0;
-    hit.sceneObjectIndex = 5;
+    hit.sceneObjectIndex = 0;
     hit.source = scene.primitives[0].source;
     hit.baryU = 0.333333333333;
     hit.baryV = 0.333333333333;
@@ -159,6 +189,8 @@ static int test_runtime_direct_light_3d_shade_pixel_shadowed_contract(void) {
     assert_close("runtime_direct_light_3d_shadowed_radiance_zero", result.radiance, 0.0, 1e-9);
 
     RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
     return 0;
 }
 
@@ -341,8 +373,7 @@ static int test_runtime_direct_light_3d_top_fill_lifts_upward_faces(void) {
     bool ok = false;
 
     RuntimeScene3D_Init(&scene);
-    memset(&sceneSettings, 0, sizeof(sceneSettings));
-    memset(&animSettings, 0, sizeof(animSettings));
+    runtime_lighting_materials_direct_reset_authoring_state();
     sceneSettings.objectCount = 1;
     sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_DEFAULT;
     sceneSettings.sceneObjects[0].color = 0x00FF00;
@@ -421,13 +452,14 @@ static int test_runtime_direct_light_3d_top_fill_lifts_upward_faces(void) {
 
 static int test_runtime_direct_light_3d_transparent_blocker_partial_shadow_contract(void) {
     SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
     RuntimeScene3D scene;
     HitInfo3D hit = {0};
     RuntimeDirectLight3DResult result = {0};
     bool ok = false;
 
     RuntimeScene3D_Init(&scene);
-    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    runtime_lighting_materials_direct_reset_authoring_state();
     sceneSettings.objectCount = 2;
     sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_DEFAULT;
     sceneSettings.sceneObjects[0].color = 0xFFFFFF;
@@ -501,6 +533,7 @@ static int test_runtime_direct_light_3d_transparent_blocker_partial_shadow_contr
 
     RuntimeScene3D_Free(&scene);
     sceneSettings = saved_scene;
+    animSettings = saved_anim;
     return 0;
 }
 
@@ -611,6 +644,8 @@ static int test_runtime_direct_light_3d_authored_light_motion_contract(void) {
 }
 
 static int test_runtime_direct_light_3d_volume_hit_to_light_attenuation_contract(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
     RuntimeScene3D scene;
     HitInfo3D hit = {0};
     RuntimeDirectLight3DResult baseline = {0};
@@ -618,6 +653,10 @@ static int test_runtime_direct_light_3d_volume_hit_to_light_attenuation_contract
     bool ok = false;
 
     RuntimeScene3D_Init(&scene);
+    runtime_lighting_materials_direct_reset_authoring_state();
+    sceneSettings.objectCount = 1;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_DEFAULT;
+    sceneSettings.sceneObjects[0].color = 0xFFFFFF;
     scene.hasLight = true;
     scene.light.position = vec3(0.0, -2.0, 2.0);
     scene.light.intensity = 10.0;
@@ -634,6 +673,8 @@ static int test_runtime_direct_light_3d_volume_hit_to_light_attenuation_contract
     assert_true("runtime_direct_light_3d_volume_shadow_alloc_triangles", scene.triangleMesh.triangles != NULL);
     if (!scene.primitives || !scene.triangleMesh.triangles) {
         RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
         return 0;
     }
 
@@ -685,6 +726,8 @@ static int test_runtime_direct_light_3d_volume_hit_to_light_attenuation_contract
     assert_true("runtime_direct_light_3d_volume_shadow_alloc_ok", ok);
     if (!ok) {
         RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
         return 0;
     }
     for (uint64_t i = 0; i < scene.volume.grid.cellCount; ++i) {
@@ -702,6 +745,8 @@ static int test_runtime_direct_light_3d_volume_hit_to_light_attenuation_contract
                 attenuated.radianceR < baseline.radianceR);
 
     RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
     return 0;
 }
 

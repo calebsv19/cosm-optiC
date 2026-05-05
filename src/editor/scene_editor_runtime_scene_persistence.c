@@ -4,6 +4,7 @@
 #include "config/config_manager.h"
 #include "config/config_scene_path_io.h"
 #include "core_io.h"
+#include "editor/scene_editor_material_face_placement.h"
 #include "import/runtime_scene_bridge.h"
 
 #include <json-c/json.h>
@@ -133,6 +134,23 @@ static bool scene_editor_runtime_scene_resolve_metrics(const char* runtime_scene
     return true;
 }
 
+static json_object* scene_editor_runtime_scene_texture_params_json(
+    RuntimeMaterialTexture3DParams params) {
+    json_object* parameters = json_object_new_object();
+    params = RuntimeMaterialTexture3DNormalizeParams(params);
+    if (!parameters) return NULL;
+    json_object_object_add(parameters, "pattern_mode", json_object_new_int(params.patternMode));
+    json_object_object_add(parameters, "coverage", json_object_new_double(params.coverage));
+    json_object_object_add(parameters, "grain", json_object_new_double(params.grain));
+    json_object_object_add(parameters, "edge_softness", json_object_new_double(params.edgeSoftness));
+    json_object_object_add(parameters, "contrast", json_object_new_double(params.contrast));
+    json_object_object_add(parameters, "flow", json_object_new_double(params.flow));
+    json_object_object_add(parameters, "color_depth", json_object_new_double(params.colorDepth));
+    json_object_object_add(parameters, "surface_damage", json_object_new_double(params.surfaceDamage));
+    json_object_object_add(parameters, "seed", json_object_new_int(params.seed));
+    return parameters;
+}
+
 static json_object* scene_editor_runtime_scene_build_object_materials_json(void) {
     json_object* object_materials = json_object_new_array();
     int i = 0;
@@ -161,6 +179,108 @@ static json_object* scene_editor_runtime_scene_build_object_materials_json(void)
         json_object_object_add(entry,
                                "emissive_strength",
                                json_object_new_double(sceneSettings.sceneObjects[i].emissiveStrength));
+        {
+            int face_count = SceneEditorMaterialFacePlacementOverrideCountForObject(i);
+            bool has_procedural_texture =
+                sceneSettings.sceneObjects[i].textureId != 0 ||
+                sceneSettings.sceneObjects[i].textureOffsetU != 0.0 ||
+                sceneSettings.sceneObjects[i].textureOffsetV != 0.0 ||
+                sceneSettings.sceneObjects[i].textureScale != 1.0 ||
+                sceneSettings.sceneObjects[i].textureStrength != 0.0 ||
+                sceneSettings.sceneObjects[i].texturePatternMode != 0 ||
+                sceneSettings.sceneObjects[i].textureCoverage != 0.5 ||
+                sceneSettings.sceneObjects[i].textureGrain != 0.5 ||
+                sceneSettings.sceneObjects[i].textureEdgeSoftness != 0.5 ||
+                sceneSettings.sceneObjects[i].textureContrast != 0.5 ||
+                sceneSettings.sceneObjects[i].textureFlow != 0.0 ||
+                sceneSettings.sceneObjects[i].textureColorDepth != 0.5 ||
+                sceneSettings.sceneObjects[i].textureSurfaceDamage != 0.5 ||
+                sceneSettings.sceneObjects[i].textureSeed != 0 ||
+                face_count > 0;
+            json_object* procedural_texture = NULL;
+            json_object* face_placements = NULL;
+            if (!has_procedural_texture) {
+                json_object_array_add(object_materials, entry);
+                continue;
+            }
+            procedural_texture = json_object_new_object();
+            face_placements = json_object_new_array();
+            if (!procedural_texture || !face_placements) {
+                if (procedural_texture) json_object_put(procedural_texture);
+                if (face_placements) json_object_put(face_placements);
+                json_object_put(object_materials);
+                json_object_put(entry);
+                return NULL;
+            }
+            json_object_object_add(procedural_texture,
+                                   "texture_id",
+                                   json_object_new_int(sceneSettings.sceneObjects[i].textureId));
+            json_object_object_add(procedural_texture,
+                                   "offset_u",
+                                   json_object_new_double(sceneSettings.sceneObjects[i].textureOffsetU));
+            json_object_object_add(procedural_texture,
+                                   "offset_v",
+                                   json_object_new_double(sceneSettings.sceneObjects[i].textureOffsetV));
+            json_object_object_add(procedural_texture,
+                                   "scale",
+                                   json_object_new_double(sceneSettings.sceneObjects[i].textureScale));
+            json_object_object_add(procedural_texture,
+                                   "strength",
+                                   json_object_new_double(sceneSettings.sceneObjects[i].textureStrength));
+            {
+                json_object* parameters =
+                    scene_editor_runtime_scene_texture_params_json(
+                        RuntimeMaterialTexture3DParamsFromObject(&sceneSettings.sceneObjects[i]));
+                if (!parameters) {
+                    json_object_put(face_placements);
+                    json_object_put(procedural_texture);
+                    json_object_put(object_materials);
+                    json_object_put(entry);
+                    return NULL;
+                }
+                json_object_object_add(procedural_texture, "parameters", parameters);
+            }
+            for (int face_i = 0; face_i < face_count; ++face_i) {
+                SceneEditorMaterialFacePlacement placement;
+                json_object* face_entry = NULL;
+                if (!SceneEditorMaterialFacePlacementGetOverrideForObject(i, face_i, &placement)) {
+                    continue;
+                }
+                face_entry = json_object_new_object();
+                if (!face_entry) {
+                    json_object_put(face_placements);
+                    json_object_put(procedural_texture);
+                    json_object_put(object_materials);
+                    json_object_put(entry);
+                    return NULL;
+                }
+                json_object_object_add(face_entry,
+                                       "face_group_index",
+                                       json_object_new_int(placement.faceGroupIndex));
+                json_object_object_add(face_entry, "texture_id", json_object_new_int(placement.textureId));
+                json_object_object_add(face_entry, "offset_u", json_object_new_double(placement.offsetU));
+                json_object_object_add(face_entry, "offset_v", json_object_new_double(placement.offsetV));
+                json_object_object_add(face_entry, "scale", json_object_new_double(placement.scale));
+                json_object_object_add(face_entry, "strength", json_object_new_double(placement.strength));
+                json_object_object_add(face_entry, "rotation", json_object_new_double(placement.rotation));
+                {
+                    json_object* parameters =
+                        scene_editor_runtime_scene_texture_params_json(placement.params);
+                    if (!parameters) {
+                        json_object_put(face_entry);
+                        json_object_put(face_placements);
+                        json_object_put(procedural_texture);
+                        json_object_put(object_materials);
+                        json_object_put(entry);
+                        return NULL;
+                    }
+                    json_object_object_add(face_entry, "parameters", parameters);
+                }
+                json_object_array_add(face_placements, face_entry);
+            }
+            json_object_object_add(procedural_texture, "face_placements", face_placements);
+            json_object_object_add(entry, "procedural_texture", procedural_texture);
+        }
         json_object_array_add(object_materials, entry);
     }
     return object_materials;

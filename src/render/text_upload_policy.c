@@ -13,6 +13,8 @@ float ray_tracing_text_raster_scale(SDL_Renderer* renderer) {
     RenderContext* ctx = NULL;
     float logical_w = 0.0f;
     float logical_h = 0.0f;
+    int window_w = 0;
+    int window_h = 0;
     int drawable_w = 0;
     int drawable_h = 0;
     float scale_x = 1.0f;
@@ -28,16 +30,17 @@ float ray_tracing_text_raster_scale(SDL_Renderer* renderer) {
         return 1.0f;
     }
 
-    SDL_GetWindowSize(ctx->window, &drawable_w, &drawable_h);
+    SDL_GetWindowSize(ctx->window, &window_w, &window_h);
+    drawable_w = window_w;
+    drawable_h = window_h;
 #if USE_VULKAN
     SDL_Vulkan_GetDrawableSize(ctx->window, &drawable_w, &drawable_h);
 #endif
-    logical_w = (float)ctx->width;
-    logical_h = (float)ctx->height;
+    logical_w = (window_w > 0) ? (float)window_w : (float)ctx->logical_width;
+    logical_h = (window_h > 0) ? (float)window_h : (float)ctx->logical_height;
     if (logical_w < 1.0f || logical_h < 1.0f) {
-        SDL_GetWindowSize(ctx->window, &drawable_w, &drawable_h);
-        logical_w = (float)drawable_w;
-        logical_h = (float)drawable_h;
+        logical_w = (float)window_w;
+        logical_h = (float)window_h;
     }
     if (logical_w < 1.0f || logical_h < 1.0f) {
         return 1.0f;

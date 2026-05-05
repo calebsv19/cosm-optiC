@@ -8,6 +8,7 @@
 
 #include "config/config_manager.h"
 #include "core_font.h"
+#include "render/text_upload_policy.h"
 
 typedef struct RayTracingFontBridgeSlotSpec {
     CoreFontRoleId role_id;
@@ -142,8 +143,6 @@ CoreResult ray_tracing_font_bridge_resolve(SDL_Renderer* renderer,
     size_t i = 0;
     int chosen_point_size = logical_point_size;
 
-    (void)renderer;
-
     if (!spec || !out_resolved) {
         return ray_tracing_font_bridge_invalid("invalid font bridge resolve request");
     }
@@ -158,7 +157,7 @@ CoreResult ray_tracing_font_bridge_resolve(SDL_Renderer* renderer,
     result = kit_render_resolve_text_run(&render_ctx,
                                          spec->role_id,
                                          spec->text_tier,
-                                         1.0f,
+                                         ray_tracing_text_raster_scale(renderer),
                                          &text_run);
     kit_render_context_shutdown(&render_ctx);
     if (result.code != CORE_OK) {
@@ -176,9 +175,15 @@ CoreResult ray_tracing_font_bridge_resolve(SDL_Renderer* renderer,
     }
 
     text_run.logical_point_size = chosen_point_size;
-    text_run.raster_point_size = chosen_point_size;
-    text_run.raster_scale = 1.0f;
-    text_run.upload_filter = KIT_RENDER_TEXT_UPLOAD_FILTER_LINEAR;
+    text_run.raster_point_size = ray_tracing_text_raster_point_size(renderer,
+                                                                    chosen_point_size,
+                                                                    min_point_size);
+    text_run.raster_scale =
+        (chosen_point_size > 0) ? ((float)text_run.raster_point_size / (float)chosen_point_size)
+                                : 1.0f;
+    text_run.render_scale = text_run.raster_scale;
+    text_run.upload_filter = (text_run.raster_scale > 1.0f) ? KIT_RENDER_TEXT_UPLOAD_FILTER_NEAREST
+                                                            : KIT_RENDER_TEXT_UPLOAD_FILTER_LINEAR;
 
     shared_paths[0] = text_run.role_spec.primary_path;
     shared_paths[1] = text_run.role_spec.fallback_path;

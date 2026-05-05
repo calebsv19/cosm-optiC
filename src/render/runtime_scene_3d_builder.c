@@ -133,6 +133,7 @@ static bool runtime_scene_3d_builder_append_triangle(RuntimeScene3D* scene,
     Vec3 edge1;
     Vec3 edge2;
     Vec3 normal;
+    int local_triangle_index = 0;
     if (!scene) return false;
     if (scene->triangleMesh.triangleCount >= scene->triangleMesh.triangleCapacity) return false;
 
@@ -150,12 +151,18 @@ static bool runtime_scene_3d_builder_append_triangle(RuntimeScene3D* scene,
 
     triangle = &scene->triangleMesh.triangles[scene->triangleMesh.triangleCount++];
     memset(triangle, 0, sizeof(*triangle));
+    for (int i = 0; i < scene->triangleMesh.triangleCount - 1; ++i) {
+        if (scene->triangleMesh.triangles[i].sceneObjectIndex == scene_object_index) {
+            local_triangle_index += 1;
+        }
+    }
     triangle->p0 = p0;
     triangle->p1 = p1;
     triangle->p2 = p2;
     triangle->normal = normal;
     triangle->primitiveIndex = primitive_index;
     triangle->sceneObjectIndex = scene_object_index;
+    triangle->localTriangleIndex = local_triangle_index;
     return true;
 }
 

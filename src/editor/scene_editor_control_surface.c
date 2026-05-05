@@ -6,6 +6,7 @@
 #include "app/animation.h"
 #include "config/config_manager.h"
 #include "editor/editor_mode_router.h"
+#include "editor/material_editor.h"
 
 bool SceneEditorControlSurfaceLocksObjectMode(void) {
     return AnimationUseFluidScene();
@@ -13,9 +14,10 @@ bool SceneEditorControlSurfaceLocksObjectMode(void) {
 
 const char* SceneEditorControlSurfaceModeLabel(int mode) {
     switch (mode) {
-        case 0: return "Bezier";
-        case 1: return "Objects";
-        case 2: return "Camera";
+        case EDITOR_MODE_PATH: return "Bezier";
+        case EDITOR_MODE_OBJECT: return "Objects";
+        case EDITOR_MODE_CAMERA: return "Camera";
+        case EDITOR_MODE_MATERIAL: return "Material";
         default: return "Mode";
     }
 }
@@ -102,6 +104,14 @@ void SceneEditorControlSurfaceBuildCurrent(int selected_object_index,
 
     route = RayTracingModeBackend_ResolveRoute();
     input.requestedMode = animSettings.editorMode;
+    if (EditorModeRouter_ClampEditorMode(input.requestedMode,
+                                         SceneEditorControlSurfaceLocksObjectMode()) ==
+        EDITOR_MODE_MATERIAL) {
+        int focused_index = MaterialEditorResolveFocusedObjectIndex();
+        if (focused_index >= 0) {
+            selected_object_index = focused_index;
+        }
+    }
     input.lockObjectMode = SceneEditorControlSurfaceLocksObjectMode();
     input.sceneSource = animSettings.sceneSource;
     input.sourceLabel = SceneEditorControlSurfaceSourceLabel();
@@ -134,9 +144,10 @@ void SceneEditorControlSurfaceBuild(const SceneEditorControlSurfaceInput* input,
 
     mode = EditorModeRouter_ClampEditorMode(input->requestedMode, input->lockObjectMode);
     contract.activeMode = mode;
-    contract.modeSelectable[0] = true;
-    contract.modeSelectable[1] = !input->lockObjectMode;
-    contract.modeSelectable[2] = true;
+    contract.modeSelectable[EDITOR_MODE_PATH] = true;
+    contract.modeSelectable[EDITOR_MODE_OBJECT] = !input->lockObjectMode;
+    contract.modeSelectable[EDITOR_MODE_CAMERA] = true;
+    contract.modeSelectable[EDITOR_MODE_MATERIAL] = !input->lockObjectMode;
 
     contract.lane = SceneEditorControlSurfaceResolveLane(&input->route);
     contract.previewEnabled = true;
@@ -154,23 +165,29 @@ void SceneEditorControlSurfaceBuild(const SceneEditorControlSurfaceInput* input,
 
     contract.laneBezierCanvasEditEnabled = canonical_2d_lane;
     contract.laneObjectCanvasEditEnabled =
-        canonical_2d_lane || (controlled_3d_lane && contract.activeMode == 1);
+        canonical_2d_lane || (controlled_3d_lane && contract.activeMode == EDITOR_MODE_OBJECT);
     contract.laneCameraCanvasEditEnabled =
-        canonical_2d_lane || (controlled_3d_lane && contract.activeMode == 2);
-    contract.laneViewportBezierPlacementEnabled = controlled_3d_lane && contract.activeMode == 0;
-    contract.laneViewportObjectPickEnabled = controlled_3d_lane && contract.activeMode == 1;
-    contract.laneViewportCameraPlacementEnabled = controlled_3d_lane && contract.activeMode == 2;
+        canonical_2d_lane || (controlled_3d_lane && contract.activeMode == EDITOR_MODE_CAMERA);
+    contract.laneViewportBezierPlacementEnabled =
+        controlled_3d_lane && contract.activeMode == EDITOR_MODE_PATH;
+    contract.laneViewportObjectPickEnabled =
+        controlled_3d_lane && contract.activeMode == EDITOR_MODE_OBJECT;
+    contract.laneViewportCameraPlacementEnabled =
+        controlled_3d_lane && contract.activeMode == EDITOR_MODE_CAMERA;
 
     switch (contract.activeMode) {
-        case 0:
+        case EDITOR_MODE_PATH:
             contract.laneCanvasEditEnabled =
                 contract.laneBezierCanvasEditEnabled || contract.laneViewportBezierPlacementEnabled;
             break;
-        case 1:
+        case EDITOR_MODE_OBJECT:
             contract.laneCanvasEditEnabled = contract.laneObjectCanvasEditEnabled;
             break;
-        case 2:
+        case EDITOR_MODE_CAMERA:
             contract.laneCanvasEditEnabled = contract.laneCameraCanvasEditEnabled;
+            break;
+        case EDITOR_MODE_MATERIAL:
+            contract.laneCanvasEditEnabled = input->hasSelectedObject;
             break;
         default:
             contract.laneCanvasEditEnabled = false;
@@ -267,18 +284,22 @@ void SceneEditorControlSurfaceBuild(const SceneEditorControlSurfaceInput* input,
                      sizeof(contract.statusRuntime),
                      "Runtime: 3D compat fallback active; shared shell with digest viewport.");
         }
-        if (contract.activeMode == 0) {
+        if (contract.activeMode == EDITOR_MODE_PATH) {
             snprintf(contract.statusControls,
                      sizeof(contract.statusControls),
                      "Controls: TAB cycle ESC close Alt+drag orbit MMB pan Wheel zoom F frame LMB select bezier Shift+LMB add point Cmd+drag smooth");
-        } else if (contract.activeMode == 1) {
+        } else if (contract.activeMode == EDITOR_MODE_OBJECT) {
             snprintf(contract.statusControls,
                      sizeof(contract.statusControls),
                      "Controls: TAB cycle ESC close Alt+drag orbit MMB pan Wheel zoom F frame LMB pick object");
-        } else {
+        } else if (contract.activeMode == EDITOR_MODE_CAMERA) {
             snprintf(contract.statusControls,
                      sizeof(contract.statusControls),
                      "Controls: TAB cycle ESC close Alt+drag orbit MMB pan Wheel zoom F frame LMB select camera Shift+LMB add camera point Cmd+drag smooth");
+        } else {
+            snprintf(contract.statusControls,
+                     sizeof(contract.statusControls),
+                     "Controls: TAB cycle ESC close Alt+drag orbit MMB pan Wheel zoom F frame | Material controls edit selected object");
         }
     }
 

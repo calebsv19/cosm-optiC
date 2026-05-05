@@ -5,13 +5,20 @@
 #include <unistd.h>
 
 #include "app/animation.h"
+#include "editor/material_editor.h"
 #include "editor/object_editor.h"
 #include "editor/object_editor_object_ops.h"
+#include "editor/object_editor_selection_tracker.h"
 #include "editor/editor_mode_router.h"
 #include "editor/scene_editor_control_surface.h"
+#include "editor/scene_editor_digest_overlay.h"
+#include "editor/scene_editor_material_face_placement.h"
+#include "editor/scene_editor_material_preview.h"
 #include "editor/scene_editor_runtime_scene_persistence.h"
 #include "editor/scene_editor_tool_state.h"
+#include "editor/scene_editor_viewport_nav.h"
 #include "import/runtime_scene_bridge.h"
+#include "render/runtime_material_texture_3d.h"
 #include "test_runtime_scene_editor.h"
 #include "test_support.h"
 
@@ -216,6 +223,7 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip_object_material
     char *persisted_json = NULL;
     FILE *file = fopen(runtime_path, "wb");
     RuntimeSceneBridgePreflight summary = {0};
+    SceneEditorMaterialFacePlacement face_placement;
     bool ok = false;
 
     assert_true("runtime_scene_authoring_material_persist_open_tmp", file != NULL);
@@ -229,6 +237,7 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip_object_material
 
     memset(&sceneSettings, 0, sizeof(sceneSettings));
     memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialFacePlacementResetAll();
     ok = runtime_scene_bridge_apply_file(runtime_path, &summary);
     assert_true("runtime_scene_authoring_material_persist_apply_ok", ok);
     if (!ok) {
@@ -244,6 +253,36 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip_object_material
     sceneSettings.sceneObjects[0].color = 0x00FF00;
     sceneSettings.sceneObjects[0].alpha = 0.35;
     sceneSettings.sceneObjects[0].emissiveStrength = 0.65;
+    sceneSettings.sceneObjects[0].textureId = RUNTIME_MATERIAL_TEXTURE_3D_RUST;
+    sceneSettings.sceneObjects[0].textureOffsetU = 0.12;
+    sceneSettings.sceneObjects[0].textureOffsetV = 0.23;
+    sceneSettings.sceneObjects[0].textureScale = 2.5;
+    sceneSettings.sceneObjects[0].textureStrength = 0.8;
+    sceneSettings.sceneObjects[0].texturePatternMode = RUNTIME_MATERIAL_TEXTURE_3D_PATTERN_FLOW;
+    sceneSettings.sceneObjects[0].textureCoverage = 0.72;
+    sceneSettings.sceneObjects[0].textureGrain = 0.41;
+    sceneSettings.sceneObjects[0].textureEdgeSoftness = 0.63;
+    sceneSettings.sceneObjects[0].textureContrast = 0.29;
+    sceneSettings.sceneObjects[0].textureFlow = 0.86;
+    sceneSettings.sceneObjects[0].textureColorDepth = 0.74;
+    sceneSettings.sceneObjects[0].textureSurfaceDamage = 0.66;
+    sceneSettings.sceneObjects[0].textureSeed = 17;
+    memset(&face_placement, 0, sizeof(face_placement));
+    face_placement.hasOverride = true;
+    face_placement.sceneObjectIndex = 0;
+    face_placement.faceGroupIndex = 4;
+    face_placement.textureId = RUNTIME_MATERIAL_TEXTURE_3D_FOG;
+    face_placement.offsetU = 0.31;
+    face_placement.offsetV = 0.42;
+    face_placement.scale = 3.5;
+    face_placement.strength = 0.7;
+    face_placement.rotation = 0.25;
+    face_placement.params = RuntimeMaterialTexture3DParamsFromObject(&sceneSettings.sceneObjects[0]);
+    face_placement.params.patternMode = RUNTIME_MATERIAL_TEXTURE_3D_PATTERN_SPECKLE;
+    face_placement.params.coverage = 0.52;
+    face_placement.params.surfaceDamage = 0.91;
+    assert_true("runtime_scene_authoring_material_face_override_seeded",
+                SceneEditorMaterialFacePlacementSetOverride(&face_placement));
 
     ok = SceneEditorRuntimeScenePersistAuthoring(diagnostics, sizeof(diagnostics));
     assert_true("runtime_scene_authoring_material_persist_writeback_ok", ok);
@@ -269,6 +308,20 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip_object_material
                     strstr(persisted_json, "\"alpha\":") != NULL);
         assert_true("runtime_scene_authoring_material_persist_has_emissive_strength",
                     strstr(persisted_json, "\"emissive_strength\":") != NULL);
+        assert_true("runtime_scene_authoring_material_persist_has_procedural_texture",
+                    strstr(persisted_json, "\"procedural_texture\"") != NULL);
+        assert_true("runtime_scene_authoring_material_persist_has_texture_id",
+                    strstr(persisted_json, "\"texture_id\":1") != NULL);
+        assert_true("runtime_scene_authoring_material_persist_has_parameters",
+                    strstr(persisted_json, "\"parameters\"") != NULL);
+        assert_true("runtime_scene_authoring_material_persist_has_flow_pattern",
+                    strstr(persisted_json, "\"pattern_mode\":3") != NULL);
+        assert_true("runtime_scene_authoring_material_persist_has_face_placements",
+                    strstr(persisted_json, "\"face_placements\"") != NULL);
+        assert_true("runtime_scene_authoring_material_persist_has_face_group",
+                    strstr(persisted_json, "\"face_group_index\":4") != NULL);
+        assert_true("runtime_scene_authoring_material_persist_has_face_texture_id",
+                    strstr(persisted_json, "\"texture_id\":2") != NULL);
     }
 
     assert_true("runtime_scene_authoring_material_persist_hydrated_material_id",
@@ -283,9 +336,73 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip_object_material
                  sceneSettings.sceneObjects[0].emissiveStrength,
                  0.65,
                  1e-9);
+    assert_true("runtime_scene_authoring_material_persist_hydrated_texture_id",
+                sceneSettings.sceneObjects[0].textureId == RUNTIME_MATERIAL_TEXTURE_3D_RUST);
+    assert_close("runtime_scene_authoring_material_persist_hydrated_texture_offset_u",
+                 sceneSettings.sceneObjects[0].textureOffsetU,
+                 0.12,
+                 1e-9);
+    assert_close("runtime_scene_authoring_material_persist_hydrated_texture_offset_v",
+                 sceneSettings.sceneObjects[0].textureOffsetV,
+                 0.23,
+                 1e-9);
+    assert_close("runtime_scene_authoring_material_persist_hydrated_texture_scale",
+                 sceneSettings.sceneObjects[0].textureScale,
+                 2.5,
+                 1e-9);
+    assert_close("runtime_scene_authoring_material_persist_hydrated_texture_strength",
+                 sceneSettings.sceneObjects[0].textureStrength,
+                 0.8,
+                 1e-9);
+    assert_true("runtime_scene_authoring_material_persist_hydrated_pattern",
+                sceneSettings.sceneObjects[0].texturePatternMode ==
+                    RUNTIME_MATERIAL_TEXTURE_3D_PATTERN_FLOW);
+    assert_close("runtime_scene_authoring_material_persist_hydrated_coverage",
+                 sceneSettings.sceneObjects[0].textureCoverage,
+                 0.72,
+                 1e-9);
+    assert_close("runtime_scene_authoring_material_persist_hydrated_surface_damage",
+                 sceneSettings.sceneObjects[0].textureSurfaceDamage,
+                 0.66,
+                 1e-9);
+    assert_true("runtime_scene_authoring_material_persist_hydrated_seed",
+                sceneSettings.sceneObjects[0].textureSeed == 17);
+    assert_true("runtime_scene_authoring_material_persist_hydrated_face_override",
+                SceneEditorMaterialFacePlacementHasOverride(0, 4));
+    face_placement = SceneEditorMaterialFacePlacementGetEffective(&sceneSettings.sceneObjects[0], 0, 4);
+    assert_true("runtime_scene_authoring_material_persist_hydrated_face_texture_id",
+                face_placement.textureId == RUNTIME_MATERIAL_TEXTURE_3D_FOG);
+    assert_close("runtime_scene_authoring_material_persist_hydrated_face_offset_u",
+                 face_placement.offsetU,
+                 0.31,
+                 1e-9);
+    assert_close("runtime_scene_authoring_material_persist_hydrated_face_offset_v",
+                 face_placement.offsetV,
+                 0.42,
+                 1e-9);
+    assert_close("runtime_scene_authoring_material_persist_hydrated_face_scale",
+                 face_placement.scale,
+                 3.5,
+                 1e-9);
+    assert_close("runtime_scene_authoring_material_persist_hydrated_face_strength",
+                 face_placement.strength,
+                 0.7,
+                 1e-9);
+    assert_close("runtime_scene_authoring_material_persist_hydrated_face_rotation",
+                 face_placement.rotation,
+                 0.25,
+                 1e-9);
+    assert_true("runtime_scene_authoring_material_persist_hydrated_face_pattern",
+                face_placement.params.patternMode ==
+                    RUNTIME_MATERIAL_TEXTURE_3D_PATTERN_SPECKLE);
+    assert_close("runtime_scene_authoring_material_persist_hydrated_face_damage",
+                 face_placement.params.surfaceDamage,
+                 0.91,
+                 1e-9);
 
     free(persisted_json);
     unlink(runtime_path);
+    SceneEditorMaterialFacePlacementResetAll();
     sceneSettings = saved_scene;
     animSettings = saved_anim;
     return 0;
@@ -336,6 +453,791 @@ static int test_object_editor_slider_assignments_update_object_fields(void) {
                  0.75,
                  1e-9);
 
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_focuses_last_selected_and_updates_texture_fields(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    sceneSettings.objectCount = 2;
+    sceneSettings.sceneObjects[0].textureScale = 1.0;
+    sceneSettings.sceneObjects[1].textureScale = 1.0;
+    MaterialEditorSetSolidFacesEnabled(true);
+
+    ObjectEditorSelectionTrackerSetCurrent(1, sceneSettings.objectCount);
+    ObjectEditorSelectionTrackerSetCurrent(-1, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+
+    assert_true("material_editor_solid_faces_default_on",
+                MaterialEditorGetSolidFacesEnabled());
+    assert_true("material_editor_solid_faces_toggle_off",
+                !MaterialEditorToggleSolidFaces());
+    assert_true("material_editor_solid_faces_set_on",
+                (MaterialEditorSetSolidFacesEnabled(true), MaterialEditorGetSolidFacesEnabled()));
+    assert_true("material_editor_focuses_last_selected",
+                MaterialEditorResolveFocusedObjectIndex() == 1);
+    assert_true("material_editor_applies_rust_kind",
+                MaterialEditorApplyTextureKindToFocused(1));
+    assert_true("material_editor_texture_kind_updated",
+                sceneSettings.sceneObjects[1].textureId == 1);
+    assert_true("material_editor_strength_slider_updates",
+                MaterialEditorApplySliderValueToFocused(MATERIAL_EDITOR_SLIDER_STRENGTH, 0.75));
+    assert_close("material_editor_strength_value",
+                 sceneSettings.sceneObjects[1].textureStrength,
+                 0.75,
+                 1e-9);
+    assert_true("material_editor_scale_slider_updates",
+                MaterialEditorApplySliderValueToFocused(MATERIAL_EDITOR_SLIDER_SCALE, 1.0));
+    assert_close("material_editor_scale_value",
+                 sceneSettings.sceneObjects[1].textureScale,
+                 8.0,
+                 1e-9);
+    assert_true("material_editor_offset_u_updates",
+                MaterialEditorApplySliderValueToFocused(MATERIAL_EDITOR_SLIDER_OFFSET_U, 0.20));
+    assert_true("material_editor_offset_v_updates",
+                MaterialEditorApplySliderValueToFocused(MATERIAL_EDITOR_SLIDER_OFFSET_V, 0.65));
+    assert_close("material_editor_offset_u_value",
+                 sceneSettings.sceneObjects[1].textureOffsetU,
+                 0.20,
+                 1e-9);
+    assert_close("material_editor_offset_v_value",
+                 sceneSettings.sceneObjects[1].textureOffsetV,
+                 0.65,
+                 1e-9);
+    assert_true("material_editor_param_pattern_updates",
+                MaterialEditorApplyTexturePatternToFocused(
+                    RUNTIME_MATERIAL_TEXTURE_3D_PATTERN_FLOW));
+    assert_true("material_editor_param_coverage_updates",
+                MaterialEditorApplyTextureParamValueToFocused(
+                    MATERIAL_EDITOR_TEXTURE_PARAM_COVERAGE,
+                    0.42));
+    assert_true("material_editor_param_damage_updates",
+                MaterialEditorApplyTextureParamValueToFocused(
+                    MATERIAL_EDITOR_TEXTURE_PARAM_SURFACE_DAMAGE,
+                    0.83));
+    assert_true("material_editor_param_pattern_value",
+                sceneSettings.sceneObjects[1].texturePatternMode ==
+                    RUNTIME_MATERIAL_TEXTURE_3D_PATTERN_FLOW);
+    assert_close("material_editor_param_coverage_value",
+                 sceneSettings.sceneObjects[1].textureCoverage,
+                 0.42,
+                 1e-9);
+    assert_close("material_editor_param_damage_value",
+                 sceneSettings.sceneObjects[1].textureSurfaceDamage,
+                 0.83,
+                 1e-9);
+    assert_true("material_editor_rejects_empty_param_kind",
+                !MaterialEditorApplyTextureParamValueToFocused(
+                    MATERIAL_EDITOR_TEXTURE_PARAM_NONE,
+                    0.99));
+    assert_close("material_editor_empty_param_kind_keeps_coverage",
+                 sceneSettings.sceneObjects[1].textureCoverage,
+                 0.42,
+                 1e-9);
+    assert_true("material_editor_marks_object_dirty",
+                sceneSettings.sceneObjects[1].dirty);
+
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_object_projector_centers_focused_object(void) {
+    RuntimeSceneBridge3DDigestState digest;
+    SceneEditorDigestOverlayNavState nav_state;
+    SceneEditorDigestOverlayProjector projector;
+    SceneEditorDigestOverlayProjector scene_projector;
+    SDL_Rect viewport = {0, 0, 800, 600};
+
+    memset(&digest, 0, sizeof(digest));
+    memset(&nav_state, 0, sizeof(nav_state));
+    memset(&projector, 0, sizeof(projector));
+    memset(&scene_projector, 0, sizeof(scene_projector));
+
+    digest.valid = true;
+    digest.primitive_count = 2;
+    digest.primitives[0].kind = RUNTIME_SCENE_BRIDGE_PRIMITIVE_RECT_PRISM;
+    digest.primitives[0].scene_object_index = 7;
+    digest.primitives[0].origin_x = -100.0;
+    digest.primitives[0].origin_y = 0.0;
+    digest.primitives[0].origin_z = 0.0;
+    digest.primitives[0].has_dimensions = true;
+    digest.primitives[0].width = 20.0;
+    digest.primitives[0].height = 20.0;
+    digest.primitives[0].depth = 20.0;
+    digest.primitives[1].kind = RUNTIME_SCENE_BRIDGE_PRIMITIVE_RECT_PRISM;
+    digest.primitives[1].scene_object_index = 8;
+    digest.primitives[1].origin_x = 50.0;
+    digest.primitives[1].origin_y = 4.0;
+    digest.primitives[1].origin_z = -2.0;
+    digest.primitives[1].has_dimensions = true;
+    digest.primitives[1].width = 10.0;
+    digest.primitives[1].height = 6.0;
+    digest.primitives[1].depth = 4.0;
+    nav_state.overlay_zoom = 0.05;
+
+    MaterialEditorSetViewMode(MATERIAL_EDITOR_VIEW_SCENE_PLACEMENT);
+    assert_true("material_editor_view_mode_scene_placement",
+                MaterialEditorGetViewMode() == MATERIAL_EDITOR_VIEW_SCENE_PLACEMENT);
+    assert_true("material_editor_scene_projector_path_available",
+                SceneEditorDigestOverlayBuildObjectProjector(&digest,
+                                                             &viewport,
+                                                             &nav_state,
+                                                             8,
+                                                             false,
+                                                             &scene_projector));
+
+    MaterialEditorSetViewMode(MATERIAL_EDITOR_VIEW_FOCUSED_ORIGIN);
+    assert_true("material_editor_view_mode_focused_origin",
+                MaterialEditorGetViewMode() == MATERIAL_EDITOR_VIEW_FOCUSED_ORIGIN);
+    assert_true("material_editor_focused_object_projector_builds",
+                SceneEditorDigestOverlayBuildObjectProjector(&digest,
+                                                             &viewport,
+                                                             &nav_state,
+                                                             8,
+                                                             true,
+                                                             &projector));
+    assert_close("material_editor_projector_center_x", projector.center_x, 50.0, 1e-9);
+    assert_close("material_editor_projector_center_y", projector.center_y, 4.0, 1e-9);
+    assert_close("material_editor_projector_center_z", projector.center_z, -2.0, 1e-9);
+    assert_close("material_editor_projector_span", projector.span_max, 10.0, 1e-9);
+
+    return 0;
+}
+
+static int test_material_editor_focused_zoom_accumulates_around_object_fit(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_material_zoom_focus\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"far_block\","
+            "\"object_type\":\"rect_prism_primitive\","
+            "\"transform\":{\"position\":{\"x\":-120.0,\"y\":0.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}},"
+            "\"primitive\":{\"kind\":\"rect_prism_primitive\","
+              "\"width\":12.0,\"height\":12.0,\"depth\":12.0}"
+          "},"
+          "{"
+            "\"object_id\":\"focus_block\","
+            "\"object_type\":\"rect_prism_primitive\","
+            "\"transform\":{\"position\":{\"x\":40.0,\"y\":3.0,\"z\":-1.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}},"
+            "\"primitive\":{\"kind\":\"rect_prism_primitive\","
+              "\"width\":4.0,\"height\":3.0,\"depth\":2.0}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":4.0,\"z\":20.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    SceneEditorDigestOverlayNavState nav_state;
+    SDL_Rect viewport = {0, 0, 800, 600};
+    double fit_zoom = 0.0;
+    double zoom_once = 0.0;
+    double zoom_twice = 0.0;
+    double zoom_far = 0.0;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.integratorMode = 1;
+    MaterialEditorSetViewMode(MATERIAL_EDITOR_VIEW_FOCUSED_ORIGIN);
+    assert_true("material_zoom_runtime_apply_ok",
+                runtime_scene_bridge_apply_json(runtime_json, &summary));
+
+    memset(&nav_state, 0, sizeof(nav_state));
+    assert_true("material_zoom_fit_focused_object",
+                SceneEditorViewportNavFitDigestOverlayForTarget(&nav_state,
+                                                                &viewport,
+                                                                true,
+                                                                EDITOR_MODE_MATERIAL,
+                                                                1));
+    fit_zoom = nav_state.overlay_zoom;
+    assert_true("material_zoom_fit_positive", fit_zoom > 0.0);
+
+    assert_true("material_zoom_wheel_once",
+                SceneEditorViewportNavApplyDigestWheelZoom(&nav_state,
+                                                           &viewport,
+                                                           1,
+                                                           EDITOR_MODE_MATERIAL,
+                                                           1));
+    zoom_once = nav_state.overlay_zoom;
+    assert_true("material_zoom_first_step_increases", zoom_once > fit_zoom * 1.20);
+
+    assert_true("material_zoom_wheel_twice",
+                SceneEditorViewportNavApplyDigestWheelZoom(&nav_state,
+                                                           &viewport,
+                                                           1,
+                                                           EDITOR_MODE_MATERIAL,
+                                                           1));
+    zoom_twice = nav_state.overlay_zoom;
+    assert_true("material_zoom_accumulates_without_refit_reset",
+                zoom_twice > zoom_once * 1.20);
+
+    assert_true("material_zoom_wheel_far_out",
+                SceneEditorViewportNavApplyDigestWheelZoom(&nav_state,
+                                                           &viewport,
+                                                           -40,
+                                                           EDITOR_MODE_MATERIAL,
+                                                           1));
+    zoom_far = nav_state.overlay_zoom;
+    assert_true("material_zoom_far_out_below_fit", zoom_far < fit_zoom);
+    assert_true("material_zoom_far_out_keeps_positive", zoom_far > 0.0);
+
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_preview_resolves_focused_triangle_substrate(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_material_triangle_preview\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"preview_plane\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":5.0,\"height\":3.0,"
+              "\"frame\":{\"origin\":{\"x\":-6.0,\"y\":0.0,\"z\":0.0},"
+              "\"axis_u\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+              "\"axis_v\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+              "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":-6.0,\"y\":0.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"preview_prism\","
+            "\"object_type\":\"rect_prism_primitive\","
+            "\"transform\":{\"position\":{\"x\":5.0,\"y\":0.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}},"
+            "\"primitive\":{\"kind\":\"rect_prism_primitive\","
+              "\"width\":4.0,\"height\":3.0,\"depth\":2.0}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":4.0,\"z\":18.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeSceneBridge3DDigestState digest = {0};
+    SceneEditorDigestOverlayNavState nav_state = {0};
+    SceneEditorDigestOverlayProjector projector = {0};
+    SDL_Rect viewport = {0, 0, 900, 650};
+    SceneEditorMaterialPreviewTriangleAddress addresses
+        [SCENE_EDITOR_MATERIAL_PREVIEW_MAX_TRIANGLES];
+    SceneEditorMaterialPreviewStats stats = {0};
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.integratorMode = 1;
+    MaterialEditorSetViewMode(MATERIAL_EDITOR_VIEW_FOCUSED_ORIGIN);
+
+    assert_true("material_preview_runtime_apply_ok",
+                runtime_scene_bridge_apply_json(runtime_json, &summary));
+    runtime_scene_bridge_get_last_3d_digest_state(&digest);
+    nav_state.overlay_zoom = 0.08;
+
+    assert_true("material_preview_plane_projector",
+                SceneEditorDigestOverlayBuildObjectProjector(&digest,
+                                                             &viewport,
+                                                             &nav_state,
+                                                             0,
+                                                             true,
+                                                             &projector));
+    memset(addresses, 0, sizeof(addresses));
+    memset(&stats, 0, sizeof(stats));
+    assert_true("material_preview_plane_triangles_resolve",
+                SceneEditorMaterialPreviewResolveFocusedTriangles(0,
+                                                                  &projector,
+                                                                  addresses,
+                                                                  SCENE_EDITOR_MATERIAL_PREVIEW_MAX_TRIANGLES,
+                                                                  &stats));
+    assert_true("material_preview_plane_triangle_count", stats.triangleCount == 2);
+    assert_true("material_preview_plane_face_group_count", stats.faceGroupCount == 1);
+    assert_true("material_preview_plane_projected", stats.projected);
+    assert_true("material_preview_plane_address_object", addresses[0].sceneObjectIndex == 0);
+    assert_true("material_preview_plane_address_ordinal", addresses[1].localTriangleIndex == 1);
+
+    assert_true("material_preview_prism_projector",
+                SceneEditorDigestOverlayBuildObjectProjector(&digest,
+                                                             &viewport,
+                                                             &nav_state,
+                                                             1,
+                                                             true,
+                                                             &projector));
+    memset(addresses, 0, sizeof(addresses));
+    memset(&stats, 0, sizeof(stats));
+    assert_true("material_preview_prism_triangles_resolve",
+                SceneEditorMaterialPreviewResolveFocusedTriangles(1,
+                                                                  &projector,
+                                                                  addresses,
+                                                                  SCENE_EDITOR_MATERIAL_PREVIEW_MAX_TRIANGLES,
+                                                                  &stats));
+    assert_true("material_preview_prism_triangle_count", stats.triangleCount == 12);
+    assert_true("material_preview_prism_face_group_count", stats.faceGroupCount == 6);
+    assert_true("material_preview_prism_projected", stats.projected);
+    assert_true("material_preview_prism_address_object", addresses[0].sceneObjectIndex == 1);
+    assert_true("material_preview_prism_last_face_group", addresses[11].faceGroupIndex == 5);
+
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_preview_picks_and_selects_visible_triangle(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_material_triangle_pick\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"pick_prism\","
+            "\"object_type\":\"rect_prism_primitive\","
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}},"
+            "\"primitive\":{\"kind\":\"rect_prism_primitive\","
+              "\"width\":4.0,\"height\":3.0,\"depth\":2.0}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":4.0,\"z\":18.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeSceneBridge3DDigestState digest = {0};
+    SceneEditorDigestOverlayNavState nav_state = {0};
+    SceneEditorDigestOverlayProjector projector = {0};
+    SDL_Rect viewport = {0, 0, 900, 650};
+    SceneEditorMaterialPreviewTriangleAddress picked = {0};
+    SceneEditorMaterialPreviewTriangleAddress readback = {0};
+    SceneEditorMaterialPreviewTriangleAddress second = {0};
+    int center_x = viewport.x + viewport.w / 2;
+    int center_y = viewport.y + viewport.h / 2;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.integratorMode = 1;
+    MaterialEditorSetViewMode(MATERIAL_EDITOR_VIEW_FOCUSED_ORIGIN);
+    assert_true("material_pick_runtime_apply_ok",
+                runtime_scene_bridge_apply_json(runtime_json, &summary));
+    runtime_scene_bridge_get_last_3d_digest_state(&digest);
+    nav_state.overlay_zoom = 0.10;
+    nav_state.orbit_yaw_deg = 28.0;
+    nav_state.orbit_pitch_deg = -22.0;
+
+    assert_true("material_pick_object_projector",
+                SceneEditorDigestOverlayBuildObjectProjector(&digest,
+                                                             &viewport,
+                                                             &nav_state,
+                                                             0,
+                                                             true,
+                                                             &projector));
+    assert_true("material_pick_center_triangle",
+                SceneEditorMaterialPreviewPickTriangle(0,
+                                                       &projector,
+                                                       center_x,
+                                                       center_y,
+                                                       &picked));
+    assert_true("material_pick_address_object", picked.sceneObjectIndex == 0);
+    assert_true("material_pick_address_local_range",
+                picked.localTriangleIndex >= 0 && picked.localTriangleIndex < 12);
+    assert_true("material_pick_address_face_group_range",
+                picked.faceGroupIndex >= 0 && picked.faceGroupIndex < 6);
+    MaterialEditorSetFocusedObjectIndex(0);
+    assert_true("material_pick_focused_face_group_count",
+                MaterialEditorFocusedFaceGroupCount() == 6);
+
+    MaterialEditorClearTriangleSelection();
+    assert_true("material_selection_initial_empty",
+                MaterialEditorSelectedTriangleCount() == 0);
+    assert_true("material_selection_set_picked",
+                MaterialEditorSetTriangleSelection(&picked));
+    assert_true("material_selection_count_one",
+                MaterialEditorSelectedTriangleCount() == 1);
+    assert_true("material_selection_face_count_one",
+                MaterialEditorSelectedFaceGroupCount() == 1);
+    assert_true("material_selection_active_face_group",
+                MaterialEditorGetActiveFaceGroupIndex() == picked.faceGroupIndex);
+    assert_true("material_selection_readback",
+                MaterialEditorGetSelectedTriangle(0, &readback));
+    assert_true("material_selection_readback_matches",
+                readback.triangleIndex == picked.triangleIndex &&
+                readback.localTriangleIndex == picked.localTriangleIndex);
+
+    assert_true("material_selection_toggle_removes",
+                MaterialEditorToggleTriangleSelection(&picked));
+    assert_true("material_selection_count_zero",
+                MaterialEditorSelectedTriangleCount() == 0);
+    assert_true("material_selection_active_group_cleared",
+                MaterialEditorGetActiveFaceGroupIndex() == -1);
+
+    second = picked;
+    second.triangleIndex += 1;
+    second.localTriangleIndex += 1;
+    assert_true("material_selection_toggle_first_adds",
+                MaterialEditorToggleTriangleSelection(&picked));
+    assert_true("material_selection_toggle_second_adds",
+                MaterialEditorToggleTriangleSelection(&second));
+    assert_true("material_selection_count_two",
+                MaterialEditorSelectedTriangleCount() == 2);
+
+    MaterialEditorClearTriangleSelection();
+    assert_true("material_face_group_selection_sets_two_triangles",
+                MaterialEditorSetFaceGroupSelection(&picked));
+    assert_true("material_face_group_selection_triangle_count",
+                MaterialEditorSelectedTriangleCount() == 2);
+    assert_true("material_face_group_selection_face_count",
+                MaterialEditorSelectedFaceGroupCount() == 1);
+    assert_true("material_face_group_selection_active_group",
+                MaterialEditorGetActiveFaceGroupIndex() == picked.faceGroupIndex);
+    assert_true("material_face_group_set_active_valid",
+                MaterialEditorSetActiveFaceGroupIndex(picked.faceGroupIndex));
+    assert_true("material_face_group_rejects_unselected_active",
+                !MaterialEditorSetActiveFaceGroupIndex(picked.faceGroupIndex + 100));
+    assert_true("material_face_group_selection_by_index",
+                MaterialEditorSetFaceGroupSelectionByIndex(picked.faceGroupIndex));
+    assert_true("material_face_group_selection_by_index_active",
+                MaterialEditorGetActiveFaceGroupIndex() == picked.faceGroupIndex);
+    assert_true("material_face_group_toggle_removes_group",
+                MaterialEditorToggleFaceGroupSelection(&picked));
+    assert_true("material_face_group_toggle_count_zero",
+                MaterialEditorSelectedTriangleCount() == 0);
+    assert_true("material_face_group_toggle_active_cleared",
+                MaterialEditorGetActiveFaceGroupIndex() == -1);
+
+    MaterialEditorClearTriangleSelection();
+    MaterialEditorSetFocusedObjectIndex(0);
+    assert_true("material_canvas_pointer_selects",
+                MaterialEditorHandleCanvasPointerDown(&projector, center_x, center_y, false));
+    assert_true("material_canvas_pointer_selection_count",
+                MaterialEditorSelectedTriangleCount() == 2);
+    assert_true("material_canvas_pointer_face_count",
+                MaterialEditorSelectedFaceGroupCount() == 1);
+    assert_true("material_canvas_pointer_active_group",
+                MaterialEditorGetActiveFaceGroupIndex() >= 0);
+    assert_true("material_canvas_shift_pointer_toggles_face_off",
+                MaterialEditorHandleCanvasPointerDown(&projector, center_x, center_y, true));
+    assert_true("material_canvas_shift_pointer_selection_empty",
+                MaterialEditorSelectedTriangleCount() == 0);
+    assert_true("material_canvas_shift_pointer_active_empty",
+                MaterialEditorGetActiveFaceGroupIndex() == -1);
+
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static bool material_preview_color_differs(SDL_Color a, SDL_Color b) {
+    return a.r != b.r || a.g != b.g || a.b != b.b || a.a != b.a;
+}
+
+static int test_material_editor_preview_texture_color_responds_to_controls(void) {
+    SceneObject object;
+    SDL_Color base = {128, 128, 132, 235};
+    SDL_Color none = {0, 0, 0, 0};
+    SDL_Color rust = {0, 0, 0, 0};
+    SDL_Color rust_panned = {0, 0, 0, 0};
+    SDL_Color fog = {0, 0, 0, 0};
+    double mask = 0.0;
+    double rust_mask = 0.0;
+    double rust_panned_mask = 0.0;
+    double fog_mask = 0.0;
+    bool found_rust = false;
+    bool found_pan_difference = false;
+    bool found_fog = false;
+
+    memset(&object, 0, sizeof(object));
+    object.color = 0x808084;
+    object.textureScale = 1.0;
+    object.textureStrength = 0.0;
+    object.textureId = RUNTIME_MATERIAL_TEXTURE_3D_RUST;
+    assert_true("material_preview_texture_strength_zero_inactive",
+                !SceneEditorMaterialPreviewEvaluateTextureColor(&object,
+                                                                3,
+                                                                0.25,
+                                                                0.35,
+                                                                base,
+                                                                &none,
+                                                                &mask));
+    assert_true("material_preview_texture_strength_zero_base",
+                !material_preview_color_differs(base, none));
+    assert_close("material_preview_texture_strength_zero_mask", mask, 0.0, 1e-12);
+
+    object.textureStrength = 1.0;
+    object.textureScale = 2.5;
+    object.textureOffsetU = 0.0;
+    object.textureOffsetV = 0.0;
+    for (int u = 1; u < 9 && !found_rust; ++u) {
+        for (int v = 1; v < 9 && !found_rust; ++v) {
+            double bary_v = (double)u / 10.0;
+            double bary_w = (double)v / 10.0;
+            if (bary_v + bary_w >= 0.95) continue;
+            found_rust = SceneEditorMaterialPreviewEvaluateTextureColor(&object,
+                                                                        3,
+                                                                        bary_v,
+                                                                        bary_w,
+                                                                        base,
+                                                                        &rust,
+                                                                        &rust_mask);
+        }
+    }
+    assert_true("material_preview_rust_finds_active_sample", found_rust);
+    assert_true("material_preview_rust_changes_color", material_preview_color_differs(base, rust));
+    assert_true("material_preview_rust_mask_positive", rust_mask > 0.0);
+
+    for (int u = 1; u < 9 && !found_pan_difference; ++u) {
+        for (int v = 1; v < 9 && !found_pan_difference; ++v) {
+            double bary_v = (double)u / 10.0;
+            double bary_w = (double)v / 10.0;
+            SDL_Color unpanned = {0, 0, 0, 0};
+            SDL_Color panned = {0, 0, 0, 0};
+            double unpanned_mask = 0.0;
+            double panned_mask = 0.0;
+            if (bary_v + bary_w >= 0.95) continue;
+            object.textureOffsetU = 0.0;
+            object.textureOffsetV = 0.0;
+            SceneEditorMaterialPreviewEvaluateTextureColor(&object,
+                                                           4,
+                                                           bary_v,
+                                                           bary_w,
+                                                           base,
+                                                           &unpanned,
+                                                           &unpanned_mask);
+            object.textureOffsetU = 0.31;
+            object.textureOffsetV = 0.17;
+            SceneEditorMaterialPreviewEvaluateTextureColor(&object,
+                                                           4,
+                                                           bary_v,
+                                                           bary_w,
+                                                           base,
+                                                           &panned,
+                                                           &panned_mask);
+            if (material_preview_color_differs(unpanned, panned) ||
+                fabs(unpanned_mask - panned_mask) > 1e-9) {
+                found_pan_difference = true;
+                rust_panned = panned;
+                rust_panned_mask = panned_mask;
+            }
+        }
+    }
+    assert_true("material_preview_pan_changes_sample", found_pan_difference);
+    assert_true("material_preview_pan_mask_recorded", rust_panned_mask >= 0.0);
+    assert_true("material_preview_pan_color_recorded",
+                rust_panned.a == base.a || material_preview_color_differs(base, rust_panned));
+
+    object.textureId = RUNTIME_MATERIAL_TEXTURE_3D_FOG;
+    object.textureStrength = 1.0;
+    object.textureScale = 2.0;
+    object.textureOffsetU = 0.0;
+    object.textureOffsetV = 0.0;
+    for (int u = 1; u < 9 && !found_fog; ++u) {
+        for (int v = 1; v < 9 && !found_fog; ++v) {
+            double bary_v = (double)u / 10.0;
+            double bary_w = (double)v / 10.0;
+            if (bary_v + bary_w >= 0.95) continue;
+            found_fog = SceneEditorMaterialPreviewEvaluateTextureColor(&object,
+                                                                       5,
+                                                                       bary_v,
+                                                                       bary_w,
+                                                                       base,
+                                                                       &fog,
+                                                                       &fog_mask);
+        }
+    }
+    assert_true("material_preview_fog_finds_active_sample", found_fog);
+    assert_true("material_preview_fog_changes_color", material_preview_color_differs(base, fog));
+    assert_true("material_preview_fog_mask_positive", fog_mask > 0.0);
+    return 0;
+}
+
+static int test_material_editor_face_group_texture_island_and_override_controls(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    SceneObject object;
+    SceneEditorMaterialPreviewTriangleAddress address = {0};
+    SceneEditorMaterialPreviewTriangleAddress second_address = {0};
+    SceneEditorMaterialFacePlacement placement;
+    SDL_Color base = {128, 128, 132, 235};
+    SDL_Color tri_a = {0, 0, 0, 0};
+    SDL_Color tri_b = {0, 0, 0, 0};
+    SDL_Color face_rust = {0, 0, 0, 0};
+    double mask_a = 0.0;
+    double mask_b = 0.0;
+    double face_rust_mask = 0.0;
+    bool found_face_rust = false;
+
+    memset(&object, 0, sizeof(object));
+    object.color = 0x808084;
+    object.textureId = RUNTIME_MATERIAL_TEXTURE_3D_FOG;
+    object.textureStrength = 1.0;
+    object.textureScale = 2.0;
+    object.textureOffsetU = 0.0;
+    object.textureOffsetV = 0.0;
+    SceneEditorMaterialFacePlacementResetAll();
+
+    SceneEditorMaterialPreviewEvaluateTextureColorForFace(&object,
+                                                          0,
+                                                          2,
+                                                          0,
+                                                          4,
+                                                          0.75,
+                                                          0.0,
+                                                          0.25,
+                                                          base,
+                                                          &tri_a,
+                                                          &mask_a);
+    SceneEditorMaterialPreviewEvaluateTextureColorForFace(&object,
+                                                          0,
+                                                          2,
+                                                          1,
+                                                          5,
+                                                          0.75,
+                                                          0.25,
+                                                          0.0,
+                                                          base,
+                                                          &tri_b,
+                                                          &mask_b);
+    assert_true("material_face_island_color_continuous",
+                !material_preview_color_differs(tri_a, tri_b));
+    assert_close("material_face_island_mask_continuous", mask_a, mask_b, 1e-12);
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    sceneSettings.objectCount = 1;
+    sceneSettings.sceneObjects[0] = object;
+    MaterialEditorSetFocusedObjectIndex(0);
+    address.sceneObjectIndex = 0;
+    address.primitiveIndex = 0;
+    address.triangleIndex = 4;
+    address.localTriangleIndex = 4;
+    address.faceGroupIndex = 2;
+    assert_true("material_face_override_selects_active",
+                MaterialEditorSetTriangleSelection(&address));
+    assert_true("material_face_override_slider_applies",
+                MaterialEditorApplySliderValueToFocused(MATERIAL_EDITOR_SLIDER_OFFSET_U, 0.31));
+    assert_close("material_face_override_object_offset_unchanged",
+                 sceneSettings.sceneObjects[0].textureOffsetU,
+                 0.0,
+                 1e-12);
+    assert_true("material_face_override_exists",
+                SceneEditorMaterialFacePlacementHasOverride(0, 2));
+    placement = SceneEditorMaterialFacePlacementGetEffective(&sceneSettings.sceneObjects[0], 0, 2);
+    assert_close("material_face_override_offset_value", placement.offsetU, 0.31, 1e-12);
+    assert_true("material_face_override_inherits_texture_kind",
+                placement.textureId == RUNTIME_MATERIAL_TEXTURE_3D_FOG);
+    assert_true("material_face_texture_kind_applies_to_active",
+                MaterialEditorApplyTextureKindToFocused(RUNTIME_MATERIAL_TEXTURE_3D_RUST));
+    assert_true("material_face_texture_kind_object_unchanged",
+                sceneSettings.sceneObjects[0].textureId == RUNTIME_MATERIAL_TEXTURE_3D_FOG);
+    placement = SceneEditorMaterialFacePlacementGetEffective(&sceneSettings.sceneObjects[0], 0, 2);
+    assert_true("material_face_texture_kind_override_value",
+                placement.textureId == RUNTIME_MATERIAL_TEXTURE_3D_RUST);
+    assert_true("material_face_param_pattern_applies",
+                MaterialEditorApplyTexturePatternToFocused(
+                    RUNTIME_MATERIAL_TEXTURE_3D_PATTERN_PATCH));
+    assert_true("material_face_param_damage_applies",
+                MaterialEditorApplyTextureParamValueToFocused(
+                    MATERIAL_EDITOR_TEXTURE_PARAM_SURFACE_DAMAGE,
+                    0.88));
+    placement = SceneEditorMaterialFacePlacementGetEffective(&sceneSettings.sceneObjects[0], 0, 2);
+    assert_true("material_face_param_pattern_value",
+                placement.params.patternMode == RUNTIME_MATERIAL_TEXTURE_3D_PATTERN_PATCH);
+    assert_close("material_face_param_damage_value",
+                 placement.params.surfaceDamage,
+                 0.88,
+                 1e-12);
+    sceneSettings.sceneObjects[0].textureId = RUNTIME_MATERIAL_TEXTURE_3D_NONE;
+    assert_true("material_face_texture_override_active_without_object_texture",
+                SceneEditorMaterialFacePlacementObjectHasActiveTextureOverride(0));
+    for (int u = 1; u < 9 && !found_face_rust; ++u) {
+        for (int v = 1; v < 9 && !found_face_rust; ++v) {
+            double bary_v = (double)u / 10.0;
+            double bary_w = (double)v / 10.0;
+            if (bary_v + bary_w >= 0.95) continue;
+            found_face_rust = SceneEditorMaterialPreviewEvaluateTextureColorForFace(
+                &sceneSettings.sceneObjects[0],
+                0,
+                2,
+                0,
+                4,
+                1.0 - bary_v - bary_w,
+                bary_v,
+                bary_w,
+                base,
+                &face_rust,
+                &face_rust_mask);
+        }
+    }
+    assert_true("material_face_texture_override_samples_without_object_texture",
+                found_face_rust);
+    assert_true("material_face_texture_override_changes_color",
+                material_preview_color_differs(base, face_rust));
+    second_address = address;
+    second_address.triangleIndex = 6;
+    second_address.localTriangleIndex = 6;
+    second_address.faceGroupIndex = 3;
+    assert_true("material_face_copy_adds_second_group",
+                MaterialEditorToggleTriangleSelection(&second_address));
+    assert_true("material_face_copy_restores_active_group",
+                MaterialEditorSetActiveFaceGroupIndex(2));
+    assert_true("material_face_copy_to_selected",
+                MaterialEditorCopyActiveFacePlacementToSelected());
+    assert_true("material_face_copy_target_override_exists",
+                SceneEditorMaterialFacePlacementHasOverride(0, 3));
+    placement = SceneEditorMaterialFacePlacementGetEffective(&sceneSettings.sceneObjects[0], 0, 3);
+    assert_true("material_face_copy_target_texture_value",
+                placement.textureId == RUNTIME_MATERIAL_TEXTURE_3D_RUST);
+    assert_close("material_face_copy_target_offset_value", placement.offsetU, 0.31, 1e-12);
+    assert_true("material_face_copy_target_pattern_value",
+                placement.params.patternMode == RUNTIME_MATERIAL_TEXTURE_3D_PATTERN_PATCH);
+    assert_close("material_face_copy_target_damage_value",
+                 placement.params.surfaceDamage,
+                 0.88,
+                 1e-12);
+    assert_true("material_face_override_reset",
+                MaterialEditorResetActiveFacePlacement());
+    assert_true("material_face_override_reset_clears",
+                !SceneEditorMaterialFacePlacementHasOverride(0, 2));
+
+    SceneEditorMaterialFacePlacementResetAll();
     sceneSettings = saved_scene;
     animSettings = saved_anim;
     return 0;
@@ -463,12 +1365,21 @@ static int test_editor_mode_router_capabilities_3d_native(void) {
 static int test_editor_mode_router_cycle_policy(void) {
     assert_true("router_clamp_normal", EditorModeRouter_ClampEditorMode(1, false) == 1);
     assert_true("router_clamp_invalid", EditorModeRouter_ClampEditorMode(7, false) == 0);
+    assert_true("router_clamp_material_normal",
+                EditorModeRouter_ClampEditorMode(EDITOR_MODE_MATERIAL, false) ==
+                    EDITOR_MODE_MATERIAL);
     assert_true("router_clamp_lock_scene_to_path",
                 EditorModeRouter_ClampEditorMode(1, true) == 0);
     assert_true("router_next_unlocked_forward",
                 EditorModeRouter_NextEditorMode(0, false, false) == 1);
     assert_true("router_next_unlocked_reverse",
-                EditorModeRouter_NextEditorMode(0, true, false) == 2);
+                EditorModeRouter_NextEditorMode(0, true, false) == EDITOR_MODE_MATERIAL);
+    assert_true("router_next_unlocked_camera_to_material",
+                EditorModeRouter_NextEditorMode(EDITOR_MODE_CAMERA, false, false) ==
+                    EDITOR_MODE_MATERIAL);
+    assert_true("router_next_unlocked_material_to_path",
+                EditorModeRouter_NextEditorMode(EDITOR_MODE_MATERIAL, false, false) ==
+                    EDITOR_MODE_PATH);
     assert_true("router_next_locked_forward",
                 EditorModeRouter_NextEditorMode(0, false, true) == 2);
     assert_true("router_next_locked_reverse",
@@ -730,6 +1641,44 @@ static int test_scene_editor_control_surface_selected_object_status(void) {
     return 0;
 }
 
+static int test_scene_editor_control_surface_material_mode_contract(void) {
+    SceneEditorControlSurfaceInput input;
+    SceneEditorControlSurfaceContract contract;
+
+    memset(&input, 0, sizeof(input));
+    memset(&contract, 0, sizeof(contract));
+    input.requestedMode = EDITOR_MODE_MATERIAL;
+    input.lockObjectMode = false;
+    input.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    input.sourceLabel = "Runtime Scene";
+    input.sourcePath = "/tmp/runtime_scene_material_lane.json";
+    input.objectCount = 3;
+    input.hasSelectedObject = true;
+    input.selectedObjectIndex = 1;
+    input.route.routeFamily = RAY_TRACING_ROUTE_NATIVE_3D;
+
+    SceneEditorControlSurfaceBuild(&input, &contract);
+
+    assert_true("surface_material_mode_active",
+                contract.activeMode == EDITOR_MODE_MATERIAL);
+    assert_true("surface_material_mode_selectable",
+                contract.modeSelectable[EDITOR_MODE_MATERIAL]);
+    assert_true("surface_material_mode_canvas_enabled_with_selection",
+                contract.laneCanvasEditEnabled);
+    assert_true("surface_material_mode_controls_hint",
+                strstr(contract.statusControls, "Material controls") != NULL);
+    assert_true("surface_material_mode_label",
+                strcmp(SceneEditorControlSurfaceModeLabel(EDITOR_MODE_MATERIAL), "Material") == 0);
+
+    input.hasSelectedObject = false;
+    input.selectedObjectIndex = -1;
+    memset(&contract, 0, sizeof(contract));
+    SceneEditorControlSurfaceBuild(&input, &contract);
+    assert_true("surface_material_mode_canvas_disabled_without_selection",
+                !contract.laneCanvasEditEnabled);
+    return 0;
+}
+
 
 int run_test_runtime_scene_editor_tests(void) {
     int before = test_support_failures();
@@ -739,6 +1688,13 @@ int run_test_runtime_scene_editor_tests(void) {
     test_scene_editor_runtime_scene_persistence_roundtrip_object_materials();
     test_object_editor_material_assignment_preserves_object_color();
     test_object_editor_slider_assignments_update_object_fields();
+    test_material_editor_focuses_last_selected_and_updates_texture_fields();
+    test_material_editor_object_projector_centers_focused_object();
+    test_material_editor_focused_zoom_accumulates_around_object_fit();
+    test_material_editor_preview_resolves_focused_triangle_substrate();
+    test_material_editor_preview_picks_and_selects_visible_triangle();
+    test_material_editor_preview_texture_color_responds_to_controls();
+    test_material_editor_face_group_texture_island_and_override_controls();
     test_editor_mode_router_capabilities_2d();
     test_editor_mode_router_capabilities_3d_scaffold();
     test_editor_mode_router_capabilities_3d_native();
@@ -749,5 +1705,6 @@ int run_test_runtime_scene_editor_tests(void) {
     test_scene_editor_control_surface_controlled_3d_bezier_mode_enablement();
     test_scene_editor_control_surface_controlled_3d_object_mode_canvas_enablement();
     test_scene_editor_control_surface_selected_object_status();
+    test_scene_editor_control_surface_material_mode_contract();
     return test_support_failures() - before;
 }

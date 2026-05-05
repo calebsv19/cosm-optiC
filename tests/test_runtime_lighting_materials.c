@@ -10,3 +10,9 @@ int run_test_runtime_lighting_materials_tests(void) {
     run_test_runtime_lighting_materials_transport_suite();
     return test_support_failures() - before;
 }
+
+int run_test_runtime_lighting_materials_payload_tests(void) {
+    int before = test_support_failures();
+    run_test_runtime_lighting_materials_payload_suite();
+    return test_support_failures() - before;
+}

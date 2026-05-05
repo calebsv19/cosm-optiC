@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "engine/Render/render_pipeline.h"
 #include "render/integrators/integrator_common.h"
 #include "render/runtime_native_3d_render.h"
 
@@ -25,6 +26,18 @@ typedef struct {
 } Native3DDirtyRectCache;
 
 static Native3DDirtyRectCache s_native3DDirtyRectCache = {0};
+
+static SDL_Rect Native3DDirtyRectResolveDrawDestination(SDL_Renderer* renderer,
+                                                        int fallback_width,
+                                                        int fallback_height) {
+    SDL_Rect dst = {0, 0, fallback_width, fallback_height};
+    RenderContext* ctx = getRenderContext();
+    if (ctx && ctx->renderer == renderer && ctx->logical_width > 0 && ctx->logical_height > 0) {
+        dst.w = ctx->logical_width;
+        dst.h = ctx->logical_height;
+    }
+    return dst;
+}
 
 static uint32_t PackLuminanceToABGR(Uint8 value) {
     return ((uint32_t)0xFFu << 24) |
@@ -418,7 +431,7 @@ bool RayTracingPreview_UpdateNative3DDirtyRectABGR(SDL_Renderer* renderer,
 
 bool RayTracingPreview_DrawNative3DDirtyRect(SDL_Renderer* renderer, int width, int height) {
 #if USE_VULKAN
-    SDL_Rect dstRect = {0, 0, width, height};
+    SDL_Rect dstRect = Native3DDirtyRectResolveDrawDestination(renderer, width, height);
 
     if (!renderer || !Native3DDirtyRectCache_Matches(renderer, width, height)) {
         return false;

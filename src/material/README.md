@@ -12,6 +12,13 @@ Struct: `Material`
 - `emissive` – preset-driven emissive contribution used by the native 3D `Emission / Transparency` tier.
 - `metallic`, `transparency` – bounded preset/material response inputs; `transparency` is used by the native 3D `Emission / Transparency` tier.
 
+Per-object procedural texture controls:
+- `textureId` selects the procedural overlay (`0` none, `1` rust, `2` fog).
+- `textureOffsetU`, `textureOffsetV` pan the procedural sample across each hit triangle.
+- `textureScale` controls pattern frequency; lower values read as broader patches and higher values as smaller/more frequent features.
+- `textureStrength` controls overlay intensity. Existing scenes default to `0.0`, so procedural overlays are opt-in.
+- `texturePatternMode`, `textureCoverage`, `textureGrain`, `textureEdgeSoftness`, `textureContrast`, `textureFlow`, `textureColorDepth`, `textureSurfaceDamage`, and `textureSeed` form the additive texture parameter block used by Material preview and native 3D payload sampling. Missing values normalize to the current default texture behavior.
+
 Presets (MaterialLibrary):
 - `MATERIAL_PRESET_DEFAULT` (0): Matte; diffuse-heavy, light reflectivity.
 - `MATERIAL_PRESET_MIRROR` (1): High reflectivity, zero roughness.
@@ -24,6 +31,7 @@ Notes:
 - Presets use neutral base colors so SceneObject color can serve as albedo.
 - Material IDs are referenced by SceneObjects; defaults to `MATERIAL_PRESET_DEFAULT`.
 - The manager (`material_manager`) initializes the library and clamps invalid IDs to the default preset.
+- Native `3D` hit shading resolves procedural overlays through `runtime_material_texture_3d` after base material lookup, using barycentric hit coordinates so the texture remains attached to the triangle as camera/light/object views change.
 - Optional override: JSON presets in `config/materials/*.json` can redefine the library. Each file supports keys:
   `diffuse`, `specular`, `reflectivity`, `roughness`, `base_color` (array[3]), `emissive` (array[3]),
   `metallic`, `transparency`. If the directory is present at load, shipped preset filenames

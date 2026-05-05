@@ -5,6 +5,14 @@
 #include <stdint.h>
 
 int RuntimeNative3DClampRenderScale(int value);
+bool RuntimeNative3DRenderScaleUsesHiDPI(int value);
+bool RuntimeNative3DResolveHostDimensions(int logical_width,
+                                          int logical_height,
+                                          int drawable_width,
+                                          int drawable_height,
+                                          int scale,
+                                          int* out_width,
+                                          int* out_height);
 bool RuntimeNative3DResolveScaledDimensions(int host_width,
                                             int host_height,
                                             int scale,

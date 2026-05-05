@@ -34,6 +34,19 @@ typedef struct {
     double roughness;      // 0 (sharp) .. 1 (diffuse)
     double emissiveStrength; // Emissive-material strength multiplier (0.0 to 1.0)
     int textureId;         // Procedural texture selector
+    double textureOffsetU; // Per-triangle procedural texture pan, U axis
+    double textureOffsetV; // Per-triangle procedural texture pan, V axis
+    double textureScale;   // Procedural texture frequency multiplier
+    double textureStrength; // Procedural material overlay strength (0.0 to 1.0)
+    int texturePatternMode; // Procedural pattern variant selector
+    double textureCoverage; // Procedural affected-area coverage
+    double textureGrain;    // Procedural feature size/detail control
+    double textureEdgeSoftness; // Procedural mask edge fade width
+    double textureContrast; // Procedural mask separation
+    double textureFlow;     // Procedural directional warp/stretch
+    double textureColorDepth; // Procedural color intensity
+    double textureSurfaceDamage; // Procedural BSDF damage intensity
+    int textureSeed;        // Durable procedural variation seed
     int material_id;       // Material preset reference
 
     bool dirty;            // Needs update?

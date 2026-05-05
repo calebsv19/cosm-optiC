@@ -7,6 +7,7 @@
 #include "render/render_helper.h"
 #include "editor/bezier_editor.h"
 #include "editor/object_editor.h"
+#include "editor/material_editor.h"
 #include "editor/camera_editor.h"
 #include "editor/scene_editor_pane_host.h"
 
@@ -22,7 +23,7 @@ typedef struct {
     bool running;
     bool owns_window;
     bool owns_renderer;
-    int currentMode;  // 0 = Bezier, 1 = Objects, 2 = Camera
+    int currentMode;  // See EDITOR_MODE_* in editor_mode_router.h
 } SceneEditor;
 
 bool SceneEditorSessionBegin(SceneEditor* editor, SDL_Renderer* renderer, SDL_Window* window);

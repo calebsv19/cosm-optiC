@@ -14,6 +14,19 @@ static void InitDefaultMaterial(SceneObject* obj) {
     obj->roughness = 0.65;
     obj->emissiveStrength = 1.0;
     obj->textureId = 0;
+    obj->textureOffsetU = 0.0;
+    obj->textureOffsetV = 0.0;
+    obj->textureScale = 1.0;
+    obj->textureStrength = 0.0;
+    obj->texturePatternMode = 0;
+    obj->textureCoverage = 0.5;
+    obj->textureGrain = 0.5;
+    obj->textureEdgeSoftness = 0.5;
+    obj->textureContrast = 0.5;
+    obj->textureFlow = 0.0;
+    obj->textureColorDepth = 0.5;
+    obj->textureSurfaceDamage = 0.5;
+    obj->textureSeed = 0;
     obj->material_id = MaterialManagerDefaultId();
     obj->guideOnly = false;
 }

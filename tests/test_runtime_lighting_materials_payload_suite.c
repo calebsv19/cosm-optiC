@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include "app/animation.h"
+#include "editor/scene_editor_material_face_placement.h"
 #include "import/runtime_scene_bridge.h"
 #include "material/material_manager.h"
 #include "render/material_bsdf.h"
@@ -14,6 +15,7 @@
 #include "render/runtime_emission_transparency_3d.h"
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_material_response_3d.h"
+#include "render/runtime_material_texture_3d.h"
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_scene_3d_builder.h"
 #include "test_runtime_lighting_materials.h"
@@ -310,11 +312,345 @@ static int test_runtime_material_payload_3d_hit_resolution_contract(void) {
     return 0;
 }
 
+static int test_runtime_material_payload_3d_rust_texture_is_hit_anchored(void) {
+    SceneConfig saved_scene = sceneSettings;
+    RuntimeMaterialPayload3D baseline = {0};
+    RuntimeMaterialPayload3D textured = {0};
+    RuntimeMaterialPayload3D repeated = {0};
+    RuntimeMaterialPayload3D panned = {0};
+    HitInfo3D hit = {0};
+    bool ok = false;
+
+    MaterialManagerResetDefaults();
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 8.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].color = 0xB0B0B0;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_ROUGH_METAL;
+    sceneSettings.sceneObjects[0].textureId = RUNTIME_MATERIAL_TEXTURE_3D_RUST;
+    sceneSettings.sceneObjects[0].textureStrength = 0.0;
+
+    HitInfo3D_Reset(&hit);
+    hit.sceneObjectIndex = 0;
+    hit.triangleIndex = 7;
+    hit.primitiveIndex = 1;
+    hit.baryU = 0.34;
+    hit.baryV = 0.52;
+    hit.baryW = 0.14;
+
+    ok = RuntimeMaterialPayload3D_ResolveFromHit(&hit, &baseline);
+    assert_true("runtime_material_payload_rust_baseline_ok", ok);
+
+    sceneSettings.sceneObjects[0].textureStrength = 1.0;
+    sceneSettings.sceneObjects[0].textureScale = 1.0;
+    ok = RuntimeMaterialPayload3D_ResolveFromHit(&hit, &textured);
+    assert_true("runtime_material_payload_rust_textured_ok", ok);
+
+    if (textured.textureMask <= 1e-9) {
+        hit.baryU = 0.15;
+        hit.baryV = 0.18;
+        hit.baryW = 0.67;
+        ok = RuntimeMaterialPayload3D_ResolveFromHit(&hit, &textured);
+        assert_true("runtime_material_payload_rust_textured_retry_ok", ok);
+    }
+
+    assert_true("runtime_material_payload_rust_mask_active", textured.textureMask > 1e-9);
+    assert_true("runtime_material_payload_rust_reflectivity_reduced",
+                textured.bsdf.reflectivity < baseline.bsdf.reflectivity);
+    assert_true("runtime_material_payload_rust_roughness_increased",
+                textured.bsdf.roughness > baseline.bsdf.roughness);
+    assert_true("runtime_material_payload_rust_color_shifted_red",
+                textured.baseColorR > baseline.baseColorR &&
+                textured.baseColorG < baseline.baseColorG);
+
+    ok = RuntimeMaterialPayload3D_ResolveFromHit(&hit, &repeated);
+    assert_true("runtime_material_payload_rust_repeat_ok", ok);
+    assert_close("runtime_material_payload_rust_repeat_mask_stable",
+                 repeated.textureMask,
+                 textured.textureMask,
+                 1e-12);
+    assert_close("runtime_material_payload_rust_repeat_u_stable",
+                 repeated.textureU,
+                 textured.textureU,
+                 1e-12);
+
+    sceneSettings.sceneObjects[0].textureOffsetU = 0.25;
+    ok = RuntimeMaterialPayload3D_ResolveFromHit(&hit, &panned);
+    assert_true("runtime_material_payload_rust_pan_ok", ok);
+    assert_true("runtime_material_payload_rust_pan_moves_u",
+                fabs(panned.textureU - textured.textureU) > 1e-6);
+
+    sceneSettings = saved_scene;
+    return 0;
+}
+
+static int test_runtime_material_payload_3d_face_texture_override_affects_hit(void) {
+    SceneConfig saved_scene = sceneSettings;
+    RuntimeMaterialPayload3D baseline = {0};
+    RuntimeMaterialPayload3D textured = {0};
+    HitInfo3D hit = {0};
+    SceneEditorMaterialFacePlacement placement = {0};
+    bool ok = false;
+    bool found_mask = false;
+
+    MaterialManagerResetDefaults();
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    SceneEditorMaterialFacePlacementResetAll();
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 8.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].color = 0xB0B0B0;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_MIRROR;
+    sceneSettings.sceneObjects[0].textureId = RUNTIME_MATERIAL_TEXTURE_3D_NONE;
+    sceneSettings.sceneObjects[0].textureStrength = 0.0;
+
+    HitInfo3D_Reset(&hit);
+    hit.sceneObjectIndex = 0;
+    hit.triangleIndex = 18;
+    hit.localTriangleIndex = 4;
+    hit.primitiveIndex = 1;
+    hit.baryU = 0.34;
+    hit.baryV = 0.52;
+    hit.baryW = 0.14;
+
+    ok = RuntimeMaterialPayload3D_ResolveFromHit(&hit, &baseline);
+    assert_true("runtime_material_payload_face_texture_baseline_ok", ok);
+    assert_close("runtime_material_payload_face_texture_baseline_mask",
+                 baseline.textureMask,
+                 0.0,
+                 1e-12);
+
+    placement.hasOverride = true;
+    placement.sceneObjectIndex = 0;
+    placement.faceGroupIndex = 2;
+    placement.textureId = RUNTIME_MATERIAL_TEXTURE_3D_RUST;
+    placement.scale = 1.0;
+    placement.strength = 1.0;
+    assert_true("runtime_material_payload_face_texture_override_set",
+                SceneEditorMaterialFacePlacementSetOverride(&placement));
+
+    for (int u = 1; u < 9 && !found_mask; ++u) {
+        for (int v = 1; v < 9 && !found_mask; ++v) {
+            double bary_v = (double)u / 10.0;
+            double bary_w = (double)v / 10.0;
+            if (bary_v + bary_w >= 0.95) continue;
+            hit.baryV = bary_v;
+            hit.baryW = bary_w;
+            hit.baryU = 1.0 - bary_v - bary_w;
+            ok = RuntimeMaterialPayload3D_ResolveFromHit(&hit, &textured);
+            assert_true("runtime_material_payload_face_texture_override_retry_ok", ok);
+            found_mask = textured.textureMask > 1e-9;
+        }
+    }
+
+    assert_true("runtime_material_payload_face_texture_mask_active", found_mask);
+    assert_true("runtime_material_payload_face_texture_roughness_increased",
+                textured.bsdf.roughness > baseline.bsdf.roughness);
+    assert_true("runtime_material_payload_face_texture_reflectivity_reduced",
+                textured.bsdf.reflectivity < baseline.bsdf.reflectivity);
+    assert_true("runtime_material_payload_face_texture_object_default_unchanged",
+                sceneSettings.sceneObjects[0].textureId == RUNTIME_MATERIAL_TEXTURE_3D_NONE);
+
+    SceneEditorMaterialFacePlacementResetAll();
+    sceneSettings = saved_scene;
+    return 0;
+}
+
+static int test_runtime_material_payload_3d_fog_texture_roughens_transparency(void) {
+    SceneConfig saved_scene = sceneSettings;
+    RuntimeMaterialPayload3D baseline = {0};
+    RuntimeMaterialPayload3D textured = {0};
+    HitInfo3D hit = {0};
+    bool ok = false;
+
+    MaterialManagerResetDefaults();
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 8.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].color = 0xB8D8FF;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
+    sceneSettings.sceneObjects[0].alpha = 0.8;
+    sceneSettings.sceneObjects[0].textureId = RUNTIME_MATERIAL_TEXTURE_3D_FOG;
+    sceneSettings.sceneObjects[0].textureStrength = 0.0;
+
+    HitInfo3D_Reset(&hit);
+    hit.sceneObjectIndex = 0;
+    hit.triangleIndex = 4;
+    hit.primitiveIndex = 1;
+    hit.baryU = 0.20;
+    hit.baryV = 0.30;
+    hit.baryW = 0.50;
+
+    ok = RuntimeMaterialPayload3D_ResolveFromHit(&hit, &baseline);
+    assert_true("runtime_material_payload_fog_baseline_ok", ok);
+
+    sceneSettings.sceneObjects[0].textureStrength = 1.0;
+    sceneSettings.sceneObjects[0].textureScale = 2.0;
+    ok = RuntimeMaterialPayload3D_ResolveFromHit(&hit, &textured);
+    assert_true("runtime_material_payload_fog_textured_ok", ok);
+    assert_true("runtime_material_payload_fog_mask_active", textured.textureMask > 1e-9);
+    assert_true("runtime_material_payload_fog_roughness_preserved_or_increased",
+                textured.bsdf.roughness >= baseline.bsdf.roughness);
+    assert_true("runtime_material_payload_fog_transparency_reduced",
+                textured.transparency < baseline.transparency);
+    assert_true("runtime_material_payload_fog_keeps_some_transparency",
+                textured.transparency > 0.0);
+
+    sceneSettings = saved_scene;
+    return 0;
+}
+
+static int test_runtime_material_texture_3d_uv_sampler_matches_hit_sampler(void) {
+    SceneConfig saved_scene = sceneSettings;
+    HitInfo3D hit = {0};
+    RuntimeMaterialTexture3DSample hit_sample = {0};
+    RuntimeMaterialTexture3DSample uv_sample = {0};
+    bool hit_ok = false;
+    bool uv_ok = false;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 8.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].textureId = RUNTIME_MATERIAL_TEXTURE_3D_RUST;
+    sceneSettings.sceneObjects[0].textureStrength = 1.0;
+    sceneSettings.sceneObjects[0].textureScale = 3.0;
+    sceneSettings.sceneObjects[0].textureOffsetU = 0.125;
+    sceneSettings.sceneObjects[0].textureOffsetV = 0.375;
+
+    HitInfo3D_Reset(&hit);
+    hit.sceneObjectIndex = 0;
+    hit.triangleIndex = 6;
+    hit.baryU = 0.18;
+    hit.baryV = 0.37;
+    hit.baryW = 0.45;
+
+    hit_ok = RuntimeMaterialTexture3D_Sample(&sceneSettings.sceneObjects[0],
+                                             &hit,
+                                             &hit_sample);
+    uv_ok = RuntimeMaterialTexture3D_SampleUV(&sceneSettings.sceneObjects[0],
+                                              hit.triangleIndex,
+                                              hit.baryV,
+                                              hit.baryW,
+                                              &uv_sample);
+
+    assert_true("runtime_material_texture_uv_parity_active", hit_ok == uv_ok);
+    assert_true("runtime_material_texture_uv_parity_kind", hit_sample.kind == uv_sample.kind);
+    assert_close("runtime_material_texture_uv_parity_u", hit_sample.u, uv_sample.u, 1e-12);
+    assert_close("runtime_material_texture_uv_parity_v", hit_sample.v, uv_sample.v, 1e-12);
+    assert_close("runtime_material_texture_uv_parity_mask", hit_sample.mask, uv_sample.mask, 1e-12);
+
+    sceneSettings = saved_scene;
+    return 0;
+}
+
+static int test_runtime_material_texture_3d_rust_parameter_modes_change_masks(void) {
+    SceneObject object;
+    RuntimeMaterialTexture3DPlacement placement = {0};
+    RuntimeMaterialTexture3DSample samples[4];
+    double diff_sum = 0.0;
+
+    memset(&object, 0, sizeof(object));
+    memset(samples, 0, sizeof(samples));
+    object.textureId = RUNTIME_MATERIAL_TEXTURE_3D_RUST;
+    object.textureStrength = 1.0;
+    object.textureScale = 1.0;
+    placement.textureId = RUNTIME_MATERIAL_TEXTURE_3D_RUST;
+    placement.strength = 1.0;
+    placement.scale = 1.0;
+    placement.params = RuntimeMaterialTexture3DDefaultParams();
+    placement.params.coverage = 0.78;
+    placement.params.edgeSoftness = 0.75;
+    placement.params.contrast = 0.25;
+    placement.params.grain = 0.35;
+    placement.params.flow = 0.75;
+    placement.params.colorDepth = 0.8;
+    placement.params.surfaceDamage = 0.8;
+
+    for (int mode = 0; mode < 4; ++mode) {
+        placement.params.patternMode = mode;
+        assert_true("runtime_material_texture_param_mode_sample_ok",
+                    RuntimeMaterialTexture3D_SamplePlacedUV(&object,
+                                                            0.37,
+                                                            0.61,
+                                                            123,
+                                                            &placement,
+                                                            &samples[mode]) ||
+                        samples[mode].mask >= 0.0);
+    }
+
+    for (int mode = 1; mode < 4; ++mode) {
+        diff_sum += fabs(samples[mode].mask - samples[0].mask);
+    }
+    assert_true("runtime_material_texture_param_modes_differ", diff_sum > 1e-5);
+    assert_close("runtime_material_texture_param_color_depth",
+                 samples[2].colorDepth,
+                 0.8,
+                 1e-12);
+    assert_close("runtime_material_texture_param_surface_damage",
+                 samples[2].surfaceDamage,
+                 0.8,
+                 1e-12);
+    return 0;
+}
+
+static int test_runtime_material_payload_3d_surface_damage_controls_roughness(void) {
+    SceneConfig saved_scene = sceneSettings;
+    RuntimeMaterialPayload3D low_damage = {0};
+    RuntimeMaterialPayload3D high_damage = {0};
+    HitInfo3D hit = {0};
+
+    MaterialManagerResetDefaults();
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 8.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].color = 0xB0B0B0;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_MIRROR;
+    sceneSettings.sceneObjects[0].textureId = RUNTIME_MATERIAL_TEXTURE_3D_RUST;
+    sceneSettings.sceneObjects[0].textureStrength = 1.0;
+    sceneSettings.sceneObjects[0].textureScale = 1.0;
+    sceneSettings.sceneObjects[0].texturePatternMode = RUNTIME_MATERIAL_TEXTURE_3D_PATTERN_PATCH;
+    sceneSettings.sceneObjects[0].textureCoverage = 1.0;
+    sceneSettings.sceneObjects[0].textureEdgeSoftness = 1.0;
+    sceneSettings.sceneObjects[0].textureContrast = 0.2;
+    sceneSettings.sceneObjects[0].textureGrain = 0.4;
+    sceneSettings.sceneObjects[0].textureColorDepth = 0.6;
+
+    HitInfo3D_Reset(&hit);
+    hit.sceneObjectIndex = 0;
+    hit.triangleIndex = 9;
+    hit.primitiveIndex = 1;
+    hit.baryU = 0.22;
+    hit.baryV = 0.33;
+    hit.baryW = 0.45;
+
+    sceneSettings.sceneObjects[0].textureSurfaceDamage = 0.05;
+    assert_true("runtime_material_payload_low_damage_ok",
+                RuntimeMaterialPayload3D_ResolveFromHit(&hit, &low_damage));
+    sceneSettings.sceneObjects[0].textureSurfaceDamage = 1.0;
+    assert_true("runtime_material_payload_high_damage_ok",
+                RuntimeMaterialPayload3D_ResolveFromHit(&hit, &high_damage));
+
+    assert_true("runtime_material_payload_damage_mask_active",
+                high_damage.textureMask > 1e-9 && low_damage.textureMask > 1e-9);
+    assert_true("runtime_material_payload_damage_roughness_increases",
+                high_damage.bsdf.roughness > low_damage.bsdf.roughness);
+    assert_true("runtime_material_payload_damage_reflectivity_reduces",
+                high_damage.bsdf.reflectivity < low_damage.bsdf.reflectivity);
+
+    sceneSettings = saved_scene;
+    return 0;
+}
+
 int run_test_runtime_lighting_materials_payload_suite(void) {
     test_runtime_material_payload_3d_scene_object_resolution_contract();
     test_runtime_material_payload_3d_object_multipliers_contract();
     test_material_manager_default_presets_include_i4_entries();
     test_material_manager_load_dir_preserves_shipped_preset_ids();
     test_runtime_material_payload_3d_hit_resolution_contract();
+    test_runtime_material_payload_3d_rust_texture_is_hit_anchored();
+    test_runtime_material_payload_3d_face_texture_override_affects_hit();
+    test_runtime_material_payload_3d_fog_texture_roughens_transparency();
+    test_runtime_material_texture_3d_uv_sampler_matches_hit_sampler();
+    test_runtime_material_texture_3d_rust_parameter_modes_change_masks();
+    test_runtime_material_payload_3d_surface_damage_controls_roughness();
     return 0;
 }

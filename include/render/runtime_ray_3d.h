@@ -15,6 +15,7 @@ typedef struct {
     Vec3 position;
     Vec3 normal;
     int triangleIndex;
+    int localTriangleIndex;
     int primitiveIndex;
     int sceneObjectIndex;
     RuntimePrimitive3DSourceRef source;

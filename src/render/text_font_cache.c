@@ -193,14 +193,18 @@ static TTF_Font* open_cached_font_from_resolved(const RayTracingResolvedFont* re
         const char* candidate = candidates[i];
         char loaded_path[384];
         TTF_Font* font = NULL;
+        int loaded_point_size = resolved->text_run.raster_point_size;
         if (!candidate || !candidate[0]) {
             continue;
         }
-        if (find_cached_font(candidate, resolved->text_run.logical_point_size)) {
-            return find_cached_font(candidate, resolved->text_run.logical_point_size);
+        if (loaded_point_size < resolved->text_run.logical_point_size) {
+            loaded_point_size = resolved->text_run.logical_point_size;
+        }
+        if (find_cached_font(candidate, loaded_point_size)) {
+            return find_cached_font(candidate, loaded_point_size);
         }
         font = open_font_with_search(candidate,
-                                     resolved->text_run.logical_point_size,
+                                     loaded_point_size,
                                      loaded_path,
                                      sizeof(loaded_path));
         if (font) {
@@ -210,10 +214,10 @@ static TTF_Font* open_cached_font_from_resolved(const RayTracingResolvedFont* re
             ray_tracing_text_register_font_source(font,
                                                   loaded_path[0] ? loaded_path : candidate,
                                                   resolved->text_run.logical_point_size,
-                                                  resolved->text_run.logical_point_size,
+                                                  loaded_point_size,
                                                   resolved->text_run.kerning_enabled);
             cache_font(loaded_path[0] ? loaded_path : candidate,
-                       resolved->text_run.logical_point_size,
+                       loaded_point_size,
                        font);
             return font;
         }

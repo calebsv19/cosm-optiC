@@ -66,6 +66,8 @@ static Uint8* native3DRenderBuffer = NULL;
 static Uint8* native3DPreviewBuffer = NULL;
 static size_t native3DRenderBufferCapacity = 0u;
 static size_t native3DPreviewBufferCapacity = 0u;
+static int native3DPreviewWidth = 0;
+static int native3DPreviewHeight = 0;
 float* energyBuffer = NULL;
 float* directEnergyBufferCPU = NULL;
 static uint32_t s_native3DSampleSequence = 1U;
@@ -172,9 +174,11 @@ static CoreSpaceDesc g_fluidSpaceDesc = {0};
 static bool g_fluidSpaceValid = false;
 
 bool ExportCurrentNative3DFrameBMP(const char* filename) {
+    int exportWidth = native3DPreviewWidth > 0 ? native3DPreviewWidth : sceneSettings.windowWidth;
+    int exportHeight = native3DPreviewHeight > 0 ? native3DPreviewHeight : sceneSettings.windowHeight;
     return RayTracing2Native3DOverlay_ExportFrameBMP(filename,
-                                                     sceneSettings.windowWidth,
-                                                     sceneSettings.windowHeight,
+                                                     exportWidth,
+                                                     exportHeight,
                                                      native3DPreviewBuffer,
                                                      pixelBuffer);
 }
@@ -463,6 +467,8 @@ void CleanupRayTracing(void) {
         native3DPreviewBuffer = NULL;
         native3DPreviewBufferCapacity = 0u;
     }
+    native3DPreviewWidth = 0;
+    native3DPreviewHeight = 0;
     RayTracingPreview_ShutdownNative3DDirtyRect();
     if (energyBuffer != NULL) {
         free(energyBuffer);
@@ -572,20 +578,36 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
     memset(tilePreviewBuffer, 0, pixelCount * sizeof(Uint8));
 
     if (native3D) {
+        RenderContext* renderContext = getRenderContext();
         RuntimeNative3DRenderStats nativeStats = {0};
         RuntimeNative3DSamplingContext nativeSampling = NextNative3DSamplingContext();
         int blurRadius = 0;
         bool nativeRenderOk = false;
         double normalized_t = AnimationCurrentNormalizedT();
         int renderScale = RuntimeNative3DClampRenderScale(animSettings.renderScale3D);
+        int hostWidth = WIDTH;
+        int hostHeight = HEIGHT;
         int renderWidth = WIDTH;
         int renderHeight = HEIGHT;
         size_t renderPixelCount = 0u;
+        size_t hostPixelCount = pixelCount;
         size_t nativePreviewByteCount =
-            pixelCount * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+            hostPixelCount * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
 
-        if (!RuntimeNative3DResolveScaledDimensions(WIDTH,
-                                                    HEIGHT,
+        if (!RuntimeNative3DResolveHostDimensions(WIDTH,
+                                                  HEIGHT,
+                                                  renderContext ? renderContext->width : WIDTH,
+                                                  renderContext ? renderContext->height : HEIGHT,
+                                                  renderScale,
+                                                  &hostWidth,
+                                                  &hostHeight)) {
+            memset(pixelBuffer, 0, pixelCount * sizeof(Uint8));
+            return;
+        }
+        hostPixelCount = (size_t)hostWidth * (size_t)hostHeight;
+        nativePreviewByteCount = hostPixelCount * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+        if (!RuntimeNative3DResolveScaledDimensions(hostWidth,
+                                                    hostHeight,
                                                     renderScale,
                                                     &renderWidth,
                                                     &renderHeight)) {
@@ -594,11 +616,13 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
         }
         renderPixelCount = (size_t)renderWidth * (size_t)renderHeight;
         if (!EnsureNative3DRenderBuffer(renderPixelCount) ||
-            !EnsureNative3DPreviewBuffer(pixelCount)) {
+            !EnsureNative3DPreviewBuffer(hostPixelCount)) {
             printf("ERROR: Failed to allocate native 3D render buffer during render.\n");
             memset(pixelBuffer, 0, pixelCount * sizeof(Uint8));
             return;
         }
+        native3DPreviewWidth = hostWidth;
+        native3DPreviewHeight = hostHeight;
         RuntimeNative3DFillPixelBufferEnvironment(native3DRenderBuffer, renderPixelCount);
         RuntimeNative3DFillPixelBufferEnvironment(native3DPreviewBuffer,
                                                  nativePreviewByteCount /
@@ -611,8 +635,8 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
             nativeRenderOk = RayTracing2PreviewPresent_RenderNative3DTilesPreview(
                 renderer,
                 native3DPreviewBuffer,
-                WIDTH,
-                HEIGHT,
+                hostWidth,
+                hostHeight,
                 native3DRenderBuffer,
                 renderWidth,
                 renderHeight,
@@ -665,19 +689,20 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
                                               renderWidth,
                                               renderHeight,
                                               native3DPreviewBuffer,
-                                              WIDTH,
-                                              HEIGHT);
+                                              hostWidth,
+                                              hostHeight);
         }
 #if USE_VULKAN
-        RayTracing2PreviewPresent_DrawABGRBuffer(renderer,
-                                                 native3DPreviewBuffer,
-                                                 WIDTH,
-                                                 HEIGHT);
+        RayTracing2PreviewPresent_DrawABGRBufferToRect(renderer,
+                                                       native3DPreviewBuffer,
+                                                       hostWidth,
+                                                       hostHeight,
+                                                       (SDL_Rect){0, 0, WIDTH, HEIGHT});
 #else
-        for (int y = 0; y < HEIGHT; y++) {
-            for (int x = 0; x < WIDTH; x++) {
+        for (int y = 0; y < hostHeight; y++) {
+            for (int x = 0; x < hostWidth; x++) {
                 size_t idx =
-                    ((size_t)y * (size_t)WIDTH + (size_t)x) * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+                    ((size_t)y * (size_t)hostWidth + (size_t)x) * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
                 Uint8 b = native3DPreviewBuffer[idx];
                 Uint8 g = native3DPreviewBuffer[idx + 1u];
                 Uint8 r = native3DPreviewBuffer[idx + 2u];

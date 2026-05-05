@@ -252,8 +252,12 @@ void menu_render_draw_sliders(SDL_Renderer* renderer,
             RenderText(renderer, font, slider->valueX, slider->valueY,
                        "%d", state->temporalFrames3DSliderValue);
         } else if (slider->value == &state->renderScale3DSliderValue) {
-            RenderText(renderer, font, slider->valueX, slider->valueY,
-                       "%dx", state->renderScale3DSliderValue);
+            if (state->renderScale3DSliderValue == RUNTIME_3D_RENDER_SCALE_HIDPI) {
+                RenderText(renderer, font, slider->valueX, slider->valueY, "HiDPI");
+            } else {
+                RenderText(renderer, font, slider->valueX, slider->valueY,
+                           "%dx", state->renderScale3DSliderValue);
+            }
         } else {
             RenderText(renderer, font, slider->valueX, slider->valueY,
                        "%d", *slider->value);

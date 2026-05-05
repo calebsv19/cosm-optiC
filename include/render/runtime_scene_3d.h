@@ -73,6 +73,7 @@ typedef struct {
     Vec3 normal;
     int primitiveIndex;
     int sceneObjectIndex;
+    int localTriangleIndex;
 } RuntimeTriangle3D;
 
 typedef struct {

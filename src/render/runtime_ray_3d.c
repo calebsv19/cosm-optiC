@@ -49,6 +49,7 @@ void HitInfo3D_Reset(HitInfo3D* hit) {
     memset(hit, 0, sizeof(*hit));
     hit->t = DBL_MAX;
     hit->triangleIndex = -1;
+    hit->localTriangleIndex = -1;
     hit->primitiveIndex = -1;
     hit->sceneObjectIndex = -1;
     hit->source.kind = RUNTIME_PRIMITIVE_3D_KIND_INVALID;
@@ -109,6 +110,7 @@ bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
     hit.position = vec3_add(ray->origin, vec3_scale(ray->direction, t));
     hit.normal = runtime_ray_3d_triangle_normal(triangle);
     hit.triangleIndex = triangle_index;
+    hit.localTriangleIndex = triangle->localTriangleIndex;
     hit.primitiveIndex = triangle->primitiveIndex;
     hit.sceneObjectIndex = triangle->sceneObjectIndex;
     hit.baryU = bary_u;

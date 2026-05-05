@@ -16,6 +16,11 @@ void RayTracing2PreviewPresent_DrawABGRBuffer(SDL_Renderer* renderer,
                                               const Uint8* buffer,
                                               int width,
                                               int height);
+void RayTracing2PreviewPresent_DrawABGRBufferToRect(SDL_Renderer* renderer,
+                                                    const Uint8* buffer,
+                                                    int width,
+                                                    int height,
+                                                    SDL_Rect dst_rect);
 bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
     SDL_Renderer* renderer,
     Uint8* host_buffer,

@@ -8,11 +8,11 @@ static RayTracingRuntimeRoute ResolveRoute(void) {
 
 int EditorModeRouter_ClampEditorMode(int current_mode, bool lock_object_mode) {
     if (!lock_object_mode) {
-        if (current_mode < 0 || current_mode > 2) return 0;
+        if (current_mode < 0 || current_mode >= EDITOR_MODE_COUNT) return EDITOR_MODE_PATH;
         return current_mode;
     }
-    if (current_mode == 2) return 2;
-    return 0;
+    if (current_mode == EDITOR_MODE_CAMERA) return EDITOR_MODE_CAMERA;
+    return EDITOR_MODE_PATH;
 }
 
 int EditorModeRouter_NextEditorMode(int current_mode, bool reverse, bool lock_object_mode) {
@@ -20,15 +20,15 @@ int EditorModeRouter_NextEditorMode(int current_mode, bool reverse, bool lock_ob
 
     if (!lock_object_mode) {
         if (reverse) {
-            return (current_mode == 0) ? 2 : (current_mode - 1);
+            return (current_mode == EDITOR_MODE_PATH) ? (EDITOR_MODE_COUNT - 1) : (current_mode - 1);
         }
-        return (current_mode + 1) % 3;
+        return (current_mode + 1) % EDITOR_MODE_COUNT;
     }
 
     if (reverse) {
-        return (current_mode == 0) ? 2 : 0;
+        return (current_mode == EDITOR_MODE_PATH) ? EDITOR_MODE_CAMERA : EDITOR_MODE_PATH;
     }
-    return (current_mode == 0) ? 2 : 0;
+    return (current_mode == EDITOR_MODE_PATH) ? EDITOR_MODE_CAMERA : EDITOR_MODE_PATH;
 }
 
 EditorModeCapabilities EditorModeRouter_GetCapabilities(void) {

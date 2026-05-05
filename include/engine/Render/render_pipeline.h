@@ -9,6 +9,10 @@ typedef struct {
     SDL_Window* window;
     int width;
     int height;
+    int logical_width;
+    int logical_height;
+    float dpi_scale_x;
+    float dpi_scale_y;
 #if USE_VULKAN
     VkCommandBuffer command_buffer;
     VkFramebuffer framebuffer;

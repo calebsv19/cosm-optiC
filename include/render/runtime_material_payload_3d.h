@@ -16,6 +16,9 @@ typedef struct {
     double baseColorB;
     double emissive;
     double transparency;
+    double textureMask;
+    double textureU;
+    double textureV;
 } RuntimeMaterialPayload3D;
 
 void RuntimeMaterialPayload3D_Reset(RuntimeMaterialPayload3D* payload);

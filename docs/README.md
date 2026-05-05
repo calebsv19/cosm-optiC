@@ -2,11 +2,13 @@
 
 Start here for public repository documentation.
 
-Last audited: 2026-04-29.
+Last audited: 2026-05-04.
 
 Current public focus:
 - shipped native `3D` runtime ladder through `Disney`
 - deep-render start/resume and export workflow
+- menu/editor control-surface truth for native `3D` scene and atmosphere selection
+- narrower native `3D` verification lanes for config persistence, prepared-render parity/scatter, and geometry contracts
 - post-`I6` renderer-lane selection before VF3D / `physics_sim` ingestion
 
 ## Current State

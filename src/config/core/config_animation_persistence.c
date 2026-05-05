@@ -168,8 +168,11 @@ static int ClampTemporalFrames3D(int value) {
 }
 
 static int ClampRenderScale3D(int value) {
-    if (value < RUNTIME_3D_RENDER_SCALE_MIN) {
-        value = RUNTIME_3D_RENDER_SCALE_MIN;
+    if (value == RUNTIME_3D_RENDER_SCALE_HIDPI) {
+        return RUNTIME_3D_RENDER_SCALE_HIDPI;
+    }
+    if (value < 1) {
+        value = RUNTIME_3D_RENDER_SCALE_DEFAULT;
     }
     if (value > RUNTIME_3D_RENDER_SCALE_MAX) {
         value = RUNTIME_3D_RENDER_SCALE_MAX;

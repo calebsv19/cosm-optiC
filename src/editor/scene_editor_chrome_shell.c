@@ -5,6 +5,7 @@
 #include <stdio.h>
 
 #include "config/config_manager.h"
+#include "editor/editor_mode_router.h"
 #include "editor/scene_editor_surface_render.h"
 #include "editor/scene_editor_tool_state.h"
 #include "engine/Render/render_pipeline.h"
@@ -20,7 +21,7 @@ SDL_Rect backToMenuButton;
 SDL_Rect selectButton;
 SDL_Rect addButton;
 SDL_Rect deleteButton;
-static SDL_Rect modeSelectButtons[3];
+static SDL_Rect modeSelectButtons[EDITOR_MODE_COUNT];
 static char g_sceneActionFeedbackText[128];
 static Uint64 g_sceneActionFeedbackUntilMs = 0u;
 
@@ -156,7 +157,7 @@ static int scene_editor_chrome_shell_measure_button_width(const char* label, int
 
 static int scene_editor_chrome_shell_measure_button_height(int min_height) {
     int point_size = animation_config_scale_text_point_size(&animSettings, 24, 12);
-    int target = point_size + 14;
+    int target = point_size + 10;
     if (target > min_height) return target;
     return min_height;
 }
@@ -175,7 +176,7 @@ static bool scene_editor_chrome_shell_button_hovered(const SDL_Rect* rect) {
 }
 
 int SceneEditorChromeShellResolveModeButtonAtPoint(int mx, int my) {
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < EDITOR_MODE_COUNT; i++) {
         if (scene_editor_chrome_shell_point_in_rect(mx, my, &modeSelectButtons[i])) {
             return i;
         }
@@ -215,9 +216,9 @@ bool SceneEditorChromeShellIsButtonHit(int mx, int my) {
 }
 
 void SceneEditorChromeShellLayoutFallback(int width, int height) {
-    int compactButtonHeight = scene_editor_chrome_shell_measure_button_height(40);
-    int footerButtonHeight = scene_editor_chrome_shell_measure_button_height(46);
-    int buttonGap = 10;
+    int compactButtonHeight = scene_editor_chrome_shell_measure_button_height(36);
+    int footerButtonHeight = scene_editor_chrome_shell_measure_button_height(40);
+    int buttonGap = 8;
     int footerMargin = 30;
     int contentWidth = scene_editor_chrome_shell_measure_button_width("Back to Menu", 320);
     int pairWidth = (contentWidth - buttonGap) / 2;
@@ -255,7 +256,7 @@ void SceneEditorChromeShellLayoutFallback(int width, int height) {
                                contentWidth - pairWidth - buttonGap,
                                footerButtonHeight};
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < EDITOR_MODE_COUNT; i++) {
         modeSelectButtons[i] = (SDL_Rect){0, 0, 0, 0};
     }
 }
@@ -265,7 +266,7 @@ void SceneEditorChromeShellLayoutFromPane(const SceneEditorPaneLayout* layout) {
     int actionButtonHeight = 0;
     int actionRowWidth = 0;
     int actionHalfWidth = 0;
-    int buttonGap = 10;
+    int buttonGap = 8;
     int modeGap = 4;
     SDL_Rect left = {0};
     SDL_Rect right = {0};
@@ -279,7 +280,7 @@ void SceneEditorChromeShellLayoutFromPane(const SceneEditorPaneLayout* layout) {
         return;
     }
 
-    actionButtonHeight = scene_editor_chrome_shell_measure_button_height(44);
+    actionButtonHeight = scene_editor_chrome_shell_measure_button_height(38);
     left = layout->left_content_rect;
     right = layout->right_content_rect;
     modeRect = layout->mode_router_rect;
@@ -365,13 +366,14 @@ void SceneEditorChromeShellLayoutFromPane(const SceneEditorPaneLayout* layout) {
                                actionRowWidth - actionHalfWidth - buttonGap,
                                actionButtonHeight};
 
-    modeButtonWidth = (modeRect.w - modeGap * 2) / 3;
-    if (modeButtonWidth < 80) modeButtonWidth = 80;
-    modeButtonRemain = modeRect.w - (modeButtonWidth * 3 + modeGap * 2);
+    modeButtonWidth = (modeRect.w - modeGap * (EDITOR_MODE_COUNT - 1)) / EDITOR_MODE_COUNT;
+    if (modeButtonWidth < 70) modeButtonWidth = 70;
+    modeButtonRemain = modeRect.w - (modeButtonWidth * EDITOR_MODE_COUNT +
+                                     modeGap * (EDITOR_MODE_COUNT - 1));
     modeButtonX = modeRect.x;
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < EDITOR_MODE_COUNT; i++) {
         int button_w = modeButtonWidth;
-        if (i == 2 && modeButtonRemain > 0) {
+        if (i == EDITOR_MODE_COUNT - 1 && modeButtonRemain > 0) {
             button_w += modeButtonRemain;
         }
         modeSelectButtons[i] = (SDL_Rect){modeButtonX, modeRect.y, button_w, modeRect.h};
@@ -482,7 +484,7 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
                                                       splitter_hovered,
                                                       splitter_active);
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < EDITOR_MODE_COUNT; i++) {
         bool selectable = contract->modeSelectable[i];
         bool active = (i == contract->activeMode);
         scene_editor_chrome_shell_render_button(renderer,

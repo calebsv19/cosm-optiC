@@ -51,7 +51,7 @@ Grouped on the far right. Current set (values persist via config):
 - 3D Secondary Samples (4–64, only in 3D mode): secondary diffuse/emissive bounce sample count for native `3D`, clamped to multiples of 4.
 - 3D Transmission Samples (4–32, only in 3D mode): transparent-view transmission sample count for native `3D`.
 - 3D Temporal Frames (1–32, only in 3D mode): per-resolved-frame native `3D` stochastic subpass count before grayscale tonemap resolve. `1` disables temporal accumulation.
-- 3D Render Scale (1–8, only in 3D mode): native `3D` internal render downscale factor. `1x` traces at full host resolution; higher values trace fewer pixels and nearest-upscale back into the normal window.
+- 3D Render Scale (HiDPI, 1–8, only in 3D mode): native `3D` internal render scale. `HiDPI` traces at the window drawable pixel size when the display exposes more pixels than the logical window; `1x` traces at the logical host resolution; higher values trace fewer pixels and nearest-upscale back into the normal window.
 - Path SPP (1–128, only when Camera Path integrator is active): samples per pixel for camera path integrator.
 - Path Depth (1–16, only when Camera Path integrator is active): max path depth.
 

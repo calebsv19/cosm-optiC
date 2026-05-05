@@ -3,6 +3,7 @@
 #include "config/config_scene_path_io.h"
 #include "config/core/config_runtime_paths.h"
 #include "app/data_paths.h"
+#include "editor/scene_editor_material_face_placement.h"
 #include "render/ray_tracing_integrator_catalog.h"
 #include "scene/object_manager.h"
 #include "material/material_manager.h"
@@ -144,6 +145,60 @@ void LoadAllSettings(void) {
     ApplyAnimationWindowSizeOverride();
 }
 
+static struct json_object* SaveMaterialFacePlacementsForObject(int scene_object_index) {
+    int count = SceneEditorMaterialFacePlacementOverrideCountForObject(scene_object_index);
+    struct json_object* placements = NULL;
+    if (count <= 0) return NULL;
+    placements = json_object_new_array();
+    if (!placements) return NULL;
+    for (int i = 0; i < count; ++i) {
+        SceneEditorMaterialFacePlacement placement;
+        struct json_object* entry = NULL;
+        if (!SceneEditorMaterialFacePlacementGetOverrideForObject(scene_object_index,
+                                                                  i,
+                                                                  &placement)) {
+            continue;
+        }
+        entry = json_object_new_object();
+        if (!entry) {
+            json_object_put(placements);
+            return NULL;
+        }
+        json_object_object_add(entry, "faceGroupIndex", json_object_new_int(placement.faceGroupIndex));
+        json_object_object_add(entry, "textureId", json_object_new_int(placement.textureId));
+        json_object_object_add(entry, "offsetU", json_object_new_double(placement.offsetU));
+        json_object_object_add(entry, "offsetV", json_object_new_double(placement.offsetV));
+        json_object_object_add(entry, "scale", json_object_new_double(placement.scale));
+        json_object_object_add(entry, "strength", json_object_new_double(placement.strength));
+        json_object_object_add(entry, "rotation", json_object_new_double(placement.rotation));
+        {
+            RuntimeMaterialTexture3DParams params =
+                RuntimeMaterialTexture3DNormalizeParams(placement.params);
+            struct json_object* parameters = json_object_new_object();
+            if (!parameters) {
+                json_object_put(placements);
+                return NULL;
+            }
+            json_object_object_add(parameters, "patternMode", json_object_new_int(params.patternMode));
+            json_object_object_add(parameters, "coverage", json_object_new_double(params.coverage));
+            json_object_object_add(parameters, "grain", json_object_new_double(params.grain));
+            json_object_object_add(parameters, "edgeSoftness", json_object_new_double(params.edgeSoftness));
+            json_object_object_add(parameters, "contrast", json_object_new_double(params.contrast));
+            json_object_object_add(parameters, "flow", json_object_new_double(params.flow));
+            json_object_object_add(parameters, "colorDepth", json_object_new_double(params.colorDepth));
+            json_object_object_add(parameters, "surfaceDamage", json_object_new_double(params.surfaceDamage));
+            json_object_object_add(parameters, "seed", json_object_new_int(params.seed));
+            json_object_object_add(entry, "parameters", parameters);
+        }
+        json_object_array_add(placements, entry);
+    }
+    if (json_object_array_length(placements) == 0u) {
+        json_object_put(placements);
+        return NULL;
+    }
+    return placements;
+}
+
 void SaveSceneConfig(void) {
     if (!config_io_ensure_parent_directory_for_file(SCENE_CONFIG_RUNTIME_FILE)) {
         fprintf(stderr, "Error: Failed to prepare runtime config lane for %s\n", SCENE_CONFIG_RUNTIME_FILE);
@@ -197,6 +252,25 @@ void SaveSceneConfig(void) {
         json_object_object_add(jsonObj, "roughness", json_object_new_double(obj->roughness));
         json_object_object_add(jsonObj, "emissiveStrength", json_object_new_double(obj->emissiveStrength));
         json_object_object_add(jsonObj, "textureId", json_object_new_int(obj->textureId));
+        json_object_object_add(jsonObj, "textureOffsetU", json_object_new_double(obj->textureOffsetU));
+        json_object_object_add(jsonObj, "textureOffsetV", json_object_new_double(obj->textureOffsetV));
+        json_object_object_add(jsonObj, "textureScale", json_object_new_double(obj->textureScale));
+        json_object_object_add(jsonObj, "textureStrength", json_object_new_double(obj->textureStrength));
+        json_object_object_add(jsonObj, "texturePatternMode", json_object_new_int(obj->texturePatternMode));
+        json_object_object_add(jsonObj, "textureCoverage", json_object_new_double(obj->textureCoverage));
+        json_object_object_add(jsonObj, "textureGrain", json_object_new_double(obj->textureGrain));
+        json_object_object_add(jsonObj, "textureEdgeSoftness", json_object_new_double(obj->textureEdgeSoftness));
+        json_object_object_add(jsonObj, "textureContrast", json_object_new_double(obj->textureContrast));
+        json_object_object_add(jsonObj, "textureFlow", json_object_new_double(obj->textureFlow));
+        json_object_object_add(jsonObj, "textureColorDepth", json_object_new_double(obj->textureColorDepth));
+        json_object_object_add(jsonObj, "textureSurfaceDamage", json_object_new_double(obj->textureSurfaceDamage));
+        json_object_object_add(jsonObj, "textureSeed", json_object_new_int(obj->textureSeed));
+        {
+            struct json_object* facePlacements = SaveMaterialFacePlacementsForObject(i);
+            if (facePlacements) {
+                json_object_object_add(jsonObj, "materialFacePlacements", facePlacements);
+            }
+        }
         json_object_object_add(jsonObj, "materialId", json_object_new_int(obj->material_id));
         json_object_object_add(jsonObj, "materialId", json_object_new_int(obj->material_id));
 
@@ -319,7 +393,10 @@ static void LoadCameraConfig(struct json_object* config) {
 
 void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
     struct json_object *texture, *color, *opacity, *alpha, *transparency, *reflectivity, *roughness,
-        *emissiveStrength, *textureId, *materialId;
+        *emissiveStrength, *textureId, *textureOffsetU, *textureOffsetV, *textureScale,
+        *textureStrength, *texturePatternMode, *textureCoverage, *textureGrain, *textureEdgeSoftness,
+        *textureContrast, *textureFlow, *textureColorDepth, *textureSurfaceDamage, *textureSeed,
+        *materialId;
 
     // Load texture path
     if (json_object_object_get_ex(obj, "texture", &texture)) {
@@ -375,6 +452,97 @@ void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
         sceneObject->textureId = 0;
     }
 
+    if (json_object_object_get_ex(obj, "textureOffsetU", &textureOffsetU)) {
+        sceneObject->textureOffsetU = json_object_get_double(textureOffsetU);
+    } else {
+        sceneObject->textureOffsetU = 0.0;
+    }
+
+    if (json_object_object_get_ex(obj, "textureOffsetV", &textureOffsetV)) {
+        sceneObject->textureOffsetV = json_object_get_double(textureOffsetV);
+    } else {
+        sceneObject->textureOffsetV = 0.0;
+    }
+
+    if (json_object_object_get_ex(obj, "textureScale", &textureScale)) {
+        sceneObject->textureScale = json_object_get_double(textureScale);
+    } else {
+        sceneObject->textureScale = 1.0;
+    }
+
+    if (json_object_object_get_ex(obj, "textureStrength", &textureStrength)) {
+        sceneObject->textureStrength = json_object_get_double(textureStrength);
+    } else {
+        sceneObject->textureStrength = 0.0;
+    }
+
+    if (json_object_object_get_ex(obj, "texturePatternMode", &texturePatternMode)) {
+        sceneObject->texturePatternMode = json_object_get_int(texturePatternMode);
+    } else {
+        sceneObject->texturePatternMode = 0;
+    }
+
+    if (json_object_object_get_ex(obj, "textureCoverage", &textureCoverage)) {
+        sceneObject->textureCoverage = json_object_get_double(textureCoverage);
+    } else {
+        sceneObject->textureCoverage = 0.5;
+    }
+
+    if (json_object_object_get_ex(obj, "textureGrain", &textureGrain)) {
+        sceneObject->textureGrain = json_object_get_double(textureGrain);
+    } else {
+        sceneObject->textureGrain = 0.5;
+    }
+
+    if (json_object_object_get_ex(obj, "textureEdgeSoftness", &textureEdgeSoftness)) {
+        sceneObject->textureEdgeSoftness = json_object_get_double(textureEdgeSoftness);
+    } else {
+        sceneObject->textureEdgeSoftness = 0.5;
+    }
+
+    if (json_object_object_get_ex(obj, "textureContrast", &textureContrast)) {
+        sceneObject->textureContrast = json_object_get_double(textureContrast);
+    } else {
+        sceneObject->textureContrast = 0.5;
+    }
+
+    if (json_object_object_get_ex(obj, "textureFlow", &textureFlow)) {
+        sceneObject->textureFlow = json_object_get_double(textureFlow);
+    } else {
+        sceneObject->textureFlow = 0.0;
+    }
+
+    if (json_object_object_get_ex(obj, "textureColorDepth", &textureColorDepth)) {
+        sceneObject->textureColorDepth = json_object_get_double(textureColorDepth);
+    } else {
+        sceneObject->textureColorDepth = 0.5;
+    }
+
+    if (json_object_object_get_ex(obj, "textureSurfaceDamage", &textureSurfaceDamage)) {
+        sceneObject->textureSurfaceDamage = json_object_get_double(textureSurfaceDamage);
+    } else {
+        sceneObject->textureSurfaceDamage = 0.5;
+    }
+
+    if (json_object_object_get_ex(obj, "textureSeed", &textureSeed)) {
+        sceneObject->textureSeed = json_object_get_int(textureSeed);
+    } else {
+        sceneObject->textureSeed = 0;
+    }
+    {
+        RuntimeMaterialTexture3DParams params =
+            RuntimeMaterialTexture3DParamsFromObject(sceneObject);
+        sceneObject->texturePatternMode = params.patternMode;
+        sceneObject->textureCoverage = params.coverage;
+        sceneObject->textureGrain = params.grain;
+        sceneObject->textureEdgeSoftness = params.edgeSoftness;
+        sceneObject->textureContrast = params.contrast;
+        sceneObject->textureFlow = params.flow;
+        sceneObject->textureColorDepth = params.colorDepth;
+        sceneObject->textureSurfaceDamage = params.surfaceDamage;
+        sceneObject->textureSeed = params.seed;
+    }
+
     if (json_object_object_get_ex(obj, "materialId", &materialId)) {
         sceneObject->material_id = json_object_get_int(materialId);
     } else {
@@ -382,9 +550,102 @@ void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
     }
 }
 
+static bool ConfigJsonGetDouble(struct json_object* obj, const char* key, double* out_value) {
+    struct json_object* value = NULL;
+    if (!obj || !key || !out_value) return false;
+    if (!json_object_object_get_ex(obj, key, &value)) return false;
+    if (!json_object_is_type(value, json_type_double) &&
+        !json_object_is_type(value, json_type_int)) {
+        return false;
+    }
+    *out_value = json_object_get_double(value);
+    return true;
+}
+
+static bool ConfigJsonGetInt(struct json_object* obj, const char* key, int* out_value) {
+    struct json_object* value = NULL;
+    if (!obj || !key || !out_value) return false;
+    if (!json_object_object_get_ex(obj, key, &value)) return false;
+    if (!json_object_is_type(value, json_type_int) &&
+        !json_object_is_type(value, json_type_double)) {
+        return false;
+    }
+    *out_value = json_object_get_int(value);
+    return true;
+}
+
+static void ConfigLoadTextureParams(struct json_object* obj,
+                                    RuntimeMaterialTexture3DParams* params) {
+    struct json_object* parameters = NULL;
+    if (!obj || !params) return;
+    if (json_object_object_get_ex(obj, "parameters", &parameters) &&
+        json_object_is_type(parameters, json_type_object)) {
+        ConfigJsonGetInt(parameters, "patternMode", &params->patternMode);
+        ConfigJsonGetDouble(parameters, "coverage", &params->coverage);
+        ConfigJsonGetDouble(parameters, "grain", &params->grain);
+        ConfigJsonGetDouble(parameters, "edgeSoftness", &params->edgeSoftness);
+        ConfigJsonGetDouble(parameters, "contrast", &params->contrast);
+        ConfigJsonGetDouble(parameters, "flow", &params->flow);
+        ConfigJsonGetDouble(parameters, "colorDepth", &params->colorDepth);
+        ConfigJsonGetDouble(parameters, "surfaceDamage", &params->surfaceDamage);
+        ConfigJsonGetInt(parameters, "seed", &params->seed);
+    }
+    ConfigJsonGetInt(obj, "texturePatternMode", &params->patternMode);
+    ConfigJsonGetDouble(obj, "textureCoverage", &params->coverage);
+    ConfigJsonGetDouble(obj, "textureGrain", &params->grain);
+    ConfigJsonGetDouble(obj, "textureEdgeSoftness", &params->edgeSoftness);
+    ConfigJsonGetDouble(obj, "textureContrast", &params->contrast);
+    ConfigJsonGetDouble(obj, "textureFlow", &params->flow);
+    ConfigJsonGetDouble(obj, "textureColorDepth", &params->colorDepth);
+    ConfigJsonGetDouble(obj, "textureSurfaceDamage", &params->surfaceDamage);
+    ConfigJsonGetInt(obj, "textureSeed", &params->seed);
+    *params = RuntimeMaterialTexture3DNormalizeParams(*params);
+}
+
+static void LoadMaterialFacePlacements(struct json_object* obj, int scene_object_index) {
+    struct json_object* placements = NULL;
+    size_t count = 0u;
+    if (!obj || scene_object_index < 0) return;
+    if (!json_object_object_get_ex(obj, "materialFacePlacements", &placements) ||
+        !json_object_is_type(placements, json_type_array)) {
+        return;
+    }
+    count = json_object_array_length(placements);
+    for (size_t i = 0u; i < count; ++i) {
+        struct json_object* entry = json_object_array_get_idx(placements, i);
+        struct json_object* face_group = NULL;
+        SceneEditorMaterialFacePlacement placement;
+        if (!entry || !json_object_is_type(entry, json_type_object)) continue;
+        if (!json_object_object_get_ex(entry, "faceGroupIndex", &face_group) ||
+            !json_object_is_type(face_group, json_type_int)) {
+            continue;
+        }
+        memset(&placement, 0, sizeof(placement));
+        placement.hasOverride = true;
+        placement.sceneObjectIndex = scene_object_index;
+        placement.faceGroupIndex = json_object_get_int(face_group);
+        placement.textureId = sceneSettings.sceneObjects[scene_object_index].textureId;
+        placement.offsetU = sceneSettings.sceneObjects[scene_object_index].textureOffsetU;
+        placement.offsetV = sceneSettings.sceneObjects[scene_object_index].textureOffsetV;
+        placement.scale = sceneSettings.sceneObjects[scene_object_index].textureScale;
+        placement.strength = sceneSettings.sceneObjects[scene_object_index].textureStrength;
+        placement.params = RuntimeMaterialTexture3DParamsFromObject(
+            &sceneSettings.sceneObjects[scene_object_index]);
+        ConfigJsonGetInt(entry, "textureId", &placement.textureId);
+        ConfigJsonGetDouble(entry, "offsetU", &placement.offsetU);
+        ConfigJsonGetDouble(entry, "offsetV", &placement.offsetV);
+        ConfigJsonGetDouble(entry, "scale", &placement.scale);
+        ConfigJsonGetDouble(entry, "strength", &placement.strength);
+        ConfigJsonGetDouble(entry, "rotation", &placement.rotation);
+        ConfigLoadTextureParams(entry, &placement.params);
+        SceneEditorMaterialFacePlacementSetOverride(&placement);
+    }
+}
+
             
 void LoadSceneObjects(struct json_object* config) {
     printf("DEBUG: Loading Scene Objects...\n");
+    SceneEditorMaterialFacePlacementResetAll();
 
     struct json_object *objects;
     if (json_object_object_get_ex(config, "objects", &objects)) {
@@ -396,6 +657,7 @@ void LoadSceneObjects(struct json_object* config) {
             SceneObject* sceneObj = &sceneSettings.sceneObjects[i];
 
             LoadObjectProperties(obj, sceneObj);
+            LoadMaterialFacePlacements(obj, i);
 
             struct json_object *type, *x, *y, *z, *scale, *rotation, *radius, *numPoints, *baseShapePoints, 
 *shapePoints;

@@ -74,7 +74,8 @@ static bool initialize_menu(SDL_Window** window,
                                SDL_WINDOWPOS_CENTERED,
                                MENU_WIDTH,
                                MENU_HEIGHT,
-                               SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
+                               SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE |
+                                   SDL_WINDOW_ALLOW_HIGHDPI);
     if (!*window) {
         printf("Window Creation Failed: %s\n", SDL_GetError());
         TTF_Quit();

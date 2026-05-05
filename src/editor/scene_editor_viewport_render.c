@@ -7,6 +7,7 @@
 #include "editor/bezier_editor.h"
 #include "editor/camera_editor.h"
 #include "editor/editor_mode_router.h"
+#include "editor/material_editor.h"
 #include "editor/object_editor.h"
 #include "editor/scene_editor.h"
 #include "render/ray_tracing_mode_backend.h"
@@ -62,14 +63,17 @@ static void scene_editor_viewport_render_active_mode_layer(SDL_Renderer* rendere
     if (!renderer) return;
 
     switch (current_mode) {
-        case 0:
+        case EDITOR_MODE_PATH:
             RenderBezierEditor(renderer);
             break;
-        case 1:
+        case EDITOR_MODE_OBJECT:
             RenderObjectEditor(renderer);
             break;
-        case 2:
+        case EDITOR_MODE_CAMERA:
             RenderCameraEditor(renderer);
+            break;
+        case EDITOR_MODE_MATERIAL:
+            RenderMaterialEditor(renderer);
             break;
         default:
             break;
