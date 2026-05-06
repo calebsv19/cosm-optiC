@@ -1,5 +1,6 @@
 #include "render/pipeline/ray_tracing2_native3d_overlay.h"
 
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -302,28 +303,49 @@ bool RayTracing2Native3DOverlay_ExportFrameBMP(const char* filename,
     SDL_Surface* surface = NULL;
     const Uint8* source =
         native3d_preview_buffer ? native3d_preview_buffer : luminance_buffer;
+    const size_t row_bytes =
+        (size_t)width * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
 
     if (!filename || !filename[0] || !source || width <= 0 || height <= 0) {
         return false;
     }
 
-    surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ARGB8888);
+    if (native3d_preview_buffer) {
+        if (row_bytes / (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES != (size_t)width ||
+            row_bytes > (size_t)INT_MAX) {
+            fprintf(stderr,
+                    "native 3D BMP export rejected invalid row size for %dx%d preview.\n",
+                    width,
+                    height);
+            return false;
+        }
+
+        surface = SDL_CreateRGBSurfaceFrom((void*)native3d_preview_buffer,
+                                           width,
+                                           height,
+                                           32,
+                                           (int)row_bytes,
+                                           0x000000FFu,
+                                           0x0000FF00u,
+                                           0x00FF0000u,
+                                           0xFF000000u);
+        if (!surface) {
+            fprintf(stderr, "SDL_CreateRGBSurfaceFrom failed: %s\n", SDL_GetError());
+            return false;
+        }
+    } else {
+        surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ARGB8888);
+    }
     if (!surface) {
         fprintf(stderr, "SDL_CreateRGBSurfaceWithFormat failed: %s\n", SDL_GetError());
         return false;
     }
 
-    for (int y = 0; y < height; ++y) {
-        uint32_t* row = (uint32_t*)((uint8_t*)surface->pixels + ((size_t)y * surface->pitch));
-        size_t base = (size_t)y * (size_t)width;
-        for (int x = 0; x < width; ++x) {
-            if (source == native3d_preview_buffer) {
-                size_t idx = (base + (size_t)x) * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
-                row[x] = ((uint32_t)source[idx + 3u] << 24) |
-                         ((uint32_t)source[idx] << 16) |
-                         ((uint32_t)source[idx + 1u] << 8) |
-                         (uint32_t)source[idx + 2u];
-            } else {
+    if (!native3d_preview_buffer) {
+        for (int y = 0; y < height; ++y) {
+            uint32_t* row = (uint32_t*)((uint8_t*)surface->pixels + ((size_t)y * surface->pitch));
+            size_t base = (size_t)y * (size_t)width;
+            for (int x = 0; x < width; ++x) {
                 uint8_t b = source[base + (size_t)x];
                 row[x] = ((uint32_t)0xFF << 24) | ((uint32_t)b << 16) |
                          ((uint32_t)b << 8) | (uint32_t)b;

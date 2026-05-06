@@ -11,7 +11,11 @@ static uint64_t get_time_ns(void) {
 
 void timer_init(Timer* timer, const char* name) {
     memset(timer, 0, sizeof(Timer));
-    timer->name = name;
+    if (!name) {
+        return;
+    }
+    strncpy(timer->name, name, sizeof(timer->name) - 1);
+    timer->name[sizeof(timer->name) - 1] = '\0';
 }
 
 void timer_start(Timer* timer) {

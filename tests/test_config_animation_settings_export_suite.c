@@ -8,6 +8,7 @@
 #include "app/data_paths.h"
 #include "app/render_export_batch.h"
 #include "config/config_manager.h"
+#include "render/pipeline/ray_tracing2_native3d_overlay.h"
 #include "render/ray_tracing_integrator_catalog.h"
 #include "render/runtime_native_3d_resolution.h"
 #include "test_config_animation_internal.h"
@@ -622,6 +623,57 @@ static int test_animation_deep_render_frame_resume_roundtrip_and_clamp(void) {
     return 0;
 }
 
+static int test_native_3d_export_frame_bmp_uses_preview_buffer_directly(void) {
+    char tmp_template[] = "/tmp/ray_tracing_native3d_export_XXXXXX";
+    char* tmp_root = mkdtemp(tmp_template);
+    char frame_path[PATH_MAX];
+    const Uint8 preview_rgba[] = {
+        255u, 0u,   0u,   255u,
+        0u,   255u, 0u,   255u
+    };
+    SDL_Surface* loaded = NULL;
+    SDL_Surface* converted = NULL;
+    Uint32* pixels = NULL;
+    Uint8 r = 0u;
+    Uint8 g = 0u;
+    Uint8 b = 0u;
+    Uint8 a = 0u;
+
+    assert_true("native_3d_export_tmpdir_created", tmp_root != NULL);
+    if (!tmp_root) return 0;
+
+    snprintf(frame_path, sizeof(frame_path), "%s/frame_0000.bmp", tmp_root);
+    assert_true("native_3d_export_save_ok",
+                RayTracing2Native3DOverlay_ExportFrameBMP(frame_path,
+                                                          2,
+                                                          1,
+                                                          preview_rgba,
+                                                          NULL));
+    assert_true("native_3d_export_file_exists", path_exists(frame_path));
+
+    loaded = SDL_LoadBMP(frame_path);
+    assert_true("native_3d_export_load_saved_bmp", loaded != NULL);
+    if (loaded) {
+        converted = SDL_ConvertSurfaceFormat(loaded, SDL_PIXELFORMAT_RGBA32, 0);
+        assert_true("native_3d_export_convert_loaded_surface", converted != NULL);
+    }
+    if (converted) {
+        pixels = (Uint32*)converted->pixels;
+        SDL_GetRGBA(pixels[0], converted->format, &r, &g, &b, &a);
+        assert_true("native_3d_export_first_pixel_red",
+                    r == 255u && g == 0u && b == 0u);
+        SDL_GetRGBA(pixels[1], converted->format, &r, &g, &b, &a);
+        assert_true("native_3d_export_second_pixel_green",
+                    r == 0u && g == 255u && b == 0u);
+    }
+
+    if (converted) SDL_FreeSurface(converted);
+    if (loaded) SDL_FreeSurface(loaded);
+    unlink(frame_path);
+    rmdir(tmp_root);
+    return 0;
+}
+
 int run_test_config_animation_settings_export_suite(void) {
     int before = test_support_failures();
 
@@ -640,5 +692,6 @@ int run_test_config_animation_settings_export_suite(void) {
     test_render_export_batch_counts_and_clears_frames();
     test_render_export_batch_reports_highest_and_next_frame();
     test_render_export_batch_make_video_rejects_empty_frame_dir();
+    test_native_3d_export_frame_bmp_uses_preview_buffer_directly();
     return test_support_failures() - before;
 }
