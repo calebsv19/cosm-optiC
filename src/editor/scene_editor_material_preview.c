@@ -7,8 +7,9 @@
 
 #include "config/config_manager.h"
 #include "editor/scene_editor_material_face_placement.h"
+#include "editor/scene_editor_material_stack.h"
 #include "import/runtime_scene_bridge.h"
-#include "render/runtime_material_texture_3d.h"
+#include "render/runtime_material_texture_stack_3d.h"
 #include "render/runtime_scene_3d_builder.h"
 #include "scene/object_manager.h"
 
@@ -31,11 +32,26 @@ typedef struct SceneEditorMaterialPreviewProjectedTriangle {
 
 static SDL_Color scene_editor_material_preview_color_from_packed_rgb(int packed, Uint8 alpha) {
     SDL_Color out = {220, 200, 88, alpha};
+    const double max_preview_channel = 168.0;
+    double max_channel = 0.0;
+    double scale = 1.0;
     if (packed != 0) {
         out.r = (Uint8)((packed >> 16) & 0xFF);
         out.g = (Uint8)((packed >> 8) & 0xFF);
         out.b = (Uint8)(packed & 0xFF);
     }
+    max_channel = fmax((double)out.r, fmax((double)out.g, (double)out.b));
+    if (max_channel > max_preview_channel) {
+        scale = max_preview_channel / max_channel;
+        out.r = (Uint8)lround((double)out.r * scale);
+        out.g = (Uint8)lround((double)out.g * scale);
+        out.b = (Uint8)lround((double)out.b * scale);
+    }
+    return out;
+}
+
+static SDL_Color scene_editor_material_preview_dim_base_color(Uint8 alpha) {
+    SDL_Color out = {44, 46, 52, alpha};
     return out;
 }
 
@@ -55,41 +71,19 @@ static double scene_editor_material_preview_clamp01(double value) {
     return value;
 }
 
-static Uint8 scene_editor_material_preview_mix_byte(Uint8 a, Uint8 b, double t) {
-    double mixed = (double)a + (((double)b - (double)a) * t);
-    if (mixed < 0.0) mixed = 0.0;
-    if (mixed > 255.0) mixed = 255.0;
-    return (Uint8)lround(mixed);
-}
-
-static bool scene_editor_material_preview_color_from_texture_sample(
-    const RuntimeMaterialTexture3DSample* sample,
+static bool scene_editor_material_preview_color_from_surface_eval(
+    const RuntimeMaterialSurfaceEval* surface_eval,
     SDL_Color base_color,
     SDL_Color* out_color,
     double* out_mask) {
     SDL_Color color = base_color;
     double mask = 0.0;
     if (!out_color) return false;
-    if (sample && sample->active) {
-        mask = scene_editor_material_preview_clamp01(sample->mask);
-        if (sample->kind == RUNTIME_MATERIAL_TEXTURE_3D_RUST) {
-            const SDL_Color rust = {168, 82, 32, base_color.a};
-            double color_t = scene_editor_material_preview_clamp01(
-                mask * (0.35 + (sample->colorDepth * 1.0)));
-            double darken = 1.0 - (0.24 * mask * (0.35 + sample->surfaceDamage));
-            color.r = scene_editor_material_preview_mix_byte(base_color.r, rust.r, color_t);
-            color.g = scene_editor_material_preview_mix_byte(base_color.g, rust.g, color_t);
-            color.b = scene_editor_material_preview_mix_byte(base_color.b, rust.b, color_t);
-            color.r = (Uint8)lround((double)color.r * darken);
-            color.g = (Uint8)lround((double)color.g * darken);
-            color.b = (Uint8)lround((double)color.b * darken);
-        } else if (sample->kind == RUNTIME_MATERIAL_TEXTURE_3D_FOG) {
-            const SDL_Color fog = {226, 231, 228, base_color.a};
-            double t = mask * (0.20 + (sample->colorDepth * 0.65));
-            color.r = scene_editor_material_preview_mix_byte(base_color.r, fog.r, t);
-            color.g = scene_editor_material_preview_mix_byte(base_color.g, fog.g, t);
-            color.b = scene_editor_material_preview_mix_byte(base_color.b, fog.b, t);
-        }
+    if (surface_eval && surface_eval->active) {
+        mask = scene_editor_material_preview_clamp01(surface_eval->textureMask);
+        color.r = (Uint8)lround(scene_editor_material_preview_clamp01(surface_eval->colorR) * 255.0);
+        color.g = (Uint8)lround(scene_editor_material_preview_clamp01(surface_eval->colorG) * 255.0);
+        color.b = (Uint8)lround(scene_editor_material_preview_clamp01(surface_eval->colorB) * 255.0);
     }
     color.a = base_color.a;
     *out_color = color;
@@ -104,12 +98,29 @@ bool SceneEditorMaterialPreviewEvaluateTextureColor(const SceneObject* object,
                                                     SDL_Color base_color,
                                                     SDL_Color* out_color,
                                                     double* out_mask) {
-    RuntimeMaterialTexture3DSample sample = {0};
-    RuntimeMaterialTexture3D_SampleUV(object, triangle_index, bary_v, bary_w, &sample);
-    return scene_editor_material_preview_color_from_texture_sample(&sample,
-                                                                   base_color,
-                                                                   out_color,
-                                                                   out_mask);
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    RuntimeMaterialSurfaceEval base_eval =
+        RuntimeMaterialSurfaceEvalMakeBase((double)base_color.r / 255.0,
+                                           (double)base_color.g / 255.0,
+                                           (double)base_color.b / 255.0,
+                                           0.5,
+                                           0.0,
+                                           0.0,
+                                           1.0,
+                                           0.0);
+    RuntimeMaterialSurfaceEval surface_eval = {0};
+    RuntimeMaterialTextureStackBuildLegacyFromObject(object, &stack);
+    RuntimeMaterialTextureStackEvaluatePlacedUV(&stack,
+                                                object,
+                                                bary_v,
+                                                bary_w,
+                                                triangle_index + 1,
+                                                &base_eval,
+                                                &surface_eval);
+    return scene_editor_material_preview_color_from_surface_eval(&surface_eval,
+                                                                 base_color,
+                                                                 out_color,
+                                                                 out_mask);
 }
 
 bool SceneEditorMaterialPreviewEvaluateTextureColorForFace(
@@ -121,14 +132,24 @@ bool SceneEditorMaterialPreviewEvaluateTextureColorForFace(
     double bary_u,
     double bary_v,
     double bary_w,
-    SDL_Color base_color,
-    SDL_Color* out_color,
-    double* out_mask) {
-    RuntimeMaterialTexture3DSample sample = {0};
-    SceneEditorMaterialFacePlacement placement =
-        SceneEditorMaterialFacePlacementGetEffective(object, scene_object_index, face_group_index);
-    RuntimeMaterialTexture3DPlacement runtime_placement =
-        SceneEditorMaterialFacePlacementToRuntime(&placement);
+                                                    SDL_Color base_color,
+                                                    SDL_Color* out_color,
+                                                    double* out_mask) {
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    RuntimeMaterialSurfaceEval base_eval =
+        RuntimeMaterialSurfaceEvalMakeBase((double)base_color.r / 255.0,
+                                           (double)base_color.g / 255.0,
+                                           (double)base_color.b / 255.0,
+                                           0.5,
+                                           0.0,
+                                           0.0,
+                                           1.0,
+                                           0.0);
+    RuntimeMaterialSurfaceEval surface_eval = {0};
+    SceneEditorMaterialFacePlacement placement = {0};
+    RuntimeMaterialTexture3DPlacement runtime_placement = {0};
+    bool has_face_override =
+        SceneEditorMaterialFacePlacementHasOverride(scene_object_index, face_group_index);
     double island_u = 0.0;
     double island_v = 0.0;
     int seed_key = ((scene_object_index + 1) * 19349663) ^ ((face_group_index + 1) * 83492791);
@@ -139,16 +160,26 @@ bool SceneEditorMaterialPreviewEvaluateTextureColorForFace(
                                                     bary_w,
                                                     &island_u,
                                                     &island_v);
-    RuntimeMaterialTexture3D_SamplePlacedUV(object,
-                                            island_u,
-                                            island_v,
-                                            seed_key,
-                                            &runtime_placement,
-                                            &sample);
-    return scene_editor_material_preview_color_from_texture_sample(&sample,
-                                                                   base_color,
-                                                                   out_color,
-                                                                   out_mask);
+    if (has_face_override) {
+        placement = SceneEditorMaterialFacePlacementGetEffective(object,
+                                                                scene_object_index,
+                                                                face_group_index);
+        runtime_placement = SceneEditorMaterialFacePlacementToRuntime(&placement);
+        RuntimeMaterialTextureStackBuildLegacyFromPlacement(&runtime_placement, &stack);
+    } else {
+        SceneEditorMaterialStackGetEffectiveObjectStack(object, scene_object_index, &stack);
+    }
+    RuntimeMaterialTextureStackEvaluatePlacedUV(&stack,
+                                                object,
+                                                island_u,
+                                                island_v,
+                                                seed_key,
+                                                &base_eval,
+                                                &surface_eval);
+    return scene_editor_material_preview_color_from_surface_eval(&surface_eval,
+                                                                 base_color,
+                                                                 out_color,
+                                                                 out_mask);
 }
 
 static double scene_editor_material_preview_view_depth(
@@ -430,15 +461,64 @@ bool SceneEditorMaterialPreviewPickTriangle(
     return found;
 }
 
-static bool scene_editor_material_preview_object_has_active_texture(const SceneObject* object) {
+static bool scene_editor_material_preview_stack_has_visual_layers(
+    const RuntimeMaterialTextureStack* stack) {
+    RuntimeMaterialTextureStack normalized;
+    int limit = 0;
+    if (!stack) return false;
+    normalized = RuntimeMaterialTextureStackNormalize(*stack);
+    limit = normalized.layerCount;
+    if (limit > RUNTIME_MATERIAL_TEXTURE_STACK_MAX_LAYERS) {
+        limit = RUNTIME_MATERIAL_TEXTURE_STACK_MAX_LAYERS;
+    }
+    for (int i = 0; i < limit; ++i) {
+        const RuntimeMaterialTextureLayer* layer = &normalized.layers[i];
+        if (!layer->enabled ||
+            layer->kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE ||
+            layer->opacity <= 1e-9 ||
+            layer->placement.strength <= 1e-9) {
+            continue;
+        }
+        if (layer->role == RUNTIME_MATERIAL_TEXTURE_LAYER_ROLE_BASE) {
+            if (layer->kind != RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID) {
+                return true;
+            }
+            continue;
+        }
+        if (layer->role == RUNTIME_MATERIAL_TEXTURE_LAYER_ROLE_OVERLAY) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool scene_editor_material_preview_object_has_active_texture(const SceneObject* object,
+                                                                    int scene_object_index) {
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
     if (!object) return false;
-    if (object->textureId <= RUNTIME_MATERIAL_TEXTURE_3D_NONE) return false;
-    return object->textureStrength > 1e-9;
+    if (!SceneEditorMaterialStackGetEffectiveObjectStack(object, scene_object_index, &stack)) {
+        return false;
+    }
+    return scene_editor_material_preview_stack_has_visual_layers(&stack);
+}
+
+static bool scene_editor_material_preview_object_base_layer_disabled(
+    const SceneObject* object,
+    int scene_object_index) {
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    if (!object) return false;
+    if (!SceneEditorMaterialStackGetEffectiveObjectStack(object, scene_object_index, &stack)) {
+        return false;
+    }
+    stack = RuntimeMaterialTextureStackNormalize(stack);
+    if (stack.layerCount <= 0) return false;
+    if (!RuntimeMaterialTextureLayerKindIsBase(stack.layers[0].kind)) return false;
+    return !stack.layers[0].enabled;
 }
 
 static bool scene_editor_material_preview_has_active_texture_for_object(const SceneObject* object,
                                                                         int scene_object_index) {
-    return scene_editor_material_preview_object_has_active_texture(object) ||
+    return scene_editor_material_preview_object_has_active_texture(object, scene_object_index) ||
            SceneEditorMaterialFacePlacementObjectHasActiveTextureOverride(scene_object_index);
 }
 
@@ -1096,6 +1176,11 @@ bool SceneEditorMaterialPreviewRenderFocusedObjectWithSelection(
         fill_color = scene_editor_material_preview_color_from_packed_rgb(
             sceneSettings.sceneObjects[focused_object_index].color,
             solid_faces ? 255 : 218);
+        if (scene_editor_material_preview_object_base_layer_disabled(
+                &sceneSettings.sceneObjects[focused_object_index],
+                focused_object_index)) {
+            fill_color = scene_editor_material_preview_dim_base_color(solid_faces ? 255 : 218);
+        }
     } else {
         fill_color = scene_editor_material_preview_color_from_packed_rgb(0, solid_faces ? 255 : 218);
     }

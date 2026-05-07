@@ -11,7 +11,10 @@
 
 static bool g_theme_runtime_initialized = false;
 static CoreThemePresetId g_theme_runtime_preset = CORE_THEME_PRESET_DARK_DEFAULT;
+static bool g_font_runtime_initialized = false;
+static CoreFontPresetId g_font_runtime_preset = CORE_FONT_PRESET_IDE;
 static const char* k_theme_persist_path = "theme_preset.txt";
+static const char* k_font_persist_path = "data/runtime/font_preset.txt";
 static const CoreThemePresetId k_theme_cycle_order[] = {
     CORE_THEME_PRESET_DAW_DEFAULT,
     CORE_THEME_PRESET_MAP_FORGE_DEFAULT,
@@ -120,6 +123,22 @@ static void theme_runtime_init_if_needed(void) {
         g_theme_runtime_preset = CORE_THEME_PRESET_DARK_DEFAULT;
     }
     g_theme_runtime_initialized = true;
+}
+
+static void font_runtime_init_if_needed(void) {
+    const char* preset_name;
+    CoreFontPreset resolved_preset = {0};
+    if (g_font_runtime_initialized) {
+        return;
+    }
+    preset_name = getenv("RAY_TRACING_FONT_PRESET");
+    if (preset_name && preset_name[0] &&
+        core_font_get_preset_by_name(preset_name, &resolved_preset).code == CORE_OK) {
+        g_font_runtime_preset = resolved_preset.id;
+    } else {
+        g_font_runtime_preset = CORE_FONT_PRESET_IDE;
+    }
+    g_font_runtime_initialized = true;
 }
 
 static bool resolve_theme_preset(CoreThemePreset* out_preset) {
@@ -341,8 +360,37 @@ bool ray_tracing_shared_theme_save_persisted(void) {
     return core_io_write_all(k_theme_persist_path, payload, (size_t)written).code == CORE_OK;
 }
 
+bool ray_tracing_shared_font_load_persisted(void) {
+    CoreBuffer file_data = {0};
+    CoreResult read_result;
+    char preset_name[128];
+    size_t copy_len = 0;
+    if (!core_io_path_exists(k_font_persist_path)) {
+        return false;
+    }
+    read_result = core_io_read_all(k_font_persist_path, &file_data);
+    if (read_result.code != CORE_OK || !file_data.data) {
+        return false;
+    }
+    copy_len = file_data.size;
+    if (copy_len >= sizeof(preset_name)) {
+        copy_len = sizeof(preset_name) - 1;
+    }
+    if (copy_len == 0u) {
+        core_io_buffer_free(&file_data);
+        return false;
+    }
+    memcpy(preset_name, file_data.data, copy_len);
+    preset_name[copy_len] = '\0';
+    core_io_buffer_free(&file_data);
+    trim_trailing_whitespace(preset_name);
+    if (!preset_name[0]) {
+        return false;
+    }
+    return ray_tracing_shared_font_set_preset(preset_name);
+}
+
 bool ray_tracing_shared_font_resolve_ui_regular(char* out_path, size_t out_path_size, int* out_point_size) {
-    const char* preset_name;
     CoreFontPreset preset = {0};
     CoreFontRoleSpec role = {0};
     int tier_size = 0;
@@ -353,12 +401,8 @@ bool ray_tracing_shared_font_resolve_ui_regular(char* out_path, size_t out_path_
         return false;
     }
 
-    preset_name = getenv("RAY_TRACING_FONT_PRESET");
-    if (!preset_name || !preset_name[0]) {
-        preset_name = "ide";
-    }
-
-    r = core_font_get_preset_by_name(preset_name, &preset);
+    font_runtime_init_if_needed();
+    r = core_font_get_preset(g_font_runtime_preset, &preset);
     if (r.code != CORE_OK) {
         r = core_font_get_preset(CORE_FONT_PRESET_IDE, &preset);
         if (r.code != CORE_OK) {
@@ -382,4 +426,46 @@ bool ray_tracing_shared_font_resolve_ui_regular(char* out_path, size_t out_path_
         *out_point_size = role.point_size > 0 ? role.point_size : 24;
     }
     return true;
+}
+
+bool ray_tracing_shared_font_set_preset(const char* preset_name) {
+    CoreFontPreset preset = {0};
+    if (!preset_name || !preset_name[0]) {
+        return false;
+    }
+    if (core_font_get_preset_by_name(preset_name, &preset).code != CORE_OK) {
+        return false;
+    }
+    g_font_runtime_preset = preset.id;
+    g_font_runtime_initialized = true;
+    return true;
+}
+
+bool ray_tracing_shared_font_current_preset(char* out_name, size_t out_name_size) {
+    const char* name;
+    if (!out_name || out_name_size == 0) {
+        return false;
+    }
+    font_runtime_init_if_needed();
+    name = core_font_preset_name(g_font_runtime_preset);
+    if (!name || !name[0]) {
+        return false;
+    }
+    strncpy(out_name, name, out_name_size - 1);
+    out_name[out_name_size - 1] = '\0';
+    return true;
+}
+
+bool ray_tracing_shared_font_save_persisted(void) {
+    char preset_name[128];
+    char payload[144];
+    int written;
+    if (!ray_tracing_shared_font_current_preset(preset_name, sizeof(preset_name))) {
+        return false;
+    }
+    written = snprintf(payload, sizeof(payload), "%s\n", preset_name);
+    if (written <= 0 || (size_t)written >= sizeof(payload)) {
+        return false;
+    }
+    return core_io_write_all(k_font_persist_path, payload, (size_t)written).code == CORE_OK;
 }

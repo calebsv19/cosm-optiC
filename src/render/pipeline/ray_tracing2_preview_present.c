@@ -120,7 +120,7 @@ static bool PresentNative3DTilePreviewFrame(SDL_Renderer* renderer,
                                                        reset_dirty_preview)) {
         return false;
     }
-    ts_render();
+    ts_session_render(timer_hud_session());
     render_end_frame();
     if (render_device_lost()) {
         return false;
@@ -133,15 +133,15 @@ static bool PresentNative3DTilePreviewFrameTimed(SDL_Renderer* renderer,
                                                  const IntegratorTile* dirty_tile,
                                                  const Uint8* preview_buffer,
                                                  bool reset_dirty_preview) {
-    ts_stop_timer("Buffer Calc");
-    ts_start_timer("Tile Preview Present");
+    ts_session_stop_timer(timer_hud_session(), "Buffer Calc");
+    ts_session_start_timer(timer_hud_session(), "Tile Preview Present");
     bool ok = PresentNative3DTilePreviewFrame(renderer,
                                               preview_ctx,
                                               dirty_tile,
                                               preview_buffer,
                                               reset_dirty_preview);
-    ts_stop_timer("Tile Preview Present");
-    ts_start_timer("Buffer Calc");
+    ts_session_stop_timer(timer_hud_session(), "Tile Preview Present");
+    ts_session_start_timer(timer_hud_session(), "Buffer Calc");
     return ok;
 }
 
@@ -519,7 +519,7 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
             present_tile = &host_dirty_tile;
         }
 
-        ts_start_timer("Tile Frame Calc");
+        ts_session_start_timer(timer_hud_session(), "Tile Frame Calc");
         tile_timer_active = true;
         for (int subpass = 0; subpass < temporal_frames; ++subpass) {
             RuntimeNative3DPreparedFrame subpass_frame = frame;
@@ -559,7 +559,7 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
                                                                       tile->height,
                                                                       active_mask,
                                                                       active_mask_stride)) {
-                ts_stop_timer("Tile Frame Calc");
+                ts_session_stop_timer(timer_hud_session(), "Tile Frame Calc");
                 RuntimeNative3DFillPixelBufferEnvironment(render_buffer, total);
                 free(tile_radiance);
                 free(tile_resolved_radiance);
@@ -590,7 +590,7 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
                         !RuntimeNative3DDenoise_Apply(tile_resolved_radiance,
                                                       tile_stride,
                                                       &tile_features)) {
-                        ts_stop_timer("Tile Frame Calc");
+                        ts_session_stop_timer(timer_hud_session(), "Tile Frame Calc");
                         free(tile_radiance);
                         free(tile_resolved_radiance);
                         RuntimeNative3DAdaptiveSamplingMask_Free(&adaptive_mask);
@@ -625,7 +625,7 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
                                                           present_tile,
                                                           host_buffer,
                                                           false)) {
-                    ts_stop_timer("Tile Frame Calc");
+                    ts_session_stop_timer(timer_hud_session(), "Tile Frame Calc");
                     free(tile_radiance);
                     free(tile_resolved_radiance);
                     RuntimeNative3DAdaptiveSamplingMask_Free(&adaptive_mask);
@@ -651,7 +651,7 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
                                                                                    tile->height) ||
                 !RuntimeNative3DDenoise_Apply(tile_resolved_radiance, tile_stride, &tile_features)) {
                 if (tile_timer_active) {
-                    ts_stop_timer("Tile Frame Calc");
+                    ts_session_stop_timer(timer_hud_session(), "Tile Frame Calc");
                 }
                 free(tile_radiance);
                 free(tile_resolved_radiance);
@@ -677,7 +677,7 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
                                                                              tile->originY);
         }
         if (tile_timer_active) {
-            ts_stop_timer("Tile Frame Calc");
+            ts_session_stop_timer(timer_hud_session(), "Tile Frame Calc");
         }
     }
 

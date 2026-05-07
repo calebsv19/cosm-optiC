@@ -628,7 +628,7 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
                                                  nativePreviewByteCount /
                                                      (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES);
 
-        ts_start_timer("Buffer Calc");
+        ts_session_start_timer(timer_hud_session(), "Buffer Calc");
         if (useTiles && tileGrid.tiles && tileGrid.count > 0) {
             TileGridEnsure(&tileGrid, renderWidth, renderHeight, tileSize);
             TileGridClear(&tileGrid);
@@ -663,7 +663,7 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
                 ResolveNative3DTemporalFrames(route.integratorMode3D),
                 &nativeStats);
         }
-        ts_stop_timer("Buffer Calc");
+        ts_session_stop_timer(timer_hud_session(), "Buffer Calc");
         if (!nativeRenderOk) {
             memset(pixelBuffer, 0, pixelCount * sizeof(Uint8));
             RuntimeNative3DFillPixelBufferEnvironment(
@@ -677,7 +677,7 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
         else if (animSettings.blurMode == 2) blurRadius = 2;
         else if (animSettings.blurMode == 3) blurRadius = 3;
 
-        ts_start_timer("Buffer Present");
+        ts_session_start_timer(timer_hud_session(), "Buffer Present");
         if (nativeRenderOk) {
             if (blurRadius > 0) {
                 RayTracingPreview_ApplySeparableBlurABGR(native3DRenderBuffer,
@@ -713,7 +713,7 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
             }
         }
 #endif
-        ts_stop_timer("Buffer Present");
+        ts_session_stop_timer(timer_hud_session(), "Buffer Present");
         return;
     }
 
@@ -777,9 +777,9 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
 
     bool cacheReady = false;
     if (route.buildIrradianceCache && haveCache) {
-        ts_start_timer("Irradiance Cache");
+        ts_session_start_timer(timer_hud_session(), "Irradiance Cache");
         cacheReady = BuildReflectionCache(&context, &activeLight);
-        ts_stop_timer("Irradiance Cache");
+        ts_session_stop_timer(timer_hud_session(), "Irradiance Cache");
         if (!cacheReady) {
             context.cache = NULL;
         }
@@ -788,7 +788,7 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
         context.cache = NULL;
     }
 
-    ts_start_timer("Buffer Calc");
+    ts_session_start_timer(timer_hud_session(), "Buffer Calc");
     switch (route.integratorMode) {
         case 0: // forward
             ForwardLightIntegratorRender(&context, &activeLight);
@@ -826,13 +826,13 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
             ForwardLightIntegratorRender(&context, &activeLight);
             break;
     }
-    ts_stop_timer("Buffer Calc");
+    ts_session_stop_timer(timer_hud_session(), "Buffer Calc");
 
     int blurRadius = 0;
     if (animSettings.blurMode == 1) blurRadius = 1;
     else if (animSettings.blurMode == 2) blurRadius = 2;
     else if (animSettings.blurMode == 3) blurRadius = 3;
-    ts_start_timer("Buffer Present");
+    ts_session_start_timer(timer_hud_session(), "Buffer Present");
     if (route.tilePreviewEnabled) {
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_Rect bg = {0, 0, WIDTH, HEIGHT};
@@ -894,7 +894,7 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
         }
     }
 
-    ts_stop_timer("Buffer Present");
+    ts_session_stop_timer(timer_hud_session(), "Buffer Present");
 }
 
 

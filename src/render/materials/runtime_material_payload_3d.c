@@ -5,8 +5,10 @@
 
 #include "config/config_manager.h"
 #include "editor/scene_editor_material_face_placement.h"
+#include "editor/scene_editor_material_stack.h"
 #include "material/material_manager.h"
-#include "render/runtime_material_texture_3d.h"
+#include "render/runtime_material_authored_texture_3d.h"
+#include "render/runtime_material_texture_stack_3d.h"
 
 static bool runtime_material_payload_3d_valid_scene_object_index(int scene_object_index) {
     return scene_object_index >= 0 &&
@@ -31,10 +33,6 @@ static double runtime_material_payload_3d_clamp01(double value) {
     if (value < 0.0) return 0.0;
     if (value > 1.0) return 1.0;
     return value;
-}
-
-static double runtime_material_payload_3d_lerp(double a, double b, double t) {
-    return a + ((b - a) * runtime_material_payload_3d_clamp01(t));
 }
 
 static void runtime_material_payload_3d_refresh_derived(RuntimeMaterialPayload3D* payload) {
@@ -76,10 +74,12 @@ static void runtime_material_payload_3d_apply_texture(
     const SceneObject* object,
     const HitInfo3D* hit,
     RuntimeMaterialPayload3D* payload) {
-    RuntimeMaterialTexture3DSample sample = {0};
+    RuntimeMaterialAuthoredTextureSample authored_sample = {0};
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    RuntimeMaterialSurfaceEval base_eval = {0};
+    RuntimeMaterialSurfaceEval surface_eval = {0};
     RuntimeMaterialTexture3DPlacement runtime_placement = {0};
     SceneEditorMaterialFacePlacement face_placement = {0};
-    double mask = 0.0;
     double island_u = 0.0;
     double island_v = 0.0;
     int face_group_index = -1;
@@ -87,13 +87,19 @@ static void runtime_material_payload_3d_apply_texture(
     int seed_key = 0;
 
     if (!object || !hit || !payload || !payload->valid) return;
+    base_eval = RuntimeMaterialSurfaceEvalMakeBase(payload->baseColorR,
+                                                   payload->baseColorG,
+                                                   payload->baseColorB,
+                                                   payload->bsdf.roughness,
+                                                   payload->bsdf.reflectivity,
+                                                   payload->bsdf.specWeight,
+                                                   payload->bsdf.diffuseWeight,
+                                                   payload->transparency);
     local_triangle_index = hit->localTriangleIndex;
     face_group_index = local_triangle_index >= 0 ? local_triangle_index / 2 : -1;
     if (face_group_index >= 0 && hit->sceneObjectIndex >= 0) {
-        face_placement = SceneEditorMaterialFacePlacementGetEffective(object,
-                                                                      hit->sceneObjectIndex,
-                                                                      face_group_index);
-        runtime_placement = SceneEditorMaterialFacePlacementToRuntime(&face_placement);
+        bool has_face_override =
+            SceneEditorMaterialFacePlacementHasOverride(hit->sceneObjectIndex, face_group_index);
         seed_key = ((hit->sceneObjectIndex + 1) * 19349663) ^
                    ((face_group_index + 1) * 83492791);
         if (seed_key == 0) seed_key = hit->triangleIndex + 1;
@@ -103,51 +109,72 @@ static void runtime_material_payload_3d_apply_texture(
                                                         hit->baryW,
                                                         &island_u,
                                                         &island_v);
-        if (!RuntimeMaterialTexture3D_SamplePlacedUV(object,
+        if (RuntimeMaterialAuthoredTextureSampleFace(hit->sceneObjectIndex,
+                                                     face_group_index,
                                                      island_u,
                                                      island_v,
-                                                     seed_key,
-                                                     &runtime_placement,
-                                                     &sample)) {
+                                                     &authored_sample)) {
+            double alpha = runtime_material_payload_3d_clamp01(authored_sample.alpha);
+            payload->textureMask = alpha;
+            payload->textureU = island_u;
+            payload->textureV = island_v;
+            payload->baseColorR =
+                payload->baseColorR + ((authored_sample.colorR - payload->baseColorR) * alpha);
+            payload->baseColorG =
+                payload->baseColorG + ((authored_sample.colorG - payload->baseColorG) * alpha);
+            payload->baseColorB =
+                payload->baseColorB + ((authored_sample.colorB - payload->baseColorB) * alpha);
+            payload->transparency *= (1.0 - alpha);
+            runtime_material_payload_3d_refresh_derived(payload);
             return;
         }
-    } else if (!RuntimeMaterialTexture3D_Sample(object, hit, &sample)) {
-        return;
+        if (has_face_override) {
+            face_placement = SceneEditorMaterialFacePlacementGetEffective(object,
+                                                                          hit->sceneObjectIndex,
+                                                                          face_group_index);
+            runtime_placement = SceneEditorMaterialFacePlacementToRuntime(&face_placement);
+            if (!RuntimeMaterialTextureStackBuildLegacyFromPlacement(&runtime_placement, &stack)) {
+                return;
+            }
+        } else if (!SceneEditorMaterialStackGetEffectiveObjectStack(object,
+                                                                    hit->sceneObjectIndex,
+                                                                    &stack)) {
+            return;
+        }
+        if (!RuntimeMaterialTextureStackEvaluatePlacedUV(&stack,
+                                                         object,
+                                                         island_u,
+                                                         island_v,
+                                                         seed_key,
+                                                         &base_eval,
+                                                         &surface_eval)) {
+            return;
+        }
+    } else {
+        seed_key = hit->triangleIndex + 1;
+        if (!SceneEditorMaterialStackGetEffectiveObjectStack(object, hit->sceneObjectIndex, &stack) ||
+            !RuntimeMaterialTextureStackEvaluatePlacedUV(&stack,
+                                                         object,
+                                                         hit->baryV,
+                                                         hit->baryW,
+                                                         seed_key,
+                                                         &base_eval,
+                                                         &surface_eval)) {
+            return;
+        }
     }
 
-    mask = runtime_material_payload_3d_clamp01(sample.mask);
-    payload->textureMask = mask;
-    payload->textureU = sample.u;
-    payload->textureV = sample.v;
-
-    if (sample.kind == RUNTIME_MATERIAL_TEXTURE_3D_RUST) {
-        double color_t = runtime_material_payload_3d_clamp01(mask *
-            runtime_material_payload_3d_lerp(0.35, 1.35, sample.colorDepth));
-        double damage_t = runtime_material_payload_3d_clamp01(mask *
-            runtime_material_payload_3d_lerp(0.20, 1.25, sample.surfaceDamage));
-        payload->baseColorR = runtime_material_payload_3d_lerp(payload->baseColorR, 0.74, color_t);
-        payload->baseColorG = runtime_material_payload_3d_lerp(payload->baseColorG, 0.26, color_t);
-        payload->baseColorB = runtime_material_payload_3d_lerp(payload->baseColorB, 0.08, color_t);
-        payload->bsdf.reflectivity *= 1.0 - (0.90 * damage_t);
-        payload->bsdf.roughness = runtime_material_payload_3d_lerp(payload->bsdf.roughness, 0.96, damage_t);
-        payload->bsdf.specWeight *= 1.0 - (0.80 * damage_t);
-        payload->bsdf.diffuseWeight = runtime_material_payload_3d_lerp(payload->bsdf.diffuseWeight, 0.90, damage_t);
-        payload->transparency *= 1.0 - damage_t;
-    } else if (sample.kind == RUNTIME_MATERIAL_TEXTURE_3D_FOG) {
-        double color_t = runtime_material_payload_3d_clamp01(mask *
-            runtime_material_payload_3d_lerp(0.20, 0.85, sample.colorDepth));
-        double damage_t = runtime_material_payload_3d_clamp01(mask *
-            runtime_material_payload_3d_lerp(0.15, 1.0, sample.surfaceDamage));
-        payload->baseColorR = runtime_material_payload_3d_lerp(payload->baseColorR, 0.82, color_t);
-        payload->baseColorG = runtime_material_payload_3d_lerp(payload->baseColorG, 0.86, color_t);
-        payload->baseColorB = runtime_material_payload_3d_lerp(payload->baseColorB, 0.88, color_t);
-        payload->bsdf.reflectivity *= 1.0 - (0.35 * damage_t);
-        payload->bsdf.roughness = runtime_material_payload_3d_lerp(payload->bsdf.roughness, 1.0, damage_t);
-        payload->bsdf.specWeight *= 1.0 - (0.35 * damage_t);
-        payload->bsdf.diffuseWeight = runtime_material_payload_3d_lerp(payload->bsdf.diffuseWeight, 0.70, damage_t);
-        payload->transparency *= 1.0 - (0.25 * damage_t);
-    }
-
+    payload->textureMask = runtime_material_payload_3d_clamp01(surface_eval.textureMask);
+    payload->textureU = surface_eval.textureU;
+    payload->textureV = surface_eval.textureV;
+    payload->baseColorR = surface_eval.colorR;
+    payload->baseColorG = surface_eval.colorG;
+    payload->baseColorB = surface_eval.colorB;
+    payload->bsdf.reflectivity = surface_eval.reflectivity;
+    payload->bsdf.roughness = surface_eval.roughness;
+    payload->bsdf.specWeight = surface_eval.specWeight;
+    payload->bsdf.diffuseWeight = surface_eval.diffuseWeight;
+    payload->transparency = surface_eval.transparency;
     runtime_material_payload_3d_refresh_derived(payload);
 }
 

@@ -138,7 +138,7 @@ static void menu_batch_panel_progress_repaint(const RayTracingRenderExportStatus
                (SDL_Color){160, 210, 255, 255},
                60000u);
     SDL_PumpEvents();
-    menu_render_frame(ctx->renderer, ctx->font, ctx->state);
+    menu_render_frame(ctx->renderer, ctx->font, ctx->state, NULL);
 }
 
 static const char* path_basename(const char *path) {

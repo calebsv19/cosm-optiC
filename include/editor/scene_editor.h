@@ -26,9 +26,16 @@ typedef struct {
     int currentMode;  // See EDITOR_MODE_* in editor_mode_router.h
 } SceneEditor;
 
+typedef void (*SceneEditorSessionPostDrawFn)(SceneEditor* editor,
+                                             SDL_Renderer* renderer,
+                                             void* context);
+
 bool SceneEditorSessionBegin(SceneEditor* editor, SDL_Renderer* renderer, SDL_Window* window);
 void SceneEditorSessionHandleEvent(SceneEditor* editor, SDL_Event* event);
 void SceneEditorSessionRender(SceneEditor* editor);
+void SceneEditorSessionRenderWithPostDraw(SceneEditor* editor,
+                                          SceneEditorSessionPostDrawFn post_draw,
+                                          void* context);
 bool SceneEditorSessionWantsExit(const SceneEditor* editor);
 bool SceneEditorSessionInteractionActive(const SceneEditor* editor);
 void SceneEditorSessionRequestPreviewOnBegin(void);

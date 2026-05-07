@@ -19,6 +19,8 @@
 #include "render/vk_shared_device.h"
 #include "ui/shared_theme_font_adapter.h"
 #include "ui/menu_batch_panel.h"
+#include "ui/menu/workspace_authoring/ray_tracing_workspace_authoring_overlay.h"
+#include "ui/menu/workspace_authoring/ray_tracing_workspace_authoring_host.h"
 #include "ui/sdl_menu_input.h"
 #include "ui/sdl_menu_render.h"
 #include "ui/sdl_menu_state.h"
@@ -32,6 +34,37 @@
 #if USE_VULKAN
 static VkRenderer g_menu_renderer_storage;
 #endif
+
+typedef struct MenuAuthoringSceneEditorDrawContext {
+    TTF_Font* font;
+    RayTracingWorkspaceAuthoringHostState* host;
+} MenuAuthoringSceneEditorDrawContext;
+
+static void menu_authoring_scene_editor_post_draw(SceneEditor* editor,
+                                                  SDL_Renderer* renderer,
+                                                  void* context) {
+    MenuAuthoringSceneEditorDrawContext* draw_context =
+        (MenuAuthoringSceneEditorDrawContext*)context;
+    SceneEditorPaneLayout pane_layout;
+    SceneEditorPaneLayout* pane_layout_ptr = NULL;
+    int width = 0;
+    int height = 0;
+
+    if (!editor || !editor->window || !renderer || !draw_context || !draw_context->host) {
+        return;
+    }
+    SDL_GetWindowSize(editor->window, &width, &height);
+    ray_tracing_workspace_authoring_host_set_viewport(draw_context->host, width, height);
+    if (SceneEditorGetPaneLayout(&pane_layout)) {
+        pane_layout_ptr = &pane_layout;
+    }
+    ray_tracing_workspace_authoring_overlay_draw(renderer,
+                                                 draw_context->font,
+                                                 draw_context->host,
+                                                 width,
+                                                 height,
+                                                 pane_layout_ptr);
+}
 
 static void menu_refresh_render_context(SDL_Window* window, SDL_Renderer* renderer) {
     int window_width = MENU_WIDTH;
@@ -57,6 +90,7 @@ static bool initialize_menu(SDL_Window** window,
     if (!window || !renderer || !font || !state) return false;
 
     ray_tracing_shared_theme_load_persisted();
+    ray_tracing_shared_font_load_persisted();
 
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         printf("SDL Initialization Failed: %s\n", SDL_GetError());
@@ -219,28 +253,70 @@ static bool menu_state_interaction_active(const MenuRuntimeState* state) {
            menu_batch_panel_edit_active(state);
 }
 
+static bool menu_workspace_authoring_apply_pending_visuals(
+    TTF_Font** font,
+    RayTracingWorkspaceAuthoringHostState* authoring_host) {
+    bool dirty = false;
+    if (!authoring_host) return false;
+    if (authoring_host->font_theme_needs_font_reload) {
+        if (font) {
+            (void)menu_state_reload_font(font);
+        }
+        authoring_host->font_theme_needs_font_reload = 0u;
+        dirty = true;
+    }
+    if (authoring_host->font_theme_needs_theme_apply) {
+        authoring_host->font_theme_needs_theme_apply = 0u;
+        dirty = true;
+    }
+    if (ray_tracing_workspace_authoring_host_consume_accepted_font_theme_changes(authoring_host)) {
+        SaveAnimationConfig();
+        ray_tracing_shared_theme_save_persisted();
+        ray_tracing_shared_font_save_persisted();
+        dirty = true;
+    }
+    return dirty;
+}
+
 static bool menu_process_event(SDL_Window* window,
                                SDL_Renderer* renderer,
                                TTF_Font** font,
                                MenuRuntimeState* menu_state,
                                SceneEditor* scene_editor,
                                bool* scene_editor_session_active,
+                               RayTracingWorkspaceAuthoringHostState* authoring_host,
                                bool* running,
                                bool* menu_exited_normally,
                                const SDL_Event* event) {
     SDL_Event mutable_event;
     bool dirty = false;
-    if (!window || !renderer || !font || !menu_state || !scene_editor ||
+    if (!window || !renderer || !font || !menu_state || !scene_editor || !authoring_host ||
         !scene_editor_session_active || !running || !menu_exited_normally || !event) {
         return false;
     }
 
     mutable_event = *event;
+    {
+        int authoring_width = 0;
+        int authoring_height = 0;
+        SDL_GetWindowSize(window, &authoring_width, &authoring_height);
+        ray_tracing_workspace_authoring_host_set_viewport(authoring_host,
+                                                          authoring_width,
+                                                          authoring_height);
+    }
     if (mutable_event.type == SDL_QUIT ||
         menu_event_is_host_window_close(window, &mutable_event)) {
         *menu_exited_normally = false;
         *running = false;
         return false;
+    }
+
+    if (ray_tracing_workspace_authoring_host_handle_sdl_event(
+            authoring_host,
+            &mutable_event,
+            menu_state_interaction_active(menu_state))) {
+        (void)menu_workspace_authoring_apply_pending_visuals(font, authoring_host);
+        return true;
     }
 
     if (menu_state->activeView == MENU_VIEW_SCENE_EDITOR) {
@@ -331,8 +407,10 @@ bool RunMenu(void) {
     TTF_Font *font = NULL;
     MenuRuntimeState menuState;
     SceneEditor sceneEditor;
+    RayTracingWorkspaceAuthoringHostState authoringHost;
     bool sceneEditorSessionActive = false;
     memset(&sceneEditor, 0, sizeof(sceneEditor));
+    ray_tracing_workspace_authoring_host_reset(&authoringHost);
 
     if (!initialize_menu(&window, &renderer, &font, &menuState)) {
         return false;
@@ -373,6 +451,7 @@ bool RunMenu(void) {
                                                       &menuState,
                                                       &sceneEditor,
                                                       &sceneEditorSessionActive,
+                                                      &authoringHost,
                                                       &running,
                                                       &menuExitedNormally,
                                                       &event);
@@ -386,6 +465,7 @@ bool RunMenu(void) {
                                               &menuState,
                                               &sceneEditor,
                                               &sceneEditorSessionActive,
+                                              &authoringHost,
                                               &running,
                                               &menuExitedNormally,
                                               &event);
@@ -419,7 +499,13 @@ bool RunMenu(void) {
                     }
                 }
                 if (sceneEditorSessionActive) {
-                    SceneEditorSessionRender(&sceneEditor);
+                    MenuAuthoringSceneEditorDrawContext authoring_draw_context = {
+                        .font = font,
+                        .host = &authoringHost
+                    };
+                    SceneEditorSessionRenderWithPostDraw(&sceneEditor,
+                                                         menu_authoring_scene_editor_post_draw,
+                                                         &authoring_draw_context);
                     rendered = true;
                     if (SceneEditorSessionWantsExit(&sceneEditor)) {
                         SceneEditorSessionEnd(&sceneEditor);
@@ -431,7 +517,7 @@ bool RunMenu(void) {
                 }
             }
             if (!rendered) {
-                menu_render_frame(renderer, font, &menuState);
+                menu_render_frame(renderer, font, &menuState, &authoringHost);
             }
             if (render_device_lost()) {
                 running = false;
@@ -448,8 +534,12 @@ bool RunMenu(void) {
     if (sceneEditorSessionActive) {
         SceneEditorSessionEnd(&sceneEditor);
     }
+    if (ray_tracing_workspace_authoring_host_active(&authoringHost)) {
+        (void)ray_tracing_workspace_authoring_host_cancel_preview(&authoringHost);
+    }
     shutdown_menu(window, renderer, font, menuExitedNormally);
     ray_tracing_shared_theme_save_persisted();
+    ray_tracing_shared_font_save_persisted();
     SaveAllSettings();
     return menuExitedNormally;
 }

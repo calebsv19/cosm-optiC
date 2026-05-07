@@ -6,6 +6,7 @@
 #include <stdbool.h>
 
 #include "ui/menu_layout.h"
+#include "ui/menu/workspace_authoring/ray_tracing_workspace_authoring_host.h"
 #include "ui/sdl_menu_state.h"
 
 #define SDL_MENU_MAX_SLIDERS 24
@@ -92,7 +93,10 @@ void menu_render_draw_sliders(SDL_Renderer* renderer,
                               MenuRuntimeState* state,
                               const SliderLayout* layout);
 
-void menu_render_frame(SDL_Renderer* renderer, TTF_Font* font, MenuRuntimeState* state);
+void menu_render_frame(SDL_Renderer* renderer,
+                       TTF_Font* font,
+                       MenuRuntimeState* state,
+                       const RayTracingWorkspaceAuthoringHostState* authoring_host);
 
 void menu_render_draw_text_color(SDL_Renderer *renderer,
                                  TTF_Font *font,

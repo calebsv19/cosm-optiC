@@ -1,6 +1,6 @@
 # Ray Tracing Future Intent
 
-Last updated: 2026-05-04
+Last updated: 2026-05-07
 
 ## Direction
 
@@ -22,9 +22,14 @@ Keep `ray_tracing` stable as a hybrid editor/runtime while treating the shipped 
    - Build on the object-centered Material editor mode instead of overloading the top-level object editor.
    - Expose the retained scene-placement Material view only when there is a real workflow for comparing object origin framing against in-scene placement.
    - Preserve the broader object-focused Material zoom range so texture work can be inspected close up and previewed from a distance.
-   - Build on the texture-sampled filled triangle Material preview, all-face-group list, active-face texture kind and placement controls, copy-to-selected placement, and generated-face persistence by growing toward custom per-triangle/per-plane material texture placement.
+   - Build on the texture-sampled filled triangle Material preview, all-face-group list, active-face texture kind and placement controls, copy-to-selected placement, generated-face persistence, and the v2 layered material stack by growing toward custom per-triangle/per-plane material texture placement.
+   - Keep the current v2 stack contract as the intermediate representation for later node-graph authoring instead of making the node UI the first runtime format.
    - Preserve the split between geometry scene selection and optional atmosphere attachment.
    - Keep menu-render control helpers and scene-digest picking helpers as dedicated seams instead of collapsing them back into monolithic host files.
+   - Preserve the new authored-bitmap texture roundtrip:
+     - keep the object-bound manifest/PNG contract stable
+     - keep authored bitmap binding metadata scene-relative instead of embedding texture bytes into runtime-scene files
+     - build coexistence rules between authored bitmap faces and procedural overlays intentionally instead of letting the two routes drift
 
 4. Defer VF3D / `physics_sim` ingestion until the next internal renderer boundary is chosen and stabilized.
 
@@ -46,8 +51,8 @@ Keep `ray_tracing` stable as a hybrid editor/runtime while treating the shipped 
   - sampling
   - denoise
   - preview/update behavior
-- Keep procedural texture work app-local until a stable cross-app material graph/schema exists; current rust/fog overlays are native `3D` renderer behavior, not shared-core contracts.
-- Keep the Material editor's object-wide controls as the fallback while custom group topology, durable group controls, and path-traced renderer parity catch up to the generated-face placement schema.
+- Keep procedural texture work and the authored-bitmap manifest reader app-local until a stable cross-app material graph/schema exists; current layered material stacks and bitmap face bindings are native `3D` renderer behavior, not shared-core contracts.
+- Keep the Material editor's object-wide layer stack as the fallback while custom group topology, durable group controls, and per-layer face overrides catch up to the generated-face placement schema.
 
 ## Non-Goals
 

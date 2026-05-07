@@ -5,6 +5,9 @@
 
 void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event);
 void SceneEditorSessionRuntimeRender(SceneEditor* editor);
+void SceneEditorSessionRuntimeRenderWithPostDraw(SceneEditor* editor,
+                                                 SceneEditorSessionPostDrawFn post_draw,
+                                                 void* context);
 void SceneEditorSessionRuntimeLoop(SceneEditor* editor);
 
 #endif

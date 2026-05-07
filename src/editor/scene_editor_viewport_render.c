@@ -10,6 +10,7 @@
 #include "editor/material_editor.h"
 #include "editor/object_editor.h"
 #include "editor/scene_editor.h"
+#include "import/runtime_scene_bridge.h"
 #include "render/ray_tracing_mode_backend.h"
 #include "render/fluid/fluid_state.h"
 
@@ -52,7 +53,11 @@ static void scene_editor_viewport_render_fluid_bounds(SDL_Renderer* renderer) {
 
 static SceneEditorViewportRenderLane scene_editor_viewport_render_resolve_lane(void) {
     RayTracingRuntimeRoute route = RayTracingModeBackend_ResolveRoute();
-    if (RayTracingModeBackend_IsControlled3D(&route)) {
+    RuntimeSceneBridge3DDigestState digest = {0};
+    runtime_scene_bridge_get_last_3d_digest_state(&digest);
+    if (SceneEditorViewportRenderShouldUseDigestLaneForState(
+            RayTracingModeBackend_IsControlled3D(&route),
+            digest.valid)) {
         return SCENE_EDITOR_VIEWPORT_RENDER_LANE_DIGEST_3D;
     }
     return SCENE_EDITOR_VIEWPORT_RENDER_LANE_PLANAR_2D;

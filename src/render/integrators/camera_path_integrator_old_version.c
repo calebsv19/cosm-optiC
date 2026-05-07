@@ -900,24 +900,24 @@ void CameraPathIntegratorRender(IntegratorContext* ctx,
         return;
     }
 
-    ts_start_timer("CameraPath Clear");
+    ts_session_start_timer(timer_hud_session(), "CameraPath Clear");
     ClearEnergyBuffer(ctx);
-    ts_stop_timer("CameraPath Clear");
+    ts_session_stop_timer(timer_hud_session(), "CameraPath Clear");
 
-    ts_start_timer("CameraPath Direct");
+    ts_session_start_timer(timer_hud_session(), "CameraPath Direct");
     PerformDirectLightingPass(ctx, light);
-    ts_stop_timer("CameraPath Direct");
+    ts_session_stop_timer(timer_hud_session(), "CameraPath Direct");
 
-    ts_start_timer("CameraPath Indirect");
+    ts_session_start_timer(timer_hud_session(), "CameraPath Indirect");
     PerformIndirectLightingPass(ctx, light);
-    ts_stop_timer("CameraPath Indirect");
+    ts_session_stop_timer(timer_hud_session(), "CameraPath Indirect");
 
     if (!usingTiles && ctx->energyBuffer) {
         BilateralBlurEnergyBuffer(ctx, 1.2f, 0.6f);
     }
 
     if (!ctx->pixelBuffer) return;
-    ts_start_timer("CameraPath Tonemap");
+    ts_session_start_timer(timer_hud_session(), "CameraPath Tonemap");
     if (usingTiles) {
         TonemapTiles(ctx);
     } else if (ctx->energyBuffer) {
@@ -928,5 +928,5 @@ void CameraPathIntegratorRender(IntegratorContext* ctx,
     } else {
         memset(ctx->pixelBuffer, 0, total * sizeof(Uint8));
     }
-    ts_stop_timer("CameraPath Tonemap");
+    ts_session_stop_timer(timer_hud_session(), "CameraPath Tonemap");
 }

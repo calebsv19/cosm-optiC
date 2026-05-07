@@ -815,6 +815,12 @@ void SceneEditorSessionRender(SceneEditor* editor) {
     SceneEditorSessionRuntimeRender(editor);
 }
 
+void SceneEditorSessionRenderWithPostDraw(SceneEditor* editor,
+                                          SceneEditorSessionPostDrawFn post_draw,
+                                          void* context) {
+    SceneEditorSessionRuntimeRenderWithPostDraw(editor, post_draw, context);
+}
+
 bool SceneEditorSessionWantsExit(const SceneEditor* editor) {
     if (!editor) {
         return true;

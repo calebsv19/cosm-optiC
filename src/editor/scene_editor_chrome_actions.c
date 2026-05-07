@@ -158,6 +158,10 @@ void SceneEditorChromeActionsApply(SceneEditor* editor,
         if (!contract.applyEnabled) {
             return;
         }
+        if (!scene_editor_save_current_authoring()) {
+            SceneEditorChromeShellSetActionFeedback("Scene apply failed", 2200);
+            return;
+        }
         SceneEditorChromeShellSetActionFeedback("Scene changes applied", 1800);
         printf("Applied scene editor authoring in-app for mode %d\n", editor->currentMode);
         return;

@@ -9,46 +9,64 @@
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
+#include <limits.h>
+#include <stdbool.h>
 #include <stdio.h>
-#include <errno.h>
-#include <sys/stat.h>
-#include <sys/types.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+#include <unistd.h>
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
 #define TIMER_HUD_DEFAULT_SETTINGS_PATH "config/timer_hud_settings.json"
 #define TIMER_HUD_RUNTIME_SETTINGS_PATH "data/runtime/timer_hud_settings.json"
 
-static int path_exists(const char* path) {
-    struct stat st = {0};
-    return (path && path[0] && stat(path, &st) == 0);
+static TimerHUDSession* g_timer_hud_session = NULL;
+
+TimerHUDSession* timer_hud_session(void) {
+    if (!g_timer_hud_session) {
+        g_timer_hud_session = ts_session_create();
+    }
+    return g_timer_hud_session;
 }
 
-static int ensure_runtime_lane(void) {
-    if (mkdir("data", 0755) != 0 && errno != EEXIST) return 0;
-    if (mkdir("data/runtime", 0755) != 0 && errno != EEXIST) return 0;
-    return 1;
+static int timer_hud_resolve_abs_from_cwd(const char* relative_path,
+                                          char* out,
+                                          size_t out_cap) {
+    char cwd[PATH_MAX] = {0};
+    int written = 0;
+    if (!relative_path || !relative_path[0] || !out || out_cap == 0) {
+        return 0;
+    }
+    if (relative_path[0] == '/') {
+        written = snprintf(out, out_cap, "%s", relative_path);
+        return written > 0 && (size_t)written < out_cap;
+    }
+    if (!getcwd(cwd, sizeof(cwd))) {
+        return 0;
+    }
+    written = snprintf(out, out_cap, "%s/%s", cwd, relative_path);
+    return written > 0 && (size_t)written < out_cap;
 }
 
-static void seed_runtime_timer_hud_settings(void) {
-    if (path_exists(TIMER_HUD_RUNTIME_SETTINGS_PATH)) return;
-    if (!path_exists(TIMER_HUD_DEFAULT_SETTINGS_PATH)) return;
-    if (!ensure_runtime_lane()) return;
-
-    FILE* in = fopen(TIMER_HUD_DEFAULT_SETTINGS_PATH, "rb");
-    if (!in) return;
-    FILE* out = fopen(TIMER_HUD_RUNTIME_SETTINGS_PATH, "wb");
-    if (!out) {
-        fclose(in);
-        return;
+static bool timer_hud_parse_bool_token(const char* value, bool* out_enabled) {
+    if (!value || !out_enabled) {
+        return false;
     }
-
-    char buffer[4096];
-    size_t n = 0;
-    while ((n = fread(buffer, 1, sizeof(buffer), in)) > 0) {
-        if (fwrite(buffer, 1, n, out) != n) {
-            break;
-        }
+    if (strcmp(value, "1") == 0 || strcasecmp(value, "true") == 0 ||
+        strcasecmp(value, "on") == 0 || strcasecmp(value, "yes") == 0) {
+        *out_enabled = true;
+        return true;
     }
-    fclose(out);
-    fclose(in);
+    if (strcmp(value, "0") == 0 || strcasecmp(value, "false") == 0 ||
+        strcasecmp(value, "off") == 0 || strcasecmp(value, "no") == 0) {
+        *out_enabled = false;
+        return true;
+    }
+    return false;
 }
 
 static void timer_hud_backend_init(void) {
@@ -144,7 +162,111 @@ static const TimerHUDBackend g_timer_hud_backend = {
 };
 
 void timer_hud_register_backend(void) {
-    ts_register_backend(&g_timer_hud_backend);
-    seed_runtime_timer_hud_settings();
-    ts_set_settings_path(TIMER_HUD_RUNTIME_SETTINGS_PATH);
+    TimerHUDSession* session = timer_hud_session();
+    char default_settings_path[PATH_MAX] = {0};
+    char runtime_settings_path[PATH_MAX] = {0};
+    TimerHUDInitConfig init_config = {
+        .program_name = "ray_tracing",
+        .output_root = ".",
+        .settings_path = TIMER_HUD_RUNTIME_SETTINGS_PATH,
+        .default_settings_path = NULL,
+        .seed_settings_if_missing = false,
+    };
+    const char* output_root = NULL;
+    const char* override_path = NULL;
+
+    if (!session) {
+        fprintf(stderr, "[TimerHUD] failed to allocate ray_tracing session.\n");
+        return;
+    }
+
+    ts_session_register_backend(session, &g_timer_hud_backend);
+
+    if (timer_hud_resolve_abs_from_cwd(TIMER_HUD_DEFAULT_SETTINGS_PATH,
+                                       default_settings_path,
+                                       sizeof(default_settings_path)) &&
+        timer_hud_resolve_abs_from_cwd(TIMER_HUD_RUNTIME_SETTINGS_PATH,
+                                       runtime_settings_path,
+                                       sizeof(runtime_settings_path)) &&
+        access(runtime_settings_path, F_OK) != 0 &&
+        access(default_settings_path, F_OK) == 0) {
+        init_config.default_settings_path = default_settings_path;
+        init_config.seed_settings_if_missing = true;
+    }
+
+    output_root = getenv("TIMERHUD_OUTPUT_ROOT");
+    if (output_root && output_root[0]) {
+        init_config.output_root = output_root;
+    }
+
+    override_path = getenv("RAY_TRACING_TIMER_HUD_SETTINGS");
+    if (override_path && override_path[0]) {
+        init_config.settings_path = override_path;
+    }
+
+    (void)ts_session_apply_init_config(session, &init_config);
+}
+
+void timer_hud_apply_startup_env_overrides(void) {
+    TimerHUDSession* session = timer_hud_session();
+    const char* hud_env = getenv("RAY_TRACING_TIMER_HUD");
+    const char* overlay_env = getenv("RAY_TRACING_TIMER_HUD_OVERLAY");
+    const char* visual_mode_env = getenv("RAY_TRACING_TIMER_HUD_VISUAL_MODE");
+    bool enabled = false;
+    bool set_hybrid_by_default = false;
+    TimerHUDVisualMode visual_mode = TIMER_HUD_VISUAL_MODE_INVALID;
+
+    if (!session) {
+        return;
+    }
+
+    if (hud_env && hud_env[0]) {
+        if (timer_hud_parse_bool_token(hud_env, &enabled)) {
+            ts_session_set_hud_enabled(session, enabled);
+            set_hybrid_by_default = enabled;
+        } else {
+            fprintf(stderr,
+                    "[TimerHUD] ignoring invalid RAY_TRACING_TIMER_HUD=%s\n",
+                    hud_env);
+        }
+    }
+
+    if (overlay_env && overlay_env[0]) {
+        if (timer_hud_parse_bool_token(overlay_env, &enabled)) {
+            ts_session_set_hud_enabled(session, enabled);
+            set_hybrid_by_default = enabled;
+        } else {
+            fprintf(stderr,
+                    "[TimerHUD] ignoring invalid RAY_TRACING_TIMER_HUD_OVERLAY=%s\n",
+                    overlay_env);
+        }
+    }
+
+    if (visual_mode_env && visual_mode_env[0]) {
+        visual_mode = ts_visual_mode_from_string(visual_mode_env);
+        if (visual_mode != TIMER_HUD_VISUAL_MODE_INVALID) {
+            (void)ts_session_set_hud_visual_mode_kind(session, visual_mode);
+        } else {
+            fprintf(stderr,
+                    "[TimerHUD] ignoring invalid RAY_TRACING_TIMER_HUD_VISUAL_MODE=%s\n",
+                    visual_mode_env);
+        }
+    } else if (set_hybrid_by_default) {
+        (void)ts_session_set_hud_visual_mode_kind(session, TIMER_HUD_VISUAL_MODE_HYBRID);
+    }
+
+    fprintf(stderr,
+            "[TimerHUD] ray_tracing startup hud_enabled=%d mode=%s log_enabled=%d log_file=%s\n",
+            ts_session_is_hud_enabled(session) ? 1 : 0,
+            ts_session_get_hud_visual_mode(session),
+            ts_session_is_log_enabled(session) ? 1 : 0,
+            ts_session_get_log_filepath(session));
+}
+
+void timer_hud_shutdown_session(void) {
+    if (!g_timer_hud_session) {
+        return;
+    }
+    ts_session_destroy(g_timer_hud_session);
+    g_timer_hud_session = NULL;
 }

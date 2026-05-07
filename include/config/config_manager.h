@@ -182,6 +182,7 @@ void ApplyAnimationWindowSizeOverride(void);
 
 
 void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject);
+void LoadSceneObjects(struct json_object* config);
 
 int animation_config_text_zoom_step_clamp(int step);
 int animation_config_text_zoom_percent_from_step(int step);

@@ -9,7 +9,9 @@
 #include "config/config_scene_path_io.h"
 #include "core_io.h"
 #include "editor/scene_editor_material_face_placement.h"
+#include "editor/scene_editor_material_stack.h"
 #include "material/material_manager.h"
+#include "render/runtime_material_authored_texture_3d.h"
 #include "scene/object_manager.h"
 
 #include <json-c/json.h>
@@ -42,6 +44,8 @@ static void scene_defaults_reset(void) {
     sceneSettings.cameraPath.mode = BEZIER_CUBIC;
     CameraPath3D_Reset(&sceneSettings.cameraPath3D);
     SceneEditorMaterialFacePlacementResetAll();
+    SceneEditorMaterialStackResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
     memset(g_last_runtime_object_ids, 0, sizeof(g_last_runtime_object_ids));
     g_last_runtime_object_id_count = 0;
 }

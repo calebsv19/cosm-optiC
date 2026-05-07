@@ -1,5 +1,7 @@
 #include <math.h>
+#include <png.h>
 #include <stdio.h>
+#include <sys/stat.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -14,17 +16,114 @@
 #include "editor/scene_editor_digest_overlay.h"
 #include "editor/scene_editor_material_face_placement.h"
 #include "editor/scene_editor_material_preview.h"
+#include "editor/scene_editor_material_stack.h"
 #include "editor/scene_editor_runtime_scene_persistence.h"
 #include "editor/scene_editor_tool_state.h"
 #include "editor/scene_editor_viewport_nav.h"
+#include "editor/scene_editor_viewport_render.h"
 #include "import/runtime_scene_bridge.h"
+#include "render/runtime_material_authored_texture_3d.h"
+#include "render/runtime_material_payload_3d.h"
 #include "render/runtime_material_texture_3d.h"
 #include "test_runtime_scene_editor.h"
 #include "test_support.h"
 
+#include <json-c/json.h>
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+
+static bool test_scene_editor_write_png_rgba(const char* path,
+                                             const unsigned char* rgba,
+                                             unsigned width,
+                                             unsigned height) {
+    FILE* png_file = NULL;
+    png_structp png_ptr = NULL;
+    png_infop info_ptr = NULL;
+    bool ok = false;
+    if (!path || !rgba || width == 0u || height == 0u) {
+        return false;
+    }
+    png_file = fopen(path, "wb");
+    if (!png_file) {
+        return false;
+    }
+    png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    if (!png_ptr) {
+        fclose(png_file);
+        return false;
+    }
+    info_ptr = png_create_info_struct(png_ptr);
+    if (!info_ptr) {
+        png_destroy_write_struct(&png_ptr, NULL);
+        fclose(png_file);
+        return false;
+    }
+    if (setjmp(png_jmpbuf(png_ptr))) {
+        ok = false;
+        goto cleanup;
+    }
+    png_init_io(png_ptr, png_file);
+    png_set_IHDR(png_ptr,
+                 info_ptr,
+                 width,
+                 height,
+                 8,
+                 PNG_COLOR_TYPE_RGBA,
+                 PNG_INTERLACE_NONE,
+                 PNG_COMPRESSION_TYPE_DEFAULT,
+                 PNG_FILTER_TYPE_DEFAULT);
+    png_write_info(png_ptr, info_ptr);
+    for (unsigned y = 0u; y < height; ++y) {
+        png_write_row(png_ptr, rgba + ((size_t)y * (size_t)width * 4u));
+    }
+    png_write_end(png_ptr, info_ptr);
+    ok = true;
+cleanup:
+    png_destroy_write_struct(&png_ptr, &info_ptr);
+    fclose(png_file);
+    return ok;
+}
+
+static bool test_scene_editor_write_authored_texture_manifest(const char* manifest_path,
+                                                              const char* object_id,
+                                                              const char* primitive_kind,
+                                                              const char* face_role,
+                                                              const char* file_name) {
+    json_object* root = NULL;
+    json_object* surfaces = NULL;
+    json_object* surface = NULL;
+    int write_ok = 0;
+    if (!manifest_path || !object_id || !primitive_kind || !face_role || !file_name) {
+        return false;
+    }
+    root = json_object_new_object();
+    surfaces = json_object_new_array();
+    surface = json_object_new_object();
+    if (!root || !surfaces || !surface) {
+        if (root) json_object_put(root);
+        if (surfaces) json_object_put(surfaces);
+        if (surface) json_object_put(surface);
+        return false;
+    }
+    json_object_object_add(root, "schema_version", json_object_new_int(1));
+    json_object_object_add(root,
+                           "export_binding_kind",
+                           json_object_new_string("SEPARATE_FACES"));
+    json_object_object_add(root, "primitive_kind", json_object_new_string(primitive_kind));
+    json_object_object_add(root, "source_scene_id", json_object_new_string("scene_editor_test"));
+    json_object_object_add(root, "source_object_id", json_object_new_string(object_id));
+    json_object_object_add(root, "surface_count", json_object_new_int(1));
+    json_object_object_add(surface, "surface_id", json_object_new_int(1));
+    json_object_object_add(surface, "face_role", json_object_new_string(face_role));
+    json_object_object_add(surface, "file_name", json_object_new_string(file_name));
+    json_object_array_add(surfaces, surface);
+    json_object_object_add(root, "surfaces", surfaces);
+    write_ok = json_object_to_file_ext(manifest_path, root, JSON_C_TO_STRING_PRETTY);
+    json_object_put(root);
+    return write_ok == 0;
+}
 
 static void test_scene_editor_tool_state_contract(void) {
     SceneEditorToolStateReset();
@@ -189,6 +288,13 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip_object_material
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
     const char *runtime_path = "/tmp/ray_tracing_runtime_scene_authoring_material_roundtrip.json";
+    const char *texture_dir = "/tmp/ray_tracing_runtime_scene_authoring_texture_set";
+    const char *texture_png =
+        "/tmp/ray_tracing_runtime_scene_authoring_texture_set/box_a_front.png";
+    const char *texture_manifest =
+        "/tmp/ray_tracing_runtime_scene_authoring_texture_set/box_a_texture_manifest.json";
+    const char *texture_manifest_rel =
+        "ray_tracing_runtime_scene_authoring_texture_set/box_a_texture_manifest.json";
     const char *runtime_json =
         "{"
         "\"schema_family\":\"codework_scene\","
@@ -223,7 +329,14 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip_object_material
     char *persisted_json = NULL;
     FILE *file = fopen(runtime_path, "wb");
     RuntimeSceneBridgePreflight summary = {0};
+    RuntimeSceneBridgePreflight reapply_summary = {0};
+    RuntimeMaterialPayload3D payload = {0};
     SceneEditorMaterialFacePlacement face_placement;
+    unsigned char texture_rgba[] = {255u, 48u, 24u, 255u};
+    char authored_manifest_path[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
+    char authored_binding_mode[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MODE_CAPACITY];
+    int authored_face_count = 0;
+    HitInfo3D hit = {0};
     bool ok = false;
 
     assert_true("runtime_scene_authoring_material_persist_open_tmp", file != NULL);
@@ -234,10 +347,20 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip_object_material
     }
     fwrite(runtime_json, 1, strlen(runtime_json), file);
     fclose(file);
+    (void)mkdir(texture_dir, 0775);
+    assert_true("runtime_scene_authoring_material_texture_png_write_ok",
+                test_scene_editor_write_png_rgba(texture_png, texture_rgba, 1u, 1u));
+    assert_true("runtime_scene_authoring_material_texture_manifest_write_ok",
+                test_scene_editor_write_authored_texture_manifest(texture_manifest,
+                                                                  "box_a",
+                                                                  "RECT_PRISM",
+                                                                  "TOP",
+                                                                  "box_a_front.png"));
 
     memset(&sceneSettings, 0, sizeof(sceneSettings));
     memset(&animSettings, 0, sizeof(animSettings));
     SceneEditorMaterialFacePlacementResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
     ok = runtime_scene_bridge_apply_file(runtime_path, &summary);
     assert_true("runtime_scene_authoring_material_persist_apply_ok", ok);
     if (!ok) {
@@ -283,6 +406,11 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip_object_material
     face_placement.params.surfaceDamage = 0.91;
     assert_true("runtime_scene_authoring_material_face_override_seeded",
                 SceneEditorMaterialFacePlacementSetOverride(&face_placement));
+    assert_true("runtime_scene_authoring_material_authored_texture_bind_ok",
+                RuntimeMaterialAuthoredTextureBindManifestForObject(0,
+                                                                   "box_a",
+                                                                   texture_manifest_rel,
+                                                                   "override"));
 
     ok = SceneEditorRuntimeScenePersistAuthoring(diagnostics, sizeof(diagnostics));
     assert_true("runtime_scene_authoring_material_persist_writeback_ok", ok);
@@ -322,6 +450,10 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip_object_material
                     strstr(persisted_json, "\"face_group_index\":4") != NULL);
         assert_true("runtime_scene_authoring_material_persist_has_face_texture_id",
                     strstr(persisted_json, "\"texture_id\":2") != NULL);
+        assert_true("runtime_scene_authoring_material_persist_has_authored_texture",
+                    strstr(persisted_json, "\"authored_texture\"") != NULL);
+        assert_true("runtime_scene_authoring_material_persist_has_manifest_path",
+                    strstr(persisted_json, texture_manifest_rel) != NULL);
     }
 
     assert_true("runtime_scene_authoring_material_persist_hydrated_material_id",
@@ -399,9 +531,206 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip_object_material
                  face_placement.params.surfaceDamage,
                  0.91,
                  1e-9);
+    assert_true("runtime_scene_authoring_material_persist_reapply_ok",
+                runtime_scene_bridge_apply_file(runtime_path, &reapply_summary));
+    assert_true("runtime_scene_authoring_material_persist_reapply_binding_present",
+                RuntimeMaterialAuthoredTextureGetBinding(0,
+                                                        authored_manifest_path,
+                                                        sizeof(authored_manifest_path),
+                                                        authored_binding_mode,
+                                                        sizeof(authored_binding_mode),
+                                                        &authored_face_count));
+    assert_true("runtime_scene_authoring_material_persist_reapply_binding_path",
+                strcmp(authored_manifest_path, texture_manifest_rel) == 0);
+    assert_true("runtime_scene_authoring_material_persist_reapply_binding_mode",
+                strcmp(authored_binding_mode, "override") == 0);
+    assert_true("runtime_scene_authoring_material_persist_reapply_face_count",
+                authored_face_count == 1);
+    HitInfo3D_Reset(&hit);
+    hit.sceneObjectIndex = 0;
+    hit.triangleIndex = 12;
+    hit.localTriangleIndex = 8;
+    hit.primitiveIndex = 0;
+    hit.baryU = 0.2;
+    hit.baryV = 0.3;
+    hit.baryW = 0.5;
+    assert_true("runtime_scene_authoring_material_persist_reapply_payload_ok",
+                RuntimeMaterialPayload3D_ResolveFromHit(&hit, &payload));
+    assert_true("runtime_scene_authoring_material_persist_reapply_payload_mask",
+                payload.textureMask > 0.99);
+    assert_true("runtime_scene_authoring_material_persist_reapply_payload_red",
+                payload.baseColorR > payload.baseColorG);
+
+    free(persisted_json);
+    unlink(texture_png);
+    unlink(texture_manifest);
+    rmdir(texture_dir);
+    unlink(runtime_path);
+    RuntimeMaterialAuthoredTextureResetAll();
+    SceneEditorMaterialFacePlacementResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_scene_editor_runtime_scene_material_stack_roundtrip_payload(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_path = "/tmp/ray_tracing_runtime_scene_material_stack_roundtrip.json";
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_authoring_material_stack_1\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"box_stack\","
+          "\"object_type\":\"rect_prism_primitive\","
+          "\"transform\":{"
+            "\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+          "},"
+          "\"primitive\":{"
+            "\"kind\":\"rect_prism_primitive\","
+            "\"width\":1.0,"
+            "\"height\":1.0,"
+            "\"depth\":1.0"
+          "},"
+          "\"flags\":{\"visible\":true}"
+        "}],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    char diagnostics[256];
+    char *persisted_json = NULL;
+    FILE *file = fopen(runtime_path, "wb");
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    RuntimeMaterialTextureStack hydrated = RuntimeMaterialTextureStackEmpty();
+    RuntimeMaterialPayload3D baseline = {0};
+    RuntimeMaterialPayload3D textured = {0};
+    HitInfo3D hit = {0};
+    bool ok = false;
+
+    assert_true("runtime_scene_stack_roundtrip_open_tmp", file != NULL);
+    if (!file) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+    fwrite(runtime_json, 1, strlen(runtime_json), file);
+    fclose(file);
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialFacePlacementResetAll();
+    SceneEditorMaterialStackResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+
+    ok = runtime_scene_bridge_apply_file(runtime_path, &summary);
+    assert_true("runtime_scene_stack_roundtrip_apply_ok", ok);
+    if (!ok) {
+        unlink(runtime_path);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    HitInfo3D_Reset(&hit);
+    hit.sceneObjectIndex = 0;
+    hit.triangleIndex = 0;
+    hit.localTriangleIndex = 0;
+    hit.primitiveIndex = 0;
+    hit.baryU = 0.2;
+    hit.baryV = 0.3;
+    hit.baryW = 0.5;
+    assert_true("runtime_scene_stack_roundtrip_baseline_payload_ok",
+                RuntimeMaterialPayload3D_ResolveFromHit(&hit, &baseline));
+
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    snprintf(animSettings.runtimeScenePath, sizeof(animSettings.runtimeScenePath), "%s", runtime_path);
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_ROUGH_METAL;
+    sceneSettings.sceneObjects[0].color = 0x6A6A66;
+
+    stack.layerCount = 3;
+    stack.layers[0] =
+        RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_WOOD);
+    stack.layers[0].placement.strength = 0.85;
+    stack.layers[0].placement.scale = 2.0;
+    stack.layers[1] =
+        RuntimeMaterialTextureLayerMakeOverlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME);
+    stack.layers[1].opacity = 1.0;
+    stack.layers[1].placement.strength = 1.0;
+    stack.layers[1].placement.scale = 1.5;
+    stack.layers[1].params.coverage = 1.0;
+    stack.layers[1].params.grain = 0.85;
+    stack.layers[1].roughnessInfluence = 0.75;
+    stack.layers[2] =
+        RuntimeMaterialTextureLayerMakeOverlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL);
+    stack.layers[2].opacity = 0.65;
+    stack.layers[2].placement.strength = 0.9;
+    stack.layers[2].params.coverage = 0.85;
+    stack.layers[2].specularInfluence = 0.7;
+    assert_true("runtime_scene_stack_roundtrip_stack_seeded",
+                SceneEditorMaterialStackSetObjectStack(0, &stack));
+
+    ok = SceneEditorRuntimeScenePersistAuthoring(diagnostics, sizeof(diagnostics));
+    assert_true("runtime_scene_stack_roundtrip_persist_ok", ok);
+    if (!ok) {
+        unlink(runtime_path);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    persisted_json = read_text_file_alloc(runtime_path, NULL);
+    assert_true("runtime_scene_stack_roundtrip_readback_ok", persisted_json != NULL);
+    if (persisted_json) {
+        assert_true("runtime_scene_stack_roundtrip_has_stack_json",
+                    strstr(persisted_json, "\"material_texture_stack\"") != NULL);
+        assert_true("runtime_scene_stack_roundtrip_has_wood",
+                    strstr(persisted_json, "\"kind\":\"wood\"") != NULL);
+        assert_true("runtime_scene_stack_roundtrip_has_grime",
+                    strstr(persisted_json, "\"kind\":\"grime\"") != NULL);
+        assert_true("runtime_scene_stack_roundtrip_has_oil",
+                    strstr(persisted_json, "\"kind\":\"oil\"") != NULL);
+    }
+
+    assert_true("runtime_scene_stack_roundtrip_hydrated_stack",
+                SceneEditorMaterialStackGetObjectStack(0, &hydrated));
+    assert_true("runtime_scene_stack_roundtrip_hydrated_layer_count",
+                hydrated.layerCount == 3);
+    assert_true("runtime_scene_stack_roundtrip_hydrated_base_kind",
+                hydrated.layers[0].kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_WOOD);
+    assert_true("runtime_scene_stack_roundtrip_hydrated_grime_kind",
+                hydrated.layers[1].kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME);
+    assert_close("runtime_scene_stack_roundtrip_hydrated_grime_roughness",
+                 hydrated.layers[1].roughnessInfluence,
+                 0.75,
+                 1e-9);
+    assert_true("runtime_scene_stack_roundtrip_hydrated_oil_kind",
+                hydrated.layers[2].kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL);
+
+    assert_true("runtime_scene_stack_roundtrip_textured_payload_ok",
+                RuntimeMaterialPayload3D_ResolveFromHit(&hit, &textured));
+    assert_true("runtime_scene_stack_roundtrip_textured_payload_mask",
+                textured.textureMask > 0.0);
+    assert_true("runtime_scene_stack_roundtrip_payload_color_or_roughness_changed",
+                fabs(textured.baseColorR - baseline.baseColorR) > 1e-6 ||
+                fabs(textured.baseColorG - baseline.baseColorG) > 1e-6 ||
+                fabs(textured.baseColorB - baseline.baseColorB) > 1e-6 ||
+                fabs(textured.bsdf.roughness - baseline.bsdf.roughness) > 1e-6);
 
     free(persisted_json);
     unlink(runtime_path);
+    SceneEditorMaterialStackResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
     SceneEditorMaterialFacePlacementResetAll();
     sceneSettings = saved_scene;
     animSettings = saved_anim;
@@ -461,12 +790,14 @@ static int test_object_editor_slider_assignments_update_object_fields(void) {
 static int test_material_editor_focuses_last_selected_and_updates_texture_fields(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
 
     memset(&sceneSettings, 0, sizeof(sceneSettings));
     memset(&animSettings, 0, sizeof(animSettings));
     sceneSettings.objectCount = 2;
     sceneSettings.sceneObjects[0].textureScale = 1.0;
     sceneSettings.sceneObjects[1].textureScale = 1.0;
+    SceneEditorMaterialStackResetAll();
     MaterialEditorSetSolidFacesEnabled(true);
 
     ObjectEditorSelectionTrackerSetCurrent(1, sceneSettings.objectCount);
@@ -483,18 +814,21 @@ static int test_material_editor_focuses_last_selected_and_updates_texture_fields
                 MaterialEditorResolveFocusedObjectIndex() == 1);
     assert_true("material_editor_applies_rust_kind",
                 MaterialEditorApplyTextureKindToFocused(1));
-    assert_true("material_editor_texture_kind_updated",
-                sceneSettings.sceneObjects[1].textureId == 1);
+    assert_true("material_editor_texture_kind_promotes_stack",
+                SceneEditorMaterialStackGetObjectStack(1, &stack));
+    assert_true("material_editor_texture_kind_stack_rust",
+                stack.layerCount == 2 &&
+                    stack.layers[1].kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_RUST);
     assert_true("material_editor_strength_slider_updates",
                 MaterialEditorApplySliderValueToFocused(MATERIAL_EDITOR_SLIDER_STRENGTH, 0.75));
     assert_close("material_editor_strength_value",
-                 sceneSettings.sceneObjects[1].textureStrength,
+                 (SceneEditorMaterialStackGetObjectStack(1, &stack) ? stack.layers[1].placement.strength : -1.0),
                  0.75,
                  1e-9);
     assert_true("material_editor_scale_slider_updates",
                 MaterialEditorApplySliderValueToFocused(MATERIAL_EDITOR_SLIDER_SCALE, 1.0));
     assert_close("material_editor_scale_value",
-                 sceneSettings.sceneObjects[1].textureScale,
+                 (SceneEditorMaterialStackGetObjectStack(1, &stack) ? stack.layers[1].placement.scale : -1.0),
                  8.0,
                  1e-9);
     assert_true("material_editor_offset_u_updates",
@@ -502,11 +836,11 @@ static int test_material_editor_focuses_last_selected_and_updates_texture_fields
     assert_true("material_editor_offset_v_updates",
                 MaterialEditorApplySliderValueToFocused(MATERIAL_EDITOR_SLIDER_OFFSET_V, 0.65));
     assert_close("material_editor_offset_u_value",
-                 sceneSettings.sceneObjects[1].textureOffsetU,
+                 (SceneEditorMaterialStackGetObjectStack(1, &stack) ? stack.layers[1].placement.offsetU : -1.0),
                  0.20,
                  1e-9);
     assert_close("material_editor_offset_v_value",
-                 sceneSettings.sceneObjects[1].textureOffsetV,
+                 (SceneEditorMaterialStackGetObjectStack(1, &stack) ? stack.layers[1].placement.offsetV : -1.0),
                  0.65,
                  1e-9);
     assert_true("material_editor_param_pattern_updates",
@@ -521,14 +855,15 @@ static int test_material_editor_focuses_last_selected_and_updates_texture_fields
                     MATERIAL_EDITOR_TEXTURE_PARAM_SURFACE_DAMAGE,
                     0.83));
     assert_true("material_editor_param_pattern_value",
-                sceneSettings.sceneObjects[1].texturePatternMode ==
+                SceneEditorMaterialStackGetObjectStack(1, &stack) &&
+                    stack.layers[1].params.patternMode ==
                     RUNTIME_MATERIAL_TEXTURE_3D_PATTERN_FLOW);
     assert_close("material_editor_param_coverage_value",
-                 sceneSettings.sceneObjects[1].textureCoverage,
+                 (SceneEditorMaterialStackGetObjectStack(1, &stack) ? stack.layers[1].params.coverage : -1.0),
                  0.42,
                  1e-9);
     assert_close("material_editor_param_damage_value",
-                 sceneSettings.sceneObjects[1].textureSurfaceDamage,
+                 (SceneEditorMaterialStackGetObjectStack(1, &stack) ? stack.layers[1].params.surfaceDamage : -1.0),
                  0.83,
                  1e-9);
     assert_true("material_editor_rejects_empty_param_kind",
@@ -536,12 +871,158 @@ static int test_material_editor_focuses_last_selected_and_updates_texture_fields
                     MATERIAL_EDITOR_TEXTURE_PARAM_NONE,
                     0.99));
     assert_close("material_editor_empty_param_kind_keeps_coverage",
-                 sceneSettings.sceneObjects[1].textureCoverage,
+                 (SceneEditorMaterialStackGetObjectStack(1, &stack) ? stack.layers[1].params.coverage : -1.0),
                  0.42,
                  1e-9);
     assert_true("material_editor_marks_object_dirty",
                 sceneSettings.sceneObjects[1].dirty);
 
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_object_scope_clears_face_overrides_and_applies_all_faces(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    SceneEditorMaterialPreviewTriangleAddress address = {0};
+    SceneEditorMaterialFacePlacement placement;
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    SDL_Color base = {128, 128, 132, 255};
+    SDL_Color sampled = {0, 0, 0, 0};
+    double mask = 0.0;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialFacePlacementResetAll();
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_POLYGON, 0.0, 0.0, 1.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].textureId = RUNTIME_MATERIAL_TEXTURE_3D_NONE;
+    sceneSettings.sceneObjects[0].textureStrength = 1.0;
+    sceneSettings.sceneObjects[0].textureScale = 2.0;
+
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+
+    address.sceneObjectIndex = 0;
+    address.primitiveIndex = 0;
+    address.triangleIndex = 4;
+    address.localTriangleIndex = 4;
+    address.faceGroupIndex = 2;
+    assert_true("material_object_scope_face_select",
+                MaterialEditorSetTriangleSelection(&address));
+    assert_true("material_object_scope_face_rust_override",
+                MaterialEditorApplyTextureKindToFocused(RUNTIME_MATERIAL_TEXTURE_3D_RUST));
+    assert_true("material_object_scope_face_override_exists",
+                SceneEditorMaterialFacePlacementHasOverride(0, 2));
+    placement = SceneEditorMaterialFacePlacementGetEffective(&sceneSettings.sceneObjects[0], 0, 2);
+    assert_true("material_object_scope_face_override_rust",
+                placement.textureId == RUNTIME_MATERIAL_TEXTURE_3D_RUST);
+
+    MaterialEditorClearTriangleSelection();
+    assert_true("material_object_scope_none_applies_to_all",
+                MaterialEditorApplyTextureKindToFocused(RUNTIME_MATERIAL_TEXTURE_3D_NONE));
+    assert_true("material_object_scope_face_override_cleared",
+                !SceneEditorMaterialFacePlacementHasOverride(0, 2));
+    assert_true("material_object_scope_stack_is_solid_only",
+                SceneEditorMaterialStackGetObjectStack(0, &stack) &&
+                    stack.layerCount == 1 &&
+                    stack.layers[0].kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID);
+    assert_true("material_object_scope_preview_has_no_texture",
+                !SceneEditorMaterialPreviewEvaluateTextureColorForFace(
+                    &sceneSettings.sceneObjects[0],
+                    0,
+                    2,
+                    0,
+                    4,
+                    0.50,
+                    0.25,
+                    0.25,
+                    base,
+                    &sampled,
+                    &mask));
+    assert_close("material_object_scope_preview_mask_zero", mask, 0.0, 1e-12);
+
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialFacePlacementResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_layer_list_routes_object_stack_controls(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_POLYGON, 0.0, 0.0, 1.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].textureId = RUNTIME_MATERIAL_TEXTURE_3D_RUST;
+    sceneSettings.sceneObjects[0].textureStrength = 1.0;
+    sceneSettings.sceneObjects[0].textureScale = 2.0;
+    sceneSettings.sceneObjects[0].textureCoverage = 0.50;
+
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+
+    assert_true("material_editor_layer_count_from_legacy",
+                MaterialEditorFocusedLayerCount() == 2);
+    assert_true("material_editor_layer_select_overlay",
+                MaterialEditorSetActiveLayerIndex(1));
+    assert_true("material_editor_layer_select_promotes_v2",
+                SceneEditorMaterialStackHasObjectStack(0));
+    assert_true("material_editor_layer_strength_routes_to_stack",
+                MaterialEditorApplySliderValueToFocused(MATERIAL_EDITOR_SLIDER_STRENGTH, 0.35));
+    assert_true("material_editor_layer_param_routes_to_stack",
+                MaterialEditorApplyTextureParamValueToFocused(
+                    MATERIAL_EDITOR_TEXTURE_PARAM_COVERAGE,
+                    0.80));
+    assert_true("material_editor_layer_kind_routes_to_stack",
+                MaterialEditorApplyLayerKindToFocused(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME));
+    assert_close("material_editor_layer_keeps_legacy_strength",
+                 sceneSettings.sceneObjects[0].textureStrength,
+                 1.0,
+                 1e-12);
+    assert_true("material_editor_layer_stack_readback",
+                SceneEditorMaterialStackGetObjectStack(0, &stack));
+    assert_close("material_editor_layer_strength_stack_value",
+                 stack.layers[1].placement.strength,
+                 0.35,
+                 1e-12);
+    assert_close("material_editor_layer_kind_default_coverage",
+                 stack.layers[1].params.coverage,
+                 0.58,
+                 1e-12);
+    assert_true("material_editor_layer_kind_default_pattern",
+                stack.layers[1].params.patternMode == RUNTIME_MATERIAL_TEXTURE_3D_PATTERN_FLOW);
+    assert_true("material_editor_layer_kind_stack_value",
+                stack.layers[1].kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME);
+
+    assert_true("material_editor_layer_add_overlay",
+                MaterialEditorAddOverlayLayerToFocused());
+    assert_true("material_editor_layer_add_count",
+                MaterialEditorFocusedLayerCount() == 3);
+    assert_true("material_editor_layer_add_active_last",
+                MaterialEditorGetActiveLayerIndex() == 2);
+    assert_true("material_editor_layer_move_up",
+                MaterialEditorMoveActiveLayer(-1));
+    assert_true("material_editor_layer_move_active_index",
+                MaterialEditorGetActiveLayerIndex() == 1);
+    assert_true("material_editor_layer_toggle_enabled",
+                MaterialEditorToggleActiveLayerEnabled());
+    assert_true("material_editor_layer_toggle_readback",
+                SceneEditorMaterialStackGetObjectStack(0, &stack) &&
+                    !stack.layers[1].enabled);
+    assert_true("material_editor_layer_delete",
+                MaterialEditorDeleteActiveLayer());
+    assert_true("material_editor_layer_delete_count",
+                MaterialEditorFocusedLayerCount() == 2);
+
+    SceneEditorMaterialStackResetAll();
     sceneSettings = saved_scene;
     animSettings = saved_anim;
     return 0;
@@ -1085,6 +1566,87 @@ static int test_material_editor_preview_texture_color_responds_to_controls(void)
     assert_true("material_preview_fog_finds_active_sample", found_fog);
     assert_true("material_preview_fog_changes_color", material_preview_color_differs(base, fog));
     assert_true("material_preview_fog_mask_positive", fog_mask > 0.0);
+    return 0;
+}
+
+static int test_material_editor_preview_uses_v2_base_and_overlay_stack(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    SceneObject object;
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    SDL_Color base = {92, 94, 98, 255};
+    SDL_Color legacy_color = {0, 0, 0, 0};
+    SDL_Color stack_color = {0, 0, 0, 0};
+    double legacy_mask = 0.0;
+    double stack_mask = 0.0;
+    bool found_stack_sample = false;
+
+    memset(&object, 0, sizeof(object));
+    object.color = 0x5c5e62;
+    object.textureId = RUNTIME_MATERIAL_TEXTURE_3D_NONE;
+    object.textureStrength = 0.0;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    sceneSettings.objectCount = 1;
+    sceneSettings.sceneObjects[0] = object;
+
+    stack.layerCount = 3;
+    stack.layers[0] = RuntimeMaterialTextureLayerMakeBase(
+        RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_WOOD);
+    stack.layers[0].placement.scale = 2.0;
+    stack.layers[0].placement.strength = 1.0;
+    stack.layers[1] = RuntimeMaterialTextureLayerMakeOverlay(
+        RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME);
+    stack.layers[1].placement.scale = 3.0;
+    stack.layers[1].placement.strength = 0.82;
+    stack.layers[1].opacity = 0.90;
+    stack.layers[2] = RuntimeMaterialTextureLayerMakeOverlay(
+        RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL);
+    stack.layers[2].placement.scale = 1.6;
+    stack.layers[2].placement.strength = 0.65;
+    stack.layers[2].opacity = 0.72;
+    assert_true("material_preview_v2_stack_set",
+                SceneEditorMaterialStackSetObjectStack(0, &stack));
+    assert_true("material_preview_legacy_none_inactive",
+                !SceneEditorMaterialPreviewEvaluateTextureColor(&object,
+                                                                1,
+                                                                0.25,
+                                                                0.35,
+                                                                base,
+                                                                &legacy_color,
+                                                                &legacy_mask));
+    assert_true("material_preview_legacy_none_flat",
+                !material_preview_color_differs(base, legacy_color));
+
+    for (int u = 1; u < 9 && !found_stack_sample; ++u) {
+        for (int v = 1; v < 9 && !found_stack_sample; ++v) {
+            double bary_v = (double)u / 10.0;
+            double bary_w = (double)v / 10.0;
+            if (bary_v + bary_w >= 0.95) continue;
+            found_stack_sample = SceneEditorMaterialPreviewEvaluateTextureColorForFace(
+                &sceneSettings.sceneObjects[0],
+                0,
+                1,
+                0,
+                2,
+                1.0 - bary_v - bary_w,
+                bary_v,
+                bary_w,
+                base,
+                &stack_color,
+                &stack_mask);
+        }
+    }
+    assert_true("material_preview_v2_stack_samples", found_stack_sample);
+    assert_true("material_preview_v2_stack_changes_color",
+                material_preview_color_differs(base, stack_color));
+    assert_true("material_preview_v2_stack_mask_positive", stack_mask > 0.0);
+
+    SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
     return 0;
 }
 
@@ -1641,6 +2203,16 @@ static int test_scene_editor_control_surface_selected_object_status(void) {
     return 0;
 }
 
+static int test_scene_editor_viewport_render_falls_back_without_digest(void) {
+    assert_true("viewport_digest_route_uses_digest_when_available",
+                SceneEditorViewportRenderShouldUseDigestLaneForState(true, true));
+    assert_true("viewport_digest_route_falls_back_without_digest",
+                !SceneEditorViewportRenderShouldUseDigestLaneForState(true, false));
+    assert_true("viewport_2d_route_uses_planar_even_with_digest",
+                !SceneEditorViewportRenderShouldUseDigestLaneForState(false, true));
+    return 0;
+}
+
 static int test_scene_editor_control_surface_material_mode_contract(void) {
     SceneEditorControlSurfaceInput input;
     SceneEditorControlSurfaceContract contract;
@@ -1686,14 +2258,18 @@ int run_test_runtime_scene_editor_tests(void) {
     test_scene_editor_tool_state_contract();
     test_scene_editor_runtime_scene_persistence_roundtrip();
     test_scene_editor_runtime_scene_persistence_roundtrip_object_materials();
+    test_scene_editor_runtime_scene_material_stack_roundtrip_payload();
     test_object_editor_material_assignment_preserves_object_color();
     test_object_editor_slider_assignments_update_object_fields();
     test_material_editor_focuses_last_selected_and_updates_texture_fields();
+    test_material_editor_object_scope_clears_face_overrides_and_applies_all_faces();
+    test_material_editor_layer_list_routes_object_stack_controls();
     test_material_editor_object_projector_centers_focused_object();
     test_material_editor_focused_zoom_accumulates_around_object_fit();
     test_material_editor_preview_resolves_focused_triangle_substrate();
     test_material_editor_preview_picks_and_selects_visible_triangle();
     test_material_editor_preview_texture_color_responds_to_controls();
+    test_material_editor_preview_uses_v2_base_and_overlay_stack();
     test_material_editor_face_group_texture_island_and_override_controls();
     test_editor_mode_router_capabilities_2d();
     test_editor_mode_router_capabilities_3d_scaffold();
@@ -1705,6 +2281,7 @@ int run_test_runtime_scene_editor_tests(void) {
     test_scene_editor_control_surface_controlled_3d_bezier_mode_enablement();
     test_scene_editor_control_surface_controlled_3d_object_mode_canvas_enablement();
     test_scene_editor_control_surface_selected_object_status();
+    test_scene_editor_viewport_render_falls_back_without_digest();
     test_scene_editor_control_surface_material_mode_contract();
     return test_support_failures() - before;
 }

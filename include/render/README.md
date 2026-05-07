@@ -22,4 +22,4 @@ Ray-tracing and drawing helper declarations.
 - `runtime_scene_3d_samples.h` – Render-owned authored-state sampler for the native `3D` lane. It resolves runtime light and camera samples from canonical hydrated path/base state at a normalized timeline parameter without depending on preview modules.
 - `runtime_scene_3d_builder.h` – Render-side builder that consumes retained bridge primitive seeds and compiles the bounded first slice (`plane` + `rect_prism`) into native runtime primitives plus deterministic triangle output.
 - `material_bsdf.h` – Shared material representation plus Lambert/GGX BSDF helpers that convert `SceneObject` data into shading parameters.
-- `timer_hud_api.h` – Lightweight instrumentation hooks (`ts_start_timer`, etc.) used to profile integrator subpasses without pulling in the entire TimerHUD implementation.
+- `timer_hud_api.h` – TimerHUD host surface for profiling integrator subpasses through the app-owned `TimerHUDSession`, including explicit session access for frame/timer/render hooks.

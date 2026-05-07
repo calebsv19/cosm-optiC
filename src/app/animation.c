@@ -215,7 +215,8 @@ int AnimationInit(void) {
 
     setRenderContext(renderer, window, WINDOW_WIDTH, WINDOW_HEIGHT);
     timer_hud_register_backend();
-    ts_init();
+    ts_session_init(timer_hud_session());
+    timer_hud_apply_startup_env_overrides();
 
     // Validate Bézier path
     if (sceneSettings.bezierPath.numPoints < 2) {
@@ -250,6 +251,7 @@ void AnimationCleanup(void) {
 #if USE_VULKAN
     vk_shared_device_shutdown();
 #endif
+    timer_hud_shutdown_session();
     SDL_Quit();
 }
 
@@ -525,18 +527,23 @@ static void UpdateCameraPosition(double t) {
 
 
 void RenderFrame(double lightX, double lightY, int* frameCounter, bool* running) {
+    TimerHUDSession* timer_hud = timer_hud_session();
     if (quitRequested) {
         *running = false;
         return;
     }
-    ts_frame_start();
+    if (timer_hud) {
+        ts_session_frame_start(timer_hud);
+    }
     setRenderContext(renderer, window, sceneSettings.windowWidth, sceneSettings.windowHeight);
     render_set_clear_color(renderer, 0, 0, 0, 255);
     if (!render_begin_frame()) {
         if (render_device_lost()) {
             *running = false;
         }
-        ts_frame_end();
+        if (timer_hud) {
+            ts_session_frame_end(timer_hud);
+        }
         return;
     }
         
@@ -547,10 +554,14 @@ void RenderFrame(double lightX, double lightY, int* frameCounter, bool* running)
     // Handle deep render mode frame saving
     if (animSettings.deepRenderMode) {
         int absoluteFrameIndex = s_deepRenderStartFrameIndex + *frameCounter;
-        ts_start_timer("Frame Save");
+        if (timer_hud) {
+            ts_session_start_timer(timer_hud, "Frame Save");
+        }
         SaveFrame(absoluteFrameIndex);
         (*frameCounter)++;
-        ts_stop_timer("Frame Save");
+        if (timer_hud) {
+            ts_session_stop_timer(timer_hud, "Frame Save");
+        }
         if (*frameCounter >= animSettings.frameLimit) {
             printf("Deep render mode complete. Final frame saved.\n");
             SDL_Delay(500);
@@ -558,9 +569,13 @@ void RenderFrame(double lightX, double lightY, int* frameCounter, bool* running)
         }
     }
 
-    ts_render();
+    if (timer_hud) {
+        ts_session_render(timer_hud);
+    }
     render_end_frame();
-    ts_frame_end();
+    if (timer_hud) {
+        ts_session_frame_end(timer_hud);
+    }
 }
 
 typedef struct RayTracingFrameRenderInputs {

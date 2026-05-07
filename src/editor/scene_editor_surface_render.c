@@ -71,6 +71,11 @@ void SceneEditorSurfaceRenderLeftPaneContent(SDL_Renderer* renderer,
         bottom_y = selectButton.y - 10;
     }
 
+    if (contract->activeMode == EDITOR_MODE_MATERIAL) {
+        MaterialEditorRenderPaneControls(renderer, bounds, cursor_y, bottom_y);
+        return;
+    }
+
     snprintf(line, sizeof(line), "Mode: %s", SceneEditorSurfaceModeLabel(contract->activeMode));
     cursor_y = SceneEditorSurfaceRenderFlowLine(renderer, bounds, cursor_y, bottom_y, line, title_color, false, 6);
     active_tool = SceneEditorToolStateGetActive();
@@ -84,38 +89,6 @@ void SceneEditorSurfaceRenderLeftPaneContent(SDL_Renderer* renderer,
                                                 body_color,
                                                 true,
                                                 8);
-
-    if (contract->activeMode == EDITOR_MODE_MATERIAL) {
-        selected_index = MaterialEditorResolveFocusedObjectIndex();
-        if (selected_index >= 0 && selected_index < sceneSettings.objectCount) {
-            SceneObject* obj = &sceneSettings.sceneObjects[selected_index];
-            snprintf(line,
-                     sizeof(line),
-                     "Focused #%d mat=%d tex=%d",
-                     selected_index,
-                     obj->material_id,
-                     obj->textureId);
-            cursor_y = SceneEditorSurfaceRenderFlowLine(renderer, bounds, cursor_y, bottom_y, line, body_color, true, 4);
-            snprintf(line,
-                     sizeof(line),
-                     "Color #%06X  strength=%.2f scale=%.2f",
-                     (obj->color & 0xFFFFFF),
-                     obj->textureStrength,
-                     obj->textureScale);
-            cursor_y = SceneEditorSurfaceRenderFlowLine(renderer, bounds, cursor_y, bottom_y, line, body_color, true, 8);
-        } else {
-            cursor_y = SceneEditorSurfaceRenderFlowLine(renderer,
-                                                        bounds,
-                                                        cursor_y,
-                                                        bottom_y,
-                                                        "No focused object. Select an object in Objects mode, then return here.",
-                                                        body_color,
-                                                        true,
-                                                        8);
-        }
-        MaterialEditorRenderPaneControls(renderer, bounds, cursor_y, bottom_y);
-        return;
-    }
 
     if (contract->activeMode == EDITOR_MODE_OBJECT) {
         selected_index = ObjectEditorGetSelectedObjectIndex();

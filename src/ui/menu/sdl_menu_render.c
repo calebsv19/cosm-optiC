@@ -16,6 +16,7 @@
 #include "render/text_upload_policy.h"
 #include "ui/menu_batch_panel.h"
 #include "ui/menu_panel_chrome.h"
+#include "ui/menu/workspace_authoring/ray_tracing_workspace_authoring_overlay.h"
 #include "ui/shared_theme_font_adapter.h"
 
 #define MENU_WIDTH 1200
@@ -91,7 +92,10 @@ static void render_centered_text_color(SDL_Renderer *renderer,
     (void)ray_tracing_text_draw_utf8(renderer, font, text, color, &textRect);
 }
 
-void menu_render_frame(SDL_Renderer* renderer, TTF_Font* font, MenuRuntimeState* state) {
+void menu_render_frame(SDL_Renderer* renderer,
+                       TTF_Font* font,
+                       MenuRuntimeState* state,
+                       const RayTracingWorkspaceAuthoringHostState* authoring_host) {
     RayTracingThemePalette palette = {0};
     const bool has_shared_palette = ray_tracing_shared_theme_resolve_palette(&palette);
     MenuButtonLayout buttons;
@@ -430,5 +434,11 @@ void menu_render_frame(SDL_Renderer* renderer, TTF_Font* font, MenuRuntimeState*
         }
     }
 
+    ray_tracing_workspace_authoring_overlay_draw(renderer,
+                                                 font,
+                                                 authoring_host,
+                                                 menu_width,
+                                                 menu_height,
+                                                 NULL);
     render_end_frame();
 }

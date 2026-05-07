@@ -6,6 +6,7 @@
 
 #include "editor/scene_editor_digest_overlay.h"
 #include "editor/scene_editor_material_preview.h"
+#include "render/runtime_material_texture_stack_3d.h"
 
 typedef enum MaterialEditorHitRegion {
     MATERIAL_EDITOR_HIT_NONE = 0,
@@ -60,6 +61,14 @@ int MaterialEditorFocusedFaceGroupCount(void);
 int MaterialEditorGetActiveFaceGroupIndex(void);
 bool MaterialEditorSetActiveFaceGroupIndex(int face_group_index);
 bool MaterialEditorSetFaceGroupSelectionByIndex(int face_group_index);
+int MaterialEditorGetActiveLayerIndex(void);
+bool MaterialEditorSetActiveLayerIndex(int layer_index);
+int MaterialEditorFocusedLayerCount(void);
+bool MaterialEditorAddOverlayLayerToFocused(void);
+bool MaterialEditorDeleteActiveLayer(void);
+bool MaterialEditorMoveActiveLayer(int direction);
+bool MaterialEditorToggleActiveLayerEnabled(void);
+bool MaterialEditorApplyLayerKindToFocused(RuntimeMaterialTextureLayerKind kind);
 bool MaterialEditorGetSelectedTriangle(int index, SceneEditorMaterialPreviewTriangleAddress* out_address);
 bool MaterialEditorSetTriangleSelection(const SceneEditorMaterialPreviewTriangleAddress* address);
 bool MaterialEditorToggleTriangleSelection(const SceneEditorMaterialPreviewTriangleAddress* address);

@@ -61,6 +61,18 @@ int main(void) {
     if (path[0] == '\0' || point_size <= 0) {
         return fail("font resolution returned invalid path or point size");
     }
+    if (!ray_tracing_shared_font_set_preset("daw_default")) {
+        return fail("font preset setter should accept shared DAW preset");
+    }
+    if (!ray_tracing_shared_font_current_preset(path, sizeof(path))) {
+        return fail("font preset getter should report current runtime preset");
+    }
+    if (strcmp(path, "daw_default") != 0) {
+        return fail("font preset getter should reflect runtime preset changes");
+    }
+    if (!ray_tracing_shared_font_set_preset("ide")) {
+        return fail("font preset setter should restore IDE preset");
+    }
 
     for (i = 0; i < sizeof(theme_presets) / sizeof(theme_presets[0]); ++i) {
         setenv("RAY_TRACING_THEME_PRESET", theme_presets[i], 1);

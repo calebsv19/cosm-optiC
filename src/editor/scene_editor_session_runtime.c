@@ -49,7 +49,9 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
     SceneEditorInputRouterHandleEvent(event, &callbacks);
 }
 
-void SceneEditorSessionRuntimeRender(SceneEditor* editor) {
+void SceneEditorSessionRuntimeRenderWithPostDraw(SceneEditor* editor,
+                                                 SceneEditorSessionPostDrawFn post_draw,
+                                                 void* context) {
     if (!editor || !editor->running || !editor->window || !editor->renderer) {
         if (editor) {
             editor->running = false;
@@ -78,7 +80,14 @@ void SceneEditorSessionRuntimeRender(SceneEditor* editor) {
                                   editor->currentMode,
                                   RenderSceneDigestOverlay);
     RenderSceneButtons(editor->renderer);
+    if (post_draw) {
+        post_draw(editor, editor->renderer, context);
+    }
     render_end_frame();
+}
+
+void SceneEditorSessionRuntimeRender(SceneEditor* editor) {
+    SceneEditorSessionRuntimeRenderWithPostDraw(editor, NULL, NULL);
 }
 
 void SceneEditorSessionRuntimeLoop(SceneEditor* editor) {

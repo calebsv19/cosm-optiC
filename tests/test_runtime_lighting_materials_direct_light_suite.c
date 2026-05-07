@@ -5,6 +5,7 @@
 
 #include "app/animation.h"
 #include "editor/scene_editor_material_face_placement.h"
+#include "editor/scene_editor_material_stack.h"
 #include "import/runtime_scene_bridge.h"
 #include "material/material_manager.h"
 #include "render/material_bsdf.h"
@@ -26,6 +27,7 @@ static void runtime_lighting_materials_direct_reset_authoring_state(void) {
     memset(&sceneSettings, 0, sizeof(sceneSettings));
     memset(&animSettings, 0, sizeof(animSettings));
     SceneEditorMaterialFacePlacementResetAll();
+    SceneEditorMaterialStackResetAll();
     MaterialManagerResetDefaults();
 }
 
@@ -537,6 +539,104 @@ static int test_runtime_direct_light_3d_transparent_blocker_partial_shadow_contr
     return 0;
 }
 
+static int test_runtime_direct_light_3d_oil_overlay_opaque_blocker_stays_solid(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    RuntimeDirectLight3DResult result = {0};
+    RuntimeMaterialTextureStack blocker_stack = RuntimeMaterialTextureStackEmpty();
+    HitInfo3D hit = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    runtime_lighting_materials_direct_reset_authoring_state();
+    sceneSettings.objectCount = 2;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_DEFAULT;
+    sceneSettings.sceneObjects[0].color = 0xFFFFFF;
+    sceneSettings.sceneObjects[1].material_id = MATERIAL_PRESET_DEFAULT;
+    sceneSettings.sceneObjects[1].color = 0x808080;
+
+    blocker_stack.layerCount = 2;
+    blocker_stack.layers[0] =
+        RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_BRUSHED_METAL);
+    blocker_stack.layers[1] =
+        RuntimeMaterialTextureLayerMakeOverlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL);
+    blocker_stack.layers[1].placement.scale = 3.0;
+    blocker_stack.layers[1].placement.strength = 1.0;
+    blocker_stack.layers[1].params.coverage = 1.0;
+    blocker_stack.layers[1].params.grain = 0.55;
+    blocker_stack.layers[1].params.edgeSoftness = 1.0;
+    blocker_stack.layers[1].params.contrast = 0.45;
+    blocker_stack.layers[1].params.flow = 0.65;
+    blocker_stack.layers[1].params.colorDepth = 1.0;
+    blocker_stack.layers[1].params.surfaceDamage = 1.0;
+    assert_true("runtime_direct_light_3d_oil_blocker_stack_set",
+                SceneEditorMaterialStackSetObjectStack(1, &blocker_stack));
+
+    scene.hasLight = true;
+    scene.light.position = vec3(2.0, -2.0, 0.0);
+    scene.light.intensity = 10.0;
+    scene.light.falloffDistance = 10.0;
+    scene.light.falloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    scene.primitiveCapacity = 2;
+    scene.triangleMesh.triangleCapacity = 2;
+    scene.primitives = (RuntimePrimitive3D*)calloc((size_t)scene.primitiveCapacity,
+                                                   sizeof(*scene.primitives));
+    scene.triangleMesh.triangles =
+        (RuntimeTriangle3D*)calloc((size_t)scene.triangleMesh.triangleCapacity,
+                                   sizeof(*scene.triangleMesh.triangles));
+    assert_true("runtime_direct_light_3d_oil_blocker_alloc_primitives", scene.primitives != NULL);
+    assert_true("runtime_direct_light_3d_oil_blocker_alloc_triangles", scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    scene.primitiveCount = 2;
+    scene.triangleMesh.triangleCount = 2;
+    scene.primitives[0].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene.primitives[0].source.sceneObjectIndex = 0;
+    scene.primitives[1].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene.primitives[1].source.sceneObjectIndex = 1;
+    scene.triangleMesh.triangles[0].p0 = vec3(-3.0, -5.0, -3.0);
+    scene.triangleMesh.triangles[0].p1 = vec3(-3.0, -5.0, 3.0);
+    scene.triangleMesh.triangles[0].p2 = vec3(3.0, -5.0, -3.0);
+    scene.triangleMesh.triangles[0].normal = vec3(0.0, 1.0, 0.0);
+    scene.triangleMesh.triangles[0].primitiveIndex = 0;
+    scene.triangleMesh.triangles[0].sceneObjectIndex = 0;
+    scene.triangleMesh.triangles[1].p0 = vec3(1.0, -4.5, -2.0);
+    scene.triangleMesh.triangles[1].p1 = vec3(1.0, -2.5, 0.0);
+    scene.triangleMesh.triangles[1].p2 = vec3(1.0, -4.5, 2.0);
+    scene.triangleMesh.triangles[1].normal = vec3(1.0, 0.0, 0.0);
+    scene.triangleMesh.triangles[1].primitiveIndex = 1;
+    scene.triangleMesh.triangles[1].sceneObjectIndex = 1;
+
+    hit.t = 5.0;
+    hit.position = vec3(0.0, -5.0, 0.0);
+    hit.normal = vec3(0.0, 1.0, 0.0);
+    hit.triangleIndex = 0;
+    hit.primitiveIndex = 0;
+    hit.sceneObjectIndex = 0;
+    hit.source = scene.primitives[0].source;
+    hit.baryU = 0.333333333333;
+    hit.baryV = 0.333333333333;
+    hit.baryW = 0.333333333334;
+
+    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, &result);
+    assert_true("runtime_direct_light_3d_oil_blocker_shade_ok", ok);
+    assert_true("runtime_direct_light_3d_oil_blocker_hit", result.hit);
+    assert_true("runtime_direct_light_3d_oil_blocker_not_visible", !result.visible);
+    assert_close("runtime_direct_light_3d_oil_blocker_radiance_zero", result.radiance, 0.0, 1e-9);
+
+    RuntimeScene3D_Free(&scene);
+    SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 static int test_runtime_direct_light_3d_authored_light_motion_contract(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -757,6 +857,7 @@ int run_test_runtime_lighting_materials_direct_light_suite(void) {
     test_runtime_direct_light_3d_legacy_zero_color_fallback_contract();
     test_runtime_direct_light_3d_top_fill_lifts_upward_faces();
     test_runtime_direct_light_3d_transparent_blocker_partial_shadow_contract();
+    test_runtime_direct_light_3d_oil_overlay_opaque_blocker_stays_solid();
     test_runtime_direct_light_3d_authored_light_motion_contract();
     test_runtime_direct_light_3d_volume_hit_to_light_attenuation_contract();
     return 0;

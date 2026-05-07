@@ -6,19 +6,22 @@
 
 #include "camera/camera.h"
 #include "config/config_manager.h"
+#include "editor/material_editor_knob_control.h"
 #include "editor/object_editor_selection_tracker.h"
+#include "editor/material_editor_layer_model.h"
 #include "editor/scene_editor.h"
 #include "editor/scene_editor_material_face_placement.h"
+#include "editor/scene_editor_material_stack.h"
 #include "render/render_helper.h"
 #include "scene/object_manager.h"
 #include "ui/shared_theme_font_adapter.h"
 
-#define MATERIAL_EDITOR_BUTTON_HEIGHT 24
+#define MATERIAL_EDITOR_BUTTON_HEIGHT 22
 #define MATERIAL_EDITOR_BUTTON_GAP 5
-#define MATERIAL_EDITOR_SLIDER_HEIGHT 24
-#define MATERIAL_EDITOR_PARAM_SLIDER_HEIGHT 24
-#define MATERIAL_EDITOR_SLIDER_TRACK_HEIGHT 5
-#define MATERIAL_EDITOR_SLIDER_KNOB_WIDTH 9
+#define MATERIAL_EDITOR_CONTROL_GAP 7
+#define MATERIAL_EDITOR_SLIDER_HEIGHT 30
+#define MATERIAL_EDITOR_SLIDER_TRACK_HEIGHT 7
+#define MATERIAL_EDITOR_SLIDER_KNOB_WIDTH 11
 #define MATERIAL_EDITOR_MAX_SELECTED_TRIANGLES 64
 #define MATERIAL_EDITOR_MAX_GROUP_ROWS 16
 #define MATERIAL_EDITOR_GROUP_ROW_HEIGHT 24
@@ -26,7 +29,15 @@
 #define MATERIAL_EDITOR_MAX_FACE_GROUPS SCENE_EDITOR_MATERIAL_PREVIEW_MAX_TRIANGLES
 #define MATERIAL_EDITOR_PARAM_SLIDER_COUNT 7
 #define MATERIAL_EDITOR_PATTERN_BUTTON_COUNT 4
-#define MATERIAL_EDITOR_MIN_GROUP_LIST_HEIGHT 96
+#define MATERIAL_EDITOR_MIN_GROUP_LIST_HEIGHT 150
+#define MATERIAL_EDITOR_MAX_LAYER_ROWS 4
+#define MATERIAL_EDITOR_LAYER_ROW_HEIGHT 22
+#define MATERIAL_EDITOR_LAYER_ROW_GAP 2
+#define MATERIAL_EDITOR_LAYER_ACTION_COUNT 5
+#define MATERIAL_EDITOR_LAYER_KIND_BUTTON_COUNT 4
+#define MATERIAL_EDITOR_KNOB_HEIGHT 58
+#define MATERIAL_EDITOR_SECTION_LABEL(renderer, bounds, y, label, palette) \
+    RenderLabelTextLeft((renderer), (SDL_Rect){(bounds).x, (y), (bounds).w, 14}, (label), (palette).text_primary)
 
 typedef struct MaterialEditorFaceGroupInfo {
     int face_group_index;
@@ -48,6 +59,9 @@ static int s_material_editor_selected_triangle_count = 0;
 static SDL_Rect s_texture_none_rect = {0, 0, 0, 0};
 static SDL_Rect s_texture_rust_rect = {0, 0, 0, 0};
 static SDL_Rect s_texture_fog_rect = {0, 0, 0, 0};
+static SDL_Rect s_layer_kind_rects[MATERIAL_EDITOR_LAYER_KIND_BUTTON_COUNT];
+static RuntimeMaterialTextureLayerKind
+    s_layer_kind_rect_kinds[MATERIAL_EDITOR_LAYER_KIND_BUTTON_COUNT];
 static SDL_Rect s_solid_faces_rect = {0, 0, 0, 0};
 static SDL_Rect s_reset_face_rect = {0, 0, 0, 0};
 static SDL_Rect s_copy_face_rect = {0, 0, 0, 0};
@@ -66,14 +80,29 @@ static int s_group_total_count = 0;
 static SDL_Rect s_slider_sections[4];
 static SDL_Rect s_slider_tracks[4];
 static SDL_Rect s_param_sections[MATERIAL_EDITOR_PARAM_SLIDER_COUNT];
-static SDL_Rect s_param_tracks[MATERIAL_EDITOR_PARAM_SLIDER_COUNT];
 static SDL_Rect s_pattern_rects[MATERIAL_EDITOR_PATTERN_BUTTON_COUNT];
+static SDL_Rect s_layer_panel_rect = {0, 0, 0, 0};
+static SDL_Rect s_layer_list_rect = {0, 0, 0, 0};
+static SDL_Rect s_layer_row_rects[MATERIAL_EDITOR_MAX_LAYER_ROWS];
+static SDL_Rect s_layer_toggle_rects[MATERIAL_EDITOR_MAX_LAYER_ROWS];
+static int s_layer_row_indices[MATERIAL_EDITOR_MAX_LAYER_ROWS];
+static char s_layer_row_labels[MATERIAL_EDITOR_MAX_LAYER_ROWS][72];
+static SDL_Rect s_layer_action_rects[MATERIAL_EDITOR_LAYER_ACTION_COUNT];
+static int s_layer_row_count = 0;
+static int s_layer_scroll_offset = 0;
+static int s_layer_visible_capacity = 0;
+static int s_layer_total_count = 0;
+static int s_material_editor_param_drag_start_y = 0;
+static double s_material_editor_param_drag_start_value = 0.0;
 
 static void material_editor_draw_button(SDL_Renderer* renderer,
                                         SDL_Rect rect,
                                         const char* label,
                                         bool active,
                                         RayTracingThemePalette palette);
+static bool material_editor_has_room_for_optional_control(int cursor_y,
+                                                          int control_h,
+                                                          int bottom_y);
 
 static SceneEditorMaterialTextureParamField material_editor_texture_param_field(
     MaterialEditorTextureParamKind kind) {
@@ -221,6 +250,21 @@ static void material_editor_reset_group_list_layout(void) {
     s_group_list_rect = (SDL_Rect){0, 0, 0, 0};
     s_group_visible_capacity = 0;
     s_group_total_count = 0;
+}
+
+static void material_editor_reset_layer_list_layout(void) {
+    memset(s_layer_row_rects, 0, sizeof(s_layer_row_rects));
+    memset(s_layer_toggle_rects, 0, sizeof(s_layer_toggle_rects));
+    memset(s_layer_row_labels, 0, sizeof(s_layer_row_labels));
+    memset(s_layer_action_rects, 0, sizeof(s_layer_action_rects));
+    for (int i = 0; i < MATERIAL_EDITOR_MAX_LAYER_ROWS; ++i) {
+        s_layer_row_indices[i] = -1;
+    }
+    s_layer_panel_rect = (SDL_Rect){0, 0, 0, 0};
+    s_layer_list_rect = (SDL_Rect){0, 0, 0, 0};
+    s_layer_row_count = 0;
+    s_layer_visible_capacity = 0;
+    s_layer_total_count = 0;
 }
 
 static bool material_editor_add_triangle_selection(
@@ -427,12 +471,171 @@ static int material_editor_draw_group_list(SDL_Renderer* renderer,
     return bottom_y;
 }
 
+static int material_editor_draw_layer_list(SDL_Renderer* renderer,
+                                           SDL_Rect content_bounds,
+                                           int cursor_y,
+                                           int bottom_y,
+                                           const SceneObject* obj,
+                                           RayTracingThemePalette palette) {
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
+    int active_index = 0;
+    int header_h = 18;
+    int action_h = 20;
+    int row_stride = MATERIAL_EDITOR_LAYER_ROW_HEIGHT + MATERIAL_EDITOR_LAYER_ROW_GAP;
+    int row_capacity = 0;
+    int panel_h = 0;
+    int action_w = 0;
+    int scrollbar_w = 0;
+    const char* action_labels[MATERIAL_EDITOR_LAYER_ACTION_COUNT] = {
+        "+", "Mute", "Up", "Down", "Del"
+    };
+    char header_text[48];
+    if (!renderer || !obj || content_bounds.w <= 0 || cursor_y >= bottom_y) return cursor_y;
+    material_editor_reset_layer_list_layout();
+    if (!MaterialEditorLayerModelGetEffectiveStack(obj, focused_object_index, &stack) ||
+        stack.layerCount <= 0) {
+        return cursor_y;
+    }
+    active_index = MaterialEditorLayerModelGetActiveIndex(obj, focused_object_index);
+    row_capacity = stack.layerCount < MATERIAL_EDITOR_MAX_LAYER_ROWS
+                       ? stack.layerCount
+                       : MATERIAL_EDITOR_MAX_LAYER_ROWS;
+    if (row_capacity < 1) row_capacity = 1;
+    panel_h = header_h + action_h + MATERIAL_EDITOR_BUTTON_GAP +
+              row_capacity * row_stride;
+    if (!material_editor_has_room_for_optional_control(cursor_y, panel_h, bottom_y)) {
+        return cursor_y;
+    }
+    s_layer_panel_rect = (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, panel_h};
+    s_layer_total_count = stack.layerCount;
+    s_layer_visible_capacity = row_capacity;
+    if (s_layer_scroll_offset > stack.layerCount - row_capacity) {
+        s_layer_scroll_offset = stack.layerCount - row_capacity;
+    }
+    if (s_layer_scroll_offset < 0) s_layer_scroll_offset = 0;
+
+    snprintf(header_text,
+             sizeof(header_text),
+             "Layers %d %s",
+             stack.layerCount,
+             SceneEditorMaterialStackHasObjectStack(focused_object_index) ? "v2" : "legacy");
+    RenderLabelTextLeft(renderer,
+                        (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, header_h},
+                        header_text,
+                        palette.text_primary);
+    cursor_y += header_h;
+
+    action_w = (content_bounds.w - MATERIAL_EDITOR_BUTTON_GAP * (MATERIAL_EDITOR_LAYER_ACTION_COUNT - 1)) /
+               MATERIAL_EDITOR_LAYER_ACTION_COUNT;
+    for (int i = 0; i < MATERIAL_EDITOR_LAYER_ACTION_COUNT; ++i) {
+        int x = content_bounds.x + i * (action_w + MATERIAL_EDITOR_BUTTON_GAP);
+        int w = (i == MATERIAL_EDITOR_LAYER_ACTION_COUNT - 1)
+                    ? content_bounds.x + content_bounds.w - x
+                    : action_w;
+        bool active = false;
+        if (i == 1 && active_index >= 0 && active_index < stack.layerCount) {
+            active = !stack.layers[active_index].enabled;
+        }
+        s_layer_action_rects[i] = (SDL_Rect){x, cursor_y, w, action_h};
+        material_editor_draw_button(renderer, s_layer_action_rects[i], action_labels[i], active, palette);
+    }
+    cursor_y += action_h + MATERIAL_EDITOR_BUTTON_GAP;
+
+    scrollbar_w = stack.layerCount > row_capacity ? 8 : 0;
+    s_layer_list_rect = (SDL_Rect){content_bounds.x,
+                                   cursor_y,
+                                   content_bounds.w,
+                                   row_capacity * row_stride};
+    for (int i = 0; i < row_capacity; ++i) {
+        int layer_index = i + s_layer_scroll_offset;
+        RuntimeMaterialTextureLayer* layer = &stack.layers[layer_index];
+        SDL_Rect row = {content_bounds.x,
+                        cursor_y + i * row_stride,
+                        content_bounds.w - scrollbar_w - 4,
+                        MATERIAL_EDITOR_LAYER_ROW_HEIGHT};
+        int toggle_w = 38;
+        SDL_Rect toggle = {row.x + row.w - toggle_w - 3,
+                           row.y + 3,
+                           toggle_w,
+                           row.h - 6};
+        bool row_active = layer_index == active_index;
+        SDL_Color fill = row_active ? ray_tracing_theme_resolve_button_active_fill(palette)
+                                    : palette.panel_fill;
+        SDL_Color text = row_active ? ray_tracing_theme_choose_button_text(fill, palette)
+                                    : layer->enabled ? palette.text_primary : palette.text_muted;
+        const char* role = RuntimeMaterialTextureLayerKindIsBase(layer->kind) ? "Base" : "Layer";
+        s_layer_row_rects[i] = row;
+        s_layer_toggle_rects[i] = toggle;
+        s_layer_row_indices[i] = layer_index;
+        snprintf(s_layer_row_labels[i],
+                 sizeof(s_layer_row_labels[i]),
+                 "#%d %s %s",
+                 layer_index,
+                 role,
+                 layer->displayName[0] ? layer->displayName
+                                       : RuntimeMaterialTextureLayerKindDisplayName(layer->kind));
+        s_layer_row_count += 1;
+        SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, row_active ? 255 : 210);
+        SDL_RenderFillRect(renderer, &row);
+        SDL_SetRenderDrawColor(renderer,
+                               row_active ? palette.accent_primary.r : palette.panel_border.r,
+                               row_active ? palette.accent_primary.g : palette.panel_border.g,
+                               row_active ? palette.accent_primary.b : palette.panel_border.b,
+                               255);
+        SDL_RenderDrawRect(renderer, &row);
+        RenderLabelTextLeft(renderer,
+                            (SDL_Rect){row.x + 6, row.y + 3, row.w - toggle_w - 18, 16},
+                            s_layer_row_labels[i],
+                            text);
+        material_editor_draw_button(renderer, toggle, layer->enabled ? "On" : "Off", layer->enabled, palette);
+    }
+    if (scrollbar_w > 0) {
+        int track_h = row_capacity * row_stride - MATERIAL_EDITOR_LAYER_ROW_GAP;
+        int thumb_h = (track_h * row_capacity) / stack.layerCount;
+        int max_offset = stack.layerCount - row_capacity;
+        int thumb_travel = 0;
+        SDL_Rect track = {content_bounds.x + content_bounds.w - scrollbar_w,
+                          cursor_y,
+                          4,
+                          track_h};
+        SDL_Rect thumb = track;
+        if (thumb_h < 16) thumb_h = 16;
+        if (thumb_h > track_h) thumb_h = track_h;
+        thumb_travel = track_h - thumb_h;
+        thumb.h = thumb_h;
+        thumb.y = track.y + (max_offset > 0 ? (thumb_travel * s_layer_scroll_offset) / max_offset : 0);
+        SDL_SetRenderDrawColor(renderer,
+                               palette.panel_border.r,
+                               palette.panel_border.g,
+                               palette.panel_border.b,
+                               180);
+        SDL_RenderFillRect(renderer, &track);
+        SDL_SetRenderDrawColor(renderer,
+                               palette.accent_primary.r,
+                               palette.accent_primary.g,
+                               palette.accent_primary.b,
+                               255);
+        SDL_RenderFillRect(renderer, &thumb);
+    }
+    return s_layer_panel_rect.y + s_layer_panel_rect.h + MATERIAL_EDITOR_BUTTON_GAP;
+}
+
 static bool material_editor_scroll_group_list(int wheel_y) {
     int max_offset = s_group_total_count - s_group_visible_capacity;
     if (wheel_y == 0 || max_offset <= 0) return false;
     s_group_scroll_offset -= wheel_y;
     if (s_group_scroll_offset < 0) s_group_scroll_offset = 0;
     if (s_group_scroll_offset > max_offset) s_group_scroll_offset = max_offset;
+    return true;
+}
+
+static bool material_editor_scroll_layer_list(int wheel_y) {
+    int max_offset = s_layer_total_count - s_layer_visible_capacity;
+    if (wheel_y == 0 || max_offset <= 0) return false;
+    s_layer_scroll_offset -= wheel_y;
+    if (s_layer_scroll_offset < 0) s_layer_scroll_offset = 0;
+    if (s_layer_scroll_offset > max_offset) s_layer_scroll_offset = max_offset;
     return true;
 }
 
@@ -467,6 +670,95 @@ static SceneObject* material_editor_focused_object(void) {
         return &sceneSettings.sceneObjects[s_material_editor_focused_object_index];
     }
     return NULL;
+}
+
+static bool material_editor_use_object_layer_controls(const SceneObject* obj) {
+    int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    return obj &&
+           s_material_editor_active_face_group_index < 0 &&
+           MaterialEditorLayerModelGetEffectiveStack(obj, focused_object_index, &stack);
+}
+
+static void material_editor_apply_object_scope_to_all_faces(int scene_object_index) {
+    if (scene_object_index < 0) return;
+    SceneEditorMaterialFacePlacementResetObject(scene_object_index);
+}
+
+static bool material_editor_get_active_layer(const SceneObject* obj,
+                                             RuntimeMaterialTextureStack* out_stack,
+                                             RuntimeMaterialTextureLayer* out_layer,
+                                             int* out_index) {
+    int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    int index = 0;
+    if (!obj || !MaterialEditorLayerModelGetEffectiveStack(obj, focused_object_index, &stack)) {
+        return false;
+    }
+    index = MaterialEditorLayerModelGetActiveIndex(obj, focused_object_index);
+    if (index < 0 || index >= stack.layerCount) return false;
+    if (out_stack) *out_stack = stack;
+    if (out_layer) *out_layer = stack.layers[index];
+    if (out_index) *out_index = index;
+    return true;
+}
+
+static const char* material_editor_short_layer_kind_label(RuntimeMaterialTextureLayerKind kind) {
+    if (kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_BRUSHED_METAL) return "Metal";
+    if (kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_CONCRETE) return "Concrete";
+    if (kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_EDGE_WEAR) return "Wear";
+    return RuntimeMaterialTextureLayerKindDisplayName(kind);
+}
+
+static int material_editor_draw_layer_kind_buttons(SDL_Renderer* renderer,
+                                                   SDL_Rect content_bounds,
+                                                   int cursor_y,
+                                                   int bottom_y,
+                                                   const SceneObject* obj,
+                                                   RayTracingThemePalette palette) {
+    RuntimeMaterialTextureLayer layer;
+    RuntimeMaterialTextureLayerKind options[MATERIAL_EDITOR_LAYER_KIND_BUTTON_COUNT];
+    int button_w = 0;
+    bool layer_controls = material_editor_use_object_layer_controls(obj);
+    memset(s_layer_kind_rects, 0, sizeof(s_layer_kind_rects));
+    memset(s_layer_kind_rect_kinds, 0, sizeof(s_layer_kind_rect_kinds));
+    if (!layer_controls || !material_editor_get_active_layer(obj, NULL, &layer, NULL)) {
+        return cursor_y;
+    }
+    if (!material_editor_has_room_for_optional_control(cursor_y,
+                                                       15 + MATERIAL_EDITOR_BUTTON_HEIGHT,
+                                                       bottom_y)) {
+        return cursor_y;
+    }
+    if (RuntimeMaterialTextureLayerKindIsBase(layer.kind)) {
+        options[0] = RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID;
+        options[1] = RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_BRUSHED_METAL;
+        options[2] = RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_WOOD;
+        options[3] = RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_BRICK;
+    } else {
+        options[0] = RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_RUST;
+        options[1] = RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_FOG;
+        options[2] = RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME;
+        options[3] = RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL;
+    }
+    MATERIAL_EDITOR_SECTION_LABEL(renderer, content_bounds, cursor_y, RuntimeMaterialTextureLayerKindIsBase(layer.kind) ? "Base Type" : "Overlay Type", palette);
+    cursor_y += 15;
+    button_w = (content_bounds.w - MATERIAL_EDITOR_BUTTON_GAP * 3) /
+               MATERIAL_EDITOR_LAYER_KIND_BUTTON_COUNT;
+    for (int i = 0; i < MATERIAL_EDITOR_LAYER_KIND_BUTTON_COUNT; ++i) {
+        int x = content_bounds.x + i * (button_w + MATERIAL_EDITOR_BUTTON_GAP);
+        int w = (i == MATERIAL_EDITOR_LAYER_KIND_BUTTON_COUNT - 1)
+                    ? content_bounds.x + content_bounds.w - x
+                    : button_w;
+        s_layer_kind_rects[i] = (SDL_Rect){x, cursor_y, w, MATERIAL_EDITOR_BUTTON_HEIGHT};
+        s_layer_kind_rect_kinds[i] = options[i];
+        material_editor_draw_button(renderer,
+                                    s_layer_kind_rects[i],
+                                    material_editor_short_layer_kind_label(options[i]),
+                                    layer.kind == options[i],
+                                    palette);
+    }
+    return cursor_y + MATERIAL_EDITOR_BUTTON_HEIGHT + MATERIAL_EDITOR_BUTTON_GAP;
 }
 
 static RayTracingThemePalette material_editor_palette(void) {
@@ -506,6 +798,7 @@ static void material_editor_draw_button(SDL_Renderer* renderer,
 }
 
 static double material_editor_value_for_slider(const SceneObject* obj, MaterialEditorSliderKind kind) {
+    RuntimeMaterialTextureLayer layer;
     if (!obj) return 0.0;
     if (s_material_editor_active_face_group_index >= 0) {
         int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
@@ -525,6 +818,18 @@ static double material_editor_value_for_slider(const SceneObject* obj, MaterialE
                                                                   s_material_editor_active_face_group_index,
                                                                   field);
     }
+    if (material_editor_use_object_layer_controls(obj) &&
+        material_editor_get_active_layer(obj, NULL, &layer, NULL)) {
+        if (kind == MATERIAL_EDITOR_SLIDER_STRENGTH) return material_editor_clamp01(layer.placement.strength);
+        if (kind == MATERIAL_EDITOR_SLIDER_SCALE) {
+            double value = layer.placement.scale;
+            if (value < 0.25) value = 0.25;
+            if (value > 8.0) value = 8.0;
+            return (value - 0.25) / 7.75;
+        }
+        if (kind == MATERIAL_EDITOR_SLIDER_OFFSET_U) return material_editor_clamp01(layer.placement.offsetU);
+        if (kind == MATERIAL_EDITOR_SLIDER_OFFSET_V) return material_editor_clamp01(layer.placement.offsetV);
+    }
     if (kind == MATERIAL_EDITOR_SLIDER_STRENGTH) return material_editor_clamp01(obj->textureStrength);
     if (kind == MATERIAL_EDITOR_SLIDER_SCALE) {
         double value = obj->textureScale;
@@ -539,6 +844,7 @@ static double material_editor_value_for_slider(const SceneObject* obj, MaterialE
 
 static int material_editor_texture_kind_for_controls(const SceneObject* obj) {
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
+    RuntimeMaterialTextureLayer layer;
     if (!obj) return 0;
     if (s_material_editor_active_face_group_index >= 0) {
         SceneEditorMaterialFacePlacement placement =
@@ -547,11 +853,22 @@ static int material_editor_texture_kind_for_controls(const SceneObject* obj) {
                                                          s_material_editor_active_face_group_index);
         return placement.textureId;
     }
+    if (material_editor_use_object_layer_controls(obj) &&
+        material_editor_get_active_layer(obj, NULL, &layer, NULL)) {
+        if (layer.kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_RUST) {
+            return RUNTIME_MATERIAL_TEXTURE_3D_RUST;
+        }
+        if (layer.kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_FOG) {
+            return RUNTIME_MATERIAL_TEXTURE_3D_FOG;
+        }
+        return RUNTIME_MATERIAL_TEXTURE_3D_NONE;
+    }
     return obj->textureId;
 }
 
 static RuntimeMaterialTexture3DParams material_editor_params_for_controls(const SceneObject* obj) {
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
+    RuntimeMaterialTextureLayer layer;
     if (!obj) return RuntimeMaterialTexture3DDefaultParams();
     if (s_material_editor_active_face_group_index >= 0) {
         SceneEditorMaterialFacePlacement placement =
@@ -559,6 +876,10 @@ static RuntimeMaterialTexture3DParams material_editor_params_for_controls(const 
                                                          focused_object_index,
                                                          s_material_editor_active_face_group_index);
         return RuntimeMaterialTexture3DNormalizeParams(placement.params);
+    }
+    if (material_editor_use_object_layer_controls(obj) &&
+        material_editor_get_active_layer(obj, NULL, &layer, NULL)) {
+        return RuntimeMaterialTexture3DNormalizeParams(layer.params);
     }
     return RuntimeMaterialTexture3DParamsFromObject(obj);
 }
@@ -586,15 +907,31 @@ static const char* material_editor_label_for_slider(MaterialEditorSliderKind kin
     return "";
 }
 
-static const char* material_editor_label_for_param(MaterialEditorTextureParamKind kind) {
-    if (kind == MATERIAL_EDITOR_TEXTURE_PARAM_COVERAGE) return "Coverage";
-    if (kind == MATERIAL_EDITOR_TEXTURE_PARAM_GRAIN) return "Grain";
-    if (kind == MATERIAL_EDITOR_TEXTURE_PARAM_EDGE_SOFTNESS) return "Edge";
-    if (kind == MATERIAL_EDITOR_TEXTURE_PARAM_CONTRAST) return "Contrast";
-    if (kind == MATERIAL_EDITOR_TEXTURE_PARAM_FLOW) return "Flow";
-    if (kind == MATERIAL_EDITOR_TEXTURE_PARAM_COLOR_DEPTH) return "Color";
-    if (kind == MATERIAL_EDITOR_TEXTURE_PARAM_SURFACE_DAMAGE) return "Damage";
-    return "";
+static RuntimeMaterialTextureLayerKind material_editor_active_layer_kind_for_labels(
+    const SceneObject* obj) {
+    RuntimeMaterialTextureLayer layer;
+    int texture_id = 0;
+    if (!obj) return RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE;
+    if (material_editor_use_object_layer_controls(obj) && material_editor_get_active_layer(obj, NULL, &layer, NULL)) return layer.kind;
+    texture_id = material_editor_texture_kind_for_controls(obj);
+    if (texture_id == RUNTIME_MATERIAL_TEXTURE_3D_RUST) return RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_RUST;
+    if (texture_id == RUNTIME_MATERIAL_TEXTURE_3D_FOG) return RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_FOG;
+    return RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE;
+}
+
+static const char* material_editor_label_for_param(const SceneObject* obj,
+                                                   MaterialEditorTextureParamKind kind) {
+    static const char* generic_labels[] = {"Coverage", "Grain", "Edge", "Contrast", "Flow", "Color", "Damage"};
+    static const char* fog_labels[] = {"Density", "Drift", "Soft", "Fade", "Flow", "Tint", "Haze"};
+    static const char* grime_labels[] = {"Cover", "Streak", "Edge", "Dark", "Run", "Tint", "Dirt"};
+    static const char* oil_labels[] = {"Film", "Gloss", "Edge", "Sheen", "Smear", "Tint", "Break"};
+    RuntimeMaterialTextureLayerKind layer_kind = material_editor_active_layer_kind_for_labels(obj);
+    int slot = material_editor_texture_param_slot(kind);
+    if (slot < 0) return "";
+    if (layer_kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_FOG) return fog_labels[slot];
+    if (layer_kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME) return grime_labels[slot];
+    if (layer_kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL) return oil_labels[slot];
+    return generic_labels[slot];
 }
 
 static double material_editor_value_for_param_slider(const SceneObject* obj,
@@ -618,20 +955,13 @@ static double material_editor_value_for_param_slider(const SceneObject* obj,
     return 0.0;
 }
 
-static void material_editor_format_param_value(const SceneObject* obj,
-                                               MaterialEditorTextureParamKind kind,
-                                               char* out,
-                                               size_t out_size) {
-    if (!out || out_size == 0) return;
-    snprintf(out, out_size, "%.2f", material_editor_value_for_param_slider(obj, kind));
-}
-
 static void material_editor_format_slider_value(const SceneObject* obj,
                                                 MaterialEditorSliderKind kind,
                                                 char* out,
                                                 size_t out_size) {
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
     SceneEditorMaterialFacePlacement placement;
+    RuntimeMaterialTextureLayer layer;
     if (!out || out_size == 0) return;
     if (!obj) {
         snprintf(out, out_size, "--");
@@ -649,6 +979,21 @@ static void material_editor_format_slider_value(const SceneObject* obj,
             snprintf(out, out_size, "%.2f", placement.offsetU);
         } else if (kind == MATERIAL_EDITOR_SLIDER_OFFSET_V) {
             snprintf(out, out_size, "%.2f", placement.offsetV);
+        } else {
+            snprintf(out, out_size, "--");
+        }
+        return;
+    }
+    if (material_editor_use_object_layer_controls(obj) &&
+        material_editor_get_active_layer(obj, NULL, &layer, NULL)) {
+        if (kind == MATERIAL_EDITOR_SLIDER_STRENGTH) {
+            snprintf(out, out_size, "%.2f", layer.placement.strength);
+        } else if (kind == MATERIAL_EDITOR_SLIDER_SCALE) {
+            snprintf(out, out_size, "%.2f", layer.placement.scale);
+        } else if (kind == MATERIAL_EDITOR_SLIDER_OFFSET_U) {
+            snprintf(out, out_size, "%.2f", layer.placement.offsetU);
+        } else if (kind == MATERIAL_EDITOR_SLIDER_OFFSET_V) {
+            snprintf(out, out_size, "%.2f", layer.placement.offsetV);
         } else {
             snprintf(out, out_size, "--");
         }
@@ -675,30 +1020,52 @@ static void material_editor_draw_slider(SDL_Renderer* renderer,
     double normalized = material_editor_value_for_slider(obj, kind);
     SDL_Rect label_rect = {bounds.x, bounds.y, bounds.w / 2, 14};
     SDL_Rect value_rect = {bounds.x + bounds.w / 2, bounds.y, bounds.w / 2, 14};
-    SDL_Rect track = {bounds.x + 2, bounds.y + 16, bounds.w - 4, MATERIAL_EDITOR_SLIDER_TRACK_HEIGHT};
-    SDL_Rect knob = {0, 0, MATERIAL_EDITOR_SLIDER_KNOB_WIDTH, track.h + 7};
+    SDL_Rect track_bg = {bounds.x + 1, bounds.y + 18, bounds.w - 2, MATERIAL_EDITOR_SLIDER_TRACK_HEIGHT};
+    SDL_Rect track_fill = track_bg;
+    SDL_Rect knob = {0, 0, MATERIAL_EDITOR_SLIDER_KNOB_WIDTH, track_bg.h + 9};
     char value_text[32];
     int slot = (int)kind - 1;
     if (!renderer || slot < 0 || slot >= 4) return;
     s_slider_sections[slot] = bounds;
-    s_slider_tracks[slot] = track;
+    s_slider_tracks[slot] = track_bg;
     material_editor_format_slider_value(obj, kind, value_text, sizeof(value_text));
     RenderLabelTextLeft(renderer, label_rect, material_editor_label_for_slider(kind), palette.text_primary);
     RenderLabelTextLeft(renderer, value_rect, value_text, palette.text_muted);
     SDL_SetRenderDrawColor(renderer,
+                           palette.panel_fill.r,
+                           palette.panel_fill.g,
+                           palette.panel_fill.b,
+                           255);
+    SDL_RenderFillRect(renderer, &track_bg);
+    SDL_SetRenderDrawColor(renderer,
                            palette.panel_border.r,
                            palette.panel_border.g,
                            palette.panel_border.b,
-                           palette.panel_border.a);
-    SDL_RenderFillRect(renderer, &track);
-    knob.x = track.x + (int)lround(normalized * (double)(track.w - MATERIAL_EDITOR_SLIDER_KNOB_WIDTH));
-    knob.y = track.y - 3;
+                           255);
+    SDL_RenderDrawRect(renderer, &track_bg);
+    track_fill.w = (int)lround(normalized * (double)track_bg.w);
+    if (track_fill.w < 0) track_fill.w = 0;
+    if (track_fill.w > track_bg.w) track_fill.w = track_bg.w;
+    SDL_SetRenderDrawColor(renderer,
+                           palette.accent_primary.r,
+                           palette.accent_primary.g,
+                           palette.accent_primary.b,
+                           190);
+    SDL_RenderFillRect(renderer, &track_fill);
+    knob.x = track_bg.x + (int)lround(normalized * (double)(track_bg.w - MATERIAL_EDITOR_SLIDER_KNOB_WIDTH));
+    knob.y = track_bg.y - 4;
     SDL_SetRenderDrawColor(renderer,
                            palette.accent_primary.r,
                            palette.accent_primary.g,
                            palette.accent_primary.b,
                            255);
     SDL_RenderFillRect(renderer, &knob);
+    SDL_SetRenderDrawColor(renderer,
+                           palette.text_primary.r,
+                           palette.text_primary.g,
+                           palette.text_primary.b,
+                           210);
+    SDL_RenderDrawRect(renderer, &knob);
 }
 
 static void material_editor_draw_param_slider(SDL_Renderer* renderer,
@@ -707,32 +1074,14 @@ static void material_editor_draw_param_slider(SDL_Renderer* renderer,
                                               const SceneObject* obj,
                                               RayTracingThemePalette palette) {
     double normalized = material_editor_value_for_param_slider(obj, kind);
-    SDL_Rect label_rect = {bounds.x, bounds.y, bounds.w / 2, 13};
-    SDL_Rect value_rect = {bounds.x + bounds.w / 2, bounds.y, bounds.w / 2, 13};
-    SDL_Rect track = {bounds.x + 2, bounds.y + 16, bounds.w - 4, MATERIAL_EDITOR_SLIDER_TRACK_HEIGHT};
-    SDL_Rect knob = {0, 0, MATERIAL_EDITOR_SLIDER_KNOB_WIDTH, track.h + 6};
-    char value_text[32];
     int slot = material_editor_texture_param_slot(kind);
     if (!renderer || slot < 0) return;
     s_param_sections[slot] = bounds;
-    s_param_tracks[slot] = track;
-    material_editor_format_param_value(obj, kind, value_text, sizeof(value_text));
-    RenderLabelTextLeft(renderer, label_rect, material_editor_label_for_param(kind), palette.text_primary);
-    RenderLabelTextLeft(renderer, value_rect, value_text, palette.text_muted);
-    SDL_SetRenderDrawColor(renderer,
-                           palette.panel_border.r,
-                           palette.panel_border.g,
-                           palette.panel_border.b,
-                           palette.panel_border.a);
-    SDL_RenderFillRect(renderer, &track);
-    knob.x = track.x + (int)lround(normalized * (double)(track.w - MATERIAL_EDITOR_SLIDER_KNOB_WIDTH));
-    knob.y = track.y - 3;
-    SDL_SetRenderDrawColor(renderer,
-                           palette.accent_primary.r,
-                           palette.accent_primary.g,
-                           palette.accent_primary.b,
-                           255);
-    SDL_RenderFillRect(renderer, &knob);
+    MaterialEditorKnobDraw(renderer,
+                           bounds,
+                           material_editor_label_for_param(obj, kind),
+                           normalized,
+                           palette);
 }
 
 void InitializeMaterialEditor(void) {
@@ -743,6 +1092,8 @@ void InitializeMaterialEditor(void) {
     s_material_editor_active_slider = MATERIAL_EDITOR_SLIDER_NONE;
     s_material_editor_active_param_slider = MATERIAL_EDITOR_TEXTURE_PARAM_NONE;
     s_group_scroll_offset = 0;
+    s_layer_scroll_offset = 0;
+    MaterialEditorLayerModelReset();
     MaterialEditorClearTriangleSelection();
 }
 
@@ -798,8 +1149,10 @@ int MaterialEditorRenderPaneControls(SDL_Renderer* renderer,
     memset(s_slider_sections, 0, sizeof(s_slider_sections));
     memset(s_slider_tracks, 0, sizeof(s_slider_tracks));
     memset(s_param_sections, 0, sizeof(s_param_sections));
-    memset(s_param_tracks, 0, sizeof(s_param_tracks));
     memset(s_pattern_rects, 0, sizeof(s_pattern_rects));
+    memset(s_layer_kind_rects, 0, sizeof(s_layer_kind_rects));
+    memset(s_layer_kind_rect_kinds, 0, sizeof(s_layer_kind_rect_kinds));
+    material_editor_reset_layer_list_layout();
     s_texture_none_rect = (SDL_Rect){0, 0, 0, 0};
     s_texture_rust_rect = (SDL_Rect){0, 0, 0, 0};
     s_texture_fog_rect = (SDL_Rect){0, 0, 0, 0};
@@ -819,147 +1172,119 @@ int MaterialEditorRenderPaneControls(SDL_Renderer* renderer,
     selected_faces = MaterialEditorSelectedFaceGroupCount();
     focused_faces = MaterialEditorFocusedFaceGroupCount();
     if (s_material_editor_active_face_group_index >= 0) {
-        bool has_override =
-            SceneEditorMaterialFacePlacementHasOverride(focused_index,
-                                                        s_material_editor_active_face_group_index);
-        snprintf(edit_text,
-                 sizeof(edit_text),
-                 "Face #%d %s",
-                 s_material_editor_active_face_group_index,
-                 has_override ? "override" : "default");
+        bool has_override = SceneEditorMaterialFacePlacementHasOverride(focused_index, s_material_editor_active_face_group_index);
+        snprintf(edit_text, sizeof(edit_text), "Face #%d %s", s_material_editor_active_face_group_index, has_override ? "override" : "default");
     } else {
         snprintf(edit_text, sizeof(edit_text), "Object defaults");
     }
-    snprintf(line,
-             sizeof(line),
-             "Obj #%d  mat=%d tex=%d",
-             focused_index,
-             obj->material_id,
-             material_editor_texture_kind_for_controls(obj));
-    RenderLabelTextLeft(renderer,
-                        (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, 16},
-                        line,
-                        palette.text_primary);
+    snprintf(line, sizeof(line), "Material Obj #%d  mat=%d", focused_index, obj->material_id);
+    RenderLabelTextLeft(renderer, (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, 16}, line, palette.text_primary);
     cursor_y += 20;
 
-    snprintf(line,
-             sizeof(line),
-             "Faces %d/%d selected  Edit %s",
-             selected_faces,
-             focused_faces,
-             edit_text);
-    RenderLabelTextLeft(renderer,
-                        (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, 16},
-                        line,
-                        palette.text_muted);
+    snprintf(line, sizeof(line), "Faces %d/%d selected | %s", selected_faces, focused_faces, edit_text);
+    RenderLabelTextLeft(renderer, (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, 16}, line, palette.text_muted);
     cursor_y += 22;
 
-    third_w = (content_bounds.w - MATERIAL_EDITOR_BUTTON_GAP * 2) / 3;
-    if (cursor_y + MATERIAL_EDITOR_BUTTON_HEIGHT <= bottom_y) {
-        s_texture_none_rect = (SDL_Rect){content_bounds.x, cursor_y, third_w, MATERIAL_EDITOR_BUTTON_HEIGHT};
-        s_texture_rust_rect = (SDL_Rect){s_texture_none_rect.x + third_w + MATERIAL_EDITOR_BUTTON_GAP,
-                                         cursor_y,
-                                         third_w,
-                                         MATERIAL_EDITOR_BUTTON_HEIGHT};
-        s_texture_fog_rect = (SDL_Rect){s_texture_rust_rect.x + third_w + MATERIAL_EDITOR_BUTTON_GAP,
-                                        cursor_y,
-                                        content_bounds.w - third_w * 2 - MATERIAL_EDITOR_BUTTON_GAP * 2,
-                                        MATERIAL_EDITOR_BUTTON_HEIGHT};
-        int active_texture = material_editor_texture_kind_for_controls(obj);
-        material_editor_draw_button(renderer, s_texture_none_rect, "None", active_texture == 0, palette);
-        material_editor_draw_button(renderer, s_texture_rust_rect, "Rust", active_texture == 1, palette);
-        material_editor_draw_button(renderer, s_texture_fog_rect, "Fog", active_texture == 2, palette);
-        cursor_y += MATERIAL_EDITOR_BUTTON_HEIGHT + MATERIAL_EDITOR_BUTTON_GAP;
+    cursor_y = material_editor_draw_layer_list(renderer, content_bounds, cursor_y, bottom_y, obj, palette);
+
+    if (material_editor_use_object_layer_controls(obj)) {
+        cursor_y = material_editor_draw_layer_kind_buttons(renderer, content_bounds, cursor_y, bottom_y, obj, palette);
+    } else {
+        third_w = (content_bounds.w - MATERIAL_EDITOR_BUTTON_GAP * 2) / 3;
+        if (cursor_y + 15 + MATERIAL_EDITOR_BUTTON_HEIGHT <= bottom_y) {
+            MATERIAL_EDITOR_SECTION_LABEL(renderer, content_bounds, cursor_y, "Texture", palette);
+            cursor_y += 15;
+            s_texture_none_rect = (SDL_Rect){content_bounds.x, cursor_y, third_w, MATERIAL_EDITOR_BUTTON_HEIGHT};
+            s_texture_rust_rect = (SDL_Rect){s_texture_none_rect.x + third_w + MATERIAL_EDITOR_BUTTON_GAP, cursor_y, third_w, MATERIAL_EDITOR_BUTTON_HEIGHT};
+            s_texture_fog_rect = (SDL_Rect){s_texture_rust_rect.x + third_w + MATERIAL_EDITOR_BUTTON_GAP, cursor_y, content_bounds.w - third_w * 2 - MATERIAL_EDITOR_BUTTON_GAP * 2, MATERIAL_EDITOR_BUTTON_HEIGHT};
+            int active_texture = material_editor_texture_kind_for_controls(obj);
+            material_editor_draw_button(renderer, s_texture_none_rect, "None", active_texture == 0, palette);
+            material_editor_draw_button(renderer, s_texture_rust_rect, "Rust", active_texture == 1, palette);
+            material_editor_draw_button(renderer, s_texture_fog_rect, "Fog", active_texture == 2, palette);
+            cursor_y += MATERIAL_EDITOR_BUTTON_HEIGHT + MATERIAL_EDITOR_BUTTON_GAP;
+        }
     }
 
     {
         int grid_y = cursor_y;
         int drawn_rows = 0;
-        int col_w = (content_bounds.w - MATERIAL_EDITOR_BUTTON_GAP) / 2;
+        int col_w = (content_bounds.w - MATERIAL_EDITOR_CONTROL_GAP) / 2;
+        if (material_editor_has_room_for_optional_control(
+                cursor_y,
+                15 + MATERIAL_EDITOR_SLIDER_HEIGHT * 2 + MATERIAL_EDITOR_CONTROL_GAP,
+                bottom_y)) {
+            MATERIAL_EDITOR_SECTION_LABEL(renderer, content_bounds, cursor_y, "Placement", palette);
+            cursor_y += 15;
+            grid_y = cursor_y;
+        }
         for (int i = 0; i < 4; ++i) {
             MaterialEditorSliderKind kind = (MaterialEditorSliderKind)(i + 1);
             int col = i % 2;
             int row = i / 2;
-            int x = content_bounds.x + col * (col_w + MATERIAL_EDITOR_BUTTON_GAP);
-            int y = grid_y + row * (MATERIAL_EDITOR_SLIDER_HEIGHT + 5);
+            int x = content_bounds.x + col * (col_w + MATERIAL_EDITOR_CONTROL_GAP);
+            int y = grid_y + row * (MATERIAL_EDITOR_SLIDER_HEIGHT + MATERIAL_EDITOR_CONTROL_GAP);
             int w = (col == 1) ? content_bounds.x + content_bounds.w - x : col_w;
             if (y + MATERIAL_EDITOR_SLIDER_HEIGHT > bottom_y) break;
-            material_editor_draw_slider(renderer,
-                                        (SDL_Rect){x, y, w, MATERIAL_EDITOR_SLIDER_HEIGHT},
-                                        kind,
-                                        obj,
-                                        palette);
+            material_editor_draw_slider(renderer, (SDL_Rect){x, y, w, MATERIAL_EDITOR_SLIDER_HEIGHT}, kind, obj, palette);
             if (drawn_rows < row + 1) drawn_rows = row + 1;
         }
-        cursor_y += drawn_rows * (MATERIAL_EDITOR_SLIDER_HEIGHT + 5);
+        cursor_y += drawn_rows * (MATERIAL_EDITOR_SLIDER_HEIGHT + MATERIAL_EDITOR_CONTROL_GAP);
     }
 
-    if (material_editor_texture_kind_for_controls(obj) > RUNTIME_MATERIAL_TEXTURE_3D_NONE) {
+    if (material_editor_use_object_layer_controls(obj) ||
+        material_editor_texture_kind_for_controls(obj) > RUNTIME_MATERIAL_TEXTURE_3D_NONE) {
         RuntimeMaterialTexture3DParams params = material_editor_params_for_controls(obj);
         int pattern_w = (content_bounds.w - MATERIAL_EDITOR_BUTTON_GAP * 3) / 4;
         const char* pattern_labels[MATERIAL_EDITOR_PATTERN_BUTTON_COUNT] = {
             "Default", "Speck", "Patch", "Flow"
         };
-        if (material_editor_has_room_for_optional_control(cursor_y,
-                                                          MATERIAL_EDITOR_BUTTON_HEIGHT,
-                                                          bottom_y)) {
+        if (material_editor_has_room_for_optional_control(cursor_y, 15 + MATERIAL_EDITOR_BUTTON_HEIGHT, bottom_y)) {
+            MATERIAL_EDITOR_SECTION_LABEL(renderer, content_bounds, cursor_y, "Pattern", palette);
+            cursor_y += 15;
             for (int i = 0; i < MATERIAL_EDITOR_PATTERN_BUTTON_COUNT; ++i) {
                 int x = content_bounds.x + i * (pattern_w + MATERIAL_EDITOR_BUTTON_GAP);
                 int w = (i == MATERIAL_EDITOR_PATTERN_BUTTON_COUNT - 1)
                             ? content_bounds.x + content_bounds.w - x
                             : pattern_w;
                 s_pattern_rects[i] = (SDL_Rect){x, cursor_y, w, MATERIAL_EDITOR_BUTTON_HEIGHT};
-                material_editor_draw_button(renderer,
-                                            s_pattern_rects[i],
-                                            pattern_labels[i],
-                                            params.patternMode == i,
-                                            palette);
+                material_editor_draw_button(renderer, s_pattern_rects[i], pattern_labels[i], params.patternMode == i, palette);
             }
             cursor_y += MATERIAL_EDITOR_BUTTON_HEIGHT + MATERIAL_EDITOR_BUTTON_GAP;
         }
         {
             int grid_y = cursor_y;
             int drawn_rows = 0;
-            int col_w = (content_bounds.w - MATERIAL_EDITOR_BUTTON_GAP) / 2;
+            int col_count = 4;
+            int col_w = (content_bounds.w - MATERIAL_EDITOR_CONTROL_GAP * (col_count - 1)) / col_count;
+            if (material_editor_has_room_for_optional_control(cursor_y, 15 + MATERIAL_EDITOR_KNOB_HEIGHT, bottom_y)) {
+                MATERIAL_EDITOR_SECTION_LABEL(renderer, content_bounds, cursor_y, "Parameters", palette);
+                cursor_y += 15;
+                grid_y = cursor_y;
+            }
             for (int i = 0; i < MATERIAL_EDITOR_PARAM_SLIDER_COUNT; ++i) {
                 MaterialEditorTextureParamKind kind = (MaterialEditorTextureParamKind)(i + 1);
-                int col = i % 2;
-                int row = i / 2;
-                int x = content_bounds.x + col * (col_w + MATERIAL_EDITOR_BUTTON_GAP);
-                int y = grid_y + row * (MATERIAL_EDITOR_PARAM_SLIDER_HEIGHT + 4);
-                int w = (col == 1) ? content_bounds.x + content_bounds.w - x : col_w;
-                if (!material_editor_has_room_for_optional_control(y,
-                                                                   MATERIAL_EDITOR_PARAM_SLIDER_HEIGHT,
-                                                                   bottom_y)) {
+                int col = i % col_count;
+                int row = i / col_count;
+                int x = content_bounds.x + col * (col_w + MATERIAL_EDITOR_CONTROL_GAP);
+                int y = grid_y + row * (MATERIAL_EDITOR_KNOB_HEIGHT + MATERIAL_EDITOR_CONTROL_GAP);
+                int w = (col == col_count - 1) ? content_bounds.x + content_bounds.w - x : col_w;
+                if (!material_editor_has_room_for_optional_control(y, MATERIAL_EDITOR_KNOB_HEIGHT, bottom_y)) {
                     break;
                 }
-                material_editor_draw_param_slider(renderer,
-                                                  (SDL_Rect){x, y, w, MATERIAL_EDITOR_PARAM_SLIDER_HEIGHT},
-                                                  kind,
-                                                  obj,
-                                                  palette);
+                material_editor_draw_param_slider(renderer, (SDL_Rect){x, y, w, MATERIAL_EDITOR_KNOB_HEIGHT}, kind, obj, palette);
                 if (drawn_rows < row + 1) drawn_rows = row + 1;
             }
-            cursor_y += drawn_rows * (MATERIAL_EDITOR_PARAM_SLIDER_HEIGHT + 4);
+            cursor_y += drawn_rows * (MATERIAL_EDITOR_KNOB_HEIGHT + MATERIAL_EDITOR_CONTROL_GAP);
         }
     }
 
     if (cursor_y + MATERIAL_EDITOR_BUTTON_HEIGHT <= bottom_y) {
         int reset_w = (s_material_editor_active_face_group_index >= 0 &&
-                       SceneEditorMaterialFacePlacementHasOverride(
-                           focused_index,
-                           s_material_editor_active_face_group_index))
+                       SceneEditorMaterialFacePlacementHasOverride(focused_index, s_material_editor_active_face_group_index))
                           ? (content_bounds.w - MATERIAL_EDITOR_BUTTON_GAP) / 2
                           : 0;
-        s_solid_faces_rect = (SDL_Rect){content_bounds.x,
-                                        cursor_y,
-                                        reset_w > 0 ? reset_w : content_bounds.w,
-                                        MATERIAL_EDITOR_BUTTON_HEIGHT};
-        material_editor_draw_button(renderer,
-                                    s_solid_faces_rect,
-                                    "Solid Faces",
-                                    s_material_editor_solid_faces_enabled,
-                                    palette);
+        s_solid_faces_rect = (SDL_Rect){content_bounds.x, cursor_y, reset_w > 0 ? reset_w : content_bounds.w, MATERIAL_EDITOR_BUTTON_HEIGHT};
+        material_editor_draw_button(renderer, s_solid_faces_rect, "Solid Preview", s_material_editor_solid_faces_enabled, palette);
         if (reset_w > 0) {
             s_reset_face_rect = (SDL_Rect){s_solid_faces_rect.x + s_solid_faces_rect.w +
                                               MATERIAL_EDITOR_BUTTON_GAP,
@@ -1014,6 +1339,39 @@ void HandleMaterialEditorEvents(SDL_Event* event) {
             MaterialEditorCopyActiveFacePlacementToSelected();
             return;
         }
+        for (int i = 0; i < MATERIAL_EDITOR_LAYER_ACTION_COUNT; ++i) {
+            if (material_editor_point_in_rect(mx, my, &s_layer_action_rects[i])) {
+                if (i == 0) {
+                    MaterialEditorAddOverlayLayerToFocused();
+                } else if (i == 1) {
+                    MaterialEditorToggleActiveLayerEnabled();
+                } else if (i == 2) {
+                    MaterialEditorMoveActiveLayer(-1);
+                } else if (i == 3) {
+                    MaterialEditorMoveActiveLayer(1);
+                } else if (i == 4) {
+                    MaterialEditorDeleteActiveLayer();
+                }
+                return;
+            }
+        }
+        for (int i = 0; i < s_layer_row_count; ++i) {
+            if (material_editor_point_in_rect(mx, my, &s_layer_toggle_rects[i])) {
+                MaterialEditorSetActiveLayerIndex(s_layer_row_indices[i]);
+                MaterialEditorToggleActiveLayerEnabled();
+                return;
+            }
+            if (material_editor_point_in_rect(mx, my, &s_layer_row_rects[i])) {
+                MaterialEditorSetActiveLayerIndex(s_layer_row_indices[i]);
+                return;
+            }
+        }
+        for (int i = 0; i < MATERIAL_EDITOR_LAYER_KIND_BUTTON_COUNT; ++i) {
+            if (material_editor_point_in_rect(mx, my, &s_layer_kind_rects[i])) {
+                MaterialEditorApplyLayerKindToFocused(s_layer_kind_rect_kinds[i]);
+                return;
+            }
+        }
         for (int i = 0; i < MATERIAL_EDITOR_PATTERN_BUTTON_COUNT; ++i) {
             if (material_editor_point_in_rect(mx, my, &s_pattern_rects[i])) {
                 MaterialEditorApplyTexturePatternToFocused(i);
@@ -1041,9 +1399,10 @@ void HandleMaterialEditorEvents(SDL_Event* event) {
         for (int i = 0; i < MATERIAL_EDITOR_PARAM_SLIDER_COUNT; ++i) {
             if (material_editor_point_in_rect(mx, my, &s_param_sections[i])) {
                 s_material_editor_active_param_slider = (MaterialEditorTextureParamKind)(i + 1);
-                MaterialEditorApplyTextureParamValueToFocused(
-                    s_material_editor_active_param_slider,
-                    material_editor_slider_value_from_x(&s_param_tracks[i], mx));
+                s_material_editor_param_drag_start_y = my;
+                s_material_editor_param_drag_start_value =
+                    material_editor_value_for_param_slider(material_editor_focused_object(),
+                                                           s_material_editor_active_param_slider);
                 return;
             }
         }
@@ -1063,7 +1422,9 @@ void HandleMaterialEditorEvents(SDL_Event* event) {
         if (slot >= 0 && slot < MATERIAL_EDITOR_PARAM_SLIDER_COUNT) {
             MaterialEditorApplyTextureParamValueToFocused(
                 s_material_editor_active_param_slider,
-                material_editor_slider_value_from_x(&s_param_tracks[slot], event->motion.x));
+                MaterialEditorKnobValueFromDrag(s_material_editor_param_drag_start_value,
+                                                s_material_editor_param_drag_start_y,
+                                                event->motion.y));
         }
     } else if (event->type == SDL_MOUSEBUTTONUP && event->button.button == SDL_BUTTON_LEFT) {
         s_material_editor_active_slider = MATERIAL_EDITOR_SLIDER_NONE;
@@ -1072,7 +1433,10 @@ void HandleMaterialEditorEvents(SDL_Event* event) {
         int mx = 0;
         int my = 0;
         SDL_GetMouseState(&mx, &my);
-        if (material_editor_point_in_rect(mx, my, &s_group_panel_rect) ||
+        if (material_editor_point_in_rect(mx, my, &s_layer_panel_rect) ||
+            material_editor_point_in_rect(mx, my, &s_layer_list_rect)) {
+            material_editor_scroll_layer_list(event->wheel.y);
+        } else if (material_editor_point_in_rect(mx, my, &s_group_panel_rect) ||
             material_editor_point_in_rect(mx, my, &s_group_list_rect)) {
             material_editor_scroll_group_list(event->wheel.y);
         }
@@ -1113,6 +1477,28 @@ MaterialEditorHitRegion MaterialEditorHitRegionAtPoint(int mx, int my) {
         material_editor_point_in_rect(mx, my, &s_clear_groups_rect)) {
         return MATERIAL_EDITOR_HIT_CONTROLS;
     }
+    for (int i = 0; i < MATERIAL_EDITOR_LAYER_ACTION_COUNT; ++i) {
+        if (material_editor_point_in_rect(mx, my, &s_layer_action_rects[i])) {
+            return MATERIAL_EDITOR_HIT_CONTROLS;
+        }
+    }
+    for (int i = 0; i < s_layer_row_count; ++i) {
+        if (material_editor_point_in_rect(mx, my, &s_layer_toggle_rects[i])) {
+            return MATERIAL_EDITOR_HIT_CONTROLS;
+        }
+        if (material_editor_point_in_rect(mx, my, &s_layer_row_rects[i])) {
+            return MATERIAL_EDITOR_HIT_LIST_PANEL;
+        }
+    }
+    if (material_editor_point_in_rect(mx, my, &s_layer_panel_rect) ||
+        material_editor_point_in_rect(mx, my, &s_layer_list_rect)) {
+        return MATERIAL_EDITOR_HIT_LIST_PANEL;
+    }
+    for (int i = 0; i < MATERIAL_EDITOR_LAYER_KIND_BUTTON_COUNT; ++i) {
+        if (material_editor_point_in_rect(mx, my, &s_layer_kind_rects[i])) {
+            return MATERIAL_EDITOR_HIT_CONTROLS;
+        }
+    }
     for (int i = 0; i < MATERIAL_EDITOR_PATTERN_BUTTON_COUNT; ++i) {
         if (material_editor_point_in_rect(mx, my, &s_pattern_rects[i])) {
             return MATERIAL_EDITOR_HIT_CONTROLS;
@@ -1151,6 +1537,8 @@ void MaterialEditorSetFocusedObjectIndex(int index) {
         if (s_material_editor_focused_object_index != index) {
             MaterialEditorClearTriangleSelection();
             s_group_scroll_offset = 0;
+            s_layer_scroll_offset = 0;
+            MaterialEditorLayerModelReset();
         }
         s_material_editor_focused_object_index = index;
         ObjectEditorSelectionTrackerSetCurrent(index, sceneSettings.objectCount);
@@ -1200,6 +1588,100 @@ bool MaterialEditorSetFaceGroupSelectionByIndex(int face_group_index) {
     int index = material_editor_find_face_group_info(groups, group_count, face_group_index);
     if (index < 0) return false;
     return MaterialEditorSetFaceGroupSelection(&groups[index].representative);
+}
+
+int MaterialEditorGetActiveLayerIndex(void) {
+    SceneObject* obj = material_editor_focused_object();
+    return MaterialEditorLayerModelGetActiveIndex(obj, MaterialEditorResolveFocusedObjectIndex());
+}
+
+bool MaterialEditorSetActiveLayerIndex(int layer_index) {
+    SceneObject* obj = material_editor_focused_object();
+    int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
+    if (!obj || focused_object_index < 0) return false;
+    if (!MaterialEditorLayerModelEnsureEditableStack(obj, focused_object_index, NULL)) {
+        return false;
+    }
+    if (s_material_editor_active_face_group_index >= 0) {
+        MaterialEditorClearTriangleSelection();
+    }
+    return MaterialEditorLayerModelSetActiveIndex(obj, focused_object_index, layer_index);
+}
+
+int MaterialEditorFocusedLayerCount(void) {
+    SceneObject* obj = material_editor_focused_object();
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    if (!MaterialEditorLayerModelGetEffectiveStack(obj,
+                                                   MaterialEditorResolveFocusedObjectIndex(),
+                                                   &stack)) {
+        return 0;
+    }
+    return stack.layerCount;
+}
+
+bool MaterialEditorAddOverlayLayerToFocused(void) {
+    SceneObject* obj = material_editor_focused_object();
+    int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
+    if (!obj || focused_object_index < 0) return false;
+    if (s_material_editor_active_face_group_index >= 0) {
+        MaterialEditorClearTriangleSelection();
+    }
+    if (!MaterialEditorLayerModelAddOverlay(obj, focused_object_index)) return false;
+    material_editor_apply_object_scope_to_all_faces(focused_object_index);
+    MarkObjectDirty(obj);
+    return true;
+}
+
+bool MaterialEditorDeleteActiveLayer(void) {
+    SceneObject* obj = material_editor_focused_object();
+    int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
+    if (!obj || focused_object_index < 0) return false;
+    if (s_material_editor_active_face_group_index >= 0) {
+        MaterialEditorClearTriangleSelection();
+    }
+    if (!MaterialEditorLayerModelDeleteActiveLayer(obj, focused_object_index)) return false;
+    material_editor_apply_object_scope_to_all_faces(focused_object_index);
+    MarkObjectDirty(obj);
+    return true;
+}
+
+bool MaterialEditorMoveActiveLayer(int direction) {
+    SceneObject* obj = material_editor_focused_object();
+    int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
+    if (!obj || focused_object_index < 0) return false;
+    if (s_material_editor_active_face_group_index >= 0) {
+        MaterialEditorClearTriangleSelection();
+    }
+    if (!MaterialEditorLayerModelMoveActiveLayer(obj, focused_object_index, direction)) return false;
+    material_editor_apply_object_scope_to_all_faces(focused_object_index);
+    MarkObjectDirty(obj);
+    return true;
+}
+
+bool MaterialEditorToggleActiveLayerEnabled(void) {
+    SceneObject* obj = material_editor_focused_object();
+    int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
+    if (!obj || focused_object_index < 0) return false;
+    if (s_material_editor_active_face_group_index >= 0) {
+        MaterialEditorClearTriangleSelection();
+    }
+    if (!MaterialEditorLayerModelToggleActiveLayerEnabled(obj, focused_object_index)) return false;
+    material_editor_apply_object_scope_to_all_faces(focused_object_index);
+    MarkObjectDirty(obj);
+    return true;
+}
+
+bool MaterialEditorApplyLayerKindToFocused(RuntimeMaterialTextureLayerKind kind) {
+    SceneObject* obj = material_editor_focused_object();
+    int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
+    if (!obj || focused_object_index < 0) return false;
+    if (s_material_editor_active_face_group_index >= 0) {
+        MaterialEditorClearTriangleSelection();
+    }
+    if (!MaterialEditorLayerModelApplyLayerKind(obj, focused_object_index, kind)) return false;
+    material_editor_apply_object_scope_to_all_faces(focused_object_index);
+    MarkObjectDirty(obj);
+    return true;
 }
 
 bool MaterialEditorGetSelectedTriangle(int index, SceneEditorMaterialPreviewTriangleAddress* out_address) {
@@ -1317,7 +1799,17 @@ bool MaterialEditorApplyTextureKindToFocused(int texture_id) {
         MarkObjectDirty(obj);
         return true;
     }
+    if (material_editor_use_object_layer_controls(obj)) {
+        if (!MaterialEditorLayerModelApplyLegacyTextureKind(obj, focused_object_index, texture_id)) {
+            return false;
+        }
+        obj->textureId = texture_id;
+        material_editor_apply_object_scope_to_all_faces(focused_object_index);
+        MarkObjectDirty(obj);
+        return true;
+    }
     obj->textureId = texture_id;
+    material_editor_apply_object_scope_to_all_faces(focused_object_index);
     MarkObjectDirty(obj);
     return true;
 }
@@ -1352,6 +1844,17 @@ bool MaterialEditorApplySliderValueToFocused(MaterialEditorSliderKind kind, doub
         MarkObjectDirty(obj);
         return true;
     }
+    if (material_editor_use_object_layer_controls(obj)) {
+        if (!MaterialEditorLayerModelApplyPlacementValue(obj,
+                                                         focused_object_index,
+                                                         (int)kind,
+                                                         value)) {
+            return false;
+        }
+        material_editor_apply_object_scope_to_all_faces(focused_object_index);
+        MarkObjectDirty(obj);
+        return true;
+    }
     if (kind == MATERIAL_EDITOR_SLIDER_STRENGTH) {
         obj->textureStrength = value;
     } else if (kind == MATERIAL_EDITOR_SLIDER_SCALE) {
@@ -1364,6 +1867,7 @@ bool MaterialEditorApplySliderValueToFocused(MaterialEditorSliderKind kind, doub
         return false;
     }
     MarkObjectDirty(obj);
+    material_editor_apply_object_scope_to_all_faces(focused_object_index);
     return true;
 }
 
@@ -1383,9 +1887,18 @@ bool MaterialEditorApplyTexturePatternToFocused(int pattern_mode) {
         MarkObjectDirty(obj);
         return true;
     }
+    if (material_editor_use_object_layer_controls(obj)) {
+        if (!MaterialEditorLayerModelApplyPatternMode(obj, focused_object_index, pattern_mode)) {
+            return false;
+        }
+        material_editor_apply_object_scope_to_all_faces(focused_object_index);
+        MarkObjectDirty(obj);
+        return true;
+    }
     params = RuntimeMaterialTexture3DParamsFromObject(obj);
     params.patternMode = pattern_mode;
     material_editor_assign_object_params(obj, params);
+    material_editor_apply_object_scope_to_all_faces(focused_object_index);
     MarkObjectDirty(obj);
     return true;
 }
@@ -1409,6 +1922,17 @@ bool MaterialEditorApplyTextureParamValueToFocused(MaterialEditorTextureParamKin
         MarkObjectDirty(obj);
         return true;
     }
+    if (material_editor_use_object_layer_controls(obj)) {
+        if (!MaterialEditorLayerModelApplyParamValue(obj,
+                                                     focused_object_index,
+                                                     (int)kind,
+                                                     value)) {
+            return false;
+        }
+        material_editor_apply_object_scope_to_all_faces(focused_object_index);
+        MarkObjectDirty(obj);
+        return true;
+    }
     params = RuntimeMaterialTexture3DParamsFromObject(obj);
     if (kind == MATERIAL_EDITOR_TEXTURE_PARAM_COVERAGE) {
         params.coverage = value;
@@ -1428,6 +1952,7 @@ bool MaterialEditorApplyTextureParamValueToFocused(MaterialEditorTextureParamKin
         return false;
     }
     material_editor_assign_object_params(obj, params);
+    material_editor_apply_object_scope_to_all_faces(focused_object_index);
     MarkObjectDirty(obj);
     return true;
 }

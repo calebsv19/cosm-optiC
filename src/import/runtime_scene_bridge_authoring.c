@@ -4,8 +4,11 @@
 #include "config/config_manager.h"
 #include "config/config_scene_path_io.h"
 #include "editor/scene_editor_material_face_placement.h"
+#include "editor/scene_editor_material_stack.h"
 #include "import/runtime_scene_bridge_json_utils.h"
 #include "material/material_manager.h"
+#include "render/runtime_material_authored_texture_3d.h"
+#include "render/runtime_material_texture_stack_3d.h"
 
 #include <json-c/json.h>
 #include <math.h>
@@ -93,6 +96,16 @@ static void runtime_scene_bridge_apply_object_material_preset(SceneObject *out_o
     out_object->color = runtime_scene_bridge_color_from_material_preset(material_id);
 }
 
+static bool runtime_scene_bridge_parse_double_field_any(json_object *obj,
+                                                        const char *key_a,
+                                                        const char *key_b,
+                                                        double *out_value) {
+    if (!obj || !out_value) return false;
+    if (key_a && runtime_scene_bridge_parse_double_field(obj, key_a, out_value)) return true;
+    if (key_b && runtime_scene_bridge_parse_double_field(obj, key_b, out_value)) return true;
+    return false;
+}
+
 static void runtime_scene_bridge_parse_texture_parameters(json_object *owner,
                                                           RuntimeMaterialTexture3DParams *params) {
     json_object *parameters = NULL;
@@ -107,19 +120,153 @@ static void runtime_scene_bridge_parse_texture_parameters(json_object *owner,
          json_object_is_type(field, json_type_double))) {
         params->patternMode = json_object_get_int(field);
     }
+    if (json_object_object_get_ex(parameters, "patternMode", &field) &&
+        (json_object_is_type(field, json_type_int) ||
+         json_object_is_type(field, json_type_double))) {
+        params->patternMode = json_object_get_int(field);
+    }
     runtime_scene_bridge_parse_double_field(parameters, "coverage", &params->coverage);
     runtime_scene_bridge_parse_double_field(parameters, "grain", &params->grain);
-    runtime_scene_bridge_parse_double_field(parameters, "edge_softness", &params->edgeSoftness);
+    runtime_scene_bridge_parse_double_field_any(parameters,
+                                                "edge_softness",
+                                                "edgeSoftness",
+                                                &params->edgeSoftness);
     runtime_scene_bridge_parse_double_field(parameters, "contrast", &params->contrast);
     runtime_scene_bridge_parse_double_field(parameters, "flow", &params->flow);
-    runtime_scene_bridge_parse_double_field(parameters, "color_depth", &params->colorDepth);
-    runtime_scene_bridge_parse_double_field(parameters, "surface_damage", &params->surfaceDamage);
+    runtime_scene_bridge_parse_double_field_any(parameters,
+                                                "color_depth",
+                                                "colorDepth",
+                                                &params->colorDepth);
+    runtime_scene_bridge_parse_double_field_any(parameters,
+                                                "surface_damage",
+                                                "surfaceDamage",
+                                                &params->surfaceDamage);
     if (json_object_object_get_ex(parameters, "seed", &field) &&
         (json_object_is_type(field, json_type_int) ||
          json_object_is_type(field, json_type_double))) {
         params->seed = json_object_get_int(field);
     }
     *params = RuntimeMaterialTexture3DNormalizeParams(*params);
+}
+
+static void runtime_scene_bridge_parse_texture_placement(
+    json_object *owner,
+    RuntimeMaterialTexture3DPlacement *placement) {
+    json_object *placement_obj = NULL;
+    if (!owner || !placement) return;
+    if (json_object_object_get_ex(owner, "placement", &placement_obj) &&
+        json_object_is_type(placement_obj, json_type_object)) {
+        runtime_scene_bridge_parse_double_field_any(placement_obj,
+                                                    "offset_u",
+                                                    "offsetU",
+                                                    &placement->offsetU);
+        runtime_scene_bridge_parse_double_field_any(placement_obj,
+                                                    "offset_v",
+                                                    "offsetV",
+                                                    &placement->offsetV);
+        runtime_scene_bridge_parse_double_field(placement_obj, "scale", &placement->scale);
+        runtime_scene_bridge_parse_double_field(placement_obj, "strength", &placement->strength);
+        runtime_scene_bridge_parse_double_field(placement_obj, "rotation", &placement->rotation);
+    }
+    runtime_scene_bridge_parse_double_field_any(owner, "offset_u", "offsetU", &placement->offsetU);
+    runtime_scene_bridge_parse_double_field_any(owner, "offset_v", "offsetV", &placement->offsetV);
+    runtime_scene_bridge_parse_double_field(owner, "scale", &placement->scale);
+    runtime_scene_bridge_parse_double_field(owner, "strength", &placement->strength);
+    runtime_scene_bridge_parse_double_field(owner, "rotation", &placement->rotation);
+}
+
+static bool apply_ray_authoring_object_material_stack(json_object *entry,
+                                                      int scene_index) {
+    json_object *stack_obj = NULL;
+    json_object *layers = NULL;
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    size_t count = 0u;
+
+    if (!entry || scene_index < 0 || scene_index >= sceneSettings.objectCount) return false;
+    if (!json_object_object_get_ex(entry, "material_texture_stack", &stack_obj)) {
+        json_object_object_get_ex(entry, "materialTextureStack", &stack_obj);
+    }
+    if (!stack_obj ||
+        !json_object_is_type(stack_obj, json_type_object) ||
+        !json_object_object_get_ex(stack_obj, "layers", &layers) ||
+        !json_object_is_type(layers, json_type_array)) {
+        SceneEditorMaterialStackClearObjectStack(scene_index);
+        return false;
+    }
+
+    count = json_object_array_length(layers);
+    for (size_t i = 0u;
+         i < count && stack.layerCount < RUNTIME_MATERIAL_TEXTURE_STACK_MAX_LAYERS;
+         ++i) {
+        json_object *layer_obj = json_object_array_get_idx(layers, i);
+        json_object *value = NULL;
+        const char *kind_id = NULL;
+        RuntimeMaterialTextureLayerKind kind = RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE;
+        RuntimeMaterialTextureLayer layer;
+
+        if (!layer_obj || !json_object_is_type(layer_obj, json_type_object)) continue;
+        if (json_object_object_get_ex(layer_obj, "kind", &value) &&
+            json_object_is_type(value, json_type_string)) {
+            kind_id = json_object_get_string(value);
+        }
+        kind = RuntimeMaterialTextureLayerKindFromStableId(kind_id);
+        if (kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE) continue;
+
+        layer = RuntimeMaterialTextureLayerKindIsBase(kind)
+                    ? RuntimeMaterialTextureLayerMakeBase(kind)
+                    : RuntimeMaterialTextureLayerMakeOverlay(kind);
+        if (json_object_object_get_ex(layer_obj, "id", &value) &&
+            json_object_is_type(value, json_type_string)) {
+            snprintf(layer.layerId, sizeof(layer.layerId), "%s", json_object_get_string(value));
+        }
+        if (json_object_object_get_ex(layer_obj, "name", &value) &&
+            json_object_is_type(value, json_type_string)) {
+            snprintf(layer.displayName,
+                     sizeof(layer.displayName),
+                     "%s",
+                     json_object_get_string(value));
+        }
+        if (json_object_object_get_ex(layer_obj, "blend", &value) &&
+            json_object_is_type(value, json_type_string)) {
+            layer.blendMode =
+                RuntimeMaterialTextureLayerBlendModeFromStableId(json_object_get_string(value));
+        }
+        if (json_object_object_get_ex(layer_obj, "enabled", &value) &&
+            json_object_is_type(value, json_type_boolean)) {
+            layer.enabled = json_object_get_boolean(value) != 0;
+        }
+        runtime_scene_bridge_parse_double_field(layer_obj, "opacity", &layer.opacity);
+        runtime_scene_bridge_parse_texture_placement(layer_obj, &layer.placement);
+        runtime_scene_bridge_parse_texture_parameters(layer_obj, &layer.params);
+        layer.placement.params = layer.params;
+        runtime_scene_bridge_parse_double_field_any(layer_obj,
+                                                    "roughness_influence",
+                                                    "roughnessInfluence",
+                                                    &layer.roughnessInfluence);
+        runtime_scene_bridge_parse_double_field_any(layer_obj,
+                                                    "reflectivity_influence",
+                                                    "reflectivityInfluence",
+                                                    &layer.reflectivityInfluence);
+        runtime_scene_bridge_parse_double_field_any(layer_obj,
+                                                    "specular_influence",
+                                                    "specularInfluence",
+                                                    &layer.specularInfluence);
+        runtime_scene_bridge_parse_double_field_any(layer_obj,
+                                                    "diffuse_influence",
+                                                    "diffuseInfluence",
+                                                    &layer.diffuseInfluence);
+        runtime_scene_bridge_parse_double_field_any(layer_obj,
+                                                    "transparency_influence",
+                                                    "transparencyInfluence",
+                                                    &layer.transparencyInfluence);
+        stack.layers[stack.layerCount++] = RuntimeMaterialTextureLayerNormalize(layer);
+    }
+
+    if (stack.layerCount <= 0) {
+        SceneEditorMaterialStackClearObjectStack(scene_index);
+        return false;
+    }
+    return SceneEditorMaterialStackSetObjectStack(scene_index, &stack);
 }
 
 static void apply_ray_authoring_object_procedural_texture(json_object *entry,
@@ -211,6 +358,35 @@ static void apply_ray_authoring_object_procedural_texture(json_object *entry,
     }
 }
 
+static void apply_ray_authoring_object_authored_texture(json_object* entry,
+                                                        int scene_index,
+                                                        const char* object_id) {
+    json_object* authored_texture = NULL;
+    json_object* manifest_path_obj = NULL;
+    json_object* binding_mode_obj = NULL;
+    const char* manifest_path = NULL;
+    const char* binding_mode = NULL;
+    if (!entry || !object_id || !object_id[0] || scene_index < 0 ||
+        scene_index >= sceneSettings.objectCount) {
+        return;
+    }
+    if (!json_object_object_get_ex(entry, "authored_texture", &authored_texture) ||
+        !json_object_is_type(authored_texture, json_type_object) ||
+        !json_object_object_get_ex(authored_texture, "manifest_path", &manifest_path_obj) ||
+        !json_object_is_type(manifest_path_obj, json_type_string)) {
+        return;
+    }
+    manifest_path = json_object_get_string(manifest_path_obj);
+    if (json_object_object_get_ex(authored_texture, "binding_mode", &binding_mode_obj) &&
+        json_object_is_type(binding_mode_obj, json_type_string)) {
+        binding_mode = json_object_get_string(binding_mode_obj);
+    }
+    (void)RuntimeMaterialAuthoredTextureBindManifestForObject(scene_index,
+                                                              object_id,
+                                                              manifest_path,
+                                                              binding_mode);
+}
+
 static void apply_ray_authoring_object_materials(json_object *authoring) {
     json_object *object_materials = NULL;
     size_t i = 0;
@@ -285,7 +461,9 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
                 sceneSettings.sceneObjects[scene_index].alpha = fmax(0.0, fmin(1.0, alpha));
                 sceneSettings.sceneObjects[scene_index].emissiveStrength =
                     fmax(0.0, fmin(1.0, emissive_strength));
+                apply_ray_authoring_object_authored_texture(entry, scene_index, object_id);
                 apply_ray_authoring_object_procedural_texture(entry, scene_index);
+                apply_ray_authoring_object_material_stack(entry, scene_index);
                 break;
             }
         }

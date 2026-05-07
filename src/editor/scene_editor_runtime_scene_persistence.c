@@ -5,7 +5,10 @@
 #include "config/config_scene_path_io.h"
 #include "core_io.h"
 #include "editor/scene_editor_material_face_placement.h"
+#include "editor/scene_editor_material_stack.h"
 #include "import/runtime_scene_bridge.h"
+#include "render/runtime_material_texture_stack_3d.h"
+#include "render/runtime_material_authored_texture_3d.h"
 
 #include <json-c/json.h>
 #include <stdio.h>
@@ -151,6 +154,97 @@ static json_object* scene_editor_runtime_scene_texture_params_json(
     return parameters;
 }
 
+static json_object* scene_editor_runtime_scene_texture_placement_json(
+    const RuntimeMaterialTexture3DPlacement* placement) {
+    json_object* placement_obj = json_object_new_object();
+    if (!placement_obj || !placement) return placement_obj;
+    json_object_object_add(placement_obj, "offset_u", json_object_new_double(placement->offsetU));
+    json_object_object_add(placement_obj, "offset_v", json_object_new_double(placement->offsetV));
+    json_object_object_add(placement_obj, "scale", json_object_new_double(placement->scale));
+    json_object_object_add(placement_obj, "strength", json_object_new_double(placement->strength));
+    json_object_object_add(placement_obj, "rotation", json_object_new_double(placement->rotation));
+    return placement_obj;
+}
+
+static json_object* scene_editor_runtime_scene_material_stack_json(int scene_object_index) {
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    json_object* stack_obj = NULL;
+    json_object* layers = NULL;
+    if (scene_object_index < 0 || scene_object_index >= sceneSettings.objectCount) return NULL;
+    if (!SceneEditorMaterialStackGetEffectiveObjectStack(&sceneSettings.sceneObjects[scene_object_index],
+                                                         scene_object_index,
+                                                         &stack)) {
+        return NULL;
+    }
+    stack = RuntimeMaterialTextureStackNormalize(stack);
+    if (stack.layerCount <= 1 &&
+        stack.layers[0].kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID &&
+        !SceneEditorMaterialStackHasObjectStack(scene_object_index)) {
+        return NULL;
+    }
+    stack_obj = json_object_new_object();
+    layers = json_object_new_array();
+    if (!stack_obj || !layers) {
+        if (stack_obj) json_object_put(stack_obj);
+        if (layers) json_object_put(layers);
+        return NULL;
+    }
+    json_object_object_add(stack_obj, "version", json_object_new_int(1));
+    for (int i = 0; i < stack.layerCount && i < RUNTIME_MATERIAL_TEXTURE_STACK_MAX_LAYERS; ++i) {
+        RuntimeMaterialTextureLayer layer = RuntimeMaterialTextureLayerNormalize(stack.layers[i]);
+        json_object* layer_obj = NULL;
+        json_object* parameters = NULL;
+        if (!layer.enabled || layer.kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE) continue;
+        layer_obj = json_object_new_object();
+        parameters = scene_editor_runtime_scene_texture_params_json(layer.params);
+        if (!layer_obj || !parameters) {
+            if (layer_obj) json_object_put(layer_obj);
+            if (parameters) json_object_put(parameters);
+            json_object_put(layers);
+            json_object_put(stack_obj);
+            return NULL;
+        }
+        json_object_object_add(layer_obj, "id", json_object_new_string(layer.layerId));
+        json_object_object_add(layer_obj, "name", json_object_new_string(layer.displayName));
+        json_object_object_add(layer_obj,
+                               "role",
+                               json_object_new_string(layer.role == RUNTIME_MATERIAL_TEXTURE_LAYER_ROLE_BASE
+                                                          ? "base"
+                                                          : "overlay"));
+        json_object_object_add(layer_obj,
+                               "kind",
+                               json_object_new_string(RuntimeMaterialTextureLayerKindStableId(layer.kind)));
+        json_object_object_add(layer_obj,
+                               "blend",
+                               json_object_new_string(
+                                   RuntimeMaterialTextureLayerBlendModeStableId(layer.blendMode)));
+        json_object_object_add(layer_obj, "enabled", json_object_new_boolean(layer.enabled));
+        json_object_object_add(layer_obj, "opacity", json_object_new_double(layer.opacity));
+        json_object_object_add(layer_obj,
+                               "placement",
+                               scene_editor_runtime_scene_texture_placement_json(&layer.placement));
+        json_object_object_add(layer_obj, "parameters", parameters);
+        json_object_object_add(layer_obj,
+                               "roughness_influence",
+                               json_object_new_double(layer.roughnessInfluence));
+        json_object_object_add(layer_obj,
+                               "reflectivity_influence",
+                               json_object_new_double(layer.reflectivityInfluence));
+        json_object_object_add(layer_obj,
+                               "specular_influence",
+                               json_object_new_double(layer.specularInfluence));
+        json_object_object_add(layer_obj,
+                               "diffuse_influence",
+                               json_object_new_double(layer.diffuseInfluence));
+        json_object_object_add(layer_obj,
+                               "transparency_influence",
+                               json_object_new_double(layer.transparencyInfluence));
+        json_object_array_add(layers, layer_obj);
+    }
+    json_object_object_add(stack_obj, "layers", layers);
+    return stack_obj;
+}
+
 static json_object* scene_editor_runtime_scene_build_object_materials_json(void) {
     json_object* object_materials = json_object_new_array();
     int i = 0;
@@ -180,8 +274,37 @@ static json_object* scene_editor_runtime_scene_build_object_materials_json(void)
                                "emissive_strength",
                                json_object_new_double(sceneSettings.sceneObjects[i].emissiveStrength));
         {
+            char manifest_path[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
+            char binding_mode[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MODE_CAPACITY];
+            int face_count = 0;
+            if (RuntimeMaterialAuthoredTextureGetBinding(i,
+                                                         manifest_path,
+                                                         sizeof(manifest_path),
+                                                         binding_mode,
+                                                         sizeof(binding_mode),
+                                                         &face_count)) {
+                json_object* authored_texture = json_object_new_object();
+                if (!authored_texture) {
+                    json_object_put(object_materials);
+                    json_object_put(entry);
+                    return NULL;
+                }
+                json_object_object_add(authored_texture,
+                                       "manifest_path",
+                                       json_object_new_string(manifest_path));
+                json_object_object_add(authored_texture,
+                                       "binding_mode",
+                                       json_object_new_string(binding_mode[0] ? binding_mode
+                                                                              : "override"));
+                json_object_object_add(authored_texture, "face_count", json_object_new_int(face_count));
+                json_object_object_add(entry, "authored_texture", authored_texture);
+            }
+        }
+        {
             int face_count = SceneEditorMaterialFacePlacementOverrideCountForObject(i);
+            bool has_material_stack = SceneEditorMaterialStackHasObjectStack(i);
             bool has_procedural_texture =
+                has_material_stack ||
                 sceneSettings.sceneObjects[i].textureId != 0 ||
                 sceneSettings.sceneObjects[i].textureOffsetU != 0.0 ||
                 sceneSettings.sceneObjects[i].textureOffsetV != 0.0 ||
@@ -199,6 +322,7 @@ static json_object* scene_editor_runtime_scene_build_object_materials_json(void)
                 face_count > 0;
             json_object* procedural_texture = NULL;
             json_object* face_placements = NULL;
+            json_object* material_texture_stack = NULL;
             if (!has_procedural_texture) {
                 json_object_array_add(object_materials, entry);
                 continue;
@@ -211,6 +335,10 @@ static json_object* scene_editor_runtime_scene_build_object_materials_json(void)
                 json_object_put(object_materials);
                 json_object_put(entry);
                 return NULL;
+            }
+            material_texture_stack = scene_editor_runtime_scene_material_stack_json(i);
+            if (material_texture_stack) {
+                json_object_object_add(entry, "material_texture_stack", material_texture_stack);
             }
             json_object_object_add(procedural_texture,
                                    "texture_id",

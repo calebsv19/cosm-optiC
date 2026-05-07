@@ -1,6 +1,6 @@
 # Ray Tracing Current Truth
 
-Last updated: 2026-05-05
+Last updated: 2026-05-07
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -33,6 +33,28 @@ Last updated: 2026-05-05
   - per-object node-ready texture parameters persisted on scene objects: pattern mode, coverage, grain, edge softness, contrast, flow, color depth, surface damage, and seed
   - path-traced/native hit anchoring currently uses triangle barycentric hit coordinates so overlays remain attached to surfaces as view/light state changes
   - generated Material face-group texture overrides now feed the native `3D` material payload when a runtime hit carries a local triangle ordinal, so rust/fog overrides and their parameter blocks can change actual BSDF roughness, reflectivity/specular weight, diffuse response, color, and transparency in the simulation path
+- Native `3D` material payloads also support the first v2 layered material texture stack:
+  - bounded ordered stacks carry durable layer ids, base/overlay roles, blend modes, placement, procedural parameters, enabled state, opacity, and material influence fields
+  - base layer kinds include solid, brushed metal, wood, brick, concrete, and stone in the stack/evaluator contract
+  - overlay layer kinds include rust, fog, grime, and oil in the current Material editor surface, with scratches and edge wear reserved in the enum contract
+  - runtime scene authoring save/load persists `material_texture_stack` data additively beside legacy `procedural_texture` compatibility fields
+  - the Material preview and native payload path both evaluate through `RuntimeMaterialTextureStackEvaluatePlacedUV(...)`, so focused editor preview and simulation material response share the same stack math
+- Native `3D` material payloads now also support object-bound authored bitmap texture sets for the current texture-authoring roundtrip:
+  - `drawing_program` exports separate per-face RGBA PNG files plus one JSON manifest
+  - `ray_tracing` reads that manifest through app-local authored-texture import code
+  - bindings are restored by stable `object_id` under `extensions.ray_tracing.authoring.object_materials[*].authored_texture`
+  - supported face-role mapping is explicit for planes and generated rectangular-prism faces
+  - hit-time payload resolution now samples authored bitmap color and alpha before procedural fallback when a bound face is hit
+  - runtime-scene authoring persistence retains the manifest path/binding metadata rather than embedding image payload bytes
+  - the authored-texture manifest reader now accepts optional semantic net metadata per face:
+    - net layout kind
+    - canonical net slot
+    - orientation
+    - ordered corner ids
+    - ordered edge ids
+    - adjacent face-role hints
+    - manual layout offsets
+  - that richer manifest metadata is now available through a bounded runtime face-metadata getter, but current face sampling still resolves by explicit face-role mapping
 - Scene editor mode routing now has four top-level modes:
   - Path / Bézier
   - Objects
@@ -44,8 +66,10 @@ Last updated: 2026-05-05
   - defaults native `3D` Material mode to an object-centered projector so the focused object orbits around its own center rather than its scene placement
   - retains the old scene-placement object-only projector path as an internal view mode for a later UI toggle
   - frames and wheel-zooms against the focused object's extents in object-centered native `3D` Material mode, with a much wider accumulated zoom range for close texture inspection and far-distance preview
-  - renders the focused native `3D` object as filled projected triangles in Material mode, using the authored object color and drawing triangle separation lines
-  - samples rust/fog procedural texture overlays directly in the flat Material preview, so texture type, strength, scale, U offset, and V offset are visible before path-traced rendering
+  - renders the focused native `3D` object as filled projected triangles in Material mode, using a preview-safe capped version of the authored object color and drawing triangle separation lines
+  - samples procedural material texture overlays directly in the flat Material preview, so texture type, strength, scale, U offset, and V offset are visible before path-traced rendering
+  - previews v2 object stacks, including base patterns plus ordered rust/fog/grime/oil overlays, even when the legacy single `textureId` field is `None`
+  - lets the base layer be toggled off in the layer list; the preview then draws a dim neutral substrate so overlay-only behavior can be inspected without changing the authored object color
   - keeps editor rendering bounded: no-texture focused objects use a fast solid fill path, while active rust/fog previews use capped block sampling instead of unbounded per-pixel draw-point emission
   - exposes a `Solid Faces` preview toggle that defaults on; the solid path uses opaque fill and editor-local depth buffering so rear triangles do not show through glass/fog/rust material previews
   - in Solid Faces mode, depth-checks triangle edge pixels so visible face diagonals render for per-triangle material inspection while rear triangle edges remain hidden
@@ -63,7 +87,10 @@ Last updated: 2026-05-05
   - lets active face groups override texture kind independently, so a generated face can be `None`, `Rust`, or `Fog` without changing the object-wide default or neighboring generated faces
   - routes strength, scale, Offset U, and Offset V sliders through the active face group when one is active, while preserving object-wide fallback controls when no group is active
   - routes the texture kind buttons through the active face group when one is active, while preserving object-wide texture kind controls when no group is active
-  - exposes compact texture parameter controls for active rust/fog overlays: pattern mode (`Default`, `Speck`, `Patch`, `Flow`), coverage, grain, edge softness, contrast, flow, color depth, and surface damage
+  - object-default mode exposes the v2 layer stack immediately when no face is selected; layer rows support add, mute/enable, move up/down, delete, row selection, and row-level `On`/`Off` visibility toggles
+  - active v2 base layers expose `Solid`, `Metal`, `Wood`, and `Brick` buttons in the current editor UI, while active v2 overlay layers expose `Rust`, `Fog`, `Grime`, and `Oil`
+  - exposes compact texture parameter controls for active procedural overlays: pattern mode (`Default`, `Speck`, `Patch`, `Flow`), coverage, grain, edge softness, contrast, flow, color depth, and surface damage
+  - placement controls remain sliders; secondary procedural parameters render as bounded knob cells with vertical drag and numeric readback
   - routes texture parameter controls through the active face group when one is active, while preserving object-wide parameter controls when no group is active
   - samples face-local texture overrides in the Material preview even when the object-wide texture kind is `None`
   - shows whether the active face is using object defaults or a volatile face override, and exposes `Reset Face` to clear the active override
@@ -126,7 +153,7 @@ Last updated: 2026-05-05
 - Do not reopen closed `I5`/`I6` slices.
 - Treat procedural material-texture sampling plus focused Material editor mode as the active post-`I6` material authoring foundation.
 - Preserve Material mode's object-focused viewport controls while the next authoring controls land: `F` should frame the focused object, and wheel zoom should accumulate around that fit instead of resetting on every scroll tick.
-- Keep the next material-editor slice focused on custom face group topology, durable group controls, and preset management now that generated face-local texture placement and parameter blocks reach the native material payload path.
+- Keep the next material/material-authoring slice focused on coexistence polish between procedural overlays and authored bitmap bindings, plus durable group/preset controls on top of the now-live manifest path.
 - Keep deep-render start/resume behavior stable while adjacent runtime-scene buckets settle.
 - Keep the new menu-render, digest-pick, and native `3D` test-family seams aligned with their current helper/file boundaries while larger file-split work continues.
 - Defer VF3D / `physics_sim` ingestion expansion until the next internal renderer boundary is chosen.
