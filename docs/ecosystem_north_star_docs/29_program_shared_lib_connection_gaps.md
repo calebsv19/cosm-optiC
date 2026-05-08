@@ -204,6 +204,7 @@ Current shared profile:
 - first `kit_render` adoption slice is now in place for the font migration: Makefile wiring, shared role/tier/render-scale bridge policy, active helper/menu/timer-HUD UTF-8 measure/draw runtime, and wrapped helper labels now route through the shared external text path.
 - the scene editor pane shell now also adopts shared `core_pane` for pane solve and shared `kit_pane` for splitter hover/drag interaction, while pane meaning and editor routing remain app-local.
 - the host now consumes that shared surface through a vendored `third_party/codework_shared` subtree instead of direct workspace-local `../shared` linkage.
+- `core_sim >= 0.2.0` is now partially adopted for runtime-frame control-plane routing, and the app now consumes that simulation surface through the vendored subtree host instead of a direct live `../shared` `CORE_SIM_DIR` reference.
 
 Gaps:
 - `Partial`: raise `core_data` usage from render-metrics export slice into broader analyzable runtime datasets.
@@ -218,6 +219,7 @@ Gaps:
 - `Stabilize`: pre-`TP-S3` runtime-scene preflight lane is in place (`import/runtime_scene_bridge`) with contract tests against trio fixtures (`scene_runtime_v1` accept, authoring-variant reject).
 - `Stabilize`: RayTracing font-runtime bridge + default-baseline polish are complete; active text draw owners and wrapped labels now use shared `kit_render`, the host defaults to the shared `ide` font baseline, the old local `text_font_quality` helper is retired, and build/package/test/doc paths now resolve through vendored `third_party/codework_shared`. Remaining work is limited to optional thin-wrapper cleanup and visual tuning.
 - `Stabilize`: first shared pane-resize slice is now complete; the scene editor uses SDL-resizable windows plus shared `core_pane >= 0.2.0` and `kit_pane >= 0.2.0` for left/center/right pane solve and live splitter hover/drag, the menu host is now SDL-resizable with runtime-sized layout rebuilds, and simulation runtime windows remain config-sized/fixed while chrome semantics, viewport routing, and pane meaning remain app-local.
+- `Stabilize`: vendored shared simulation cutover is complete; `CORE_SIM_DIR` now resolves through `third_party/codework_shared` and the subtree snapshot is refreshed to the current committed shared baseline.
 - `Stabilize`: native `3D` tile preview now relies on the additive shared `vk_renderer` in-place texture subrect update seam (`shared/vk_renderer >= 1.1.0`) instead of recreating a fresh full-frame preview texture for each visible tile step.
 - `Missing`: execution-core adoption beyond `core_time` if worker/job/scheduler behavior should be standardized with IDE/MapForge.
 
