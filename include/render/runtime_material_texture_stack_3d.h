@@ -124,4 +124,13 @@ bool RuntimeMaterialTextureStackEvaluatePlacedUV(
     const RuntimeMaterialSurfaceEval* base_eval,
     RuntimeMaterialSurfaceEval* out_eval);
 
+bool RuntimeMaterialTextureStackEvaluateOverlayPlacedUV(
+    const RuntimeMaterialTextureStack* stack,
+    const SceneObject* object,
+    double u,
+    double v,
+    int seed_key,
+    const RuntimeMaterialSurfaceEval* base_eval,
+    RuntimeMaterialSurfaceEval* out_eval);
+
 #endif

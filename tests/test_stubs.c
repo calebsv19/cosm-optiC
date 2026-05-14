@@ -9,12 +9,31 @@
 #include "engine/Render/render_pipeline.h"
 #include "timer_hud/time_scope.h"
 
+#if defined(__has_include)
+#if __has_include("timer_hud/timer_hud_config.h")
+#include "timer_hud/timer_hud_config.h"
+#else
+#define RAY_TRACING_TEST_TIMER_HUD_LEGACY_COMPAT 1
+#endif
+#else
+#define RAY_TRACING_TEST_TIMER_HUD_LEGACY_COMPAT 1
+#endif
+
 #ifndef TIMESCOPE_TIMER_HUD_SESSION_TYPEDEF_DONE
 #define TIMESCOPE_TIMER_HUD_SESSION_TYPEDEF_DONE 1
 typedef struct TimerHUDSession TimerHUDSession;
 #endif
 
 typedef struct TimerHUDInitConfig TimerHUDInitConfig;
+
+#if RAY_TRACING_TEST_TIMER_HUD_LEGACY_COMPAT
+typedef enum TimerHUDVisualMode {
+    TIMER_HUD_VISUAL_MODE_INVALID = -1,
+    TIMER_HUD_VISUAL_MODE_TEXT_COMPACT = 0,
+    TIMER_HUD_VISUAL_MODE_HISTORY_GRAPH = 1,
+    TIMER_HUD_VISUAL_MODE_HYBRID = 2,
+} TimerHUDVisualMode;
+#endif
 
 TimerHUDSession* ts_session_create(void) { return (TimerHUDSession*)1; }
 void ts_session_destroy(TimerHUDSession* session) { (void)session; }

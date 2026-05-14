@@ -30,6 +30,125 @@
 
 #include <json-c/json.h>
 
+static RuntimeMaterialTextureLayer runtime_material_test_make_strong_overlay(
+    RuntimeMaterialTextureLayerKind kind,
+    double scale);
+
+static void runtime_material_payload_test_add_material_intent_summaries(
+    json_object* surface,
+    const char* const* layer_material_intent_stable_ids,
+    size_t layer_material_intent_count,
+    const char* explicit_base_summary,
+    const char* explicit_overlay_summary) {
+    const char* base_summary = explicit_base_summary;
+    const char* overlay_summary = explicit_overlay_summary;
+    if (!surface) {
+        return;
+    }
+    if (!base_summary || !overlay_summary) {
+        for (size_t i = 0u; i < layer_material_intent_count; ++i) {
+            RuntimeMaterialTextureLayerKind kind = RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE;
+            const char* stable_id = NULL;
+            if (!layer_material_intent_stable_ids || !layer_material_intent_stable_ids[i]) {
+                continue;
+            }
+            stable_id = layer_material_intent_stable_ids[i];
+            kind = RuntimeMaterialTextureLayerKindFromStableId(stable_id);
+            if (!explicit_base_summary && RuntimeMaterialTextureLayerKindIsBase(kind)) {
+                base_summary = stable_id;
+            } else if (!explicit_overlay_summary &&
+                       RuntimeMaterialTextureLayerKindIsOverlay(kind)) {
+                overlay_summary = stable_id;
+            }
+        }
+    }
+    if (base_summary && base_summary[0] != '\0') {
+        json_object_object_add(surface,
+                               "base_material_intent_kind",
+                               json_object_new_string(base_summary));
+    }
+    if (overlay_summary && overlay_summary[0] != '\0') {
+        json_object_object_add(surface,
+                               "overlay_material_intent_kind",
+                               json_object_new_string(overlay_summary));
+    }
+}
+
+static bool runtime_material_payload_test_add_surface_semantic_fields(
+    json_object* surface,
+    const char* primitive_kind,
+    const char* face_role,
+    const char* net_layout_kind,
+    const char* net_slot,
+    const char* orientation) {
+    static const char* kPlaneAdjacentRoles[4] = {"NONE", "NONE", "NONE", "NONE"};
+    static const char* kFrontAdjacentRoles[4] = {"TOP", "RIGHT", "BOTTOM", "LEFT"};
+    static const char* kBackAdjacentRoles[4] = {"TOP", "LEFT", "BOTTOM", "RIGHT"};
+    static const char* kLeftAdjacentRoles[4] = {"TOP", "FRONT", "BOTTOM", "BACK"};
+    static const char* kRightAdjacentRoles[4] = {"TOP", "BACK", "BOTTOM", "FRONT"};
+    static const char* kTopAdjacentRoles[4] = {"BACK", "RIGHT", "FRONT", "LEFT"};
+    static const char* kBottomAdjacentRoles[4] = {"FRONT", "RIGHT", "BACK", "LEFT"};
+    json_object* corner_ids = NULL;
+    json_object* edge_ids = NULL;
+    json_object* adjacent_face_roles = NULL;
+    const char* const* adjacent_roles = NULL;
+    const char* resolved_layout = net_layout_kind;
+    const char* resolved_slot = net_slot;
+    const char* resolved_orientation = orientation;
+    int corner_values[4] = {0, 1, 2, 3};
+    int edge_values[4] = {0, 1, 2, 3};
+    int i = 0;
+    if (!surface || !primitive_kind || !face_role) {
+        return false;
+    }
+    if (strcmp(primitive_kind, "PLANE") == 0) {
+        resolved_layout = resolved_layout ? resolved_layout : "PLANE";
+        resolved_slot = resolved_slot ? resolved_slot : "FRONT";
+        resolved_orientation = resolved_orientation ? resolved_orientation : "R0";
+        for (i = 0; i < 4; ++i) {
+            corner_values[i] = 255;
+            edge_values[i] = 255;
+        }
+        adjacent_roles = kPlaneAdjacentRoles;
+    } else {
+        resolved_layout = resolved_layout ? resolved_layout : "PRISM_CROSS";
+        resolved_slot = resolved_slot ? resolved_slot : face_role;
+        resolved_orientation = resolved_orientation ? resolved_orientation : "R0";
+        if (strcmp(face_role, "FRONT") == 0) adjacent_roles = kFrontAdjacentRoles;
+        else if (strcmp(face_role, "BACK") == 0) adjacent_roles = kBackAdjacentRoles;
+        else if (strcmp(face_role, "LEFT") == 0) adjacent_roles = kLeftAdjacentRoles;
+        else if (strcmp(face_role, "RIGHT") == 0) adjacent_roles = kRightAdjacentRoles;
+        else if (strcmp(face_role, "TOP") == 0) adjacent_roles = kTopAdjacentRoles;
+        else if (strcmp(face_role, "BOTTOM") == 0) adjacent_roles = kBottomAdjacentRoles;
+        else return false;
+    }
+    if (!resolved_layout || !resolved_slot || !resolved_orientation || !adjacent_roles) {
+        return false;
+    }
+    corner_ids = json_object_new_array();
+    edge_ids = json_object_new_array();
+    adjacent_face_roles = json_object_new_array();
+    if (!corner_ids || !edge_ids || !adjacent_face_roles) {
+        if (corner_ids) json_object_put(corner_ids);
+        if (edge_ids) json_object_put(edge_ids);
+        if (adjacent_face_roles) json_object_put(adjacent_face_roles);
+        return false;
+    }
+    json_object_object_add(surface, "net_layout_kind", json_object_new_string(resolved_layout));
+    json_object_object_add(surface, "net_slot", json_object_new_string(resolved_slot));
+    json_object_object_add(surface, "orientation", json_object_new_string(resolved_orientation));
+    for (i = 0; i < 4; ++i) {
+        json_object_array_add(corner_ids, json_object_new_int(corner_values[i]));
+        json_object_array_add(edge_ids, json_object_new_int(edge_values[i]));
+        json_object_array_add(adjacent_face_roles,
+                              json_object_new_string(adjacent_roles[i]));
+    }
+    json_object_object_add(surface, "corner_ids", corner_ids);
+    json_object_object_add(surface, "edge_ids", edge_ids);
+    json_object_object_add(surface, "adjacent_face_roles", adjacent_face_roles);
+    return true;
+}
+
 static bool runtime_material_payload_test_write_png_rgba(const char* path,
                                                          const unsigned char* rgba,
                                                          unsigned width,
@@ -89,34 +208,46 @@ static bool runtime_material_payload_test_write_authored_texture_manifest(
     const char* face_role,
     const char* file_name) {
     json_object* root = NULL;
-    json_object* surfaces = NULL;
-    json_object* surface = NULL;
+    json_object* base_surfaces = NULL;
+    json_object* base_surface = NULL;
     int write_ok = 0;
     if (!manifest_path || !object_id || !primitive_kind || !face_role || !file_name) {
         return false;
     }
     root = json_object_new_object();
-    surfaces = json_object_new_array();
-    surface = json_object_new_object();
-    if (!root || !surfaces || !surface) {
+    base_surfaces = json_object_new_array();
+    base_surface = json_object_new_object();
+    if (!root || !base_surfaces || !base_surface) {
         if (root) json_object_put(root);
-        if (surfaces) json_object_put(surfaces);
-        if (surface) json_object_put(surface);
+        if (base_surfaces) json_object_put(base_surfaces);
+        if (base_surface) json_object_put(base_surface);
         return false;
     }
-    json_object_object_add(root, "schema_version", json_object_new_int(1));
+    json_object_object_add(root, "schema_version", json_object_new_int(5));
     json_object_object_add(root,
                            "export_binding_kind",
                            json_object_new_string("SEPARATE_FACES"));
+    json_object_object_add(root,
+                           "emitted_output_kind",
+                           json_object_new_string("FLATTENED_ONLY"));
     json_object_object_add(root, "primitive_kind", json_object_new_string(primitive_kind));
     json_object_object_add(root, "source_scene_id", json_object_new_string("scene_payload_test"));
     json_object_object_add(root, "source_object_id", json_object_new_string(object_id));
-    json_object_object_add(root, "surface_count", json_object_new_int(1));
-    json_object_object_add(surface, "surface_id", json_object_new_int(1));
-    json_object_object_add(surface, "face_role", json_object_new_string(face_role));
-    json_object_object_add(surface, "file_name", json_object_new_string(file_name));
-    json_object_array_add(surfaces, surface);
-    json_object_object_add(root, "surfaces", surfaces);
+    json_object_object_add(root, "base_surface_count", json_object_new_int(1));
+    json_object_object_add(base_surface, "surface_id", json_object_new_int(1));
+    json_object_object_add(base_surface, "face_role", json_object_new_string(face_role));
+    json_object_object_add(base_surface, "file_name", json_object_new_string(file_name));
+    if (!runtime_material_payload_test_add_surface_semantic_fields(base_surface,
+                                                                   primitive_kind,
+                                                                   face_role,
+                                                                   NULL,
+                                                                   NULL,
+                                                                   NULL)) {
+        json_object_put(root);
+        return false;
+    }
+    json_object_array_add(base_surfaces, base_surface);
+    json_object_object_add(root, "base_surfaces", base_surfaces);
     write_ok = json_object_to_file_ext(manifest_path, root, JSON_C_TO_STRING_PRETTY);
     json_object_put(root);
     return write_ok == 0;
@@ -132,66 +263,263 @@ static bool runtime_material_payload_test_write_authored_texture_manifest_with_m
     const char* net_slot,
     const char* orientation,
     double layout_offset_x,
-    double layout_offset_y) {
+    double layout_offset_y,
+    const char* const* layer_material_intent_stable_ids,
+    size_t layer_material_intent_count) {
     json_object* root = NULL;
-    json_object* surfaces = NULL;
-    json_object* surface = NULL;
-    json_object* corner_ids = NULL;
-    json_object* edge_ids = NULL;
-    json_object* adjacent_face_roles = NULL;
+    json_object* base_surfaces = NULL;
+    json_object* base_surface = NULL;
     int write_ok = 0;
     if (!manifest_path || !object_id || !primitive_kind || !face_role || !file_name ||
         !net_layout_kind || !net_slot || !orientation) {
         return false;
     }
     root = json_object_new_object();
-    surfaces = json_object_new_array();
-    surface = json_object_new_object();
-    corner_ids = json_object_new_array();
-    edge_ids = json_object_new_array();
-    adjacent_face_roles = json_object_new_array();
-    if (!root || !surfaces || !surface || !corner_ids || !edge_ids || !adjacent_face_roles) {
+    base_surfaces = json_object_new_array();
+    base_surface = json_object_new_object();
+    if (!root || !base_surfaces || !base_surface) {
         if (root) json_object_put(root);
-        if (surfaces) json_object_put(surfaces);
-        if (surface) json_object_put(surface);
-        if (corner_ids) json_object_put(corner_ids);
-        if (edge_ids) json_object_put(edge_ids);
-        if (adjacent_face_roles) json_object_put(adjacent_face_roles);
+        if (base_surfaces) json_object_put(base_surfaces);
+        if (base_surface) json_object_put(base_surface);
         return false;
     }
-    json_object_object_add(root, "schema_version", json_object_new_int(2));
+    json_object_object_add(root, "schema_version", json_object_new_int(5));
     json_object_object_add(root,
                            "export_binding_kind",
                            json_object_new_string("SEPARATE_FACES"));
+    json_object_object_add(root,
+                           "emitted_output_kind",
+                           json_object_new_string("FLATTENED_ONLY"));
+    json_object_object_add(root, "primitive_kind", json_object_new_string(primitive_kind));
+    json_object_object_add(root, "source_scene_id", json_object_new_string("scene_payload_test"));
+    json_object_object_add(root, "source_object_id", json_object_new_string(object_id));
+    json_object_object_add(root, "base_surface_count", json_object_new_int(1));
+    json_object_object_add(base_surface, "surface_id", json_object_new_int(1));
+    json_object_object_add(base_surface, "face_role", json_object_new_string(face_role));
+    json_object_object_add(base_surface, "file_name", json_object_new_string(file_name));
+    if (!runtime_material_payload_test_add_surface_semantic_fields(base_surface,
+                                                                   primitive_kind,
+                                                                   face_role,
+                                                                   net_layout_kind,
+                                                                   net_slot,
+                                                                   orientation)) {
+        json_object_put(root);
+        return false;
+    }
+    {
+        json_object* base_layer_material_intents = json_object_new_array();
+        if (!base_layer_material_intents) {
+            json_object_put(root);
+            return false;
+        }
+        for (size_t i = 0u; i < layer_material_intent_count; ++i) {
+            if (layer_material_intent_stable_ids && layer_material_intent_stable_ids[i]) {
+                json_object_array_add(base_layer_material_intents,
+                                      json_object_new_string(layer_material_intent_stable_ids[i]));
+            }
+        }
+        json_object_object_add(base_surface,
+                               "layer_material_intent_stable_ids",
+                               base_layer_material_intents);
+    }
+    json_object_object_add(base_surface, "layout_offset_x", json_object_new_double(layout_offset_x));
+    json_object_object_add(base_surface, "layout_offset_y", json_object_new_double(layout_offset_y));
+    runtime_material_payload_test_add_material_intent_summaries(base_surface,
+                                                                layer_material_intent_stable_ids,
+                                                                layer_material_intent_count,
+                                                                NULL,
+                                                                NULL);
+    json_object_array_add(base_surfaces, base_surface);
+    json_object_object_add(root, "base_surfaces", base_surfaces);
+    write_ok = json_object_to_file_ext(manifest_path, root, JSON_C_TO_STRING_PRETTY);
+    json_object_put(root);
+    return write_ok == 0;
+}
+
+static bool runtime_material_payload_test_write_dual_lane_manifest_with_intents(
+    const char* manifest_path,
+    const char* object_id,
+    const char* primitive_kind,
+    const char* face_role,
+    const char* base_file_name,
+    const char* overlay_file_name,
+    const char* const* base_layer_material_intent_stable_ids,
+    size_t base_layer_material_intent_count,
+    const char* const* overlay_layer_material_intent_stable_ids,
+    size_t overlay_layer_material_intent_count,
+    const char* overlay_material_intent_kind) {
+    json_object* root = NULL;
+    json_object* base_surfaces = NULL;
+    json_object* overlay_surfaces = NULL;
+    json_object* base_surface = NULL;
+    json_object* overlay_surface = NULL;
+    json_object* base_intents = NULL;
+    json_object* overlay_intents = NULL;
+    int write_ok = 0;
+    if (!manifest_path || !object_id || !primitive_kind || !face_role || !base_file_name ||
+        !overlay_file_name) {
+        return false;
+    }
+    root = json_object_new_object();
+    base_surfaces = json_object_new_array();
+    overlay_surfaces = json_object_new_array();
+    base_surface = json_object_new_object();
+    overlay_surface = json_object_new_object();
+    base_intents = json_object_new_array();
+    overlay_intents = json_object_new_array();
+    if (!root || !base_surfaces || !overlay_surfaces || !base_surface || !overlay_surface ||
+        !base_intents || !overlay_intents) {
+        if (root) json_object_put(root);
+        if (base_surfaces) json_object_put(base_surfaces);
+        if (overlay_surfaces) json_object_put(overlay_surfaces);
+        if (base_surface) json_object_put(base_surface);
+        if (overlay_surface) json_object_put(overlay_surface);
+        if (base_intents) json_object_put(base_intents);
+        if (overlay_intents) json_object_put(overlay_intents);
+        return false;
+    }
+    json_object_object_add(root, "schema_version", json_object_new_int(5));
+    json_object_object_add(root,
+                           "export_binding_kind",
+                           json_object_new_string("SEPARATE_FACES"));
+    json_object_object_add(root,
+                           "emitted_output_kind",
+                           json_object_new_string("BASE_PLUS_OVERLAY"));
     json_object_object_add(root, "primitive_kind", json_object_new_string(primitive_kind));
     json_object_object_add(root, "source_scene_id", json_object_new_string("scene_payload_test"));
     json_object_object_add(root, "source_object_id", json_object_new_string(object_id));
     json_object_object_add(root, "surface_count", json_object_new_int(1));
-    json_object_object_add(surface, "surface_id", json_object_new_int(1));
-    json_object_object_add(surface, "face_role", json_object_new_string(face_role));
-    json_object_object_add(surface, "file_name", json_object_new_string(file_name));
-    json_object_object_add(surface, "net_layout_kind", json_object_new_string(net_layout_kind));
-    json_object_object_add(surface, "net_slot", json_object_new_string(net_slot));
-    json_object_object_add(surface, "orientation", json_object_new_string(orientation));
-    json_object_array_add(corner_ids, json_object_new_int(0));
-    json_object_array_add(corner_ids, json_object_new_int(1));
-    json_object_array_add(corner_ids, json_object_new_int(2));
-    json_object_array_add(corner_ids, json_object_new_int(3));
-    json_object_array_add(edge_ids, json_object_new_int(10));
-    json_object_array_add(edge_ids, json_object_new_int(11));
-    json_object_array_add(edge_ids, json_object_new_int(12));
-    json_object_array_add(edge_ids, json_object_new_int(13));
-    json_object_array_add(adjacent_face_roles, json_object_new_string("UNSPECIFIED"));
-    json_object_array_add(adjacent_face_roles, json_object_new_string("UNSPECIFIED"));
-    json_object_array_add(adjacent_face_roles, json_object_new_string("UNSPECIFIED"));
-    json_object_array_add(adjacent_face_roles, json_object_new_string("UNSPECIFIED"));
-    json_object_object_add(surface, "corner_ids", corner_ids);
-    json_object_object_add(surface, "edge_ids", edge_ids);
-    json_object_object_add(surface, "adjacent_face_roles", adjacent_face_roles);
-    json_object_object_add(surface, "layout_offset_x", json_object_new_double(layout_offset_x));
-    json_object_object_add(surface, "layout_offset_y", json_object_new_double(layout_offset_y));
-    json_object_array_add(surfaces, surface);
-    json_object_object_add(root, "surfaces", surfaces);
+    json_object_object_add(root, "base_surface_count", json_object_new_int(1));
+    json_object_object_add(root, "overlay_surface_count", json_object_new_int(1));
+    if (overlay_material_intent_kind) {
+        json_object_object_add(root,
+                               "overlay_material_intent_kind",
+                               json_object_new_string(overlay_material_intent_kind));
+    }
+    json_object_object_add(base_surface, "surface_id", json_object_new_int(1));
+    json_object_object_add(base_surface, "face_role", json_object_new_string(face_role));
+    json_object_object_add(base_surface, "file_name", json_object_new_string(base_file_name));
+    json_object_object_add(overlay_surface, "surface_id", json_object_new_int(1));
+    json_object_object_add(overlay_surface, "face_role", json_object_new_string(face_role));
+    json_object_object_add(overlay_surface, "file_name", json_object_new_string(overlay_file_name));
+    if (!runtime_material_payload_test_add_surface_semantic_fields(base_surface,
+                                                                   primitive_kind,
+                                                                   face_role,
+                                                                   NULL,
+                                                                   NULL,
+                                                                   NULL) ||
+        !runtime_material_payload_test_add_surface_semantic_fields(overlay_surface,
+                                                                   primitive_kind,
+                                                                   face_role,
+                                                                   NULL,
+                                                                   NULL,
+                                                                   NULL)) {
+        json_object_put(root);
+        return false;
+    }
+    for (size_t i = 0u; i < base_layer_material_intent_count; ++i) {
+        if (base_layer_material_intent_stable_ids &&
+            base_layer_material_intent_stable_ids[i]) {
+            json_object_array_add(base_intents,
+                                  json_object_new_string(
+                                      base_layer_material_intent_stable_ids[i]));
+        }
+    }
+    for (size_t i = 0u; i < overlay_layer_material_intent_count; ++i) {
+        if (overlay_layer_material_intent_stable_ids &&
+            overlay_layer_material_intent_stable_ids[i]) {
+            json_object_array_add(overlay_intents,
+                                  json_object_new_string(
+                                      overlay_layer_material_intent_stable_ids[i]));
+        }
+    }
+    json_object_object_add(base_surface, "layer_material_intent_stable_ids", base_intents);
+    json_object_object_add(overlay_surface, "layer_material_intent_stable_ids", overlay_intents);
+    runtime_material_payload_test_add_material_intent_summaries(base_surface,
+                                                                base_layer_material_intent_stable_ids,
+                                                                base_layer_material_intent_count,
+                                                                NULL,
+                                                                NULL);
+    runtime_material_payload_test_add_material_intent_summaries(overlay_surface,
+                                                                overlay_layer_material_intent_stable_ids,
+                                                                overlay_layer_material_intent_count,
+                                                                NULL,
+                                                                NULL);
+    json_object_array_add(base_surfaces, base_surface);
+    json_object_array_add(overlay_surfaces, overlay_surface);
+    json_object_object_add(root, "base_surfaces", base_surfaces);
+    json_object_object_add(root, "overlay_surfaces", overlay_surfaces);
+    write_ok = json_object_to_file_ext(manifest_path, root, JSON_C_TO_STRING_PRETTY);
+    json_object_put(root);
+    return write_ok == 0;
+}
+
+static bool runtime_material_payload_test_write_authored_texture_manifest_with_explicit_summaries(
+    const char* manifest_path,
+    const char* object_id,
+    const char* primitive_kind,
+    const char* face_role,
+    const char* file_name,
+    const char* const* layer_material_intent_stable_ids,
+    size_t layer_material_intent_count,
+    const char* explicit_base_summary,
+    const char* explicit_overlay_summary) {
+    json_object* root = NULL;
+    json_object* base_surfaces = NULL;
+    json_object* base_surface = NULL;
+    json_object* layer_intents = NULL;
+    int write_ok = 0;
+    if (!manifest_path || !object_id || !primitive_kind || !face_role || !file_name) {
+        return false;
+    }
+    root = json_object_new_object();
+    base_surfaces = json_object_new_array();
+    base_surface = json_object_new_object();
+    layer_intents = json_object_new_array();
+    if (!root || !base_surfaces || !base_surface || !layer_intents) {
+        if (root) json_object_put(root);
+        if (base_surfaces) json_object_put(base_surfaces);
+        if (base_surface) json_object_put(base_surface);
+        if (layer_intents) json_object_put(layer_intents);
+        return false;
+    }
+    json_object_object_add(root, "schema_version", json_object_new_int(5));
+    json_object_object_add(root,
+                           "export_binding_kind",
+                           json_object_new_string("SEPARATE_FACES"));
+    json_object_object_add(root,
+                           "emitted_output_kind",
+                           json_object_new_string("FLATTENED_ONLY"));
+    json_object_object_add(root, "primitive_kind", json_object_new_string(primitive_kind));
+    json_object_object_add(root, "source_scene_id", json_object_new_string("scene_payload_test"));
+    json_object_object_add(root, "source_object_id", json_object_new_string(object_id));
+    json_object_object_add(root, "base_surface_count", json_object_new_int(1));
+    json_object_object_add(base_surface, "surface_id", json_object_new_int(1));
+    json_object_object_add(base_surface, "face_role", json_object_new_string(face_role));
+    json_object_object_add(base_surface, "file_name", json_object_new_string(file_name));
+    if (!runtime_material_payload_test_add_surface_semantic_fields(base_surface,
+                                                                   primitive_kind,
+                                                                   face_role,
+                                                                   NULL,
+                                                                   NULL,
+                                                                   NULL)) {
+        json_object_put(root);
+        return false;
+    }
+    for (size_t i = 0u; i < layer_material_intent_count; ++i) {
+        if (layer_material_intent_stable_ids && layer_material_intent_stable_ids[i]) {
+            json_object_array_add(layer_intents,
+                                  json_object_new_string(layer_material_intent_stable_ids[i]));
+        }
+    }
+    json_object_object_add(base_surface, "layer_material_intent_stable_ids", layer_intents);
+    runtime_material_payload_test_add_material_intent_summaries(base_surface,
+                                                                layer_material_intent_stable_ids,
+                                                                layer_material_intent_count,
+                                                                explicit_base_summary,
+                                                                explicit_overlay_summary);
+    json_object_array_add(base_surfaces, base_surface);
+    json_object_object_add(root, "base_surfaces", base_surfaces);
     write_ok = json_object_to_file_ext(manifest_path, root, JSON_C_TO_STRING_PRETTY);
     json_object_put(root);
     return write_ok == 0;
@@ -716,6 +1044,7 @@ static int test_runtime_material_payload_authored_texture_metadata_contract(void
         "/tmp/ray_tracing_authored_texture_metadata_contract/plane_manifest.json";
     const char* manifest_rel = "plane_manifest.json";
     const unsigned char rgba[4] = {255u, 255u, 255u, 255u};
+    const char* intents[] = {"concrete", "oil"};
 
     (void)mkdir(dir, 0775);
     memset(&sceneSettings, 0, sizeof(sceneSettings));
@@ -735,11 +1064,13 @@ static int test_runtime_material_payload_authored_texture_metadata_contract(void
                     "PLANE",
                     "FRONT",
                     "plane_front.png",
-                    "PLANE_SINGLE",
+                    "PLANE",
                     "FRONT",
                     "R0",
                     11.5,
-                    -4.25));
+                    -4.25,
+                    intents,
+                    2u));
     assert_true("runtime_material_payload_authored_metadata_bind_ok",
                 RuntimeMaterialAuthoredTextureBindManifestForObject(0,
                                                                    "glass_plane",
@@ -751,15 +1082,19 @@ static int test_runtime_material_payload_authored_texture_metadata_contract(void
     assert_true("runtime_material_payload_authored_metadata_slot",
                 strcmp(metadata.netSlot, "FRONT") == 0);
     assert_true("runtime_material_payload_authored_metadata_layout_kind",
-                strcmp(metadata.netLayoutKind, "PLANE_SINGLE") == 0);
+                strcmp(metadata.netLayoutKind, "PLANE") == 0);
     assert_true("runtime_material_payload_authored_metadata_orientation",
                 strcmp(metadata.orientation, "R0") == 0);
+    assert_true("runtime_material_payload_authored_metadata_base_material_intent",
+                strcmp(metadata.baseMaterialIntentKind, "concrete") == 0);
+    assert_true("runtime_material_payload_authored_metadata_overlay_material_intent",
+                strcmp(metadata.overlayMaterialIntentKind, "oil") == 0);
     assert_true("runtime_material_payload_authored_metadata_corner_ids",
-                metadata.cornerIds[0] == 0u && metadata.cornerIds[1] == 1u &&
-                    metadata.cornerIds[2] == 2u && metadata.cornerIds[3] == 3u);
+                metadata.cornerIds[0] == 255u && metadata.cornerIds[1] == 255u &&
+                    metadata.cornerIds[2] == 255u && metadata.cornerIds[3] == 255u);
     assert_true("runtime_material_payload_authored_metadata_edge_ids",
-                metadata.edgeIds[0] == 10u && metadata.edgeIds[1] == 11u &&
-                    metadata.edgeIds[2] == 12u && metadata.edgeIds[3] == 13u);
+                metadata.edgeIds[0] == 255u && metadata.edgeIds[1] == 255u &&
+                    metadata.edgeIds[2] == 255u && metadata.edgeIds[3] == 255u);
     assert_close("runtime_material_payload_authored_metadata_offset_x",
                  metadata.layoutOffsetX,
                  11.5,
@@ -769,6 +1104,348 @@ static int test_runtime_material_payload_authored_texture_metadata_contract(void
                  -4.25,
                  1e-9);
 
+    RuntimeMaterialAuthoredTextureResetAll();
+    unlink(png_path);
+    unlink(manifest_path);
+    rmdir(dir);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_material_payload_authored_texture_explicit_summary_overrides_layer_list(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeMaterialAuthoredTextureFaceMetadata metadata;
+    const char* dir = "/tmp/ray_tracing_authored_texture_summary_precedence";
+    const char* png_path = "/tmp/ray_tracing_authored_texture_summary_precedence/plane_front.png";
+    const char* manifest_path =
+        "/tmp/ray_tracing_authored_texture_summary_precedence/plane_manifest.json";
+    const char* manifest_rel = "plane_manifest.json";
+    const unsigned char rgba[4] = {255u, 255u, 255u, 255u};
+    const char* intents[] = {"solid", "oil"};
+
+    (void)mkdir(dir, 0775);
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 8.0, 0.0, NULL, 0);
+    snprintf(animSettings.runtimeScenePath,
+             sizeof(animSettings.runtimeScenePath),
+             "%s/scene_runtime.json",
+             dir);
+    assert_true("runtime_material_payload_explicit_summary_png_write_ok",
+                runtime_material_payload_test_write_png_rgba(png_path, rgba, 1u, 1u));
+    assert_true("runtime_material_payload_explicit_summary_manifest_write_ok",
+                runtime_material_payload_test_write_authored_texture_manifest_with_explicit_summaries(
+                    manifest_path,
+                    "glass_plane",
+                    "PLANE",
+                    "FRONT",
+                    "plane_front.png",
+                    intents,
+                    2u,
+                    "concrete",
+                    "grime"));
+    assert_true("runtime_material_payload_explicit_summary_bind_ok",
+                RuntimeMaterialAuthoredTextureBindManifestForObject(0,
+                                                                   "glass_plane",
+                                                                   manifest_rel,
+                                                                   "override"));
+    assert_true("runtime_material_payload_explicit_summary_get_ok",
+                RuntimeMaterialAuthoredTextureGetFaceMetadata(0, 0, &metadata));
+    assert_true("runtime_material_payload_explicit_summary_base_kind",
+                strcmp(metadata.baseMaterialIntentKind, "concrete") == 0);
+    assert_true("runtime_material_payload_explicit_summary_overlay_kind",
+                strcmp(metadata.overlayMaterialIntentKind, "grime") == 0);
+
+    RuntimeMaterialAuthoredTextureResetAll();
+    unlink(png_path);
+    unlink(manifest_path);
+    rmdir(dir);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_material_payload_authored_texture_face_base_intent_modulates_bsdf(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeMaterialPayload3D baseline = {0};
+    RuntimeMaterialPayload3D authored = {0};
+    HitInfo3D hit = {0};
+    const char* dir = "/tmp/rt_authored_texture_base_intent_suite";
+    const char* png_path = "/tmp/rt_authored_texture_base_intent_suite/metal_plane_front.png";
+    const char* manifest_path =
+        "/tmp/rt_authored_texture_base_intent_suite/metal_plane_texture_manifest.json";
+    const char* manifest_rel = "metal_plane_texture_manifest.json";
+    const unsigned char rgba[] = {210u, 210u, 210u, 255u};
+    const char* intents[] = {"metal"};
+    bool ok = false;
+
+    MaterialManagerResetDefaults();
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    RuntimeMaterialAuthoredTextureResetAll();
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 8.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].color = 0xA0A0A0;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_ROUGH_METAL;
+    sceneSettings.sceneObjects[0].alpha = 1.0;
+    sceneSettings.sceneObjects[0].textureStrength = 0.0;
+
+    HitInfo3D_Reset(&hit);
+    hit.sceneObjectIndex = 0;
+    hit.triangleIndex = 2;
+    hit.localTriangleIndex = 0;
+    hit.primitiveIndex = 0;
+    hit.baryU = 0.25;
+    hit.baryV = 0.25;
+    hit.baryW = 0.50;
+
+    ok = RuntimeMaterialPayload3D_ResolveFromHit(&hit, &baseline);
+    assert_true("runtime_material_payload_authored_base_intent_baseline_ok", ok);
+
+    (void)mkdir(dir, 0775);
+    assert_true("runtime_material_payload_authored_base_intent_png_write_ok",
+                runtime_material_payload_test_write_png_rgba(png_path, rgba, 1u, 1u));
+    assert_true("runtime_material_payload_authored_base_intent_manifest_write_ok",
+                runtime_material_payload_test_write_authored_texture_manifest_with_metadata(
+                    manifest_path,
+                    "metal_plane",
+                    "PLANE",
+                    "FRONT",
+                    "metal_plane_front.png",
+                    "PLANE",
+                    "FRONT",
+                    "R0",
+                    0.0,
+                    0.0,
+                    intents,
+                    1u));
+    snprintf(animSettings.runtimeScenePath,
+             sizeof(animSettings.runtimeScenePath),
+             "%s/scene_runtime.json",
+             dir);
+    assert_true("runtime_material_payload_authored_base_intent_bind_ok",
+                RuntimeMaterialAuthoredTextureBindManifestForObject(0,
+                                                                   "metal_plane",
+                                                                   manifest_rel,
+                                                                   "override"));
+    ok = RuntimeMaterialPayload3D_ResolveFromHit(&hit, &authored);
+    assert_true("runtime_material_payload_authored_base_intent_hit_ok", ok);
+    assert_true("runtime_material_payload_authored_base_intent_reflectivity_up",
+                authored.bsdf.reflectivity > baseline.bsdf.reflectivity + 1e-6);
+    assert_true("runtime_material_payload_authored_base_intent_roughness_down",
+                authored.bsdf.roughness < baseline.bsdf.roughness - 1e-6);
+
+    RuntimeMaterialAuthoredTextureResetAll();
+    unlink(png_path);
+    unlink(manifest_path);
+    rmdir(dir);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_material_payload_authored_texture_face_overlay_intent_overrides_binding_default(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeMaterialPayload3D baseline = {0};
+    RuntimeMaterialPayload3D authored = {0};
+    RuntimeMaterialAuthoredTextureFaceMetadata metadata = {0};
+    HitInfo3D hit = {0};
+    const char* dir = "/tmp/rt_authored_texture_overlay_intent_suite";
+    const char* base_png_path = "/tmp/rt_authored_texture_overlay_intent_suite/intent_plane_front_base.png";
+    const char* overlay_png_path = "/tmp/rt_authored_texture_overlay_intent_suite/intent_plane_front_overlay.png";
+    const char* manifest_path =
+        "/tmp/rt_authored_texture_overlay_intent_suite/intent_plane_texture_manifest.json";
+    const char* manifest_rel = "intent_plane_texture_manifest.json";
+    const unsigned char base_rgba[] = {120u, 120u, 120u, 255u};
+    const unsigned char overlay_rgba[] = {240u, 220u, 40u, 255u};
+    const char* base_intents[] = {"solid"};
+    const char* overlay_intents[] = {"oil"};
+    bool ok = false;
+
+    MaterialManagerResetDefaults();
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    RuntimeMaterialAuthoredTextureResetAll();
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 8.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].color = 0xA8A8A8;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
+    sceneSettings.sceneObjects[0].alpha = 1.0;
+    sceneSettings.sceneObjects[0].textureStrength = 0.0;
+
+    HitInfo3D_Reset(&hit);
+    hit.sceneObjectIndex = 0;
+    hit.triangleIndex = 2;
+    hit.localTriangleIndex = 0;
+    hit.primitiveIndex = 0;
+    hit.baryU = 0.2;
+    hit.baryV = 0.3;
+    hit.baryW = 0.5;
+
+    ok = RuntimeMaterialPayload3D_ResolveFromHit(&hit, &baseline);
+    assert_true("runtime_material_payload_authored_overlay_intent_baseline_ok", ok);
+
+    (void)mkdir(dir, 0775);
+    assert_true("runtime_material_payload_authored_overlay_intent_base_png_write_ok",
+                runtime_material_payload_test_write_png_rgba(base_png_path, base_rgba, 1u, 1u));
+    assert_true("runtime_material_payload_authored_overlay_intent_overlay_png_write_ok",
+                runtime_material_payload_test_write_png_rgba(overlay_png_path, overlay_rgba, 1u, 1u));
+    assert_true("runtime_material_payload_authored_overlay_intent_manifest_write_ok",
+                runtime_material_payload_test_write_dual_lane_manifest_with_intents(
+                    manifest_path,
+                    "intent_plane",
+                    "PLANE",
+                    "FRONT",
+                    "intent_plane_front_base.png",
+                    "intent_plane_front_overlay.png",
+                    base_intents,
+                    1u,
+                    overlay_intents,
+                    1u,
+                    NULL));
+    snprintf(animSettings.runtimeScenePath,
+             sizeof(animSettings.runtimeScenePath),
+             "%s/scene_runtime.json",
+             dir);
+    assert_true("runtime_material_payload_authored_overlay_intent_bind_ok",
+                RuntimeMaterialAuthoredTextureBindManifestForObject(0,
+                                                                   "intent_plane",
+                                                                   manifest_rel,
+                                                                   "override"));
+    assert_true("runtime_material_payload_authored_overlay_intent_metadata_ok",
+                RuntimeMaterialAuthoredTextureGetFaceMetadata(0, 0, &metadata));
+    assert_true("runtime_material_payload_authored_overlay_intent_metadata_overlay_kind",
+                strcmp(metadata.overlayMaterialIntentKind, "oil") == 0);
+    ok = RuntimeMaterialPayload3D_ResolveFromHit(&hit, &authored);
+    assert_true("runtime_material_payload_authored_overlay_intent_hit_ok", ok);
+    assert_true("runtime_material_payload_authored_overlay_intent_reflectivity_up",
+                authored.bsdf.reflectivity > baseline.bsdf.reflectivity + 1e-6);
+
+    RuntimeMaterialAuthoredTextureResetAll();
+    unlink(base_png_path);
+    unlink(overlay_png_path);
+    unlink(manifest_path);
+    rmdir(dir);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_material_payload_authored_texture_becomes_base_but_keeps_overlay_stack(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeMaterialPayload3D authored_only = {0};
+    RuntimeMaterialPayload3D authored_with_base_stack = {0};
+    RuntimeMaterialPayload3D authored_with_overlay_stack = {0};
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    HitInfo3D hit = {0};
+    const char* dir = "/tmp/rt_authored_texture_overlay_stack_suite";
+    const char* png_path = "/tmp/rt_authored_texture_overlay_stack_suite/painted_plane_front.png";
+    const char* manifest_path =
+        "/tmp/rt_authored_texture_overlay_stack_suite/painted_plane_texture_manifest.json";
+    const char* manifest_rel = "painted_plane_texture_manifest.json";
+    const unsigned char rgba[] = {240u, 24u, 16u, 255u};
+    bool ok = false;
+
+    MaterialManagerResetDefaults();
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 8.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].color = 0x90A0B8;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_ROUGH_METAL;
+    sceneSettings.sceneObjects[0].alpha = 1.0;
+    sceneSettings.sceneObjects[0].textureId = RUNTIME_MATERIAL_TEXTURE_3D_NONE;
+    sceneSettings.sceneObjects[0].textureStrength = 0.0;
+
+    HitInfo3D_Reset(&hit);
+    hit.sceneObjectIndex = 0;
+    hit.triangleIndex = 2;
+    hit.localTriangleIndex = 0;
+    hit.primitiveIndex = 0;
+    hit.baryU = 0.31;
+    hit.baryV = 0.26;
+    hit.baryW = 0.43;
+
+    (void)mkdir(dir, 0775);
+    assert_true("runtime_material_payload_authored_stack_png_write_ok",
+                runtime_material_payload_test_write_png_rgba(png_path, rgba, 1u, 1u));
+    assert_true("runtime_material_payload_authored_stack_manifest_write_ok",
+                runtime_material_payload_test_write_authored_texture_manifest(manifest_path,
+                                                                              "painted_plane",
+                                                                              "PLANE",
+                                                                              "FRONT",
+                                                                              "painted_plane_front.png"));
+    snprintf(animSettings.runtimeScenePath,
+             sizeof(animSettings.runtimeScenePath),
+             "%s/scene_runtime.json",
+             dir);
+    assert_true("runtime_material_payload_authored_stack_bind_ok",
+                RuntimeMaterialAuthoredTextureBindManifestForObject(0,
+                                                                   "painted_plane",
+                                                                   manifest_rel,
+                                                                   "override"));
+
+    ok = RuntimeMaterialPayload3D_ResolveFromHit(&hit, &authored_only);
+    assert_true("runtime_material_payload_authored_stack_authored_only_ok", ok);
+    assert_true("runtime_material_payload_authored_stack_authored_only_mask",
+                authored_only.textureMask > 0.99);
+    assert_true("runtime_material_payload_authored_stack_authored_only_red_dominant",
+                authored_only.baseColorR > authored_only.baseColorG &&
+                    authored_only.baseColorR > authored_only.baseColorB);
+
+    stack.layerCount = 1;
+    stack.layers[0] = RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_WOOD);
+    stack.layers[0].placement.scale = 2.4;
+    assert_true("runtime_material_payload_authored_stack_base_only_set",
+                SceneEditorMaterialStackSetObjectStack(0, &stack));
+    ok = RuntimeMaterialPayload3D_ResolveFromHit(&hit, &authored_with_base_stack);
+    assert_true("runtime_material_payload_authored_stack_base_only_ok", ok);
+    assert_close("runtime_material_payload_authored_stack_base_only_color_r_matches",
+                 authored_with_base_stack.baseColorR,
+                 authored_only.baseColorR,
+                 1e-9);
+    assert_close("runtime_material_payload_authored_stack_base_only_color_g_matches",
+                 authored_with_base_stack.baseColorG,
+                 authored_only.baseColorG,
+                 1e-9);
+    assert_close("runtime_material_payload_authored_stack_base_only_color_b_matches",
+                 authored_with_base_stack.baseColorB,
+                 authored_only.baseColorB,
+                 1e-9);
+    assert_close("runtime_material_payload_authored_stack_base_only_roughness_matches",
+                 authored_with_base_stack.bsdf.roughness,
+                 authored_only.bsdf.roughness,
+                 1e-9);
+
+    stack.layerCount = 2;
+    stack.layers[0] = RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_WOOD);
+    stack.layers[0].placement.scale = 2.4;
+    stack.layers[1] =
+        runtime_material_test_make_strong_overlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME, 3.8);
+    assert_true("runtime_material_payload_authored_stack_overlay_set",
+                SceneEditorMaterialStackSetObjectStack(0, &stack));
+    ok = RuntimeMaterialPayload3D_ResolveFromHit(&hit, &authored_with_overlay_stack);
+    assert_true("runtime_material_payload_authored_stack_overlay_ok", ok);
+    assert_true("runtime_material_payload_authored_stack_overlay_darkens",
+                authored_with_overlay_stack.baseColorR <
+                    authored_only.baseColorR - 1e-6 ||
+                authored_with_overlay_stack.baseColorG <
+                    authored_only.baseColorG - 1e-6 ||
+                authored_with_overlay_stack.baseColorB <
+                    authored_only.baseColorB - 1e-6);
+    assert_true("runtime_material_payload_authored_stack_overlay_roughens",
+                authored_with_overlay_stack.bsdf.roughness >
+                    authored_only.bsdf.roughness + 1e-6);
+
+    SceneEditorMaterialStackResetAll();
     RuntimeMaterialAuthoredTextureResetAll();
     unlink(png_path);
     unlink(manifest_path);
@@ -1647,7 +2324,11 @@ int run_test_runtime_lighting_materials_payload_suite(void) {
     test_runtime_material_payload_3d_rust_texture_is_hit_anchored();
     test_runtime_material_payload_3d_face_texture_override_affects_hit();
     test_runtime_material_payload_3d_authored_texture_override_affects_hit();
+    test_runtime_material_payload_authored_texture_becomes_base_but_keeps_overlay_stack();
     test_runtime_material_payload_authored_texture_metadata_contract();
+    test_runtime_material_payload_authored_texture_explicit_summary_overrides_layer_list();
+    test_runtime_material_payload_authored_texture_face_base_intent_modulates_bsdf();
+    test_runtime_material_payload_authored_texture_face_overlay_intent_overrides_binding_default();
     test_runtime_material_payload_3d_fog_texture_roughens_transparency();
     test_runtime_material_texture_3d_uv_sampler_matches_hit_sampler();
     test_runtime_material_texture_3d_rust_parameter_modes_change_masks();

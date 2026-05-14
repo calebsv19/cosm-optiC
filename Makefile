@@ -2,7 +2,7 @@ CC        := cc
 CSTD      := -std=c11
 SRC_DIR   := src
 INC_DIR   := include
-BUILD_DIR := build
+BUILD_DIR_BASE ?= build
 TARGET    := Ray_anim
 .DEFAULT_GOAL := all
 DIST_DIR := dist
@@ -22,7 +22,8 @@ PACKAGE_APP_ICON_FILE := $(PACKAGE_APP_ICON_NAME).icns
 PACKAGE_APP_ICON_SRC ?= $(PACKAGE_LOCAL_ICON_DIR)/$(PACKAGE_APP_ICON_FILE)
 PACKAGE_APP_ICONSET_SRC ?= $(PACKAGE_LOCAL_ICON_DIR)/$(PACKAGE_APP_ICON_NAME).iconset
 PACKAGE_BUNDLED_ICON_PATH := $(PACKAGE_RESOURCES_DIR)/$(PACKAGE_APP_ICON_FILE)
-PACKAGE_FFMPEG_SRC ?= $(shell command -v ffmpeg 2>/dev/null)
+PACKAGE_FFMPEG_SRC ?=
+PACKAGE_REQUIRE_FFMPEG ?= 0
 DESKTOP_APP_DIR ?= $(HOME)/Desktop/$(PACKAGE_APP_NAME)
 PACKAGE_ADHOC_SIGN_IDENTITY ?= -
 
@@ -47,6 +48,7 @@ APPLE_TEAM_ID ?=
 STAPLE_MAX_ATTEMPTS ?= 6
 STAPLE_RETRY_DELAY_SEC ?= 15
 SHARED_ROOT ?= third_party/codework_shared
+SHARED_WORKSPACE_DIR ?= ../shared
 SHARED_ASSETS_DIR := $(SHARED_ROOT)/assets
 VK_RENDERER_DIR := $(SHARED_ROOT)/vk_renderer
 CORE_BASE_DIR := $(SHARED_ROOT)/core/core_base
@@ -56,6 +58,7 @@ CORE_PACK_DIR := $(SHARED_ROOT)/core/core_pack
 CORE_TIME_DIR := $(SHARED_ROOT)/core/core_time
 CORE_SIM_DIR := $(SHARED_ROOT)/core/core_sim
 CORE_SCENE_DIR := $(SHARED_ROOT)/core/core_scene
+CORE_AUTHORED_TEXTURE_DIR := $(SHARED_ROOT)/core/core_authored_texture
 CORE_SCENE_COMPILE_DIR := $(SHARED_ROOT)/core/core_scene_compile
 CORE_OBJECT_DIR := $(SHARED_ROOT)/core/core_object
 CORE_UNITS_DIR := $(SHARED_ROOT)/core/core_units
@@ -69,6 +72,9 @@ KIT_PANE_DIR := $(SHARED_ROOT)/kit/kit_pane
 KIT_VIZ_DIR := $(SHARED_ROOT)/kit/kit_viz
 KIT_RUNTIME_DIAG_DIR := $(SHARED_ROOT)/kit/kit_runtime_diag
 KIT_WORKSPACE_AUTHORING_DIR := $(SHARED_ROOT)/kit/kit_workspace_authoring
+ifeq ($(wildcard $(CORE_AUTHORED_TEXTURE_DIR)/include/core_authored_texture.h),)
+CORE_AUTHORED_TEXTURE_DIR := $(SHARED_WORKSPACE_DIR)/core/core_authored_texture
+endif
 UNAME_S := $(shell uname -s)
 PKG_CONFIG ?= pkg-config
 TARGET_CONTRACT_HELPER ?= ../bin/desktop_release_target_contract.sh
@@ -186,8 +192,15 @@ ifeq ($(UNAME_S),Darwin)
 CFLAGS += -DVK_USE_PLATFORM_METAL_EXT
 CFLAGS_RELEASE += -DVK_USE_PLATFORM_METAL_EXT
 endif
-REL_BUILD_DIR := build_release
+REL_BUILD_DIR_BASE ?= build_release
 REL_TARGET := Ray_anim_release
+ifeq ($(UNAME_S),Darwin)
+BUILD_DIR ?= $(BUILD_DIR_BASE)/$(TARGET_ARCH)
+REL_BUILD_DIR ?= $(REL_BUILD_DIR_BASE)/$(TARGET_ARCH)
+else
+BUILD_DIR ?= $(BUILD_DIR_BASE)
+REL_BUILD_DIR ?= $(REL_BUILD_DIR_BASE)
+endif
 
 CLI_BIN_DIR := tools/cli/bin
 CLI_TOOLS := $(CLI_BIN_DIR)/shape_asset_tool $(CLI_BIN_DIR)/shape_import_tool $(CLI_BIN_DIR)/shape_sanity_tool
@@ -304,6 +317,7 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry_trace_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_volume_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials.o \
+	$(BUILD_DIR)/tests/test_runtime_material_authored_texture_validation_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials_payload_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials_direct_light_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials_transport_suite.o \
@@ -330,13 +344,13 @@ TIMER_HUD_DIR := $(SHARED_ROOT)/timer_hud
 TIMER_HUD_INCLUDE := -I$(TIMER_HUD_DIR)/include -I$(TIMER_HUD_DIR)/external
 
 CFLAGS += $(TIMER_HUD_INCLUDE) -I$(VK_RENDERER_DIR)/include $(VULKAN_CFLAGS) \
-	-I$(CORE_BASE_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_DATA_DIR)/include -I$(CORE_PACK_DIR)/include -I$(CORE_TIME_DIR)/include -I$(CORE_SIM_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_SCENE_COMPILE_DIR)/include -I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include -I$(CORE_TRACE_DIR)/include -I$(CORE_SPACE_DIR)/include -I$(CORE_PANE_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(KIT_RENDER_DIR)/include -I$(KIT_PANE_DIR)/include -I$(KIT_VIZ_DIR)/include -I$(KIT_RUNTIME_DIAG_DIR)/include -I$(KIT_WORKSPACE_AUTHORING_DIR)/include \
+	-I$(CORE_BASE_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_DATA_DIR)/include -I$(CORE_PACK_DIR)/include -I$(CORE_TIME_DIR)/include -I$(CORE_SIM_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_AUTHORED_TEXTURE_DIR)/include -I$(CORE_SCENE_COMPILE_DIR)/include -I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include -I$(CORE_TRACE_DIR)/include -I$(CORE_SPACE_DIR)/include -I$(CORE_PANE_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(KIT_RENDER_DIR)/include -I$(KIT_PANE_DIR)/include -I$(KIT_VIZ_DIR)/include -I$(KIT_RUNTIME_DIAG_DIR)/include -I$(KIT_WORKSPACE_AUTHORING_DIR)/include \
 	-DKIT_RENDER_ENABLE_VK_BACKEND=0 \
 	-DUSE_VULKAN=1 -DVK_RENDERER_SHADER_ROOT=\"$(abspath $(VK_RENDERER_DIR))\" \
 	-include $(VK_RENDERER_DIR)/include/vk_renderer_sdl.h
 LDFLAGS += $(VULKAN_LIBS)
 CFLAGS_RELEASE += $(TIMER_HUD_INCLUDE) -I$(VK_RENDERER_DIR)/include $(VULKAN_CFLAGS) \
-	-I$(CORE_BASE_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_DATA_DIR)/include -I$(CORE_PACK_DIR)/include -I$(CORE_TIME_DIR)/include -I$(CORE_SIM_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_SCENE_COMPILE_DIR)/include -I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include -I$(CORE_TRACE_DIR)/include -I$(CORE_SPACE_DIR)/include -I$(CORE_PANE_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(KIT_RENDER_DIR)/include -I$(KIT_PANE_DIR)/include -I$(KIT_VIZ_DIR)/include -I$(KIT_RUNTIME_DIAG_DIR)/include -I$(KIT_WORKSPACE_AUTHORING_DIR)/include \
+	-I$(CORE_BASE_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_DATA_DIR)/include -I$(CORE_PACK_DIR)/include -I$(CORE_TIME_DIR)/include -I$(CORE_SIM_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_AUTHORED_TEXTURE_DIR)/include -I$(CORE_SCENE_COMPILE_DIR)/include -I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include -I$(CORE_TRACE_DIR)/include -I$(CORE_SPACE_DIR)/include -I$(CORE_PANE_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(KIT_RENDER_DIR)/include -I$(KIT_PANE_DIR)/include -I$(KIT_VIZ_DIR)/include -I$(KIT_RUNTIME_DIAG_DIR)/include -I$(KIT_WORKSPACE_AUTHORING_DIR)/include \
 	-DKIT_RENDER_ENABLE_VK_BACKEND=0 \
 	-DUSE_VULKAN=1 -DVK_RENDERER_SHADER_ROOT=\"$(abspath $(VK_RENDERER_DIR))\" \
 	-include $(VK_RENDERER_DIR)/include/vk_renderer_sdl.h
@@ -401,6 +415,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/editor/editor_mode_router.o \
 	$(BUILD_DIR)/editor/material_editor_knob_control.o \
 	$(BUILD_DIR)/editor/material_editor_layer_model.o \
+	$(BUILD_DIR)/editor/material_editor_authored_texture_binding.o \
 	$(BUILD_DIR)/editor/material_editor.o \
 	$(BUILD_DIR)/editor/object_editor_object_ops.o \
 	$(BUILD_DIR)/editor/object_editor_selection_tracker.o \
@@ -484,6 +499,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/core_pack/core_pack.o \
 	$(CORE_TIME_TEST_DEPS) \
 	$(BUILD_DIR)/core_scene/core_scene.o \
+	$(BUILD_DIR)/core_authored_texture/core_authored_texture.o \
 	$(BUILD_DIR)/core_scene_compile/core_scene_compile.o \
 	$(BUILD_DIR)/core_object/core_object.o \
 	$(BUILD_DIR)/core_units/core_units.o \
@@ -525,6 +541,7 @@ CORE_TIME_SRCS += $(CORE_TIME_DIR)/src/core_time_posix.c
 endif
 CORE_SIM_SRCS := $(CORE_SIM_DIR)/src/core_sim.c
 CORE_SCENE_SRCS := $(CORE_SCENE_DIR)/src/core_scene.c
+CORE_AUTHORED_TEXTURE_SRCS := $(CORE_AUTHORED_TEXTURE_DIR)/src/core_authored_texture.c
 CORE_SCENE_COMPILE_SRCS := $(CORE_SCENE_COMPILE_DIR)/src/core_scene_compile.c
 CORE_OBJECT_SRCS := $(CORE_OBJECT_DIR)/src/core_object.c
 CORE_UNITS_SRCS := $(CORE_UNITS_DIR)/src/core_units.c
@@ -551,6 +568,7 @@ CORE_PACK_OBJS := $(patsubst $(CORE_PACK_DIR)/src/%.c,$(BUILD_DIR)/core_pack/%.o
 CORE_TIME_OBJS := $(patsubst $(CORE_TIME_DIR)/src/%.c,$(BUILD_DIR)/core_time/%.o,$(CORE_TIME_SRCS))
 CORE_SIM_OBJS := $(patsubst $(CORE_SIM_DIR)/src/%.c,$(BUILD_DIR)/core_sim/%.o,$(CORE_SIM_SRCS))
 CORE_SCENE_OBJS := $(patsubst $(CORE_SCENE_DIR)/src/%.c,$(BUILD_DIR)/core_scene/%.o,$(CORE_SCENE_SRCS))
+CORE_AUTHORED_TEXTURE_OBJS := $(patsubst $(CORE_AUTHORED_TEXTURE_DIR)/src/%.c,$(BUILD_DIR)/core_authored_texture/%.o,$(CORE_AUTHORED_TEXTURE_SRCS))
 CORE_SCENE_COMPILE_OBJS := $(patsubst $(CORE_SCENE_COMPILE_DIR)/src/%.c,$(BUILD_DIR)/core_scene_compile/%.o,$(CORE_SCENE_COMPILE_SRCS))
 CORE_OBJECT_OBJS := $(patsubst $(CORE_OBJECT_DIR)/src/%.c,$(BUILD_DIR)/core_object/%.o,$(CORE_OBJECT_SRCS))
 CORE_UNITS_OBJS := $(patsubst $(CORE_UNITS_DIR)/src/%.c,$(BUILD_DIR)/core_units/%.o,$(CORE_UNITS_SRCS))
@@ -571,7 +589,7 @@ TEST_DEPS += $(KIT_RENDER_OBJS) $(CORE_PANE_OBJS) $(KIT_PANE_OBJS) $(KIT_WORKSPA
 
 OBJ := $(OBJ) $(TIMER_HUD_OBJS) $(TIMER_HUD_EXTERNAL_OBJS) \
 	$(patsubst $(VK_RENDERER_DIR)/src/%.c,$(BUILD_DIR)/vk_renderer/%.o,$(VK_RENDERER_SRCS)) \
-	$(CORE_BASE_OBJS) $(CORE_IO_OBJS) $(CORE_DATA_OBJS) $(CORE_PACK_OBJS) $(CORE_TIME_OBJS) $(CORE_SIM_OBJS) $(CORE_SCENE_OBJS) $(CORE_SCENE_COMPILE_OBJS) $(CORE_OBJECT_OBJS) $(CORE_UNITS_OBJS) $(CORE_SPACE_OBJS) $(CORE_PANE_OBJS) $(CORE_THEME_OBJS) $(CORE_FONT_OBJS) $(KIT_RENDER_OBJS) $(KIT_PANE_OBJS) $(KIT_VIZ_OBJS) $(KIT_RUNTIME_DIAG_OBJS) $(KIT_WORKSPACE_AUTHORING_OBJS)
+	$(CORE_BASE_OBJS) $(CORE_IO_OBJS) $(CORE_DATA_OBJS) $(CORE_PACK_OBJS) $(CORE_TIME_OBJS) $(CORE_SIM_OBJS) $(CORE_SCENE_OBJS) $(CORE_AUTHORED_TEXTURE_OBJS) $(CORE_SCENE_COMPILE_OBJS) $(CORE_OBJECT_OBJS) $(CORE_UNITS_OBJS) $(CORE_SPACE_OBJS) $(CORE_PANE_OBJS) $(CORE_THEME_OBJS) $(CORE_FONT_OBJS) $(KIT_RENDER_OBJS) $(KIT_PANE_OBJS) $(KIT_VIZ_OBJS) $(KIT_RUNTIME_DIAG_OBJS) $(KIT_WORKSPACE_AUTHORING_OBJS)
 DEP := $(OBJ:.o=.d)
 
 .PHONY: add-disney-flag
@@ -695,6 +713,10 @@ $(BUILD_DIR)/core_scene/%.o: $(CORE_SCENE_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
+$(BUILD_DIR)/core_authored_texture/%.o: $(CORE_AUTHORED_TEXTURE_DIR)/src/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
 $(BUILD_DIR)/core_scene_compile/%.o: $(CORE_SCENE_COMPILE_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
@@ -780,10 +802,37 @@ package-desktop: all
 	else \
 		echo "warning: no app icon source found at $(PACKAGE_APP_ICON_SRC) or $(PACKAGE_APP_ICONSET_SRC)"; \
 	fi
-	@if [ -n "$(PACKAGE_FFMPEG_SRC)" ] && [ -x "$(PACKAGE_FFMPEG_SRC)" ] && \
-		/usr/bin/lipo -archs "$(PACKAGE_FFMPEG_SRC)" 2>/dev/null | /usr/bin/grep -Eq '(^| )$(TARGET_ARCH)($| )'; then \
-		cp "$(PACKAGE_FFMPEG_SRC)" "$(PACKAGE_TOOLS_DIR)/ffmpeg"; \
+	@ffmpeg_src=""; \
+	ffmpeg_archs=""; \
+	if [ -n "$(PACKAGE_FFMPEG_SRC)" ] && [ -x "$(PACKAGE_FFMPEG_SRC)" ]; then \
+		ffmpeg_src="$(PACKAGE_FFMPEG_SRC)"; \
+	else \
+		for candidate in "$(TARGET_HOMEBREW_PREFIX)/bin/ffmpeg" "$(TARGET_ALT_HOMEBREW_PREFIX)/bin/ffmpeg" /usr/local/bin/ffmpeg /opt/homebrew/bin/ffmpeg /usr/bin/ffmpeg; do \
+			if [ -x "$$candidate" ]; then \
+				ffmpeg_src="$$candidate"; \
+				break; \
+			fi; \
+		done; \
+	fi; \
+	if [ -n "$$ffmpeg_src" ]; then \
+		ffmpeg_archs="$$(/usr/bin/lipo -archs "$$ffmpeg_src" 2>/dev/null || /usr/bin/file -b "$$ffmpeg_src" 2>/dev/null || true)"; \
+	fi; \
+	case " $$ffmpeg_archs " in \
+		*" $(TARGET_ARCH) "*) ffmpeg_arch_match=1 ;; \
+		*) ffmpeg_arch_match=0 ;; \
+	esac; \
+	if [ -n "$$ffmpeg_src" ] && [ "$$ffmpeg_arch_match" = "1" ]; then \
+		cp "$$ffmpeg_src" "$(PACKAGE_TOOLS_DIR)/ffmpeg"; \
 		chmod +x "$(PACKAGE_TOOLS_DIR)/ffmpeg"; \
+		echo "Bundled ffmpeg from $$ffmpeg_src"; \
+	elif [ "$(PACKAGE_REQUIRE_FFMPEG)" = "1" ]; then \
+		if [ -n "$$ffmpeg_src" ]; then \
+			echo "Missing TARGET_ARCH=$(TARGET_ARCH) ffmpeg: $$ffmpeg_src provides '$${ffmpeg_archs:-unknown}'"; \
+		else \
+			echo "Missing TARGET_ARCH=$(TARGET_ARCH) ffmpeg: searched $(TARGET_HOMEBREW_PREFIX)/bin, $(TARGET_ALT_HOMEBREW_PREFIX)/bin, /usr/local/bin, /opt/homebrew/bin, and /usr/bin"; \
+		fi; \
+		echo "Set PACKAGE_FFMPEG_SRC=/absolute/path/to/ffmpeg or install an $(TARGET_ARCH) ffmpeg build for packaging."; \
+		exit 1; \
 	else \
 		echo "Skipping bundled ffmpeg for TARGET_ARCH=$(TARGET_ARCH)"; \
 	fi
@@ -822,6 +871,9 @@ package-desktop-smoke: package-desktop
 	@test -d "$(PACKAGE_RESOURCES_DIR)/data/runtime" || (echo "Missing runtime dir"; exit 1)
 	@test -d "$(PACKAGE_RESOURCES_DIR)/data/runtime/frames" || (echo "Missing runtime frames dir"; exit 1)
 	@test -d "$(PACKAGE_RESOURCES_DIR)/data/runtime/videos" || (echo "Missing runtime videos dir"; exit 1)
+	@if [ "$(PACKAGE_REQUIRE_FFMPEG)" = "1" ]; then \
+		test -x "$(PACKAGE_TOOLS_DIR)/ffmpeg" || (echo "Missing bundled ffmpeg"; exit 1); \
+	fi
 	@test -f "$(PACKAGE_RESOURCES_DIR)/vk_renderer/shaders/textured.vert.spv" || (echo "Missing bundled vk_renderer shader"; exit 1)
 	@test -f "$(PACKAGE_RESOURCES_DIR)/shaders/textured.vert.spv" || (echo "Missing bundled runtime shader"; exit 1)
 	@echo "package-desktop-smoke passed."
@@ -874,6 +926,7 @@ release-clean:
 release-build: all
 	@echo "Release build complete: $(TARGET)"
 
+release-bundle-audit: PACKAGE_REQUIRE_FFMPEG=1
 release-bundle-audit: package-desktop-self-test
 	@mkdir -p "$(RELEASE_DIR)"
 	@/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$(PACKAGE_CONTENTS_DIR)/Info.plist" > "$(RELEASE_DIR)/bundle_id.txt"
@@ -887,6 +940,9 @@ release-bundle-audit: package-desktop-self-test
 	if [ -z "$$dataset_path" ]; then echo "render metrics dataset path missing from print-config"; exit 1; fi; \
 	case "$$dataset_path" in *"/Contents/Resources"*) echo "render metrics dataset path incorrectly points into app bundle: $$dataset_path"; exit 1;; esac; \
 	case "$$dataset_path" in /tmp/*|/var/*|"$(HOME)"/*) ;; *) echo "render metrics dataset path is not user-writable rooted: $$dataset_path"; exit 1;; esac
+	@ffmpeg_bin="$$(/usr/bin/grep '^RAY_TRACING_FFMPEG_BIN=' "$(RELEASE_DIR)/print_config.txt" | /usr/bin/cut -d= -f2-)"; \
+	if [ -z "$$ffmpeg_bin" ]; then echo "ffmpeg path missing from print-config"; exit 1; fi; \
+	test -x "$$ffmpeg_bin" || (echo "ffmpeg path from print-config is not executable: $$ffmpeg_bin"; exit 1)
 	@/usr/bin/grep -q '^VK_ICD_FILENAMES=' "$(RELEASE_DIR)/print_config.txt" || (echo "missing VK_ICD_FILENAMES in print-config"; exit 1)
 	@/usr/bin/grep -q '^VK_DRIVER_FILES=' "$(RELEASE_DIR)/print_config.txt" || (echo "missing VK_DRIVER_FILES in print-config"; exit 1)
 	@otool -L "$(PACKAGE_MACOS_DIR)/raytracing-bin" > "$(RELEASE_DIR)/otool_raytracing_bin.txt"

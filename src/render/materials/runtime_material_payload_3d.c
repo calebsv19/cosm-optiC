@@ -35,6 +35,123 @@ static double runtime_material_payload_3d_clamp01(double value) {
     return value;
 }
 
+static double runtime_material_payload_3d_lerp(double a, double b, double t) {
+    return a + ((b - a) * runtime_material_payload_3d_clamp01(t));
+}
+
+static void runtime_material_payload_3d_apply_authored_overlay_material(
+    RuntimeMaterialPayload3D* payload,
+    RuntimeMaterialTextureLayerKind overlay_kind,
+    double overlay_alpha) {
+    double t = runtime_material_payload_3d_clamp01(overlay_alpha);
+    if (!payload || t <= 1e-9) {
+        return;
+    }
+    switch (overlay_kind) {
+        case RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME:
+            payload->baseColorR *= runtime_material_payload_3d_lerp(1.0, 0.82, t);
+            payload->baseColorG *= runtime_material_payload_3d_lerp(1.0, 0.82, t);
+            payload->baseColorB *= runtime_material_payload_3d_lerp(1.0, 0.82, t);
+            payload->bsdf.roughness = runtime_material_payload_3d_clamp01(
+                payload->bsdf.roughness + (0.22 * t));
+            payload->bsdf.reflectivity = runtime_material_payload_3d_clamp01(
+                payload->bsdf.reflectivity * runtime_material_payload_3d_lerp(1.0, 0.82, t));
+            break;
+        case RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL:
+            payload->baseColorR *= runtime_material_payload_3d_lerp(1.0, 0.92, t);
+            payload->baseColorG *= runtime_material_payload_3d_lerp(1.0, 0.92, t);
+            payload->baseColorB *= runtime_material_payload_3d_lerp(1.0, 0.92, t);
+            payload->bsdf.roughness = runtime_material_payload_3d_clamp01(
+                payload->bsdf.roughness * runtime_material_payload_3d_lerp(1.0, 0.55, t));
+            if (payload->bsdf.roughness < 0.02) {
+                payload->bsdf.roughness = 0.02;
+            }
+            payload->bsdf.reflectivity = runtime_material_payload_3d_clamp01(
+                payload->bsdf.reflectivity + (0.26 * t));
+            payload->bsdf.specWeight = runtime_material_payload_3d_clamp01(
+                payload->bsdf.specWeight + (0.18 * t));
+            payload->bsdf.diffuseWeight = runtime_material_payload_3d_clamp01(
+                payload->bsdf.diffuseWeight * runtime_material_payload_3d_lerp(1.0, 0.88, t));
+            break;
+        case RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_RUST:
+            payload->bsdf.roughness = runtime_material_payload_3d_clamp01(
+                payload->bsdf.roughness + (0.30 * t));
+            payload->bsdf.reflectivity = runtime_material_payload_3d_clamp01(
+                payload->bsdf.reflectivity * runtime_material_payload_3d_lerp(1.0, 0.60, t));
+            payload->bsdf.specWeight = runtime_material_payload_3d_clamp01(
+                payload->bsdf.specWeight * runtime_material_payload_3d_lerp(1.0, 0.72, t));
+            break;
+        case RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_FOG:
+            payload->bsdf.roughness = runtime_material_payload_3d_clamp01(
+                payload->bsdf.roughness + (0.14 * t));
+            payload->transparency *= runtime_material_payload_3d_lerp(1.0, 0.68, t);
+            break;
+        case RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE:
+        default:
+            break;
+    }
+}
+
+static void runtime_material_payload_3d_apply_authored_base_material(
+    RuntimeMaterialPayload3D* payload,
+    RuntimeMaterialTextureLayerKind base_kind,
+    double base_alpha) {
+    double t = runtime_material_payload_3d_clamp01(base_alpha);
+    if (!payload || t <= 1e-9) {
+        return;
+    }
+    switch (base_kind) {
+        case RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_BRUSHED_METAL:
+            payload->bsdf.roughness = runtime_material_payload_3d_lerp(
+                payload->bsdf.roughness, 0.18, t);
+            payload->bsdf.reflectivity = runtime_material_payload_3d_lerp(
+                payload->bsdf.reflectivity, 0.76, t);
+            payload->bsdf.specWeight = runtime_material_payload_3d_lerp(
+                payload->bsdf.specWeight, 0.68, t);
+            payload->bsdf.diffuseWeight = runtime_material_payload_3d_lerp(
+                payload->bsdf.diffuseWeight, 0.32, t);
+            break;
+        case RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_WOOD:
+            payload->bsdf.roughness = runtime_material_payload_3d_lerp(
+                payload->bsdf.roughness, 0.58, t);
+            payload->bsdf.reflectivity = runtime_material_payload_3d_lerp(
+                payload->bsdf.reflectivity, 0.08, t);
+            payload->bsdf.specWeight = runtime_material_payload_3d_lerp(
+                payload->bsdf.specWeight, 0.16, t);
+            payload->bsdf.diffuseWeight = runtime_material_payload_3d_lerp(
+                payload->bsdf.diffuseWeight, 0.88, t);
+            break;
+        case RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_BRICK:
+            payload->bsdf.roughness = runtime_material_payload_3d_lerp(
+                payload->bsdf.roughness, 0.86, t);
+            payload->bsdf.reflectivity = runtime_material_payload_3d_lerp(
+                payload->bsdf.reflectivity, 0.03, t);
+            payload->bsdf.specWeight = runtime_material_payload_3d_lerp(
+                payload->bsdf.specWeight, 0.08, t);
+            break;
+        case RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_CONCRETE:
+            payload->bsdf.roughness = runtime_material_payload_3d_lerp(
+                payload->bsdf.roughness, 0.78, t);
+            payload->bsdf.reflectivity = runtime_material_payload_3d_lerp(
+                payload->bsdf.reflectivity, 0.04, t);
+            payload->bsdf.specWeight = runtime_material_payload_3d_lerp(
+                payload->bsdf.specWeight, 0.10, t);
+            break;
+        case RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_STONE:
+            payload->bsdf.roughness = runtime_material_payload_3d_lerp(
+                payload->bsdf.roughness, 0.70, t);
+            payload->bsdf.reflectivity = runtime_material_payload_3d_lerp(
+                payload->bsdf.reflectivity, 0.07, t);
+            payload->bsdf.specWeight = runtime_material_payload_3d_lerp(
+                payload->bsdf.specWeight, 0.18, t);
+            break;
+        case RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID:
+        case RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE:
+        default:
+            break;
+    }
+}
+
 static void runtime_material_payload_3d_refresh_derived(RuntimeMaterialPayload3D* payload) {
     double weight_sum = 0.0;
     if (!payload) return;
@@ -75,6 +192,7 @@ static void runtime_material_payload_3d_apply_texture(
     const HitInfo3D* hit,
     RuntimeMaterialPayload3D* payload) {
     RuntimeMaterialAuthoredTextureSample authored_sample = {0};
+    RuntimeMaterialAuthoredTextureSample authored_overlay_sample = {0};
     RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
     RuntimeMaterialSurfaceEval base_eval = {0};
     RuntimeMaterialSurfaceEval surface_eval = {0};
@@ -82,9 +200,18 @@ static void runtime_material_payload_3d_apply_texture(
     SceneEditorMaterialFacePlacement face_placement = {0};
     double island_u = 0.0;
     double island_v = 0.0;
+    double authored_alpha = 0.0;
+    double authored_overlay_alpha = 0.0;
     int face_group_index = -1;
     int local_triangle_index = -1;
     int seed_key = 0;
+    bool overlay_only = false;
+    char authored_overlay_material_intent[RUNTIME_MATERIAL_AUTHORED_TEXTURE_INTENT_CAPACITY];
+    RuntimeMaterialAuthoredTextureFaceMetadata authored_metadata;
+    char authored_base_material_intent[RUNTIME_MATERIAL_AUTHORED_TEXTURE_INTENT_CAPACITY];
+    RuntimeMaterialTextureLayerKind authored_overlay_kind = RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE;
+    RuntimeMaterialTextureLayerKind authored_base_kind = RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE;
+    bool has_authored_metadata = false;
 
     if (!object || !hit || !payload || !payload->valid) return;
     base_eval = RuntimeMaterialSurfaceEvalMakeBase(payload->baseColorR,
@@ -97,7 +224,29 @@ static void runtime_material_payload_3d_apply_texture(
                                                    payload->transparency);
     local_triangle_index = hit->localTriangleIndex;
     face_group_index = local_triangle_index >= 0 ? local_triangle_index / 2 : -1;
+    memset(authored_overlay_material_intent, 0, sizeof(authored_overlay_material_intent));
+    memset(authored_base_material_intent, 0, sizeof(authored_base_material_intent));
+    memset(&authored_metadata, 0, sizeof(authored_metadata));
     if (face_group_index >= 0 && hit->sceneObjectIndex >= 0) {
+        has_authored_metadata = RuntimeMaterialAuthoredTextureGetFaceMetadata(hit->sceneObjectIndex,
+                                                                              face_group_index,
+                                                                              &authored_metadata);
+        if (has_authored_metadata && authored_metadata.baseMaterialIntentKind[0]) {
+            snprintf(authored_base_material_intent,
+                     sizeof(authored_base_material_intent),
+                     "%s",
+                     authored_metadata.baseMaterialIntentKind);
+            authored_base_kind =
+                RuntimeMaterialTextureLayerKindFromStableId(authored_base_material_intent);
+        }
+        if (has_authored_metadata && authored_metadata.overlayMaterialIntentKind[0]) {
+            snprintf(authored_overlay_material_intent,
+                     sizeof(authored_overlay_material_intent),
+                     "%s",
+                     authored_metadata.overlayMaterialIntentKind);
+            authored_overlay_kind =
+                RuntimeMaterialTextureLayerKindFromStableId(authored_overlay_material_intent);
+        }
         bool has_face_override =
             SceneEditorMaterialFacePlacementHasOverride(hit->sceneObjectIndex, face_group_index);
         seed_key = ((hit->sceneObjectIndex + 1) * 19349663) ^
@@ -114,19 +263,73 @@ static void runtime_material_payload_3d_apply_texture(
                                                      island_u,
                                                      island_v,
                                                      &authored_sample)) {
-            double alpha = runtime_material_payload_3d_clamp01(authored_sample.alpha);
-            payload->textureMask = alpha;
-            payload->textureU = island_u;
-            payload->textureV = island_v;
+            authored_alpha = runtime_material_payload_3d_clamp01(authored_sample.alpha);
             payload->baseColorR =
-                payload->baseColorR + ((authored_sample.colorR - payload->baseColorR) * alpha);
+                payload->baseColorR + ((authored_sample.colorR - payload->baseColorR) * authored_alpha);
             payload->baseColorG =
-                payload->baseColorG + ((authored_sample.colorG - payload->baseColorG) * alpha);
+                payload->baseColorG + ((authored_sample.colorG - payload->baseColorG) * authored_alpha);
             payload->baseColorB =
-                payload->baseColorB + ((authored_sample.colorB - payload->baseColorB) * alpha);
-            payload->transparency *= (1.0 - alpha);
+                payload->baseColorB + ((authored_sample.colorB - payload->baseColorB) * authored_alpha);
+            payload->transparency *= (1.0 - authored_alpha);
+            runtime_material_payload_3d_apply_authored_base_material(payload,
+                                                                     authored_base_kind,
+                                                                     authored_alpha);
             runtime_material_payload_3d_refresh_derived(payload);
-            return;
+            overlay_only = true;
+            base_eval = RuntimeMaterialSurfaceEvalMakeBase(payload->baseColorR,
+                                                           payload->baseColorG,
+                                                           payload->baseColorB,
+                                                           payload->bsdf.roughness,
+                                                           payload->bsdf.reflectivity,
+                                                           payload->bsdf.specWeight,
+                                                           payload->bsdf.diffuseWeight,
+                                                           payload->transparency);
+            base_eval.active = true;
+            base_eval.textureMask = authored_alpha;
+            base_eval.textureU = island_u;
+            base_eval.textureV = island_v;
+        }
+        if (RuntimeMaterialAuthoredTextureSampleOverlayFace(hit->sceneObjectIndex,
+                                                            face_group_index,
+                                                            island_u,
+                                                            island_v,
+                                                            &authored_overlay_sample)) {
+            authored_overlay_alpha = runtime_material_payload_3d_clamp01(authored_overlay_sample.alpha);
+            payload->baseColorR = runtime_material_payload_3d_lerp(payload->baseColorR,
+                                                                   authored_overlay_sample.colorR,
+                                                                   authored_overlay_alpha);
+            payload->baseColorG = runtime_material_payload_3d_lerp(payload->baseColorG,
+                                                                   authored_overlay_sample.colorG,
+                                                                   authored_overlay_alpha);
+            payload->baseColorB = runtime_material_payload_3d_lerp(payload->baseColorB,
+                                                                   authored_overlay_sample.colorB,
+                                                                   authored_overlay_alpha);
+            if (authored_overlay_kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE &&
+                RuntimeMaterialAuthoredTextureGetOverlayMaterialIntent(hit->sceneObjectIndex,
+                                                                       authored_overlay_material_intent,
+                                                                       sizeof(authored_overlay_material_intent))) {
+                authored_overlay_kind =
+                    RuntimeMaterialTextureLayerKindFromStableId(authored_overlay_material_intent);
+            }
+            runtime_material_payload_3d_apply_authored_overlay_material(payload,
+                                                                        authored_overlay_kind,
+                                                                        authored_overlay_alpha);
+            runtime_material_payload_3d_refresh_derived(payload);
+            overlay_only = true;
+            base_eval = RuntimeMaterialSurfaceEvalMakeBase(payload->baseColorR,
+                                                           payload->baseColorG,
+                                                           payload->baseColorB,
+                                                           payload->bsdf.roughness,
+                                                           payload->bsdf.reflectivity,
+                                                           payload->bsdf.specWeight,
+                                                           payload->bsdf.diffuseWeight,
+                                                           payload->transparency);
+            base_eval.active = true;
+            if (authored_overlay_alpha > base_eval.textureMask) {
+                base_eval.textureMask = authored_overlay_alpha;
+            }
+            base_eval.textureU = island_u;
+            base_eval.textureV = island_v;
         }
         if (has_face_override) {
             face_placement = SceneEditorMaterialFacePlacementGetEffective(object,
@@ -141,14 +344,29 @@ static void runtime_material_payload_3d_apply_texture(
                                                                     &stack)) {
             return;
         }
-        if (!RuntimeMaterialTextureStackEvaluatePlacedUV(&stack,
-                                                         object,
-                                                         island_u,
-                                                         island_v,
-                                                         seed_key,
-                                                         &base_eval,
-                                                         &surface_eval)) {
-            return;
+        if (overlay_only) {
+            if (!RuntimeMaterialTextureStackEvaluateOverlayPlacedUV(&stack,
+                                                                    object,
+                                                                    island_u,
+                                                                    island_v,
+                                                                    seed_key,
+                                                                    &base_eval,
+                                                                    &surface_eval)) {
+                payload->textureMask = authored_alpha;
+                payload->textureU = island_u;
+                payload->textureV = island_v;
+                return;
+            }
+        } else {
+            if (!RuntimeMaterialTextureStackEvaluatePlacedUV(&stack,
+                                                             object,
+                                                             island_u,
+                                                             island_v,
+                                                             seed_key,
+                                                             &base_eval,
+                                                             &surface_eval)) {
+                return;
+            }
         }
     } else {
         seed_key = hit->triangleIndex + 1;

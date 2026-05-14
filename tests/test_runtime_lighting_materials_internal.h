@@ -3,3 +3,4 @@
 int run_test_runtime_lighting_materials_payload_suite(void);
 int run_test_runtime_lighting_materials_direct_light_suite(void);
 int run_test_runtime_lighting_materials_transport_suite(void);
+int run_test_runtime_material_authored_texture_validation_suite(void);

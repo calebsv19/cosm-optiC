@@ -1,6 +1,6 @@
 # Ray Tracing Current Truth
 
-Last updated: 2026-05-07
+Last updated: 2026-05-13
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -43,9 +43,77 @@ Last updated: 2026-05-07
   - `drawing_program` exports separate per-face RGBA PNG files plus one JSON manifest
   - `ray_tracing` reads that manifest through app-local authored-texture import code
   - bindings are restored by stable `object_id` under `extensions.ray_tracing.authoring.object_materials[*].authored_texture`
+  - runtime-scene authoring persistence now writes authored-texture manifest paths back relative to the runtime-scene file when the manifest lives beside that scene, so reopen does not depend on a machine-local absolute export path
+  - runtime-scene authoring persistence now writes explicit cleared authored-texture state (`null`) when an object no longer has a bound authored texture, so overlay merge removes stale bindings instead of preserving them by omission
+  - invalid authored-texture binds now record a bounded object-local invalid state instead of silently collapsing to unbound
+  - the selected-object Material editor now surfaces that invalid state explicitly with:
+    - attempted manifest path
+    - bounded validation failure reason
+  - runtime-scene authoring persistence now preserves invalid authored-texture entries by writing manifest path plus binding mode instead of erasing them to `null`
+  - reopen now replays persisted invalid authored-texture entries and resurfaces the same invalid state when validation still fails
   - supported face-role mapping is explicit for planes and generated rectangular-prism faces
   - hit-time payload resolution now samples authored bitmap color and alpha before procedural fallback when a bound face is hit
+  - the authored/procedural coexistence rule is now explicit:
+    - authored bitmap sampling establishes the substrate/base color and alpha response for the hit
+    - procedural base-role texture-stack layers do not replace that authored substrate
+    - procedural overlay-role texture-stack layers may still modulate above it
+    - legacy rust/fog `textureId` overlays remain compatible because they still enter through overlay-role evaluation
   - runtime-scene authoring persistence retains the manifest path/binding metadata rather than embedding image payload bytes
+  - the authored-texture manifest reader now supports the first narrow dual-lane runtime contract:
+    - base-lane faces load from `base_surfaces` when present, otherwise fall back to legacy `surfaces`
+    - overlay-lane faces load from optional `overlay_surfaces`
+    - top-level `overlay_material_intent_kind` is now preserved for runtime material-response mapping
+  - dual-lane authored sampling now behaves as:
+    - authored base lane establishes the substrate/base color and alpha response
+    - authored overlay lane samples independently by the same face-role mapping
+    - overlay alpha blends over the authored base before the remaining downstream material policy runs
+    - overlay material intent is now mapped through the existing runtime texture-stack taxonomy so `grime`, `oil`, `rust`, and `fog` can modify BSDF/material response instead of acting as pure color decals
+  - authored-texture manifests now also expose finer-grained per-surface material-intent metadata to the runtime:
+    - `layer_material_intent_stable_ids` is read from manifest schema `v5`
+    - runtime face metadata now derives bounded face-level base and overlay material-intent stable ids from those exported values
+    - for the current lane-faithful export transition, the bounded face-metadata getter now merges overlay-face overlay intent into the returned face metadata instead of assuming overlay intent still appears in base-surface semantic arrays
+    - explicit per-face summary fields are now the primary runtime contract:
+      - `base_material_intent_kind`
+      - `overlay_material_intent_kind`
+    - current runtime compatibility behavior is now explicit:
+      - when those summary fields are present, loader and payload logic prefer them over the raw `layer_material_intent_stable_ids` array
+      - when they are absent, older manifests still fall back to the previous bounded one-per-family derivation from the raw array
+    - the durable authored-texture runtime rule is now explicit:
+      - one effective base/substrate intent per face
+      - one effective overlay/environment intent per face
+      - raw per-layer `layer_material_intent_stable_ids` arrays remain auxiliary/editor-facing metadata and are not a richer mixed-material runtime BSDF contract
+    - hit-time payload resolution now consumes that richer metadata narrowly:
+      - face-level base/substrate intent may modulate BSDF response after authored base-lane sampling
+      - face-level overlay/environment intent may modulate BSDF response after authored overlay-lane sampling
+      - face-level overlay intent now takes priority over the older coarse binding-wide `overlay_material_intent_kind`, which remains only as fallback
+  - authored-texture manifest validation is now explicit instead of permissive:
+    - bind only accepts explicitly allowed schema versions
+    - schema `v5` manifests must provide a valid `emitted_output_kind`
+    - `export_binding_kind` must be `SEPARATE_FACES`
+    - supported authored-texture primitive kinds remain bounded to `PLANE` and `RECT_PRISM`
+    - face-array loading is strict:
+      - malformed entries fail the bind
+      - duplicate face-role declarations fail the bind
+      - unreadable or missing face image files fail the bind
+    - base-lane completeness is enforced for the declared primitive kind
+    - declared bounded overlay lanes must also be complete
+    - invalid authored-texture binds now leave the object fully unbound instead of partially active
+  - the authored-texture loader/runtime lane now also partially adopts shared `core_authored_texture >= 0.1.1`:
+    - schema/version, binding/output/primitive vocabulary, face-role semantics, and manifest-contract validation now come from the shared core module
+    - the cutover is intentionally narrow:
+      - JSON parsing
+      - image loading
+      - invalid-binding UX
+      - runtime-scene persistence policy
+      remain app-local
+    - current schema `v5` manifests now expect the strict shared lane shape:
+      - `base_surfaces`
+      - optional `overlay_surfaces`
+      - no mixed legacy `surfaces` field in the current `v5` output path
+    - `core_authored_texture >= 0.1.2` is now the actual runtime floor for this lane:
+      - `FLATTENED_ONLY` manifests that still declare an overlay lane are rejected by the shared validator
+      - runtime validation coverage now also explicitly rejects the mixed `schema v5` drift shape (`surfaces` plus `base_surfaces`)
+      - semantic-net validation now also routes through the shared module
   - the authored-texture manifest reader now accepts optional semantic net metadata per face:
     - net layout kind
     - canonical net slot
@@ -54,7 +122,24 @@ Last updated: 2026-05-07
     - ordered edge ids
     - adjacent face-role hints
     - manual layout offsets
-  - that richer manifest metadata is now available through a bounded runtime face-metadata getter, but current face sampling still resolves by explicit face-role mapping
+  - semantic-net metadata is no longer best-effort:
+    - plane faces now require:
+      - `net_layout_kind = PLANE`
+      - `net_slot = FRONT`
+      - `corner_ids = [255,255,255,255]`
+      - `edge_ids = [255,255,255,255]`
+      - `adjacent_face_roles = [NONE,NONE,NONE,NONE]`
+    - rect-prism faces now require:
+      - `net_layout_kind = PRISM_CROSS`
+      - `net_slot` matching the face role
+      - orientation in `R0/R90/R180/R270`
+      - four unique `corner_ids` in `0..7`
+      - four unique `edge_ids` in `0..11`
+      - four unique valid adjacent prism face roles that are neither `NONE` nor the face's own role
+    - malformed semantic-net metadata now fails authored-texture bind instead of degrading silently
+    - compatibility remains bounded:
+      - legacy neutral adjacency aliases `SURFACE` and `UNSPECIFIED` still normalize to canonical `NONE`
+  - that richer manifest metadata is now available through a bounded runtime face-metadata getter, while current face sampling still resolves by explicit face-role mapping
 - Scene editor mode routing now has four top-level modes:
   - Path / Bézier
   - Objects
@@ -88,7 +173,31 @@ Last updated: 2026-05-07
   - routes strength, scale, Offset U, and Offset V sliders through the active face group when one is active, while preserving object-wide fallback controls when no group is active
   - routes the texture kind buttons through the active face group when one is active, while preserving object-wide texture kind controls when no group is active
   - object-default mode exposes the v2 layer stack immediately when no face is selected; layer rows support add, mute/enable, move up/down, delete, row selection, and row-level `On`/`Off` visibility toggles
+  - now includes an object-wide `Authored Texture` section above the procedural layer stack; the section shows compact bound/unbound status, manifest basename plus face count when bound, and explicit `Pick/Replace Manifest` plus `Clear Binding` actions for the selected object
+  - authored-texture bind state now survives the full selected-object workflow: bind in the Material editor, persist the runtime scene, reopen it later, and recover the same manifest path / binding mode / face-count summary for the selected object
+  - the same selected-object workflow now also supports replacing one authored-texture manifest with another for the same object, persisting that replacement, clearing the binding later, and reopening back into an unbound state
   - active v2 base layers expose `Solid`, `Metal`, `Wood`, and `Brick` buttons in the current editor UI, while active v2 overlay layers expose `Rust`, `Fog`, `Grime`, and `Oil`
+  - the active authored-texture follow-on lane in `drawing_program` now explicitly aligns its layer-role recipe to this runtime taxonomy instead of inventing a second label family:
+    - role recipe:
+      - `Base`
+      - `Material Detail`
+      - `Decal`
+      - `Grime`
+      - `Damage`
+    - runtime intent families remain:
+      - base/substrate:
+        - `solid`
+        - `metal`
+        - `wood`
+        - `brick`
+        - `concrete`
+        - `stone`
+      - overlay/environment:
+        - `rust`
+        - `fog`
+        - `grime`
+        - `oil`
+    - role and runtime intent are now deliberately separate, so later dual-lane authored layers can preserve cases like oily contamination without collapsing that intent into color-only paint
   - exposes compact texture parameter controls for active procedural overlays: pattern mode (`Default`, `Speck`, `Patch`, `Flow`), coverage, grain, edge softness, contrast, flow, color depth, and surface damage
   - placement controls remain sliders; secondary procedural parameters render as bounded knob cells with vertical drag and numeric readback
   - routes texture parameter controls through the active face group when one is active, while preserving object-wide parameter controls when no group is active
@@ -153,7 +262,7 @@ Last updated: 2026-05-07
 - Do not reopen closed `I5`/`I6` slices.
 - Treat procedural material-texture sampling plus focused Material editor mode as the active post-`I6` material authoring foundation.
 - Preserve Material mode's object-focused viewport controls while the next authoring controls land: `F` should frame the focused object, and wheel zoom should accumulate around that fit instead of resetting on every scroll tick.
-- Keep the next material/material-authoring slice focused on coexistence polish between procedural overlays and authored bitmap bindings, plus durable group/preset controls on top of the now-live manifest path.
+- Keep the next material/material-authoring slice focused on authoring-side layer-role conventions, then coexistence polish between procedural overlays and authored bitmap bindings, plus durable group/preset controls on top of the now-live manifest path.
 - Keep deep-render start/resume behavior stable while adjacent runtime-scene buckets settle.
 - Keep the new menu-render, digest-pick, and native `3D` test-family seams aligned with their current helper/file boundaries while larger file-split work continues.
 - Defer VF3D / `physics_sim` ingestion expansion until the next internal renderer boundary is chosen.

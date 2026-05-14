@@ -9,13 +9,9 @@
 #include <json-c/json.h>
 
 #include "config/config_manager.h"
+#include "core_authored_texture.h"
 #include "core_scene.h"
-
-typedef enum RuntimeMaterialAuthoredPrimitiveKind {
-    RUNTIME_MATERIAL_AUTHORED_PRIMITIVE_KIND_NONE = 0,
-    RUNTIME_MATERIAL_AUTHORED_PRIMITIVE_KIND_PLANE = 1,
-    RUNTIME_MATERIAL_AUTHORED_PRIMITIVE_KIND_RECT_PRISM = 2
-} RuntimeMaterialAuthoredPrimitiveKind;
+#include "render/runtime_material_texture_stack_3d.h"
 
 typedef struct RuntimeMaterialAuthoredTextureFace {
     bool active;
@@ -28,17 +24,115 @@ typedef struct RuntimeMaterialAuthoredTextureFace {
 
 typedef struct RuntimeMaterialAuthoredTextureBinding {
     bool active;
+    bool invalidActive;
     int sceneObjectIndex;
-    RuntimeMaterialAuthoredPrimitiveKind primitiveKind;
-    int faceCount;
+    CoreAuthoredTexturePrimitiveKind primitiveKind;
+    int baseFaceCount;
+    int overlayFaceCount;
     char objectId[64];
     char manifestPath[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
     char resolvedManifestPath[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
     char bindingMode[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MODE_CAPACITY];
-    RuntimeMaterialAuthoredTextureFace faces[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MAX_FACES];
+    char invalidManifestPath[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
+    char invalidBindingMode[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MODE_CAPACITY];
+    char invalidReason[RUNTIME_MATERIAL_AUTHORED_TEXTURE_REASON_CAPACITY];
+    char overlayMaterialIntentKind[RUNTIME_MATERIAL_AUTHORED_TEXTURE_INTENT_CAPACITY];
+    RuntimeMaterialAuthoredTextureFace baseFaces[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MAX_FACES];
+    RuntimeMaterialAuthoredTextureFace overlayFaces[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MAX_FACES];
 } RuntimeMaterialAuthoredTextureBinding;
 
 static RuntimeMaterialAuthoredTextureBinding s_authored_texture_bindings[MAX_OBJECTS];
+
+static bool runtime_material_authored_texture_manifest_array_exists(json_object* root,
+                                                                    const char* key) {
+    json_object* field = NULL;
+    return root && key && json_object_object_get_ex(root, key, &field) &&
+           json_object_is_type(field, json_type_array);
+}
+
+static bool runtime_material_authored_texture_manifest_parse_schema_version(
+    json_object* manifest_root,
+    int* out_schema_version) {
+    json_object* field = NULL;
+    int schema_version = 0;
+    if (!manifest_root || !out_schema_version ||
+        !json_object_object_get_ex(manifest_root, "schema_version", &field) ||
+        !json_object_is_type(field, json_type_int)) {
+        return false;
+    }
+    schema_version = json_object_get_int(field);
+    if (!core_authored_texture_schema_version_supported(schema_version)) {
+        return false;
+    }
+    *out_schema_version = schema_version;
+    return true;
+}
+
+static bool runtime_material_authored_texture_manifest_parse_contract(
+    json_object* manifest_root,
+    CoreAuthoredTextureManifestContract* out_contract) {
+    json_object* field = NULL;
+    const char* text = NULL;
+    if (!manifest_root || !out_contract) {
+        return false;
+    }
+    memset(out_contract, 0, sizeof(*out_contract));
+    if (!runtime_material_authored_texture_manifest_parse_schema_version(manifest_root,
+                                                                         &out_contract->schema_version)) {
+        return false;
+    }
+    if (!json_object_object_get_ex(manifest_root, "export_binding_kind", &field) ||
+        !json_object_is_type(field, json_type_string) ||
+        !core_authored_texture_binding_kind_parse(json_object_get_string(field),
+                                                  &out_contract->binding_kind)) {
+        return false;
+    }
+    if (!json_object_object_get_ex(manifest_root, "primitive_kind", &field) ||
+        !json_object_is_type(field, json_type_string) ||
+        !core_authored_texture_primitive_kind_parse(json_object_get_string(field),
+                                                    &out_contract->primitive_kind)) {
+        return false;
+    }
+    out_contract->has_legacy_surfaces =
+        runtime_material_authored_texture_manifest_array_exists(manifest_root, "surfaces");
+    out_contract->has_base_surfaces =
+        runtime_material_authored_texture_manifest_array_exists(manifest_root, "base_surfaces");
+    out_contract->has_overlay_surfaces =
+        runtime_material_authored_texture_manifest_array_exists(manifest_root, "overlay_surfaces");
+    if (out_contract->schema_version == CORE_AUTHORED_TEXTURE_SCHEMA_V1 ||
+        out_contract->schema_version == CORE_AUTHORED_TEXTURE_SCHEMA_V2) {
+        out_contract->output_kind = CORE_AUTHORED_TEXTURE_OUTPUT_KIND_LEGACY_FLATTENED;
+        return core_authored_texture_manifest_contract_validate(out_contract);
+    }
+    if (!json_object_object_get_ex(manifest_root, "emitted_output_kind", &field) ||
+        !json_object_is_type(field, json_type_string)) {
+        return false;
+    }
+    text = json_object_get_string(field);
+    if (!core_authored_texture_output_kind_parse(text, &out_contract->output_kind)) {
+        return false;
+    }
+    return core_authored_texture_manifest_contract_validate(out_contract);
+}
+
+static bool runtime_material_authored_texture_faces_complete(
+    CoreAuthoredTexturePrimitiveKind primitive_kind,
+    const RuntimeMaterialAuthoredTextureFace* faces,
+    int face_count) {
+    CoreAuthoredTextureFaceRole face_roles[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MAX_FACES];
+    size_t expected = core_authored_texture_expected_face_count(primitive_kind);
+    size_t i = 0u;
+    if (!faces || expected == 0u || face_count != (int)expected) {
+        return false;
+    }
+    for (i = 0u; i < expected; ++i) {
+        if (!faces[i].active) {
+            return false;
+        }
+        face_roles[i] = (CoreAuthoredTextureFaceRole)(i + 1u);
+    }
+    return core_authored_texture_face_roles_complete(primitive_kind, face_roles, expected);
+}
 
 static void runtime_material_authored_texture_copy_text(char* dst,
                                                         size_t dst_size,
@@ -93,10 +187,34 @@ static void runtime_material_authored_texture_binding_reset(
     int i = 0;
     if (!binding) return;
     for (i = 0; i < RUNTIME_MATERIAL_AUTHORED_TEXTURE_MAX_FACES; ++i) {
-        runtime_material_authored_texture_face_reset(&binding->faces[i]);
+        runtime_material_authored_texture_face_reset(&binding->baseFaces[i]);
+        runtime_material_authored_texture_face_reset(&binding->overlayFaces[i]);
     }
     memset(binding, 0, sizeof(*binding));
     binding->sceneObjectIndex = -1;
+}
+
+static void runtime_material_authored_texture_binding_record_invalid(
+    RuntimeMaterialAuthoredTextureBinding* binding,
+    int scene_object_index,
+    const char* manifest_path,
+    const char* binding_mode,
+    const char* reason) {
+    if (!binding) return;
+    runtime_material_authored_texture_binding_reset(binding);
+    binding->sceneObjectIndex = scene_object_index;
+    binding->invalidActive = true;
+    runtime_material_authored_texture_copy_text(binding->invalidManifestPath,
+                                                sizeof(binding->invalidManifestPath),
+                                                manifest_path);
+    runtime_material_authored_texture_copy_text(binding->invalidBindingMode,
+                                                sizeof(binding->invalidBindingMode),
+                                                binding_mode && binding_mode[0] ? binding_mode
+                                                                                : "override");
+    runtime_material_authored_texture_copy_text(binding->invalidReason,
+                                                sizeof(binding->invalidReason),
+                                                reason && reason[0] ? reason
+                                                                    : "manifest validation failed");
 }
 
 void RuntimeMaterialAuthoredTextureResetAll(void) {
@@ -104,6 +222,16 @@ void RuntimeMaterialAuthoredTextureResetAll(void) {
     for (i = 0; i < MAX_OBJECTS; ++i) {
         runtime_material_authored_texture_binding_reset(&s_authored_texture_bindings[i]);
     }
+}
+
+bool RuntimeMaterialAuthoredTextureClearBindingForObject(int scene_object_index) {
+    RuntimeMaterialAuthoredTextureBinding* binding =
+        runtime_material_authored_texture_binding_at(scene_object_index);
+    if (!binding) {
+        return false;
+    }
+    runtime_material_authored_texture_binding_reset(binding);
+    return true;
 }
 
 static bool runtime_material_authored_texture_resolve_manifest_path(const char* manifest_path,
@@ -151,34 +279,50 @@ static bool runtime_material_authored_texture_resolve_relative_to_file(const cha
     return true;
 }
 
-static RuntimeMaterialAuthoredPrimitiveKind runtime_material_authored_texture_primitive_kind_from_manifest(
-    const char* primitive_kind) {
-    if (!primitive_kind) return RUNTIME_MATERIAL_AUTHORED_PRIMITIVE_KIND_NONE;
-    if (strcmp(primitive_kind, "PLANE") == 0) {
-        return RUNTIME_MATERIAL_AUTHORED_PRIMITIVE_KIND_PLANE;
-    }
-    if (strcmp(primitive_kind, "RECT_PRISM") == 0) {
-        return RUNTIME_MATERIAL_AUTHORED_PRIMITIVE_KIND_RECT_PRISM;
-    }
-    return RUNTIME_MATERIAL_AUTHORED_PRIMITIVE_KIND_NONE;
-}
-
 static int runtime_material_authored_texture_face_group_from_role(
-    RuntimeMaterialAuthoredPrimitiveKind primitive_kind,
+    CoreAuthoredTexturePrimitiveKind primitive_kind,
     const char* face_role) {
-    if (!face_role) return -1;
-    if (primitive_kind == RUNTIME_MATERIAL_AUTHORED_PRIMITIVE_KIND_PLANE) {
-        return strcmp(face_role, "FRONT") == 0 ? 0 : -1;
+    CoreAuthoredTextureFaceRole role = CORE_AUTHORED_TEXTURE_FACE_ROLE_NONE;
+    if (!core_authored_texture_face_role_parse(face_role, &role)) {
+        return -1;
     }
-    if (primitive_kind == RUNTIME_MATERIAL_AUTHORED_PRIMITIVE_KIND_RECT_PRISM) {
-        if (strcmp(face_role, "FRONT") == 0) return 0;
-        if (strcmp(face_role, "BACK") == 0) return 1;
-        if (strcmp(face_role, "LEFT") == 0) return 2;
-        if (strcmp(face_role, "RIGHT") == 0) return 3;
-        if (strcmp(face_role, "TOP") == 0) return 4;
-        if (strcmp(face_role, "BOTTOM") == 0) return 5;
+    if (primitive_kind == CORE_AUTHORED_TEXTURE_PRIMITIVE_KIND_PLANE) {
+        return role == CORE_AUTHORED_TEXTURE_FACE_ROLE_FRONT ? 0 : -1;
+    }
+    if (primitive_kind == CORE_AUTHORED_TEXTURE_PRIMITIVE_KIND_RECT_PRISM) {
+        switch (role) {
+            case CORE_AUTHORED_TEXTURE_FACE_ROLE_FRONT: return 0;
+            case CORE_AUTHORED_TEXTURE_FACE_ROLE_BACK: return 1;
+            case CORE_AUTHORED_TEXTURE_FACE_ROLE_LEFT: return 2;
+            case CORE_AUTHORED_TEXTURE_FACE_ROLE_RIGHT: return 3;
+            case CORE_AUTHORED_TEXTURE_FACE_ROLE_TOP: return 4;
+            case CORE_AUTHORED_TEXTURE_FACE_ROLE_BOTTOM: return 5;
+            case CORE_AUTHORED_TEXTURE_FACE_ROLE_NONE:
+            default: return -1;
+        }
     }
     return -1;
+}
+
+static CoreAuthoredTextureFaceRole runtime_material_authored_texture_face_role_from_group_index(
+    CoreAuthoredTexturePrimitiveKind primitive_kind,
+    int face_group_index) {
+    if (primitive_kind == CORE_AUTHORED_TEXTURE_PRIMITIVE_KIND_PLANE) {
+        return face_group_index == 0 ? CORE_AUTHORED_TEXTURE_FACE_ROLE_FRONT
+                                     : CORE_AUTHORED_TEXTURE_FACE_ROLE_NONE;
+    }
+    if (primitive_kind == CORE_AUTHORED_TEXTURE_PRIMITIVE_KIND_RECT_PRISM) {
+        switch (face_group_index) {
+            case 0: return CORE_AUTHORED_TEXTURE_FACE_ROLE_FRONT;
+            case 1: return CORE_AUTHORED_TEXTURE_FACE_ROLE_BACK;
+            case 2: return CORE_AUTHORED_TEXTURE_FACE_ROLE_LEFT;
+            case 3: return CORE_AUTHORED_TEXTURE_FACE_ROLE_RIGHT;
+            case 4: return CORE_AUTHORED_TEXTURE_FACE_ROLE_TOP;
+            case 5: return CORE_AUTHORED_TEXTURE_FACE_ROLE_BOTTOM;
+            default: return CORE_AUTHORED_TEXTURE_FACE_ROLE_NONE;
+        }
+    }
+    return CORE_AUTHORED_TEXTURE_FACE_ROLE_NONE;
 }
 
 static bool runtime_material_authored_texture_parse_u8_array(json_object* object,
@@ -208,74 +352,215 @@ static bool runtime_material_authored_texture_parse_u8_array(json_object* object
     return true;
 }
 
-static void runtime_material_authored_texture_parse_adjacent_face_groups(
-    RuntimeMaterialAuthoredPrimitiveKind primitive_kind,
+static bool runtime_material_authored_texture_parse_adjacent_face_groups(
+    CoreAuthoredTexturePrimitiveKind primitive_kind,
     json_object* object,
     const char* key,
+    CoreAuthoredTextureFaceRole* out_adjacent_face_roles,
     int* out_face_group_indices,
     size_t expected_count) {
     json_object* array = NULL;
     size_t i = 0u;
-    if (!out_face_group_indices || expected_count == 0u) return;
+    if (!out_adjacent_face_roles || !out_face_group_indices || expected_count == 0u) return false;
     for (i = 0u; i < expected_count; ++i) {
+        out_adjacent_face_roles[i] = CORE_AUTHORED_TEXTURE_FACE_ROLE_NONE;
         out_face_group_indices[i] = -1;
     }
     if (!object || !key || !json_object_object_get_ex(object, key, &array) ||
+        !json_object_is_type(array, json_type_array) ||
+        json_object_array_length(array) != expected_count) {
+        return false;
+    }
+    for (i = 0u; i < expected_count; ++i) {
+        json_object* value = json_object_array_get_idx(array, (int)i);
+        const char* role = NULL;
+        CoreAuthoredTextureFaceRole parsed_role = CORE_AUTHORED_TEXTURE_FACE_ROLE_NONE;
+        if (!value || !json_object_is_type(value, json_type_string)) {
+            return false;
+        }
+        role = json_object_get_string(value);
+        if (!core_authored_texture_face_role_parse(role, &parsed_role)) {
+            return false;
+        }
+        out_adjacent_face_roles[i] = parsed_role;
+        if (parsed_role != CORE_AUTHORED_TEXTURE_FACE_ROLE_NONE) {
+            out_face_group_indices[i] =
+                runtime_material_authored_texture_face_group_from_role(primitive_kind, role);
+            if (out_face_group_indices[i] < 0) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static bool runtime_material_authored_texture_parse_face_material_intent_summary_field(
+    RuntimeMaterialAuthoredTextureFace* face,
+    json_object* surface,
+    const char* key,
+    bool require_overlay_family,
+    bool* out_present) {
+    json_object* field = NULL;
+    const char* stable_id = NULL;
+    RuntimeMaterialTextureLayerKind kind = RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE;
+    if (out_present) {
+        *out_present = false;
+    }
+    if (!face || !surface || !key) {
+        return false;
+    }
+    if (!json_object_object_get_ex(surface, key, &field)) {
+        return true;
+    }
+    if (!field || !json_object_is_type(field, json_type_string)) {
+        return false;
+    }
+    stable_id = json_object_get_string(field);
+    if (!stable_id || stable_id[0] == '\0' || strcmp(stable_id, "none") == 0) {
+        if (out_present) {
+            *out_present = true;
+        }
+        return true;
+    }
+    kind = RuntimeMaterialTextureLayerKindFromStableId(stable_id);
+    if (kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE) {
+        return false;
+    }
+    if (require_overlay_family) {
+        if (!RuntimeMaterialTextureLayerKindIsOverlay(kind)) {
+            return false;
+        }
+        runtime_material_authored_texture_copy_text(face->metadata.overlayMaterialIntentKind,
+                                                    sizeof(face->metadata.overlayMaterialIntentKind),
+                                                    stable_id);
+    } else {
+        if (!RuntimeMaterialTextureLayerKindIsBase(kind)) {
+            return false;
+        }
+        runtime_material_authored_texture_copy_text(face->metadata.baseMaterialIntentKind,
+                                                    sizeof(face->metadata.baseMaterialIntentKind),
+                                                    stable_id);
+    }
+    if (out_present) {
+        *out_present = true;
+    }
+    return true;
+}
+
+static void runtime_material_authored_texture_parse_face_material_intents(
+    RuntimeMaterialAuthoredTextureFace* face,
+    json_object* surface,
+    bool allow_base_fallback,
+    bool allow_overlay_fallback) {
+    json_object* array = NULL;
+    size_t i = 0u;
+    if (!face || !surface ||
+        !json_object_object_get_ex(surface, "layer_material_intent_stable_ids", &array) ||
         !json_object_is_type(array, json_type_array)) {
         return;
     }
-    for (i = 0u; i < expected_count && i < json_object_array_length(array); ++i) {
+    for (i = 0u; i < json_object_array_length(array); ++i) {
         json_object* value = json_object_array_get_idx(array, (int)i);
-        const char* role = NULL;
+        const char* stable_id = NULL;
+        RuntimeMaterialTextureLayerKind kind = RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE;
         if (!value || !json_object_is_type(value, json_type_string)) {
             continue;
         }
-        role = json_object_get_string(value);
-        out_face_group_indices[i] =
-            runtime_material_authored_texture_face_group_from_role(primitive_kind, role);
+        stable_id = json_object_get_string(value);
+        kind = RuntimeMaterialTextureLayerKindFromStableId(stable_id);
+        if (allow_base_fallback && RuntimeMaterialTextureLayerKindIsBase(kind)) {
+            runtime_material_authored_texture_copy_text(face->metadata.baseMaterialIntentKind,
+                                                        sizeof(face->metadata.baseMaterialIntentKind),
+                                                        stable_id);
+        } else if (allow_overlay_fallback && RuntimeMaterialTextureLayerKindIsOverlay(kind)) {
+            runtime_material_authored_texture_copy_text(face->metadata.overlayMaterialIntentKind,
+                                                        sizeof(face->metadata.overlayMaterialIntentKind),
+                                                        stable_id);
+        }
     }
 }
 
-static void runtime_material_authored_texture_parse_face_metadata(
+static bool runtime_material_authored_texture_parse_face_metadata(
     RuntimeMaterialAuthoredTextureBinding* binding,
     RuntimeMaterialAuthoredTextureFace* face,
     json_object* surface) {
     json_object* field = NULL;
-    if (!binding || !face || !surface) return;
+    bool has_base_summary = false;
+    bool has_overlay_summary = false;
+    CoreAuthoredTextureNetLayoutKind layout_kind = CORE_AUTHORED_TEXTURE_NET_LAYOUT_KIND_NONE;
+    CoreAuthoredTextureNetSlot net_slot = CORE_AUTHORED_TEXTURE_NET_SLOT_NONE;
+    CoreAuthoredTextureNetOrientation orientation = CORE_AUTHORED_TEXTURE_NET_ORIENTATION_NONE;
+    CoreAuthoredTextureFaceRole adjacent_face_roles[RUNTIME_MATERIAL_AUTHORED_TEXTURE_FACE_EDGE_COUNT];
+    CoreAuthoredTextureFaceRole face_role = CORE_AUTHORED_TEXTURE_FACE_ROLE_NONE;
+    if (!binding || !face || !surface) return false;
     face->metadata.active = true;
     face->metadata.sceneObjectIndex = binding->sceneObjectIndex;
     face->metadata.faceGroupIndex = face->faceGroupIndex;
-    if (json_object_object_get_ex(surface, "net_layout_kind", &field) &&
-        json_object_is_type(field, json_type_string)) {
-        runtime_material_authored_texture_copy_text(face->metadata.netLayoutKind,
-                                                    sizeof(face->metadata.netLayoutKind),
-                                                    json_object_get_string(field));
+    if (!json_object_object_get_ex(surface, "net_layout_kind", &field) ||
+        !json_object_is_type(field, json_type_string) ||
+        !core_authored_texture_net_layout_kind_parse(json_object_get_string(field), &layout_kind)) {
+        return false;
     }
-    if (json_object_object_get_ex(surface, "net_slot", &field) &&
-        json_object_is_type(field, json_type_string)) {
-        runtime_material_authored_texture_copy_text(face->metadata.netSlot,
-                                                    sizeof(face->metadata.netSlot),
-                                                    json_object_get_string(field));
+    if (!json_object_object_get_ex(surface, "net_slot", &field) ||
+        !json_object_is_type(field, json_type_string) ||
+        !core_authored_texture_net_slot_parse(json_object_get_string(field), &net_slot)) {
+        return false;
     }
-    if (json_object_object_get_ex(surface, "orientation", &field) &&
-        json_object_is_type(field, json_type_string)) {
-        runtime_material_authored_texture_copy_text(face->metadata.orientation,
-                                                    sizeof(face->metadata.orientation),
-                                                    json_object_get_string(field));
+    if (!json_object_object_get_ex(surface, "orientation", &field) ||
+        !json_object_is_type(field, json_type_string) ||
+        !core_authored_texture_net_orientation_parse(json_object_get_string(field), &orientation)) {
+        return false;
     }
-    (void)runtime_material_authored_texture_parse_u8_array(surface,
-                                                           "corner_ids",
-                                                           face->metadata.cornerIds,
-                                                           RUNTIME_MATERIAL_AUTHORED_TEXTURE_FACE_CORNER_COUNT);
-    (void)runtime_material_authored_texture_parse_u8_array(surface,
-                                                           "edge_ids",
-                                                           face->metadata.edgeIds,
-                                                           RUNTIME_MATERIAL_AUTHORED_TEXTURE_FACE_EDGE_COUNT);
-    runtime_material_authored_texture_parse_adjacent_face_groups(binding->primitiveKind,
-                                                                 surface,
-                                                                 "adjacent_face_roles",
-                                                                 face->metadata.adjacentFaceGroupIndices,
-                                                                 RUNTIME_MATERIAL_AUTHORED_TEXTURE_FACE_EDGE_COUNT);
+    if (!runtime_material_authored_texture_parse_u8_array(
+            surface,
+            "corner_ids",
+            face->metadata.cornerIds,
+            RUNTIME_MATERIAL_AUTHORED_TEXTURE_FACE_CORNER_COUNT) ||
+        !runtime_material_authored_texture_parse_u8_array(
+            surface,
+            "edge_ids",
+            face->metadata.edgeIds,
+            RUNTIME_MATERIAL_AUTHORED_TEXTURE_FACE_EDGE_COUNT) ||
+        !runtime_material_authored_texture_parse_adjacent_face_groups(
+            binding->primitiveKind,
+            surface,
+            "adjacent_face_roles",
+            adjacent_face_roles,
+            face->metadata.adjacentFaceGroupIndices,
+            RUNTIME_MATERIAL_AUTHORED_TEXTURE_FACE_EDGE_COUNT)) {
+        return false;
+    }
+    face_role = runtime_material_authored_texture_face_role_from_group_index(binding->primitiveKind,
+                                                                             face->faceGroupIndex);
+    if (!core_authored_texture_semantic_net_validate(binding->primitiveKind,
+                                                     face_role,
+                                                     layout_kind,
+                                                     net_slot,
+                                                     orientation,
+                                                     face->metadata.cornerIds,
+                                                     face->metadata.edgeIds,
+                                                     adjacent_face_roles)) {
+        return false;
+    }
+    runtime_material_authored_texture_copy_text(face->metadata.netLayoutKind,
+                                                sizeof(face->metadata.netLayoutKind),
+                                                core_authored_texture_net_layout_kind_name(
+                                                    layout_kind));
+    runtime_material_authored_texture_copy_text(face->metadata.netSlot,
+                                                sizeof(face->metadata.netSlot),
+                                                core_authored_texture_net_slot_name(net_slot));
+    runtime_material_authored_texture_copy_text(face->metadata.orientation,
+                                                sizeof(face->metadata.orientation),
+                                                core_authored_texture_net_orientation_name(
+                                                    orientation));
+    if (!runtime_material_authored_texture_parse_face_material_intent_summary_field(
+            face, surface, "base_material_intent_kind", false, &has_base_summary) ||
+        !runtime_material_authored_texture_parse_face_material_intent_summary_field(
+            face, surface, "overlay_material_intent_kind", true, &has_overlay_summary)) {
+        return false;
+    }
+    runtime_material_authored_texture_parse_face_material_intents(
+        face, surface, !has_base_summary, !has_overlay_summary);
     if (json_object_object_get_ex(surface, "layout_offset_x", &field) &&
         (json_object_is_type(field, json_type_double) || json_object_is_type(field, json_type_int))) {
         face->metadata.layoutOffsetX = json_object_get_double(field);
@@ -284,6 +569,7 @@ static void runtime_material_authored_texture_parse_face_metadata(
         (json_object_is_type(field, json_type_double) || json_object_is_type(field, json_type_int))) {
         face->metadata.layoutOffsetY = json_object_get_double(field);
     }
+    return true;
 }
 
 static bool runtime_material_authored_texture_read_png_rgba(const char* path,
@@ -377,18 +663,24 @@ cleanup:
     return ok;
 }
 
-static bool runtime_material_authored_texture_load_faces(RuntimeMaterialAuthoredTextureBinding* binding,
-                                                         json_object* manifest_root,
-                                                         const char* manifest_resolved_path) {
+static bool runtime_material_authored_texture_load_face_array(RuntimeMaterialAuthoredTextureBinding* binding,
+                                                              json_object* manifest_root,
+                                                              const char* manifest_resolved_path,
+                                                              const char* array_key,
+                                                              RuntimeMaterialAuthoredTextureFace* faces,
+                                                              int* out_face_count) {
     json_object* surfaces = NULL;
+    bool seen_face_groups[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MAX_FACES] = {false};
     size_t i = 0u;
-    if (!binding || !manifest_root || !manifest_resolved_path) {
+    if (!binding || !manifest_root || !manifest_resolved_path || !array_key || !faces ||
+        !out_face_count) {
         return false;
     }
-    if (!json_object_object_get_ex(manifest_root, "surfaces", &surfaces) ||
+    if (!json_object_object_get_ex(manifest_root, array_key, &surfaces) ||
         !json_object_is_type(surfaces, json_type_array)) {
         return false;
     }
+    *out_face_count = 0;
     for (i = 0u; i < json_object_array_length(surfaces); ++i) {
         json_object* surface = json_object_array_get_idx(surfaces, (int)i);
         json_object* face_role_obj = NULL;
@@ -402,38 +694,52 @@ static bool runtime_material_authored_texture_load_faces(RuntimeMaterialAuthored
         int face_group_index = -1;
         RuntimeMaterialAuthoredTextureFace* face = NULL;
         if (!surface || !json_object_is_type(surface, json_type_object)) {
-            continue;
+            goto fail;
         }
         if (!json_object_object_get_ex(surface, "face_role", &face_role_obj) ||
             !json_object_is_type(face_role_obj, json_type_string) ||
             !json_object_object_get_ex(surface, "file_name", &file_name_obj) ||
             !json_object_is_type(file_name_obj, json_type_string)) {
-            continue;
+            goto fail;
         }
         face_role = json_object_get_string(face_role_obj);
         file_name = json_object_get_string(file_name_obj);
         face_group_index = runtime_material_authored_texture_face_group_from_role(
             binding->primitiveKind, face_role);
         if (face_group_index < 0 ||
-            face_group_index >= RUNTIME_MATERIAL_AUTHORED_TEXTURE_MAX_FACES ||
-            !runtime_material_authored_texture_resolve_relative_to_file(manifest_resolved_path,
+            face_group_index >= RUNTIME_MATERIAL_AUTHORED_TEXTURE_MAX_FACES) {
+            goto fail;
+        }
+        if (seen_face_groups[face_group_index]) {
+            goto fail;
+        }
+        if (!runtime_material_authored_texture_resolve_relative_to_file(manifest_resolved_path,
                                                                         file_name,
                                                                         png_path,
                                                                         sizeof(png_path)) ||
             !runtime_material_authored_texture_read_png_rgba(png_path, &rgba, &width, &height)) {
-            continue;
+            goto fail;
         }
-        face = &binding->faces[face_group_index];
+        face = &faces[face_group_index];
         runtime_material_authored_texture_face_reset(face);
         face->active = true;
         face->faceGroupIndex = face_group_index;
         face->width = width;
         face->height = height;
         face->rgba = rgba;
-        runtime_material_authored_texture_parse_face_metadata(binding, face, surface);
-        binding->faceCount += 1;
+        if (!runtime_material_authored_texture_parse_face_metadata(binding, face, surface)) {
+            goto fail;
+        }
+        seen_face_groups[face_group_index] = true;
+        *out_face_count += 1;
     }
-    return binding->faceCount > 0;
+    return *out_face_count > 0;
+fail:
+    for (i = 0u; i < (size_t)RUNTIME_MATERIAL_AUTHORED_TEXTURE_MAX_FACES; ++i) {
+        runtime_material_authored_texture_face_reset(&faces[i]);
+    }
+    *out_face_count = 0;
+    return false;
 }
 
 bool RuntimeMaterialAuthoredTextureBindManifestForObject(int scene_object_index,
@@ -446,7 +752,9 @@ bool RuntimeMaterialAuthoredTextureBindManifestForObject(int scene_object_index,
     json_object* manifest_root = NULL;
     json_object* field = NULL;
     const char* manifest_object_id = NULL;
-    const char* primitive_kind = NULL;
+    const char* overlay_material_intent_kind = NULL;
+    CoreAuthoredTextureManifestContract manifest_contract;
+    const char* failure_reason = "manifest validation failed";
     bool ok = false;
     if (!binding || !object_id || !object_id[0] || !manifest_path || !manifest_path[0]) {
         return false;
@@ -455,30 +763,34 @@ bool RuntimeMaterialAuthoredTextureBindManifestForObject(int scene_object_index,
     if (!runtime_material_authored_texture_resolve_manifest_path(manifest_path,
                                                                  resolved_manifest_path,
                                                                  sizeof(resolved_manifest_path))) {
+        runtime_material_authored_texture_binding_record_invalid(binding,
+                                                                 scene_object_index,
+                                                                 manifest_path,
+                                                                 binding_mode,
+                                                                 "manifest path unresolved");
         return false;
     }
     manifest_root = json_object_from_file(resolved_manifest_path);
     if (!manifest_root || !json_object_is_type(manifest_root, json_type_object)) {
+        failure_reason = "manifest unreadable";
+        goto cleanup;
+    }
+    if (!runtime_material_authored_texture_manifest_parse_contract(manifest_root,
+                                                                   &manifest_contract)) {
+        failure_reason = "schema or output contract invalid";
         goto cleanup;
     }
     if (!json_object_object_get_ex(manifest_root, "source_object_id", &field) ||
         !json_object_is_type(field, json_type_string)) {
+        failure_reason = "source object id missing";
         goto cleanup;
     }
     manifest_object_id = json_object_get_string(field);
     if (!manifest_object_id || strcmp(manifest_object_id, object_id) != 0) {
+        failure_reason = "source object mismatch";
         goto cleanup;
     }
-    if (!json_object_object_get_ex(manifest_root, "primitive_kind", &field) ||
-        !json_object_is_type(field, json_type_string)) {
-        goto cleanup;
-    }
-    primitive_kind = json_object_get_string(field);
-    binding->primitiveKind =
-        runtime_material_authored_texture_primitive_kind_from_manifest(primitive_kind);
-    if (binding->primitiveKind == RUNTIME_MATERIAL_AUTHORED_PRIMITIVE_KIND_NONE) {
-        goto cleanup;
-    }
+    binding->primitiveKind = manifest_contract.primitive_kind;
     binding->sceneObjectIndex = scene_object_index;
     runtime_material_authored_texture_copy_text(binding->objectId,
                                                 sizeof(binding->objectId),
@@ -493,10 +805,44 @@ bool RuntimeMaterialAuthoredTextureBindManifestForObject(int scene_object_index,
                                                 sizeof(binding->bindingMode),
                                                 binding_mode && binding_mode[0] ? binding_mode
                                                                                 : "override");
-    if (!runtime_material_authored_texture_load_faces(binding,
-                                                      manifest_root,
-                                                      resolved_manifest_path)) {
+    runtime_material_authored_texture_copy_text(binding->overlayMaterialIntentKind,
+                                                sizeof(binding->overlayMaterialIntentKind),
+                                                "none");
+    if (json_object_object_get_ex(manifest_root, "overlay_material_intent_kind", &field) &&
+        json_object_is_type(field, json_type_string)) {
+        overlay_material_intent_kind = json_object_get_string(field);
+        runtime_material_authored_texture_copy_text(binding->overlayMaterialIntentKind,
+                                                    sizeof(binding->overlayMaterialIntentKind),
+                                                    overlay_material_intent_kind);
+    }
+    if (!runtime_material_authored_texture_load_face_array(binding,
+                                                           manifest_root,
+                                                           resolved_manifest_path,
+                                                           manifest_contract.output_kind ==
+                                                                   CORE_AUTHORED_TEXTURE_OUTPUT_KIND_LEGACY_FLATTENED
+                                                               ? "surfaces"
+                                                               : "base_surfaces",
+                                                           binding->baseFaces,
+                                                           &binding->baseFaceCount) ||
+        !runtime_material_authored_texture_faces_complete(binding->primitiveKind,
+                                                          binding->baseFaces,
+                                                          binding->baseFaceCount)) {
+        failure_reason = "base lane incomplete";
         goto cleanup;
+    }
+    if (manifest_contract.output_kind == CORE_AUTHORED_TEXTURE_OUTPUT_KIND_BASE_PLUS_OVERLAY) {
+        if (!runtime_material_authored_texture_load_face_array(binding,
+                                                               manifest_root,
+                                                               resolved_manifest_path,
+                                                               "overlay_surfaces",
+                                                               binding->overlayFaces,
+                                                               &binding->overlayFaceCount) ||
+            !runtime_material_authored_texture_faces_complete(binding->primitiveKind,
+                                                              binding->overlayFaces,
+                                                              binding->overlayFaceCount)) {
+            failure_reason = "overlay lane incomplete";
+            goto cleanup;
+        }
     }
     binding->active = true;
     ok = true;
@@ -505,7 +851,11 @@ cleanup:
         json_object_put(manifest_root);
     }
     if (!ok) {
-        runtime_material_authored_texture_binding_reset(binding);
+        runtime_material_authored_texture_binding_record_invalid(binding,
+                                                                 scene_object_index,
+                                                                 manifest_path,
+                                                                 binding_mode,
+                                                                 failure_reason);
     }
     return ok;
 }
@@ -532,7 +882,37 @@ bool RuntimeMaterialAuthoredTextureGetBinding(int scene_object_index,
                                                     binding->bindingMode);
     }
     if (out_face_count) {
-        *out_face_count = binding->faceCount;
+        *out_face_count = binding->baseFaceCount;
+    }
+    return true;
+}
+
+bool RuntimeMaterialAuthoredTextureGetInvalidBinding(int scene_object_index,
+                                                     char* out_manifest_path,
+                                                     size_t out_manifest_path_size,
+                                                     char* out_binding_mode,
+                                                     size_t out_binding_mode_size,
+                                                     char* out_reason,
+                                                     size_t out_reason_size) {
+    RuntimeMaterialAuthoredTextureBinding* binding =
+        runtime_material_authored_texture_binding_at(scene_object_index);
+    if (!binding || binding->active || !binding->invalidActive) {
+        return false;
+    }
+    if (out_manifest_path && out_manifest_path_size > 0u) {
+        runtime_material_authored_texture_copy_text(out_manifest_path,
+                                                    out_manifest_path_size,
+                                                    binding->invalidManifestPath);
+    }
+    if (out_binding_mode && out_binding_mode_size > 0u) {
+        runtime_material_authored_texture_copy_text(out_binding_mode,
+                                                    out_binding_mode_size,
+                                                    binding->invalidBindingMode);
+    }
+    if (out_reason && out_reason_size > 0u) {
+        runtime_material_authored_texture_copy_text(out_reason,
+                                                    out_reason_size,
+                                                    binding->invalidReason);
     }
     return true;
 }
@@ -543,7 +923,8 @@ bool RuntimeMaterialAuthoredTextureGetFaceMetadata(
     RuntimeMaterialAuthoredTextureFaceMetadata* out_metadata) {
     RuntimeMaterialAuthoredTextureBinding* binding =
         runtime_material_authored_texture_binding_at(scene_object_index);
-    RuntimeMaterialAuthoredTextureFace* face = NULL;
+    RuntimeMaterialAuthoredTextureFace* base_face = NULL;
+    RuntimeMaterialAuthoredTextureFace* overlay_face = NULL;
     if (out_metadata) {
         runtime_material_authored_texture_face_metadata_reset(out_metadata);
         out_metadata->sceneObjectIndex = scene_object_index;
@@ -553,11 +934,32 @@ bool RuntimeMaterialAuthoredTextureGetFaceMetadata(
         face_group_index >= RUNTIME_MATERIAL_AUTHORED_TEXTURE_MAX_FACES || !out_metadata) {
         return false;
     }
-    face = &binding->faces[face_group_index];
-    if (!face->active) {
+    base_face = &binding->baseFaces[face_group_index];
+    if (!base_face->active) {
         return false;
     }
-    *out_metadata = face->metadata;
+    *out_metadata = base_face->metadata;
+    overlay_face = &binding->overlayFaces[face_group_index];
+    if (overlay_face->active && overlay_face->metadata.overlayMaterialIntentKind[0]) {
+        runtime_material_authored_texture_copy_text(out_metadata->overlayMaterialIntentKind,
+                                                    sizeof(out_metadata->overlayMaterialIntentKind),
+                                                    overlay_face->metadata.overlayMaterialIntentKind);
+    }
+    return true;
+}
+
+bool RuntimeMaterialAuthoredTextureGetOverlayMaterialIntent(int scene_object_index,
+                                                            char* out_overlay_material_intent,
+                                                            size_t out_overlay_material_intent_size) {
+    RuntimeMaterialAuthoredTextureBinding* binding =
+        runtime_material_authored_texture_binding_at(scene_object_index);
+    if (!binding || !binding->active || !out_overlay_material_intent ||
+        out_overlay_material_intent_size == 0u) {
+        return false;
+    }
+    runtime_material_authored_texture_copy_text(out_overlay_material_intent,
+                                                out_overlay_material_intent_size,
+                                                binding->overlayMaterialIntentKind);
     return true;
 }
 
@@ -618,14 +1020,15 @@ static void runtime_material_authored_texture_sample_channel(
     if (out_a) *out_a = accum_a;
 }
 
-bool RuntimeMaterialAuthoredTextureSampleFace(int scene_object_index,
-                                              int face_group_index,
-                                              double u,
-                                              double v,
-                                              RuntimeMaterialAuthoredTextureSample* out_sample) {
-    RuntimeMaterialAuthoredTextureBinding* binding =
-        runtime_material_authored_texture_binding_at(scene_object_index);
-    RuntimeMaterialAuthoredTextureFace* face = NULL;
+static bool runtime_material_authored_texture_sample_face_array(
+    const RuntimeMaterialAuthoredTextureBinding* binding,
+    const RuntimeMaterialAuthoredTextureFace* faces,
+    int scene_object_index,
+    int face_group_index,
+    double u,
+    double v,
+    RuntimeMaterialAuthoredTextureSample* out_sample) {
+    const RuntimeMaterialAuthoredTextureFace* face = NULL;
     if (out_sample) {
         memset(out_sample, 0, sizeof(*out_sample));
         out_sample->sceneObjectIndex = scene_object_index;
@@ -633,11 +1036,11 @@ bool RuntimeMaterialAuthoredTextureSampleFace(int scene_object_index,
         out_sample->u = u;
         out_sample->v = v;
     }
-    if (!binding || !binding->active || face_group_index < 0 ||
+    if (!binding || !binding->active || !faces || face_group_index < 0 ||
         face_group_index >= RUNTIME_MATERIAL_AUTHORED_TEXTURE_MAX_FACES) {
         return false;
     }
-    face = &binding->faces[face_group_index];
+    face = &faces[face_group_index];
     if (!face->active || !face->rgba) {
         return false;
     }
@@ -652,4 +1055,36 @@ bool RuntimeMaterialAuthoredTextureSampleFace(int scene_object_index,
                                                          &out_sample->alpha);
     }
     return true;
+}
+
+bool RuntimeMaterialAuthoredTextureSampleFace(int scene_object_index,
+                                              int face_group_index,
+                                              double u,
+                                              double v,
+                                              RuntimeMaterialAuthoredTextureSample* out_sample) {
+    RuntimeMaterialAuthoredTextureBinding* binding =
+        runtime_material_authored_texture_binding_at(scene_object_index);
+    return runtime_material_authored_texture_sample_face_array(binding,
+                                                               binding ? binding->baseFaces : NULL,
+                                                               scene_object_index,
+                                                               face_group_index,
+                                                               u,
+                                                               v,
+                                                               out_sample);
+}
+
+bool RuntimeMaterialAuthoredTextureSampleOverlayFace(int scene_object_index,
+                                                     int face_group_index,
+                                                     double u,
+                                                     double v,
+                                                     RuntimeMaterialAuthoredTextureSample* out_sample) {
+    RuntimeMaterialAuthoredTextureBinding* binding =
+        runtime_material_authored_texture_binding_at(scene_object_index);
+    return runtime_material_authored_texture_sample_face_array(binding,
+                                                               binding ? binding->overlayFaces : NULL,
+                                                               scene_object_index,
+                                                               face_group_index,
+                                                               u,
+                                                               v,
+                                                               out_sample);
 }

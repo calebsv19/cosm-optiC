@@ -85,5 +85,18 @@ bool MaterialEditorApplyTexturePatternToFocused(int pattern_mode);
 bool MaterialEditorApplyTextureParamValueToFocused(MaterialEditorTextureParamKind kind, double value);
 bool MaterialEditorResetActiveFacePlacement(void);
 bool MaterialEditorCopyActiveFacePlacementToSelected(void);
+bool MaterialEditorBindAuthoredTextureManifestForFocused(const char* manifest_path);
+bool MaterialEditorClearAuthoredTextureBindingForFocused(void);
+bool MaterialEditorGetAuthoredTextureBindingSummary(char* out_manifest_path,
+                                                    size_t out_manifest_path_size,
+                                                    char* out_binding_mode,
+                                                    size_t out_binding_mode_size,
+                                                    int* out_face_count);
+bool MaterialEditorGetAuthoredTextureInvalidSummary(char* out_manifest_path,
+                                                    size_t out_manifest_path_size,
+                                                    char* out_binding_mode,
+                                                    size_t out_binding_mode_size,
+                                                    char* out_reason,
+                                                    size_t out_reason_size);
 
 #endif

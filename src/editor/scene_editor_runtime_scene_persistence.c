@@ -3,6 +3,7 @@
 #include "camera/camera_path_3d.h"
 #include "config/config_manager.h"
 #include "config/config_scene_path_io.h"
+#include "core_scene.h"
 #include "core_io.h"
 #include "editor/scene_editor_material_face_placement.h"
 #include "editor/scene_editor_material_stack.h"
@@ -14,6 +15,35 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+static void scene_editor_runtime_scene_authored_manifest_write_path(
+    const char* runtime_scene_path,
+    const char* manifest_path,
+    char* out_path,
+    size_t out_path_size) {
+    char scene_dir[4096];
+    size_t scene_dir_len = 0u;
+    if (!out_path || out_path_size == 0u) return;
+    out_path[0] = '\0';
+    if (!manifest_path || !manifest_path[0]) return;
+    if (!runtime_scene_path || !runtime_scene_path[0]) {
+        snprintf(out_path, out_path_size, "%s", manifest_path);
+        return;
+    }
+    if (manifest_path[0] != '/' ||
+        core_scene_dirname(runtime_scene_path, scene_dir, sizeof(scene_dir)).code != CORE_OK) {
+        snprintf(out_path, out_path_size, "%s", manifest_path);
+        return;
+    }
+    scene_dir_len = strlen(scene_dir);
+    if (scene_dir_len > 0u &&
+        strncmp(manifest_path, scene_dir, scene_dir_len) == 0 &&
+        manifest_path[scene_dir_len] == '/') {
+        snprintf(out_path, out_path_size, "%s", manifest_path + scene_dir_len + 1u);
+        return;
+    }
+    snprintf(out_path, out_path_size, "%s", manifest_path);
+}
 
 static void scene_editor_runtime_scene_diag(char* out_diagnostics,
                                             size_t out_diagnostics_size,
@@ -275,7 +305,9 @@ static json_object* scene_editor_runtime_scene_build_object_materials_json(void)
                                json_object_new_double(sceneSettings.sceneObjects[i].emissiveStrength));
         {
             char manifest_path[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
+            char manifest_write_path[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
             char binding_mode[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MODE_CAPACITY];
+            char invalid_reason[RUNTIME_MATERIAL_AUTHORED_TEXTURE_REASON_CAPACITY];
             int face_count = 0;
             if (RuntimeMaterialAuthoredTextureGetBinding(i,
                                                          manifest_path,
@@ -289,15 +321,50 @@ static json_object* scene_editor_runtime_scene_build_object_materials_json(void)
                     json_object_put(entry);
                     return NULL;
                 }
+                scene_editor_runtime_scene_authored_manifest_write_path(animSettings.runtimeScenePath,
+                                                                        manifest_path,
+                                                                        manifest_write_path,
+                                                                        sizeof(manifest_write_path));
                 json_object_object_add(authored_texture,
                                        "manifest_path",
-                                       json_object_new_string(manifest_path));
+                                       json_object_new_string(manifest_write_path[0]
+                                                                  ? manifest_write_path
+                                                                  : manifest_path));
                 json_object_object_add(authored_texture,
                                        "binding_mode",
                                        json_object_new_string(binding_mode[0] ? binding_mode
                                                                               : "override"));
                 json_object_object_add(authored_texture, "face_count", json_object_new_int(face_count));
                 json_object_object_add(entry, "authored_texture", authored_texture);
+            } else if (RuntimeMaterialAuthoredTextureGetInvalidBinding(i,
+                                                                       manifest_path,
+                                                                       sizeof(manifest_path),
+                                                                       binding_mode,
+                                                                       sizeof(binding_mode),
+                                                                       invalid_reason,
+                                                                       sizeof(invalid_reason))) {
+                json_object* authored_texture = json_object_new_object();
+                if (!authored_texture) {
+                    json_object_put(object_materials);
+                    json_object_put(entry);
+                    return NULL;
+                }
+                scene_editor_runtime_scene_authored_manifest_write_path(animSettings.runtimeScenePath,
+                                                                        manifest_path,
+                                                                        manifest_write_path,
+                                                                        sizeof(manifest_write_path));
+                json_object_object_add(authored_texture,
+                                       "manifest_path",
+                                       json_object_new_string(manifest_write_path[0]
+                                                                  ? manifest_write_path
+                                                                  : manifest_path));
+                json_object_object_add(authored_texture,
+                                       "binding_mode",
+                                       json_object_new_string(binding_mode[0] ? binding_mode
+                                                                              : "override"));
+                json_object_object_add(entry, "authored_texture", authored_texture);
+            } else {
+                json_object_object_add(entry, "authored_texture", json_object_new_null());
             }
         }
         {
@@ -527,6 +594,7 @@ bool SceneEditorRuntimeScenePersistAuthoring(char* out_diagnostics, size_t out_d
     char* runtime_scene_json = NULL;
     char* overlay_json = NULL;
     char* merged_json = NULL;
+    char persisted_runtime_scene_path[sizeof(animSettings.runtimeScenePath)];
     double world_scale = 1.0;
     long long logical_clock = 1;
     CoreResult write_result;
@@ -538,6 +606,10 @@ bool SceneEditorRuntimeScenePersistAuthoring(char* out_diagnostics, size_t out_d
         scene_editor_runtime_scene_diag(out_diagnostics, out_diagnostics_size, "runtime scene source is not active");
         return false;
     }
+    snprintf(persisted_runtime_scene_path,
+             sizeof(persisted_runtime_scene_path),
+             "%s",
+             animSettings.runtimeScenePath);
 
     if (!scene_editor_runtime_scene_read_file(animSettings.runtimeScenePath,
                                               &runtime_scene_json,
@@ -588,6 +660,11 @@ bool SceneEditorRuntimeScenePersistAuthoring(char* out_diagnostics, size_t out_d
         scene_editor_runtime_scene_diag(out_diagnostics, out_diagnostics_size, summary.diagnostics);
         return false;
     }
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    snprintf(animSettings.runtimeScenePath,
+             sizeof(animSettings.runtimeScenePath),
+             "%s",
+             persisted_runtime_scene_path);
 
     scene_editor_runtime_scene_diag(out_diagnostics, out_diagnostics_size, "ok");
     return true;

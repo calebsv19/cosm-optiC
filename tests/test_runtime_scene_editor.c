@@ -86,40 +86,180 @@ cleanup:
     return ok;
 }
 
+static bool test_scene_editor_add_surface_semantic_fields(json_object* surface,
+                                                          const char* primitive_kind,
+                                                          const char* face_role) {
+    static const char* kPlaneAdjacentRoles[4] = {"NONE", "NONE", "NONE", "NONE"};
+    static const char* kFrontAdjacentRoles[4] = {"TOP", "RIGHT", "BOTTOM", "LEFT"};
+    static const char* kBackAdjacentRoles[4] = {"TOP", "LEFT", "BOTTOM", "RIGHT"};
+    static const char* kLeftAdjacentRoles[4] = {"TOP", "FRONT", "BOTTOM", "BACK"};
+    static const char* kRightAdjacentRoles[4] = {"TOP", "BACK", "BOTTOM", "FRONT"};
+    static const char* kTopAdjacentRoles[4] = {"BACK", "RIGHT", "FRONT", "LEFT"};
+    static const char* kBottomAdjacentRoles[4] = {"FRONT", "RIGHT", "BACK", "LEFT"};
+    json_object* corner_ids = NULL;
+    json_object* edge_ids = NULL;
+    json_object* adjacent_face_roles = NULL;
+    const char* const* adjacent_roles = NULL;
+    const char* layout_kind = NULL;
+    const char* net_slot = NULL;
+    int corner_values[4] = {0, 1, 2, 3};
+    int edge_values[4] = {0, 1, 2, 3};
+    int i = 0;
+    if (!surface || !primitive_kind || !face_role) {
+        return false;
+    }
+    if (strcmp(primitive_kind, "PLANE") == 0) {
+        layout_kind = "PLANE";
+        net_slot = "FRONT";
+        for (i = 0; i < 4; ++i) {
+            corner_values[i] = 255;
+            edge_values[i] = 255;
+        }
+        adjacent_roles = kPlaneAdjacentRoles;
+    } else if (strcmp(primitive_kind, "RECT_PRISM") == 0) {
+        layout_kind = "PRISM_CROSS";
+        net_slot = face_role;
+        if (strcmp(face_role, "FRONT") == 0) adjacent_roles = kFrontAdjacentRoles;
+        else if (strcmp(face_role, "BACK") == 0) adjacent_roles = kBackAdjacentRoles;
+        else if (strcmp(face_role, "LEFT") == 0) adjacent_roles = kLeftAdjacentRoles;
+        else if (strcmp(face_role, "RIGHT") == 0) adjacent_roles = kRightAdjacentRoles;
+        else if (strcmp(face_role, "TOP") == 0) adjacent_roles = kTopAdjacentRoles;
+        else if (strcmp(face_role, "BOTTOM") == 0) adjacent_roles = kBottomAdjacentRoles;
+        else return false;
+    } else {
+        return false;
+    }
+    corner_ids = json_object_new_array();
+    edge_ids = json_object_new_array();
+    adjacent_face_roles = json_object_new_array();
+    if (!corner_ids || !edge_ids || !adjacent_face_roles || !layout_kind || !net_slot ||
+        !adjacent_roles) {
+        if (corner_ids) json_object_put(corner_ids);
+        if (edge_ids) json_object_put(edge_ids);
+        if (adjacent_face_roles) json_object_put(adjacent_face_roles);
+        return false;
+    }
+    json_object_object_add(surface, "net_layout_kind", json_object_new_string(layout_kind));
+    json_object_object_add(surface, "net_slot", json_object_new_string(net_slot));
+    json_object_object_add(surface, "orientation", json_object_new_string("R0"));
+    for (i = 0; i < 4; ++i) {
+        json_object_array_add(corner_ids, json_object_new_int(corner_values[i]));
+        json_object_array_add(edge_ids, json_object_new_int(edge_values[i]));
+        json_object_array_add(adjacent_face_roles,
+                              json_object_new_string(adjacent_roles[i]));
+    }
+    json_object_object_add(surface, "corner_ids", corner_ids);
+    json_object_object_add(surface, "edge_ids", edge_ids);
+    json_object_object_add(surface, "adjacent_face_roles", adjacent_face_roles);
+    return true;
+}
+
 static bool test_scene_editor_write_authored_texture_manifest(const char* manifest_path,
                                                               const char* object_id,
                                                               const char* primitive_kind,
                                                               const char* face_role,
                                                               const char* file_name) {
+    static const char* kRectPrismRoles[] = {"FRONT", "BACK", "LEFT", "RIGHT", "TOP", "BOTTOM"};
     json_object* root = NULL;
-    json_object* surfaces = NULL;
+    json_object* base_surfaces = NULL;
+    json_object* base_surface = NULL;
+    int write_ok = 0;
+    if (!manifest_path || !object_id || !primitive_kind || !face_role || !file_name) {
+        return false;
+    }
+    root = json_object_new_object();
+    base_surfaces = json_object_new_array();
+    base_surface = json_object_new_object();
+    if (!root || !base_surfaces || !base_surface) {
+        if (root) json_object_put(root);
+        if (base_surfaces) json_object_put(base_surfaces);
+        if (base_surface) json_object_put(base_surface);
+        return false;
+    }
+    json_object_object_add(root, "schema_version", json_object_new_int(5));
+    json_object_object_add(root,
+                           "export_binding_kind",
+                           json_object_new_string("SEPARATE_FACES"));
+    json_object_object_add(root,
+                           "emitted_output_kind",
+                           json_object_new_string("FLATTENED_ONLY"));
+    json_object_object_add(root, "primitive_kind", json_object_new_string(primitive_kind));
+    json_object_object_add(root, "source_scene_id", json_object_new_string("scene_editor_test"));
+    json_object_object_add(root, "source_object_id", json_object_new_string(object_id));
+    if (strcmp(primitive_kind, "RECT_PRISM") == 0) {
+        json_object_put(base_surface);
+        base_surface = NULL;
+        json_object_object_add(root, "base_surface_count", json_object_new_int(6));
+        for (int i = 0; i < 6; ++i) {
+            json_object* prism_base_surface = json_object_new_object();
+            if (!prism_base_surface) {
+                if (prism_base_surface) json_object_put(prism_base_surface);
+                json_object_put(root);
+                return false;
+            }
+            json_object_object_add(prism_base_surface, "surface_id", json_object_new_int(i + 1));
+            json_object_object_add(prism_base_surface, "face_role", json_object_new_string(kRectPrismRoles[i]));
+            json_object_object_add(prism_base_surface, "file_name", json_object_new_string(file_name));
+            if (!test_scene_editor_add_surface_semantic_fields(prism_base_surface,
+                                                               primitive_kind,
+                                                               kRectPrismRoles[i])) {
+                json_object_put(prism_base_surface);
+                json_object_put(root);
+                return false;
+            }
+            json_object_array_add(base_surfaces, prism_base_surface);
+        }
+    } else {
+        json_object_object_add(root, "base_surface_count", json_object_new_int(1));
+        json_object_object_add(base_surface, "surface_id", json_object_new_int(1));
+        json_object_object_add(base_surface, "face_role", json_object_new_string(face_role));
+        json_object_object_add(base_surface, "file_name", json_object_new_string(file_name));
+        if (!test_scene_editor_add_surface_semantic_fields(base_surface,
+                                                           primitive_kind,
+                                                           face_role)) {
+            json_object_put(root);
+            return false;
+        }
+        json_object_array_add(base_surfaces, base_surface);
+    }
+    json_object_object_add(root, "base_surfaces", base_surfaces);
+    write_ok = json_object_to_file_ext(manifest_path, root, JSON_C_TO_STRING_PRETTY);
+    json_object_put(root);
+    return write_ok == 0;
+}
+
+static bool test_scene_editor_write_invalid_authored_texture_manifest_missing_output_kind(
+    const char* manifest_path,
+    const char* object_id,
+    const char* primitive_kind,
+    const char* face_role,
+    const char* file_name) {
+    json_object* root = NULL;
+    json_object* base_surfaces = NULL;
     json_object* surface = NULL;
     int write_ok = 0;
     if (!manifest_path || !object_id || !primitive_kind || !face_role || !file_name) {
         return false;
     }
     root = json_object_new_object();
-    surfaces = json_object_new_array();
+    base_surfaces = json_object_new_array();
     surface = json_object_new_object();
-    if (!root || !surfaces || !surface) {
+    if (!root || !base_surfaces || !surface) {
         if (root) json_object_put(root);
-        if (surfaces) json_object_put(surfaces);
+        if (base_surfaces) json_object_put(base_surfaces);
         if (surface) json_object_put(surface);
         return false;
     }
-    json_object_object_add(root, "schema_version", json_object_new_int(1));
+    json_object_object_add(root, "schema_version", json_object_new_int(5));
     json_object_object_add(root,
                            "export_binding_kind",
                            json_object_new_string("SEPARATE_FACES"));
     json_object_object_add(root, "primitive_kind", json_object_new_string(primitive_kind));
-    json_object_object_add(root, "source_scene_id", json_object_new_string("scene_editor_test"));
     json_object_object_add(root, "source_object_id", json_object_new_string(object_id));
-    json_object_object_add(root, "surface_count", json_object_new_int(1));
-    json_object_object_add(surface, "surface_id", json_object_new_int(1));
     json_object_object_add(surface, "face_role", json_object_new_string(face_role));
     json_object_object_add(surface, "file_name", json_object_new_string(file_name));
-    json_object_array_add(surfaces, surface);
-    json_object_object_add(root, "surfaces", surfaces);
+    json_object_array_add(base_surfaces, surface);
+    json_object_object_add(root, "base_surfaces", base_surfaces);
     write_ok = json_object_to_file_ext(manifest_path, root, JSON_C_TO_STRING_PRETTY);
     json_object_put(root);
     return write_ok == 0;
@@ -545,7 +685,7 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip_object_material
     assert_true("runtime_scene_authoring_material_persist_reapply_binding_mode",
                 strcmp(authored_binding_mode, "override") == 0);
     assert_true("runtime_scene_authoring_material_persist_reapply_face_count",
-                authored_face_count == 1);
+                authored_face_count == 6);
     HitInfo3D_Reset(&hit);
     hit.sceneObjectIndex = 0;
     hit.triangleIndex = 12;
@@ -568,6 +708,725 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip_object_material
     unlink(runtime_path);
     RuntimeMaterialAuthoredTextureResetAll();
     SceneEditorMaterialFacePlacementResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_authored_texture_binding_routes_to_runtime_binding(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *texture_dir = "/tmp/ray_tracing_material_editor_authored_texture_set";
+    const char *texture_png =
+        "/tmp/ray_tracing_material_editor_authored_texture_set/box_bind_top.png";
+    const char *texture_manifest =
+        "/tmp/ray_tracing_material_editor_authored_texture_set/box_bind_texture_manifest.json";
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_material_editor_authored_bind\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"box_bind\","
+          "\"object_type\":\"rect_prism_primitive\","
+          "\"transform\":{"
+            "\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+          "},"
+          "\"primitive\":{"
+            "\"kind\":\"rect_prism_primitive\","
+            "\"width\":1.0,"
+            "\"height\":1.0,"
+            "\"depth\":1.0"
+          "},"
+          "\"flags\":{\"visible\":true}"
+        "}],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    unsigned char texture_rgba[] = {96u, 140u, 220u, 255u};
+    char authored_manifest_path[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
+    char authored_binding_mode[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MODE_CAPACITY];
+    int authored_face_count = 0;
+    bool ok = false;
+
+    (void)mkdir(texture_dir, 0775);
+    assert_true("material_editor_authored_texture_png_write_ok",
+                test_scene_editor_write_png_rgba(texture_png, texture_rgba, 1u, 1u));
+    assert_true("material_editor_authored_texture_manifest_write_ok",
+                test_scene_editor_write_authored_texture_manifest(texture_manifest,
+                                                                  "box_bind",
+                                                                  "RECT_PRISM",
+                                                                  "TOP",
+                                                                  "box_bind_top.png"));
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialFacePlacementResetAll();
+    SceneEditorMaterialStackResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("material_editor_authored_texture_runtime_apply_ok", ok);
+    if (!ok) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+    assert_true("material_editor_authored_texture_bind_ok",
+                MaterialEditorBindAuthoredTextureManifestForFocused(texture_manifest));
+    assert_true("material_editor_authored_texture_summary_ok",
+                MaterialEditorGetAuthoredTextureBindingSummary(authored_manifest_path,
+                                                              sizeof(authored_manifest_path),
+                                                              authored_binding_mode,
+                                                              sizeof(authored_binding_mode),
+                                                              &authored_face_count));
+    assert_true("material_editor_authored_texture_summary_path_matches",
+                strstr(authored_manifest_path, "box_bind_texture_manifest.json") != NULL);
+    assert_true("material_editor_authored_texture_summary_mode_override",
+                strcmp(authored_binding_mode, "override") == 0);
+    assert_true("material_editor_authored_texture_summary_face_count",
+                authored_face_count == 6);
+
+    assert_true("material_editor_authored_texture_clear_ok",
+                MaterialEditorClearAuthoredTextureBindingForFocused());
+    assert_true("material_editor_authored_texture_summary_cleared",
+                !MaterialEditorGetAuthoredTextureBindingSummary(authored_manifest_path,
+                                                               sizeof(authored_manifest_path),
+                                                               authored_binding_mode,
+                                                               sizeof(authored_binding_mode),
+                                                               &authored_face_count));
+
+    RuntimeMaterialAuthoredTextureResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_authored_texture_binding_persists_and_reopens(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_path = "/tmp/ray_tracing_material_editor_authored_reopen.json";
+    const char *texture_dir = "/tmp/ray_tracing_material_editor_authored_reopen_textures";
+    const char *texture_png =
+        "/tmp/ray_tracing_material_editor_authored_reopen_textures/box_bind_top.png";
+    const char *texture_manifest =
+        "/tmp/ray_tracing_material_editor_authored_reopen_textures/box_bind_texture_manifest.json";
+    const char *texture_manifest_rel =
+        "ray_tracing_material_editor_authored_reopen_textures/box_bind_texture_manifest.json";
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_material_editor_authored_reopen\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"box_bind\","
+          "\"object_type\":\"rect_prism_primitive\","
+          "\"transform\":{"
+            "\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+          "},"
+          "\"primitive\":{"
+            "\"kind\":\"rect_prism_primitive\","
+            "\"width\":1.0,"
+            "\"height\":1.0,"
+            "\"depth\":1.0"
+          "},"
+          "\"flags\":{\"visible\":true}"
+        "}],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeSceneBridgePreflight reapply_summary = {0};
+    unsigned char texture_rgba[] = {96u, 140u, 220u, 255u};
+    char diagnostics[256];
+    char *persisted_json = NULL;
+    char authored_manifest_path[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
+    char authored_binding_mode[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MODE_CAPACITY];
+    int authored_face_count = 0;
+    FILE *file = fopen(runtime_path, "wb");
+    bool ok = false;
+
+    assert_true("material_editor_authored_reopen_open_tmp", file != NULL);
+    if (!file) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+    fwrite(runtime_json, 1, strlen(runtime_json), file);
+    fclose(file);
+
+    (void)mkdir(texture_dir, 0775);
+    assert_true("material_editor_authored_reopen_png_write_ok",
+                test_scene_editor_write_png_rgba(texture_png, texture_rgba, 1u, 1u));
+    assert_true("material_editor_authored_reopen_manifest_write_ok",
+                test_scene_editor_write_authored_texture_manifest(texture_manifest,
+                                                                  "box_bind",
+                                                                  "RECT_PRISM",
+                                                                  "TOP",
+                                                                  "box_bind_top.png"));
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialFacePlacementResetAll();
+    SceneEditorMaterialStackResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    ok = runtime_scene_bridge_apply_file(runtime_path, &summary);
+    assert_true("material_editor_authored_reopen_apply_ok", ok);
+    if (!ok) {
+        unlink(texture_png);
+        unlink(texture_manifest);
+        rmdir(texture_dir);
+        unlink(runtime_path);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    snprintf(animSettings.runtimeScenePath, sizeof(animSettings.runtimeScenePath), "%s", runtime_path);
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+    assert_true("material_editor_authored_reopen_bind_ok",
+                MaterialEditorBindAuthoredTextureManifestForFocused(texture_manifest));
+    assert_true("material_editor_authored_reopen_persist_ok",
+                SceneEditorRuntimeScenePersistAuthoring(diagnostics, sizeof(diagnostics)));
+
+    persisted_json = read_text_file_alloc(runtime_path, NULL);
+    assert_true("material_editor_authored_reopen_readback_ok", persisted_json != NULL);
+    if (persisted_json) {
+        assert_true("material_editor_authored_reopen_persisted_relative_manifest",
+                    strstr(persisted_json, texture_manifest_rel) != NULL);
+        assert_true("material_editor_authored_reopen_persisted_not_absolute_manifest",
+                    strstr(persisted_json, texture_manifest) == NULL);
+    }
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialFacePlacementResetAll();
+    SceneEditorMaterialStackResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    assert_true("material_editor_authored_reopen_reapply_ok",
+                runtime_scene_bridge_apply_file(runtime_path, &reapply_summary));
+
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+    assert_true("material_editor_authored_reopen_summary_ok",
+                MaterialEditorGetAuthoredTextureBindingSummary(authored_manifest_path,
+                                                              sizeof(authored_manifest_path),
+                                                              authored_binding_mode,
+                                                              sizeof(authored_binding_mode),
+                                                              &authored_face_count));
+    assert_true("material_editor_authored_reopen_summary_relative_path",
+                strcmp(authored_manifest_path, texture_manifest_rel) == 0);
+    assert_true("material_editor_authored_reopen_summary_mode",
+                strcmp(authored_binding_mode, "override") == 0);
+    assert_true("material_editor_authored_reopen_summary_face_count",
+                authored_face_count == 6);
+
+    free(persisted_json);
+    unlink(texture_png);
+    unlink(texture_manifest);
+    rmdir(texture_dir);
+    unlink(runtime_path);
+    RuntimeMaterialAuthoredTextureResetAll();
+    SceneEditorMaterialFacePlacementResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_authored_texture_binding_replace_clear_roundtrip(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_path = "/tmp/ray_tracing_material_editor_authored_replace_clear.json";
+    const char *texture_dir = "/tmp/ray_tracing_material_editor_authored_replace_clear_textures";
+    const char *texture_png_a =
+        "/tmp/ray_tracing_material_editor_authored_replace_clear_textures/box_bind_top_a.png";
+    const char *texture_manifest_a =
+        "/tmp/ray_tracing_material_editor_authored_replace_clear_textures/box_bind_texture_manifest_a.json";
+    const char *texture_manifest_a_rel =
+        "ray_tracing_material_editor_authored_replace_clear_textures/box_bind_texture_manifest_a.json";
+    const char *texture_png_b =
+        "/tmp/ray_tracing_material_editor_authored_replace_clear_textures/box_bind_top_b.png";
+    const char *texture_manifest_b =
+        "/tmp/ray_tracing_material_editor_authored_replace_clear_textures/box_bind_texture_manifest_b.json";
+    const char *texture_manifest_b_rel =
+        "ray_tracing_material_editor_authored_replace_clear_textures/box_bind_texture_manifest_b.json";
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_material_editor_authored_replace_clear\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"box_bind\","
+          "\"object_type\":\"rect_prism_primitive\","
+          "\"transform\":{"
+            "\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+          "},"
+          "\"primitive\":{"
+            "\"kind\":\"rect_prism_primitive\","
+            "\"width\":1.0,"
+            "\"height\":1.0,"
+            "\"depth\":1.0"
+          "},"
+          "\"flags\":{\"visible\":true}"
+        "}],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeSceneBridgePreflight reapply_summary = {0};
+    RuntimeSceneBridgePreflight reapply_cleared_summary = {0};
+    unsigned char texture_rgba_a[] = {96u, 140u, 220u, 255u};
+    unsigned char texture_rgba_b[] = {212u, 96u, 120u, 255u};
+    char diagnostics[256];
+    char *persisted_json = NULL;
+    char authored_manifest_path[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
+    char authored_binding_mode[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MODE_CAPACITY];
+    int authored_face_count = 0;
+    FILE *file = fopen(runtime_path, "wb");
+    bool ok = false;
+
+    assert_true("material_editor_authored_replace_clear_open_tmp", file != NULL);
+    if (!file) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+    fwrite(runtime_json, 1, strlen(runtime_json), file);
+    fclose(file);
+
+    (void)mkdir(texture_dir, 0775);
+    assert_true("material_editor_authored_replace_clear_png_a_write_ok",
+                test_scene_editor_write_png_rgba(texture_png_a, texture_rgba_a, 1u, 1u));
+    assert_true("material_editor_authored_replace_clear_manifest_a_write_ok",
+                test_scene_editor_write_authored_texture_manifest(texture_manifest_a,
+                                                                  "box_bind",
+                                                                  "RECT_PRISM",
+                                                                  "TOP",
+                                                                  "box_bind_top_a.png"));
+    assert_true("material_editor_authored_replace_clear_png_b_write_ok",
+                test_scene_editor_write_png_rgba(texture_png_b, texture_rgba_b, 1u, 1u));
+    assert_true("material_editor_authored_replace_clear_manifest_b_write_ok",
+                test_scene_editor_write_authored_texture_manifest(texture_manifest_b,
+                                                                  "box_bind",
+                                                                  "RECT_PRISM",
+                                                                  "TOP",
+                                                                  "box_bind_top_b.png"));
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialFacePlacementResetAll();
+    SceneEditorMaterialStackResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    ok = runtime_scene_bridge_apply_file(runtime_path, &summary);
+    assert_true("material_editor_authored_replace_clear_apply_ok", ok);
+    if (!ok) {
+        unlink(texture_png_a);
+        unlink(texture_manifest_a);
+        unlink(texture_png_b);
+        unlink(texture_manifest_b);
+        rmdir(texture_dir);
+        unlink(runtime_path);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    snprintf(animSettings.runtimeScenePath, sizeof(animSettings.runtimeScenePath), "%s", runtime_path);
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+
+    assert_true("material_editor_authored_replace_clear_bind_a_ok",
+                MaterialEditorBindAuthoredTextureManifestForFocused(texture_manifest_a));
+    assert_true("material_editor_authored_replace_clear_summary_a_ok",
+                MaterialEditorGetAuthoredTextureBindingSummary(authored_manifest_path,
+                                                              sizeof(authored_manifest_path),
+                                                              authored_binding_mode,
+                                                              sizeof(authored_binding_mode),
+                                                              &authored_face_count));
+    assert_true("material_editor_authored_replace_clear_summary_a_path",
+                strcmp(authored_manifest_path, texture_manifest_a) == 0);
+
+    assert_true("material_editor_authored_replace_clear_bind_b_ok",
+                MaterialEditorBindAuthoredTextureManifestForFocused(texture_manifest_b));
+    assert_true("material_editor_authored_replace_clear_summary_b_ok",
+                MaterialEditorGetAuthoredTextureBindingSummary(authored_manifest_path,
+                                                              sizeof(authored_manifest_path),
+                                                              authored_binding_mode,
+                                                              sizeof(authored_binding_mode),
+                                                              &authored_face_count));
+    assert_true("material_editor_authored_replace_clear_summary_b_path",
+                strcmp(authored_manifest_path, texture_manifest_b) == 0);
+    assert_true("material_editor_authored_replace_clear_summary_b_mode",
+                strcmp(authored_binding_mode, "override") == 0);
+    assert_true("material_editor_authored_replace_clear_summary_b_face_count",
+                authored_face_count == 6);
+
+    assert_true("material_editor_authored_replace_clear_persist_bound_ok",
+                SceneEditorRuntimeScenePersistAuthoring(diagnostics, sizeof(diagnostics)));
+    persisted_json = read_text_file_alloc(runtime_path, NULL);
+    assert_true("material_editor_authored_replace_clear_readback_bound_ok", persisted_json != NULL);
+    if (persisted_json) {
+        assert_true("material_editor_authored_replace_clear_persisted_uses_b_relative",
+                    strstr(persisted_json, texture_manifest_b_rel) != NULL);
+        assert_true("material_editor_authored_replace_clear_persisted_not_a_relative",
+                    strstr(persisted_json, texture_manifest_a_rel) == NULL);
+        assert_true("material_editor_authored_replace_clear_persisted_not_b_absolute",
+                    strstr(persisted_json, texture_manifest_b) == NULL);
+        free(persisted_json);
+        persisted_json = NULL;
+    }
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialFacePlacementResetAll();
+    SceneEditorMaterialStackResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    assert_true("material_editor_authored_replace_clear_reapply_bound_ok",
+                runtime_scene_bridge_apply_file(runtime_path, &reapply_summary));
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    snprintf(animSettings.runtimeScenePath, sizeof(animSettings.runtimeScenePath), "%s", runtime_path);
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+    assert_true("material_editor_authored_replace_clear_reapply_summary_ok",
+                MaterialEditorGetAuthoredTextureBindingSummary(authored_manifest_path,
+                                                              sizeof(authored_manifest_path),
+                                                              authored_binding_mode,
+                                                              sizeof(authored_binding_mode),
+                                                              &authored_face_count));
+    assert_true("material_editor_authored_replace_clear_reapply_summary_b_relative_path",
+                strcmp(authored_manifest_path, texture_manifest_b_rel) == 0);
+
+    assert_true("material_editor_authored_replace_clear_clear_ok",
+                MaterialEditorClearAuthoredTextureBindingForFocused());
+    assert_true("material_editor_authored_replace_clear_summary_cleared",
+                !MaterialEditorGetAuthoredTextureBindingSummary(authored_manifest_path,
+                                                               sizeof(authored_manifest_path),
+                                                               authored_binding_mode,
+                                                               sizeof(authored_binding_mode),
+                                                               &authored_face_count));
+    assert_true("material_editor_authored_replace_clear_persist_cleared_ok",
+                SceneEditorRuntimeScenePersistAuthoring(diagnostics, sizeof(diagnostics)));
+    persisted_json = read_text_file_alloc(runtime_path, NULL);
+    assert_true("material_editor_authored_replace_clear_readback_cleared_ok", persisted_json != NULL);
+    if (persisted_json) {
+        assert_true("material_editor_authored_replace_clear_persisted_cleared_authored_texture_null",
+                    strstr(persisted_json, "\"authored_texture\":null") != NULL ||
+                    strstr(persisted_json, "\"authored_texture\": null") != NULL);
+        assert_true("material_editor_authored_replace_clear_persisted_cleared_no_manifest_b",
+                    strstr(persisted_json, texture_manifest_b_rel) == NULL);
+        free(persisted_json);
+        persisted_json = NULL;
+    }
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialFacePlacementResetAll();
+    SceneEditorMaterialStackResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    assert_true("material_editor_authored_replace_clear_reapply_cleared_ok",
+                runtime_scene_bridge_apply_file(runtime_path, &reapply_cleared_summary));
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+    assert_true("material_editor_authored_replace_clear_reapply_cleared_summary_absent",
+                !MaterialEditorGetAuthoredTextureBindingSummary(authored_manifest_path,
+                                                               sizeof(authored_manifest_path),
+                                                               authored_binding_mode,
+                                                               sizeof(authored_binding_mode),
+                                                               &authored_face_count));
+
+    unlink(texture_png_a);
+    unlink(texture_manifest_a);
+    unlink(texture_png_b);
+    unlink(texture_manifest_b);
+    rmdir(texture_dir);
+    unlink(runtime_path);
+    RuntimeMaterialAuthoredTextureResetAll();
+    SceneEditorMaterialFacePlacementResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_authored_texture_invalid_binding_surfaces_reason_and_clears(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char* texture_dir = "/tmp/ray_tracing_material_editor_authored_invalid_set";
+    const char* texture_png =
+        "/tmp/ray_tracing_material_editor_authored_invalid_set/plane_front.png";
+    const char* texture_manifest =
+        "/tmp/ray_tracing_material_editor_authored_invalid_set/plane_texture_manifest.json";
+    const char* runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_material_editor_authored_invalid_bind\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"plane_bind\","
+          "\"object_type\":\"plane_primitive\","
+          "\"transform\":{"
+            "\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+          "},"
+          "\"primitive\":{"
+            "\"kind\":\"plane_primitive\","
+            "\"width\":1.0,"
+            "\"height\":1.0"
+          "},"
+          "\"flags\":{\"visible\":true}"
+        "}],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    unsigned char texture_rgba[] = {96u, 140u, 220u, 255u};
+    char authored_manifest_path[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
+    char authored_binding_mode[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MODE_CAPACITY];
+    char authored_reason[RUNTIME_MATERIAL_AUTHORED_TEXTURE_REASON_CAPACITY];
+    bool ok = false;
+
+    (void)mkdir(texture_dir, 0775);
+    assert_true("material_editor_authored_invalid_png_write_ok",
+                test_scene_editor_write_png_rgba(texture_png, texture_rgba, 1u, 1u));
+    assert_true("material_editor_authored_invalid_manifest_write_ok",
+                test_scene_editor_write_invalid_authored_texture_manifest_missing_output_kind(
+                    texture_manifest,
+                    "plane_bind",
+                    "PLANE",
+                    "FRONT",
+                    "plane_front.png"));
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialFacePlacementResetAll();
+    SceneEditorMaterialStackResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("material_editor_authored_invalid_runtime_apply_ok", ok);
+    if (!ok) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+    assert_true("material_editor_authored_invalid_bind_rejected",
+                !MaterialEditorBindAuthoredTextureManifestForFocused(texture_manifest));
+    assert_true("material_editor_authored_invalid_summary_absent",
+                !MaterialEditorGetAuthoredTextureBindingSummary(authored_manifest_path,
+                                                               sizeof(authored_manifest_path),
+                                                               authored_binding_mode,
+                                                               sizeof(authored_binding_mode),
+                                                               NULL));
+    assert_true("material_editor_authored_invalid_summary_present",
+                MaterialEditorGetAuthoredTextureInvalidSummary(authored_manifest_path,
+                                                              sizeof(authored_manifest_path),
+                                                              authored_binding_mode,
+                                                              sizeof(authored_binding_mode),
+                                                              authored_reason,
+                                                              sizeof(authored_reason)));
+    assert_true("material_editor_authored_invalid_summary_path_matches",
+                strcmp(authored_manifest_path, texture_manifest) == 0);
+    assert_true("material_editor_authored_invalid_summary_mode_override",
+                strcmp(authored_binding_mode, "override") == 0);
+    assert_true("material_editor_authored_invalid_summary_reason",
+                strcmp(authored_reason, "schema or output contract invalid") == 0);
+
+    assert_true("material_editor_authored_invalid_clear_ok",
+                MaterialEditorClearAuthoredTextureBindingForFocused());
+    assert_true("material_editor_authored_invalid_summary_cleared",
+                !MaterialEditorGetAuthoredTextureInvalidSummary(authored_manifest_path,
+                                                               sizeof(authored_manifest_path),
+                                                               authored_binding_mode,
+                                                               sizeof(authored_binding_mode),
+                                                               authored_reason,
+                                                               sizeof(authored_reason)));
+
+    unlink(texture_png);
+    unlink(texture_manifest);
+    rmdir(texture_dir);
+    RuntimeMaterialAuthoredTextureResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_authored_texture_invalid_binding_persists_and_reopens(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char* runtime_path = "/tmp/ray_tracing_material_editor_authored_invalid_reopen.json";
+    const char* texture_dir = "/tmp/ray_tracing_material_editor_authored_invalid_reopen_set";
+    const char* texture_png =
+        "/tmp/ray_tracing_material_editor_authored_invalid_reopen_set/plane_front.png";
+    const char* texture_manifest =
+        "/tmp/ray_tracing_material_editor_authored_invalid_reopen_set/plane_texture_manifest.json";
+    const char* texture_manifest_rel =
+        "ray_tracing_material_editor_authored_invalid_reopen_set/plane_texture_manifest.json";
+    const char* runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_material_editor_authored_invalid_reopen\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"plane_bind\","
+          "\"object_type\":\"plane_primitive\","
+          "\"transform\":{"
+            "\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+          "},"
+          "\"primitive\":{"
+            "\"kind\":\"plane_primitive\","
+            "\"width\":1.0,"
+            "\"height\":1.0"
+          "},"
+          "\"flags\":{\"visible\":true}"
+        "}],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeSceneBridgePreflight reapply_summary = {0};
+    unsigned char texture_rgba[] = {96u, 140u, 220u, 255u};
+    char diagnostics[256];
+    char* persisted_json = NULL;
+    char authored_manifest_path[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
+    char authored_binding_mode[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MODE_CAPACITY];
+    char authored_reason[RUNTIME_MATERIAL_AUTHORED_TEXTURE_REASON_CAPACITY];
+    FILE* file = fopen(runtime_path, "wb");
+    bool ok = false;
+
+    assert_true("material_editor_authored_invalid_reopen_open_tmp", file != NULL);
+    if (!file) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+    fwrite(runtime_json, 1, strlen(runtime_json), file);
+    fclose(file);
+
+    (void)mkdir(texture_dir, 0775);
+    assert_true("material_editor_authored_invalid_reopen_png_write_ok",
+                test_scene_editor_write_png_rgba(texture_png, texture_rgba, 1u, 1u));
+    assert_true("material_editor_authored_invalid_reopen_manifest_write_ok",
+                test_scene_editor_write_invalid_authored_texture_manifest_missing_output_kind(
+                    texture_manifest,
+                    "plane_bind",
+                    "PLANE",
+                    "FRONT",
+                    "plane_front.png"));
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialFacePlacementResetAll();
+    SceneEditorMaterialStackResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    ok = runtime_scene_bridge_apply_file(runtime_path, &summary);
+    assert_true("material_editor_authored_invalid_reopen_apply_ok", ok);
+    if (!ok) {
+        unlink(texture_png);
+        unlink(texture_manifest);
+        rmdir(texture_dir);
+        unlink(runtime_path);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    snprintf(animSettings.runtimeScenePath, sizeof(animSettings.runtimeScenePath), "%s", runtime_path);
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+    assert_true("material_editor_authored_invalid_reopen_bind_rejected",
+                !MaterialEditorBindAuthoredTextureManifestForFocused(texture_manifest));
+    assert_true("material_editor_authored_invalid_reopen_persist_ok",
+                SceneEditorRuntimeScenePersistAuthoring(diagnostics, sizeof(diagnostics)));
+
+    persisted_json = read_text_file_alloc(runtime_path, NULL);
+    assert_true("material_editor_authored_invalid_reopen_readback_ok", persisted_json != NULL);
+    if (persisted_json) {
+        assert_true("material_editor_authored_invalid_reopen_persisted_relative_manifest",
+                    strstr(persisted_json, texture_manifest_rel) != NULL);
+        assert_true("material_editor_authored_invalid_reopen_persisted_not_null",
+                    strstr(persisted_json, "\"authored_texture\":null") == NULL &&
+                    strstr(persisted_json, "\"authored_texture\": null") == NULL);
+        free(persisted_json);
+        persisted_json = NULL;
+    }
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialFacePlacementResetAll();
+    SceneEditorMaterialStackResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    assert_true("material_editor_authored_invalid_reopen_reapply_ok",
+                runtime_scene_bridge_apply_file(runtime_path, &reapply_summary));
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    snprintf(animSettings.runtimeScenePath, sizeof(animSettings.runtimeScenePath), "%s", runtime_path);
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+    assert_true("material_editor_authored_invalid_reopen_summary_present",
+                MaterialEditorGetAuthoredTextureInvalidSummary(authored_manifest_path,
+                                                              sizeof(authored_manifest_path),
+                                                              authored_binding_mode,
+                                                              sizeof(authored_binding_mode),
+                                                              authored_reason,
+                                                              sizeof(authored_reason)));
+    assert_true("material_editor_authored_invalid_reopen_summary_relative_path",
+                strcmp(authored_manifest_path, texture_manifest_rel) == 0);
+    assert_true("material_editor_authored_invalid_reopen_summary_mode_override",
+                strcmp(authored_binding_mode, "override") == 0);
+    assert_true("material_editor_authored_invalid_reopen_summary_reason",
+                strcmp(authored_reason, "schema or output contract invalid") == 0);
+
+    unlink(texture_png);
+    unlink(texture_manifest);
+    rmdir(texture_dir);
+    unlink(runtime_path);
+    RuntimeMaterialAuthoredTextureResetAll();
     sceneSettings = saved_scene;
     animSettings = saved_anim;
     return 0;
@@ -728,6 +1587,229 @@ static int test_scene_editor_runtime_scene_material_stack_roundtrip_payload(void
                 fabs(textured.bsdf.roughness - baseline.bsdf.roughness) > 1e-6);
 
     free(persisted_json);
+    unlink(runtime_path);
+    SceneEditorMaterialStackResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    SceneEditorMaterialFacePlacementResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_scene_editor_runtime_scene_authored_texture_overlay_roundtrip_payload(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char* runtime_path =
+        "/tmp/ray_tracing_runtime_scene_authored_texture_overlay_roundtrip.json";
+    const char* texture_dir = "/tmp/ray_tracing_runtime_scene_authored_texture_overlay_roundtrip_set";
+    const char* texture_png =
+        "/tmp/ray_tracing_runtime_scene_authored_texture_overlay_roundtrip_set/box_stack_front.png";
+    const char* texture_manifest =
+        "/tmp/ray_tracing_runtime_scene_authored_texture_overlay_roundtrip_set/box_stack_texture_manifest.json";
+    const char* texture_manifest_rel =
+        "ray_tracing_runtime_scene_authored_texture_overlay_roundtrip_set/box_stack_texture_manifest.json";
+    const char* runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_authoring_authored_overlay_1\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"box_stack_authored\","
+          "\"object_type\":\"rect_prism_primitive\","
+          "\"transform\":{"
+            "\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+          "},"
+          "\"primitive\":{"
+            "\"kind\":\"rect_prism_primitive\","
+            "\"width\":1.0,"
+            "\"height\":1.0,"
+            "\"depth\":1.0"
+          "},"
+          "\"flags\":{\"visible\":true}"
+        "}],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    char diagnostics[256];
+    char* persisted_json = NULL;
+    FILE* file = fopen(runtime_path, "wb");
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeSceneBridgePreflight reopen_summary = {0};
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    RuntimeMaterialTextureStack hydrated = RuntimeMaterialTextureStackEmpty();
+    RuntimeMaterialPayload3D authored_only = {0};
+    RuntimeMaterialPayload3D authored_overlay = {0};
+    HitInfo3D hit = {0};
+    unsigned char texture_rgba[] = {248u, 28u, 18u, 255u};
+    char authored_manifest_path[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
+    char authored_binding_mode[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MODE_CAPACITY];
+    int authored_face_count = 0;
+    bool ok = false;
+
+    assert_true("runtime_scene_authored_overlay_roundtrip_open_tmp", file != NULL);
+    if (!file) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+    fwrite(runtime_json, 1, strlen(runtime_json), file);
+    fclose(file);
+    (void)mkdir(texture_dir, 0775);
+    assert_true("runtime_scene_authored_overlay_roundtrip_png_write_ok",
+                test_scene_editor_write_png_rgba(texture_png, texture_rgba, 1u, 1u));
+    assert_true("runtime_scene_authored_overlay_roundtrip_manifest_write_ok",
+                test_scene_editor_write_authored_texture_manifest(texture_manifest,
+                                                                  "box_stack_authored",
+                                                                  "RECT_PRISM",
+                                                                  "FRONT",
+                                                                  "box_stack_front.png"));
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialFacePlacementResetAll();
+    SceneEditorMaterialStackResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+
+    ok = runtime_scene_bridge_apply_file(runtime_path, &summary);
+    assert_true("runtime_scene_authored_overlay_roundtrip_apply_ok", ok);
+    if (!ok) {
+        unlink(texture_png);
+        unlink(texture_manifest);
+        rmdir(texture_dir);
+        unlink(runtime_path);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    snprintf(animSettings.runtimeScenePath, sizeof(animSettings.runtimeScenePath), "%s", runtime_path);
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_ROUGH_METAL;
+    sceneSettings.sceneObjects[0].color = 0x707882;
+    sceneSettings.sceneObjects[0].textureId = RUNTIME_MATERIAL_TEXTURE_3D_NONE;
+    sceneSettings.sceneObjects[0].textureStrength = 0.0;
+
+    stack.layerCount = 2;
+    stack.layers[0] =
+        RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_WOOD);
+    stack.layers[0].placement.scale = 2.0;
+    stack.layers[1] =
+        RuntimeMaterialTextureLayerMakeOverlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME);
+    stack.layers[1].opacity = 1.0;
+    stack.layers[1].placement.strength = 1.0;
+    stack.layers[1].placement.scale = 1.5;
+    stack.layers[1].params.coverage = 1.0;
+    stack.layers[1].params.grain = 0.85;
+    stack.layers[1].roughnessInfluence = 0.75;
+    assert_true("runtime_scene_authored_overlay_roundtrip_stack_seeded",
+                SceneEditorMaterialStackSetObjectStack(0, &stack));
+    assert_true("runtime_scene_authored_overlay_roundtrip_bind_ok",
+                RuntimeMaterialAuthoredTextureBindManifestForObject(0,
+                                                                   "box_stack_authored",
+                                                                   texture_manifest_rel,
+                                                                   "override"));
+
+    ok = SceneEditorRuntimeScenePersistAuthoring(diagnostics, sizeof(diagnostics));
+    assert_true("runtime_scene_authored_overlay_roundtrip_persist_ok", ok);
+    if (!ok) {
+        unlink(texture_png);
+        unlink(texture_manifest);
+        rmdir(texture_dir);
+        unlink(runtime_path);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    persisted_json = read_text_file_alloc(runtime_path, NULL);
+    assert_true("runtime_scene_authored_overlay_roundtrip_readback_ok", persisted_json != NULL);
+    if (persisted_json) {
+        assert_true("runtime_scene_authored_overlay_roundtrip_has_stack_json",
+                    strstr(persisted_json, "\"material_texture_stack\"") != NULL);
+        assert_true("runtime_scene_authored_overlay_roundtrip_has_authored_texture",
+                    strstr(persisted_json, "\"authored_texture\"") != NULL);
+        assert_true("runtime_scene_authored_overlay_roundtrip_has_manifest_path",
+                    strstr(persisted_json, texture_manifest_rel) != NULL);
+    }
+    free(persisted_json);
+    persisted_json = NULL;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialFacePlacementResetAll();
+    SceneEditorMaterialStackResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    ok = runtime_scene_bridge_apply_file(runtime_path, &reopen_summary);
+    assert_true("runtime_scene_authored_overlay_roundtrip_reopen_ok", ok);
+    if (!ok) {
+        unlink(texture_png);
+        unlink(texture_manifest);
+        rmdir(texture_dir);
+        unlink(runtime_path);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    assert_true("runtime_scene_authored_overlay_roundtrip_binding_summary_ok",
+                RuntimeMaterialAuthoredTextureGetBinding(0,
+                                                        authored_manifest_path,
+                                                        sizeof(authored_manifest_path),
+                                                        authored_binding_mode,
+                                                        sizeof(authored_binding_mode),
+                                                        &authored_face_count));
+    assert_true("runtime_scene_authored_overlay_roundtrip_binding_face_count",
+                authored_face_count == 6);
+    assert_true("runtime_scene_authored_overlay_roundtrip_binding_path",
+                strcmp(authored_manifest_path, texture_manifest_rel) == 0);
+    assert_true("runtime_scene_authored_overlay_roundtrip_hydrated_stack",
+                SceneEditorMaterialStackGetObjectStack(0, &hydrated));
+    assert_true("runtime_scene_authored_overlay_roundtrip_hydrated_layer_count",
+                hydrated.layerCount == 2);
+    assert_true("runtime_scene_authored_overlay_roundtrip_hydrated_overlay_kind",
+                hydrated.layers[1].kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME);
+
+    HitInfo3D_Reset(&hit);
+    hit.sceneObjectIndex = 0;
+    hit.triangleIndex = 0;
+    hit.localTriangleIndex = 0;
+    hit.primitiveIndex = 0;
+    hit.baryU = 0.2;
+    hit.baryV = 0.3;
+    hit.baryW = 0.5;
+
+    assert_true("runtime_scene_authored_overlay_roundtrip_overlay_payload_ok",
+                RuntimeMaterialPayload3D_ResolveFromHit(&hit, &authored_overlay));
+    assert_true("runtime_scene_authored_overlay_roundtrip_overlay_payload_mask",
+                authored_overlay.textureMask > 0.0);
+    assert_true("runtime_scene_authored_overlay_roundtrip_overlay_red_dominant",
+                authored_overlay.baseColorR > authored_overlay.baseColorG &&
+                    authored_overlay.baseColorR > authored_overlay.baseColorB);
+
+    assert_true("runtime_scene_authored_overlay_roundtrip_clear_stack_ok",
+                SceneEditorMaterialStackClearObjectStack(0));
+    assert_true("runtime_scene_authored_overlay_roundtrip_authored_only_payload_ok",
+                RuntimeMaterialPayload3D_ResolveFromHit(&hit, &authored_only));
+    assert_true("runtime_scene_authored_overlay_roundtrip_authored_only_red_dominant",
+                authored_only.baseColorR > authored_only.baseColorG &&
+                    authored_only.baseColorR > authored_only.baseColorB);
+    assert_true("runtime_scene_authored_overlay_roundtrip_overlay_changes_response",
+                authored_overlay.baseColorR < authored_only.baseColorR - 1e-6 ||
+                    authored_overlay.baseColorG < authored_only.baseColorG - 1e-6 ||
+                    authored_overlay.baseColorB < authored_only.baseColorB - 1e-6 ||
+                    authored_overlay.bsdf.roughness > authored_only.bsdf.roughness + 1e-6);
+
+    unlink(texture_png);
+    unlink(texture_manifest);
+    rmdir(texture_dir);
     unlink(runtime_path);
     SceneEditorMaterialStackResetAll();
     RuntimeMaterialAuthoredTextureResetAll();
@@ -2283,5 +3365,11 @@ int run_test_runtime_scene_editor_tests(void) {
     test_scene_editor_control_surface_selected_object_status();
     test_scene_editor_viewport_render_falls_back_without_digest();
     test_scene_editor_control_surface_material_mode_contract();
+    test_material_editor_authored_texture_binding_routes_to_runtime_binding();
+    test_material_editor_authored_texture_binding_persists_and_reopens();
+    test_material_editor_authored_texture_binding_replace_clear_roundtrip();
+    test_material_editor_authored_texture_invalid_binding_surfaces_reason_and_clears();
+    test_material_editor_authored_texture_invalid_binding_persists_and_reopens();
+    test_scene_editor_runtime_scene_authored_texture_overlay_roundtrip_payload();
     return test_support_failures() - before;
 }

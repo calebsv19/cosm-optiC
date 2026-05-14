@@ -194,6 +194,9 @@ RuntimeMaterialTextureLayerKind RuntimeMaterialTextureLayerKindFromStableId(
     if (strcmp(stable_id, "fog") == 0) return RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_FOG;
     if (strcmp(stable_id, "grime") == 0) return RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME;
     if (strcmp(stable_id, "oil") == 0) return RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL;
+    if (strcmp(stable_id, "metal") == 0) {
+        return RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_BRUSHED_METAL;
+    }
     if (strcmp(stable_id, "brushed_metal") == 0) {
         return RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_BRUSHED_METAL;
     }
@@ -1009,14 +1012,15 @@ static void runtime_material_surface_eval_apply_stack_overlay(
     }
 }
 
-bool RuntimeMaterialTextureStackEvaluatePlacedUV(
+static bool runtime_material_texture_stack_evaluate_placed_uv_internal(
     const RuntimeMaterialTextureStack* stack,
     const SceneObject* object,
     double u,
     double v,
     int seed_key,
     const RuntimeMaterialSurfaceEval* base_eval,
-    RuntimeMaterialSurfaceEval* out_eval) {
+    RuntimeMaterialSurfaceEval* out_eval,
+    bool include_base_layers) {
     RuntimeMaterialTextureStack normalized;
     RuntimeMaterialSurfaceEval eval;
     int limit = 0;
@@ -1041,6 +1045,9 @@ bool RuntimeMaterialTextureStackEvaluatePlacedUV(
             continue;
         }
         if (layer->role == RUNTIME_MATERIAL_TEXTURE_LAYER_ROLE_BASE) {
+            if (!include_base_layers) {
+                continue;
+            }
             double amount = runtime_material_texture_stack_clamp01(layer->opacity *
                                                                    layer->placement.strength);
             memset(&base_sample, 0, sizeof(base_sample));
@@ -1093,4 +1100,40 @@ bool RuntimeMaterialTextureStackEvaluatePlacedUV(
     runtime_material_surface_eval_refresh(&eval);
     *out_eval = eval;
     return eval.active;
+}
+
+bool RuntimeMaterialTextureStackEvaluatePlacedUV(
+    const RuntimeMaterialTextureStack* stack,
+    const SceneObject* object,
+    double u,
+    double v,
+    int seed_key,
+    const RuntimeMaterialSurfaceEval* base_eval,
+    RuntimeMaterialSurfaceEval* out_eval) {
+    return runtime_material_texture_stack_evaluate_placed_uv_internal(stack,
+                                                                      object,
+                                                                      u,
+                                                                      v,
+                                                                      seed_key,
+                                                                      base_eval,
+                                                                      out_eval,
+                                                                      true);
+}
+
+bool RuntimeMaterialTextureStackEvaluateOverlayPlacedUV(
+    const RuntimeMaterialTextureStack* stack,
+    const SceneObject* object,
+    double u,
+    double v,
+    int seed_key,
+    const RuntimeMaterialSurfaceEval* base_eval,
+    RuntimeMaterialSurfaceEval* out_eval) {
+    return runtime_material_texture_stack_evaluate_placed_uv_internal(stack,
+                                                                      object,
+                                                                      u,
+                                                                      v,
+                                                                      seed_key,
+                                                                      base_eval,
+                                                                      out_eval,
+                                                                      false);
 }

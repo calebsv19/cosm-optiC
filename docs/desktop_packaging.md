@@ -1,6 +1,6 @@
 # Ray Tracing Desktop Packaging
 
-Last updated: 2026-04-25
+Last updated: 2026-05-08
 
 ## Bundle Contract
 
@@ -46,6 +46,37 @@ make -C ray_tracing package-desktop-refresh \
   PACKAGE_APP_ICON_SRC="/absolute/path/AppIcon.icns"
 ```
 
+FFmpeg packaging inputs:
+
+- on macOS, object/test build outputs are now isolated by target architecture under `build/<arch>/` and `build_release/<arch>/` so Intel/Rosetta packaging does not reuse stale Apple Silicon objects
+- package flow now prefers a target-matching `ffmpeg` in this order:
+  - explicit `PACKAGE_FFMPEG_SRC=/absolute/path/to/ffmpeg`
+  - `$(TARGET_HOMEBREW_PREFIX)/bin/ffmpeg`
+  - `$(TARGET_ALT_HOMEBREW_PREFIX)/bin/ffmpeg`
+  - `/usr/local/bin/ffmpeg`
+  - `/opt/homebrew/bin/ffmpeg`
+  - `/usr/bin/ffmpeg`
+- for release or Intel handoff builds, require the bundle to carry `ffmpeg`:
+
+```sh
+HOME=/private/tmp/codex-raytracing-x86-home \
+make -C ray_tracing release-artifact \
+  TARGET_ARCH=x86_64 \
+  BUILD_TOOLCHAIN=clang \
+  PACKAGE_TOOLCHAIN=clang
+```
+
+- if the host does not already expose an `x86_64` `ffmpeg` in the search order above, pass an explicit override:
+
+```sh
+HOME=/private/tmp/codex-raytracing-x86-home \
+make -C ray_tracing release-artifact \
+  TARGET_ARCH=x86_64 \
+  BUILD_TOOLCHAIN=clang \
+  PACKAGE_TOOLCHAIN=clang \
+  PACKAGE_FFMPEG_SRC="/absolute/path/to/x86_64/ffmpeg"
+```
+
 If the local store or either override variable is present, packaging will bundle `Contents/Resources/AppIcon.icns` and the app plist will advertise `CFBundleIconFile=AppIcon`.
 
 Local asset note:
@@ -77,6 +108,7 @@ Local asset note:
   - config/default asset presence is intact
   - runtime directories are writable
   - Vulkan portability files and shaders are present
+  - when `PACKAGE_REQUIRE_FFMPEG=1`, bundled `ffmpeg` is present and exported through `RAY_TRACING_FFMPEG_BIN`
 - launcher runtime root:
   - default: `~/Library/Application Support/RayTracing/runtime`
   - tmp fallback: `${TMPDIR:-/tmp}/RayTracing/runtime`

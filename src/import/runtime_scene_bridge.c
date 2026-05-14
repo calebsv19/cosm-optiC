@@ -712,15 +712,20 @@ bool runtime_scene_bridge_apply_file(const char *runtime_scene_path,
     json_text[file_data.size] = '\0';
     core_io_buffer_free(&file_data);
 
+    snprintf(animSettings.runtimeScenePath,
+             sizeof(animSettings.runtimeScenePath),
+             "%s",
+             runtime_scene_path_copy);
     ok = runtime_scene_bridge_apply_json(json_text, out_summary);
     if (ok) {
-        snprintf(animSettings.runtimeScenePath,
-                 sizeof(animSettings.runtimeScenePath),
-                 "%s",
-                 runtime_scene_path_copy);
         runtime_scene_volume_defaults_apply_transition(&animSettings,
                                                        previous_runtime_scene_path,
                                                        runtime_scene_path_copy);
+    } else {
+        snprintf(animSettings.runtimeScenePath,
+                 sizeof(animSettings.runtimeScenePath),
+                 "%s",
+                 previous_runtime_scene_path);
     }
     free(json_text);
     return ok;

@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "editor/material_editor_authored_texture_binding.h"
 #include "camera/camera.h"
 #include "config/config_manager.h"
 #include "editor/material_editor_knob_control.h"
@@ -1094,6 +1095,7 @@ void InitializeMaterialEditor(void) {
     s_group_scroll_offset = 0;
     s_layer_scroll_offset = 0;
     MaterialEditorLayerModelReset();
+    MaterialEditorAuthoredTextureBindingReset();
     MaterialEditorClearTriangleSelection();
 }
 
@@ -1184,6 +1186,13 @@ int MaterialEditorRenderPaneControls(SDL_Renderer* renderer,
     snprintf(line, sizeof(line), "Faces %d/%d selected | %s", selected_faces, focused_faces, edit_text);
     RenderLabelTextLeft(renderer, (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, 16}, line, palette.text_muted);
     cursor_y += 22;
+
+    cursor_y = MaterialEditorAuthoredTextureBindingRenderPaneControls(renderer,
+                                                                      content_bounds,
+                                                                      cursor_y,
+                                                                      bottom_y,
+                                                                      focused_index,
+                                                                      palette);
 
     cursor_y = material_editor_draw_layer_list(renderer, content_bounds, cursor_y, bottom_y, obj, palette);
 
@@ -1315,6 +1324,10 @@ void HandleMaterialEditorEvents(SDL_Event* event) {
     if (event->type == SDL_MOUSEBUTTONDOWN && event->button.button == SDL_BUTTON_LEFT) {
         int mx = event->button.x;
         int my = event->button.y;
+        if (MaterialEditorAuthoredTextureBindingHandleEvent(event,
+                                                            MaterialEditorResolveFocusedObjectIndex())) {
+            return;
+        }
         if (material_editor_point_in_rect(mx, my, &s_texture_none_rect)) {
             MaterialEditorApplyTextureKindToFocused(0);
             return;
@@ -1539,6 +1552,7 @@ void MaterialEditorSetFocusedObjectIndex(int index) {
             s_group_scroll_offset = 0;
             s_layer_scroll_offset = 0;
             MaterialEditorLayerModelReset();
+            MaterialEditorAuthoredTextureBindingReset();
         }
         s_material_editor_focused_object_index = index;
         ObjectEditorSelectionTrackerSetCurrent(index, sceneSettings.objectCount);
@@ -2017,4 +2031,42 @@ bool MaterialEditorCopyActiveFacePlacementToSelected(void) {
     if (copied <= 0) return false;
     MarkObjectDirty(obj);
     return true;
+}
+
+bool MaterialEditorBindAuthoredTextureManifestForFocused(const char* manifest_path) {
+    return MaterialEditorAuthoredTextureBindingBindForFocused(MaterialEditorResolveFocusedObjectIndex(),
+                                                             manifest_path);
+}
+
+bool MaterialEditorClearAuthoredTextureBindingForFocused(void) {
+    return MaterialEditorAuthoredTextureBindingClearForFocused(MaterialEditorResolveFocusedObjectIndex());
+}
+
+bool MaterialEditorGetAuthoredTextureBindingSummary(char* out_manifest_path,
+                                                    size_t out_manifest_path_size,
+                                                    char* out_binding_mode,
+                                                    size_t out_binding_mode_size,
+                                                    int* out_face_count) {
+    return MaterialEditorAuthoredTextureBindingGetSummary(MaterialEditorResolveFocusedObjectIndex(),
+                                                          out_manifest_path,
+                                                          out_manifest_path_size,
+                                                          out_binding_mode,
+                                                          out_binding_mode_size,
+                                                          out_face_count);
+}
+
+bool MaterialEditorGetAuthoredTextureInvalidSummary(char* out_manifest_path,
+                                                    size_t out_manifest_path_size,
+                                                    char* out_binding_mode,
+                                                    size_t out_binding_mode_size,
+                                                    char* out_reason,
+                                                    size_t out_reason_size) {
+    return MaterialEditorAuthoredTextureBindingGetInvalidSummary(
+        MaterialEditorResolveFocusedObjectIndex(),
+        out_manifest_path,
+        out_manifest_path_size,
+        out_binding_mode,
+        out_binding_mode_size,
+        out_reason,
+        out_reason_size);
 }

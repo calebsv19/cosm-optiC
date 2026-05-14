@@ -9,6 +9,8 @@
 #define RUNTIME_MATERIAL_AUTHORED_TEXTURE_MAX_FACES 6
 #define RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY 512
 #define RUNTIME_MATERIAL_AUTHORED_TEXTURE_MODE_CAPACITY 24
+#define RUNTIME_MATERIAL_AUTHORED_TEXTURE_INTENT_CAPACITY 32
+#define RUNTIME_MATERIAL_AUTHORED_TEXTURE_REASON_CAPACITY 128
 #define RUNTIME_MATERIAL_AUTHORED_TEXTURE_FACE_CORNER_COUNT 4
 #define RUNTIME_MATERIAL_AUTHORED_TEXTURE_FACE_EDGE_COUNT 4
 
@@ -31,6 +33,8 @@ typedef struct RuntimeMaterialAuthoredTextureFaceMetadata {
     char netLayoutKind[24];
     char netSlot[24];
     char orientation[16];
+    char baseMaterialIntentKind[RUNTIME_MATERIAL_AUTHORED_TEXTURE_INTENT_CAPACITY];
+    char overlayMaterialIntentKind[RUNTIME_MATERIAL_AUTHORED_TEXTURE_INTENT_CAPACITY];
     unsigned char cornerIds[RUNTIME_MATERIAL_AUTHORED_TEXTURE_FACE_CORNER_COUNT];
     unsigned char edgeIds[RUNTIME_MATERIAL_AUTHORED_TEXTURE_FACE_EDGE_COUNT];
     int adjacentFaceGroupIndices[RUNTIME_MATERIAL_AUTHORED_TEXTURE_FACE_EDGE_COUNT];
@@ -39,6 +43,7 @@ typedef struct RuntimeMaterialAuthoredTextureFaceMetadata {
 } RuntimeMaterialAuthoredTextureFaceMetadata;
 
 void RuntimeMaterialAuthoredTextureResetAll(void);
+bool RuntimeMaterialAuthoredTextureClearBindingForObject(int scene_object_index);
 
 bool RuntimeMaterialAuthoredTextureBindManifestForObject(int scene_object_index,
                                                          const char* object_id,
@@ -52,15 +57,33 @@ bool RuntimeMaterialAuthoredTextureGetBinding(int scene_object_index,
                                               size_t out_binding_mode_size,
                                               int* out_face_count);
 
+bool RuntimeMaterialAuthoredTextureGetInvalidBinding(int scene_object_index,
+                                                     char* out_manifest_path,
+                                                     size_t out_manifest_path_size,
+                                                     char* out_binding_mode,
+                                                     size_t out_binding_mode_size,
+                                                     char* out_reason,
+                                                     size_t out_reason_size);
+
 bool RuntimeMaterialAuthoredTextureGetFaceMetadata(
     int scene_object_index,
     int face_group_index,
     RuntimeMaterialAuthoredTextureFaceMetadata* out_metadata);
+
+bool RuntimeMaterialAuthoredTextureGetOverlayMaterialIntent(int scene_object_index,
+                                                            char* out_overlay_material_intent,
+                                                            size_t out_overlay_material_intent_size);
 
 bool RuntimeMaterialAuthoredTextureSampleFace(int scene_object_index,
                                               int face_group_index,
                                               double u,
                                               double v,
                                               RuntimeMaterialAuthoredTextureSample* out_sample);
+
+bool RuntimeMaterialAuthoredTextureSampleOverlayFace(int scene_object_index,
+                                                     int face_group_index,
+                                                     double u,
+                                                     double v,
+                                                     RuntimeMaterialAuthoredTextureSample* out_sample);
 
 #endif
