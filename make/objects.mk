@@ -1,0 +1,363 @@
+NATIVE3D_AUDIT_DEPS = \
+	$(BUILD_DIR)/render/materials/material_bsdf.o \
+	$(BUILD_DIR)/material/material_manager.o \
+	$(BUILD_DIR)/material/material.o \
+	$(BUILD_DIR)/render/integrators/integrator_common.o \
+	$(BUILD_DIR)/render/integrators/hybrid/integrator_tonemap.o \
+	$(BUILD_DIR)/render/adapters/space_mode_adapter.o \
+	$(BUILD_DIR)/render/helpers/ray_tracing_integrator_catalog.o \
+	$(BUILD_DIR)/render/backend/ray_tracing_mode_backend.o \
+	$(BUILD_DIR)/render/runtime_camera_3d_rays.o \
+	$(BUILD_DIR)/render/runtime_direct_light_3d.o \
+	$(BUILD_DIR)/render/runtime_diffuse_bounce_3d.o \
+	$(BUILD_DIR)/render/runtime_emissive_direct_3d.o \
+	$(BUILD_DIR)/render/runtime_light_emitter_3d.o \
+	$(BUILD_DIR)/render/runtime_disney_3d.o \
+	$(BUILD_DIR)/render/runtime_emission_transparency_3d.o \
+	$(BUILD_DIR)/render/runtime_native_3d_feature_buffer.o \
+	$(BUILD_DIR)/render/runtime_native_3d_denoise.o \
+	$(BUILD_DIR)/render/runtime_native_3d_blue_noise.o \
+	$(BUILD_DIR)/render/runtime_native_3d_sampling.o \
+	$(BUILD_DIR)/render/materials/runtime_material_authored_texture_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_material_payload_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_material_texture_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_material_texture_stack_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_material_response_3d.o \
+	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render_shading.o \
+	$(BUILD_DIR)/render/runtime_native_3d_resolution.o \
+	$(BUILD_DIR)/render/runtime_native_3d_temporal_accum.o \
+	$(BUILD_DIR)/render/runtime_native_3d_tile_occupancy.o \
+	$(BUILD_DIR)/render/runtime_ray_3d.o \
+	$(BUILD_DIR)/render/runtime_scene_3d.o \
+	$(BUILD_DIR)/render/runtime_volume_3d.o \
+	$(BUILD_DIR)/render/runtime_volume_3d_sampling.o \
+	$(BUILD_DIR)/render/runtime_volume_3d_integrate.o \
+	$(BUILD_DIR)/render/runtime_volume_3d_scatter.o \
+	$(BUILD_DIR)/render/runtime_volume_3d_debug.o \
+	$(BUILD_DIR)/render/runtime_scene_3d_samples.o \
+	$(BUILD_DIR)/render/runtime_scene_3d_builder.o \
+	$(BUILD_DIR)/render/runtime_visibility_3d.o \
+	$(BUILD_DIR)/scene/object_manager.o \
+	$(BUILD_DIR)/geo/shape_adapter.o \
+	$(BUILD_DIR)/geo/geolib/shape_asset.o \
+	$(BUILD_DIR)/geo/geolib/shape_library.o \
+	$(BUILD_DIR)/import/shape_import.o \
+	$(BUILD_DIR)/import/fluid_import.o \
+	$(BUILD_DIR)/import/fluid_volume_import_3d.o \
+	$(BUILD_DIR)/import/fluid_volume_source_import_3d.o \
+	$(BUILD_DIR)/import/fluid_volume_pack_import_3d.o \
+	$(BUILD_DIR)/import/fluid_pack_import.o \
+	$(BUILD_DIR)/import/scene_bundle_import.o \
+	$(BUILD_DIR)/import/runtime_scene_bridge_json_utils.o \
+	$(BUILD_DIR)/import/runtime_scene_bridge_authoring.o \
+	$(BUILD_DIR)/import/runtime_scene_bridge.o \
+	$(BUILD_DIR)/path/path_system.o \
+	$(BUILD_DIR)/path/path_arc_length.o \
+	$(BUILD_DIR)/camera/camera.o \
+	$(BUILD_DIR)/camera/camera_path_3d.o \
+	$(BUILD_DIR)/app/animation_fluid_scene.o \
+	$(BUILD_DIR)/app/data_paths.o \
+	$(BUILD_DIR)/config/core/config_runtime_paths.o \
+	$(BUILD_DIR)/config/core/config_animation_persistence.o \
+	$(BUILD_DIR)/config/io/config_file_io.o \
+	$(BUILD_DIR)/config/scene/config_scene_path_io.o \
+	$(BUILD_DIR)/config/core/config_manager.o \
+	$(BUILD_DIR)/render/fluid/fluid_state.o \
+	$(BUILD_DIR)/render/pipeline/ray_tracing2_native3d_overlay.o \
+	$(BUILD_DIR)/render/pipeline/ray_tracing2_preview_present.o \
+	$(BUILD_DIR)/tools/ShapeLib/shape_core.o \
+	$(BUILD_DIR)/tools/ShapeLib/shape_json.o \
+	$(BUILD_DIR)/tools/ShapeLib/shape_flatten.o \
+	$(BUILD_DIR)/timer_hud_external/cJSON.o \
+	$(CORE_BASE_OBJS) \
+	$(CORE_IO_OBJS) \
+	$(CORE_DATA_OBJS) \
+	$(CORE_PACK_OBJS) \
+	$(CORE_TIME_OBJS) \
+	$(CORE_SCENE_OBJS) \
+	$(CORE_SCENE_COMPILE_OBJS) \
+	$(CORE_OBJECT_OBJS) \
+	$(CORE_UNITS_OBJS) \
+	$(CORE_SPACE_OBJS) \
+	$(CORE_THEME_OBJS) \
+	$(CORE_FONT_OBJS) \
+	$(patsubst $(VK_RENDERER_DIR)/src/%.c,$(BUILD_DIR)/vk_renderer/%.o,$(VK_RENDERER_SRCS)) \
+	$(KIT_VIZ_OBJS) \
+	$(KIT_RUNTIME_DIAG_OBJS)
+
+
+TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_registry.o \
+	$(BUILD_DIR)/tests/test_support.o $(BUILD_DIR)/tests/test_config_animation.o \
+	$(BUILD_DIR)/tests/test_config_animation_source_volume_suite.o \
+	$(BUILD_DIR)/tests/test_config_animation_settings_export_suite.o \
+	$(BUILD_DIR)/tests/test_ui_menu_contracts.o \
+	$(BUILD_DIR)/tests/test_runtime_scene_bridge_core.o \
+	$(BUILD_DIR)/tests/test_runtime_scene_bridge_writeback.o \
+	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry.o \
+	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry_builder_suite.o \
+	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry_trace_suite.o \
+	$(BUILD_DIR)/tests/test_runtime_volume_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_lighting_materials.o \
+	$(BUILD_DIR)/tests/test_runtime_material_authored_texture_validation_suite.o \
+	$(BUILD_DIR)/tests/test_runtime_lighting_materials_payload_suite.o \
+	$(BUILD_DIR)/tests/test_runtime_lighting_materials_direct_light_suite.o \
+	$(BUILD_DIR)/tests/test_runtime_lighting_materials_transport_suite.o \
+	$(BUILD_DIR)/tests/test_runtime_diffuse_temporal.o \
+	$(BUILD_DIR)/tests/test_runtime_emission_transparency.o \
+	$(BUILD_DIR)/tests/test_runtime_native_3d_denoise.o \
+	$(BUILD_DIR)/tests/test_runtime_native_3d_render.o \
+	$(BUILD_DIR)/tests/test_runtime_native_3d_render_live_suite.o \
+	$(BUILD_DIR)/tests/test_runtime_native_3d_render_prepared_suite.o \
+	$(BUILD_DIR)/tests/test_runtime_native_3d_render_prepared_parity_volume_suite.o \
+	$(BUILD_DIR)/tests/test_runtime_native_3d_render_prepared_scatter_preview_suite.o \
+	$(BUILD_DIR)/tests/test_runtime_render_metrics_export.o \
+	$(BUILD_DIR)/tests/test_runtime_preview_editor.o \
+	$(BUILD_DIR)/tests/test_runtime_scene_editor.o \
+	$(BUILD_DIR)/tests/test_runtime_path_policy.o \
+	$(BUILD_DIR)/tests/test_runtime_mode_backend_policy.o \
+	$(BUILD_DIR)/tests/test_fluid_volume_import_3d.o \
+	$(BUILD_DIR)/tests/test_fluid_volume_pack_import_3d.o \
+	$(BUILD_DIR)/tests/test_stubs.o \
+	$(BUILD_DIR)/tests/fluid_pack_import_test.o \
+	$(BUILD_DIR)/tests/kit_viz_fluid_overlay_adapter_test.o \
+	$(BUILD_DIR)/tests/render_metrics_dataset_test.o
+
+ifeq ($(UNAME_S),Darwin)
+CORE_TIME_TEST_DEPS := $(BUILD_DIR)/core_time/core_time.o $(BUILD_DIR)/core_time/core_time_mac.o
+else
+CORE_TIME_TEST_DEPS := $(BUILD_DIR)/core_time/core_time.o $(BUILD_DIR)/core_time/core_time_posix.o
+endif
+
+TEST_DEPS := \
+	$(BUILD_DIR)/render/materials/material_bsdf.o \
+	$(BUILD_DIR)/material/material_manager.o \
+	$(BUILD_DIR)/material/material.o \
+	$(BUILD_DIR)/render/integrators/direct_light_integrator.o \
+	$(BUILD_DIR)/render/integrators/forward_light_integrator.o \
+	$(BUILD_DIR)/render/integrators/hybrid/integrator_energy.o \
+	$(BUILD_DIR)/render/integrators/hybrid/integrator_cache.o \
+	$(BUILD_DIR)/render/integrators/hybrid/integrator_direct.o \
+	$(BUILD_DIR)/render/integrators/hybrid/integrator_indirect.o \
+	$(BUILD_DIR)/render/integrators/hybrid/integrator_sampling.o \
+	$(BUILD_DIR)/render/integrators/hybrid/integrator_tonemap.o \
+	$(BUILD_DIR)/render/integrators/hybrid/integrator_visibility.o \
+	$(BUILD_DIR)/render/integrators/hybrid/camera_path_integrator.o \
+	$(BUILD_DIR)/render/integrators/camera_path_integrator_disney.o \
+	$(BUILD_DIR)/render/integrators/integrator_common.o \
+	$(BUILD_DIR)/render/accel/irradiance_cache.o \
+	$(BUILD_DIR)/render/adapters/space_mode_adapter.o \
+	$(BUILD_DIR)/render/helpers/ray_tracing_integrator_catalog.o \
+	$(BUILD_DIR)/render/backend/ray_tracing_mode_backend.o \
+		$(BUILD_DIR)/render/runtime_camera_3d_rays.o \
+		$(BUILD_DIR)/render/runtime_direct_light_3d.o \
+		$(BUILD_DIR)/render/runtime_diffuse_bounce_3d.o \
+		$(BUILD_DIR)/render/runtime_emissive_direct_3d.o \
+		$(BUILD_DIR)/render/runtime_light_emitter_3d.o \
+		$(BUILD_DIR)/render/runtime_disney_3d.o \
+		$(BUILD_DIR)/render/runtime_emission_transparency_3d.o \
+	$(BUILD_DIR)/render/runtime_native_3d_feature_buffer.o \
+	$(BUILD_DIR)/render/runtime_native_3d_denoise.o \
+	$(BUILD_DIR)/render/runtime_native_3d_blue_noise.o \
+	$(BUILD_DIR)/render/runtime_native_3d_sampling.o \
+	$(BUILD_DIR)/render/materials/runtime_material_authored_texture_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_material_payload_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_material_texture_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_material_texture_stack_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_material_response_3d.o \
+	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render_shading.o \
+	$(BUILD_DIR)/render/runtime_native_3d_resolution.o \
+	$(BUILD_DIR)/render/runtime_native_3d_temporal_accum.o \
+	$(BUILD_DIR)/render/runtime_native_3d_tile_occupancy.o \
+	$(BUILD_DIR)/render/runtime_ray_3d.o \
+	$(BUILD_DIR)/render/runtime_scene_3d.o \
+	$(BUILD_DIR)/render/runtime_volume_3d.o \
+	$(BUILD_DIR)/render/runtime_volume_3d_sampling.o \
+	$(BUILD_DIR)/render/runtime_volume_3d_integrate.o \
+	$(BUILD_DIR)/render/runtime_volume_3d_scatter.o \
+	$(BUILD_DIR)/render/runtime_volume_3d_debug.o \
+	$(BUILD_DIR)/render/runtime_scene_3d_samples.o \
+	$(BUILD_DIR)/render/runtime_scene_3d_builder.o \
+	$(BUILD_DIR)/render/runtime_visibility_3d.o \
+	$(BUILD_DIR)/editor/editor_mode_router.o \
+	$(BUILD_DIR)/editor/material_editor_knob_control.o \
+	$(BUILD_DIR)/editor/material_editor_layer_model.o \
+	$(BUILD_DIR)/editor/material_editor_authored_texture_binding.o \
+	$(BUILD_DIR)/editor/material_editor.o \
+	$(BUILD_DIR)/editor/object_editor_object_ops.o \
+	$(BUILD_DIR)/editor/object_editor_selection_tracker.o \
+	$(BUILD_DIR)/editor/scene_editor_control_surface.o \
+	$(BUILD_DIR)/editor/scene_editor_digest_overlay_projector.o \
+	$(BUILD_DIR)/editor/scene_editor_material_face_placement.o \
+	$(BUILD_DIR)/editor/scene_editor_material_stack.o \
+	$(BUILD_DIR)/editor/scene_editor_material_preview.o \
+	$(BUILD_DIR)/editor/scene_editor_tool_state.o \
+	$(BUILD_DIR)/editor/scene_editor_viewport_nav_zoom.o \
+	$(BUILD_DIR)/editor/scene_editor_runtime_scene_persistence.o \
+	$(BUILD_DIR)/path/path_system.o \
+	$(BUILD_DIR)/path/path_arc_length.o \
+		$(BUILD_DIR)/render/accel/uniform_grid.o \
+		$(BUILD_DIR)/render/accel/surface_mesh.o \
+	$(BUILD_DIR)/render/helpers/render_helper.o \
+	$(BUILD_DIR)/render/font_bridge.o \
+	$(BUILD_DIR)/render/text_font_cache.o \
+	$(BUILD_DIR)/render/text_draw.o \
+	$(BUILD_DIR)/render/text_upload_policy.o \
+		$(BUILD_DIR)/render/pipeline/ray_tracing2_native3d_overlay.o \
+		$(BUILD_DIR)/render/pipeline/ray_tracing2_preview.o \
+		$(BUILD_DIR)/render/pipeline/ray_tracing2_preview_present.o \
+		$(BUILD_DIR)/render/pipeline/ray_tracing2.o \
+	$(BUILD_DIR)/render/fluid/fluid_state.o \
+	$(BUILD_DIR)/render/fluid/fluid_overlay.o \
+	$(BUILD_DIR)/scene/object_manager.o \
+	$(BUILD_DIR)/geo/shape_adapter.o \
+	$(BUILD_DIR)/geo/geolib/shape_asset.o \
+	$(BUILD_DIR)/geo/geolib/shape_library.o \
+	$(BUILD_DIR)/import/shape_import.o \
+	$(BUILD_DIR)/timer_hud_external/cJSON.o \
+	$(BUILD_DIR)/camera/camera.o \
+	$(BUILD_DIR)/camera/camera_path_3d.o \
+	$(BUILD_DIR)/app/preview_mode_route.o \
+	$(BUILD_DIR)/app/preview_playback.o \
+	$(BUILD_DIR)/app/preview_camera_sample.o \
+	$(BUILD_DIR)/app/preview_camera_projector.o \
+	$(BUILD_DIR)/app/preview_retained_scene_renderer.o \
+	$(BUILD_DIR)/app/animation_output.o \
+	$(BUILD_DIR)/app/render_export_batch.o \
+	$(BUILD_DIR)/app/animation_fluid_scene.o \
+	$(BUILD_DIR)/app/data_paths.o \
+	$(BUILD_DIR)/config/core/config_runtime_paths.o \
+	$(BUILD_DIR)/config/core/config_animation_persistence.o \
+		$(BUILD_DIR)/config/io/config_file_io.o \
+	$(BUILD_DIR)/config/scene/config_scene_path_io.o \
+	$(BUILD_DIR)/config/core/config_manager.o \
+	$(BUILD_DIR)/ui/menu/scene_source_ui_labels.o \
+	$(BUILD_DIR)/ui/menu/volume_source_ui_labels.o \
+	$(BUILD_DIR)/ui/menu/shared_theme_font_adapter.o \
+	$(BUILD_DIR)/tools/make_video.o \
+	$(BUILD_DIR)/tools/ShapeLib/shape_core.o \
+	$(BUILD_DIR)/tools/ShapeLib/shape_json.o \
+	$(BUILD_DIR)/tools/ShapeLib/shape_flatten.o \
+	$(BUILD_DIR)/import/fluid_import.o \
+	$(BUILD_DIR)/import/fluid_volume_import_3d.o \
+	$(BUILD_DIR)/import/fluid_volume_source_import_3d.o \
+	$(BUILD_DIR)/import/fluid_volume_pack_import_3d.o \
+	$(BUILD_DIR)/import/fluid_pack_import.o \
+	$(BUILD_DIR)/import/scene_bundle_import.o \
+	$(BUILD_DIR)/import/runtime_scene_bridge_json_utils.o \
+	$(BUILD_DIR)/import/runtime_scene_bridge_authoring.o \
+	$(BUILD_DIR)/import/runtime_scene_volume_defaults.o \
+	$(BUILD_DIR)/import/runtime_scene_bridge.o \
+	$(BUILD_DIR)/ui/menu/sdl_menu_render.o \
+	$(BUILD_DIR)/ui/menu/sdl_menu_render_controls.o \
+	$(BUILD_DIR)/ui/menu/sdl_menu_render_manifest.o \
+	$(BUILD_DIR)/ui/menu/sdl_menu_render_volume.o \
+	$(BUILD_DIR)/ui/menu/sdl_menu_render_sliders.o \
+	$(BUILD_DIR)/ui/menu/menu_layout.o \
+	$(BUILD_DIR)/ui/menu/menu_panel_chrome.o \
+	$(BUILD_DIR)/ui/menu/menu_batch_panel.o \
+	$(BUILD_DIR)/ui/menu/scene_source_catalog.o \
+	$(BUILD_DIR)/ui/menu/volume_source_catalog.o \
+	$(BUILD_DIR)/ui/menu/sdl_menu_state.o \
+	$(BUILD_DIR)/render/adapters/kit_viz_fluid_overlay_adapter.o \
+	$(BUILD_DIR)/core_base/core_base.o \
+	$(BUILD_DIR)/core_io/core_io.o \
+	$(BUILD_DIR)/core_data/core_data.o \
+	$(BUILD_DIR)/core_pack/core_pack.o \
+	$(CORE_TIME_TEST_DEPS) \
+	$(BUILD_DIR)/core_scene/core_scene.o \
+	$(BUILD_DIR)/core_authored_texture/core_authored_texture.o \
+	$(BUILD_DIR)/core_scene_compile/core_scene_compile.o \
+	$(BUILD_DIR)/core_object/core_object.o \
+	$(BUILD_DIR)/core_units/core_units.o \
+	$(BUILD_DIR)/core_space/core_space.o \
+	$(BUILD_DIR)/export/render_metrics_dataset.o \
+	$(BUILD_DIR)/core_theme/core_theme.o \
+	$(BUILD_DIR)/core_font/core_font.o \
+	$(BUILD_DIR)/kit_viz/kit_viz.o \
+	$(BUILD_DIR)/vk_renderer/vk_renderer.o \
+	$(BUILD_DIR)/vk_renderer/vk_renderer_commands.o \
+	$(BUILD_DIR)/vk_renderer/vk_renderer_config.o \
+	$(BUILD_DIR)/vk_renderer/vk_renderer_context.o \
+	$(BUILD_DIR)/vk_renderer/vk_renderer_device.o \
+	$(BUILD_DIR)/vk_renderer/vk_renderer_pipeline.o \
+	$(BUILD_DIR)/vk_renderer/vk_renderer_textures.o \
+	$(BUILD_DIR)/vk_renderer/vk_renderer_memory.o
+
+SRC := $(shell find $(SRC_DIR) -name '*.c' \
+	! -path '$(SRC_DIR)/tools/cli/*' \
+	! -path '$(SRC_DIR)/render/integrators/camera_path_integrator_old_version.c' \
+	! -path '$(SRC_DIR)/render/TimerHUD_legacy_backup/*')
+VK_RENDERER_SRCS := $(shell find $(VK_RENDERER_DIR)/src -name '*.c')
+OBJ := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRC))
+OBJ := $(filter-out $(BUILD_DIR)/render/integrators/camera_path_integrator_old_version.o,$(OBJ))
+
+TIMER_HUD_SRCS := $(shell find $(TIMER_HUD_DIR)/src -name '*.c')
+TIMER_HUD_EXTERNAL_SRCS := $(TIMER_HUD_DIR)/external/cJSON.c
+TIMER_HUD_OBJS := $(patsubst $(TIMER_HUD_DIR)/src/%.c,$(BUILD_DIR)/timer_hud/%.o,$(TIMER_HUD_SRCS))
+TIMER_HUD_EXTERNAL_OBJS := $(patsubst $(TIMER_HUD_DIR)/external/%.c,$(BUILD_DIR)/timer_hud_external/%.o,$(TIMER_HUD_EXTERNAL_SRCS))
+CORE_BASE_SRCS := $(CORE_BASE_DIR)/src/core_base.c
+CORE_IO_SRCS := $(CORE_IO_DIR)/src/core_io.c
+CORE_DATA_SRCS := $(CORE_DATA_DIR)/src/core_data.c
+CORE_PACK_SRCS := $(CORE_PACK_DIR)/src/core_pack.c
+CORE_TIME_SRCS := $(CORE_TIME_DIR)/src/core_time.c
+ifeq ($(UNAME_S),Darwin)
+CORE_TIME_SRCS += $(CORE_TIME_DIR)/src/core_time_mac.c
+else
+CORE_TIME_SRCS += $(CORE_TIME_DIR)/src/core_time_posix.c
+endif
+CORE_SIM_SRCS := $(CORE_SIM_DIR)/src/core_sim.c
+CORE_SCENE_SRCS := $(CORE_SCENE_DIR)/src/core_scene.c
+CORE_AUTHORED_TEXTURE_SRCS := $(CORE_AUTHORED_TEXTURE_DIR)/src/core_authored_texture.c
+CORE_SCENE_COMPILE_SRCS := $(CORE_SCENE_COMPILE_DIR)/src/core_scene_compile.c
+CORE_OBJECT_SRCS := $(CORE_OBJECT_DIR)/src/core_object.c
+CORE_UNITS_SRCS := $(CORE_UNITS_DIR)/src/core_units.c
+CORE_SPACE_SRCS := $(CORE_SPACE_DIR)/src/core_space.c
+CORE_PANE_SRCS := $(CORE_PANE_DIR)/src/core_pane.c
+CORE_THEME_SRCS := $(CORE_THEME_DIR)/src/core_theme.c
+CORE_FONT_SRCS := $(CORE_FONT_DIR)/src/core_font.c
+KIT_RENDER_SRCS := \
+	$(KIT_RENDER_DIR)/src/kit_render.c \
+	$(KIT_RENDER_DIR)/src/kit_render_external_text.c \
+	$(KIT_RENDER_DIR)/src/kit_render_backend_null.c \
+	$(KIT_RENDER_DIR)/src/kit_render_backend_vk.c
+KIT_PANE_SRCS := $(KIT_PANE_DIR)/src/kit_pane.c
+KIT_VIZ_SRCS := $(KIT_VIZ_DIR)/src/kit_viz.c
+KIT_RUNTIME_DIAG_SRCS := $(KIT_RUNTIME_DIAG_DIR)/src/kit_runtime_diag.c
+KIT_WORKSPACE_AUTHORING_SRCS := \
+	$(KIT_WORKSPACE_AUTHORING_DIR)/src/kit_workspace_authoring.c \
+	$(KIT_WORKSPACE_AUTHORING_DIR)/src/ui/kit_workspace_authoring_ui_overlay.c \
+	$(KIT_WORKSPACE_AUTHORING_DIR)/src/ui/kit_workspace_authoring_ui_font_theme.c
+CORE_BASE_OBJS := $(patsubst $(CORE_BASE_DIR)/src/%.c,$(BUILD_DIR)/core_base/%.o,$(CORE_BASE_SRCS))
+CORE_IO_OBJS := $(patsubst $(CORE_IO_DIR)/src/%.c,$(BUILD_DIR)/core_io/%.o,$(CORE_IO_SRCS))
+CORE_DATA_OBJS := $(patsubst $(CORE_DATA_DIR)/src/%.c,$(BUILD_DIR)/core_data/%.o,$(CORE_DATA_SRCS))
+CORE_PACK_OBJS := $(patsubst $(CORE_PACK_DIR)/src/%.c,$(BUILD_DIR)/core_pack/%.o,$(CORE_PACK_SRCS))
+CORE_TIME_OBJS := $(patsubst $(CORE_TIME_DIR)/src/%.c,$(BUILD_DIR)/core_time/%.o,$(CORE_TIME_SRCS))
+CORE_SIM_OBJS := $(patsubst $(CORE_SIM_DIR)/src/%.c,$(BUILD_DIR)/core_sim/%.o,$(CORE_SIM_SRCS))
+CORE_SCENE_OBJS := $(patsubst $(CORE_SCENE_DIR)/src/%.c,$(BUILD_DIR)/core_scene/%.o,$(CORE_SCENE_SRCS))
+CORE_AUTHORED_TEXTURE_OBJS := $(patsubst $(CORE_AUTHORED_TEXTURE_DIR)/src/%.c,$(BUILD_DIR)/core_authored_texture/%.o,$(CORE_AUTHORED_TEXTURE_SRCS))
+CORE_SCENE_COMPILE_OBJS := $(patsubst $(CORE_SCENE_COMPILE_DIR)/src/%.c,$(BUILD_DIR)/core_scene_compile/%.o,$(CORE_SCENE_COMPILE_SRCS))
+CORE_OBJECT_OBJS := $(patsubst $(CORE_OBJECT_DIR)/src/%.c,$(BUILD_DIR)/core_object/%.o,$(CORE_OBJECT_SRCS))
+CORE_UNITS_OBJS := $(patsubst $(CORE_UNITS_DIR)/src/%.c,$(BUILD_DIR)/core_units/%.o,$(CORE_UNITS_SRCS))
+CORE_SPACE_OBJS := $(patsubst $(CORE_SPACE_DIR)/src/%.c,$(BUILD_DIR)/core_space/%.o,$(CORE_SPACE_SRCS))
+CORE_PANE_OBJS := $(patsubst $(CORE_PANE_DIR)/src/%.c,$(BUILD_DIR)/core_pane/%.o,$(CORE_PANE_SRCS))
+CORE_THEME_OBJS := $(patsubst $(CORE_THEME_DIR)/src/%.c,$(BUILD_DIR)/core_theme/%.o,$(CORE_THEME_SRCS))
+CORE_FONT_OBJS := $(patsubst $(CORE_FONT_DIR)/src/%.c,$(BUILD_DIR)/core_font/%.o,$(CORE_FONT_SRCS))
+KIT_RENDER_OBJS := $(patsubst $(KIT_RENDER_DIR)/src/%.c,$(BUILD_DIR)/kit_render/%.o,$(KIT_RENDER_SRCS))
+KIT_PANE_OBJS := $(patsubst $(KIT_PANE_DIR)/src/%.c,$(BUILD_DIR)/kit_pane/%.o,$(KIT_PANE_SRCS))
+KIT_VIZ_OBJS := $(patsubst $(KIT_VIZ_DIR)/src/%.c,$(BUILD_DIR)/kit_viz/%.o,$(KIT_VIZ_SRCS))
+KIT_RUNTIME_DIAG_OBJS := $(patsubst $(KIT_RUNTIME_DIAG_DIR)/src/%.c,$(BUILD_DIR)/kit_runtime_diag/%.o,$(KIT_RUNTIME_DIAG_SRCS))
+KIT_WORKSPACE_AUTHORING_OBJS := $(patsubst $(KIT_WORKSPACE_AUTHORING_DIR)/src/%.c,$(BUILD_DIR)/kit_workspace_authoring/%.o,$(KIT_WORKSPACE_AUTHORING_SRCS))
+
+TEST_DEPS += $(KIT_RENDER_OBJS) $(CORE_PANE_OBJS) $(KIT_PANE_OBJS) $(KIT_WORKSPACE_AUTHORING_OBJS) \
+	$(BUILD_DIR)/editor/scene_editor_pane_host.o \
+	$(BUILD_DIR)/ui/menu/workspace_authoring/ray_tracing_workspace_authoring_host.o \
+	$(BUILD_DIR)/ui/menu/workspace_authoring/ray_tracing_workspace_authoring_overlay.o
+
+OBJ := $(OBJ) $(TIMER_HUD_OBJS) $(TIMER_HUD_EXTERNAL_OBJS) \
+	$(patsubst $(VK_RENDERER_DIR)/src/%.c,$(BUILD_DIR)/vk_renderer/%.o,$(VK_RENDERER_SRCS)) \
+	$(CORE_BASE_OBJS) $(CORE_IO_OBJS) $(CORE_DATA_OBJS) $(CORE_PACK_OBJS) $(CORE_TIME_OBJS) $(CORE_SIM_OBJS) $(CORE_SCENE_OBJS) $(CORE_AUTHORED_TEXTURE_OBJS) $(CORE_SCENE_COMPILE_OBJS) $(CORE_OBJECT_OBJS) $(CORE_UNITS_OBJS) $(CORE_SPACE_OBJS) $(CORE_PANE_OBJS) $(CORE_THEME_OBJS) $(CORE_FONT_OBJS) $(KIT_RENDER_OBJS) $(KIT_PANE_OBJS) $(KIT_VIZ_OBJS) $(KIT_RUNTIME_DIAG_OBJS) $(KIT_WORKSPACE_AUTHORING_OBJS)
+DEP := $(OBJ:.o=.d)
