@@ -29,6 +29,7 @@ This document defines what each shared library owns so behavior does not overlap
 - `core_pane_module`: renderer-agnostic pane-module descriptor registry and binding validation semantics.
 - `core_trace`: trace capture/ingest/export primitives.
 - `core_sim`: UI-free simulation control-plane semantics for fixed-step accumulation, pause/play/single-step state, max-tick clamping, ordered pass execution, and deterministic frame outcomes.
+- `core_sim_trace`: optional `core_sim` to `core_trace` adapter for shared simulation control-plane trace lanes and frame/reason markers.
 - `core_pane`: renderer-agnostic pane tree layout semantics (split ratios, constraints, splitter hit/drag math). It does not own app snapshot selection, session fallback policy, or host build dependency hygiene around those structs.
 - `core_theme`: tokenized color + spacing presets.
 - `core_font`: font roles + font tier/size preset contracts.
@@ -70,6 +71,7 @@ This document defines what each shared library owns so behavior does not overlap
   - `core_wake` owns wait/signal bridge.
   - `core_kernel` owns loop policy and phase order.
   - `core_sim` owns simulation-specific cadence/pass semantics layered above app-domain solvers and optionally above execution-core adapters.
+  - `core_sim_trace` owns reusable trace vocabulary for `core_sim` outcomes, while app-specific solver/entity/world lanes stay app-owned.
 
 - Theme/font:
   - Preset and token source of truth must stay in `core_theme` / `core_font`.
