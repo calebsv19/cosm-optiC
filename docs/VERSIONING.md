@@ -17,8 +17,12 @@ Modules covered:
 - `shared/core/core_units`
 - `shared/core/core_object`
 - `shared/core/core_trace`
+- `shared/core/core_sim_trace`
 - `shared/core/core_math`
 - `shared/core/core_pane`
+- `shared/core/core_pane_module`
+- `shared/core/core_pane_snapshot`
+- `shared/core/core_sim`
 - `shared/core/core_time`
 - `shared/core/core_queue`
 - `shared/core/core_sched`
@@ -28,6 +32,7 @@ Modules covered:
 - `shared/core/core_kernel`
 - `shared/kit/kit_render`
 - `shared/kit/kit_pane`
+- `shared/kit/kit_workspace_authoring`
 - `shared/kit/kit_graph_timeseries`
 - `shared/kit/kit_graph_struct`
 - `shared/kit/kit_ui`

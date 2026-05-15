@@ -25,7 +25,7 @@ It does not own:
 Apps provide domain callbacks for simulation passes. `core_sim` decides when and in what order those callbacks run.
 
 ## Dependencies
-- C standard library only for v0.3.0
+- C standard library only for v0.4.0
 
 Future adapters may layer on:
 - `core_time`
@@ -57,6 +57,10 @@ make -C shared/core/core_sim test
 ```
 
 ## Change Notes
+- `0.4.0`: additive Step 3 artifact-record helpers: public version string,
+  deterministic pass-order hashing, artifact run-header initialization, and
+  frame-record extraction from completed frame outcomes. These helpers keep
+  trace/data/pack sinks optional and dependency-free.
 - `0.3.0`: additive host-adapter examples plus UI-free diagnostics helpers:
   reason-name extraction, frame outcome summaries, and stage timing derivation.
   Optional `core_trace` / `core_data` / `core_pack` adapter contracts are
@@ -74,3 +78,4 @@ make -C shared/core/core_sim test
 ## References
 - `docs/HOST_ADAPTER_EXAMPLES.md`
 - `docs/OPTIONAL_TRACE_DATA_PACK_ADAPTERS.md`
+- `docs/TRACE_DATA_PACK_STEP3_PLAN.md`

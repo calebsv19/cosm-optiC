@@ -259,6 +259,24 @@ This is not an implementation guide.
 
 ---
 
+### core_sim_trace (BOOTSTRAP)
+**Role:** Optional `core_sim` to `core_trace` control-plane adapter.
+**Responsibilities (initial):**
+- Standard `core_sim.*` trace lanes for frame index, frame dt, tick count,
+  pass count, reason bits, accumulator, and advanced simulation time
+- Standard frame/reason markers for tick, render, clamp, single-step, and pass
+  failure outcomes
+- Headless/agent-analysis vocabulary that simulation hosts can reuse before
+  adding app-specific domain lanes
+
+**Boundary:**
+- Does not add a `core_trace` dependency to base `core_sim`
+- Does not own app entity/world snapshots, solver metrics, replay execution,
+  UI, `core_data`, or `core_pack`
+- Apps add domain-specific lanes beside the shared control-plane lanes
+
+---
+
 ### core_sim (BOOTSTRAP)
 **Role:** Shared simulation control-plane foundation.
 **Responsibilities (initial):**
@@ -268,11 +286,15 @@ This is not an implementation guide.
 - Ordered simulation pass execution
 - Deterministic per-frame outcome reporting
 - Host adapter diagnostics: status names, pass-order validation, pass-outcome initialization, and frame reason bits
+- UI-free frame summaries, reason-name extraction, and stage-timing derivation for optional diagnostics/artifact adapters
+- Step 3 artifact records: public version string, deterministic pass-order hash,
+  artifact run-header initialization, and frame-record extraction
 
 **Boundary:**
 - Owns simulation orchestration semantics only
 - Does not own physics equations, entity/world storage, scenario formats, rendering, UI, platform input, or worker/job/scheduler ownership
-- May layer with `core_time`, `core_kernel`, `core_sched`, `core_jobs`, `core_workers`, `core_queue`, `core_wake`, and `core_trace` through later adapters
+- Current proving-host shapes are fixed-step (`gravity_orbit_sim`), entity/group pass order (`behavior_sim`), solver/substep (`physics_sim`), and progressive/render-frame orchestration (`ray_tracing`)
+- May layer with `core_time`, `core_kernel`, `core_sched`, `core_jobs`, `core_workers`, `core_queue`, `core_wake`, and optional sibling adapters such as `core_sim_trace`
 
 ---
 
@@ -502,6 +524,11 @@ This is not an implementation guide.
 
 ### kit_sim (PLANNED)
 **Role:** Shared simulation-loop and replay helpers.
+**Notes:**
+- Should remain a kit-level optional layer above `core_sim` for diagnostics,
+  replay presentation, scaffold examples, and tooling helpers.
+- Should not own the core loop ABI or pull renderer/UI dependencies into
+  `core_sim`.
 
 ---
 

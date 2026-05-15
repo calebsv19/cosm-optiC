@@ -6,9 +6,10 @@
 #include <stdbool.h>
 
 #define TIMER_HISTORY_SIZE 128
+#define TIMER_NAME_MAX 96
 
 typedef struct Timer {
-    const char* name;
+    char name[TIMER_NAME_MAX];
     double durations[TIMER_HISTORY_SIZE];
     size_t index;
     size_t count;
