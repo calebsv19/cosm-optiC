@@ -721,6 +721,10 @@ bool runtime_scene_bridge_apply_file(const char *runtime_scene_path,
         runtime_scene_volume_defaults_apply_transition(&animSettings,
                                                        previous_runtime_scene_path,
                                                        runtime_scene_path_copy);
+        snprintf(animSettings.runtimeScenePath,
+                 sizeof(animSettings.runtimeScenePath),
+                 "%s",
+                 runtime_scene_path_copy);
     } else {
         snprintf(animSettings.runtimeScenePath,
                  sizeof(animSettings.runtimeScenePath),
