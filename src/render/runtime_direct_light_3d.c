@@ -9,6 +9,20 @@
 
 static const double kRuntimeDirectLight3DTopFillIntensityScale = 0.08;
 static const double kRuntimeDirectLight3DTopFillIntensityMax = 0.75;
+static const double kRuntimeDirectLight3DAreaLightSampleRing = 0.7071067811865476;
+
+typedef struct {
+    double x;
+    double y;
+} RuntimeDirectLight3DDiskSample;
+
+static const RuntimeDirectLight3DDiskSample kRuntimeDirectLight3DAreaLightSamples[] = {
+    {0.0, 0.0},
+    {1.0, 0.0},
+    {-1.0, 0.0},
+    {0.0, 1.0},
+    {0.0, -1.0},
+};
 
 static double runtime_direct_light_3d_attenuation(const RuntimeLight3D* light,
                                                   double light_distance) {
@@ -46,6 +60,61 @@ static double runtime_direct_light_3d_clamp(double value,
     if (value < min_value) return min_value;
     if (value > max_value) return max_value;
     return value;
+}
+
+static Vec3 runtime_direct_light_3d_default_tangent(Vec3 normal) {
+    Vec3 guide = fabs(normal.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
+    Vec3 tangent = vec3_cross(guide, normal);
+    if (vec3_length(tangent) <= 1e-9) {
+        tangent = vec3(1.0, 0.0, 0.0);
+    }
+    return vec3_normalize(tangent);
+}
+
+static void runtime_direct_light_3d_build_basis(Vec3 normal,
+                                                Vec3* out_tangent,
+                                                Vec3* out_bitangent) {
+    Vec3 tangent = runtime_direct_light_3d_default_tangent(normal);
+    Vec3 bitangent = vec3_normalize(vec3_cross(normal, tangent));
+
+    if (vec3_length(bitangent) <= 1e-9) {
+        tangent = vec3(1.0, 0.0, 0.0);
+        bitangent = vec3(0.0, 0.0, 1.0);
+    }
+
+    if (out_tangent) *out_tangent = tangent;
+    if (out_bitangent) *out_bitangent = bitangent;
+}
+
+static int runtime_direct_light_3d_area_light_sample_count(const RuntimeLight3D* light) {
+    if (!light || !(light->radius > 1e-9)) {
+        return 1;
+    }
+    return (int)(sizeof(kRuntimeDirectLight3DAreaLightSamples) /
+                 sizeof(kRuntimeDirectLight3DAreaLightSamples[0]));
+}
+
+static Vec3 runtime_direct_light_3d_sample_light_position(const RuntimeLight3D* light,
+                                                          Vec3 center_dir,
+                                                          int sample_index) {
+    Vec3 tangent = vec3(0.0, 0.0, 0.0);
+    Vec3 bitangent = vec3(0.0, 0.0, 0.0);
+    RuntimeDirectLight3DDiskSample sample = {0.0, 0.0};
+    double radius = 0.0;
+
+    if (!light || sample_index <= 0 || !(light->radius > 1e-9)) {
+        return light ? light->position : vec3(0.0, 0.0, 0.0);
+    }
+
+    runtime_direct_light_3d_build_basis(center_dir, &tangent, &bitangent);
+    radius = light->radius * kRuntimeDirectLight3DAreaLightSampleRing;
+    if (sample_index >= runtime_direct_light_3d_area_light_sample_count(light)) {
+        sample_index = 0;
+    }
+    sample = kRuntimeDirectLight3DAreaLightSamples[sample_index];
+    return vec3_add(light->position,
+                    vec3_add(vec3_scale(tangent, sample.x * radius),
+                             vec3_scale(bitangent, sample.y * radius)));
 }
 
 static void runtime_direct_light_3d_apply_transmittance(
@@ -150,6 +219,8 @@ bool RuntimeDirectLight3D_ShadeHit(const RuntimeScene3D* scene,
     double light_g = 0.0;
     double light_b = 0.0;
     double top_fill = 0.0;
+    bool any_light_sample_visible = false;
+    int light_sample_count = 0;
 
     if (!scene || !hit || !out_result) return false;
     if (!scene->hasLight) return false;
@@ -176,15 +247,48 @@ bool RuntimeDirectLight3D_ShadeHit(const RuntimeScene3D* scene,
 
     to_light = vec3_scale(to_light, 1.0 / light_distance);
     result.ndotl = fmax(0.0, vec3_dot(hit->normal, to_light));
-    transmittance = RuntimeVisibility3D_TransmittanceFromHitRGB(scene, hit, &scene->light);
-    result.visible = transmittance.luma > 1e-6 || top_fill > 1e-6;
     attenuation = runtime_direct_light_3d_attenuation(&scene->light, light_distance);
     result.attenuation = attenuation;
-    if (result.visible && result.ndotl > 0.0) {
-        light_r = scene->light.intensity * attenuation * result.ndotl * transmittance.r;
-        light_g = scene->light.intensity * attenuation * result.ndotl * transmittance.g;
-        light_b = scene->light.intensity * attenuation * result.ndotl * transmittance.b;
+    light_sample_count = runtime_direct_light_3d_area_light_sample_count(&scene->light);
+    if (result.ndotl > 0.0 && light_sample_count > 0) {
+        for (int i = 0; i < light_sample_count; ++i) {
+            Vec3 sample_position = runtime_direct_light_3d_sample_light_position(&scene->light,
+                                                                                 to_light,
+                                                                                 i);
+            Vec3 sample_to_light = vec3_sub(sample_position, hit->position);
+            double sample_distance = vec3_length(sample_to_light);
+            double sample_attenuation = 0.0;
+            double sample_ndotl = 0.0;
+            Vec3 sample_dir = vec3(0.0, 0.0, 0.0);
+
+            if (!(sample_distance > 1e-9)) {
+                continue;
+            }
+            sample_dir = vec3_scale(sample_to_light, 1.0 / sample_distance);
+            sample_ndotl = fmax(0.0, vec3_dot(hit->normal, sample_dir));
+            if (!(sample_ndotl > 0.0)) {
+                continue;
+            }
+
+            transmittance = RuntimeVisibility3D_TransmittanceFromHitToPointRGB(scene,
+                                                                                hit,
+                                                                                sample_position,
+                                                                                -1,
+                                                                                -1);
+            if (transmittance.luma > 1e-6) {
+                any_light_sample_visible = true;
+            }
+            sample_attenuation =
+                runtime_direct_light_3d_attenuation(&scene->light, sample_distance);
+            light_r += scene->light.intensity * sample_attenuation * sample_ndotl * transmittance.r;
+            light_g += scene->light.intensity * sample_attenuation * sample_ndotl * transmittance.g;
+            light_b += scene->light.intensity * sample_attenuation * sample_ndotl * transmittance.b;
+        }
+        light_r /= (double)light_sample_count;
+        light_g /= (double)light_sample_count;
+        light_b /= (double)light_sample_count;
     }
+    result.visible = any_light_sample_visible || top_fill > 1e-6;
     result.radianceR = (light_r + top_fill) * tint_r;
     result.radianceG = (light_g + top_fill) * tint_g;
     result.radianceB = (light_b + top_fill) * tint_b;

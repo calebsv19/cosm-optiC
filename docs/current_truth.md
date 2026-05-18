@@ -1,6 +1,6 @@
 # Ray Tracing Current Truth
 
-Last updated: 2026-05-13
+Last updated: 2026-05-17
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -17,6 +17,10 @@ Last updated: 2026-05-13
   - `Material`
   - `Emission / Transparency`
   - `Disney`
+- The shipped native `3D` direct-light tier now averages a small deterministic
+  finite-radius light sample set, so penumbra and transparent-shadow softening
+  track authored `light.radius` instead of behaving like a strict point-light
+  shortcut.
 - Native `3D` output is RGB-aware through the full shipped ladder.
 - Native `3D` support layers now include:
   - tile preview
