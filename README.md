@@ -1,6 +1,16 @@
-# RayTracing Project
+# optiC (`ray_tracing`)
 
-`ray_tracing` is a C/SDL2 scene editor and renderer with both legacy `2D` paths and a shipped native `3D` runtime ladder.
+`optiC` is the packaged desktop product for the `ray_tracing` program. It is a
+C/SDL2 scene editor and renderer with both legacy `2D` paths and a shipped
+native `3D` runtime ladder.
+
+Identity note:
+
+- public product name: `optiC`
+- repository/program key: `ray_tracing`
+- launcher, binary, log, and source-level contracts still use `RayTracing` or
+  `ray_tracing` identifiers where those are part of the current technical
+  surface
 
 ## Current Scope
 
@@ -52,6 +62,9 @@ make -C ray_tracing run
 make -C ray_tracing debug
 make -C ray_tracing release
 ```
+
+Packaging and Desktop refresh flows produce `optiC.app`; see
+`docs/desktop_packaging.md`.
 
 Verification entry points:
 

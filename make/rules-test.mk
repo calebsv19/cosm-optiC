@@ -1,7 +1,13 @@
 STABLE_TEST_TARGETS := \
 	test \
+	test-runtime-scene-bridge-contract \
 	test-ray-tracing-core-sim-runtime-frame-contract \
 	test-scene-editor-pane-host-contract \
+	test-ray-tracing-render-headless-preflight \
+	test-ray-tracing-render-headless-image-export \
+	test-ray-tracing-material-preview-headless \
+	test-ray-tracing-job-runner-smoke \
+	test-ray-tracing-job-runner-policy \
 	test-manifest-to-trace-export \
 	test-fluid-pack-contract-parity \
 	test-trio-scene-contract-diff \
@@ -27,6 +33,11 @@ visual-harness: $(TARGET)
 
 test: $(TARGET) $(TEST_BIN)
 	./$(TEST_BIN)
+
+test-runtime-scene-bridge-contract: $(TARGET) $(TEST_BIN)
+	@TEST_RUNNER_GROUP=runtime_scene_bridge_core ./$(TEST_BIN) || (echo "ray tracing runtime scene bridge core contract test failed."; exit 1)
+	@TEST_RUNNER_GROUP=runtime_scene_bridge_writeback ./$(TEST_BIN) || (echo "ray tracing runtime scene bridge writeback contract test failed."; exit 1)
+	@echo "ray tracing runtime scene bridge contract lane passed"
 
 $(TEST_BIN): $(TEST_OBJ) $(TEST_DEPS)
 	$(CC) $(TEST_OBJ) $(TEST_DEPS) -o $@ $(LDFLAGS)
@@ -106,6 +117,24 @@ $(SCENE_EDITOR_PANE_HOST_TEST_BIN): $(SCENE_EDITOR_PANE_HOST_TEST_SRCS)
 
 test-scene-editor-pane-host-contract: $(SCENE_EDITOR_PANE_HOST_TEST_BIN)
 	@$(SCENE_EDITOR_PANE_HOST_TEST_BIN) || (echo "scene editor pane host contract test failed."; exit 1)
+
+test-ray-tracing-render-headless-preflight: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	tests/integration/run_ray_tracing_render_headless_preflight.sh
+
+test-ray-tracing-render-headless-image-export: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	tests/integration/run_ray_tracing_render_headless_image_export.sh
+
+test-ray-tracing-render-headless-volume-handoff: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	tests/integration/run_ray_tracing_render_headless_volume_handoff.sh
+
+test-ray-tracing-job-runner-smoke: $(RAY_TRACING_RENDER_HEADLESS_BIN) $(RAY_TRACING_JOB_RUNNER_BIN)
+	tests/integration/run_ray_tracing_job_runner_smoke.sh
+
+test-ray-tracing-job-runner-policy: $(RAY_TRACING_RENDER_HEADLESS_BIN) $(RAY_TRACING_JOB_RUNNER_BIN)
+	tests/integration/run_ray_tracing_job_runner_policy.sh
+
+test-ray-tracing-material-preview-headless: $(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_BIN)
+	tests/integration/run_ray_tracing_material_preview_headless.sh
 
 test-manifest-to-trace-export: ray_trace_tool
 	tests/integration/run_manifest_to_trace_export.sh

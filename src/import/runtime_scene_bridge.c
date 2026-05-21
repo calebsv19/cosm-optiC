@@ -68,6 +68,43 @@ static bool runtime_scene_bridge_is_authoring_helper_object_type(const char *obj
            strcmp(object_type, "edge_set") == 0;
 }
 
+static bool runtime_scene_bridge_object_has_ray_authoring_material_binding(json_object *root,
+                                                                           const char *object_id) {
+    json_object *extensions = NULL;
+    json_object *ray_tracing = NULL;
+    json_object *authoring = NULL;
+    json_object *object_materials = NULL;
+    size_t count = 0u;
+    size_t i = 0u;
+    if (!root || !object_id || !object_id[0]) return false;
+    if (!json_object_object_get_ex(root, "extensions", &extensions) ||
+        !json_object_is_type(extensions, json_type_object) ||
+        !json_object_object_get_ex(extensions, "ray_tracing", &ray_tracing) ||
+        !json_object_is_type(ray_tracing, json_type_object) ||
+        !json_object_object_get_ex(ray_tracing, "authoring", &authoring) ||
+        !json_object_is_type(authoring, json_type_object) ||
+        !json_object_object_get_ex(authoring, "object_materials", &object_materials) ||
+        !json_object_is_type(object_materials, json_type_array)) {
+        return false;
+    }
+    count = json_object_array_length(object_materials);
+    for (i = 0u; i < count; ++i) {
+        json_object *entry = json_object_array_get_idx(object_materials, (int)i);
+        json_object *entry_object_id = NULL;
+        const char *entry_object_id_str = NULL;
+        if (!entry || !json_object_is_type(entry, json_type_object)) continue;
+        if (!json_object_object_get_ex(entry, "object_id", &entry_object_id) ||
+            !json_object_is_type(entry_object_id, json_type_string)) {
+            continue;
+        }
+        entry_object_id_str = json_object_get_string(entry_object_id);
+        if (entry_object_id_str && strcmp(entry_object_id_str, object_id) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static int runtime_scene_bridge_physics_emitter_packed_color(const char *type_str) {
     if (type_str && strcmp(type_str, "Jet") == 0) {
         return SceneObjectPackRGBBytes(74, 232, 124);
@@ -424,7 +461,6 @@ static void apply_objects(json_object *root,
     }
 
     src_count = json_object_array_length(objects_array);
-    if (src_count > (size_t)MAX_OBJECTS) src_count = (size_t)MAX_OBJECTS;
 
     sceneSettings.objectCount = 0;
     for (i = 0; i < src_count; ++i) {
@@ -443,6 +479,9 @@ static void apply_objects(json_object *root,
         bool is_plane = false;
         bool is_triangle_mesh = false;
         bool is_box = false;
+        bool is_authoring_helper = false;
+        bool has_active_physics_emitter_overlay = false;
+        bool has_ray_authoring_material_binding = false;
         bool is_guide_only = false;
         int guide_overlay_color = 0;
         RuntimeSceneBridgePrimitiveKind digest_kind = RUNTIME_SCENE_BRIDGE_PRIMITIVE_UNKNOWN;
@@ -504,24 +543,56 @@ static void apply_objects(json_object *root,
             }
         }
 
+        object_id = runtime_scene_bridge_json_string_field_or_null(obj, "object_id");
+        is_authoring_helper = runtime_scene_bridge_is_authoring_helper_object_type(type_str);
+        has_active_physics_emitter_overlay =
+            runtime_scene_bridge_object_has_active_physics_emitter_overlay(root,
+                                                                           object_id,
+                                                                           &guide_overlay_color);
+        has_ray_authoring_material_binding =
+            runtime_scene_bridge_object_has_ray_authoring_material_binding(root, object_id);
+        is_guide_only =
+            ((animSettings.spaceMode == SPACE_MODE_3D) && is_authoring_helper) ||
+            has_active_physics_emitter_overlay;
+        /*
+         * Authoring helper objects describe editor paths/anchors only. Do not
+         * consume live scene-object slots with them in native 3D mode, or
+         * later renderable objects can be pushed past the fixed runtime object
+         * array. In 2D mode, `curve_path` remains a live runtime object type.
+         */
+        if ((animSettings.spaceMode == SPACE_MODE_3D) && is_authoring_helper) {
+            continue;
+        }
+        if (has_active_physics_emitter_overlay && !has_ray_authoring_material_binding) {
+            digest_append_primitive(obj,
+                                    transform,
+                                    primitive,
+                                    digest_kind,
+                                    world_scale,
+                                    sceneSettings.objectCount,
+                                    true);
+            primitive_seed_append(obj,
+                                  transform,
+                                  primitive,
+                                  digest_kind,
+                                  world_scale,
+                                  sceneSettings.objectCount,
+                                  true);
+            continue;
+        }
+        if (sceneSettings.objectCount >= MAX_OBJECTS) {
+            continue;
+        }
         dst = &sceneSettings.sceneObjects[sceneSettings.objectCount];
         memset(g_last_runtime_object_ids[sceneSettings.objectCount],
                0,
                sizeof(g_last_runtime_object_ids[sceneSettings.objectCount]));
-        {
-            object_id = runtime_scene_bridge_json_string_field_or_null(obj, "object_id");
-            if (object_id && object_id[0]) {
-                snprintf(g_last_runtime_object_ids[sceneSettings.objectCount],
-                         sizeof(g_last_runtime_object_ids[sceneSettings.objectCount]),
-                         "%s",
-                         object_id);
-            }
+        if (object_id && object_id[0]) {
+            snprintf(g_last_runtime_object_ids[sceneSettings.objectCount],
+                     sizeof(g_last_runtime_object_ids[sceneSettings.objectCount]),
+                     "%s",
+                     object_id);
         }
-        is_guide_only =
-            runtime_scene_bridge_is_authoring_helper_object_type(type_str) ||
-            runtime_scene_bridge_object_has_active_physics_emitter_overlay(root,
-                                                                           object_id,
-                                                                           &guide_overlay_color);
         if (is_circle) {
             InitObject(dst, OBJECT_CIRCLE, x, y, 10.0, 0.0, NULL, 0);
         } else if (is_plane) {
