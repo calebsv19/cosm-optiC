@@ -21,11 +21,21 @@ typedef bool (*RuntimeNative3DTileSchedulerProgressCallback)(
 
 int RuntimeNative3DTileSchedulerResolveTileSize(int requested);
 int RuntimeNative3DTileSchedulerResolveTileSizeForScale(int requested, int render_scale);
+int RuntimeNative3DTileSchedulerAdaptiveMinChildTileSize(void);
+size_t RuntimeNative3DTileSchedulerAdaptiveMaxSplitParents(void);
+bool RuntimeNative3DTileSchedulerTileEligibleForAdaptiveSplit(int tile_width,
+                                                              int tile_height,
+                                                              int min_child_tile_size);
+bool RuntimeNative3DTileSchedulerTileShouldAdaptiveSplit(int tile_width,
+                                                         int tile_height,
+                                                         double total_tile_ms,
+                                                         double average_tile_ms);
 size_t RuntimeNative3DTileSchedulerResolveWorkerCountForCpu(size_t job_count,
                                                             int cpu_count,
                                                             bool interactive_preview);
 size_t RuntimeNative3DTileSchedulerResolveWorkerCount(size_t job_count,
                                                       bool interactive_preview);
+void RuntimeNative3DTileSchedulerResetAdaptivePlan(void);
 bool RuntimeNative3DRenderPreparedFrameTemporalTiled(
     uint8_t* pixel_buffer,
     RayTracing3DIntegratorId integrator_id,

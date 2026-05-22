@@ -448,6 +448,8 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
     dst->temporalActiveTileCount += src->temporalActiveTileCount;
     dst->temporalInactiveTileCount += src->temporalInactiveTileCount;
     dst->temporalMeasuredTileJobs += src->temporalMeasuredTileJobs;
+    dst->temporalAdaptiveSplitParentCount += src->temporalAdaptiveSplitParentCount;
+    dst->temporalAdaptiveChildTileCount += src->temporalAdaptiveChildTileCount;
     if (src->maxRadiance > dst->maxRadiance) {
         dst->maxRadiance = src->maxRadiance;
     }

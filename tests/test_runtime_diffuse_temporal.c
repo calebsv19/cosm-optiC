@@ -1554,6 +1554,24 @@ static int test_runtime_native_3d_tile_scheduler_policy_contract(void) {
                 RuntimeNative3DTileSchedulerResolveTileSizeForScale(16, 4) == 8);
     assert_true("runtime_native_3d_tile_scheduler_tile_size_scale_clamps_floor",
                 RuntimeNative3DTileSchedulerResolveTileSizeForScale(16, 8) == 8);
+    assert_true("runtime_native_3d_tile_scheduler_adaptive_min_child_tile_size",
+                RuntimeNative3DTileSchedulerAdaptiveMinChildTileSize() == 8);
+    assert_true("runtime_native_3d_tile_scheduler_adaptive_max_split_parents",
+                RuntimeNative3DTileSchedulerAdaptiveMaxSplitParents() == 4u);
+    assert_true("runtime_native_3d_tile_scheduler_adaptive_split_eligible_16",
+                RuntimeNative3DTileSchedulerTileEligibleForAdaptiveSplit(16, 16, 8));
+    assert_true("runtime_native_3d_tile_scheduler_adaptive_split_rejects_small_width",
+                !RuntimeNative3DTileSchedulerTileEligibleForAdaptiveSplit(15, 16, 8));
+    assert_true("runtime_native_3d_tile_scheduler_adaptive_split_rejects_small_height",
+                !RuntimeNative3DTileSchedulerTileEligibleForAdaptiveSplit(16, 15, 8));
+    assert_true("runtime_native_3d_tile_scheduler_adaptive_split_policy_accepts_slow_parent",
+                RuntimeNative3DTileSchedulerTileShouldAdaptiveSplit(16, 16, 24.0, 8.0));
+    assert_true("runtime_native_3d_tile_scheduler_adaptive_split_policy_rejects_fast_parent",
+                !RuntimeNative3DTileSchedulerTileShouldAdaptiveSplit(16, 16, 8.0, 4.0));
+    assert_true("runtime_native_3d_tile_scheduler_adaptive_split_policy_rejects_low_ratio",
+                !RuntimeNative3DTileSchedulerTileShouldAdaptiveSplit(16, 16, 12.0, 8.0));
+    assert_true("runtime_native_3d_tile_scheduler_adaptive_split_policy_rejects_small_tile",
+                !RuntimeNative3DTileSchedulerTileShouldAdaptiveSplit(8, 8, 24.0, 8.0));
 
     assert_true("runtime_native_3d_tile_scheduler_workers_zero_jobs",
                 RuntimeNative3DTileSchedulerResolveWorkerCountForCpu(0u, 8, false) == 0u);

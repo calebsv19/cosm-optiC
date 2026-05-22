@@ -165,11 +165,13 @@ static void LogNative3DRenderStatsIfNeeded(RayTracing3DIntegratorId integrator_i
            stats->maxBounceRadiance,
            avg_bounce);
     if (stats->temporalMeasuredTileJobs > 0) {
-        printf("[native3d] tile_metrics jobs=%d avg_ms=%.3f max_tile_ms=%.3f max_subpass_ms=%.3f slow_tile=(%d,%d %dx%d)\n",
+        printf("[native3d] tile_metrics jobs=%d avg_ms=%.3f max_tile_ms=%.3f max_subpass_ms=%.3f splits=%d children=%d slow_tile=(%d,%d %dx%d)\n",
                stats->temporalMeasuredTileJobs,
                stats->temporalAverageTileMs,
                stats->temporalMaxTileMs,
                stats->temporalMaxTileSubpassMs,
+               stats->temporalAdaptiveSplitParentCount,
+               stats->temporalAdaptiveChildTileCount,
                stats->temporalSlowTileOriginX,
                stats->temporalSlowTileOriginY,
                stats->temporalSlowTileWidth,

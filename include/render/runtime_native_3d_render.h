@@ -31,6 +31,8 @@ typedef struct {
     int temporalActiveTileCount;
     int temporalInactiveTileCount;
     int temporalMeasuredTileJobs;
+    int temporalAdaptiveSplitParentCount;
+    int temporalAdaptiveChildTileCount;
     int temporalSlowTileOriginX;
     int temporalSlowTileOriginY;
     int temporalSlowTileWidth;
