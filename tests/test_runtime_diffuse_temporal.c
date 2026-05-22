@@ -12,6 +12,7 @@
 #include "render/runtime_direct_light_3d.h"
 #include "render/runtime_native_3d_render.h"
 #include "render/runtime_native_3d_sampling.h"
+#include "render/runtime_native_3d_tile_scheduler.h"
 #include "render/runtime_native_3d_temporal_accum.h"
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_scene_3d_builder.h"
@@ -43,6 +44,33 @@ static void native3d_temporal_normalize_stats(RuntimeNative3DRenderStats* stats,
         native3d_temporal_round_divide(stats->secondaryHitCount, temporal_frames);
     stats->secondaryContributingHitCount =
         native3d_temporal_round_divide(stats->secondaryContributingHitCount, temporal_frames);
+}
+
+typedef struct Native3DTemporalTileProgressTrace {
+    int calls;
+    int lastStartedSubpasses;
+    int lastCompletedSubpasses;
+    size_t totalDirtyTiles;
+    bool monotonic;
+} Native3DTemporalTileProgressTrace;
+
+static bool native3d_temporal_track_tile_progress(
+    const RuntimeNative3DTileSchedulerProgress* progress,
+    void* user_data) {
+    Native3DTemporalTileProgressTrace* trace = (Native3DTemporalTileProgressTrace*)user_data;
+
+    if (!trace || !progress) return false;
+    if (trace->calls > 0 &&
+        (progress->startedSubpasses < trace->lastStartedSubpasses ||
+         progress->completedSubpasses < trace->lastCompletedSubpasses ||
+         progress->completedSubpasses > progress->startedSubpasses)) {
+        trace->monotonic = false;
+    }
+    trace->calls += 1;
+    trace->lastStartedSubpasses = progress->startedSubpasses;
+    trace->lastCompletedSubpasses = progress->completedSubpasses;
+    trace->totalDirtyTiles += progress->dirtyTileCount;
+    return true;
 }
 
 static int test_runtime_diffuse_bounce_3d_shadowed_hit_lift_contract(void) {
@@ -1068,6 +1096,480 @@ static int test_runtime_native_3d_temporal_tile_parity_contract(void) {
     return 0;
 }
 
+static int test_runtime_native_3d_temporal_worker_tile_scheduler_contract(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_native_3d_temporal_worker_tiles\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"floor\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":8.0,\"height\":8.0,"
+            "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+            "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"bounce_card\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":1.0,\"height\":2.0,"
+            "\"frame\":{\"origin\":{\"x\":0.9,\"y\":-4.1,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":0.0,\"y\":1.0,\"z\":0.0},"
+            "\"normal\":{\"x\":-1.0,\"y\":0.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.9,\"y\":-4.1,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":2.0,\"y\":-2.0,\"z\":0.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeNative3DSamplingContext sampling = {.sampleSequence = 21U};
+    RuntimeNative3DRenderStats serial_stats = {0};
+    RuntimeNative3DRenderStats tiled_stats = {0};
+    uint8_t serial_pixels[101 * 101 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    uint8_t tiled_pixels[101 * 101 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    bool ok = false;
+    const int temporal_frames = 4;
+
+    animSettings.secondaryDiffuseSamples3D = 4;
+    animSettings.bounceDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
+    animSettings.temporalFrames3D = temporal_frames;
+    animSettings.lightIntensity = 10.0;
+    animSettings.forwardDecay = 10.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    animSettings.lightRadius = 0.0;
+    animSettings.disneyDenoiseEnabled = false;
+    animSettings.tileSize = 16;
+    sceneSettings.camera.rotation = 0.0;
+    sceneSettings.camera.zoom = 1.0;
+
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_native_3d_temporal_worker_tiles_apply_ok", ok);
+    if (!ok) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    animSettings.useTiledRenderer = false;
+    ok = RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
+        serial_pixels,
+        RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
+        101,
+        101,
+        0.0,
+        2.0,
+        -2.0,
+        &sampling,
+        temporal_frames,
+        &serial_stats);
+    assert_true("runtime_native_3d_temporal_worker_tiles_serial_ok", ok);
+
+    animSettings.useTiledRenderer = true;
+    ok = RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
+        tiled_pixels,
+        RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
+        101,
+        101,
+        0.0,
+        2.0,
+        -2.0,
+        &sampling,
+        temporal_frames,
+        &tiled_stats);
+    assert_true("runtime_native_3d_temporal_worker_tiles_tiled_ok", ok);
+
+    assert_true("runtime_native_3d_temporal_worker_tiles_pixels_match",
+                memcmp(serial_pixels, tiled_pixels, sizeof(serial_pixels)) == 0);
+    assert_true("runtime_native_3d_temporal_worker_tiles_hits_match",
+                serial_stats.hitPixelCount == tiled_stats.hitPixelCount);
+    assert_true("runtime_native_3d_temporal_worker_tiles_visible_match",
+                serial_stats.visiblePixelCount == tiled_stats.visiblePixelCount);
+    assert_true("runtime_native_3d_temporal_worker_tiles_secondary_rays_match",
+                serial_stats.secondaryRayCount == tiled_stats.secondaryRayCount);
+    assert_true("runtime_native_3d_temporal_worker_tiles_secondary_hits_match",
+                serial_stats.secondaryHitCount == tiled_stats.secondaryHitCount);
+    assert_true("runtime_native_3d_temporal_worker_tiles_secondary_lit_hits_match",
+                serial_stats.secondaryContributingHitCount ==
+                    tiled_stats.secondaryContributingHitCount);
+    assert_true("runtime_native_3d_temporal_worker_tiles_committed_match",
+                serial_stats.temporalCommittedSubpasses ==
+                    tiled_stats.temporalCommittedSubpasses);
+    assert_true("runtime_native_3d_temporal_worker_tiles_active_pixels_match",
+                serial_stats.temporalActivePixelCount ==
+                    tiled_stats.temporalActivePixelCount);
+    assert_true("runtime_native_3d_temporal_worker_tiles_active_tiles_match",
+                serial_stats.temporalActiveTileCount ==
+                    tiled_stats.temporalActiveTileCount);
+    assert_true("runtime_native_3d_temporal_worker_tiles_inactive_tiles_match",
+                serial_stats.temporalInactiveTileCount ==
+                    tiled_stats.temporalInactiveTileCount);
+    assert_true("runtime_native_3d_temporal_worker_tiles_metrics_jobs_positive",
+                tiled_stats.temporalMeasuredTileJobs > 0);
+    assert_true("runtime_native_3d_temporal_worker_tiles_metrics_avg_positive",
+                tiled_stats.temporalAverageTileMs > 0.0);
+    assert_true("runtime_native_3d_temporal_worker_tiles_metrics_max_positive",
+                tiled_stats.temporalMaxTileMs > 0.0);
+    assert_true("runtime_native_3d_temporal_worker_tiles_metrics_max_ge_avg",
+                tiled_stats.temporalMaxTileMs >= tiled_stats.temporalAverageTileMs);
+    assert_true("runtime_native_3d_temporal_worker_tiles_metrics_subpass_positive",
+                tiled_stats.temporalMaxTileSubpassMs > 0.0);
+
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_native_3d_temporal_worker_tile_size_parity_contract(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_native_3d_temporal_worker_tile_size_parity\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"floor\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":8.0,\"height\":8.0,"
+            "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+            "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"bounce_card\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":1.0,\"height\":2.0,"
+            "\"frame\":{\"origin\":{\"x\":0.9,\"y\":-4.1,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":0.0,\"y\":1.0,\"z\":0.0},"
+            "\"normal\":{\"x\":-1.0,\"y\":0.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.9,\"y\":-4.1,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":2.0,\"y\":-2.0,\"z\":0.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    static const int tile_sizes[] = {16, 32, 64};
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeNative3DSamplingContext sampling = {.sampleSequence = 23U};
+    RuntimeNative3DRenderStats serial_stats = {0};
+    uint8_t serial_pixels[101 * 101 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    bool ok = false;
+    const int temporal_frames = 4;
+
+    animSettings.secondaryDiffuseSamples3D = 4;
+    animSettings.bounceDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
+    animSettings.temporalFrames3D = temporal_frames;
+    animSettings.lightIntensity = 10.0;
+    animSettings.forwardDecay = 10.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    animSettings.lightRadius = 0.0;
+    animSettings.disneyDenoiseEnabled = false;
+    sceneSettings.camera.rotation = 0.0;
+    sceneSettings.camera.zoom = 1.0;
+
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_native_3d_temporal_worker_tile_size_apply_ok", ok);
+    if (!ok) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    animSettings.useTiledRenderer = false;
+    ok = RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
+        serial_pixels,
+        RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
+        101,
+        101,
+        0.0,
+        2.0,
+        -2.0,
+        &sampling,
+        temporal_frames,
+        &serial_stats);
+    assert_true("runtime_native_3d_temporal_worker_tile_size_serial_ok", ok);
+
+    for (size_t i = 0; i < sizeof(tile_sizes) / sizeof(tile_sizes[0]); ++i) {
+        RuntimeNative3DRenderStats tiled_stats = {0};
+        uint8_t tiled_pixels[101 * 101 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+        const int tile_size = tile_sizes[i];
+
+        animSettings.useTiledRenderer = true;
+        animSettings.tileSize = tile_size;
+        ok = RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
+            tiled_pixels,
+            RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
+            101,
+            101,
+            0.0,
+            2.0,
+            -2.0,
+            &sampling,
+            temporal_frames,
+            &tiled_stats);
+        assert_true("runtime_native_3d_temporal_worker_tile_size_tiled_ok", ok);
+        assert_true("runtime_native_3d_temporal_worker_tile_size_pixels_match",
+                    memcmp(serial_pixels, tiled_pixels, sizeof(serial_pixels)) == 0);
+        assert_true("runtime_native_3d_temporal_worker_tile_size_hits_match",
+                    serial_stats.hitPixelCount == tiled_stats.hitPixelCount);
+        assert_true("runtime_native_3d_temporal_worker_tile_size_visible_match",
+                    serial_stats.visiblePixelCount == tiled_stats.visiblePixelCount);
+        assert_true("runtime_native_3d_temporal_worker_tile_size_secondary_rays_match",
+                    serial_stats.secondaryRayCount == tiled_stats.secondaryRayCount);
+        assert_true("runtime_native_3d_temporal_worker_tile_size_secondary_hits_match",
+                    serial_stats.secondaryHitCount == tiled_stats.secondaryHitCount);
+        assert_true(
+            "runtime_native_3d_temporal_worker_tile_size_secondary_lit_hits_match",
+            serial_stats.secondaryContributingHitCount ==
+                tiled_stats.secondaryContributingHitCount);
+        assert_true("runtime_native_3d_temporal_worker_tile_size_committed_match",
+                    serial_stats.temporalCommittedSubpasses ==
+                        tiled_stats.temporalCommittedSubpasses);
+        assert_true("runtime_native_3d_temporal_worker_tile_size_active_pixels_match",
+                    serial_stats.temporalActivePixelCount ==
+                        tiled_stats.temporalActivePixelCount);
+        assert_true("runtime_native_3d_temporal_worker_tile_size_active_tiles_match",
+                    serial_stats.temporalActiveTileCount ==
+                        tiled_stats.temporalActiveTileCount);
+        assert_true("runtime_native_3d_temporal_worker_tile_size_inactive_tiles_match",
+                    serial_stats.temporalInactiveTileCount ==
+                        tiled_stats.temporalInactiveTileCount);
+    }
+
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_native_3d_temporal_worker_preview_progress_contract(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_native_3d_temporal_worker_preview_progress\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"floor\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":8.0,\"height\":8.0,"
+            "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+            "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"bounce_card\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":1.0,\"height\":2.0,"
+            "\"frame\":{\"origin\":{\"x\":0.9,\"y\":-4.1,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":0.0,\"y\":1.0,\"z\":0.0},"
+            "\"normal\":{\"x\":-1.0,\"y\":0.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.9,\"y\":-4.1,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":2.0,\"y\":-2.0,\"z\":0.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeNative3DSamplingContext sampling = {.sampleSequence = 25U};
+    RuntimeNative3DPreparedFrame frame_without_progress = {0};
+    RuntimeNative3DPreparedFrame frame_with_progress = {0};
+    RuntimeNative3DRenderStats plain_stats = {0};
+    RuntimeNative3DRenderStats progress_stats = {0};
+    Native3DTemporalTileProgressTrace trace = {.monotonic = true};
+    uint8_t plain_pixels[101 * 101 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    uint8_t progress_pixels[101 * 101 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    bool ok = false;
+    const int temporal_frames = 4;
+
+    animSettings.secondaryDiffuseSamples3D = 4;
+    animSettings.bounceDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
+    animSettings.temporalFrames3D = temporal_frames;
+    animSettings.lightIntensity = 10.0;
+    animSettings.forwardDecay = 10.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    animSettings.lightRadius = 0.0;
+    animSettings.disneyDenoiseEnabled = false;
+    animSettings.useTiledRenderer = true;
+    animSettings.tileSize = 16;
+    sceneSettings.camera.rotation = 0.0;
+    sceneSettings.camera.zoom = 1.0;
+
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_native_3d_temporal_worker_preview_progress_apply_ok", ok);
+    if (!ok) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    ok = RuntimeNative3DPrepareFrameWithSampling(&frame_without_progress,
+                                                 101,
+                                                 101,
+                                                 0.0,
+                                                 2.0,
+                                                 -2.0,
+                                                 &sampling);
+    assert_true("runtime_native_3d_temporal_worker_preview_progress_prepare_plain_ok", ok);
+    ok = ok && RuntimeNative3DPrepareFrameWithSampling(&frame_with_progress,
+                                                       101,
+                                                       101,
+                                                       0.0,
+                                                       2.0,
+                                                       -2.0,
+                                                       &sampling);
+    assert_true("runtime_native_3d_temporal_worker_preview_progress_prepare_callback_ok", ok);
+    if (!ok) {
+        RuntimeNative3DPreparedFrame_Free(&frame_without_progress);
+        RuntimeNative3DPreparedFrame_Free(&frame_with_progress);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    ok = RuntimeNative3DRenderPreparedFrameTemporalTiled(plain_pixels,
+                                                         RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
+                                                         &frame_without_progress,
+                                                         temporal_frames,
+                                                         NULL,
+                                                         NULL,
+                                                         &plain_stats);
+    assert_true("runtime_native_3d_temporal_worker_preview_progress_plain_ok", ok);
+    ok = RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgress(
+        progress_pixels,
+        RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
+        &frame_with_progress,
+        temporal_frames,
+        NULL,
+        NULL,
+        native3d_temporal_track_tile_progress,
+        &trace,
+        &progress_stats);
+    assert_true("runtime_native_3d_temporal_worker_preview_progress_callback_ok", ok);
+
+    assert_true("runtime_native_3d_temporal_worker_preview_progress_pixels_match",
+                memcmp(plain_pixels, progress_pixels, sizeof(plain_pixels)) == 0);
+    assert_true("runtime_native_3d_temporal_worker_preview_progress_hits_match",
+                plain_stats.hitPixelCount == progress_stats.hitPixelCount);
+    assert_true("runtime_native_3d_temporal_worker_preview_progress_visible_match",
+                plain_stats.visiblePixelCount == progress_stats.visiblePixelCount);
+    assert_true("runtime_native_3d_temporal_worker_preview_progress_secondary_rays_match",
+                plain_stats.secondaryRayCount == progress_stats.secondaryRayCount);
+    assert_true("runtime_native_3d_temporal_worker_preview_progress_secondary_hits_match",
+                plain_stats.secondaryHitCount == progress_stats.secondaryHitCount);
+    assert_true(
+        "runtime_native_3d_temporal_worker_preview_progress_secondary_lit_hits_match",
+        plain_stats.secondaryContributingHitCount ==
+            progress_stats.secondaryContributingHitCount);
+    assert_true("runtime_native_3d_temporal_worker_preview_progress_committed_match",
+                plain_stats.temporalCommittedSubpasses ==
+                    progress_stats.temporalCommittedSubpasses);
+    assert_true("runtime_native_3d_temporal_worker_preview_progress_active_pixels_match",
+                plain_stats.temporalActivePixelCount ==
+                    progress_stats.temporalActivePixelCount);
+    assert_true("runtime_native_3d_temporal_worker_preview_progress_active_tiles_match",
+                plain_stats.temporalActiveTileCount ==
+                    progress_stats.temporalActiveTileCount);
+    assert_true("runtime_native_3d_temporal_worker_preview_progress_inactive_tiles_match",
+                plain_stats.temporalInactiveTileCount ==
+                    progress_stats.temporalInactiveTileCount);
+    assert_true("runtime_native_3d_temporal_worker_preview_progress_callback_seen",
+                trace.calls > 0);
+    assert_true("runtime_native_3d_temporal_worker_preview_progress_callback_monotonic",
+                trace.monotonic);
+    assert_true("runtime_native_3d_temporal_worker_preview_progress_completed_final",
+                trace.lastCompletedSubpasses == temporal_frames);
+    assert_true("runtime_native_3d_temporal_worker_preview_progress_dirty_tiles_seen",
+                trace.totalDirtyTiles > 0u);
+
+    RuntimeNative3DPreparedFrame_Free(&frame_without_progress);
+    RuntimeNative3DPreparedFrame_Free(&frame_with_progress);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_native_3d_tile_scheduler_policy_contract(void) {
+    assert_true("runtime_native_3d_tile_scheduler_tile_size_default_16",
+                RuntimeNative3DTileSchedulerResolveTileSize(0) == 16);
+    assert_true("runtime_native_3d_tile_scheduler_tile_size_clamps_low",
+                RuntimeNative3DTileSchedulerResolveTileSize(1) ==
+                    ClampTileSize(1));
+    assert_true("runtime_native_3d_tile_scheduler_tile_size_clamps_high",
+                RuntimeNative3DTileSchedulerResolveTileSize(1024) ==
+                    ClampTileSize(1024));
+    assert_true("runtime_native_3d_tile_scheduler_tile_size_scale_identity",
+                RuntimeNative3DTileSchedulerResolveTileSizeForScale(16, 1) == 16);
+    assert_true("runtime_native_3d_tile_scheduler_tile_size_scale_hidpi_identity",
+                RuntimeNative3DTileSchedulerResolveTileSizeForScale(16,
+                                                                    RUNTIME_3D_RENDER_SCALE_HIDPI) ==
+                    16);
+    assert_true("runtime_native_3d_tile_scheduler_tile_size_scale_downsizes_preview_tiles",
+                RuntimeNative3DTileSchedulerResolveTileSizeForScale(16, 4) == 8);
+    assert_true("runtime_native_3d_tile_scheduler_tile_size_scale_clamps_floor",
+                RuntimeNative3DTileSchedulerResolveTileSizeForScale(16, 8) == 8);
+
+    assert_true("runtime_native_3d_tile_scheduler_workers_zero_jobs",
+                RuntimeNative3DTileSchedulerResolveWorkerCountForCpu(0u, 8, false) == 0u);
+    assert_true("runtime_native_3d_tile_scheduler_workers_headless_cpu_bound",
+                RuntimeNative3DTileSchedulerResolveWorkerCountForCpu(12u, 8, false) == 4u);
+    assert_true("runtime_native_3d_tile_scheduler_workers_headless_job_bound",
+                RuntimeNative3DTileSchedulerResolveWorkerCountForCpu(3u, 8, false) == 3u);
+    assert_true("runtime_native_3d_tile_scheduler_workers_interactive_reserve_one",
+                RuntimeNative3DTileSchedulerResolveWorkerCountForCpu(12u, 8, true) == 4u);
+    assert_true("runtime_native_3d_tile_scheduler_workers_interactive_floor_one",
+                RuntimeNative3DTileSchedulerResolveWorkerCountForCpu(12u, 1, true) == 1u);
+    assert_true("runtime_native_3d_tile_scheduler_workers_cpu_fallback_one",
+                RuntimeNative3DTileSchedulerResolveWorkerCountForCpu(12u, 0, false) == 1u);
+    return 0;
+}
+
 static int test_runtime_native_3d_disney_temporal_pruning_stats_contract(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -1287,6 +1789,10 @@ int run_test_runtime_diffuse_temporal_tests(void) {
     test_runtime_native_3d_blue_noise_jitter_contract();
     test_runtime_native_3d_sampling_stratified_subpass_contract();
     test_runtime_native_3d_temporal_tile_parity_contract();
+    test_runtime_native_3d_temporal_worker_tile_scheduler_contract();
+    test_runtime_native_3d_temporal_worker_tile_size_parity_contract();
+    test_runtime_native_3d_temporal_worker_preview_progress_contract();
+    test_runtime_native_3d_tile_scheduler_policy_contract();
     test_runtime_native_3d_disney_temporal_pruning_stats_contract();
     test_runtime_diffuse_bounce_3d_seed_branch_contract();
 

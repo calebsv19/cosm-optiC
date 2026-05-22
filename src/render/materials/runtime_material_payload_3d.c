@@ -39,6 +39,13 @@ static double runtime_material_payload_3d_lerp(double a, double b, double t) {
     return a + ((b - a) * runtime_material_payload_3d_clamp01(t));
 }
 
+static double runtime_material_payload_3d_clamp_positive(double value, double fallback) {
+    if (value > 1e-6) {
+        return value;
+    }
+    return fallback;
+}
+
 static void runtime_material_payload_3d_apply_authored_overlay_material(
     RuntimeMaterialPayload3D* payload,
     RuntimeMaterialTextureLayerKind overlay_kind,
@@ -433,6 +440,12 @@ static bool runtime_material_payload_3d_resolve(int scene_object_index,
                        material->transparency *
                        runtime_material_payload_3d_clamp01(object_copy.alpha))
                  : 0.0;
+    payload.opticalIor = material ? runtime_material_payload_3d_clamp_positive(material->ior, 1.0)
+                                  : runtime_material_payload_3d_clamp_positive(payload.bsdf.ior, 1.0);
+    payload.absorptionDistance =
+        material ? runtime_material_payload_3d_clamp_positive(material->absorption_distance, 1.0)
+                 : 1.0;
+    payload.thinWalled = material ? material->thin_walled : false;
     payload.valid = true;
     runtime_material_payload_3d_apply_texture(&object_copy, hit, &payload);
 

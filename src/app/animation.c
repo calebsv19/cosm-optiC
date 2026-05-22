@@ -15,10 +15,12 @@
 #include "config/config_manager.h"
 #include "scene/object_manager.h"
 #include "render/ray_tracing2.h"
+#include "render/pipeline/ray_tracing2_preview_present.h"
 #include "editor/bezier_editor.h"
 #include "path/path_system.h"
 #include "render/timer_hud_api.h"
 #include "render/timer_hud_adapter.h"
+#include "render/ray_tracing_mode_backend.h"
 #include "camera/camera.h"
 #include "render/space_mode_adapter.h"
 #include "render/render_helper.h"
@@ -114,6 +116,42 @@ static double AnimationNormalizedTForAbsoluteFrameIndex(int absolute_frame_index
     if (progress < 0.0) progress = 0.0;
     if (progress > 1.0) progress = 1.0;
     return progress;
+}
+
+static void TryLoadResumePreviewHistory(void) {
+    RayTracingRenderExportStatus status = {0};
+    RayTracingRuntimeRoute route;
+    char last_frame_path[PATH_MAX];
+    int last_frame_index = -1;
+
+    if (!animSettings.deepRenderMode || !animSettings.resumeFromExistingFrames) {
+        return;
+    }
+
+    route = RayTracingModeBackend_ResolveRoute();
+    if (route.routeFamily != RAY_TRACING_ROUTE_NATIVE_3D) {
+        return;
+    }
+    if (!ray_tracing_render_export_describe_active(&status)) {
+        return;
+    }
+    if (status.next_frame_index <= 0 || status.frame_dir[0] == '\0') {
+        return;
+    }
+
+    last_frame_index = status.next_frame_index - 1;
+    if (snprintf(last_frame_path,
+                 sizeof(last_frame_path),
+                 "%s/frame_%04d.bmp",
+                 status.frame_dir,
+                 last_frame_index) >= (int)sizeof(last_frame_path)) {
+        return;
+    }
+
+    if (RayTracing2PreviewPresent_LoadNative3DPreviewHistoryFromBMP(last_frame_path)) {
+        printf("[preview] seeded native 3D preview history from resumed frame: %s\n",
+               last_frame_path);
+    }
 }
 
 static void PrepareDeepRenderFrameStateForLocalIndex(int local_frame_counter) {
@@ -716,6 +754,7 @@ void RunMainLoop(void) {
         s_deepRenderStartFrameIndex = ResolveDeepRenderStartFrameIndex();
         t_param = AnimationNormalizedTForAbsoluteFrameIndex(s_deepRenderStartFrameIndex);
         currentTime = (double)s_deepRenderStartFrameIndex * animSettings.frameDuration;
+        TryLoadResumePreviewHistory();
     } else {
         t_param = 1.0 / animSettings.framesForTravel;
     }

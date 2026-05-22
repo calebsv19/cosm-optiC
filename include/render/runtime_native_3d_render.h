@@ -30,9 +30,18 @@ typedef struct {
     int temporalActivePixelCount;
     int temporalActiveTileCount;
     int temporalInactiveTileCount;
+    int temporalMeasuredTileJobs;
+    int temporalSlowTileOriginX;
+    int temporalSlowTileOriginY;
+    int temporalSlowTileWidth;
+    int temporalSlowTileHeight;
     double maxRadiance;
     double maxBounceRadiance;
     double totalBounceRadiance;
+    double temporalTotalTileMs;
+    double temporalMaxTileMs;
+    double temporalAverageTileMs;
+    double temporalMaxTileSubpassMs;
 } RuntimeNative3DRenderStats;
 
 typedef struct {

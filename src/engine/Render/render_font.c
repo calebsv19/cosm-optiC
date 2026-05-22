@@ -10,6 +10,12 @@ static int activePointSize = 16;
 static const int kBasePointSize = 16;
 static const int kMinPointSize = 6;
 
+static bool active_font_is_usable(TTF_Font* font) {
+    return font &&
+           ray_tracing_text_has_font_source(font) &&
+           ray_tracing_text_font_cache_contains(font);
+}
+
 void invalidateActiveFontHandle(void) {
     activeFont = NULL;
     activePointSize = kBasePointSize;
@@ -32,9 +38,7 @@ static bool loadDefaultFont(void) {
     SDL_Renderer* renderer = NULL;
 
     if (!ensureTTF()) return false;
-    if (activeFont &&
-        ray_tracing_text_has_font_source(activeFont) &&
-        ray_tracing_text_font_cache_contains(activeFont)) {
+    if (active_font_is_usable(activeFont)) {
         return true;
     }
     activeFont = NULL;
@@ -67,8 +71,12 @@ bool loadFontByID(FontID id) {
 }
 
 TTF_Font* getActiveFont(void) {
-    if (!activeFont) {
-        loadDefaultFont();
+    if (!active_font_is_usable(activeFont)) {
+        activeFont = NULL;
+        activePointSize = kBasePointSize;
+        if (!loadDefaultFont()) {
+            return NULL;
+        }
     }
     return activeFont;
 }
@@ -87,10 +95,8 @@ bool refreshActiveFontFromAnimationConfig(void) {
     if (!ensureTTF()) {
         return false;
     }
-    if (activeFont &&
-        scaled_point_size == activePointSize &&
-        ray_tracing_text_has_font_source(activeFont) &&
-        ray_tracing_text_font_cache_contains(activeFont)) {
+    if (active_font_is_usable(activeFont) &&
+        scaled_point_size == activePointSize) {
         return true;
     }
 

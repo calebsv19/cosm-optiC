@@ -11,6 +11,9 @@ Struct: `Material`
 - `base_color` – neutral albedo; intended to be modulated by the SceneObject color.
 - `emissive` – preset-driven emissive contribution used by the native 3D `Emission / Transparency` tier.
 - `metallic`, `transparency` – bounded preset/material response inputs; `transparency` is used by the native 3D `Emission / Transparency` tier.
+- `ior` – authored dielectric index of refraction for transparent materials.
+- `absorption_distance` – reference distance at which `base_color` should read as the transmitted color for solid transparent materials.
+- `thin_walled` – when true, transparent transport applies one authored tint layer without solid-thickness buildup and preserves straight-through transmission direction.
 
 Per-object procedural texture controls:
 - `textureId` selects the procedural overlay (`0` none, `1` rust, `2` fog).
@@ -26,6 +29,7 @@ Presets (MaterialLibrary):
 - `MATERIAL_PRESET_GLOSSY` (3): Mid reflectivity, low roughness.
 - `MATERIAL_PRESET_EMISSIVE` (4): Preset-driven emissive surface with moderated grayscale test output.
 - `MATERIAL_PRESET_TRANSPARENT` (5): Preset-driven transmissive surface with moderately high transparency and reduced front-face diffuse weight for clearer grayscale readback.
+  The shipped preset now also seeds a glass-like `ior` and a finite absorption distance for more grounded transmission behavior.
 
 Notes:
 - Presets use neutral base colors so SceneObject color can serve as albedo.
@@ -34,7 +38,8 @@ Notes:
 - Native `3D` hit shading resolves procedural overlays through `runtime_material_texture_3d` after base material lookup, using barycentric hit coordinates so the texture remains attached to the triangle as camera/light/object views change.
 - Optional override: JSON presets in `config/materials/*.json` can redefine the library. Each file supports keys:
   `diffuse`, `specular`, `reflectivity`, `roughness`, `base_color` (array[3]), `emissive` (array[3]),
-  `metallic`, `transparency`. If the directory is present at load, shipped preset filenames
+  `metallic`, `transparency`, `ior`, `absorption_distance`/`absorptionDistance`,
+  `thin_walled`/`thinWalled`. If the directory is present at load, shipped preset filenames
   (`default.json`, `mirror.json`, `rough_metal.json`, `glossy.json`, `emissive.json`,
   `transparent.json`) override their canonical preset ids in place; extra custom files append
   after the shipped preset block.

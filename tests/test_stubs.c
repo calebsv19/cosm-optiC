@@ -122,6 +122,7 @@ void RunPreviewModeEmbedded(SDL_Window* host_window, SDL_Renderer* host_renderer
 // Font symbols used by timer_hud_adapter.
 bool initFontSystem(void) { return true; }
 TTF_Font* getActiveFont(void) { return NULL; }
+void invalidateActiveFontHandle(void) {}
 
 // TimerHUD global registration symbols.
 void ts_register_backend(const TimerHUDBackend* backend) { (void)backend; }

@@ -10,12 +10,16 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_camera_3d_rays.o \
 	$(BUILD_DIR)/render/runtime_direct_light_3d.o \
 	$(BUILD_DIR)/render/runtime_diffuse_bounce_3d.o \
+	$(BUILD_DIR)/render/runtime_dielectric_transport_3d.o \
 	$(BUILD_DIR)/render/runtime_emissive_direct_3d.o \
 	$(BUILD_DIR)/render/runtime_light_emitter_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_3d.o \
 	$(BUILD_DIR)/render/runtime_emission_transparency_3d.o \
+	$(BUILD_DIR)/render/runtime_path_depth_policy_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_feature_buffer.o \
 	$(BUILD_DIR)/render/runtime_native_3d_denoise.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render_unit.o \
+	$(BUILD_DIR)/render/runtime_native_3d_tile_scheduler.o \
 	$(BUILD_DIR)/render/runtime_native_3d_blue_noise.o \
 	$(BUILD_DIR)/render/runtime_native_3d_sampling.o \
 	$(BUILD_DIR)/render/materials/runtime_material_authored_texture_3d.o \
@@ -77,7 +81,9 @@ NATIVE3D_AUDIT_DEPS = \
 	$(CORE_IO_OBJS) \
 	$(CORE_DATA_OBJS) \
 	$(CORE_PACK_OBJS) \
+	$(CORE_QUEUE_OBJS) \
 	$(CORE_TIME_OBJS) \
+	$(CORE_WORKERS_OBJS) \
 	$(CORE_SCENE_OBJS) \
 	$(CORE_SCENE_COMPILE_OBJS) \
 	$(CORE_AUTHORED_TEXTURE_OBJS) \
@@ -169,12 +175,16 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_camera_3d_rays.o \
 		$(BUILD_DIR)/render/runtime_direct_light_3d.o \
 		$(BUILD_DIR)/render/runtime_diffuse_bounce_3d.o \
+		$(BUILD_DIR)/render/runtime_dielectric_transport_3d.o \
 		$(BUILD_DIR)/render/runtime_emissive_direct_3d.o \
 		$(BUILD_DIR)/render/runtime_light_emitter_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_3d.o \
 		$(BUILD_DIR)/render/runtime_emission_transparency_3d.o \
+		$(BUILD_DIR)/render/runtime_path_depth_policy_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_feature_buffer.o \
 	$(BUILD_DIR)/render/runtime_native_3d_denoise.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render_unit.o \
+	$(BUILD_DIR)/render/runtime_native_3d_tile_scheduler.o \
 	$(BUILD_DIR)/render/runtime_native_3d_blue_noise.o \
 	$(BUILD_DIR)/render/runtime_native_3d_sampling.o \
 	$(BUILD_DIR)/render/materials/runtime_material_authored_texture_3d.o \
@@ -283,7 +293,9 @@ TEST_DEPS := \
 	$(BUILD_DIR)/core_io/core_io.o \
 	$(BUILD_DIR)/core_data/core_data.o \
 	$(BUILD_DIR)/core_pack/core_pack.o \
+	$(BUILD_DIR)/core_queue/core_queue.o \
 	$(CORE_TIME_TEST_DEPS) \
+	$(BUILD_DIR)/core_workers/core_workers.o \
 	$(BUILD_DIR)/core_scene/core_scene.o \
 	$(BUILD_DIR)/core_authored_texture/core_authored_texture.o \
 	$(BUILD_DIR)/core_scene_compile/core_scene_compile.o \
@@ -319,12 +331,14 @@ CORE_BASE_SRCS := $(CORE_BASE_DIR)/src/core_base.c
 CORE_IO_SRCS := $(CORE_IO_DIR)/src/core_io.c
 CORE_DATA_SRCS := $(CORE_DATA_DIR)/src/core_data.c
 CORE_PACK_SRCS := $(CORE_PACK_DIR)/src/core_pack.c
+CORE_QUEUE_SRCS := $(CORE_QUEUE_DIR)/src/core_queue.c
 CORE_TIME_SRCS := $(CORE_TIME_DIR)/src/core_time.c
 ifeq ($(UNAME_S),Darwin)
 CORE_TIME_SRCS += $(CORE_TIME_DIR)/src/core_time_mac.c
 else
 CORE_TIME_SRCS += $(CORE_TIME_DIR)/src/core_time_posix.c
 endif
+CORE_WORKERS_SRCS := $(CORE_WORKERS_DIR)/src/core_workers.c
 CORE_SIM_SRCS := $(CORE_SIM_DIR)/src/core_sim.c
 CORE_SCENE_SRCS := $(CORE_SCENE_DIR)/src/core_scene.c
 CORE_AUTHORED_TEXTURE_SRCS := $(CORE_AUTHORED_TEXTURE_DIR)/src/core_authored_texture.c
@@ -351,7 +365,9 @@ CORE_BASE_OBJS := $(patsubst $(CORE_BASE_DIR)/src/%.c,$(BUILD_DIR)/core_base/%.o
 CORE_IO_OBJS := $(patsubst $(CORE_IO_DIR)/src/%.c,$(BUILD_DIR)/core_io/%.o,$(CORE_IO_SRCS))
 CORE_DATA_OBJS := $(patsubst $(CORE_DATA_DIR)/src/%.c,$(BUILD_DIR)/core_data/%.o,$(CORE_DATA_SRCS))
 CORE_PACK_OBJS := $(patsubst $(CORE_PACK_DIR)/src/%.c,$(BUILD_DIR)/core_pack/%.o,$(CORE_PACK_SRCS))
+CORE_QUEUE_OBJS := $(patsubst $(CORE_QUEUE_DIR)/src/%.c,$(BUILD_DIR)/core_queue/%.o,$(CORE_QUEUE_SRCS))
 CORE_TIME_OBJS := $(patsubst $(CORE_TIME_DIR)/src/%.c,$(BUILD_DIR)/core_time/%.o,$(CORE_TIME_SRCS))
+CORE_WORKERS_OBJS := $(patsubst $(CORE_WORKERS_DIR)/src/%.c,$(BUILD_DIR)/core_workers/%.o,$(CORE_WORKERS_SRCS))
 CORE_SIM_OBJS := $(patsubst $(CORE_SIM_DIR)/src/%.c,$(BUILD_DIR)/core_sim/%.o,$(CORE_SIM_SRCS))
 CORE_SCENE_OBJS := $(patsubst $(CORE_SCENE_DIR)/src/%.c,$(BUILD_DIR)/core_scene/%.o,$(CORE_SCENE_SRCS))
 CORE_AUTHORED_TEXTURE_OBJS := $(patsubst $(CORE_AUTHORED_TEXTURE_DIR)/src/%.c,$(BUILD_DIR)/core_authored_texture/%.o,$(CORE_AUTHORED_TEXTURE_SRCS))
@@ -375,5 +391,5 @@ TEST_DEPS += $(KIT_RENDER_OBJS) $(CORE_PANE_OBJS) $(KIT_PANE_OBJS) $(KIT_WORKSPA
 
 OBJ := $(OBJ) $(TIMER_HUD_OBJS) $(TIMER_HUD_EXTERNAL_OBJS) \
 	$(patsubst $(VK_RENDERER_DIR)/src/%.c,$(BUILD_DIR)/vk_renderer/%.o,$(VK_RENDERER_SRCS)) \
-	$(CORE_BASE_OBJS) $(CORE_IO_OBJS) $(CORE_DATA_OBJS) $(CORE_PACK_OBJS) $(CORE_TIME_OBJS) $(CORE_SIM_OBJS) $(CORE_SCENE_OBJS) $(CORE_AUTHORED_TEXTURE_OBJS) $(CORE_SCENE_COMPILE_OBJS) $(CORE_OBJECT_OBJS) $(CORE_UNITS_OBJS) $(CORE_SPACE_OBJS) $(CORE_PANE_OBJS) $(CORE_THEME_OBJS) $(CORE_FONT_OBJS) $(KIT_RENDER_OBJS) $(KIT_PANE_OBJS) $(KIT_VIZ_OBJS) $(KIT_RUNTIME_DIAG_OBJS) $(KIT_WORKSPACE_AUTHORING_OBJS)
+	$(CORE_BASE_OBJS) $(CORE_IO_OBJS) $(CORE_DATA_OBJS) $(CORE_PACK_OBJS) $(CORE_QUEUE_OBJS) $(CORE_TIME_OBJS) $(CORE_WORKERS_OBJS) $(CORE_SIM_OBJS) $(CORE_SCENE_OBJS) $(CORE_AUTHORED_TEXTURE_OBJS) $(CORE_SCENE_COMPILE_OBJS) $(CORE_OBJECT_OBJS) $(CORE_UNITS_OBJS) $(CORE_SPACE_OBJS) $(CORE_PANE_OBJS) $(CORE_THEME_OBJS) $(CORE_FONT_OBJS) $(KIT_RENDER_OBJS) $(KIT_PANE_OBJS) $(KIT_VIZ_OBJS) $(KIT_RUNTIME_DIAG_OBJS) $(KIT_WORKSPACE_AUTHORING_OBJS)
 DEP := $(OBJ:.o=.d)

@@ -654,6 +654,12 @@ static int test_material_manager_default_presets_include_i4_entries(void) {
                  1e-9);
     assert_true("material_manager_transparent_preset_has_transparency",
                 transparent->transparency > 0.0f);
+    assert_true("material_manager_transparent_preset_has_dielectric_ior",
+                transparent->ior > 1.0f);
+    assert_true("material_manager_transparent_preset_has_absorption_distance",
+                transparent->absorption_distance > 0.0f);
+    assert_true("material_manager_transparent_preset_is_solid_by_default",
+                !transparent->thin_walled);
     assert_close("material_manager_transparent_preset_emissive_zero",
                  transparent->emissive.x + transparent->emissive.y + transparent->emissive.z,
                  0.0,
@@ -709,6 +715,9 @@ static int test_material_manager_load_dir_preserves_shipped_preset_ids(void) {
                          "\"reflectivity\":0.0,"
                          "\"roughness\":1.0,"
                          "\"transparency\":0.66,"
+                         "\"ior\":1.31,"
+                         "\"absorption_distance\":3.5,"
+                         "\"thin_walled\":true,"
                          "\"base_color\":[1.0,1.0,1.0],"
                          "\"emissive\":[0.0,0.0,0.0]"
                          "}");
@@ -735,6 +744,16 @@ static int test_material_manager_load_dir_preserves_shipped_preset_ids(void) {
                  transparent->transparency,
                  0.66,
                  1e-6);
+    assert_close("material_manager_load_dir_transparent_parses_ior",
+                 transparent->ior,
+                 1.31,
+                 1e-6);
+    assert_close("material_manager_load_dir_transparent_parses_absorption_distance",
+                 transparent->absorption_distance,
+                 3.5,
+                 1e-6);
+    assert_true("material_manager_load_dir_transparent_parses_thin_walled",
+                transparent->thin_walled);
 
     remove(mirror_path);
     remove(emissive_path);
@@ -806,6 +825,16 @@ static int test_runtime_material_payload_3d_hit_resolution_contract(void) {
                  payload.transparency,
                  0.0,
                  1e-9);
+    assert_close("runtime_material_payload_3d_hit_optical_ior_match",
+                 payload.opticalIor,
+                 MaterialManagerGet(MATERIAL_PRESET_GLOSSY)->ior,
+                 1e-9);
+    assert_close("runtime_material_payload_3d_hit_absorption_distance_match",
+                 payload.absorptionDistance,
+                 MaterialManagerGet(MATERIAL_PRESET_GLOSSY)->absorption_distance,
+                 1e-9);
+    assert_true("runtime_material_payload_3d_hit_thin_walled_match",
+                payload.thinWalled == MaterialManagerGet(MATERIAL_PRESET_GLOSSY)->thin_walled);
     assert_true("runtime_material_payload_3d_hit_invalid_index_rejected",
                 !RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(4, &payload));
     assert_true("runtime_material_payload_3d_hit_invalid_hit_rejected",

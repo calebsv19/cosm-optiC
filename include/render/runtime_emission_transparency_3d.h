@@ -30,6 +30,14 @@ typedef struct {
     double emissiveBounceRadianceR;
     double emissiveBounceRadianceG;
     double emissiveBounceRadianceB;
+    double reflectedDirectRadiance;
+    double reflectedDirectRadianceR;
+    double reflectedDirectRadianceG;
+    double reflectedDirectRadianceB;
+    double reflectedBounceRadiance;
+    double reflectedBounceRadianceR;
+    double reflectedBounceRadianceG;
+    double reflectedBounceRadianceB;
     double transmittedDirectRadiance;
     double transmittedDirectRadianceR;
     double transmittedDirectRadianceG;

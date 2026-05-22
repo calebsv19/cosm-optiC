@@ -141,6 +141,26 @@ static int ClampBounceDepth3D(int value) {
     return value;
 }
 
+static int ClampSpecularDepth3D(int value) {
+    if (value < RUNTIME_3D_SPECULAR_DEPTH_MIN) {
+        value = RUNTIME_3D_SPECULAR_DEPTH_MIN;
+    }
+    if (value > RUNTIME_3D_SPECULAR_DEPTH_MAX) {
+        value = RUNTIME_3D_SPECULAR_DEPTH_MAX;
+    }
+    return value;
+}
+
+static int ClampTransmissionDepth3D(int value) {
+    if (value < RUNTIME_3D_TRANSMISSION_DEPTH_MIN) {
+        value = RUNTIME_3D_TRANSMISSION_DEPTH_MIN;
+    }
+    if (value > RUNTIME_3D_TRANSMISSION_DEPTH_MAX) {
+        value = RUNTIME_3D_TRANSMISSION_DEPTH_MAX;
+    }
+    return value;
+}
+
 static double ClampRouletteThreshold3D(double value) {
     return ClampDoubleValue(value,
                             RUNTIME_3D_ROULETTE_THRESHOLD_MIN,
@@ -289,6 +309,12 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config,
                            "bounceDepth3D",
                            json_object_new_int(animSettings.bounceDepth3D));
+    json_object_object_add(config,
+                           "specularDepth3D",
+                           json_object_new_int(animSettings.specularDepth3D));
+    json_object_object_add(config,
+                           "transmissionDepth3D",
+                           json_object_new_int(animSettings.transmissionDepth3D));
     json_object_object_add(config,
                            "rouletteThreshold3D",
                            json_object_new_double(animSettings.rouletteThreshold3D));
@@ -576,6 +602,16 @@ void LoadAnimationConfig(void) {
     } else {
         animSettings.bounceDepth3D = RUNTIME_3D_BOUNCE_DEPTH_DEFAULT;
     }
+    if (json_object_object_get_ex(config, "specularDepth3D", &temp)) {
+        animSettings.specularDepth3D = json_object_get_int(temp);
+    } else {
+        animSettings.specularDepth3D = RUNTIME_3D_SPECULAR_DEPTH_DEFAULT;
+    }
+    if (json_object_object_get_ex(config, "transmissionDepth3D", &temp)) {
+        animSettings.transmissionDepth3D = json_object_get_int(temp);
+    } else {
+        animSettings.transmissionDepth3D = RUNTIME_3D_TRANSMISSION_DEPTH_DEFAULT;
+    }
     if (json_object_object_get_ex(config, "rouletteThreshold3D", &temp)) {
         animSettings.rouletteThreshold3D = json_object_get_double(temp);
     } else {
@@ -729,6 +765,10 @@ void LoadAnimationConfig(void) {
         ClampSecondaryDiffuseSamples3D(animSettings.secondaryDiffuseSamples3D);
     animSettings.bounceDepth3D =
         ClampBounceDepth3D(animSettings.bounceDepth3D);
+    animSettings.specularDepth3D =
+        ClampSpecularDepth3D(animSettings.specularDepth3D);
+    animSettings.transmissionDepth3D =
+        ClampTransmissionDepth3D(animSettings.transmissionDepth3D);
     animSettings.rouletteThreshold3D =
         ClampRouletteThreshold3D(animSettings.rouletteThreshold3D);
     animSettings.transmissionSamples3D =

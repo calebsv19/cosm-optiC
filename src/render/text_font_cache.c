@@ -1,5 +1,6 @@
 #include "render/text_font_cache.h"
 
+#include "engine/Render/render_font.h"
 #include "render/font_bridge.h"
 #include "render/text_draw.h"
 
@@ -259,6 +260,7 @@ int ray_tracing_text_font_cache_contains(TTF_Font* font) {
 
 void ray_tracing_text_font_cache_shutdown(void) {
     size_t i = 0;
+    invalidateActiveFontHandle();
     for (i = 0; i < g_font_cache_count; ++i) {
         if (g_font_cache[i].font) {
             ray_tracing_text_unregister_font_source(g_font_cache[i].font);

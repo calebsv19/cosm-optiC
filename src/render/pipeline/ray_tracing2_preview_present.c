@@ -9,9 +9,8 @@
 #include "render/integrators/hybrid/integrator_tonemap.h"
 #include "render/ray_tracing2_preview.h"
 #include "render/runtime_native_3d_adaptive_sampling.h"
-#include "render/runtime_native_3d_denoise.h"
-#include "render/runtime_native_3d_feature_buffer.h"
 #include "render/runtime_native_3d_resolution.h"
+#include "render/runtime_native_3d_tile_scheduler.h"
 #include "render/timer_hud_api.h"
 
 #if USE_VULKAN
@@ -65,6 +64,15 @@ static SDL_Surface* get_abgr_surface(int width, int height) {
 }
 #endif
 
+static Uint8* g_native3d_preview_history_buffer = NULL;
+static size_t g_native3d_preview_history_capacity = 0u;
+static int g_native3d_preview_history_width = 0;
+static int g_native3d_preview_history_height = 0;
+static bool g_native3d_preview_history_valid = false;
+
+#define NATIVE3D_PREVIEW_HISTORY_DIM_NUMERATOR 1u
+#define NATIVE3D_PREVIEW_HISTORY_DIM_DENOMINATOR 4u
+
 static SDL_Rect resolve_full_window_destination(SDL_Renderer* renderer,
                                                 int fallback_width,
                                                 int fallback_height) {
@@ -77,22 +85,155 @@ static SDL_Rect resolve_full_window_destination(SDL_Renderer* renderer,
     return dst;
 }
 
-static RuntimeNative3DSamplingContext ResolveNative3DSubpassSampling(
-    const RuntimeNative3DSamplingContext* sampling,
-    uint32_t subpass_index,
-    int total_subpasses) {
-    RuntimeNative3DSamplingContext resolved = {0};
-    if (sampling) {
-        resolved = *sampling;
+void RayTracing2PreviewPresent_DimCopyABGR(const Uint8* src,
+                                           Uint8* dst,
+                                           size_t pixel_count,
+                                           unsigned int numerator,
+                                           unsigned int denominator) {
+    if (!src || !dst || pixel_count == 0u || denominator == 0u) {
+        return;
     }
-    resolved.sampleSequence += subpass_index;
-    if (resolved.sampleSequence == 0U) {
-        resolved.sampleSequence = subpass_index + 1U;
+
+    for (size_t i = 0; i < pixel_count; ++i) {
+        const size_t base = i * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+        dst[base] = (Uint8)(((unsigned int)src[base] * numerator) / denominator);
+        dst[base + 1u] = (Uint8)(((unsigned int)src[base + 1u] * numerator) / denominator);
+        dst[base + 2u] = (Uint8)(((unsigned int)src[base + 2u] * numerator) / denominator);
+        dst[base + 3u] = 0xFFu;
     }
-    resolved.temporalSubpassIndex = (uint16_t)((subpass_index > 65535u) ? 65535u : subpass_index);
-    resolved.temporalSubpassCount =
-        (uint16_t)((total_subpasses <= 1) ? 1 : ((total_subpasses > 65535) ? 65535 : total_subpasses));
-    return resolved;
+}
+
+static void InvalidateNative3DPreviewHistory(void) {
+    g_native3d_preview_history_valid = false;
+}
+
+static bool EnsureNative3DPreviewHistoryBuffer(size_t host_pixel_count,
+                                               int host_width,
+                                               int host_height) {
+    Uint8* resized = NULL;
+    size_t byte_count = 0u;
+
+    if (host_pixel_count == 0u || host_width <= 0 || host_height <= 0) {
+        InvalidateNative3DPreviewHistory();
+        return false;
+    }
+
+    if (g_native3d_preview_history_width != host_width ||
+        g_native3d_preview_history_height != host_height) {
+        InvalidateNative3DPreviewHistory();
+    }
+
+    if (g_native3d_preview_history_buffer &&
+        g_native3d_preview_history_capacity >= host_pixel_count &&
+        g_native3d_preview_history_width == host_width &&
+        g_native3d_preview_history_height == host_height) {
+        return true;
+    }
+
+    byte_count = host_pixel_count * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+    resized = (Uint8*)realloc(g_native3d_preview_history_buffer, byte_count);
+    if (!resized) {
+        InvalidateNative3DPreviewHistory();
+        return false;
+    }
+    g_native3d_preview_history_buffer = resized;
+    g_native3d_preview_history_capacity = host_pixel_count;
+    g_native3d_preview_history_width = host_width;
+    g_native3d_preview_history_height = host_height;
+    return true;
+}
+
+static void SeedNative3DPreviewHistoryUnderlay(Uint8* host_buffer,
+                                               size_t host_pixel_count,
+                                               int host_width,
+                                               int host_height) {
+    if (!host_buffer || host_pixel_count == 0u || host_width <= 0 || host_height <= 0) {
+        return;
+    }
+
+    if (!g_native3d_preview_history_valid ||
+        !g_native3d_preview_history_buffer ||
+        g_native3d_preview_history_width != host_width ||
+        g_native3d_preview_history_height != host_height) {
+        RuntimeNative3DFillPixelBufferEnvironment(host_buffer, host_pixel_count);
+        return;
+    }
+
+    RayTracing2PreviewPresent_DimCopyABGR(g_native3d_preview_history_buffer,
+                                          host_buffer,
+                                          host_pixel_count,
+                                          NATIVE3D_PREVIEW_HISTORY_DIM_NUMERATOR,
+                                          NATIVE3D_PREVIEW_HISTORY_DIM_DENOMINATOR);
+}
+
+static bool PromoteNative3DPreviewHistory(const Uint8* host_buffer,
+                                          size_t host_pixel_count,
+                                          int host_width,
+                                          int host_height) {
+    const size_t byte_count =
+        host_pixel_count * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+    if (!host_buffer || host_pixel_count == 0u || host_width <= 0 || host_height <= 0) {
+        InvalidateNative3DPreviewHistory();
+        return false;
+    }
+    if (!EnsureNative3DPreviewHistoryBuffer(host_pixel_count, host_width, host_height)) {
+        return false;
+    }
+    memcpy(g_native3d_preview_history_buffer, host_buffer, byte_count);
+    g_native3d_preview_history_valid = true;
+    return true;
+}
+
+bool RayTracing2PreviewPresent_LoadNative3DPreviewHistoryFromBMP(const char* path) {
+    SDL_Surface* loaded = NULL;
+    SDL_Surface* converted = NULL;
+
+    if (!path || !path[0]) {
+        InvalidateNative3DPreviewHistory();
+        return false;
+    }
+
+    loaded = SDL_LoadBMP(path);
+    if (!loaded) {
+        InvalidateNative3DPreviewHistory();
+        return false;
+    }
+    converted = SDL_ConvertSurfaceFormat(loaded, SDL_PIXELFORMAT_ARGB8888, 0);
+    SDL_FreeSurface(loaded);
+    loaded = NULL;
+    if (!converted) {
+        InvalidateNative3DPreviewHistory();
+        return false;
+    }
+    if (!EnsureNative3DPreviewHistoryBuffer((size_t)converted->w * (size_t)converted->h,
+                                            converted->w,
+                                            converted->h)) {
+        SDL_FreeSurface(converted);
+        return false;
+    }
+
+    for (int y = 0; y < converted->h; ++y) {
+        const uint32_t* row =
+            (const uint32_t*)((const uint8_t*)converted->pixels + ((size_t)y * (size_t)converted->pitch));
+        for (int x = 0; x < converted->w; ++x) {
+            Uint8 r = 0u;
+            Uint8 g = 0u;
+            Uint8 b = 0u;
+            Uint8 a = 0u;
+            const size_t base =
+                ((size_t)y * (size_t)converted->w + (size_t)x) *
+                (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+            SDL_GetRGBA(row[x], converted->format, &r, &g, &b, &a);
+            g_native3d_preview_history_buffer[base] = b;
+            g_native3d_preview_history_buffer[base + 1u] = g;
+            g_native3d_preview_history_buffer[base + 2u] = r;
+            g_native3d_preview_history_buffer[base + 3u] = a;
+        }
+    }
+
+    SDL_FreeSurface(converted);
+    g_native3d_preview_history_valid = true;
+    return true;
 }
 
 static bool PresentNative3DTilePreviewFrame(SDL_Renderer* renderer,
@@ -145,29 +286,6 @@ static bool PresentNative3DTilePreviewFrameTimed(SDL_Renderer* renderer,
     return ok;
 }
 
-static bool ShouldPresentNative3DTileSubpassPreview(int subpass,
-                                                    int temporal_frames) {
-    int completed_subpasses = 0;
-    int preview_stride = 1;
-
-    if (subpass < 0 || temporal_frames <= 0) {
-        return false;
-    }
-
-    completed_subpasses = subpass + 1;
-    if (temporal_frames > 16) {
-        preview_stride = 8;
-    } else if (temporal_frames > 8) {
-        preview_stride = 4;
-    } else if (temporal_frames > 4) {
-        preview_stride = 2;
-    }
-
-    return completed_subpasses == 1 ||
-           completed_subpasses == temporal_frames ||
-           (completed_subpasses % preview_stride) == 0;
-}
-
 static bool ResolveNative3DHostDirtyTile(const IntegratorTile* render_tile,
                                          int render_width,
                                          int render_height,
@@ -193,6 +311,259 @@ static bool ResolveNative3DHostDirtyTile(const IntegratorTile* render_tile,
     }
     out_host_tile->energy = NULL;
     return true;
+}
+
+static bool ResolveNative3DHostDirtyTileUnion(const IntegratorTile* render_tiles,
+                                              size_t render_tile_count,
+                                              int render_width,
+                                              int render_height,
+                                              int host_width,
+                                              int host_height,
+                                              IntegratorTile* out_host_tile) {
+    bool seeded = false;
+
+    if (!render_tiles || render_tile_count == 0u || !out_host_tile) {
+        return false;
+    }
+
+    for (size_t i = 0; i < render_tile_count; ++i) {
+        IntegratorTile host_tile = {0};
+        if (!ResolveNative3DHostDirtyTile(&render_tiles[i],
+                                          render_width,
+                                          render_height,
+                                          host_width,
+                                          host_height,
+                                          &host_tile)) {
+            continue;
+        }
+        if (!seeded) {
+            *out_host_tile = host_tile;
+            seeded = true;
+            continue;
+        }
+
+        const int min_x = (host_tile.originX < out_host_tile->originX)
+                              ? host_tile.originX
+                              : out_host_tile->originX;
+        const int min_y = (host_tile.originY < out_host_tile->originY)
+                              ? host_tile.originY
+                              : out_host_tile->originY;
+        const int max_x = ((host_tile.originX + host_tile.width) >
+                           (out_host_tile->originX + out_host_tile->width))
+                              ? (host_tile.originX + host_tile.width)
+                              : (out_host_tile->originX + out_host_tile->width);
+        const int max_y = ((host_tile.originY + host_tile.height) >
+                           (out_host_tile->originY + out_host_tile->height))
+                              ? (host_tile.originY + host_tile.height)
+                              : (out_host_tile->originY + out_host_tile->height);
+        out_host_tile->originX = min_x;
+        out_host_tile->originY = min_y;
+        out_host_tile->width = max_x - min_x;
+        out_host_tile->height = max_y - min_y;
+        out_host_tile->energy = NULL;
+    }
+
+    return seeded;
+}
+
+static int ResolveNative3DProgressPresentBlurRadius(void) {
+    if (animSettings.blurMode >= 3) return 2;
+    return 1;
+}
+
+static void ExpandNative3DHostDirtyTile(IntegratorTile* tile,
+                                        int halo_pixels,
+                                        int host_width,
+                                        int host_height) {
+    int min_x = 0;
+    int min_y = 0;
+    int max_x = 0;
+    int max_y = 0;
+
+    if (!tile || halo_pixels <= 0 || host_width <= 0 || host_height <= 0) {
+        return;
+    }
+
+    min_x = tile->originX - halo_pixels;
+    min_y = tile->originY - halo_pixels;
+    max_x = tile->originX + tile->width + halo_pixels;
+    max_y = tile->originY + tile->height + halo_pixels;
+
+    if (min_x < 0) min_x = 0;
+    if (min_y < 0) min_y = 0;
+    if (max_x > host_width) max_x = host_width;
+    if (max_y > host_height) max_y = host_height;
+
+    tile->originX = min_x;
+    tile->originY = min_y;
+    tile->width = max_x - min_x;
+    tile->height = max_y - min_y;
+}
+
+static bool BlurNative3DHostRectABGR(Uint8* host_buffer,
+                                     int host_width,
+                                     int host_height,
+                                     const IntegratorTile* host_tile,
+                                     int blur_radius) {
+    Uint8* scratch = NULL;
+    size_t rect_bytes = 0u;
+
+    if (!host_buffer || !host_tile || blur_radius <= 0 ||
+        host_width <= 0 || host_height <= 0 ||
+        host_tile->width <= 0 || host_tile->height <= 0) {
+        return true;
+    }
+
+    rect_bytes = (size_t)host_tile->width * (size_t)host_tile->height *
+                 (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+    scratch = (Uint8*)malloc(rect_bytes);
+    if (!scratch) {
+        return false;
+    }
+
+    for (int y = 0; y < host_tile->height; ++y) {
+        const size_t src_row =
+            ((size_t)(host_tile->originY + y) * (size_t)host_width + (size_t)host_tile->originX) *
+            (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+        const size_t dst_row =
+            (size_t)y * (size_t)host_tile->width * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+        memcpy(scratch + dst_row,
+               host_buffer + src_row,
+               (size_t)host_tile->width * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES);
+    }
+
+    RayTracingPreview_ApplySeparableBlurABGR(scratch,
+                                             host_tile->width,
+                                             host_tile->height,
+                                             blur_radius);
+
+    for (int y = 0; y < host_tile->height; ++y) {
+        const size_t src_row =
+            (size_t)y * (size_t)host_tile->width * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+        const size_t dst_row =
+            ((size_t)(host_tile->originY + y) * (size_t)host_width + (size_t)host_tile->originX) *
+            (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+        memcpy(host_buffer + dst_row,
+               scratch + src_row,
+               (size_t)host_tile->width * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES);
+    }
+
+    free(scratch);
+    return true;
+}
+
+static void ClearNative3DPreviewHistoryForKnownEmptyTiles(
+    Uint8* host_buffer,
+    int host_width,
+    int host_height,
+    const Uint8* render_buffer,
+    int render_width,
+    int render_height,
+    const TileGrid* grid,
+    const RuntimeNative3DPreparedFrame* frame) {
+    if (!host_buffer || !render_buffer || !grid || !grid->tiles || grid->count == 0u || !frame) {
+        return;
+    }
+
+    for (size_t i = 0; i < grid->count; ++i) {
+        const IntegratorTile* render_tile = &grid->tiles[i];
+        IntegratorTile host_tile = {0};
+        if (RuntimeNative3DPreparedRegionMayContainGeometry(frame,
+                                                            render_tile->originX,
+                                                            render_tile->originY,
+                                                            render_tile->originX + render_tile->width,
+                                                            render_tile->originY + render_tile->height)) {
+            continue;
+        }
+        if (!ResolveNative3DHostDirtyTile(render_tile,
+                                          render_width,
+                                          render_height,
+                                          host_width,
+                                          host_height,
+                                          &host_tile)) {
+            continue;
+        }
+        RuntimeNative3DUpscaleNearestABGRRect(render_buffer,
+                                              render_width,
+                                              render_height,
+                                              host_buffer,
+                                              host_width,
+                                              host_height,
+                                              host_tile.originX,
+                                              host_tile.originY,
+                                              host_tile.width,
+                                              host_tile.height);
+    }
+}
+
+typedef struct Native3DPreviewTileProgressContext {
+    SDL_Renderer* renderer;
+    Uint8* hostBuffer;
+    int hostWidth;
+    int hostHeight;
+    const Uint8* renderBuffer;
+    int renderWidth;
+    int renderHeight;
+    IntegratorContext previewCtx;
+} Native3DPreviewTileProgressContext;
+
+static bool PresentNative3DPreviewTileProgress(
+    const RuntimeNative3DTileSchedulerProgress* progress,
+    void* user_data) {
+    Native3DPreviewTileProgressContext* ctx =
+        (Native3DPreviewTileProgressContext*)user_data;
+    IntegratorTile host_dirty_tile = {0};
+    int blur_radius = 0;
+    int host_halo_pixels = 0;
+    const IntegratorTile* present_tile = NULL;
+
+    if (!progress || !ctx || !ctx->renderer || !ctx->hostBuffer || !ctx->renderBuffer) {
+        return false;
+    }
+    if (!ResolveNative3DHostDirtyTileUnion(progress->dirtyTiles,
+                                           progress->dirtyTileCount,
+                                           ctx->renderWidth,
+                                           ctx->renderHeight,
+                                           ctx->hostWidth,
+                                           ctx->hostHeight,
+                                           &host_dirty_tile)) {
+        return true;
+    }
+
+    blur_radius = ResolveNative3DProgressPresentBlurRadius();
+    host_halo_pixels = blur_radius;
+    if (ctx->renderWidth > 0 && ctx->hostWidth > ctx->renderWidth) {
+        host_halo_pixels =
+            ((ctx->hostWidth + ctx->renderWidth - 1) / ctx->renderWidth) * blur_radius;
+    }
+    ExpandNative3DHostDirtyTile(&host_dirty_tile,
+                                host_halo_pixels,
+                                ctx->hostWidth,
+                                ctx->hostHeight);
+
+    RuntimeNative3DUpscaleNearestABGRRect(ctx->renderBuffer,
+                                          ctx->renderWidth,
+                                          ctx->renderHeight,
+                                          ctx->hostBuffer,
+                                          ctx->hostWidth,
+                                          ctx->hostHeight,
+                                          host_dirty_tile.originX,
+                                          host_dirty_tile.originY,
+                                          host_dirty_tile.width,
+                                          host_dirty_tile.height);
+    if (!BlurNative3DHostRectABGR(ctx->hostBuffer,
+                                  ctx->hostWidth,
+                                  ctx->hostHeight,
+                                  &host_dirty_tile,
+                                  blur_radius)) {
+        return false;
+    }
+    present_tile = &host_dirty_tile;
+    return PresentNative3DTilePreviewFrameTimed(ctx->renderer,
+                                                &ctx->previewCtx,
+                                                present_tile,
+                                                ctx->hostBuffer,
+                                                false);
 }
 
 static void DrawTilePreview(SDL_Renderer* renderer,
@@ -357,29 +728,29 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
     RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DPreparedFrame frame = {0};
     RuntimeNative3DRenderStats stats = {0};
-    RuntimeNative3DTemporalAccumulation tile_accumulation = {0};
-    RuntimeNative3DAdaptiveSamplingMask adaptive_mask = {0};
-    RuntimeNative3DFeatureBuffer tile_features = {0};
     IntegratorContext preview_ctx = {
         .width = host_width,
         .height = host_height
     };
-    float* tile_radiance = NULL;
-    float* tile_resolved_radiance = NULL;
+    Native3DPreviewTileProgressContext progress_ctx = {
+        .renderer = renderer,
+        .hostBuffer = host_buffer,
+        .hostWidth = host_width,
+        .hostHeight = host_height,
+        .renderBuffer = render_buffer,
+        .renderWidth = render_width,
+        .renderHeight = render_height,
+        .previewCtx = {
+            .width = host_width,
+            .height = host_height
+        }
+    };
     size_t total = (size_t)render_width * (size_t)render_height;
-    int max_tile_pixels = 0;
-    const bool use_adaptive_sampling =
-        RuntimeNative3DAdaptiveSampling_ShouldUse(integrator_id, temporal_frames);
-    const bool use_disney_temporal_pruning =
-        use_adaptive_sampling && integrator_id == RAY_TRACING_3D_INTEGRATOR_DISNEY;
-    const bool use_denoise =
-        RuntimeNative3DDenoise_ShouldApply(integrator_id,
-                                           temporal_frames,
-                                           disney_denoise_enabled);
 
     if (out_stats) {
         memset(out_stats, 0, sizeof(*out_stats));
     }
+    (void)disney_denoise_enabled;
     if (!host_buffer || !render_buffer || host_width <= 0 || host_height <= 0 ||
         render_width <= 0 || render_height <= 0 ||
         !grid || !grid->tiles || grid->count == 0) {
@@ -387,9 +758,6 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
     }
 
     RuntimeNative3DFillPixelBufferEnvironment(render_buffer, total);
-    RuntimeNative3DTemporalAccumulation_Init(&tile_accumulation);
-    RuntimeNative3DAdaptiveSamplingMask_Init(&adaptive_mask);
-    RuntimeNative3DFeatureBuffer_Init(&tile_features);
     if (!RuntimeNative3DPrepareFrameWithSampling(&frame,
                                                  render_width,
                                                  render_height,
@@ -397,338 +765,61 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
                                                  light_x,
                                                  light_y,
                                                  sampling)) {
-        RuntimeNative3DAdaptiveSamplingMask_Free(&adaptive_mask);
-        RuntimeNative3DTemporalAccumulation_Free(&tile_accumulation);
-        RuntimeNative3DFeatureBuffer_Free(&tile_features);
         return false;
     }
     (void)RuntimeNative3DPrepareFrameTileOccupancy(&frame, grid->tileSize);
-    max_tile_pixels = grid->tileSize * grid->tileSize;
-    if (max_tile_pixels <= 0) {
-        RuntimeNative3DAdaptiveSamplingMask_Free(&adaptive_mask);
-        RuntimeNative3DTemporalAccumulation_Free(&tile_accumulation);
-        RuntimeNative3DPreparedFrame_Free(&frame);
-        RuntimeNative3DFeatureBuffer_Free(&tile_features);
-        return false;
-    }
-    tile_radiance = (float*)calloc((size_t)max_tile_pixels * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS,
-                                   sizeof(*tile_radiance));
-    tile_resolved_radiance =
-        (float*)calloc((size_t)max_tile_pixels * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS,
-                       sizeof(*tile_resolved_radiance));
-    if (!tile_radiance || !tile_resolved_radiance) {
-        free(tile_radiance);
-        free(tile_resolved_radiance);
-        RuntimeNative3DAdaptiveSamplingMask_Free(&adaptive_mask);
-        RuntimeNative3DTemporalAccumulation_Free(&tile_accumulation);
-        RuntimeNative3DPreparedFrame_Free(&frame);
-        RuntimeNative3DFeatureBuffer_Free(&tile_features);
-        return false;
-    }
 
     if (present_progress && renderer) {
-        RuntimeNative3DUpscaleNearestABGR(render_buffer,
-                                          render_width,
-                                          render_height,
-                                          host_buffer,
-                                          host_width,
-                                          host_height);
+        SeedNative3DPreviewHistoryUnderlay(host_buffer,
+                                           (size_t)host_width * (size_t)host_height,
+                                           host_width,
+                                           host_height);
+        ClearNative3DPreviewHistoryForKnownEmptyTiles(host_buffer,
+                                                      host_width,
+                                                      host_height,
+                                                      render_buffer,
+                                                      render_width,
+                                                      render_height,
+                                                      grid,
+                                                      &frame);
         if (!PresentNative3DTilePreviewFrameTimed(renderer,
                                                   &preview_ctx,
                                                   NULL,
                                                   host_buffer,
                                                   true)) {
-            free(tile_radiance);
-            free(tile_resolved_radiance);
-            RuntimeNative3DAdaptiveSamplingMask_Free(&adaptive_mask);
-            RuntimeNative3DTemporalAccumulation_Free(&tile_accumulation);
             RuntimeNative3DPreparedFrame_Free(&frame);
-            RuntimeNative3DFeatureBuffer_Free(&tile_features);
             return false;
         }
     }
-
-    for (size_t ti = 0; ti < grid->count; ++ti) {
-        const IntegratorTile* tile = &grid->tiles[ti];
-        IntegratorTile host_dirty_tile = {0};
-        const IntegratorTile* present_tile = NULL;
-        const int tile_stride = tile->width;
-        const int tile_pixels = tile->width * tile->height;
-        bool tile_timer_active = false;
-
-        if (!RuntimeNative3DPreparedRegionMayContainGeometry(&frame,
-                                                             tile->originX,
-                                                             tile->originY,
-                                                             tile->originX + tile->width,
-                                                             tile->originY + tile->height)) {
-            continue;
-        }
-
-        if (!RuntimeNative3DTemporalAccumulation_Ensure(&tile_accumulation, tile->width, tile->height)) {
-            RuntimeNative3DFillPixelBufferEnvironment(render_buffer, total);
-            free(tile_radiance);
-            free(tile_resolved_radiance);
-            RuntimeNative3DAdaptiveSamplingMask_Free(&adaptive_mask);
-            RuntimeNative3DTemporalAccumulation_Free(&tile_accumulation);
-            RuntimeNative3DPreparedFrame_Free(&frame);
-            RuntimeNative3DFeatureBuffer_Free(&tile_features);
-            return false;
-        }
-        RuntimeNative3DTemporalAccumulation_Clear(&tile_accumulation);
-        if ((use_denoise || use_disney_temporal_pruning) &&
-            (!RuntimeNative3DFeatureBuffer_Ensure(&tile_features, tile->width, tile->height) ||
-             !RuntimeNative3DFeatureBuffer_RenderRegion(&tile_features,
-                                                       &frame.scene,
-                                                       &frame.projector,
-                                                       tile->originX,
-                                                       tile->originY,
-                                                       tile->originX + tile->width,
-                                                       tile->originY + tile->height))) {
-            RuntimeNative3DFillPixelBufferEnvironment(render_buffer, total);
-            free(tile_radiance);
-            free(tile_resolved_radiance);
-            RuntimeNative3DAdaptiveSamplingMask_Free(&adaptive_mask);
-            RuntimeNative3DTemporalAccumulation_Free(&tile_accumulation);
-            RuntimeNative3DPreparedFrame_Free(&frame);
-            RuntimeNative3DFeatureBuffer_Free(&tile_features);
-            return false;
-        }
-        if (use_adaptive_sampling &&
-            (!(use_disney_temporal_pruning
-                   ? RuntimeNative3DAdaptiveSampling_BeginTemporalActivityMask(
-                         &adaptive_mask,
-                         tile->width,
-                         tile->height,
-                         RUNTIME_NATIVE_3D_ADAPTIVE_TILE_SIZE,
-                         RUNTIME_NATIVE_3D_ADAPTIVE_MIN_SUBPASSES)
-                   : (RuntimeNative3DAdaptiveSamplingMask_Ensure(&adaptive_mask,
-                                                                 tile->width,
-                                                                 tile->height) &&
-                      RuntimeNative3DAdaptiveSampling_BuildStableEmitterMask(
-                          &adaptive_mask,
-                          &frame.scene,
-                          &frame.projector,
-                          tile->originX,
-                          tile->originY,
-                          tile->originX + tile->width,
-                          tile->originY + tile->height))))) {
-            RuntimeNative3DFillPixelBufferEnvironment(render_buffer, total);
-            free(tile_radiance);
-            free(tile_resolved_radiance);
-            RuntimeNative3DAdaptiveSamplingMask_Free(&adaptive_mask);
-            RuntimeNative3DTemporalAccumulation_Free(&tile_accumulation);
-            RuntimeNative3DPreparedFrame_Free(&frame);
-            RuntimeNative3DFeatureBuffer_Free(&tile_features);
-            return false;
-        }
-        if (present_progress && renderer &&
-            ResolveNative3DHostDirtyTile(tile,
-                                         render_width,
-                                         render_height,
-                                         host_width,
-                                         host_height,
-                                         &host_dirty_tile)) {
-            present_tile = &host_dirty_tile;
-        }
-
-        ts_session_start_timer(timer_hud_session(), "Tile Frame Calc");
-        tile_timer_active = true;
-        for (int subpass = 0; subpass < temporal_frames; ++subpass) {
-            RuntimeNative3DPreparedFrame subpass_frame = frame;
-            RuntimeNative3DRenderStats subpass_stats = {0};
-            RuntimeNative3DSamplingContext subpass_sampling =
-                ResolveNative3DSubpassSampling(sampling, (uint32_t)subpass, temporal_frames);
-            const uint8_t* active_mask =
-                (use_adaptive_sampling && subpass > 0) ? adaptive_mask.activeSampleMask : NULL;
-            const int active_mask_stride =
-                (use_adaptive_sampling && subpass > 0) ? adaptive_mask.width : 0;
-            const int subpass_active_pixels =
-                (active_mask && subpass > 0) ? adaptive_mask.activePixelCount : tile_pixels;
-            if (active_mask && !RuntimeNative3DAdaptiveSampling_HasActiveSamples(&adaptive_mask)) {
-                break;
-            }
-            subpass_frame.sampling = subpass_sampling;
-            memset(tile_radiance,
-                   0,
-                   (size_t)tile_pixels * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS *
-                       sizeof(*tile_radiance));
-            if (!RuntimeNative3DAdaptiveSampling_RenderPreparedRegionRadianceRGBMasked(
-                    tile_radiance,
-                    tile_stride,
-                    integrator_id,
-                    &subpass_frame,
-                    tile->originX,
-                    tile->originY,
-                    tile->originX + tile->width,
-                    tile->originY + tile->height,
-                    active_mask,
-                    active_mask_stride,
-                    &subpass_stats) ||
-                !RuntimeNative3DTemporalAccumulation_AddRegionSamples(&tile_accumulation,
-                                                                      tile_radiance,
-                                                                      tile_stride,
-                                                                      0,
-                                                                      0,
-                                                                      tile->width,
-                                                                      tile->height,
-                                                                      active_mask,
-                                                                      active_mask_stride)) {
-                ts_session_stop_timer(timer_hud_session(), "Tile Frame Calc");
-                RuntimeNative3DFillPixelBufferEnvironment(render_buffer, total);
-                free(tile_radiance);
-                free(tile_resolved_radiance);
-                RuntimeNative3DAdaptiveSamplingMask_Free(&adaptive_mask);
-                RuntimeNative3DTemporalAccumulation_Free(&tile_accumulation);
-                RuntimeNative3DPreparedFrame_Free(&frame);
-                RuntimeNative3DFeatureBuffer_Free(&tile_features);
-                return false;
-            }
-            subpass_stats.temporalPixelsRendered = subpass_active_pixels;
-            subpass_stats.temporalPixelsSkipped = tile_pixels - subpass_active_pixels;
-            RuntimeNative3DTemporalAccumulation_CommitSubpass(&tile_accumulation);
-            if (use_disney_temporal_pruning) {
-                if (!RuntimeNative3DAdaptiveSampling_RefreshTemporalActivityMask(&adaptive_mask,
-                                                                                 &tile_accumulation,
-                                                                                 &tile_features)) {
-                    ts_session_stop_timer(timer_hud_session(), "Tile Frame Calc");
-                    RuntimeNative3DFillPixelBufferEnvironment(render_buffer, total);
-                    free(tile_radiance);
-                    free(tile_resolved_radiance);
-                    RuntimeNative3DAdaptiveSamplingMask_Free(&adaptive_mask);
-                    RuntimeNative3DTemporalAccumulation_Free(&tile_accumulation);
-                    RuntimeNative3DPreparedFrame_Free(&frame);
-                    RuntimeNative3DFeatureBuffer_Free(&tile_features);
-                    return false;
-                }
-            }
-            RuntimeNative3DRenderStats_Accumulate(&stats, &subpass_stats);
-
-            if (present_progress && renderer &&
-                ShouldPresentNative3DTileSubpassPreview(subpass, temporal_frames)) {
-                if (use_denoise) {
-                    memset(tile_resolved_radiance,
-                           0,
-                           (size_t)tile_pixels * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS *
-                               sizeof(*tile_resolved_radiance));
-                    if (!RuntimeNative3DTemporalAccumulation_ResolveRegionToRadianceBuffer(
-                            &tile_accumulation,
-                            tile_resolved_radiance,
-                            tile_stride,
-                            0,
-                            0,
-                            tile->width,
-                            tile->height) ||
-                        !RuntimeNative3DDenoise_Apply(tile_resolved_radiance,
-                                                      tile_stride,
-                                                      &tile_features)) {
-                        ts_session_stop_timer(timer_hud_session(), "Tile Frame Calc");
-                        free(tile_radiance);
-                        free(tile_resolved_radiance);
-                        RuntimeNative3DAdaptiveSamplingMask_Free(&adaptive_mask);
-                        RuntimeNative3DTemporalAccumulation_Free(&tile_accumulation);
-                        RuntimeNative3DPreparedFrame_Free(&frame);
-                        RuntimeNative3DFeatureBuffer_Free(&tile_features);
-                        return false;
-                    }
-                    RuntimeNative3DResolveRadianceRegionToPixels(render_buffer,
-                                                                 render_width,
-                                                                 tile_resolved_radiance,
-                                                                 tile_stride,
-                                                                 tile->originX,
-                                                                 tile->originY,
-                                                                 tile->originX + tile->width,
-                                                                 tile->originY + tile->height);
-                } else {
-                    RuntimeNative3DTemporalAccumulation_ResolveToPixelBufferAtOffset(&tile_accumulation,
-                                                                                     render_buffer,
-                                                                                     render_width,
-                                                                                     tile->originX,
-                                                                                     tile->originY);
-                }
-                RuntimeNative3DUpscaleNearestABGR(render_buffer,
-                                                  render_width,
-                                                  render_height,
-                                                  host_buffer,
-                                                  host_width,
-                                                  host_height);
-                if (!PresentNative3DTilePreviewFrameTimed(renderer,
-                                                          &preview_ctx,
-                                                          present_tile,
-                                                          host_buffer,
-                                                          false)) {
-                    ts_session_stop_timer(timer_hud_session(), "Tile Frame Calc");
-                    free(tile_radiance);
-                    free(tile_resolved_radiance);
-                    RuntimeNative3DAdaptiveSamplingMask_Free(&adaptive_mask);
-                    RuntimeNative3DTemporalAccumulation_Free(&tile_accumulation);
-                    RuntimeNative3DPreparedFrame_Free(&frame);
-                    RuntimeNative3DFeatureBuffer_Free(&tile_features);
-                    return false;
-                }
-            }
-        }
-
-        if (use_denoise) {
-            memset(tile_resolved_radiance,
-                   0,
-                   (size_t)tile_pixels * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS *
-                       sizeof(*tile_resolved_radiance));
-            if (!RuntimeNative3DTemporalAccumulation_ResolveRegionToRadianceBuffer(&tile_accumulation,
-                                                                                   tile_resolved_radiance,
-                                                                                   tile_stride,
-                                                                                   0,
-                                                                                   0,
-                                                                                   tile->width,
-                                                                                   tile->height) ||
-                !RuntimeNative3DDenoise_Apply(tile_resolved_radiance, tile_stride, &tile_features)) {
-                if (tile_timer_active) {
-                    ts_session_stop_timer(timer_hud_session(), "Tile Frame Calc");
-                }
-                free(tile_radiance);
-                free(tile_resolved_radiance);
-                RuntimeNative3DAdaptiveSamplingMask_Free(&adaptive_mask);
-                RuntimeNative3DTemporalAccumulation_Free(&tile_accumulation);
-                RuntimeNative3DPreparedFrame_Free(&frame);
-                RuntimeNative3DFeatureBuffer_Free(&tile_features);
-                return false;
-            }
-            RuntimeNative3DResolveRadianceRegionToPixels(render_buffer,
-                                                         render_width,
-                                                         tile_resolved_radiance,
-                                                         tile_stride,
-                                                         tile->originX,
-                                                         tile->originY,
-                                                         tile->originX + tile->width,
-                                                         tile->originY + tile->height);
-        } else {
-            RuntimeNative3DTemporalAccumulation_ResolveToPixelBufferAtOffset(&tile_accumulation,
-                                                                             render_buffer,
-                                                                             render_width,
-                                                                             tile->originX,
-                                                                             tile->originY);
-        }
-        if (tile_timer_active) {
-            ts_session_stop_timer(timer_hud_session(), "Tile Frame Calc");
-        }
+    ts_session_start_timer(timer_hud_session(), "Tile Frame Calc");
+    if (!RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgress(
+            render_buffer,
+            integrator_id,
+            &frame,
+            temporal_frames,
+            NULL,
+            NULL,
+            (present_progress && renderer) ? PresentNative3DPreviewTileProgress : NULL,
+            (present_progress && renderer) ? &progress_ctx : NULL,
+            &stats)) {
+        ts_session_stop_timer(timer_hud_session(), "Tile Frame Calc");
+        RuntimeNative3DFillPixelBufferEnvironment(render_buffer, total);
+        RuntimeNative3DPreparedFrame_Free(&frame);
+        return false;
     }
+    ts_session_stop_timer(timer_hud_session(), "Tile Frame Calc");
 
-    RuntimeNative3DUpscaleNearestABGR(render_buffer,
-                                      render_width,
-                                      render_height,
-                                      host_buffer,
-                                      host_width,
-                                      host_height);
-    if (out_stats && use_disney_temporal_pruning) {
-        stats.temporalActivePixelCount = adaptive_mask.activePixelCount;
-        stats.temporalActiveTileCount = adaptive_mask.activeTileCount;
-        stats.temporalInactiveTileCount = adaptive_mask.inactiveTileCount;
-    }
-    free(tile_radiance);
-    free(tile_resolved_radiance);
-    RuntimeNative3DAdaptiveSamplingMask_Free(&adaptive_mask);
-    RuntimeNative3DTemporalAccumulation_Free(&tile_accumulation);
+    RuntimeNative3DUpscaleBilinearABGR(render_buffer,
+                                       render_width,
+                                       render_height,
+                                       host_buffer,
+                                       host_width,
+                                       host_height);
+    (void)PromoteNative3DPreviewHistory(host_buffer,
+                                        (size_t)host_width * (size_t)host_height,
+                                        host_width,
+                                        host_height);
     RuntimeNative3DPreparedFrame_Free(&frame);
-    RuntimeNative3DFeatureBuffer_Free(&tile_features);
     if (out_stats) {
         *out_stats = stats;
     }

@@ -37,6 +37,7 @@
 #include "render/runtime_native_3d_resolution.h"
 #include "render/runtime_native_3d_adaptive_sampling.h"
 #include "render/runtime_native_3d_temporal_accum.h"
+#include "render/runtime_native_3d_tile_scheduler.h"
 #include "render/runtime_ray_3d.h"
 #include "render/runtime_scene_3d_builder.h"
 #include "render/runtime_scene_3d_samples.h"
@@ -163,6 +164,17 @@ static void LogNative3DRenderStatsIfNeeded(RayTracing3DIntegratorId integrator_i
            stats->maxRadiance,
            stats->maxBounceRadiance,
            avg_bounce);
+    if (stats->temporalMeasuredTileJobs > 0) {
+        printf("[native3d] tile_metrics jobs=%d avg_ms=%.3f max_tile_ms=%.3f max_subpass_ms=%.3f slow_tile=(%d,%d %dx%d)\n",
+               stats->temporalMeasuredTileJobs,
+               stats->temporalAverageTileMs,
+               stats->temporalMaxTileMs,
+               stats->temporalMaxTileSubpassMs,
+               stats->temporalSlowTileOriginX,
+               stats->temporalSlowTileOriginY,
+               stats->temporalSlowTileWidth,
+               stats->temporalSlowTileHeight);
+    }
 }
 
 static FluidManifest g_fluidManifest = {0};
@@ -582,6 +594,7 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
         RuntimeNative3DRenderStats nativeStats = {0};
         RuntimeNative3DSamplingContext nativeSampling = NextNative3DSamplingContext();
         int blurRadius = 0;
+        int nativeTileSize = 0;
         bool nativeRenderOk = false;
         double normalized_t = AnimationCurrentNormalizedT();
         int renderScale = RuntimeNative3DClampRenderScale(animSettings.renderScale3D);
@@ -615,6 +628,8 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
             return;
         }
         renderPixelCount = (size_t)renderWidth * (size_t)renderHeight;
+        nativeTileSize = RuntimeNative3DTileSchedulerResolveTileSizeForScale(animSettings.tileSize,
+                                                                             renderScale);
         if (!EnsureNative3DRenderBuffer(renderPixelCount) ||
             !EnsureNative3DPreviewBuffer(hostPixelCount)) {
             printf("ERROR: Failed to allocate native 3D render buffer during render.\n");
@@ -630,7 +645,7 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
 
         ts_session_start_timer(timer_hud_session(), "Buffer Calc");
         if (useTiles && tileGrid.tiles && tileGrid.count > 0) {
-            TileGridEnsure(&tileGrid, renderWidth, renderHeight, tileSize);
+            TileGridEnsure(&tileGrid, renderWidth, renderHeight, nativeTileSize);
             TileGridClear(&tileGrid);
             nativeRenderOk = RayTracing2PreviewPresent_RenderNative3DTilesPreview(
                 renderer,
@@ -685,12 +700,12 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
                                                          renderHeight,
                                                          blurRadius);
             }
-            RuntimeNative3DUpscaleNearestABGR(native3DRenderBuffer,
-                                              renderWidth,
-                                              renderHeight,
-                                              native3DPreviewBuffer,
-                                              hostWidth,
-                                              hostHeight);
+            RuntimeNative3DUpscaleBilinearABGR(native3DRenderBuffer,
+                                               renderWidth,
+                                               renderHeight,
+                                               native3DPreviewBuffer,
+                                               hostWidth,
+                                               hostHeight);
         }
 #if USE_VULKAN
         RayTracing2PreviewPresent_DrawABGRBufferToRect(renderer,

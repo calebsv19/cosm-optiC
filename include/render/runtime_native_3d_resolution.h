@@ -42,5 +42,21 @@ void RuntimeNative3DUpscaleNearestABGR(const uint8_t* src,
                                        uint8_t* dst,
                                        int dst_width,
                                        int dst_height);
+void RuntimeNative3DUpscaleBilinearABGR(const uint8_t* src,
+                                        int src_width,
+                                        int src_height,
+                                        uint8_t* dst,
+                                        int dst_width,
+                                        int dst_height);
+void RuntimeNative3DUpscaleNearestABGRRect(const uint8_t* src,
+                                           int src_width,
+                                           int src_height,
+                                           uint8_t* dst,
+                                           int dst_width,
+                                           int dst_height,
+                                           int dst_x,
+                                           int dst_y,
+                                           int dst_rect_width,
+                                           int dst_rect_height);
 
 #endif

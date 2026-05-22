@@ -41,7 +41,15 @@ $(BUILD_DIR)/core_pack/%.o: $(CORE_PACK_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
+$(BUILD_DIR)/core_queue/%.o: $(CORE_QUEUE_DIR)/src/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
 $(BUILD_DIR)/core_time/%.o: $(CORE_TIME_DIR)/src/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD_DIR)/core_workers/%.o: $(CORE_WORKERS_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 

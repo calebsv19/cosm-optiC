@@ -16,6 +16,9 @@ typedef struct {
     double baseColorB;
     double emissive;
     double transparency;
+    double opticalIor;
+    double absorptionDistance;
+    bool thinWalled;
     double textureMask;
     double textureU;
     double textureV;

@@ -3,6 +3,7 @@
 
 #include <SDL2/SDL.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 #include "render/integrators/integrator_common.h"
 #include "render/integrators/hybrid/camera_path_integrator.h"
@@ -21,6 +22,12 @@ void RayTracing2PreviewPresent_DrawABGRBufferToRect(SDL_Renderer* renderer,
                                                     int width,
                                                     int height,
                                                     SDL_Rect dst_rect);
+void RayTracing2PreviewPresent_DimCopyABGR(const Uint8* src,
+                                           Uint8* dst,
+                                           size_t pixel_count,
+                                           unsigned int numerator,
+                                           unsigned int denominator);
+bool RayTracing2PreviewPresent_LoadNative3DPreviewHistoryFromBMP(const char* path);
 bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
     SDL_Renderer* renderer,
     Uint8* host_buffer,

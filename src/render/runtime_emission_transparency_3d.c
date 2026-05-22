@@ -3,10 +3,13 @@
 #include <math.h>
 #include <stdint.h>
 
+#include "render/runtime_dielectric_transport_3d.h"
+#include "render/material_bsdf.h"
 #include "render/runtime_native_3d_sampling.h"
 #include "render/runtime_emissive_direct_3d.h"
 #include "render/runtime_light_emitter_3d.h"
 #include "render/runtime_material_response_3d.h"
+#include "render/runtime_path_depth_policy_3d.h"
 #include "render/runtime_ray_3d.h"
 #include "render/runtime_visibility_3d.h"
 
@@ -18,18 +21,40 @@ static const double kRuntimeEmissionTransparency3DEpsilon = 1e-4;
 static const double kRuntimeEmissionTransparency3DMaxDistance = 8.0;
 static const double kRuntimeEmissionTransparency3DEnergyScale = 0.75;
 static const double kRuntimeEmissionTransparency3DTransmissionMaxDistance = 32.0;
-static const double kRuntimeEmissionTransparency3DMinimumFrontWeight = 0.2;
 static const int kRuntimeEmissionTransparency3DMaxTransmissionSurfaceSkips = 16;
 static const double kRuntimeEmissionTransparency3DTransmissionConeBase = 0.015;
 static const double kRuntimeEmissionTransparency3DTransmissionConeScale = 0.12;
 
 typedef struct {
+    Vec3 incidentDir;
+    int specularDepth;
+    int transmissionDepth;
+} RuntimeEmissionTransparency3DPathState;
+
+typedef struct {
     bool hit;
     bool emitterWins;
+    bool usedTransparencyTier;
     RuntimeMaterialResponse3DResult materialResult;
+    RuntimeEmissionTransparency3DResult transparencyResult;
     RuntimeMaterialPayload3D materialPayload;
     RuntimeLightEmitterHit3DResult emitterHit;
 } RuntimeEmissionTransparency3DTransmissionResult;
+
+static bool runtime_emission_transparency_3d_shade_hit_recursive(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeEmissionTransparency3DPathState path_state,
+    RuntimeEmissionTransparency3DResult* out_result);
+
+static bool runtime_emission_transparency_3d_shade_pixel_recursive(
+    const RuntimeScene3D* scene,
+    const RuntimeCameraProjector3D* projector,
+    double pixel_x,
+    double pixel_y,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeEmissionTransparency3DResult* out_result);
 
 static int runtime_emission_transparency_3d_resolve_secondary_sample_count(void) {
     int value = animSettings.secondaryDiffuseSamples3D;
@@ -198,6 +223,40 @@ static double runtime_emission_transparency_3d_transmission_cone_radius(
            (kRuntimeEmissionTransparency3DTransmissionConeScale * spread);
 }
 
+static void runtime_emission_transparency_3d_resolve_mix_weights(
+    const RuntimeMaterialPayload3D* payload,
+    const RuntimeDielectricTransport3D* dielectric,
+    double* out_base_front_weight,
+    double* out_reflection_weight,
+    double* out_transmission_weight) {
+    double transparency = 0.0;
+    double base_front_weight = 1.0;
+    double reflection_weight = 0.0;
+    double transmission_weight = 0.0;
+
+    if (!payload) return;
+
+    transparency = runtime_emission_transparency_3d_clamp(payload->transparency, 0.0, 1.0);
+    base_front_weight = 1.0 - transparency;
+    if (dielectric) {
+        reflection_weight = transparency *
+                            runtime_emission_transparency_3d_clamp(dielectric->fresnel, 0.0, 1.0);
+        transmission_weight = transparency - reflection_weight;
+        if (dielectric->totalInternalReflection) {
+            reflection_weight += transmission_weight;
+            transmission_weight = 0.0;
+        }
+    } else {
+        transmission_weight = transparency;
+    }
+    reflection_weight = runtime_emission_transparency_3d_clamp(reflection_weight, 0.0, 1.0);
+    transmission_weight = runtime_emission_transparency_3d_clamp(transmission_weight, 0.0, 1.0);
+
+    if (out_base_front_weight) *out_base_front_weight = base_front_weight;
+    if (out_reflection_weight) *out_reflection_weight = reflection_weight;
+    if (out_transmission_weight) *out_transmission_weight = transmission_weight;
+}
+
 static Vec3 runtime_emission_transparency_3d_sample_transmission_direction(
     const HitInfo3D* hit,
     Vec3 base_dir,
@@ -355,14 +414,17 @@ static double runtime_emission_transparency_3d_secondary_emissive(
     return accumulated / (double)sample_count;
 }
 
-static bool runtime_emission_transparency_3d_trace_transmission(
+static bool runtime_emission_transparency_3d_trace_support(
     const RuntimeScene3D* scene,
     const HitInfo3D* hit,
-    Vec3 transmission_dir,
+    Vec3 support_dir,
     const RuntimeNative3DSamplingContext* sampling,
+    RuntimeEmissionTransparency3DPathState path_state,
+    bool transmission_branch,
     RuntimeEmissionTransparency3DTransmissionResult* out_result,
     double* out_source_segment_distance) {
-    Ray3D transmission_ray;
+    RuntimePathDepthPolicy3D path_policy = RuntimePathDepthPolicy3D_Resolve();
+    Ray3D support_ray;
     HitInfo3D transmitted_hit = {0};
     RuntimeLightEmitterHit3DResult emitter_hit = {0};
     RuntimeEmissionTransparency3DTransmissionResult result = {0};
@@ -374,14 +436,14 @@ static bool runtime_emission_transparency_3d_trace_transmission(
     if (out_source_segment_distance) *out_source_segment_distance = 1.0;
     HitInfo3D_Reset(&transmitted_hit);
 
-    transmission_ray = RuntimeRay3D_MakeOffset(hit->position,
-                                               hit->normal,
-                                               transmission_dir,
-                                               kRuntimeEmissionTransparency3DEpsilon);
+    support_ray = RuntimeRay3D_MakeOffset(hit->position,
+                                          hit->normal,
+                                          support_dir,
+                                          kRuntimeEmissionTransparency3DEpsilon);
     while (skip_count < kRuntimeEmissionTransparency3DMaxTransmissionSurfaceSkips &&
            remaining_distance > kRuntimeEmissionTransparency3DEpsilon) {
         if (!RuntimeRay3D_TraceSceneFirstHit(scene,
-                                             &transmission_ray,
+                                             &support_ray,
                                              kRuntimeEmissionTransparency3DEpsilon,
                                              remaining_distance,
                                              &transmitted_hit)) {
@@ -393,10 +455,10 @@ static bool runtime_emission_transparency_3d_trace_transmission(
         }
         source_segment_distance += transmitted_hit.t;
         remaining_distance -= transmitted_hit.t;
-        transmission_ray = RuntimeRay3D_MakeOffset(transmitted_hit.position,
-                                                   transmitted_hit.normal,
-                                                   transmission_dir,
-                                                   kRuntimeEmissionTransparency3DEpsilon);
+        support_ray = RuntimeRay3D_MakeOffset(transmitted_hit.position,
+                                              transmitted_hit.normal,
+                                              support_dir,
+                                              kRuntimeEmissionTransparency3DEpsilon);
         skip_count += 1;
         HitInfo3D_Reset(&transmitted_hit);
     }
@@ -407,7 +469,7 @@ static bool runtime_emission_transparency_3d_trace_transmission(
     }
 
     if (RuntimeLightEmitter3D_IntersectRay(scene,
-                                           &transmission_ray,
+                                           &support_ray,
                                            kRuntimeEmissionTransparency3DEpsilon,
                                            remaining_distance,
                                            &emitter_hit) &&
@@ -428,11 +490,33 @@ static bool runtime_emission_transparency_3d_trace_transmission(
     if (!RuntimeMaterialPayload3D_ResolveFromHit(&transmitted_hit, &result.materialPayload)) {
         return false;
     }
-    if (!RuntimeMaterialResponse3D_ShadeHit(scene,
-                                           &transmitted_hit,
-                                           sampling,
-                                           &result.materialResult)) {
-        return false;
+    if (result.materialPayload.transparency > 0.0 &&
+        ((transmission_branch &&
+          path_state.transmissionDepth < path_policy.transmissionDepth) ||
+         (!transmission_branch &&
+          path_state.specularDepth < path_policy.specularDepth))) {
+        RuntimeEmissionTransparency3DPathState next_state = path_state;
+        next_state.incidentDir = support_dir;
+        if (transmission_branch) {
+            next_state.transmissionDepth += 1;
+        } else {
+            next_state.specularDepth += 1;
+        }
+        if (!runtime_emission_transparency_3d_shade_hit_recursive(scene,
+                                                                  &transmitted_hit,
+                                                                  sampling,
+                                                                  next_state,
+                                                                  &result.transparencyResult)) {
+            return false;
+        }
+        result.usedTransparencyTier = true;
+    } else {
+        if (!RuntimeMaterialResponse3D_ShadeHit(scene,
+                                               &transmitted_hit,
+                                               sampling,
+                                               &result.materialResult)) {
+            return false;
+        }
     }
 
     result.hit = true;
@@ -449,6 +533,7 @@ static bool runtime_emission_transparency_3d_sample_transmission(
     const RuntimeMaterialPayload3D* payload,
     Vec3 transmission_dir,
     const RuntimeNative3DSamplingContext* sampling,
+    RuntimeEmissionTransparency3DPathState path_state,
     RuntimeEmissionTransparency3DResult* io_result,
     double* out_direct,
     double* out_direct_r,
@@ -509,12 +594,14 @@ static bool runtime_emission_transparency_3d_sample_transmission(
                                                                                          sample_count,
                                                                                          i);
         RuntimeVisibility3DTransmittance source_filter = RuntimeVisibility3D_UnitTransmittance();
-        if (!runtime_emission_transparency_3d_trace_transmission(scene,
-                                                                 hit,
-                                                                 sample_dir,
-                                                                 sampling,
-                                                                 &transmitted,
-                                                                 &source_segment_distance)) {
+        if (!runtime_emission_transparency_3d_trace_support(scene,
+                                                            hit,
+                                                            sample_dir,
+                                                            sampling,
+                                                            path_state,
+                                                            true,
+                                                            &transmitted,
+                                                            &source_segment_distance)) {
             continue;
         }
         RuntimeVisibility3D_ApplyTransparentPayloadAbsorption(payload,
@@ -529,30 +616,48 @@ static bool runtime_emission_transparency_3d_sample_transmission(
             continue;
         }
 
-        first_hit_emissive = runtime_emission_transparency_3d_first_hit_emissive(
-            scene,
-            &transmitted.materialResult.hitInfo,
-            &transmitted.materialPayload,
-            vec3_scale(sample_dir, -1.0),
-            &first_hit_emissive_r,
-            &first_hit_emissive_g,
-            &first_hit_emissive_b);
-        total_direct += (transmitted.materialResult.directRadiance + first_hit_emissive) *
-                        source_filter.luma;
-        total_direct_r += (transmitted.materialResult.directRadianceR + first_hit_emissive_r) *
-                          source_filter.r;
-        total_direct_g += (transmitted.materialResult.directRadianceG + first_hit_emissive_g) *
-                          source_filter.g;
-        total_direct_b += (transmitted.materialResult.directRadianceB + first_hit_emissive_b) *
-                          source_filter.b;
-        total_bounce += transmitted.materialResult.bounceRadiance * source_filter.luma;
-        total_bounce_r += transmitted.materialResult.bounceRadianceR * source_filter.r;
-        total_bounce_g += transmitted.materialResult.bounceRadianceG * source_filter.g;
-        total_bounce_b += transmitted.materialResult.bounceRadianceB * source_filter.b;
-        io_result->secondaryRayCount += transmitted.materialResult.secondaryRayCount;
-        io_result->secondaryHitCount += transmitted.materialResult.secondaryHitCount;
-        io_result->secondaryContributingHitCount +=
-            transmitted.materialResult.secondaryContributingHitCount;
+        if (transmitted.usedTransparencyTier) {
+            total_direct += transmitted.transparencyResult.directRadiance * source_filter.luma;
+            total_direct_r += transmitted.transparencyResult.directRadianceR * source_filter.r;
+            total_direct_g += transmitted.transparencyResult.directRadianceG * source_filter.g;
+            total_direct_b += transmitted.transparencyResult.directRadianceB * source_filter.b;
+            total_bounce += transmitted.transparencyResult.bounceRadiance * source_filter.luma;
+            total_bounce_r += transmitted.transparencyResult.bounceRadianceR * source_filter.r;
+            total_bounce_g += transmitted.transparencyResult.bounceRadianceG * source_filter.g;
+            total_bounce_b += transmitted.transparencyResult.bounceRadianceB * source_filter.b;
+            io_result->secondaryRayCount += transmitted.transparencyResult.secondaryRayCount;
+            io_result->secondaryHitCount += transmitted.transparencyResult.secondaryHitCount;
+            io_result->secondaryContributingHitCount +=
+                transmitted.transparencyResult.secondaryContributingHitCount;
+        } else {
+            first_hit_emissive = runtime_emission_transparency_3d_first_hit_emissive(
+                scene,
+                &transmitted.materialResult.hitInfo,
+                &transmitted.materialPayload,
+                vec3_scale(sample_dir, -1.0),
+                &first_hit_emissive_r,
+                &first_hit_emissive_g,
+                &first_hit_emissive_b);
+            total_direct += (transmitted.materialResult.directRadiance + first_hit_emissive) *
+                            source_filter.luma;
+            total_direct_r +=
+                (transmitted.materialResult.directRadianceR + first_hit_emissive_r) *
+                source_filter.r;
+            total_direct_g +=
+                (transmitted.materialResult.directRadianceG + first_hit_emissive_g) *
+                source_filter.g;
+            total_direct_b +=
+                (transmitted.materialResult.directRadianceB + first_hit_emissive_b) *
+                source_filter.b;
+            total_bounce += transmitted.materialResult.bounceRadiance * source_filter.luma;
+            total_bounce_r += transmitted.materialResult.bounceRadianceR * source_filter.r;
+            total_bounce_g += transmitted.materialResult.bounceRadianceG * source_filter.g;
+            total_bounce_b += transmitted.materialResult.bounceRadianceB * source_filter.b;
+            io_result->secondaryRayCount += transmitted.materialResult.secondaryRayCount;
+            io_result->secondaryHitCount += transmitted.materialResult.secondaryHitCount;
+            io_result->secondaryContributingHitCount +=
+                transmitted.materialResult.secondaryContributingHitCount;
+        }
     }
 
     if (contributing_samples <= 0) {
@@ -570,15 +675,119 @@ static bool runtime_emission_transparency_3d_sample_transmission(
     return true;
 }
 
+static bool runtime_emission_transparency_3d_sample_reflection(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    Vec3 reflection_dir,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeEmissionTransparency3DPathState path_state,
+    RuntimeEmissionTransparency3DResult* io_result,
+    double* out_direct,
+    double* out_direct_r,
+    double* out_direct_g,
+    double* out_direct_b,
+    double* out_bounce,
+    double* out_bounce_r,
+    double* out_bounce_g,
+    double* out_bounce_b) {
+    RuntimeEmissionTransparency3DTransmissionResult reflected = {0};
+    double first_hit_emissive = 0.0;
+    double first_hit_emissive_r = 0.0;
+    double first_hit_emissive_g = 0.0;
+    double first_hit_emissive_b = 0.0;
+    double source_segment_distance = 1.0;
+
+    if (out_direct) *out_direct = 0.0;
+    if (out_direct_r) *out_direct_r = 0.0;
+    if (out_direct_g) *out_direct_g = 0.0;
+    if (out_direct_b) *out_direct_b = 0.0;
+    if (out_bounce) *out_bounce = 0.0;
+    if (out_bounce_r) *out_bounce_r = 0.0;
+    if (out_bounce_g) *out_bounce_g = 0.0;
+    if (out_bounce_b) *out_bounce_b = 0.0;
+    if (!scene || !hit || !io_result || !out_direct || !out_direct_r || !out_direct_g ||
+        !out_direct_b || !out_bounce || !out_bounce_r || !out_bounce_g || !out_bounce_b) {
+        return false;
+    }
+
+    io_result->secondaryRayCount += 1;
+    if (!runtime_emission_transparency_3d_trace_support(scene,
+                                                        hit,
+                                                        reflection_dir,
+                                                        sampling,
+                                                        path_state,
+                                                        false,
+                                                        &reflected,
+                                                        &source_segment_distance)) {
+        return false;
+    }
+    (void)source_segment_distance;
+    if (reflected.emitterWins) {
+        *out_direct = reflected.emitterHit.radiance;
+        *out_direct_r = reflected.emitterHit.radiance;
+        *out_direct_g = reflected.emitterHit.radiance;
+        *out_direct_b = reflected.emitterHit.radiance;
+        return true;
+    }
+
+    if (reflected.usedTransparencyTier) {
+        *out_direct = reflected.transparencyResult.directRadiance;
+        *out_direct_r = reflected.transparencyResult.directRadianceR;
+        *out_direct_g = reflected.transparencyResult.directRadianceG;
+        *out_direct_b = reflected.transparencyResult.directRadianceB;
+        *out_bounce = reflected.transparencyResult.bounceRadiance;
+        *out_bounce_r = reflected.transparencyResult.bounceRadianceR;
+        *out_bounce_g = reflected.transparencyResult.bounceRadianceG;
+        *out_bounce_b = reflected.transparencyResult.bounceRadianceB;
+        io_result->secondaryRayCount += reflected.transparencyResult.secondaryRayCount;
+        io_result->secondaryHitCount += reflected.transparencyResult.secondaryHitCount;
+        io_result->secondaryContributingHitCount +=
+            reflected.transparencyResult.secondaryContributingHitCount;
+        return true;
+    }
+
+    first_hit_emissive = runtime_emission_transparency_3d_first_hit_emissive(scene,
+                                                                              &reflected.materialResult.hitInfo,
+                                                                              &reflected.materialPayload,
+                                                                              vec3_scale(reflection_dir, -1.0),
+                                                                              &first_hit_emissive_r,
+                                                                              &first_hit_emissive_g,
+                                                                              &first_hit_emissive_b);
+    *out_direct = reflected.materialResult.directRadiance + first_hit_emissive;
+    *out_direct_r = reflected.materialResult.directRadianceR + first_hit_emissive_r;
+    *out_direct_g = reflected.materialResult.directRadianceG + first_hit_emissive_g;
+    *out_direct_b = reflected.materialResult.directRadianceB + first_hit_emissive_b;
+    *out_bounce = reflected.materialResult.bounceRadiance;
+    *out_bounce_r = reflected.materialResult.bounceRadianceR;
+    *out_bounce_g = reflected.materialResult.bounceRadianceG;
+    *out_bounce_b = reflected.materialResult.bounceRadianceB;
+    io_result->secondaryRayCount += reflected.materialResult.secondaryRayCount;
+    io_result->secondaryHitCount += reflected.materialResult.secondaryHitCount;
+    io_result->secondaryContributingHitCount +=
+        reflected.materialResult.secondaryContributingHitCount;
+    return true;
+}
+
 static void runtime_emission_transparency_3d_apply_transparency(
     const RuntimeScene3D* scene,
     const HitInfo3D* hit,
     const RuntimeMaterialPayload3D* payload,
-    Vec3 transmission_dir,
+    RuntimeEmissionTransparency3DPathState path_state,
     const RuntimeNative3DSamplingContext* sampling,
     RuntimeEmissionTransparency3DResult* io_result) {
     double transparency = 0.0;
-    double front_weight = 1.0;
+    double base_front_weight = 1.0;
+    double reflection_weight = 0.0;
+    double transmission_weight = 0.0;
+    RuntimeDielectricTransport3D dielectric = {0};
+    double reflected_direct = 0.0;
+    double reflected_direct_r = 0.0;
+    double reflected_direct_g = 0.0;
+    double reflected_direct_b = 0.0;
+    double reflected_bounce = 0.0;
+    double reflected_bounce_r = 0.0;
+    double reflected_bounce_g = 0.0;
+    double reflected_bounce_b = 0.0;
     double transmitted_direct = 0.0;
     double transmitted_direct_r = 0.0;
     double transmitted_direct_g = 0.0;
@@ -594,57 +803,96 @@ static void runtime_emission_transparency_3d_apply_transparency(
         return;
     }
 
-    front_weight = 1.0 - transparency;
-    if (front_weight < kRuntimeEmissionTransparency3DMinimumFrontWeight) {
-        front_weight = kRuntimeEmissionTransparency3DMinimumFrontWeight;
+    (void)RuntimeDielectricTransport3D_Resolve(payload,
+                                               hit->normal,
+                                               path_state.incidentDir,
+                                               &dielectric);
+    runtime_emission_transparency_3d_resolve_mix_weights(payload,
+                                                         &dielectric,
+                                                         &base_front_weight,
+                                                         &reflection_weight,
+                                                         &transmission_weight);
+    if (reflection_weight > 1e-9) {
+        (void)runtime_emission_transparency_3d_sample_reflection(scene,
+                                                                 hit,
+                                                                 dielectric.reflectionDir,
+                                                                 sampling,
+                                                                 path_state,
+                                                                 io_result,
+                                                                 &reflected_direct,
+                                                                 &reflected_direct_r,
+                                                                 &reflected_direct_g,
+                                                                 &reflected_direct_b,
+                                                                 &reflected_bounce,
+                                                                 &reflected_bounce_r,
+                                                                 &reflected_bounce_g,
+                                                                 &reflected_bounce_b);
     }
-    transparency = 1.0 - front_weight;
-    (void)runtime_emission_transparency_3d_sample_transmission(scene,
-                                                               hit,
-                                                               payload,
-                                                               transmission_dir,
-                                                               sampling,
-                                                               io_result,
-                                                               &transmitted_direct,
-                                                               &transmitted_direct_r,
-                                                               &transmitted_direct_g,
-                                                               &transmitted_direct_b,
-                                                               &transmitted_bounce,
-                                                               &transmitted_bounce_r,
-                                                               &transmitted_bounce_g,
-                                                               &transmitted_bounce_b);
+    if (transmission_weight > 1e-9 && dielectric.hasRefraction) {
+        (void)runtime_emission_transparency_3d_sample_transmission(scene,
+                                                                   hit,
+                                                                   payload,
+                                                                   dielectric.refractionDir,
+                                                                   sampling,
+                                                                   path_state,
+                                                                   io_result,
+                                                                   &transmitted_direct,
+                                                                   &transmitted_direct_r,
+                                                                   &transmitted_direct_g,
+                                                                   &transmitted_direct_b,
+                                                                   &transmitted_bounce,
+                                                                   &transmitted_bounce_r,
+                                                                   &transmitted_bounce_g,
+                                                                   &transmitted_bounce_b);
+    }
 
-    io_result->emissiveDirectRadiance *= front_weight;
-    io_result->emissiveDirectRadianceR *= front_weight;
-    io_result->emissiveDirectRadianceG *= front_weight;
-    io_result->emissiveDirectRadianceB *= front_weight;
-    io_result->emissiveBounceRadiance *= front_weight;
-    io_result->emissiveBounceRadianceR *= front_weight;
-    io_result->emissiveBounceRadianceG *= front_weight;
-    io_result->emissiveBounceRadianceB *= front_weight;
-    io_result->transmittedDirectRadiance = transmitted_direct * transparency;
-    io_result->transmittedDirectRadianceR = transmitted_direct_r * transparency;
-    io_result->transmittedDirectRadianceG = transmitted_direct_g * transparency;
-    io_result->transmittedDirectRadianceB = transmitted_direct_b * transparency;
-    io_result->transmittedBounceRadiance = transmitted_bounce * transparency;
-    io_result->transmittedBounceRadianceR = transmitted_bounce_r * transparency;
-    io_result->transmittedBounceRadianceG = transmitted_bounce_g * transparency;
-    io_result->transmittedBounceRadianceB = transmitted_bounce_b * transparency;
-    io_result->directRadiance = (io_result->directRadiance * front_weight) +
+    io_result->emissiveDirectRadiance *= base_front_weight;
+    io_result->emissiveDirectRadianceR *= base_front_weight;
+    io_result->emissiveDirectRadianceG *= base_front_weight;
+    io_result->emissiveDirectRadianceB *= base_front_weight;
+    io_result->emissiveBounceRadiance *= base_front_weight;
+    io_result->emissiveBounceRadianceR *= base_front_weight;
+    io_result->emissiveBounceRadianceG *= base_front_weight;
+    io_result->emissiveBounceRadianceB *= base_front_weight;
+    io_result->reflectedDirectRadiance = reflected_direct * reflection_weight;
+    io_result->reflectedDirectRadianceR = reflected_direct_r * reflection_weight;
+    io_result->reflectedDirectRadianceG = reflected_direct_g * reflection_weight;
+    io_result->reflectedDirectRadianceB = reflected_direct_b * reflection_weight;
+    io_result->reflectedBounceRadiance = reflected_bounce * reflection_weight;
+    io_result->reflectedBounceRadianceR = reflected_bounce_r * reflection_weight;
+    io_result->reflectedBounceRadianceG = reflected_bounce_g * reflection_weight;
+    io_result->reflectedBounceRadianceB = reflected_bounce_b * reflection_weight;
+    io_result->transmittedDirectRadiance = transmitted_direct * transmission_weight;
+    io_result->transmittedDirectRadianceR = transmitted_direct_r * transmission_weight;
+    io_result->transmittedDirectRadianceG = transmitted_direct_g * transmission_weight;
+    io_result->transmittedDirectRadianceB = transmitted_direct_b * transmission_weight;
+    io_result->transmittedBounceRadiance = transmitted_bounce * transmission_weight;
+    io_result->transmittedBounceRadianceR = transmitted_bounce_r * transmission_weight;
+    io_result->transmittedBounceRadianceG = transmitted_bounce_g * transmission_weight;
+    io_result->transmittedBounceRadianceB = transmitted_bounce_b * transmission_weight;
+    io_result->directRadiance = (io_result->directRadiance * base_front_weight) +
+                                io_result->reflectedDirectRadiance +
                                 io_result->transmittedDirectRadiance;
-    io_result->directRadianceR = (io_result->directRadianceR * front_weight) +
+    io_result->directRadianceR = (io_result->directRadianceR * base_front_weight) +
+                                 io_result->reflectedDirectRadianceR +
                                  io_result->transmittedDirectRadianceR;
-    io_result->directRadianceG = (io_result->directRadianceG * front_weight) +
+    io_result->directRadianceG = (io_result->directRadianceG * base_front_weight) +
+                                 io_result->reflectedDirectRadianceG +
                                  io_result->transmittedDirectRadianceG;
-    io_result->directRadianceB = (io_result->directRadianceB * front_weight) +
+    io_result->directRadianceB = (io_result->directRadianceB * base_front_weight) +
+                                 io_result->reflectedDirectRadianceB +
                                  io_result->transmittedDirectRadianceB;
-    io_result->bounceRadiance = (io_result->bounceRadiance * front_weight) +
+    io_result->bounceRadiance = (io_result->bounceRadiance * base_front_weight) +
+                                io_result->reflectedBounceRadiance +
                                 io_result->transmittedBounceRadiance;
-    io_result->bounceRadianceR = (io_result->bounceRadianceR * front_weight) +
+    io_result->bounceRadianceR = (io_result->bounceRadianceR * base_front_weight) +
+                                 io_result->reflectedBounceRadianceR +
                                  io_result->transmittedBounceRadianceR;
-    io_result->bounceRadianceG = (io_result->bounceRadianceG * front_weight) +
+    io_result->bounceRadianceG = (io_result->bounceRadianceG * base_front_weight) +
+                                 io_result->reflectedBounceRadianceG +
                                  io_result->transmittedBounceRadianceG;
-    io_result->bounceRadianceB = (io_result->bounceRadianceB * front_weight) +
+    io_result->bounceRadianceB = (io_result->bounceRadianceB * base_front_weight) +
+                                 io_result->reflectedBounceRadianceB +
                                  io_result->transmittedBounceRadianceB;
     io_result->radiance = io_result->directRadiance + io_result->bounceRadiance;
     io_result->radianceR = io_result->directRadianceR + io_result->bounceRadianceR;
@@ -680,6 +928,14 @@ static void runtime_emission_transparency_3d_copy_material_result(
     out_result->emissiveBounceRadianceR = 0.0;
     out_result->emissiveBounceRadianceG = 0.0;
     out_result->emissiveBounceRadianceB = 0.0;
+    out_result->reflectedDirectRadiance = 0.0;
+    out_result->reflectedDirectRadianceR = 0.0;
+    out_result->reflectedDirectRadianceG = 0.0;
+    out_result->reflectedDirectRadianceB = 0.0;
+    out_result->reflectedBounceRadiance = 0.0;
+    out_result->reflectedBounceRadianceR = 0.0;
+    out_result->reflectedBounceRadianceG = 0.0;
+    out_result->reflectedBounceRadianceB = 0.0;
     out_result->transmittedDirectRadiance = 0.0;
     out_result->transmittedDirectRadianceR = 0.0;
     out_result->transmittedDirectRadianceG = 0.0;
@@ -697,14 +953,15 @@ static void runtime_emission_transparency_3d_copy_material_result(
     out_result->secondaryContributingHitCount = source->secondaryContributingHitCount;
 }
 
-bool RuntimeEmissionTransparency3D_ShadeHit(const RuntimeScene3D* scene,
-                                            const HitInfo3D* hit,
-                                            const RuntimeNative3DSamplingContext* sampling,
-                                            RuntimeEmissionTransparency3DResult* out_result) {
+static bool runtime_emission_transparency_3d_shade_hit_recursive(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeEmissionTransparency3DPathState path_state,
+    RuntimeEmissionTransparency3DResult* out_result) {
     RuntimeEmissionTransparency3DResult result = {0};
     RuntimeMaterialResponse3DResult material_result = {0};
     Vec3 view_dir = vec3(0.0, 0.0, 0.0);
-    Vec3 transmission_dir = vec3(0.0, 0.0, 0.0);
     double emissive_direct = 0.0;
     double emissive_bounce = 0.0;
     double emissive_direct_r = 0.0;
@@ -731,8 +988,7 @@ bool RuntimeEmissionTransparency3D_ShadeHit(const RuntimeScene3D* scene,
                                                           &result);
     secondary_sample_count = runtime_emission_transparency_3d_resolve_secondary_sample_count();
     result.secondaryRayCount = secondary_sample_count;
-    view_dir = vec3_normalize(hit->normal);
-    transmission_dir = vec3_scale(view_dir, -1.0);
+    view_dir = vec3_scale(path_state.incidentDir, -1.0);
     emissive_direct = runtime_emission_transparency_3d_first_hit_emissive(scene,
                                                                           hit,
                                                                           &result.payload,
@@ -776,23 +1032,24 @@ bool RuntimeEmissionTransparency3D_ShadeHit(const RuntimeScene3D* scene,
     runtime_emission_transparency_3d_apply_transparency(scene,
                                                         hit,
                                                         &result.payload,
-                                                        transmission_dir,
+                                                        path_state,
                                                         sampling,
                                                         &result);
     *out_result = result;
     return true;
 }
 
-bool RuntimeEmissionTransparency3D_ShadePixel(const RuntimeScene3D* scene,
-                                              const RuntimeCameraProjector3D* projector,
-                                              double pixel_x,
-                                              double pixel_y,
-                                              const RuntimeNative3DSamplingContext* sampling,
-                                              RuntimeEmissionTransparency3DResult* out_result) {
+static bool runtime_emission_transparency_3d_shade_pixel_recursive(
+    const RuntimeScene3D* scene,
+    const RuntimeCameraProjector3D* projector,
+    double pixel_x,
+    double pixel_y,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeEmissionTransparency3DResult* out_result) {
     RuntimeEmissionTransparency3DResult result = {0};
     RuntimeMaterialResponse3DResult material_result = {0};
+    RuntimeEmissionTransparency3DPathState path_state = {0};
     Vec3 view_dir = vec3(0.0, 0.0, 0.0);
-    Vec3 transmission_dir = vec3(0.0, 0.0, 0.0);
     double emissive_direct = 0.0;
     double emissive_bounce = 0.0;
     double emissive_direct_r = 0.0;
@@ -824,10 +1081,12 @@ bool RuntimeEmissionTransparency3D_ShadePixel(const RuntimeScene3D* scene,
     runtime_emission_transparency_3d_copy_material_result(&material_result,
                                                           &result.payload,
                                                           &result);
+    path_state.incidentDir = material_result.primaryRay.direction;
+    path_state.specularDepth = 0;
+    path_state.transmissionDepth = 0;
     secondary_sample_count = runtime_emission_transparency_3d_resolve_secondary_sample_count();
     result.secondaryRayCount = secondary_sample_count;
     view_dir = vec3_scale(material_result.primaryRay.direction, -1.0);
-    transmission_dir = material_result.primaryRay.direction;
     emissive_direct = runtime_emission_transparency_3d_first_hit_emissive(scene,
                                                                           &result.hitInfo,
                                                                           &result.payload,
@@ -874,9 +1133,31 @@ bool RuntimeEmissionTransparency3D_ShadePixel(const RuntimeScene3D* scene,
     runtime_emission_transparency_3d_apply_transparency(scene,
                                                         &result.hitInfo,
                                                         &result.payload,
-                                                        transmission_dir,
+                                                        path_state,
                                                         sampling,
                                                         &result);
     *out_result = result;
     return true;
+}
+
+bool RuntimeEmissionTransparency3D_ShadeHit(const RuntimeScene3D* scene,
+                                            const HitInfo3D* hit,
+                                            const RuntimeNative3DSamplingContext* sampling,
+                                            RuntimeEmissionTransparency3DResult* out_result) {
+    RuntimeEmissionTransparency3DPathState path_state = {0};
+    path_state.incidentDir = vec3_scale(hit->normal, -1.0);
+    path_state.specularDepth = 0;
+    path_state.transmissionDepth = 0;
+    return runtime_emission_transparency_3d_shade_hit_recursive(
+        scene, hit, sampling, path_state, out_result);
+}
+
+bool RuntimeEmissionTransparency3D_ShadePixel(const RuntimeScene3D* scene,
+                                              const RuntimeCameraProjector3D* projector,
+                                              double pixel_x,
+                                              double pixel_y,
+                                              const RuntimeNative3DSamplingContext* sampling,
+                                              RuntimeEmissionTransparency3DResult* out_result) {
+    return runtime_emission_transparency_3d_shade_pixel_recursive(
+        scene, projector, pixel_x, pixel_y, sampling, out_result);
 }

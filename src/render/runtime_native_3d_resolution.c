@@ -3,6 +3,58 @@
 #include "config/config_manager.h"
 #include "render/runtime_native_3d_render.h"
 
+#include <math.h>
+
+static int runtime_native_3d_resolution_clamp_index(int value, int max_value) {
+    if (value < 0) return 0;
+    if (value > max_value) return max_value;
+    return value;
+}
+
+static uint8_t runtime_native_3d_resolution_sample_bilinear_channel(const uint8_t* src,
+                                                                    int src_width,
+                                                                    int src_height,
+                                                                    double src_x,
+                                                                    double src_y,
+                                                                    int channel) {
+    int x0 = 0;
+    int y0 = 0;
+    int x1 = 0;
+    int y1 = 0;
+    double tx = 0.0;
+    double ty = 0.0;
+    double top = 0.0;
+    double bottom = 0.0;
+    size_t index00 = 0u;
+    size_t index10 = 0u;
+    size_t index01 = 0u;
+    size_t index11 = 0u;
+
+    x0 = runtime_native_3d_resolution_clamp_index((int)floor(src_x), src_width - 1);
+    y0 = runtime_native_3d_resolution_clamp_index((int)floor(src_y), src_height - 1);
+    x1 = runtime_native_3d_resolution_clamp_index(x0 + 1, src_width - 1);
+    y1 = runtime_native_3d_resolution_clamp_index(y0 + 1, src_height - 1);
+    tx = src_x - (double)x0;
+    ty = src_y - (double)y0;
+    if (tx < 0.0) tx = 0.0;
+    if (tx > 1.0) tx = 1.0;
+    if (ty < 0.0) ty = 0.0;
+    if (ty > 1.0) ty = 1.0;
+
+    index00 = (((size_t)y0 * (size_t)src_width) + (size_t)x0) *
+              (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES + (size_t)channel;
+    index10 = (((size_t)y0 * (size_t)src_width) + (size_t)x1) *
+              (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES + (size_t)channel;
+    index01 = (((size_t)y1 * (size_t)src_width) + (size_t)x0) *
+              (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES + (size_t)channel;
+    index11 = (((size_t)y1 * (size_t)src_width) + (size_t)x1) *
+              (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES + (size_t)channel;
+
+    top = ((1.0 - tx) * (double)src[index00]) + (tx * (double)src[index10]);
+    bottom = ((1.0 - tx) * (double)src[index01]) + (tx * (double)src[index11]);
+    return (uint8_t)lround(((1.0 - ty) * top) + (ty * bottom));
+}
+
 int RuntimeNative3DClampRenderScale(int value) {
     if (value == RUNTIME_3D_RENDER_SCALE_HIDPI) {
         return RUNTIME_3D_RENDER_SCALE_HIDPI;
@@ -152,6 +204,74 @@ void RuntimeNative3DUpscaleNearestABGR(const uint8_t* src,
         size_t dst_row = (size_t)y * (size_t)dst_width * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
         size_t src_row = (size_t)src_y * (size_t)src_width * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
         for (int x = 0; x < dst_width; ++x) {
+            int src_x = ((int64_t)x * (int64_t)src_width) / (int64_t)dst_width;
+            size_t dst_index =
+                dst_row + (size_t)x * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+            size_t src_index =
+                src_row + (size_t)src_x * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+            for (int c = 0; c < RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES; ++c) {
+                dst[dst_index + (size_t)c] = src[src_index + (size_t)c];
+            }
+        }
+    }
+}
+
+void RuntimeNative3DUpscaleBilinearABGR(const uint8_t* src,
+                                        int src_width,
+                                        int src_height,
+                                        uint8_t* dst,
+                                        int dst_width,
+                                        int dst_height) {
+    if (!src || !dst || src_width <= 0 || src_height <= 0 || dst_width <= 0 || dst_height <= 0) {
+        return;
+    }
+
+    for (int y = 0; y < dst_height; ++y) {
+        double src_y = (((double)y + 0.5) * (double)src_height / (double)dst_height) - 0.5;
+        size_t dst_row = (size_t)y * (size_t)dst_width * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+        for (int x = 0; x < dst_width; ++x) {
+            double src_x = (((double)x + 0.5) * (double)src_width / (double)dst_width) - 0.5;
+            size_t dst_index =
+                dst_row + (size_t)x * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+            for (int c = 0; c < RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES; ++c) {
+                dst[dst_index + (size_t)c] = runtime_native_3d_resolution_sample_bilinear_channel(
+                    src,
+                    src_width,
+                    src_height,
+                    src_x,
+                    src_y,
+                    c);
+            }
+        }
+    }
+}
+
+void RuntimeNative3DUpscaleNearestABGRRect(const uint8_t* src,
+                                           int src_width,
+                                           int src_height,
+                                           uint8_t* dst,
+                                           int dst_width,
+                                           int dst_height,
+                                           int dst_x,
+                                           int dst_y,
+                                           int dst_rect_width,
+                                           int dst_rect_height) {
+    if (!src || !dst || src_width <= 0 || src_height <= 0 || dst_width <= 0 || dst_height <= 0) {
+        return;
+    }
+    if (dst_rect_width <= 0 || dst_rect_height <= 0) {
+        return;
+    }
+    if (dst_x < 0 || dst_y < 0 || dst_x + dst_rect_width > dst_width ||
+        dst_y + dst_rect_height > dst_height) {
+        return;
+    }
+
+    for (int y = dst_y; y < dst_y + dst_rect_height; ++y) {
+        int src_y = ((int64_t)y * (int64_t)src_height) / (int64_t)dst_height;
+        size_t dst_row = (size_t)y * (size_t)dst_width * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+        size_t src_row = (size_t)src_y * (size_t)src_width * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+        for (int x = dst_x; x < dst_x + dst_rect_width; ++x) {
             int src_x = ((int64_t)x * (int64_t)src_width) / (int64_t)dst_width;
             size_t dst_index =
                 dst_row + (size_t)x * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;

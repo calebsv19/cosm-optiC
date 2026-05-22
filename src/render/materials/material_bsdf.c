@@ -261,7 +261,9 @@ void MaterialBSDFInitFromSceneObject(const SceneObject* obj, MaterialBSDF* mater
     material->opacity = Clamp01(obj->opacity);
     material->reflectivity = Clamp01(preset ? preset->reflectivity : obj->reflectivity);
     material->roughness = Clamp(preset ? preset->roughness : obj->roughness, 0.02, 1.0);
-    material->ior = (material->reflectivity > 0.0) ? 1.45 : 1.0;
+    material->ior = Clamp(preset ? preset->ior : ((material->reflectivity > 0.0) ? 1.45 : 1.0),
+                          1.0,
+                          4.0);
     material->textureId = obj->textureId;
     material->model = (material->reflectivity > 0.05) ? MATERIAL_BSDF_GGX : MATERIAL_BSDF_LAMBERT;
     material->specWeight = (preset ? preset->specular : 0.0) + material->reflectivity;

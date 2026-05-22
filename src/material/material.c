@@ -9,6 +9,8 @@ static Material ClampMaterial(Material m) {
     m.roughness = clampd(m.roughness, 0.0f, 1.0f);
     m.metallic = clampd(m.metallic, 0.0f, 1.0f);
     m.transparency = clampd(m.transparency, 0.0f, 1.0f);
+    if (m.ior < 1.0f) m.ior = 1.0f;
+    if (m.absorption_distance <= 1e-4f) m.absorption_distance = 1.0f;
     return m;
 }
 
@@ -25,7 +27,10 @@ void MaterialLibraryInit(MaterialLibrary* lib) {
         .base_color = vec3(1.0f, 1.0f, 1.0f),
         .emissive = vec3(0.0f, 0.0f, 0.0f),
         .metallic = 0.0f,
-        .transparency = 0.0f
+        .transparency = 0.0f,
+        .ior = 1.0f,
+        .absorption_distance = 1.0f,
+        .thin_walled = false
     };
     MaterialAdd(lib, matte); // MATERIAL_PRESET_DEFAULT
 
@@ -38,7 +43,10 @@ void MaterialLibraryInit(MaterialLibrary* lib) {
         .base_color = vec3(1.0f, 1.0f, 1.0f),
         .emissive = vec3(0.0f, 0.0f, 0.0f),
         .metallic = 1.0f,
-        .transparency = 0.0f
+        .transparency = 0.0f,
+        .ior = 1.0f,
+        .absorption_distance = 1.0f,
+        .thin_walled = false
     };
     MaterialAdd(lib, mirror); // MATERIAL_PRESET_MIRROR
 
@@ -51,7 +59,10 @@ void MaterialLibraryInit(MaterialLibrary* lib) {
         .base_color = vec3(0.8f, 0.8f, 0.8f),
         .emissive = vec3(0.0f, 0.0f, 0.0f),
         .metallic = 1.0f,
-        .transparency = 0.0f
+        .transparency = 0.0f,
+        .ior = 1.0f,
+        .absorption_distance = 1.0f,
+        .thin_walled = false
     };
     MaterialAdd(lib, roughMetal); // MATERIAL_PRESET_ROUGH_METAL
 
@@ -64,7 +75,10 @@ void MaterialLibraryInit(MaterialLibrary* lib) {
         .base_color = vec3(1.0f, 1.0f, 1.0f),
         .emissive = vec3(0.0f, 0.0f, 0.0f),
         .metallic = 0.0f,
-        .transparency = 0.0f
+        .transparency = 0.0f,
+        .ior = 1.0f,
+        .absorption_distance = 1.0f,
+        .thin_walled = false
     };
     MaterialAdd(lib, glossy); // MATERIAL_PRESET_GLOSSY
 
@@ -77,7 +91,10 @@ void MaterialLibraryInit(MaterialLibrary* lib) {
         .base_color = vec3(1.0f, 1.0f, 1.0f),
         .emissive = vec3(0.5f, 0.5f, 0.5f),
         .metallic = 0.0f,
-        .transparency = 0.0f
+        .transparency = 0.0f,
+        .ior = 1.0f,
+        .absorption_distance = 1.0f,
+        .thin_walled = false
     };
     MaterialAdd(lib, emissive); // MATERIAL_PRESET_EMISSIVE
 
@@ -90,7 +107,10 @@ void MaterialLibraryInit(MaterialLibrary* lib) {
         .base_color = vec3(1.0f, 1.0f, 1.0f),
         .emissive = vec3(0.0f, 0.0f, 0.0f),
         .metallic = 0.0f,
-        .transparency = 0.75f
+        .transparency = 0.75f,
+        .ior = 1.45f,
+        .absorption_distance = 2.0f,
+        .thin_walled = false
     };
     MaterialAdd(lib, transparent); // MATERIAL_PRESET_TRANSPARENT
 }

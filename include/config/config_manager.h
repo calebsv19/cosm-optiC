@@ -55,6 +55,14 @@ typedef enum {
 #define RUNTIME_3D_BOUNCE_DEPTH_MAX 8
 #define RUNTIME_3D_BOUNCE_DEPTH_DEFAULT 3
 
+#define RUNTIME_3D_SPECULAR_DEPTH_MIN 1
+#define RUNTIME_3D_SPECULAR_DEPTH_MAX 8
+#define RUNTIME_3D_SPECULAR_DEPTH_DEFAULT 3
+
+#define RUNTIME_3D_TRANSMISSION_DEPTH_MIN 1
+#define RUNTIME_3D_TRANSMISSION_DEPTH_MAX 16
+#define RUNTIME_3D_TRANSMISSION_DEPTH_DEFAULT 8
+
 #define RUNTIME_3D_ROULETTE_THRESHOLD_MIN 0.0
 #define RUNTIME_3D_ROULETTE_THRESHOLD_MAX 0.1
 #define RUNTIME_3D_ROULETTE_THRESHOLD_DEFAULT 0.01
@@ -128,6 +136,8 @@ typedef struct {
     bool topFillLightEnabled;     // Shared native 3D overhead fill light toggle
     bool disneyDenoiseEnabled;    // Disney-only native 3D denoise post-pass toggle
     int bounceDepth3D;
+    int specularDepth3D;
+    int transmissionDepth3D;
     double rouletteThreshold3D;
     int secondaryDiffuseSamples3D;
     int transmissionSamples3D;

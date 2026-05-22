@@ -8,7 +8,6 @@
 static const double kRuntimeVisibility3DEpsilon = 1e-4;
 static const double kRuntimeVisibility3DMinimumTransmittance = 1e-4;
 static const int kRuntimeVisibility3DMaxTransparentSurfaceSkips = 24;
-static const double kRuntimeVisibility3DAbsorptionDistanceScale = 0.75;
 
 static double runtime_visibility_3d_clamp(double value,
                                           double min_value,
@@ -53,10 +52,12 @@ void RuntimeVisibility3D_ApplyTransparentPayloadAbsorption(
     double tint_r = 1.0;
     double tint_g = 1.0;
     double tint_b = 1.0;
-    double base_r = 1.0;
-    double base_g = 1.0;
-    double base_b = 1.0;
-    double distance_weight = 1.0;
+    double absorption_distance = 1.0;
+    double effective_distance = 0.0;
+    double distance_ratio = 1.0;
+    double segment_r = 1.0;
+    double segment_g = 1.0;
+    double segment_b = 1.0;
 
     if (!payload || !payload->valid || !io_transmittance) return;
 
@@ -72,23 +73,25 @@ void RuntimeVisibility3D_ApplyTransparentPayloadAbsorption(
     tint_r = runtime_visibility_3d_clamp(payload->baseColorR, 0.0, 1.0);
     tint_g = runtime_visibility_3d_clamp(payload->baseColorG, 0.0, 1.0);
     tint_b = runtime_visibility_3d_clamp(payload->baseColorB, 0.0, 1.0);
-    distance_weight = fmax(1.0, segment_distance * kRuntimeVisibility3DAbsorptionDistanceScale);
+    absorption_distance = fmax(payload->absorptionDistance, 1e-4);
+    effective_distance = payload->thinWalled ? absorption_distance : fmax(segment_distance, 0.0);
+    distance_ratio = fmax(effective_distance / absorption_distance, 0.0);
 
-    /* White glass stays neutral; colored glass attenuates off-channels more
-     * strongly as path length through the surface grows. */
-    base_r = runtime_visibility_3d_clamp((1.0 - transparency) + (transparency * tint_r),
-                                         kRuntimeVisibility3DMinimumTransmittance,
-                                         1.0);
-    base_g = runtime_visibility_3d_clamp((1.0 - transparency) + (transparency * tint_g),
-                                         kRuntimeVisibility3DMinimumTransmittance,
-                                         1.0);
-    base_b = runtime_visibility_3d_clamp((1.0 - transparency) + (transparency * tint_b),
-                                         kRuntimeVisibility3DMinimumTransmittance,
-                                         1.0);
+    /* Beer-Lambert form with authored baseColor interpreted as the
+     * transmittance color at one absorption-distance unit. */
+    segment_r = transparency * pow(fmax(tint_r, kRuntimeVisibility3DMinimumTransmittance), distance_ratio);
+    segment_g = transparency * pow(fmax(tint_g, kRuntimeVisibility3DMinimumTransmittance), distance_ratio);
+    segment_b = transparency * pow(fmax(tint_b, kRuntimeVisibility3DMinimumTransmittance), distance_ratio);
 
-    io_transmittance->r *= pow(base_r, distance_weight);
-    io_transmittance->g *= pow(base_g, distance_weight);
-    io_transmittance->b *= pow(base_b, distance_weight);
+    io_transmittance->r *= runtime_visibility_3d_clamp(segment_r,
+                                                       kRuntimeVisibility3DMinimumTransmittance,
+                                                       1.0);
+    io_transmittance->g *= runtime_visibility_3d_clamp(segment_g,
+                                                       kRuntimeVisibility3DMinimumTransmittance,
+                                                       1.0);
+    io_transmittance->b *= runtime_visibility_3d_clamp(segment_b,
+                                                       kRuntimeVisibility3DMinimumTransmittance,
+                                                       1.0);
     io_transmittance->luma = runtime_visibility_3d_luminance(io_transmittance->r,
                                                              io_transmittance->g,
                                                              io_transmittance->b);

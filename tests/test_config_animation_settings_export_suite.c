@@ -9,6 +9,7 @@
 #include "app/render_export_batch.h"
 #include "config/config_manager.h"
 #include "render/pipeline/ray_tracing2_native3d_overlay.h"
+#include "render/pipeline/ray_tracing2_preview_present.h"
 #include "render/ray_tracing_integrator_catalog.h"
 #include "render/runtime_native_3d_resolution.h"
 #include "test_config_animation_internal.h"
@@ -301,6 +302,14 @@ static int test_animation_native_3d_render_scale_roundtrip_and_clamp(void) {
 static int test_runtime_native_3d_resolution_scale_contract(void) {
     uint8_t src[4] = {10, 20, 30, 40};
     uint8_t dst[16] = {0};
+    uint8_t src_abgr[16] = {
+        0, 0, 0, 255,
+        100, 100, 100, 255,
+        200, 200, 200, 255,
+        255, 255, 255, 255
+    };
+    uint8_t dst_abgr[64] = {0};
+    uint8_t dimmed_abgr[16] = {0};
     int width = 0;
     int height = 0;
     int rect_x = 0;
@@ -337,6 +346,25 @@ static int test_runtime_native_3d_resolution_scale_contract(void) {
     assert_true("runtime_native_3d_scale_upscale_top_right", dst[3] == 20);
     assert_true("runtime_native_3d_scale_upscale_bottom_left", dst[12] == 30);
     assert_true("runtime_native_3d_scale_upscale_bottom_right", dst[15] == 40);
+    RuntimeNative3DUpscaleBilinearABGR(src_abgr, 2, 2, dst_abgr, 4, 4);
+    assert_true("runtime_native_3d_scale_bilinear_preserves_top_left",
+                dst_abgr[0] == 0);
+    assert_true("runtime_native_3d_scale_bilinear_preserves_bottom_right",
+                dst_abgr[((size_t)3 * 4u + 3u) * 4u] == 255);
+    assert_true("runtime_native_3d_scale_bilinear_center_softens_block",
+                dst_abgr[((size_t)1 * 4u + 1u) * 4u] > 0 &&
+                dst_abgr[((size_t)1 * 4u + 1u) * 4u] < 100);
+    assert_true("runtime_native_3d_scale_bilinear_alpha_preserved",
+                dst_abgr[((size_t)1 * 4u + 1u) * 4u + 3u] == 255);
+    RayTracing2PreviewPresent_DimCopyABGR(src_abgr, dimmed_abgr, 4u, 1u, 4u);
+    assert_true("runtime_native_3d_preview_dim_copy_quarter_blue",
+                dimmed_abgr[4] == 25);
+    assert_true("runtime_native_3d_preview_dim_copy_quarter_green",
+                dimmed_abgr[5] == 25);
+    assert_true("runtime_native_3d_preview_dim_copy_quarter_red",
+                dimmed_abgr[6] == 25);
+    assert_true("runtime_native_3d_preview_dim_copy_alpha_forced_opaque",
+                dimmed_abgr[7] == 255);
     assert_true("runtime_native_3d_scale_rect_map_ok",
                 RuntimeNative3DResolveUpscaledRect(32,
                                                    16,
