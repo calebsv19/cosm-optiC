@@ -233,7 +233,7 @@ static int test_runtime_disney_3d_lower_tier_separation_contract(void) {
     }
 
     sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_GLOSSY;
-    ok = RuntimeDirectLight3D_ShadePixel(&scene, &projector, 50.0, 50.0, &direct_result);
+    ok = RuntimeDirectLight3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &direct_result);
     assert_true("runtime_disney_tier_compare_direct_ok", ok);
     ok = RuntimeDiffuseBounce3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &diffuse_result);
     assert_true("runtime_disney_tier_compare_diffuse_ok", ok);

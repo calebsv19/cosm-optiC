@@ -7,6 +7,7 @@
 #include "render/integrators/integrator_common.h"
 #include "render/runtime_camera_3d_rays.h"
 #include "render/runtime_native_3d_blue_noise.h"
+#include "render/runtime_native_3d_adaptive_sampling.h"
 #include "render/runtime_diffuse_bounce_3d.h"
 #include "render/runtime_direct_light_3d.h"
 #include "render/runtime_native_3d_render.h"
@@ -21,6 +22,27 @@ static uint8_t native3d_temporal_test_pixel_r(const uint8_t* pixels, int width, 
     size_t base =
         ((size_t)y * (size_t)width + (size_t)x) * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
     return pixels[base + 2u];
+}
+
+static int native3d_temporal_round_divide(int value, int divisor) {
+    if (divisor <= 1) return value;
+    return (int)lround((double)value / (double)divisor);
+}
+
+static void native3d_temporal_normalize_stats(RuntimeNative3DRenderStats* stats,
+                                              int temporal_frames) {
+    if (!stats || temporal_frames <= 1) return;
+    stats->hitPixelCount = native3d_temporal_round_divide(stats->hitPixelCount, temporal_frames);
+    stats->visiblePixelCount =
+        native3d_temporal_round_divide(stats->visiblePixelCount, temporal_frames);
+    stats->bouncePixelCount =
+        native3d_temporal_round_divide(stats->bouncePixelCount, temporal_frames);
+    stats->secondaryRayCount =
+        native3d_temporal_round_divide(stats->secondaryRayCount, temporal_frames);
+    stats->secondaryHitCount =
+        native3d_temporal_round_divide(stats->secondaryHitCount, temporal_frames);
+    stats->secondaryContributingHitCount =
+        native3d_temporal_round_divide(stats->secondaryContributingHitCount, temporal_frames);
 }
 
 static int test_runtime_diffuse_bounce_3d_shadowed_hit_lift_contract(void) {
@@ -106,7 +128,7 @@ static int test_runtime_diffuse_bounce_3d_shadowed_hit_lift_contract(void) {
         return 0;
     }
 
-    ok = RuntimeDirectLight3D_ShadePixel(&scene, &projector, 50.0, 50.0, &direct_result);
+    ok = RuntimeDirectLight3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &direct_result);
     assert_true("runtime_diffuse_bounce_shadowed_direct_ok", ok);
     assert_true("runtime_diffuse_bounce_shadowed_direct_not_visible", !direct_result.visible);
     assert_close("runtime_diffuse_bounce_shadowed_direct_zero",
@@ -482,13 +504,13 @@ static int test_runtime_native_3d_temporal_accumulation_contract(void) {
     assert_true("runtime_native_3d_temporal_multi_ok", ok);
     assert_true("runtime_native_3d_temporal_differs_from_single",
                 memcmp(pixels_single, pixels_temporal, sizeof(pixels_single)) != 0);
-    assert_true("runtime_native_3d_temporal_secondary_ray_growth",
-                stats_temporal.secondaryRayCount ==
-                    (stats_single.secondaryRayCount * 4));
+    assert_true("runtime_native_3d_temporal_secondary_ray_normalized",
+                stats_temporal.secondaryRayCount == stats_single.secondaryRayCount);
+    const int visible_tolerance =
+        (int)fmax(8.0, ceil((double)stats_single.visiblePixelCount * 0.02));
     assert_true("runtime_native_3d_temporal_visible_preserved",
-                stats_temporal.visiblePixelCount >= stats_single.visiblePixelCount &&
-                    stats_temporal.visiblePixelCount <=
-                        (stats_single.visiblePixelCount * 4));
+                abs(stats_temporal.visiblePixelCount - stats_single.visiblePixelCount) <=
+                    visible_tolerance);
     assert_true("runtime_native_3d_temporal_bounded_grayscale",
                 native3d_temporal_test_pixel_r(pixels_temporal, 101, 50, 50) <= 255);
 
@@ -515,8 +537,32 @@ static int test_runtime_native_3d_temporal_accumulation_contract(void) {
         &sampling,
         &stats_single);
     assert_true("runtime_native_3d_temporal_direct_light_single_ok", ok);
-    assert_true("runtime_native_3d_temporal_direct_light_bypasses",
-                memcmp(pixels_single, pixels_temporal, sizeof(pixels_single)) == 0);
+    animSettings.lightRadius = 0.25;
+    ok = RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
+        pixels_temporal,
+        RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT,
+        101,
+        101,
+        0.0,
+        2.0,
+        -2.0,
+        &sampling,
+        4,
+        &stats_temporal);
+    assert_true("runtime_native_3d_temporal_direct_light_area_ok", ok);
+    ok = RuntimeNative3DRenderToPixelBufferWithSampling(
+        pixels_single,
+        RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT,
+        101,
+        101,
+        0.0,
+        2.0,
+        -2.0,
+        &sampling,
+        &stats_single);
+    assert_true("runtime_native_3d_temporal_direct_light_area_single_ok", ok);
+    assert_true("runtime_native_3d_temporal_direct_light_differs",
+                memcmp(pixels_single, pixels_temporal, sizeof(pixels_single)) != 0);
 
     sceneSettings = saved_scene;
     animSettings = saved_anim;
@@ -558,6 +604,210 @@ static int test_runtime_native_3d_temporal_accumulation_ema_and_clamp_contract(v
     assert_true("runtime_native_3d_temporal_accum_ema_lifts_history",
                 resolved[0] > sample_a[0]);
 
+    RuntimeNative3DTemporalAccumulation_Free(&accumulation);
+    return 0;
+}
+
+static int test_runtime_native_3d_temporal_activity_mask_min_subpass_contract(void) {
+    RuntimeNative3DTemporalAccumulation accumulation = {0};
+    RuntimeNative3DAdaptiveSamplingMask mask = {0};
+    float* samples = NULL;
+    bool ok = false;
+    const int width = 16;
+    const int height = 16;
+
+    RuntimeNative3DTemporalAccumulation_Init(&accumulation);
+    RuntimeNative3DAdaptiveSamplingMask_Init(&mask);
+    samples = (float*)calloc((size_t)width * (size_t)height * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS,
+                             sizeof(*samples));
+    assert_true("runtime_native_3d_temporal_activity_mask_buffer_alloc", samples != NULL);
+    if (!samples) {
+        RuntimeNative3DAdaptiveSamplingMask_Free(&mask);
+        RuntimeNative3DTemporalAccumulation_Free(&accumulation);
+        return 0;
+    }
+
+    ok = RuntimeNative3DTemporalAccumulation_Ensure(&accumulation, width, height) &&
+         RuntimeNative3DAdaptiveSampling_BeginTemporalActivityMask(&mask,
+                                                                   width,
+                                                                   height,
+                                                                   width,
+                                                                   2);
+    assert_true("runtime_native_3d_temporal_activity_mask_setup_ok", ok);
+    if (!ok) {
+        free(samples);
+        RuntimeNative3DAdaptiveSamplingMask_Free(&mask);
+        RuntimeNative3DTemporalAccumulation_Free(&accumulation);
+        return 0;
+    }
+
+    ok = RuntimeNative3DTemporalAccumulation_AddRegion(&accumulation, samples, width, 0, 0, width, height);
+    assert_true("runtime_native_3d_temporal_activity_mask_first_add_ok", ok);
+    RuntimeNative3DTemporalAccumulation_CommitSubpass(&accumulation);
+    ok = RuntimeNative3DAdaptiveSampling_RefreshTemporalActivityMask(&mask, &accumulation, NULL);
+    assert_true("runtime_native_3d_temporal_activity_mask_first_refresh_ok", ok);
+    assert_true("runtime_native_3d_temporal_activity_mask_min_subpasses_hold_pixels",
+                mask.activePixelCount == width * height);
+    assert_true("runtime_native_3d_temporal_activity_mask_min_subpasses_hold_tiles",
+                mask.activeTileCount == 1 && mask.inactiveTileCount == 0);
+
+    ok = RuntimeNative3DTemporalAccumulation_AddRegion(&accumulation, samples, width, 0, 0, width, height);
+    assert_true("runtime_native_3d_temporal_activity_mask_second_add_ok", ok);
+    RuntimeNative3DTemporalAccumulation_CommitSubpass(&accumulation);
+    ok = RuntimeNative3DAdaptiveSampling_RefreshTemporalActivityMask(&mask, &accumulation, NULL);
+    assert_true("runtime_native_3d_temporal_activity_mask_second_refresh_ok", ok);
+    assert_true("runtime_native_3d_temporal_activity_mask_converged_tile_prunes",
+                mask.activePixelCount == 0);
+    assert_true("runtime_native_3d_temporal_activity_mask_converged_tile_counts",
+                mask.activeTileCount == 0 && mask.inactiveTileCount == 1);
+
+    free(samples);
+    RuntimeNative3DAdaptiveSamplingMask_Free(&mask);
+    RuntimeNative3DTemporalAccumulation_Free(&accumulation);
+    return 0;
+}
+
+static int test_runtime_native_3d_temporal_activity_mask_unstable_tile_stays_active(void) {
+    RuntimeNative3DTemporalAccumulation accumulation = {0};
+    RuntimeNative3DAdaptiveSamplingMask mask = {0};
+    float* samples = NULL;
+    bool ok = false;
+    const int width = 16;
+    const int height = 16;
+
+    RuntimeNative3DTemporalAccumulation_Init(&accumulation);
+    RuntimeNative3DAdaptiveSamplingMask_Init(&mask);
+    samples = (float*)calloc((size_t)width * (size_t)height * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS,
+                             sizeof(*samples));
+    assert_true("runtime_native_3d_temporal_activity_unstable_buffer_alloc", samples != NULL);
+    if (!samples) {
+        RuntimeNative3DAdaptiveSamplingMask_Free(&mask);
+        RuntimeNative3DTemporalAccumulation_Free(&accumulation);
+        return 0;
+    }
+
+    ok = RuntimeNative3DTemporalAccumulation_Ensure(&accumulation, width, height) &&
+         RuntimeNative3DAdaptiveSampling_BeginTemporalActivityMask(&mask,
+                                                                   width,
+                                                                   height,
+                                                                   width,
+                                                                   2);
+    assert_true("runtime_native_3d_temporal_activity_unstable_setup_ok", ok);
+    if (!ok) {
+        free(samples);
+        RuntimeNative3DAdaptiveSamplingMask_Free(&mask);
+        RuntimeNative3DTemporalAccumulation_Free(&accumulation);
+        return 0;
+    }
+
+    ok = RuntimeNative3DTemporalAccumulation_AddRegion(&accumulation, samples, width, 0, 0, width, height);
+    assert_true("runtime_native_3d_temporal_activity_unstable_first_add_ok", ok);
+    RuntimeNative3DTemporalAccumulation_CommitSubpass(&accumulation);
+    samples[0] = 1.0f;
+    ok = RuntimeNative3DTemporalAccumulation_AddRegion(&accumulation, samples, width, 0, 0, width, height);
+    assert_true("runtime_native_3d_temporal_activity_unstable_second_add_ok", ok);
+    RuntimeNative3DTemporalAccumulation_CommitSubpass(&accumulation);
+    ok = RuntimeNative3DAdaptiveSampling_RefreshTemporalActivityMask(&mask, &accumulation, NULL);
+    assert_true("runtime_native_3d_temporal_activity_unstable_refresh_ok", ok);
+    assert_true("runtime_native_3d_temporal_activity_unstable_tile_kept_active",
+                mask.activePixelCount == width * height);
+    assert_true("runtime_native_3d_temporal_activity_unstable_tile_counts",
+                mask.activeTileCount == 1 && mask.inactiveTileCount == 0);
+
+    free(samples);
+    RuntimeNative3DAdaptiveSamplingMask_Free(&mask);
+    RuntimeNative3DTemporalAccumulation_Free(&accumulation);
+    return 0;
+}
+
+static int test_runtime_native_3d_temporal_activity_mask_risky_tile_holds_longer(void) {
+    RuntimeNative3DTemporalAccumulation accumulation = {0};
+    RuntimeNative3DAdaptiveSamplingMask mask = {0};
+    RuntimeNative3DFeatureBuffer features = {0};
+    float* samples = NULL;
+    bool ok = false;
+    const int width = 16;
+    const int height = 16;
+    const size_t pixel_count = (size_t)width * (size_t)height;
+
+    RuntimeNative3DTemporalAccumulation_Init(&accumulation);
+    RuntimeNative3DAdaptiveSamplingMask_Init(&mask);
+    RuntimeNative3DFeatureBuffer_Init(&features);
+    samples = (float*)calloc(pixel_count * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS, sizeof(*samples));
+    assert_true("runtime_native_3d_temporal_activity_risky_buffer_alloc", samples != NULL);
+    if (!samples) {
+        RuntimeNative3DFeatureBuffer_Free(&features);
+        RuntimeNative3DAdaptiveSamplingMask_Free(&mask);
+        RuntimeNative3DTemporalAccumulation_Free(&accumulation);
+        return 0;
+    }
+
+    ok = RuntimeNative3DTemporalAccumulation_Ensure(&accumulation, width, height) &&
+         RuntimeNative3DAdaptiveSampling_BeginTemporalActivityMask(&mask,
+                                                                   width,
+                                                                   height,
+                                                                   width,
+                                                                   2) &&
+         RuntimeNative3DFeatureBuffer_Ensure(&features, width, height);
+    assert_true("runtime_native_3d_temporal_activity_risky_setup_ok", ok);
+    if (!ok) {
+        free(samples);
+        RuntimeNative3DFeatureBuffer_Free(&features);
+        RuntimeNative3DAdaptiveSamplingMask_Free(&mask);
+        RuntimeNative3DTemporalAccumulation_Free(&accumulation);
+        return 0;
+    }
+
+    memset(features.hitMaskBuffer, 1, pixel_count * sizeof(*features.hitMaskBuffer));
+    for (size_t i = 0; i < pixel_count; ++i) {
+        const size_t normal_base = i * 3u;
+        features.normalBuffer[normal_base] = 0.0f;
+        features.normalBuffer[normal_base + 1u] = 1.0f;
+        features.normalBuffer[normal_base + 2u] = 0.0f;
+        features.depthBuffer[i] = 5.0f;
+        features.reflectivityBuffer[i] = 1.0f;
+        features.roughnessBuffer[i] = 0.0f;
+        features.transparencyBuffer[i] = 0.0f;
+    }
+
+    ok = RuntimeNative3DTemporalAccumulation_AddRegion(&accumulation, samples, width, 0, 0, width, height);
+    assert_true("runtime_native_3d_temporal_activity_risky_first_add_ok", ok);
+    RuntimeNative3DTemporalAccumulation_CommitSubpass(&accumulation);
+    ok = RuntimeNative3DAdaptiveSampling_RefreshTemporalActivityMask(&mask, &accumulation, &features);
+    assert_true("runtime_native_3d_temporal_activity_risky_first_refresh_ok", ok);
+    assert_true("runtime_native_3d_temporal_activity_risky_first_hold",
+                mask.activePixelCount == width * height);
+
+    ok = RuntimeNative3DTemporalAccumulation_AddRegion(&accumulation, samples, width, 0, 0, width, height);
+    assert_true("runtime_native_3d_temporal_activity_risky_second_add_ok", ok);
+    RuntimeNative3DTemporalAccumulation_CommitSubpass(&accumulation);
+    ok = RuntimeNative3DAdaptiveSampling_RefreshTemporalActivityMask(&mask, &accumulation, &features);
+    assert_true("runtime_native_3d_temporal_activity_risky_second_refresh_ok", ok);
+    assert_true("runtime_native_3d_temporal_activity_risky_second_hold",
+                mask.activePixelCount == width * height &&
+                    mask.activeTileCount == 1 && mask.inactiveTileCount == 0);
+
+    ok = RuntimeNative3DTemporalAccumulation_AddRegion(&accumulation, samples, width, 0, 0, width, height);
+    assert_true("runtime_native_3d_temporal_activity_risky_third_add_ok", ok);
+    RuntimeNative3DTemporalAccumulation_CommitSubpass(&accumulation);
+    ok = RuntimeNative3DAdaptiveSampling_RefreshTemporalActivityMask(&mask, &accumulation, &features);
+    assert_true("runtime_native_3d_temporal_activity_risky_third_refresh_ok", ok);
+    assert_true("runtime_native_3d_temporal_activity_risky_third_hold",
+                mask.activePixelCount == width * height &&
+                    mask.activeTileCount == 1 && mask.inactiveTileCount == 0);
+
+    ok = RuntimeNative3DTemporalAccumulation_AddRegion(&accumulation, samples, width, 0, 0, width, height);
+    assert_true("runtime_native_3d_temporal_activity_risky_fourth_add_ok", ok);
+    RuntimeNative3DTemporalAccumulation_CommitSubpass(&accumulation);
+    ok = RuntimeNative3DAdaptiveSampling_RefreshTemporalActivityMask(&mask, &accumulation, &features);
+    assert_true("runtime_native_3d_temporal_activity_risky_fourth_refresh_ok", ok);
+    assert_true("runtime_native_3d_temporal_activity_risky_tile_prunes_after_hold",
+                mask.activePixelCount == 0 &&
+                    mask.activeTileCount == 0 && mask.inactiveTileCount == 1);
+
+    free(samples);
+    RuntimeNative3DFeatureBuffer_Free(&features);
+    RuntimeNative3DAdaptiveSamplingMask_Free(&mask);
     RuntimeNative3DTemporalAccumulation_Free(&accumulation);
     return 0;
 }
@@ -800,6 +1050,7 @@ static int test_runtime_native_3d_temporal_tile_parity_contract(void) {
 
     assert_true("runtime_native_3d_temporal_tile_pixels_match",
                 memcmp(full_pixels, tiled_pixels, sizeof(full_pixels)) == 0);
+    native3d_temporal_normalize_stats(&tiled_stats, temporal_frames);
     assert_true("runtime_native_3d_temporal_tile_secondary_rays_match",
                 full_stats.secondaryRayCount == tiled_stats.secondaryRayCount);
     assert_true("runtime_native_3d_temporal_tile_secondary_hits_match",
@@ -812,6 +1063,106 @@ static int test_runtime_native_3d_temporal_tile_parity_contract(void) {
     RuntimeNative3DTemporalAccumulation_Free(&tile_accumulation);
     TileGridFree(&grid);
     RuntimeNative3DPreparedFrame_Free(&frame);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_native_3d_disney_temporal_pruning_stats_contract(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_native_3d_disney_temporal_pruning\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"wall\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":6.0,\"height\":6.0,"
+            "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+            "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":1.5,\"y\":-2.0,\"z\":0.5}}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeNative3DSamplingContext sampling = {.sampleSequence = 41U};
+    RuntimeNative3DRenderStats diffuse_stats = {0};
+    RuntimeNative3DRenderStats disney_stats = {0};
+    uint8_t diffuse_pixels[101 * 101 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    uint8_t disney_pixels[101 * 101 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    bool ok = false;
+    const int temporal_frames = 4;
+
+    animSettings.secondaryDiffuseSamples3D = 4;
+    animSettings.transmissionSamples3D = 4;
+    animSettings.bounceDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
+    animSettings.temporalFrames3D = temporal_frames;
+    animSettings.disneyDenoiseEnabled = false;
+    animSettings.lightIntensity = 10.0;
+    animSettings.forwardDecay = 10.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    animSettings.lightRadius = 0.0;
+    sceneSettings.camera.rotation = 0.0;
+    sceneSettings.camera.zoom = 1.0;
+
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_native_3d_disney_temporal_pruning_apply_ok", ok);
+    if (!ok) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    ok = RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
+        diffuse_pixels,
+        RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
+        101,
+        101,
+        0.0,
+        1.5,
+        -2.0,
+        &sampling,
+        temporal_frames,
+        &diffuse_stats);
+    assert_true("runtime_native_3d_disney_temporal_pruning_diffuse_ok", ok);
+    ok = RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
+        disney_pixels,
+        RAY_TRACING_3D_INTEGRATOR_DISNEY,
+        101,
+        101,
+        0.0,
+        1.5,
+        -2.0,
+        &sampling,
+        temporal_frames,
+        &disney_stats);
+    assert_true("runtime_native_3d_disney_temporal_pruning_disney_ok", ok);
+    assert_true("runtime_native_3d_disney_temporal_pruning_diffuse_skip_zero",
+                diffuse_stats.temporalPixelsSkipped == 0);
+    assert_true("runtime_native_3d_disney_temporal_pruning_disney_tracks_subpasses",
+                disney_stats.temporalCommittedSubpasses >= 2 &&
+                    disney_stats.temporalCommittedSubpasses <= temporal_frames);
+    assert_true("runtime_native_3d_disney_temporal_pruning_disney_skips_work",
+                disney_stats.temporalPixelsSkipped > 0);
+    assert_true("runtime_native_3d_disney_temporal_pruning_disney_marks_tiles",
+                disney_stats.temporalInactiveTileCount > 0);
+
     sceneSettings = saved_scene;
     animSettings = saved_anim;
     return 0;
@@ -891,7 +1242,7 @@ static int test_runtime_diffuse_bounce_3d_seed_branch_contract(void) {
     assert_true("runtime_diffuse_bounce_seed_primary_hit_ok", ok);
     assert_true("runtime_diffuse_bounce_seed_primary_hit_found", primary_hit.hit);
 
-    ok = RuntimeDirectLight3D_ShadePixel(&scene, &projector, 50.0, 50.0, &direct_result);
+    ok = RuntimeDirectLight3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &direct_result);
     assert_true("runtime_diffuse_bounce_seed_direct_ok", ok);
     ok = RuntimeDiffuseBounce3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &diffuse_result);
     assert_true("runtime_diffuse_bounce_seed_diffuse_ok", ok);
@@ -930,9 +1281,13 @@ int run_test_runtime_diffuse_temporal_tests(void) {
     test_runtime_diffuse_bounce_3d_recursive_depth_contract();
     test_runtime_native_3d_temporal_accumulation_contract();
     test_runtime_native_3d_temporal_accumulation_ema_and_clamp_contract();
+    test_runtime_native_3d_temporal_activity_mask_min_subpass_contract();
+    test_runtime_native_3d_temporal_activity_mask_unstable_tile_stays_active();
+    test_runtime_native_3d_temporal_activity_mask_risky_tile_holds_longer();
     test_runtime_native_3d_blue_noise_jitter_contract();
     test_runtime_native_3d_sampling_stratified_subpass_contract();
     test_runtime_native_3d_temporal_tile_parity_contract();
+    test_runtime_native_3d_disney_temporal_pruning_stats_contract();
     test_runtime_diffuse_bounce_3d_seed_branch_contract();
 
     return test_support_failures() - before;

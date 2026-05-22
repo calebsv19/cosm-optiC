@@ -31,8 +31,13 @@ static bool loadDefaultFont(void) {
     int requested_point_size = 0;
     SDL_Renderer* renderer = NULL;
 
-    if (activeFont) return true;
     if (!ensureTTF()) return false;
+    if (activeFont &&
+        ray_tracing_text_has_font_source(activeFont) &&
+        ray_tracing_text_font_cache_contains(activeFont)) {
+        return true;
+    }
+    activeFont = NULL;
     renderer = getRenderContext() ? getRenderContext()->renderer : NULL;
     base_point_size = ray_tracing_text_font_cache_ui_regular_base_point_size(kBasePointSize);
     requested_point_size = animation_config_scale_text_point_size(&animSettings, base_point_size, kMinPointSize);
@@ -82,7 +87,10 @@ bool refreshActiveFontFromAnimationConfig(void) {
     if (!ensureTTF()) {
         return false;
     }
-    if (activeFont && scaled_point_size == activePointSize) {
+    if (activeFont &&
+        scaled_point_size == activePointSize &&
+        ray_tracing_text_has_font_source(activeFont) &&
+        ray_tracing_text_font_cache_contains(activeFont)) {
         return true;
     }
 

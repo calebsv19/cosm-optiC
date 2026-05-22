@@ -79,10 +79,6 @@ static SDL_Renderer* menu_context_renderer(void) {
     return ctx->renderer;
 }
 
-static int menu_logical_pixels(int raster_pixels) {
-    return ray_tracing_text_logical_pixels(menu_context_renderer(), raster_pixels);
-}
-
 const char* menu_space_mode_button_label(void) {
     return EditorModeRouter_SpaceButtonLabel();
 }
@@ -189,9 +185,8 @@ static SDL_Rect build_adaptive_button_rect(TTF_Font* font,
     int height = minHeight;
     int textW = 0;
     int textH = 0;
-    if (font && text && text[0] && TTF_SizeUTF8(font, text, &textW, &textH) == 0) {
-        textW = menu_logical_pixels(textW);
-        textH = menu_logical_pixels(textH);
+    if (font && text && text[0] &&
+        ray_tracing_text_measure_utf8(menu_context_renderer(), font, text, &textW, &textH)) {
         width = max_int(width, textW + 24);
         height = max_int(height, textH + 14);
     }
@@ -251,8 +246,7 @@ void menu_render_fit_text_to_width(TTF_Font *font,
     source[sizeof(source) - 1] = '\0';
     snprintf(out, out_size, "%s", source);
     if (!font || max_width <= 0) return;
-    if (TTF_SizeUTF8(font, out, &w, NULL) == 0) {
-        w = menu_logical_pixels(w);
+    if (ray_tracing_text_measure_utf8(menu_context_renderer(), font, out, &w, NULL)) {
         if (w <= max_width) return;
     }
     len = strlen(out);
@@ -262,8 +256,7 @@ void menu_render_fit_text_to_width(TTF_Font *font,
         {
             char candidate[PATH_MAX];
             snprintf(candidate, sizeof(candidate), "%s...", out);
-            if (TTF_SizeUTF8(font, candidate, &w, NULL) == 0) {
-                w = menu_logical_pixels(w);
+            if (ray_tracing_text_measure_utf8(menu_context_renderer(), font, candidate, &w, NULL)) {
                 if (w <= max_width) {
                     snprintf(out, out_size, "%s", candidate);
                     return;

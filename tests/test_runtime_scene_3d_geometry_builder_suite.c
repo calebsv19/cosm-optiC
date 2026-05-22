@@ -452,6 +452,117 @@ static int test_runtime_scene_3d_builder_falls_back_to_seeded_camera_state(void)
     return 0;
 }
 
+static int test_runtime_scene_3d_builder_applies_authored_camera_focus_target(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_3d_builder_camera_focus_target\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":1.0,\"y\":2.0,\"z\":3.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{"
+          "\"ray_tracing\":{"
+            "\"authoring\":{"
+              "\"camera_focus_target\":{"
+                "\"x\":0.5,\"y\":1.5,\"z\":1.25"
+              "},"
+              "\"camera_path\":{"
+                "\"mode\":\"BEZIER_CUBIC\","
+                "\"points\":["
+                  "{"
+                    "\"x\":-4.0,\"y\":-6.0,\"rotation\":0.20,\"handleLink\":false,"
+                    "\"velocity1\":{\"vx\":1.0,\"vy\":0.5}"
+                  "},"
+                  "{"
+                    "\"x\":-3.0,\"y\":-5.0,\"rotation\":0.25,\"handleLink\":false,"
+                    "\"velocity2\":{\"vx\":-1.0,\"vy\":-0.5}"
+                  "}"
+                "]"
+              "},"
+              "\"camera_path_depth\":{"
+                "\"points\":["
+                  "{\"z\":2.0,\"lookPitch\":0.05,\"velocity1\":{\"vz\":0.25}},"
+                  "{\"z\":2.5,\"lookPitch\":0.10,\"velocity2\":{\"vz\":-0.25}}"
+                "]"
+              "}"
+            "}"
+          "}"
+        "}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeScene3D scene;
+    Point expected_camera_xy = {0.0, 0.0};
+    double expected_camera_z = 0.0;
+    double expected_camera_yaw = 0.0;
+    double expected_camera_pitch = 0.0;
+    double target_x = 0.5;
+    double target_y = 1.5;
+    double target_z = 1.25;
+    double dx = 0.0;
+    double dy = 0.0;
+    double dz = 0.0;
+    double horizontal = 0.0;
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_scene_3d_builder_camera_focus_target_apply_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    expected_camera_xy = GetPositionAlongPathNormalized(&sceneSettings.cameraPath, 0.5);
+    expected_camera_z =
+        CameraPath3D_GetPositionZNormalized(&sceneSettings.cameraPath, &sceneSettings.cameraPath3D, 0.5);
+    dx = target_x - expected_camera_xy.x;
+    dy = target_y - expected_camera_xy.y;
+    dz = target_z - expected_camera_z;
+    horizontal = hypot(dx, dy);
+    expected_camera_yaw = atan2(dx, -dy);
+    expected_camera_pitch = atan2(dz, horizontal);
+
+    ok = RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(&scene, 0.5);
+    assert_true("runtime_scene_3d_builder_camera_focus_target_build_ok", ok);
+    assert_true("runtime_scene_3d_builder_camera_focus_target_has_camera", scene.hasCamera);
+    assert_close("runtime_scene_3d_builder_camera_focus_target_camera_x",
+                 scene.camera.position.x,
+                 expected_camera_xy.x,
+                 1e-6);
+    assert_close("runtime_scene_3d_builder_camera_focus_target_camera_y",
+                 scene.camera.position.y,
+                 expected_camera_xy.y,
+                 1e-6);
+    assert_close("runtime_scene_3d_builder_camera_focus_target_camera_z",
+                 scene.camera.position.z,
+                 expected_camera_z,
+                 1e-6);
+    assert_close("runtime_scene_3d_builder_camera_focus_target_camera_yaw",
+                 scene.camera.rotation,
+                 expected_camera_yaw,
+                 1e-6);
+    assert_close("runtime_scene_3d_builder_camera_focus_target_camera_pitch",
+                 scene.camera.lookPitch,
+                 expected_camera_pitch,
+                 1e-6);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 int run_test_runtime_scene_3d_geometry_builder_suite(void) {
     int before = test_support_failures();
 
@@ -465,5 +576,7 @@ int run_test_runtime_scene_3d_geometry_builder_suite(void) {
     test_runtime_scene_3d_builder_promotes_authored_light_camera_samples();
     test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_builder_falls_back_to_seeded_camera_state");
     test_runtime_scene_3d_builder_falls_back_to_seeded_camera_state();
+    test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_builder_applies_authored_camera_focus_target");
+    test_runtime_scene_3d_builder_applies_authored_camera_focus_target();
     return test_support_failures() - before;
 }

@@ -2,12 +2,17 @@
 #define CONFIG_MANAGER_H
 
 #include <stdbool.h>
+#include <limits.h>
 #include <json-c/json.h>
 #include "path/path_system.h"  // Ensure Bézier path handling is included
 #include "camera/camera.h"
 #include "camera/camera_path_3d.h"
 #include "scene/object_manager.h"
 #include "material/material.h"
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
 
 #define MAX_SHAPE_POINTS 256  // Supports up to 256 points for custom shapes
 
@@ -137,15 +142,15 @@ typedef struct {
     // 2D config, planar fluid manifest, or runtime geometry scene.
     SceneSource sceneSource;
     bool useFluidScene;
-    char fluidManifest[256];
-    char runtimeScenePath[256];
+    char fluidManifest[PATH_MAX];
+    char runtimeScenePath[PATH_MAX];
 
     // Native 3D participating-media lane. This remains separate from the
     // legacy sceneSource contract so runtime geometry and optional VF3D
     // atmosphere can coexist.
     bool volumeInteractionEnabled;
     int volumeSourceKind;
-    char volumeSourcePath[256];
+    char volumeSourcePath[PATH_MAX];
     bool volumeAffectsLighting;
     bool volumeDebugOverlayEnabled;
 } AnimationConfig;
@@ -155,7 +160,7 @@ typedef struct {
 typedef struct {
     int windowWidth;
     int windowHeight;
-    SceneObject sceneObjects[10];  // Stores up to 10 objects
+    SceneObject sceneObjects[MAX_OBJECTS];  // Stores up to MAX_OBJECTS objects
     int objectCount;
     Path bezierPath;   // Light path
     CameraPath3D bezierPath3D; // Light path depth authoring for controlled-3D lane

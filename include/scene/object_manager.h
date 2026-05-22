@@ -5,7 +5,7 @@
 #include <math.h>
 #include <stdbool.h>
 #define MAX_POINTS 256
-#define MAX_OBJECTS 10
+#define MAX_OBJECTS 64
 
 typedef enum {
     OBJECT_CIRCLE = 0,   // Circle objects

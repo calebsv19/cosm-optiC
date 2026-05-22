@@ -25,3 +25,9 @@ bool fluid_volume_import_3d_load_source(const char* path,
                                         RuntimeVolumeAttachment3D* out_attachment,
                                         char* out_diagnostics,
                                         size_t out_diagnostics_size);
+bool fluid_volume_import_3d_load_source_at_frame(const char* path,
+                                                 RuntimeVolume3DSourceKind source_kind_hint,
+                                                 int requested_frame_index,
+                                                 RuntimeVolumeAttachment3D* out_attachment,
+                                                 char* out_diagnostics,
+                                                 size_t out_diagnostics_size);

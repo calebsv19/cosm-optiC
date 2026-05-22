@@ -484,6 +484,72 @@ static int test_fluid_volume_import_3d_manifest_prefers_first_frame_by_default(v
     return 0;
 }
 
+static int test_fluid_volume_import_3d_manifest_selects_requested_frame_index(void) {
+    char dir[PATH_MAX] = {0};
+    char first_vf3d_path[PATH_MAX] = {0};
+    char second_vf3d_path[PATH_MAX] = {0};
+    char manifest_path[PATH_MAX] = {0};
+    RuntimeVolumeAttachment3D attachment;
+    char diagnostics[128] = {0};
+    bool ok = false;
+    const char* manifest_json =
+        "{\n"
+        "  \"manifest_version\": 2,\n"
+        "  \"frame_contract\": \"vf3d\",\n"
+        "  \"space_mode\": \"3d\",\n"
+        "  \"frames\": [\n"
+        "    {\n"
+        "      \"frame_index\": 1,\n"
+        "      \"path\": \"frame_000001.vf3d\",\n"
+        "      \"frame_contract\": \"vf3d\"\n"
+        "    },\n"
+        "    {\n"
+        "      \"frame_index\": 2,\n"
+        "      \"path\": \"frame_000002.vf3d\",\n"
+        "      \"frame_contract\": \"vf3d\"\n"
+        "    }\n"
+        "  ]\n"
+        "}\n";
+
+    RuntimeVolumeAttachment3D_Init(&attachment);
+    assert_true("fluid_volume_import_3d_manifest_index_frame_temp_dir",
+                make_temp_volume_dir(dir, sizeof(dir)));
+    assert_true("fluid_volume_import_3d_manifest_index_frame_path_a",
+                snprintf(first_vf3d_path, sizeof(first_vf3d_path), "%s/frame_000001.vf3d", dir) <
+                    (int)sizeof(first_vf3d_path));
+    assert_true("fluid_volume_import_3d_manifest_index_frame_path_b",
+                snprintf(second_vf3d_path, sizeof(second_vf3d_path), "%s/frame_000002.vf3d", dir) <
+                    (int)sizeof(second_vf3d_path));
+    assert_true("fluid_volume_import_3d_manifest_index_frame_manifest_path",
+                snprintf(manifest_path, sizeof(manifest_path), "%s/manifest.json", dir) <
+                    (int)sizeof(manifest_path));
+    assert_true("fluid_volume_import_3d_manifest_index_frame_write_a",
+                write_sample_vf3d_custom(first_vf3d_path, 1u, false, false, 0.0f, 1u));
+    assert_true("fluid_volume_import_3d_manifest_index_frame_write_b",
+                write_sample_vf3d_custom(second_vf3d_path, 1u, false, false, 1.0f, 2u));
+    assert_true("fluid_volume_import_3d_manifest_index_frame_write_manifest",
+                write_local_text_file(manifest_path, manifest_json));
+
+    ok = fluid_volume_import_3d_load_source_at_frame(manifest_path,
+                                                     RUNTIME_VOLUME_3D_SOURCE_MANIFEST,
+                                                     1,
+                                                     &attachment,
+                                                     diagnostics,
+                                                     sizeof(diagnostics));
+    assert_true("fluid_volume_import_3d_manifest_index_frame_ok", ok);
+    assert_true("fluid_volume_import_3d_manifest_index_frame_density_from_second",
+                attachment.channels.density && attachment.channels.density[4] == 1.5f);
+    assert_true("fluid_volume_import_3d_manifest_index_frame_not_first",
+                attachment.channels.density && attachment.channels.density[4] != 0.5f);
+
+    RuntimeVolumeAttachment3D_Free(&attachment);
+    unlink(manifest_path);
+    unlink(first_vf3d_path);
+    unlink(second_vf3d_path);
+    rmdir(dir);
+    return 0;
+}
+
 static int test_fluid_volume_import_3d_loads_scene_bundle_pack_source(void) {
     char dir[PATH_MAX] = {0};
     char pack_path[PATH_MAX] = {0};
@@ -595,6 +661,7 @@ int run_test_fluid_volume_import_3d_tests(void) {
     test_fluid_volume_import_3d_rejects_zero_scene_up();
     test_fluid_volume_import_3d_loads_manifest_backed_raw_source();
     test_fluid_volume_import_3d_manifest_prefers_first_frame_by_default();
+    test_fluid_volume_import_3d_manifest_selects_requested_frame_index();
     test_fluid_volume_import_3d_loads_scene_bundle_pack_source();
     test_fluid_volume_import_3d_rejects_non_vf3d_manifest();
     return test_support_failures() - before;

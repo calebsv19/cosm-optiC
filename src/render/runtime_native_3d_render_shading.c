@@ -90,7 +90,8 @@ static RuntimeVolume3DScatterResult runtime_native_3d_render_primary_scatter(
     const RuntimeCameraProjector3D* projector,
     double pixel_x,
     double pixel_y,
-    double t_max) {
+    double t_max,
+    const RuntimeNative3DSamplingContext* sampling) {
     Ray3D primary_ray = {0};
 
     if (!scene || !projector) {
@@ -102,7 +103,8 @@ static RuntimeVolume3DScatterResult runtime_native_3d_render_primary_scatter(
     return RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(scene,
                                                               &primary_ray,
                                                               projector->nearPlane,
-                                                              t_max);
+                                                              t_max,
+                                                              sampling);
 }
 
 static void runtime_native_3d_render_apply_scatter_rgb(
@@ -169,6 +171,7 @@ static void runtime_native_3d_render_write_emitter_radiance_with_scatter(
     double pixel_x,
     double pixel_y,
     const RuntimeLightEmitterHit3DResult* hit,
+    const RuntimeNative3DSamplingContext* sampling,
     RuntimeNative3DRenderStats* io_stats) {
     RuntimeVolume3DScatterResult scatter = {0};
     double radiance_r = 0.0;
@@ -182,7 +185,8 @@ static void runtime_native_3d_render_write_emitter_radiance_with_scatter(
                                                        projector,
                                                        pixel_x,
                                                        pixel_y,
-                                                       hit->t);
+                                                       hit->t,
+                                                       sampling);
     radiance_r = hit->radiance;
     radiance_g = hit->radiance;
     radiance_b = hit->radiance;
@@ -216,6 +220,7 @@ static bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
                                                         int end_y,
                                                         const RuntimeScene3D* scene,
                                                         const RuntimeCameraProjector3D* projector,
+                                                        const RuntimeNative3DSamplingContext* sampling,
                                                         RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DRenderStats stats = {0};
 
@@ -254,6 +259,7 @@ static bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
                                                                              (double)x,
                                                                              (double)y,
                                                                              &emitter_hit,
+                                                                             sampling,
                                                                              &stats);
                 continue;
             }
@@ -261,12 +267,14 @@ static bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
                                                  projector,
                                                  (double)x,
                                                  (double)y,
+                                                 sampling,
                                                  &result)) {
                 scatter = runtime_native_3d_render_primary_scatter(scene,
                                                                    projector,
                                                                    (double)x,
                                                                    (double)y,
-                                                                   HUGE_VAL);
+                                                                   HUGE_VAL,
+                                                                   sampling);
                 runtime_native_3d_render_write_background_radiance(radiance_buffer,
                                                                    idx,
                                                                    scene,
@@ -282,7 +290,8 @@ static bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
                                                                projector,
                                                                (double)x,
                                                                (double)y,
-                                                               result.hitInfo.t);
+                                                               result.hitInfo.t,
+                                                               sampling);
             stats.hitPixelCount += 1;
             if (result.visible || scatter.active) {
                 stats.visiblePixelCount += 1;
@@ -360,6 +369,7 @@ static bool runtime_native_3d_render_shade_diffuse_bounce(float* radiance_buffer
                                                                              (double)x,
                                                                              (double)y,
                                                                              &emitter_hit,
+                                                                             sampling,
                                                                              &stats);
                 continue;
             }
@@ -373,7 +383,8 @@ static bool runtime_native_3d_render_shade_diffuse_bounce(float* radiance_buffer
                                                                    projector,
                                                                    (double)x,
                                                                    (double)y,
-                                                                   HUGE_VAL);
+                                                                   HUGE_VAL,
+                                                                   sampling);
                 runtime_native_3d_render_write_background_radiance(radiance_buffer,
                                                                    idx,
                                                                    scene,
@@ -389,7 +400,8 @@ static bool runtime_native_3d_render_shade_diffuse_bounce(float* radiance_buffer
                                                                projector,
                                                                (double)x,
                                                                (double)y,
-                                                               result.hitInfo.t);
+                                                               result.hitInfo.t,
+                                                               sampling);
             stats.hitPixelCount += 1;
             runtime_native_3d_render_apply_scatter_rgb(&result.radianceR,
                                                        &result.radianceG,
@@ -477,6 +489,7 @@ static bool runtime_native_3d_render_shade_material(float* radiance_buffer,
                                                                              (double)x,
                                                                              (double)y,
                                                                              &emitter_hit,
+                                                                             sampling,
                                                                              &stats);
                 continue;
             }
@@ -490,7 +503,8 @@ static bool runtime_native_3d_render_shade_material(float* radiance_buffer,
                                                                    projector,
                                                                    (double)x,
                                                                    (double)y,
-                                                                   HUGE_VAL);
+                                                                   HUGE_VAL,
+                                                                   sampling);
                 runtime_native_3d_render_write_background_radiance(radiance_buffer,
                                                                    idx,
                                                                    scene,
@@ -506,7 +520,8 @@ static bool runtime_native_3d_render_shade_material(float* radiance_buffer,
                                                                projector,
                                                                (double)x,
                                                                (double)y,
-                                                               result.hitInfo.t);
+                                                               result.hitInfo.t,
+                                                               sampling);
             stats.hitPixelCount += 1;
             runtime_native_3d_render_apply_scatter_rgb(&result.radianceR,
                                                        &result.radianceG,
@@ -595,6 +610,7 @@ static bool runtime_native_3d_render_shade_emission_transparency(
                                                                              (double)x,
                                                                              (double)y,
                                                                              &emitter_hit,
+                                                                             sampling,
                                                                              &stats);
                 continue;
             }
@@ -608,7 +624,8 @@ static bool runtime_native_3d_render_shade_emission_transparency(
                                                                    projector,
                                                                    (double)x,
                                                                    (double)y,
-                                                                   HUGE_VAL);
+                                                                   HUGE_VAL,
+                                                                   sampling);
                 runtime_native_3d_render_write_background_radiance(radiance_buffer,
                                                                    idx,
                                                                    scene,
@@ -624,7 +641,8 @@ static bool runtime_native_3d_render_shade_emission_transparency(
                                                                projector,
                                                                (double)x,
                                                                (double)y,
-                                                               result.hitInfo.t);
+                                                               result.hitInfo.t,
+                                                               sampling);
             stats.hitPixelCount += 1;
             runtime_native_3d_render_apply_scatter_rgb(&result.radianceR,
                                                        &result.radianceG,
@@ -712,6 +730,7 @@ static bool runtime_native_3d_render_shade_disney(float* radiance_buffer,
                                                                              (double)x,
                                                                              (double)y,
                                                                              &emitter_hit,
+                                                                             sampling,
                                                                              &stats);
                 continue;
             }
@@ -725,7 +744,8 @@ static bool runtime_native_3d_render_shade_disney(float* radiance_buffer,
                                                                    projector,
                                                                    (double)x,
                                                                    (double)y,
-                                                                   HUGE_VAL);
+                                                                   HUGE_VAL,
+                                                                   sampling);
                 runtime_native_3d_render_write_background_radiance(radiance_buffer,
                                                                    idx,
                                                                    scene,
@@ -741,7 +761,8 @@ static bool runtime_native_3d_render_shade_disney(float* radiance_buffer,
                                                                projector,
                                                                (double)x,
                                                                (double)y,
-                                                               result.hitInfo.t);
+                                                               result.hitInfo.t,
+                                                               sampling);
             stats.hitPixelCount += 1;
             runtime_native_3d_render_apply_scatter_rgb(&result.radianceR,
                                                        &result.radianceG,
@@ -807,6 +828,7 @@ bool runtime_native_3d_render_dispatch_integrator(float* radiance_buffer,
                                                                end_y,
                                                                &frame->scene,
                                                                &frame->projector,
+                                                               &frame->sampling,
                                                                out_stats);
         case RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE:
             return runtime_native_3d_render_shade_diffuse_bounce(radiance_buffer,

@@ -348,7 +348,7 @@ void LoadAnimationConfig(void) {
                                                    ANIMATION_CONFIG_LEGACY_FILE,
                                                    &loaded_path);
     if (!file) {
-        printf("Failed to open animation config file (tried %s, %s, %s)\n",
+        printf("INFO: Animation config file not found (tried %s, %s, %s); using defaults.\n",
                ANIMATION_CONFIG_RUNTIME_FILE,
                ANIMATION_CONFIG_DEFAULT_FILE,
                ANIMATION_CONFIG_LEGACY_FILE);

@@ -343,7 +343,7 @@ static int test_runtime_volume_3d_single_scatter_accumulates_lit_density(void) {
     ray.origin = vec3(0.0, 0.0, 0.0);
     ray.direction = vec3(0.0, -1.0, 0.0);
 
-    scatter = RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene, &ray, 0.0, 5.0);
+    scatter = RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene, &ray, 0.0, 5.0, NULL);
     assert_true("runtime_volume_3d_scatter_active", scatter.active);
     assert_true("runtime_volume_3d_scatter_samples_positive", scatter.sampleCount > 0);
     assert_true("runtime_volume_3d_scatter_radiance_positive", scatter.radiance > 0.0);
@@ -398,9 +398,9 @@ static int test_runtime_volume_3d_single_scatter_prefers_forward_light_path(void
     lateral_ray.direction = vec3(0.0, 0.0, 1.0);
 
     forward_scatter =
-        RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene, &forward_ray, 0.0, 6.0);
+        RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene, &forward_ray, 0.0, 6.0, NULL);
     lateral_scatter =
-        RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene, &lateral_ray, 0.0, 6.0);
+        RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene, &lateral_ray, 0.0, 6.0, NULL);
 
     assert_true("runtime_volume_3d_scatter_forward_active", forward_scatter.active);
     assert_true("runtime_volume_3d_scatter_lateral_active", lateral_scatter.active);

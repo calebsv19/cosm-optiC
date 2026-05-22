@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "render/runtime_light_emitter_3d.h"
+#include "render/runtime_material_payload_3d.h"
 
 void RuntimeNative3DFeatureBuffer_Init(RuntimeNative3DFeatureBuffer* buffer) {
     if (!buffer) return;
@@ -16,6 +17,9 @@ void RuntimeNative3DFeatureBuffer_Free(RuntimeNative3DFeatureBuffer* buffer) {
     if (!buffer) return;
     free(buffer->normalBuffer);
     free(buffer->depthBuffer);
+    free(buffer->reflectivityBuffer);
+    free(buffer->roughnessBuffer);
+    free(buffer->transparencyBuffer);
     free(buffer->hitMaskBuffer);
     memset(buffer, 0, sizeof(*buffer));
 }
@@ -25,11 +29,17 @@ bool RuntimeNative3DFeatureBuffer_Ensure(RuntimeNative3DFeatureBuffer* buffer,
                                          int height) {
     float* normals = NULL;
     float* depths = NULL;
+    float* reflectivity = NULL;
+    float* roughness = NULL;
+    float* transparency = NULL;
     unsigned char* hit_mask = NULL;
     size_t pixel_count = 0;
     if (!buffer || width <= 0 || height <= 0) return false;
     if (buffer->normalBuffer &&
         buffer->depthBuffer &&
+        buffer->reflectivityBuffer &&
+        buffer->roughnessBuffer &&
+        buffer->transparencyBuffer &&
         buffer->hitMaskBuffer &&
         buffer->width == width &&
         buffer->height == height) {
@@ -39,19 +49,31 @@ bool RuntimeNative3DFeatureBuffer_Ensure(RuntimeNative3DFeatureBuffer* buffer,
     pixel_count = (size_t)width * (size_t)height;
     normals = (float*)calloc(pixel_count * 3u, sizeof(*normals));
     depths = (float*)calloc(pixel_count, sizeof(*depths));
+    reflectivity = (float*)calloc(pixel_count, sizeof(*reflectivity));
+    roughness = (float*)calloc(pixel_count, sizeof(*roughness));
+    transparency = (float*)calloc(pixel_count, sizeof(*transparency));
     hit_mask = (unsigned char*)calloc(pixel_count, sizeof(*hit_mask));
-    if (!normals || !depths || !hit_mask) {
+    if (!normals || !depths || !reflectivity || !roughness || !transparency || !hit_mask) {
         free(normals);
         free(depths);
+        free(reflectivity);
+        free(roughness);
+        free(transparency);
         free(hit_mask);
         return false;
     }
 
     free(buffer->normalBuffer);
     free(buffer->depthBuffer);
+    free(buffer->reflectivityBuffer);
+    free(buffer->roughnessBuffer);
+    free(buffer->transparencyBuffer);
     free(buffer->hitMaskBuffer);
     buffer->normalBuffer = normals;
     buffer->depthBuffer = depths;
+    buffer->reflectivityBuffer = reflectivity;
+    buffer->roughnessBuffer = roughness;
+    buffer->transparencyBuffer = transparency;
     buffer->hitMaskBuffer = hit_mask;
     buffer->width = width;
     buffer->height = height;
@@ -60,13 +82,18 @@ bool RuntimeNative3DFeatureBuffer_Ensure(RuntimeNative3DFeatureBuffer* buffer,
 
 void RuntimeNative3DFeatureBuffer_Clear(RuntimeNative3DFeatureBuffer* buffer) {
     size_t pixel_count = 0;
-    if (!buffer || !buffer->normalBuffer || !buffer->depthBuffer || !buffer->hitMaskBuffer ||
+    if (!buffer || !buffer->normalBuffer || !buffer->depthBuffer ||
+        !buffer->reflectivityBuffer || !buffer->roughnessBuffer ||
+        !buffer->transparencyBuffer || !buffer->hitMaskBuffer ||
         buffer->width <= 0 || buffer->height <= 0) {
         return;
     }
     pixel_count = (size_t)buffer->width * (size_t)buffer->height;
     memset(buffer->normalBuffer, 0, pixel_count * 3u * sizeof(*buffer->normalBuffer));
     memset(buffer->depthBuffer, 0, pixel_count * sizeof(*buffer->depthBuffer));
+    memset(buffer->reflectivityBuffer, 0, pixel_count * sizeof(*buffer->reflectivityBuffer));
+    memset(buffer->roughnessBuffer, 0, pixel_count * sizeof(*buffer->roughnessBuffer));
+    memset(buffer->transparencyBuffer, 0, pixel_count * sizeof(*buffer->transparencyBuffer));
     memset(buffer->hitMaskBuffer, 0, pixel_count * sizeof(*buffer->hitMaskBuffer));
 }
 
@@ -90,6 +117,7 @@ bool RuntimeNative3DFeatureBuffer_RenderRegion(RuntimeNative3DFeatureBuffer* buf
         const int local_y = y - start_y;
         for (int x = start_x; x < end_x; ++x) {
             RuntimeLightEmitterTrace3DResult trace = {0};
+            RuntimeMaterialPayload3D payload = {0};
             Ray3D primary_ray = RuntimeCameraProjector3D_MakePrimaryRay(projector,
                                                                         (double)x,
                                                                         (double)y);
@@ -114,6 +142,12 @@ bool RuntimeNative3DFeatureBuffer_RenderRegion(RuntimeNative3DFeatureBuffer* buf
             } else if (trace.geometryHit) {
                 normal = trace.geometryHitInfo.normal;
                 depth = trace.geometryHitInfo.t;
+                if (RuntimeMaterialPayload3D_ResolveFromHit(&trace.geometryHitInfo, &payload) &&
+                    payload.valid) {
+                    buffer->reflectivityBuffer[pixel_index] = (float)fmax(payload.bsdf.reflectivity, 0.0);
+                    buffer->roughnessBuffer[pixel_index] = (float)fmax(payload.bsdf.roughness, 0.0);
+                    buffer->transparencyBuffer[pixel_index] = (float)fmax(payload.transparency, 0.0);
+                }
             } else {
                 continue;
             }

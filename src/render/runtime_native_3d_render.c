@@ -2,11 +2,13 @@
 
 #include <math.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "config/config_manager.h"
 #include "import/fluid_volume_import_3d.h"
+#include "import/runtime_scene_bridge.h"
 #include "render/integrators/hybrid/integrator_tonemap.h"
 #include "render/runtime_volume_3d_integrate.h"
 #include "render/runtime_native_3d_render_internal.h"
@@ -17,6 +19,40 @@
 #include "render/runtime_native_3d_temporal_accum.h"
 #include "render/runtime_scene_3d_builder.h"
 #include "render/runtime_scene_3d_samples.h"
+
+static bool gRuntimeNative3DInspectionCameraPositionEnabled = false;
+static bool gRuntimeNative3DInspectionCameraLookAtEnabled = false;
+static Vec3 gRuntimeNative3DInspectionCameraPosition = {0};
+static Vec3 gRuntimeNative3DInspectionCameraLookAt = {0};
+static char gRuntimeNative3DPrepareFrameLastDiagnostics[1024] = "ok";
+
+static void runtime_native_3d_prepare_frame_set_diag(const char* message) {
+    snprintf(gRuntimeNative3DPrepareFrameLastDiagnostics,
+             sizeof(gRuntimeNative3DPrepareFrameLastDiagnostics),
+             "%s",
+             message ? message : "unknown");
+}
+
+const char* RuntimeNative3DPrepareFrameLastDiagnostics(void) {
+    return gRuntimeNative3DPrepareFrameLastDiagnostics;
+}
+
+void RuntimeNative3DRender_ResetInspectionCameraOverrides(void) {
+    gRuntimeNative3DInspectionCameraPositionEnabled = false;
+    gRuntimeNative3DInspectionCameraLookAtEnabled = false;
+    gRuntimeNative3DInspectionCameraPosition = vec3(0.0, 0.0, 0.0);
+    gRuntimeNative3DInspectionCameraLookAt = vec3(0.0, 0.0, 0.0);
+}
+
+void RuntimeNative3DRender_SetInspectionCameraPosition(Vec3 position) {
+    gRuntimeNative3DInspectionCameraPositionEnabled = true;
+    gRuntimeNative3DInspectionCameraPosition = position;
+}
+
+void RuntimeNative3DRender_SetInspectionCameraLookAt(Vec3 target) {
+    gRuntimeNative3DInspectionCameraLookAtEnabled = true;
+    gRuntimeNative3DInspectionCameraLookAt = target;
+}
 
 static double runtime_native_3d_render_resolve_default_light_radius(
     const RuntimeScene3D* scene) {
@@ -71,16 +107,143 @@ static double runtime_native_3d_render_resolve_default_light_radius(
     return radius;
 }
 
+static bool runtime_native_3d_render_scene_center(const RuntimeScene3D* scene, Vec3* out_center) {
+    double min_x = 0.0;
+    double min_y = 0.0;
+    double min_z = 0.0;
+    double max_x = 0.0;
+    double max_y = 0.0;
+    double max_z = 0.0;
+    bool seeded = false;
+
+    if (out_center) *out_center = vec3(0.0, 0.0, 0.0);
+    if (!scene || !out_center || scene->triangleMesh.triangleCount <= 0) {
+        return false;
+    }
+
+    for (int i = 0; i < scene->triangleMesh.triangleCount; ++i) {
+        const RuntimeTriangle3D* tri = &scene->triangleMesh.triangles[i];
+        const Vec3 points[3] = {tri->p0, tri->p1, tri->p2};
+        for (int p = 0; p < 3; ++p) {
+            const Vec3 point = points[p];
+            if (!seeded) {
+                min_x = max_x = point.x;
+                min_y = max_y = point.y;
+                min_z = max_z = point.z;
+                seeded = true;
+            } else {
+                if (point.x < min_x) min_x = point.x;
+                if (point.x > max_x) max_x = point.x;
+                if (point.y < min_y) min_y = point.y;
+                if (point.y > max_y) max_y = point.y;
+                if (point.z < min_z) min_z = point.z;
+                if (point.z > max_z) max_z = point.z;
+            }
+        }
+    }
+
+    if (!seeded) {
+        return false;
+    }
+
+    *out_center = vec3((min_x + max_x) * 0.5,
+                       (min_y + max_y) * 0.5,
+                       (min_z + max_z) * 0.5);
+    return true;
+}
+
+static bool runtime_native_3d_render_camera_path_has_authored_rotation(void) {
+    for (int i = 0; i < sceneSettings.cameraPath.numPoints && i < MAX_BEZIER_POINTS; ++i) {
+        if (sceneSettings.cameraPath.rotationSet[i]) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool runtime_native_3d_render_camera_path_has_authored_pitch(void) {
+    for (int i = 0; i < sceneSettings.cameraPath.numPoints && i < MAX_BEZIER_POINTS; ++i) {
+        if (fabs(sceneSettings.cameraPath3D.point_pitch[i]) > 1e-9) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void runtime_native_3d_render_apply_focus_target(RuntimeCamera3D* io_camera, Vec3 target) {
+    Vec3 to_target = vec3(0.0, 0.0, 0.0);
+    double horizontal = 0.0;
+    double pitch = 0.0;
+    const double max_pitch = 70.0 * M_PI / 180.0;
+
+    if (!io_camera) return;
+    to_target = vec3_sub(target, io_camera->position);
+    horizontal = hypot(to_target.x, to_target.y);
+    if (!(horizontal > 1e-9) && !(fabs(to_target.z) > 1e-9)) {
+        return;
+    }
+
+    if (horizontal > 1e-9) {
+        io_camera->rotation = atan2(to_target.x, -to_target.y);
+    }
+    pitch = atan2(to_target.z, horizontal);
+    if (pitch > max_pitch) pitch = max_pitch;
+    if (pitch < -max_pitch) pitch = -max_pitch;
+    io_camera->lookPitch = pitch;
+}
+
+static void runtime_native_3d_render_apply_auto_look_at_scene(const RuntimeScene3D* scene,
+                                                               RuntimeCamera3D* io_camera) {
+    Vec3 target = vec3(0.0, 0.0, 0.0);
+
+    if (!scene || !io_camera) return;
+    if (!runtime_native_3d_render_scene_center(scene, &target)) return;
+    runtime_native_3d_render_apply_focus_target(io_camera, target);
+}
+
+static void runtime_native_3d_render_apply_inspection_camera_overrides(
+    const RuntimeScene3D* scene,
+    RuntimeCamera3D* io_camera,
+    bool has_authored_rotation,
+    bool has_authored_pitch) {
+    if (!io_camera) return;
+
+    if (gRuntimeNative3DInspectionCameraPositionEnabled) {
+        io_camera->position = gRuntimeNative3DInspectionCameraPosition;
+    }
+
+    if (gRuntimeNative3DInspectionCameraLookAtEnabled) {
+        runtime_native_3d_render_apply_focus_target(io_camera,
+                                                    gRuntimeNative3DInspectionCameraLookAt);
+        return;
+    }
+
+    if (gRuntimeNative3DInspectionCameraPositionEnabled &&
+        !has_authored_rotation &&
+        !has_authored_pitch) {
+        runtime_native_3d_render_apply_auto_look_at_scene(scene, io_camera);
+    }
+}
+
 static void runtime_native_3d_render_apply_live_light(RuntimeScene3D* scene,
                                                       double live_light_x,
                                                       double live_light_y) {
     RuntimeLight3D light = {0};
+    const bool has_authored_light = scene && scene->hasLight;
     if (!scene) return;
 
-    if (scene->hasLight) {
+    if (has_authored_light) {
         light = scene->light;
     }
-    light.position = vec3(live_light_x, live_light_y, animSettings.lightHeight);
+    /*
+     * The runtime-scene builder already samples authored light paths at
+     * normalized_t and seeds scene->light accordingly. Preserve that sampled
+     * position when it exists; the live_light_* inputs are only a fallback for
+     * lanes that do not author a runtime light path.
+     */
+    if (!has_authored_light) {
+        light.position = vec3(live_light_x, live_light_y, animSettings.lightHeight);
+    }
     light.radius = (light.radius > 0.0) ? light.radius
                                         : runtime_native_3d_render_resolve_default_light_radius(scene);
     light.intensity = animSettings.lightIntensity;
@@ -94,6 +257,9 @@ static void runtime_native_3d_render_apply_live_camera(RuntimeScene3D* scene,
                                                        double normalized_t) {
     RuntimeCamera3D camera = {0};
     RuntimeCamera3D sampled = {0};
+    RuntimeSceneBridge3DScaffoldState scaffold = {0};
+    bool has_authored_rotation = false;
+    bool has_authored_pitch = false;
     if (!scene) return;
 
     if (scene->hasCamera) {
@@ -104,9 +270,26 @@ static void runtime_native_3d_render_apply_live_camera(RuntimeScene3D* scene,
     camera.zoom = (sceneSettings.camera.zoom > 0.0) ? sceneSettings.camera.zoom : 1.0;
     camera.nearPlane = (camera.nearPlane > 0.0) ? camera.nearPlane : 0.1;
     camera.lookPitch = 0.0;
-    if (!animSettings.interactiveMode &&
-        RuntimeScene3DSampleAuthoredCamera(normalized_t, &sampled)) {
-        camera.lookPitch = sampled.lookPitch;
+    if (!animSettings.interactiveMode) {
+        if (RuntimeScene3DSampleAuthoredCamera(normalized_t, &sampled)) {
+            camera = sampled;
+            camera.nearPlane = (camera.nearPlane > 0.0) ? camera.nearPlane : 0.1;
+        }
+        runtime_scene_bridge_get_last_3d_scaffold_state(&scaffold);
+        has_authored_rotation = scaffold.has_camera_rotation_seed ||
+                                runtime_native_3d_render_camera_path_has_authored_rotation();
+        has_authored_pitch = scaffold.has_camera_pitch_seed ||
+                             runtime_native_3d_render_camera_path_has_authored_pitch();
+        runtime_native_3d_render_apply_inspection_camera_overrides(scene,
+                                                                   &camera,
+                                                                   has_authored_rotation,
+                                                                   has_authored_pitch);
+        if (!has_authored_rotation &&
+            !has_authored_pitch &&
+            !gRuntimeNative3DInspectionCameraLookAtEnabled &&
+            !gRuntimeNative3DInspectionCameraPositionEnabled) {
+            runtime_native_3d_render_apply_auto_look_at_scene(scene, &camera);
+        }
     }
 
     scene->camera = camera;
@@ -114,6 +297,8 @@ static void runtime_native_3d_render_apply_live_camera(RuntimeScene3D* scene,
 }
 
 static bool runtime_native_3d_render_build_live_scene(RuntimeScene3D* scene,
+                                                      int width,
+                                                      int height,
                                                       double normalized_t,
                                                       double live_light_x,
                                                       double live_light_y) {
@@ -123,6 +308,8 @@ static bool runtime_native_3d_render_build_live_scene(RuntimeScene3D* scene,
     }
 
     runtime_native_3d_render_apply_live_light(scene, live_light_x, live_light_y);
+    (void)width;
+    (void)height;
     runtime_native_3d_render_apply_live_camera(scene, normalized_t);
     return scene->primitiveCount > 0 &&
            scene->triangleMesh.triangleCount > 0 &&
@@ -145,9 +332,10 @@ static RuntimeVolume3DSourceKind runtime_native_3d_render_map_volume_source_kind
     }
 }
 
-static bool runtime_native_3d_render_attach_configured_volume(RuntimeScene3D* scene) {
+static bool runtime_native_3d_render_attach_configured_volume(RuntimeScene3D* scene,
+                                                              int frame_index) {
     RuntimeVolume3DSourceKind source_kind = RUNTIME_VOLUME_3D_SOURCE_NONE;
-    char diagnostics[128] = {0};
+    char diagnostics[1024] = {0};
 
     if (!scene) return false;
 
@@ -163,11 +351,14 @@ static bool runtime_native_3d_render_attach_configured_volume(RuntimeScene3D* sc
         return false;
     }
 
-    if (!fluid_volume_import_3d_load_source(animSettings.volumeSourcePath,
-                                            source_kind,
-                                            &scene->volume,
-                                            diagnostics,
-                                            sizeof(diagnostics))) {
+    if (!fluid_volume_import_3d_load_source_at_frame(animSettings.volumeSourcePath,
+                                                     source_kind,
+                                                     frame_index,
+                                                     &scene->volume,
+                                                     diagnostics,
+                                                     sizeof(diagnostics))) {
+        runtime_native_3d_prepare_frame_set_diag(diagnostics[0] ? diagnostics
+                                                                : "volume import failed");
         RuntimeVolumeAttachment3D_Reset(&scene->volume);
         return false;
     }
@@ -248,6 +439,12 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
     dst->secondaryRayCount += src->secondaryRayCount;
     dst->secondaryHitCount += src->secondaryHitCount;
     dst->secondaryContributingHitCount += src->secondaryContributingHitCount;
+    dst->temporalCommittedSubpasses += src->temporalCommittedSubpasses;
+    dst->temporalPixelsRendered += src->temporalPixelsRendered;
+    dst->temporalPixelsSkipped += src->temporalPixelsSkipped;
+    dst->temporalActivePixelCount += src->temporalActivePixelCount;
+    dst->temporalActiveTileCount += src->temporalActiveTileCount;
+    dst->temporalInactiveTileCount += src->temporalInactiveTileCount;
     if (src->maxRadiance > dst->maxRadiance) {
         dst->maxRadiance = src->maxRadiance;
     }
@@ -257,19 +454,61 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
     dst->totalBounceRadiance += src->totalBounceRadiance;
 }
 
+static int runtime_native_3d_render_stats_round_divide(int value, int divisor) {
+    if (divisor <= 1) return value;
+    return (int)lround((double)value / (double)divisor);
+}
+
+static void runtime_native_3d_render_stats_normalize_temporal(
+    RuntimeNative3DRenderStats* stats,
+    int committed_subpasses) {
+    if (!stats || committed_subpasses <= 1) return;
+    stats->hitPixelCount =
+        runtime_native_3d_render_stats_round_divide(stats->hitPixelCount, committed_subpasses);
+    stats->visiblePixelCount =
+        runtime_native_3d_render_stats_round_divide(stats->visiblePixelCount, committed_subpasses);
+    stats->bouncePixelCount =
+        runtime_native_3d_render_stats_round_divide(stats->bouncePixelCount, committed_subpasses);
+    stats->secondaryRayCount =
+        runtime_native_3d_render_stats_round_divide(stats->secondaryRayCount, committed_subpasses);
+    stats->secondaryHitCount =
+        runtime_native_3d_render_stats_round_divide(stats->secondaryHitCount, committed_subpasses);
+    stats->secondaryContributingHitCount = runtime_native_3d_render_stats_round_divide(
+        stats->secondaryContributingHitCount, committed_subpasses);
+    stats->totalBounceRadiance /= (double)committed_subpasses;
+}
+
 bool RuntimeNative3DPrepareFrame(RuntimeNative3DPreparedFrame* out_frame,
                                  int width,
                                  int height,
                                  double normalized_t,
                                  double live_light_x,
                                  double live_light_y) {
-    return RuntimeNative3DPrepareFrameWithSampling(out_frame,
-                                                   width,
-                                                   height,
-                                                   normalized_t,
-                                                   live_light_x,
-                                                   live_light_y,
-                                                   NULL);
+    return RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(out_frame,
+                                                               width,
+                                                               height,
+                                                               normalized_t,
+                                                               0,
+                                                               live_light_x,
+                                                               live_light_y,
+                                                               NULL);
+}
+
+bool RuntimeNative3DPrepareFrameAtFrameIndex(RuntimeNative3DPreparedFrame* out_frame,
+                                             int width,
+                                             int height,
+                                             double normalized_t,
+                                             int frame_index,
+                                             double live_light_x,
+                                             double live_light_y) {
+    return RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(out_frame,
+                                                               width,
+                                                               height,
+                                                               normalized_t,
+                                                               frame_index,
+                                                               live_light_x,
+                                                               live_light_y,
+                                                               NULL);
 }
 
 bool RuntimeNative3DPrepareFrameWithSampling(RuntimeNative3DPreparedFrame* out_frame,
@@ -279,25 +518,74 @@ bool RuntimeNative3DPrepareFrameWithSampling(RuntimeNative3DPreparedFrame* out_f
                                              double live_light_x,
                                              double live_light_y,
                                              const RuntimeNative3DSamplingContext* sampling) {
+    return RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(out_frame,
+                                                               width,
+                                                               height,
+                                                               normalized_t,
+                                                               0,
+                                                               live_light_x,
+                                                               live_light_y,
+                                                               sampling);
+}
+
+bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
+    RuntimeNative3DPreparedFrame* out_frame,
+    int width,
+    int height,
+    double normalized_t,
+    int frame_index,
+    double live_light_x,
+    double live_light_y,
+    const RuntimeNative3DSamplingContext* sampling) {
     RuntimeNative3DPreparedFrame frame = {0};
 
+    runtime_native_3d_prepare_frame_set_diag("ok");
     if (!out_frame || width <= 0 || height <= 0) return false;
 
     RuntimeNative3DTileOccupancy_Init(&frame.tileOccupancy);
     RuntimeScene3D_Init(&frame.scene);
     if (!runtime_native_3d_render_build_live_scene(&frame.scene,
+                                                   width,
+                                                   height,
                                                    normalized_t,
                                                    live_light_x,
                                                    live_light_y)) {
+        snprintf(gRuntimeNative3DPrepareFrameLastDiagnostics,
+                 sizeof(gRuntimeNative3DPrepareFrameLastDiagnostics),
+                 "build_live_scene failed: primitive_count=%d triangle_count=%d has_light=%s has_camera=%s",
+                 frame.scene.primitiveCount,
+                 frame.scene.triangleMesh.triangleCount,
+                 frame.scene.hasLight ? "true" : "false",
+                 frame.scene.hasCamera ? "true" : "false");
         RuntimeScene3D_Free(&frame.scene);
         return false;
     }
-    if (!runtime_native_3d_render_attach_configured_volume(&frame.scene)) {
+    if (!runtime_native_3d_render_attach_configured_volume(&frame.scene, frame_index)) {
+        snprintf(gRuntimeNative3DPrepareFrameLastDiagnostics,
+                 sizeof(gRuntimeNative3DPrepareFrameLastDiagnostics),
+                 "attach_configured_volume failed: %s | volume_enabled=%s source_kind=%d source_path=%s frame_index=%d",
+                 RuntimeNative3DPrepareFrameLastDiagnostics(),
+                 animSettings.volumeInteractionEnabled ? "true" : "false",
+                 animSettings.volumeSourceKind,
+                 animSettings.volumeSourcePath,
+                 frame_index);
         RuntimeScene3D_Free(&frame.scene);
         return false;
     }
 
     if (!RuntimeCameraProjector3D_Build(&frame.scene.camera, width, height, &frame.projector)) {
+        snprintf(gRuntimeNative3DPrepareFrameLastDiagnostics,
+                 sizeof(gRuntimeNative3DPrepareFrameLastDiagnostics),
+                 "camera_projector_build failed: camera_pos=(%.6f,%.6f,%.6f) rotation=%.6f lookPitch=%.6f zoom=%.6f near=%.6f viewport=%dx%d",
+                 frame.scene.camera.position.x,
+                 frame.scene.camera.position.y,
+                 frame.scene.camera.position.z,
+                 frame.scene.camera.rotation,
+                 frame.scene.camera.lookPitch,
+                 frame.scene.camera.zoom,
+                 frame.scene.camera.nearPlane,
+                 width,
+                 height);
         RuntimeScene3D_Free(&frame.scene);
         return false;
     }
@@ -530,6 +818,65 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
     const RuntimeNative3DSamplingContext* sampling,
     int temporal_frames,
     RuntimeNative3DRenderStats* out_stats) {
+    return RuntimeNative3DRenderToPixelBufferWithSamplingTemporalProgressAtFrameIndex(
+        pixel_buffer,
+        integrator_id,
+        width,
+        height,
+        normalized_t,
+        0,
+        live_light_x,
+        live_light_y,
+        sampling,
+        temporal_frames,
+        NULL,
+        NULL,
+        out_stats);
+}
+
+bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalProgress(
+    uint8_t* pixel_buffer,
+    RayTracing3DIntegratorId integrator_id,
+    int width,
+    int height,
+    double normalized_t,
+    double live_light_x,
+    double live_light_y,
+    const RuntimeNative3DSamplingContext* sampling,
+    int temporal_frames,
+    RuntimeNative3DTemporalProgressCallback progress_callback,
+    void* progress_user_data,
+    RuntimeNative3DRenderStats* out_stats) {
+    return RuntimeNative3DRenderToPixelBufferWithSamplingTemporalProgressAtFrameIndex(
+        pixel_buffer,
+        integrator_id,
+        width,
+        height,
+        normalized_t,
+        0,
+        live_light_x,
+        live_light_y,
+        sampling,
+        temporal_frames,
+        progress_callback,
+        progress_user_data,
+        out_stats);
+}
+
+bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalProgressAtFrameIndex(
+    uint8_t* pixel_buffer,
+    RayTracing3DIntegratorId integrator_id,
+    int width,
+    int height,
+    double normalized_t,
+    int frame_index,
+    double live_light_x,
+    double live_light_y,
+    const RuntimeNative3DSamplingContext* sampling,
+    int temporal_frames,
+    RuntimeNative3DTemporalProgressCallback progress_callback,
+    void* progress_user_data,
+    RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DPreparedFrame frame = {0};
     RuntimeNative3DTemporalAccumulation accumulation = {0};
     RuntimeNative3DAdaptiveSamplingMask adaptive_mask = {0};
@@ -537,12 +884,12 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
     float* subpass_radiance = NULL;
     float* resolved_radiance = NULL;
     bool ok = false;
-    const int effective_temporal_frames =
-        (integrator_id == RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT || temporal_frames <= 1)
-            ? 1
-            : temporal_frames;
+    int committed_subpasses = 0;
+    const int effective_temporal_frames = (temporal_frames <= 1) ? 1 : temporal_frames;
     const bool use_adaptive_sampling =
         RuntimeNative3DAdaptiveSampling_ShouldUse(integrator_id, effective_temporal_frames);
+    const bool use_disney_temporal_pruning =
+        use_adaptive_sampling && integrator_id == RAY_TRACING_3D_INTEGRATOR_DISNEY;
     const bool use_denoise =
         RuntimeNative3DDenoise_ShouldApply(integrator_id,
                                            effective_temporal_frames,
@@ -565,13 +912,14 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
         free(resolved_radiance);
         return false;
     }
-    ok = RuntimeNative3DPrepareFrameWithSampling(&frame,
-                                                 width,
-                                                 height,
-                                                 normalized_t,
-                                                 live_light_x,
-                                                 live_light_y,
-                                                 sampling);
+    ok = RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(&frame,
+                                                             width,
+                                                             height,
+                                                             normalized_t,
+                                                             frame_index,
+                                                             live_light_x,
+                                                             live_light_y,
+                                                             sampling);
     if (!ok) {
         free(subpass_radiance);
         free(resolved_radiance);
@@ -587,7 +935,7 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
     }
     RuntimeNative3DTemporalAccumulation_Clear(&accumulation);
     RuntimeNative3DFeatureBuffer_Init(&feature_buffer);
-    if (use_denoise &&
+    if ((use_denoise || use_disney_temporal_pruning) &&
         (!RuntimeNative3DFeatureBuffer_Ensure(&feature_buffer, width, height) ||
          !RuntimeNative3DFeatureBuffer_RenderRegion(&feature_buffer,
                                                    &frame.scene,
@@ -605,14 +953,21 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
     }
     if (use_adaptive_sampling) {
         RuntimeNative3DAdaptiveSamplingMask_Init(&adaptive_mask);
-        ok = RuntimeNative3DAdaptiveSamplingMask_Ensure(&adaptive_mask, width, height) &&
-             RuntimeNative3DAdaptiveSampling_BuildStableEmitterMask(&adaptive_mask,
-                                                                    &frame.scene,
-                                                                    &frame.projector,
-                                                                    0,
-                                                                    0,
-                                                                    width,
-                                                                    height);
+        ok = use_disney_temporal_pruning
+                 ? RuntimeNative3DAdaptiveSampling_BeginTemporalActivityMask(
+                       &adaptive_mask,
+                       width,
+                       height,
+                       RUNTIME_NATIVE_3D_ADAPTIVE_TILE_SIZE,
+                       RUNTIME_NATIVE_3D_ADAPTIVE_MIN_SUBPASSES)
+                 : (RuntimeNative3DAdaptiveSamplingMask_Ensure(&adaptive_mask, width, height) &&
+                    RuntimeNative3DAdaptiveSampling_BuildStableEmitterMask(&adaptive_mask,
+                                                                           &frame.scene,
+                                                                           &frame.projector,
+                                                                           0,
+                                                                           0,
+                                                                           width,
+                                                                           height));
         if (!ok) {
             free(subpass_radiance);
             free(resolved_radiance);
@@ -627,10 +982,13 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
     for (int subpass = 0; subpass < effective_temporal_frames; ++subpass) {
         RuntimeNative3DPreparedFrame subpass_frame = frame;
         RuntimeNative3DRenderStats subpass_stats = {0};
+        const int started_subpasses = subpass + 1;
         const uint8_t* active_mask =
             (use_adaptive_sampling && subpass > 0) ? adaptive_mask.activeSampleMask : NULL;
         const int active_mask_stride =
             (use_adaptive_sampling && subpass > 0) ? adaptive_mask.width : 0;
+        const int subpass_active_pixels =
+            (active_mask && subpass > 0) ? adaptive_mask.activePixelCount : (width * height);
         if (active_mask && !RuntimeNative3DAdaptiveSampling_HasActiveSamples(&adaptive_mask)) {
             break;
         }
@@ -642,6 +1000,12 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
             runtime_native_3d_render_resolve_subpass_sampling(sampling,
                                                               (uint32_t)subpass,
                                                               effective_temporal_frames);
+        if (progress_callback) {
+            progress_callback(started_subpasses,
+                              committed_subpasses,
+                              effective_temporal_frames,
+                              progress_user_data);
+        }
         ok = RuntimeNative3DAdaptiveSampling_RenderPreparedRegionRadianceRGBMasked(
             subpass_radiance,
             width,
@@ -657,6 +1021,8 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
         if (!ok) {
             break;
         }
+        subpass_stats.temporalPixelsRendered = subpass_active_pixels;
+        subpass_stats.temporalPixelsSkipped = (width * height) - subpass_active_pixels;
         ok = RuntimeNative3DTemporalAccumulation_AddRegionSamples(&accumulation,
                                                                   subpass_radiance,
                                                                   width,
@@ -670,6 +1036,21 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
             break;
         }
         RuntimeNative3DTemporalAccumulation_CommitSubpass(&accumulation);
+        if (use_disney_temporal_pruning) {
+            ok = RuntimeNative3DAdaptiveSampling_RefreshTemporalActivityMask(&adaptive_mask,
+                                                                             &accumulation,
+                                                                             &feature_buffer);
+            if (!ok) {
+                break;
+            }
+        }
+        committed_subpasses += 1;
+        if (progress_callback) {
+            progress_callback(started_subpasses,
+                              committed_subpasses,
+                              effective_temporal_frames,
+                              progress_user_data);
+        }
         if (out_stats) {
             RuntimeNative3DRenderStats_Accumulate(out_stats, &subpass_stats);
         }
@@ -686,6 +1067,17 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
     }
     if (ok && use_denoise) {
         ok = RuntimeNative3DDenoise_Apply(resolved_radiance, width, &feature_buffer);
+    }
+    if (ok && out_stats) {
+        out_stats->temporalCommittedSubpasses = committed_subpasses;
+        if (use_disney_temporal_pruning) {
+            out_stats->temporalActivePixelCount = adaptive_mask.activePixelCount;
+            out_stats->temporalActiveTileCount = adaptive_mask.activeTileCount;
+            out_stats->temporalInactiveTileCount = adaptive_mask.inactiveTileCount;
+        }
+    }
+    if (ok && out_stats) {
+        runtime_native_3d_render_stats_normalize_temporal(out_stats, committed_subpasses);
     }
     if (ok) {
         RuntimeNative3DResolveRadianceRegionToPixels(pixel_buffer,

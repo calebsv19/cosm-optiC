@@ -8,6 +8,7 @@
 #include "ui/menu_panel_chrome.h"
 #include "ui/shared_theme_font_adapter.h"
 #include "engine/Render/render_pipeline.h"
+#include "render/text_draw.h"
 #include "render/text_upload_policy.h"
 
 #define MENU_WIDTH 1200
@@ -41,9 +42,12 @@ void menu_render_build_slider_layout(TTF_Font* font,
     int scrollOffset;
 
     if (font) {
-        textHeight = TTF_FontHeight(font);
-        textHeight = ray_tracing_text_logical_pixels(getRenderContext() ? getRenderContext()->renderer : NULL,
-                                                     textHeight);
+        int measured_h = 0;
+        if (ray_tracing_text_line_height(getRenderContext() ? getRenderContext()->renderer : NULL,
+                                         font,
+                                         &measured_h)) {
+            textHeight = measured_h;
+        }
     }
     if (textHeight < 12) textHeight = 12;
     if (screen_layout) {

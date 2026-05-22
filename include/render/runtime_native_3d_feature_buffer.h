@@ -9,6 +9,9 @@
 typedef struct {
     float* normalBuffer;
     float* depthBuffer;
+    float* reflectivityBuffer;
+    float* roughnessBuffer;
+    float* transparencyBuffer;
     unsigned char* hitMaskBuffer;
     int width;
     int height;

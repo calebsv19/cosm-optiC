@@ -21,7 +21,13 @@ typedef struct RuntimeSceneBridgePreflight {
 typedef struct RuntimeSceneBridge3DScaffoldState {
     bool valid;
     bool has_camera_seed;
+    bool has_camera_rotation_seed;
+    bool has_camera_pitch_seed;
+    bool has_camera_focus_target;
     double camera_z;
+    double camera_focus_target_x;
+    double camera_focus_target_y;
+    double camera_focus_target_z;
     int box_count;
     int plane_count;
     int triangle_mesh_count;

@@ -244,6 +244,19 @@ int ray_tracing_text_font_cache_ui_regular_base_point_size(int fallback_point_si
                                                    fallback_point_size);
 }
 
+int ray_tracing_text_font_cache_contains(TTF_Font* font) {
+    size_t i = 0;
+    if (!font) {
+        return 0;
+    }
+    for (i = 0; i < g_font_cache_count; ++i) {
+        if (g_font_cache[i].font == font) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 void ray_tracing_text_font_cache_shutdown(void) {
     size_t i = 0;
     for (i = 0; i < g_font_cache_count; ++i) {

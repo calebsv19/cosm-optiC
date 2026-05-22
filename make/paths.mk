@@ -15,6 +15,15 @@ RAY_TRACE_TOOL_BIN := ray_trace_tool
 NATIVE3D_AUDIT_SRC := $(SRC_DIR)/tools/cli/native3d_render_audit.c
 NATIVE3D_AUDIT_BIN := $(BUILD_DIR)/tools/cli/native3d_render_audit
 NATIVE3D_AUDIT_OBJ := $(BUILD_DIR)/tools/cli/native3d_render_audit.o
+RAY_TRACING_RENDER_HEADLESS_SRC := $(SRC_DIR)/tools/cli/ray_tracing_render_headless.c
+RAY_TRACING_RENDER_HEADLESS_BIN := $(BUILD_DIR)/tools/cli/ray_tracing_render_headless
+RAY_TRACING_RENDER_HEADLESS_OBJ := $(BUILD_DIR)/tools/cli/ray_tracing_render_headless.o
+RAY_TRACING_JOB_RUNNER_SRC := $(SRC_DIR)/tools/cli/ray_tracing_job_runner.c
+RAY_TRACING_JOB_RUNNER_BIN := $(BUILD_DIR)/tools/cli/ray_tracing_job_runner
+RAY_TRACING_JOB_RUNNER_OBJ := $(BUILD_DIR)/tools/cli/ray_tracing_job_runner.o
+RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_SRC := $(SRC_DIR)/tools/cli/ray_tracing_material_preview_headless.c
+RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_BIN := $(BUILD_DIR)/tools/cli/ray_tracing_material_preview_headless
+RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_OBJ := $(BUILD_DIR)/tools/cli/ray_tracing_material_preview_headless.o
 
 VIDEO_FRAMES_DIR ?= data/runtime/frames/default
 VIDEO_OUTPUT ?= data/runtime/videos/output.mp4

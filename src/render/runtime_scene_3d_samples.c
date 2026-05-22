@@ -1,6 +1,9 @@
 #include "render/runtime_scene_3d_samples.h"
 
 #include "config/config_manager.h"
+#include "import/runtime_scene_bridge.h"
+
+#include <math.h>
 
 static double runtime_scene_3d_samples_clamp01(double value) {
     if (value < 0.0) return 0.0;
@@ -27,7 +30,7 @@ static double runtime_scene_3d_samples_rotation_at_t(const Path* path, double no
         return GetRotationAlongPathNormalized((Path*)path,
                                              runtime_scene_3d_samples_clamp01(normalized_t));
     }
-    return path->rotations[0];
+    return path->rotationSet[0] ? path->rotations[0] : sceneSettings.camera.rotation;
 }
 
 static double runtime_scene_3d_samples_z_at_t(const Path* path,
@@ -73,6 +76,31 @@ static double runtime_scene_3d_samples_pitch_at_t(const Path* path,
     return pitch0 + (pitch1 - pitch0) * local_t;
 }
 
+static void runtime_scene_3d_samples_apply_focus_target(RuntimeCamera3D* io_camera,
+                                                        double target_x,
+                                                        double target_y,
+                                                        double target_z) {
+    Vec3 to_target = vec3(0.0, 0.0, 0.0);
+    double horizontal = 0.0;
+    double pitch = 0.0;
+    const double max_pitch = 70.0 * M_PI / 180.0;
+
+    if (!io_camera) return;
+    to_target = vec3_sub(vec3(target_x, target_y, target_z), io_camera->position);
+    horizontal = hypot(to_target.x, to_target.y);
+    if (!(horizontal > 1e-9) && !(fabs(to_target.z) > 1e-9)) {
+        return;
+    }
+
+    if (horizontal > 1e-9) {
+        io_camera->rotation = atan2(to_target.x, -to_target.y);
+    }
+    pitch = atan2(to_target.z, horizontal);
+    if (pitch > max_pitch) pitch = max_pitch;
+    if (pitch < -max_pitch) pitch = -max_pitch;
+    io_camera->lookPitch = pitch;
+}
+
 bool RuntimeScene3DSampleAuthoredLight(double normalized_t, RuntimeLight3D* out_light) {
     RuntimeLight3D light = {0};
     Point position = {0.0, 0.0};
@@ -99,6 +127,7 @@ bool RuntimeScene3DSampleAuthoredLight(double normalized_t, RuntimeLight3D* out_
 
 bool RuntimeScene3DSampleAuthoredCamera(double normalized_t, RuntimeCamera3D* out_camera) {
     RuntimeCamera3D camera = {0};
+    RuntimeSceneBridge3DScaffoldState scaffold = {0};
     Point position = {0.0, 0.0};
 
     if (!out_camera) {
@@ -124,6 +153,14 @@ bool RuntimeScene3DSampleAuthoredCamera(double normalized_t, RuntimeCamera3D* ou
         camera.lookPitch = runtime_scene_3d_samples_pitch_at_t(&sceneSettings.cameraPath,
                                                                &sceneSettings.cameraPath3D,
                                                                normalized_t);
+    }
+
+    runtime_scene_bridge_get_last_3d_scaffold_state(&scaffold);
+    if (scaffold.has_camera_focus_target) {
+        runtime_scene_3d_samples_apply_focus_target(&camera,
+                                                    scaffold.camera_focus_target_x,
+                                                    scaffold.camera_focus_target_y,
+                                                    scaffold.camera_focus_target_z);
     }
 
     *out_camera = camera;

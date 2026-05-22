@@ -1,0 +1,66 @@
+{
+  "schema": "ray_tracing_material_preview_request_v1",
+  "runtime_scene_path": "/private/tmp/material_preview_grime_overlay_sweep_v1_author/scene_runtime.json",
+  "object_id": "left_screen",
+  "width": 196,
+  "height": 196,
+  "columns": 3,
+  "background_color": 14139328,
+  "output_path": "/Users/calebsv/Desktop/CodeWork/_private_workspace_artifacts/agent_runs/ray_tracing/material_preview_grime_overlay_sweep_v1/preview.bmp",
+  "summary_path": "/Users/calebsv/Desktop/CodeWork/_private_workspace_artifacts/agent_runs/ray_tracing/material_preview_grime_overlay_sweep_v1/summary.json",
+  "variants": [
+    {
+      "label": "base_clean"
+    },
+    {
+      "label": "grime_soft_fine",
+      "preview_overlay": {
+        "kind": "grime",
+        "opacity": 0.34,
+        "scale": 1.45,
+        "coverage": 0.28,
+        "grain": 0.18,
+        "contrast": 0.42,
+        "surface_damage": 0.16
+      }
+    },
+    {
+      "label": "grime_patchy_mid",
+      "preview_overlay": {
+        "kind": "grime",
+        "opacity": 0.52,
+        "scale": 1.15,
+        "coverage": 0.46,
+        "grain": 0.44,
+        "contrast": 0.61,
+        "surface_damage": 0.34
+      }
+    },
+    {
+      "label": "grime_macro_heavy",
+      "preview_overlay": {
+        "kind": "grime",
+        "opacity": 0.72,
+        "scale": 0.72,
+        "coverage": 0.63,
+        "grain": 0.71,
+        "contrast": 0.83,
+        "surface_damage": 0.58
+      }
+    },
+    {
+      "label": "grime_streak_flow",
+      "preview_overlay": {
+        "kind": "grime",
+        "opacity": 0.61,
+        "scale": 1.05,
+        "pattern_mode": 3,
+        "coverage": 0.54,
+        "grain": 0.49,
+        "contrast": 0.74,
+        "flow": 0.66,
+        "surface_damage": 0.47
+      }
+    }
+  ]
+}

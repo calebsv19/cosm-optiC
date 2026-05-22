@@ -370,6 +370,8 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
     int max_tile_pixels = 0;
     const bool use_adaptive_sampling =
         RuntimeNative3DAdaptiveSampling_ShouldUse(integrator_id, temporal_frames);
+    const bool use_disney_temporal_pruning =
+        use_adaptive_sampling && integrator_id == RAY_TRACING_3D_INTEGRATOR_DISNEY;
     const bool use_denoise =
         RuntimeNative3DDenoise_ShouldApply(integrator_id,
                                            temporal_frames,
@@ -473,7 +475,7 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
             return false;
         }
         RuntimeNative3DTemporalAccumulation_Clear(&tile_accumulation);
-        if (use_denoise &&
+        if ((use_denoise || use_disney_temporal_pruning) &&
             (!RuntimeNative3DFeatureBuffer_Ensure(&tile_features, tile->width, tile->height) ||
              !RuntimeNative3DFeatureBuffer_RenderRegion(&tile_features,
                                                        &frame.scene,
@@ -492,14 +494,24 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
             return false;
         }
         if (use_adaptive_sampling &&
-            (!RuntimeNative3DAdaptiveSamplingMask_Ensure(&adaptive_mask, tile->width, tile->height) ||
-             !RuntimeNative3DAdaptiveSampling_BuildStableEmitterMask(&adaptive_mask,
-                                                                    &frame.scene,
-                                                                    &frame.projector,
-                                                                    tile->originX,
-                                                                    tile->originY,
-                                                                    tile->originX + tile->width,
-                                                                    tile->originY + tile->height))) {
+            (!(use_disney_temporal_pruning
+                   ? RuntimeNative3DAdaptiveSampling_BeginTemporalActivityMask(
+                         &adaptive_mask,
+                         tile->width,
+                         tile->height,
+                         RUNTIME_NATIVE_3D_ADAPTIVE_TILE_SIZE,
+                         RUNTIME_NATIVE_3D_ADAPTIVE_MIN_SUBPASSES)
+                   : (RuntimeNative3DAdaptiveSamplingMask_Ensure(&adaptive_mask,
+                                                                 tile->width,
+                                                                 tile->height) &&
+                      RuntimeNative3DAdaptiveSampling_BuildStableEmitterMask(
+                          &adaptive_mask,
+                          &frame.scene,
+                          &frame.projector,
+                          tile->originX,
+                          tile->originY,
+                          tile->originX + tile->width,
+                          tile->originY + tile->height))))) {
             RuntimeNative3DFillPixelBufferEnvironment(render_buffer, total);
             free(tile_radiance);
             free(tile_resolved_radiance);
@@ -530,6 +542,8 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
                 (use_adaptive_sampling && subpass > 0) ? adaptive_mask.activeSampleMask : NULL;
             const int active_mask_stride =
                 (use_adaptive_sampling && subpass > 0) ? adaptive_mask.width : 0;
+            const int subpass_active_pixels =
+                (active_mask && subpass > 0) ? adaptive_mask.activePixelCount : tile_pixels;
             if (active_mask && !RuntimeNative3DAdaptiveSampling_HasActiveSamples(&adaptive_mask)) {
                 break;
             }
@@ -569,7 +583,24 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
                 RuntimeNative3DFeatureBuffer_Free(&tile_features);
                 return false;
             }
+            subpass_stats.temporalPixelsRendered = subpass_active_pixels;
+            subpass_stats.temporalPixelsSkipped = tile_pixels - subpass_active_pixels;
             RuntimeNative3DTemporalAccumulation_CommitSubpass(&tile_accumulation);
+            if (use_disney_temporal_pruning) {
+                if (!RuntimeNative3DAdaptiveSampling_RefreshTemporalActivityMask(&adaptive_mask,
+                                                                                 &tile_accumulation,
+                                                                                 &tile_features)) {
+                    ts_session_stop_timer(timer_hud_session(), "Tile Frame Calc");
+                    RuntimeNative3DFillPixelBufferEnvironment(render_buffer, total);
+                    free(tile_radiance);
+                    free(tile_resolved_radiance);
+                    RuntimeNative3DAdaptiveSamplingMask_Free(&adaptive_mask);
+                    RuntimeNative3DTemporalAccumulation_Free(&tile_accumulation);
+                    RuntimeNative3DPreparedFrame_Free(&frame);
+                    RuntimeNative3DFeatureBuffer_Free(&tile_features);
+                    return false;
+                }
+            }
             RuntimeNative3DRenderStats_Accumulate(&stats, &subpass_stats);
 
             if (present_progress && renderer &&
@@ -687,6 +718,11 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
                                       host_buffer,
                                       host_width,
                                       host_height);
+    if (out_stats && use_disney_temporal_pruning) {
+        stats.temporalActivePixelCount = adaptive_mask.activePixelCount;
+        stats.temporalActiveTileCount = adaptive_mask.activeTileCount;
+        stats.temporalInactiveTileCount = adaptive_mask.inactiveTileCount;
+    }
     free(tile_radiance);
     free(tile_resolved_radiance);
     RuntimeNative3DAdaptiveSamplingMask_Free(&adaptive_mask);

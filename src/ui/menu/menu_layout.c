@@ -5,6 +5,7 @@
 
 #include "config/config_manager.h"
 #include "render/ray_tracing_integrator_catalog.h"
+#include "render/text_draw.h"
 #include "ui/sdl_menu_render.h"
 
 #define MENU_WIDTH 1200
@@ -42,8 +43,8 @@ static int measure_button_width(TTF_Font* font,
                                 int max_width) {
     int width = min_width;
     int text_w = 0;
-    int text_h = 0;
-    if (font && text && text[0] && TTF_SizeUTF8(font, text, &text_w, &text_h) == 0) {
+    if (font && text && text[0] &&
+        ray_tracing_text_measure_utf8(NULL, font, text, &text_w, NULL)) {
         width = max_int(width, text_w + 24);
     }
     if (max_width > 0) {

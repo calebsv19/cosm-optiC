@@ -48,6 +48,7 @@ static bool fluid_volume_source_import_3d_read_text(const char* path,
 
 static bool fluid_volume_source_import_3d_resolve_manifest_frame_path(
     const char* manifest_path,
+    int requested_frame_index,
     char* out_frame_path,
     size_t out_frame_path_size,
     char* out_diagnostics,
@@ -117,11 +118,13 @@ static bool fluid_volume_source_import_3d_resolve_manifest_frame_path(
         return false;
     }
 
-    /* Static manifest-backed attachment currently resolves one representative
-     * frame only. Prefer the first exported frame so authoring previews and
-     * initial runtime loads agree until a real frame/time selection contract
-     * lands for animated VF3D playback. */
-    frame_entry = cJSON_GetArrayItem(frames, 0);
+    if (requested_frame_index < 0) {
+        requested_frame_index = 0;
+    } else if (requested_frame_index >= frame_count) {
+        requested_frame_index = frame_count - 1;
+    }
+
+    frame_entry = cJSON_GetArrayItem(frames, requested_frame_index);
     if (!cJSON_IsObject(frame_entry)) {
         cJSON_Delete(root);
         fluid_volume_source_import_3d_diag(out_diagnostics, out_diagnostics_size,
@@ -172,6 +175,7 @@ static bool fluid_volume_source_import_3d_resolve_manifest_frame_path(
 
 static bool fluid_volume_source_import_3d_load_internal(const char* path,
                                                         RuntimeVolume3DSourceKind source_kind,
+                                                        int requested_frame_index,
                                                         RuntimeVolumeAttachment3D* out_attachment,
                                                         char* out_diagnostics,
                                                         size_t out_diagnostics_size,
@@ -225,6 +229,7 @@ static bool fluid_volume_source_import_3d_load_internal(const char* path,
                 return fluid_volume_source_import_3d_load_internal(
                     bundle.fluid_source_path,
                     RUNTIME_VOLUME_3D_SOURCE_NONE,
+                    requested_frame_index,
                     out_attachment,
                     out_diagnostics,
                     out_diagnostics_size,
@@ -232,6 +237,7 @@ static bool fluid_volume_source_import_3d_load_internal(const char* path,
             }
 
             if (!fluid_volume_source_import_3d_resolve_manifest_frame_path(path,
+                                                                           requested_frame_index,
                                                                            resolved_path,
                                                                            sizeof(resolved_path),
                                                                            out_diagnostics,
@@ -245,6 +251,7 @@ static bool fluid_volume_source_import_3d_load_internal(const char* path,
             }
             return fluid_volume_source_import_3d_load_internal(resolved_path,
                                                                RUNTIME_VOLUME_3D_SOURCE_NONE,
+                                                               requested_frame_index,
                                                                out_attachment,
                                                                out_diagnostics,
                                                                out_diagnostics_size,
@@ -263,6 +270,20 @@ bool fluid_volume_import_3d_load_source(const char* path,
                                         RuntimeVolumeAttachment3D* out_attachment,
                                         char* out_diagnostics,
                                         size_t out_diagnostics_size) {
+    return fluid_volume_import_3d_load_source_at_frame(path,
+                                                       source_kind_hint,
+                                                       0,
+                                                       out_attachment,
+                                                       out_diagnostics,
+                                                       out_diagnostics_size);
+}
+
+bool fluid_volume_import_3d_load_source_at_frame(const char* path,
+                                                 RuntimeVolume3DSourceKind source_kind_hint,
+                                                 int requested_frame_index,
+                                                 RuntimeVolumeAttachment3D* out_attachment,
+                                                 char* out_diagnostics,
+                                                 size_t out_diagnostics_size) {
     fluid_volume_source_import_3d_diag(out_diagnostics, out_diagnostics_size, "invalid input");
     if (!path || !path[0] || !out_attachment) {
         return false;
@@ -271,6 +292,7 @@ bool fluid_volume_import_3d_load_source(const char* path,
     RuntimeVolumeAttachment3D_Reset(out_attachment);
     return fluid_volume_source_import_3d_load_internal(path,
                                                        source_kind_hint,
+                                                       requested_frame_index,
                                                        out_attachment,
                                                        out_diagnostics,
                                                        out_diagnostics_size,

@@ -54,7 +54,7 @@ SDL_Renderer* renderer = NULL;
 #if USE_VULKAN
 static VkRenderer renderer_storage;
 #endif
-SceneObject sceneObjects[10];  // Define object array storage
+SceneObject sceneObjects[MAX_OBJECTS];  // Define object array storage
 int objectCount = 0;  // Define object count
 
 bool running;

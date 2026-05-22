@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #include "render/runtime_camera_3d_rays.h"
+#include "render/runtime_native_3d_sampling.h"
 #include "render/runtime_visibility_3d.h"
 
 typedef struct {
@@ -35,12 +36,14 @@ bool RuntimeDirectLight3D_TracePrimaryHit(const RuntimeScene3D* scene,
 
 bool RuntimeDirectLight3D_ShadeHit(const RuntimeScene3D* scene,
                                    const HitInfo3D* hit,
+                                   const RuntimeNative3DSamplingContext* sampling,
                                    RuntimeDirectLight3DResult* out_result);
 
 bool RuntimeDirectLight3D_ShadePixel(const RuntimeScene3D* scene,
                                      const RuntimeCameraProjector3D* projector,
                                      double pixel_x,
                                      double pixel_y,
+                                     const RuntimeNative3DSamplingContext* sampling,
                                      RuntimeDirectLight3DResult* out_result);
 
 #endif

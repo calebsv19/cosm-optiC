@@ -24,6 +24,12 @@ typedef struct {
     int secondaryRayCount;
     int secondaryHitCount;
     int secondaryContributingHitCount;
+    int temporalCommittedSubpasses;
+    int temporalPixelsRendered;
+    int temporalPixelsSkipped;
+    int temporalActivePixelCount;
+    int temporalActiveTileCount;
+    int temporalInactiveTileCount;
     double maxRadiance;
     double maxBounceRadiance;
     double totalBounceRadiance;
@@ -39,14 +45,30 @@ typedef struct {
     bool valid;
 } RuntimeNative3DPreparedFrame;
 
+typedef void (*RuntimeNative3DTemporalProgressCallback)(int started_subpasses,
+                                                        int completed_subpasses,
+                                                        int total_subpasses,
+                                                        void* user_data);
+
 void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
                                            const RuntimeNative3DRenderStats* src);
+void RuntimeNative3DRender_ResetInspectionCameraOverrides(void);
+void RuntimeNative3DRender_SetInspectionCameraPosition(Vec3 position);
+void RuntimeNative3DRender_SetInspectionCameraLookAt(Vec3 target);
+const char* RuntimeNative3DPrepareFrameLastDiagnostics(void);
 bool RuntimeNative3DPrepareFrame(RuntimeNative3DPreparedFrame* out_frame,
                                  int width,
                                  int height,
                                  double normalized_t,
                                  double live_light_x,
                                  double live_light_y);
+bool RuntimeNative3DPrepareFrameAtFrameIndex(RuntimeNative3DPreparedFrame* out_frame,
+                                             int width,
+                                             int height,
+                                             double normalized_t,
+                                             int frame_index,
+                                             double live_light_x,
+                                             double live_light_y);
 bool RuntimeNative3DPrepareFrameWithSampling(RuntimeNative3DPreparedFrame* out_frame,
                                              int width,
                                              int height,
@@ -54,6 +76,15 @@ bool RuntimeNative3DPrepareFrameWithSampling(RuntimeNative3DPreparedFrame* out_f
                                              double live_light_x,
                                              double live_light_y,
                                              const RuntimeNative3DSamplingContext* sampling);
+bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
+    RuntimeNative3DPreparedFrame* out_frame,
+    int width,
+    int height,
+    double normalized_t,
+    int frame_index,
+    double live_light_x,
+    double live_light_y,
+    const RuntimeNative3DSamplingContext* sampling);
 void RuntimeNative3DPreparedFrame_Free(RuntimeNative3DPreparedFrame* frame);
 bool RuntimeNative3DRenderPreparedRegion(uint8_t* pixel_buffer,
                                          RayTracing3DIntegratorId integrator_id,
@@ -122,6 +153,33 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
     double live_light_y,
     const RuntimeNative3DSamplingContext* sampling,
     int temporal_frames,
+    RuntimeNative3DRenderStats* out_stats);
+bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalProgress(
+    uint8_t* pixel_buffer,
+    RayTracing3DIntegratorId integrator_id,
+    int width,
+    int height,
+    double normalized_t,
+    double live_light_x,
+    double live_light_y,
+    const RuntimeNative3DSamplingContext* sampling,
+    int temporal_frames,
+    RuntimeNative3DTemporalProgressCallback progress_callback,
+    void* progress_user_data,
+    RuntimeNative3DRenderStats* out_stats);
+bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalProgressAtFrameIndex(
+    uint8_t* pixel_buffer,
+    RayTracing3DIntegratorId integrator_id,
+    int width,
+    int height,
+    double normalized_t,
+    int frame_index,
+    double live_light_x,
+    double live_light_y,
+    const RuntimeNative3DSamplingContext* sampling,
+    int temporal_frames,
+    RuntimeNative3DTemporalProgressCallback progress_callback,
+    void* progress_user_data,
     RuntimeNative3DRenderStats* out_stats);
 uint8_t RuntimeNative3DResolveEnvironmentByte(void);
 void RuntimeNative3DFillPixelBufferEnvironment(uint8_t* pixel_buffer, size_t pixel_count);

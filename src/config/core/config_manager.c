@@ -575,7 +575,7 @@ void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
     if (json_object_object_get_ex(obj, "emissiveStrength", &emissiveStrength)) {
         sceneObject->emissiveStrength = json_object_get_double(emissiveStrength);
     } else {
-        sceneObject->emissiveStrength = 1.0;
+        sceneObject->emissiveStrength = 0.0;
     }
 
     if (json_object_object_get_ex(obj, "textureId", &textureId)) {
@@ -990,7 +990,7 @@ void LoadSceneConfig(void) {
                                                    SCENE_CONFIG_LEGACY_FILE,
                                                    &loaded_path);
     if (!file) {
-        printf("ERROR: Failed to open scene config file (tried %s, %s, %s)\n",
+        printf("INFO: Scene config file not found (tried %s, %s, %s); using defaults/runtime overrides.\n",
                SCENE_CONFIG_RUNTIME_FILE,
                SCENE_CONFIG_DEFAULT_FILE,
                SCENE_CONFIG_LEGACY_FILE);

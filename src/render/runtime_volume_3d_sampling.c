@@ -37,6 +37,21 @@ static uint64_t runtime_volume_3d_sampling_cell_index(const RuntimeVolumeGrid3D*
            ((uint64_t)grid->gridW * ((uint64_t)cell_y + ((uint64_t)grid->gridH * (uint64_t)cell_z)));
 }
 
+static float runtime_volume_3d_sampling_density_cell(const RuntimeVolumeAttachment3D* attachment,
+                                                     const RuntimeVolumeGrid3D* grid,
+                                                     uint32_t cell_x,
+                                                     uint32_t cell_y,
+                                                     uint32_t cell_z) {
+    const uint64_t cell_index = runtime_volume_3d_sampling_cell_index(grid, cell_x, cell_y, cell_z);
+    if (cell_index >= grid->cellCount) {
+        return 0.0f;
+    }
+    if (attachment->channels.solidMask && attachment->channels.solidMask[cell_index] != 0u) {
+        return 0.0f;
+    }
+    return attachment->channels.density[cell_index];
+}
+
 bool RuntimeVolume3D_HasSampleableDensity(const RuntimeVolumeAttachment3D* attachment) {
     if (!attachment) return false;
     if (!attachment->enabled || !attachment->affectsLighting || !attachment->hasData) {
@@ -95,10 +110,21 @@ float RuntimeVolume3D_SampleDensityAtPosition(const RuntimeVolumeAttachment3D* a
     double local_x = 0.0;
     double local_y = 0.0;
     double local_z = 0.0;
-    uint32_t cell_x = 0u;
-    uint32_t cell_y = 0u;
-    uint32_t cell_z = 0u;
-    uint64_t cell_index = 0u;
+    uint32_t x0 = 0u;
+    uint32_t y0 = 0u;
+    uint32_t z0 = 0u;
+    uint32_t x1 = 0u;
+    uint32_t y1 = 0u;
+    uint32_t z1 = 0u;
+    double fx = 0.0;
+    double fy = 0.0;
+    double fz = 0.0;
+    double c00 = 0.0;
+    double c10 = 0.0;
+    double c01 = 0.0;
+    double c11 = 0.0;
+    double c0 = 0.0;
+    double c1 = 0.0;
 
     if (!RuntimeVolume3D_HasSampleableDensity(attachment) || !attachment->channels.density) {
         return 0.0f;
@@ -115,15 +141,25 @@ float RuntimeVolume3D_SampleDensityAtPosition(const RuntimeVolumeAttachment3D* a
         return 0.0f;
     }
 
-    cell_x = (uint32_t)local_x;
-    cell_y = (uint32_t)local_y;
-    cell_z = (uint32_t)local_z;
-    cell_index = runtime_volume_3d_sampling_cell_index(grid, cell_x, cell_y, cell_z);
-    if (cell_index >= grid->cellCount) {
-        return 0.0f;
-    }
-    if (attachment->channels.solidMask && attachment->channels.solidMask[cell_index] != 0u) {
-        return 0.0f;
-    }
-    return attachment->channels.density[cell_index];
+    x0 = (uint32_t)local_x;
+    y0 = (uint32_t)local_y;
+    z0 = (uint32_t)local_z;
+    x1 = (x0 + 1u < grid->gridW) ? (x0 + 1u) : x0;
+    y1 = (y0 + 1u < grid->gridH) ? (y0 + 1u) : y0;
+    z1 = (z0 + 1u < grid->gridD) ? (z0 + 1u) : z0;
+    fx = local_x - floor(local_x);
+    fy = local_y - floor(local_y);
+    fz = local_z - floor(local_z);
+
+    c00 = (1.0 - fx) * runtime_volume_3d_sampling_density_cell(attachment, grid, x0, y0, z0) +
+          fx * runtime_volume_3d_sampling_density_cell(attachment, grid, x1, y0, z0);
+    c10 = (1.0 - fx) * runtime_volume_3d_sampling_density_cell(attachment, grid, x0, y1, z0) +
+          fx * runtime_volume_3d_sampling_density_cell(attachment, grid, x1, y1, z0);
+    c01 = (1.0 - fx) * runtime_volume_3d_sampling_density_cell(attachment, grid, x0, y0, z1) +
+          fx * runtime_volume_3d_sampling_density_cell(attachment, grid, x1, y0, z1);
+    c11 = (1.0 - fx) * runtime_volume_3d_sampling_density_cell(attachment, grid, x0, y1, z1) +
+          fx * runtime_volume_3d_sampling_density_cell(attachment, grid, x1, y1, z1);
+    c0 = (1.0 - fy) * c00 + fy * c10;
+    c1 = (1.0 - fy) * c01 + fy * c11;
+    return (float)((1.0 - fz) * c0 + fz * c1);
 }

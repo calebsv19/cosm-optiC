@@ -1,6 +1,7 @@
 #include "engine/Render/render_text_helpers.h"
 #include "engine/Render/render_font.h"
 #include "engine/Render/render_pipeline.h"
+#include "render/text_draw.h"
 #include "render/text_upload_policy.h"
 #include <SDL2/SDL_ttf.h>
 #include <string.h>
@@ -11,8 +12,9 @@ static int measureRange(const char* text, int length, int* outWidth) {
     SDL_Renderer* renderer = ctx ? ctx->renderer : NULL;
     if (!font || !text || length <= 0) return 0;
     int w = 0;
-    TTF_SizeUTF8(font, text, &w, NULL);
-    w = ray_tracing_text_logical_pixels(renderer, w);
+    if (!ray_tracing_text_measure_utf8(renderer, font, text, &w, NULL)) {
+        return 0;
+    }
     if (outWidth) *outWidth = w;
     return w;
 }

@@ -6,6 +6,7 @@
 
 typedef struct {
     float* accumulationBuffer;
+    float* activityBuffer;
     uint16_t* sampleCountBuffer;
     int width;
     int height;

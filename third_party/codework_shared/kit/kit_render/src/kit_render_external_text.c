@@ -530,6 +530,10 @@ void kit_render_external_text_unregister_font_source(TTF_Font *font) {
     }
 }
 
+int kit_render_external_text_has_font_source(TTF_Font *font) {
+    return kit_render_external_text_find_font_source(font) != NULL;
+}
+
 void kit_render_external_text_reset_renderer(SDL_Renderer *renderer) {
     int i = 0;
     if (!renderer) {

@@ -326,7 +326,7 @@ static void runtime_diffuse_bounce_3d_trace_path(
             break;
         }
 
-        if (RuntimeDirectLight3D_ShadeHit(scene, &next_hit, &next_direct)) {
+        if (RuntimeDirectLight3D_ShadeHit(scene, &next_hit, sampling, &next_direct)) {
             const double contributed_r = path_r * next_direct.radianceR;
             const double contributed_g = path_g * next_direct.radianceG;
             const double contributed_b = path_b * next_direct.radianceB;
@@ -389,7 +389,7 @@ bool RuntimeDiffuseBounce3D_ShadeHit(const RuntimeScene3D* scene,
     if (!scene || !hit || !out_result) return false;
     if (!scene->hasLight) return false;
 
-    if (!RuntimeDirectLight3D_ShadeHit(scene, hit, &direct_result)) {
+    if (!RuntimeDirectLight3D_ShadeHit(scene, hit, sampling, &direct_result)) {
         return false;
     }
 

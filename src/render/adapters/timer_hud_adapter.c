@@ -95,10 +95,12 @@ static int timer_hud_line_height(void) {
     TTF_Font* font = getActiveFont();
     RenderContext* ctx = getRenderContext();
     SDL_Renderer* renderer = (ctx ? ctx->renderer : NULL);
-    int raster_h = 0;
+    int logical_h = 0;
     if (!font) return 0;
-    raster_h = TTF_FontHeight(font);
-    return ray_tracing_text_logical_pixels(renderer, raster_h);
+    if (!ray_tracing_text_line_height(renderer, font, &logical_h)) {
+        return 0;
+    }
+    return logical_h;
 }
 
 static void timer_hud_draw_rect(int x, int y, int w, int h, TimerHUDColor color) {

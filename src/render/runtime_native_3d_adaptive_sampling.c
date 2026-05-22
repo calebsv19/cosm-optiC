@@ -1,11 +1,110 @@
 #include "render/runtime_native_3d_adaptive_sampling.h"
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "render/runtime_light_emitter_3d.h"
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_ray_3d.h"
+
+static const float kRuntimeNative3DAdaptiveActivityThreshold = 0.05f;
+static const float kRuntimeNative3DAdaptiveMinimumActivityThreshold = 0.008f;
+static const float kRuntimeNative3DAdaptiveRiskHoldMedium = 0.35f;
+static const float kRuntimeNative3DAdaptiveRiskHoldHigh = 0.70f;
+static const float kRuntimeNative3DAdaptiveNormalEdgeDotThreshold = 0.92f;
+static const float kRuntimeNative3DAdaptiveDepthEdgeRatioThreshold = 0.08f;
+
+static float runtime_native_3d_adaptive_sampling_clampf(float value,
+                                                        float min_value,
+                                                        float max_value) {
+    if (value < min_value) return min_value;
+    if (value > max_value) return max_value;
+    return value;
+}
+
+static float runtime_native_3d_adaptive_sampling_compute_feature_risk(
+    const RuntimeNative3DFeatureBuffer* features,
+    int x,
+    int y,
+    int width,
+    int height) {
+    const size_t pixel_index = (size_t)y * (size_t)width + (size_t)x;
+    const size_t normal_base = pixel_index * 3u;
+    float risk = 0.0f;
+
+    if (!features || !features->hitMaskBuffer || !features->depthBuffer || !features->normalBuffer ||
+        !features->reflectivityBuffer || !features->roughnessBuffer || !features->transparencyBuffer ||
+        features->width != width || features->height != height) {
+        return 0.0f;
+    }
+    if (!features->hitMaskBuffer[pixel_index]) {
+        return 0.0f;
+    }
+
+    {
+        const float reflectivity = runtime_native_3d_adaptive_sampling_clampf(
+            features->reflectivityBuffer[pixel_index], 0.0f, 1.0f);
+        const float roughness = runtime_native_3d_adaptive_sampling_clampf(
+            features->roughnessBuffer[pixel_index], 0.0f, 1.0f);
+        const float transparency = runtime_native_3d_adaptive_sampling_clampf(
+            features->transparencyBuffer[pixel_index], 0.0f, 1.0f);
+        const float gloss_risk = reflectivity * (1.0f - roughness);
+        risk = fmaxf(risk, gloss_risk);
+        risk = fmaxf(risk, transparency);
+    }
+
+    if (x + 1 < width) {
+        const size_t neighbor_index = pixel_index + 1u;
+        if (features->hitMaskBuffer[neighbor_index] != features->hitMaskBuffer[pixel_index]) {
+            risk = 1.0f;
+        } else if (features->hitMaskBuffer[neighbor_index]) {
+            const size_t neighbor_normal_base = neighbor_index * 3u;
+            const float dot =
+                features->normalBuffer[normal_base] * features->normalBuffer[neighbor_normal_base] +
+                features->normalBuffer[normal_base + 1u] *
+                    features->normalBuffer[neighbor_normal_base + 1u] +
+                features->normalBuffer[normal_base + 2u] *
+                    features->normalBuffer[neighbor_normal_base + 2u];
+            const float depth = features->depthBuffer[pixel_index];
+            const float neighbor_depth = features->depthBuffer[neighbor_index];
+            const float depth_delta = fabsf(neighbor_depth - depth);
+            const float depth_scale = fmaxf(fmaxf(depth, neighbor_depth), 1.0e-4f);
+            if (dot < kRuntimeNative3DAdaptiveNormalEdgeDotThreshold) {
+                risk = fmaxf(risk, 0.85f);
+            }
+            if (depth_delta / depth_scale > kRuntimeNative3DAdaptiveDepthEdgeRatioThreshold) {
+                risk = fmaxf(risk, 0.85f);
+            }
+        }
+    }
+    if (y + 1 < height) {
+        const size_t neighbor_index = pixel_index + (size_t)width;
+        if (features->hitMaskBuffer[neighbor_index] != features->hitMaskBuffer[pixel_index]) {
+            risk = 1.0f;
+        } else if (features->hitMaskBuffer[neighbor_index]) {
+            const size_t neighbor_normal_base = neighbor_index * 3u;
+            const float dot =
+                features->normalBuffer[normal_base] * features->normalBuffer[neighbor_normal_base] +
+                features->normalBuffer[normal_base + 1u] *
+                    features->normalBuffer[neighbor_normal_base + 1u] +
+                features->normalBuffer[normal_base + 2u] *
+                    features->normalBuffer[neighbor_normal_base + 2u];
+            const float depth = features->depthBuffer[pixel_index];
+            const float neighbor_depth = features->depthBuffer[neighbor_index];
+            const float depth_delta = fabsf(neighbor_depth - depth);
+            const float depth_scale = fmaxf(fmaxf(depth, neighbor_depth), 1.0e-4f);
+            if (dot < kRuntimeNative3DAdaptiveNormalEdgeDotThreshold) {
+                risk = fmaxf(risk, 0.85f);
+            }
+            if (depth_delta / depth_scale > kRuntimeNative3DAdaptiveDepthEdgeRatioThreshold) {
+                risk = fmaxf(risk, 0.85f);
+            }
+        }
+    }
+
+    return runtime_native_3d_adaptive_sampling_clampf(risk, 0.0f, 1.0f);
+}
 
 static bool runtime_native_3d_adaptive_sampling_is_stable_emitter_pixel(
     const RuntimeScene3D* scene,
@@ -47,6 +146,7 @@ void RuntimeNative3DAdaptiveSamplingMask_Free(RuntimeNative3DAdaptiveSamplingMas
     if (!mask) return;
     free(mask->stableEmitterMask);
     free(mask->activeSampleMask);
+    free(mask->activeTileMask);
     memset(mask, 0, sizeof(*mask));
 }
 
@@ -90,6 +190,9 @@ void RuntimeNative3DAdaptiveSamplingMask_Clear(RuntimeNative3DAdaptiveSamplingMa
     count = (size_t)mask->width * (size_t)mask->height;
     memset(mask->stableEmitterMask, 0, count * sizeof(*mask->stableEmitterMask));
     memset(mask->activeSampleMask, 0, count * sizeof(*mask->activeSampleMask));
+    mask->activePixelCount = 0;
+    mask->activeTileCount = 0;
+    mask->inactiveTileCount = 0;
 }
 
 bool RuntimeNative3DAdaptiveSampling_ShouldUse(RayTracing3DIntegratorId integrator_id,
@@ -97,6 +200,31 @@ bool RuntimeNative3DAdaptiveSampling_ShouldUse(RayTracing3DIntegratorId integrat
     return temporal_frames > 1 &&
            (integrator_id == RAY_TRACING_3D_INTEGRATOR_EMISSION_TRANSPARENCY ||
             integrator_id == RAY_TRACING_3D_INTEGRATOR_DISNEY);
+}
+
+static int runtime_native_3d_adaptive_sampling_compute_tiles(int extent, int tile_size) {
+    if (extent <= 0 || tile_size <= 0) return 0;
+    return (extent + tile_size - 1) / tile_size;
+}
+
+static bool runtime_native_3d_adaptive_sampling_ensure_tile_mask(
+    RuntimeNative3DAdaptiveSamplingMask* mask,
+    int tile_count) {
+    uint8_t* resized_tiles = NULL;
+    size_t count = 0;
+
+    if (!mask || tile_count <= 0) return false;
+    if (mask->activeTileMask && mask->tilesX * mask->tilesY == tile_count) {
+        return true;
+    }
+
+    count = (size_t)tile_count;
+    resized_tiles = (uint8_t*)calloc(count, sizeof(*resized_tiles));
+    if (!resized_tiles) return false;
+
+    free(mask->activeTileMask);
+    mask->activeTileMask = resized_tiles;
+    return true;
 }
 
 bool RuntimeNative3DAdaptiveSampling_BuildStableEmitterMask(
@@ -129,8 +257,142 @@ bool RuntimeNative3DAdaptiveSampling_BuildStableEmitterMask(
                 (double)y);
             mask->stableEmitterMask[idx] = stable ? 1u : 0u;
             mask->activeSampleMask[idx] = stable ? 0u : 1u;
+            mask->activePixelCount += stable ? 0 : 1;
         }
     }
+    return true;
+}
+
+bool RuntimeNative3DAdaptiveSampling_BeginTemporalActivityMask(
+    RuntimeNative3DAdaptiveSamplingMask* mask,
+    int width,
+    int height,
+    int tile_size,
+    int min_subpasses_before_prune) {
+    size_t pixel_count = 0;
+    const int tiles_x = runtime_native_3d_adaptive_sampling_compute_tiles(width, tile_size);
+    const int tiles_y = runtime_native_3d_adaptive_sampling_compute_tiles(height, tile_size);
+    const int tile_count = tiles_x * tiles_y;
+
+    if (!mask || width <= 0 || height <= 0 || tile_size <= 0 || min_subpasses_before_prune < 1) {
+        return false;
+    }
+    if (!RuntimeNative3DAdaptiveSamplingMask_Ensure(mask, width, height) ||
+        !runtime_native_3d_adaptive_sampling_ensure_tile_mask(mask, tile_count)) {
+        return false;
+    }
+
+    pixel_count = (size_t)width * (size_t)height;
+    memset(mask->stableEmitterMask, 0, pixel_count * sizeof(*mask->stableEmitterMask));
+    memset(mask->activeSampleMask, 1, pixel_count * sizeof(*mask->activeSampleMask));
+    memset(mask->activeTileMask, 1, (size_t)tile_count * sizeof(*mask->activeTileMask));
+    mask->tileSize = tile_size;
+    mask->tilesX = tiles_x;
+    mask->tilesY = tiles_y;
+    mask->minSubpassesBeforePrune = min_subpasses_before_prune;
+    mask->activePixelCount = width * height;
+    mask->activeTileCount = tile_count;
+    mask->inactiveTileCount = 0;
+    return true;
+}
+
+bool RuntimeNative3DAdaptiveSampling_RefreshTemporalActivityMask(
+    RuntimeNative3DAdaptiveSamplingMask* mask,
+    const RuntimeNative3DTemporalAccumulation* accumulation,
+    const RuntimeNative3DFeatureBuffer* features) {
+    if (!mask || !mask->activeSampleMask || !mask->activeTileMask || !accumulation ||
+        !accumulation->activityBuffer || accumulation->width != mask->width ||
+        accumulation->height != mask->height || mask->tileSize <= 0 ||
+        mask->tilesX <= 0 || mask->tilesY <= 0) {
+        return false;
+    }
+
+    mask->activePixelCount = 0;
+    mask->activeTileCount = 0;
+    mask->inactiveTileCount = 0;
+
+    if (accumulation->completedSubpasses < mask->minSubpassesBeforePrune) {
+        const size_t pixel_count = (size_t)mask->width * (size_t)mask->height;
+        const size_t tile_count = (size_t)mask->tilesX * (size_t)mask->tilesY;
+        memset(mask->activeSampleMask, 1, pixel_count * sizeof(*mask->activeSampleMask));
+        memset(mask->activeTileMask, 1, tile_count * sizeof(*mask->activeTileMask));
+        mask->activePixelCount = mask->width * mask->height;
+        mask->activeTileCount = (int)tile_count;
+        return true;
+    }
+
+    for (int tile_y = 0; tile_y < mask->tilesY; ++tile_y) {
+        for (int tile_x = 0; tile_x < mask->tilesX; ++tile_x) {
+            const int start_x = tile_x * mask->tileSize;
+            const int start_y = tile_y * mask->tileSize;
+            const int end_x = (start_x + mask->tileSize < mask->width)
+                                  ? (start_x + mask->tileSize)
+                                  : mask->width;
+            const int end_y = (start_y + mask->tileSize < mask->height)
+                                  ? (start_y + mask->tileSize)
+                                  : mask->height;
+            const size_t tile_index = (size_t)tile_y * (size_t)mask->tilesX + (size_t)tile_x;
+            float tile_peak_activity = 0.0f;
+            float tile_peak_risk = 0.0f;
+            float tile_threshold = kRuntimeNative3DAdaptiveActivityThreshold;
+            int tile_min_subpasses = mask->minSubpassesBeforePrune;
+            bool tile_active = false;
+
+            for (int y = start_y; y < end_y; ++y) {
+                for (int x = start_x; x < end_x; ++x) {
+                    const size_t pixel_index = (size_t)y * (size_t)mask->width + (size_t)x;
+                    const float activity = accumulation->activityBuffer[pixel_index];
+                    if (activity > tile_peak_activity) {
+                        tile_peak_activity = activity;
+                    }
+                    if (features) {
+                        const float pixel_risk =
+                            runtime_native_3d_adaptive_sampling_compute_feature_risk(features,
+                                                                                    x,
+                                                                                    y,
+                                                                                    mask->width,
+                                                                                    mask->height);
+                        if (pixel_risk > tile_peak_risk) {
+                            tile_peak_risk = pixel_risk;
+                        }
+                    }
+                }
+            }
+
+            if (tile_peak_risk >= kRuntimeNative3DAdaptiveRiskHoldHigh) {
+                tile_min_subpasses += 2;
+            } else if (tile_peak_risk >= kRuntimeNative3DAdaptiveRiskHoldMedium) {
+                tile_min_subpasses += 1;
+            }
+            tile_threshold =
+                kRuntimeNative3DAdaptiveActivityThreshold -
+                ((kRuntimeNative3DAdaptiveActivityThreshold -
+                  kRuntimeNative3DAdaptiveMinimumActivityThreshold) *
+                 tile_peak_risk);
+            tile_threshold = runtime_native_3d_adaptive_sampling_clampf(
+                tile_threshold,
+                kRuntimeNative3DAdaptiveMinimumActivityThreshold,
+                kRuntimeNative3DAdaptiveActivityThreshold);
+            tile_active = accumulation->completedSubpasses < tile_min_subpasses ||
+                          tile_peak_activity > tile_threshold;
+            mask->activeTileMask[tile_index] = tile_active ? 1u : 0u;
+            if (tile_active) {
+                mask->activeTileCount += 1;
+            } else {
+                mask->inactiveTileCount += 1;
+            }
+            for (int y = start_y; y < end_y; ++y) {
+                for (int x = start_x; x < end_x; ++x) {
+                    const size_t pixel_index = (size_t)y * (size_t)mask->width + (size_t)x;
+                    mask->activeSampleMask[pixel_index] = tile_active ? 1u : 0u;
+                    if (tile_active) {
+                        mask->activePixelCount += 1;
+                    }
+                }
+            }
+        }
+    }
+
     return true;
 }
 

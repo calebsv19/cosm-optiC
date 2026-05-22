@@ -96,7 +96,7 @@ static int test_runtime_direct_light_3d_shade_pixel_visible_contract(void) {
         return 0;
     }
 
-    ok = RuntimeDirectLight3D_ShadePixel(&scene, &projector, 50.0, 50.0, &result);
+    ok = RuntimeDirectLight3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &result);
     assert_true("runtime_direct_light_3d_visible_shade_ok", ok);
     assert_true("runtime_direct_light_3d_visible_hit", result.hit);
     assert_true("runtime_direct_light_3d_visible_los", result.visible);
@@ -184,7 +184,7 @@ static int test_runtime_direct_light_3d_shade_pixel_shadowed_contract(void) {
     hit.baryV = 0.333333333333;
     hit.baryW = 0.333333333334;
 
-    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, &result);
+    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, NULL, &result);
     assert_true("runtime_direct_light_3d_shadowed_shade_ok", ok);
     assert_true("runtime_direct_light_3d_shadowed_hit", result.hit);
     assert_true("runtime_direct_light_3d_shadowed_not_visible", !result.visible);
@@ -261,7 +261,7 @@ static int test_runtime_direct_light_3d_color_tint_contract(void) {
         return 0;
     }
 
-    ok = RuntimeDirectLight3D_ShadePixel(&scene, &projector, 50.0, 50.0, &result);
+    ok = RuntimeDirectLight3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &result);
     assert_true("runtime_direct_light_3d_color_shade_ok", ok);
     assert_true("runtime_direct_light_3d_color_hit", result.hit);
     assert_true("runtime_direct_light_3d_color_visible", result.visible);
@@ -345,7 +345,7 @@ static int test_runtime_direct_light_3d_legacy_zero_color_fallback_contract(void
         return 0;
     }
 
-    ok = RuntimeDirectLight3D_ShadePixel(&scene, &projector, 50.0, 50.0, &result);
+    ok = RuntimeDirectLight3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &result);
     assert_true("runtime_direct_light_3d_zero_color_shade_ok", ok);
     assert_true("runtime_direct_light_3d_zero_color_scalar_positive", result.radiance > 0.0);
     assert_true("runtime_direct_light_3d_zero_color_red_positive", result.radianceR > 0.0);
@@ -425,7 +425,7 @@ static int test_runtime_direct_light_3d_top_fill_lifts_upward_faces(void) {
     hit.baryV = 0.333333333333;
     hit.baryW = 0.333333333334;
 
-    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, &result);
+    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, NULL, &result);
     assert_true("runtime_direct_light_3d_top_fill_shade_ok", ok);
     assert_true("runtime_direct_light_3d_top_fill_hit", result.hit);
     assert_true("runtime_direct_light_3d_top_fill_visible", result.visible);
@@ -439,7 +439,7 @@ static int test_runtime_direct_light_3d_top_fill_lifts_upward_faces(void) {
                  1e-9);
 
     animSettings.topFillLightEnabled = false;
-    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, &result);
+    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, NULL, &result);
     assert_true("runtime_direct_light_3d_top_fill_disabled_shade_ok", ok);
     assert_close("runtime_direct_light_3d_top_fill_disabled_scalar_zero",
                  result.radiance,
@@ -519,7 +519,7 @@ static int test_runtime_direct_light_3d_transparent_blocker_partial_shadow_contr
     hit.baryV = 0.333333333333;
     hit.baryW = 0.333333333334;
 
-    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, &result);
+    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, NULL, &result);
     assert_true("runtime_direct_light_3d_partial_shadow_shade_ok", ok);
     assert_true("runtime_direct_light_3d_partial_shadow_hit", result.hit);
     assert_true("runtime_direct_light_3d_partial_shadow_visible", result.visible);
@@ -608,7 +608,7 @@ static int test_runtime_direct_light_3d_area_light_softens_edge_shadow_contract(
     hit.baryW = 0.333333333334;
 
     scene.light.radius = 0.0;
-    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, &center_result);
+    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, NULL, &center_result);
     assert_true("runtime_direct_light_3d_area_shadow_center_ok", ok);
     assert_true("runtime_direct_light_3d_area_shadow_center_blocked", !center_result.visible);
     assert_close("runtime_direct_light_3d_area_shadow_center_zero",
@@ -617,7 +617,7 @@ static int test_runtime_direct_light_3d_area_light_softens_edge_shadow_contract(
                  1e-9);
 
     scene.light.radius = 0.9;
-    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, &area_result);
+    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, NULL, &area_result);
     assert_true("runtime_direct_light_3d_area_shadow_area_ok", ok);
     assert_true("runtime_direct_light_3d_area_shadow_area_visible", area_result.visible);
     assert_true("runtime_direct_light_3d_area_shadow_area_positive", area_result.radiance > 0.0);
@@ -721,7 +721,7 @@ static int test_runtime_direct_light_3d_oil_overlay_opaque_blocker_stays_solid(v
     hit.baryV = 0.333333333333;
     hit.baryW = 0.333333333334;
 
-    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, &result);
+    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, NULL, &result);
     assert_true("runtime_direct_light_3d_oil_blocker_shade_ok", ok);
     assert_true("runtime_direct_light_3d_oil_blocker_hit", result.hit);
     assert_true("runtime_direct_light_3d_oil_blocker_not_visible", !result.visible);
@@ -822,9 +822,19 @@ static int test_runtime_direct_light_3d_authored_light_motion_contract(void) {
         return 0;
     }
 
-    ok = RuntimeDirectLight3D_ShadePixel(&scene_start, &projector, 50.0, 50.0, &start_result);
+    ok = RuntimeDirectLight3D_ShadePixel(&scene_start,
+                                         &projector,
+                                         50.0,
+                                         50.0,
+                                         NULL,
+                                         &start_result);
     assert_true("runtime_direct_light_3d_motion_shade_start_ok", ok);
-    ok = RuntimeDirectLight3D_ShadePixel(&scene_end, &projector, 50.0, 50.0, &end_result);
+    ok = RuntimeDirectLight3D_ShadePixel(&scene_end,
+                                         &projector,
+                                         50.0,
+                                         50.0,
+                                         NULL,
+                                         &end_result);
     assert_true("runtime_direct_light_3d_motion_shade_end_ok", ok);
     assert_true("runtime_direct_light_3d_motion_start_visible", start_result.visible);
     assert_true("runtime_direct_light_3d_motion_end_visible", end_result.visible);
@@ -897,7 +907,7 @@ static int test_runtime_direct_light_3d_volume_hit_to_light_attenuation_contract
     hit.baryV = 0.333333333333;
     hit.baryW = 0.333333333334;
 
-    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, &baseline);
+    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, NULL, &baseline);
     assert_true("runtime_direct_light_3d_volume_shadow_baseline_ok", ok);
     assert_true("runtime_direct_light_3d_volume_shadow_baseline_visible", baseline.visible);
     assert_true("runtime_direct_light_3d_volume_shadow_baseline_positive", baseline.radiance > 0.0);
@@ -932,7 +942,7 @@ static int test_runtime_direct_light_3d_volume_hit_to_light_attenuation_contract
         scene.volume.channels.solidMask[i] = 0u;
     }
 
-    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, &attenuated);
+    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, NULL, &attenuated);
     assert_true("runtime_direct_light_3d_volume_shadow_attenuated_ok", ok);
     assert_true("runtime_direct_light_3d_volume_shadow_attenuated_visible", attenuated.visible);
     assert_true("runtime_direct_light_3d_volume_shadow_attenuated_positive", attenuated.radiance > 0.0);

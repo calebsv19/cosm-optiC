@@ -5,6 +5,7 @@
 
 #include "config/config_manager.h"
 #include "render/runtime_material_payload_3d.h"
+#include "render/runtime_native_3d_sampling.h"
 #include "render/runtime_volume_3d_integrate.h"
 
 static const double kRuntimeDirectLight3DTopFillIntensityScale = 0.08;
@@ -23,6 +24,37 @@ static const RuntimeDirectLight3DDiskSample kRuntimeDirectLight3DAreaLightSample
     {0.0, 1.0},
     {0.0, -1.0},
 };
+
+static bool runtime_direct_light_3d_has_temporal_jitter(
+    const RuntimeNative3DSamplingContext* sampling) {
+    return sampling && sampling->temporalSubpassCount > 1u;
+}
+
+static void runtime_direct_light_3d_map_square_to_disk(double u,
+                                                       double v,
+                                                       double* out_x,
+                                                       double* out_y) {
+    const double a = 2.0 * u - 1.0;
+    const double b = 2.0 * v - 1.0;
+    double r = 0.0;
+    double phi = 0.0;
+
+    if (!out_x || !out_y) return;
+    if (fabs(a) < 1e-9 && fabs(b) < 1e-9) {
+        *out_x = 0.0;
+        *out_y = 0.0;
+        return;
+    }
+    if (fabs(a) > fabs(b)) {
+        r = a;
+        phi = (M_PI / 4.0) * (b / a);
+    } else {
+        r = b;
+        phi = (M_PI / 2.0) - (M_PI / 4.0) * (a / b);
+    }
+    *out_x = r * cos(phi);
+    *out_y = r * sin(phi);
+}
 
 static double runtime_direct_light_3d_attenuation(const RuntimeLight3D* light,
                                                   double light_distance) {
@@ -96,7 +128,8 @@ static int runtime_direct_light_3d_area_light_sample_count(const RuntimeLight3D*
 
 static Vec3 runtime_direct_light_3d_sample_light_position(const RuntimeLight3D* light,
                                                           Vec3 center_dir,
-                                                          int sample_index) {
+                                                          int sample_index,
+                                                          const RuntimeNative3DSamplingContext* sampling) {
     Vec3 tangent = vec3(0.0, 0.0, 0.0);
     Vec3 bitangent = vec3(0.0, 0.0, 0.0);
     RuntimeDirectLight3DDiskSample sample = {0.0, 0.0};
@@ -108,6 +141,29 @@ static Vec3 runtime_direct_light_3d_sample_light_position(const RuntimeLight3D* 
 
     runtime_direct_light_3d_build_basis(center_dir, &tangent, &bitangent);
     radius = light->radius * kRuntimeDirectLight3DAreaLightSampleRing;
+    if (runtime_direct_light_3d_has_temporal_jitter(sampling)) {
+        const uint32_t base_seed =
+            (uint32_t)(fabs(light->position.x) * 4096.0) ^
+            ((uint32_t)(fabs(light->position.y) * 2048.0) << 1u) ^
+            ((uint32_t)(fabs(light->position.z) * 1024.0) << 2u) ^
+            ((uint32_t)(sample_index + 1) * 2654435761u);
+        double u = 0.5;
+        double v = 0.5;
+        double disk_x = 0.0;
+        double disk_y = 0.0;
+
+        RuntimeNative3DSampling_Stratified2D(sampling,
+                                             base_seed,
+                                             runtime_direct_light_3d_area_light_sample_count(light),
+                                             sample_index,
+                                             (uint32_t)(sample_index + 17),
+                                             &u,
+                                             &v);
+        runtime_direct_light_3d_map_square_to_disk(u, v, &disk_x, &disk_y);
+        return vec3_add(light->position,
+                        vec3_add(vec3_scale(tangent, disk_x * radius),
+                                 vec3_scale(bitangent, disk_y * radius)));
+    }
     if (sample_index >= runtime_direct_light_3d_area_light_sample_count(light)) {
         sample_index = 0;
     }
@@ -206,6 +262,7 @@ bool RuntimeDirectLight3D_TracePrimaryHit(const RuntimeScene3D* scene,
 
 bool RuntimeDirectLight3D_ShadeHit(const RuntimeScene3D* scene,
                                    const HitInfo3D* hit,
+                                   const RuntimeNative3DSamplingContext* sampling,
                                    RuntimeDirectLight3DResult* out_result) {
     RuntimeDirectLight3DResult result = {0};
     Vec3 to_light = vec3(0.0, 0.0, 0.0);
@@ -254,7 +311,8 @@ bool RuntimeDirectLight3D_ShadeHit(const RuntimeScene3D* scene,
         for (int i = 0; i < light_sample_count; ++i) {
             Vec3 sample_position = runtime_direct_light_3d_sample_light_position(&scene->light,
                                                                                  to_light,
-                                                                                 i);
+                                                                                 i,
+                                                                                 sampling);
             Vec3 sample_to_light = vec3_sub(sample_position, hit->position);
             double sample_distance = vec3_length(sample_to_light);
             double sample_attenuation = 0.0;
@@ -304,6 +362,7 @@ bool RuntimeDirectLight3D_ShadePixel(const RuntimeScene3D* scene,
                                      const RuntimeCameraProjector3D* projector,
                                      double pixel_x,
                                      double pixel_y,
+                                     const RuntimeNative3DSamplingContext* sampling,
                                      RuntimeDirectLight3DResult* out_result) {
     RuntimeDirectLight3DResult result = {0};
     RuntimePrimaryHit3DResult primary_hit = {0};
@@ -321,7 +380,7 @@ bool RuntimeDirectLight3D_ShadePixel(const RuntimeScene3D* scene,
         return false;
     }
 
-    if (!RuntimeDirectLight3D_ShadeHit(scene, &primary_hit.hitInfo, &result)) {
+    if (!RuntimeDirectLight3D_ShadeHit(scene, &primary_hit.hitInfo, sampling, &result)) {
         result.primaryRay = primary_hit.primaryRay;
         *out_result = result;
         return false;

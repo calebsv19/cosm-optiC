@@ -11,6 +11,7 @@ void ray_tracing_text_register_font_source(TTF_Font* font,
                                            int kerning_enabled);
 
 void ray_tracing_text_unregister_font_source(TTF_Font* font);
+int ray_tracing_text_has_font_source(TTF_Font* font);
 
 void ray_tracing_text_reset_renderer(SDL_Renderer* renderer);
 
@@ -19,6 +20,9 @@ int ray_tracing_text_measure_utf8(SDL_Renderer* renderer,
                                   const char* text,
                                   int* out_w,
                                   int* out_h);
+int ray_tracing_text_line_height(SDL_Renderer* renderer,
+                                 TTF_Font* font,
+                                 int* out_h);
 
 int ray_tracing_text_draw_utf8(SDL_Renderer* renderer,
                                TTF_Font* font,

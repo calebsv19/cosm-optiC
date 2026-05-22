@@ -1,6 +1,6 @@
 # optiC Current Truth
 
-Last updated: 2026-05-20
+Last updated: 2026-05-21
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -24,6 +24,12 @@ Last updated: 2026-05-20
   track authored `light.radius` instead of behaving like a strict point-light
   shortcut.
 - Native `3D` output is RGB-aware through the full shipped ladder.
+- Runtime UI text measurement now routes through one guarded font contract:
+  - only fonts still owned by the live runtime font cache are considered usable
+  - HUD/menu measurement and line-height helpers no longer call `SDL_ttf`
+    sizing APIs directly on unchecked font pointers
+  - when a stale font handle is encountered, text draw/measure now fails closed
+    instead of dereferencing the dead handle
 - Native `3D` support layers now include:
   - tile preview
   - dirty-rect preview updates
@@ -351,6 +357,27 @@ Last updated: 2026-05-20
 - Menu/control-surface implementation is now split across:
   - `src/ui/menu/sdl_menu_render.c` for orchestration/layout pass ownership
   - `src/ui/menu/sdl_menu_render_controls.c` for shared text/button/control rendering helpers
+
+## Recommended Scene-Authoring / Render Loop
+- Treat `line_drawing` as the canonical source for room/object/camera/light
+  authoring and `ray_tracing` as the downstream preview, render, and publish
+  lane.
+- The intended operator flow is:
+  - export or compile `scene_authoring.json` and `scene_runtime.json` from the
+    upstream request
+  - use headless preview first for framing/material validation
+  - use `ray_tracing_material_preview_headless` when the question is surface
+    treatment rather than full lighting transport
+  - use `glass_preview` / `glass_review` only when transmission quality is the
+    actual thing under review
+  - use detached job runner plus publish helpers only after preview/framing are
+    stable
+- Current authoring contract reminders:
+  - `material_id = 5` is the transparent/glass preset
+  - `material_id = 4` remains the explicit emissive preset
+  - omitted `emissive_strength` now means `0.0`, not an implicitly lit object
+  - layered object treatment should prefer `material_texture_stack` over
+    widening more flat one-off object fields
 
 ## Structure
 - Required lanes: `docs/`, `src/`, `include/`, `tests/`, `build/`

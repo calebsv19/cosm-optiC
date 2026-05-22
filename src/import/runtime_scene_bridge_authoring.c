@@ -106,6 +106,99 @@ static bool runtime_scene_bridge_parse_double_field_any(json_object *obj,
     return false;
 }
 
+static bool runtime_scene_bridge_parse_position_or_transform_position(json_object *obj,
+                                                                      double *out_x,
+                                                                      double *out_y,
+                                                                      double *out_z) {
+    json_object *transform = NULL;
+    if (!obj || !out_x || !out_y || !out_z) return false;
+    if (runtime_scene_bridge_parse_vec3(obj, "position", out_x, out_y, out_z)) {
+        return true;
+    }
+    if (json_object_object_get_ex(obj, "transform", &transform) &&
+        json_object_is_type(transform, json_type_object) &&
+        runtime_scene_bridge_parse_vec3(transform, "position", out_x, out_y, out_z)) {
+        return true;
+    }
+    return false;
+}
+
+static bool runtime_scene_bridge_parse_transform_rotation(json_object *obj,
+                                                          double *out_x,
+                                                          double *out_y,
+                                                          double *out_z) {
+    json_object *transform = NULL;
+    if (!obj || !out_x || !out_y || !out_z) return false;
+    if (json_object_object_get_ex(obj, "transform", &transform) &&
+        json_object_is_type(transform, json_type_object) &&
+        runtime_scene_bridge_parse_vec3(transform, "rotation", out_x, out_y, out_z)) {
+        return true;
+    }
+    return false;
+}
+
+static bool runtime_scene_bridge_parse_camera_seed_yaw(json_object *obj, double *out_yaw) {
+    double rx = 0.0;
+    double ry = 0.0;
+    double rz = 0.0;
+    if (!obj || !out_yaw) return false;
+    if (runtime_scene_bridge_parse_double_field(obj, "yaw", out_yaw)) return true;
+    if (runtime_scene_bridge_parse_double_field(obj, "rotation_z", out_yaw)) return true;
+    if (runtime_scene_bridge_parse_double_field(obj, "rotationZ", out_yaw)) return true;
+    if (runtime_scene_bridge_parse_transform_rotation(obj, &rx, &ry, &rz)) {
+        *out_yaw = rz;
+        return true;
+    }
+    return false;
+}
+
+static bool runtime_scene_bridge_parse_camera_seed_pitch(json_object *obj, double *out_pitch) {
+    double rx = 0.0;
+    double ry = 0.0;
+    double rz = 0.0;
+    if (!obj || !out_pitch) return false;
+    if (runtime_scene_bridge_parse_double_field(obj, "look_pitch", out_pitch)) return true;
+    if (runtime_scene_bridge_parse_double_field(obj, "lookPitch", out_pitch)) return true;
+    if (runtime_scene_bridge_parse_double_field(obj, "pitch", out_pitch)) return true;
+    if (runtime_scene_bridge_parse_double_field(obj, "rotation_x", out_pitch)) return true;
+    if (runtime_scene_bridge_parse_double_field(obj, "rotationX", out_pitch)) return true;
+    if (runtime_scene_bridge_parse_transform_rotation(obj, &rx, &ry, &rz)) {
+        *out_pitch = rx;
+        return true;
+    }
+    return false;
+}
+
+static bool runtime_scene_bridge_parse_focus_target(json_object *obj,
+                                                    double world_scale,
+                                                    double *out_x,
+                                                    double *out_y,
+                                                    double *out_z) {
+    json_object *target = NULL;
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;
+    if (!obj || !out_x || !out_y || !out_z) return false;
+    if (!json_object_object_get_ex(obj, "camera_focus_target", &target) ||
+        !json_object_is_type(target, json_type_object)) {
+        return false;
+    }
+    if (!runtime_scene_bridge_parse_position_or_transform_position(target, &x, &y, &z) &&
+        !runtime_scene_bridge_parse_double_field(target, "x", &x)) {
+        return false;
+    }
+    if (!runtime_scene_bridge_parse_position_or_transform_position(target, &x, &y, &z)) {
+        if (!runtime_scene_bridge_parse_double_field(target, "y", &y) ||
+            !runtime_scene_bridge_parse_double_field(target, "z", &z)) {
+            return false;
+        }
+    }
+    *out_x = x * world_scale;
+    *out_y = y * world_scale;
+    *out_z = z * world_scale;
+    return true;
+}
+
 static void runtime_scene_bridge_parse_texture_parameters(json_object *owner,
                                                           RuntimeMaterialTexture3DParams *params) {
     json_object *parameters = NULL;
@@ -275,50 +368,205 @@ static void apply_ray_authoring_object_procedural_texture(json_object *entry,
     json_object *texture_id_obj = NULL;
     json_object *face_placements = NULL;
     SceneObject *object = NULL;
+    bool has_flat_override = false;
 
     if (!entry || scene_index < 0 || scene_index >= sceneSettings.objectCount) return;
-    if (!json_object_object_get_ex(entry, "procedural_texture", &procedural_texture) ||
-        !json_object_is_type(procedural_texture, json_type_object)) {
+    if (json_object_object_get_ex(entry, "texture_id", &texture_id_obj) &&
+        (json_object_is_type(texture_id_obj, json_type_int) ||
+         json_object_is_type(texture_id_obj, json_type_double))) {
+        has_flat_override = true;
+    } else if (json_object_object_get_ex(entry, "textureId", &texture_id_obj) &&
+               (json_object_is_type(texture_id_obj, json_type_int) ||
+                json_object_is_type(texture_id_obj, json_type_double))) {
+        has_flat_override = true;
+    }
+    has_flat_override =
+        has_flat_override ||
+        runtime_scene_bridge_parse_double_field_any(entry,
+                                                    "texture_strength",
+                                                    "textureStrength",
+                                                    &(double){0.0}) ||
+        runtime_scene_bridge_parse_double_field_any(entry,
+                                                    "texture_scale",
+                                                    "textureScale",
+                                                    &(double){0.0}) ||
+        runtime_scene_bridge_parse_double_field_any(entry,
+                                                    "texture_offset_u",
+                                                    "textureOffsetU",
+                                                    &(double){0.0}) ||
+        runtime_scene_bridge_parse_double_field_any(entry,
+                                                    "texture_offset_v",
+                                                    "textureOffsetV",
+                                                    &(double){0.0}) ||
+        runtime_scene_bridge_parse_double_field_any(entry,
+                                                    "texture_coverage",
+                                                    "textureCoverage",
+                                                    &(double){0.0}) ||
+        runtime_scene_bridge_parse_double_field_any(entry,
+                                                    "texture_grain",
+                                                    "textureGrain",
+                                                    &(double){0.0}) ||
+        runtime_scene_bridge_parse_double_field_any(entry,
+                                                    "texture_edge_softness",
+                                                    "textureEdgeSoftness",
+                                                    &(double){0.0}) ||
+        runtime_scene_bridge_parse_double_field_any(entry,
+                                                    "texture_contrast",
+                                                    "textureContrast",
+                                                    &(double){0.0}) ||
+        runtime_scene_bridge_parse_double_field_any(entry,
+                                                    "texture_flow",
+                                                    "textureFlow",
+                                                    &(double){0.0}) ||
+        runtime_scene_bridge_parse_double_field_any(entry,
+                                                    "texture_color_depth",
+                                                    "textureColorDepth",
+                                                    &(double){0.0}) ||
+        runtime_scene_bridge_parse_double_field_any(entry,
+                                                    "texture_surface_damage",
+                                                    "textureSurfaceDamage",
+                                                    &(double){0.0}) ||
+        json_object_object_get_ex(entry, "texture_pattern_mode", &texture_id_obj) ||
+        json_object_object_get_ex(entry, "texturePatternMode", &texture_id_obj) ||
+        json_object_object_get_ex(entry, "texture_seed", &texture_id_obj) ||
+        json_object_object_get_ex(entry, "textureSeed", &texture_id_obj);
+
+    if ((!json_object_object_get_ex(entry, "procedural_texture", &procedural_texture) ||
+         !json_object_is_type(procedural_texture, json_type_object)) &&
+        !has_flat_override) {
         return;
     }
 
     object = &sceneSettings.sceneObjects[scene_index];
-    if (json_object_object_get_ex(procedural_texture, "texture_id", &texture_id_obj) &&
-        (json_object_is_type(texture_id_obj, json_type_int) ||
-         json_object_is_type(texture_id_obj, json_type_double))) {
-        object->textureId = json_object_get_int(texture_id_obj);
+    if (has_flat_override) {
+        if (json_object_object_get_ex(entry, "texture_id", &texture_id_obj) &&
+            (json_object_is_type(texture_id_obj, json_type_int) ||
+             json_object_is_type(texture_id_obj, json_type_double))) {
+            object->textureId = json_object_get_int(texture_id_obj);
+        } else if (json_object_object_get_ex(entry, "textureId", &texture_id_obj) &&
+                   (json_object_is_type(texture_id_obj, json_type_int) ||
+                    json_object_is_type(texture_id_obj, json_type_double))) {
+            object->textureId = json_object_get_int(texture_id_obj);
+        }
+        runtime_scene_bridge_parse_double_field_any(entry,
+                                                    "texture_offset_u",
+                                                    "textureOffsetU",
+                                                    &object->textureOffsetU);
+        runtime_scene_bridge_parse_double_field_any(entry,
+                                                    "texture_offset_v",
+                                                    "textureOffsetV",
+                                                    &object->textureOffsetV);
+        runtime_scene_bridge_parse_double_field_any(entry,
+                                                    "texture_scale",
+                                                    "textureScale",
+                                                    &object->textureScale);
+        runtime_scene_bridge_parse_double_field_any(entry,
+                                                    "texture_strength",
+                                                    "textureStrength",
+                                                    &object->textureStrength);
+        {
+            RuntimeMaterialTexture3DParams params = RuntimeMaterialTexture3DParamsFromObject(object);
+            json_object *seed_obj = NULL;
+            json_object *pattern_mode_obj = NULL;
+            if (json_object_object_get_ex(entry, "texture_pattern_mode", &pattern_mode_obj) &&
+                (json_object_is_type(pattern_mode_obj, json_type_int) ||
+                 json_object_is_type(pattern_mode_obj, json_type_double))) {
+                params.patternMode = json_object_get_int(pattern_mode_obj);
+            } else if (json_object_object_get_ex(entry, "texturePatternMode", &pattern_mode_obj) &&
+                       (json_object_is_type(pattern_mode_obj, json_type_int) ||
+                        json_object_is_type(pattern_mode_obj, json_type_double))) {
+                params.patternMode = json_object_get_int(pattern_mode_obj);
+            }
+            runtime_scene_bridge_parse_double_field_any(entry,
+                                                        "texture_coverage",
+                                                        "textureCoverage",
+                                                        &params.coverage);
+            runtime_scene_bridge_parse_double_field_any(entry,
+                                                        "texture_grain",
+                                                        "textureGrain",
+                                                        &params.grain);
+            runtime_scene_bridge_parse_double_field_any(entry,
+                                                        "texture_edge_softness",
+                                                        "textureEdgeSoftness",
+                                                        &params.edgeSoftness);
+            runtime_scene_bridge_parse_double_field_any(entry,
+                                                        "texture_contrast",
+                                                        "textureContrast",
+                                                        &params.contrast);
+            runtime_scene_bridge_parse_double_field_any(entry,
+                                                        "texture_flow",
+                                                        "textureFlow",
+                                                        &params.flow);
+            runtime_scene_bridge_parse_double_field_any(entry,
+                                                        "texture_color_depth",
+                                                        "textureColorDepth",
+                                                        &params.colorDepth);
+            runtime_scene_bridge_parse_double_field_any(entry,
+                                                        "texture_surface_damage",
+                                                        "textureSurfaceDamage",
+                                                        &params.surfaceDamage);
+            if (json_object_object_get_ex(entry, "texture_seed", &seed_obj) &&
+                (json_object_is_type(seed_obj, json_type_int) ||
+                 json_object_is_type(seed_obj, json_type_double))) {
+                params.seed = json_object_get_int(seed_obj);
+            } else if (json_object_object_get_ex(entry, "textureSeed", &seed_obj) &&
+                       (json_object_is_type(seed_obj, json_type_int) ||
+                        json_object_is_type(seed_obj, json_type_double))) {
+                params.seed = json_object_get_int(seed_obj);
+            }
+            params = RuntimeMaterialTexture3DNormalizeParams(params);
+            object->texturePatternMode = params.patternMode;
+            object->textureCoverage = params.coverage;
+            object->textureGrain = params.grain;
+            object->textureEdgeSoftness = params.edgeSoftness;
+            object->textureContrast = params.contrast;
+            object->textureFlow = params.flow;
+            object->textureColorDepth = params.colorDepth;
+            object->textureSurfaceDamage = params.surfaceDamage;
+            object->textureSeed = params.seed;
+        }
     }
-    runtime_scene_bridge_parse_double_field(procedural_texture,
-                                            "offset_u",
-                                            &object->textureOffsetU);
-    runtime_scene_bridge_parse_double_field(procedural_texture,
-                                            "offset_v",
-                                            &object->textureOffsetV);
-    runtime_scene_bridge_parse_double_field(procedural_texture,
-                                            "scale",
-                                            &object->textureScale);
-    runtime_scene_bridge_parse_double_field(procedural_texture,
-                                            "strength",
-                                            &object->textureStrength);
-    {
-        RuntimeMaterialTexture3DParams params = RuntimeMaterialTexture3DParamsFromObject(object);
-        runtime_scene_bridge_parse_texture_parameters(procedural_texture, &params);
-        object->texturePatternMode = params.patternMode;
-        object->textureCoverage = params.coverage;
-        object->textureGrain = params.grain;
-        object->textureEdgeSoftness = params.edgeSoftness;
-        object->textureContrast = params.contrast;
-        object->textureFlow = params.flow;
-        object->textureColorDepth = params.colorDepth;
-        object->textureSurfaceDamage = params.surfaceDamage;
-        object->textureSeed = params.seed;
+
+    if (procedural_texture && json_object_is_type(procedural_texture, json_type_object)) {
+        if (json_object_object_get_ex(procedural_texture, "texture_id", &texture_id_obj) &&
+            (json_object_is_type(texture_id_obj, json_type_int) ||
+             json_object_is_type(texture_id_obj, json_type_double))) {
+            object->textureId = json_object_get_int(texture_id_obj);
+        }
+        runtime_scene_bridge_parse_double_field(procedural_texture,
+                                                "offset_u",
+                                                &object->textureOffsetU);
+        runtime_scene_bridge_parse_double_field(procedural_texture,
+                                                "offset_v",
+                                                &object->textureOffsetV);
+        runtime_scene_bridge_parse_double_field(procedural_texture,
+                                                "scale",
+                                                &object->textureScale);
+        runtime_scene_bridge_parse_double_field(procedural_texture,
+                                                "strength",
+                                                &object->textureStrength);
+        {
+            RuntimeMaterialTexture3DParams params = RuntimeMaterialTexture3DParamsFromObject(object);
+            runtime_scene_bridge_parse_texture_parameters(procedural_texture, &params);
+            object->texturePatternMode = params.patternMode;
+            object->textureCoverage = params.coverage;
+            object->textureGrain = params.grain;
+            object->textureEdgeSoftness = params.edgeSoftness;
+            object->textureContrast = params.contrast;
+            object->textureFlow = params.flow;
+            object->textureColorDepth = params.colorDepth;
+            object->textureSurfaceDamage = params.surfaceDamage;
+            object->textureSeed = params.seed;
+        }
     }
     if (!(object->textureScale > 1e-6)) object->textureScale = 1.0;
     if (object->textureStrength < 0.0) object->textureStrength = 0.0;
     if (object->textureStrength > 1.0) object->textureStrength = 1.0;
 
     SceneEditorMaterialFacePlacementResetObject(scene_index);
-    if (!json_object_object_get_ex(procedural_texture, "face_placements", &face_placements) ||
+    if (!procedural_texture ||
+        !json_object_is_type(procedural_texture, json_type_object) ||
+        !json_object_object_get_ex(procedural_texture, "face_placements", &face_placements) ||
         !json_object_is_type(face_placements, json_type_array)) {
         return;
     }
@@ -402,13 +650,17 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
         json_object *object_color_obj = NULL;
         json_object *alpha_obj = NULL;
         json_object *transparency_obj = NULL;
+        json_object *reflectivity_obj = NULL;
+        json_object *roughness_obj = NULL;
         json_object *emissive_strength_obj = NULL;
         const char *object_id = NULL;
         int material_id = MaterialManagerDefaultId();
         int object_color = 0xFFFFFF;
         bool has_object_color = false;
         double alpha = 1.0;
-        double emissive_strength = 1.0;
+        double reflectivity = 0.35;
+        double roughness = 0.65;
+        double emissive_strength = 0.0;
         int scene_index = 0;
         if (!entry || !json_object_is_type(entry, json_type_object)) continue;
         if (!json_object_object_get_ex(entry, "object_id", &object_id_obj) ||
@@ -437,6 +689,16 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
                     json_object_is_type(transparency_obj, json_type_double))) {
             alpha = json_object_get_double(transparency_obj);
         }
+        if (json_object_object_get_ex(entry, "reflectivity", &reflectivity_obj) &&
+            (json_object_is_type(reflectivity_obj, json_type_int) ||
+             json_object_is_type(reflectivity_obj, json_type_double))) {
+            reflectivity = json_object_get_double(reflectivity_obj);
+        }
+        if (json_object_object_get_ex(entry, "roughness", &roughness_obj) &&
+            (json_object_is_type(roughness_obj, json_type_int) ||
+             json_object_is_type(roughness_obj, json_type_double))) {
+            roughness = json_object_get_double(roughness_obj);
+        }
         if (json_object_object_get_ex(entry, "emissive_strength", &emissive_strength_obj) &&
             (json_object_is_type(emissive_strength_obj, json_type_int) ||
              json_object_is_type(emissive_strength_obj, json_type_double))) {
@@ -459,6 +721,10 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
                     sceneSettings.sceneObjects[scene_index].color = object_color;
                 }
                 sceneSettings.sceneObjects[scene_index].alpha = fmax(0.0, fmin(1.0, alpha));
+                sceneSettings.sceneObjects[scene_index].reflectivity =
+                    fmax(0.0, fmin(1.0, reflectivity));
+                sceneSettings.sceneObjects[scene_index].roughness =
+                    fmax(0.0, fmin(1.0, roughness));
                 sceneSettings.sceneObjects[scene_index].emissiveStrength =
                     fmax(0.0, fmin(1.0, emissive_strength));
                 apply_ray_authoring_object_authored_texture(entry, scene_index, object_id);
@@ -564,7 +830,7 @@ void runtime_scene_bridge_apply_light_seed_scaled(json_object *lights_array,
     }
     light0 = json_object_array_get_idx(lights_array, 0);
     if (!light0 || !json_object_is_type(light0, json_type_object)) return;
-    if (runtime_scene_bridge_parse_vec3(light0, "position", &lx, &ly, &lz)) {
+    if (runtime_scene_bridge_parse_position_or_transform_position(light0, &lx, &ly, &lz)) {
         sceneSettings.bezierPath.numPoints = 1;
         sceneSettings.bezierPath.points[0].x = lx * world_scale;
         sceneSettings.bezierPath.points[0].y = ly * world_scale;
@@ -579,18 +845,40 @@ void runtime_scene_bridge_apply_camera_seed_scaled(json_object *cameras_array,
                                                    double world_scale) {
     json_object *camera0 = NULL;
     double cx = 0.0, cy = 0.0, cz = 0.0;
+    double yaw = 0.0;
+    double pitch = 0.0;
+    bool has_yaw = false;
+    bool has_pitch = false;
     if (!cameras_array || !json_object_is_type(cameras_array, json_type_array) ||
         json_object_array_length(cameras_array) == 0u) {
         return;
     }
     camera0 = json_object_array_get_idx(cameras_array, 0);
     if (!camera0 || !json_object_is_type(camera0, json_type_object)) return;
-    if (runtime_scene_bridge_parse_vec3(camera0, "position", &cx, &cy, &cz)) {
+    if (runtime_scene_bridge_parse_position_or_transform_position(camera0, &cx, &cy, &cz)) {
         sceneSettings.camera.x = cx * world_scale;
         sceneSettings.camera.y = cy * world_scale;
         sceneSettings.cameraZ = cz * world_scale;
+        sceneSettings.cameraPath.numPoints = 1;
+        sceneSettings.cameraPath.points[0].x = sceneSettings.camera.x;
+        sceneSettings.cameraPath.points[0].y = sceneSettings.camera.y;
+        sceneSettings.cameraPath.rotationSet[0] = false;
+        sceneSettings.cameraPath3D.point_z[0] = sceneSettings.cameraZ;
+        sceneSettings.cameraPath3D.point_pitch[0] = 0.0;
         g_last_3d_scaffold.has_camera_seed = true;
         g_last_3d_scaffold.camera_z = cz * world_scale;
+    }
+    has_yaw = runtime_scene_bridge_parse_camera_seed_yaw(camera0, &yaw);
+    has_pitch = runtime_scene_bridge_parse_camera_seed_pitch(camera0, &pitch);
+    if (has_yaw) {
+        sceneSettings.camera.rotation = yaw;
+        sceneSettings.cameraPath.rotations[0] = yaw;
+        sceneSettings.cameraPath.rotationSet[0] = true;
+        g_last_3d_scaffold.has_camera_rotation_seed = true;
+    }
+    if (has_pitch) {
+        sceneSettings.cameraPath3D.point_pitch[0] = pitch;
+        g_last_3d_scaffold.has_camera_pitch_seed = true;
     }
 }
 
@@ -601,6 +889,9 @@ void runtime_scene_bridge_apply_ray_authoring_paths(json_object *root,
     json_object *authoring = NULL;
     json_object *light_path_depth = NULL;
     json_object *camera_path_depth = NULL;
+    double focus_x = 0.0;
+    double focus_y = 0.0;
+    double focus_z = 0.0;
     if (!root) return;
     if (!json_object_object_get_ex(root, "extensions", &extensions) ||
         !json_object_is_type(extensions, json_type_object) ||
@@ -609,6 +900,17 @@ void runtime_scene_bridge_apply_ray_authoring_paths(json_object *root,
         !json_object_object_get_ex(ray_tracing, "authoring", &authoring) ||
         !json_object_is_type(authoring, json_type_object)) {
         return;
+    }
+
+    if (runtime_scene_bridge_parse_focus_target(authoring,
+                                                world_scale,
+                                                &focus_x,
+                                                &focus_y,
+                                                &focus_z)) {
+        g_last_3d_scaffold.has_camera_focus_target = true;
+        g_last_3d_scaffold.camera_focus_target_x = focus_x;
+        g_last_3d_scaffold.camera_focus_target_y = focus_y;
+        g_last_3d_scaffold.camera_focus_target_z = focus_z;
     }
 
     if (apply_authoring_path_scaled(authoring,

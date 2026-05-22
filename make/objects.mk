@@ -23,6 +23,8 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/materials/runtime_material_texture_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_texture_stack_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_response_3d.o \
+	$(BUILD_DIR)/editor/scene_editor_material_face_placement.o \
+	$(BUILD_DIR)/editor/scene_editor_material_stack.o \
 	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading.o \
@@ -52,6 +54,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/import/scene_bundle_import.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_json_utils.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_authoring.o \
+	$(BUILD_DIR)/import/runtime_scene_volume_defaults.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge.o \
 	$(BUILD_DIR)/path/path_system.o \
 	$(BUILD_DIR)/path/path_arc_length.o \
@@ -66,7 +69,6 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/config/core/config_manager.o \
 	$(BUILD_DIR)/render/fluid/fluid_state.o \
 	$(BUILD_DIR)/render/pipeline/ray_tracing2_native3d_overlay.o \
-	$(BUILD_DIR)/render/pipeline/ray_tracing2_preview_present.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_core.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_json.o \
 	$(BUILD_DIR)/tools/ShapeLib/shape_flatten.o \
@@ -78,6 +80,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(CORE_TIME_OBJS) \
 	$(CORE_SCENE_OBJS) \
 	$(CORE_SCENE_COMPILE_OBJS) \
+	$(CORE_AUTHORED_TEXTURE_OBJS) \
 	$(CORE_OBJECT_OBJS) \
 	$(CORE_UNITS_OBJS) \
 	$(CORE_SPACE_OBJS) \
@@ -86,6 +89,19 @@ NATIVE3D_AUDIT_DEPS = \
 	$(patsubst $(VK_RENDERER_DIR)/src/%.c,$(BUILD_DIR)/vk_renderer/%.o,$(VK_RENDERER_SRCS)) \
 	$(KIT_VIZ_OBJS) \
 	$(KIT_RUNTIME_DIAG_OBJS)
+
+RAY_TRACING_RENDER_HEADLESS_DEPS = \
+	$(BUILD_DIR)/app/agent_render_request.o \
+	$(NATIVE3D_AUDIT_DEPS)
+
+RAY_TRACING_JOB_RUNNER_DEPS = \
+	$(BUILD_DIR)/app/ray_tracing_job_runner.o \
+	$(RAY_TRACING_RENDER_HEADLESS_DEPS)
+
+RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_DEPS = \
+	$(BUILD_DIR)/app/material_preview_request.o \
+	$(BUILD_DIR)/app/material_preview_headless.o \
+	$(NATIVE3D_AUDIT_DEPS)
 
 
 TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_registry.o \

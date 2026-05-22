@@ -40,6 +40,27 @@ $(NATIVE3D_AUDIT_BIN): $(NATIVE3D_AUDIT_OBJ) $(NATIVE3D_AUDIT_DEPS)
 	@mkdir -p $(dir $@)
 	$(CC) $(NATIVE3D_AUDIT_OBJ) $(NATIVE3D_AUDIT_DEPS) -o $@ $(LDFLAGS)
 
+ray-tracing-render-headless: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	@echo "ray_tracing headless render CLI ready: $(RAY_TRACING_RENDER_HEADLESS_BIN)"
+
+$(RAY_TRACING_RENDER_HEADLESS_BIN): $(RAY_TRACING_RENDER_HEADLESS_OBJ) $(RAY_TRACING_RENDER_HEADLESS_DEPS)
+	@mkdir -p $(dir $@)
+	$(CC) $(RAY_TRACING_RENDER_HEADLESS_OBJ) $(RAY_TRACING_RENDER_HEADLESS_DEPS) -o $@ $(LDFLAGS)
+
+ray-tracing-job-runner: $(RAY_TRACING_JOB_RUNNER_BIN)
+	@echo "ray_tracing detached job runner ready: $(RAY_TRACING_JOB_RUNNER_BIN)"
+
+$(RAY_TRACING_JOB_RUNNER_BIN): $(RAY_TRACING_JOB_RUNNER_OBJ) $(RAY_TRACING_JOB_RUNNER_DEPS)
+	@mkdir -p $(dir $@)
+	$(CC) $(RAY_TRACING_JOB_RUNNER_OBJ) $(RAY_TRACING_JOB_RUNNER_DEPS) -o $@ $(LDFLAGS)
+
+ray-tracing-material-preview-headless: $(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_BIN)
+	@echo "ray_tracing material preview CLI ready: $(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_BIN)"
+
+$(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_BIN): $(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_OBJ) $(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_DEPS)
+	@mkdir -p $(dir $@)
+	$(CC) $(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_OBJ) $(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_DEPS) -o $@ $(LDFLAGS)
+
 manifest_to_trace: ray_trace_tool
 	@if [ -z "$(MANIFEST)" ] || [ -z "$(TRACE)" ]; then \
 		echo "usage: make manifest_to_trace MANIFEST=/path/source_manifest_or_bundle_or_frame TRACE=/path/output.trace.pack [BOUNCE=4]"; \

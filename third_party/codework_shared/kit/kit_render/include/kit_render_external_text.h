@@ -15,6 +15,7 @@ void kit_render_external_text_register_font_source(TTF_Font *font,
                                                    int kerning_enabled);
 
 void kit_render_external_text_unregister_font_source(TTF_Font *font);
+int kit_render_external_text_has_font_source(TTF_Font *font);
 
 void kit_render_external_text_reset_renderer(SDL_Renderer *renderer);
 

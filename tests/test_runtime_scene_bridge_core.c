@@ -473,16 +473,12 @@ static int test_runtime_scene_bridge_apply_physics_emitter_overlay_marks_guide_o
     assert_true("runtime_scene_apply_emitter_helper_ok", ok);
     if (!ok) return 0;
 
-    assert_true("runtime_scene_apply_emitter_helper_object_count_two",
-                sceneSettings.objectCount == 2);
+    assert_true("runtime_scene_apply_emitter_helper_object_count_one",
+                sceneSettings.objectCount == 1);
     assert_true("runtime_scene_apply_emitter_helper_floor_not_guide",
                 !SceneObjectIsGuideOnly(&sceneSettings.sceneObjects[0]));
-    assert_true("runtime_scene_apply_emitter_helper_object_guide_only",
-                SceneObjectIsGuideOnly(&sceneSettings.sceneObjects[1]));
-    assert_true("runtime_scene_apply_emitter_helper_object_not_render_participant",
-                !SceneObjectParticipatesInRender(&sceneSettings.sceneObjects[1]));
-    assert_true("runtime_scene_apply_emitter_helper_object_tinted_jet_green",
-                sceneSettings.sceneObjects[1].color == SceneObjectPackRGBBytes(74, 232, 124));
+    assert_true("runtime_scene_apply_emitter_helper_floor_render_participant",
+                SceneObjectParticipatesInRender(&sceneSettings.sceneObjects[0]));
 
     runtime_scene_bridge_get_last_3d_primitive_seed_state(&seeds);
     assert_true("runtime_scene_apply_emitter_helper_seeds_valid", seeds.valid);
@@ -499,6 +495,8 @@ static int test_runtime_scene_bridge_apply_physics_emitter_overlay_marks_guide_o
                 digest.primitives[0].scene_object_index == 0);
     assert_true("runtime_scene_apply_emitter_helper_digest_emitter_scene_object_index_one",
                 digest.primitives[1].scene_object_index == 1);
+    assert_true("runtime_scene_apply_emitter_helper_digest_emitter_guide_only",
+                digest.primitives[1].guide_only);
     assert_true("runtime_scene_apply_emitter_helper_digest_guide_flag",
                 digest.primitives[1].guide_only);
     return 0;
@@ -797,14 +795,16 @@ static int test_runtime_scene_bridge_authoring_overlay_object_color_preserved(vo
           "\"ray_tracing\":{"
             "\"authoring\":{"
               "\"object_materials\":[{"
-                "\"object_id\":\"obj_color\","
-                "\"material_id\":3,"
-                "\"object_color\":255,"
-                "\"alpha\":0.4,"
-                "\"emissive_strength\":0.7"
-              "}]"
-            "}"
+              "\"object_id\":\"obj_color\","
+              "\"material_id\":3,"
+              "\"object_color\":255,"
+              "\"alpha\":0.4,"
+              "\"reflectivity\":0.72,"
+              "\"roughness\":0.18,"
+              "\"emissive_strength\":0.7"
+            "}]"
           "}"
+        "}"
         "}"
         "}";
     RuntimeSceneBridgePreflight summary = {0};
@@ -818,6 +818,14 @@ static int test_runtime_scene_bridge_authoring_overlay_object_color_preserved(vo
         assert_close("runtime_scene_apply_authoring_overlay_alpha",
                      sceneSettings.sceneObjects[0].alpha,
                      0.4,
+                     1e-9);
+        assert_close("runtime_scene_apply_authoring_overlay_reflectivity",
+                     sceneSettings.sceneObjects[0].reflectivity,
+                     0.72,
+                     1e-9);
+        assert_close("runtime_scene_apply_authoring_overlay_roughness",
+                     sceneSettings.sceneObjects[0].roughness,
+                     0.18,
                      1e-9);
         assert_close("runtime_scene_apply_authoring_overlay_emissive_strength",
                      sceneSettings.sceneObjects[0].emissiveStrength,
@@ -865,6 +873,166 @@ static int test_runtime_scene_bridge_authoring_overlay_light_settings_preserved(
                  animSettings.lightRadius,
                  1.25,
                  1e-9);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_authoring_overlay_procedural_texture_shorthand_preserved(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_overlay_procedural_texture\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"obj_tex\","
+          "\"object_type\":\"rect_prism_primitive\","
+          "\"transform\":{"
+            "\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+          "},"
+          "\"primitive\":{"
+            "\"kind\":\"rect_prism_primitive\","
+            "\"width\":1.0,"
+            "\"height\":1.0,"
+            "\"depth\":1.0"
+          "}"
+        "}],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{"
+          "\"ray_tracing\":{"
+            "\"authoring\":{"
+              "\"object_materials\":[{"
+                "\"object_id\":\"obj_tex\","
+                "\"material_id\":0,"
+                "\"texture_id\":1,"
+                "\"texture_strength\":0.35,"
+                "\"texture_scale\":2.5,"
+                "\"texture_offset_u\":0.12,"
+                "\"texture_offset_v\":0.18,"
+                "\"texture_pattern_mode\":2,"
+                "\"texture_coverage\":0.62,"
+                "\"texture_grain\":0.41,"
+                "\"texture_edge_softness\":0.27,"
+                "\"texture_contrast\":0.73,"
+                "\"texture_flow\":0.35,"
+                "\"texture_color_depth\":0.58,"
+                "\"texture_surface_damage\":0.44,"
+                "\"texture_seed\":77"
+              "}]"
+            "}"
+          "}"
+        "}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    bool ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_scene_apply_authoring_overlay_procedural_texture_ok", ok);
+    if (!ok) return 0;
+    assert_true("runtime_scene_apply_authoring_overlay_texture_id",
+                sceneSettings.sceneObjects[0].textureId == 1);
+    assert_close("runtime_scene_apply_authoring_overlay_texture_strength",
+                 sceneSettings.sceneObjects[0].textureStrength,
+                 0.35,
+                 1e-9);
+    assert_close("runtime_scene_apply_authoring_overlay_texture_scale",
+                 sceneSettings.sceneObjects[0].textureScale,
+                 2.5,
+                 1e-9);
+    assert_close("runtime_scene_apply_authoring_overlay_texture_offset_u",
+                 sceneSettings.sceneObjects[0].textureOffsetU,
+                 0.12,
+                 1e-9);
+    assert_close("runtime_scene_apply_authoring_overlay_texture_offset_v",
+                 sceneSettings.sceneObjects[0].textureOffsetV,
+                 0.18,
+                 1e-9);
+    assert_true("runtime_scene_apply_authoring_overlay_texture_pattern_mode",
+                sceneSettings.sceneObjects[0].texturePatternMode == 2);
+    assert_close("runtime_scene_apply_authoring_overlay_texture_coverage",
+                 sceneSettings.sceneObjects[0].textureCoverage,
+                 0.62,
+                 1e-9);
+    assert_close("runtime_scene_apply_authoring_overlay_texture_grain",
+                 sceneSettings.sceneObjects[0].textureGrain,
+                 0.41,
+                 1e-9);
+    assert_close("runtime_scene_apply_authoring_overlay_texture_edge_softness",
+                 sceneSettings.sceneObjects[0].textureEdgeSoftness,
+                 0.27,
+                 1e-9);
+    assert_close("runtime_scene_apply_authoring_overlay_texture_contrast",
+                 sceneSettings.sceneObjects[0].textureContrast,
+                 0.73,
+                 1e-9);
+    assert_close("runtime_scene_apply_authoring_overlay_texture_flow",
+                 sceneSettings.sceneObjects[0].textureFlow,
+                 0.35,
+                 1e-9);
+    assert_close("runtime_scene_apply_authoring_overlay_texture_color_depth",
+                 sceneSettings.sceneObjects[0].textureColorDepth,
+                 0.58,
+                 1e-9);
+    assert_close("runtime_scene_apply_authoring_overlay_texture_surface_damage",
+                 sceneSettings.sceneObjects[0].textureSurfaceDamage,
+                 0.44,
+                 1e-9);
+    assert_true("runtime_scene_apply_authoring_overlay_texture_seed",
+                sceneSettings.sceneObjects[0].textureSeed == 77);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_authoring_overlay_default_emissive_strength_zero(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_authoring_default_emissive_zero\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"obj_overlay\","
+          "\"object_type\":\"box\","
+          "\"transform\":{"
+            "\"position\":{\"x\":1.0,\"y\":2.0,\"z\":3.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+          "}"
+        "}],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{"
+          "\"ray_tracing\":{"
+            "\"authoring\":{"
+              "\"object_materials\":[{"
+                "\"object_id\":\"obj_overlay\","
+                "\"material_id\":5,"
+                "\"alpha\":0.4,"
+                "\"reflectivity\":0.72,"
+                "\"roughness\":0.18"
+              "}]"
+            "}"
+          "}"
+        "}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    bool ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_scene_apply_authoring_default_emissive_zero_ok", ok);
+    if (ok) {
+        assert_true("runtime_scene_apply_authoring_default_emissive_zero_material",
+                    sceneSettings.sceneObjects[0].material_id == 5);
+        assert_close("runtime_scene_apply_authoring_default_emissive_zero_strength",
+                     sceneSettings.sceneObjects[0].emissiveStrength,
+                     0.0,
+                     1e-9);
+    }
     return 0;
 }
 
@@ -950,6 +1118,8 @@ int run_test_runtime_scene_bridge_core_tests(void) {
     test_runtime_scene_bridge_apply_runtime_fixture();
     test_runtime_scene_bridge_authoring_overlay_object_color_preserved();
     test_runtime_scene_bridge_authoring_overlay_light_settings_preserved();
+    test_runtime_scene_bridge_authoring_overlay_procedural_texture_shorthand_preserved();
+    test_runtime_scene_bridge_authoring_overlay_default_emissive_strength_zero();
     test_runtime_scene_bridge_apply_compile_output();
 
     return test_support_failures() - before;

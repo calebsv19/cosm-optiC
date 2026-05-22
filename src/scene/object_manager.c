@@ -12,7 +12,7 @@ static void InitDefaultMaterial(SceneObject* obj) {
     obj->alpha = 1.0;
     obj->reflectivity = 0.35;
     obj->roughness = 0.65;
-    obj->emissiveStrength = 1.0;
+    obj->emissiveStrength = 0.0;
     obj->textureId = 0;
     obj->textureOffsetU = 0.0;
     obj->textureOffsetV = 0.0;
