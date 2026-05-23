@@ -291,8 +291,115 @@ static int test_public_helpers(void) {
                        "stage timing duration");
 }
 
+static int test_invalid_inputs_and_state_helpers(void) {
+    CoreSimStepPolicy policy = test_policy();
+    CoreSimLoopState state;
+    CoreSimFrameOutcome outcome;
+    CoreSimFrameSummary summary;
+    CoreSimArtifactRunHeader header;
+    CoreSimFrameRecord record;
+    CoreSimStageTiming timings[2];
+    size_t timing_count = 99u;
+    const char *reason_names[2] = { "keep0", "keep1" };
+    CoreSimStageMark descending_marks[] = {
+        { "a", 2.0 },
+        { "b", 1.0 },
+    };
+    CoreSimStageMark nonfinite_marks[] = {
+        { "a", 0.0 },
+        { "b", INFINITY },
+    };
+    CoreSimPassDescriptor valid_pass = { 7u, "ok", record_pass };
+    CoreSimPassOrder valid_order = { &valid_pass, 1u };
+    CoreSimFrameRequest valid_request = { 0.25, 0, &valid_order };
+
+    if (!expect_true(!core_sim_step_policy_valid(0), "null policy invalid")) return 0;
+    policy.fixed_dt_seconds = NAN;
+    if (!expect_true(!core_sim_step_policy_valid(&policy), "nan dt invalid")) return 0;
+    policy = test_policy();
+    policy.fixed_dt_seconds = INFINITY;
+    if (!expect_true(!core_sim_step_policy_valid(&policy), "infinite dt invalid")) return 0;
+    policy = test_policy();
+    policy.max_ticks_per_frame = 0u;
+    if (!expect_true(!core_sim_step_policy_valid(&policy), "zero max ticks invalid")) return 0;
+
+    if (!expect_true(!core_sim_loop_init(0, &policy), "null loop init")) return 0;
+    policy = test_policy();
+    policy.fixed_dt_seconds = NAN;
+    if (!expect_true(!core_sim_loop_init(&state, &policy), "invalid loop init")) return 0;
+    policy = test_policy();
+    if (!expect_true(core_sim_loop_init(&state, &policy), "valid loop init")) return 0;
+
+    state.accumulator_seconds = 1.0;
+    state.single_step_requested = true;
+    core_sim_loop_set_paused(&state, true);
+    if (!expect_true(nearly_equal(state.accumulator_seconds, 0.0), "pause clears accumulator")) return 0;
+    core_sim_loop_set_paused(&state, false);
+    if (!expect_true(!state.single_step_requested, "unpause clears single-step request")) return 0;
+    core_sim_loop_request_single_step(0);
+    core_sim_loop_set_paused(0, true);
+    core_sim_loop_reset(0);
+
+    if (!expect_true(strcmp(core_sim_status_name((CoreSimStatus)99), "unknown") == 0,
+                     "unknown status name")) return 0;
+    if (!expect_true(strcmp(core_sim_frame_reason_name((CoreSimFrameReason)99), "unknown") == 0,
+                     "unknown reason name")) return 0;
+    if (!expect_true(core_sim_frame_reason_names(0x80000000u, reason_names, 2u) == 1u,
+                     "unknown reason bit count")) return 0;
+    if (!expect_true(strcmp(reason_names[0], "unknown") == 0, "unknown reason name stored")) return 0;
+
+    if (!expect_true(!core_sim_artifact_run_header_init(0, "p", "h", &state, &valid_order),
+                     "null artifact header")) return 0;
+    if (!expect_true(!core_sim_artifact_run_header_init(&header, "p", "h", 0, &valid_order),
+                     "null artifact state")) return 0;
+    if (!expect_true(!core_sim_frame_summary_from_outcome(0, &summary), "null summary outcome")) return 0;
+    if (!expect_true(!core_sim_frame_summary_from_outcome(&outcome, 0), "null summary out")) return 0;
+    if (!expect_true(!core_sim_frame_record_from_outcome(0, &state, &valid_request, &outcome),
+                     "null frame record")) return 0;
+    if (!expect_true(!core_sim_frame_record_from_outcome(&record, 0, &valid_request, &outcome),
+                     "null frame record state")) return 0;
+    if (!expect_true(!core_sim_frame_record_from_outcome(&record, &state, 0, &outcome),
+                     "null frame record request")) return 0;
+    if (!expect_true(!core_sim_frame_record_from_outcome(&record, &state, &valid_request, 0),
+                     "null frame record outcome")) return 0;
+
+    if (!expect_true(!core_sim_stage_timings_compute(0, 2u, timings, 2u, &timing_count),
+                     "null stage marks invalid")) return 0;
+    if (!expect_true(timing_count == 0u, "stage count cleared on null marks")) return 0;
+    timing_count = 99u;
+    if (!expect_true(core_sim_stage_timings_compute(0, 0u, timings, 2u, &timing_count),
+                     "empty stage marks valid")) return 0;
+    if (!expect_true(timing_count == 0u, "empty stage count zero")) return 0;
+    timing_count = 99u;
+    if (!expect_true(!core_sim_stage_timings_compute(descending_marks, 2u, timings, 2u, &timing_count),
+                     "descending marks invalid")) return 0;
+    if (!expect_true(timing_count == 1u, "descending marks count reported")) return 0;
+    timing_count = 99u;
+    if (!expect_true(!core_sim_stage_timings_compute(nonfinite_marks, 2u, timings, 2u, &timing_count),
+                     "non-finite marks invalid")) return 0;
+    if (!expect_true(timing_count == 1u, "non-finite marks count reported")) return 0;
+    timing_count = 99u;
+    if (!expect_true(!core_sim_stage_timings_compute(descending_marks, 2u, 0, 0u, &timing_count),
+                     "too-small timing buffer invalid")) return 0;
+    if (!expect_true(timing_count == 1u, "too-small timing count reported")) return 0;
+
+    outcome = core_sim_loop_advance(0, &valid_request);
+    if (!expect_true(outcome.status == CORE_SIM_STATUS_INVALID_ARGUMENT, "null state advance")) return 0;
+    outcome = core_sim_loop_advance(&state, 0);
+    if (!expect_true(outcome.status == CORE_SIM_STATUS_INVALID_ARGUMENT, "null request advance")) return 0;
+
+    state.policy = test_policy();
+    outcome = core_sim_loop_advance(&state, &(CoreSimFrameRequest){ NAN, 0, &valid_order });
+    if (!expect_true(outcome.status == CORE_SIM_STATUS_INVALID_ARGUMENT, "nan frame dt invalid")) return 0;
+    outcome = core_sim_loop_advance(&state, &(CoreSimFrameRequest){ INFINITY, 0, &valid_order });
+    if (!expect_true(outcome.status == CORE_SIM_STATUS_INVALID_ARGUMENT, "infinite frame dt invalid")) return 0;
+
+    return 1;
+}
+
 int main(void) {
     if (!test_public_helpers()) return 1;
+    if (!test_invalid_inputs_and_state_helpers()) return 1;
     if (!test_paused_executes_no_ticks()) return 1;
     if (!test_single_step_while_paused()) return 1;
     if (!test_active_fixed_step_count_and_remainder()) return 1;

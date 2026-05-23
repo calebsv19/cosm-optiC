@@ -15,6 +15,20 @@ static int core_scene_is_finite(double v) {
     return isfinite(v) ? 1 : 0;
 }
 
+static int core_scene_unit_kind_is_known(CoreUnitKind kind) {
+    switch (kind) {
+        case CORE_UNIT_METER:
+        case CORE_UNIT_CENTIMETER:
+        case CORE_UNIT_MILLIMETER:
+        case CORE_UNIT_INCH:
+        case CORE_UNIT_FOOT:
+            return 1;
+        case CORE_UNIT_UNKNOWN:
+        default:
+            return 0;
+    }
+}
+
 static bool path_has_extension(const char *path, const char *ext) {
     if (!path || !ext) return false;
     size_t path_len = strlen(path);
@@ -119,6 +133,9 @@ const char *core_scene_space_mode_name(CoreSceneSpaceMode mode) {
 }
 
 CoreResult core_scene_space_mode_parse(const char *text, CoreSceneSpaceMode *out_mode) {
+    if (out_mode) {
+        *out_mode = CORE_SCENE_SPACE_MODE_UNKNOWN;
+    }
     if (!text || !out_mode) {
         CoreResult r = { CORE_ERR_INVALID_ARG, "invalid argument" };
         return r;
@@ -151,6 +168,9 @@ const char *core_scene_object_kind_name(CoreSceneObjectKind kind) {
 }
 
 CoreResult core_scene_object_kind_parse(const char *text, CoreSceneObjectKind *out_kind) {
+    if (out_kind) {
+        *out_kind = CORE_SCENE_OBJECT_KIND_UNKNOWN;
+    }
     if (!text || !out_kind) {
         CoreResult r = { CORE_ERR_INVALID_ARG, "invalid argument" };
         return r;
@@ -226,7 +246,7 @@ CoreResult core_scene_root_contract_validate(const CoreSceneRootContract *contra
         CoreResult r = { CORE_ERR_INVALID_ARG, "invalid scene space mode" };
         return r;
     }
-    if (contract->unit_kind == CORE_UNIT_UNKNOWN) {
+    if (!core_scene_unit_kind_is_known(contract->unit_kind)) {
         CoreResult r = { CORE_ERR_INVALID_ARG, "unit_kind must be set" };
         return r;
     }
@@ -394,6 +414,16 @@ CoreResult core_scene_dirname(const char *path, char *out_dir, size_t out_dir_si
             return r;
         }
         out_dir[0] = '.';
+        out_dir[1] = '\0';
+        return core_result_ok();
+    }
+
+    if (slash == path) {
+        if (out_dir_size < 2) {
+            CoreResult r = { CORE_ERR_INVALID_ARG, "buffer too small" };
+            return r;
+        }
+        out_dir[0] = '/';
         out_dir[1] = '\0';
         return core_result_ok();
     }

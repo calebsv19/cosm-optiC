@@ -418,7 +418,9 @@ bool core_authored_texture_manifest_contract_validate(
     if (contract->schema_version == CORE_AUTHORED_TEXTURE_SCHEMA_V1 ||
         contract->schema_version == CORE_AUTHORED_TEXTURE_SCHEMA_V2) {
         return contract->output_kind == CORE_AUTHORED_TEXTURE_OUTPUT_KIND_LEGACY_FLATTENED &&
-               contract->has_legacy_surfaces;
+               contract->has_legacy_surfaces &&
+               !contract->has_base_surfaces &&
+               !contract->has_overlay_surfaces;
     }
     if (contract->schema_version == CORE_AUTHORED_TEXTURE_SCHEMA_V5) {
         if (contract->output_kind == CORE_AUTHORED_TEXTURE_OUTPUT_KIND_FLATTENED_ONLY) {

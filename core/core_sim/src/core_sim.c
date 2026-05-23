@@ -1,5 +1,7 @@
 #include "core_sim.h"
 
+#include <math.h>
+
 enum {
     CORE_SIM_FNV1A_64_PRIME = 1099511628211ull,
     CORE_SIM_FNV1A_64_OFFSET_HIGH = 0xcbf29ce4u,
@@ -146,7 +148,7 @@ bool core_sim_step_policy_valid(const CoreSimStepPolicy *policy) {
     if (!policy) {
         return false;
     }
-    if (policy->fixed_dt_seconds <= 0.0) {
+    if (!isfinite(policy->fixed_dt_seconds) || policy->fixed_dt_seconds <= 0.0) {
         return false;
     }
     if (policy->max_ticks_per_frame == 0u) {
@@ -395,6 +397,9 @@ bool core_sim_stage_timings_compute(const CoreSimStageMark *marks,
     for (i = 0u; i < timing_count; ++i) {
         double start_seconds = marks[i].seconds;
         double end_seconds = marks[i + 1u].seconds;
+        if (!isfinite(start_seconds) || !isfinite(end_seconds)) {
+            return false;
+        }
         if (end_seconds < start_seconds) {
             return false;
         }
@@ -493,9 +498,9 @@ CoreSimFrameOutcome core_sim_loop_advance(CoreSimLoopState *state,
 
     outcome = core_sim_frame_outcome_init(state);
 
-    if (request->frame_dt_seconds < 0.0) {
+    if (!isfinite(request->frame_dt_seconds) || request->frame_dt_seconds < 0.0) {
         outcome.status = CORE_SIM_STATUS_INVALID_ARGUMENT;
-        outcome.message = "negative frame dt";
+        outcome.message = "invalid frame dt";
         return outcome;
     }
 

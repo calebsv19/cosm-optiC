@@ -387,6 +387,18 @@ static bool key_matches_unescaped(const char *key_start, const char *key_end, co
     return strlen(key) == key_len && strncmp(key_start, key, key_len) == 0;
 }
 
+static bool json_is_single_top_level_object(const char *json) {
+    const char *start;
+    const char *end;
+    if (!json) return false;
+    start = skip_ws(json);
+    if (!start || *start != '{') return false;
+    end = parse_json_value_end(start);
+    if (!end) return false;
+    end = skip_ws(end);
+    return end && *end == '\0';
+}
+
 static bool json_find_top_level_value(const char *json, const char *key, JsonSlice *out_slice) {
     const char *p;
     if (!json || !key || !out_slice) return false;
@@ -1212,6 +1224,11 @@ static CoreResult compile_inner(const char *authoring_json,
     }
     *out_runtime_json = NULL;
     if (diagnostics && diagnostics_size > 0) diagnostics[0] = '\0';
+
+    if (!json_is_single_top_level_object(authoring_json)) {
+        diag_write(diagnostics, diagnostics_size, "authoring JSON must be one complete top-level object");
+        return (CoreResult){ CORE_ERR_FORMAT, "invalid authoring JSON" };
+    }
 
     if (!json_find_top_level_value(authoring_json, "schema_family", &schema_family) ||
         !json_slice_eq_string(&schema_family, k_schema_family)) {
