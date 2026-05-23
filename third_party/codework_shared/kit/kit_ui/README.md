@@ -1,6 +1,6 @@
 # kit_ui
 
-`kit_ui` is the shared widget and layout helper kit built on top of `kit_render`.
+`kit_ui` is the shared immediate-mode widget and layout helper kit built on top of `kit_render`.
 
 It provides pane-hostable UI primitives that render through shared draw commands instead of owning any pane or runtime lifecycle.
 
@@ -11,6 +11,7 @@ This module now provides:
 - stack layout helpers (`vstack`, `hstack`)
 - label drawing
 - button drawing
+- richer button spec/state/layout/style helpers for selected, pressed, focused, and variant-aware controls
 - checkbox drawing
 - slider drawing
 - scrollbar drawing for viewport-style panels
@@ -30,14 +31,27 @@ The implementation is still intentionally immediate-mode. The goal is reusable, 
 - simple layout allocation helpers
 - reusable control composition
 - light interaction helpers for shared tools
+- clip-stack helpers layered onto the active `kit_render` frame
+- text-measure and text-fit helpers that reuse `kit_render` metrics when available and fall back to lightweight estimates otherwise
 
 `kit_ui` does not own:
 
 - pane lifecycle
 - event loop ownership
+- retained widget trees
+- keyboard focus or text input ownership
 - layout document loading
 - settings or action persistence
 - application-specific behavior
+
+## Contract Notes
+
+- `KitUiContext.render_ctx` is borrowed and must outlive the UI context.
+- All draw helpers are immediate-mode frame helpers. Borrowed label/text pointers only need to remain valid through the current render frame command consumption.
+- `kit_ui` writes commands into the caller-owned `KitRenderCommandBuffer` attached to the active `KitRenderFrame`; it does not retain widget state across frames.
+- Clip-stack depth is bounded by `KIT_UI_CLIP_STACK_MAX`.
+- `kit_ui_fit_text_to_rect(...)` chooses the largest full-fit tier first, then falls back to the smallest height-fitting tier with ellipsis truncation.
+- The Vulkan validation harness is a host-side debug harness, not part of the shared widget contract itself.
 
 ## Progress
 
@@ -54,6 +68,8 @@ Implemented now:
 9. additive top-anchor content-height helper for virtualized row lists (`kit_ui_scroll_content_height_top_anchor(...)`)
 10. additive clip-stack helpers with nested intersection and pixel-snapped clip rects (`kit_ui_clip_push(...)`, `kit_ui_clip_pop(...)`, `kit_ui_clip_stack_reset(...)`) for pane-safe scrolling and overlap prevention
 11. additive text-measure and text-fit helpers (`kit_ui_measure_text(...)`, `kit_ui_fit_text_to_rect(...)`) for reusable width/height-aware label fitting with tier selection and ellipsis fallback
+12. additive richer button semantics (`kit_ui_button_*`, `kit_ui_draw_button_spec(...)`) so hosts can share selected/pressed/focused/variant-aware button styling without inventing app-local contracts first
+13. additive 1px button-outline hardening so shared button borders avoid corner overrun artifacts across snapped pixel densities by emitting edge rects instead of endpoint-sensitive line segments
 
 ## Planned Growth
 
@@ -61,6 +77,7 @@ Implemented now:
 2. add binding adapters for settings/action/telemetry keys
 3. add simple row/list helpers for inspectors
 4. remain the common control surface for settings, graph inspectors, and debug panes
+5. keep app-specific button preference layers above the shared `kit_ui_button_*` semantic contract unless a second host proves a reusable policy
 
 ## Theme-Scale Style Sync
 

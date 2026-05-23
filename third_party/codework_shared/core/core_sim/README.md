@@ -24,6 +24,15 @@ It does not own:
 
 Apps provide domain callbacks for simulation passes. `core_sim` decides when and in what order those callbacks run.
 
+## Contract
+- `core_sim` is a dependency-light control-plane only. It does not own time providers, schedulers, jobs, workers, wake behavior, trace capture, or retained scene/entity storage.
+- `core_sim_loop_advance(...)` accepts only finite non-negative frame dt input. Invalid state, request, policy, or pass-order input returns an invalid frame outcome instead of mutating the loop through host callbacks.
+- `core_sim_step_policy_valid(...)` requires a finite positive `fixed_dt_seconds` and a non-zero `max_ticks_per_frame`.
+- Paused frames execute no ticks unless `single_step_requested` is armed. A paused single-step consumes exactly one tick and then clears the request.
+- Active frames execute deterministic fixed-step ticks in declared pass order until the accumulator falls below `fixed_dt_seconds` or the max-tick clamp is reached.
+- Artifact/header/summary/record/stage-timing helpers are pure reporting helpers layered on top of completed outcomes. They do not imply pack, trace, scheduler, or host-runtime ownership.
+- This module currently has no separate `ROADMAP.md`; this README is the truth doc for the current hardening pass.
+
 ## Dependencies
 - C standard library only for v0.4.0
 
@@ -38,7 +47,7 @@ Future adapters may layer on:
 - `core_trace`
 
 ## Status
-Bootstrap implementation with standalone unit tests and four proving hosts:
+Bootstrap implementation truth-locked with standalone unit tests and four proving hosts (`v0.4.1`):
 - `gravity_orbit_sim` fixed-step runtime-loop adapter
 - `behavior_sim` ordered pass-execution adapter
 - `physics_sim` scene-level substep pass network plus 3D solver first-pass shell adapter
@@ -57,6 +66,7 @@ make -C shared/core/core_sim test
 ```
 
 ## Change Notes
+- `0.4.1`: patch hardening for control-plane edge behavior: finite policy/frame-dt validation is now explicit, stage-timing helpers reject non-finite mark data, and the README now truth-locks helper/lifecycle boundaries and paused/single-step semantics.
 - `0.4.0`: additive Step 3 artifact-record helpers: public version string,
   deterministic pass-order hashing, artifact run-header initialization, and
   frame-record extraction from completed frame outcomes. These helpers keep

@@ -22,6 +22,7 @@ This document defines what each shared library owns so behavior does not overlap
 - `core_viewport2d`: renderer-agnostic 2D viewport/camera state transitions for fit-to-window, screen/content transforms, drag pan, and cursor-anchor zoom.
 - `core_units`: unit vocabulary, unit conversions, and world-scale conversion primitives.
 - `core_object`: app-neutral object identity/transform/dimensional-mode validation primitives.
+- `core_authored_texture`: authored-texture manifest semantics, binding/output vocabulary, supported primitive/face-role vocabulary, and manifest-contract validation primitives.
 - `core_pack`: versioned chunked interchange container (`.pack`).
 - `core_layout`: renderer-agnostic layout transaction state (runtime/authoring mode, apply/cancel, revision/rebuild flags).
 - `core_config`: lightweight typed runtime configuration table boundary.
@@ -36,6 +37,7 @@ This document defines what each shared library owns so behavior does not overlap
 
 ## Kit Libs
 
+- `kit_render`: shared render command vocabulary, frame-recording/submission contract, backend attach/adopt boundary, shared theme/font/text policy resolution, and renderer-adjacent external text helpers. It does not own widget behavior, pane semantics, host event loops/window lifetimes, persistence, or app-local layout/cursor policy.
 - `kit_viz`: visualization-specific helpers layered on top of core contracts.
 - `kit_workspace_authoring`: host-agnostic authoring interaction glue (entry chord checks, trigger mapping, callback-driven action/text-step adapters) plus host-attach contract guidance for theme/font state handoff and top-level shell parity expectations.
 
@@ -56,6 +58,7 @@ This document defines what each shared library owns so behavior does not overlap
 - Scene vs object ownership:
   - `core_scene` owns app-agnostic scene structure/schema.
   - App-local object composition or editor-only transient state stays in app code.
+  - `core_authored_texture` owns object-bound authored-texture manifest meaning layered above scene/object identity, while `core_scene` continues owning the scene/object envelope and primitive semantics.
 
 - Data interchange:
   - Serialize durable interchange via `core_pack`.
@@ -72,6 +75,7 @@ This document defines what each shared library owns so behavior does not overlap
   - `core_kernel` owns loop policy and phase order.
   - `core_sim` owns simulation-specific cadence/pass semantics layered above app-domain solvers and optionally above execution-core adapters.
   - `core_sim_trace` owns reusable trace vocabulary for `core_sim` outcomes, while app-specific solver/entity/world lanes stay app-owned.
+  - Governance rule: do not flatten `core_kernel`, `core_wake`, `core_workers`, `core_sim`, and `core_sim_trace` into one "runtime owner". Execution-core primitives own infrastructure lifecycle; `core_sim` owns simulation control-plane cadence; `core_sim_trace` owns only the shared trace vocabulary above completed `core_sim` outcomes.
 
 - Theme/font:
   - Preset and token source of truth must stay in `core_theme` / `core_font`.
@@ -82,6 +86,7 @@ This document defines what each shared library owns so behavior does not overlap
 - Do not duplicate generic math helpers in app code if `core_math` already owns them.
 - Do not place SDL input routing, mouse-wheel policy, or app pane hit-testing in `core_viewport2d`.
 - Do not place scene-schema types in app-specific UI/render modules.
+- Do not place authored-texture manifest field meaning in app-local exporter/loader code once `core_authored_texture` is adopted.
 - Do not add compiler include emulation behavior to runtime core libs.
 - Do not hardcode theme/font constants in app UI where adapter lookup exists.
 - Do not place pane geometry solve or hit-testing semantics in `core_layout`.

@@ -52,6 +52,48 @@ typedef struct KitUiInputState {
     int mouse_released;
 } KitUiInputState;
 
+typedef enum KitUiButtonVariant {
+    KIT_UI_BUTTON_VARIANT_DEFAULT = 0,
+    KIT_UI_BUTTON_VARIANT_PRIMARY = 1,
+    KIT_UI_BUTTON_VARIANT_POSITIVE = 2
+} KitUiButtonVariant;
+
+typedef struct KitUiButtonState {
+    int hovered;
+    int selected;
+    int pressed;
+    int disabled;
+    int focused;
+} KitUiButtonState;
+
+typedef struct KitUiButtonSpec {
+    const char *label;
+    KitUiButtonVariant variant;
+    KitUiButtonState state;
+} KitUiButtonSpec;
+
+typedef struct KitUiButtonStyle {
+    CoreThemeColor fill;
+    CoreThemeColor outline;
+    CoreThemeColor text;
+} KitUiButtonStyle;
+
+typedef struct KitUiButtonLayout {
+    float text_offset_x;
+    float text_offset_y;
+} KitUiButtonLayout;
+
+typedef struct KitUiButtonTheme {
+    CoreThemeColor idle_fill;
+    CoreThemeColor selected_fill;
+    CoreThemeColor hover_fill;
+    CoreThemeColor positive_fill;
+    CoreThemeColor outline_idle;
+    CoreThemeColor outline_highlight;
+    CoreThemeColor text_primary;
+    CoreThemeColor text_muted;
+} KitUiButtonTheme;
+
 typedef struct KitUiButtonResult {
     KitUiWidgetState state;
     int clicked;
@@ -90,6 +132,30 @@ typedef struct KitUiTextFitResult {
 void kit_ui_style_default(KitUiStyle *out_style);
 CoreResult kit_ui_style_apply_theme_scale(KitUiContext *ctx);
 CoreResult kit_ui_context_init(KitUiContext *ctx, KitRenderContext *render_ctx);
+
+void kit_ui_button_state_init(KitUiButtonState *state);
+void kit_ui_button_spec_init(KitUiButtonSpec *spec, const char *label);
+void kit_ui_button_layout_init(KitUiButtonLayout *layout,
+                               float text_offset_x,
+                               float text_offset_y);
+void kit_ui_button_text_origin(const KitUiButtonLayout *layout,
+                               float rect_x,
+                               float rect_y,
+                               float *out_x,
+                               float *out_y);
+void kit_ui_button_text_origin_i(const KitUiButtonLayout *layout,
+                                 int rect_x,
+                                 int rect_y,
+                                 int *out_x,
+                                 int *out_y);
+int kit_ui_button_theme_from_preset(const CoreThemePreset *preset,
+                                    KitUiButtonTheme *out_theme);
+int kit_ui_button_style_resolve(const KitUiButtonTheme *theme,
+                                const KitUiButtonSpec *spec,
+                                KitUiButtonStyle *out_style);
+int kit_ui_button_style_resolve_preset(const CoreThemePreset *preset,
+                                       const KitUiButtonSpec *spec,
+                                       KitUiButtonStyle *out_style);
 
 CoreResult kit_ui_stack_begin(KitUiStackLayout *layout,
                               KitUiAxis axis,
@@ -159,6 +225,18 @@ CoreResult kit_ui_draw_button_custom(KitUiContext *ctx,
                                      KitUiWidgetState state,
                                      CoreFontRoleId font_role,
                                      CoreFontTextSizeTier text_tier);
+CoreResult kit_ui_draw_button_spec(KitUiContext *ctx,
+                                   KitRenderFrame *frame,
+                                   KitRenderRect bounds,
+                                   const KitUiButtonSpec *spec,
+                                   const KitUiButtonLayout *layout);
+CoreResult kit_ui_draw_button_spec_custom(KitUiContext *ctx,
+                                          KitRenderFrame *frame,
+                                          KitRenderRect bounds,
+                                          const KitUiButtonSpec *spec,
+                                          const KitUiButtonLayout *layout,
+                                          CoreFontRoleId font_role,
+                                          CoreFontTextSizeTier text_tier);
 
 CoreResult kit_ui_draw_checkbox(KitUiContext *ctx,
                                 KitRenderFrame *frame,

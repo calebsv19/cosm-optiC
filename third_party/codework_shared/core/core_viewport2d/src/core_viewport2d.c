@@ -83,10 +83,12 @@ float core_viewport2d_clamp_zoom(const CoreViewport2D *viewport, float zoom) {
         return 1.0f;
     }
     if (viewport) {
-        if (isfinite(viewport->min_zoom) && viewport->min_zoom > 0.0f) {
+        if (isfinite(viewport->min_zoom) &&
+            isfinite(viewport->max_zoom) &&
+            viewport->min_zoom > 0.0f &&
+            viewport->max_zoom > 0.0f &&
+            viewport->max_zoom >= viewport->min_zoom) {
             min_zoom = viewport->min_zoom;
-        }
-        if (isfinite(viewport->max_zoom) && viewport->max_zoom >= min_zoom) {
             max_zoom = viewport->max_zoom;
         }
     }
