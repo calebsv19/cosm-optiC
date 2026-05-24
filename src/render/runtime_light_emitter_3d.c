@@ -3,6 +3,21 @@
 #include <math.h>
 #include <string.h>
 
+static double runtime_light_emitter_3d_zero_length(void) {
+    double zero [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    return zero;
+}
+
+static double runtime_light_emitter_3d_unit_length(void) {
+    double unit_length [[fisics::dim(length)]] [[fisics::unit(meter)]] = 1.0;
+    return unit_length;
+}
+
+static double runtime_light_emitter_3d_length_epsilon(void) {
+    double epsilon [[fisics::dim(length)]] [[fisics::unit(meter)]] = 1e-9;
+    return epsilon;
+}
+
 static double runtime_light_emitter_3d_clamp(double value,
                                              double min_value,
                                              double max_value) {
@@ -12,15 +27,16 @@ static double runtime_light_emitter_3d_clamp(double value,
 }
 
 static double runtime_light_emitter_3d_attenuation(const RuntimeLight3D* light,
-                                                   double distance) {
-    double falloff = 1.0;
+                                                   double distance [[fisics::dim(length)]] [[fisics::unit(meter)]]) {
+    double falloff [[fisics::dim(length)]] [[fisics::unit(meter)]] = runtime_light_emitter_3d_unit_length();
     double normalized = 0.0;
+    double zero_length = runtime_light_emitter_3d_zero_length();
 
     if (!light) return 0.0;
 
     falloff = light->falloffDistance;
-    if (!(falloff > 0.0)) {
-        falloff = 1.0;
+    if (!(falloff > zero_length)) {
+        falloff = runtime_light_emitter_3d_unit_length();
     }
     normalized = distance / falloff;
 
@@ -37,26 +53,28 @@ static double runtime_light_emitter_3d_attenuation(const RuntimeLight3D* light,
 
 bool RuntimeLightEmitter3D_IntersectRay(const RuntimeScene3D* scene,
                                         const Ray3D* ray,
-                                        double t_min,
-                                        double t_max,
+                                        double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                        double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
                                         RuntimeLightEmitterHit3DResult* out_result) {
     RuntimeLightEmitterHit3DResult result = {0};
     Vec3 sphere_offset = vec3(0.0, 0.0, 0.0);
-    double radius = 0.0;
+    double radius [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
     double b = 0.0;
     double c = 0.0;
     double discriminant = 0.0;
     double sqrt_disc = 0.0;
-    double roots[2] = {0.0, 0.0};
-    double hit_t = 0.0;
+    double roots[2] [[fisics::dim(length)]] [[fisics::unit(meter)]] = {0.0, 0.0};
+    double hit_t [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
     Vec3 view_facing = vec3(0.0, 0.0, 0.0);
+    double zero_length = runtime_light_emitter_3d_zero_length();
+    double epsilon = runtime_light_emitter_3d_length_epsilon();
 
     if (!scene || !ray || !out_result) return false;
     *out_result = result;
     if (!scene->hasLight) return false;
 
     radius = scene->light.radius;
-    if (!(radius > 1e-9)) {
+    if (!(radius > epsilon)) {
         return false;
     }
 
@@ -71,11 +89,11 @@ bool RuntimeLightEmitter3D_IntersectRay(const RuntimeScene3D* scene,
     sqrt_disc = sqrt(discriminant);
     roots[0] = (-b - sqrt_disc) * 0.5;
     roots[1] = (-b + sqrt_disc) * 0.5;
-    hit_t = -1.0;
+    hit_t = -runtime_light_emitter_3d_unit_length();
 
     for (int i = 0; i < 2; ++i) {
         if (roots[i] < t_min || roots[i] > t_max) continue;
-        if (!(hit_t > 0.0) || roots[i] < hit_t) {
+        if (!(hit_t > zero_length) || roots[i] < hit_t) {
             hit_t = roots[i];
         }
     }
@@ -87,7 +105,7 @@ bool RuntimeLightEmitter3D_IntersectRay(const RuntimeScene3D* scene,
     result.t = hit_t;
     result.position = vec3_add(ray->origin, vec3_scale(ray->direction, hit_t));
     result.normal = vec3_normalize(vec3_sub(result.position, scene->light.position));
-    if (vec3_length(result.normal) <= 1e-9) {
+    if (vec3_length(result.normal) <= epsilon) {
         result.normal = vec3_scale(ray->direction, -1.0);
     }
     view_facing = vec3_scale(ray->direction, -1.0);
@@ -101,8 +119,8 @@ bool RuntimeLightEmitter3D_IntersectRay(const RuntimeScene3D* scene,
 
 bool RuntimeLightEmitter3D_ResolveFirstHit(const RuntimeScene3D* scene,
                                            const Ray3D* ray,
-                                           double t_min,
-                                           double t_max,
+                                           double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                           double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
                                            RuntimeLightEmitterTrace3DResult* out_result) {
     RuntimeLightEmitterTrace3DResult result = {0};
 

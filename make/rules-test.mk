@@ -7,6 +7,7 @@ STABLE_TEST_TARGETS := \
 	test-ray-tracing-render-headless-image-export \
 	test-ray-tracing-material-preview-headless \
 	test-ray-tracing-job-runner-smoke \
+	test-ray-tracing-job-runner-bundle-smoke \
 	test-ray-tracing-job-runner-policy \
 	test-manifest-to-trace-export \
 	test-fluid-pack-contract-parity \
@@ -16,25 +17,25 @@ STABLE_TEST_TARGETS := \
 
 LEGACY_TEST_TARGETS :=
 
-run: $(TARGET)
-	./$(TARGET)
+run: $(APP_TARGET)
+	./$(APP_TARGET)
 
-run-ide-theme: $(TARGET)
-	RAY_TRACING_USE_SHARED_THEME_FONT=1 RAY_TRACING_USE_SHARED_THEME=1 RAY_TRACING_USE_SHARED_FONT=1 RAY_TRACING_THEME_PRESET=ide_gray RAY_TRACING_FONT_PRESET=ide ./$(TARGET)
+run-ide-theme: $(APP_TARGET)
+	RAY_TRACING_USE_SHARED_THEME_FONT=1 RAY_TRACING_USE_SHARED_THEME=1 RAY_TRACING_USE_SHARED_FONT=1 RAY_TRACING_THEME_PRESET=ide_gray RAY_TRACING_FONT_PRESET=ide ./$(APP_TARGET)
 
-run-daw-theme: $(TARGET)
-	RAY_TRACING_USE_SHARED_THEME_FONT=1 RAY_TRACING_USE_SHARED_THEME=1 RAY_TRACING_USE_SHARED_FONT=1 RAY_TRACING_THEME_PRESET=daw_default RAY_TRACING_FONT_PRESET=daw_default ./$(TARGET)
+run-daw-theme: $(APP_TARGET)
+	RAY_TRACING_USE_SHARED_THEME_FONT=1 RAY_TRACING_USE_SHARED_THEME=1 RAY_TRACING_USE_SHARED_FONT=1 RAY_TRACING_THEME_PRESET=daw_default RAY_TRACING_FONT_PRESET=daw_default ./$(APP_TARGET)
 
 run-headless-smoke: all test-stable
 	@echo "ray_tracing headless smoke passed (non-interactive)"
 
-visual-harness: $(TARGET)
-	@echo "visual harness binary ready: $(TARGET)"
+visual-harness: $(APP_TARGET)
+	@echo "visual harness binary ready: $(APP_TARGET)"
 
-test: $(TARGET) $(TEST_BIN)
+test: $(APP_TARGET) $(TEST_BIN)
 	./$(TEST_BIN)
 
-test-runtime-scene-bridge-contract: $(TARGET) $(TEST_BIN)
+test-runtime-scene-bridge-contract: $(APP_TARGET) $(TEST_BIN)
 	@TEST_RUNNER_GROUP=runtime_scene_bridge_core ./$(TEST_BIN) || (echo "ray tracing runtime scene bridge core contract test failed."; exit 1)
 	@TEST_RUNNER_GROUP=runtime_scene_bridge_writeback ./$(TEST_BIN) || (echo "ray tracing runtime scene bridge writeback contract test failed."; exit 1)
 	@echo "ray tracing runtime scene bridge contract lane passed"
@@ -129,6 +130,9 @@ test-ray-tracing-render-headless-volume-handoff: $(RAY_TRACING_RENDER_HEADLESS_B
 
 test-ray-tracing-job-runner-smoke: $(RAY_TRACING_RENDER_HEADLESS_BIN) $(RAY_TRACING_JOB_RUNNER_BIN)
 	tests/integration/run_ray_tracing_job_runner_smoke.sh
+
+test-ray-tracing-job-runner-bundle-smoke: $(RAY_TRACING_RENDER_HEADLESS_BIN) $(RAY_TRACING_JOB_RUNNER_BIN)
+	tests/integration/run_ray_tracing_job_runner_bundle_smoke.sh
 
 test-ray-tracing-job-runner-policy: $(RAY_TRACING_RENDER_HEADLESS_BIN) $(RAY_TRACING_JOB_RUNNER_BIN)
 	tests/integration/run_ray_tracing_job_runner_policy.sh

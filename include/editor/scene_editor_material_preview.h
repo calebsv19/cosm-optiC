@@ -48,6 +48,7 @@ bool SceneEditorMaterialPreviewEvaluateTextureColor(const SceneObject* object,
 bool SceneEditorMaterialPreviewEvaluateTextureColorForFace(
     const SceneObject* object,
     int scene_object_index,
+    int primitive_index,
     int face_group_index,
     int local_triangle_index,
     int triangle_index,

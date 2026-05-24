@@ -2,7 +2,7 @@
 #include "config/config_manager.h"
 #include "camera/camera.h"
 #include "math/vec2.h"
-#include "render/text_font_cache.h"
+#include "render/font_runtime.h"
 #include "render/text_draw.h"
 #include <SDL2/SDL.h>
 #include <math.h>
@@ -20,7 +20,9 @@ static double clamp_double(double value, double min_value, double max_value) {
 static TTF_Font* RenderHelperOpenUIFontAtPointSize(SDL_Renderer* renderer,
                                                    int logical_point_size,
                                                    int min_point_size) {
-    return ray_tracing_text_font_cache_get_ui_regular(renderer, logical_point_size, min_point_size);
+    return ray_tracing_font_runtime_get_ui_regular(renderer,
+                                                   logical_point_size,
+                                                   min_point_size);
 }
 
 double RenderHelper_DepthScaleForObjectZ(double object_z) {

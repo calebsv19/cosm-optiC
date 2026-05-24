@@ -32,6 +32,8 @@ Identity note:
 - native `3D` support layers include:
   - tile preview
   - dirty-rect preview updates
+  - shared-frame preview reconstruction
+  - explicit native `3D` upscale mode (`OFF` / `Nearest` / `Bilinear`)
   - tile occupancy culling
   - temporal accumulation upgrades
   - stratified + blue-noise sampling support
@@ -88,6 +90,10 @@ This renumbers captured BMP frames from `data/runtime/frames/default/` by defaul
 
 - Scene Editor modes still cycle across Bézier path, Object, and Camera editing.
 - Native `3D` route activation now reflects the retained runtime-scene path rather than older preview-only truth.
+- Native `3D` low-scale output now has an explicit reconstruction mode seam:
+  - `OFF` for raw non-smoothed low-resolution presentation
+  - `Nearest` for crisp pixel-preserving preview/final output
+  - `Bilinear` for smoothed preview/final output
 - Native `3D` menu controls and scene-editor digest picking now live behind dedicated helper seams instead of one monolithic UI/editor file.
 - Fluid overlays remain available for imported physics data; see `docs/KEYBINDS.md` for the current control list.
 

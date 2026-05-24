@@ -200,6 +200,16 @@ static int ClampRenderScale3D(int value) {
     return value;
 }
 
+static int ClampUpscaleMode3D(int value) {
+    if (value < RUNTIME_3D_UPSCALE_MODE_MIN) {
+        value = RUNTIME_3D_UPSCALE_MODE_MIN;
+    }
+    if (value > RUNTIME_3D_UPSCALE_MODE_MAX) {
+        value = RUNTIME_3D_UPSCALE_MODE_MAX;
+    }
+    return value;
+}
+
 static int ClampRuntimeWindowDimension(int value, int fallback) {
     if (value <= 0) {
         value = fallback;
@@ -330,6 +340,9 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config,
                            "renderScale3D",
                            json_object_new_int(animSettings.renderScale3D));
+    json_object_object_add(config,
+                           "upscaleMode3D",
+                           json_object_new_int(animSettings.upscaleMode3D));
     json_object_object_add(config,
                            "runtimeWindowWidth",
                            json_object_new_int(animSettings.runtimeWindowWidth));
@@ -637,6 +650,11 @@ void LoadAnimationConfig(void) {
     } else {
         animSettings.renderScale3D = RUNTIME_3D_RENDER_SCALE_DEFAULT;
     }
+    if (json_object_object_get_ex(config, "upscaleMode3D", &temp)) {
+        animSettings.upscaleMode3D = json_object_get_int(temp);
+    } else {
+        animSettings.upscaleMode3D = RUNTIME_3D_UPSCALE_MODE_DEFAULT;
+    }
     if (json_object_object_get_ex(config, "runtimeWindowWidth", &temp)) {
         animSettings.runtimeWindowWidth = json_object_get_int(temp);
     } else {
@@ -777,6 +795,8 @@ void LoadAnimationConfig(void) {
         ClampTemporalFrames3D(animSettings.temporalFrames3D);
     animSettings.renderScale3D =
         ClampRenderScale3D(animSettings.renderScale3D);
+    animSettings.upscaleMode3D =
+        ClampUpscaleMode3D(animSettings.upscaleMode3D);
     animSettings.runtimeWindowWidth =
         ClampRuntimeWindowDimension(animSettings.runtimeWindowWidth, sceneSettings.windowWidth);
     animSettings.runtimeWindowHeight =

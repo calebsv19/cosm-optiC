@@ -22,6 +22,10 @@ Buttons (top to bottom)
 - Forward Falloff: cycle falloff model (Quadratic → Linear → None).
 - Tile Renderer: toggle tiled renderer on/off.
 - Tile Preview: show tiles as they complete during hybrid renders.
+- Disney Denoise: toggle Disney-only native `3D` denoise.
+- Top Fill: toggle the native `3D` overhead fill light.
+- Upscale: cycle native `3D` upscale mode (`OFF` → `Nearest` → `Bilinear`).
+- Light Height: cycle the native `3D` light-height preset.
 
 **Right column**
 - Scene Editor: opens the scene editor window.
@@ -51,7 +55,7 @@ Grouped on the far right. Current set (values persist via config):
 - 3D Secondary Samples (4–64, only in 3D mode): secondary diffuse/emissive bounce sample count for native `3D`, clamped to multiples of 4.
 - 3D Transmission Samples (4–32, only in 3D mode): transparent-view transmission sample count for native `3D`.
 - 3D Temporal Frames (1–32, only in 3D mode): per-resolved-frame native `3D` stochastic subpass count before grayscale tonemap resolve. `1` disables temporal accumulation.
-- 3D Render Scale (HiDPI, 1–8, only in 3D mode): native `3D` internal render scale. `HiDPI` traces at the window drawable pixel size when the display exposes more pixels than the logical window; `1x` traces at the logical host resolution; higher values trace fewer pixels and nearest-upscale back into the normal window.
+- 3D Render Scale (HiDPI, 1–8, only in 3D mode): native `3D` internal render scale. `HiDPI` traces at the window drawable pixel size when the display exposes more pixels than the logical window; `1x` traces at the logical host resolution; higher values trace fewer pixels and reconstruct back into the normal window through the active `3D Upscale Mode`.
 - Path SPP (1–128, only when Camera Path integrator is active): samples per pixel for camera path integrator.
 - Path Depth (1–16, only when Camera Path integrator is active): max path depth.
 

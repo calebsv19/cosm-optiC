@@ -222,6 +222,15 @@ void SceneEditorSurfaceRenderRightPaneStatus(SDL_Renderer* renderer,
         status_bottom = bounds.y + bounds.h;
     }
     cursor_y = bounds.y + 2;
+    if (contract->activeMode == EDITOR_MODE_MATERIAL) {
+        int preview_bottom = MaterialEditorRenderRightPanePreview(renderer,
+                                                                  bounds,
+                                                                  cursor_y,
+                                                                  status_bottom);
+        if (preview_bottom > cursor_y) {
+            cursor_y = preview_bottom + 8;
+        }
+    }
     cursor_y = SceneEditorSurfaceRenderFlowLine(renderer,
                                                 bounds,
                                                 cursor_y,

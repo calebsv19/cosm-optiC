@@ -17,7 +17,7 @@ RuntimeVisibility3DTransmittance RuntimeVisibility3D_UnitTransmittance(void);
 
 void RuntimeVisibility3D_ApplyTransparentPayloadAbsorption(
     const RuntimeMaterialPayload3D* payload,
-    double segment_distance,
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double segment_distance,
     RuntimeVisibility3DTransmittance* io_transmittance);
 
 bool RuntimeVisibility3D_TraceToLight(const RuntimeScene3D* scene,
@@ -25,7 +25,7 @@ bool RuntimeVisibility3D_TraceToLight(const RuntimeScene3D* scene,
                                       Vec3 surface_normal,
                                       Vec3 light_position,
                                       HitInfo3D* out_blocker_hit,
-                                      double* out_light_distance);
+                                      [[fisics::dim(length)]] [[fisics::unit(meter)]] double* out_light_distance);
 
 RuntimeVisibility3DTransmittance RuntimeVisibility3D_TransmittanceToLightRGB(
     const RuntimeScene3D* scene,

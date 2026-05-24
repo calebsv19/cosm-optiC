@@ -3,6 +3,18 @@
 #include <stdio.h>
 #include <string.h>
 
+void AnimationParseArgs(int argc, char* argv[]) {
+    (void)argc;
+    (void)argv;
+}
+
+void AnimationLoadRuntimeDefaults(void) {
+}
+
+int AnimationRunAppSession(void) {
+    return 0;
+}
+
 typedef struct RuntimeFrameContractState {
     int order[8];
     int order_count;

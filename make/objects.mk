@@ -32,6 +32,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading.o \
+	$(BUILD_DIR)/render/runtime_native_3d_preview_reconstruction.o \
 	$(BUILD_DIR)/render/runtime_native_3d_resolution.o \
 	$(BUILD_DIR)/render/runtime_native_3d_temporal_accum.o \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_occupancy.o \
@@ -102,11 +103,15 @@ RAY_TRACING_RENDER_HEADLESS_DEPS = \
 
 RAY_TRACING_JOB_RUNNER_DEPS = \
 	$(BUILD_DIR)/app/ray_tracing_job_runner.o \
+	$(BUILD_DIR)/app/ray_tracing_headless_job_bundle.o \
+	$(patsubst $(CORE_HEADLESS_JOB_DIR)/src/%.c,$(BUILD_DIR)/core_headless_job/%.o,$(CORE_HEADLESS_JOB_SRCS)) \
 	$(RAY_TRACING_RENDER_HEADLESS_DEPS)
 
 RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_DEPS = \
 	$(BUILD_DIR)/app/material_preview_request.o \
 	$(BUILD_DIR)/app/material_preview_headless.o \
+	$(BUILD_DIR)/editor/material_preview_surface_eval.o \
+	$(BUILD_DIR)/editor/scene_editor_material_face_metrics.o \
 	$(NATIVE3D_AUDIT_DEPS)
 
 
@@ -195,6 +200,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading.o \
+	$(BUILD_DIR)/render/runtime_native_3d_preview_reconstruction.o \
 	$(BUILD_DIR)/render/runtime_native_3d_resolution.o \
 	$(BUILD_DIR)/render/runtime_native_3d_temporal_accum.o \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_occupancy.o \
@@ -212,7 +218,10 @@ TEST_DEPS := \
 	$(BUILD_DIR)/editor/material_editor_knob_control.o \
 	$(BUILD_DIR)/editor/material_editor_layer_model.o \
 	$(BUILD_DIR)/editor/material_editor_authored_texture_binding.o \
+	$(BUILD_DIR)/editor/material_editor_face_preview.o \
 	$(BUILD_DIR)/editor/material_editor.o \
+	$(BUILD_DIR)/editor/material_preview_surface_eval.o \
+	$(BUILD_DIR)/editor/scene_editor_material_face_metrics.o \
 	$(BUILD_DIR)/editor/object_editor_object_ops.o \
 	$(BUILD_DIR)/editor/object_editor_selection_tracker.o \
 	$(BUILD_DIR)/editor/scene_editor_control_surface.o \
@@ -229,6 +238,7 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/accel/surface_mesh.o \
 	$(BUILD_DIR)/render/helpers/render_helper.o \
 	$(BUILD_DIR)/render/font_bridge.o \
+	$(BUILD_DIR)/render/font_runtime.o \
 	$(BUILD_DIR)/render/text_font_cache.o \
 	$(BUILD_DIR)/render/text_draw.o \
 	$(BUILD_DIR)/render/text_upload_policy.o \
@@ -349,6 +359,7 @@ CORE_SPACE_SRCS := $(CORE_SPACE_DIR)/src/core_space.c
 CORE_PANE_SRCS := $(CORE_PANE_DIR)/src/core_pane.c
 CORE_THEME_SRCS := $(CORE_THEME_DIR)/src/core_theme.c
 CORE_FONT_SRCS := $(CORE_FONT_DIR)/src/core_font.c
+CORE_HEADLESS_JOB_SRCS := $(CORE_HEADLESS_JOB_DIR)/src/core_headless_job.c
 KIT_RENDER_SRCS := \
 	$(KIT_RENDER_DIR)/src/kit_render.c \
 	$(KIT_RENDER_DIR)/src/kit_render_external_text.c \
@@ -378,6 +389,7 @@ CORE_SPACE_OBJS := $(patsubst $(CORE_SPACE_DIR)/src/%.c,$(BUILD_DIR)/core_space/
 CORE_PANE_OBJS := $(patsubst $(CORE_PANE_DIR)/src/%.c,$(BUILD_DIR)/core_pane/%.o,$(CORE_PANE_SRCS))
 CORE_THEME_OBJS := $(patsubst $(CORE_THEME_DIR)/src/%.c,$(BUILD_DIR)/core_theme/%.o,$(CORE_THEME_SRCS))
 CORE_FONT_OBJS := $(patsubst $(CORE_FONT_DIR)/src/%.c,$(BUILD_DIR)/core_font/%.o,$(CORE_FONT_SRCS))
+CORE_HEADLESS_JOB_OBJS := $(patsubst $(CORE_HEADLESS_JOB_DIR)/src/%.c,$(BUILD_DIR)/core_headless_job/%.o,$(CORE_HEADLESS_JOB_SRCS))
 KIT_RENDER_OBJS := $(patsubst $(KIT_RENDER_DIR)/src/%.c,$(BUILD_DIR)/kit_render/%.o,$(KIT_RENDER_SRCS))
 KIT_PANE_OBJS := $(patsubst $(KIT_PANE_DIR)/src/%.c,$(BUILD_DIR)/kit_pane/%.o,$(KIT_PANE_SRCS))
 KIT_VIZ_OBJS := $(patsubst $(KIT_VIZ_DIR)/src/%.c,$(BUILD_DIR)/kit_viz/%.o,$(KIT_VIZ_SRCS))
@@ -391,5 +403,5 @@ TEST_DEPS += $(KIT_RENDER_OBJS) $(CORE_PANE_OBJS) $(KIT_PANE_OBJS) $(KIT_WORKSPA
 
 OBJ := $(OBJ) $(TIMER_HUD_OBJS) $(TIMER_HUD_EXTERNAL_OBJS) \
 	$(patsubst $(VK_RENDERER_DIR)/src/%.c,$(BUILD_DIR)/vk_renderer/%.o,$(VK_RENDERER_SRCS)) \
-	$(CORE_BASE_OBJS) $(CORE_IO_OBJS) $(CORE_DATA_OBJS) $(CORE_PACK_OBJS) $(CORE_QUEUE_OBJS) $(CORE_TIME_OBJS) $(CORE_WORKERS_OBJS) $(CORE_SIM_OBJS) $(CORE_SCENE_OBJS) $(CORE_AUTHORED_TEXTURE_OBJS) $(CORE_SCENE_COMPILE_OBJS) $(CORE_OBJECT_OBJS) $(CORE_UNITS_OBJS) $(CORE_SPACE_OBJS) $(CORE_PANE_OBJS) $(CORE_THEME_OBJS) $(CORE_FONT_OBJS) $(KIT_RENDER_OBJS) $(KIT_PANE_OBJS) $(KIT_VIZ_OBJS) $(KIT_RUNTIME_DIAG_OBJS) $(KIT_WORKSPACE_AUTHORING_OBJS)
+	$(CORE_BASE_OBJS) $(CORE_IO_OBJS) $(CORE_DATA_OBJS) $(CORE_PACK_OBJS) $(CORE_QUEUE_OBJS) $(CORE_TIME_OBJS) $(CORE_WORKERS_OBJS) $(CORE_SIM_OBJS) $(CORE_SCENE_OBJS) $(CORE_AUTHORED_TEXTURE_OBJS) $(CORE_SCENE_COMPILE_OBJS) $(CORE_OBJECT_OBJS) $(CORE_UNITS_OBJS) $(CORE_SPACE_OBJS) $(CORE_PANE_OBJS) $(CORE_THEME_OBJS) $(CORE_FONT_OBJS) $(CORE_HEADLESS_JOB_OBJS) $(KIT_RENDER_OBJS) $(KIT_PANE_OBJS) $(KIT_VIZ_OBJS) $(KIT_RUNTIME_DIAG_OBJS) $(KIT_WORKSPACE_AUTHORING_OBJS)
 DEP := $(OBJ:.o=.d)

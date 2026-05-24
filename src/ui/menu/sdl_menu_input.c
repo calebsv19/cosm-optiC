@@ -674,6 +674,27 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         state->statusExpireMs = SDL_GetTicks() + 1800;
         return;
     }
+    if (point_in_rect(&buttons.upscaleModeRect, x, y)) {
+        if (animSettings.upscaleMode3D < RUNTIME_3D_UPSCALE_MODE_MIN ||
+            animSettings.upscaleMode3D > RUNTIME_3D_UPSCALE_MODE_MAX) {
+            animSettings.upscaleMode3D = RUNTIME_3D_UPSCALE_MODE_DEFAULT;
+        } else {
+            animSettings.upscaleMode3D =
+                (animSettings.upscaleMode3D + 1) % (RUNTIME_3D_UPSCALE_MODE_MAX + 1);
+        }
+        snprintf(state->statusLabel,
+                 sizeof(state->statusLabel),
+                 "Upscale: %s",
+                 (animSettings.upscaleMode3D == RUNTIME_3D_UPSCALE_MODE_NEAREST)
+                     ? "Nearest"
+                     : (animSettings.upscaleMode3D == RUNTIME_3D_UPSCALE_MODE_BILINEAR)
+                           ? "Bilinear"
+                           : "OFF");
+        state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
+        state->statusColor = (SDL_Color){160, 210, 255, 255};
+        state->statusExpireMs = SDL_GetTicks() + 1800;
+        return;
+    }
 
     if (buttons.showLightHeight && point_in_rect(&buttons.lightHeightRect, x, y)) {
         double options[] = {2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 16.0, 20.0};

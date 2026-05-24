@@ -9,6 +9,7 @@
 #include "render/integrators/hybrid/integrator_tonemap.h"
 #include "render/ray_tracing2_preview.h"
 #include "render/runtime_native_3d_adaptive_sampling.h"
+#include "render/runtime_native_3d_preview_reconstruction.h"
 #include "render/runtime_native_3d_resolution.h"
 #include "render/runtime_native_3d_tile_scheduler.h"
 #include "render/timer_hud_api.h"
@@ -292,23 +293,26 @@ static bool ResolveNative3DHostDirtyTile(const IntegratorTile* render_tile,
                                          int host_width,
                                          int host_height,
                                          IntegratorTile* out_host_tile) {
+    SDL_Rect host_rect = {0};
+
     if (!render_tile || !out_host_tile) {
         return false;
     }
-    if (!RuntimeNative3DResolveUpscaledRect(render_tile->originX,
-                                            render_tile->originY,
-                                            render_tile->width,
-                                            render_tile->height,
-                                            render_width,
-                                            render_height,
-                                            host_width,
-                                            host_height,
-                                            &out_host_tile->originX,
-                                            &out_host_tile->originY,
-                                            &out_host_tile->width,
-                                            &out_host_tile->height)) {
+    if (!RuntimeNative3DPreviewResolveDirtyHostRect(render_tile->originX,
+                                                    render_tile->originY,
+                                                    render_tile->width,
+                                                    render_tile->height,
+                                                    render_width,
+                                                    render_height,
+                                                    host_width,
+                                                    host_height,
+                                                    &host_rect)) {
         return false;
     }
+    out_host_tile->originX = host_rect.x;
+    out_host_tile->originY = host_rect.y;
+    out_host_tile->width = host_rect.w;
+    out_host_tile->height = host_rect.h;
     out_host_tile->energy = NULL;
     return true;
 }
@@ -366,92 +370,6 @@ static bool ResolveNative3DHostDirtyTileUnion(const IntegratorTile* render_tiles
     return seeded;
 }
 
-static int ResolveNative3DProgressPresentBlurRadius(void) {
-    if (animSettings.blurMode >= 3) return 2;
-    return 1;
-}
-
-static void ExpandNative3DHostDirtyTile(IntegratorTile* tile,
-                                        int halo_pixels,
-                                        int host_width,
-                                        int host_height) {
-    int min_x = 0;
-    int min_y = 0;
-    int max_x = 0;
-    int max_y = 0;
-
-    if (!tile || halo_pixels <= 0 || host_width <= 0 || host_height <= 0) {
-        return;
-    }
-
-    min_x = tile->originX - halo_pixels;
-    min_y = tile->originY - halo_pixels;
-    max_x = tile->originX + tile->width + halo_pixels;
-    max_y = tile->originY + tile->height + halo_pixels;
-
-    if (min_x < 0) min_x = 0;
-    if (min_y < 0) min_y = 0;
-    if (max_x > host_width) max_x = host_width;
-    if (max_y > host_height) max_y = host_height;
-
-    tile->originX = min_x;
-    tile->originY = min_y;
-    tile->width = max_x - min_x;
-    tile->height = max_y - min_y;
-}
-
-static bool BlurNative3DHostRectABGR(Uint8* host_buffer,
-                                     int host_width,
-                                     int host_height,
-                                     const IntegratorTile* host_tile,
-                                     int blur_radius) {
-    Uint8* scratch = NULL;
-    size_t rect_bytes = 0u;
-
-    if (!host_buffer || !host_tile || blur_radius <= 0 ||
-        host_width <= 0 || host_height <= 0 ||
-        host_tile->width <= 0 || host_tile->height <= 0) {
-        return true;
-    }
-
-    rect_bytes = (size_t)host_tile->width * (size_t)host_tile->height *
-                 (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
-    scratch = (Uint8*)malloc(rect_bytes);
-    if (!scratch) {
-        return false;
-    }
-
-    for (int y = 0; y < host_tile->height; ++y) {
-        const size_t src_row =
-            ((size_t)(host_tile->originY + y) * (size_t)host_width + (size_t)host_tile->originX) *
-            (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
-        const size_t dst_row =
-            (size_t)y * (size_t)host_tile->width * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
-        memcpy(scratch + dst_row,
-               host_buffer + src_row,
-               (size_t)host_tile->width * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES);
-    }
-
-    RayTracingPreview_ApplySeparableBlurABGR(scratch,
-                                             host_tile->width,
-                                             host_tile->height,
-                                             blur_radius);
-
-    for (int y = 0; y < host_tile->height; ++y) {
-        const size_t src_row =
-            (size_t)y * (size_t)host_tile->width * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
-        const size_t dst_row =
-            ((size_t)(host_tile->originY + y) * (size_t)host_width + (size_t)host_tile->originX) *
-            (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
-        memcpy(host_buffer + dst_row,
-               scratch + src_row,
-               (size_t)host_tile->width * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES);
-    }
-
-    free(scratch);
-    return true;
-}
-
 static void ClearNative3DPreviewHistoryForKnownEmptyTiles(
     Uint8* host_buffer,
     int host_width,
@@ -468,6 +386,7 @@ static void ClearNative3DPreviewHistoryForKnownEmptyTiles(
     for (size_t i = 0; i < grid->count; ++i) {
         const IntegratorTile* render_tile = &grid->tiles[i];
         IntegratorTile host_tile = {0};
+        SDL_Rect host_rect = {0};
         if (RuntimeNative3DPreparedRegionMayContainGeometry(frame,
                                                             render_tile->originX,
                                                             render_tile->originY,
@@ -483,16 +402,32 @@ static void ClearNative3DPreviewHistoryForKnownEmptyTiles(
                                           &host_tile)) {
             continue;
         }
-        RuntimeNative3DUpscaleNearestABGRRect(render_buffer,
-                                              render_width,
-                                              render_height,
-                                              host_buffer,
-                                              host_width,
-                                              host_height,
-                                              host_tile.originX,
-                                              host_tile.originY,
-                                              host_tile.width,
-                                              host_tile.height);
+        host_rect.x = host_tile.originX;
+        host_rect.y = host_tile.originY;
+        host_rect.w = host_tile.width;
+        host_rect.h = host_tile.height;
+        if (animSettings.upscaleMode3D == RUNTIME_3D_UPSCALE_MODE_OFF) {
+            RuntimeNative3DUpscaleNearestABGRRect(render_buffer,
+                                                  render_width,
+                                                  render_height,
+                                                  host_buffer,
+                                                  host_width,
+                                                  host_height,
+                                                  host_rect.x,
+                                                  host_rect.y,
+                                                  host_rect.w,
+                                                  host_rect.h);
+        } else {
+            (void)RuntimeNative3DPreviewReconstructABGRRectWithMode(
+                render_buffer,
+                render_width,
+                render_height,
+                host_buffer,
+                host_width,
+                host_height,
+                &host_rect,
+                (Runtime3DUpscaleMode)animSettings.upscaleMode3D);
+        }
     }
 }
 
@@ -513,9 +448,8 @@ static bool PresentNative3DPreviewTileProgress(
     Native3DPreviewTileProgressContext* ctx =
         (Native3DPreviewTileProgressContext*)user_data;
     IntegratorTile host_dirty_tile = {0};
-    int blur_radius = 0;
-    int host_halo_pixels = 0;
     const IntegratorTile* present_tile = NULL;
+    SDL_Rect host_dirty_rect = {0};
 
     if (!progress || !ctx || !ctx->renderer || !ctx->hostBuffer || !ctx->renderBuffer) {
         return false;
@@ -530,32 +464,30 @@ static bool PresentNative3DPreviewTileProgress(
         return true;
     }
 
-    blur_radius = ResolveNative3DProgressPresentBlurRadius();
-    host_halo_pixels = blur_radius;
-    if (ctx->renderWidth > 0 && ctx->hostWidth > ctx->renderWidth) {
-        host_halo_pixels =
-            ((ctx->hostWidth + ctx->renderWidth - 1) / ctx->renderWidth) * blur_radius;
-    }
-    ExpandNative3DHostDirtyTile(&host_dirty_tile,
-                                host_halo_pixels,
-                                ctx->hostWidth,
-                                ctx->hostHeight);
-
-    RuntimeNative3DUpscaleNearestABGRRect(ctx->renderBuffer,
-                                          ctx->renderWidth,
-                                          ctx->renderHeight,
-                                          ctx->hostBuffer,
-                                          ctx->hostWidth,
-                                          ctx->hostHeight,
-                                          host_dirty_tile.originX,
-                                          host_dirty_tile.originY,
-                                          host_dirty_tile.width,
-                                          host_dirty_tile.height);
-    if (!BlurNative3DHostRectABGR(ctx->hostBuffer,
-                                  ctx->hostWidth,
-                                  ctx->hostHeight,
-                                  &host_dirty_tile,
-                                  blur_radius)) {
+    host_dirty_rect.x = host_dirty_tile.originX;
+    host_dirty_rect.y = host_dirty_tile.originY;
+    host_dirty_rect.w = host_dirty_tile.width;
+    host_dirty_rect.h = host_dirty_tile.height;
+    if (animSettings.upscaleMode3D == RUNTIME_3D_UPSCALE_MODE_OFF) {
+        RuntimeNative3DUpscaleNearestABGRRect(ctx->renderBuffer,
+                                              ctx->renderWidth,
+                                              ctx->renderHeight,
+                                              ctx->hostBuffer,
+                                              ctx->hostWidth,
+                                              ctx->hostHeight,
+                                              host_dirty_rect.x,
+                                              host_dirty_rect.y,
+                                              host_dirty_rect.w,
+                                              host_dirty_rect.h);
+    } else if (!RuntimeNative3DPreviewReconstructABGRRectWithMode(
+                   ctx->renderBuffer,
+                   ctx->renderWidth,
+                   ctx->renderHeight,
+                   ctx->hostBuffer,
+                   ctx->hostWidth,
+                   ctx->hostHeight,
+                   &host_dirty_rect,
+                   (Runtime3DUpscaleMode)animSettings.upscaleMode3D)) {
         return false;
     }
     present_tile = &host_dirty_tile;
@@ -663,11 +595,12 @@ void RayTracing2PreviewPresent_DrawABGRBuffer(SDL_Renderer* renderer,
                                                    resolve_full_window_destination(renderer, width, height));
 }
 
-void RayTracing2PreviewPresent_DrawABGRBufferToRect(SDL_Renderer* renderer,
-                                                    const Uint8* buffer,
-                                                    int width,
-                                                    int height,
-                                                    SDL_Rect dst_rect) {
+void RayTracing2PreviewPresent_DrawABGRBufferToRectFiltered(SDL_Renderer* renderer,
+                                                            const Uint8* buffer,
+                                                            int width,
+                                                            int height,
+                                                            SDL_Rect dst_rect,
+                                                            bool linear_filter) {
 #if USE_VULKAN
     if (!renderer || !buffer || width <= 0 || height <= 0) return;
     if (dst_rect.w <= 0 || dst_rect.h <= 0) return;
@@ -689,8 +622,7 @@ void RayTracing2PreviewPresent_DrawABGRBufferToRect(SDL_Renderer* renderer,
     }
 
     VkRendererTexture texture;
-    VkFilter filter = (dst_rect.w == width && dst_rect.h == height) ? VK_FILTER_NEAREST
-                                                                    : VK_FILTER_LINEAR;
+    VkFilter filter = linear_filter ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
     if (vk_renderer_upload_sdl_surface_with_filter((VkRenderer*)renderer,
                                                    surface,
                                                    &texture,
@@ -705,7 +637,22 @@ void RayTracing2PreviewPresent_DrawABGRBufferToRect(SDL_Renderer* renderer,
     (void)width;
     (void)height;
     (void)dst_rect;
+    (void)linear_filter;
 #endif
+}
+
+void RayTracing2PreviewPresent_DrawABGRBufferToRect(SDL_Renderer* renderer,
+                                                    const Uint8* buffer,
+                                                    int width,
+                                                    int height,
+                                                    SDL_Rect dst_rect) {
+    const bool linear_filter = !(dst_rect.w == width && dst_rect.h == height);
+    RayTracing2PreviewPresent_DrawABGRBufferToRectFiltered(renderer,
+                                                           buffer,
+                                                           width,
+                                                           height,
+                                                           dst_rect,
+                                                           linear_filter);
 }
 
 bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
@@ -809,12 +756,24 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
     }
     ts_session_stop_timer(timer_hud_session(), "Tile Frame Calc");
 
-    RuntimeNative3DUpscaleBilinearABGR(render_buffer,
-                                       render_width,
-                                       render_height,
-                                       host_buffer,
-                                       host_width,
-                                       host_height);
+    if (animSettings.upscaleMode3D == RUNTIME_3D_UPSCALE_MODE_OFF) {
+        RuntimeNative3DUpscaleNearestABGR(render_buffer,
+                                          render_width,
+                                          render_height,
+                                          host_buffer,
+                                          host_width,
+                                          host_height);
+    } else if (!RuntimeNative3DPreviewReconstructABGRWithMode(
+                   render_buffer,
+                   render_width,
+                   render_height,
+                   host_buffer,
+                   host_width,
+                   host_height,
+                   (Runtime3DUpscaleMode)animSettings.upscaleMode3D)) {
+        RuntimeNative3DPreparedFrame_Free(&frame);
+        return false;
+    }
     (void)PromoteNative3DPreviewHistory(host_buffer,
                                         (size_t)host_width * (size_t)host_height,
                                         host_width,

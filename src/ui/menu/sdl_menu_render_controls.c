@@ -73,6 +73,18 @@
 #define ROOT_ROW_SPACING 8
 #define ROOT_CTRL_BUTTON_W 56
 
+static const char* menu_upscale_mode_button_label(void) {
+    switch ((Runtime3DUpscaleMode)animSettings.upscaleMode3D) {
+        case RUNTIME_3D_UPSCALE_MODE_NEAREST:
+            return "Upscale: Nearest";
+        case RUNTIME_3D_UPSCALE_MODE_BILINEAR:
+            return "Upscale: Bilinear";
+        case RUNTIME_3D_UPSCALE_MODE_OFF:
+        default:
+            return "Upscale: OFF";
+    }
+}
+
 static SDL_Renderer* menu_context_renderer(void) {
     RenderContext* ctx = getRenderContext();
     if (!ctx) return NULL;
@@ -528,8 +540,13 @@ void menu_render_build_button_layout(TTF_Font* font,
                                                     TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT,
                                                     animSettings.topFillLightEnabled ? "Top Fill: ON" : "Top Fill: OFF",
                                                     centerColumnMaxWidth);
-    layout.lightHeightRect = build_adaptive_button_rect(font, centerRightX,
+    layout.upscaleModeRect = build_adaptive_button_rect(font, centerRightX,
                                                         layout.topFillRect.y + layout.topFillRect.h + FORWARD_FALLOFF_BUTTON_SPACING,
+                                                        TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT,
+                                                        menu_upscale_mode_button_label(),
+                                                        centerColumnMaxWidth);
+    layout.lightHeightRect = build_adaptive_button_rect(font, centerRightX,
+                                                        layout.upscaleModeRect.y + layout.upscaleModeRect.h + FORWARD_FALLOFF_BUTTON_SPACING,
                                                         TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT,
                                                         "Light Height", centerColumnMaxWidth);
 

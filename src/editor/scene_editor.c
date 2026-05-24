@@ -23,8 +23,8 @@
 #include "editor/scene_editor_viewport_nav.h"
 #include "engine/Render/render_font.h"
 #include "engine/Render/render_pipeline.h"
+#include "render/font_runtime.h"
 #include "render/text_draw.h"
-#include "render/text_font_cache.h"
 #include "render/text_upload_policy.h"
 #include "render/vk_shared_device.h"
 #include "ui/text_zoom_shortcuts.h"
@@ -332,9 +332,7 @@ static bool SceneEditorHandleSystemInput(SceneEditor* editor,
                 ray_tracing_shared_theme_cycle_prev();
             }
             ray_tracing_shared_theme_save_persisted();
-            ray_tracing_text_reset_renderer(editor->renderer);
-            invalidateActiveFontHandle();
-            ray_tracing_text_font_cache_shutdown();
+            ray_tracing_font_runtime_invalidate_all();
             result->target = SCENE_EDITOR_INPUT_TARGET_SYSTEM;
             result->consumed = true;
             result->invalidation_class = SCENE_EDITOR_INVALIDATION_TARGET_UI;
@@ -626,7 +624,7 @@ bool SceneEditorSessionBegin(SceneEditor* editor, SDL_Renderer* renderer, SDL_Wi
     SceneEditorBezier3DGizmoReset();
     SceneEditorCamera3DGizmoReset();
 
-    if (TTF_WasInit() == 0 && TTF_Init() == -1) {
+    if (!ray_tracing_font_runtime_init()) {
         fprintf(stderr, "Error: TTF_Init failed: %s\n", TTF_GetError());
         memset(editor, 0, sizeof(*editor));
         return false;
@@ -644,6 +642,7 @@ bool SceneEditorSessionBegin(SceneEditor* editor, SDL_Renderer* renderer, SDL_Wi
 #endif
     setRenderContext(editor->renderer, editor->window,
                      sceneSettings.windowWidth, sceneSettings.windowHeight);
+    ray_tracing_font_runtime_attach_renderer(editor->renderer);
     SceneEditorLayoutChrome();
     SceneEditorRefreshPaneSplitterHover(editor);
     (void)SceneEditorViewportNavFitDigestOverlay(&g_viewport_nav_state,
@@ -740,7 +739,7 @@ bool InitializeSceneEditor(SceneEditor* editor) {
     editor->owns_renderer = true;
 
     //  Initialize TTF for font rendering
-    if (TTF_Init() == -1) {
+    if (!ray_tracing_font_runtime_init()) {
         fprintf(stderr, "Error: TTF_Init failed: %s\n", TTF_GetError());
 #if USE_VULKAN
         if (editor->owns_renderer && editor->renderer) {
@@ -765,6 +764,7 @@ bool InitializeSceneEditor(SceneEditor* editor) {
     }
     setRenderContext(editor->renderer, editor->window,
                      sceneSettings.windowWidth, sceneSettings.windowHeight);
+    ray_tracing_font_runtime_attach_renderer(editor->renderer);
     SceneEditorLayoutChrome();
     SceneEditorRefreshPaneSplitterHover(editor);
 
@@ -922,6 +922,7 @@ void DestroySceneEditor(SceneEditor* editor) {
         return;
     }
     editor->running = false;
+    ray_tracing_font_runtime_detach_renderer(editor->renderer);
     if (editor->renderer && editor->owns_renderer) {
 #if USE_VULKAN
         ray_tracing_text_reset_renderer(editor->renderer);
@@ -941,6 +942,7 @@ void DestroySceneEditor(SceneEditor* editor) {
     editor->owns_renderer = false;
     scene_editor_pane_host_end_splitter_drag(&g_scenePaneHost);
     SceneEditorInputRouterReset();
+    ray_tracing_font_runtime_shutdown();
     setRenderContext(NULL, NULL, 0, 0);
     printf("Scene Editor Closed. Returning to main menu...\n");
 }

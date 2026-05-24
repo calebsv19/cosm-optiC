@@ -25,14 +25,14 @@ typedef struct {
 
 bool RuntimeLightEmitter3D_IntersectRay(const RuntimeScene3D* scene,
                                         const Ray3D* ray,
-                                        double t_min,
-                                        double t_max,
+                                        double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                        double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
                                         RuntimeLightEmitterHit3DResult* out_result);
 
 bool RuntimeLightEmitter3D_ResolveFirstHit(const RuntimeScene3D* scene,
                                            const Ray3D* ray,
-                                           double t_min,
-                                           double t_max,
+                                           double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                           double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
                                            RuntimeLightEmitterTrace3DResult* out_result);
 
 #endif

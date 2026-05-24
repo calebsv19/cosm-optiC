@@ -702,6 +702,10 @@ static int test_runtime_native_3d_temporal_activity_mask_unstable_tile_stays_act
     bool ok = false;
     const int width = 16;
     const int height = 16;
+    const int tile_size = 8;
+    const size_t seed_index = 7u;
+    const size_t cross_tile_neighbor_index = 8u;
+    const size_t far_index = (size_t)(height - 1) * (size_t)width + (size_t)(width - 1);
 
     RuntimeNative3DTemporalAccumulation_Init(&accumulation);
     RuntimeNative3DAdaptiveSamplingMask_Init(&mask);
@@ -718,7 +722,7 @@ static int test_runtime_native_3d_temporal_activity_mask_unstable_tile_stays_act
          RuntimeNative3DAdaptiveSampling_BeginTemporalActivityMask(&mask,
                                                                    width,
                                                                    height,
-                                                                   width,
+                                                                   tile_size,
                                                                    2);
     assert_true("runtime_native_3d_temporal_activity_unstable_setup_ok", ok);
     if (!ok) {
@@ -731,16 +735,92 @@ static int test_runtime_native_3d_temporal_activity_mask_unstable_tile_stays_act
     ok = RuntimeNative3DTemporalAccumulation_AddRegion(&accumulation, samples, width, 0, 0, width, height);
     assert_true("runtime_native_3d_temporal_activity_unstable_first_add_ok", ok);
     RuntimeNative3DTemporalAccumulation_CommitSubpass(&accumulation);
-    samples[0] = 1.0f;
+    samples[0] = 0.0f;
+    samples[seed_index * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS] = 1.0f;
     ok = RuntimeNative3DTemporalAccumulation_AddRegion(&accumulation, samples, width, 0, 0, width, height);
     assert_true("runtime_native_3d_temporal_activity_unstable_second_add_ok", ok);
     RuntimeNative3DTemporalAccumulation_CommitSubpass(&accumulation);
     ok = RuntimeNative3DAdaptiveSampling_RefreshTemporalActivityMask(&mask, &accumulation, NULL);
     assert_true("runtime_native_3d_temporal_activity_unstable_refresh_ok", ok);
-    assert_true("runtime_native_3d_temporal_activity_unstable_tile_kept_active",
-                mask.activePixelCount == width * height);
-    assert_true("runtime_native_3d_temporal_activity_unstable_tile_counts",
-                mask.activeTileCount == 1 && mask.inactiveTileCount == 0);
+    assert_true("runtime_native_3d_temporal_activity_unstable_seed_pixel_kept_active",
+                mask.activeSampleMask[seed_index] != 0u);
+    assert_true("runtime_native_3d_temporal_activity_unstable_cross_tile_neighbor_held",
+                mask.activeSampleMask[cross_tile_neighbor_index] != 0u);
+    assert_true("runtime_native_3d_temporal_activity_unstable_far_pixel_pruned",
+                mask.activeSampleMask[far_index] == 0u);
+    assert_true("runtime_native_3d_temporal_activity_unstable_partial_pruning_preserved",
+                mask.activePixelCount > 0 && mask.activePixelCount < width * height);
+    assert_true("runtime_native_3d_temporal_activity_unstable_two_tiles_active",
+                mask.activeTileCount == 2 && mask.inactiveTileCount == 2);
+
+    free(samples);
+    RuntimeNative3DAdaptiveSamplingMask_Free(&mask);
+    RuntimeNative3DTemporalAccumulation_Free(&accumulation);
+    return 0;
+}
+
+static int test_runtime_native_3d_temporal_activity_mask_boundary_hold_smooths_tiles(void) {
+    RuntimeNative3DTemporalAccumulation accumulation = {0};
+    RuntimeNative3DAdaptiveSamplingMask mask = {0};
+    float* samples = NULL;
+    bool ok = false;
+    const int width = 16;
+    const int height = 16;
+    const int tile_size = 8;
+    const int seed_x = 7;
+    const int seed_y = 7;
+    const size_t seed_index = (size_t)seed_y * (size_t)width + (size_t)seed_x;
+    const size_t right_neighbor_index = seed_index + 1u;
+    const size_t lower_neighbor_index = seed_index + (size_t)width;
+    const size_t diagonal_neighbor_index = lower_neighbor_index + 1u;
+    const size_t far_index = (size_t)(height - 1) * (size_t)width + (size_t)(width - 1);
+
+    RuntimeNative3DTemporalAccumulation_Init(&accumulation);
+    RuntimeNative3DAdaptiveSamplingMask_Init(&mask);
+    samples = (float*)calloc((size_t)width * (size_t)height * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS,
+                             sizeof(*samples));
+    assert_true("runtime_native_3d_temporal_activity_boundary_buffer_alloc", samples != NULL);
+    if (!samples) {
+        RuntimeNative3DAdaptiveSamplingMask_Free(&mask);
+        RuntimeNative3DTemporalAccumulation_Free(&accumulation);
+        return 0;
+    }
+
+    ok = RuntimeNative3DTemporalAccumulation_Ensure(&accumulation, width, height) &&
+         RuntimeNative3DAdaptiveSampling_BeginTemporalActivityMask(&mask,
+                                                                   width,
+                                                                   height,
+                                                                   tile_size,
+                                                                   2);
+    assert_true("runtime_native_3d_temporal_activity_boundary_setup_ok", ok);
+    if (!ok) {
+        free(samples);
+        RuntimeNative3DAdaptiveSamplingMask_Free(&mask);
+        RuntimeNative3DTemporalAccumulation_Free(&accumulation);
+        return 0;
+    }
+
+    ok = RuntimeNative3DTemporalAccumulation_AddRegion(&accumulation, samples, width, 0, 0, width, height);
+    assert_true("runtime_native_3d_temporal_activity_boundary_first_add_ok", ok);
+    RuntimeNative3DTemporalAccumulation_CommitSubpass(&accumulation);
+    samples[seed_index * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS] = 1.0f;
+    ok = RuntimeNative3DTemporalAccumulation_AddRegion(&accumulation, samples, width, 0, 0, width, height);
+    assert_true("runtime_native_3d_temporal_activity_boundary_second_add_ok", ok);
+    RuntimeNative3DTemporalAccumulation_CommitSubpass(&accumulation);
+    ok = RuntimeNative3DAdaptiveSampling_RefreshTemporalActivityMask(&mask, &accumulation, NULL);
+    assert_true("runtime_native_3d_temporal_activity_boundary_refresh_ok", ok);
+    assert_true("runtime_native_3d_temporal_activity_boundary_seed_active",
+                mask.activeSampleMask[seed_index] != 0u);
+    assert_true("runtime_native_3d_temporal_activity_boundary_right_neighbor_active",
+                mask.activeSampleMask[right_neighbor_index] != 0u);
+    assert_true("runtime_native_3d_temporal_activity_boundary_lower_neighbor_active",
+                mask.activeSampleMask[lower_neighbor_index] != 0u);
+    assert_true("runtime_native_3d_temporal_activity_boundary_diagonal_neighbor_active",
+                mask.activeSampleMask[diagonal_neighbor_index] != 0u);
+    assert_true("runtime_native_3d_temporal_activity_boundary_far_pixel_pruned",
+                mask.activeSampleMask[far_index] == 0u);
+    assert_true("runtime_native_3d_temporal_activity_boundary_cross_tile_counts",
+                mask.activeTileCount == 4 && mask.inactiveTileCount == 0);
 
     free(samples);
     RuntimeNative3DAdaptiveSamplingMask_Free(&mask);
@@ -1588,7 +1668,7 @@ static int test_runtime_native_3d_tile_scheduler_policy_contract(void) {
     return 0;
 }
 
-static int test_runtime_native_3d_disney_temporal_pruning_stats_contract(void) {
+static int test_runtime_native_3d_disney_temporal_pruning_disabled_contract(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
     const char *runtime_json =
@@ -1678,10 +1758,12 @@ static int test_runtime_native_3d_disney_temporal_pruning_stats_contract(void) {
     assert_true("runtime_native_3d_disney_temporal_pruning_disney_tracks_subpasses",
                 disney_stats.temporalCommittedSubpasses >= 2 &&
                     disney_stats.temporalCommittedSubpasses <= temporal_frames);
-    assert_true("runtime_native_3d_disney_temporal_pruning_disney_skips_work",
-                disney_stats.temporalPixelsSkipped > 0);
-    assert_true("runtime_native_3d_disney_temporal_pruning_disney_marks_tiles",
-                disney_stats.temporalInactiveTileCount > 0);
+    assert_true("runtime_native_3d_disney_temporal_pruning_runtime_gate_off",
+                !RuntimeNative3DAdaptiveSampling_RuntimeEnabled());
+    assert_true("runtime_native_3d_disney_temporal_pruning_disney_skip_zero_when_disabled",
+                disney_stats.temporalPixelsSkipped == 0);
+    assert_true("runtime_native_3d_disney_temporal_pruning_disney_inactive_tiles_zero_when_disabled",
+                disney_stats.temporalInactiveTileCount == 0);
 
     sceneSettings = saved_scene;
     animSettings = saved_anim;
@@ -1803,6 +1885,7 @@ int run_test_runtime_diffuse_temporal_tests(void) {
     test_runtime_native_3d_temporal_accumulation_ema_and_clamp_contract();
     test_runtime_native_3d_temporal_activity_mask_min_subpass_contract();
     test_runtime_native_3d_temporal_activity_mask_unstable_tile_stays_active();
+    test_runtime_native_3d_temporal_activity_mask_boundary_hold_smooths_tiles();
     test_runtime_native_3d_temporal_activity_mask_risky_tile_holds_longer();
     test_runtime_native_3d_blue_noise_jitter_contract();
     test_runtime_native_3d_sampling_stratified_subpass_contract();
@@ -1811,7 +1894,7 @@ int run_test_runtime_diffuse_temporal_tests(void) {
     test_runtime_native_3d_temporal_worker_tile_size_parity_contract();
     test_runtime_native_3d_temporal_worker_preview_progress_contract();
     test_runtime_native_3d_tile_scheduler_policy_contract();
-    test_runtime_native_3d_disney_temporal_pruning_stats_contract();
+    test_runtime_native_3d_disney_temporal_pruning_disabled_contract();
     test_runtime_diffuse_bounce_3d_seed_branch_contract();
 
     return test_support_failures() - before;

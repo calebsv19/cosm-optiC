@@ -11,7 +11,7 @@ bool RuntimeVolume3D_HasActiveExtinction(const RuntimeVolumeAttachment3D* attach
 RuntimeVisibility3DTransmittance RuntimeVolume3D_TransmittanceAlongRayRGB(
     const RuntimeVolumeAttachment3D* attachment,
     const Ray3D* ray,
-    double t_min,
-    double t_max);
+    double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]]);
 
 #endif

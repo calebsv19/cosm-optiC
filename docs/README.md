@@ -9,6 +9,20 @@ Public identity:
 Last audited: 2026-05-04.
 
 Current public focus:
+- dual-toolchain compiler-units rollout now starts at the runtime-scene import
+  bridge, with explicit Clang-vs-`fisiCs` build/package selection
+  and current sema coverage on:
+  - `src/import/runtime_scene_bridge.c`
+  - `src/import/runtime_scene_bridge_authoring.c`
+  - `src/app/animation_fluid_scene.c`
+  - `src/render/runtime_light_emitter_3d.c`
+  - `src/render/runtime_volume_3d_sampling.c`
+  - `src/render/runtime_native_3d_sampling.c`
+  - `src/render/runtime_volume_3d.c`
+  - `src/render/runtime_volume_3d_integrate.c`
+  - `src/render/runtime_volume_3d_scatter.c`
+  - `src/render/runtime_direct_light_3d.c`
+  - `src/render/runtime_visibility_3d.c`
 - shipped native `3D` runtime ladder through `Disney`
 - Phase 4.1/4.2 headless-agent render request preflight CLI
 - deep-render start/resume and export workflow
@@ -21,6 +35,8 @@ Current public focus:
 - `docs/future_intent.md`: near-term renderer and workflow direction.
 - `docs/headless_agent_render_cli.md`: `ray_tracing_agent_render_request_v1`
   request schema and preflight CLI command.
+- `docs/headless_continuation_visualizer_workflow.md`: operator workflow for
+  seed render -> RayTracing-only continuation -> visualizer grouping/backfill.
 - `docs/render_review_sets/README.md`: local repo-doc review sets from detached
   renders. These are not the live visualizer website lane.
 - `docs/desktop_packaging.md`: `.app` packaging commands, launcher diagnostics, and release-readiness workflow.
@@ -35,6 +51,20 @@ Live visualizer website publication is a separate pipeline:
   its last frame are the intended publish target
 
 Current verification contract:
+- `make -C ray_tracing toolchain-contract`
+- `make -C ray_tracing dump-sema-runtime-scene-bridge`
+- `make -C ray_tracing dump-sema-runtime-scene-bridge-authoring`
+- `make -C ray_tracing dump-sema-animation-fluid-scene`
+- `make -C ray_tracing dump-sema-runtime-light-emitter-3d`
+- `make -C ray_tracing dump-sema-runtime-volume-3d-sampling`
+- `make -C ray_tracing dump-sema-runtime-native-3d-sampling`
+- `make -C ray_tracing dump-sema-runtime-volume-3d`
+- `make -C ray_tracing dump-sema-runtime-volume-3d-integrate`
+- `make -C ray_tracing dump-sema-runtime-volume-3d-scatter`
+- `make -C ray_tracing dump-sema-runtime-direct-light-3d`
+- `make -C ray_tracing dump-sema-runtime-visibility-3d`
+- `make -C ray_tracing clang-build`
+- `make -C ray_tracing fisics-build`
 - `make -C ray_tracing clean && make -C ray_tracing`
 - `make -C ray_tracing test-stable`
 - `make -C ray_tracing run-headless-smoke`

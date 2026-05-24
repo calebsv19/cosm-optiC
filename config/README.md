@@ -9,6 +9,7 @@ Tracked defaults consumed by the menu and renderer.
   - `useTiledRenderer` – switches between the original full-buffer path and the new tile-based renderer.
   - `tilePreviewEnabled` – when tiled renderer is enabled, incrementally presents each completed tile during hybrid renders.
   - `tileSize` – tile edge length (multiples of 4, default 16) used when `useTiledRenderer` is true.
+  - `upscaleMode3D` – native `3D` low-resolution presentation mode (`0 = Off`, `1 = Nearest`, `2 = Bilinear`).
   - `rouletteThreshold` – Russian-roulette cutoff controlling when low-energy rays terminate.
   - `integratorMode` – selects the renderer pipeline: 0 = Forward Light (light-emitted rays), 1 = Hybrid (camera-path GI), 2 = Direct Light (single LOS pass). (Disney path is currently paused in the UI.)
   - `pathSamplesPerPixel`, `pathMaxDepth` – per-pixel sampling count and bounce limit for the camera-path mode.

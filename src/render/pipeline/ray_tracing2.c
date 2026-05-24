@@ -34,6 +34,7 @@
 #include "render/runtime_native_3d_denoise.h"
 #include "render/runtime_native_3d_feature_buffer.h"
 #include "render/runtime_native_3d_render.h"
+#include "render/runtime_native_3d_preview_reconstruction.h"
 #include "render/runtime_native_3d_resolution.h"
 #include "render/runtime_native_3d_adaptive_sampling.h"
 #include "render/runtime_native_3d_temporal_accum.h"
@@ -78,6 +79,19 @@ static IrradianceCache irradianceCache = {0};
 static MaterialBSDF* materialTable = NULL;
 static int materialCapacity = 0;
 static SurfaceMesh surfaceMesh = {0};
+
+static const char* ResolveRuntime3DUpscaleModeLabel(int upscale_mode) {
+    switch ((Runtime3DUpscaleMode)upscale_mode) {
+        case RUNTIME_3D_UPSCALE_MODE_OFF:
+            return "OFF";
+        case RUNTIME_3D_UPSCALE_MODE_NEAREST:
+            return "Nearest";
+        case RUNTIME_3D_UPSCALE_MODE_BILINEAR:
+            return "Bilinear";
+        default:
+            return "Unknown";
+    }
+}
 static TriangleMesh triangleMesh = {0};
 
 static float* reflectionForwardBuffer = NULL;
@@ -702,19 +716,32 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
                                                          renderHeight,
                                                          blurRadius);
             }
-            RuntimeNative3DUpscaleBilinearABGR(native3DRenderBuffer,
-                                               renderWidth,
-                                               renderHeight,
-                                               native3DPreviewBuffer,
-                                               hostWidth,
-                                               hostHeight);
+            if (animSettings.upscaleMode3D == RUNTIME_3D_UPSCALE_MODE_OFF) {
+                RuntimeNative3DUpscaleNearestABGR(native3DRenderBuffer,
+                                                  renderWidth,
+                                                  renderHeight,
+                                                  native3DPreviewBuffer,
+                                                  hostWidth,
+                                                  hostHeight);
+            } else {
+                (void)RuntimeNative3DPreviewReconstructABGRWithMode(
+                    native3DRenderBuffer,
+                    renderWidth,
+                    renderHeight,
+                    native3DPreviewBuffer,
+                    hostWidth,
+                    hostHeight,
+                    (Runtime3DUpscaleMode)animSettings.upscaleMode3D);
+            }
         }
 #if USE_VULKAN
-        RayTracing2PreviewPresent_DrawABGRBufferToRect(renderer,
-                                                       native3DPreviewBuffer,
-                                                       hostWidth,
-                                                       hostHeight,
-                                                       (SDL_Rect){0, 0, WIDTH, HEIGHT});
+        RayTracing2PreviewPresent_DrawABGRBufferToRectFiltered(
+            renderer,
+            native3DPreviewBuffer,
+            hostWidth,
+            hostHeight,
+            (SDL_Rect){0, 0, WIDTH, HEIGHT},
+            animSettings.upscaleMode3D == RUNTIME_3D_UPSCALE_MODE_BILINEAR);
 #else
         for (int y = 0; y < hostHeight; y++) {
             for (int x = 0; x < hostWidth; x++) {
@@ -933,6 +960,17 @@ void ProcessRayTracingEvent(SDL_Event* event) {
             printf("Blur Mode: %s\n", (animSettings.blurMode == 0) ? "None" :
                                         (animSettings.blurMode == 1) ? "Light Blur" :
                                         "Heavy Blur");
+    }
+    else if (event->type == SDL_KEYDOWN && event->key.keysym.sym == SDLK_u) {
+            if (animSettings.upscaleMode3D < RUNTIME_3D_UPSCALE_MODE_MIN ||
+                animSettings.upscaleMode3D > RUNTIME_3D_UPSCALE_MODE_MAX) {
+                animSettings.upscaleMode3D = RUNTIME_3D_UPSCALE_MODE_DEFAULT;
+            } else {
+                animSettings.upscaleMode3D =
+                    (animSettings.upscaleMode3D + 1) % (RUNTIME_3D_UPSCALE_MODE_MAX + 1);
+            }
+            printf("3D Upscale Mode: %s\n",
+                   ResolveRuntime3DUpscaleModeLabel(animSettings.upscaleMode3D));
     }
 }
 

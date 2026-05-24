@@ -9,6 +9,7 @@
 #include "app/animation_input_helpers.h"
 #include "app/animation_output.h"
 #include "app/data_paths.h"
+#include "app/ray_tracing_runtime_host.h"
 #include "app/ray_tracing_core_sim_runtime_frame.h"
 #include "app/render_export_batch.h"
 #include "app/runtime_time.h"
@@ -19,7 +20,6 @@
 #include "editor/bezier_editor.h"
 #include "path/path_system.h"
 #include "render/timer_hud_api.h"
-#include "render/timer_hud_adapter.h"
 #include "render/ray_tracing_mode_backend.h"
 #include "camera/camera.h"
 #include "render/space_mode_adapter.h"
@@ -34,7 +34,6 @@
 #include "geo/shape_asset.h"
 #include "geo/shape_adapter.h"
 #include "ray_tracing/ray_tracing_app_main.h"
-#include "render/vk_shared_device.h"
 #include "kit_runtime_diag.h"
 #include <json-c/json.h>
 #include <limits.h>
@@ -53,9 +52,6 @@ int WINDOW_HEIGHT;
 
 SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL;
-#if USE_VULKAN
-static VkRenderer renderer_storage;
-#endif
 SceneObject sceneObjects[MAX_OBJECTS];  // Define object array storage
 int objectCount = 0;  // Define object count
 
@@ -189,75 +185,13 @@ int AnimationInit(void) {
     UpdateObjects();
     WINDOW_WIDTH = sceneSettings.windowWidth;       
     WINDOW_HEIGHT = sceneSettings.windowHeight; 
-    // Initialize SDL
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-        fprintf(stderr, "SDL_Init Error: %s\n", SDL_GetError());
+    if (ray_tracing_runtime_host_init(WINDOW_WIDTH, WINDOW_HEIGHT) != 0) {
         return -1;
     }
 
-    // Create window
-    window = SDL_CreateWindow("Raytracing Animation",
-                              SDL_WINDOWPOS_CENTERED,
-                              SDL_WINDOWPOS_CENTERED,
-                              WINDOW_WIDTH, WINDOW_HEIGHT,
-                              SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN | SDL_WINDOW_ALLOW_HIGHDPI);
-    if (!window) {
-        fprintf(stderr, "SDL_CreateWindow Error: %s\n", SDL_GetError());
-        SDL_Quit();
-        return -1;
-    }
-
-#if USE_VULKAN
-    VkRendererConfig cfg;
-    vk_renderer_config_set_defaults(&cfg);
-    cfg.enable_validation = SDL_FALSE;
-    cfg.clear_color[0] = 0.0f;
-    cfg.clear_color[1] = 0.0f;
-    cfg.clear_color[2] = 0.0f;
-    cfg.clear_color[3] = 1.0f;
-
-    if (!vk_shared_device_init(window, &cfg)) {
-        fprintf(stderr, "vk_shared_device_init failed.\n");
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return -1;
-    }
-
-    VkRendererDevice* shared_device = vk_shared_device_get();
-    if (!shared_device) {
-        fprintf(stderr, "vk_shared_device_get failed.\n");
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return -1;
-    }
-
-    VkResult init = vk_renderer_init_with_device(&renderer_storage, shared_device, window, &cfg);
-    if (init != VK_SUCCESS) {
-        fprintf(stderr, "vk_renderer_init failed: %d\n", init);
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return -1;
-    }
-    renderer = (SDL_Renderer*)&renderer_storage;
-    vk_renderer_set_logical_size((VkRenderer*)renderer, (float)WINDOW_WIDTH, (float)WINDOW_HEIGHT);
-#else
-    // Create renderer
-    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    if (!renderer) {
-        fprintf(stderr, "SDL_CreateRenderer Error: %s\n", SDL_GetError());
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return -1;
-    }
-#endif
-
-    setRenderContext(renderer, window, WINDOW_WIDTH, WINDOW_HEIGHT);
-    timer_hud_register_backend();
-    ts_session_init(timer_hud_session());
-    timer_hud_apply_startup_env_overrides();
-
-    // Validate Bézier path
-    if (sceneSettings.bezierPath.numPoints < 2) {
+    // Native 3D runtime-scene starts may seed a single static light point.
+    // The runtime path already treats 1 point as a valid stationary light.
+    if (sceneSettings.bezierPath.numPoints < 1) {
         fprintf(stderr, "Error: Bézier path is uninitialized or invalid. Check scene_config.json.\n");
         AnimationCleanup();
         return -1;
@@ -272,25 +206,8 @@ int AnimationInit(void) {
 
 
 void AnimationCleanup(void) {   
-    if (renderer) {
-        ray_tracing_text_reset_renderer(renderer);
-#if USE_VULKAN
-        vk_renderer_wait_idle((VkRenderer*)renderer);
-        vk_renderer_shutdown_surface((VkRenderer*)renderer);
-#else
-        SDL_DestroyRenderer(renderer);
-#endif
-        renderer = NULL;
-    }
-    if (window) {
-        SDL_DestroyWindow(window);
-        window = NULL;
-    }
-#if USE_VULKAN
-    vk_shared_device_shutdown();
-#endif
-    timer_hud_shutdown_session();
-    SDL_Quit();
+    CleanupRayTracing();
+    ray_tracing_runtime_host_shutdown();
 }
 
 typedef enum RayTracingInputActionType {
@@ -904,21 +821,11 @@ void RunMainLoop(void) {
     }
     }
     AnimationExportRenderMetricsDatasetIfEnabled();
-    CleanupRayTracing();    
-    ray_tracing_text_reset_renderer(renderer);
-#if USE_VULKAN
-    vk_renderer_wait_idle((VkRenderer*)renderer);
-    vk_renderer_shutdown_surface((VkRenderer*)renderer);
-#else
-    SDL_DestroyRenderer(renderer);
-#endif
-    SDL_DestroyWindow(window);
-    SDL_Quit();
 }
 
 
 #ifdef MAIN_DRIVER  
-static void ParseArgs(int argc, char* argv[]) {
+void AnimationParseArgs(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i) {
         const char* arg = argv[i];
         if (strcmp(arg, "--fluid-manifest") == 0 && i + 1 < argc) {
@@ -929,15 +836,13 @@ static void ParseArgs(int argc, char* argv[]) {
     }
 }
 
-int ray_tracing_app_main_legacy(int argc, char* argv[]) {
-    ParseArgs(argc, argv);
-    (void)argc;
-    (void)argv;
-    // Load animation settings from config file
+void AnimationLoadRuntimeDefaults(void) {
     LoadAllSettings();
     t_increment = 1.0 / animSettings.framesForTravel;
     printf("Loaded animation config in main.\n");
+}
 
+int AnimationRunAppSession(void) {
     // Menu → run loop, allowing return to menu after each run
     while (!quitRequested) {
         if (!RunMenu()) {
@@ -1011,7 +916,6 @@ int ray_tracing_app_main_legacy(int argc, char* argv[]) {
 }
 
 int main(int argc, char* argv[]) {
-    ray_tracing_app_set_legacy_entry(ray_tracing_app_main_legacy);
     return ray_tracing_app_main(argc, argv);
 }
 #endif

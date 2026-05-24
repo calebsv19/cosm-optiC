@@ -14,18 +14,15 @@ REQUEST="$RUN_ROOT/ray_tracing_request.json"
 SUMMARY="$RAY_OUT/render_summary.json"
 STDOUT_SUMMARY="$RAY_OUT/stdout_summary.json"
 
-LINE_TOOL="$LINE_DIR/build/bin/agent_scene_tool"
+LINE_TOOL="$LINE_DIR/build/toolchains/clang/bin/agent_scene_tool"
 PHYSICS_TOOL="$PHYSICS_DIR/physics_sim_headless"
-RAY_TOOL="$RAY_DIR/build/$(uname -m)/tools/cli/ray_tracing_render_headless"
-if [[ ! -x "$RAY_TOOL" ]]; then
-  RAY_TOOL="$RAY_DIR/build/tools/cli/ray_tracing_render_headless"
-fi
+RAY_TOOL="$RAY_DIR/build/toolchains/clang/$(uname -m)/tools/cli/ray_tracing_render_headless"
 
 mkdir -p "$RUN_ROOT" "$RAY_OUT"
 
-make -C "$LINE_DIR" agent_scene_tool
+make -C "$LINE_DIR" BUILD_TOOLCHAIN=clang agent_scene_tool
 make -C "$PHYSICS_DIR" physics_sim_headless
-make -C "$RAY_DIR" ray-tracing-render-headless
+make -C "$RAY_DIR" BUILD_TOOLCHAIN=clang ray-tracing-render-headless
 
 "$LINE_TOOL" \
   --request "$LINE_DIR/tests/fixtures/agent_room_prism_emitter_request.json" \

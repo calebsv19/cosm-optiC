@@ -89,6 +89,7 @@ AnimationConfig animSettings = {
     .transmissionSamples3D = RUNTIME_3D_TRANSMISSION_SAMPLES_DEFAULT,
     .temporalFrames3D = RUNTIME_3D_TEMPORAL_FRAMES_DEFAULT,
     .renderScale3D = RUNTIME_3D_RENDER_SCALE_DEFAULT,
+    .upscaleMode3D = RUNTIME_3D_UPSCALE_MODE_DEFAULT,
     .runtimeWindowWidth = 0,
     .runtimeWindowHeight = 0,
     .sceneSource = SCENE_SOURCE_CONFIG_2D,

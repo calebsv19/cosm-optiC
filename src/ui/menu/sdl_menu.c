@@ -14,6 +14,7 @@
 #include "editor/scene_editor.h"
 #include "engine/Render/render_font.h"
 #include "engine/Render/render_pipeline.h"
+#include "render/font_runtime.h"
 #include "render/text_draw.h"
 #include "render/text_font_cache.h"
 #include "render/vk_shared_device.h"
@@ -97,7 +98,7 @@ static bool initialize_menu(SDL_Window** window,
         return false;
     }
 
-    if (TTF_Init() == -1) {
+    if (!ray_tracing_font_runtime_init()) {
         printf("TTF Initialization Failed: %s\n", TTF_GetError());
         SDL_Quit();
         return false;
@@ -112,7 +113,7 @@ static bool initialize_menu(SDL_Window** window,
                                    SDL_WINDOW_ALLOW_HIGHDPI);
     if (!*window) {
         printf("Window Creation Failed: %s\n", SDL_GetError());
-        TTF_Quit();
+        ray_tracing_font_runtime_shutdown();
         SDL_Quit();
         return false;
     }
@@ -130,7 +131,7 @@ static bool initialize_menu(SDL_Window** window,
     if (!vk_shared_device_init(*window, &cfg)) {
         printf("vk_shared_device_init failed.\n");
         SDL_DestroyWindow(*window);
-        TTF_Quit();
+        ray_tracing_font_runtime_shutdown();
         SDL_Quit();
         return false;
     }
@@ -139,7 +140,7 @@ static bool initialize_menu(SDL_Window** window,
     if (!shared_device) {
         printf("vk_shared_device_get failed.\n");
         SDL_DestroyWindow(*window);
-        TTF_Quit();
+        ray_tracing_font_runtime_shutdown();
         SDL_Quit();
         return false;
     }
@@ -148,7 +149,7 @@ static bool initialize_menu(SDL_Window** window,
     if (init != VK_SUCCESS) {
         printf("vk_renderer_init failed: %d\n", init);
         SDL_DestroyWindow(*window);
-        TTF_Quit();
+        ray_tracing_font_runtime_shutdown();
         SDL_Quit();
         return false;
     }
@@ -159,7 +160,7 @@ static bool initialize_menu(SDL_Window** window,
     if (!*renderer) {
         printf("Renderer Creation Failed: %s\n", SDL_GetError());
         SDL_DestroyWindow(*window);
-        TTF_Quit();
+        ray_tracing_font_runtime_shutdown();
         SDL_Quit();
         return false;
     }
@@ -172,6 +173,7 @@ static bool initialize_menu(SDL_Window** window,
 
     menu_state_init(state);
     menu_refresh_render_context(*window, *renderer);
+    ray_tracing_font_runtime_attach_renderer(*renderer);
 
     *font = NULL;
     menu_state_reload_font(font);
@@ -184,7 +186,8 @@ static bool initialize_menu(SDL_Window** window,
         SDL_DestroyRenderer(*renderer);
 #endif
         SDL_DestroyWindow(*window);
-        TTF_Quit();
+        ray_tracing_font_runtime_detach_renderer(*renderer);
+        ray_tracing_font_runtime_shutdown();
         SDL_Quit();
         return false;
     }
@@ -197,6 +200,7 @@ static void shutdown_menu(SDL_Window* window,
                           TTF_Font* font,
                           bool keep_running_engine) {
     (void)keep_running_engine;
+    ray_tracing_font_runtime_detach_renderer(renderer);
     setRenderContext(NULL, NULL, 0, 0);
 
     if (renderer) {
@@ -213,9 +217,6 @@ static void shutdown_menu(SDL_Window* window,
     }
     (void)font;
     shutdownFontSystem();
-    if (TTF_WasInit() != 0) {
-        TTF_Quit();
-    }
 #if USE_VULKAN
     vk_shared_device_shutdown();
 #endif

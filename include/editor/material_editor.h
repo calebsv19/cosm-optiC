@@ -45,6 +45,10 @@ int MaterialEditorRenderPaneControls(SDL_Renderer* renderer,
                                      SDL_Rect content_bounds,
                                      int top_y,
                                      int bottom_y);
+int MaterialEditorRenderRightPanePreview(SDL_Renderer* renderer,
+                                         SDL_Rect content_bounds,
+                                         int top_y,
+                                         int bottom_y);
 void HandleMaterialEditorEvents(SDL_Event* event);
 MaterialEditorHitRegion MaterialEditorHitRegionAtPoint(int mx, int my);
 bool MaterialEditorHandleCanvasPointerDown(const SceneEditorDigestOverlayProjector* projector,

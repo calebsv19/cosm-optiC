@@ -12,9 +12,12 @@
 #define RUNTIME_NATIVE_3D_ADAPTIVE_TILE_SIZE 16
 #define RUNTIME_NATIVE_3D_ADAPTIVE_MIN_SUBPASSES 2
 
+bool RuntimeNative3DAdaptiveSampling_RuntimeEnabled(void);
+
 typedef struct {
     uint8_t* stableEmitterMask;
     uint8_t* activeSampleMask;
+    uint8_t* scratchSampleMask;
     uint8_t* activeTileMask;
     int width;
     int height;

@@ -19,7 +19,7 @@ typedef struct {
     bool visible;
     Ray3D primaryRay;
     HitInfo3D hitInfo;
-    double lightDistance;
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double lightDistance;
     double ndotl;
     double attenuation;
     double radiance;

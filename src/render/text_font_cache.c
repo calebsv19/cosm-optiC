@@ -1,7 +1,7 @@
 #include "render/text_font_cache.h"
 
-#include "engine/Render/render_font.h"
 #include "render/font_bridge.h"
+#include "render/font_runtime.h"
 #include "render/text_draw.h"
 
 #include <SDL2/SDL.h>
@@ -21,14 +21,7 @@ static RayTracingFontCacheEntry g_font_cache[256];
 static size_t g_font_cache_count = 0;
 
 static bool ensure_ttf_initialized(void) {
-    if (TTF_WasInit() != 0) {
-        return true;
-    }
-    if (TTF_Init() != 0) {
-        fprintf(stderr, "[font_cache] TTF_Init failed: %s\n", TTF_GetError());
-        return false;
-    }
-    return true;
+    return ray_tracing_font_runtime_ensure_ttf();
 }
 
 static bool same_path(const char* a, const char* b) {
@@ -260,7 +253,6 @@ int ray_tracing_text_font_cache_contains(TTF_Font* font) {
 
 void ray_tracing_text_font_cache_shutdown(void) {
     size_t i = 0;
-    invalidateActiveFontHandle();
     for (i = 0; i < g_font_cache_count; ++i) {
         if (g_font_cache[i].font) {
             ray_tracing_text_unregister_font_source(g_font_cache[i].font);

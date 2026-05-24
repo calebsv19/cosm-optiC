@@ -8,12 +8,15 @@
 
 #include "app/animation.h"
 #include "editor/material_editor.h"
+#include "editor/material_editor_face_preview.h"
+#include "editor/material_preview_surface_eval.h"
 #include "editor/object_editor.h"
 #include "editor/object_editor_object_ops.h"
 #include "editor/object_editor_selection_tracker.h"
 #include "editor/editor_mode_router.h"
 #include "editor/scene_editor_control_surface.h"
 #include "editor/scene_editor_digest_overlay.h"
+#include "editor/scene_editor_material_face_metrics.h"
 #include "editor/scene_editor_material_face_placement.h"
 #include "editor/scene_editor_material_preview.h"
 #include "editor/scene_editor_material_stack.h"
@@ -2015,6 +2018,7 @@ static int test_material_editor_object_scope_clears_face_overrides_and_applies_a
                 !SceneEditorMaterialPreviewEvaluateTextureColorForFace(
                     &sceneSettings.sceneObjects[0],
                     0,
+                    0,
                     2,
                     0,
                     4,
@@ -2375,6 +2379,322 @@ static int test_material_editor_preview_resolves_focused_triangle_substrate(void
     return 0;
 }
 
+static int test_material_editor_face_metrics_ground_uv_scales_with_dimensions(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_material_face_metrics\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"plane_small\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":2.0,\"height\":1.0,"
+              "\"frame\":{\"origin\":{\"x\":-8.0,\"y\":0.0,\"z\":0.0},"
+              "\"axis_u\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+              "\"axis_v\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+              "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":-8.0,\"y\":0.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"plane_wide\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":5.0,\"height\":1.0,"
+              "\"frame\":{\"origin\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+              "\"axis_u\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+              "\"axis_v\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+              "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"prism_grounded\","
+            "\"object_type\":\"rect_prism_primitive\","
+            "\"transform\":{\"position\":{\"x\":8.0,\"y\":0.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}},"
+            "\"primitive\":{\"kind\":\"rect_prism_primitive\","
+              "\"width\":4.0,\"height\":3.0,\"depth\":2.0}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":4.0,\"z\":18.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    SceneEditorMaterialFaceMetrics metrics = {0};
+    double grounded_small_u = 0.0;
+    double grounded_small_v = 0.0;
+    double grounded_wide_u = 0.0;
+    double grounded_wide_v = 0.0;
+    double grounded_prism_side_u = 0.0;
+    double grounded_prism_side_v = 0.0;
+    double grounded_prism_end_u = 0.0;
+    double grounded_prism_end_v = 0.0;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.integratorMode = 1;
+
+    assert_true("material_face_metrics_runtime_apply_ok",
+                runtime_scene_bridge_apply_json(runtime_json, &summary));
+
+    assert_true("material_face_metrics_plane_small_resolve",
+                SceneEditorMaterialFaceMetricsResolve(0, 0, 0, &metrics));
+    assert_close("material_face_metrics_plane_small_width", metrics.width, 2.0, 1e-12);
+    assert_close("material_face_metrics_plane_small_height", metrics.height, 1.0, 1e-12);
+    assert_true("material_face_metrics_plane_small_ground",
+                SceneEditorMaterialFaceMetricsResolveGroundedUV(0,
+                                                                0,
+                                                                0,
+                                                                0.75,
+                                                                0.50,
+                                                                &grounded_small_u,
+                                                                &grounded_small_v));
+
+    assert_true("material_face_metrics_plane_wide_ground",
+                SceneEditorMaterialFaceMetricsResolveGroundedUV(1,
+                                                                1,
+                                                                0,
+                                                                0.75,
+                                                                0.50,
+                                                                &grounded_wide_u,
+                                                                &grounded_wide_v));
+    assert_true("material_face_metrics_plane_width_scales_grounded_u",
+                grounded_wide_u > grounded_small_u);
+    assert_close("material_face_metrics_plane_height_keeps_grounded_v",
+                 grounded_wide_v,
+                 grounded_small_v,
+                 1e-12);
+
+    assert_true("material_face_metrics_prism_side_resolve",
+                SceneEditorMaterialFaceMetricsResolve(2, 2, 2, &metrics));
+    assert_close("material_face_metrics_prism_side_width", metrics.width, 4.0, 1e-12);
+    assert_close("material_face_metrics_prism_side_height", metrics.height, 2.0, 1e-12);
+    assert_true("material_face_metrics_prism_end_resolve",
+                SceneEditorMaterialFaceMetricsResolve(2, 2, 4, &metrics));
+    assert_close("material_face_metrics_prism_end_width", metrics.width, 3.0, 1e-12);
+    assert_close("material_face_metrics_prism_end_height", metrics.height, 2.0, 1e-12);
+    assert_true("material_face_metrics_prism_side_ground",
+                SceneEditorMaterialFaceMetricsResolveGroundedUV(2,
+                                                                2,
+                                                                2,
+                                                                0.75,
+                                                                0.75,
+                                                                &grounded_prism_side_u,
+                                                                &grounded_prism_side_v));
+    assert_true("material_face_metrics_prism_end_ground",
+                SceneEditorMaterialFaceMetricsResolveGroundedUV(2,
+                                                                2,
+                                                                4,
+                                                                0.75,
+                                                                0.75,
+                                                                &grounded_prism_end_u,
+                                                                &grounded_prism_end_v));
+    assert_true("material_face_metrics_prism_width_changes_grounded_u",
+                grounded_prism_side_u > grounded_prism_end_u);
+    assert_close("material_face_metrics_prism_matching_depth_keeps_grounded_v",
+                 grounded_prism_side_v,
+                 grounded_prism_end_v,
+                 1e-12);
+
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_face_metrics_orients_vertical_faces_to_world_up(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_material_face_orientation\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"vertical_swapped\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":2.0,\"height\":6.0,"
+              "\"frame\":{\"origin\":{\"x\":-4.0,\"y\":0.0,\"z\":0.0},"
+              "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+              "\"axis_v\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+              "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":-4.0,\"y\":0.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"horizontal_default\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":3.0,\"height\":5.0,"
+              "\"frame\":{\"origin\":{\"x\":4.0,\"y\":0.0,\"z\":0.0},"
+              "\"axis_u\":{\"x\":0.0,\"y\":1.0,\"z\":0.0},"
+              "\"axis_v\":{\"x\":-1.0,\"y\":0.0,\"z\":0.0},"
+              "\"normal\":{\"x\":0.0,\"y\":0.0,\"z\":1.0}}},"
+            "\"transform\":{\"position\":{\"x\":4.0,\"y\":0.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":4.0,\"z\":18.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    SceneEditorMaterialFaceMetrics metrics = {0};
+    double grounded_u = 0.0;
+    double grounded_v = 0.0;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.integratorMode = 1;
+
+    assert_true("material_face_metrics_orientation_runtime_apply_ok",
+                runtime_scene_bridge_apply_json(runtime_json, &summary));
+
+    assert_true("material_face_metrics_orientation_vertical_resolve",
+                SceneEditorMaterialFaceMetricsResolve(0, 0, 0, &metrics));
+    assert_true("material_face_metrics_orientation_vertical_swaps_axes", metrics.swapAxes);
+    assert_true("material_face_metrics_orientation_vertical_keeps_up", !metrics.flipV);
+    assert_close("material_face_metrics_orientation_vertical_width", metrics.width, 6.0, 1e-12);
+    assert_close("material_face_metrics_orientation_vertical_height", metrics.height, 2.0, 1e-12);
+    assert_true("material_face_metrics_orientation_vertical_ground",
+                SceneEditorMaterialFaceMetricsResolveGroundedUV(0,
+                                                                0,
+                                                                0,
+                                                                0.25,
+                                                                0.75,
+                                                                &grounded_u,
+                                                                &grounded_v));
+    assert_close("material_face_metrics_orientation_vertical_ground_u",
+                 grounded_u,
+                 2.0,
+                 1e-12);
+    assert_close("material_face_metrics_orientation_vertical_ground_v",
+                 grounded_v,
+                 0.0,
+                 1e-12);
+
+    assert_true("material_face_metrics_orientation_horizontal_resolve",
+                SceneEditorMaterialFaceMetricsResolve(1, 1, 0, &metrics));
+    assert_true("material_face_metrics_orientation_horizontal_swaps_axes", metrics.swapAxes);
+    assert_true("material_face_metrics_orientation_horizontal_flips_u", metrics.flipU);
+    assert_true("material_face_metrics_orientation_horizontal_keeps_v", !metrics.flipV);
+    assert_close("material_face_metrics_orientation_horizontal_width", metrics.width, 5.0, 1e-12);
+    assert_close("material_face_metrics_orientation_horizontal_height", metrics.height, 3.0, 1e-12);
+
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_face_preview_display_size_respects_face_aspect(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_material_face_preview_display\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"wide_plane\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":5.0,\"height\":2.0,"
+              "\"frame\":{\"origin\":{\"x\":-4.0,\"y\":0.0,\"z\":0.0},"
+              "\"axis_u\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+              "\"axis_v\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+              "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":-4.0,\"y\":0.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"tall_plane\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":1.0,\"height\":5.0,"
+              "\"frame\":{\"origin\":{\"x\":4.0,\"y\":0.0,\"z\":0.0},"
+              "\"axis_u\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+              "\"axis_v\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+              "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":4.0,\"y\":0.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":4.0,\"z\":18.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    int wide_width = 0;
+    int wide_height = 0;
+    int tall_width = 0;
+    int tall_height = 0;
+    int neutral_width = 0;
+    int neutral_height = 0;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.integratorMode = 1;
+    sceneSettings.objectCount = 2;
+
+    assert_true("material_face_preview_display_runtime_apply_ok",
+                runtime_scene_bridge_apply_json(runtime_json, &summary));
+    assert_true("material_face_preview_display_wide",
+                MaterialEditorFacePreviewResolveDisplaySize(&sceneSettings.sceneObjects[0],
+                                                           0,
+                                                           0,
+                                                           240,
+                                                           &wide_width,
+                                                           &wide_height));
+    assert_true("material_face_preview_display_tall",
+                MaterialEditorFacePreviewResolveDisplaySize(&sceneSettings.sceneObjects[1],
+                                                           1,
+                                                           0,
+                                                           240,
+                                                           &tall_width,
+                                                           &tall_height));
+    assert_true("material_face_preview_display_neutral",
+                MaterialEditorFacePreviewResolveDisplaySize(&sceneSettings.sceneObjects[0],
+                                                           0,
+                                                           -1,
+                                                           240,
+                                                           &neutral_width,
+                                                           &neutral_height));
+    assert_true("material_face_preview_display_wide_landscape", wide_width > wide_height);
+    assert_true("material_face_preview_display_tall_portrait", tall_height > tall_width);
+    assert_true("material_face_preview_display_neutral_square",
+                neutral_width == neutral_height);
+    assert_true("material_face_preview_display_clamped_max",
+                wide_width <= 176 && wide_height <= 176 &&
+                tall_width <= 176 && tall_height <= 176);
+
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 static int test_material_editor_preview_picks_and_selects_visible_triangle(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -2710,6 +3030,7 @@ static int test_material_editor_preview_uses_v2_base_and_overlay_stack(void) {
             found_stack_sample = SceneEditorMaterialPreviewEvaluateTextureColorForFace(
                 &sceneSettings.sceneObjects[0],
                 0,
+                0,
                 1,
                 0,
                 2,
@@ -2727,6 +3048,147 @@ static int test_material_editor_preview_uses_v2_base_and_overlay_stack(void) {
     assert_true("material_preview_v2_stack_mask_positive", stack_mask > 0.0);
 
     SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_preview_surface_eval_active_face_detail_preview_contract(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    SceneObject object;
+    RuntimeMaterialSurfaceEval object_eval = {0};
+    RuntimeMaterialSurfaceEval face_eval = {0};
+    RuntimeMaterialSurfaceEval second_face_eval = {0};
+    Uint8 shade_r = 0u;
+    Uint8 shade_g = 0u;
+    Uint8 shade_b = 0u;
+    bool found_face_detail = false;
+    bool found_uv_variation = false;
+
+    memset(&object, 0, sizeof(object));
+    object.color = 0x6c7278;
+    object.roughness = 0.18;
+    object.reflectivity = 0.64;
+    object.emissiveStrength = 0.12;
+    object.alpha = 1.0;
+    object.textureId = RUNTIME_MATERIAL_TEXTURE_3D_NONE;
+    object.textureStrength = 0.0;
+    object.textureScale = 1.0;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialFacePlacementResetAll();
+    sceneSettings.objectCount = 1;
+    sceneSettings.sceneObjects[0] = object;
+
+    assert_true("material_preview_surface_eval_object_base",
+                MaterialPreviewSurfaceEvaluateObject(&sceneSettings.sceneObjects[0],
+                                                    0,
+                                                    NULL,
+                                                    0.25,
+                                                    0.25,
+                                                    &object_eval));
+    assert_true("material_preview_surface_eval_face_override_kind",
+                SceneEditorMaterialFacePlacementApplyTextureKind(&sceneSettings.sceneObjects[0],
+                                                                 0,
+                                                                 2,
+                                                                 RUNTIME_MATERIAL_TEXTURE_3D_RUST));
+    assert_true("material_preview_surface_eval_face_override_strength",
+                SceneEditorMaterialFacePlacementApplyNormalizedValue(
+                    &sceneSettings.sceneObjects[0],
+                    0,
+                    2,
+                    SCENE_EDITOR_MATERIAL_FACE_PLACEMENT_STRENGTH,
+                    1.0));
+    assert_true("material_preview_surface_eval_face_override_scale",
+                SceneEditorMaterialFacePlacementApplyNormalizedValue(
+                    &sceneSettings.sceneObjects[0],
+                    0,
+                    2,
+                    SCENE_EDITOR_MATERIAL_FACE_PLACEMENT_SCALE,
+                    0.46));
+    assert_true("material_preview_surface_eval_face_override_pattern",
+                SceneEditorMaterialFacePlacementApplyTextureParamPatternMode(
+                    &sceneSettings.sceneObjects[0],
+                    0,
+                    2,
+                    RUNTIME_MATERIAL_TEXTURE_3D_PATTERN_PATCH));
+    assert_true("material_preview_surface_eval_face_override_damage",
+                SceneEditorMaterialFacePlacementApplyTextureParamNormalizedValue(
+                    &sceneSettings.sceneObjects[0],
+                    0,
+                    2,
+                    SCENE_EDITOR_MATERIAL_TEXTURE_PARAM_SURFACE_DAMAGE,
+                    0.72));
+
+    for (int u = 1; u < 9 && !found_face_detail; ++u) {
+        for (int v = 1; v < 9 && !found_face_detail; ++v) {
+            double sample_u = (double)u / 10.0;
+            double sample_v = (double)v / 10.0;
+            if (!MaterialPreviewSurfaceEvaluateFace(&sceneSettings.sceneObjects[0],
+                                                    0,
+                                                    2,
+                                                    sample_u,
+                                                    sample_v,
+                                                    &face_eval)) {
+                continue;
+            }
+            if (face_eval.textureMask > 0.0 &&
+                (fabs(face_eval.colorR - object_eval.colorR) > 1e-6 ||
+                 fabs(face_eval.colorG - object_eval.colorG) > 1e-6 ||
+                 fabs(face_eval.colorB - object_eval.colorB) > 1e-6 ||
+                 fabs(face_eval.roughness - object_eval.roughness) > 1e-6 ||
+                 fabs(face_eval.reflectivity - object_eval.reflectivity) > 1e-6)) {
+                found_face_detail = true;
+            }
+        }
+    }
+    assert_true("material_preview_surface_eval_face_detail_found", found_face_detail);
+
+    assert_true("material_preview_surface_eval_face_first_sample",
+                MaterialPreviewSurfaceEvaluateFace(&sceneSettings.sceneObjects[0],
+                                                   0,
+                                                   2,
+                                                   0.15,
+                                                   0.20,
+                                                   &face_eval));
+    for (int u = 2; u < 10 && !found_uv_variation; ++u) {
+        for (int v = 2; v < 10 && !found_uv_variation; ++v) {
+            double sample_u = (double)u / 10.0;
+            double sample_v = (double)v / 10.0;
+            if (!MaterialPreviewSurfaceEvaluateFace(&sceneSettings.sceneObjects[0],
+                                                    0,
+                                                    2,
+                                                    sample_u,
+                                                    sample_v,
+                                                    &second_face_eval)) {
+                continue;
+            }
+            if (fabs(face_eval.colorR - second_face_eval.colorR) > 1e-6 ||
+                fabs(face_eval.colorG - second_face_eval.colorG) > 1e-6 ||
+                fabs(face_eval.colorB - second_face_eval.colorB) > 1e-6 ||
+                fabs(face_eval.textureMask - second_face_eval.textureMask) > 1e-6) {
+                found_uv_variation = true;
+            }
+        }
+    }
+    assert_true("material_preview_surface_eval_face_uv_variation", found_uv_variation);
+
+    MaterialPreviewSurfaceShadePixel(&face_eval,
+                                     &sceneSettings.sceneObjects[0],
+                                     0.15,
+                                     0.20,
+                                     232u,
+                                     232u,
+                                     232u,
+                                     &shade_r,
+                                     &shade_g,
+                                     &shade_b);
+    assert_true("material_preview_surface_eval_face_shade_visible",
+                shade_r != 232u || shade_g != 232u || shade_b != 232u);
+
+    SceneEditorMaterialFacePlacementResetAll();
     sceneSettings = saved_scene;
     animSettings = saved_anim;
     return 0;
@@ -2759,6 +3221,7 @@ static int test_material_editor_face_group_texture_island_and_override_controls(
 
     SceneEditorMaterialPreviewEvaluateTextureColorForFace(&object,
                                                           0,
+                                                          0,
                                                           2,
                                                           0,
                                                           4,
@@ -2769,6 +3232,7 @@ static int test_material_editor_face_group_texture_island_and_override_controls(
                                                           &tri_a,
                                                           &mask_a);
     SceneEditorMaterialPreviewEvaluateTextureColorForFace(&object,
+                                                          0,
                                                           0,
                                                           2,
                                                           1,
@@ -2839,6 +3303,7 @@ static int test_material_editor_face_group_texture_island_and_override_controls(
             found_face_rust = SceneEditorMaterialPreviewEvaluateTextureColorForFace(
                 &sceneSettings.sceneObjects[0],
                 0,
+                0,
                 2,
                 0,
                 4,
@@ -2881,6 +3346,89 @@ static int test_material_editor_face_group_texture_island_and_override_controls(
     assert_true("material_face_override_reset_clears",
                 !SceneEditorMaterialFacePlacementHasOverride(0, 2));
 
+    SceneEditorMaterialFacePlacementResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_face_override_inherits_active_stack_layer(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    SceneEditorMaterialPreviewTriangleAddress address = {0};
+    SceneEditorMaterialFacePlacement placement;
+    SDL_Color base = {128, 128, 132, 235};
+    SDL_Color sampled = {0, 0, 0, 0};
+    double mask = 0.0;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialFacePlacementResetAll();
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_POLYGON, 0.0, 0.0, 1.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].color = 0x808084;
+
+    stack.layers[0] = RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID);
+    stack.layers[1] = RuntimeMaterialTextureLayerMakeOverlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_RUST);
+    stack.layers[1].placement.strength = 1.0;
+    stack.layers[1].opacity = 1.0;
+    stack.layerCount = 2;
+    assert_true("material_face_stack_seed_set",
+                SceneEditorMaterialStackSetObjectStack(0, &stack));
+
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+    assert_true("material_face_stack_active_overlay",
+                MaterialEditorSetActiveLayerIndex(1));
+
+    address.sceneObjectIndex = 0;
+    address.primitiveIndex = 0;
+    address.triangleIndex = 4;
+    address.localTriangleIndex = 4;
+    address.faceGroupIndex = 2;
+    assert_true("material_face_stack_select_face",
+                MaterialEditorSetTriangleSelection(&address));
+    assert_true("material_face_stack_param_applies",
+                MaterialEditorApplyTextureParamValueToFocused(
+                    MATERIAL_EDITOR_TEXTURE_PARAM_COVERAGE,
+                    0.81));
+    assert_true("material_face_stack_selection_preserved",
+                MaterialEditorSelectedTriangleCount() == 1);
+    assert_true("material_face_stack_active_group_preserved",
+                MaterialEditorGetActiveFaceGroupIndex() == 2);
+    assert_true("material_face_stack_override_exists",
+                SceneEditorMaterialFacePlacementHasOverride(0, 2));
+    placement = SceneEditorMaterialFacePlacementGetEffective(&sceneSettings.sceneObjects[0], 0, 2);
+    assert_true("material_face_stack_override_tracks_layer",
+                placement.layerIndex == 1);
+    assert_true("material_face_stack_override_keeps_rust_texture",
+                placement.textureId == RUNTIME_MATERIAL_TEXTURE_3D_RUST);
+    assert_close("material_face_stack_override_coverage_value",
+                 placement.params.coverage,
+                 0.81,
+                 1e-12);
+    assert_true("material_face_stack_preview_still_textured",
+                SceneEditorMaterialPreviewEvaluateTextureColorForFace(
+                    &sceneSettings.sceneObjects[0],
+                    0,
+                    0,
+                    2,
+                    0,
+                    4,
+                    0.50,
+                    0.25,
+                    0.25,
+                    base,
+                    &sampled,
+                    &mask));
+    assert_true("material_face_stack_preview_color_changed",
+                material_preview_color_differs(base, sampled));
+    assert_true("material_face_stack_preview_mask_positive",
+                mask > 1e-6);
+
+    SceneEditorMaterialStackResetAll();
     SceneEditorMaterialFacePlacementResetAll();
     sceneSettings = saved_scene;
     animSettings = saved_anim;
@@ -3349,10 +3897,15 @@ int run_test_runtime_scene_editor_tests(void) {
     test_material_editor_object_projector_centers_focused_object();
     test_material_editor_focused_zoom_accumulates_around_object_fit();
     test_material_editor_preview_resolves_focused_triangle_substrate();
+    test_material_editor_face_metrics_ground_uv_scales_with_dimensions();
+    test_material_editor_face_metrics_orients_vertical_faces_to_world_up();
+    test_material_editor_face_preview_display_size_respects_face_aspect();
     test_material_editor_preview_picks_and_selects_visible_triangle();
     test_material_editor_preview_texture_color_responds_to_controls();
     test_material_editor_preview_uses_v2_base_and_overlay_stack();
+    test_material_preview_surface_eval_active_face_detail_preview_contract();
     test_material_editor_face_group_texture_island_and_override_controls();
+    test_material_editor_face_override_inherits_active_stack_layer();
     test_editor_mode_router_capabilities_2d();
     test_editor_mode_router_capabilities_3d_scaffold();
     test_editor_mode_router_capabilities_3d_native();

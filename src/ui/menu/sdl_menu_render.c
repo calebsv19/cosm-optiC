@@ -92,6 +92,18 @@ static void render_centered_text_color(SDL_Renderer *renderer,
     (void)ray_tracing_text_draw_utf8(renderer, font, text, color, &textRect);
 }
 
+static const char* menu_upscale_mode_button_label(void) {
+    switch ((Runtime3DUpscaleMode)animSettings.upscaleMode3D) {
+        case RUNTIME_3D_UPSCALE_MODE_NEAREST:
+            return "Upscale: Nearest";
+        case RUNTIME_3D_UPSCALE_MODE_BILINEAR:
+            return "Upscale: Bilinear";
+        case RUNTIME_3D_UPSCALE_MODE_OFF:
+        default:
+            return "Upscale: OFF";
+    }
+}
+
 void menu_render_frame(SDL_Renderer* renderer,
                        TTF_Font* font,
                        MenuRuntimeState* state,
@@ -251,6 +263,12 @@ void menu_render_frame(SDL_Renderer* renderer,
 
     const char* topFillLabel = animSettings.topFillLightEnabled ? "Top Fill: ON" : "Top Fill: OFF";
     menu_render_draw_button_rect(renderer, font, &buttons.topFillRect, topFillLabel, animSettings.topFillLightEnabled);
+
+    menu_render_draw_button_rect(renderer,
+                                 font,
+                                 &buttons.upscaleModeRect,
+                                 menu_upscale_mode_button_label(),
+                                 animSettings.upscaleMode3D != RUNTIME_3D_UPSCALE_MODE_OFF);
 
     if (buttons.showLightHeight) {
         char heightLabel[64];

@@ -47,7 +47,7 @@ Future adapters may layer on:
 - `core_trace`
 
 ## Status
-Bootstrap implementation truth-locked with standalone unit tests and four proving hosts (`v0.4.1`):
+Bootstrap implementation truth-locked with standalone unit tests and four proving hosts (`v0.4.2`):
 - `gravity_orbit_sim` fixed-step runtime-loop adapter
 - `behavior_sim` ordered pass-execution adapter
 - `physics_sim` scene-level substep pass network plus 3D solver first-pass shell adapter
@@ -66,6 +66,7 @@ make -C shared/core/core_sim test
 ```
 
 ## Change Notes
+- `0.4.2`: patch-level pedantic cleanup: the internal FNV-1a hash constants now use typed static constants instead of oversized enum values, removing standards-warning noise without changing runtime behavior.
 - `0.4.1`: patch hardening for control-plane edge behavior: finite policy/frame-dt validation is now explicit, stage-timing helpers reject non-finite mark data, and the README now truth-locks helper/lifecycle boundaries and paused/single-step semantics.
 - `0.4.0`: additive Step 3 artifact-record helpers: public version string,
   deterministic pass-order hashing, artifact run-header initialization, and

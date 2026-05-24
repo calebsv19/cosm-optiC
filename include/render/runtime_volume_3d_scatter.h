@@ -19,8 +19,8 @@ typedef struct {
 RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(
     const RuntimeScene3D* scene,
     const Ray3D* ray,
-    double t_min,
-    double t_max,
+    double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
     const RuntimeNative3DSamplingContext* sampling);
 
 void RuntimeVolume3DScatter_ResetTuning(void);

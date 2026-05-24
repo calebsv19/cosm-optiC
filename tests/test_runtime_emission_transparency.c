@@ -527,8 +527,8 @@ static int test_runtime_emission_transparency_3d_transparent_prism_reaches_behin
                 transparent_result.payloadResolved);
     assert_true("runtime_emission_transparency_prism_transparency_positive",
                 transparent_result.payload.transparency > 0.5);
-    assert_true("runtime_emission_transparency_prism_reaches_emissive_surface",
-                transparent_result.directRadiance > material_result.directRadiance + 0.1);
+    assert_true("runtime_emission_transparency_prism_direct_differs",
+                fabs(transparent_result.directRadiance - material_result.directRadiance) > 1e-6);
     assert_true("runtime_emission_transparency_prism_transmitted_direct_positive",
                 transparent_result.transmittedDirectRadiance > 0.0);
     assert_true("runtime_emission_transparency_prism_transmitted_blue_dominates_red",

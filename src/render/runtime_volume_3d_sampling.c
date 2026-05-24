@@ -2,17 +2,37 @@
 
 #include <math.h>
 
-static bool runtime_volume_3d_sampling_intersect_axis(double origin,
-                                                      double direction,
-                                                      double slab_min,
-                                                      double slab_max,
+static double runtime_volume_3d_sampling_zero_length(void) {
+    double zero [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    return zero;
+}
+
+static double runtime_volume_3d_sampling_length_epsilon(void) {
+    double epsilon [[fisics::dim(length)]] [[fisics::unit(meter)]] = 1e-9;
+    return epsilon;
+}
+
+static double runtime_volume_3d_sampling_world_to_local(
+    double world_value [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double world_origin [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double voxel_size [[fisics::dim(length)]] [[fisics::unit(meter)]]) {
+    double local = (world_value - world_origin) / voxel_size;
+    return local;
+}
+
+static bool runtime_volume_3d_sampling_intersect_axis(
+    double origin [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double direction,
+    double slab_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double slab_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
                                                       double* io_t_enter,
                                                       double* io_t_exit) {
-    double t0 = 0.0;
-    double t1 = 0.0;
+    double t0 [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double t1 [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double epsilon = runtime_volume_3d_sampling_length_epsilon();
 
     if (!io_t_enter || !io_t_exit) return false;
-    if (fabs(direction) <= 1e-9) {
+    if (fabs(direction) <= epsilon) {
         return origin >= slab_min && origin <= slab_max;
     }
 
@@ -66,12 +86,12 @@ bool RuntimeVolume3D_HasSampleableDensity(const RuntimeVolumeAttachment3D* attac
 
 bool RuntimeVolume3D_ClipRayToBounds(const RuntimeVolumeAttachment3D* attachment,
                                      const Ray3D* ray,
-                                     double t_min,
-                                     double t_max,
+                                     double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                     double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
                                      double* out_t_enter,
                                      double* out_t_exit) {
-    double t_enter = t_min;
-    double t_exit = t_max;
+    double t_enter [[fisics::dim(length)]] [[fisics::unit(meter)]] = t_min;
+    double t_exit [[fisics::dim(length)]] [[fisics::unit(meter)]] = t_max;
 
     if (!attachment || !ray || !out_t_enter || !out_t_exit) return false;
     if (!RuntimeVolume3D_HasSampleableDensity(attachment)) return false;
@@ -131,9 +151,9 @@ float RuntimeVolume3D_SampleDensityAtPosition(const RuntimeVolumeAttachment3D* a
     }
 
     grid = &attachment->grid;
-    local_x = (position.x - grid->origin.x) / grid->voxelSize;
-    local_y = (position.y - grid->origin.y) / grid->voxelSize;
-    local_z = (position.z - grid->origin.z) / grid->voxelSize;
+    local_x = runtime_volume_3d_sampling_world_to_local(position.x, grid->origin.x, grid->voxelSize);
+    local_y = runtime_volume_3d_sampling_world_to_local(position.y, grid->origin.y, grid->voxelSize);
+    local_z = runtime_volume_3d_sampling_world_to_local(position.z, grid->origin.z, grid->voxelSize);
     if (local_x < 0.0 || local_y < 0.0 || local_z < 0.0 ||
         local_x >= (double)grid->gridW ||
         local_y >= (double)grid->gridH ||

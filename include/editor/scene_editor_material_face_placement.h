@@ -30,6 +30,7 @@ typedef struct SceneEditorMaterialFacePlacement {
     bool hasOverride;
     int sceneObjectIndex;
     int faceGroupIndex;
+    int layerIndex;
     int textureId;
     double offsetU;
     double offsetV;

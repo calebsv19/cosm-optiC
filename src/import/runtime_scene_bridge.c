@@ -56,6 +56,21 @@ static void scaffold_state_reset(void) {
     memset(&g_last_3d_primitive_seeds, 0, sizeof(g_last_3d_primitive_seeds));
 }
 
+static double runtime_scene_bridge_scale_scene_length(
+    double scene_length [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double world_scale) {
+    double authored_length [[fisics::dim(length)]] [[fisics::unit(meter)]] = scene_length;
+    return authored_length * world_scale;
+}
+
+static double runtime_scene_bridge_scale_scene_length_axis(
+    double scene_length [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double authored_axis_scale,
+    double world_scale) {
+    double authored_length [[fisics::dim(length)]] [[fisics::unit(meter)]] = scene_length;
+    return authored_length * fabs(authored_axis_scale) * world_scale;
+}
+
 static bool primitive_seed_kind_supported_by_r0(RuntimeSceneBridgePrimitiveKind kind) {
     return kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE ||
            kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_RECT_PRISM;
@@ -190,9 +205,9 @@ static void digest_append_primitive(json_object *object_obj,
     json_object *frame = NULL;
     json_object *origin_source = NULL;
     json_object *position_source = NULL;
-    double width = 0.0;
-    double height = 0.0;
-    double depth = 0.0;
+    double width [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double height [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double depth [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
     bool has_width = false;
     bool has_height = false;
     bool has_depth = false;
@@ -214,11 +229,13 @@ static void digest_append_primitive(json_object *object_obj,
             json_object_is_type(frame, json_type_object) &&
             json_object_object_get_ex(frame, "origin", &origin_source) &&
             json_object_is_type(origin_source, json_type_object)) {
-            double ox = 0.0, oy = 0.0, oz = 0.0;
+            double ox [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+            double oy [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+            double oz [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
             if (runtime_scene_bridge_parse_vec3(frame, "origin", &ox, &oy, &oz)) {
-                entry->origin_x = ox * world_scale;
-                entry->origin_y = oy * world_scale;
-                entry->origin_z = oz * world_scale;
+                entry->origin_x = runtime_scene_bridge_scale_scene_length(ox, world_scale);
+                entry->origin_y = runtime_scene_bridge_scale_scene_length(oy, world_scale);
+                entry->origin_z = runtime_scene_bridge_scale_scene_length(oz, world_scale);
             }
         }
         has_width = runtime_scene_bridge_parse_double_field(primitive_obj, "width", &width);
@@ -234,20 +251,26 @@ static void digest_append_primitive(json_object *object_obj,
         json_object *jy = NULL;
         json_object *jz = NULL;
         if (json_object_object_get_ex(position_source, "x", &jx)) {
-            entry->origin_x = json_object_get_double(jx) * world_scale;
+            double scene_x [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+                json_object_get_double(jx);
+            entry->origin_x = runtime_scene_bridge_scale_scene_length(scene_x, world_scale);
         }
         if (json_object_object_get_ex(position_source, "y", &jy)) {
-            entry->origin_y = json_object_get_double(jy) * world_scale;
+            double scene_y [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+                json_object_get_double(jy);
+            entry->origin_y = runtime_scene_bridge_scale_scene_length(scene_y, world_scale);
         }
         if (json_object_object_get_ex(position_source, "z", &jz)) {
-            entry->origin_z = json_object_get_double(jz) * world_scale;
+            double scene_z [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+                json_object_get_double(jz);
+            entry->origin_z = runtime_scene_bridge_scale_scene_length(scene_z, world_scale);
         }
     }
 
     entry->has_dimensions = has_width || has_height || has_depth;
-    if (has_width) entry->width = width * world_scale;
-    if (has_height) entry->height = height * world_scale;
-    if (has_depth) entry->depth = depth * world_scale;
+    if (has_width) entry->width = runtime_scene_bridge_scale_scene_length(width, world_scale);
+    if (has_height) entry->height = runtime_scene_bridge_scale_scene_length(height, world_scale);
+    if (has_depth) entry->depth = runtime_scene_bridge_scale_scene_length(depth, world_scale);
 
     g_last_3d_digest.primitive_count += 1;
     if (kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE) {
@@ -283,9 +306,9 @@ static void primitive_seed_append(json_object *object_obj,
                                                                              "object_type");
     json_object *frame = NULL;
     json_object *position_source = NULL;
-    double width = 0.0;
-    double height = 0.0;
-    double depth = 0.0;
+    double width [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double height [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double depth [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
     double scale_x = 1.0;
     double scale_y = 1.0;
     double scale_z = 1.0;
@@ -329,13 +352,19 @@ static void primitive_seed_append(json_object *object_obj,
             json_object *jy = NULL;
             json_object *jz = NULL;
             if (json_object_object_get_ex(position_source, "x", &jx)) {
-                entry->origin_x = json_object_get_double(jx) * world_scale;
+                double scene_x [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+                    json_object_get_double(jx);
+                entry->origin_x = runtime_scene_bridge_scale_scene_length(scene_x, world_scale);
             }
             if (json_object_object_get_ex(position_source, "y", &jy)) {
-                entry->origin_y = json_object_get_double(jy) * world_scale;
+                double scene_y [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+                    json_object_get_double(jy);
+                entry->origin_y = runtime_scene_bridge_scale_scene_length(scene_y, world_scale);
             }
             if (json_object_object_get_ex(position_source, "z", &jz)) {
-                entry->origin_z = json_object_get_double(jz) * world_scale;
+                double scene_z [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+                    json_object_get_double(jz);
+                entry->origin_z = runtime_scene_bridge_scale_scene_length(scene_z, world_scale);
             }
         }
         if (json_object_object_get_ex(transform_obj, "scale", &scale) &&
@@ -350,18 +379,18 @@ static void primitive_seed_append(json_object *object_obj,
     }
 
     if (primitive_obj && json_object_is_type(primitive_obj, json_type_object)) {
-        double ox = 0.0;
-        double oy = 0.0;
-        double oz = 0.0;
+        double ox [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+        double oy [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+        double oz [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
         double ax = 0.0;
         double ay = 0.0;
         double az = 0.0;
         if (json_object_object_get_ex(primitive_obj, "frame", &frame) &&
             json_object_is_type(frame, json_type_object)) {
             if (runtime_scene_bridge_parse_vec3(frame, "origin", &ox, &oy, &oz)) {
-                entry->origin_x = ox * world_scale;
-                entry->origin_y = oy * world_scale;
-                entry->origin_z = oz * world_scale;
+                entry->origin_x = runtime_scene_bridge_scale_scene_length(ox, world_scale);
+                entry->origin_y = runtime_scene_bridge_scale_scene_length(oy, world_scale);
+                entry->origin_z = runtime_scene_bridge_scale_scene_length(oz, world_scale);
             }
             if (runtime_scene_bridge_parse_vec3(frame, "axis_u", &ax, &ay, &az)) {
                 entry->axis_u_x = ax;
@@ -385,9 +414,15 @@ static void primitive_seed_append(json_object *object_obj,
     }
 
     entry->has_dimensions = has_width || has_height || has_depth;
-    entry->width = has_width ? width * fabs(scale_x) * world_scale : 0.0;
-    entry->height = has_height ? height * fabs(scale_y) * world_scale : 0.0;
-    entry->depth = has_depth ? depth * fabs(scale_z) * world_scale : 0.0;
+    entry->width = has_width
+                       ? runtime_scene_bridge_scale_scene_length_axis(width, scale_x, world_scale)
+                       : 0.0;
+    entry->height = has_height
+                        ? runtime_scene_bridge_scale_scene_length_axis(height, scale_y, world_scale)
+                        : 0.0;
+    entry->depth = has_depth
+                       ? runtime_scene_bridge_scale_scene_length_axis(depth, scale_z, world_scale)
+                       : 0.0;
 
     g_last_3d_primitive_seeds.primitive_count += 1;
     if (kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE) {
@@ -473,7 +508,9 @@ static void apply_objects(json_object *root,
         json_object *scale = NULL;
         const char *type_str = NULL;
         const char *primitive_kind_str = NULL;
-        double x = 0.0, y = 0.0, z = 0.0;
+        double x [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+        double y [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+        double z [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
         double sx = 1.0, sy = 1.0, sz = 1.0;
         bool is_circle = true;
         bool is_plane = false;
@@ -605,9 +642,9 @@ static void apply_objects(json_object *root,
             InitObject(dst, OBJECT_POLYGON, x, y, 0.0, 0.0, k_default_poly, 4);
             if (is_box) g_last_3d_scaffold.box_count++;
         }
-        dst->x *= world_scale;
-        dst->y *= world_scale;
-        dst->z = z * world_scale;
+        dst->x = runtime_scene_bridge_scale_scene_length(x, world_scale);
+        dst->y = runtime_scene_bridge_scale_scene_length(y, world_scale);
+        dst->z = runtime_scene_bridge_scale_scene_length(z, world_scale);
         dst->scale = ((sx + sy + sz) / 3.0) * world_scale;
         if (dst->scale <= 0.01) dst->scale = 0.01;
         dst->guideOnly = is_guide_only;

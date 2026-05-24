@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "editor/material_editor_face_preview.h"
 #include "editor/material_editor_authored_texture_binding.h"
 #include "camera/camera.h"
 #include "config/config_manager.h"
@@ -686,6 +687,40 @@ static void material_editor_apply_object_scope_to_all_faces(int scene_object_ind
     SceneEditorMaterialFacePlacementResetObject(scene_object_index);
 }
 
+static bool material_editor_seed_face_override_from_active_layer(const SceneObject* obj,
+                                                                 int scene_object_index,
+                                                                 int face_group_index) {
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    SceneEditorMaterialFacePlacement placement = {0};
+    RuntimeMaterialTextureLayer layer = {0};
+    int layer_index = 0;
+    if (!obj || scene_object_index < 0 || face_group_index < 0) return false;
+    if (SceneEditorMaterialFacePlacementHasOverride(scene_object_index, face_group_index)) {
+        return true;
+    }
+    if (!SceneEditorMaterialStackGetEffectiveObjectStack(obj, scene_object_index, &stack)) {
+        return true;
+    }
+    layer_index = MaterialEditorLayerModelGetActiveIndex(obj, scene_object_index);
+    if (layer_index < 0 || layer_index >= stack.layerCount) return true;
+    layer = stack.layers[layer_index];
+    placement = SceneEditorMaterialFacePlacementGetEffective(obj,
+                                                             scene_object_index,
+                                                             face_group_index);
+    placement.hasOverride = true;
+    placement.sceneObjectIndex = scene_object_index;
+    placement.faceGroupIndex = face_group_index;
+    placement.layerIndex = layer_index;
+    placement.textureId = layer.placement.textureId;
+    placement.offsetU = layer.placement.offsetU;
+    placement.offsetV = layer.placement.offsetV;
+    placement.scale = layer.placement.scale;
+    placement.strength = layer.placement.strength;
+    placement.rotation = layer.placement.rotation;
+    placement.params = layer.params;
+    return SceneEditorMaterialFacePlacementSetOverride(&placement);
+}
+
 static bool material_editor_get_active_layer(const SceneObject* obj,
                                              RuntimeMaterialTextureStack* out_stack,
                                              RuntimeMaterialTextureLayer* out_layer,
@@ -1096,6 +1131,7 @@ void InitializeMaterialEditor(void) {
     s_layer_scroll_offset = 0;
     MaterialEditorLayerModelReset();
     MaterialEditorAuthoredTextureBindingReset();
+    MaterialEditorFacePreviewReset();
     MaterialEditorClearTriangleSelection();
 }
 
@@ -1317,6 +1353,40 @@ int MaterialEditorRenderPaneControls(SDL_Renderer* renderer,
     }
     cursor_y = material_editor_draw_group_list(renderer, content_bounds, cursor_y, bottom_y, palette);
     return cursor_y;
+}
+
+int MaterialEditorRenderRightPanePreview(SDL_Renderer* renderer,
+                                         SDL_Rect content_bounds,
+                                         int top_y,
+                                         int bottom_y) {
+    SceneObject* obj = material_editor_focused_object();
+    RayTracingThemePalette palette = material_editor_palette();
+    int focused_index = -1;
+    int needed_h = 0;
+    if (!renderer || content_bounds.w <= 0 || top_y >= bottom_y) return top_y;
+    if (!obj) {
+        SDL_Rect label = {content_bounds.x, top_y, content_bounds.w, bottom_y - top_y};
+        RenderLabelTextWrappedLeft(renderer,
+                                   label,
+                                   "No object selected. Select an object in Objects mode first.",
+                                   palette.text_muted);
+        return bottom_y;
+    }
+    focused_index = MaterialEditorResolveFocusedObjectIndex();
+    needed_h = MaterialEditorFacePreviewPreferredHeight(obj,
+                                                        focused_index,
+                                                        s_material_editor_active_face_group_index,
+                                                        content_bounds.w);
+    if (!material_editor_has_room_for_optional_control(top_y, needed_h, bottom_y)) {
+        return top_y;
+    }
+    return MaterialEditorFacePreviewRenderPane(renderer,
+                                               content_bounds,
+                                               top_y,
+                                               obj,
+                                               focused_index,
+                                               s_material_editor_active_face_group_index,
+                                               palette);
 }
 
 void HandleMaterialEditorEvents(SDL_Event* event) {
@@ -1548,6 +1618,7 @@ int MaterialEditorResolveFocusedObjectIndex(void) {
 void MaterialEditorSetFocusedObjectIndex(int index) {
     if (index >= 0 && index < sceneSettings.objectCount) {
         if (s_material_editor_focused_object_index != index) {
+            MaterialEditorFacePreviewInvalidate();
             MaterialEditorClearTriangleSelection();
             s_group_scroll_offset = 0;
             s_layer_scroll_offset = 0;
@@ -1564,6 +1635,7 @@ void MaterialEditorClearTriangleSelection(void) {
     s_material_editor_selected_triangle_count = 0;
     s_material_editor_active_face_group_index = -1;
     material_editor_reset_group_list_layout();
+    MaterialEditorFacePreviewInvalidate();
 }
 
 int MaterialEditorSelectedTriangleCount(void) {
@@ -1593,6 +1665,7 @@ int MaterialEditorGetActiveFaceGroupIndex(void) {
 bool MaterialEditorSetActiveFaceGroupIndex(int face_group_index) {
     if (!material_editor_selected_face_group_exists(face_group_index)) return false;
     s_material_editor_active_face_group_index = face_group_index;
+    MaterialEditorFacePreviewInvalidate();
     return true;
 }
 
@@ -1643,6 +1716,7 @@ bool MaterialEditorAddOverlayLayerToFocused(void) {
     if (!MaterialEditorLayerModelAddOverlay(obj, focused_object_index)) return false;
     material_editor_apply_object_scope_to_all_faces(focused_object_index);
     MarkObjectDirty(obj);
+    MaterialEditorFacePreviewInvalidate();
     return true;
 }
 
@@ -1656,6 +1730,7 @@ bool MaterialEditorDeleteActiveLayer(void) {
     if (!MaterialEditorLayerModelDeleteActiveLayer(obj, focused_object_index)) return false;
     material_editor_apply_object_scope_to_all_faces(focused_object_index);
     MarkObjectDirty(obj);
+    MaterialEditorFacePreviewInvalidate();
     return true;
 }
 
@@ -1669,6 +1744,7 @@ bool MaterialEditorMoveActiveLayer(int direction) {
     if (!MaterialEditorLayerModelMoveActiveLayer(obj, focused_object_index, direction)) return false;
     material_editor_apply_object_scope_to_all_faces(focused_object_index);
     MarkObjectDirty(obj);
+    MaterialEditorFacePreviewInvalidate();
     return true;
 }
 
@@ -1682,6 +1758,7 @@ bool MaterialEditorToggleActiveLayerEnabled(void) {
     if (!MaterialEditorLayerModelToggleActiveLayerEnabled(obj, focused_object_index)) return false;
     material_editor_apply_object_scope_to_all_faces(focused_object_index);
     MarkObjectDirty(obj);
+    MaterialEditorFacePreviewInvalidate();
     return true;
 }
 
@@ -1695,6 +1772,7 @@ bool MaterialEditorApplyLayerKindToFocused(RuntimeMaterialTextureLayerKind kind)
     if (!MaterialEditorLayerModelApplyLayerKind(obj, focused_object_index, kind)) return false;
     material_editor_apply_object_scope_to_all_faces(focused_object_index);
     MarkObjectDirty(obj);
+    MaterialEditorFacePreviewInvalidate();
     return true;
 }
 
@@ -1710,6 +1788,7 @@ bool MaterialEditorSetTriangleSelection(const SceneEditorMaterialPreviewTriangle
     s_material_editor_selected_triangles[0] = *address;
     s_material_editor_selected_triangle_count = 1;
     s_material_editor_active_face_group_index = address->faceGroupIndex;
+    MaterialEditorFacePreviewInvalidate();
     return true;
 }
 
@@ -1729,10 +1808,12 @@ bool MaterialEditorToggleTriangleSelection(const SceneEditorMaterialPreviewTrian
             s_material_editor_active_face_group_index == removed_face_group) {
             s_material_editor_active_face_group_index = -1;
         }
+        MaterialEditorFacePreviewInvalidate();
         return true;
     }
     if (!material_editor_add_triangle_selection(address)) return false;
     s_material_editor_active_face_group_index = address->faceGroupIndex;
+    MaterialEditorFacePreviewInvalidate();
     return true;
 }
 
@@ -1747,6 +1828,7 @@ bool MaterialEditorSetFaceGroupSelection(const SceneEditorMaterialPreviewTriangl
         if (!material_editor_add_triangle_selection(&group_addresses[i])) return false;
     }
     s_material_editor_active_face_group_index = address->faceGroupIndex;
+    MaterialEditorFacePreviewInvalidate();
     return true;
 }
 
@@ -1760,6 +1842,9 @@ bool MaterialEditorToggleFaceGroupSelection(const SceneEditorMaterialPreviewTria
         if (removed && s_material_editor_active_face_group_index == address->faceGroupIndex) {
             s_material_editor_active_face_group_index = -1;
         }
+        if (removed) {
+            MaterialEditorFacePreviewInvalidate();
+        }
         return removed;
     }
     group_count = material_editor_collect_face_group_triangles(address,
@@ -1770,6 +1855,7 @@ bool MaterialEditorToggleFaceGroupSelection(const SceneEditorMaterialPreviewTria
         if (!material_editor_add_triangle_selection(&group_addresses[i])) return false;
     }
     s_material_editor_active_face_group_index = address->faceGroupIndex;
+    MaterialEditorFacePreviewInvalidate();
     return true;
 }
 
@@ -1794,6 +1880,7 @@ void MaterialEditorSetSolidFacesEnabled(bool enabled) {
 
 bool MaterialEditorToggleSolidFaces(void) {
     s_material_editor_solid_faces_enabled = !s_material_editor_solid_faces_enabled;
+    MaterialEditorFacePreviewInvalidate();
     return s_material_editor_solid_faces_enabled;
 }
 
@@ -1803,6 +1890,12 @@ bool MaterialEditorApplyTextureKindToFocused(int texture_id) {
     if (!obj) return false;
     if (texture_id < 0 || texture_id > 2) return false;
     if (s_material_editor_active_face_group_index >= 0) {
+        if (!material_editor_seed_face_override_from_active_layer(
+                obj,
+                focused_object_index,
+                s_material_editor_active_face_group_index)) {
+            return false;
+        }
         if (!SceneEditorMaterialFacePlacementApplyTextureKind(
                 obj,
                 focused_object_index,
@@ -1811,6 +1904,7 @@ bool MaterialEditorApplyTextureKindToFocused(int texture_id) {
             return false;
         }
         MarkObjectDirty(obj);
+        MaterialEditorFacePreviewInvalidate();
         return true;
     }
     if (material_editor_use_object_layer_controls(obj)) {
@@ -1820,11 +1914,13 @@ bool MaterialEditorApplyTextureKindToFocused(int texture_id) {
         obj->textureId = texture_id;
         material_editor_apply_object_scope_to_all_faces(focused_object_index);
         MarkObjectDirty(obj);
+        MaterialEditorFacePreviewInvalidate();
         return true;
     }
     obj->textureId = texture_id;
     material_editor_apply_object_scope_to_all_faces(focused_object_index);
     MarkObjectDirty(obj);
+    MaterialEditorFacePreviewInvalidate();
     return true;
 }
 
@@ -1836,6 +1932,12 @@ bool MaterialEditorApplySliderValueToFocused(MaterialEditorSliderKind kind, doub
     if (!obj) return false;
     value = material_editor_clamp01(value);
     if (s_material_editor_active_face_group_index >= 0) {
+        if (!material_editor_seed_face_override_from_active_layer(
+                obj,
+                focused_object_index,
+                s_material_editor_active_face_group_index)) {
+            return false;
+        }
         if (kind == MATERIAL_EDITOR_SLIDER_STRENGTH) {
             field = SCENE_EDITOR_MATERIAL_FACE_PLACEMENT_STRENGTH;
         } else if (kind == MATERIAL_EDITOR_SLIDER_SCALE) {
@@ -1856,6 +1958,7 @@ bool MaterialEditorApplySliderValueToFocused(MaterialEditorSliderKind kind, doub
             return false;
         }
         MarkObjectDirty(obj);
+        MaterialEditorFacePreviewInvalidate();
         return true;
     }
     if (material_editor_use_object_layer_controls(obj)) {
@@ -1867,6 +1970,7 @@ bool MaterialEditorApplySliderValueToFocused(MaterialEditorSliderKind kind, doub
         }
         material_editor_apply_object_scope_to_all_faces(focused_object_index);
         MarkObjectDirty(obj);
+        MaterialEditorFacePreviewInvalidate();
         return true;
     }
     if (kind == MATERIAL_EDITOR_SLIDER_STRENGTH) {
@@ -1882,6 +1986,7 @@ bool MaterialEditorApplySliderValueToFocused(MaterialEditorSliderKind kind, doub
     }
     MarkObjectDirty(obj);
     material_editor_apply_object_scope_to_all_faces(focused_object_index);
+    MaterialEditorFacePreviewInvalidate();
     return true;
 }
 
@@ -1891,6 +1996,12 @@ bool MaterialEditorApplyTexturePatternToFocused(int pattern_mode) {
     RuntimeMaterialTexture3DParams params;
     if (!obj) return false;
     if (s_material_editor_active_face_group_index >= 0) {
+        if (!material_editor_seed_face_override_from_active_layer(
+                obj,
+                focused_object_index,
+                s_material_editor_active_face_group_index)) {
+            return false;
+        }
         if (!SceneEditorMaterialFacePlacementApplyTextureParamPatternMode(
                 obj,
                 focused_object_index,
@@ -1899,6 +2010,7 @@ bool MaterialEditorApplyTexturePatternToFocused(int pattern_mode) {
             return false;
         }
         MarkObjectDirty(obj);
+        MaterialEditorFacePreviewInvalidate();
         return true;
     }
     if (material_editor_use_object_layer_controls(obj)) {
@@ -1907,6 +2019,7 @@ bool MaterialEditorApplyTexturePatternToFocused(int pattern_mode) {
         }
         material_editor_apply_object_scope_to_all_faces(focused_object_index);
         MarkObjectDirty(obj);
+        MaterialEditorFacePreviewInvalidate();
         return true;
     }
     params = RuntimeMaterialTexture3DParamsFromObject(obj);
@@ -1914,6 +2027,7 @@ bool MaterialEditorApplyTexturePatternToFocused(int pattern_mode) {
     material_editor_assign_object_params(obj, params);
     material_editor_apply_object_scope_to_all_faces(focused_object_index);
     MarkObjectDirty(obj);
+    MaterialEditorFacePreviewInvalidate();
     return true;
 }
 
@@ -1925,6 +2039,12 @@ bool MaterialEditorApplyTextureParamValueToFocused(MaterialEditorTextureParamKin
     if (material_editor_texture_param_slot(kind) < 0) return false;
     value = material_editor_clamp01(value);
     if (s_material_editor_active_face_group_index >= 0) {
+        if (!material_editor_seed_face_override_from_active_layer(
+                obj,
+                focused_object_index,
+                s_material_editor_active_face_group_index)) {
+            return false;
+        }
         if (!SceneEditorMaterialFacePlacementApplyTextureParamNormalizedValue(
                 obj,
                 focused_object_index,
@@ -1934,6 +2054,7 @@ bool MaterialEditorApplyTextureParamValueToFocused(MaterialEditorTextureParamKin
             return false;
         }
         MarkObjectDirty(obj);
+        MaterialEditorFacePreviewInvalidate();
         return true;
     }
     if (material_editor_use_object_layer_controls(obj)) {
@@ -1945,6 +2066,7 @@ bool MaterialEditorApplyTextureParamValueToFocused(MaterialEditorTextureParamKin
         }
         material_editor_apply_object_scope_to_all_faces(focused_object_index);
         MarkObjectDirty(obj);
+        MaterialEditorFacePreviewInvalidate();
         return true;
     }
     params = RuntimeMaterialTexture3DParamsFromObject(obj);
@@ -1968,6 +2090,7 @@ bool MaterialEditorApplyTextureParamValueToFocused(MaterialEditorTextureParamKin
     material_editor_assign_object_params(obj, params);
     material_editor_apply_object_scope_to_all_faces(focused_object_index);
     MarkObjectDirty(obj);
+    MaterialEditorFacePreviewInvalidate();
     return true;
 }
 
@@ -1982,6 +2105,7 @@ bool MaterialEditorResetActiveFacePlacement(void) {
         return false;
     }
     MarkObjectDirty(obj);
+    MaterialEditorFacePreviewInvalidate();
     return true;
 }
 
@@ -2030,6 +2154,7 @@ bool MaterialEditorCopyActiveFacePlacementToSelected(void) {
     }
     if (copied <= 0) return false;
     MarkObjectDirty(obj);
+    MaterialEditorFacePreviewInvalidate();
     return true;
 }
 

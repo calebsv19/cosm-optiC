@@ -15,17 +15,39 @@
 #include <stdio.h>
 #include <string.h>
 
+static double runtime_scene_bridge_authoring_zero_length(void) {
+    double zero [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    return zero;
+}
+
+static double runtime_scene_bridge_authoring_scale_scene_length(
+    double scene_length [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double world_scale) {
+    double authored_length [[fisics::dim(length)]] [[fisics::unit(meter)]] = scene_length;
+    return authored_length * world_scale;
+}
+
 static void scale_path_world_units(Path *path, double world_scale) {
     int i = 0;
     if (!path) return;
     for (i = 0; i < path->numPoints && i < MAX_BEZIER_POINTS; ++i) {
-        path->points[i].x *= world_scale;
-        path->points[i].y *= world_scale;
+        double point_x [[fisics::dim(length)]] [[fisics::unit(meter)]] = path->points[i].x;
+        double point_y [[fisics::dim(length)]] [[fisics::unit(meter)]] = path->points[i].y;
+        path->points[i].x = runtime_scene_bridge_authoring_scale_scene_length(point_x, world_scale);
+        path->points[i].y = runtime_scene_bridge_authoring_scale_scene_length(point_y, world_scale);
         if (i < MAX_BEZIER_POINTS - 1) {
-            path->handles[i][0].vx *= world_scale;
-            path->handles[i][0].vy *= world_scale;
-            path->handles[i][1].vx *= world_scale;
-            path->handles[i][1].vy *= world_scale;
+            double h0x [[fisics::dim(length)]] [[fisics::unit(meter)]] = path->handles[i][0].vx;
+            double h0y [[fisics::dim(length)]] [[fisics::unit(meter)]] = path->handles[i][0].vy;
+            double h1x [[fisics::dim(length)]] [[fisics::unit(meter)]] = path->handles[i][1].vx;
+            double h1y [[fisics::dim(length)]] [[fisics::unit(meter)]] = path->handles[i][1].vy;
+            path->handles[i][0].vx =
+                runtime_scene_bridge_authoring_scale_scene_length(h0x, world_scale);
+            path->handles[i][0].vy =
+                runtime_scene_bridge_authoring_scale_scene_length(h0y, world_scale);
+            path->handles[i][1].vx =
+                runtime_scene_bridge_authoring_scale_scene_length(h1x, world_scale);
+            path->handles[i][1].vy =
+                runtime_scene_bridge_authoring_scale_scene_length(h1y, world_scale);
         }
     }
 }
@@ -175,9 +197,9 @@ static bool runtime_scene_bridge_parse_focus_target(json_object *obj,
                                                     double *out_y,
                                                     double *out_z) {
     json_object *target = NULL;
-    double x = 0.0;
-    double y = 0.0;
-    double z = 0.0;
+    double x [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double y [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double z [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
     if (!obj || !out_x || !out_y || !out_z) return false;
     if (!json_object_object_get_ex(obj, "camera_focus_target", &target) ||
         !json_object_is_type(target, json_type_object)) {
@@ -193,9 +215,9 @@ static bool runtime_scene_bridge_parse_focus_target(json_object *obj,
             return false;
         }
     }
-    *out_x = x * world_scale;
-    *out_y = y * world_scale;
-    *out_z = z * world_scale;
+    *out_x = runtime_scene_bridge_authoring_scale_scene_length(x, world_scale);
+    *out_y = runtime_scene_bridge_authoring_scale_scene_length(y, world_scale);
+    *out_z = runtime_scene_bridge_authoring_scale_scene_length(z, world_scale);
     return true;
 }
 
@@ -760,8 +782,12 @@ void runtime_scene_bridge_apply_scene3d_extension_digest(json_object *root,
 
     if (json_object_object_get_ex(scene3d, "bounds", &bounds) &&
         json_object_is_type(bounds, json_type_object)) {
-        double min_x = 0.0, min_y = 0.0, min_z = 0.0;
-        double max_x = 0.0, max_y = 0.0, max_z = 0.0;
+        double min_x [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+        double min_y [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+        double min_z [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+        double max_x [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+        double max_y [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+        double max_z [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
         bool has_enabled = false;
         bool has_clamp = false;
         bool enabled = false;
@@ -772,14 +798,20 @@ void runtime_scene_bridge_apply_scene3d_extension_digest(json_object *root,
         g_last_3d_digest.bounds_enabled = has_enabled && enabled;
         g_last_3d_digest.bounds_clamp_on_edit = has_clamp && clamp_on_edit;
         if (runtime_scene_bridge_parse_vec3(bounds, "min", &min_x, &min_y, &min_z)) {
-            g_last_3d_digest.bounds_min_x = min_x * world_scale;
-            g_last_3d_digest.bounds_min_y = min_y * world_scale;
-            g_last_3d_digest.bounds_min_z = min_z * world_scale;
+            g_last_3d_digest.bounds_min_x =
+                runtime_scene_bridge_authoring_scale_scene_length(min_x, world_scale);
+            g_last_3d_digest.bounds_min_y =
+                runtime_scene_bridge_authoring_scale_scene_length(min_y, world_scale);
+            g_last_3d_digest.bounds_min_z =
+                runtime_scene_bridge_authoring_scale_scene_length(min_z, world_scale);
         }
         if (runtime_scene_bridge_parse_vec3(bounds, "max", &max_x, &max_y, &max_z)) {
-            g_last_3d_digest.bounds_max_x = max_x * world_scale;
-            g_last_3d_digest.bounds_max_y = max_y * world_scale;
-            g_last_3d_digest.bounds_max_z = max_z * world_scale;
+            g_last_3d_digest.bounds_max_x =
+                runtime_scene_bridge_authoring_scale_scene_length(max_x, world_scale);
+            g_last_3d_digest.bounds_max_y =
+                runtime_scene_bridge_authoring_scale_scene_length(max_y, world_scale);
+            g_last_3d_digest.bounds_max_z =
+                runtime_scene_bridge_authoring_scale_scene_length(max_z, world_scale);
         }
     }
 
@@ -802,7 +834,9 @@ void runtime_scene_bridge_apply_scene3d_extension_digest(json_object *root,
                      axis);
         }
         if (runtime_scene_bridge_parse_double_field(construction_plane, "offset", &offset)) {
-            g_last_3d_digest.construction_plane_offset = offset * world_scale;
+            double scene_offset [[fisics::dim(length)]] [[fisics::unit(meter)]] = offset;
+            g_last_3d_digest.construction_plane_offset =
+                runtime_scene_bridge_authoring_scale_scene_length(scene_offset, world_scale);
         }
     }
 }
@@ -823,7 +857,10 @@ void runtime_scene_bridge_apply_space_mode(json_object *root) {
 void runtime_scene_bridge_apply_light_seed_scaled(json_object *lights_array,
                                                   double world_scale) {
     json_object *light0 = NULL;
-    double lx = 0.0, ly = 0.0, lz = 0.0;
+    double lx [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double ly [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double lz [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double zero_length = runtime_scene_bridge_authoring_zero_length();
     if (!lights_array || !json_object_is_type(lights_array, json_type_array) ||
         json_object_array_length(lights_array) == 0u) {
         return;
@@ -832,11 +869,14 @@ void runtime_scene_bridge_apply_light_seed_scaled(json_object *lights_array,
     if (!light0 || !json_object_is_type(light0, json_type_object)) return;
     if (runtime_scene_bridge_parse_position_or_transform_position(light0, &lx, &ly, &lz)) {
         sceneSettings.bezierPath.numPoints = 1;
-        sceneSettings.bezierPath.points[0].x = lx * world_scale;
-        sceneSettings.bezierPath.points[0].y = ly * world_scale;
-        sceneSettings.bezierPath3D.point_z[0] = lz * world_scale;
-        if (lz * world_scale > 0.0) {
-            animSettings.lightHeight = lz * world_scale;
+        sceneSettings.bezierPath.points[0].x =
+            runtime_scene_bridge_authoring_scale_scene_length(lx, world_scale);
+        sceneSettings.bezierPath.points[0].y =
+            runtime_scene_bridge_authoring_scale_scene_length(ly, world_scale);
+        sceneSettings.bezierPath3D.point_z[0] =
+            runtime_scene_bridge_authoring_scale_scene_length(lz, world_scale);
+        if (sceneSettings.bezierPath3D.point_z[0] > zero_length) {
+            animSettings.lightHeight = sceneSettings.bezierPath3D.point_z[0];
         }
     }
 }
@@ -844,7 +884,9 @@ void runtime_scene_bridge_apply_light_seed_scaled(json_object *lights_array,
 void runtime_scene_bridge_apply_camera_seed_scaled(json_object *cameras_array,
                                                    double world_scale) {
     json_object *camera0 = NULL;
-    double cx = 0.0, cy = 0.0, cz = 0.0;
+    double cx [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double cy [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double cz [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
     double yaw = 0.0;
     double pitch = 0.0;
     bool has_yaw = false;
@@ -856,9 +898,12 @@ void runtime_scene_bridge_apply_camera_seed_scaled(json_object *cameras_array,
     camera0 = json_object_array_get_idx(cameras_array, 0);
     if (!camera0 || !json_object_is_type(camera0, json_type_object)) return;
     if (runtime_scene_bridge_parse_position_or_transform_position(camera0, &cx, &cy, &cz)) {
-        sceneSettings.camera.x = cx * world_scale;
-        sceneSettings.camera.y = cy * world_scale;
-        sceneSettings.cameraZ = cz * world_scale;
+        sceneSettings.camera.x =
+            runtime_scene_bridge_authoring_scale_scene_length(cx, world_scale);
+        sceneSettings.camera.y =
+            runtime_scene_bridge_authoring_scale_scene_length(cy, world_scale);
+        sceneSettings.cameraZ =
+            runtime_scene_bridge_authoring_scale_scene_length(cz, world_scale);
         sceneSettings.cameraPath.numPoints = 1;
         sceneSettings.cameraPath.points[0].x = sceneSettings.camera.x;
         sceneSettings.cameraPath.points[0].y = sceneSettings.camera.y;
@@ -866,7 +911,7 @@ void runtime_scene_bridge_apply_camera_seed_scaled(json_object *cameras_array,
         sceneSettings.cameraPath3D.point_z[0] = sceneSettings.cameraZ;
         sceneSettings.cameraPath3D.point_pitch[0] = 0.0;
         g_last_3d_scaffold.has_camera_seed = true;
-        g_last_3d_scaffold.camera_z = cz * world_scale;
+        g_last_3d_scaffold.camera_z = sceneSettings.cameraZ;
     }
     has_yaw = runtime_scene_bridge_parse_camera_seed_yaw(camera0, &yaw);
     has_pitch = runtime_scene_bridge_parse_camera_seed_pitch(camera0, &pitch);

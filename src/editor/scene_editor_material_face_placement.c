@@ -61,6 +61,7 @@ static SceneEditorMaterialFacePlacement scene_editor_material_face_placement_def
     memset(&placement, 0, sizeof(placement));
     placement.sceneObjectIndex = scene_object_index;
     placement.faceGroupIndex = face_group_index;
+    placement.layerIndex = -1;
     placement.scale = 1.0;
     if (object) {
         placement.textureId = object->textureId;
@@ -128,6 +129,7 @@ bool SceneEditorMaterialFacePlacementSetOverride(
     if (index < 0) return false;
     stored = *placement;
     stored.hasOverride = true;
+    if (stored.layerIndex < -1) stored.layerIndex = -1;
     stored.textureId = scene_editor_material_face_placement_clamp_texture_id(stored.textureId);
     if (!(stored.scale > 1e-6)) stored.scale = 1.0;
     stored.strength = scene_editor_material_face_placement_clamp01(stored.strength);

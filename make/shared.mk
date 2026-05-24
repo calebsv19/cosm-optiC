@@ -20,6 +20,7 @@ CORE_SPACE_DIR := $(SHARED_ROOT)/core/core_space
 CORE_PANE_DIR := $(SHARED_ROOT)/core/core_pane
 CORE_THEME_DIR := $(SHARED_ROOT)/core/core_theme
 CORE_FONT_DIR := $(SHARED_ROOT)/core/core_font
+CORE_HEADLESS_JOB_DIR := $(SHARED_ROOT)/core/core_headless_job
 KIT_RENDER_DIR := $(SHARED_ROOT)/kit/kit_render
 KIT_PANE_DIR := $(SHARED_ROOT)/kit/kit_pane
 KIT_VIZ_DIR := $(SHARED_ROOT)/kit/kit_viz
@@ -27,6 +28,9 @@ KIT_RUNTIME_DIAG_DIR := $(SHARED_ROOT)/kit/kit_runtime_diag
 KIT_WORKSPACE_AUTHORING_DIR := $(SHARED_ROOT)/kit/kit_workspace_authoring
 ifeq ($(wildcard $(CORE_AUTHORED_TEXTURE_DIR)/include/core_authored_texture.h),)
 CORE_AUTHORED_TEXTURE_DIR := $(SHARED_WORKSPACE_DIR)/core/core_authored_texture
+endif
+ifeq ($(wildcard $(CORE_HEADLESS_JOB_DIR)/include/core_headless_job.h),)
+CORE_HEADLESS_JOB_DIR := $(SHARED_WORKSPACE_DIR)/core/core_headless_job
 endif
 
 TIMER_HUD_DIR := $(SHARED_ROOT)/timer_hud

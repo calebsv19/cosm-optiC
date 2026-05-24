@@ -18,7 +18,7 @@ release-clean:
 	@echo "Removed release dir: $(RELEASE_DIR)"
 
 release-build: all
-	@echo "Release build complete: $(TARGET)"
+	@echo "Release build complete: $(APP_TARGET)"
 
 release-bundle-audit: PACKAGE_REQUIRE_FFMPEG=1
 release-bundle-audit: package-desktop-self-test

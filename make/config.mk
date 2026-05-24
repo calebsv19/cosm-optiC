@@ -1,4 +1,13 @@
-CC        := cc
+CLANG_CC ?= cc
+FISICS_BIN ?= ../fisiCs/fisics
+FISICS_OVERLAY ?= physics-units
+FISICS_ENV ?= FISICS_MAX_PROCS=0
+BUILD_TOOLCHAIN ?= clang
+PACKAGE_TOOLCHAIN ?= $(BUILD_TOOLCHAIN)
+CC := $(CLANG_CC)
+ifeq ($(BUILD_TOOLCHAIN),fisics)
+CC := $(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY)
+endif
 CSTD      := -std=c11
 SRC_DIR   := src
 INC_DIR   := include
@@ -26,6 +35,22 @@ PACKAGE_FFMPEG_SRC ?=
 PACKAGE_REQUIRE_FFMPEG ?= 0
 DESKTOP_APP_DIR ?= $(HOME)/Desktop/$(PACKAGE_APP_NAME)
 PACKAGE_ADHOC_SIGN_IDENTITY ?= -
+
+ifneq ($(filter $(BUILD_TOOLCHAIN),clang fisics),$(BUILD_TOOLCHAIN))
+$(error Unsupported BUILD_TOOLCHAIN '$(BUILD_TOOLCHAIN)'; expected clang or fisics)
+endif
+
+ifneq ($(filter $(PACKAGE_TOOLCHAIN),clang fisics),$(PACKAGE_TOOLCHAIN))
+$(error Unsupported PACKAGE_TOOLCHAIN '$(PACKAGE_TOOLCHAIN)'; expected clang or fisics)
+endif
+
+define program_build_dir_for
+$(BUILD_DIR_BASE)/toolchains/$(1)/$(TARGET_ARCH)
+endef
+
+define program_bin_for
+$(call program_build_dir_for,$(1))/$(TARGET)
+endef
 
 # RL0 release contract.
 RELEASE_VERSION_FILE ?= VERSION

@@ -34,17 +34,49 @@ static double ClampDoubleLocal(double value, double min_value, double max_value)
     return value;
 }
 
+static double FluidSceneZeroLength(void) {
+    double zero [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    return zero;
+}
+
+static double FluidSceneLengthEpsilon(void) {
+    double epsilon [[fisics::dim(length)]] [[fisics::unit(meter)]] = 1e-4;
+    return epsilon;
+}
+
+static double FluidSceneUnitLength(void) {
+    double unit_length [[fisics::dim(length)]] [[fisics::unit(meter)]] = 1.0;
+    return unit_length;
+}
+
+static double FluidSceneLengthCenter(double min_value [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                     double span [[fisics::dim(length)]] [[fisics::unit(meter)]]) {
+    double half_span [[fisics::dim(length)]] [[fisics::unit(meter)]] = span * 0.5;
+    return min_value + half_span;
+}
+
+static double FluidSceneLengthInterpolate(
+    double min_value [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double span [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double normalized) {
+    double delta [[fisics::dim(length)]] [[fisics::unit(meter)]] = span * normalized;
+    return min_value + delta;
+}
+
 static void ResetPathLocal(Path *path, BezierMode mode) {
     if (!path) return;
     memset(path, 0, sizeof(*path));
     path->mode = mode;
 }
 
-static void ApplyFluidWindowAndCameraFit(double min_x, double min_y,
-                                         double max_x, double max_y) {
-    double grid_w_world = max_x - min_x;
-    double grid_h_world = max_y - min_y;
-    if (grid_w_world <= 1e-4 || grid_h_world <= 1e-4) return;
+static void ApplyFluidWindowAndCameraFit(double min_x [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                         double min_y [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                         double max_x [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                         double max_y [[fisics::dim(length)]] [[fisics::unit(meter)]]) {
+    double grid_w_world [[fisics::dim(length)]] [[fisics::unit(meter)]] = max_x - min_x;
+    double grid_h_world [[fisics::dim(length)]] [[fisics::unit(meter)]] = max_y - min_y;
+    double epsilon = FluidSceneLengthEpsilon();
+    if (grid_w_world <= epsilon || grid_h_world <= epsilon) return;
 
     const int target_long_edge = 1200;
     const int min_w = 320, min_h = 200;
@@ -62,13 +94,13 @@ static void ApplyFluidWindowAndCameraFit(double min_x, double min_y,
     sceneSettings.windowWidth = ClampEvenInt(target_w / 2, min_w, max_w);
     sceneSettings.windowHeight = ClampEvenInt(target_h / 2, min_h, max_h);
 
-    sceneSettings.camera.x = min_x + grid_w_world * 0.5;
-    sceneSettings.camera.y = min_y + grid_h_world * 0.5;
+    sceneSettings.camera.x = FluidSceneLengthCenter(min_x, grid_w_world);
+    sceneSettings.camera.y = FluidSceneLengthCenter(min_y, grid_h_world);
     sceneSettings.camera.rotation = 0.0;
-    double padded_w = grid_w_world * 1.10;
-    double padded_h = grid_h_world * 1.10;
-    double zoom_x = (padded_w > 1e-4) ? ((double)sceneSettings.windowWidth / padded_w) : 1.0;
-    double zoom_y = (padded_h > 1e-4) ? ((double)sceneSettings.windowHeight / padded_h) : 1.0;
+    double padded_w [[fisics::dim(length)]] [[fisics::unit(meter)]] = grid_w_world * 1.10;
+    double padded_h [[fisics::dim(length)]] [[fisics::unit(meter)]] = grid_h_world * 1.10;
+    double zoom_x = (padded_w > epsilon) ? ((double)sceneSettings.windowWidth / padded_w) : 1.0;
+    double zoom_y = (padded_h > epsilon) ? ((double)sceneSettings.windowHeight / padded_h) : 1.0;
     sceneSettings.camera.zoom = ClampDoubleLocal(fmin(zoom_x, zoom_y), 0.01, 100.0);
 
     double margin_cap = fmin((double)sceneSettings.windowWidth, (double)sceneSettings.windowHeight) * 0.45;
@@ -76,23 +108,30 @@ static void ApplyFluidWindowAndCameraFit(double min_x, double min_y,
     sceneSettings.cameraMargin = ClampDoubleLocal(sceneSettings.cameraMargin, 0.0, margin_cap);
 }
 
-static void BuildDefaultFluidPaths(double min_x, double min_y,
-                                   double max_x, double max_y) {
-    double grid_w_world = max_x - min_x;
-    double grid_h_world = max_y - min_y;
-    if (grid_w_world <= 1e-4 || grid_h_world <= 1e-4) return;
+static void BuildDefaultFluidPaths(double min_x [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                   double min_y [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                   double max_x [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                   double max_y [[fisics::dim(length)]] [[fisics::unit(meter)]]) {
+    double grid_w_world [[fisics::dim(length)]] [[fisics::unit(meter)]] = max_x - min_x;
+    double grid_h_world [[fisics::dim(length)]] [[fisics::unit(meter)]] = max_y - min_y;
+    double epsilon = FluidSceneLengthEpsilon();
+    if (grid_w_world <= epsilon || grid_h_world <= epsilon) return;
 
     ResetPathLocal(&sceneSettings.cameraPath, BEZIER_CUBIC);
     CameraPath3D_Reset(&sceneSettings.cameraPath3D);
 
     ResetPathLocal(&sceneSettings.bezierPath, BEZIER_CUBIC);
     CameraPath3D_Reset(&sceneSettings.bezierPath3D);
-    double cx = min_x + grid_w_world * 0.5;
-    double cy = min_y + grid_h_world * 0.5;
-    double orbit_rx = fmax(grid_w_world * 0.30, grid_w_world * 0.08);
-    double orbit_ry = fmax(grid_h_world * 0.30, grid_h_world * 0.08);
-    if (orbit_rx <= 1e-4) orbit_rx = 1.0;
-    if (orbit_ry <= 1e-4) orbit_ry = 1.0;
+    double cx [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        FluidSceneLengthCenter(min_x, grid_w_world);
+    double cy [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        FluidSceneLengthCenter(min_y, grid_h_world);
+    double orbit_rx [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        fmax(grid_w_world * 0.30, grid_w_world * 0.08);
+    double orbit_ry [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        fmax(grid_h_world * 0.30, grid_h_world * 0.08);
+    if (orbit_rx <= epsilon) orbit_rx = FluidSceneUnitLength();
+    if (orbit_ry <= epsilon) orbit_ry = FluidSceneUnitLength();
 
     sceneSettings.bezierPath.numPoints = 4;
     sceneSettings.bezierPath.points[0] = (Point){cx - orbit_rx, cy};
@@ -504,8 +543,10 @@ bool AnimationApplyFluidScene(const char *manifest_path) {
     g_fluidGrid.max_y = manifest.origin_y + manifest.cell_size * (float)manifest.grid_h;
 
     sceneSettings.objectCount = 0;
-    double grid_w_world = g_fluidGrid.max_x - g_fluidGrid.min_x;
-    double grid_h_world = g_fluidGrid.max_y - g_fluidGrid.min_y;
+    double grid_w_world [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        g_fluidGrid.max_x - g_fluidGrid.min_x;
+    double grid_h_world [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        g_fluidGrid.max_y - g_fluidGrid.min_y;
     ApplyFluidWindowAndCameraFit(g_fluidGrid.min_x, g_fluidGrid.min_y,
                                  g_fluidGrid.max_x, g_fluidGrid.max_y);
     BuildDefaultFluidPaths(g_fluidGrid.min_x, g_fluidGrid.min_y,
@@ -536,8 +577,10 @@ bool AnimationApplyFluidScene(const char *manifest_path) {
     for (size_t i = 0; i < manifest.import_count; ++i) {
         const FluidImportShape *imp = &manifest.imports[i];
         if (!imp->path) continue;
-        double world_x = g_fluidGrid.min_x + (grid_w_world) * imp->pos_x_norm;
-        double world_y = g_fluidGrid.min_y + (grid_h_world) * imp->pos_y_norm;
+        double world_x [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+            FluidSceneLengthInterpolate(g_fluidGrid.min_x, grid_w_world, imp->pos_x_norm);
+        double world_y [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+            FluidSceneLengthInterpolate(g_fluidGrid.min_y, grid_h_world, imp->pos_y_norm);
         ShapeAsset asset = {0};
         bool loaded = LoadImportShapeAsset(imp->path, &asset);
         double angle = imp->rotation_deg * M_PI / 180.0;

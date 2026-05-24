@@ -6,7 +6,7 @@
 
 static void usage(const char *argv0) {
     fprintf(stderr,
-            "usage: %s <submit|status|cancel> [--request <request.json>|--job-id <job_id>] [--jobs-root <path>]\n",
+            "usage: %s <submit|status|cancel> [--request <request.json|job.json>|--job-id <job_id>] [--jobs-root <path>]\n",
             argv0 ? argv0 : "ray_tracing_job_runner");
 }
 
@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     bool overwrite = false;
     bool resume = false;
     char diagnostics[256] = {0};
-    char generated_job_id[64] = {0};
+    char generated_job_id[96] = {0};
 
     if (argc < 2) {
         usage(argv[0]);

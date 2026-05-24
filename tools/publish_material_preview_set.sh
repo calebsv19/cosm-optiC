@@ -2,7 +2,7 @@
 set -eu
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-CLI="$ROOT_DIR/build/arm64/tools/cli/ray_tracing_material_preview_headless"
+CLI="$ROOT_DIR/build/toolchains/clang/$(uname -m)/tools/cli/ray_tracing_material_preview_headless"
 
 REQUEST=""
 SET_ID=""

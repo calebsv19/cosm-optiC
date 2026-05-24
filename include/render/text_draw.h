@@ -12,7 +12,9 @@ void ray_tracing_text_register_font_source(TTF_Font* font,
 
 void ray_tracing_text_unregister_font_source(TTF_Font* font);
 int ray_tracing_text_has_font_source(TTF_Font* font);
+int ray_tracing_text_font_is_current(TTF_Font* font);
 
+void ray_tracing_text_reset_font_system(void);
 void ray_tracing_text_reset_renderer(SDL_Renderer* renderer);
 
 int ray_tracing_text_measure_utf8(SDL_Renderer* renderer,

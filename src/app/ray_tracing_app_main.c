@@ -1,5 +1,7 @@
 #include "ray_tracing/ray_tracing_app_main.h"
 
+#include "app/animation.h"
+
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -22,7 +24,6 @@ typedef struct RayTracingLaunchArgs {
 
 typedef struct RayTracingDispatchSummary {
     uint32_t dispatch_count;
-    bool used_legacy_entry;
     bool dispatch_succeeded;
     int last_dispatch_exit_code;
 } RayTracingDispatchSummary;
@@ -52,18 +53,6 @@ typedef struct RayTracingLifecycleOwnership {
     bool shutdown_owned;
 } RayTracingLifecycleOwnership;
 
-typedef struct RayTracingDispatchRequest {
-    int argc;
-    char **argv;
-    int (*legacy_entry)(int argc, char **argv);
-} RayTracingDispatchRequest;
-
-typedef struct RayTracingDispatchOutcome {
-    bool dispatched;
-    bool used_legacy_entry;
-    int exit_code;
-} RayTracingDispatchOutcome;
-
 typedef struct RayTracingAppContext {
     RayTracingAppStage stage;
     bool bootstrapped;
@@ -74,9 +63,6 @@ typedef struct RayTracingAppContext {
     bool run_loop_completed;
     bool shutdown_completed;
     int exit_code;
-    int (*legacy_entry)(int argc, char **argv);
-    bool (*runtime_dispatch)(const RayTracingDispatchRequest *request,
-                             RayTracingDispatchOutcome *outcome);
     RayTracingLaunchArgs launch_args;
     RayTracingDispatchSummary dispatch_summary;
     RayTracingRenderHandoffSummary render_handoff_summary;
@@ -91,10 +77,7 @@ typedef enum RayTracingWrapperError {
     RAY_TRACING_WRAPPER_ERROR_STATE_SEED_FAILED = 3,
     RAY_TRACING_WRAPPER_ERROR_SUBSYSTEMS_INIT_FAILED = 4,
     RAY_TRACING_WRAPPER_ERROR_RUNTIME_START_FAILED = 5,
-    RAY_TRACING_WRAPPER_ERROR_DISPATCH_PREPARE_FAILED = 6,
-    RAY_TRACING_WRAPPER_ERROR_DISPATCH_EXECUTE_FAILED = 7,
-    RAY_TRACING_WRAPPER_ERROR_DISPATCH_FINALIZE_FAILED = 8,
-    RAY_TRACING_WRAPPER_ERROR_RUN_LOOP_FAILED = 9
+    RAY_TRACING_WRAPPER_ERROR_RUN_LOOP_FAILED = 6
 } RayTracingWrapperError;
 
 static void ray_tracing_log_wrapper_error(const char *fn_name,
@@ -111,31 +94,11 @@ static void ray_tracing_log_wrapper_error(const char *fn_name,
             detail ? detail : "n/a");
 }
 
-static int ray_tracing_default_legacy_entry(int argc, char **argv) {
-    (void)argc;
-    (void)argv;
-    return 1;
-}
-
-static bool ray_tracing_default_runtime_dispatch(const RayTracingDispatchRequest *request,
-                                                 RayTracingDispatchOutcome *outcome) {
-    if (!request || !outcome || !request->legacy_entry) {
-        return false;
-    }
-    outcome->dispatched = true;
-    outcome->used_legacy_entry = true;
-    outcome->exit_code = request->legacy_entry(request->argc, request->argv);
-    return true;
-}
-
 static RayTracingAppContext g_ray_tracing_app_ctx = {
     .stage = RAY_TRACING_APP_STAGE_INIT,
     .exit_code = 1,
-    .legacy_entry = ray_tracing_default_legacy_entry,
-    .runtime_dispatch = ray_tracing_default_runtime_dispatch
 };
 
-// Guards stage progression so wrapper lifecycle stays deterministic.
 static bool ray_tracing_app_transition_stage(RayTracingAppContext *ctx,
                                              RayTracingAppStage expected,
                                              RayTracingAppStage next,
@@ -159,30 +122,20 @@ static bool ray_tracing_app_transition_stage(RayTracingAppContext *ctx,
 }
 
 static bool ray_tracing_app_bootstrap_ctx(RayTracingAppContext *ctx) {
-    int (*legacy_entry)(int argc, char **argv) = ray_tracing_default_legacy_entry;
-    bool (*runtime_dispatch)(const RayTracingDispatchRequest *request,
-                             RayTracingDispatchOutcome *outcome) =
-        ray_tracing_default_runtime_dispatch;
     RayTracingLaunchArgs launch_args = {0};
 
     if (!ctx) {
         return false;
     }
-    if (ctx->legacy_entry) {
-        legacy_entry = ctx->legacy_entry;
-    }
-    if (ctx->runtime_dispatch) {
-        runtime_dispatch = ctx->runtime_dispatch;
-    }
     launch_args = ctx->launch_args;
-
     memset(ctx, 0, sizeof(*ctx));
-    ctx->legacy_entry = legacy_entry;
-    ctx->runtime_dispatch = runtime_dispatch;
     ctx->launch_args = launch_args;
+    ctx->stage = RAY_TRACING_APP_STAGE_INIT;
     ctx->exit_code = 1;
     ctx->wrapper_error = RAY_TRACING_WRAPPER_ERROR_NONE;
     ctx->dispatch_summary.last_dispatch_exit_code = 1;
+
+    AnimationParseArgs(ctx->launch_args.argc, ctx->launch_args.argv);
 
     if (!ray_tracing_app_transition_stage(ctx,
                                           RAY_TRACING_APP_STAGE_INIT,
@@ -200,6 +153,7 @@ static bool ray_tracing_app_config_load_ctx(RayTracingAppContext *ctx) {
     if (!ctx) {
         return false;
     }
+    AnimationLoadRuntimeDefaults();
     if (!ray_tracing_app_transition_stage(ctx,
                                           RAY_TRACING_APP_STAGE_BOOTSTRAPPED,
                                           RAY_TRACING_APP_STAGE_CONFIG_LOADED,
@@ -260,75 +214,29 @@ static bool ray_tracing_runtime_start_ctx(RayTracingAppContext *ctx) {
     return true;
 }
 
-static bool ray_tracing_app_dispatch_prepare_ctx(RayTracingAppContext *ctx,
-                                                 RayTracingDispatchRequest *request) {
-    if (!ctx || !request || !ctx->legacy_entry || !ctx->runtime_dispatch) {
-        return false;
-    }
-    if (ctx->stage != RAY_TRACING_APP_STAGE_RUNTIME_STARTED) {
-        return false;
-    }
-    memset(request, 0, sizeof(*request));
-    request->argc = ctx->launch_args.argc;
-    request->argv = ctx->launch_args.argv;
-    request->legacy_entry = ctx->legacy_entry;
-    ctx->ownership.dispatch_owned = true;
-    ctx->dispatch_summary.dispatch_count += 1u;
-    return true;
-}
-
-static bool ray_tracing_app_dispatch_execute_ctx(
-    RayTracingAppContext *ctx,
-    const RayTracingDispatchRequest *request,
-    RayTracingDispatchOutcome *outcome) {
-    if (!ctx || !request || !outcome || !ctx->runtime_dispatch) {
-        return false;
-    }
-    memset(outcome, 0, sizeof(*outcome));
-    return ctx->runtime_dispatch(request, outcome) && outcome->dispatched;
-}
-
-static int ray_tracing_app_dispatch_finalize_ctx(RayTracingAppContext *ctx,
-                                                 const RayTracingDispatchOutcome *outcome) {
-    if (!ctx || !outcome) {
+static int ray_tracing_app_run_loop_ctx(RayTracingAppContext *ctx) {
+    if (!ctx || ctx->stage != RAY_TRACING_APP_STAGE_RUNTIME_STARTED) {
         if (ctx) {
-            ctx->wrapper_error = RAY_TRACING_WRAPPER_ERROR_DISPATCH_FINALIZE_FAILED;
+            ctx->wrapper_error = RAY_TRACING_WRAPPER_ERROR_RUN_LOOP_FAILED;
         }
         return 1;
     }
-    ctx->dispatch_summary.used_legacy_entry = outcome->used_legacy_entry;
+    ctx->ownership.dispatch_owned = true;
+    ctx->dispatch_summary.dispatch_count += 1u;
+    ctx->dispatch_summary.last_dispatch_exit_code = AnimationRunAppSession();
     ctx->dispatch_summary.dispatch_succeeded = true;
-    ctx->dispatch_summary.last_dispatch_exit_code = outcome->exit_code;
-    ctx->exit_code = outcome->exit_code;
+    ctx->exit_code = ctx->dispatch_summary.last_dispatch_exit_code;
+
     if (!ray_tracing_app_transition_stage(ctx,
                                           RAY_TRACING_APP_STAGE_RUNTIME_STARTED,
                                           RAY_TRACING_APP_STAGE_LOOP_COMPLETED,
-                                          "ray_tracing_app_dispatch_finalize",
+                                          "ray_tracing_app_run_loop",
                                           __func__)) {
-        ctx->wrapper_error = RAY_TRACING_WRAPPER_ERROR_DISPATCH_FINALIZE_FAILED;
+        ctx->wrapper_error = RAY_TRACING_WRAPPER_ERROR_RUN_LOOP_FAILED;
         return 1;
     }
     ctx->run_loop_completed = true;
     return ctx->exit_code;
-}
-
-static int ray_tracing_app_run_loop_ctx(RayTracingAppContext *ctx) {
-    RayTracingDispatchRequest request = {0};
-    RayTracingDispatchOutcome outcome = {0};
-
-    if (!ray_tracing_app_dispatch_prepare_ctx(ctx, &request)) {
-        if (ctx) {
-            ctx->wrapper_error = RAY_TRACING_WRAPPER_ERROR_DISPATCH_PREPARE_FAILED;
-        }
-        return 1;
-    }
-    if (!ray_tracing_app_dispatch_execute_ctx(ctx, &request, &outcome)) {
-        ctx->dispatch_summary.dispatch_succeeded = false;
-        ctx->dispatch_summary.last_dispatch_exit_code = 1;
-        ctx->wrapper_error = RAY_TRACING_WRAPPER_ERROR_DISPATCH_EXECUTE_FAILED;
-        return 1;
-    }
-    return ray_tracing_app_dispatch_finalize_ctx(ctx, &outcome);
 }
 
 static bool ray_tracing_app_render_submit_ctx(
@@ -532,23 +440,12 @@ bool ray_tracing_runtime_start(void) {
     return ray_tracing_runtime_start_ctx(&g_ray_tracing_app_ctx);
 }
 
-void ray_tracing_app_set_legacy_entry(int (*legacy_entry)(int argc, char **argv)) {
-    if (legacy_entry) {
-        g_ray_tracing_app_ctx.legacy_entry = legacy_entry;
-    }
-}
-
 int ray_tracing_app_run_loop(void) {
     return ray_tracing_app_run_loop_ctx(&g_ray_tracing_app_ctx);
 }
 
 void ray_tracing_app_shutdown(void) {
     ray_tracing_app_shutdown_ctx(&g_ray_tracing_app_ctx);
-}
-
-bool ray_tracing_app_frame_events(const RayTracingFrameEventsRequest *request,
-                                  RayTracingFrameEventsOutcome *outcome) {
-    return ray_tracing_app_frame_events_ctx(&g_ray_tracing_app_ctx, request, outcome);
 }
 
 bool ray_tracing_app_frame_update(const RayTracingFrameUpdateRequest *request,
@@ -561,94 +458,81 @@ bool ray_tracing_app_frame_route(const RayTracingFrameRouteRequest *request,
     return ray_tracing_app_frame_route_ctx(&g_ray_tracing_app_ctx, request, outcome);
 }
 
+bool ray_tracing_app_frame_events(const RayTracingFrameEventsRequest *request,
+                                  RayTracingFrameEventsOutcome *outcome) {
+    return ray_tracing_app_frame_events_ctx(&g_ray_tracing_app_ctx, request, outcome);
+}
+
 bool ray_tracing_app_render_submit(const RayTracingRenderSubmitRequest *request,
                                    RayTracingRenderSubmitOutcome *outcome) {
     return ray_tracing_app_render_submit_ctx(&g_ray_tracing_app_ctx, request, outcome);
 }
 
 int ray_tracing_app_main(int argc, char **argv) {
+    RayTracingAppContext *ctx = &g_ray_tracing_app_ctx;
     int exit_code = 1;
 
-    g_ray_tracing_app_ctx.launch_args.argc = argc;
-    g_ray_tracing_app_ctx.launch_args.argv = argv;
+    ctx->launch_args.argc = argc;
+    ctx->launch_args.argv = argv;
 
-    if (!ray_tracing_app_bootstrap_ctx(&g_ray_tracing_app_ctx)) {
-        g_ray_tracing_app_ctx.wrapper_error = RAY_TRACING_WRAPPER_ERROR_BOOTSTRAP_FAILED;
+    if (!ray_tracing_app_bootstrap()) {
+        ctx->wrapper_error = RAY_TRACING_WRAPPER_ERROR_BOOTSTRAP_FAILED;
         ray_tracing_log_wrapper_error(__func__,
-                                      (RayTracingWrapperError)g_ray_tracing_app_ctx.wrapper_error,
-                                      g_ray_tracing_app_ctx.stage,
-                                      exit_code,
+                                      (RayTracingWrapperError)ctx->wrapper_error,
+                                      ctx->stage,
+                                      ctx->exit_code,
                                       "bootstrap failed");
-        return exit_code;
+        ray_tracing_app_shutdown();
+        return 1;
     }
-    if (!ray_tracing_app_config_load_ctx(&g_ray_tracing_app_ctx)) {
-        g_ray_tracing_app_ctx.wrapper_error = RAY_TRACING_WRAPPER_ERROR_CONFIG_LOAD_FAILED;
+    if (!ray_tracing_app_config_load()) {
+        ctx->wrapper_error = RAY_TRACING_WRAPPER_ERROR_CONFIG_LOAD_FAILED;
         ray_tracing_log_wrapper_error(__func__,
-                                      (RayTracingWrapperError)g_ray_tracing_app_ctx.wrapper_error,
-                                      g_ray_tracing_app_ctx.stage,
-                                      exit_code,
+                                      (RayTracingWrapperError)ctx->wrapper_error,
+                                      ctx->stage,
+                                      ctx->exit_code,
                                       "config load failed");
-        goto shutdown;
+        ray_tracing_app_shutdown();
+        return 1;
     }
-    if (!ray_tracing_app_state_seed_ctx(&g_ray_tracing_app_ctx)) {
-        g_ray_tracing_app_ctx.wrapper_error = RAY_TRACING_WRAPPER_ERROR_STATE_SEED_FAILED;
+    if (!ray_tracing_app_state_seed()) {
+        ctx->wrapper_error = RAY_TRACING_WRAPPER_ERROR_STATE_SEED_FAILED;
         ray_tracing_log_wrapper_error(__func__,
-                                      (RayTracingWrapperError)g_ray_tracing_app_ctx.wrapper_error,
-                                      g_ray_tracing_app_ctx.stage,
-                                      exit_code,
+                                      (RayTracingWrapperError)ctx->wrapper_error,
+                                      ctx->stage,
+                                      ctx->exit_code,
                                       "state seed failed");
-        goto shutdown;
+        ray_tracing_app_shutdown();
+        return 1;
     }
-    if (!ray_tracing_app_subsystems_init_ctx(&g_ray_tracing_app_ctx)) {
-        g_ray_tracing_app_ctx.wrapper_error = RAY_TRACING_WRAPPER_ERROR_SUBSYSTEMS_INIT_FAILED;
+    if (!ray_tracing_app_subsystems_init()) {
+        ctx->wrapper_error = RAY_TRACING_WRAPPER_ERROR_SUBSYSTEMS_INIT_FAILED;
         ray_tracing_log_wrapper_error(__func__,
-                                      (RayTracingWrapperError)g_ray_tracing_app_ctx.wrapper_error,
-                                      g_ray_tracing_app_ctx.stage,
-                                      exit_code,
+                                      (RayTracingWrapperError)ctx->wrapper_error,
+                                      ctx->stage,
+                                      ctx->exit_code,
                                       "subsystems init failed");
-        goto shutdown;
+        ray_tracing_app_shutdown();
+        return 1;
     }
-    if (!ray_tracing_runtime_start_ctx(&g_ray_tracing_app_ctx)) {
-        g_ray_tracing_app_ctx.wrapper_error = RAY_TRACING_WRAPPER_ERROR_RUNTIME_START_FAILED;
+    if (!ray_tracing_runtime_start()) {
+        ctx->wrapper_error = RAY_TRACING_WRAPPER_ERROR_RUNTIME_START_FAILED;
         ray_tracing_log_wrapper_error(__func__,
-                                      (RayTracingWrapperError)g_ray_tracing_app_ctx.wrapper_error,
-                                      g_ray_tracing_app_ctx.stage,
-                                      exit_code,
+                                      (RayTracingWrapperError)ctx->wrapper_error,
+                                      ctx->stage,
+                                      ctx->exit_code,
                                       "runtime start failed");
-        goto shutdown;
+        ray_tracing_app_shutdown();
+        return 1;
     }
-
-    exit_code = ray_tracing_app_run_loop_ctx(&g_ray_tracing_app_ctx);
-    if (exit_code != 0 &&
-        g_ray_tracing_app_ctx.wrapper_error == RAY_TRACING_WRAPPER_ERROR_NONE) {
-        g_ray_tracing_app_ctx.wrapper_error = RAY_TRACING_WRAPPER_ERROR_RUN_LOOP_FAILED;
+    exit_code = ray_tracing_app_run_loop();
+    if (ctx->wrapper_error != RAY_TRACING_WRAPPER_ERROR_NONE) {
         ray_tracing_log_wrapper_error(__func__,
-                                      (RayTracingWrapperError)g_ray_tracing_app_ctx.wrapper_error,
-                                      g_ray_tracing_app_ctx.stage,
+                                      (RayTracingWrapperError)ctx->wrapper_error,
+                                      ctx->stage,
                                       exit_code,
                                       "run loop failed");
     }
-shutdown:
-    ray_tracing_app_shutdown_ctx(&g_ray_tracing_app_ctx);
-    fprintf(stderr,
-            "ray_tracing: wrapper exit stage=%d exit_code=%d dispatch_count=%u dispatch_ok=%d last_dispatch_exit=%d frame_events_attempts=%u frame_events_ok=%u frame_events_rejected=%u frame_update_attempts=%u frame_update_ok=%u frame_update_rejected=%u frame_route_attempts=%u frame_route_ok=%u frame_route_rejected=%u render_submit_attempts=%u render_submit_ok=%u render_submit_rejected=%u wrapper_error=%d\n",
-            (int)g_ray_tracing_app_ctx.stage,
-            exit_code,
-            g_ray_tracing_app_ctx.dispatch_summary.dispatch_count,
-            g_ray_tracing_app_ctx.dispatch_summary.dispatch_succeeded ? 1 : 0,
-            g_ray_tracing_app_ctx.dispatch_summary.last_dispatch_exit_code,
-            g_ray_tracing_app_ctx.render_handoff_summary.events_attempt_count,
-            g_ray_tracing_app_ctx.render_handoff_summary.events_success_count,
-            g_ray_tracing_app_ctx.render_handoff_summary.events_rejected_count,
-            g_ray_tracing_app_ctx.render_handoff_summary.update_attempt_count,
-            g_ray_tracing_app_ctx.render_handoff_summary.update_success_count,
-            g_ray_tracing_app_ctx.render_handoff_summary.update_rejected_count,
-            g_ray_tracing_app_ctx.render_handoff_summary.route_attempt_count,
-            g_ray_tracing_app_ctx.render_handoff_summary.route_success_count,
-            g_ray_tracing_app_ctx.render_handoff_summary.route_rejected_count,
-            g_ray_tracing_app_ctx.render_handoff_summary.submit_attempt_count,
-            g_ray_tracing_app_ctx.render_handoff_summary.submit_success_count,
-            g_ray_tracing_app_ctx.render_handoff_summary.submit_rejected_count,
-            g_ray_tracing_app_ctx.wrapper_error);
+    ray_tracing_app_shutdown();
     return exit_code;
 }

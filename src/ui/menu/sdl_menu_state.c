@@ -13,10 +13,10 @@
 #include "config/config_manager.h"
 #include "editor/editor_mode_router.h"
 #include "engine/Render/render_pipeline.h"
+#include "render/font_runtime.h"
 #include "import/fluid_volume_import_3d.h"
 #include "render/ray_tracing_integrator_catalog.h"
 #include "render/runtime_volume_3d_debug.h"
-#include "render/text_font_cache.h"
 #include "ui/scene_source_catalog.h"
 #include "ui/scene_source_ui_labels.h"
 #include "ui/volume_source_catalog.h"
@@ -107,6 +107,16 @@ static int clamp_render_scale_3d_menu(int value) {
     }
     if (value > RUNTIME_3D_RENDER_SCALE_MAX) {
         value = RUNTIME_3D_RENDER_SCALE_MAX;
+    }
+    return value;
+}
+
+static int clamp_upscale_mode_3d_menu(int value) {
+    if (value < RUNTIME_3D_UPSCALE_MODE_MIN) {
+        value = RUNTIME_3D_UPSCALE_MODE_MIN;
+    }
+    if (value > RUNTIME_3D_UPSCALE_MODE_MAX) {
+        value = RUNTIME_3D_UPSCALE_MODE_MAX;
     }
     return value;
 }
@@ -572,6 +582,8 @@ void menu_state_sync_from_anim(MenuRuntimeState* state) {
     sync_transmission_samples_3d_slider_from_settings(state);
     sync_temporal_frames_3d_slider_from_settings(state);
     sync_render_scale_3d_slider_from_settings(state);
+    animSettings.upscaleMode3D =
+        clamp_upscale_mode_3d_menu(animSettings.upscaleMode3D);
     menu_state_sync_source_and_library(state);
     menu_state_refresh_volume_debug_summary(state);
 }
@@ -689,7 +701,7 @@ void menu_state_apply_special_slider_rules(MenuRuntimeState* state, int* target)
 }
 
 static bool open_menu_font_for_current_zoom(TTF_Font** out_font) {
-    int point_size = ray_tracing_text_font_cache_ui_regular_base_point_size(TOGGLE_BUTTON_TEXT_SIZE);
+    int point_size = ray_tracing_font_runtime_ui_regular_base_point_size(TOGGLE_BUTTON_TEXT_SIZE);
     TTF_Font* opened_font;
     SDL_Renderer* renderer = getRenderContext() ? getRenderContext()->renderer : NULL;
     if (!out_font) return false;
@@ -697,9 +709,9 @@ static bool open_menu_font_for_current_zoom(TTF_Font** out_font) {
     point_size = animation_config_scale_text_point_size(&animSettings,
                                                         point_size,
                                                         kMenuMinFontPointSize);
-    opened_font = ray_tracing_text_font_cache_get_ui_regular(renderer,
-                                                             point_size,
-                                                             kMenuMinFontPointSize);
+    opened_font = ray_tracing_font_runtime_get_ui_regular(renderer,
+                                                          point_size,
+                                                          kMenuMinFontPointSize);
     if (!opened_font) return false;
     printf("Menu font loaded: size=%d cache=yes\n", point_size);
     *out_font = opened_font;
@@ -837,6 +849,7 @@ void menu_state_reset_defaults(MenuRuntimeState* state) {
     animSettings.transmissionSamples3D = RUNTIME_3D_TRANSMISSION_SAMPLES_DEFAULT;
     animSettings.temporalFrames3D = RUNTIME_3D_TEMPORAL_FRAMES_DEFAULT;
     animSettings.renderScale3D = RUNTIME_3D_RENDER_SCALE_DEFAULT;
+    animSettings.upscaleMode3D = RUNTIME_3D_UPSCALE_MODE_DEFAULT;
     menu_state_sync_from_anim(state);
     if (state) {
         menu_state_refresh_manifest_options(state);

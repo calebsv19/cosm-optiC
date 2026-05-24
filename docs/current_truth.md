@@ -1,12 +1,46 @@
 # optiC Current Truth
 
-Last updated: 2026-05-21
+Last updated: 2026-05-24
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
 - Public product name: `optiC`
 - Internal/repo/runtime identifiers still use `ray_tracing` and `RayTracing`
   in launcher, log, binary, and source-level contracts where required
+- The compiler-units rollout now has its first explicit RayTracing customer
+  lane:
+  - dual-toolchain `clang-build` / `fisics-build`
+  - explicit `PACKAGE_TOOLCHAIN` package source selection
+  - sema targets on:
+    - `src/import/runtime_scene_bridge.c`
+    - `src/import/runtime_scene_bridge_authoring.c`
+    - `src/app/animation_fluid_scene.c`
+    - `src/render/runtime_light_emitter_3d.c`
+    - `src/render/runtime_volume_3d_sampling.c`
+    - `src/render/runtime_native_3d_sampling.c`
+    - `src/render/runtime_volume_3d.c`
+    - `src/render/runtime_volume_3d_integrate.c`
+    - `src/render/runtime_volume_3d_scatter.c`
+    - `src/render/runtime_direct_light_3d.c`
+    - `src/render/runtime_visibility_3d.c`
+  - current honest units boundary covers:
+    - runtime-scene object positions and primitive dimensions
+    - authoring path coordinates, light/camera seed positions, focus target,
+      scene bounds, and construction-plane offset
+    - fluid-manifest world-fit camera placement, default orbit extents, and
+      import placement interpolation into world space
+    - emitter radius, falloff distance, and hit-distance attenuation checks
+    - volume bounds clip distances and world-position-to-voxel normalization
+    - volume grid voxel size, bounds extents, and timestep metadata
+    - volume transmittance march-step and segment-length semantics
+    - volume single-scatter light-path distance and sample-step semantics
+    - direct-light light-path distance and attenuation-falloff semantics
+    - visibility segment-distance, light-distance, and target-distance semantics
+  - support-only sema coverage now also records:
+    - native `3D` unitless subpass/jitter sampling in
+      `src/render/runtime_native_3d_sampling.c`
+  - `extensions.ray_tracing.authoring.light_settings.radius` was checked and
+    intentionally left on its existing renderer-local scalar contract
 - Primary runtime entry:
   - `src/app/animation.c` (`main()` delegates through `ray_tracing_app_main(...)`)
   - wrapper shell: `include/ray_tracing/ray_tracing_app_main.h`, `src/app/ray_tracing_app_main.c`
@@ -33,11 +67,22 @@ Last updated: 2026-05-21
 - Native `3D` support layers now include:
   - tile preview
   - dirty-rect preview updates
+  - shared-frame preview reconstruction
+  - explicit `Nearest` / `Bilinear` upscale policy selection
   - tile occupancy culling
   - temporal accumulation upgrades
   - stratified + blue-noise sampling support
   - Disney-only denoise
   - optional top-fill lighting
+- Native `3D` low-resolution presentation no longer has one hardcoded upscale policy:
+  - preview dirty-rect redraw and completed-frame resolve both route through
+    `runtime_native_3d_preview_reconstruction.*`
+  - the persisted/menu/runtime contract now exposes `upscaleMode3D` through a
+    renderer-controls button and the runtime `U` key cycle
+  - `OFF` preserves a raw non-smoothed low-resolution present path
+  - `Nearest` preserves crisp pixel structure at low render scales
+  - `Bilinear` keeps the smoother reconstruction path available as an
+    explicit mode instead of an accidental default
 - Native `3D` material payloads now support opt-in procedural material texture overlays:
   - `textureId=1` rust overlay
   - `textureId=2` fog overlay
@@ -372,6 +417,9 @@ Last updated: 2026-05-21
     actual thing under review
   - use detached job runner plus publish helpers only after preview/framing are
     stable
+  - for worker-backed multi-frame review, use the proven seed ->
+    `start_stage = ray_tracing` continuation -> optional publish backfill flow
+    described in `docs/headless_continuation_visualizer_workflow.md`
 - Current authoring contract reminders:
   - `material_id = 5` is the transparent/glass preset
   - `material_id = 4` remains the explicit emissive preset

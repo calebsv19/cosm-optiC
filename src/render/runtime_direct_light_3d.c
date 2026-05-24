@@ -56,15 +56,18 @@ static void runtime_direct_light_3d_map_square_to_disk(double u,
     *out_y = r * sin(phi);
 }
 
-static double runtime_direct_light_3d_attenuation(const RuntimeLight3D* light,
-                                                  double light_distance) {
-    double falloff = 1.0;
+static double runtime_direct_light_3d_attenuation(
+    const RuntimeLight3D* light,
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double light_distance) {
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double zero_length = 0.0;
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double unit_length = 1.0;
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double falloff = unit_length;
     double normalized = 0.0;
     if (!light) return 0.0;
 
     falloff = light->falloffDistance;
-    if (!(falloff > 0.0)) {
-        falloff = 1.0;
+    if (!(falloff > zero_length)) {
+        falloff = unit_length;
     }
     normalized = light_distance / falloff;
 
@@ -95,9 +98,10 @@ static double runtime_direct_light_3d_clamp(double value,
 }
 
 static Vec3 runtime_direct_light_3d_default_tangent(Vec3 normal) {
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon = 1e-9;
     Vec3 guide = fabs(normal.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
     Vec3 tangent = vec3_cross(guide, normal);
-    if (vec3_length(tangent) <= 1e-9) {
+    if (vec3_length(tangent) <= length_epsilon) {
         tangent = vec3(1.0, 0.0, 0.0);
     }
     return vec3_normalize(tangent);
@@ -106,10 +110,11 @@ static Vec3 runtime_direct_light_3d_default_tangent(Vec3 normal) {
 static void runtime_direct_light_3d_build_basis(Vec3 normal,
                                                 Vec3* out_tangent,
                                                 Vec3* out_bitangent) {
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon = 1e-9;
     Vec3 tangent = runtime_direct_light_3d_default_tangent(normal);
     Vec3 bitangent = vec3_normalize(vec3_cross(normal, tangent));
 
-    if (vec3_length(bitangent) <= 1e-9) {
+    if (vec3_length(bitangent) <= length_epsilon) {
         tangent = vec3(1.0, 0.0, 0.0);
         bitangent = vec3(0.0, 0.0, 1.0);
     }
@@ -119,7 +124,8 @@ static void runtime_direct_light_3d_build_basis(Vec3 normal,
 }
 
 static int runtime_direct_light_3d_area_light_sample_count(const RuntimeLight3D* light) {
-    if (!light || !(light->radius > 1e-9)) {
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon = 1e-9;
+    if (!light || !(light->radius > length_epsilon)) {
         return 1;
     }
     return (int)(sizeof(kRuntimeDirectLight3DAreaLightSamples) /
@@ -134,8 +140,10 @@ static Vec3 runtime_direct_light_3d_sample_light_position(const RuntimeLight3D* 
     Vec3 bitangent = vec3(0.0, 0.0, 0.0);
     RuntimeDirectLight3DDiskSample sample = {0.0, 0.0};
     double radius = 0.0;
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon = 1e-9;
 
-    if (!light || sample_index <= 0 || !(light->radius > 1e-9)) {
+    if (!light || sample_index <= 0 ||
+        !(light->radius > length_epsilon)) {
         return light ? light->position : vec3(0.0, 0.0, 0.0);
     }
 
@@ -266,7 +274,9 @@ bool RuntimeDirectLight3D_ShadeHit(const RuntimeScene3D* scene,
                                    RuntimeDirectLight3DResult* out_result) {
     RuntimeDirectLight3DResult result = {0};
     Vec3 to_light = vec3(0.0, 0.0, 0.0);
-    double light_distance = 0.0;
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double light_distance =
+        0.0;
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon = 1e-9;
     double attenuation = 0.0;
     RuntimeVisibility3DTransmittance transmittance = {0};
     double tint_r = 1.0;
@@ -290,7 +300,7 @@ bool RuntimeDirectLight3D_ShadeHit(const RuntimeScene3D* scene,
     to_light = vec3_sub(scene->light.position, hit->position);
     light_distance = vec3_length(to_light);
     result.lightDistance = light_distance;
-    if (light_distance <= 1e-9) {
+    if (light_distance <= length_epsilon) {
         result.visible = true;
         result.ndotl = 1.0;
         result.attenuation = 1.0;
@@ -314,12 +324,13 @@ bool RuntimeDirectLight3D_ShadeHit(const RuntimeScene3D* scene,
                                                                                  i,
                                                                                  sampling);
             Vec3 sample_to_light = vec3_sub(sample_position, hit->position);
-            double sample_distance = vec3_length(sample_to_light);
+            [[fisics::dim(length)]] [[fisics::unit(meter)]] double sample_distance =
+                vec3_length(sample_to_light);
             double sample_attenuation = 0.0;
             double sample_ndotl = 0.0;
             Vec3 sample_dir = vec3(0.0, 0.0, 0.0);
 
-            if (!(sample_distance > 1e-9)) {
+            if (!(sample_distance > length_epsilon)) {
                 continue;
             }
             sample_dir = vec3_scale(sample_to_light, 1.0 / sample_distance);

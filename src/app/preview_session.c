@@ -12,6 +12,7 @@
 #include "render/space_mode_adapter.h"
 #include "render/ray_tracing_mode_backend.h"
 #include "engine/Render/render_pipeline.h"
+#include "render/font_runtime.h"
 #include "render/text_draw.h"
 #include "import/runtime_scene_bridge.h"
 #include "render/vk_shared_device.h"
@@ -110,6 +111,7 @@ static void PreviewSessionRestoreHostWindow(SDL_Window* host_window) {
 
 static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Renderer* host_renderer) {
     bool didInit = false;
+    bool didFontRuntimeInit = false;
     Uint32 preview_window_id = 0;
     SDL_Window* preview_window = NULL;
     SDL_Renderer* preview_renderer = NULL;
@@ -126,6 +128,12 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
             return;
         }
         didInit = true;
+        if (!ray_tracing_font_runtime_init()) {
+            fprintf(stderr, "TTF_Init Error (preview): %s\n", TTF_GetError());
+            SDL_Quit();
+            return;
+        }
+        didFontRuntimeInit = true;
     } else if (!host_window || !host_renderer) {
         fprintf(stderr, "Embedded preview requires a host window and renderer.\n");
         return;
@@ -141,6 +149,7 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
                                               SDL_WINDOW_ALLOW_HIGHDPI);
         if (!preview_window) {
             fprintf(stderr, "SDL_CreateWindow Error (preview): %s\n", SDL_GetError());
+            if (didFontRuntimeInit) ray_tracing_font_runtime_shutdown();
             if (didInit) SDL_Quit();
             return;
         }
@@ -168,12 +177,14 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
             if (!shared_device) {
                 fprintf(stderr, "vk_shared_device_get failed (preview).\n");
                 SDL_DestroyWindow(preview_window);
+                if (didFontRuntimeInit) ray_tracing_font_runtime_shutdown();
                 if (didInit) SDL_Quit();
                 return;
             }
             preview_vk = (VkRenderer*)malloc(sizeof(VkRenderer));
             if (!preview_vk) {
                 SDL_DestroyWindow(preview_window);
+                if (didFontRuntimeInit) ray_tracing_font_runtime_shutdown();
                 if (didInit) SDL_Quit();
                 return;
             }
@@ -182,6 +193,7 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
                 fprintf(stderr, "vk_renderer_init failed (preview): %d\n", preview_init);
                 free(preview_vk);
                 SDL_DestroyWindow(preview_window);
+                if (didFontRuntimeInit) ray_tracing_font_runtime_shutdown();
                 if (didInit) SDL_Quit();
                 return;
             }
@@ -197,6 +209,7 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
         if (!preview_renderer) {
             fprintf(stderr, "SDL_CreateRenderer Error (preview): %s\n", SDL_GetError());
             SDL_DestroyWindow(preview_window);
+            if (didFontRuntimeInit) ray_tracing_font_runtime_shutdown();
             if (didInit) SDL_Quit();
             return;
         }
@@ -340,6 +353,9 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
                          preview_window,
                          sceneSettings.windowWidth,
                          sceneSettings.windowHeight);
+        if (standalone) {
+            ray_tracing_font_runtime_attach_renderer(preview_renderer);
+        }
         render_set_clear_color(preview_renderer,
                                (Uint8)kPreviewBg,
                                (Uint8)kPreviewBg,
@@ -397,6 +413,7 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
     sceneSettings.camera = saved_camera;
     sceneSettings.cameraZ = saved_camera_z;
     if (standalone) {
+        ray_tracing_font_runtime_detach_renderer(preview_renderer);
 #if USE_VULKAN
         if (preview_renderer) {
             VkRenderer* preview_vk = (VkRenderer*)preview_renderer;
@@ -425,6 +442,7 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
         SDL_PumpEvents();
     }
     if (didInit) {
+        ray_tracing_font_runtime_shutdown();
         SDL_Quit();
     }
 }

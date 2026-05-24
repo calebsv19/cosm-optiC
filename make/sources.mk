@@ -30,6 +30,7 @@ CORE_SPACE_SRCS := $(CORE_SPACE_DIR)/src/core_space.c
 CORE_PANE_SRCS := $(CORE_PANE_DIR)/src/core_pane.c
 CORE_THEME_SRCS := $(CORE_THEME_DIR)/src/core_theme.c
 CORE_FONT_SRCS := $(CORE_FONT_DIR)/src/core_font.c
+CORE_HEADLESS_JOB_SRCS := $(CORE_HEADLESS_JOB_DIR)/src/core_headless_job.c
 KIT_RENDER_SRCS := \
 	$(KIT_RENDER_DIR)/src/kit_render.c \
 	$(KIT_RENDER_DIR)/src/kit_render_external_text.c \

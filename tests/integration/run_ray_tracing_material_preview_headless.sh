@@ -2,8 +2,8 @@
 set -eu
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-LINE_TOOL="$ROOT_DIR/../line_drawing/build/bin/agent_scene_tool"
-PREVIEW_BIN="$ROOT_DIR/build/arm64/tools/cli/ray_tracing_material_preview_headless"
+LINE_TOOL="$ROOT_DIR/../line_drawing/build/toolchains/clang/bin/agent_scene_tool"
+PREVIEW_BIN="$ROOT_DIR/build/toolchains/clang/$(uname -m)/tools/cli/ray_tracing_material_preview_headless"
 LINE_REQUEST="$ROOT_DIR/../line_drawing/tests/fixtures/agent_detached_lab_emitter_paths_request.json"
 AUTHOR_OUT="/private/tmp/ray_tracing_material_preview_author"
 REQUEST_PATH="/private/tmp/ray_tracing_material_preview_request.json"
@@ -12,6 +12,8 @@ SUMMARY_PATH="/private/tmp/ray_tracing_material_preview_summary.json"
 
 rm -rf "$AUTHOR_OUT"
 rm -f "$REQUEST_PATH" "$OUTPUT_PATH" "$SUMMARY_PATH"
+
+make -C "$ROOT_DIR/../line_drawing" BUILD_TOOLCHAIN=clang agent_scene_tool
 
 "$LINE_TOOL" --request "$LINE_REQUEST" --out "$AUTHOR_OUT" --determinism-check
 

@@ -70,9 +70,11 @@ static bool timer_hud_parse_bool_token(const char* value, bool* out_enabled) {
 }
 
 static void timer_hud_backend_init(void) {
-    if (!initFontSystem()) {
-        fprintf(stderr, "[TimerHUD] Failed to initialise font system.\n");
-    }
+    /* Host runtime owns font lifecycle for this backend. */
+}
+
+static void timer_hud_backend_shutdown(void) {
+    /* Host runtime owns font lifecycle for this backend. */
 }
 
 static int timer_hud_get_screen_size(int* out_w, int* out_h) {
@@ -87,7 +89,7 @@ static int timer_hud_measure_text(const char* text, int* out_w, int* out_h) {
     TTF_Font* font = getActiveFont();
     RenderContext* ctx = getRenderContext();
     SDL_Renderer* renderer = (ctx ? ctx->renderer : NULL);
-    if (!text || !font) return 0;
+    if (!text || !renderer || !fontSystemReady() || !font) return 0;
     return ray_tracing_text_measure_utf8(renderer, font, text, out_w, out_h);
 }
 
@@ -96,7 +98,7 @@ static int timer_hud_line_height(void) {
     RenderContext* ctx = getRenderContext();
     SDL_Renderer* renderer = (ctx ? ctx->renderer : NULL);
     int logical_h = 0;
-    if (!font) return 0;
+    if (!renderer || !fontSystemReady() || !font) return 0;
     if (!ray_tracing_text_line_height(renderer, font, &logical_h)) {
         return 0;
     }
@@ -130,7 +132,7 @@ static void timer_hud_draw_text(const char* text, int x, int y, int align_flags,
     TTF_Font* font = getActiveFont();
     int logical_w = 0;
     int logical_h = 0;
-    if (!text || !font) return;
+    if (!text || !fontSystemReady() || !font) return;
 
     if (!ray_tracing_text_measure_utf8(ctx->renderer, font, text, &logical_w, &logical_h)) {
         return;
@@ -151,7 +153,7 @@ static void timer_hud_draw_text(const char* text, int x, int y, int align_flags,
 
 static const TimerHUDBackend g_timer_hud_backend = {
     .init = timer_hud_backend_init,
-    .shutdown = NULL,
+    .shutdown = timer_hud_backend_shutdown,
     .get_screen_size = timer_hud_get_screen_size,
     .measure_text = timer_hud_measure_text,
     .get_line_height = timer_hud_line_height,

@@ -9,6 +9,7 @@
 #include "app/animation.h"
 #include "config/config_file_io.h"
 #include "config/config_manager.h"
+#include "editor/material_preview_surface_eval.h"
 #include "editor/scene_editor_material_stack.h"
 #include "import/runtime_scene_bridge.h"
 #include "material/material_manager.h"
@@ -118,31 +119,13 @@ static void material_preview_eval_surface(const SceneObject* object,
                                           double u,
                                           double v,
                                           RuntimeMaterialSurfaceEval* out_eval) {
-    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
-    RuntimeMaterialSurfaceEval base_eval;
-    RuntimeMaterialSurfaceEval surface_eval = {0};
-    MaterialBSDF bsdf;
-    const Material* material = NULL;
-    double transparency = 0.0;
-    MaterialBSDFInitFromSceneObject(object, &bsdf);
-    material = MaterialManagerGet(object->material_id);
-    transparency = material ? material_preview_clamp01(material->transparency * material_preview_clamp01(object->alpha)) : 0.0;
-    base_eval = RuntimeMaterialSurfaceEvalMakeBase(bsdf.baseColorR,
-                                                   bsdf.baseColorG,
-                                                   bsdf.baseColorB,
-                                                   bsdf.roughness,
-                                                   bsdf.reflectivity,
-                                                   bsdf.specWeight,
-                                                   bsdf.diffuseWeight,
-                                                   transparency);
-    if (!SceneEditorMaterialStackGetEffectiveObjectStack(object, scene_index, &stack)) {
-        RuntimeMaterialTextureStackBuildLegacyFromObject(object, &stack);
-    }
+    RuntimeMaterialTextureLayer overlay = {0};
+    const RuntimeMaterialTextureLayer* overlay_ptr = NULL;
     if (variant && variant->has_preview_overlay &&
-        stack.layerCount < RUNTIME_MATERIAL_TEXTURE_STACK_MAX_LAYERS) {
-        RuntimeMaterialTextureLayer overlay =
-            RuntimeMaterialTextureLayerMakeOverlay(
-                RuntimeMaterialTextureLayerKindFromStableId(variant->preview_overlay_kind));
+        RuntimeMaterialTextureLayerKindFromStableId(variant->preview_overlay_kind) !=
+            RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE) {
+        overlay = RuntimeMaterialTextureLayerMakeOverlay(
+            RuntimeMaterialTextureLayerKindFromStableId(variant->preview_overlay_kind));
         overlay.opacity = material_preview_clamp01(variant->preview_overlay_opacity);
         if (variant->has_preview_overlay_scale) overlay.placement.scale = variant->preview_overlay_scale;
         if (variant->has_preview_overlay_strength) overlay.placement.strength = variant->preview_overlay_strength;
@@ -161,20 +144,18 @@ static void material_preview_eval_surface(const SceneObject* object,
         overlay.placement.params = overlay.params;
         overlay = RuntimeMaterialTextureLayerNormalize(overlay);
         if (overlay.kind != RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE) {
-            stack.layers[stack.layerCount++] = overlay;
-            stack = RuntimeMaterialTextureStackNormalize(stack);
+            overlay_ptr = &overlay;
         }
     }
-    if (!RuntimeMaterialTextureStackEvaluatePlacedUV(&stack,
-                                                     object,
-                                                     u,
-                                                     v,
-                                                     object->textureSeed != 0 ? object->textureSeed : scene_index + 1,
-                                                     &base_eval,
-                                                     &surface_eval)) {
-        surface_eval = base_eval;
+    if (!out_eval) return;
+    if (!MaterialPreviewSurfaceEvaluateObject(object,
+                                              scene_index,
+                                              overlay_ptr,
+                                              u,
+                                              v,
+                                              out_eval)) {
+        memset(out_eval, 0, sizeof(*out_eval));
     }
-    if (out_eval) *out_eval = surface_eval;
 }
 
 static void material_preview_shade_pixel(const RuntimeMaterialSurfaceEval* eval,
@@ -187,51 +168,16 @@ static void material_preview_shade_pixel(const RuntimeMaterialSurfaceEval* eval,
                                          Uint8* out_r,
                                          Uint8* out_g,
                                          Uint8* out_b) {
-    double x = (u - 0.5) * 1.6;
-    double y = (v - 0.5) * 1.6;
-    double nz = 1.0 / sqrt(1.0 + x * x + y * y);
-    double nx = x * nz;
-    double ny = y * nz;
-    double lx = -0.42;
-    double ly = -0.58;
-    double lz = 0.70;
-    double ll = sqrt(lx * lx + ly * ly + lz * lz);
-    double ndotl = 0.0;
-    double hx = 0.0;
-    double hy = 0.0;
-    double hz = 0.0;
-    double hlen = 0.0;
-    double spec = 0.0;
-    double shininess = 0.0;
-    double diffuse = 0.0;
-    double emissive = 0.0;
-    double alpha = 1.0 - material_preview_clamp01(eval ? eval->transparency : 0.0);
-    double base_r = eval ? eval->colorR : 1.0;
-    double base_g = eval ? eval->colorG : 1.0;
-    double base_b = eval ? eval->colorB : 1.0;
-    double roughness = eval ? material_preview_clamp01(eval->roughness) : material_preview_clamp01(object->roughness);
-    double reflectivity = eval ? material_preview_clamp01(eval->reflectivity) : material_preview_clamp01(object->reflectivity);
-    lx /= ll;
-    ly /= ll;
-    lz /= ll;
-    ndotl = fmax(0.0, nx * lx + ny * ly + nz * lz);
-    diffuse = 0.30 + ndotl * 0.70;
-    hx = lx;
-    hy = ly;
-    hz = lz + 1.0;
-    hlen = sqrt(hx * hx + hy * hy + hz * hz);
-    hx /= hlen;
-    hy /= hlen;
-    hz /= hlen;
-    shininess = 8.0 + ((1.0 - roughness) * 88.0);
-    spec = pow(fmax(0.0, nx * hx + ny * hy + nz * hz), shininess) * (0.08 + reflectivity * 0.92);
-    emissive = material_preview_clamp01(object->emissiveStrength) * 0.28;
-    base_r = material_preview_clamp01(base_r * diffuse + spec + emissive);
-    base_g = material_preview_clamp01(base_g * diffuse + spec + emissive);
-    base_b = material_preview_clamp01(base_b * diffuse + spec + emissive);
-    *out_r = (Uint8)lround(((double)bg_r * (1.0 - alpha)) + (base_r * 255.0 * alpha));
-    *out_g = (Uint8)lround(((double)bg_g * (1.0 - alpha)) + (base_g * 255.0 * alpha));
-    *out_b = (Uint8)lround(((double)bg_b * (1.0 - alpha)) + (base_b * 255.0 * alpha));
+    MaterialPreviewSurfaceShadePixel(eval,
+                                     object,
+                                     u,
+                                     v,
+                                     bg_r,
+                                     bg_g,
+                                     bg_b,
+                                     out_r,
+                                     out_g,
+                                     out_b);
 }
 
 static bool material_preview_write_surface(const char* output_path,

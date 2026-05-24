@@ -1,12 +1,25 @@
 REL_BUILD_DIR_BASE ?= build_release
 REL_TARGET := Ray_anim_release
+BUILD_DIR ?= $(call program_build_dir_for,$(BUILD_TOOLCHAIN))
 ifeq ($(UNAME_S),Darwin)
-BUILD_DIR ?= $(BUILD_DIR_BASE)/$(TARGET_ARCH)
 REL_BUILD_DIR ?= $(REL_BUILD_DIR_BASE)/$(TARGET_ARCH)
 else
-BUILD_DIR ?= $(BUILD_DIR_BASE)
 REL_BUILD_DIR ?= $(REL_BUILD_DIR_BASE)
 endif
+
+APP_TARGET := $(BUILD_DIR)/$(TARGET)
+PACKAGE_SOURCE_BIN := $(call program_bin_for,$(PACKAGE_TOOLCHAIN))
+RAY_TRACING_UNITS_SEMA_OUTPUT := $(call program_build_dir_for,fisics)/runtime_scene_bridge.sema.txt
+RAY_TRACING_AUTHORING_UNITS_SEMA_OUTPUT := $(call program_build_dir_for,fisics)/runtime_scene_bridge_authoring.sema.txt
+RAY_TRACING_FLUID_SCENE_UNITS_SEMA_OUTPUT := $(call program_build_dir_for,fisics)/animation_fluid_scene.sema.txt
+RAY_TRACING_LIGHT_EMITTER_UNITS_SEMA_OUTPUT := $(call program_build_dir_for,fisics)/runtime_light_emitter_3d.sema.txt
+RAY_TRACING_VOLUME_SAMPLING_UNITS_SEMA_OUTPUT := $(call program_build_dir_for,fisics)/runtime_volume_3d_sampling.sema.txt
+RAY_TRACING_NATIVE_SAMPLING_UNITS_SEMA_OUTPUT := $(call program_build_dir_for,fisics)/runtime_native_3d_sampling.sema.txt
+RAY_TRACING_VOLUME_UNITS_SEMA_OUTPUT := $(call program_build_dir_for,fisics)/runtime_volume_3d.sema.txt
+RAY_TRACING_VOLUME_INTEGRATE_UNITS_SEMA_OUTPUT := $(call program_build_dir_for,fisics)/runtime_volume_3d_integrate.sema.txt
+RAY_TRACING_VOLUME_SCATTER_UNITS_SEMA_OUTPUT := $(call program_build_dir_for,fisics)/runtime_volume_3d_scatter.sema.txt
+RAY_TRACING_DIRECT_LIGHT_UNITS_SEMA_OUTPUT := $(call program_build_dir_for,fisics)/runtime_direct_light_3d.sema.txt
+RAY_TRACING_VISIBILITY_UNITS_SEMA_OUTPUT := $(call program_build_dir_for,fisics)/runtime_visibility_3d.sema.txt
 
 CLI_BIN_DIR := tools/cli/bin
 CLI_TOOLS := $(CLI_BIN_DIR)/shape_asset_tool $(CLI_BIN_DIR)/shape_import_tool $(CLI_BIN_DIR)/shape_sanity_tool

@@ -5,6 +5,21 @@
 #include <stdlib.h>
 #include <string.h>
 
+static double runtime_volume_3d_zero_length(void) {
+    double zero [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    return zero;
+}
+
+static double runtime_volume_3d_zero_time(void) {
+    double zero [[fisics::dim(time)]] [[fisics::unit(second)]] = 0.0;
+    return zero;
+}
+
+static double runtime_volume_3d_length_epsilon(void) {
+    double epsilon [[fisics::dim(length)]] [[fisics::unit(meter)]] = 1e-9;
+    return epsilon;
+}
+
 static Vec3 runtime_volume_3d_default_scene_up(void) {
     return vec3(0.0, 0.0, 1.0);
 }
@@ -63,31 +78,43 @@ bool RuntimeVolumeGrid3D_Configure(RuntimeVolumeGrid3D* grid,
                                    uint32_t grid_w,
                                    uint32_t grid_h,
                                    uint32_t grid_d,
-                                   double time_seconds,
+                                   double time_seconds [[fisics::dim(time)]] [[fisics::unit(second)]],
                                    uint64_t frame_index,
-                                   double dt_seconds,
+                                   double dt_seconds [[fisics::dim(time)]] [[fisics::unit(second)]],
                                    Vec3 origin,
-                                   double voxel_size,
+                                   double voxel_size [[fisics::dim(length)]] [[fisics::unit(meter)]],
                                    Vec3 scene_up,
                                    uint32_t solid_mask_crc32) {
     Vec3 scene_up_resolved = scene_up;
     Vec3 max_extent = {0};
     uint64_t cell_count = 0;
+    double zero_length = runtime_volume_3d_zero_length();
+    double zero_time = runtime_volume_3d_zero_time();
+    double scene_up_length = 0.0;
+    double epsilon = runtime_volume_3d_length_epsilon();
+    double extent_x [[fisics::dim(length)]] [[fisics::unit(meter)]] = zero_length;
+    double extent_y [[fisics::dim(length)]] [[fisics::unit(meter)]] = zero_length;
+    double extent_z [[fisics::dim(length)]] [[fisics::unit(meter)]] = zero_length;
 
-    if (!grid || !(voxel_size > 0.0)) {
+    if (!grid || !(voxel_size > zero_length)) {
+        return false;
+    }
+    if (!(dt_seconds >= zero_time)) {
         return false;
     }
     if (!runtime_volume_3d_try_compute_cell_count(grid_w, grid_h, grid_d, &cell_count)) {
         return false;
     }
-    if (vec3_length(scene_up_resolved) <= 1e-9) {
+    scene_up_length = vec3_length(scene_up_resolved);
+    if (scene_up_length <= epsilon) {
         scene_up_resolved = runtime_volume_3d_default_scene_up();
     }
 
     RuntimeVolumeGrid3D_Reset(grid);
-    max_extent = vec3((double)grid_w * voxel_size,
-                      (double)grid_h * voxel_size,
-                      (double)grid_d * voxel_size);
+    extent_x = (double)grid_w * voxel_size;
+    extent_y = (double)grid_h * voxel_size;
+    extent_z = (double)grid_d * voxel_size;
+    max_extent = vec3(extent_x, extent_y, extent_z);
     grid->formatVersion = format_version;
     grid->gridW = grid_w;
     grid->gridH = grid_h;
@@ -107,7 +134,8 @@ bool RuntimeVolumeGrid3D_Configure(RuntimeVolumeGrid3D* grid,
 }
 
 bool RuntimeVolumeGrid3D_IsConfigured(const RuntimeVolumeGrid3D* grid) {
-    return grid && grid->valid && grid->cellCount > 0u && grid->voxelSize > 0.0;
+    double zero_length = runtime_volume_3d_zero_length();
+    return grid && grid->valid && grid->cellCount > 0u && grid->voxelSize > zero_length;
 }
 
 void RuntimeVolumeGrid3D_Reset(RuntimeVolumeGrid3D* grid) {

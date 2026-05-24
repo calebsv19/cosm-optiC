@@ -9,6 +9,7 @@
 #include "render/integrators/integrator_common.h"
 #include "render/ray_tracing2_preview.h"
 #include "render/runtime_camera_3d_rays.h"
+#include "render/runtime_native_3d_preview_reconstruction.h"
 #include "render/runtime_native_3d_render.h"
 #include "render/runtime_scene_3d.h"
 #include "test_runtime_native_3d_render_prepared_suite_internal.h"
@@ -315,11 +316,174 @@ static int test_runtime_native_3d_dirty_rect_preview_base_parity(void) {
     return 0;
 }
 
+static int test_runtime_native_3d_preview_reconstruction_rect_parity(void) {
+    enum { kRenderWidth = 5, kRenderHeight = 4, kHostWidth = 17, kHostHeight = 13 };
+    Uint8 render_buffer[kRenderWidth * kRenderHeight * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    Uint8 full_host[kHostWidth * kHostHeight * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    Uint8 rect_host[kHostWidth * kHostHeight * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    SDL_Rect rect_a = {.x = 0, .y = 0, .w = 8, .h = 6};
+    SDL_Rect rect_b = {.x = 8, .y = 0, .w = 9, .h = 6};
+    SDL_Rect rect_c = {.x = 0, .y = 6, .w = 17, .h = 7};
+    const Runtime3DUpscaleMode modes[] = {
+        RUNTIME_3D_UPSCALE_MODE_NEAREST,
+        RUNTIME_3D_UPSCALE_MODE_BILINEAR,
+    };
+    bool ok = false;
+    char label[96];
+
+    for (int y = 0; y < kRenderHeight; ++y) {
+        for (int x = 0; x < kRenderWidth; ++x) {
+            const size_t base =
+                ((size_t)y * (size_t)kRenderWidth + (size_t)x) *
+                (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+            render_buffer[base] = (Uint8)(10 + x * 31 + y * 7);
+            render_buffer[base + 1u] = (Uint8)(20 + x * 13 + y * 29);
+            render_buffer[base + 2u] = (Uint8)(30 + x * 19 + y * 11);
+            render_buffer[base + 3u] = 0xFFu;
+        }
+    }
+
+    for (size_t i = 0; i < sizeof(modes) / sizeof(modes[0]); ++i) {
+        memset(full_host, 0, sizeof(full_host));
+        memset(rect_host, 0, sizeof(rect_host));
+
+        ok = RuntimeNative3DPreviewReconstructABGRWithMode(render_buffer,
+                                                           kRenderWidth,
+                                                           kRenderHeight,
+                                                           full_host,
+                                                           kHostWidth,
+                                                           kHostHeight,
+                                                           modes[i]);
+        snprintf(label, sizeof(label),
+                 "runtime_native_3d_preview_reconstruction_full_ok_%zu", i);
+        assert_true(label, ok);
+        ok = RuntimeNative3DPreviewReconstructABGRRectWithMode(render_buffer,
+                                                               kRenderWidth,
+                                                               kRenderHeight,
+                                                               rect_host,
+                                                               kHostWidth,
+                                                               kHostHeight,
+                                                               &rect_a,
+                                                               modes[i]);
+        snprintf(label, sizeof(label),
+                 "runtime_native_3d_preview_reconstruction_rect_a_ok_%zu", i);
+        assert_true(label, ok);
+        ok = RuntimeNative3DPreviewReconstructABGRRectWithMode(render_buffer,
+                                                               kRenderWidth,
+                                                               kRenderHeight,
+                                                               rect_host,
+                                                               kHostWidth,
+                                                               kHostHeight,
+                                                               &rect_b,
+                                                               modes[i]);
+        snprintf(label, sizeof(label),
+                 "runtime_native_3d_preview_reconstruction_rect_b_ok_%zu", i);
+        assert_true(label, ok);
+        ok = RuntimeNative3DPreviewReconstructABGRRectWithMode(render_buffer,
+                                                               kRenderWidth,
+                                                               kRenderHeight,
+                                                               rect_host,
+                                                               kHostWidth,
+                                                               kHostHeight,
+                                                               &rect_c,
+                                                               modes[i]);
+        snprintf(label, sizeof(label),
+                 "runtime_native_3d_preview_reconstruction_rect_c_ok_%zu", i);
+        assert_true(label, ok);
+        snprintf(label, sizeof(label),
+                 "runtime_native_3d_preview_reconstruction_rect_parity_match_%zu", i);
+        assert_true(label, memcmp(full_host, rect_host, sizeof(full_host)) == 0);
+    }
+    return 0;
+}
+
+static int test_runtime_native_3d_preview_reconstruction_dirty_tile_parity(void) {
+    enum { kRenderWidth = 6, kRenderHeight = 4, kHostWidth = 19, kHostHeight = 13 };
+    Uint8 render_buffer[kRenderWidth * kRenderHeight * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    Uint8 full_host[kHostWidth * kHostHeight * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    Uint8 dirty_host[kHostWidth * kHostHeight * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    SDL_Rect host_rect = {0};
+    const SDL_Rect render_tiles[] = {
+        {.x = 0, .y = 0, .w = 3, .h = 2},
+        {.x = 3, .y = 0, .w = 3, .h = 2},
+        {.x = 0, .y = 2, .w = 3, .h = 2},
+        {.x = 3, .y = 2, .w = 3, .h = 2},
+    };
+    const Runtime3DUpscaleMode modes[] = {
+        RUNTIME_3D_UPSCALE_MODE_NEAREST,
+        RUNTIME_3D_UPSCALE_MODE_BILINEAR,
+    };
+    bool ok = false;
+    char label[96];
+
+    for (int y = 0; y < kRenderHeight; ++y) {
+        for (int x = 0; x < kRenderWidth; ++x) {
+            const size_t base =
+                ((size_t)y * (size_t)kRenderWidth + (size_t)x) *
+                (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+            render_buffer[base] = (Uint8)(15 + x * 23 + y * 9);
+            render_buffer[base + 1u] = (Uint8)(25 + x * 17 + y * 21);
+            render_buffer[base + 2u] = (Uint8)(35 + x * 11 + y * 27);
+            render_buffer[base + 3u] = 0xFFu;
+        }
+    }
+
+    for (size_t mode_index = 0; mode_index < sizeof(modes) / sizeof(modes[0]); ++mode_index) {
+        memset(full_host, 0, sizeof(full_host));
+        memset(dirty_host, 0, sizeof(dirty_host));
+
+        ok = RuntimeNative3DPreviewReconstructABGRWithMode(render_buffer,
+                                                           kRenderWidth,
+                                                           kRenderHeight,
+                                                           full_host,
+                                                           kHostWidth,
+                                                           kHostHeight,
+                                                           modes[mode_index]);
+        snprintf(label, sizeof(label),
+                 "runtime_native_3d_preview_dirty_tile_full_ok_%zu", mode_index);
+        assert_true(label, ok);
+
+        for (size_t i = 0; i < sizeof(render_tiles) / sizeof(render_tiles[0]); ++i) {
+            ok = RuntimeNative3DPreviewResolveDirtyHostRect(render_tiles[i].x,
+                                                            render_tiles[i].y,
+                                                            render_tiles[i].w,
+                                                            render_tiles[i].h,
+                                                            kRenderWidth,
+                                                            kRenderHeight,
+                                                            kHostWidth,
+                                                            kHostHeight,
+                                                            &host_rect);
+            snprintf(label, sizeof(label),
+                     "runtime_native_3d_preview_dirty_tile_rect_ok_%zu_%zu", mode_index, i);
+            assert_true(label, ok);
+            ok = RuntimeNative3DPreviewReconstructABGRRectWithMode(render_buffer,
+                                                                   kRenderWidth,
+                                                                   kRenderHeight,
+                                                                   dirty_host,
+                                                                   kHostWidth,
+                                                                   kHostHeight,
+                                                                   &host_rect,
+                                                                   modes[mode_index]);
+            snprintf(label, sizeof(label),
+                     "runtime_native_3d_preview_dirty_tile_reconstruct_ok_%zu_%zu",
+                     mode_index, i);
+            assert_true(label, ok);
+        }
+
+        snprintf(label, sizeof(label),
+                 "runtime_native_3d_preview_dirty_tile_parity_match_%zu", mode_index);
+        assert_true(label, memcmp(full_host, dirty_host, sizeof(full_host)) == 0);
+    }
+    return 0;
+}
+
 int run_test_runtime_native_3d_render_prepared_scatter_preview_suite(void) {
     int before = test_support_failures();
 
     test_runtime_native_3d_background_volume_single_scatter_lifts_black_miss();
     test_runtime_native_3d_surface_volume_single_scatter_lifts_unlit_hit_across_tiers();
     test_runtime_native_3d_dirty_rect_preview_base_parity();
+    test_runtime_native_3d_preview_reconstruction_rect_parity();
+    test_runtime_native_3d_preview_reconstruction_dirty_tile_parity();
     return test_support_failures() - before;
 }

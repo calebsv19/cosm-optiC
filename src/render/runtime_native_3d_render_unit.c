@@ -21,6 +21,13 @@ static RuntimeNative3DSamplingContext runtime_native_3d_render_unit_resolve_subp
     return resolved;
 }
 
+static bool runtime_native_3d_render_unit_resolve_adaptive_sampling_enabled(
+    RayTracing3DIntegratorId integrator_id,
+    int temporal_frames) {
+    return RuntimeNative3DAdaptiveSampling_RuntimeEnabled() &&
+           RuntimeNative3DAdaptiveSampling_ShouldUse(integrator_id, temporal_frames);
+}
+
 void RuntimeNative3DRenderUnit_Init(RuntimeNative3DRenderUnit* unit) {
     if (!unit) return;
     memset(unit, 0, sizeof(*unit));
@@ -105,7 +112,8 @@ bool RuntimeNative3DRenderUnit_Setup(RuntimeNative3DRenderUnit* unit,
     unit->committedSubpasses = 0;
     unit->baseSampling = sampling ? *sampling : (RuntimeNative3DSamplingContext){0};
     unit->useAdaptiveSampling =
-        RuntimeNative3DAdaptiveSampling_ShouldUse(integrator_id, unit->temporalFrames);
+        runtime_native_3d_render_unit_resolve_adaptive_sampling_enabled(integrator_id,
+                                                                        unit->temporalFrames);
     unit->useDisneyTemporalPruning =
         unit->useAdaptiveSampling && integrator_id == RAY_TRACING_3D_INTEGRATOR_DISNEY;
     unit->useDenoise =
@@ -117,6 +125,7 @@ bool RuntimeNative3DRenderUnit_Setup(RuntimeNative3DRenderUnit* unit,
         return false;
     }
     RuntimeNative3DTemporalAccumulation_Clear(&unit->accumulation);
+    RuntimeNative3DAdaptiveSamplingMask_Clear(&unit->adaptiveMask);
 
     pixel_count = (size_t)unit->width * (size_t)unit->height *
                   (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;

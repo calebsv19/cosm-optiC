@@ -22,6 +22,12 @@ void RayTracing2PreviewPresent_DrawABGRBufferToRect(SDL_Renderer* renderer,
                                                     int width,
                                                     int height,
                                                     SDL_Rect dst_rect);
+void RayTracing2PreviewPresent_DrawABGRBufferToRectFiltered(SDL_Renderer* renderer,
+                                                            const Uint8* buffer,
+                                                            int width,
+                                                            int height,
+                                                            SDL_Rect dst_rect,
+                                                            bool linear_filter);
 void RayTracing2PreviewPresent_DimCopyABGR(const Uint8* src,
                                            Uint8* dst,
                                            size_t pixel_count,

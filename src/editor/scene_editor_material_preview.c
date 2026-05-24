@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "config/config_manager.h"
+#include "editor/scene_editor_material_face_metrics.h"
 #include "editor/scene_editor_material_face_placement.h"
 #include "editor/scene_editor_material_stack.h"
 #include "import/runtime_scene_bridge.h"
@@ -91,6 +92,33 @@ static bool scene_editor_material_preview_color_from_surface_eval(
     return mask > 1e-9;
 }
 
+static bool scene_editor_material_preview_apply_face_override_to_stack(
+    const SceneObject* object,
+    int scene_object_index,
+    const SceneEditorMaterialFacePlacement* placement,
+    RuntimeMaterialTextureStack* stack) {
+    RuntimeMaterialTextureLayer layer = {0};
+    if (!object || !placement || !stack) return false;
+    if (!SceneEditorMaterialStackGetEffectiveObjectStack(object, scene_object_index, stack)) {
+        return false;
+    }
+    if (placement->layerIndex < 0 || placement->layerIndex >= stack->layerCount) {
+        return false;
+    }
+    layer = stack->layers[placement->layerIndex];
+    layer.placement.textureId = placement->textureId;
+    layer.placement.offsetU = placement->offsetU;
+    layer.placement.offsetV = placement->offsetV;
+    layer.placement.scale = placement->scale;
+    layer.placement.strength = placement->strength;
+    layer.placement.rotation = placement->rotation;
+    layer.params = placement->params;
+    layer.placement.params = placement->params;
+    stack->layers[placement->layerIndex] = RuntimeMaterialTextureLayerNormalize(layer);
+    *stack = RuntimeMaterialTextureStackNormalize(*stack);
+    return true;
+}
+
 bool SceneEditorMaterialPreviewEvaluateTextureColor(const SceneObject* object,
                                                     int triangle_index,
                                                     double bary_v,
@@ -126,6 +154,7 @@ bool SceneEditorMaterialPreviewEvaluateTextureColor(const SceneObject* object,
 bool SceneEditorMaterialPreviewEvaluateTextureColorForFace(
     const SceneObject* object,
     int scene_object_index,
+    int primitive_index,
     int face_group_index,
     int local_triangle_index,
     int triangle_index,
@@ -152,6 +181,8 @@ bool SceneEditorMaterialPreviewEvaluateTextureColorForFace(
         SceneEditorMaterialFacePlacementHasOverride(scene_object_index, face_group_index);
     double island_u = 0.0;
     double island_v = 0.0;
+    double grounded_u = 0.0;
+    double grounded_v = 0.0;
     int seed_key = ((scene_object_index + 1) * 19349663) ^ ((face_group_index + 1) * 83492791);
     if (seed_key == 0) seed_key = triangle_index + 1;
     SceneEditorMaterialFacePlacementResolveIslandUV(local_triangle_index,
@@ -160,19 +191,31 @@ bool SceneEditorMaterialPreviewEvaluateTextureColorForFace(
                                                     bary_w,
                                                     &island_u,
                                                     &island_v);
+    SceneEditorMaterialFaceMetricsResolveGroundedUV(primitive_index,
+                                                    scene_object_index,
+                                                    face_group_index,
+                                                    island_u,
+                                                    island_v,
+                                                    &grounded_u,
+                                                    &grounded_v);
     if (has_face_override) {
         placement = SceneEditorMaterialFacePlacementGetEffective(object,
                                                                 scene_object_index,
                                                                 face_group_index);
-        runtime_placement = SceneEditorMaterialFacePlacementToRuntime(&placement);
-        RuntimeMaterialTextureStackBuildLegacyFromPlacement(&runtime_placement, &stack);
+        if (!scene_editor_material_preview_apply_face_override_to_stack(object,
+                                                                        scene_object_index,
+                                                                        &placement,
+                                                                        &stack)) {
+            runtime_placement = SceneEditorMaterialFacePlacementToRuntime(&placement);
+            RuntimeMaterialTextureStackBuildLegacyFromPlacement(&runtime_placement, &stack);
+        }
     } else {
         SceneEditorMaterialStackGetEffectiveObjectStack(object, scene_object_index, &stack);
     }
     RuntimeMaterialTextureStackEvaluatePlacedUV(&stack,
                                                 object,
-                                                island_u,
-                                                island_v,
+                                                grounded_u,
+                                                grounded_v,
                                                 seed_key,
                                                 &base_eval,
                                                 &surface_eval);
@@ -741,6 +784,7 @@ static void scene_editor_material_preview_fill_sampled_triangle(
                 SceneEditorMaterialPreviewEvaluateTextureColorForFace(
                     object,
                     triangle->address.sceneObjectIndex,
+                    triangle->address.primitiveIndex,
                     triangle->address.faceGroupIndex,
                     triangle->address.localTriangleIndex,
                     triangle->address.triangleIndex,

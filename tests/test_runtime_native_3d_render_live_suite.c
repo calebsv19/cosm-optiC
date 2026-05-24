@@ -44,7 +44,7 @@ static int test_runtime_native_3d_render_live_buffer_contract(void) {
           "}"
         "],"
         "\"materials\":[],"
-        "\"lights\":[{\"position\":{\"x\":0.0,\"y\":-2.0,\"z\":0.0}}],"
+        "\"lights\":[],"
         "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
         "\"constraints\":[],"
         "\"extensions\":{}"
@@ -56,7 +56,6 @@ static int test_runtime_native_3d_render_live_buffer_contract(void) {
     RuntimeNative3DRenderStats emission_stats = {0};
     RuntimeNative3DRenderStats disney_stats = {0};
     RuntimeNative3DRenderStats offset_stats = {0};
-    RayTracingRuntimeRoute route;
     uint8_t centered_pixels[51 * 51 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
     uint8_t diffuse_pixels[51 * 51 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
     uint8_t material_pixels[51 * 51 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
@@ -91,12 +90,10 @@ static int test_runtime_native_3d_render_live_buffer_contract(void) {
     sceneSettings.camera.rotation = 0.0;
     sceneSettings.camera.zoom = 1.0;
 
-    route = RayTracingModeBackend_ResolveRoute();
-    assert_true("runtime_native_3d_render_route_native", RayTracingModeBackend_IsNative3D(&route));
-    assert_true("runtime_native_3d_render_route_3d_disney",
-                route.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DISNEY);
-
-    /* Keep this contract on the geometry-lit path; visible-emitter precedence has its own tests. */
+    /*
+     * This lane intentionally exercises the live-light fallback path with no authored
+     * runtime light. Route-selection coverage lives in test_runtime_mode_backend_policy.c.
+     */
     ok = RuntimeNative3DRenderToPixelBuffer(centered_pixels,
                                             RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT,
                                             51,
@@ -299,7 +296,7 @@ static int test_runtime_native_3d_render_direct_light_color_tint_contract(void) 
           "}"
         "],"
         "\"materials\":[],"
-        "\"lights\":[{\"position\":{\"x\":0.0,\"y\":-2.0,\"z\":0.0}}],"
+        "\"lights\":[],"
         "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
         "\"constraints\":[],"
         "\"extensions\":{}"

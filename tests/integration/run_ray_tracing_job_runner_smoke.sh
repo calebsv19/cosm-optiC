@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 BUILD_ROOT="$ROOT_DIR/build/$(uname -m)"
 RUNNER="$BUILD_ROOT/tools/cli/ray_tracing_job_runner"
 if [[ ! -x "$RUNNER" ]]; then
-  RUNNER="$ROOT_DIR/build/tools/cli/ray_tracing_job_runner"
+  RUNNER="$ROOT_DIR/build/toolchains/clang/$(uname -m)/tools/cli/ray_tracing_job_runner"
 fi
 
 REQUEST="$ROOT_DIR/tests/fixtures/agent_render_job_runner_request.json"

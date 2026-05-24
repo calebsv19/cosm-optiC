@@ -80,6 +80,16 @@ typedef enum {
 #define RUNTIME_3D_RENDER_SCALE_MAX 8
 #define RUNTIME_3D_RENDER_SCALE_DEFAULT 1
 
+typedef enum {
+    RUNTIME_3D_UPSCALE_MODE_OFF = 0,
+    RUNTIME_3D_UPSCALE_MODE_NEAREST = 1,
+    RUNTIME_3D_UPSCALE_MODE_BILINEAR = 2
+} Runtime3DUpscaleMode;
+
+#define RUNTIME_3D_UPSCALE_MODE_MIN RUNTIME_3D_UPSCALE_MODE_OFF
+#define RUNTIME_3D_UPSCALE_MODE_MAX RUNTIME_3D_UPSCALE_MODE_BILINEAR
+#define RUNTIME_3D_UPSCALE_MODE_DEFAULT RUNTIME_3D_UPSCALE_MODE_OFF
+
 // **Animation Config Struct**
 typedef struct {
     bool interactiveMode;
@@ -143,6 +153,7 @@ typedef struct {
     int transmissionSamples3D;
     int temporalFrames3D;
     int renderScale3D;
+    int upscaleMode3D;
     int runtimeWindowWidth;
     int runtimeWindowHeight;
     // Integrator mode: 0 = forward, 1 = hybrid (camera-path GI), 2 = direct light (Disney path paused).
