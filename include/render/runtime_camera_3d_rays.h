@@ -30,7 +30,7 @@ bool RuntimeCameraProjector3D_ProjectPoint(const RuntimeCameraProjector3D* proje
                                            Vec3 world_point,
                                            double* out_screen_x,
                                            double* out_screen_y,
-                                           double* out_camera_depth,
+                                           [[fisics::dim(length)]] [[fisics::unit(meter)]] double* out_camera_depth,
                                            bool* out_inside_viewport);
 
 #endif

@@ -23,6 +23,8 @@ Current public focus:
   - `src/render/runtime_volume_3d_scatter.c`
   - `src/render/runtime_direct_light_3d.c`
   - `src/render/runtime_visibility_3d.c`
+  - `src/render/runtime_camera_3d_rays.c`
+  - `src/render/runtime_ray_3d.c`
 - shipped native `3D` runtime ladder through `Disney`
 - Phase 4.1/4.2 headless-agent render request preflight CLI
 - deep-render start/resume and export workflow
@@ -63,6 +65,8 @@ Current verification contract:
 - `make -C ray_tracing dump-sema-runtime-volume-3d-scatter`
 - `make -C ray_tracing dump-sema-runtime-direct-light-3d`
 - `make -C ray_tracing dump-sema-runtime-visibility-3d`
+- `make -C ray_tracing dump-sema-runtime-camera-3d-rays`
+- `make -C ray_tracing dump-sema-runtime-ray-3d`
 - `make -C ray_tracing clang-build`
 - `make -C ray_tracing fisics-build`
 - `make -C ray_tracing clean && make -C ray_tracing`

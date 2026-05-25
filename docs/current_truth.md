@@ -23,6 +23,8 @@ Last updated: 2026-05-24
     - `src/render/runtime_volume_3d_scatter.c`
     - `src/render/runtime_direct_light_3d.c`
     - `src/render/runtime_visibility_3d.c`
+    - `src/render/runtime_camera_3d_rays.c`
+    - `src/render/runtime_ray_3d.c`
   - current honest units boundary covers:
     - runtime-scene object positions and primitive dimensions
     - authoring path coordinates, light/camera seed positions, focus target,
@@ -36,6 +38,8 @@ Last updated: 2026-05-24
     - volume single-scatter light-path distance and sample-step semantics
     - direct-light light-path distance and attenuation-falloff semantics
     - visibility segment-distance, light-distance, and target-distance semantics
+    - camera near-plane and projected camera-depth semantics
+    - ray offset epsilon and first-hit distance semantics
   - support-only sema coverage now also records:
     - native `3D` unitless subpass/jitter sampling in
       `src/render/runtime_native_3d_sampling.c`

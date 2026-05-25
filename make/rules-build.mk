@@ -25,6 +25,8 @@ toolchain-contract:
 	@echo "                 src/render/runtime_volume_3d_scatter.c"
 	@echo "                 src/render/runtime_direct_light_3d.c"
 	@echo "                 src/render/runtime_visibility_3d.c"
+	@echo "                 src/render/runtime_camera_3d_rays.c"
+	@echo "                 src/render/runtime_ray_3d.c"
 	@echo "units output:    $(RAY_TRACING_UNITS_SEMA_OUTPUT)"
 	@echo "                 $(RAY_TRACING_AUTHORING_UNITS_SEMA_OUTPUT)"
 	@echo "                 $(RAY_TRACING_FLUID_SCENE_UNITS_SEMA_OUTPUT)"
@@ -36,6 +38,8 @@ toolchain-contract:
 	@echo "                 $(RAY_TRACING_VOLUME_SCATTER_UNITS_SEMA_OUTPUT)"
 	@echo "                 $(RAY_TRACING_DIRECT_LIGHT_UNITS_SEMA_OUTPUT)"
 	@echo "                 $(RAY_TRACING_VISIBILITY_UNITS_SEMA_OUTPUT)"
+	@echo "                 $(RAY_TRACING_CAMERA_RAYS_UNITS_SEMA_OUTPUT)"
+	@echo "                 $(RAY_TRACING_RAY3D_UNITS_SEMA_OUTPUT)"
 
 dump-sema-runtime-scene-bridge:
 	@mkdir -p "$(call program_build_dir_for,fisics)"
@@ -91,6 +95,16 @@ dump-sema-runtime-visibility-3d:
 	@mkdir -p "$(call program_build_dir_for,fisics)"
 	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(CFLAGS) --dump-sema -c "src/render/runtime_visibility_3d.c" -o "$(call program_build_dir_for,fisics)/runtime_visibility_3d.o" > "$(RAY_TRACING_VISIBILITY_UNITS_SEMA_OUTPUT)" 2>&1
 	@echo "Wrote semantic dump to $(RAY_TRACING_VISIBILITY_UNITS_SEMA_OUTPUT)"
+
+dump-sema-runtime-camera-3d-rays:
+	@mkdir -p "$(call program_build_dir_for,fisics)"
+	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(CFLAGS) --dump-sema -c "src/render/runtime_camera_3d_rays.c" -o "$(call program_build_dir_for,fisics)/runtime_camera_3d_rays.o" > "$(RAY_TRACING_CAMERA_RAYS_UNITS_SEMA_OUTPUT)" 2>&1
+	@echo "Wrote semantic dump to $(RAY_TRACING_CAMERA_RAYS_UNITS_SEMA_OUTPUT)"
+
+dump-sema-runtime-ray-3d:
+	@mkdir -p "$(call program_build_dir_for,fisics)"
+	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(CFLAGS) --dump-sema -c "src/render/runtime_ray_3d.c" -o "$(call program_build_dir_for,fisics)/runtime_ray_3d.o" > "$(RAY_TRACING_RAY3D_UNITS_SEMA_OUTPUT)" 2>&1
+	@echo "Wrote semantic dump to $(RAY_TRACING_RAY3D_UNITS_SEMA_OUTPUT)"
 
 all: $(APP_TARGET)
 

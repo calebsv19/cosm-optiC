@@ -19,6 +19,8 @@ bool RuntimeCameraProjector3D_Build(const RuntimeCamera3D* camera,
     double pitch = 0.0;
     double aspect = 1.0;
     double zoom = 1.0;
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double near_plane = 0.1;
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double near_plane_epsilon = 1e-6;
 
     if (!camera || !out_projector) return false;
     if (viewport_width <= 0 || viewport_height <= 0) return false;
@@ -44,7 +46,11 @@ bool RuntimeCameraProjector3D_Build(const RuntimeCamera3D* camera,
     }
     projector.right = vec3_normalize(projector.right);
     projector.up = vec3_normalize(vec3_cross(projector.forward, projector.right));
-    projector.nearPlane = (camera->nearPlane > 1e-6) ? camera->nearPlane : 0.1;
+    near_plane = camera->nearPlane;
+    if (!(near_plane > near_plane_epsilon)) {
+        near_plane = 0.1;
+    }
+    projector.nearPlane = near_plane;
     projector.tanHalfFovY =
         tan((kRuntimeCameraProjectorDefaultFovYDegrees * M_PI / 180.0) * 0.5) / zoom;
     projector.tanHalfFovX = projector.tanHalfFovY * aspect;
@@ -80,14 +86,15 @@ bool RuntimeCameraProjector3D_ProjectPoint(const RuntimeCameraProjector3D* proje
                                            Vec3 world_point,
                                            double* out_screen_x,
                                            double* out_screen_y,
-                                           double* out_camera_depth,
+                                           [[fisics::dim(length)]] [[fisics::unit(meter)]] double* out_camera_depth,
                                            bool* out_inside_viewport) {
     Vec3 offset = vec3(0.0, 0.0, 0.0);
-    double camera_x = 0.0;
-    double camera_y = 0.0;
-    double camera_z = 0.0;
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double camera_x = 0.0;
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double camera_y = 0.0;
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double camera_z = 0.0;
     double ndc_x = 0.0;
     double ndc_y = 0.0;
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double near_plane = 0.0;
 
     if (out_screen_x) *out_screen_x = 0.0;
     if (out_screen_y) *out_screen_y = 0.0;
@@ -99,10 +106,11 @@ bool RuntimeCameraProjector3D_ProjectPoint(const RuntimeCameraProjector3D* proje
     camera_x = vec3_dot(offset, projector->right);
     camera_y = vec3_dot(offset, projector->up);
     camera_z = vec3_dot(offset, projector->forward);
+    near_plane = projector->nearPlane;
     if (out_camera_depth) {
         *out_camera_depth = camera_z;
     }
-    if (camera_z <= projector->nearPlane) {
+    if (camera_z <= near_plane) {
         return false;
     }
 

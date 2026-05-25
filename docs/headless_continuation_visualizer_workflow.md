@@ -95,6 +95,24 @@ After the run, confirm:
 - `published_frame_relpaths`
 - `resume_source`
 
+### 3A. Request Pause Or Cancel
+
+For live worker-backed control actions, use:
+
+- `bin/control_codework_worker_job.py --job-id <run_id> --action pause`
+- `bin/control_codework_worker_job.py --job-id <run_id> --action cancel`
+
+Current proven control-path truth:
+
+- the VPS API accepts the control request
+- worker-exchange readback surfaces `review.cancel_requested = true`
+- the current RayTracing worker lane does not yet stop promptly mid-render just
+  because the cancel bit is set
+
+Treat this as a control-plane success but a stage-runtime limitation until a
+later fix proves that active RayTracing work actually exits or checkpoints on
+that request.
+
 ### 4. Publish Missing Drops When Needed
 
 If a run finished correctly but does not appear in live visualizer artifacts,
@@ -125,6 +143,8 @@ grouping issue, not as proof that the render itself failed.
 
 - prefer `bin/run_ray_tracing_worker_continuation_flow.py proof` when checking
   that the whole seed/continue path still works after tooling changes
+- use `bin/control_codework_worker_job.py` when the goal is worker control,
+  not render submission
 - Use a tiny seed run first when testing a new scene or new worker contract.
 - Prefer continuation over rerunning PhysicsSim when only later RayTracing
   frames are needed.
@@ -137,7 +157,8 @@ grouping issue, not as proof that the render itself failed.
 
 - the helper still leaves visualizer backfill as a separate bounded VPS step
   instead of folding that publish repair into one local command
-- interruption/failure-path continuation behavior still needs one dedicated
-  proof pass
+- interruption/failure-path continuation now has a clearer remaining gap:
+  cancel requests latch in worker state and exchange summaries, but the active
+  RayTracing stage does not yet stop promptly during the render
 - full trio resume beyond RayTracing-only continuation remains a later contract
   because PhysicsSim resume semantics are still narrower

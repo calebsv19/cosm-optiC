@@ -27,12 +27,17 @@ Ray3D RuntimeRay3D_Make(Vec3 origin, Vec3 direction) {
     return ray;
 }
 
-Ray3D RuntimeRay3D_MakeOffset(Vec3 origin, Vec3 normal, Vec3 direction, double epsilon) {
+Ray3D RuntimeRay3D_MakeOffset(Vec3 origin,
+                              Vec3 normal,
+                              Vec3 direction,
+                              [[fisics::dim(length)]] [[fisics::unit(meter)]] double epsilon) {
     Ray3D ray = RuntimeRay3D_Make(origin, direction);
     Vec3 offset_normal = vec3_normalize(normal);
     double side = 1.0;
-    if (epsilon < kRuntimeRay3DMinimumOffsetEpsilon) {
-        epsilon = kRuntimeRay3DMinimumOffsetEpsilon;
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double minimum_epsilon =
+        kRuntimeRay3DMinimumOffsetEpsilon;
+    if (epsilon < minimum_epsilon) {
+        epsilon = minimum_epsilon;
     }
     if (vec3_length(offset_normal) <= 1e-9) {
         return ray;
@@ -58,8 +63,8 @@ void HitInfo3D_Reset(HitInfo3D* hit) {
 bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
                                     const RuntimeTriangle3D* triangle,
                                     int triangle_index,
-                                    double t_min,
-                                    double t_max,
+                                    [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
+                                    [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
                                     HitInfo3D* out_hit) {
     Vec3 edge1;
     Vec3 edge2;
@@ -71,7 +76,7 @@ bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
     double bary_v = 0.0;
     double bary_w = 0.0;
     double bary_u = 0.0;
-    double t = 0.0;
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double t = 0.0;
     HitInfo3D hit = {0};
 
     if (!ray || !triangle || !out_hit) return false;
@@ -123,8 +128,8 @@ bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
 
 bool RuntimeRay3D_TraceSceneFirstHit(const RuntimeScene3D* scene,
                                      const Ray3D* ray,
-                                     double t_min,
-                                     double t_max,
+                                     [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
+                                     [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
                                      HitInfo3D* out_hit) {
     HitInfo3D best_hit = {0};
     bool found = false;

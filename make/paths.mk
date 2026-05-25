@@ -20,6 +20,8 @@ RAY_TRACING_VOLUME_INTEGRATE_UNITS_SEMA_OUTPUT := $(call program_build_dir_for,f
 RAY_TRACING_VOLUME_SCATTER_UNITS_SEMA_OUTPUT := $(call program_build_dir_for,fisics)/runtime_volume_3d_scatter.sema.txt
 RAY_TRACING_DIRECT_LIGHT_UNITS_SEMA_OUTPUT := $(call program_build_dir_for,fisics)/runtime_direct_light_3d.sema.txt
 RAY_TRACING_VISIBILITY_UNITS_SEMA_OUTPUT := $(call program_build_dir_for,fisics)/runtime_visibility_3d.sema.txt
+RAY_TRACING_CAMERA_RAYS_UNITS_SEMA_OUTPUT := $(call program_build_dir_for,fisics)/runtime_camera_3d_rays.sema.txt
+RAY_TRACING_RAY3D_UNITS_SEMA_OUTPUT := $(call program_build_dir_for,fisics)/runtime_ray_3d.sema.txt
 
 CLI_BIN_DIR := tools/cli/bin
 CLI_TOOLS := $(CLI_BIN_DIR)/shape_asset_tool $(CLI_BIN_DIR)/shape_import_tool $(CLI_BIN_DIR)/shape_sanity_tool
