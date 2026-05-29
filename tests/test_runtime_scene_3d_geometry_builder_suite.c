@@ -281,6 +281,9 @@ static int test_runtime_scene_3d_builder_promotes_authored_light_camera_samples(
     animSettings.lightRadius = 3.25;
     animSettings.forwardDecay = 17.5;
     animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    animSettings.environmentLightMode = ENVIRONMENT_LIGHT_MODE_TOP_FILL;
+    animSettings.topFillStrength = 2.5;
+    animSettings.environmentBrightness = 96.0;
 
     expected_light_xy = GetPositionAlongPathNormalized(&sceneSettings.bezierPath, 0.5);
     expected_light_z =
@@ -324,6 +327,16 @@ static int test_runtime_scene_3d_builder_promotes_authored_light_camera_samples(
                  1e-6);
     assert_true("runtime_scene_3d_builder_samples_light_falloff_mode",
                 scene.light.falloffMode == FORWARD_FALLOFF_MODE_LINEAR);
+    assert_true("runtime_scene_3d_builder_samples_environment_mode",
+                scene.environment.lightMode == ENVIRONMENT_LIGHT_MODE_TOP_FILL);
+    assert_close("runtime_scene_3d_builder_samples_environment_top_fill_strength",
+                 scene.environment.topFillIntensity,
+                 2.5,
+                 1e-6);
+    assert_close("runtime_scene_3d_builder_samples_environment_ambient_strength",
+                 scene.environment.ambientIntensity,
+                 96.0 / 255.0,
+                 1e-6);
     assert_close("runtime_scene_3d_builder_samples_camera_x",
                  scene.camera.position.x,
                  expected_camera_xy.x,

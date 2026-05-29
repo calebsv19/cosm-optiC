@@ -16,6 +16,10 @@
 #include "ui/shared_theme_font_adapter.h"
 
 #include <math.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include <stdio.h>
 #include <stdbool.h>
 

@@ -151,15 +151,25 @@ static int test_animation_native_3d_top_fill_roundtrip_and_default(void) {
                 write_text_file(kRuntimeAnimationConfigPath, json_missing_top_fill));
     LoadAnimationConfig();
     assert_true("native_3d_top_fill_missing_defaults_off",
-                !animSettings.topFillLightEnabled);
+                animSettings.environmentLightMode == ENVIRONMENT_LIGHT_MODE_OFF);
+    assert_close("native_3d_top_fill_missing_strength_default",
+                 animSettings.topFillStrength,
+                 1.0,
+                 1e-9);
 
     animSettings.spaceMode = SPACE_MODE_3D;
-    animSettings.topFillLightEnabled = true;
+    animSettings.environmentLightMode = ENVIRONMENT_LIGHT_MODE_TOP_FILL;
+    animSettings.topFillStrength = 2.5;
     SaveAnimationConfig();
-    animSettings.topFillLightEnabled = false;
+    animSettings.environmentLightMode = ENVIRONMENT_LIGHT_MODE_OFF;
+    animSettings.topFillStrength = 1.0;
     LoadAnimationConfig();
     assert_true("native_3d_top_fill_roundtrip_persisted",
-                animSettings.topFillLightEnabled);
+                animSettings.environmentLightMode == ENVIRONMENT_LIGHT_MODE_TOP_FILL);
+    assert_close("native_3d_top_fill_strength_roundtrip_persisted",
+                 animSettings.topFillStrength,
+                 2.5,
+                 1e-9);
 
     restore_runtime_animation_config(backup, backup_size);
     return 0;

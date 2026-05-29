@@ -102,7 +102,7 @@ void menu_render_build_slider_layout(TTF_Font* font,
     if (!is_3d) {
         ADD_SLIDER(&state->rouletteSliderValue, 1, 2000, "Roulette Threshold");
     }
-    ADD_SLIDER(&state->envSliderValue, 0, 255, "Environment");
+    ADD_SLIDER(&state->envSliderValue, 0, 255, "Ambient Brightness");
     ADD_SLIDER(&state->lightIntensitySliderValue, 0, 2000, "Light Intensity");
     ADD_SLIDER(&state->lightDecaySoftnessSliderValue, 10, 1000, "Falloff Softness");
     ADD_SLIDER(&state->forwardDecaySliderValue,

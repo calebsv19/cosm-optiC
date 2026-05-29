@@ -96,6 +96,44 @@ static void apply_ray_authoring_light_settings(json_object *authoring, double wo
     }
 }
 
+static void apply_ray_authoring_environment_settings(json_object *authoring) {
+    json_object *environment = NULL;
+    json_object *light_mode_obj = NULL;
+    json_object *ambient_brightness_obj = NULL;
+    json_object *ambient_strength_obj = NULL;
+    json_object *top_fill_strength_obj = NULL;
+    if (!authoring) return;
+    if (!json_object_object_get_ex(authoring, "environment", &environment) ||
+        !json_object_is_type(environment, json_type_object)) {
+        return;
+    }
+    if (json_object_object_get_ex(environment, "light_mode", &light_mode_obj) &&
+        (json_object_is_type(light_mode_obj, json_type_int) ||
+         json_object_is_type(light_mode_obj, json_type_double))) {
+        animSettings.environmentLightMode =
+            animation_config_environment_light_mode_clamp(json_object_get_int(light_mode_obj));
+    }
+    if (json_object_object_get_ex(environment, "ambient_strength", &ambient_strength_obj) &&
+        (json_object_is_type(ambient_strength_obj, json_type_int) ||
+         json_object_is_type(ambient_strength_obj, json_type_double))) {
+        animSettings.environmentBrightness =
+            255.0 * fmax(0.0, fmin(1.0, json_object_get_double(ambient_strength_obj)));
+    } else if (json_object_object_get_ex(environment,
+                                         "ambient_brightness",
+                                         &ambient_brightness_obj) &&
+        (json_object_is_type(ambient_brightness_obj, json_type_int) ||
+         json_object_is_type(ambient_brightness_obj, json_type_double))) {
+        animSettings.environmentBrightness =
+            fmax(0.0, fmin(255.0, json_object_get_double(ambient_brightness_obj)));
+    }
+    if (json_object_object_get_ex(environment, "top_fill_strength", &top_fill_strength_obj) &&
+        (json_object_is_type(top_fill_strength_obj, json_type_int) ||
+         json_object_is_type(top_fill_strength_obj, json_type_double))) {
+        animSettings.topFillStrength =
+            fmax(0.0, fmin(20.0, json_object_get_double(top_fill_strength_obj)));
+    }
+}
+
 static int runtime_scene_bridge_color_from_material_preset(int material_id) {
     const Material *preset = MaterialManagerGet(material_id);
     int r = 255;
@@ -1009,6 +1047,7 @@ void runtime_scene_bridge_apply_ray_authoring_paths(json_object *root,
             }
         }
     }
+    apply_ray_authoring_environment_settings(authoring);
     apply_ray_authoring_light_settings(authoring, world_scale);
     apply_ray_authoring_object_materials(authoring);
 }

@@ -7,7 +7,6 @@
 
 #include "app/animation.h"
 #include "config/config_manager.h"
-#include "render/render_helper.h"
 #include "render/runtime_camera_3d_rays.h"
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_native_3d_render.h"
@@ -261,17 +260,36 @@ static void __attribute__((unused)) DrawFilledCircleToARGBSurface(SDL_Surface* s
     }
 }
 
+static void DrawFilledCircleToRenderer(SDL_Renderer* renderer,
+                                       int center_x,
+                                       int center_y,
+                                       int radius) {
+    if (!renderer || radius <= 0) return;
+
+    for (int y = center_y - radius; y <= center_y + radius; ++y) {
+        const int dy = y - center_y;
+        const double inside = (double)(radius * radius - dy * dy);
+        int dx_limit = 0;
+        if (inside < 0.0) continue;
+        dx_limit = (int)floor(sqrt(inside));
+        SDL_RenderDrawLine(renderer,
+                           center_x - dx_limit,
+                           y,
+                           center_x + dx_limit,
+                           y);
+    }
+}
+
 static void DrawResolvedNative3DLightMarker(SDL_Renderer* renderer,
                                             const Native3DLightMarkerScreenInfo* marker) {
     if (!renderer || !marker) return;
     if (marker->radius <= 0) return;
 
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    RenderCircle(renderer,
-                 marker->centerX,
-                 marker->centerY,
-                 marker->radius,
-                 true);
+    DrawFilledCircleToRenderer(renderer,
+                               marker->centerX,
+                               marker->centerY,
+                               marker->radius);
 }
 
 static void __attribute__((unused)) DrawNative3DLightMarker(SDL_Renderer* renderer,

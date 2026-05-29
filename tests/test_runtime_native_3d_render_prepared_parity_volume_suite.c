@@ -721,6 +721,13 @@ static int test_runtime_native_3d_background_volume_transmittance_dims_environme
     RuntimeScene3D_Init(&scene);
     RuntimeNative3DTileOccupancy_Init(&frame.tileOccupancy);
     animSettings.environmentBrightness = 128.0;
+    animSettings.environmentLightMode = ENVIRONMENT_LIGHT_MODE_AMBIENT;
+    scene.environment.lightMode = ENVIRONMENT_LIGHT_MODE_AMBIENT;
+    scene.environment.ambientIntensity = 128.0 / 255.0;
+    scene.environment.ambientColor = vec3(1.0, 1.0, 1.0);
+    scene.environment.backgroundTopColor = vec3(0.66, 0.70, 0.76);
+    scene.environment.backgroundBottomColor = vec3(0.84, 0.85, 0.87);
+    scene.environment.topDownBias = 0.18;
     scene.hasLight = true;
     scene.light.position = vec3(4.0, -4.0, 0.0);
     scene.light.radius = 0.25;
@@ -829,15 +836,11 @@ static int test_runtime_native_3d_background_volume_transmittance_dims_environme
                                                  51);
 
     center_idx = (((size_t)25u * 51u) + 25u) * (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
-    assert_close("runtime_native_3d_volume_background_baseline_floor_scalar",
-                 baseline_radiance[center_idx + RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL],
-                 128.0 / 255.0,
-                 1e-6);
-    assert_true("runtime_native_3d_volume_background_floor_dimmer",
-                attenuated_radiance[center_idx +
-                                    RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL] <
-                    baseline_radiance[center_idx +
-                                      RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL]);
+    assert_true("runtime_native_3d_volume_background_baseline_pixel_positive",
+                native3d_test_pixel_r(baseline_pixels, 51, 25, 25) > 0);
+    assert_true("runtime_native_3d_volume_background_baseline_sky_tinted",
+                native3d_test_pixel_b(baseline_pixels, 51, 25, 25) >=
+                    native3d_test_pixel_r(baseline_pixels, 51, 25, 25));
     assert_true("runtime_native_3d_volume_background_pixel_dimmer",
                 native3d_test_pixel_r(attenuated_pixels, 51, 25, 25) <
                     native3d_test_pixel_r(baseline_pixels, 51, 25, 25));

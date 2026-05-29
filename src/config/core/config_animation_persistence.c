@@ -41,6 +41,12 @@ int animation_config_text_zoom_percent_from_step(int step) {
     return 100 + (clamped * TEXT_ZOOM_STEP_PERCENT_PER_STEP);
 }
 
+int animation_config_environment_light_mode_clamp(int mode) {
+    if (mode < ENVIRONMENT_LIGHT_MODE_OFF) return ENVIRONMENT_LIGHT_MODE_OFF;
+    if (mode > ENVIRONMENT_LIGHT_MODE_AMBIENT) return ENVIRONMENT_LIGHT_MODE_OFF;
+    return mode;
+}
+
 int animation_config_space_mode_clamp(int mode) {
     if (mode < SPACE_MODE_2D) return SPACE_MODE_2D;
     if (mode > SPACE_MODE_3D) return SPACE_MODE_2D;
@@ -312,8 +318,12 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "lightDecaySoftness", json_object_new_double(animSettings.lightDecaySoftness));
     json_object_object_add(config, "lightRadius", json_object_new_double(animSettings.lightRadius));
     json_object_object_add(config, "lightHeight", json_object_new_double(animSettings.lightHeight));
-    json_object_object_add(config, "topFillLightEnabled",
-                           json_object_new_boolean(animSettings.topFillLightEnabled));
+    json_object_object_add(config,
+                           "environmentLightMode",
+                           json_object_new_int(animation_config_environment_light_mode_clamp(
+                               animSettings.environmentLightMode)));
+    json_object_object_add(config, "topFillStrength",
+                           json_object_new_double(animSettings.topFillStrength));
     json_object_object_add(config, "disneyDenoiseEnabled",
                            json_object_new_boolean(animSettings.disneyDenoiseEnabled));
     json_object_object_add(config,
@@ -598,11 +608,20 @@ void LoadAnimationConfig(void) {
     } else {
         animSettings.lightHeight = 8.0;
     }
-    if (json_object_object_get_ex(config, "topFillLightEnabled", &temp) &&
-        json_object_is_type(temp, json_type_boolean)) {
-        animSettings.topFillLightEnabled = json_object_get_boolean(temp);
+    if (json_object_object_get_ex(config, "environmentLightMode", &temp)) {
+        animSettings.environmentLightMode =
+            animation_config_environment_light_mode_clamp(json_object_get_int(temp));
+    } else if (json_object_object_get_ex(config, "topFillLightEnabled", &temp) &&
+               json_object_is_type(temp, json_type_boolean) &&
+               json_object_get_boolean(temp)) {
+        animSettings.environmentLightMode = ENVIRONMENT_LIGHT_MODE_TOP_FILL;
     } else {
-        animSettings.topFillLightEnabled = false;
+        animSettings.environmentLightMode = ENVIRONMENT_LIGHT_MODE_OFF;
+    }
+    if (json_object_object_get_ex(config, "topFillStrength", &temp)) {
+        animSettings.topFillStrength = json_object_get_double(temp);
+    } else {
+        animSettings.topFillStrength = 1.0;
     }
     if (json_object_object_get_ex(config, "disneyDenoiseEnabled", &temp) &&
         json_object_is_type(temp, json_type_boolean)) {
@@ -778,6 +797,14 @@ void LoadAnimationConfig(void) {
     }
     if (!isfinite(animSettings.lightHeight) || animSettings.lightHeight < 0.0) {
         animSettings.lightHeight = 8.0;
+    }
+    animSettings.environmentLightMode =
+        animation_config_environment_light_mode_clamp(animSettings.environmentLightMode);
+    if (!isfinite(animSettings.topFillStrength) || animSettings.topFillStrength < 0.0) {
+        animSettings.topFillStrength = 1.0;
+    }
+    if (animSettings.topFillStrength > 20.0) {
+        animSettings.topFillStrength = 20.0;
     }
     animSettings.secondaryDiffuseSamples3D =
         ClampSecondaryDiffuseSamples3D(animSettings.secondaryDiffuseSamples3D);

@@ -46,6 +46,12 @@ typedef struct RayTracingAgentRenderRequest {
     double camera_look_at_z;
     bool has_environment_brightness_override;
     double environment_brightness_override;
+    bool has_ambient_strength_override;
+    double ambient_strength_override;
+    bool has_environment_light_mode_override;
+    int environment_light_mode_override;
+    bool has_top_fill_strength_override;
+    double top_fill_strength_override;
     bool has_light_intensity_override;
     double light_intensity_override;
     bool has_light_radius_override;

@@ -5,6 +5,10 @@
 #include <math.h>
 #include <stdlib.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 static void InitDefaultMaterial(SceneObject* obj) {
     obj->texture[0] = '\0';
     obj->color = 0xFFFFFF;

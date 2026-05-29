@@ -51,6 +51,14 @@ void RuntimeScene3D_Init(RuntimeScene3D* scene) {
     scene->ownership.geometryAndVolumeSourcesRemainSeparate = true;
     scene->ownership.legacyPlanarFluidOverlayRemainsSeparate = true;
 
+    scene->environment.lightMode = ENVIRONMENT_LIGHT_MODE_OFF;
+    scene->environment.ambientIntensity = 0.0;
+    scene->environment.topFillIntensity = 1.0;
+    scene->environment.ambientColor = vec3(1.0, 1.0, 1.0);
+    scene->environment.backgroundTopColor = vec3(0.0, 0.0, 0.0);
+    scene->environment.backgroundBottomColor = vec3(0.0, 0.0, 0.0);
+    scene->environment.topDownBias = 0.0;
+
     scene->light.falloffMode = FORWARD_FALLOFF_MODE_QUADRATIC;
     scene->camera.zoom = 1.0;
     scene->camera.nearPlane = 0.1;

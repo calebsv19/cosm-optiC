@@ -377,7 +377,9 @@ static double PathTracePixel(const IntegratorContext* ctx,
     int minDepth = 2;
     double throughput = 1.0;
     double radiance = 0.0;
-    double envLight = animSettings.environmentBrightness > 0.0
+    double envLight = (animation_config_environment_light_mode_clamp(
+                           animSettings.environmentLightMode) == ENVIRONMENT_LIGHT_MODE_AMBIENT &&
+                       animSettings.environmentBrightness > 0.0)
                           ? fmin(animSettings.environmentBrightness, 255.0) / 255.0
                           : 0.0;
 

@@ -382,10 +382,11 @@ static int test_runtime_direct_light_3d_top_fill_lifts_upward_faces(void) {
 
     scene.hasLight = true;
     scene.light.position = vec3(2.0, -2.0, 0.0);
-    scene.light.intensity = 10.0;
+    scene.light.intensity = 0.0;
     scene.light.falloffDistance = 10.0;
     scene.light.falloffMode = FORWARD_FALLOFF_MODE_LINEAR;
-    animSettings.topFillLightEnabled = true;
+    scene.environment.lightMode = ENVIRONMENT_LIGHT_MODE_TOP_FILL;
+    scene.environment.topFillIntensity = 3.0;
 
     scene.primitiveCapacity = 1;
     scene.triangleMesh.triangleCapacity = 1;
@@ -438,7 +439,7 @@ static int test_runtime_direct_light_3d_top_fill_lifts_upward_faces(void) {
                  result.radianceG,
                  1e-9);
 
-    animSettings.topFillLightEnabled = false;
+    scene.environment.lightMode = ENVIRONMENT_LIGHT_MODE_OFF;
     ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, NULL, &result);
     assert_true("runtime_direct_light_3d_top_fill_disabled_shade_ok", ok);
     assert_close("runtime_direct_light_3d_top_fill_disabled_scalar_zero",

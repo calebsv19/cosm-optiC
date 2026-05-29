@@ -261,8 +261,17 @@ void menu_render_frame(SDL_Renderer* renderer,
                                                                  : "Disney Denoise: OFF";
     menu_render_draw_button_rect(renderer, font, &buttons.denoiseRect, denoiseLabel, animSettings.disneyDenoiseEnabled);
 
-    const char* topFillLabel = animSettings.topFillLightEnabled ? "Top Fill: ON" : "Top Fill: OFF";
-    menu_render_draw_button_rect(renderer, font, &buttons.topFillRect, topFillLabel, animSettings.topFillLightEnabled);
+    const char* environmentLightLabel = "Env Light: Off";
+    if (animSettings.environmentLightMode == ENVIRONMENT_LIGHT_MODE_TOP_FILL) {
+        environmentLightLabel = "Env Light: Top Fill";
+    } else if (animSettings.environmentLightMode == ENVIRONMENT_LIGHT_MODE_AMBIENT) {
+        environmentLightLabel = "Env Light: Ambient";
+    }
+    menu_render_draw_button_rect(renderer,
+                                 font,
+                                 &buttons.topFillRect,
+                                 environmentLightLabel,
+                                 animSettings.environmentLightMode != ENVIRONMENT_LIGHT_MODE_OFF);
 
     menu_render_draw_button_rect(renderer,
                                  font,

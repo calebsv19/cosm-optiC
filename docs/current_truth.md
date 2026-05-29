@@ -1,6 +1,6 @@
 # optiC Current Truth
 
-Last updated: 2026-05-24
+Last updated: 2026-05-29
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -49,6 +49,23 @@ Last updated: 2026-05-24
   - `src/app/animation.c` (`main()` delegates through `ray_tracing_app_main(...)`)
   - wrapper shell: `include/ray_tracing/ray_tracing_app_main.h`, `src/app/ray_tracing_app_main.c`
 
+## Stable Worker Routing Truth
+
+- the current proven trio worker lane supports preferred-home-server routing
+  with fallback still enabled
+- a fresh tiny trio proof now completes end to end after the VPS remote upload
+  ceiling was raised:
+  - `ray-tracing--trio-headless-worker--20260526T012119Z--homeserverlimitfixc`
+- a fresh mixed tiny queue proof confirms fallback behavior:
+  - `ray-tracing--trio-headless-worker--20260526T013518Z--quickmixtrio1`
+    completed on the VPS local dispatcher
+  - in the same wave, BehaviorSim and BallBounceSim had already consumed the
+    single homeserver worker slot
+- current operational reading:
+  - homeserver preference is active
+  - trio should still complete when the homeserver is busy instead of waiting
+    indefinitely
+
 ## Current Shipped State
 - Legacy `2D` rendering and editor flows remain present.
 - Native `3D` runtime ladder is shipped through:
@@ -77,7 +94,11 @@ Last updated: 2026-05-24
   - temporal accumulation upgrades
   - stratified + blue-noise sampling support
   - Disney-only denoise
-  - optional top-fill lighting
+  - explicit environment-light modes:
+    - `off`
+    - `top_fill`
+    - `ambient`
+  - separate ambient and top-fill strength controls
 - Native `3D` low-resolution presentation no longer has one hardcoded upscale policy:
   - preview dirty-rect redraw and completed-frame resolve both route through
     `runtime_native_3d_preview_reconstruction.*`
@@ -307,7 +328,10 @@ Last updated: 2026-05-24
   - `temporalFrames3D`
   - `bounceDepth3D`
   - `rouletteThreshold3D`
-  - top-fill and denoise toggles
+  - environment light mode
+  - ambient brightness / ambient-strength compatibility state
+  - top-fill strength
+  - Disney denoise toggle
   - runtime-scene and optional atmosphere-source paths
 - Deep-render export now supports:
   - absolute start-frame selection
@@ -332,7 +356,18 @@ Last updated: 2026-05-24
   - authored moving-camera scenes now also accept `extensions.ray_tracing.authoring.camera_focus_target = { x, y, z }`; when present, headless runtime-scene sampling preserves authored camera-path translation/depth motion but recomputes yaw/pitch toward that focus target each sample, which is safer than hand-authoring moving camera orientation curves
   - render summaries now also report render-visibility truth through `render_stats.hit_pixels`, `render_stats.visible_pixels`, `render_stats.nonzero_pixels`, `render_stats.max_radiance`, and `render_stats.max_rgb`
   - render summaries now also expose `object_audit`, which reports per-object runtime-slot presence, built primitive/triangle counts, and primary camera-ray hit pixels for headless diagnosis
-  - headless requests now accept additive inspection-only render tuning fields: `preset`, `camera_zoom`, `camera_position`, `camera_look_at`, `environment_brightness`, `light_intensity`, `light_radius`, `forward_decay`, `volume_scatter_gain`, `volume_step_scale`, `secondary_diffuse_samples_3d`, `transmission_samples_3d`, and `volume_tint`
+  - headless requests now accept additive inspection-only render tuning fields: `preset`, `camera_zoom`, `camera_position`, `camera_look_at`, `environment_light_mode`, `ambient_strength`, `top_fill_strength`, `environment_brightness`, `light_intensity`, `light_radius`, `forward_decay`, `volume_scatter_gain`, `volume_step_scale`, `secondary_diffuse_samples_3d`, `transmission_samples_3d`, and `volume_tint`
+  - preferred environment-light headless contract is:
+    - `environment_light_mode = off|top_fill|ambient`
+    - `ambient_strength` for the ambient surface-fill amount (`0.0..1.0`)
+    - `top_fill_strength` for the top-fill lane (`0.0..20.0`)
+    - `environment_brightness` remains the lower-level compatibility override
+      for the legacy `0..255` brightness state
+  - runtime-scene authoring environment persistence now carries:
+    - `light_mode`
+    - `ambient_strength`
+    - legacy-compatible `ambient_brightness`
+    - `top_fill_strength`
   - the shipped `glass_preview` inspection preset defaults to `emission_transparency` plus a bounded low-cost preview budget (`secondary_diffuse_samples_3d = 8`, `transmission_samples_3d = 4`) unless explicit request fields replace those values
   - the shipped `glass_review` inspection preset defaults to `emission_transparency` plus a slower review budget (`secondary_diffuse_samples_3d = 24`, `transmission_samples_3d = 12`) unless explicit request fields replace those values
   - runtime-scene apply now skips authoring helper objects (`point_set`, `curve_path`, `edge_set`) when populating live render object slots, so helper records do not crowd out later renderable primitives such as thin transparent review slabs
@@ -424,6 +459,14 @@ Last updated: 2026-05-24
   - for worker-backed multi-frame review, use the proven seed ->
     `start_stage = ray_tracing` continuation -> optional publish backfill flow
     described in `docs/headless_continuation_visualizer_workflow.md`
+  - prefer the higher-level operator wrapper
+    `bin/run_ray_tracing_worker_continuation_flow.py` when the goal is
+    frame-by-frame seed, continuation, or bounded visualizer backfill work
+    rather than manual payload/thread shaping
+  - active worker interruption is now part of the proven operator contract:
+    `bin/control_codework_worker_job.py --action cancel` can stop an active
+    RayTracing continuation mid-render, leaves the worker terminal state at
+    `canceled`, and bypasses `visualizer_publish`
 - Current authoring contract reminders:
   - `material_id = 5` is the transparent/glass preset
   - `material_id = 4` remains the explicit emissive preset
@@ -457,9 +500,16 @@ Last updated: 2026-05-24
   - scene-geometry builder and trace contracts
 - Legacy lane:
   - `make -C ray_tracing test-legacy`
+- Linux worker packaging verification:
+  - `make -C ray_tracing package-linux-worker-self-test`
 
 ## Release and Packaging Snapshot
 - Release-readiness and desktop packaging lanes are active and maintained.
+- Linux worker packaging now emits truthful host-architecture metadata for
+  either `linux-x86_64` or `linux-aarch64` by default:
+  - `make -C ray_tracing package-linux-worker`
+  - the package manifest platform follows the Linux build host architecture
+  - `LINUX_WORKER_PLATFORM=<value>` remains available for explicit override
 - Standard package flow is available through `package-desktop*` targets.
 - Release flow includes contract/audit/sign/notary/staple/verify/distribute gates.
 

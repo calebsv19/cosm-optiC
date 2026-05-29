@@ -2,6 +2,10 @@
 
 #include <math.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #include "render/runtime_visibility_3d.h"
 #include "render/runtime_native_3d_sampling.h"
 #include "render/runtime_volume_3d_integrate.h"

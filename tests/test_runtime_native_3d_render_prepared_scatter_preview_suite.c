@@ -211,7 +211,7 @@ static int test_runtime_native_3d_surface_volume_single_scatter_lifts_unlit_hit_
     }
 
     animSettings.environmentBrightness = 0.0;
-    animSettings.topFillLightEnabled = false;
+    animSettings.environmentLightMode = ENVIRONMENT_LIGHT_MODE_OFF;
     frame.scene = scene;
     frame.width = 41;
     frame.height = 41;

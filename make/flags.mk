@@ -1,5 +1,7 @@
 SDL_CFLAGS :=
 SDL_LIBS :=
+SDL_TTF_CFLAGS :=
+SDL_TTF_LIBS :=
 SDL_PREFIX :=
 SDL_EXTRA_INC :=
 JSON_CFLAGS :=
@@ -14,6 +16,8 @@ ifneq ($(UNAME_S),Darwin)
 SDL_CONFIG := $(shell command -v sdl2-config 2>/dev/null)
 SDL_CFLAGS := $(shell $(SDL_CONFIG) --cflags 2>/dev/null)
 SDL_LIBS := $(shell $(SDL_CONFIG) --libs 2>/dev/null)
+SDL_TTF_CFLAGS := $(shell $(PKG_CONFIG) --cflags SDL2_ttf 2>/dev/null)
+SDL_TTF_LIBS := $(shell $(PKG_CONFIG) --libs SDL2_ttf 2>/dev/null)
 SDL_PREFIX := $(shell $(SDL_CONFIG) --prefix 2>/dev/null)
 SDL_EXTRA_INC := $(if $(SDL_PREFIX),-I$(SDL_PREFIX)/include,)
 JSON_CFLAGS := $(shell pkg-config --cflags json-c 2>/dev/null)
@@ -40,6 +44,8 @@ endif
 ifeq ($(UNAME_S),Darwin)
     SDL_CFLAGS := $(shell env PKG_CONFIG_LIBDIR="$(TARGET_PKG_CONFIG_LIBDIR)" $(PKG_CONFIG) --cflags sdl2 2>/dev/null)
     SDL_LIBS := $(shell env PKG_CONFIG_LIBDIR="$(TARGET_PKG_CONFIG_LIBDIR)" $(PKG_CONFIG) --libs sdl2 2>/dev/null)
+    SDL_TTF_CFLAGS := $(shell env PKG_CONFIG_LIBDIR="$(TARGET_PKG_CONFIG_LIBDIR)" $(PKG_CONFIG) --cflags SDL2_ttf 2>/dev/null)
+    SDL_TTF_LIBS := $(shell env PKG_CONFIG_LIBDIR="$(TARGET_PKG_CONFIG_LIBDIR)" $(PKG_CONFIG) --libs SDL2_ttf 2>/dev/null)
     SDL_PREFIX := $(TARGET_HOMEBREW_PREFIX)
     SDL_EXTRA_INC := $(if $(SDL_PREFIX),-I$(SDL_PREFIX)/include,)
     JSON_CFLAGS := $(shell env PKG_CONFIG_LIBDIR="$(TARGET_PKG_CONFIG_LIBDIR)" $(PKG_CONFIG) --cflags json-c 2>/dev/null)
@@ -80,10 +86,16 @@ ifeq ($(UNAME_S),Darwin)
     CFLAGS += -DVK_USE_PLATFORM_METAL_EXT
 endif
 
-CFLAGS  := $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g $(ARCH_FLAGS) $(SDL_CFLAGS) $(SDL_EXTRA_INC) $(JSON_CFLAGS) $(PNG_CFLAGS) -I$(INC_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -DMAIN_DRIVER
-LDFLAGS := $(ARCH_FLAGS) $(SDL_LIBS) -lSDL2_ttf $(JSON_LIBS) $(PNG_LIBS) -lm
+CFLAGS  := $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g $(ARCH_FLAGS) $(SDL_CFLAGS) $(SDL_TTF_CFLAGS) $(SDL_EXTRA_INC) $(JSON_CFLAGS) $(PNG_CFLAGS) -I$(INC_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -DMAIN_DRIVER
+LDFLAGS := $(ARCH_FLAGS)
+ifneq ($(strip $(SDL_TTF_LIBS)),)
+LDFLAGS += $(SDL_TTF_LIBS) $(SDL_LIBS)
+else
+LDFLAGS += -lSDL2_ttf $(SDL_LIBS)
+endif
+LDFLAGS += $(JSON_LIBS) $(PNG_LIBS) -lm
 
-CFLAGS_RELEASE := $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -O3 $(ARCH_FLAGS) $(SDL_CFLAGS) $(SDL_EXTRA_INC) $(JSON_CFLAGS) $(PNG_CFLAGS) -I$(INC_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -DMAIN_DRIVER -DNDEBUG \
+CFLAGS_RELEASE := $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -O3 $(ARCH_FLAGS) $(SDL_CFLAGS) $(SDL_TTF_CFLAGS) $(SDL_EXTRA_INC) $(JSON_CFLAGS) $(PNG_CFLAGS) -I$(INC_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -DMAIN_DRIVER -DNDEBUG \
 	-ffast-math -fno-math-errno -march=native
 ifeq ($(UNAME_S),Darwin)
 CFLAGS += -DVK_USE_PLATFORM_METAL_EXT

@@ -404,6 +404,23 @@ static void write_summary(FILE *file,
             request->has_environment_brightness_override ? "true" : "false");
     fprintf(file, "    \"environment_brightness\": %.9f,\n",
             request->environment_brightness_override);
+    fprintf(file, "    \"has_ambient_strength_override\": %s,\n",
+            request->has_ambient_strength_override ? "true" : "false");
+    fprintf(file, "    \"ambient_strength\": %.9f,\n", request->ambient_strength_override);
+    fprintf(file, "    \"has_environment_light_mode_override\": %s,\n",
+            request->has_environment_light_mode_override ? "true" : "false");
+    fprintf(file, "    \"environment_light_mode\": ");
+    json_write_string(file,
+                      request->environment_light_mode_override == ENVIRONMENT_LIGHT_MODE_TOP_FILL
+                          ? "top_fill"
+                          : (request->environment_light_mode_override ==
+                                     ENVIRONMENT_LIGHT_MODE_AMBIENT
+                                 ? "ambient"
+                                 : "off"));
+    fprintf(file, ",\n");
+    fprintf(file, "    \"has_top_fill_strength_override\": %s,\n",
+            request->has_top_fill_strength_override ? "true" : "false");
+    fprintf(file, "    \"top_fill_strength\": %.9f,\n", request->top_fill_strength_override);
     fprintf(file, "    \"has_light_intensity_override\": %s,\n",
             request->has_light_intensity_override ? "true" : "false");
     fprintf(file, "    \"light_intensity\": %.9f,\n", request->light_intensity_override);
@@ -989,6 +1006,17 @@ static void apply_inspection_overrides(const RayTracingAgentRenderRequest *reque
     }
     if (request->has_environment_brightness_override) {
         animSettings.environmentBrightness = request->environment_brightness_override;
+    }
+    if (request->has_ambient_strength_override) {
+        animSettings.environmentBrightness = request->ambient_strength_override * 255.0;
+    }
+    if (request->has_environment_light_mode_override) {
+        animSettings.environmentLightMode =
+            animation_config_environment_light_mode_clamp(
+                request->environment_light_mode_override);
+    }
+    if (request->has_top_fill_strength_override) {
+        animSettings.topFillStrength = request->top_fill_strength_override;
     }
     if (request->has_light_intensity_override) {
         animSettings.lightIntensity = request->light_intensity_override;

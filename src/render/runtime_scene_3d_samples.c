@@ -5,6 +5,10 @@
 
 #include <math.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 static double runtime_scene_3d_samples_clamp01(double value) {
     if (value < 0.0) return 0.0;
     if (value > 1.0) return 1.0;

@@ -411,7 +411,7 @@ static int test_menu_slider_layout_includes_environment_control(void) {
 
     for (size_t i = 0; i < sliders.count; ++i) {
         if (sliders.items[i].label &&
-            strcmp(sliders.items[i].label, "Environment") == 0 &&
+            strcmp(sliders.items[i].label, "Ambient Brightness") == 0 &&
             sliders.items[i].value == &state.envSliderValue) {
             found_environment = true;
             break;

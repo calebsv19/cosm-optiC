@@ -490,6 +490,7 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
     json_object* extensions = NULL;
     json_object* ray_tracing = NULL;
     json_object* authoring = NULL;
+    json_object* environment = NULL;
     json_object* light_path = NULL;
     json_object* light_path_depth = NULL;
     json_object* light_settings = NULL;
@@ -525,6 +526,7 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
     extensions = json_object_new_object();
     ray_tracing = json_object_new_object();
     authoring = json_object_new_object();
+    environment = json_object_new_object();
     light_path = config_scene_path_to_json_object(&saved_light_path);
     light_path_depth = CameraPath3D_ToJsonObject(&saved_light_path3d, &saved_light_path);
     light_settings = json_object_new_object();
@@ -533,9 +535,11 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
     object_materials = scene_editor_runtime_scene_build_object_materials_json();
 
     if (!overlay_root || !overlay_meta || !extensions || !ray_tracing || !authoring ||
+        !environment ||
         !light_path || !light_path_depth || !light_settings ||
         !camera_path || !camera_path_depth || !object_materials) {
         scene_editor_runtime_scene_diag(out_diagnostics, out_diagnostics_size, "failed to build overlay json");
+        if (environment) json_object_put(environment);
         if (object_materials) json_object_put(object_materials);
         if (light_path_depth) json_object_put(light_path_depth);
         if (light_settings) json_object_put(light_settings);
@@ -558,9 +562,25 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
     json_object_object_add(light_settings,
                            "radius",
                            json_object_new_double(animSettings.lightRadius));
+    json_object_object_add(environment,
+                           "light_mode",
+                           json_object_new_int(animation_config_environment_light_mode_clamp(
+                               animSettings.environmentLightMode)));
+    json_object_object_add(environment,
+                           "ambient_brightness",
+                           json_object_new_double(animSettings.environmentBrightness));
+    json_object_object_add(environment,
+                           "ambient_strength",
+                           json_object_new_double(fmax(
+                               0.0,
+                               fmin(1.0, animSettings.environmentBrightness / 255.0))));
+    json_object_object_add(environment,
+                           "top_fill_strength",
+                           json_object_new_double(animSettings.topFillStrength));
     json_object_object_add(authoring, "light_path", light_path);
     json_object_object_add(authoring, "light_path_depth", light_path_depth);
     json_object_object_add(authoring, "light_settings", light_settings);
+    json_object_object_add(authoring, "environment", environment);
     json_object_object_add(authoring, "camera_path", camera_path);
     json_object_object_add(authoring, "camera_path_depth", camera_path_depth);
     json_object_object_add(authoring, "object_materials", object_materials);

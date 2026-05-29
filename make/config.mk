@@ -9,6 +9,10 @@ ifeq ($(BUILD_TOOLCHAIN),fisics)
 CC := $(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY)
 endif
 CSTD      := -std=c11
+UNAME_S   := $(shell uname -s)
+ifeq ($(UNAME_S),Linux)
+CSTD      := -std=c2x
+endif
 SRC_DIR   := src
 INC_DIR   := include
 BUILD_DIR_BASE ?= build

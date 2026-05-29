@@ -538,7 +538,7 @@ void menu_render_build_button_layout(TTF_Font* font,
     layout.topFillRect = build_adaptive_button_rect(font, centerRightX,
                                                     layout.denoiseRect.y + layout.denoiseRect.h + FORWARD_FALLOFF_BUTTON_SPACING,
                                                     TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT,
-                                                    animSettings.topFillLightEnabled ? "Top Fill: ON" : "Top Fill: OFF",
+                                                    "Env Light: Ambient",
                                                     centerColumnMaxWidth);
     layout.upscaleModeRect = build_adaptive_button_rect(font, centerRightX,
                                                         layout.topFillRect.y + layout.topFillRect.h + FORWARD_FALLOFF_BUTTON_SPACING,

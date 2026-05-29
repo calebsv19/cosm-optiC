@@ -3,6 +3,10 @@
 #include <math.h>
 #include <string.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #define SCENE_EDITOR_MATERIAL_FACE_PLACEMENT_MAX_OVERRIDES 128
 
 static SceneEditorMaterialFacePlacement

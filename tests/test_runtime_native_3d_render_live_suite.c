@@ -626,6 +626,7 @@ static int test_runtime_native_3d_render_environment_floor_lights_miss_pixels(vo
     animSettings.interactiveMode = true;
     animSettings.spaceMode = SPACE_MODE_3D;
     animSettings.environmentBrightness = 128.0;
+    animSettings.environmentLightMode = ENVIRONMENT_LIGHT_MODE_AMBIENT;
     sceneSettings.camera.x = 0.0;
     sceneSettings.camera.y = 0.0;
     sceneSettings.cameraZ = 0.0;
@@ -644,14 +645,12 @@ static int test_runtime_native_3d_render_environment_floor_lights_miss_pixels(vo
     assert_true("runtime_native_3d_render_environment_center_above_floor",
                 native3d_test_pixel_r(pixels, 51, 25, 25) >= 128);
     assert_true("runtime_native_3d_render_environment_corner_matches_floor",
-                native3d_test_pixel_r(pixels, 51, 0, 0) == 128 &&
-                    native3d_test_pixel_g(pixels, 51, 0, 0) == 128 &&
-                    native3d_test_pixel_b(pixels, 51, 0, 0) == 128);
-    assert_true("runtime_native_3d_render_environment_corner_neutral",
-                native3d_test_pixel_r(pixels, 51, 0, 0) ==
-                    native3d_test_pixel_g(pixels, 51, 0, 0) &&
-                native3d_test_pixel_r(pixels, 51, 0, 0) ==
-                    native3d_test_pixel_b(pixels, 51, 0, 0));
+                native3d_test_pixel_r(pixels, 51, 0, 0) > 0 &&
+                    native3d_test_pixel_b(pixels, 51, 0, 0) >=
+                        native3d_test_pixel_r(pixels, 51, 0, 0));
+    assert_true("runtime_native_3d_render_environment_corner_sky_tinted",
+                native3d_test_pixel_b(pixels, 51, 0, 0) >
+                    native3d_test_pixel_g(pixels, 51, 0, 0));
 
     sceneSettings = saved_scene;
     animSettings = saved_anim;

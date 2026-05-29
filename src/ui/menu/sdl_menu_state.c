@@ -826,7 +826,7 @@ void menu_state_reset_defaults(MenuRuntimeState* state) {
     animSettings.cacheContributionWeight = 1.0;
     animSettings.bsdfModel = 1;
     animSettings.lightIntensity = 5.0;
-    animSettings.topFillLightEnabled = false;
+    animSettings.environmentLightMode = ENVIRONMENT_LIGHT_MODE_OFF;
     animSettings.disneyDenoiseEnabled = true;
     animSettings.spaceMode = SPACE_MODE_2D;
     animSettings.sceneSource = SCENE_SOURCE_CONFIG_2D;

@@ -6,6 +6,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #include "config/config_manager.h"
 #include "import/fluid_volume_import_3d.h"
 #include "import/runtime_scene_bridge.h"
@@ -378,6 +382,10 @@ static double runtime_native_3d_render_clamp_unit(double value) {
 
 uint8_t RuntimeNative3DResolveEnvironmentByte(void) {
     double value = animSettings.environmentBrightness;
+    if (animation_config_environment_light_mode_clamp(animSettings.environmentLightMode) !=
+        ENVIRONMENT_LIGHT_MODE_AMBIENT) {
+        return 0u;
+    }
     if (value < 0.0) value = 0.0;
     if (value > 255.0) value = 255.0;
     return (uint8_t)lround(value);

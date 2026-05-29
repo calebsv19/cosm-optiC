@@ -2,6 +2,10 @@
 
 #include <math.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #define SCENE_EDITOR_DIGEST_OVERLAY_MIN_ZOOM (0.00005)
 #define SCENE_EDITOR_DIGEST_OVERLAY_MAX_ZOOM (240.0)
 

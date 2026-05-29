@@ -1,10 +1,18 @@
 # RayTracing Headless Continuation And Visualizer Workflow
 
-Last updated: 2026-05-24
+Last updated: 2026-05-25
 
 Use this note when the goal is to run a cheap seed render first, continue later
 frame ranges against the same PhysicsSim output, and keep the resulting runs
 coherent on the live visualizer website.
+
+Current worker-host truth:
+
+- trio submission now prefers the `home-server` worker label by default
+- fallback remains enabled
+- tiny proof runs should therefore be expected to:
+  - claim on `homeserver` when it is free
+  - fall back to the VPS local dispatcher when the homeserver slot is busy
 
 ## Intended Use
 
@@ -105,20 +113,24 @@ For live worker-backed control actions, use:
 Current proven control-path truth:
 
 - the VPS API accepts the control request
+- active RayTracing cancellation now stops the running stage instead of waiting
+  only for the next outer checkpoint
 - worker-exchange readback surfaces `review.cancel_requested = true`
-- the current RayTracing worker lane does not yet stop promptly mid-render just
-  because the cancel bit is set
-
-Treat this as a control-plane success but a stage-runtime limitation until a
-later fix proves that active RayTracing work actually exits or checkpoints on
-that request.
+- terminal worker state becomes `canceled`
+- `visualizer_publish` does not run for the interrupted job
+- `publication_state` remains `none` and `published_frames` remain empty for a
+  pre-publication interruption proof
 
 ### 4. Publish Missing Drops When Needed
 
 If a run finished correctly but does not appear in live visualizer artifacts,
 publish the staged drop instead of rerunning the render.
 
-The bounded VPS publish lane now exists specifically for that:
+Preferred operator entrypoint:
+
+- `bin/run_ray_tracing_worker_continuation_flow.py backfill --run-id <run_id> --wait`
+
+That helper wraps the bounded VPS publish lane:
 
 - `vps_publish_visualizer_drop`
 
@@ -143,6 +155,11 @@ grouping issue, not as proof that the render itself failed.
 
 - prefer `bin/run_ray_tracing_worker_continuation_flow.py proof` when checking
   that the whole seed/continue path still works after tooling changes
+- when the goal is only worker-fleet validation, prefer a tiny
+  `bin/submit_codework_worker_job.py` `live_debug` run instead of a longer
+  continuation proof so render duration does not become the dominant variable
+- prefer `bin/run_ray_tracing_worker_continuation_flow.py backfill` when the
+  render completed correctly but visualizer artifact coverage needs repair
 - use `bin/control_codework_worker_job.py` when the goal is worker control,
   not render submission
 - Use a tiny seed run first when testing a new scene or new worker contract.
@@ -155,10 +172,5 @@ grouping issue, not as proof that the render itself failed.
 
 ## Current Gaps
 
-- the helper still leaves visualizer backfill as a separate bounded VPS step
-  instead of folding that publish repair into one local command
-- interruption/failure-path continuation now has a clearer remaining gap:
-  cancel requests latch in worker state and exchange summaries, but the active
-  RayTracing stage does not yet stop promptly during the render
 - full trio resume beyond RayTracing-only continuation remains a later contract
   because PhysicsSim resume semantics are still narrower

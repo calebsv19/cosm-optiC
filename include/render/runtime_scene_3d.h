@@ -91,6 +91,16 @@ typedef struct {
 } RuntimeLight3D;
 
 typedef struct {
+    EnvironmentLightMode lightMode;
+    double ambientIntensity;
+    double topFillIntensity;
+    Vec3 ambientColor;
+    Vec3 backgroundTopColor;
+    Vec3 backgroundBottomColor;
+    double topDownBias;
+} RuntimeEnvironment3D;
+
+typedef struct {
     Vec3 position;
     double rotation;
     double lookPitch;
@@ -106,6 +116,7 @@ typedef struct {
     int primitiveCapacity;
     RuntimeTriangleMesh3D triangleMesh;
     RuntimeVolumeAttachment3D volume;
+    RuntimeEnvironment3D environment;
     RuntimeLight3D light;
     bool hasLight;
     RuntimeCamera3D camera;

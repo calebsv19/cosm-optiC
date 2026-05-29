@@ -3,6 +3,10 @@
 #include <math.h>
 #include <string.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #include "config/config_manager.h"
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_native_3d_sampling.h"
@@ -197,18 +201,21 @@ static void runtime_direct_light_3d_apply_transmittance(
     }
 }
 
-static double runtime_direct_light_3d_top_fill_radiance(const HitInfo3D* hit,
-                                                        const RuntimeLight3D* light) {
+static double runtime_direct_light_3d_top_fill_radiance(const RuntimeScene3D* scene,
+                                                        const HitInfo3D* hit) {
     double up_facing = 0.0;
     double top_fill_intensity = 0.0;
 
-    if (!animSettings.topFillLightEnabled || !hit || !light) return 0.0;
+    if (!scene || !hit || scene->environment.lightMode != ENVIRONMENT_LIGHT_MODE_TOP_FILL) {
+        return 0.0;
+    }
 
     up_facing = runtime_direct_light_3d_clamp(hit->normal.z, 0.0, 1.0);
     if (!(up_facing > 0.0)) return 0.0;
 
     top_fill_intensity =
-        runtime_direct_light_3d_clamp(light->intensity * kRuntimeDirectLight3DTopFillIntensityScale,
+        runtime_direct_light_3d_clamp(scene->environment.topFillIntensity *
+                                          kRuntimeDirectLight3DTopFillIntensityScale,
                                       0.0,
                                       kRuntimeDirectLight3DTopFillIntensityMax);
     return top_fill_intensity * up_facing;
@@ -296,7 +303,7 @@ bool RuntimeDirectLight3D_ShadeHit(const RuntimeScene3D* scene,
     result.hit = true;
     result.hitInfo = *hit;
     runtime_direct_light_3d_resolve_hit_tint(hit, &tint_r, &tint_g, &tint_b);
-    top_fill = runtime_direct_light_3d_top_fill_radiance(hit, &scene->light);
+    top_fill = runtime_direct_light_3d_top_fill_radiance(scene, hit);
     to_light = vec3_sub(scene->light.position, hit->position);
     light_distance = vec3_length(to_light);
     result.lightDistance = light_distance;

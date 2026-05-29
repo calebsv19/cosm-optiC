@@ -235,6 +235,19 @@ static int parse_inspection_preset(const char *label) {
     return RAY_TRACING_AGENT_RENDER_PRESET_NONE;
 }
 
+static int parse_environment_light_mode(const char *label) {
+    if (!label || !label[0] || strcmp(label, "off") == 0) {
+        return ENVIRONMENT_LIGHT_MODE_OFF;
+    }
+    if (strcmp(label, "top_fill") == 0 || strcmp(label, "top-fill") == 0) {
+        return ENVIRONMENT_LIGHT_MODE_TOP_FILL;
+    }
+    if (strcmp(label, "ambient") == 0) {
+        return ENVIRONMENT_LIGHT_MODE_AMBIENT;
+    }
+    return ENVIRONMENT_LIGHT_MODE_OFF;
+}
+
 static int clamp_secondary_diffuse_samples_3d_override(int value) {
     if (value < RUNTIME_3D_SECONDARY_SAMPLES_MIN) {
         value = RUNTIME_3D_SECONDARY_SAMPLES_MIN;
@@ -296,6 +309,9 @@ void ray_tracing_agent_render_request_defaults(RayTracingAgentRenderRequest *req
     request->camera_look_at_y = 0.0;
     request->camera_look_at_z = 0.0;
     request->environment_brightness_override = 0.0;
+    request->ambient_strength_override = 0.0;
+    request->environment_light_mode_override = ENVIRONMENT_LIGHT_MODE_OFF;
+    request->top_fill_strength_override = 1.0;
     request->light_intensity_override = 0.0;
     request->light_radius_override = 0.0;
     request->forward_decay_override = 0.0;
@@ -510,6 +526,18 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             request.has_environment_brightness_override = true;
             request.environment_brightness_override = double_value;
         }
+        if (json_get_double(inspection, "ambient_strength", &double_value)) {
+            request.has_ambient_strength_override = true;
+            request.ambient_strength_override = double_value;
+        }
+        if (json_get_string(inspection, "environment_light_mode", &value)) {
+            request.has_environment_light_mode_override = true;
+            request.environment_light_mode_override = parse_environment_light_mode(value);
+        }
+        if (json_get_double(inspection, "top_fill_strength", &double_value)) {
+            request.has_top_fill_strength_override = true;
+            request.top_fill_strength_override = double_value;
+        }
         if (json_get_double(inspection, "light_intensity", &double_value)) {
             request.has_light_intensity_override = true;
             request.light_intensity_override = double_value;
@@ -598,6 +626,26 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
         }
         if (request.environment_brightness_override > 255.0) {
             request.environment_brightness_override = 255.0;
+        }
+    }
+    if (request.has_ambient_strength_override) {
+        if (request.ambient_strength_override < 0.0) {
+            request.ambient_strength_override = 0.0;
+        }
+        if (request.ambient_strength_override > 1.0) {
+            request.ambient_strength_override = 1.0;
+        }
+    }
+    if (request.has_environment_light_mode_override) {
+        request.environment_light_mode_override =
+            animation_config_environment_light_mode_clamp(request.environment_light_mode_override);
+    }
+    if (request.has_top_fill_strength_override) {
+        if (request.top_fill_strength_override < 0.0) {
+            request.top_fill_strength_override = 0.0;
+        }
+        if (request.top_fill_strength_override > 20.0) {
+            request.top_fill_strength_override = 20.0;
         }
     }
     if (request.has_light_intensity_override) {

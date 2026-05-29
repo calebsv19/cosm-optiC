@@ -788,6 +788,33 @@ static bool write_canonical_request_file(const char *path,
                 request->environment_brightness_override);
         wrote_field = true;
     }
+    if (request->has_ambient_strength_override) {
+        fprintf(file,
+                "%s    \"ambient_strength\": %.9f",
+                wrote_field ? ",\n" : "",
+                request->ambient_strength_override);
+        wrote_field = true;
+    }
+    if (request->has_environment_light_mode_override) {
+        const char *mode = "off";
+        if (request->environment_light_mode_override == ENVIRONMENT_LIGHT_MODE_TOP_FILL) {
+            mode = "top_fill";
+        } else if (request->environment_light_mode_override == ENVIRONMENT_LIGHT_MODE_AMBIENT) {
+            mode = "ambient";
+        }
+        fprintf(file,
+                "%s    \"environment_light_mode\": \"%s\"",
+                wrote_field ? ",\n" : "",
+                mode);
+        wrote_field = true;
+    }
+    if (request->has_top_fill_strength_override) {
+        fprintf(file,
+                "%s    \"top_fill_strength\": %.9f",
+                wrote_field ? ",\n" : "",
+                request->top_fill_strength_override);
+        wrote_field = true;
+    }
     if (request->has_light_intensity_override) {
         fprintf(file,
                 "%s    \"light_intensity\": %.9f",

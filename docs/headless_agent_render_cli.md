@@ -2,6 +2,17 @@
 
 Status: Phase 4 volume handoff image export contract landed, with runtime-scene camera fallback for native `3D` renders, additive colored volume inspection tint support, and a first detached RayTracing local job runner.
 
+Environment-light inspection overrides now also support the shipped three-way
+renderer lane:
+- `off`
+- `top_fill`
+- `ambient`
+
+Use `ambient_strength` for the ambient-mode surface-fill amount (`0.0..1.0`)
+and `top_fill_strength` for the top-fill lane (`0.0..20.0`). The older
+`environment_brightness` override remains available as a compatibility knob for
+the underlying byte-domain environment brightness state.
+
 The first RayTracing agent command is:
 
 ```bash
@@ -101,7 +112,8 @@ The request root must declare:
     "camera_zoom": 0.95,
     "camera_position": { "x": -3.8, "y": -7.2, "z": 2.2 },
     "camera_look_at": { "x": -0.2, "y": 0.8, "z": 1.2 },
-    "environment_brightness": 0.0,
+    "environment_light_mode": "ambient",
+    "ambient_strength": 0.25,
     "light_intensity": 2.6,
     "light_radius": 0.10,
     "forward_decay": 220.0,
@@ -146,6 +158,9 @@ change the persisted runtime scene:
 - `camera_zoom`
 - `camera_position`
 - `camera_look_at`
+- `environment_light_mode`
+- `ambient_strength`
+- `top_fill_strength`
 - `environment_brightness`
 - `light_intensity`
 - `light_radius`
@@ -156,6 +171,14 @@ change the persisted runtime scene:
 - `secondary_diffuse_samples_3d`
 - `transmission_samples_3d`
 - `volume_tint`
+
+Preferred environment-light override contract:
+- `environment_light_mode = "off"` disables the extra environment fill lane
+- `environment_light_mode = "top_fill"` uses `top_fill_strength`
+- `environment_light_mode = "ambient"` uses `ambient_strength`
+- `environment_brightness` still maps directly to the persisted
+  `0..255` environment brightness value and should be treated as a lower-level
+  compatibility override rather than the first-choice authored request field
 
 ## Current Behavior
 

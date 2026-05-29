@@ -34,6 +34,12 @@ typedef enum {
 } SpaceMode;
 
 typedef enum {
+    ENVIRONMENT_LIGHT_MODE_OFF = 0,
+    ENVIRONMENT_LIGHT_MODE_TOP_FILL = 1,
+    ENVIRONMENT_LIGHT_MODE_AMBIENT = 2
+} EnvironmentLightMode;
+
+typedef enum {
     SCENE_SOURCE_CONFIG_2D = 0,
     SCENE_SOURCE_FLUID_MANIFEST = 1,
     SCENE_SOURCE_RUNTIME_SCENE = 2
@@ -143,7 +149,8 @@ typedef struct {
     double lightDecaySoftness;    // >1.0 flattens decay, <1.0 steepens decay
     double lightRadius;           // Authored light source radius in world units (0 = auto)
     double lightHeight;           // Z-height of the light above the ground plane for Disney path/2.5D shading
-    bool topFillLightEnabled;     // Shared native 3D overhead fill light toggle
+    int environmentLightMode;     // Extra fill-light lane: off, top-fill, or ambient
+    double topFillStrength;       // Standalone top-fill strength for the environment-light top-fill mode
     bool disneyDenoiseEnabled;    // Disney-only native 3D denoise post-pass toggle
     int bounceDepth3D;
     int specularDepth3D;
@@ -215,6 +222,7 @@ int animation_config_text_zoom_percent_from_step(int step);
 int animation_config_scale_text_point_size(const AnimationConfig* cfg,
                                            int base_point_size,
                                            int min_point_size);
+int animation_config_environment_light_mode_clamp(int mode);
 int animation_config_space_mode_clamp(int mode);
 int animation_config_scene_source_clamp(int source);
 int animation_config_volume_source_kind_clamp(int kind);

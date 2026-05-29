@@ -664,11 +664,17 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         return;
     }
     if (point_in_rect(&buttons.topFillRect, x, y)) {
-        animSettings.topFillLightEnabled = !animSettings.topFillLightEnabled;
+        animSettings.environmentLightMode =
+            (animation_config_environment_light_mode_clamp(animSettings.environmentLightMode) + 1) %
+            (ENVIRONMENT_LIGHT_MODE_AMBIENT + 1);
         snprintf(state->statusLabel,
                  sizeof(state->statusLabel),
-                 "Top Fill: %s",
-                 animSettings.topFillLightEnabled ? "ON" : "OFF");
+                 "Env Light: %s",
+                 (animSettings.environmentLightMode == ENVIRONMENT_LIGHT_MODE_TOP_FILL)
+                     ? "Top Fill"
+                     : ((animSettings.environmentLightMode == ENVIRONMENT_LIGHT_MODE_AMBIENT)
+                            ? "Ambient"
+                            : "Off"));
         state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
         state->statusColor = (SDL_Color){160, 210, 255, 255};
         state->statusExpireMs = SDL_GetTicks() + 1800;

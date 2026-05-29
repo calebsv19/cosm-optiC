@@ -6,7 +6,7 @@ Public identity:
 - packaged desktop product: `optiC`
 - repository/program key: `ray_tracing`
 
-Last audited: 2026-05-04.
+Last audited: 2026-05-29.
 
 Current public focus:
 - dual-toolchain compiler-units rollout now starts at the runtime-scene import
@@ -27,7 +27,16 @@ Current public focus:
   - `src/render/runtime_ray_3d.c`
 - shipped native `3D` runtime ladder through `Disney`
 - Phase 4.1/4.2 headless-agent render request preflight CLI
+- explicit environment-light request overrides for headless native `3D`
+  renders:
+  - mode: `off` / `top_fill` / `ambient`
+  - strengths: `ambient_strength` and `top_fill_strength`
 - deep-render start/resume and export workflow
+- hardened worker-backed frame-range continuation workflow:
+  seed -> `start_stage = ray_tracing` continuation -> optional publish
+  backfill -> grouped visualizer inspection
+- tiny trio worker proofs now also cover preferred-home-server routing with VPS
+  fallback for cheap validation runs
 - menu/editor control-surface truth for native `3D` scene and atmosphere selection
 - narrower native `3D` verification lanes for config persistence, prepared-render parity/scatter, and geometry contracts
 - post-`I6` renderer-lane selection before VF3D / `physics_sim` ingestion
@@ -38,7 +47,8 @@ Current public focus:
 - `docs/headless_agent_render_cli.md`: `ray_tracing_agent_render_request_v1`
   request schema and preflight CLI command.
 - `docs/headless_continuation_visualizer_workflow.md`: operator workflow for
-  seed render -> RayTracing-only continuation -> visualizer grouping/backfill.
+  seed render -> RayTracing-only continuation -> cancel/publish-backfill ->
+  visualizer grouping.
 - `docs/render_review_sets/README.md`: local repo-doc review sets from detached
   renders. These are not the live visualizer website lane.
 - `docs/desktop_packaging.md`: `.app` packaging commands, launcher diagnostics, and release-readiness workflow.
@@ -76,9 +86,12 @@ Current verification contract:
 - `make -C ray_tracing visual-harness`
   - build-only readiness gate, not an unattended execution surface
 - `make -C ray_tracing test-legacy`
+- `make -C ray_tracing package-linux-worker-self-test`
 - `make -C ray_tracing package-desktop-self-test`
 - `make -C ray_tracing package-desktop-refresh`
 - `make -C ray_tracing release-bundle-audit`
+- Linux worker packaging now follows the Linux build-host architecture by
+  default (`linux-x86_64` or `linux-aarch64`)
 
 ## Public Runtime Docs
 - `README.md` (repo root): product/runtime overview and build/run flow.

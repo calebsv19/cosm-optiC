@@ -876,6 +876,50 @@ static int test_runtime_scene_bridge_authoring_overlay_light_settings_preserved(
     return 0;
 }
 
+static int test_runtime_scene_bridge_authoring_overlay_environment_settings_preserved(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_overlay_environment_settings\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{"
+          "\"ray_tracing\":{"
+            "\"authoring\":{"
+              "\"environment\":{"
+                "\"light_mode\":2,"
+                "\"ambient_strength\":0.375,"
+                "\"top_fill_strength\":3.5"
+              "}"
+            "}"
+          "}"
+        "}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    bool ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_scene_apply_authoring_overlay_environment_settings_ok", ok);
+    if (!ok) return 0;
+    assert_true("runtime_scene_apply_authoring_overlay_environment_mode",
+                animSettings.environmentLightMode == ENVIRONMENT_LIGHT_MODE_AMBIENT);
+    assert_close("runtime_scene_apply_authoring_overlay_environment_ambient_strength",
+                 animSettings.environmentBrightness,
+                 0.375 * 255.0,
+                 1e-9);
+    assert_close("runtime_scene_apply_authoring_overlay_environment_top_fill_strength",
+                 animSettings.topFillStrength,
+                 3.5,
+                 1e-9);
+    return 0;
+}
+
 static int test_runtime_scene_bridge_authoring_overlay_procedural_texture_shorthand_preserved(void) {
     const char *runtime_json =
         "{"
@@ -1118,6 +1162,7 @@ int run_test_runtime_scene_bridge_core_tests(void) {
     test_runtime_scene_bridge_apply_runtime_fixture();
     test_runtime_scene_bridge_authoring_overlay_object_color_preserved();
     test_runtime_scene_bridge_authoring_overlay_light_settings_preserved();
+    test_runtime_scene_bridge_authoring_overlay_environment_settings_preserved();
     test_runtime_scene_bridge_authoring_overlay_procedural_texture_shorthand_preserved();
     test_runtime_scene_bridge_authoring_overlay_default_emissive_strength_zero();
     test_runtime_scene_bridge_apply_compile_output();
