@@ -20,6 +20,19 @@ typedef struct {
     int radius;
 } Native3DLightMarkerScreenInfo;
 
+const char* RayTracing2Native3DOverlay_ResolveUpscaleModeLabel(int upscale_mode) {
+    switch ((Runtime3DUpscaleMode)upscale_mode) {
+        case RUNTIME_3D_UPSCALE_MODE_OFF:
+            return "OFF";
+        case RUNTIME_3D_UPSCALE_MODE_NEAREST:
+            return "Nearest";
+        case RUNTIME_3D_UPSCALE_MODE_BILINEAR:
+            return "Bilinear";
+        default:
+            return "Unknown";
+    }
+}
+
 static bool BuildNative3DLiveSceneForOverlay(RuntimeScene3D* out_scene,
                                              double normalized_t,
                                              double light_x,
