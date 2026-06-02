@@ -1,6 +1,7 @@
 #include "editor/material_editor_internal.h"
 
 #include "editor/material_editor_authored_texture_binding.h"
+#include "editor/material_editor_face_preview.h"
 #include "editor/material_editor_knob_control.h"
 
 static bool material_editor_point_in_rect(int x, int y, const SDL_Rect* rect) {
@@ -41,6 +42,9 @@ void HandleMaterialEditorEvents(SDL_Event* event) {
     if (event->type == SDL_MOUSEBUTTONDOWN && event->button.button == SDL_BUTTON_LEFT) {
         int mx = event->button.x;
         int my = event->button.y;
+        if (MaterialEditorFacePreviewHandleEvent(event)) {
+            return;
+        }
         if (MaterialEditorAuthoredTextureBindingHandleEvent(event,
                                                             MaterialEditorResolveFocusedObjectIndex())) {
             return;
@@ -174,6 +178,9 @@ void HandleMaterialEditorEvents(SDL_Event* event) {
 }
 
 MaterialEditorHitRegion MaterialEditorHitRegionAtPoint(int mx, int my) {
+    if (MaterialEditorFacePreviewHitTest(mx, my)) {
+        return MATERIAL_EDITOR_HIT_CONTROLS;
+    }
     if (material_editor_point_in_rect(mx, my, &s_texture_none_rect) ||
         material_editor_point_in_rect(mx, my, &s_texture_rust_rect) ||
         material_editor_point_in_rect(mx, my, &s_texture_fog_rect) ||

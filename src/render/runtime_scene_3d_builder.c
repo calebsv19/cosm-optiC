@@ -152,7 +152,8 @@ static bool runtime_scene_3d_builder_append_triangle(RuntimeScene3D* scene,
     triangle = &scene->triangleMesh.triangles[scene->triangleMesh.triangleCount++];
     memset(triangle, 0, sizeof(*triangle));
     for (int i = 0; i < scene->triangleMesh.triangleCount - 1; ++i) {
-        if (scene->triangleMesh.triangles[i].sceneObjectIndex == scene_object_index) {
+        if (scene->triangleMesh.triangles[i].sceneObjectIndex == scene_object_index &&
+            scene->triangleMesh.triangles[i].primitiveIndex == primitive_index) {
             local_triangle_index += 1;
         }
     }

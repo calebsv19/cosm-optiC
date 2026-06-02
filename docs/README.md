@@ -6,7 +6,7 @@ Public identity:
 - packaged desktop product: `optiC`
 - repository/program key: `ray_tracing`
 
-Last audited: 2026-05-29.
+Last audited: 2026-06-02.
 
 Current public focus:
 - dual-toolchain compiler-units rollout now starts at the runtime-scene import
@@ -38,6 +38,9 @@ Current public focus:
 - tiny trio worker proofs now also cover preferred-home-server routing with VPS
   fallback for cheap validation runs
 - menu/editor control-surface truth for native `3D` scene and atmosphere selection
+- Material-mode right-pane Active Face Preview for selected generated face groups,
+  including alpha inspection, real face-aspect sizing, grounded texture sampling,
+  and stable world-up orientation
 - narrower native `3D` verification lanes for config persistence, prepared-render parity/scatter, and geometry contracts
 - post-`I6` renderer-lane selection before VF3D / `physics_sim` ingestion
 

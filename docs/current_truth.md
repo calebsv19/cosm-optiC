@@ -1,6 +1,6 @@
 # optiC Current Truth
 
-Last updated: 2026-05-29
+Last updated: 2026-06-02
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -121,6 +121,13 @@ Last updated: 2026-05-29
   - overlay layer kinds include rust, fog, grime, and oil in the current Material editor surface, with scratches and edge wear reserved in the enum contract
   - runtime scene authoring save/load persists `material_texture_stack` data additively beside legacy `procedural_texture` compatibility fields
   - the Material preview and native payload path both evaluate through `RuntimeMaterialTextureStackEvaluatePlacedUV(...)`, so focused editor preview and simulation material response share the same stack math
+- Material mode now has a dedicated right-pane Active Face Preview for selected generated face groups:
+  - the center viewport remains the interaction/selection lane
+  - the right-pane preview renders one active face through the shared non-ray-traced material surface evaluator
+  - the preview can ignore or honor material alpha for inspection
+  - rectangular faces preserve their real aspect ratio, including very skinny prism sides
+  - face metrics ground procedural texture sampling to real plane/rect-prism dimensions and orient vertical faces with world `+Z` as preview-up where available
+  - selected face addresses now carry primitive-local triangle ordinals so preview dimensions and orientation resolve against the intended primitive/face group instead of a fallback object order
 - Native `3D` material payloads now also support object-bound authored bitmap texture sets for the current texture-authoring roundtrip:
   - `drawing_program` exports separate per-face RGBA PNG files plus one JSON manifest
   - `ray_tracing` reads that manifest through app-local authored-texture import code

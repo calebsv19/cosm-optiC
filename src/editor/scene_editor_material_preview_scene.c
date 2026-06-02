@@ -101,7 +101,9 @@ int scene_editor_material_preview_build_projected_triangles(
                                                    focused_object_index,
                                                    triangle->primitiveIndex,
                                                    i,
-                                                   projected_count);
+                                                   triangle->localTriangleIndex >= 0
+                                                       ? triangle->localTriangleIndex
+                                                       : projected_count);
         projected_count += 1;
     }
     return projected_count;
@@ -134,7 +136,9 @@ bool SceneEditorMaterialPreviewResolveFocusedTriangles(
                                                    focused_object_index,
                                                    triangle->primitiveIndex,
                                                    i,
-                                                   focused_count);
+                                                   triangle->localTriangleIndex >= 0
+                                                       ? triangle->localTriangleIndex
+                                                       : focused_count);
         if (out_addresses && focused_count < address_capacity) {
             out_addresses[focused_count] = address;
         }

@@ -110,6 +110,22 @@ bool MaterialPreviewSurfaceEvaluateFace(const SceneObject* object,
                                         double u,
                                         double v,
                                         RuntimeMaterialSurfaceEval* out_eval) {
+    return MaterialPreviewSurfaceEvaluateFacePrimitive(object,
+                                                       scene_object_index,
+                                                       -1,
+                                                       face_group_index,
+                                                       u,
+                                                       v,
+                                                       out_eval);
+}
+
+bool MaterialPreviewSurfaceEvaluateFacePrimitive(const SceneObject* object,
+                                                 int scene_object_index,
+                                                 int primitive_index,
+                                                 int face_group_index,
+                                                 double u,
+                                                 double v,
+                                                 RuntimeMaterialSurfaceEval* out_eval) {
     RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
     RuntimeMaterialSurfaceEval base_eval = {0};
     RuntimeMaterialSurfaceEval surface_eval = {0};
@@ -125,7 +141,7 @@ bool MaterialPreviewSurfaceEvaluateFace(const SceneObject* object,
         SceneEditorMaterialFacePlacementHasOverride(scene_object_index, face_group_index);
     seed_key = ((scene_object_index + 1) * 19349663) ^ ((face_group_index + 1) * 83492791);
     if (seed_key == 0) seed_key = scene_object_index + 1;
-    SceneEditorMaterialFaceMetricsResolveGroundedUV(-1,
+    SceneEditorMaterialFaceMetricsResolveGroundedUV(primitive_index,
                                                     scene_object_index,
                                                     face_group_index,
                                                     u,

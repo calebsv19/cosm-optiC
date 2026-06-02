@@ -117,20 +117,35 @@ static bool scene_editor_material_face_metrics_resolve_seed_dims(
         case RUNTIME_SCENE_BRIDGE_PRIMITIVE_RECT_PRISM:
             switch (face_group_index) {
                 case 0:
-                case 1:
                     axis_a = axis_u;
                     axis_b = axis_v;
                     dim_a = seed->width;
                     dim_b = seed->height;
                     break;
+                case 1:
+                    axis_a = axis_v;
+                    axis_b = axis_u;
+                    dim_a = seed->height;
+                    dim_b = seed->width;
+                    break;
                 case 2:
-                case 3:
                     axis_a = axis_u;
                     axis_b = normal;
                     dim_a = seed->width;
                     dim_b = seed->depth;
                     break;
+                case 3:
+                    axis_a = normal;
+                    axis_b = axis_u;
+                    dim_a = seed->depth;
+                    dim_b = seed->width;
+                    break;
                 case 4:
+                    axis_a = normal;
+                    axis_b = axis_v;
+                    dim_a = seed->depth;
+                    dim_b = seed->height;
+                    break;
                 case 5:
                     axis_a = axis_v;
                     axis_b = normal;

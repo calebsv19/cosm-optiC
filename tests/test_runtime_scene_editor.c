@@ -9,6 +9,7 @@
 #include "app/animation.h"
 #include "editor/material_editor.h"
 #include "editor/material_editor_face_preview.h"
+#include "editor/material_editor_internal.h"
 #include "editor/material_preview_surface_eval.h"
 #include "editor/object_editor.h"
 #include "editor/object_editor_object_ops.h"
@@ -28,6 +29,7 @@
 #include "render/runtime_material_authored_texture_3d.h"
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_material_texture_3d.h"
+#include "render/runtime_scene_3d_builder.h"
 #include "test_runtime_scene_editor.h"
 #include "test_support.h"
 
@@ -2512,6 +2514,44 @@ static int test_material_editor_face_metrics_ground_uv_scales_with_dimensions(vo
     return 0;
 }
 
+static int test_material_editor_face_indices_are_local_to_primitive(void) {
+    RuntimeSceneBridge3DPrimitiveSeedState seeds = {0};
+    RuntimeScene3D scene;
+
+    memset(&scene, 0, sizeof(scene));
+    seeds.valid = true;
+    seeds.primitive_count = 2;
+    seeds.plane_primitive_count = 2;
+    for (int i = 0; i < 2; ++i) {
+        RuntimeSceneBridgePrimitiveSeed* seed = &seeds.primitives[i];
+        seed->kind = RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE;
+        seed->scene_object_index = 7;
+        seed->axis_u_x = 1.0;
+        seed->axis_v_z = 1.0;
+        seed->normal_y = 1.0;
+        seed->width = 2.0 + (double)i;
+        seed->height = 1.0;
+    }
+
+    assert_true("material_face_indices_build_scene",
+                RuntimeScene3DBuilder_BuildFromPrimitiveSeedState(&scene, &seeds));
+    assert_true("material_face_indices_triangle_count", scene.triangleMesh.triangleCount == 4);
+    assert_true("material_face_indices_first_primitive_tri0",
+                scene.triangleMesh.triangles[0].primitiveIndex == 0 &&
+                scene.triangleMesh.triangles[0].localTriangleIndex == 0);
+    assert_true("material_face_indices_first_primitive_tri1",
+                scene.triangleMesh.triangles[1].primitiveIndex == 0 &&
+                scene.triangleMesh.triangles[1].localTriangleIndex == 1);
+    assert_true("material_face_indices_second_primitive_resets_tri0",
+                scene.triangleMesh.triangles[2].primitiveIndex == 1 &&
+                scene.triangleMesh.triangles[2].localTriangleIndex == 0);
+    assert_true("material_face_indices_second_primitive_resets_tri1",
+                scene.triangleMesh.triangles[3].primitiveIndex == 1 &&
+                scene.triangleMesh.triangles[3].localTriangleIndex == 1);
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
 static int test_material_editor_face_metrics_orients_vertical_faces_to_world_up(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -2637,6 +2677,18 @@ static int test_material_editor_face_preview_display_size_respects_face_aspect(v
               "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
             "\"transform\":{\"position\":{\"x\":4.0,\"y\":0.0,\"z\":0.0},"
               "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "},"
+          "{"
+            "\"object_id\":\"skinny_prism\","
+            "\"object_type\":\"rect_prism_primitive\","
+            "\"transform\":{\"position\":{\"x\":9.0,\"y\":0.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}},"
+            "\"primitive\":{\"kind\":\"rect_prism_primitive\","
+              "\"width\":8.0,\"height\":6.0,\"depth\":0.5,"
+              "\"frame\":{\"origin\":{\"x\":9.0,\"y\":0.0,\"z\":0.0},"
+                "\"axis_u\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+                "\"axis_v\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+                "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}}"
           "}"
         "],"
         "\"materials\":[],"
@@ -2652,12 +2704,14 @@ static int test_material_editor_face_preview_display_size_respects_face_aspect(v
     int tall_height = 0;
     int neutral_width = 0;
     int neutral_height = 0;
+    int skinny_width = 0;
+    int skinny_height = 0;
 
     memset(&sceneSettings, 0, sizeof(sceneSettings));
     memset(&animSettings, 0, sizeof(animSettings));
     animSettings.spaceMode = SPACE_MODE_3D;
     animSettings.integratorMode = 1;
-    sceneSettings.objectCount = 2;
+    sceneSettings.objectCount = 3;
 
     assert_true("material_face_preview_display_runtime_apply_ok",
                 runtime_scene_bridge_apply_json(runtime_json, &summary));
@@ -2682,13 +2736,34 @@ static int test_material_editor_face_preview_display_size_respects_face_aspect(v
                                                            240,
                                                            &neutral_width,
                                                            &neutral_height));
+    assert_true("material_face_preview_display_skinny_side",
+                MaterialEditorFacePreviewResolveDisplaySize(&sceneSettings.sceneObjects[2],
+                                                           2,
+                                                           2,
+                                                           240,
+                                                           &skinny_width,
+                                                           &skinny_height));
     assert_true("material_face_preview_display_wide_landscape", wide_width > wide_height);
     assert_true("material_face_preview_display_tall_portrait", tall_height > tall_width);
     assert_true("material_face_preview_display_neutral_square",
                 neutral_width == neutral_height);
+    assert_true("material_face_preview_display_skinny_keeps_extreme_aspect",
+                skinny_width > skinny_height * 8);
+    assert_true("material_face_preview_display_skinny_short_not_square_padded",
+                skinny_height < 40);
     assert_true("material_face_preview_display_clamped_max",
-                wide_width <= 176 && wide_height <= 176 &&
-                tall_width <= 176 && tall_height <= 176);
+                wide_width <= 220 && wide_height <= 220 &&
+                tall_width <= 220 && tall_height <= 220 &&
+                skinny_width <= 220 && skinny_height <= 220);
+    MaterialEditorFacePreviewReset();
+    assert_true("material_face_preview_alpha_default_off",
+                !MaterialEditorFacePreviewGetUseTransparency());
+    MaterialEditorFacePreviewSetUseTransparency(true);
+    assert_true("material_face_preview_alpha_toggle_on",
+                MaterialEditorFacePreviewGetUseTransparency());
+    MaterialEditorFacePreviewSetUseTransparency(false);
+    assert_true("material_face_preview_alpha_toggle_off",
+                !MaterialEditorFacePreviewGetUseTransparency());
 
     sceneSettings = saved_scene;
     animSettings = saved_anim;
@@ -2730,6 +2805,7 @@ static int test_material_editor_preview_picks_and_selects_visible_triangle(void)
     SDL_Rect viewport = {0, 0, 900, 650};
     SceneEditorMaterialPreviewTriangleAddress picked = {0};
     SceneEditorMaterialPreviewTriangleAddress readback = {0};
+    SceneEditorMaterialPreviewTriangleAddress active_address = {0};
     SceneEditorMaterialPreviewTriangleAddress second = {0};
     int center_x = viewport.x + viewport.w / 2;
     int center_y = viewport.y + viewport.h / 2;
@@ -2784,6 +2860,11 @@ static int test_material_editor_preview_picks_and_selects_visible_triangle(void)
     assert_true("material_selection_readback_matches",
                 readback.triangleIndex == picked.triangleIndex &&
                 readback.localTriangleIndex == picked.localTriangleIndex);
+    assert_true("material_selection_active_address_readback",
+                MaterialEditorGetActiveFaceAddress(&active_address));
+    assert_true("material_selection_active_address_matches_primitive",
+                active_address.primitiveIndex == picked.primitiveIndex &&
+                    active_address.faceGroupIndex == picked.faceGroupIndex);
 
     assert_true("material_selection_toggle_removes",
                 MaterialEditorToggleTriangleSelection(&picked));
@@ -3390,6 +3471,14 @@ static int test_material_editor_face_override_inherits_active_stack_layer(void) 
     address.faceGroupIndex = 2;
     assert_true("material_face_stack_select_face",
                 MaterialEditorSetTriangleSelection(&address));
+    assert_true("material_face_stack_default_controls_read_active_layer",
+                material_editor_texture_kind_for_controls(&sceneSettings.sceneObjects[0]) ==
+                    RUNTIME_MATERIAL_TEXTURE_3D_RUST);
+    assert_close("material_face_stack_default_controls_read_strength",
+                 material_editor_value_for_slider(&sceneSettings.sceneObjects[0],
+                                                  MATERIAL_EDITOR_SLIDER_STRENGTH),
+                 1.0,
+                 1e-12);
     assert_true("material_face_stack_param_applies",
                 MaterialEditorApplyTextureParamValueToFocused(
                     MATERIAL_EDITOR_TEXTURE_PARAM_COVERAGE,
@@ -3898,6 +3987,7 @@ int run_test_runtime_scene_editor_tests(void) {
     test_material_editor_focused_zoom_accumulates_around_object_fit();
     test_material_editor_preview_resolves_focused_triangle_substrate();
     test_material_editor_face_metrics_ground_uv_scales_with_dimensions();
+    test_material_editor_face_indices_are_local_to_primitive();
     test_material_editor_face_metrics_orients_vertical_faces_to_world_up();
     test_material_editor_face_preview_display_size_respects_face_aspect();
     test_material_editor_preview_picks_and_selects_visible_triangle();

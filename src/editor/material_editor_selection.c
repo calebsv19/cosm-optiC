@@ -1,5 +1,7 @@
 #include "editor/material_editor_internal.h"
 
+#include <string.h>
+
 #include "editor/material_editor_face_preview.h"
 
 bool MaterialEditorSetTriangleSelection(const SceneEditorMaterialPreviewTriangleAddress* address) {
@@ -76,4 +78,26 @@ bool MaterialEditorToggleFaceGroupSelection(const SceneEditorMaterialPreviewTria
     s_material_editor_active_face_group_index = address->faceGroupIndex;
     MaterialEditorFacePreviewInvalidate();
     return true;
+}
+
+bool MaterialEditorGetActiveFaceAddress(SceneEditorMaterialPreviewTriangleAddress* out_address) {
+    if (out_address) {
+        memset(out_address, 0, sizeof(*out_address));
+    }
+    if (!out_address || s_material_editor_active_face_group_index < 0) return false;
+    for (int i = 0; i < s_material_editor_selected_triangle_count; ++i) {
+        const SceneEditorMaterialPreviewTriangleAddress* selected =
+            &s_material_editor_selected_triangles[i];
+        if (selected->faceGroupIndex == s_material_editor_active_face_group_index) {
+            *out_address = *selected;
+            return true;
+        }
+    }
+    for (int i = 0; i < s_group_row_count; ++i) {
+        if (s_group_row_face_groups[i] == s_material_editor_active_face_group_index) {
+            *out_address = s_group_row_addresses[i];
+            return true;
+        }
+    }
+    return false;
 }

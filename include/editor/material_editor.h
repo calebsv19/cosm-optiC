@@ -74,6 +74,7 @@ bool MaterialEditorMoveActiveLayer(int direction);
 bool MaterialEditorToggleActiveLayerEnabled(void);
 bool MaterialEditorApplyLayerKindToFocused(RuntimeMaterialTextureLayerKind kind);
 bool MaterialEditorGetSelectedTriangle(int index, SceneEditorMaterialPreviewTriangleAddress* out_address);
+bool MaterialEditorGetActiveFaceAddress(SceneEditorMaterialPreviewTriangleAddress* out_address);
 bool MaterialEditorSetTriangleSelection(const SceneEditorMaterialPreviewTriangleAddress* address);
 bool MaterialEditorToggleTriangleSelection(const SceneEditorMaterialPreviewTriangleAddress* address);
 bool MaterialEditorSetFaceGroupSelection(const SceneEditorMaterialPreviewTriangleAddress* address);

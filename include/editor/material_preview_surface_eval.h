@@ -20,6 +20,14 @@ bool MaterialPreviewSurfaceEvaluateFace(const SceneObject* object,
                                         double v,
                                         RuntimeMaterialSurfaceEval* out_eval);
 
+bool MaterialPreviewSurfaceEvaluateFacePrimitive(const SceneObject* object,
+                                                 int scene_object_index,
+                                                 int primitive_index,
+                                                 int face_group_index,
+                                                 double u,
+                                                 double v,
+                                                 RuntimeMaterialSurfaceEval* out_eval);
+
 void MaterialPreviewSurfaceShadePixel(const RuntimeMaterialSurfaceEval* eval,
                                      const SceneObject* object,
                                      double u,

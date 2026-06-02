@@ -10,9 +10,10 @@
 #include "editor/scene_editor_material_face_metrics.h"
 #include "render/render_helper.h"
 
-#define MATERIAL_EDITOR_FACE_PREVIEW_MAX_SIZE 176
+#define MATERIAL_EDITOR_FACE_PREVIEW_MAX_SIZE 220
 #define MATERIAL_EDITOR_FACE_PREVIEW_MIN_SIZE 96
-#define MATERIAL_EDITOR_FACE_PREVIEW_LABEL_H 15
+#define MATERIAL_EDITOR_FACE_PREVIEW_MIN_SHORT_SIZE 24
+#define MATERIAL_EDITOR_FACE_PREVIEW_LABEL_H 24
 #define MATERIAL_EDITOR_FACE_PREVIEW_GAP 7
 
 typedef struct MaterialEditorFacePreviewCache {
@@ -23,6 +24,7 @@ typedef struct MaterialEditorFacePreviewCache {
     int width;
     int height;
     int scene_object_index;
+    int primitive_index;
     int face_group_index;
     bool dirty;
 #if USE_VULKAN
@@ -43,6 +45,7 @@ static MaterialEditorFacePreviewCache s_face_preview_cache = {
     0,
     -1,
     -1,
+    -1,
     true,
 #if USE_VULKAN
     NULL,
@@ -52,6 +55,15 @@ static MaterialEditorFacePreviewCache s_face_preview_cache = {
     NULL
 #endif
 };
+
+static bool s_face_preview_use_transparency = false;
+static SDL_Rect s_face_preview_alpha_toggle_rect = {0, 0, 0, 0};
+
+static bool material_editor_face_preview_point_in_rect(int x, int y, const SDL_Rect* rect) {
+    return rect && rect->w > 0 && rect->h > 0 &&
+           x >= rect->x && x < rect->x + rect->w &&
+           y >= rect->y && y < rect->y + rect->h;
+}
 
 static int material_editor_face_preview_size_for_width(int panel_width) {
     int preview_size = panel_width;
@@ -81,8 +93,8 @@ static bool material_editor_face_preview_clamped_display_size(
         height = max_size;
         width = (int)lround((double)max_size * aspect_ratio);
     }
-    if (width < MATERIAL_EDITOR_FACE_PREVIEW_MIN_SIZE) width = MATERIAL_EDITOR_FACE_PREVIEW_MIN_SIZE;
-    if (height < MATERIAL_EDITOR_FACE_PREVIEW_MIN_SIZE) height = MATERIAL_EDITOR_FACE_PREVIEW_MIN_SIZE;
+    if (width < MATERIAL_EDITOR_FACE_PREVIEW_MIN_SHORT_SIZE) width = MATERIAL_EDITOR_FACE_PREVIEW_MIN_SHORT_SIZE;
+    if (height < MATERIAL_EDITOR_FACE_PREVIEW_MIN_SHORT_SIZE) height = MATERIAL_EDITOR_FACE_PREVIEW_MIN_SHORT_SIZE;
     if (width > MATERIAL_EDITOR_FACE_PREVIEW_MAX_SIZE) width = MATERIAL_EDITOR_FACE_PREVIEW_MAX_SIZE;
     if (height > MATERIAL_EDITOR_FACE_PREVIEW_MAX_SIZE) height = MATERIAL_EDITOR_FACE_PREVIEW_MAX_SIZE;
     if (out_width) *out_width = width;
@@ -96,15 +108,35 @@ bool MaterialEditorFacePreviewResolveDisplaySize(const SceneObject* object,
                                                  int panel_width,
                                                  int* out_width,
                                                  int* out_height) {
+    SceneEditorMaterialPreviewTriangleAddress address = {0};
+    address.sceneObjectIndex = scene_object_index;
+    address.primitiveIndex = -1;
+    address.faceGroupIndex = active_face_group_index;
+    return MaterialEditorFacePreviewResolveDisplaySizeForAddress(object,
+                                                                 &address,
+                                                                 panel_width,
+                                                                 out_width,
+                                                                 out_height);
+}
+
+bool MaterialEditorFacePreviewResolveDisplaySizeForAddress(
+    const SceneObject* object,
+    const SceneEditorMaterialPreviewTriangleAddress* active_face_address,
+    int panel_width,
+    int* out_width,
+    int* out_height) {
     SceneEditorMaterialFaceMetrics metrics = {0};
     double aspect_ratio = 1.0;
+    int scene_object_index = active_face_address ? active_face_address->sceneObjectIndex : -1;
+    int primitive_index = active_face_address ? active_face_address->primitiveIndex : -1;
+    int active_face_group_index = active_face_address ? active_face_address->faceGroupIndex : -1;
 
     if (out_width) *out_width = 0;
     if (out_height) *out_height = 0;
     if (!object || panel_width <= 0) return false;
 
     if (active_face_group_index >= 0 &&
-        SceneEditorMaterialFaceMetricsResolve(-1,
+        SceneEditorMaterialFaceMetricsResolve(primitive_index,
                                               scene_object_index,
                                               active_face_group_index,
                                               &metrics) &&
@@ -166,12 +198,44 @@ void MaterialEditorFacePreviewReset(void) {
     s_face_preview_cache.pixels = NULL;
     s_face_preview_cache.pixel_capacity = 0;
     s_face_preview_cache.scene_object_index = -1;
+    s_face_preview_cache.primitive_index = -1;
     s_face_preview_cache.face_group_index = -1;
     s_face_preview_cache.dirty = true;
+    s_face_preview_use_transparency = false;
+    s_face_preview_alpha_toggle_rect = (SDL_Rect){0, 0, 0, 0};
 }
 
 void MaterialEditorFacePreviewInvalidate(void) {
     s_face_preview_cache.dirty = true;
+}
+
+bool MaterialEditorFacePreviewGetUseTransparency(void) {
+    return s_face_preview_use_transparency;
+}
+
+void MaterialEditorFacePreviewSetUseTransparency(bool enabled) {
+    if (s_face_preview_use_transparency == enabled) return;
+    s_face_preview_use_transparency = enabled;
+    MaterialEditorFacePreviewInvalidate();
+}
+
+bool MaterialEditorFacePreviewHitTest(int mx, int my) {
+    return material_editor_face_preview_point_in_rect(mx,
+                                                      my,
+                                                      &s_face_preview_alpha_toggle_rect);
+}
+
+bool MaterialEditorFacePreviewHandleEvent(const SDL_Event* event) {
+    if (!event ||
+        event->type != SDL_MOUSEBUTTONDOWN ||
+        event->button.button != SDL_BUTTON_LEFT) {
+        return false;
+    }
+    if (!MaterialEditorFacePreviewHitTest(event->button.x, event->button.y)) {
+        return false;
+    }
+    MaterialEditorFacePreviewSetUseTransparency(!s_face_preview_use_transparency);
+    return true;
 }
 
 static bool material_editor_face_preview_ensure_pixels(int width, int height) {
@@ -246,6 +310,7 @@ static bool material_editor_face_preview_needs_rebuild(SDL_Renderer* renderer,
                                                        int width,
                                                        int height,
                                                        int scene_object_index,
+                                                       int primitive_index,
                                                        int active_face_group_index) {
     if (s_face_preview_cache.dirty) return true;
     if (s_face_preview_cache.renderer != renderer) return true;
@@ -253,6 +318,7 @@ static bool material_editor_face_preview_needs_rebuild(SDL_Renderer* renderer,
         return true;
     }
     if (s_face_preview_cache.scene_object_index != scene_object_index) return true;
+    if (s_face_preview_cache.primitive_index != primitive_index) return true;
     if (s_face_preview_cache.face_group_index != active_face_group_index) return true;
 #if USE_VULKAN
     if (!s_face_preview_cache.texture_ready) return true;
@@ -264,8 +330,7 @@ static bool material_editor_face_preview_needs_rebuild(SDL_Renderer* renderer,
 
 static bool material_editor_face_preview_rebuild(SDL_Renderer* renderer,
                                                  const SceneObject* object,
-                                                 int scene_object_index,
-                                                 int active_face_group_index,
+                                                 const SceneEditorMaterialPreviewTriangleAddress* active_face_address,
                                                  int width,
                                                  int height) {
 #if !USE_VULKAN
@@ -286,15 +351,21 @@ static bool material_editor_face_preview_rebuild(SDL_Renderer* renderer,
             double v = 0.0;
             RuntimeMaterialSurfaceEval eval = {0};
             material_editor_face_preview_checker_color(px, py, &bg_r, &bg_g, &bg_b);
-            if (object && active_face_group_index >= 0 && width > 1 && height > 1) {
+            if (object && active_face_address &&
+                active_face_address->faceGroupIndex >= 0 && width > 1 && height > 1) {
                 u = (double)px / (double)(width - 1);
                 v = (double)py / (double)(height - 1);
-                if (MaterialPreviewSurfaceEvaluateFace(object,
-                                                       scene_object_index,
-                                                       active_face_group_index,
-                                                       u,
-                                                       v,
-                                                       &eval)) {
+                if (MaterialPreviewSurfaceEvaluateFacePrimitive(
+                        object,
+                        active_face_address->sceneObjectIndex,
+                        active_face_address->primitiveIndex,
+                        active_face_address->faceGroupIndex,
+                        u,
+                        v,
+                        &eval)) {
+                    if (!s_face_preview_use_transparency) {
+                        eval.transparency = 0.0;
+                    }
                     MaterialPreviewSurfaceShadePixel(&eval,
                                                     object,
                                                     u,
@@ -353,8 +424,12 @@ static bool material_editor_face_preview_rebuild(SDL_Renderer* renderer,
         return false;
     }
 #endif
-    s_face_preview_cache.scene_object_index = scene_object_index;
-    s_face_preview_cache.face_group_index = active_face_group_index;
+    s_face_preview_cache.scene_object_index =
+        active_face_address ? active_face_address->sceneObjectIndex : -1;
+    s_face_preview_cache.primitive_index =
+        active_face_address ? active_face_address->primitiveIndex : -1;
+    s_face_preview_cache.face_group_index =
+        active_face_address ? active_face_address->faceGroupIndex : -1;
     s_face_preview_cache.dirty = false;
     return true;
 }
@@ -363,14 +438,26 @@ int MaterialEditorFacePreviewPreferredHeight(const SceneObject* object,
                                              int scene_object_index,
                                              int active_face_group_index,
                                              int panel_width) {
+    SceneEditorMaterialPreviewTriangleAddress address = {0};
+    address.sceneObjectIndex = scene_object_index;
+    address.primitiveIndex = -1;
+    address.faceGroupIndex = active_face_group_index;
+    return MaterialEditorFacePreviewPreferredHeightForAddress(object,
+                                                              &address,
+                                                              panel_width);
+}
+
+int MaterialEditorFacePreviewPreferredHeightForAddress(
+    const SceneObject* object,
+    const SceneEditorMaterialPreviewTriangleAddress* active_face_address,
+    int panel_width) {
     int preview_width = 0;
     int preview_height = 0;
-    if (!MaterialEditorFacePreviewResolveDisplaySize(object,
-                                                     scene_object_index,
-                                                     active_face_group_index,
-                                                     panel_width,
-                                                     &preview_width,
-                                                     &preview_height)) {
+    if (!MaterialEditorFacePreviewResolveDisplaySizeForAddress(object,
+                                                               active_face_address,
+                                                               panel_width,
+                                                               &preview_width,
+                                                               &preview_height)) {
         preview_height = material_editor_face_preview_size_for_width(panel_width);
     }
     return MATERIAL_EDITOR_FACE_PREVIEW_LABEL_H +
@@ -385,16 +472,56 @@ int MaterialEditorFacePreviewRenderPane(SDL_Renderer* renderer,
                                         int scene_object_index,
                                         int active_face_group_index,
                                         RayTracingThemePalette palette) {
+    SceneEditorMaterialPreviewTriangleAddress address = {0};
+    address.sceneObjectIndex = scene_object_index;
+    address.primitiveIndex = -1;
+    address.faceGroupIndex = active_face_group_index;
+    return MaterialEditorFacePreviewRenderPaneForAddress(renderer,
+                                                         content_bounds,
+                                                         cursor_y,
+                                                         object,
+                                                         &address,
+                                                         palette);
+}
+
+static void material_editor_face_preview_draw_toggle(SDL_Renderer* renderer,
+                                                     SDL_Rect rect,
+                                                     RayTracingThemePalette palette) {
+    SDL_Color fill = s_face_preview_use_transparency ? palette.button_active_fill
+                                                     : palette.button_fill;
+    SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, 255);
+    SDL_RenderFillRect(renderer, &rect);
+    SDL_SetRenderDrawColor(renderer,
+                           palette.panel_border.r,
+                           palette.panel_border.g,
+                           palette.panel_border.b,
+                           255);
+    SDL_RenderDrawRect(renderer, &rect);
+    RenderLabelText(renderer,
+                    rect,
+                    s_face_preview_use_transparency ? "Alpha On" : "Alpha Off",
+                    palette.button_text);
+}
+
+int MaterialEditorFacePreviewRenderPaneForAddress(
+    SDL_Renderer* renderer,
+    SDL_Rect content_bounds,
+    int cursor_y,
+    const SceneObject* object,
+    const SceneEditorMaterialPreviewTriangleAddress* active_face_address,
+    RayTracingThemePalette palette) {
     int preview_width = 0;
     int preview_height = 0;
     SDL_Rect preview_rect = {0, 0, 0, 0};
+    int scene_object_index = active_face_address ? active_face_address->sceneObjectIndex : -1;
+    int primitive_index = active_face_address ? active_face_address->primitiveIndex : -1;
+    int active_face_group_index = active_face_address ? active_face_address->faceGroupIndex : -1;
     if (!renderer || !object || content_bounds.w <= 0) return cursor_y;
-    if (!MaterialEditorFacePreviewResolveDisplaySize(object,
-                                                     scene_object_index,
-                                                     active_face_group_index,
-                                                     content_bounds.w,
-                                                     &preview_width,
-                                                     &preview_height)) {
+    if (!MaterialEditorFacePreviewResolveDisplaySizeForAddress(object,
+                                                               active_face_address,
+                                                               content_bounds.w,
+                                                               &preview_width,
+                                                               &preview_height)) {
         preview_width = material_editor_face_preview_size_for_width(content_bounds.w);
         preview_height = preview_width;
     }
@@ -403,11 +530,20 @@ int MaterialEditorFacePreviewRenderPane(SDL_Renderer* renderer,
         cursor_y + MATERIAL_EDITOR_FACE_PREVIEW_LABEL_H,
         preview_width,
         preview_height};
+    s_face_preview_alpha_toggle_rect =
+        (SDL_Rect){content_bounds.x + content_bounds.w - 84,
+                   cursor_y,
+                   84,
+                   MATERIAL_EDITOR_FACE_PREVIEW_LABEL_H - 3};
     RenderLabelTextLeft(renderer,
-                        (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w,
+                        (SDL_Rect){content_bounds.x, cursor_y,
+                                   content_bounds.w - 90,
                                    MATERIAL_EDITOR_FACE_PREVIEW_LABEL_H},
                         "Active Face Preview",
                         palette.text_primary);
+    material_editor_face_preview_draw_toggle(renderer,
+                                             s_face_preview_alpha_toggle_rect,
+                                             palette);
     SDL_SetRenderDrawColor(renderer,
                            palette.panel_fill.r,
                            palette.panel_fill.g,
@@ -418,11 +554,11 @@ int MaterialEditorFacePreviewRenderPane(SDL_Renderer* renderer,
                                                    preview_rect.w,
                                                    preview_rect.h,
                                                    scene_object_index,
+                                                   primitive_index,
                                                    active_face_group_index)) {
         if (!material_editor_face_preview_rebuild(renderer,
                                                   object,
-                                                  scene_object_index,
-                                                  active_face_group_index,
+                                                  active_face_address,
                                                   preview_rect.w,
                                                   preview_rect.h)) {
             MaterialEditorFacePreviewInvalidate();

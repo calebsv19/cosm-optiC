@@ -106,6 +106,62 @@ double material_editor_clamp01(double value) {
     return value;
 }
 
+static bool material_editor_resolve_controls_face_placement(
+    const SceneObject* obj,
+    int focused_object_index,
+    int face_group_index,
+    SceneEditorMaterialFacePlacement* out_placement) {
+    SceneEditorMaterialFacePlacement placement = {0};
+    RuntimeMaterialTextureLayer layer = {0};
+    int layer_index = -1;
+    if (!obj || focused_object_index < 0 || face_group_index < 0 || !out_placement) {
+        return false;
+    }
+    placement = SceneEditorMaterialFacePlacementGetEffective(obj,
+                                                             focused_object_index,
+                                                             face_group_index);
+    if (SceneEditorMaterialFacePlacementHasOverride(focused_object_index, face_group_index)) {
+        *out_placement = placement;
+        return true;
+    }
+    if (material_editor_get_active_layer(obj, NULL, &layer, &layer_index)) {
+        layer = RuntimeMaterialTextureLayerNormalize(layer);
+        placement.layerIndex = layer_index;
+        placement.textureId = layer.placement.textureId;
+        placement.offsetU = layer.placement.offsetU;
+        placement.offsetV = layer.placement.offsetV;
+        placement.scale = layer.placement.scale;
+        placement.strength = layer.placement.strength;
+        placement.rotation = layer.placement.rotation;
+        placement.params = layer.params;
+    }
+    *out_placement = placement;
+    return true;
+}
+
+static double material_editor_normalized_value_from_placement(
+    const SceneEditorMaterialFacePlacement* placement,
+    MaterialEditorSliderKind kind) {
+    double value = 0.0;
+    if (!placement) return 0.0;
+    if (kind == MATERIAL_EDITOR_SLIDER_STRENGTH) {
+        return material_editor_clamp01(placement->strength);
+    }
+    if (kind == MATERIAL_EDITOR_SLIDER_SCALE) {
+        value = placement->scale;
+        if (value < 0.25) value = 0.25;
+        if (value > 8.0) value = 8.0;
+        return (value - 0.25) / 7.75;
+    }
+    if (kind == MATERIAL_EDITOR_SLIDER_OFFSET_U) {
+        return material_editor_clamp01(placement->offsetU);
+    }
+    if (kind == MATERIAL_EDITOR_SLIDER_OFFSET_V) {
+        return material_editor_clamp01(placement->offsetV);
+    }
+    return 0.0;
+}
+
 bool material_editor_has_room_for_optional_control(int cursor_y,
                                                    int control_h,
                                                    int bottom_y) {
@@ -140,21 +196,13 @@ double material_editor_value_for_slider(const SceneObject* obj, MaterialEditorSl
     if (!obj) return 0.0;
     if (s_material_editor_active_face_group_index >= 0) {
         int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
-        SceneEditorMaterialFacePlacementField field =
-            SCENE_EDITOR_MATERIAL_FACE_PLACEMENT_STRENGTH;
-        if (kind == MATERIAL_EDITOR_SLIDER_SCALE) {
-            field = SCENE_EDITOR_MATERIAL_FACE_PLACEMENT_SCALE;
-        } else if (kind == MATERIAL_EDITOR_SLIDER_OFFSET_U) {
-            field = SCENE_EDITOR_MATERIAL_FACE_PLACEMENT_OFFSET_U;
-        } else if (kind == MATERIAL_EDITOR_SLIDER_OFFSET_V) {
-            field = SCENE_EDITOR_MATERIAL_FACE_PLACEMENT_OFFSET_V;
-        } else {
-            field = SCENE_EDITOR_MATERIAL_FACE_PLACEMENT_STRENGTH;
+        SceneEditorMaterialFacePlacement placement = {0};
+        if (material_editor_resolve_controls_face_placement(obj,
+                                                            focused_object_index,
+                                                            s_material_editor_active_face_group_index,
+                                                            &placement)) {
+            return material_editor_normalized_value_from_placement(&placement, kind);
         }
-        return SceneEditorMaterialFacePlacementGetNormalizedValue(obj,
-                                                                  focused_object_index,
-                                                                  s_material_editor_active_face_group_index,
-                                                                  field);
     }
     if (material_editor_use_object_layer_controls(obj) &&
         material_editor_get_active_layer(obj, NULL, &layer, NULL)) {
@@ -185,10 +233,11 @@ int material_editor_texture_kind_for_controls(const SceneObject* obj) {
     RuntimeMaterialTextureLayer layer;
     if (!obj) return 0;
     if (s_material_editor_active_face_group_index >= 0) {
-        SceneEditorMaterialFacePlacement placement =
-            SceneEditorMaterialFacePlacementGetEffective(obj,
-                                                         focused_object_index,
-                                                         s_material_editor_active_face_group_index);
+        SceneEditorMaterialFacePlacement placement = {0};
+        material_editor_resolve_controls_face_placement(obj,
+                                                        focused_object_index,
+                                                        s_material_editor_active_face_group_index,
+                                                        &placement);
         return placement.textureId;
     }
     if (material_editor_use_object_layer_controls(obj) &&
@@ -209,10 +258,11 @@ RuntimeMaterialTexture3DParams material_editor_params_for_controls(const SceneOb
     RuntimeMaterialTextureLayer layer;
     if (!obj) return RuntimeMaterialTexture3DDefaultParams();
     if (s_material_editor_active_face_group_index >= 0) {
-        SceneEditorMaterialFacePlacement placement =
-            SceneEditorMaterialFacePlacementGetEffective(obj,
-                                                         focused_object_index,
-                                                         s_material_editor_active_face_group_index);
+        SceneEditorMaterialFacePlacement placement = {0};
+        material_editor_resolve_controls_face_placement(obj,
+                                                        focused_object_index,
+                                                        s_material_editor_active_face_group_index,
+                                                        &placement);
         return RuntimeMaterialTexture3DNormalizeParams(placement.params);
     }
     if (material_editor_use_object_layer_controls(obj) &&
@@ -261,13 +311,6 @@ double material_editor_value_for_param_slider(const SceneObject* obj,
                                               MaterialEditorTextureParamKind kind) {
     RuntimeMaterialTexture3DParams params = material_editor_params_for_controls(obj);
     if (!obj || material_editor_texture_param_slot(kind) < 0) return 0.0;
-    if (s_material_editor_active_face_group_index >= 0) {
-        return SceneEditorMaterialFacePlacementGetTextureParamNormalizedValue(
-            obj,
-            MaterialEditorResolveFocusedObjectIndex(),
-            s_material_editor_active_face_group_index,
-            material_editor_texture_param_field(kind));
-    }
     if (kind == MATERIAL_EDITOR_TEXTURE_PARAM_COVERAGE) return params.coverage;
     if (kind == MATERIAL_EDITOR_TEXTURE_PARAM_GRAIN) return params.grain;
     if (kind == MATERIAL_EDITOR_TEXTURE_PARAM_EDGE_SOFTNESS) return params.edgeSoftness;
@@ -291,9 +334,10 @@ void material_editor_format_slider_value(const SceneObject* obj,
         return;
     }
     if (s_material_editor_active_face_group_index >= 0) {
-        placement = SceneEditorMaterialFacePlacementGetEffective(obj,
-                                                                 focused_object_index,
-                                                                 s_material_editor_active_face_group_index);
+        material_editor_resolve_controls_face_placement(obj,
+                                                        focused_object_index,
+                                                        s_material_editor_active_face_group_index,
+                                                        &placement);
         if (kind == MATERIAL_EDITOR_SLIDER_STRENGTH) {
             snprintf(out, out_size, "%.2f", placement.strength);
         } else if (kind == MATERIAL_EDITOR_SLIDER_SCALE) {
@@ -578,6 +622,8 @@ int MaterialEditorRenderRightPanePreview(SDL_Renderer* renderer,
     RayTracingThemePalette palette = material_editor_palette();
     int focused_index = -1;
     int needed_h = 0;
+    SceneEditorMaterialPreviewTriangleAddress active_face_address = {0};
+    bool has_active_face_address = false;
     if (!renderer || content_bounds.w <= 0 || top_y >= bottom_y) return top_y;
     if (!obj) {
         SDL_Rect label = {content_bounds.x, top_y, content_bounds.w, bottom_y - top_y};
@@ -588,20 +634,24 @@ int MaterialEditorRenderRightPanePreview(SDL_Renderer* renderer,
         return bottom_y;
     }
     focused_index = MaterialEditorResolveFocusedObjectIndex();
-    needed_h = MaterialEditorFacePreviewPreferredHeight(obj,
-                                                        focused_index,
-                                                        s_material_editor_active_face_group_index,
-                                                        content_bounds.w);
+    has_active_face_address = MaterialEditorGetActiveFaceAddress(&active_face_address);
+    if (!has_active_face_address) {
+        active_face_address.sceneObjectIndex = focused_index;
+        active_face_address.primitiveIndex = -1;
+        active_face_address.faceGroupIndex = s_material_editor_active_face_group_index;
+    }
+    needed_h = MaterialEditorFacePreviewPreferredHeightForAddress(obj,
+                                                                  &active_face_address,
+                                                                  content_bounds.w);
     if (!material_editor_has_room_for_optional_control(top_y, needed_h, bottom_y)) {
         return top_y;
     }
-    return MaterialEditorFacePreviewRenderPane(renderer,
-                                               content_bounds,
-                                               top_y,
-                                               obj,
-                                               focused_index,
-                                               s_material_editor_active_face_group_index,
-                                               palette);
+    return MaterialEditorFacePreviewRenderPaneForAddress(renderer,
+                                                         content_bounds,
+                                                         top_y,
+                                                         obj,
+                                                         &active_face_address,
+                                                         palette);
 }
 
 bool MaterialEditorHandleCanvasPointerDown(const SceneEditorDigestOverlayProjector* projector,
