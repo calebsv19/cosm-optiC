@@ -8,6 +8,7 @@
 #include "import/runtime_scene_bridge.h"
 #include "render/ray_tracing_mode_backend.h"
 #include "render/runtime_native_3d_render.h"
+#include "render/runtime_triangle_bvh_3d.h"
 #include "render/runtime_volume_3d_debug.h"
 
 #define RAY_TRACING_HEADLESS_OBJECT_AUDIT_MAX 64
@@ -63,6 +64,9 @@ typedef struct RayTracingHeadlessPreflight {
     RuntimeSceneBridgePreflight scene_summary;
     RuntimeVolumeDebugSummary3D volume_summary;
     RuntimeNative3DRenderStats stats;
+    RuntimeNative3DPreparedSceneCacheStats prepared_scene_cache_stats;
+    RuntimeTriangleBVH3DBuildStats bvh_build_stats;
+    RuntimeTriangleBVH3DTraceStats bvh_trace_stats;
     size_t nonzero_pixels;
     uint8_t max_r;
     uint8_t max_g;

@@ -598,6 +598,47 @@ static int test_runtime_material_payload_3d_scene_object_resolution_contract(voi
     return 0;
 }
 
+static int test_runtime_material_payload_3d_authoring_object_values_override_preset(void) {
+    SceneConfig saved_scene = sceneSettings;
+    RuntimeMaterialPayload3D payload = {0};
+    bool ok = false;
+
+    MaterialManagerResetDefaults();
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 6.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_GLOSSY;
+    sceneSettings.sceneObjects[0].color = 0x3366CC;
+    sceneSettings.sceneObjects[0].reflectivity = 0.52;
+    sceneSettings.sceneObjects[0].roughness = 0.19;
+
+    ok = RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(0, &payload);
+    assert_true("runtime_material_payload_authoring_object_override_ok", ok);
+    assert_close("runtime_material_payload_authoring_object_override_base_r",
+                 payload.baseColorR,
+                 0x33 / 255.0,
+                 1e-9);
+    assert_close("runtime_material_payload_authoring_object_override_base_g",
+                 payload.baseColorG,
+                 0x66 / 255.0,
+                 1e-9);
+    assert_close("runtime_material_payload_authoring_object_override_base_b",
+                 payload.baseColorB,
+                 0xCC / 255.0,
+                 1e-9);
+    assert_close("runtime_material_payload_authoring_object_override_reflectivity",
+                 payload.bsdf.reflectivity,
+                 0.52,
+                 1e-9);
+    assert_close("runtime_material_payload_authoring_object_override_roughness",
+                 payload.bsdf.roughness,
+                 0.19,
+                 1e-9);
+
+    sceneSettings = saved_scene;
+    return 0;
+}
+
 static int test_runtime_material_payload_3d_object_multipliers_contract(void) {
     SceneConfig saved_scene = sceneSettings;
     RuntimeMaterialPayload3D payload = {0};
@@ -2346,6 +2387,7 @@ static int test_runtime_material_config_loads_v2_stack_schema(void) {
 
 int run_test_runtime_lighting_materials_payload_suite(void) {
     test_runtime_material_payload_3d_scene_object_resolution_contract();
+    test_runtime_material_payload_3d_authoring_object_values_override_preset();
     test_runtime_material_payload_3d_object_multipliers_contract();
     test_material_manager_default_presets_include_i4_entries();
     test_material_manager_load_dir_preserves_shipped_preset_ids();

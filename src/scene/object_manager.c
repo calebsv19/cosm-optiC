@@ -1,6 +1,7 @@
 #include "scene/object_manager.h"
 #include "config/config_manager.h"
 #include "material/material_manager.h"
+#include "render/runtime_native_3d_prepare_cache.h"
 #include <string.h>
 #include <math.h>
 #include <stdlib.h>
@@ -208,7 +209,9 @@ void ScaleObject(SceneObject* obj, double scaleFactor) {
 
 // Marks an object as needing updates
 void MarkObjectDirty(SceneObject* obj) {
+    if (!obj) return;
     obj->dirty = true;
+    RuntimeNative3DPreparedSceneMarkDirty("scene_object_dirty");
 }
 
 // Checks if an object needs to be updated

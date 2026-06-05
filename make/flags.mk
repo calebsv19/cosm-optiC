@@ -86,7 +86,12 @@ ifeq ($(UNAME_S),Darwin)
     CFLAGS += -DVK_USE_PLATFORM_METAL_EXT
 endif
 
-CFLAGS  := $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g $(ARCH_FLAGS) $(SDL_CFLAGS) $(SDL_TTF_CFLAGS) $(SDL_EXTRA_INC) $(JSON_CFLAGS) $(PNG_CFLAGS) -I$(INC_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -DMAIN_DRIVER
+POSIX_FEATURE_CFLAGS :=
+ifeq ($(UNAME_S),Linux)
+POSIX_FEATURE_CFLAGS := -D_POSIX_C_SOURCE=200809L -D_XOPEN_SOURCE=700
+endif
+
+CFLAGS  := $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g $(POSIX_FEATURE_CFLAGS) $(ARCH_FLAGS) $(SDL_CFLAGS) $(SDL_TTF_CFLAGS) $(SDL_EXTRA_INC) $(JSON_CFLAGS) $(PNG_CFLAGS) -I$(INC_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -DMAIN_DRIVER
 LDFLAGS := $(ARCH_FLAGS)
 ifneq ($(strip $(SDL_TTF_LIBS)),)
 LDFLAGS += $(SDL_TTF_LIBS) $(SDL_LIBS)
@@ -95,7 +100,7 @@ LDFLAGS += -lSDL2_ttf $(SDL_LIBS)
 endif
 LDFLAGS += $(JSON_LIBS) $(PNG_LIBS) -lm
 
-CFLAGS_RELEASE := $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -O3 $(ARCH_FLAGS) $(SDL_CFLAGS) $(SDL_TTF_CFLAGS) $(SDL_EXTRA_INC) $(JSON_CFLAGS) $(PNG_CFLAGS) -I$(INC_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -DMAIN_DRIVER -DNDEBUG \
+CFLAGS_RELEASE := $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -O3 $(POSIX_FEATURE_CFLAGS) $(ARCH_FLAGS) $(SDL_CFLAGS) $(SDL_TTF_CFLAGS) $(SDL_EXTRA_INC) $(JSON_CFLAGS) $(PNG_CFLAGS) -I$(INC_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -DMAIN_DRIVER -DNDEBUG \
 	-ffast-math -fno-math-errno -march=native
 ifeq ($(UNAME_S),Darwin)
 CFLAGS += -DVK_USE_PLATFORM_METAL_EXT
@@ -103,14 +108,14 @@ CFLAGS_RELEASE += -DVK_USE_PLATFORM_METAL_EXT
 endif
 
 CFLAGS += $(TIMER_HUD_INCLUDE) -I$(VK_RENDERER_DIR)/include $(VULKAN_CFLAGS) \
-	-I$(CORE_BASE_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_DATA_DIR)/include -I$(CORE_PACK_DIR)/include -I$(CORE_QUEUE_DIR)/include -I$(CORE_TIME_DIR)/include -I$(CORE_WORKERS_DIR)/include -I$(CORE_SIM_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_AUTHORED_TEXTURE_DIR)/include -I$(CORE_SCENE_COMPILE_DIR)/include -I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include -I$(CORE_TRACE_DIR)/include -I$(CORE_SPACE_DIR)/include -I$(CORE_PANE_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(KIT_RENDER_DIR)/include -I$(KIT_PANE_DIR)/include -I$(KIT_VIZ_DIR)/include -I$(KIT_RUNTIME_DIAG_DIR)/include -I$(KIT_WORKSPACE_AUTHORING_DIR)/include \
+	-I$(CORE_BASE_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_DATA_DIR)/include -I$(CORE_PACK_DIR)/include -I$(CORE_QUEUE_DIR)/include -I$(CORE_TIME_DIR)/include -I$(CORE_WORKERS_DIR)/include -I$(CORE_SIM_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_AUTHORED_TEXTURE_DIR)/include -I$(CORE_SCENE_COMPILE_DIR)/include -I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include -I$(CORE_TRACE_DIR)/include -I$(CORE_SPACE_DIR)/include -I$(CORE_PANE_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(KIT_RENDER_DIR)/include -I$(KIT_PANE_DIR)/include -I$(KIT_VIZ_DIR)/include -I$(KIT_RUNTIME_DIAG_DIR)/include -I$(KIT_WORKSPACE_AUTHORING_DIR)/include \
 	-I$(CORE_HEADLESS_JOB_DIR)/include \
 	-DKIT_RENDER_ENABLE_VK_BACKEND=0 \
 	-DUSE_VULKAN=1 -DVK_RENDERER_SHADER_ROOT=\"$(abspath $(VK_RENDERER_DIR))\" \
 	-include $(VK_RENDERER_DIR)/include/vk_renderer_sdl.h
 LDFLAGS += $(VULKAN_LIBS)
 CFLAGS_RELEASE += $(TIMER_HUD_INCLUDE) -I$(VK_RENDERER_DIR)/include $(VULKAN_CFLAGS) \
-	-I$(CORE_BASE_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_DATA_DIR)/include -I$(CORE_PACK_DIR)/include -I$(CORE_QUEUE_DIR)/include -I$(CORE_TIME_DIR)/include -I$(CORE_WORKERS_DIR)/include -I$(CORE_SIM_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_AUTHORED_TEXTURE_DIR)/include -I$(CORE_SCENE_COMPILE_DIR)/include -I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include -I$(CORE_TRACE_DIR)/include -I$(CORE_SPACE_DIR)/include -I$(CORE_PANE_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(KIT_RENDER_DIR)/include -I$(KIT_PANE_DIR)/include -I$(KIT_VIZ_DIR)/include -I$(KIT_RUNTIME_DIAG_DIR)/include -I$(KIT_WORKSPACE_AUTHORING_DIR)/include \
+	-I$(CORE_BASE_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_DATA_DIR)/include -I$(CORE_PACK_DIR)/include -I$(CORE_QUEUE_DIR)/include -I$(CORE_TIME_DIR)/include -I$(CORE_WORKERS_DIR)/include -I$(CORE_SIM_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_AUTHORED_TEXTURE_DIR)/include -I$(CORE_SCENE_COMPILE_DIR)/include -I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include -I$(CORE_TRACE_DIR)/include -I$(CORE_SPACE_DIR)/include -I$(CORE_PANE_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(KIT_RENDER_DIR)/include -I$(KIT_PANE_DIR)/include -I$(KIT_VIZ_DIR)/include -I$(KIT_RUNTIME_DIAG_DIR)/include -I$(KIT_WORKSPACE_AUTHORING_DIR)/include \
 	-I$(CORE_HEADLESS_JOB_DIR)/include \
 	-DKIT_RENDER_ENABLE_VK_BACKEND=0 \
 	-DUSE_VULKAN=1 -DVK_RENDERER_SHADER_ROOT=\"$(abspath $(VK_RENDERER_DIR))\" \

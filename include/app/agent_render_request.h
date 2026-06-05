@@ -20,6 +20,9 @@ typedef struct RayTracingAgentRenderRequest {
     bool volume_affects_lighting;
     bool volume_debug_overlay;
     char output_root[PATH_MAX];
+    bool video_enabled;
+    char video_path[PATH_MAX];
+    int video_fps;
     char summary_path[PATH_MAX];
     char progress_path[PATH_MAX];
     int start_frame;

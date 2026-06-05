@@ -194,6 +194,45 @@ static int normalize_process_exit_status(int raw_status) {
     return raw_status;
 }
 
+static bool ffmpeg_supports_encoder(const char *ffmpeg_bin, const char *encoder_name) {
+    char command[(PATH_MAX * 2) + 256];
+    FILE *pipe = NULL;
+    bool supported = false;
+    if (!ffmpeg_bin || !ffmpeg_bin[0] || !encoder_name || !encoder_name[0]) return false;
+    if (snprintf(command,
+                 sizeof(command),
+                 "\"%s\" -hide_banner -encoders 2>/dev/null",
+                 ffmpeg_bin) >= (int)sizeof(command)) {
+        return false;
+    }
+    pipe = popen(command, "r");
+    if (!pipe) return false;
+    while (!feof(pipe)) {
+        char line[512];
+        if (!fgets(line, sizeof(line), pipe)) break;
+        if (strstr(line, encoder_name) != NULL) {
+            supported = true;
+            break;
+        }
+    }
+    pclose(pipe);
+    return supported;
+}
+
+static const char *resolve_ffmpeg_video_encoder(const char *ffmpeg_bin) {
+    static const char *const candidates[] = {"libx264", "libopenh264", "mpeg4"};
+    const char *env_override = getenv("RAY_TRACING_FFMPEG_VIDEO_ENCODER");
+    if (env_override && env_override[0] && ffmpeg_supports_encoder(ffmpeg_bin, env_override)) {
+        return env_override;
+    }
+    for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); ++i) {
+        if (ffmpeg_supports_encoder(ffmpeg_bin, candidates[i])) {
+            return candidates[i];
+        }
+    }
+    return NULL;
+}
+
 static void maybe_emit_progress(MakeVideoProgressCallback progress_cb,
                                 void *user_data,
                                 size_t current_frame,
@@ -234,6 +273,7 @@ int MakeVideoFromFramesWithProgress(const char *frameDir,
     FrameNameList frames = {0};
     char command[(PATH_MAX * 4) + 256];
     char ffmpeg_bin[PATH_MAX];
+    const char *video_encoder = NULL;
     FILE *pipe = NULL;
     int raw_status = 0;
     int last_percent = -1;
@@ -257,6 +297,11 @@ int MakeVideoFromFramesWithProgress(const char *frameDir,
         fprintf(stderr, "Error: ffmpeg is not available.\n");
         return 1;
     }
+    video_encoder = resolve_ffmpeg_video_encoder(ffmpeg_bin);
+    if (!video_encoder) {
+        fprintf(stderr, "Error: ffmpeg has no supported video encoder.\n");
+        return 1;
+    }
 
     printf("Checking frames directory: %s\n", frameDir);
     printf("Ensuring frames are sequentially numbered...\n");
@@ -273,16 +318,18 @@ int MakeVideoFromFramesWithProgress(const char *frameDir,
 
     if (snprintf(command,
                  sizeof(command),
-                 "\"%s\" -y -start_number 0 -framerate %d -i \"%s/frame_%%04d.bmp\" -c:v libx264 -pix_fmt yuv420p -nostats -progress pipe:1 \"%s\" 2>/dev/null",
+                 "\"%s\" -y -start_number 0 -framerate %d -i \"%s/frame_%%04d.bmp\" -c:v %s -pix_fmt yuv420p -nostats -progress pipe:1 \"%s\" 2>/dev/null",
                  ffmpeg_bin,
                  fps,
                  frameDir,
+                 video_encoder,
                  outputFile) >= (int)sizeof(command)) {
         fprintf(stderr, "Error: FFmpeg command path too long.\n");
         frame_name_list_free(&frames);
         return 1;
     }
 
+    printf("Selected ffmpeg video encoder: %s\n", video_encoder);
     printf("Executing command: %s\n", command);
     maybe_emit_progress(progress_cb, user_data, 0u, total_frames, &last_percent);
     pipe = popen(command, "r");

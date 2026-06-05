@@ -2,9 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-CLI="$ROOT_DIR/build/$(uname -m)/tools/cli/ray_tracing_render_headless"
+CLI="$ROOT_DIR/build/toolchains/clang/$(uname -m)/tools/cli/ray_tracing_render_headless"
 if [[ ! -x "$CLI" ]]; then
-  CLI="$ROOT_DIR/build/toolchains/clang/$(uname -m)/tools/cli/ray_tracing_render_headless"
+  CLI="$ROOT_DIR/build/$(uname -m)/tools/cli/ray_tracing_render_headless"
 fi
 
 REQUEST="$ROOT_DIR/tests/fixtures/agent_render_preflight_request.json"

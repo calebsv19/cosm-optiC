@@ -1,6 +1,7 @@
 #include "import/runtime_scene_bridge.h"
 #include "import/runtime_scene_bridge_internal.h"
 #include "import/runtime_scene_bridge_json_utils.h"
+#include "import/runtime_mesh_asset_loader.h"
 #include "import/runtime_scene_volume_defaults.h"
 
 #include "camera/camera_path_3d.h"
@@ -11,6 +12,7 @@
 #include "editor/scene_editor_material_face_placement.h"
 #include "editor/scene_editor_material_stack.h"
 #include "material/material_manager.h"
+#include "render/runtime_native_3d_prepare_cache.h"
 #include "render/runtime_material_authored_texture_3d.h"
 #include "scene/object_manager.h"
 
@@ -726,6 +728,15 @@ bool runtime_scene_bridge_preflight_file(const char *runtime_scene_path,
 
     ok = runtime_scene_bridge_preflight_json(json_text, out_preflight);
     free(json_text);
+    if (ok) {
+        RayTracingRuntimeMeshAssetSet mesh_assets;
+        ray_tracing_runtime_mesh_asset_set_init(&mesh_assets);
+        ok = ray_tracing_runtime_mesh_assets_load_scene_file(runtime_scene_path,
+                                                            &mesh_assets,
+                                                            out_preflight->diagnostics,
+                                                            sizeof(out_preflight->diagnostics));
+        ray_tracing_runtime_mesh_asset_set_free(&mesh_assets);
+    }
     return ok;
 }
 
@@ -741,6 +752,8 @@ bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
 
     if (!runtime_scene_json || !out_summary) return false;
     runtime_scene_bridge_preflight_reset(out_summary);
+    ray_tracing_runtime_mesh_assets_reset_last();
+    RuntimeNative3DPreparedSceneMarkDirty("runtime_scene_bridge_apply_json");
 
     root = json_tokener_parse(runtime_scene_json);
     if (!root || !json_object_is_type(root, json_type_object)) {
@@ -790,10 +803,12 @@ bool runtime_scene_bridge_apply_file(const char *runtime_scene_path,
     char runtime_scene_path_copy[sizeof(animSettings.runtimeScenePath)];
     char previous_runtime_scene_path[sizeof(animSettings.runtimeScenePath)];
     char *json_text = NULL;
+    RayTracingRuntimeMeshAssetSet mesh_assets;
     bool ok;
 
     if (!runtime_scene_path || !out_summary) return false;
     runtime_scene_bridge_preflight_reset(out_summary);
+    ray_tracing_runtime_mesh_asset_set_init(&mesh_assets);
     snprintf(previous_runtime_scene_path,
              sizeof(previous_runtime_scene_path),
              "%s",
@@ -820,11 +835,23 @@ bool runtime_scene_bridge_apply_file(const char *runtime_scene_path,
     json_text[file_data.size] = '\0';
     core_io_buffer_free(&file_data);
 
+    if (!ray_tracing_runtime_mesh_assets_load_scene_file(
+            runtime_scene_path_copy,
+            &mesh_assets,
+            out_summary->diagnostics,
+            sizeof(out_summary->diagnostics))) {
+        free(json_text);
+        return false;
+    }
+
     snprintf(animSettings.runtimeScenePath,
              sizeof(animSettings.runtimeScenePath),
              "%s",
              runtime_scene_path_copy);
     ok = runtime_scene_bridge_apply_json(json_text, out_summary);
+    if (ok) {
+        ray_tracing_runtime_mesh_assets_take_last(&mesh_assets);
+    }
     if (ok) {
         runtime_scene_volume_defaults_apply_transition(&animSettings,
                                                        previous_runtime_scene_path,
@@ -838,6 +865,7 @@ bool runtime_scene_bridge_apply_file(const char *runtime_scene_path,
                  sizeof(animSettings.runtimeScenePath),
                  "%s",
                  previous_runtime_scene_path);
+        ray_tracing_runtime_mesh_asset_set_free(&mesh_assets);
     }
     free(json_text);
     return ok;

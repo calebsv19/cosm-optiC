@@ -763,6 +763,86 @@ static int test_runtime_scene_bridge_apply_runtime_fixture(void) {
     return 0;
 }
 
+static int test_runtime_scene_bridge_apply_accepts_id_base_color_material(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_base_color_material\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"obj_base_color\","
+          "\"object_type\":\"mesh_asset_instance\","
+          "\"transform\":{"
+            "\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+          "},"
+          "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_missing_for_material_test\"},"
+          "\"material_ref\":{\"id\":\"mat_imported_surface\"}"
+        "}],"
+        "\"materials\":[{"
+          "\"id\":\"mat_imported_surface\","
+          "\"base_color\":{\"r\":0.8,\"g\":0.7,\"b\":0.55}"
+        "}],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary;
+    bool ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_scene_apply_id_base_color_material_ok", ok);
+    if (!ok) return 0;
+    assert_true("runtime_scene_apply_id_base_color_object_count",
+                sceneSettings.objectCount == 1);
+    assert_true("runtime_scene_apply_id_base_color_material",
+                sceneSettings.sceneObjects[0].color == 0xCCB38C);
+    return 0;
+}
+
+static int test_runtime_scene_bridge_apply_accepts_material_id_albedo_material(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_albedo_material\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"obj_albedo\","
+          "\"object_type\":\"rect_prism_primitive\","
+          "\"transform\":{"
+            "\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+          "},"
+          "\"primitive\":{\"kind\":\"rect_prism_primitive\"},"
+          "\"material_ref\":{\"id\":\"mat_rect\"}"
+        "}],"
+        "\"materials\":[{"
+          "\"material_id\":\"mat_rect\","
+          "\"albedo\":[0.25,0.5,0.75]"
+        "}],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary;
+    bool ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_scene_apply_material_id_albedo_material_ok", ok);
+    if (!ok) return 0;
+    assert_true("runtime_scene_apply_material_id_albedo_object_count",
+                sceneSettings.objectCount == 1);
+    assert_true("runtime_scene_apply_material_id_albedo_material",
+                sceneSettings.sceneObjects[0].color == 0x4080BF);
+    return 0;
+}
+
 static int test_runtime_scene_bridge_authoring_overlay_object_color_preserved(void) {
     const char *runtime_json =
         "{"
@@ -1160,6 +1240,8 @@ int run_test_runtime_scene_bridge_core_tests(void) {
     test_runtime_scene_bridge_apply_ps4d_fixture_retains_primitive_seed_truth();
     test_scene_compile_and_preflight_roundtrip();
     test_runtime_scene_bridge_apply_runtime_fixture();
+    test_runtime_scene_bridge_apply_accepts_id_base_color_material();
+    test_runtime_scene_bridge_apply_accepts_material_id_albedo_material();
     test_runtime_scene_bridge_authoring_overlay_object_color_preserved();
     test_runtime_scene_bridge_authoring_overlay_light_settings_preserved();
     test_runtime_scene_bridge_authoring_overlay_environment_settings_preserved();

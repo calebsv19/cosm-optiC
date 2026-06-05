@@ -289,6 +289,8 @@ void ray_tracing_agent_render_request_defaults(RayTracingAgentRenderRequest *req
     request->volume_source_kind = VOLUME_SOURCE_NONE;
     request->volume_affects_lighting = true;
     request->volume_debug_overlay = false;
+    request->video_enabled = false;
+    request->video_fps = 30;
     request->start_frame = 0;
     request->frame_count = 1;
     request->width = 640;
@@ -456,6 +458,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     }
 
     if (json_get_object(root, "output", &output)) {
+        json_object *video = NULL;
         if (json_get_string(output, "root", &value) &&
             !resolve_request_path(request_dir, value, request.output_root, sizeof(request.output_root))) {
             json_object_put(root);
@@ -463,6 +466,31 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             return false;
         }
         json_get_bool(output, "overwrite", &request.overwrite);
+        if (json_get_object(output, "video", &video)) {
+            json_get_bool(video, "enabled", &request.video_enabled);
+            if (json_get_string(video, "path", &value)) {
+                if (!resolve_request_path(request_dir,
+                                          value,
+                                          request.video_path,
+                                          sizeof(request.video_path))) {
+                    json_object_put(root);
+                    diag_set(out_diagnostics, out_diagnostics_size, "output.video.path invalid");
+                    return false;
+                }
+                request.video_enabled = true;
+            }
+            if (json_get_int(video, "fps", &int_value)) {
+                request.video_fps = int_value;
+            }
+            if (request.video_enabled && !request.video_path[0]) {
+                json_object_put(root);
+                diag_set(out_diagnostics, out_diagnostics_size, "output.video.path required when video is enabled");
+                return false;
+            }
+            if (request.video_fps <= 0) {
+                request.video_fps = 30;
+            }
+        }
     }
 
     if (json_get_object(root, "progress", &progress)) {

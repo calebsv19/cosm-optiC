@@ -13,12 +13,26 @@
 #include "import/runtime_scene_bridge.h"
 #include "render/runtime_scene_3d_builder.h"
 #include "render/runtime_scene_3d_samples.h"
+#include "render/runtime_triangle_bvh_3d.h"
 
 static bool gRuntimeNative3DInspectionCameraPositionEnabled = false;
 static bool gRuntimeNative3DInspectionCameraLookAtEnabled = false;
 static Vec3 gRuntimeNative3DInspectionCameraPosition = {0};
 static Vec3 gRuntimeNative3DInspectionCameraLookAt = {0};
 static char gRuntimeNative3DPrepareFrameLastDiagnostics[1024] = "ok";
+static RuntimeScene3D gRuntimeNative3DPreparedSceneCache;
+static bool gRuntimeNative3DPreparedSceneCacheInitialized = false;
+static bool gRuntimeNative3DPreparedSceneCacheValid = false;
+static bool gRuntimeNative3DPreparedSceneCacheStaticGeometry = true;
+static double gRuntimeNative3DPreparedSceneCacheNormalizedT = 0.0;
+static double gRuntimeNative3DPreparedSceneCacheLastRequestedT = 0.0;
+static uint64_t gRuntimeNative3DPreparedSceneDirtyGeneration = 1u;
+static uint64_t gRuntimeNative3DPreparedSceneCachedGeneration = 0u;
+static uint64_t gRuntimeNative3DPreparedSceneCacheHits = 0u;
+static uint64_t gRuntimeNative3DPreparedSceneCacheMisses = 0u;
+static uint64_t gRuntimeNative3DPreparedSceneCacheStores = 0u;
+static uint64_t gRuntimeNative3DPreparedSceneCacheInvalidations = 0u;
+static uint64_t gRuntimeNative3DPreparedSceneCacheTimeIndependentHits = 0u;
 
 void runtime_native_3d_prepare_frame_set_diag(const char* message) {
     snprintf(gRuntimeNative3DPrepareFrameLastDiagnostics,
@@ -29,6 +43,75 @@ void runtime_native_3d_prepare_frame_set_diag(const char* message) {
 
 const char* RuntimeNative3DPrepareFrameLastDiagnostics(void) {
     return gRuntimeNative3DPrepareFrameLastDiagnostics;
+}
+
+static void runtime_native_3d_prepared_scene_cache_ensure_initialized(void) {
+    if (gRuntimeNative3DPreparedSceneCacheInitialized) return;
+    RuntimeScene3D_Init(&gRuntimeNative3DPreparedSceneCache);
+    gRuntimeNative3DPreparedSceneCacheInitialized = true;
+}
+
+void RuntimeNative3DPreparedSceneMarkDirty(const char* reason) {
+    (void)reason;
+    runtime_native_3d_prepared_scene_cache_ensure_initialized();
+    gRuntimeNative3DPreparedSceneDirtyGeneration += 1u;
+    if (gRuntimeNative3DPreparedSceneCacheValid) {
+        gRuntimeNative3DPreparedSceneCacheInvalidations += 1u;
+    }
+    gRuntimeNative3DPreparedSceneCacheValid = false;
+    gRuntimeNative3DPreparedSceneCachedGeneration = 0u;
+    RuntimeScene3D_Free(&gRuntimeNative3DPreparedSceneCache);
+    RuntimeScene3D_Init(&gRuntimeNative3DPreparedSceneCache);
+}
+
+void RuntimeNative3DPreparedSceneCacheStatsSnapshot(
+    RuntimeNative3DPreparedSceneCacheStats* out_stats) {
+    if (!out_stats) return;
+    memset(out_stats, 0, sizeof(*out_stats));
+    runtime_native_3d_prepared_scene_cache_ensure_initialized();
+    out_stats->generation = gRuntimeNative3DPreparedSceneDirtyGeneration;
+    out_stats->cachedGeneration = gRuntimeNative3DPreparedSceneCachedGeneration;
+    out_stats->valid = gRuntimeNative3DPreparedSceneCacheValid;
+    out_stats->hits = gRuntimeNative3DPreparedSceneCacheHits;
+    out_stats->misses = gRuntimeNative3DPreparedSceneCacheMisses;
+    out_stats->stores = gRuntimeNative3DPreparedSceneCacheStores;
+    out_stats->invalidations = gRuntimeNative3DPreparedSceneCacheInvalidations;
+    out_stats->staticGeometryReuseEnabled =
+        gRuntimeNative3DPreparedSceneCacheStaticGeometry;
+    out_stats->timeIndependentHits =
+        gRuntimeNative3DPreparedSceneCacheTimeIndependentHits;
+    out_stats->cachedNormalizedT = gRuntimeNative3DPreparedSceneCacheNormalizedT;
+    out_stats->lastRequestedNormalizedT =
+        gRuntimeNative3DPreparedSceneCacheLastRequestedT;
+    if (gRuntimeNative3DPreparedSceneCacheValid) {
+        out_stats->cachedPrimitiveCount =
+            gRuntimeNative3DPreparedSceneCache.primitiveCount;
+        out_stats->cachedTriangleCount =
+            gRuntimeNative3DPreparedSceneCache.triangleMesh.triangleCount;
+        out_stats->cachedBVHNodeCount =
+            RuntimeTriangleMesh3D_BVHNodeCount(
+                &gRuntimeNative3DPreparedSceneCache.triangleMesh);
+        out_stats->cachedBVHLeafCount =
+            RuntimeTriangleMesh3D_BVHLeafCount(
+                &gRuntimeNative3DPreparedSceneCache.triangleMesh);
+    }
+}
+
+void RuntimeNative3DPreparedSceneCacheResetForTests(void) {
+    runtime_native_3d_prepared_scene_cache_ensure_initialized();
+    RuntimeScene3D_Free(&gRuntimeNative3DPreparedSceneCache);
+    RuntimeScene3D_Init(&gRuntimeNative3DPreparedSceneCache);
+    gRuntimeNative3DPreparedSceneCacheValid = false;
+    gRuntimeNative3DPreparedSceneCacheStaticGeometry = true;
+    gRuntimeNative3DPreparedSceneCacheNormalizedT = 0.0;
+    gRuntimeNative3DPreparedSceneCacheLastRequestedT = 0.0;
+    gRuntimeNative3DPreparedSceneDirtyGeneration = 1u;
+    gRuntimeNative3DPreparedSceneCachedGeneration = 0u;
+    gRuntimeNative3DPreparedSceneCacheHits = 0u;
+    gRuntimeNative3DPreparedSceneCacheMisses = 0u;
+    gRuntimeNative3DPreparedSceneCacheStores = 0u;
+    gRuntimeNative3DPreparedSceneCacheInvalidations = 0u;
+    gRuntimeNative3DPreparedSceneCacheTimeIndependentHits = 0u;
 }
 
 void RuntimeNative3DRender_ResetInspectionCameraOverrides(void) {
@@ -221,13 +304,20 @@ static void runtime_native_3d_render_apply_inspection_camera_overrides(
 
 static void runtime_native_3d_render_apply_live_light(RuntimeScene3D* scene,
                                                       double live_light_x,
-                                                      double live_light_y) {
+                                                      double live_light_y,
+                                                      double normalized_t) {
     RuntimeLight3D light = {0};
-    const bool has_authored_light = scene && scene->hasLight;
+    RuntimeLight3D sampled_light = {0};
+    bool has_authored_light = false;
     if (!scene) return;
 
-    if (has_authored_light) {
+    if (!animSettings.interactiveMode &&
+        RuntimeScene3DSampleAuthoredLight(normalized_t, &sampled_light)) {
+        light = sampled_light;
+        has_authored_light = true;
+    } else if (scene->hasLight) {
         light = scene->light;
+        has_authored_light = true;
     }
     if (!has_authored_light) {
         light.position = vec3(live_light_x, live_light_y, animSettings.lightHeight);
@@ -291,11 +381,48 @@ static bool runtime_native_3d_render_build_live_scene(RuntimeScene3D* scene,
                                                       double live_light_x,
                                                       double live_light_y) {
     if (!scene) return false;
-    if (!RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(scene, normalized_t)) {
-        return false;
+    runtime_native_3d_prepared_scene_cache_ensure_initialized();
+    gRuntimeNative3DPreparedSceneCacheLastRequestedT = normalized_t;
+    if (gRuntimeNative3DPreparedSceneCacheValid &&
+        gRuntimeNative3DPreparedSceneCachedGeneration ==
+            gRuntimeNative3DPreparedSceneDirtyGeneration &&
+        (gRuntimeNative3DPreparedSceneCacheStaticGeometry ||
+         fabs(gRuntimeNative3DPreparedSceneCacheNormalizedT - normalized_t) <= 1e-12)) {
+        gRuntimeNative3DPreparedSceneCacheHits += 1u;
+        if (fabs(gRuntimeNative3DPreparedSceneCacheNormalizedT - normalized_t) > 1e-12) {
+            gRuntimeNative3DPreparedSceneCacheTimeIndependentHits += 1u;
+        }
+        if (!RuntimeScene3D_CopyGeometryFrom(scene,
+                                             &gRuntimeNative3DPreparedSceneCache)) {
+            return false;
+        }
+    } else {
+        RuntimeScene3D built_scene = {0};
+        RuntimeScene3D_Init(&built_scene);
+        gRuntimeNative3DPreparedSceneCacheMisses += 1u;
+        if (!RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(&built_scene, normalized_t)) {
+            RuntimeScene3D_Free(&built_scene);
+            return false;
+        }
+        RuntimeScene3D_Free(&gRuntimeNative3DPreparedSceneCache);
+        gRuntimeNative3DPreparedSceneCache = built_scene;
+        memset(&built_scene, 0, sizeof(built_scene));
+        gRuntimeNative3DPreparedSceneCacheValid = true;
+        gRuntimeNative3DPreparedSceneCacheStaticGeometry = true;
+        gRuntimeNative3DPreparedSceneCacheNormalizedT = normalized_t;
+        gRuntimeNative3DPreparedSceneCachedGeneration =
+            gRuntimeNative3DPreparedSceneDirtyGeneration;
+        gRuntimeNative3DPreparedSceneCacheStores += 1u;
+        if (!RuntimeScene3D_CopyGeometryFrom(scene,
+                                             &gRuntimeNative3DPreparedSceneCache)) {
+            return false;
+        }
     }
 
-    runtime_native_3d_render_apply_live_light(scene, live_light_x, live_light_y);
+    runtime_native_3d_render_apply_live_light(scene,
+                                             live_light_x,
+                                             live_light_y,
+                                             normalized_t);
     (void)width;
     (void)height;
     runtime_native_3d_render_apply_live_camera(scene, normalized_t);

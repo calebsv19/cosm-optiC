@@ -24,6 +24,10 @@ CORE_SIM_SRCS := $(CORE_SIM_DIR)/src/core_sim.c
 CORE_SCENE_SRCS := $(CORE_SCENE_DIR)/src/core_scene.c
 CORE_AUTHORED_TEXTURE_SRCS := $(CORE_AUTHORED_TEXTURE_DIR)/src/core_authored_texture.c
 CORE_SCENE_COMPILE_SRCS := $(CORE_SCENE_COMPILE_DIR)/src/core_scene_compile.c
+CORE_MESH_ASSET_SRCS := \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_authoring_document.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c
 CORE_OBJECT_SRCS := $(CORE_OBJECT_DIR)/src/core_object.c
 CORE_UNITS_SRCS := $(CORE_UNITS_DIR)/src/core_units.c
 CORE_SPACE_SRCS := $(CORE_SPACE_DIR)/src/core_space.c

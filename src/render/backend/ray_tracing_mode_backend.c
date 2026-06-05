@@ -16,15 +16,14 @@ static bool ray_tracing_mode_backend_native_route_ready(double* out_camera_z,
 
     runtime_scene_bridge_get_last_3d_primitive_seed_state(&seed_state);
     if (!seed_state.valid) return false;
-    if (seed_state.primitive_count <= 0) return false;
-    if (seed_state.excluded_primitive_count > 0) return false;
 
     RuntimeScene3D_Init(&scene);
-    ready = RuntimeScene3DBuilder_BuildFromPrimitiveSeedStateAtT(&scene, &seed_state, 0.0) &&
-            scene.primitiveCount > 0 && scene.triangleMesh.triangleCount > 0 &&
-            scene.hasLight && scene.hasCamera;
+    ready = RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(&scene, 0.0) &&
+            scene.primitiveCount > 0 && scene.triangleMesh.triangleCount > 0;
     if (ready) {
-        if (out_camera_z) *out_camera_z = scene.camera.position.z;
+        if (out_camera_z) {
+            *out_camera_z = scene.hasCamera ? scene.camera.position.z : sceneSettings.cameraZ;
+        }
         if (out_primitive_count) *out_primitive_count = scene.primitiveCount;
     }
 

@@ -1,10 +1,20 @@
 STABLE_TEST_TARGETS := \
 	test \
 	test-runtime-scene-bridge-contract \
+	test-runtime-mesh-asset-loader \
+	test-runtime-mesh-asset-pack \
+	test-runtime-mesh-asset-builder \
+	test-runtime-mesh-asset-headless-audit \
+	test-runtime-triangle-bvh-3d \
 	test-ray-tracing-core-sim-runtime-frame-contract \
 	test-scene-editor-pane-host-contract \
 	test-ray-tracing-render-headless-preflight \
 	test-ray-tracing-render-headless-image-export \
+	test-ray-tracing-render-headless-mesh-asset-spheres \
+	test-ray-tracing-render-headless-mesh-asset-sphere-pressure \
+	test-ray-tracing-render-headless-mesh-asset-sphere-pressure-mrt8 \
+	test-ray-tracing-render-headless-mesh-asset-sphere-pressure-mrt10 \
+	test-ray-tracing-render-headless-mesh-asset-sphere-pressure-mrt12-static-cache \
 	test-ray-tracing-material-preview-headless \
 	test-ray-tracing-job-runner-smoke \
 	test-ray-tracing-job-runner-bundle-smoke \
@@ -39,6 +49,150 @@ test-runtime-scene-bridge-contract: $(APP_TARGET) $(TEST_BIN)
 	@TEST_RUNNER_GROUP=runtime_scene_bridge_core ./$(TEST_BIN) || (echo "ray tracing runtime scene bridge core contract test failed."; exit 1)
 	@TEST_RUNNER_GROUP=runtime_scene_bridge_writeback ./$(TEST_BIN) || (echo "ray tracing runtime scene bridge writeback contract test failed."; exit 1)
 	@echo "ray tracing runtime scene bridge contract lane passed"
+
+RUNTIME_MESH_ASSET_LOADER_TEST_BIN := $(BUILD_DIR)/tests/runtime_mesh_asset_loader_test
+RUNTIME_MESH_ASSET_LOADER_TEST_SRCS := \
+	$(TEST_DIR)/test_runtime_mesh_asset_loader.c \
+	$(SRC_DIR)/import/runtime_mesh_asset_loader.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_SCENE_DIR)/src/core_scene.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
+	$(CORE_BASE_DIR)/src/core_base.c \
+	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
+
+$(RUNTIME_MESH_ASSET_LOADER_TEST_BIN): $(RUNTIME_MESH_ASSET_LOADER_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) -I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_IO_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_OBJECT_DIR)/include \
+		-I$(CORE_UNITS_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-DRAY_TRACING_RUNTIME_MESH_ASSET_LOADER_STANDALONE \
+		-o $@ $(RUNTIME_MESH_ASSET_LOADER_TEST_SRCS) $(JSON_LIBS) -lm
+
+test-runtime-mesh-asset-loader: $(RUNTIME_MESH_ASSET_LOADER_TEST_BIN)
+	@$(RUNTIME_MESH_ASSET_LOADER_TEST_BIN) || (echo "ray tracing runtime mesh asset loader test failed."; exit 1)
+	@echo "ray tracing runtime mesh asset loader lane passed"
+
+RUNTIME_MESH_ASSET_PACK_TEST_BIN := $(BUILD_DIR)/tests/runtime_mesh_asset_pack_test
+RUNTIME_MESH_ASSET_PACK_TEST_SRCS := \
+	$(TEST_DIR)/test_runtime_mesh_asset_pack.c \
+	$(SRC_DIR)/import/runtime_mesh_asset_pack.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
+	$(CORE_BASE_DIR)/src/core_base.c \
+	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
+
+$(RUNTIME_MESH_ASSET_PACK_TEST_BIN): $(RUNTIME_MESH_ASSET_PACK_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
+		-I$(INC_DIR) -I$(SRC_DIR) -I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_IO_DIR)/include -I$(CORE_OBJECT_DIR)/include \
+		-I$(CORE_UNITS_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-DRAY_TRACING_RUNTIME_MESH_ASSET_PACK_STANDALONE \
+		-o $@ $(RUNTIME_MESH_ASSET_PACK_TEST_SRCS) -lm
+
+test-runtime-mesh-asset-pack: $(RUNTIME_MESH_ASSET_PACK_TEST_BIN)
+	@$(RUNTIME_MESH_ASSET_PACK_TEST_BIN) || (echo "ray tracing runtime mesh asset pack test failed."; exit 1)
+	@echo "ray tracing runtime mesh asset pack lane passed"
+
+RUNTIME_MESH_ASSET_BUILDER_TEST_BIN := $(BUILD_DIR)/tests/runtime_mesh_asset_builder_test
+RUNTIME_MESH_ASSET_BUILDER_TEST_SRCS := \
+	$(TEST_DIR)/test_runtime_mesh_asset_builder.c \
+	$(SRC_DIR)/import/runtime_mesh_asset_loader.c \
+	$(SRC_DIR)/render/runtime_ray_3d.c \
+	$(SRC_DIR)/render/runtime_scene_3d.c \
+	$(SRC_DIR)/render/runtime_scene_3d_builder.c \
+	$(SRC_DIR)/render/runtime_triangle_bvh_3d.c \
+	$(SRC_DIR)/render/runtime_volume_3d.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_SCENE_DIR)/src/core_scene.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
+	$(CORE_BASE_DIR)/src/core_base.c \
+	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
+
+$(RUNTIME_MESH_ASSET_BUILDER_TEST_BIN): $(RUNTIME_MESH_ASSET_BUILDER_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) -I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_IO_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_OBJECT_DIR)/include \
+		-I$(CORE_UNITS_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-o $@ $(RUNTIME_MESH_ASSET_BUILDER_TEST_SRCS) $(JSON_LIBS) -lm
+
+test-runtime-mesh-asset-builder: $(RUNTIME_MESH_ASSET_BUILDER_TEST_BIN)
+	@$(RUNTIME_MESH_ASSET_BUILDER_TEST_BIN) || (echo "ray tracing runtime mesh asset builder test failed."; exit 1)
+	@echo "ray tracing runtime mesh asset builder lane passed"
+
+RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_BIN := $(BUILD_DIR)/tests/runtime_mesh_asset_headless_audit_test
+RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_SRCS := \
+	$(TEST_DIR)/test_runtime_mesh_asset_headless_audit.c \
+	$(SRC_DIR)/import/runtime_mesh_asset_loader.c \
+	$(SRC_DIR)/render/runtime_camera_3d_rays.c \
+	$(SRC_DIR)/render/runtime_ray_3d.c \
+	$(SRC_DIR)/render/runtime_scene_3d.c \
+	$(SRC_DIR)/render/runtime_scene_3d_builder.c \
+	$(SRC_DIR)/render/runtime_triangle_bvh_3d.c \
+	$(SRC_DIR)/render/runtime_volume_3d.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_SCENE_DIR)/src/core_scene.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
+	$(CORE_BASE_DIR)/src/core_base.c \
+	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
+
+$(RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_BIN): $(RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) -I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_IO_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_OBJECT_DIR)/include \
+		-I$(CORE_UNITS_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-o $@ $(RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_SRCS) $(JSON_LIBS) -lm
+
+test-runtime-mesh-asset-headless-audit: $(RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_BIN)
+	@$(RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_BIN) || (echo "ray tracing runtime mesh asset headless audit test failed."; exit 1)
+	@echo "ray tracing runtime mesh asset headless audit lane passed"
+
+test-line-drawing-imported-mesh-runtime: $(RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_BIN)
+	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
+	@rm -rf tmp/line_drawing_imported_mesh_runtime
+	@../line_drawing/build/toolchains/clang/bin/imported_mesh_harness \
+		--stl ../line_drawing/third_party/codework_shared/core/core_mesh_compile/tests/fixtures/imports/tetrahedron_ascii.stl \
+		--out tmp/line_drawing_imported_mesh_runtime \
+		--asset-id asset_imported_tetrahedron_line_harness \
+		--scene-id scene_line_drawing_imported_tetrahedron_for_ray_tracing \
+		--object-id obj_imported_tetrahedron_harness >/dev/null
+	@RAY_TRACING_LINE_DRAWING_IMPORTED_MESH_SCENE=tmp/line_drawing_imported_mesh_runtime/scene_runtime.json \
+		$(RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_BIN) || \
+		(echo "ray tracing line drawing generated imported mesh runtime test failed."; exit 1)
+	@echo "ray tracing line drawing generated imported mesh runtime lane passed"
+
+RUNTIME_TRIANGLE_BVH_3D_TEST_BIN := $(BUILD_DIR)/tests/runtime_triangle_bvh_3d_test
+RUNTIME_TRIANGLE_BVH_3D_TEST_SRCS := \
+	$(TEST_DIR)/test_runtime_triangle_bvh_3d.c \
+	$(SRC_DIR)/render/runtime_ray_3d.c \
+	$(SRC_DIR)/render/runtime_scene_3d.c \
+	$(SRC_DIR)/render/runtime_triangle_bvh_3d.c \
+	$(SRC_DIR)/render/runtime_volume_3d.c
+
+$(RUNTIME_TRIANGLE_BVH_3D_TEST_BIN): $(RUNTIME_TRIANGLE_BVH_3D_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
+		-I$(INC_DIR) -I$(SRC_DIR) \
+		-o $@ $(RUNTIME_TRIANGLE_BVH_3D_TEST_SRCS) -lm
+
+test-runtime-triangle-bvh-3d: $(RUNTIME_TRIANGLE_BVH_3D_TEST_BIN)
+	@$(RUNTIME_TRIANGLE_BVH_3D_TEST_BIN) || (echo "ray tracing runtime triangle BVH test failed."; exit 1)
+	@echo "ray tracing runtime triangle BVH lane passed"
 
 $(TEST_BIN): $(TEST_OBJ) $(TEST_DEPS)
 	$(CC) $(TEST_OBJ) $(TEST_DEPS) -o $@ $(LDFLAGS)
@@ -124,6 +278,21 @@ test-ray-tracing-render-headless-preflight: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 
 test-ray-tracing-render-headless-image-export: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	tests/integration/run_ray_tracing_render_headless_image_export.sh
+
+test-ray-tracing-render-headless-mesh-asset-spheres: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	tests/integration/run_ray_tracing_render_headless_mesh_asset_spheres.sh
+
+test-ray-tracing-render-headless-mesh-asset-sphere-pressure: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	tests/integration/run_ray_tracing_render_headless_mesh_asset_sphere_pressure.sh
+
+test-ray-tracing-render-headless-mesh-asset-sphere-pressure-mrt8: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	tests/integration/run_ray_tracing_render_headless_mesh_asset_sphere_pressure_mrt8.sh
+
+test-ray-tracing-render-headless-mesh-asset-sphere-pressure-mrt10: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	tests/integration/run_ray_tracing_render_headless_mesh_asset_sphere_pressure_mrt10.sh
+
+test-ray-tracing-render-headless-mesh-asset-sphere-pressure-mrt12-static-cache: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	tests/integration/run_ray_tracing_render_headless_mesh_asset_sphere_pressure_mrt12_static_cache.sh
 
 test-ray-tracing-render-headless-volume-handoff: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	tests/integration/run_ray_tracing_render_headless_volume_handoff.sh

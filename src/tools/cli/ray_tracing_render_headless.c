@@ -6,6 +6,7 @@
 #include <unistd.h>
 
 #include "app/agent_render_request.h"
+#include "config/config_file_io.h"
 #include "app/animation.h"
 #include "config/config_manager.h"
 #include "import/fluid_volume_import_3d.h"
@@ -15,6 +16,7 @@
 #include "render/runtime_native_3d_render.h"
 #include "render/runtime_volume_3d_debug.h"
 #include "render/runtime_volume_3d_scatter.h"
+#include "tools/make_video.h"
 #include "tools/ray_tracing_render_headless_internal.h"
 
 static RayTracingHeadlessObjectAuditEntry *ray_tracing_headless_object_audit_ensure_entry(
@@ -452,8 +454,12 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                                     light_point.x,
                                     light_point.y);
     if (preflight.prepared_frame) {
+        RuntimeTriangleMesh3D_BVHBuildStats(&frame.scene.triangleMesh,
+                                            &preflight.bvh_build_stats);
         ray_tracing_headless_audit_prepared_frame(&preflight, &frame);
         RuntimeNative3DPreparedFrame_Free(&frame);
+        RuntimeNative3DPreparedSceneCacheStatsSnapshot(
+            &preflight.prepared_scene_cache_stats);
     } else {
         snprintf(preflight.diagnostics,
                  sizeof(preflight.diagnostics),
@@ -477,7 +483,7 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
         return 6;
     }
 
-    write_progress_and_job_status(request->progress_path,
+    ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
                                   request,
                                   "preflight_ready",
                                   request->start_frame,
@@ -584,7 +590,7 @@ static int run_render(const RayTracingAgentRenderRequest *request,
         *out_preflight = preflight;
         return 8;
     }
-    if (!ensure_directory_exists(preflight.frame_dir)) {
+    if (!config_io_ensure_directory_exists(preflight.frame_dir)) {
         snprintf(preflight.diagnostics, sizeof(preflight.diagnostics), "failed to create frame directory");
         *out_preflight = preflight;
         return 8;
@@ -601,6 +607,7 @@ static int run_render(const RayTracingAgentRenderRequest *request,
     if (sceneSettings.bezierPath.numPoints >= 1) {
         light_point = sceneSettings.bezierPath.points[0];
     }
+    RuntimeTriangleBVH3D_ResetTraceStats();
 
     for (int i = 0; i < request->frame_count; ++i) {
         char frame_path[PATH_MAX];
@@ -696,6 +703,9 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                 &temporal_progress,
                 &stats)) {
             snprintf(preflight.diagnostics, sizeof(preflight.diagnostics), "failed to render frame");
+            RuntimeTriangleBVH3D_SnapshotTraceStats(&preflight.bvh_trace_stats);
+            RuntimeNative3DPreparedSceneCacheStatsSnapshot(
+                &preflight.prepared_scene_cache_stats);
             ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
                                           request,
                                           "failed",
@@ -731,6 +741,7 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                                                        pixels,
                                                        NULL)) {
             snprintf(preflight.diagnostics, sizeof(preflight.diagnostics), "failed to write frame bmp");
+            RuntimeTriangleBVH3D_SnapshotTraceStats(&preflight.bvh_trace_stats);
             ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
                                           request,
                                           "failed",
@@ -777,7 +788,51 @@ static int run_render(const RayTracingAgentRenderRequest *request,
     }
 
     free(pixels);
+    RuntimeTriangleBVH3D_SnapshotTraceStats(&preflight.bvh_trace_stats);
+    RuntimeNative3DPreparedSceneCacheStatsSnapshot(&preflight.prepared_scene_cache_stats);
     preflight.rendered_frames = preflight.frames_rendered == request->frame_count;
+    if (preflight.rendered_frames && request->video_enabled) {
+        int video_code = 0;
+        ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
+                                      request,
+                                      "encoding_video",
+                                      request->start_frame + request->frame_count - 1,
+                                      preflight.frames_rendered,
+                                      request->temporal_frames,
+                                      request->temporal_frames,
+                                      request->temporal_frames,
+                                      "running",
+                                      request->video_path,
+                                      job_status_path,
+                                      job_id,
+                                      request_path,
+                                      -1);
+        video_code = MakeVideoFromFrames(preflight.frame_dir,
+                                         request->video_path,
+                                         request->video_fps);
+        if (video_code != 0) {
+            snprintf(preflight.diagnostics,
+                     sizeof(preflight.diagnostics),
+                     "failed to encode video: %s",
+                     request->video_path);
+            ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
+                                          request,
+                                          "failed",
+                                          request->start_frame + request->frame_count - 1,
+                                          preflight.frames_rendered,
+                                          request->temporal_frames,
+                                          request->temporal_frames,
+                                          request->temporal_frames,
+                                          "failed",
+                                          preflight.diagnostics,
+                                          job_status_path,
+                                          job_id,
+                                          request_path,
+                                          11);
+            *out_preflight = preflight;
+            return 11;
+        }
+    }
     snprintf(preflight.diagnostics, sizeof(preflight.diagnostics), "ok");
     ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
                                   request,

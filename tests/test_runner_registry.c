@@ -21,6 +21,7 @@
 #include "test_runtime_path_policy.h"
 #include "test_runtime_mode_backend_policy.h"
 #include "test_runtime_lighting_materials.h"
+#include "test_runtime_mesh_asset_loader.h"
 #include "test_runtime_scene_3d_geometry.h"
 #include "test_runtime_volume_3d.h"
 #include "test_runtime_scene_bridge_core.h"
@@ -76,6 +77,7 @@ int test_runner_main(int argc, char** argv) {
         {"runtime_volume_3d", run_test_runtime_volume_3d_tests},
         {"runtime_lighting_materials_payload", run_test_runtime_lighting_materials_payload_tests},
         {"runtime_lighting_materials", run_test_runtime_lighting_materials_tests},
+        {"runtime_mesh_asset_loader", run_test_runtime_mesh_asset_loader_tests},
         {"runtime_diffuse_temporal", run_test_runtime_diffuse_temporal_tests},
         {"runtime_emission_transparency", run_test_runtime_emission_transparency_tests},
         {"runtime_native_3d_denoise", run_test_runtime_native_3d_denoise_tests},

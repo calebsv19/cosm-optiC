@@ -9,6 +9,8 @@
 
 #define RUNTIME_SCENE_3D_MAX_OBJECT_ID 64
 
+typedef struct RuntimeTriangleBVH3D RuntimeTriangleBVH3D;
+
 typedef enum {
     RUNTIME_PRIMITIVE_3D_KIND_INVALID = 0,
     RUNTIME_PRIMITIVE_3D_KIND_PLANE = 1,
@@ -80,6 +82,8 @@ typedef struct {
     RuntimeTriangle3D* triangles;
     int triangleCount;
     int triangleCapacity;
+    RuntimeTriangleBVH3D* bvh;
+    bool bvhDirty;
 } RuntimeTriangleMesh3D;
 
 typedef struct {
@@ -128,9 +132,12 @@ bool RuntimePrimitive3DKindSupportedByR0(RuntimePrimitive3DKind kind);
 
 void RuntimeTriangleMesh3D_Init(RuntimeTriangleMesh3D* mesh);
 void RuntimeTriangleMesh3D_Free(RuntimeTriangleMesh3D* mesh);
+bool RuntimeTriangleMesh3D_CopyFrom(RuntimeTriangleMesh3D* dst,
+                                    const RuntimeTriangleMesh3D* src);
 
 void RuntimeScene3D_Init(RuntimeScene3D* scene);
 void RuntimeScene3D_Reset(RuntimeScene3D* scene);
 void RuntimeScene3D_Free(RuntimeScene3D* scene);
+bool RuntimeScene3D_CopyGeometryFrom(RuntimeScene3D* dst, const RuntimeScene3D* src);
 
 #endif

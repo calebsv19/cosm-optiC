@@ -101,16 +101,18 @@ int runtime_scene_bridge_color_from_material_albedo(json_object *materials_array
         json_object *mat = json_object_array_get_idx(materials_array, i);
         json_object *id = NULL;
         json_object *albedo = NULL;
+        json_object *base_color = NULL;
         if (!mat || !json_object_is_type(mat, json_type_object)) continue;
-        if (!json_object_object_get_ex(mat, "material_id", &id) || !json_object_is_type(id, json_type_string)) {
+        if ((!json_object_object_get_ex(mat, "material_id", &id) ||
+             !json_object_is_type(id, json_type_string)) &&
+            (!json_object_object_get_ex(mat, "id", &id) ||
+             !json_object_is_type(id, json_type_string))) {
             continue;
         }
         if (strcmp(json_object_get_string(id), material_id) != 0) continue;
-        if (!json_object_object_get_ex(mat, "albedo", &albedo) || !json_object_is_type(albedo, json_type_array)) {
-            return 0xFFFFFF;
-        }
-        if (json_object_array_length(albedo) < 3u) return 0xFFFFFF;
-        {
+        if (json_object_object_get_ex(mat, "albedo", &albedo) &&
+            json_object_is_type(albedo, json_type_array)) {
+            if (json_object_array_length(albedo) < 3u) return 0xFFFFFF;
             int r = runtime_scene_bridge_clamp_color_channel(
                 json_object_get_double(json_object_array_get_idx(albedo, 0)));
             int g = runtime_scene_bridge_clamp_color_channel(
@@ -119,6 +121,35 @@ int runtime_scene_bridge_color_from_material_albedo(json_object *materials_array
                 json_object_get_double(json_object_array_get_idx(albedo, 2)));
             return (r << 16) | (g << 8) | b;
         }
+        if (json_object_object_get_ex(mat, "base_color", &base_color) &&
+            json_object_is_type(base_color, json_type_object)) {
+            json_object *r_obj = NULL;
+            json_object *g_obj = NULL;
+            json_object *b_obj = NULL;
+            if (!json_object_object_get_ex(base_color, "r", &r_obj) ||
+                !json_object_object_get_ex(base_color, "g", &g_obj) ||
+                !json_object_object_get_ex(base_color, "b", &b_obj)) {
+                return 0xFFFFFF;
+            }
+            {
+                int r = runtime_scene_bridge_clamp_color_channel(json_object_get_double(r_obj));
+                int g = runtime_scene_bridge_clamp_color_channel(json_object_get_double(g_obj));
+                int b = runtime_scene_bridge_clamp_color_channel(json_object_get_double(b_obj));
+                return (r << 16) | (g << 8) | b;
+            }
+        }
+        if (json_object_object_get_ex(mat, "base_color", &base_color) &&
+            json_object_is_type(base_color, json_type_array)) {
+            if (json_object_array_length(base_color) < 3u) return 0xFFFFFF;
+            int r = runtime_scene_bridge_clamp_color_channel(
+                json_object_get_double(json_object_array_get_idx(base_color, 0)));
+            int g = runtime_scene_bridge_clamp_color_channel(
+                json_object_get_double(json_object_array_get_idx(base_color, 1)));
+            int b = runtime_scene_bridge_clamp_color_channel(
+                json_object_get_double(json_object_array_get_idx(base_color, 2)));
+            return (r << 16) | (g << 8) | b;
+        }
+        return 0xFFFFFF;
     }
     return 0xFFFFFF;
 }

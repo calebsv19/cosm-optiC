@@ -1,6 +1,6 @@
 # Ray Tracing Future Intent
 
-Last updated: 2026-05-07
+Last updated: 2026-06-05
 
 ## Direction
 
@@ -28,8 +28,18 @@ Keep `ray_tracing` stable as a hybrid editor/runtime while treating the shipped 
    - Keep menu-render control helpers and scene-digest picking helpers as dedicated seams instead of collapsing them back into monolithic host files.
    - Preserve the new authored-bitmap texture roundtrip:
      - keep the object-bound manifest/PNG contract stable
-     - keep authored bitmap binding metadata scene-relative instead of embedding texture bytes into runtime-scene files
-     - build coexistence rules between authored bitmap faces and procedural overlays intentionally instead of letting the two routes drift
+   - keep authored bitmap binding metadata scene-relative instead of embedding texture bytes into runtime-scene files
+   - build coexistence rules between authored bitmap faces and procedural overlays intentionally instead of letting the two routes drift
+   - Treat imported STL objects as ordinary authored scene objects once they
+     have been converted into `mesh_asset_runtime_v1` sidecars and referenced
+     by `mesh_asset_instance`.
+   - Build the next AI-agent scene-authoring material flow around the existing
+     object `material_texture_stack`: prompts like a skull with a brushed metal
+     base, rough layer, and grime overlay should compile into layered material
+     stack entries rather than one-off STL-specific material fields.
+   - Use `ray_tracing_material_preview_headless` as the bounded preview/tuning
+     loop for imported mesh material presets before running expensive full
+     native `3D` render proofs.
 
 4. Defer VF3D / `physics_sim` ingestion until the next internal renderer boundary is chosen and stabilized.
 
@@ -53,6 +63,9 @@ Keep `ray_tracing` stable as a hybrid editor/runtime while treating the shipped 
   - preview/update behavior
 - Keep procedural texture work and the authored-bitmap manifest reader app-local until a stable cross-app material graph/schema exists; current layered material stacks and bitmap face bindings are native `3D` renderer behavior, not shared-core contracts.
 - Keep the Material editor's object-wide layer stack as the fallback while custom group topology, durable group controls, and per-layer face overrides catch up to the generated-face placement schema.
+- Keep imported STL mesh material expansion object-wide first. Per-face or
+  semantic-region material authoring should wait until the imported mesh
+  pipeline has stable group/selection metadata beyond raw triangle ordinals.
 
 ## Non-Goals
 

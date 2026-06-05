@@ -58,11 +58,6 @@ static double ExtractBaseAlbedo(const SceneObject* obj) {
     return Clamp01(luma);
 }
 
-static MaterialBSDFModel SelectModel(const SceneObject* obj) {
-    double reflectivity = Clamp01(obj->reflectivity);
-    return (reflectivity > 0.05) ? MATERIAL_BSDF_GGX : MATERIAL_BSDF_LAMBERT;
-}
-
 static void BuildTangent(double nx, double ny, double* tx, double* ty) {
     *tx = -ny;
     *ty = nx;
@@ -259,8 +254,14 @@ void MaterialBSDFInitFromSceneObject(const SceneObject* obj, MaterialBSDF* mater
     }
     material->albedo = Clamp01(objLuma * presetLuma);
     material->opacity = Clamp01(obj->opacity);
-    material->reflectivity = Clamp01(preset ? preset->reflectivity : obj->reflectivity);
-    material->roughness = Clamp(preset ? preset->roughness : obj->roughness, 0.02, 1.0);
+    /*
+     * Runtime-scene authoring stores object-level material scalars after any
+     * preset has been assigned. Keep the preset for diffuse/specular/emissive
+     * defaults, but make the concrete SceneObject values authoritative so
+     * imported mesh instances can carry authored glossy/matte settings.
+     */
+    material->reflectivity = Clamp01(obj->reflectivity);
+    material->roughness = Clamp(obj->roughness, 0.02, 1.0);
     material->ior = Clamp(preset ? preset->ior : ((material->reflectivity > 0.0) ? 1.45 : 1.0),
                           1.0,
                           4.0);

@@ -1,0 +1,51 @@
+{
+  "schema_family": "codework_scene",
+  "schema_variant": "scene_runtime_v1",
+  "schema_version": 1,
+  "scene_id": "scene_imported_tetrahedron_runtime_mesh_mrt",
+  "source_scene_id": "scene_imported_tetrahedron_runtime_mesh_mrt",
+  "compile_meta": {
+    "compiler_version": "core_mesh_compile_v0_3_0_fixture",
+    "compiled_at_ns": 0,
+    "normalization": "imported_ascii_stl_fixture"
+  },
+  "space_mode_default": "3d",
+  "unit_system": "meters",
+  "world_scale": 1.0,
+  "objects": [
+    {
+      "object_id": "obj_imported_tetrahedron",
+      "object_type": "mesh_asset_instance",
+      "dimensional_mode": "full_3d",
+      "locked_plane": "xy",
+      "transform": {
+        "position": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+      },
+      "geometry_ref": {
+        "kind": "mesh_asset",
+        "id": "asset_imported_tetrahedron_01"
+      },
+      "material_ref": {
+        "id": "mat_imported_surface"
+      },
+      "flags": {
+        "visible": true,
+        "locked": false,
+        "selectable": true
+      }
+    }
+  ],
+  "materials": [
+    {
+      "id": "mat_imported_surface",
+      "name": "Imported surface",
+      "base_color": { "r": 0.8, "g": 0.7, "b": 0.55 },
+      "roughness": 0.6,
+      "metallic": 0.0
+    }
+  ],
+  "lights": [],
+  "extensions": {}
+}

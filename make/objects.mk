@@ -15,6 +15,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_light_emitter_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_3d.o \
 	$(BUILD_DIR)/render/runtime_emission_transparency_3d.o \
+	$(BUILD_DIR)/render/runtime_emission_transparency_3d_sampling.o \
 	$(BUILD_DIR)/render/runtime_path_depth_policy_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_feature_buffer.o \
 	$(BUILD_DIR)/render/runtime_native_3d_denoise.o \
@@ -23,21 +24,26 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_native_3d_blue_noise.o \
 	$(BUILD_DIR)/render/runtime_native_3d_sampling.o \
 	$(BUILD_DIR)/render/materials/runtime_material_authored_texture_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_material_authored_texture_3d_manifest.o \
 	$(BUILD_DIR)/render/materials/runtime_material_payload_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_texture_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_texture_stack_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_material_texture_stack_3d_metadata.o \
 	$(BUILD_DIR)/render/materials/runtime_material_response_3d.o \
 	$(BUILD_DIR)/editor/scene_editor_material_face_placement.o \
 	$(BUILD_DIR)/editor/scene_editor_material_stack.o \
 	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render_prepare.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render_shading_background.o \
 	$(BUILD_DIR)/render/runtime_native_3d_preview_reconstruction.o \
 	$(BUILD_DIR)/render/runtime_native_3d_resolution.o \
 	$(BUILD_DIR)/render/runtime_native_3d_temporal_accum.o \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_occupancy.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \
+	$(BUILD_DIR)/render/runtime_triangle_bvh_3d.o \
 	$(BUILD_DIR)/render/runtime_volume_3d.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_sampling.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_integrate.o \
@@ -59,7 +65,9 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/import/scene_bundle_import.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_json_utils.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_authoring.o \
+	$(BUILD_DIR)/import/runtime_scene_bridge_authoring_paths.o \
 	$(BUILD_DIR)/import/runtime_scene_volume_defaults.o \
+	$(BUILD_DIR)/import/runtime_mesh_asset_loader.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge.o \
 	$(BUILD_DIR)/path/path_system.o \
 	$(BUILD_DIR)/path/path_arc_length.o \
@@ -69,6 +77,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/app/data_paths.o \
 	$(BUILD_DIR)/config/core/config_runtime_paths.o \
 	$(BUILD_DIR)/config/core/config_animation_persistence.o \
+	$(BUILD_DIR)/config/scene/config_scene_material_persistence.o \
 	$(BUILD_DIR)/config/io/config_file_io.o \
 	$(BUILD_DIR)/config/scene/config_scene_path_io.o \
 	$(BUILD_DIR)/config/core/config_manager.o \
@@ -87,6 +96,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(CORE_WORKERS_OBJS) \
 	$(CORE_SCENE_OBJS) \
 	$(CORE_SCENE_COMPILE_OBJS) \
+	$(CORE_MESH_ASSET_OBJS) \
 	$(CORE_AUTHORED_TEXTURE_OBJS) \
 	$(CORE_OBJECT_OBJS) \
 	$(CORE_UNITS_OBJS) \
@@ -99,11 +109,15 @@ NATIVE3D_AUDIT_DEPS = \
 
 RAY_TRACING_RENDER_HEADLESS_DEPS = \
 	$(BUILD_DIR)/app/agent_render_request.o \
+	$(BUILD_DIR)/tools/make_video.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_summary.o \
 	$(NATIVE3D_AUDIT_DEPS)
 
 RAY_TRACING_JOB_RUNNER_DEPS = \
 	$(BUILD_DIR)/app/ray_tracing_job_runner.o \
 	$(BUILD_DIR)/app/ray_tracing_headless_job_bundle.o \
+	$(BUILD_DIR)/app/ray_tracing_job_runner_paths.o \
+	$(BUILD_DIR)/app/ray_tracing_job_runner_status.o \
 	$(patsubst $(CORE_HEADLESS_JOB_DIR)/src/%.c,$(BUILD_DIR)/core_headless_job/%.o,$(CORE_HEADLESS_JOB_SRCS)) \
 	$(RAY_TRACING_RENDER_HEADLESS_DEPS)
 
@@ -125,6 +139,7 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry_builder_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry_trace_suite.o \
+	$(BUILD_DIR)/tests/test_runtime_mesh_asset_loader.o \
 	$(BUILD_DIR)/tests/test_runtime_volume_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials.o \
 	$(BUILD_DIR)/tests/test_runtime_material_authored_texture_validation_suite.o \
@@ -286,6 +301,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/import/runtime_scene_bridge_json_utils.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_authoring.o \
 	$(BUILD_DIR)/import/runtime_scene_volume_defaults.o \
+	$(BUILD_DIR)/import/runtime_mesh_asset_loader.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_render.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_render_controls.o \
@@ -299,6 +315,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/ui/menu/volume_source_catalog.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_state.o \
 	$(BUILD_DIR)/render/adapters/kit_viz_fluid_overlay_adapter.o \
+	$(BUILD_DIR)/render/runtime_triangle_bvh_3d.o \
 	$(BUILD_DIR)/core_base/core_base.o \
 	$(BUILD_DIR)/core_io/core_io.o \
 	$(BUILD_DIR)/core_data/core_data.o \
@@ -309,6 +326,9 @@ TEST_DEPS := \
 	$(BUILD_DIR)/core_scene/core_scene.o \
 	$(BUILD_DIR)/core_authored_texture/core_authored_texture.o \
 	$(BUILD_DIR)/core_scene_compile/core_scene_compile.o \
+	$(BUILD_DIR)/core_mesh_asset/core_mesh_asset.o \
+	$(BUILD_DIR)/core_mesh_asset/core_mesh_asset_authoring_document.o \
+	$(BUILD_DIR)/core_mesh_asset/core_mesh_asset_runtime_document.o \
 	$(BUILD_DIR)/core_object/core_object.o \
 	$(BUILD_DIR)/core_units/core_units.o \
 	$(BUILD_DIR)/core_space/core_space.o \
@@ -353,6 +373,10 @@ CORE_SIM_SRCS := $(CORE_SIM_DIR)/src/core_sim.c
 CORE_SCENE_SRCS := $(CORE_SCENE_DIR)/src/core_scene.c
 CORE_AUTHORED_TEXTURE_SRCS := $(CORE_AUTHORED_TEXTURE_DIR)/src/core_authored_texture.c
 CORE_SCENE_COMPILE_SRCS := $(CORE_SCENE_COMPILE_DIR)/src/core_scene_compile.c
+CORE_MESH_ASSET_SRCS := \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_authoring_document.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c
 CORE_OBJECT_SRCS := $(CORE_OBJECT_DIR)/src/core_object.c
 CORE_UNITS_SRCS := $(CORE_UNITS_DIR)/src/core_units.c
 CORE_SPACE_SRCS := $(CORE_SPACE_DIR)/src/core_space.c
@@ -383,6 +407,7 @@ CORE_SIM_OBJS := $(patsubst $(CORE_SIM_DIR)/src/%.c,$(BUILD_DIR)/core_sim/%.o,$(
 CORE_SCENE_OBJS := $(patsubst $(CORE_SCENE_DIR)/src/%.c,$(BUILD_DIR)/core_scene/%.o,$(CORE_SCENE_SRCS))
 CORE_AUTHORED_TEXTURE_OBJS := $(patsubst $(CORE_AUTHORED_TEXTURE_DIR)/src/%.c,$(BUILD_DIR)/core_authored_texture/%.o,$(CORE_AUTHORED_TEXTURE_SRCS))
 CORE_SCENE_COMPILE_OBJS := $(patsubst $(CORE_SCENE_COMPILE_DIR)/src/%.c,$(BUILD_DIR)/core_scene_compile/%.o,$(CORE_SCENE_COMPILE_SRCS))
+CORE_MESH_ASSET_OBJS := $(patsubst $(CORE_MESH_ASSET_DIR)/src/%.c,$(BUILD_DIR)/core_mesh_asset/%.o,$(CORE_MESH_ASSET_SRCS))
 CORE_OBJECT_OBJS := $(patsubst $(CORE_OBJECT_DIR)/src/%.c,$(BUILD_DIR)/core_object/%.o,$(CORE_OBJECT_SRCS))
 CORE_UNITS_OBJS := $(patsubst $(CORE_UNITS_DIR)/src/%.c,$(BUILD_DIR)/core_units/%.o,$(CORE_UNITS_SRCS))
 CORE_SPACE_OBJS := $(patsubst $(CORE_SPACE_DIR)/src/%.c,$(BUILD_DIR)/core_space/%.o,$(CORE_SPACE_SRCS))
@@ -403,6 +428,6 @@ TEST_DEPS += $(KIT_RENDER_OBJS) $(CORE_PANE_OBJS) $(KIT_PANE_OBJS) $(KIT_WORKSPA
 
 OBJ := $(OBJ) $(TIMER_HUD_OBJS) $(TIMER_HUD_EXTERNAL_OBJS) \
 	$(patsubst $(VK_RENDERER_DIR)/src/%.c,$(BUILD_DIR)/vk_renderer/%.o,$(VK_RENDERER_SRCS)) \
-	$(CORE_BASE_OBJS) $(CORE_IO_OBJS) $(CORE_DATA_OBJS) $(CORE_PACK_OBJS) $(CORE_QUEUE_OBJS) $(CORE_TIME_OBJS) $(CORE_WORKERS_OBJS) $(CORE_SIM_OBJS) $(CORE_SCENE_OBJS) $(CORE_AUTHORED_TEXTURE_OBJS) $(CORE_SCENE_COMPILE_OBJS) $(CORE_OBJECT_OBJS) $(CORE_UNITS_OBJS) $(CORE_SPACE_OBJS) $(CORE_PANE_OBJS) $(CORE_THEME_OBJS) $(CORE_FONT_OBJS) $(CORE_HEADLESS_JOB_OBJS) $(KIT_RENDER_OBJS) $(KIT_PANE_OBJS) $(KIT_VIZ_OBJS) $(KIT_RUNTIME_DIAG_OBJS) $(KIT_WORKSPACE_AUTHORING_OBJS)
+	$(CORE_BASE_OBJS) $(CORE_IO_OBJS) $(CORE_DATA_OBJS) $(CORE_PACK_OBJS) $(CORE_QUEUE_OBJS) $(CORE_TIME_OBJS) $(CORE_WORKERS_OBJS) $(CORE_SIM_OBJS) $(CORE_SCENE_OBJS) $(CORE_AUTHORED_TEXTURE_OBJS) $(CORE_SCENE_COMPILE_OBJS) $(CORE_MESH_ASSET_OBJS) $(CORE_OBJECT_OBJS) $(CORE_UNITS_OBJS) $(CORE_SPACE_OBJS) $(CORE_PANE_OBJS) $(CORE_THEME_OBJS) $(CORE_FONT_OBJS) $(CORE_HEADLESS_JOB_OBJS) $(KIT_RENDER_OBJS) $(KIT_PANE_OBJS) $(KIT_VIZ_OBJS) $(KIT_RUNTIME_DIAG_OBJS) $(KIT_WORKSPACE_AUTHORING_OBJS)
 TEST_DEPS := $(sort $(TEST_DEPS) $(filter-out $(BUILD_DIR)/app/animation.o $(BUILD_DIR)/app/ray_tracing_job_runner.o,$(OBJ)))
 DEP := $(OBJ:.o=.d)

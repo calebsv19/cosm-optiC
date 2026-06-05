@@ -187,6 +187,12 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, ",\n");
     fprintf(file, "    \"last_frame_path\": ");
     json_write_string(file, preflight->last_frame_path);
+    fprintf(file, ",\n");
+    fprintf(file, "    \"video_enabled\": %s,\n", request->video_enabled ? "true" : "false");
+    fprintf(file, "    \"video_path\": ");
+    json_write_string(file, request->video_path);
+    fprintf(file, ",\n");
+    fprintf(file, "    \"video_fps\": %d", request->video_fps);
     fprintf(file, "\n");
     fprintf(file, "  },\n");
     fprintf(file, "  \"scene_summary\": {\n");
@@ -251,6 +257,91 @@ void ray_tracing_render_headless_write_summary(
             (unsigned)preflight->max_r,
             (unsigned)preflight->max_g,
             (unsigned)preflight->max_b);
+    fprintf(file, "  },\n");
+    fprintf(file, "  \"prepared_scene_cache\": {\n");
+    fprintf(file, "    \"valid\": %s,\n",
+            preflight->prepared_scene_cache_stats.valid ? "true" : "false");
+    fprintf(file, "    \"generation\": %llu,\n",
+            (unsigned long long)preflight->prepared_scene_cache_stats.generation);
+    fprintf(file, "    \"cached_generation\": %llu,\n",
+            (unsigned long long)preflight->prepared_scene_cache_stats.cachedGeneration);
+    fprintf(file, "    \"hits\": %llu,\n",
+            (unsigned long long)preflight->prepared_scene_cache_stats.hits);
+    fprintf(file, "    \"misses\": %llu,\n",
+            (unsigned long long)preflight->prepared_scene_cache_stats.misses);
+    fprintf(file, "    \"stores\": %llu,\n",
+            (unsigned long long)preflight->prepared_scene_cache_stats.stores);
+    fprintf(file, "    \"invalidations\": %llu,\n",
+            (unsigned long long)preflight->prepared_scene_cache_stats.invalidations);
+    fprintf(file, "    \"static_geometry_reuse_enabled\": %s,\n",
+            preflight->prepared_scene_cache_stats.staticGeometryReuseEnabled ? "true"
+                                                                             : "false");
+    fprintf(file, "    \"time_independent_hits\": %llu,\n",
+            (unsigned long long)preflight->prepared_scene_cache_stats.timeIndependentHits);
+    fprintf(file, "    \"cached_normalized_t\": %.9f,\n",
+            preflight->prepared_scene_cache_stats.cachedNormalizedT);
+    fprintf(file, "    \"last_requested_normalized_t\": %.9f,\n",
+            preflight->prepared_scene_cache_stats.lastRequestedNormalizedT);
+    fprintf(file, "    \"cached_primitive_count\": %d,\n",
+            preflight->prepared_scene_cache_stats.cachedPrimitiveCount);
+    fprintf(file, "    \"cached_triangle_count\": %d,\n",
+            preflight->prepared_scene_cache_stats.cachedTriangleCount);
+    fprintf(file, "    \"cached_bvh_node_count\": %d,\n",
+            preflight->prepared_scene_cache_stats.cachedBVHNodeCount);
+    fprintf(file, "    \"cached_bvh_leaf_count\": %d\n",
+            preflight->prepared_scene_cache_stats.cachedBVHLeafCount);
+    fprintf(file, "  },\n");
+    fprintf(file, "  \"bvh_summary\": {\n");
+    fprintf(file, "    \"ready\": %s,\n",
+            preflight->bvh_build_stats.ready ? "true" : "false");
+    fprintf(file, "    \"triangle_count\": %d,\n",
+            preflight->bvh_build_stats.triangleCount);
+    fprintf(file, "    \"node_count\": %d,\n", preflight->bvh_build_stats.nodeCount);
+    fprintf(file, "    \"leaf_count\": %d,\n", preflight->bvh_build_stats.leafCount);
+    fprintf(file, "    \"max_depth\": %d,\n", preflight->bvh_build_stats.maxDepth);
+    fprintf(file, "    \"leaf_size\": %d,\n", preflight->bvh_build_stats.leafSize);
+    fprintf(file, "    \"max_leaf_triangle_count\": %d,\n",
+            preflight->bvh_build_stats.maxLeafTriangleCount);
+    fprintf(file, "    \"build_cpu_ms\": %.6f,\n",
+            preflight->bvh_build_stats.buildCpuMs);
+    fprintf(file, "    \"node_bytes\": %llu,\n",
+            (unsigned long long)preflight->bvh_build_stats.nodeBytes);
+    fprintf(file, "    \"index_bytes\": %llu,\n",
+            (unsigned long long)preflight->bvh_build_stats.indexBytes);
+    fprintf(file, "    \"centroid_bytes\": %llu,\n",
+            (unsigned long long)preflight->bvh_build_stats.centroidBytes);
+    fprintf(file, "    \"sort_scratch_bytes\": %llu,\n",
+            (unsigned long long)preflight->bvh_build_stats.sortScratchBytes);
+    fprintf(file, "    \"build_scratch_bytes\": %llu,\n",
+            (unsigned long long)preflight->bvh_build_stats.buildScratchBytes);
+    fprintf(file, "    \"total_bytes\": %llu,\n",
+            (unsigned long long)preflight->bvh_build_stats.totalBytes);
+    fprintf(file, "    \"trace_calls\": %llu,\n",
+            (unsigned long long)preflight->bvh_trace_stats.traceCalls);
+    fprintf(file, "    \"trace_hits\": %llu,\n",
+            (unsigned long long)preflight->bvh_trace_stats.traceHits);
+    fprintf(file, "    \"trace_misses\": %llu,\n",
+            (unsigned long long)preflight->bvh_trace_stats.traceMisses);
+    fprintf(file, "    \"trace_overflows\": %llu,\n",
+            (unsigned long long)preflight->bvh_trace_stats.traceOverflows);
+    fprintf(file, "    \"flat_fallback_calls\": %llu,\n",
+            (unsigned long long)preflight->bvh_trace_stats.flatFallbackCalls);
+    fprintf(file, "    \"overflow_fallback_calls\": %llu,\n",
+            (unsigned long long)preflight->bvh_trace_stats.overflowFallbackCalls);
+    fprintf(file, "    \"node_visits\": %llu,\n",
+            (unsigned long long)preflight->bvh_trace_stats.nodeVisits);
+    fprintf(file, "    \"leaf_visits\": %llu,\n",
+            (unsigned long long)preflight->bvh_trace_stats.leafVisits);
+    fprintf(file, "    \"aabb_tests\": %llu,\n",
+            (unsigned long long)preflight->bvh_trace_stats.aabbTests);
+    fprintf(file, "    \"aabb_hits\": %llu,\n",
+            (unsigned long long)preflight->bvh_trace_stats.aabbHits);
+    fprintf(file, "    \"triangle_tests\": %llu,\n",
+            (unsigned long long)preflight->bvh_trace_stats.triangleTests);
+    fprintf(file, "    \"triangle_hits\": %llu,\n",
+            (unsigned long long)preflight->bvh_trace_stats.triangleHits);
+    fprintf(file, "    \"max_stack_depth\": %llu\n",
+            (unsigned long long)preflight->bvh_trace_stats.maxStackDepth);
     fprintf(file, "  },\n");
     fprintf(file, "  \"object_audit\": [\n");
     {

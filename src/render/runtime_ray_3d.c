@@ -1,4 +1,5 @@
 #include "render/runtime_ray_3d.h"
+#include "render/runtime_triangle_bvh_3d.h"
 
 #include <float.h>
 #include <string.h>
@@ -126,11 +127,20 @@ bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
     return true;
 }
 
-bool RuntimeRay3D_TraceSceneFirstHit(const RuntimeScene3D* scene,
-                                     const Ray3D* ray,
-                                     [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
-                                     [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
-                                     HitInfo3D* out_hit) {
+static void runtime_ray_3d_apply_source_ref(const RuntimeScene3D* scene, HitInfo3D* hit) {
+    if (!scene || !hit) return;
+    if (hit->primitiveIndex >= 0 && hit->primitiveIndex < scene->primitiveCount) {
+        hit->source = scene->primitives[hit->primitiveIndex].source;
+        hit->sceneObjectIndex = scene->primitives[hit->primitiveIndex].source.sceneObjectIndex;
+    }
+}
+
+static bool runtime_ray_3d_trace_scene_first_hit_flat(
+    const RuntimeScene3D* scene,
+    const Ray3D* ray,
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
+    HitInfo3D* out_hit) {
     HitInfo3D best_hit = {0};
     bool found = false;
     if (!scene || !ray || !out_hit) return false;
@@ -146,10 +156,7 @@ bool RuntimeRay3D_TraceSceneFirstHit(const RuntimeScene3D* scene,
                                             &hit)) {
             continue;
         }
-        if (hit.primitiveIndex >= 0 && hit.primitiveIndex < scene->primitiveCount) {
-            hit.source = scene->primitives[hit.primitiveIndex].source;
-            hit.sceneObjectIndex = scene->primitives[hit.primitiveIndex].source.sceneObjectIndex;
-        }
+        runtime_ray_3d_apply_source_ref(scene, &hit);
         best_hit = hit;
         found = true;
     }
@@ -161,4 +168,34 @@ bool RuntimeRay3D_TraceSceneFirstHit(const RuntimeScene3D* scene,
 
     *out_hit = best_hit;
     return true;
+}
+
+bool RuntimeRay3D_TraceSceneFirstHit(const RuntimeScene3D* scene,
+                                     const Ray3D* ray,
+                                     [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
+                                     [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
+                                     HitInfo3D* out_hit) {
+    if (!scene || !ray || !out_hit) return false;
+    if (RuntimeTriangleMesh3D_HasReadyBVH(&scene->triangleMesh)) {
+        HitInfo3D hit = {0};
+        RuntimeTriangleBVH3DTraceResult trace_result =
+            RuntimeTriangleBVH3D_TraceFirstHitStatus(&scene->triangleMesh,
+                                                     ray,
+                                                     t_min,
+                                                     t_max,
+                                                     &hit);
+        if (trace_result == RUNTIME_TRIANGLE_BVH_3D_TRACE_HIT) {
+            runtime_ray_3d_apply_source_ref(scene, &hit);
+            *out_hit = hit;
+            return true;
+        }
+        if (trace_result == RUNTIME_TRIANGLE_BVH_3D_TRACE_OVERFLOW) {
+            RuntimeTriangleBVH3D_RecordFlatFallback(true);
+            return runtime_ray_3d_trace_scene_first_hit_flat(scene, ray, t_min, t_max, out_hit);
+        }
+        HitInfo3D_Reset(out_hit);
+        return false;
+    }
+    RuntimeTriangleBVH3D_RecordFlatFallback(false);
+    return runtime_ray_3d_trace_scene_first_hit_flat(scene, ray, t_min, t_max, out_hit);
 }

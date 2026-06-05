@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "render/runtime_camera_3d_rays.h"
+#include "render/runtime_native_3d_prepare_cache.h"
 #include "render/runtime_native_3d_sampling.h"
 #include "render/runtime_native_3d_temporal_accum.h"
 #include "render/runtime_native_3d_tile_occupancy.h"

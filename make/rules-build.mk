@@ -173,6 +173,10 @@ $(BUILD_DIR)/core_scene_compile/%.o: $(CORE_SCENE_COMPILE_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
+$(BUILD_DIR)/core_mesh_asset/%.o: $(CORE_MESH_ASSET_DIR)/src/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
 $(BUILD_DIR)/core_object/%.o: $(CORE_OBJECT_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@

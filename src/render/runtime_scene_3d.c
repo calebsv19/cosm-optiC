@@ -1,4 +1,5 @@
 #include "render/runtime_scene_3d.h"
+#include "render/runtime_triangle_bvh_3d.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -29,10 +30,43 @@ void RuntimeTriangleMesh3D_Init(RuntimeTriangleMesh3D* mesh) {
 
 void RuntimeTriangleMesh3D_Free(RuntimeTriangleMesh3D* mesh) {
     if (!mesh) return;
+    RuntimeTriangleMesh3D_ClearBVH(mesh);
     free(mesh->triangles);
     mesh->triangles = NULL;
     mesh->triangleCount = 0;
     mesh->triangleCapacity = 0;
+    mesh->bvhDirty = false;
+}
+
+bool RuntimeTriangleMesh3D_CopyFrom(RuntimeTriangleMesh3D* dst,
+                                    const RuntimeTriangleMesh3D* src) {
+    if (!dst || !src) return false;
+
+    RuntimeTriangleMesh3D_Free(dst);
+    RuntimeTriangleMesh3D_Init(dst);
+    if (src->triangleCount > 0) {
+        if (!src->triangles) {
+            RuntimeTriangleMesh3D_Free(dst);
+            return false;
+        }
+        dst->triangles = (RuntimeTriangle3D*)malloc(sizeof(*dst->triangles) *
+                                                    (size_t)src->triangleCount);
+        if (!dst->triangles) {
+            RuntimeTriangleMesh3D_Free(dst);
+            return false;
+        }
+        memcpy(dst->triangles,
+               src->triangles,
+               sizeof(*dst->triangles) * (size_t)src->triangleCount);
+        dst->triangleCount = src->triangleCount;
+        dst->triangleCapacity = src->triangleCount;
+    }
+    dst->bvhDirty = src->bvhDirty;
+    if (!RuntimeTriangleMesh3D_CopyBVH(dst, src)) {
+        RuntimeTriangleMesh3D_Free(dst);
+        return false;
+    }
+    return true;
 }
 
 void RuntimeScene3D_Init(RuntimeScene3D* scene) {
@@ -90,4 +124,40 @@ void RuntimeScene3D_Free(RuntimeScene3D* scene) {
     RuntimeVolumeAttachment3D_Free(&scene->volume);
     scene->hasLight = false;
     scene->hasCamera = false;
+}
+
+bool RuntimeScene3D_CopyGeometryFrom(RuntimeScene3D* dst, const RuntimeScene3D* src) {
+    if (!dst || !src) return false;
+
+    RuntimeScene3D_Free(dst);
+    RuntimeScene3D_Init(dst);
+    dst->scope = src->scope;
+    dst->ownership = src->ownership;
+    dst->environment = src->environment;
+    dst->light = src->light;
+    dst->hasLight = src->hasLight;
+    dst->camera = src->camera;
+    dst->hasCamera = src->hasCamera;
+
+    if (src->primitiveCount > 0) {
+        dst->primitives = (RuntimePrimitive3D*)malloc(sizeof(*dst->primitives) *
+                                                      (size_t)src->primitiveCount);
+        if (!dst->primitives) {
+            RuntimeScene3D_Free(dst);
+            RuntimeScene3D_Init(dst);
+            return false;
+        }
+        memcpy(dst->primitives,
+               src->primitives,
+               sizeof(*dst->primitives) * (size_t)src->primitiveCount);
+        dst->primitiveCount = src->primitiveCount;
+        dst->primitiveCapacity = src->primitiveCount;
+    }
+
+    if (!RuntimeTriangleMesh3D_CopyFrom(&dst->triangleMesh, &src->triangleMesh)) {
+        RuntimeScene3D_Free(dst);
+        RuntimeScene3D_Init(dst);
+        return false;
+    }
+    return true;
 }

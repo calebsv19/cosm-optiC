@@ -1,6 +1,6 @@
 # optiC Current Truth
 
-Last updated: 2026-06-02
+Last updated: 2026-06-05
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -53,6 +53,16 @@ Last updated: 2026-06-02
 
 - the current proven trio worker lane supports preferred-home-server routing
   with fallback still enabled
+- a fresh forced-Linux-PC lean trio proof now completes through the normal VPS
+  worker status and visualizer publish path after lean result handoff hardening:
+  - `ray-tracing--trio-headless-worker--20260604T163741Z--leanpc01`
+  - claimed by `linuxpc` at `2026-06-04T16:38:35Z`
+  - `start_stage=physics_sim`, one PhysicsSim frame, one RayTracing frame,
+    `volume.enabled=false`
+  - the submitted package set had to use the VPS registry-pinned
+    `ray_tracing_headless_worker@0.1.0` declaration
+  - manifest:
+    `https://visualizer.calebsv.tech/artifacts/ray-tracing/ray-tracing--trio-headless-worker--20260604T163741Z--leanpc01/manifest.json`
 - a fresh tiny trio proof now completes end to end after the VPS remote upload
   ceiling was raised:
   - `ray-tracing--trio-headless-worker--20260526T012119Z--homeserverlimitfixc`
@@ -368,6 +378,64 @@ Last updated: 2026-06-02
     - `environment_light_mode = off|top_fill|ambient`
     - `ambient_strength` for the ambient surface-fill amount (`0.0..1.0`)
     - `top_fill_strength` for the top-fill lane (`0.0..20.0`)
+  - runtime mesh asset instances are now part of the native `3D` headless path:
+    - runtime scenes may reference `mesh_asset_instance` objects through
+      `geometry_ref.kind = "mesh_asset"`
+    - file-backed assets are resolved beside the runtime scene from
+      `assets/mesh_assets/<asset_id>.runtime.json` or
+      `mesh_assets/<asset_id>.runtime.json`
+    - the loader retains shared `mesh_asset_runtime_v1` documents, object ids,
+      transforms, and scene object indices for material lookup
+    - the native `3D` builder appends runtime mesh triangles into the same
+      triangle scene used by primitive geometry
+    - RayTracing accepts both runtime material shapes:
+      `materials[].material_id` plus `albedo`, and LineDrawing/generated
+      `materials[].id` plus `base_color`
+    - imported STL geometry should enter RayTracing through the authored
+      imported-mesh -> `mesh_asset_runtime_v1` sidecar flow, then appear in
+      scenes as a normal `mesh_asset_instance`
+    - object ids and scene object indices are preserved across this conversion
+      so authored material settings can resolve onto the generated runtime mesh
+      triangles at hit time
+    - `extensions.ray_tracing.authoring.object_materials[*]` is the current
+      object-wide authoring lane for imported mesh color/material overrides;
+      the concrete `SceneObject` color, reflectivity, and roughness values are
+      authoritative after preset assignment
+  - runtime mesh acceleration is active for this path:
+    - native `3D` first-hit tracing uses a median-split triangle BVH when ready
+    - BVH build/traversal metrics are emitted in render summaries
+    - flat triangle traversal remains the fallback for no-BVH or stack-overflow
+      cases
+    - prepared static runtime mesh geometry/BVH can be reused across
+      multi-frame renders when the mesh scene is unchanged
+  - deterministic runtime mesh proof assets currently include sphere fixtures
+    from `asset_sphere_8x4` through `asset_sphere_128x64`; the `64x32`
+    sphere is the current high-fidelity visual proof tier used for glossy
+    moving-light review
+  - imported mesh visual proof now flows from LineDrawing's imported STL
+    harness into RayTracing through the same runtime mesh loader and native
+    `3D` builder; the richer deterministic stepped-column fixture is the
+    current non-tetrahedron baseline
+  - external STL visual proof now includes a downloaded skull converted into a
+    file-backed runtime mesh sidecar and rendered through the native `3D` path:
+    - upright/glossy and corrected visible-blue skull proof runs have been
+      published to the CodeWork visualizer
+    - the corrected blue proof confirmed authored object material values with
+      `packed_color = 3041023`, `reflectivity = 0.25`, and `roughness = 0.34`
+      on a `31016` triangle imported skull mesh
+    - the earlier blue spiral proof is retained as provenance but superseded as
+      a material-color proof because it still read visually white
+  - packed runtime mesh payload support exists as a measured RayTracing-local
+    codec path, but JSON-backed `mesh_asset_runtime_v1` sidecars remain the
+    production scene contract
+  - worker-backed mesh renders can request native MP4 output through
+    `output.video.enabled/path/fps`; Linux MP4 encoding falls back across
+    available ffmpeg encoders instead of depending on `libx264`
+  - live visualizer publication has proven both:
+    - low-poly moving-light mesh-sphere runs through the normal worker publish
+      flow
+    - recovered high-fidelity `asset_sphere_64x32` glossy output manually
+      published after a Linux PC upload-timeout failure
     - `environment_brightness` remains the lower-level compatibility override
       for the legacy `0..255` brightness state
   - runtime-scene authoring environment persistence now carries:
@@ -480,6 +548,10 @@ Last updated: 2026-06-02
   - omitted `emissive_strength` now means `0.0`, not an implicitly lit object
   - layered object treatment should prefer `material_texture_stack` over
     widening more flat one-off object fields
+  - imported STL/runtime mesh material work should extend the existing
+    `material_texture_stack` contract for brushed metal, grime, roughness,
+    oil, rust, fog, and similar layered treatments instead of adding more
+    imported-mesh-specific material fields
 
 ## Structure
 - Required lanes: `docs/`, `src/`, `include/`, `tests/`, `build/`
