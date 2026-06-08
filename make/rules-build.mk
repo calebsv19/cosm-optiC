@@ -110,7 +110,7 @@ all: $(APP_TARGET)
 
 $(APP_TARGET): $(OBJ)
 	@mkdir -p $(dir $@)
-	$(CC) $(OBJ) -o $@ $(LDFLAGS)
+	$(CC) $(OBJ) -o $@ $(LDFLAGS) $(FISICS_MEMCHECK_LINK_LIBS)
 
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c

@@ -156,7 +156,7 @@ $(RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_BIN): $(RUNTIME_MESH_ASSET_HEADLESS_AUD
 		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) -I$(CORE_MESH_ASSET_DIR)/include \
 		-I$(CORE_IO_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_OBJECT_DIR)/include \
 		-I$(CORE_UNITS_DIR)/include -I$(CORE_BASE_DIR)/include \
-		-o $@ $(RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_SRCS) $(JSON_LIBS) -lm
+		-o $@ $(RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_SRCS) $(JSON_LIBS) -lm $(FISICS_MEMCHECK_LINK_LIBS)
 
 test-runtime-mesh-asset-headless-audit: $(RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_BIN)
 	@$(RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_BIN) || (echo "ray tracing runtime mesh asset headless audit test failed."; exit 1)

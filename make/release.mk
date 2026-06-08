@@ -62,6 +62,9 @@ release-sign: release-bundle-audit
 		for dylib in $$(/usr/bin/find "$(PACKAGE_FRAMEWORKS_DIR)" -type f -name '*.dylib' 2>/dev/null); do \
 			codesign --force --sign "$(RELEASE_CODESIGN_IDENTITY)" --timestamp=none "$$dylib"; \
 		done; \
+		if [ -x "$(PACKAGE_RESOURCES_DIR)/bin/ffmpeg" ]; then \
+			codesign --force --sign "$(RELEASE_CODESIGN_IDENTITY)" --timestamp=none "$(PACKAGE_RESOURCES_DIR)/bin/ffmpeg"; \
+		fi; \
 		codesign --force --sign "$(RELEASE_CODESIGN_IDENTITY)" --timestamp=none "$(PACKAGE_MACOS_DIR)/raytracing-bin"; \
 		codesign --force --sign "$(RELEASE_CODESIGN_IDENTITY)" --timestamp=none "$(PACKAGE_MACOS_DIR)/raytracing-launcher"; \
 		codesign --force --sign "$(RELEASE_CODESIGN_IDENTITY)" --timestamp=none "$(PACKAGE_APP_DIR)"; \
@@ -69,6 +72,9 @@ release-sign: release-bundle-audit
 		for dylib in $$(/usr/bin/find "$(PACKAGE_FRAMEWORKS_DIR)" -type f -name '*.dylib' 2>/dev/null); do \
 			codesign --force --sign "$(RELEASE_CODESIGN_IDENTITY)" --timestamp "$$dylib"; \
 		done; \
+		if [ -x "$(PACKAGE_RESOURCES_DIR)/bin/ffmpeg" ]; then \
+			codesign --force --sign "$(RELEASE_CODESIGN_IDENTITY)" --timestamp --options runtime "$(PACKAGE_RESOURCES_DIR)/bin/ffmpeg"; \
+		fi; \
 		codesign --force --sign "$(RELEASE_CODESIGN_IDENTITY)" --timestamp --options runtime "$(PACKAGE_MACOS_DIR)/raytracing-bin"; \
 		codesign --force --sign "$(RELEASE_CODESIGN_IDENTITY)" --timestamp --options runtime "$(PACKAGE_MACOS_DIR)/raytracing-launcher"; \
 		codesign --force --sign "$(RELEASE_CODESIGN_IDENTITY)" --timestamp --options runtime "$(PACKAGE_APP_DIR)"; \
@@ -100,7 +106,7 @@ release-verify: release-sign
 release-verify-signed: release-sign release-verify
 	@echo "release-verify-signed passed."
 
-release-notarize: release-sign
+release-notarize: release-verify-signed
 	@if [ -z "$(APPLE_NOTARY_PROFILE)" ]; then \
 		echo "APPLE_NOTARY_PROFILE is required for release-notarize"; \
 		exit 1; \
@@ -125,7 +131,7 @@ release-notarize: release-sign
 	fi
 	@echo "release-notarize passed."
 
-release-staple:
+release-staple: release-notarize
 	@attempt=1; \
 	while [ $$attempt -le "$(STAPLE_MAX_ATTEMPTS)" ]; do \
 		if xcrun stapler staple "$(PACKAGE_APP_DIR)"; then \
@@ -142,11 +148,12 @@ release-staple:
 	@xcrun stapler validate "$(PACKAGE_APP_DIR)"
 	@echo "release-staple passed."
 
-release-verify-notarized: release-verify
+release-verify-notarized: release-staple
+	@spctl --assess --type execute --verbose=2 "$(PACKAGE_APP_DIR)"
 	@xcrun stapler validate "$(PACKAGE_APP_DIR)"
 	@echo "release-verify-notarized passed."
 
-release-artifact: release-verify
+release-artifact: release-verify-notarized
 	@mkdir -p "$(RELEASE_DIR)"
 	@/usr/bin/ditto -c -k --sequesterRsrc --keepParent "$(PACKAGE_APP_DIR)" "$(RELEASE_APP_ZIP)"
 	@shasum -a 256 "$(RELEASE_APP_ZIP)" > "$(RELEASE_APP_ZIP).sha256"
@@ -158,8 +165,11 @@ release-artifact: release-verify
 		echo "channel=$(RELEASE_CHANNEL)"; \
 		echo "platform=$(RELEASE_PLATFORM)"; \
 		echo "arch=$(RELEASE_ARCH)"; \
+		echo "signed=1"; \
+		echo "notarized=1"; \
 		echo "artifact=$(RELEASE_APP_ZIP)"; \
 		echo "sha256_file=$(RELEASE_APP_ZIP).sha256"; \
+		echo "notary_json=$(RELEASE_DIR)/notary_submit.json"; \
 	} > "$(RELEASE_MANIFEST)"
 	@echo "release-artifact complete: $(RELEASE_APP_ZIP)"
 
