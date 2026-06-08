@@ -96,10 +96,10 @@ Local asset note:
   - `make -C ray_tracing release-artifact`
   - `make -C ray_tracing release-distribute APPLE_SIGN_IDENTITY="Developer ID Application: <Name> (<TEAMID>)" APPLE_NOTARY_PROFILE="<profile>"`
   - `make -C ray_tracing release-desktop-refresh`
-  - current 2026-06-06 notarized artifact set:
-    - `build/release/optiC-0.2.0-macOS-arm64-stable.zip`
-    - `build/release/optiC-0.2.0-macOS-arm64-stable.zip.sha256`
-    - `build/release/optiC-0.2.0-macOS-arm64-stable.manifest.txt`
+  - current 2026-06-08 notarized artifact set:
+    - `build/release/optiC-0.3.0-macOS-arm64-stable.zip`
+    - `build/release/optiC-0.3.0-macOS-arm64-stable.zip.sha256`
+    - `build/release/optiC-0.3.0-macOS-arm64-stable.manifest.txt`
     - `build/release/notary_submit.json`
 
 ## Launcher Runtime Contract
@@ -161,5 +161,5 @@ Bundled framework/runtime rules include:
 ## Current Limits
 
 - This doc describes the current local packaged-app and release-readiness workflow only.
-- The 2026-06-06 pass did produce a fresh notarized artifact set for the current `0.2.0` macOS arm64 worktree.
+- The 2026-06-08 pass produced a fresh notarized artifact set for the current `0.3.0` macOS arm64 worktree.
 - Current repo-state presence of `dist/`, Desktop, or `build/release/` artifacts should be checked separately from this doc before making artifact-presence claims.
