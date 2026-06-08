@@ -1,6 +1,6 @@
 # Ray Tracing Desktop Packaging
 
-Last updated: 2026-06-06
+Last updated: 2026-06-08
 
 ## Bundle Contract
 
@@ -100,6 +100,9 @@ Local asset note:
     - `build/release/optiC-0.3.0-macOS-arm64-stable.zip`
     - `build/release/optiC-0.3.0-macOS-arm64-stable.zip.sha256`
     - `build/release/optiC-0.3.0-macOS-arm64-stable.manifest.txt`
+    - `build/release/optiC-0.3.0-macOS-x86_64-stable.zip`
+    - `build/release/optiC-0.3.0-macOS-x86_64-stable.zip.sha256`
+    - `build/release/optiC-0.3.0-macOS-x86_64-stable.manifest.txt`
     - `build/release/notary_submit.json`
 
 ## Launcher Runtime Contract
@@ -161,5 +164,5 @@ Bundled framework/runtime rules include:
 ## Current Limits
 
 - This doc describes the current local packaged-app and release-readiness workflow only.
-- The 2026-06-08 pass produced a fresh notarized artifact set for the current `0.3.0` macOS arm64 worktree.
+- The 2026-06-08 pass produced a fresh notarized artifact set for the current `0.3.0` macOS arm64 and x86_64 worktrees.
 - Current repo-state presence of `dist/`, Desktop, or `build/release/` artifacts should be checked separately from this doc before making artifact-presence claims.
