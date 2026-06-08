@@ -53,6 +53,19 @@ static bool runtime_emission_transparency_3d_can_skip_emission_support(
     return !(payload->emissive > 1e-6) && !(payload->transparency > 1e-6);
 }
 
+static bool runtime_emission_transparency_3d_can_skip_transparency_support(
+    const RuntimeScene3D* scene,
+    const RuntimeMaterialPayload3D* payload) {
+    if (!scene || !payload || !payload->valid) return false;
+    if (!scene->capabilities.valid) return false;
+    if (!scene->capabilities.canSkipTransparencySupport ||
+        scene->capabilities.hasTransparentSurfaces ||
+        scene->capabilities.hasTransmissionSurfaces) {
+        return false;
+    }
+    return !(payload->transparency > 1e-6);
+}
+
 static double runtime_emission_transparency_3d_first_hit_emissive(
     const RuntimeScene3D* scene,
     const HitInfo3D* hit,
@@ -377,12 +390,15 @@ static bool runtime_emission_transparency_3d_shade_primary_hit_recursive(
     result.radianceR = result.directRadianceR + result.bounceRadianceR;
     result.radianceG = result.directRadianceG + result.bounceRadianceG;
     result.radianceB = result.directRadianceB + result.bounceRadianceB;
-    runtime_emission_transparency_3d_apply_transparency(scene,
-                                                        &result.hitInfo,
-                                                        &result.payload,
-                                                        path_state,
-                                                        sampling,
-                                                        &result);
+    if (!runtime_emission_transparency_3d_can_skip_transparency_support(scene,
+                                                                        &result.payload)) {
+        runtime_emission_transparency_3d_apply_transparency(scene,
+                                                            &result.hitInfo,
+                                                            &result.payload,
+                                                            path_state,
+                                                            sampling,
+                                                            &result);
+    }
     *out_result = result;
     return true;
 }

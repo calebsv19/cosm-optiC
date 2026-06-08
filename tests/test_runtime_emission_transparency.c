@@ -40,6 +40,7 @@ static bool runtime_emission_transparency_build_single_surface_scene(
     sceneSettings.objectCount = 1;
     sceneSettings.sceneObjects[0].material_id = material_id;
     sceneSettings.sceneObjects[0].color = 0xFFFFFF;
+    sceneSettings.sceneObjects[0].alpha = 1.0;
     sceneSettings.sceneObjects[0].emissiveStrength = emissive_strength;
     animSettings.lightIntensity = 10.0;
     animSettings.forwardDecay = 10.0;
@@ -255,6 +256,8 @@ static int test_runtime_emission_transparency_3d_no_emissive_capability_skips_su
                 !scene.capabilities.hasEmissiveSurfaces);
     assert_true("runtime_emission_transparency_no_emissive_caps_skip_support",
                 scene.capabilities.canSkipEmissionSupport);
+    assert_true("runtime_emission_transparency_no_emissive_caps_skip_transparency",
+                scene.capabilities.canSkipTransparencySupport);
     primary_hit.hit = true;
     primary_hit.primaryRay = RuntimeRay3D_Make(vec3(0.0, 0.0, 0.0),
                                                vec3(0.0, -1.0, 0.0));
@@ -294,6 +297,56 @@ static int test_runtime_emission_transparency_3d_no_emissive_capability_skips_su
                 valid_caps_result.secondaryRayCount <= invalid_caps_result.secondaryRayCount);
     (void)invalid_caps_stats;
     (void)valid_caps_stats;
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_emission_transparency_3d_transparent_capability_keeps_support(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    HitInfo3D hit = {0};
+    RuntimePrimaryHit3DResult primary_hit = {0};
+    RuntimeEmissionTransparency3DResult result = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    runtime_emission_transparency_reset_authoring_state();
+    ok = runtime_emission_transparency_build_single_surface_scene(&scene,
+                                                                  &hit,
+                                                                  MATERIAL_PRESET_TRANSPARENT,
+                                                                  0.0);
+    assert_true("runtime_emission_transparency_transparent_caps_fixture_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    RuntimeScene3D_RefreshCapabilities(&scene);
+    assert_true("runtime_emission_transparency_transparent_caps_valid",
+                scene.capabilities.valid);
+    assert_true("runtime_emission_transparency_transparent_caps_has_transparency",
+                scene.capabilities.hasTransparentSurfaces);
+    assert_true("runtime_emission_transparency_transparent_caps_no_skip",
+                !scene.capabilities.canSkipTransparencySupport);
+    primary_hit.hit = true;
+    primary_hit.primaryRay = RuntimeRay3D_Make(vec3(0.0, 0.0, 0.0),
+                                               vec3(0.0, -1.0, 0.0));
+    primary_hit.primaryTransmittance = RuntimeVisibility3D_UnitTransmittance();
+    primary_hit.hitInfo = hit;
+
+    ok = RuntimeEmissionTransparency3D_ShadePrimaryHit(&scene,
+                                                       &primary_hit,
+                                                       NULL,
+                                                       &result);
+    assert_true("runtime_emission_transparency_transparent_caps_shade_ok", ok);
+    assert_true("runtime_emission_transparency_transparent_caps_payload_transparent",
+                result.payload.transparency > 0.5);
 
     RuntimeScene3D_Free(&scene);
     sceneSettings = saved_scene;
@@ -1273,6 +1326,7 @@ int run_test_runtime_emission_transparency_tests(void) {
     test_runtime_emission_transparency_3d_nested_transparent_layers_do_not_consume_bounce_depth();
     test_runtime_emission_transparency_3d_temporal_skips_stable_emitters();
     test_runtime_emission_transparency_3d_no_emissive_capability_skips_support();
+    test_runtime_emission_transparency_3d_transparent_capability_keeps_support();
     test_runtime_emission_transparency_3d_emissive_capability_keeps_support();
     return test_support_failures() - before;
 }

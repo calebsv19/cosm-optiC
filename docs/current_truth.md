@@ -99,8 +99,10 @@ Last updated: 2026-06-05
   live volume state show no lighting-affecting density. The cached primary-hit
   emission/transparency path also skips mesh-emission support only when
   capabilities are valid, the scene has no emissive surfaces, and the current
-  payload is opaque/non-emissive; `ShadeHit`/`ShadePixel` compatibility paths and
-  transparent or unresolved scenes stay on the full support path.
+  payload is opaque/non-emissive; the same cached entrypoint can bypass
+  transparency support only when valid capabilities and the current payload prove
+  the scene is opaque/non-transmissive. `ShadeHit`/`ShadePixel` compatibility
+  paths and transparent or unresolved scenes stay on the full support path.
 - Native `3D` integrator dispatch now shares one primary camera-ray geometry
   trace per pixel across visible-emitter resolution and the selected integrator;
   hit-based entrypoints consume the cached primary hit/transmittance/material
