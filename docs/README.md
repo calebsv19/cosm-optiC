@@ -6,7 +6,7 @@ Public identity:
 - packaged desktop product: `optiC`
 - repository/program key: `ray_tracing`
 
-Last audited: 2026-06-02.
+Last audited: 2026-06-07.
 
 Current public focus:
 - dual-toolchain compiler-units rollout now starts at the runtime-scene import
@@ -35,6 +35,10 @@ Current public focus:
 - hardened worker-backed frame-range continuation workflow:
   seed -> `start_stage = ray_tracing` continuation -> optional publish
   backfill -> grouped visualizer inspection
+- worker-backed RayTracing chunks can now preserve one shared animation
+  sampling window across separate jobs through
+  `--ray-sampling-frame-offset` / `--ray-sampling-frame-count` and
+  `bin/plan_ray_tracing_frame_chunks.py`
 - tiny trio worker proofs now also cover preferred-home-server routing with VPS
   fallback for cheap validation runs
 - menu/editor control-surface truth for native `3D` scene and atmosphere selection
@@ -51,10 +55,14 @@ Current public focus:
   request schema and preflight CLI command.
 - `docs/headless_continuation_visualizer_workflow.md`: operator workflow for
   seed render -> RayTracing-only continuation -> cancel/publish-backfill ->
-  visualizer grouping.
+  visualizer grouping, including shared sampling-window chunks for continuous
+  camera/light motion across separate worker jobs.
 - `docs/render_review_sets/README.md`: local repo-doc review sets from detached
   renders. These are not the live visualizer website lane.
 - `docs/desktop_packaging.md`: `.app` packaging commands, launcher diagnostics, and release-readiness workflow.
+- `docs/memory_check_audit.md`: default-off fisiCs memory-check audit
+  command, report interpretation, and latest clean RayTracing BVH harness
+  summary.
 
 Live visualizer website publication is a separate pipeline:
 - stage a `visualizer-run/v1` drop under
@@ -82,6 +90,7 @@ Current verification contract:
 - `make -C ray_tracing dump-sema-runtime-ray-3d`
 - `make -C ray_tracing clang-build`
 - `make -C ray_tracing fisics-build`
+- `make -C ray_tracing memory-check-audit`
 - `make -C ray_tracing clean && make -C ray_tracing`
 - `make -C ray_tracing test-stable`
 - `make -C ray_tracing run-headless-smoke`

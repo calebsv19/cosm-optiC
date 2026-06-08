@@ -1,6 +1,6 @@
 # RayTracing Headless Continuation And Visualizer Workflow
 
-Last updated: 2026-05-25
+Last updated: 2026-06-06
 
 Use this note when the goal is to run a cheap seed render first, continue later
 frame ranges against the same PhysicsSim output, and keep the resulting runs
@@ -20,8 +20,10 @@ This workflow is for the current proven trio worker lane:
 
 1. seed one low-cost frame with the full trio worker
 2. continue later frame ranges with `start_stage = ray_tracing`
-3. publish or backfill any missing visualizer drops
-4. inspect the grouped sequence under the `ray-tracing` program bucket
+3. preserve one shared animation sampling window when chunks should form a
+   continuous camera/light motion
+4. publish or backfill any missing visualizer drops
+5. inspect the grouped sequence under the `ray-tracing` program bucket
 
 It is not the full-physics continuation lane. `physics_sim` resume semantics
 are still a later slice; the proven continuation path today is RayTracing-only
@@ -85,6 +87,70 @@ Expected continuation behavior:
 - `requested_frame_range` and `effective_frame_range` reflect the requested
   continuation batch
 - `published_frames` reflect only the new continuation frames from that run
+
+### 2A. Shared Sampling Window Chunks
+
+Use a shared RayTracing sampling window when separate worker jobs should render
+one continuous animation timeline. Without it, each chunk samples normalized
+time locally across its own `frame_count`, so multiple jobs can replay the same
+light/camera path instead of covering different parts of the full motion.
+
+Request shape:
+
+- `render.start_frame`: first output frame for this job
+- `render.frame_count`: number of frames this job renders
+- `sampling.frame_offset`: offset into the shared animation timeline
+- `sampling.frame_count`: total animation frame count for the whole sequence
+
+Mac submit helper flags:
+
+- `--ray-start-frame`
+- `--ray-frame-count`
+- `--ray-sampling-frame-offset`
+- `--ray-sampling-frame-count`
+
+Plan a 32-frame render as eight 4-frame jobs:
+
+```bash
+python3 bin/plan_ray_tracing_frame_chunks.py \
+  --total-frame-count 32 \
+  --chunk-size 4 \
+  --format table
+```
+
+Plan a preview-first flow: frame `0`, then frames `1..3`, then 4-frame chunks:
+
+```bash
+python3 bin/plan_ray_tracing_frame_chunks.py \
+  --total-frame-count 32 \
+  --batch-pattern 1,3,4 \
+  --repeat-last \
+  --format table
+```
+
+For a planned chunk with `ray_start_frame = 8`, `ray_frame_count = 4`,
+`ray_sampling_frame_offset = 8`, and `ray_sampling_frame_count = 32`, the
+RayTracing-only continuation submit should carry:
+
+```bash
+python3 bin/run_ray_tracing_worker_continuation_flow.py continue \
+  --seed-run-id <seed_run_id> \
+  --ray-start-frame 8 \
+  --ray-frame-count 4 \
+  --ray-sampling-frame-offset 8 \
+  --ray-sampling-frame-count 32
+```
+
+The same flags are also accepted by:
+
+- `bin/build_codework_worker_submit_payload.py`
+- `bin/submit_codework_worker_job.py`
+- `bin/submit_codework_worker_job_and_exchange.py`
+- `bin/prepare_codework_worker_stage_requests.py`
+
+The helpers reject impossible windows where
+`ray_sampling_frame_offset + ray_frame_count` exceeds
+`ray_sampling_frame_count`.
 
 ### 3. Read Back Progress And Completion
 
@@ -155,6 +221,10 @@ grouping issue, not as proof that the render itself failed.
 
 - prefer `bin/run_ray_tracing_worker_continuation_flow.py proof` when checking
   that the whole seed/continue path still works after tooling changes
+- use `bin/plan_ray_tracing_frame_chunks.py` before long multi-job RayTracing
+  sequences so chunk boundaries and sampling offsets are explicit
+- use `--ray-sampling-frame-offset` plus `--ray-sampling-frame-count` whenever
+  chunked jobs should cover one continuous camera/light path
 - when the goal is only worker-fleet validation, prefer a tiny
   `bin/submit_codework_worker_job.py` `live_debug` run instead of a longer
   continuation proof so render duration does not become the dominant variable

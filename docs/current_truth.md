@@ -84,10 +84,29 @@ Last updated: 2026-06-05
   - `Material`
   - `Emission / Transparency`
   - `Disney`
-- The shipped native `3D` direct-light tier now averages a small deterministic
-  finite-radius light sample set, so penumbra and transparent-shadow softening
-  track authored `light.radius` instead of behaving like a strict point-light
-  shortcut.
+- The shipped native `3D` direct-light tier samples area lights from a
+  16-slot hit-seeded stratified finite-radius disk population. Shadow checks
+  start with 4 samples and stop there for clearly fully visible or fully blocked
+  windows, escalating to 8 only for mixed, penumbra, or partial-transparency
+  cases. Samples whose maximum direct contribution is below the radiance epsilon
+  skip shadow visibility entirely, so softness tracks authored `light.radius`
+  without stable five-point bands or paying the full sample cost everywhere.
+- Native `3D` scenes now derive runtime capabilities from geometry, resolved
+  material payloads, and attached volume state; legacy material flags are
+  mirrored from the same refresh for compatibility. Hit-to-light visibility uses
+  those capabilities for the opaque/no-volume shadow fast path, while primary
+  volume scatter can skip camera-ray scatter setup when both capabilities and
+  live volume state show no lighting-affecting density. The cached primary-hit
+  emission/transparency path also skips mesh-emission support only when
+  capabilities are valid, the scene has no emissive surfaces, and the current
+  payload is opaque/non-emissive; `ShadeHit`/`ShadePixel` compatibility paths and
+  transparent or unresolved scenes stay on the full support path.
+- Native `3D` integrator dispatch now shares one primary camera-ray geometry
+  trace per pixel across visible-emitter resolution and the selected integrator;
+  hit-based entrypoints consume the cached primary hit/transmittance/material
+  payload so the renderer no longer runs the emitter resolver, `ShadePixel`
+  primary trace, and repeated first-hit material/texture resolution as separate
+  scene work for the same pixel.
 - Native `3D` output is RGB-aware through the full shipped ladder.
 - Runtime UI text measurement now routes through one guarded font contract:
   - only fonts still owned by the live runtime font cache are considered usable
