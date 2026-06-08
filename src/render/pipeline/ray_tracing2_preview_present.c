@@ -8,6 +8,7 @@
 #include "render/integrators/hybrid/integrator_indirect.h"
 #include "render/integrators/hybrid/integrator_tonemap.h"
 #include "render/ray_tracing2_preview.h"
+#include "render/runtime_native_3d_progress_hud.h"
 #include "render/runtime_native_3d_adaptive_sampling.h"
 #include "render/runtime_native_3d_preview_reconstruction.h"
 #include "render/runtime_native_3d_resolution.h"
@@ -263,6 +264,7 @@ static bool PresentNative3DTilePreviewFrame(SDL_Renderer* renderer,
         return false;
     }
     ts_session_render(timer_hud_session());
+    RuntimeNative3DProgressHUD_Draw(renderer);
     render_end_frame();
     if (render_device_lost()) {
         return false;
@@ -442,6 +444,16 @@ typedef struct Native3DPreviewTileProgressContext {
     IntegratorContext previewCtx;
 } Native3DPreviewTileProgressContext;
 
+static void PresentNative3DPreviewTemporalProgress(int started_subpasses,
+                                                   int completed_subpasses,
+                                                   int total_subpasses,
+                                                   void* user_data) {
+    (void)user_data;
+    RuntimeNative3DProgressHUD_UpdateTemporal(started_subpasses,
+                                              completed_subpasses,
+                                              total_subpasses);
+}
+
 static bool PresentNative3DPreviewTileProgress(
     const RuntimeNative3DTileSchedulerProgress* progress,
     void* user_data) {
@@ -454,6 +466,7 @@ static bool PresentNative3DPreviewTileProgress(
     if (!progress || !ctx || !ctx->renderer || !ctx->hostBuffer || !ctx->renderBuffer) {
         return false;
     }
+    RuntimeNative3DProgressHUD_UpdateTileProgress(progress);
     if (!ResolveNative3DHostDirtyTileUnion(progress->dirtyTiles,
                                            progress->dirtyTileCount,
                                            ctx->renderWidth,
@@ -744,7 +757,7 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
             integrator_id,
             &frame,
             temporal_frames,
-            NULL,
+            PresentNative3DPreviewTemporalProgress,
             NULL,
             (present_progress && renderer) ? PresentNative3DPreviewTileProgress : NULL,
             (present_progress && renderer) ? &progress_ctx : NULL,

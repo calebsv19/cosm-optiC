@@ -412,6 +412,8 @@ static bool runtime_native_3d_tile_scheduler_flush_progress_tiles(
     size_t dirty_count,
     int subpass_index,
     int temporal_frames,
+    size_t completed_tiles_in_subpass,
+    size_t total_tiles_in_subpass,
     RuntimeNative3DTileSchedulerProgressCallback tile_progress_callback,
     void* tile_progress_user_data) {
     RuntimeNative3DTileSchedulerProgress progress = {0};
@@ -422,8 +424,10 @@ static bool runtime_native_3d_tile_scheduler_flush_progress_tiles(
     progress.dirtyTiles = dirty_tiles;
     progress.dirtyTileCount = dirty_count;
     progress.startedSubpasses = subpass_index + 1;
-    progress.completedSubpasses = subpass_index + 1;
+    progress.completedSubpasses = subpass_index;
     progress.totalSubpasses = temporal_frames;
+    progress.completedTilesInSubpass = completed_tiles_in_subpass;
+    progress.totalTilesInSubpass = total_tiles_in_subpass;
     return tile_progress_callback(&progress, tile_progress_user_data);
 }
 
@@ -458,6 +462,7 @@ static bool runtime_native_3d_tile_scheduler_wait_for_subpass(
                                                     &job->inactiveTileCount);
         RuntimeNative3DRenderStats_Accumulate(&scheduler->stats, &job->subpassStats);
         if (tile_progress_callback && pixel_buffer && pixel_width > 0) {
+            const size_t completed_tiles_in_subpass = completions + 1u;
             if (!RuntimeNative3DRenderUnit_ResolveCurrentToPixels(&job->renderUnit,
                                                                   pixel_buffer,
                                                                   pixel_width)) {
@@ -470,6 +475,8 @@ static bool runtime_native_3d_tile_scheduler_wait_for_subpass(
                         dirty_count,
                         subpass_index,
                         temporal_frames,
+                        completed_tiles_in_subpass,
+                        expected_completions,
                         tile_progress_callback,
                         tile_progress_user_data)) {
                     return false;
@@ -484,6 +491,8 @@ static bool runtime_native_3d_tile_scheduler_wait_for_subpass(
                                                                    dirty_count,
                                                                    subpass_index,
                                                                    temporal_frames,
+                                                                   expected_completions,
+                                                                   expected_completions,
                                                                    tile_progress_callback,
                                                                    tile_progress_user_data)) {
             return false;

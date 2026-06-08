@@ -20,6 +20,7 @@
 #include "editor/bezier_editor.h"
 #include "path/path_system.h"
 #include "render/timer_hud_api.h"
+#include "render/runtime_native_3d_progress_hud.h"
 #include "render/ray_tracing_mode_backend.h"
 #include "camera/camera.h"
 #include "render/space_mode_adapter.h"
@@ -527,6 +528,7 @@ void RenderFrame(double lightX, double lightY, int* frameCounter, bool* running)
     if (timer_hud) {
         ts_session_render(timer_hud);
     }
+    RuntimeNative3DProgressHUD_Draw(renderer);
     render_end_frame();
     if (timer_hud) {
         ts_session_frame_end(timer_hud);

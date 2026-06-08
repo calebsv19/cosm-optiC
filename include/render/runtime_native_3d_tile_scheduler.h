@@ -13,6 +13,8 @@ typedef struct RuntimeNative3DTileSchedulerProgress {
     int startedSubpasses;
     int completedSubpasses;
     int totalSubpasses;
+    size_t completedTilesInSubpass;
+    size_t totalTilesInSubpass;
 } RuntimeNative3DTileSchedulerProgress;
 
 typedef bool (*RuntimeNative3DTileSchedulerProgressCallback)(

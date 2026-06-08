@@ -33,6 +33,7 @@
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_native_3d_denoise.h"
 #include "render/runtime_native_3d_feature_buffer.h"
+#include "render/runtime_native_3d_progress_hud.h"
 #include "render/runtime_native_3d_render.h"
 #include "render/runtime_native_3d_preview_reconstruction.h"
 #include "render/runtime_native_3d_resolution.h"
@@ -134,6 +135,16 @@ static void LogNative3DRenderStatsIfNeeded(RayTracing3DIntegratorId integrator_i
                stats->temporalSlowTileWidth,
                stats->temporalSlowTileHeight);
     }
+}
+
+static void UpdateNative3DProgressHUDTemporal(int started_subpasses,
+                                              int completed_subpasses,
+                                              int total_subpasses,
+                                              void* user_data) {
+    (void)user_data;
+    RuntimeNative3DProgressHUD_UpdateTemporal(started_subpasses,
+                                              completed_subpasses,
+                                              total_subpasses);
 }
 
 bool ExportCurrentNative3DFrameBMP(const char* filename) {
@@ -239,6 +250,8 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
     double camera_origin_x = viewCarrier.originX;
     double camera_origin_y = viewCarrier.originY;
     bool native3D = RayTracingModeBackend_IsNative3D(&route);
+
+    RuntimeNative3DProgressHUD_Reset();
 
     // Clamp camera to grid if fluid bounds are known.
     RayTracing2Fluid_ClampCameraToGrid();
@@ -346,6 +359,8 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
         RuntimeNative3DFillPixelBufferEnvironment(native3DPreviewBuffer,
                                                  nativePreviewByteCount /
                                                      (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES);
+        RuntimeNative3DProgressHUD_BeginFrame(route.integratorMode3D,
+                                              ResolveNative3DTemporalFrames(route.integratorMode3D));
 
         ts_session_start_timer(timer_hud_session(), "Buffer Calc");
         if (useTiles && tileGrid.tiles && tileGrid.count > 0) {
@@ -370,7 +385,7 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
                 route.tilePreviewEnabled,
                 &nativeStats);
         } else {
-            nativeRenderOk = RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
+            nativeRenderOk = RuntimeNative3DRenderToPixelBufferWithSamplingTemporalProgress(
                 native3DRenderBuffer,
                 route.integratorMode3D,
                 renderWidth,
@@ -380,15 +395,19 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
                 light.y,
                 &nativeSampling,
                 ResolveNative3DTemporalFrames(route.integratorMode3D),
+                UpdateNative3DProgressHUDTemporal,
+                NULL,
                 &nativeStats);
         }
         ts_session_stop_timer(timer_hud_session(), "Buffer Calc");
         if (!nativeRenderOk) {
+            RuntimeNative3DProgressHUD_Reset();
             memset(pixelBuffer, 0, pixelCount * sizeof(Uint8));
             RuntimeNative3DFillPixelBufferEnvironment(
                 native3DPreviewBuffer,
                 nativePreviewByteCount / (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES);
         } else {
+            RuntimeNative3DProgressHUD_CompleteFrame();
             LogNative3DRenderStatsIfNeeded(route.integratorMode3D, &nativeStats);
         }
 
