@@ -36,6 +36,24 @@ bool RuntimeMaterialResponse3D_ShadeHit(const RuntimeScene3D* scene,
                                         const RuntimeNative3DSamplingContext* sampling,
                                         RuntimeMaterialResponse3DResult* out_result);
 
+bool RuntimeMaterialResponse3D_ShadeHitWithPayload(const RuntimeScene3D* scene,
+                                                   const HitInfo3D* hit,
+                                                   const RuntimeMaterialPayload3D* payload,
+                                                   const RuntimeNative3DSamplingContext* sampling,
+                                                   RuntimeMaterialResponse3DResult* out_result);
+
+bool RuntimeMaterialResponse3D_ShadePrimaryHit(const RuntimeScene3D* scene,
+                                               const RuntimePrimaryHit3DResult* primary_hit,
+                                               const RuntimeNative3DSamplingContext* sampling,
+                                               RuntimeMaterialResponse3DResult* out_result);
+
+bool RuntimeMaterialResponse3D_ShadePrimaryHitWithPayload(
+    const RuntimeScene3D* scene,
+    const RuntimePrimaryHit3DResult* primary_hit,
+    const RuntimeMaterialPayload3D* payload,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeMaterialResponse3DResult* out_result);
+
 bool RuntimeMaterialResponse3D_ShadePixel(const RuntimeScene3D* scene,
                                           const RuntimeCameraProjector3D* projector,
                                           double pixel_x,

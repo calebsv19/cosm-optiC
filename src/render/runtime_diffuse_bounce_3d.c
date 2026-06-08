@@ -202,25 +202,42 @@ static Vec3 runtime_diffuse_bounce_3d_sample_direction(const HitInfo3D* hit,
 
 static void runtime_diffuse_bounce_3d_resolve_surface_reflectance(
     const HitInfo3D* hit,
+    const RuntimeMaterialPayload3D* resolved_payload,
     double* out_r,
     double* out_g,
     double* out_b) {
     RuntimeMaterialPayload3D payload = {0};
+    const RuntimeMaterialPayload3D* reflectance_payload = resolved_payload;
     double reflectance_scale = 1.0;
     double r = 1.0;
     double g = 1.0;
     double b = 1.0;
 
-    if (hit &&
+    if ((!reflectance_payload || !reflectance_payload->valid) &&
+        hit &&
         RuntimeMaterialPayload3D_ResolveFromHit(hit, &payload) &&
         payload.valid) {
-        reflectance_scale = runtime_diffuse_bounce_3d_clamp(
-            payload.bsdf.albedo * fmax(payload.bsdf.diffuseWeight, 0.15),
-            0.05,
-            1.0);
-        r = runtime_diffuse_bounce_3d_clamp(payload.baseColorR * reflectance_scale, 0.0, 1.0);
-        g = runtime_diffuse_bounce_3d_clamp(payload.baseColorG * reflectance_scale, 0.0, 1.0);
-        b = runtime_diffuse_bounce_3d_clamp(payload.baseColorB * reflectance_scale, 0.0, 1.0);
+        reflectance_payload = &payload;
+    }
+    if (reflectance_payload && reflectance_payload->valid) {
+        reflectance_scale =
+            runtime_diffuse_bounce_3d_clamp(
+                reflectance_payload->bsdf.albedo *
+                    fmax(reflectance_payload->bsdf.diffuseWeight, 0.15),
+                0.05,
+                1.0);
+        r = runtime_diffuse_bounce_3d_clamp(reflectance_payload->baseColorR *
+                                                reflectance_scale,
+                                            0.0,
+                                            1.0);
+        g = runtime_diffuse_bounce_3d_clamp(reflectance_payload->baseColorG *
+                                                reflectance_scale,
+                                            0.0,
+                                            1.0);
+        b = runtime_diffuse_bounce_3d_clamp(reflectance_payload->baseColorB *
+                                                reflectance_scale,
+                                            0.0,
+                                            1.0);
     }
 
     if (out_r) *out_r = r;
@@ -252,6 +269,7 @@ static double runtime_diffuse_bounce_3d_resolve_roulette_sample(
 static void runtime_diffuse_bounce_3d_trace_path(
     const RuntimeScene3D* scene,
     const HitInfo3D* root_hit,
+    const RuntimeMaterialPayload3D* root_payload,
     const RuntimeNative3DSamplingContext* sampling,
     int sample_count,
     int sample_index,
@@ -314,10 +332,12 @@ static void runtime_diffuse_bounce_3d_trace_path(
             break;
         }
 
-        runtime_diffuse_bounce_3d_resolve_surface_reflectance(&current_hit,
-                                                              &parent_r,
-                                                              &parent_g,
-                                                              &parent_b);
+        runtime_diffuse_bounce_3d_resolve_surface_reflectance(
+            &current_hit,
+            depth == 1 ? root_payload : NULL,
+            &parent_r,
+            &parent_g,
+            &parent_b);
         segment_distance = vec3_length(vec3_sub(next_hit.position, current_hit.position));
         secondary_facing = fabs(vec3_dot(next_hit.normal, vec3_scale(sample_dir, -1.0)));
         hop_scale = secondary_facing *
@@ -382,6 +402,14 @@ bool RuntimeDiffuseBounce3D_ShadeHit(const RuntimeScene3D* scene,
                                      const HitInfo3D* hit,
                                      const RuntimeNative3DSamplingContext* sampling,
                                      RuntimeDiffuseBounce3DResult* out_result) {
+    return RuntimeDiffuseBounce3D_ShadeHitWithPayload(scene, hit, NULL, sampling, out_result);
+}
+
+bool RuntimeDiffuseBounce3D_ShadeHitWithPayload(const RuntimeScene3D* scene,
+                                                const HitInfo3D* hit,
+                                                const RuntimeMaterialPayload3D* payload,
+                                                const RuntimeNative3DSamplingContext* sampling,
+                                                RuntimeDiffuseBounce3DResult* out_result) {
     RuntimeDiffuseBounce3DResult result = {0};
     RuntimeDirectLight3DResult direct_result = {0};
     double accumulated_r = 0.0;
@@ -393,7 +421,7 @@ bool RuntimeDiffuseBounce3D_ShadeHit(const RuntimeScene3D* scene,
     if (!scene || !hit || !out_result) return false;
     if (!scene->hasLight) return false;
 
-    if (!RuntimeDirectLight3D_ShadeHit(scene, hit, sampling, &direct_result)) {
+    if (!RuntimeDirectLight3D_ShadeHitWithPayload(scene, hit, payload, sampling, &direct_result)) {
         return false;
     }
 
@@ -410,6 +438,7 @@ bool RuntimeDiffuseBounce3D_ShadeHit(const RuntimeScene3D* scene,
     for (int i = 0; i < sample_count; ++i) {
         runtime_diffuse_bounce_3d_trace_path(scene,
                                              hit,
+                                             payload,
                                              sampling,
                                              sample_count,
                                              i,
@@ -468,14 +497,47 @@ bool RuntimeDiffuseBounce3D_ShadePixel(const RuntimeScene3D* scene,
         return false;
     }
 
-    if (!RuntimeDiffuseBounce3D_ShadeHit(scene, &primary_hit.hitInfo, sampling, &result)) {
-        result.primaryRay = primary_hit.primaryRay;
+    return RuntimeDiffuseBounce3D_ShadePrimaryHit(scene, &primary_hit, sampling, out_result);
+}
+
+bool RuntimeDiffuseBounce3D_ShadePrimaryHit(const RuntimeScene3D* scene,
+                                            const RuntimePrimaryHit3DResult* primary_hit,
+                                            const RuntimeNative3DSamplingContext* sampling,
+                                            RuntimeDiffuseBounce3DResult* out_result) {
+    return RuntimeDiffuseBounce3D_ShadePrimaryHitWithPayload(scene,
+                                                             primary_hit,
+                                                             NULL,
+                                                             sampling,
+                                                             out_result);
+}
+
+bool RuntimeDiffuseBounce3D_ShadePrimaryHitWithPayload(
+    const RuntimeScene3D* scene,
+    const RuntimePrimaryHit3DResult* primary_hit,
+    const RuntimeMaterialPayload3D* payload,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeDiffuseBounce3DResult* out_result) {
+    RuntimeDiffuseBounce3DResult result = {0};
+
+    if (!scene || !primary_hit || !out_result) return false;
+    if (!primary_hit->hit) {
+        result.primaryRay = primary_hit->primaryRay;
         *out_result = result;
         return false;
     }
 
-    runtime_diffuse_bounce_3d_apply_transmittance(&primary_hit.primaryTransmittance, &result);
-    result.primaryRay = primary_hit.primaryRay;
+    if (!RuntimeDiffuseBounce3D_ShadeHitWithPayload(scene,
+                                                    &primary_hit->hitInfo,
+                                                    payload,
+                                                    sampling,
+                                                    &result)) {
+        result.primaryRay = primary_hit->primaryRay;
+        *out_result = result;
+        return false;
+    }
+
+    runtime_diffuse_bounce_3d_apply_transmittance(&primary_hit->primaryTransmittance, &result);
+    result.primaryRay = primary_hit->primaryRay;
     *out_result = result;
     return true;
 }

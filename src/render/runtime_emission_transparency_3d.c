@@ -27,6 +27,31 @@ static bool runtime_emission_transparency_3d_shade_pixel_recursive(
     const RuntimeNative3DSamplingContext* sampling,
     RuntimeEmissionTransparency3DResult* out_result);
 
+static void runtime_emission_transparency_3d_copy_material_result(
+    const RuntimeMaterialResponse3DResult* material_result,
+    const RuntimeMaterialPayload3D* payload,
+    RuntimeEmissionTransparency3DResult* out_result);
+
+static void runtime_emission_transparency_3d_apply_transparency(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeMaterialPayload3D* payload,
+    RuntimeEmissionTransparency3DPathState path_state,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeEmissionTransparency3DResult* io_result);
+
+static bool runtime_emission_transparency_3d_can_skip_emission_support(
+    const RuntimeScene3D* scene,
+    const RuntimeMaterialPayload3D* payload) {
+    if (!scene || !payload || !payload->valid) return false;
+    if (!scene->capabilities.valid) return false;
+    if (!scene->capabilities.canSkipEmissionSupport ||
+        scene->capabilities.hasEmissiveSurfaces ||
+        !scene->capabilities.canSkipTransparencySupport) {
+        return false;
+    }
+    return !(payload->emissive > 1e-6) && !(payload->transparency > 1e-6);
+}
 
 static double runtime_emission_transparency_3d_first_hit_emissive(
     const RuntimeScene3D* scene,
@@ -255,6 +280,109 @@ static bool runtime_emission_transparency_3d_trace_support(
     if (out_source_segment_distance) {
         *out_source_segment_distance = fmax(source_segment_distance, 1.0);
     }
+    *out_result = result;
+    return true;
+}
+
+static bool runtime_emission_transparency_3d_shade_primary_hit_recursive(
+    const RuntimeScene3D* scene,
+    const RuntimePrimaryHit3DResult* primary_hit,
+    const RuntimeMaterialPayload3D* resolved_payload,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeEmissionTransparency3DResult* out_result) {
+    RuntimeEmissionTransparency3DResult result = {0};
+    RuntimeMaterialResponse3DResult material_result = {0};
+    RuntimeEmissionTransparency3DPathState path_state = {0};
+    Vec3 view_dir = vec3(0.0, 0.0, 0.0);
+    double emissive_direct = 0.0;
+    double emissive_bounce = 0.0;
+    double emissive_direct_r = 0.0;
+    double emissive_direct_g = 0.0;
+    double emissive_direct_b = 0.0;
+    double emissive_bounce_r = 0.0;
+    double emissive_bounce_g = 0.0;
+    double emissive_bounce_b = 0.0;
+    RuntimeEmissiveDirect3DResult emissive_direct_result = {0};
+    int secondary_sample_count = 0;
+
+    if (!scene || !primary_hit || !out_result) return false;
+    if (!RuntimeMaterialResponse3D_ShadePrimaryHitWithPayload(scene,
+                                                              primary_hit,
+                                                              resolved_payload,
+                                                              sampling,
+                                                              &material_result)) {
+        result.primaryRay = primary_hit->primaryRay;
+        *out_result = result;
+        return false;
+    }
+    if (resolved_payload && resolved_payload->valid) {
+        result.payload = *resolved_payload;
+    } else if (!RuntimeMaterialPayload3D_ResolveFromHit(&material_result.hitInfo, &result.payload)) {
+        result.primaryRay = material_result.primaryRay;
+        *out_result = result;
+        return false;
+    }
+
+    runtime_emission_transparency_3d_copy_material_result(&material_result,
+                                                          &result.payload,
+                                                          &result);
+    path_state.incidentDir = material_result.primaryRay.direction;
+    path_state.specularDepth = 0;
+    path_state.transmissionDepth = 0;
+    if (!runtime_emission_transparency_3d_can_skip_emission_support(scene, &result.payload)) {
+        secondary_sample_count = runtime_emission_transparency_3d_resolve_secondary_sample_count();
+        result.secondaryRayCount = secondary_sample_count;
+        view_dir = vec3_scale(material_result.primaryRay.direction, -1.0);
+        emissive_direct = runtime_emission_transparency_3d_first_hit_emissive(scene,
+                                                                              &result.hitInfo,
+                                                                              &result.payload,
+                                                                              view_dir,
+                                                                              &emissive_direct_r,
+                                                                              &emissive_direct_g,
+                                                                              &emissive_direct_b);
+        emissive_bounce = runtime_emission_transparency_3d_secondary_emissive(scene,
+                                                                               &result.hitInfo,
+                                                                               sampling,
+                                                                               &result,
+                                                                               &emissive_bounce_r,
+                                                                               &emissive_bounce_g,
+                                                                               &emissive_bounce_b);
+        if (RuntimeEmissiveDirect3D_ShadeHit(scene,
+                                             &result.hitInfo,
+                                             sampling,
+                                             &emissive_direct_result)) {
+            emissive_direct += emissive_direct_result.directRadiance;
+            emissive_direct_r += emissive_direct_result.directRadianceR;
+            emissive_direct_g += emissive_direct_result.directRadianceG;
+            emissive_direct_b += emissive_direct_result.directRadianceB;
+        }
+    }
+    result.emissiveDirectRadiance = emissive_direct;
+    result.emissiveDirectRadianceR = emissive_direct_r;
+    result.emissiveDirectRadianceG = emissive_direct_g;
+    result.emissiveDirectRadianceB = emissive_direct_b;
+    result.emissiveBounceRadiance = emissive_bounce;
+    result.emissiveBounceRadianceR = emissive_bounce_r;
+    result.emissiveBounceRadianceG = emissive_bounce_g;
+    result.emissiveBounceRadianceB = emissive_bounce_b;
+    result.directRadiance += emissive_direct;
+    result.directRadianceR += emissive_direct_r;
+    result.directRadianceG += emissive_direct_g;
+    result.directRadianceB += emissive_direct_b;
+    result.bounceRadiance += emissive_bounce;
+    result.bounceRadianceR += emissive_bounce_r;
+    result.bounceRadianceG += emissive_bounce_g;
+    result.bounceRadianceB += emissive_bounce_b;
+    result.radiance = result.directRadiance + result.bounceRadiance;
+    result.radianceR = result.directRadianceR + result.bounceRadianceR;
+    result.radianceG = result.directRadianceG + result.bounceRadianceG;
+    result.radianceB = result.directRadianceB + result.bounceRadianceB;
+    runtime_emission_transparency_3d_apply_transparency(scene,
+                                                        &result.hitInfo,
+                                                        &result.payload,
+                                                        path_state,
+                                                        sampling,
+                                                        &result);
     *out_result = result;
     return true;
 }
@@ -718,28 +846,30 @@ static bool runtime_emission_transparency_3d_shade_hit_recursive(
     runtime_emission_transparency_3d_copy_material_result(&material_result,
                                                           &result.payload,
                                                           &result);
-    secondary_sample_count = runtime_emission_transparency_3d_resolve_secondary_sample_count();
-    result.secondaryRayCount = secondary_sample_count;
-    view_dir = vec3_scale(path_state.incidentDir, -1.0);
-    emissive_direct = runtime_emission_transparency_3d_first_hit_emissive(scene,
-                                                                          hit,
-                                                                          &result.payload,
-                                                                          view_dir,
-                                                                          &emissive_direct_r,
-                                                                          &emissive_direct_g,
-                                                                          &emissive_direct_b);
-    emissive_bounce = runtime_emission_transparency_3d_secondary_emissive(scene,
-                                                                          hit,
-                                                                          sampling,
-                                                                          &result,
-                                                                          &emissive_bounce_r,
-                                                                          &emissive_bounce_g,
-                                                                          &emissive_bounce_b);
-    if (RuntimeEmissiveDirect3D_ShadeHit(scene, hit, sampling, &emissive_direct_result)) {
-        emissive_direct += emissive_direct_result.directRadiance;
-        emissive_direct_r += emissive_direct_result.directRadianceR;
-        emissive_direct_g += emissive_direct_result.directRadianceG;
-        emissive_direct_b += emissive_direct_result.directRadianceB;
+    if (!runtime_emission_transparency_3d_can_skip_emission_support(scene, &result.payload)) {
+        secondary_sample_count = runtime_emission_transparency_3d_resolve_secondary_sample_count();
+        result.secondaryRayCount = secondary_sample_count;
+        view_dir = vec3_scale(path_state.incidentDir, -1.0);
+        emissive_direct = runtime_emission_transparency_3d_first_hit_emissive(scene,
+                                                                              hit,
+                                                                              &result.payload,
+                                                                              view_dir,
+                                                                              &emissive_direct_r,
+                                                                              &emissive_direct_g,
+                                                                              &emissive_direct_b);
+        emissive_bounce = runtime_emission_transparency_3d_secondary_emissive(scene,
+                                                                              hit,
+                                                                              sampling,
+                                                                              &result,
+                                                                              &emissive_bounce_r,
+                                                                              &emissive_bounce_g,
+                                                                              &emissive_bounce_b);
+        if (RuntimeEmissiveDirect3D_ShadeHit(scene, hit, sampling, &emissive_direct_result)) {
+            emissive_direct += emissive_direct_result.directRadiance;
+            emissive_direct_r += emissive_direct_result.directRadianceR;
+            emissive_direct_g += emissive_direct_result.directRadianceG;
+            emissive_direct_b += emissive_direct_result.directRadianceB;
+        }
     }
     result.emissiveDirectRadiance = emissive_direct;
     result.emissiveDirectRadianceR = emissive_direct_r;
@@ -816,31 +946,33 @@ static bool runtime_emission_transparency_3d_shade_pixel_recursive(
     path_state.incidentDir = material_result.primaryRay.direction;
     path_state.specularDepth = 0;
     path_state.transmissionDepth = 0;
-    secondary_sample_count = runtime_emission_transparency_3d_resolve_secondary_sample_count();
-    result.secondaryRayCount = secondary_sample_count;
-    view_dir = vec3_scale(material_result.primaryRay.direction, -1.0);
-    emissive_direct = runtime_emission_transparency_3d_first_hit_emissive(scene,
-                                                                          &result.hitInfo,
-                                                                          &result.payload,
-                                                                          view_dir,
-                                                                          &emissive_direct_r,
-                                                                          &emissive_direct_g,
-                                                                          &emissive_direct_b);
-    emissive_bounce = runtime_emission_transparency_3d_secondary_emissive(scene,
-                                                                           &result.hitInfo,
-                                                                           sampling,
-                                                                           &result,
-                                                                           &emissive_bounce_r,
-                                                                           &emissive_bounce_g,
-                                                                           &emissive_bounce_b);
-    if (RuntimeEmissiveDirect3D_ShadeHit(scene,
-                                         &result.hitInfo,
-                                         sampling,
-                                         &emissive_direct_result)) {
-        emissive_direct += emissive_direct_result.directRadiance;
-        emissive_direct_r += emissive_direct_result.directRadianceR;
-        emissive_direct_g += emissive_direct_result.directRadianceG;
-        emissive_direct_b += emissive_direct_result.directRadianceB;
+    if (!runtime_emission_transparency_3d_can_skip_emission_support(scene, &result.payload)) {
+        secondary_sample_count = runtime_emission_transparency_3d_resolve_secondary_sample_count();
+        result.secondaryRayCount = secondary_sample_count;
+        view_dir = vec3_scale(material_result.primaryRay.direction, -1.0);
+        emissive_direct = runtime_emission_transparency_3d_first_hit_emissive(scene,
+                                                                              &result.hitInfo,
+                                                                              &result.payload,
+                                                                              view_dir,
+                                                                              &emissive_direct_r,
+                                                                              &emissive_direct_g,
+                                                                              &emissive_direct_b);
+        emissive_bounce = runtime_emission_transparency_3d_secondary_emissive(scene,
+                                                                               &result.hitInfo,
+                                                                               sampling,
+                                                                               &result,
+                                                                               &emissive_bounce_r,
+                                                                               &emissive_bounce_g,
+                                                                               &emissive_bounce_b);
+        if (RuntimeEmissiveDirect3D_ShadeHit(scene,
+                                             &result.hitInfo,
+                                             sampling,
+                                             &emissive_direct_result)) {
+            emissive_direct += emissive_direct_result.directRadiance;
+            emissive_direct_r += emissive_direct_result.directRadianceR;
+            emissive_direct_g += emissive_direct_result.directRadianceG;
+            emissive_direct_b += emissive_direct_result.directRadianceB;
+        }
     }
     result.emissiveDirectRadiance = emissive_direct;
     result.emissiveDirectRadianceR = emissive_direct_r;
@@ -892,4 +1024,23 @@ bool RuntimeEmissionTransparency3D_ShadePixel(const RuntimeScene3D* scene,
                                               RuntimeEmissionTransparency3DResult* out_result) {
     return runtime_emission_transparency_3d_shade_pixel_recursive(
         scene, projector, pixel_x, pixel_y, sampling, out_result);
+}
+
+bool RuntimeEmissionTransparency3D_ShadePrimaryHit(
+    const RuntimeScene3D* scene,
+    const RuntimePrimaryHit3DResult* primary_hit,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeEmissionTransparency3DResult* out_result) {
+    return runtime_emission_transparency_3d_shade_primary_hit_recursive(
+        scene, primary_hit, NULL, sampling, out_result);
+}
+
+bool RuntimeEmissionTransparency3D_ShadePrimaryHitWithPayload(
+    const RuntimeScene3D* scene,
+    const RuntimePrimaryHit3DResult* primary_hit,
+    const RuntimeMaterialPayload3D* payload,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeEmissionTransparency3DResult* out_result) {
+    return runtime_emission_transparency_3d_shade_primary_hit_recursive(
+        scene, primary_hit, payload, sampling, out_result);
 }

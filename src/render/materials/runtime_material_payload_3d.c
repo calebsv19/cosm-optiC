@@ -194,6 +194,48 @@ static void runtime_material_payload_3d_refresh_derived(RuntimeMaterialPayload3D
     }
 }
 
+static void runtime_material_payload_3d_apply_surface_eval(
+    RuntimeMaterialPayload3D* payload,
+    const RuntimeMaterialSurfaceEval* surface_eval) {
+    if (!payload || !surface_eval) return;
+    payload->textureMask = runtime_material_payload_3d_clamp01(surface_eval->textureMask);
+    payload->textureU = surface_eval->textureU;
+    payload->textureV = surface_eval->textureV;
+    payload->baseColorR = surface_eval->colorR;
+    payload->baseColorG = surface_eval->colorG;
+    payload->baseColorB = surface_eval->colorB;
+    payload->bsdf.reflectivity = surface_eval->reflectivity;
+    payload->bsdf.roughness = surface_eval->roughness;
+    payload->bsdf.specWeight = surface_eval->specWeight;
+    payload->bsdf.diffuseWeight = surface_eval->diffuseWeight;
+    payload->transparency = surface_eval->transparency;
+    runtime_material_payload_3d_refresh_derived(payload);
+}
+
+static bool runtime_material_payload_3d_resolve_object_texture_uv(const HitInfo3D* hit,
+                                                                  double* out_u,
+                                                                  double* out_v) {
+    double ax = 0.0;
+    double ay = 0.0;
+    double az = 0.0;
+    if (!hit || !hit->hasObjectTextureCoord || !out_u || !out_v) return false;
+
+    ax = fabs(hit->normal.x);
+    ay = fabs(hit->normal.y);
+    az = fabs(hit->normal.z);
+    if (az >= ax && az >= ay) {
+        *out_u = hit->objectTextureCoord.x;
+        *out_v = hit->objectTextureCoord.y;
+    } else if (ay >= ax) {
+        *out_u = hit->objectTextureCoord.x;
+        *out_v = hit->objectTextureCoord.z;
+    } else {
+        *out_u = hit->objectTextureCoord.y;
+        *out_v = hit->objectTextureCoord.z;
+    }
+    return true;
+}
+
 static void runtime_material_payload_3d_apply_texture(
     const SceneObject* object,
     const HitInfo3D* hit,
@@ -207,6 +249,8 @@ static void runtime_material_payload_3d_apply_texture(
     SceneEditorMaterialFacePlacement face_placement = {0};
     double island_u = 0.0;
     double island_v = 0.0;
+    double object_u = 0.0;
+    double object_v = 0.0;
     double authored_alpha = 0.0;
     double authored_overlay_alpha = 0.0;
     int face_group_index = -1;
@@ -229,6 +273,19 @@ static void runtime_material_payload_3d_apply_texture(
                                                    payload->bsdf.specWeight,
                                                    payload->bsdf.diffuseWeight,
                                                    payload->transparency);
+    if (runtime_material_payload_3d_resolve_object_texture_uv(hit, &object_u, &object_v) &&
+        SceneEditorMaterialStackGetEffectiveObjectStack(object, hit->sceneObjectIndex, &stack) &&
+        RuntimeMaterialTextureStackEvaluatePlacedUV(&stack,
+                                                    object,
+                                                    object_u,
+                                                    object_v,
+                                                    ((hit->sceneObjectIndex + 1) * 19349663),
+                                                    &base_eval,
+                                                    &surface_eval)) {
+        runtime_material_payload_3d_apply_surface_eval(payload, &surface_eval);
+        return;
+    }
+
     local_triangle_index = hit->localTriangleIndex;
     face_group_index = local_triangle_index >= 0 ? local_triangle_index / 2 : -1;
     memset(authored_overlay_material_intent, 0, sizeof(authored_overlay_material_intent));
@@ -389,18 +446,7 @@ static void runtime_material_payload_3d_apply_texture(
         }
     }
 
-    payload->textureMask = runtime_material_payload_3d_clamp01(surface_eval.textureMask);
-    payload->textureU = surface_eval.textureU;
-    payload->textureV = surface_eval.textureV;
-    payload->baseColorR = surface_eval.colorR;
-    payload->baseColorG = surface_eval.colorG;
-    payload->baseColorB = surface_eval.colorB;
-    payload->bsdf.reflectivity = surface_eval.reflectivity;
-    payload->bsdf.roughness = surface_eval.roughness;
-    payload->bsdf.specWeight = surface_eval.specWeight;
-    payload->bsdf.diffuseWeight = surface_eval.diffuseWeight;
-    payload->transparency = surface_eval.transparency;
-    runtime_material_payload_3d_refresh_derived(payload);
+    runtime_material_payload_3d_apply_surface_eval(payload, &surface_eval);
 }
 
 void RuntimeMaterialPayload3D_Reset(RuntimeMaterialPayload3D* payload) {

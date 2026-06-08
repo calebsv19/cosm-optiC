@@ -58,6 +58,7 @@ bool RuntimeTriangleMesh3D_BVHBuildStats(const RuntimeTriangleMesh3D* mesh,
                                          RuntimeTriangleBVH3DBuildStats* out_stats);
 
 void RuntimeTriangleBVH3D_ResetTraceStats(void);
+void RuntimeTriangleBVH3D_DisableTraceStats(void);
 void RuntimeTriangleBVH3D_SnapshotTraceStats(RuntimeTriangleBVH3DTraceStats* out_stats);
 void RuntimeTriangleBVH3D_RecordFlatFallback(bool due_to_overflow);
 void RuntimeTriangleBVH3D_SetTraversalStackLimitForTests(int max_stack_depth);

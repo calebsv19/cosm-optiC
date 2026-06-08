@@ -184,6 +184,12 @@ RuntimeVolume3DScatterResult runtime_native_3d_render_primary_scatter(
         RuntimeVolume3DScatterResult zero = {0};
         return zero;
     }
+    if (scene->capabilities.valid &&
+        scene->capabilities.canSkipVolumeScatter &&
+        !RuntimeVolume3D_HasActiveExtinction(&scene->volume)) {
+        RuntimeVolume3DScatterResult zero = {0};
+        return zero;
+    }
 
     primary_ray = RuntimeCameraProjector3D_MakePrimaryRay(projector, pixel_x, pixel_y);
     return RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(scene,

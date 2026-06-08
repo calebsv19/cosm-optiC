@@ -479,3 +479,56 @@ bool RuntimeDisney3D_ShadePixel(const RuntimeScene3D* scene,
     *out_result = result;
     return true;
 }
+
+bool RuntimeDisney3D_ShadePrimaryHit(const RuntimeScene3D* scene,
+                                     const RuntimePrimaryHit3DResult* primary_hit,
+                                     const RuntimeNative3DSamplingContext* sampling,
+                                     RuntimeDisney3DResult* out_result) {
+    return RuntimeDisney3D_ShadePrimaryHitWithPayload(scene,
+                                                      primary_hit,
+                                                      NULL,
+                                                      sampling,
+                                                      out_result);
+}
+
+bool RuntimeDisney3D_ShadePrimaryHitWithPayload(const RuntimeScene3D* scene,
+                                                const RuntimePrimaryHit3DResult* primary_hit,
+                                                const RuntimeMaterialPayload3D* payload,
+                                                const RuntimeNative3DSamplingContext* sampling,
+                                                RuntimeDisney3DResult* out_result) {
+    RuntimeDisney3DResult result = {0};
+    RuntimeMaterialResponse3DResult material_result = {0};
+    RuntimeEmissionTransparency3DResult emission_result = {0};
+    Vec3 view_dir = vec3(0.0, 0.0, 0.0);
+
+    if (!scene || !primary_hit || !out_result) return false;
+    if (!RuntimeMaterialResponse3D_ShadePrimaryHitWithPayload(scene,
+                                                              primary_hit,
+                                                              payload,
+                                                              sampling,
+                                                              &material_result)) {
+        result.primaryRay = primary_hit->primaryRay;
+        *out_result = result;
+        return false;
+    }
+    if (!RuntimeEmissionTransparency3D_ShadePrimaryHitWithPayload(scene,
+                                                                  primary_hit,
+                                                                  payload,
+                                                                  sampling,
+                                                                  &emission_result)) {
+        memset(&result, 0, sizeof(result));
+        result.primaryRay = primary_hit->primaryRay;
+        *out_result = result;
+        return false;
+    }
+
+    runtime_disney_3d_copy_emission_result(&emission_result, &result);
+    view_dir = vec3_scale(result.primaryRay.direction, -1.0);
+    runtime_disney_3d_apply_combiner(scene,
+                                     &material_result,
+                                     &emission_result,
+                                     view_dir,
+                                     &result);
+    *out_result = result;
+    return true;
+}

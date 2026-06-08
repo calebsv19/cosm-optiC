@@ -121,6 +121,73 @@ static bool runtime_visibility_3d_hit_matches_target(const HitInfo3D* hit,
     return hit->triangleIndex == triangle_index;
 }
 
+static bool runtime_visibility_3d_can_use_opaque_fast_path(const RuntimeScene3D* scene) {
+    if (!scene) return false;
+    if (scene->capabilities.valid) {
+        return scene->capabilities.canUseOpaqueNoVolumeVisibilityFastPath &&
+               !RuntimeVolume3D_HasActiveExtinction(&scene->volume);
+    }
+    if (!scene->materialFlags.valid) return false;
+    if (scene->materialFlags.hasTransparentSurfaces ||
+        scene->materialFlags.hasUnresolvedSurfaces) {
+        return false;
+    }
+    return !RuntimeVolume3D_HasActiveExtinction(&scene->volume);
+}
+
+bool RuntimeVisibility3D_CanUseOpaqueNoVolumeFastPath(const RuntimeScene3D* scene) {
+    return runtime_visibility_3d_can_use_opaque_fast_path(scene);
+}
+
+static RuntimeVisibility3DTransmittance runtime_visibility_3d_trace_opaque_fast_path(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* source_hit,
+    Vec3 ray_origin,
+    Vec3 ray_normal,
+    Vec3 ray_dir,
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double ray_length,
+    int target_scene_object_index,
+    int target_triangle_index) {
+    Ray3D current_ray = RuntimeRay3D_MakeOffset(ray_origin,
+                                                ray_normal,
+                                                ray_dir,
+                                                kRuntimeVisibility3DEpsilon);
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double remaining_distance =
+        ray_length;
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon =
+        kRuntimeVisibility3DEpsilon;
+    int skip_count = 0;
+
+    while (skip_count < kRuntimeVisibility3DMaxTransparentSurfaceSkips &&
+           remaining_distance > length_epsilon) {
+        HitInfo3D blocker_hit = {0};
+        if (!RuntimeRay3D_TraceSceneFirstHit(scene,
+                                             &current_ray,
+                                             length_epsilon,
+                                             remaining_distance,
+                                             &blocker_hit)) {
+            return RuntimeVisibility3D_UnitTransmittance();
+        }
+        if (source_hit && runtime_visibility_3d_hit_matches_source(&blocker_hit, source_hit)) {
+            remaining_distance -= blocker_hit.t;
+            current_ray = RuntimeRay3D_MakeOffset(blocker_hit.position,
+                                                  blocker_hit.normal,
+                                                  ray_dir,
+                                                  length_epsilon);
+            skip_count += 1;
+            continue;
+        }
+        if (runtime_visibility_3d_hit_matches_target(&blocker_hit,
+                                                     target_scene_object_index,
+                                                     target_triangle_index)) {
+            return RuntimeVisibility3D_UnitTransmittance();
+        }
+        return runtime_visibility_3d_zero_transmittance();
+    }
+
+    return RuntimeVisibility3D_UnitTransmittance();
+}
+
 static RuntimeVisibility3DTransmittance runtime_visibility_3d_trace_transmittance_rgb(
     const RuntimeScene3D* scene,
     const HitInfo3D* source_hit,
@@ -144,6 +211,16 @@ static RuntimeVisibility3DTransmittance runtime_visibility_3d_trace_transmittanc
         return runtime_visibility_3d_zero_transmittance();
     }
     if (!(ray_length > length_epsilon)) return transmittance;
+    if (runtime_visibility_3d_can_use_opaque_fast_path(scene)) {
+        return runtime_visibility_3d_trace_opaque_fast_path(scene,
+                                                            source_hit,
+                                                            ray_origin,
+                                                            ray_normal,
+                                                            ray_dir,
+                                                            ray_length,
+                                                            target_scene_object_index,
+                                                            target_triangle_index);
+    }
 
     segment_ray = RuntimeRay3D_Make(ray_origin, ray_dir);
     volume_transmittance = RuntimeVolume3D_TransmittanceAlongRayRGB(&scene->volume,

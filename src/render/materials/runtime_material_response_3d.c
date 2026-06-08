@@ -133,15 +133,29 @@ bool RuntimeMaterialResponse3D_ShadeHit(const RuntimeScene3D* scene,
                                         const HitInfo3D* hit,
                                         const RuntimeNative3DSamplingContext* sampling,
                                         RuntimeMaterialResponse3DResult* out_result) {
+    return RuntimeMaterialResponse3D_ShadeHitWithPayload(scene, hit, NULL, sampling, out_result);
+}
+
+bool RuntimeMaterialResponse3D_ShadeHitWithPayload(const RuntimeScene3D* scene,
+                                                   const HitInfo3D* hit,
+                                                   const RuntimeMaterialPayload3D* payload,
+                                                   const RuntimeNative3DSamplingContext* sampling,
+                                                   RuntimeMaterialResponse3DResult* out_result) {
     RuntimeMaterialResponse3DResult result = {0};
     RuntimeDiffuseBounce3DResult diffuse_result = {0};
     Vec3 view_dir = vec3(0.0, 0.0, 0.0);
 
     if (!scene || !hit || !out_result) return false;
-    if (!RuntimeMaterialPayload3D_ResolveFromHit(hit, &result.payload)) {
+    if (payload && payload->valid) {
+        result.payload = *payload;
+    } else if (!RuntimeMaterialPayload3D_ResolveFromHit(hit, &result.payload)) {
         return false;
     }
-    if (!RuntimeDiffuseBounce3D_ShadeHit(scene, hit, sampling, &diffuse_result)) {
+    if (!RuntimeDiffuseBounce3D_ShadeHitWithPayload(scene,
+                                                    hit,
+                                                    &result.payload,
+                                                    sampling,
+                                                    &diffuse_result)) {
         return false;
     }
 
@@ -171,8 +185,6 @@ bool RuntimeMaterialResponse3D_ShadePixel(const RuntimeScene3D* scene,
                                           RuntimeMaterialResponse3DResult* out_result) {
     RuntimeMaterialResponse3DResult result = {0};
     RuntimePrimaryHit3DResult primary_hit = {0};
-    RuntimeDiffuseBounce3DResult diffuse_result = {0};
-    Vec3 view_dir = vec3(0.0, 0.0, 0.0);
 
     if (!scene || !projector || !out_result) return false;
 
@@ -186,13 +198,50 @@ bool RuntimeMaterialResponse3D_ShadePixel(const RuntimeScene3D* scene,
         return false;
     }
 
-    if (!RuntimeMaterialPayload3D_ResolveFromHit(&primary_hit.hitInfo, &result.payload)) {
-        result.primaryRay = primary_hit.primaryRay;
+    return RuntimeMaterialResponse3D_ShadePrimaryHit(scene, &primary_hit, sampling, out_result);
+}
+
+bool RuntimeMaterialResponse3D_ShadePrimaryHit(const RuntimeScene3D* scene,
+                                               const RuntimePrimaryHit3DResult* primary_hit,
+                                               const RuntimeNative3DSamplingContext* sampling,
+                                               RuntimeMaterialResponse3DResult* out_result) {
+    return RuntimeMaterialResponse3D_ShadePrimaryHitWithPayload(scene,
+                                                                primary_hit,
+                                                                NULL,
+                                                                sampling,
+                                                                out_result);
+}
+
+bool RuntimeMaterialResponse3D_ShadePrimaryHitWithPayload(
+    const RuntimeScene3D* scene,
+    const RuntimePrimaryHit3DResult* primary_hit,
+    const RuntimeMaterialPayload3D* payload,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeMaterialResponse3DResult* out_result) {
+    RuntimeMaterialResponse3DResult result = {0};
+    RuntimeDiffuseBounce3DResult diffuse_result = {0};
+    Vec3 view_dir = vec3(0.0, 0.0, 0.0);
+
+    if (!scene || !primary_hit || !out_result) return false;
+    if (!primary_hit->hit) {
+        result.primaryRay = primary_hit->primaryRay;
         *out_result = result;
         return false;
     }
-    if (!RuntimeDiffuseBounce3D_ShadeHit(scene, &primary_hit.hitInfo, sampling, &diffuse_result)) {
-        result.primaryRay = primary_hit.primaryRay;
+
+    if (payload && payload->valid) {
+        result.payload = *payload;
+    } else if (!RuntimeMaterialPayload3D_ResolveFromHit(&primary_hit->hitInfo, &result.payload)) {
+        result.primaryRay = primary_hit->primaryRay;
+        *out_result = result;
+        return false;
+    }
+    if (!RuntimeDiffuseBounce3D_ShadeHitWithPayload(scene,
+                                                    &primary_hit->hitInfo,
+                                                    &result.payload,
+                                                    sampling,
+                                                    &diffuse_result)) {
+        result.primaryRay = primary_hit->primaryRay;
         *out_result = result;
         return false;
     }
@@ -201,18 +250,18 @@ bool RuntimeMaterialResponse3D_ShadePixel(const RuntimeScene3D* scene,
     result.visible = diffuse_result.visible;
     result.materialResolved = result.payload.valid;
     result.hitInfo = diffuse_result.hitInfo;
-    view_dir = vec3_scale(primary_hit.primaryRay.direction, -1.0);
+    view_dir = vec3_scale(primary_hit->primaryRay.direction, -1.0);
     runtime_material_response_3d_apply_weights(scene,
                                                &result.hitInfo,
                                                &result.payload,
                                                view_dir,
                                                &diffuse_result,
                                                &result);
-    runtime_material_response_3d_apply_transmittance(&primary_hit.primaryTransmittance, &result);
+    runtime_material_response_3d_apply_transmittance(&primary_hit->primaryTransmittance, &result);
     result.secondaryRayCount = diffuse_result.secondaryRayCount;
     result.secondaryHitCount = diffuse_result.secondaryHitCount;
     result.secondaryContributingHitCount = diffuse_result.secondaryContributingHitCount;
-    result.primaryRay = primary_hit.primaryRay;
+    result.primaryRay = primary_hit->primaryRay;
     *out_result = result;
     return true;
 }

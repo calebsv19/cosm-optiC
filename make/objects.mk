@@ -43,6 +43,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_occupancy.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \
+	$(BUILD_DIR)/render/runtime_scene_3d_capabilities.o \
 	$(BUILD_DIR)/render/runtime_triangle_bvh_3d.o \
 	$(BUILD_DIR)/render/runtime_volume_3d.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_sampling.o \
@@ -215,12 +216,14 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading.o \
+	$(BUILD_DIR)/render/runtime_native_3d_progress_hud.o \
 	$(BUILD_DIR)/render/runtime_native_3d_preview_reconstruction.o \
 	$(BUILD_DIR)/render/runtime_native_3d_resolution.o \
 	$(BUILD_DIR)/render/runtime_native_3d_temporal_accum.o \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_occupancy.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \
+	$(BUILD_DIR)/render/runtime_scene_3d_capabilities.o \
 	$(BUILD_DIR)/render/runtime_volume_3d.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_sampling.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_integrate.o \

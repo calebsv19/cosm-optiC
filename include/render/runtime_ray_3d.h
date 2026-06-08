@@ -22,6 +22,8 @@ typedef struct {
     double baryU;
     double baryV;
     double baryW;
+    bool hasObjectTextureCoord;
+    Vec3 objectTextureCoord;
 } HitInfo3D;
 
 Ray3D RuntimeRay3D_Make(Vec3 origin, Vec3 direction);

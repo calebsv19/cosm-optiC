@@ -15,6 +15,8 @@ typedef struct {
 
 RuntimeVisibility3DTransmittance RuntimeVisibility3D_UnitTransmittance(void);
 
+bool RuntimeVisibility3D_CanUseOpaqueNoVolumeFastPath(const RuntimeScene3D* scene);
+
 void RuntimeVisibility3D_ApplyTransparentPayloadAbsorption(
     const RuntimeMaterialPayload3D* payload,
     [[fisics::dim(length)]] [[fisics::unit(meter)]] double segment_distance,

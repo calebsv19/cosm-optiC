@@ -71,6 +71,63 @@ static Vec3 runtime_scene_3d_builder_transform_mesh_vertex(
                          instance->position_z));
 }
 
+typedef struct {
+    Vec3 min;
+    Vec3 max;
+    Vec3 extent;
+    bool valid;
+} RuntimeScene3DBuilderMeshBounds;
+
+static RuntimeScene3DBuilderMeshBounds runtime_scene_3d_builder_mesh_bounds(
+    const CoreMeshAssetRuntimeDocument* document,
+    const RayTracingRuntimeMeshAssetInstance* instance) {
+    RuntimeScene3DBuilderMeshBounds bounds = {0};
+    if (!document || !instance || document->vertex_count == 0u) {
+        return bounds;
+    }
+    for (size_t i = 0; i < document->vertex_count; ++i) {
+        Vec3 p = runtime_scene_3d_builder_transform_mesh_vertex(&document->vertices[i], instance);
+        if (i == 0u) {
+            bounds.min = p;
+            bounds.max = p;
+        } else {
+            if (p.x < bounds.min.x) bounds.min.x = p.x;
+            if (p.y < bounds.min.y) bounds.min.y = p.y;
+            if (p.z < bounds.min.z) bounds.min.z = p.z;
+            if (p.x > bounds.max.x) bounds.max.x = p.x;
+            if (p.y > bounds.max.y) bounds.max.y = p.y;
+            if (p.z > bounds.max.z) bounds.max.z = p.z;
+        }
+    }
+    bounds.extent = vec3(bounds.max.x - bounds.min.x,
+                         bounds.max.y - bounds.min.y,
+                         bounds.max.z - bounds.min.z);
+    bounds.valid = true;
+    return bounds;
+}
+
+static double runtime_scene_3d_builder_normalize_axis(double value,
+                                                      double min_value,
+                                                      double extent) {
+    if (extent <= 1e-9) return 0.5;
+    return (value - min_value) / extent;
+}
+
+static Vec3 runtime_scene_3d_builder_object_texture_coord(
+    Vec3 p,
+    const RuntimeScene3DBuilderMeshBounds* bounds) {
+    if (!bounds || !bounds->valid) return vec3(0.5, 0.5, 0.5);
+    return vec3(runtime_scene_3d_builder_normalize_axis(p.x,
+                                                        bounds->min.x,
+                                                        bounds->extent.x),
+                runtime_scene_3d_builder_normalize_axis(p.y,
+                                                        bounds->min.y,
+                                                        bounds->extent.y),
+                runtime_scene_3d_builder_normalize_axis(p.z,
+                                                        bounds->min.z,
+                                                        bounds->extent.z));
+}
+
 static int runtime_scene_3d_builder_resolve_mesh_scene_object_index(
     const RayTracingRuntimeMeshAssetInstance* instance) {
     char object_id[RUNTIME_SCENE_3D_MAX_OBJECT_ID] = {0};
@@ -181,14 +238,18 @@ static bool runtime_scene_3d_builder_reserve_triangles(RuntimeScene3D* scene,
     return true;
 }
 
-static bool runtime_scene_3d_builder_append_triangle(RuntimeScene3D* scene,
-                                                     int primitive_index,
-                                                     int scene_object_index,
-                                                     Vec3 p0,
-                                                     Vec3 p1,
-                                                     Vec3 p2,
-                                                     Vec3 expected_normal,
-                                                     int local_triangle_index_override) {
+static bool runtime_scene_3d_builder_append_triangle_internal(RuntimeScene3D* scene,
+                                                              int primitive_index,
+                                                              int scene_object_index,
+                                                              Vec3 p0,
+                                                              Vec3 p1,
+                                                              Vec3 p2,
+                                                              Vec3 expected_normal,
+                                                              int local_triangle_index_override,
+                                                              bool has_object_texture_coords,
+                                                              Vec3 object_texture0,
+                                                              Vec3 object_texture1,
+                                                              Vec3 object_texture2) {
     RuntimeTriangle3D* triangle = NULL;
     Vec3 edge1;
     Vec3 edge2;
@@ -202,8 +263,11 @@ static bool runtime_scene_3d_builder_append_triangle(RuntimeScene3D* scene,
     normal = vec3_normalize(vec3_cross(edge1, edge2));
     if (vec3_dot(normal, expected_normal) < 0.0) {
         Vec3 swap = p1;
+        Vec3 swap_texture = object_texture1;
         p1 = p2;
         p2 = swap;
+        object_texture1 = object_texture2;
+        object_texture2 = swap_texture;
         edge1 = vec3_sub(p1, p0);
         edge2 = vec3_sub(p2, p0);
         normal = vec3_normalize(vec3_cross(edge1, edge2));
@@ -224,11 +288,37 @@ static bool runtime_scene_3d_builder_append_triangle(RuntimeScene3D* scene,
     triangle->p1 = p1;
     triangle->p2 = p2;
     triangle->normal = normal;
+    triangle->hasObjectTextureCoords = has_object_texture_coords;
+    triangle->objectTexture0 = object_texture0;
+    triangle->objectTexture1 = object_texture1;
+    triangle->objectTexture2 = object_texture2;
     triangle->primitiveIndex = primitive_index;
     triangle->sceneObjectIndex = scene_object_index;
     triangle->localTriangleIndex = local_triangle_index;
     scene->triangleMesh.bvhDirty = true;
     return true;
+}
+
+static bool runtime_scene_3d_builder_append_triangle(RuntimeScene3D* scene,
+                                                     int primitive_index,
+                                                     int scene_object_index,
+                                                     Vec3 p0,
+                                                     Vec3 p1,
+                                                     Vec3 p2,
+                                                     Vec3 expected_normal,
+                                                     int local_triangle_index_override) {
+    return runtime_scene_3d_builder_append_triangle_internal(scene,
+                                                            primitive_index,
+                                                            scene_object_index,
+                                                            p0,
+                                                            p1,
+                                                            p2,
+                                                            expected_normal,
+                                                            local_triangle_index_override,
+                                                            false,
+                                                            vec3(0.0, 0.0, 0.0),
+                                                            vec3(0.0, 0.0, 0.0),
+                                                            vec3(0.0, 0.0, 0.0));
 }
 
 static bool runtime_scene_3d_builder_append_quad(RuntimeScene3D* scene,
@@ -449,6 +539,8 @@ bool RuntimeScene3DBuilder_AppendMeshAssetSet(
         int primitive_index = scene->primitiveCount;
         int scene_object_index =
             runtime_scene_3d_builder_resolve_mesh_scene_object_index(instance);
+        RuntimeScene3DBuilderMeshBounds bounds =
+            runtime_scene_3d_builder_mesh_bounds(document, instance);
 
         memset(primitive, 0, sizeof(*primitive));
         primitive->kind = RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH;
@@ -470,20 +562,27 @@ bool RuntimeScene3DBuilder_AppendMeshAssetSet(
             Vec3 p2 = runtime_scene_3d_builder_transform_mesh_vertex(
                 &document->vertices[src->c],
                 instance);
+            Vec3 tex0 = runtime_scene_3d_builder_object_texture_coord(p0, &bounds);
+            Vec3 tex1 = runtime_scene_3d_builder_object_texture_coord(p1, &bounds);
+            Vec3 tex2 = runtime_scene_3d_builder_object_texture_coord(p2, &bounds);
             Vec3 expected_normal = vec3_normalize(vec3_cross(vec3_sub(p1, p0),
                                                              vec3_sub(p2, p0)));
             if (vec3_length(expected_normal) <= 1e-9) {
                 RuntimeScene3D_Reset(scene);
                 return false;
             }
-            if (!runtime_scene_3d_builder_append_triangle(scene,
-                                                          primitive_index,
-                                                          scene_object_index,
-                                                          p0,
-                                                          p1,
-                                                          p2,
-                                                          expected_normal,
-                                                          (int)j)) {
+            if (!runtime_scene_3d_builder_append_triangle_internal(scene,
+                                                                   primitive_index,
+                                                                   scene_object_index,
+                                                                   p0,
+                                                                   p1,
+                                                                   p2,
+                                                                   expected_normal,
+                                                                   (int)j,
+                                                                   bounds.valid,
+                                                                   tex0,
+                                                                   tex1,
+                                                                   tex2)) {
                 RuntimeScene3D_Reset(scene);
                 return false;
             }

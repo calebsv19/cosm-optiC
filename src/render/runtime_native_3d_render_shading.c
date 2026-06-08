@@ -7,7 +7,55 @@
 #include "render/runtime_direct_light_3d.h"
 #include "render/runtime_diffuse_bounce_3d.h"
 #include "render/runtime_emission_transparency_3d.h"
+#include "render/runtime_light_emitter_3d.h"
 #include "render/runtime_material_response_3d.h"
+#include "render/runtime_volume_3d_integrate.h"
+
+typedef struct RuntimeNative3DPrimaryTrace {
+    RuntimePrimaryHit3DResult primary;
+    RuntimeLightEmitterHit3DResult emitterHit;
+    RuntimeMaterialPayload3D payload;
+    bool payloadResolved;
+    bool emitterWins;
+} RuntimeNative3DPrimaryTrace;
+
+static RuntimeNative3DPrimaryTrace runtime_native_3d_render_trace_primary(
+    const RuntimeScene3D* scene,
+    const RuntimeCameraProjector3D* projector,
+    double pixel_x,
+    double pixel_y) {
+    RuntimeNative3DPrimaryTrace trace = {0};
+    RuntimeLightEmitterHit3DResult emitter_hit = {0};
+
+    if (!scene || !projector) return trace;
+
+    RuntimeDirectLight3D_TracePrimaryHit(scene,
+                                         projector,
+                                         pixel_x,
+                                         pixel_y,
+                                         &trace.primary);
+    if (trace.primary.hit) {
+        trace.payloadResolved =
+            RuntimeMaterialPayload3D_ResolveFromHit(&trace.primary.hitInfo, &trace.payload);
+    }
+    if (RuntimeLightEmitter3D_IntersectRay(scene,
+                                           &trace.primary.primaryRay,
+                                           projector->nearPlane,
+                                           HUGE_VAL,
+                                           &emitter_hit) &&
+        (!trace.primary.hit || emitter_hit.t < trace.primary.hitInfo.t)) {
+        const RuntimeVisibility3DTransmittance transmittance =
+            RuntimeVolume3D_TransmittanceAlongRayRGB(&scene->volume,
+                                                     &trace.primary.primaryRay,
+                                                     projector->nearPlane,
+                                                     emitter_hit.t);
+        emitter_hit.radiance *= transmittance.luma;
+        trace.emitterHit = emitter_hit;
+        trace.emitterWins = true;
+    }
+
+    return trace;
+}
 
 static bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
                                                         int radiance_stride,
@@ -41,33 +89,33 @@ static bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
     for (int y = start_y; y < end_y; ++y) {
         for (int x = start_x; x < end_x; ++x) {
             RuntimeDirectLight3DResult result = {0};
-            RuntimeLightEmitterHit3DResult emitter_hit = {0};
+            RuntimeNative3DPrimaryTrace primary_trace = {0};
             RuntimeVolume3DScatterResult scatter = {0};
             const int local_y = y - start_y;
             const int local_x = x - start_x;
             size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
-            if (runtime_native_3d_render_trace_visible_emitter(scene,
-                                                               projector,
-                                                               (double)x,
-                                                               (double)y,
-                                                               &emitter_hit)) {
+            primary_trace = runtime_native_3d_render_trace_primary(scene,
+                                                                   projector,
+                                                                   (double)x,
+                                                                   (double)y);
+            if (primary_trace.emitterWins) {
                 runtime_native_3d_render_write_emitter_radiance_with_scatter(radiance_buffer,
                                                                              idx,
                                                                              scene,
                                                                              projector,
                                                                              (double)x,
                                                                              (double)y,
-                                                                             &emitter_hit,
+                                                                             &primary_trace.emitterHit,
                                                                              sampling,
                                                                              &stats);
                 continue;
             }
-            if (!RuntimeDirectLight3D_ShadePixel(scene,
-                                                 projector,
-                                                 (double)x,
-                                                 (double)y,
-                                                 sampling,
-                                                 &result)) {
+            if (!RuntimeDirectLight3D_ShadePrimaryHitWithPayload(
+                    scene,
+                    &primary_trace.primary,
+                    primary_trace.payloadResolved ? &primary_trace.payload : NULL,
+                    sampling,
+                    &result)) {
                 scatter = runtime_native_3d_render_primary_scatter(scene,
                                                                    projector,
                                                                    (double)x,
@@ -78,7 +126,7 @@ static bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
                                                                    idx,
                                                                    scene,
                                                                    projector,
-                                                                   &result.primaryRay,
+                                                                   &primary_trace.primary.primaryRay,
                                                                    &scatter);
                 if (scatter.active && scatter.radiance > stats.maxRadiance) {
                     stats.maxRadiance = scatter.radiance;
@@ -158,33 +206,33 @@ static bool runtime_native_3d_render_shade_diffuse_bounce(float* radiance_buffer
     for (int y = start_y; y < end_y; ++y) {
         for (int x = start_x; x < end_x; ++x) {
             RuntimeDiffuseBounce3DResult result = {0};
-            RuntimeLightEmitterHit3DResult emitter_hit = {0};
+            RuntimeNative3DPrimaryTrace primary_trace = {0};
             RuntimeVolume3DScatterResult scatter = {0};
             const int local_y = y - start_y;
             const int local_x = x - start_x;
             size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
-            if (runtime_native_3d_render_trace_visible_emitter(scene,
-                                                               projector,
-                                                               (double)x,
-                                                               (double)y,
-                                                               &emitter_hit)) {
+            primary_trace = runtime_native_3d_render_trace_primary(scene,
+                                                                   projector,
+                                                                   (double)x,
+                                                                   (double)y);
+            if (primary_trace.emitterWins) {
                 runtime_native_3d_render_write_emitter_radiance_with_scatter(radiance_buffer,
                                                                              idx,
                                                                              scene,
                                                                              projector,
                                                                              (double)x,
                                                                              (double)y,
-                                                                             &emitter_hit,
+                                                                             &primary_trace.emitterHit,
                                                                              sampling,
                                                                              &stats);
                 continue;
             }
-            if (!RuntimeDiffuseBounce3D_ShadePixel(scene,
-                                                   projector,
-                                                   (double)x,
-                                                   (double)y,
-                                                   sampling,
-                                                   &result)) {
+            if (!RuntimeDiffuseBounce3D_ShadePrimaryHitWithPayload(
+                    scene,
+                    &primary_trace.primary,
+                    primary_trace.payloadResolved ? &primary_trace.payload : NULL,
+                    sampling,
+                    &result)) {
                 scatter = runtime_native_3d_render_primary_scatter(scene,
                                                                    projector,
                                                                    (double)x,
@@ -195,7 +243,7 @@ static bool runtime_native_3d_render_shade_diffuse_bounce(float* radiance_buffer
                                                                    idx,
                                                                    scene,
                                                                    projector,
-                                                                   &result.primaryRay,
+                                                                   &primary_trace.primary.primaryRay,
                                                                    &scatter);
                 if (scatter.active && scatter.radiance > stats.maxRadiance) {
                     stats.maxRadiance = scatter.radiance;
@@ -285,33 +333,33 @@ static bool runtime_native_3d_render_shade_material(float* radiance_buffer,
     for (int y = start_y; y < end_y; ++y) {
         for (int x = start_x; x < end_x; ++x) {
             RuntimeMaterialResponse3DResult result = {0};
-            RuntimeLightEmitterHit3DResult emitter_hit = {0};
+            RuntimeNative3DPrimaryTrace primary_trace = {0};
             RuntimeVolume3DScatterResult scatter = {0};
             const int local_y = y - start_y;
             const int local_x = x - start_x;
             size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
-            if (runtime_native_3d_render_trace_visible_emitter(scene,
-                                                               projector,
-                                                               (double)x,
-                                                               (double)y,
-                                                               &emitter_hit)) {
+            primary_trace = runtime_native_3d_render_trace_primary(scene,
+                                                                   projector,
+                                                                   (double)x,
+                                                                   (double)y);
+            if (primary_trace.emitterWins) {
                 runtime_native_3d_render_write_emitter_radiance_with_scatter(radiance_buffer,
                                                                              idx,
                                                                              scene,
                                                                              projector,
                                                                              (double)x,
                                                                              (double)y,
-                                                                             &emitter_hit,
+                                                                             &primary_trace.emitterHit,
                                                                              sampling,
                                                                              &stats);
                 continue;
             }
-            if (!RuntimeMaterialResponse3D_ShadePixel(scene,
-                                                      projector,
-                                                      (double)x,
-                                                      (double)y,
-                                                      sampling,
-                                                      &result)) {
+            if (!RuntimeMaterialResponse3D_ShadePrimaryHitWithPayload(
+                    scene,
+                    &primary_trace.primary,
+                    primary_trace.payloadResolved ? &primary_trace.payload : NULL,
+                    sampling,
+                    &result)) {
                 scatter = runtime_native_3d_render_primary_scatter(scene,
                                                                    projector,
                                                                    (double)x,
@@ -322,7 +370,7 @@ static bool runtime_native_3d_render_shade_material(float* radiance_buffer,
                                                                    idx,
                                                                    scene,
                                                                    projector,
-                                                                   &result.primaryRay,
+                                                                   &primary_trace.primary.primaryRay,
                                                                    &scatter);
                 if (scatter.active && scatter.radiance > stats.maxRadiance) {
                     stats.maxRadiance = scatter.radiance;
@@ -413,33 +461,33 @@ static bool runtime_native_3d_render_shade_emission_transparency(
     for (int y = start_y; y < end_y; ++y) {
         for (int x = start_x; x < end_x; ++x) {
             RuntimeEmissionTransparency3DResult result = {0};
-            RuntimeLightEmitterHit3DResult emitter_hit = {0};
+            RuntimeNative3DPrimaryTrace primary_trace = {0};
             RuntimeVolume3DScatterResult scatter = {0};
             const int local_y = y - start_y;
             const int local_x = x - start_x;
             size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
-            if (runtime_native_3d_render_trace_visible_emitter(scene,
-                                                               projector,
-                                                               (double)x,
-                                                               (double)y,
-                                                               &emitter_hit)) {
+            primary_trace = runtime_native_3d_render_trace_primary(scene,
+                                                                   projector,
+                                                                   (double)x,
+                                                                   (double)y);
+            if (primary_trace.emitterWins) {
                 runtime_native_3d_render_write_emitter_radiance_with_scatter(radiance_buffer,
                                                                              idx,
                                                                              scene,
                                                                              projector,
                                                                              (double)x,
                                                                              (double)y,
-                                                                             &emitter_hit,
+                                                                             &primary_trace.emitterHit,
                                                                              sampling,
                                                                              &stats);
                 continue;
             }
-            if (!RuntimeEmissionTransparency3D_ShadePixel(scene,
-                                                          projector,
-                                                          (double)x,
-                                                          (double)y,
-                                                          sampling,
-                                                          &result)) {
+            if (!RuntimeEmissionTransparency3D_ShadePrimaryHitWithPayload(
+                    scene,
+                    &primary_trace.primary,
+                    primary_trace.payloadResolved ? &primary_trace.payload : NULL,
+                    sampling,
+                    &result)) {
                 scatter = runtime_native_3d_render_primary_scatter(scene,
                                                                    projector,
                                                                    (double)x,
@@ -450,7 +498,7 @@ static bool runtime_native_3d_render_shade_emission_transparency(
                                                                    idx,
                                                                    scene,
                                                                    projector,
-                                                                   &result.primaryRay,
+                                                                   &primary_trace.primary.primaryRay,
                                                                    &scatter);
                 if (scatter.active && scatter.radiance > stats.maxRadiance) {
                     stats.maxRadiance = scatter.radiance;
@@ -540,33 +588,33 @@ static bool runtime_native_3d_render_shade_disney(float* radiance_buffer,
     for (int y = start_y; y < end_y; ++y) {
         for (int x = start_x; x < end_x; ++x) {
             RuntimeDisney3DResult result = {0};
-            RuntimeLightEmitterHit3DResult emitter_hit = {0};
+            RuntimeNative3DPrimaryTrace primary_trace = {0};
             RuntimeVolume3DScatterResult scatter = {0};
             const int local_y = y - start_y;
             const int local_x = x - start_x;
             size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
-            if (runtime_native_3d_render_trace_visible_emitter(scene,
-                                                               projector,
-                                                               (double)x,
-                                                               (double)y,
-                                                               &emitter_hit)) {
+            primary_trace = runtime_native_3d_render_trace_primary(scene,
+                                                                   projector,
+                                                                   (double)x,
+                                                                   (double)y);
+            if (primary_trace.emitterWins) {
                 runtime_native_3d_render_write_emitter_radiance_with_scatter(radiance_buffer,
                                                                              idx,
                                                                              scene,
                                                                              projector,
                                                                              (double)x,
                                                                              (double)y,
-                                                                             &emitter_hit,
+                                                                             &primary_trace.emitterHit,
                                                                              sampling,
                                                                              &stats);
                 continue;
             }
-            if (!RuntimeDisney3D_ShadePixel(scene,
-                                            projector,
-                                            (double)x,
-                                            (double)y,
-                                            sampling,
-                                            &result)) {
+            if (!RuntimeDisney3D_ShadePrimaryHitWithPayload(
+                    scene,
+                    &primary_trace.primary,
+                    primary_trace.payloadResolved ? &primary_trace.payload : NULL,
+                    sampling,
+                    &result)) {
                 scatter = runtime_native_3d_render_primary_scatter(scene,
                                                                    projector,
                                                                    (double)x,
@@ -577,7 +625,7 @@ static bool runtime_native_3d_render_shade_disney(float* radiance_buffer,
                                                                    idx,
                                                                    scene,
                                                                    projector,
-                                                                   &result.primaryRay,
+                                                                   &primary_trace.primary.primaryRay,
                                                                    &scatter);
                 if (scatter.active && scatter.radiance > stats.maxRadiance) {
                     stats.maxRadiance = scatter.radiance;

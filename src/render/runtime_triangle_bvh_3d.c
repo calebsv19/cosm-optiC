@@ -59,10 +59,16 @@ static atomic_uint_fast64_t g_aabb_hits;
 static atomic_uint_fast64_t g_triangle_tests;
 static atomic_uint_fast64_t g_triangle_hits;
 static atomic_uint_fast64_t g_max_stack_depth;
+static atomic_bool g_trace_stats_enabled;
 static atomic_int g_traversal_stack_limit;
+
+static bool runtime_triangle_bvh_trace_stats_enabled(void) {
+    return atomic_load_explicit(&g_trace_stats_enabled, memory_order_relaxed);
+}
 
 static void runtime_triangle_bvh_counter_add(atomic_uint_fast64_t* counter,
                                              uint64_t value) {
+    if (!runtime_triangle_bvh_trace_stats_enabled()) return;
     atomic_fetch_add_explicit(counter, value, memory_order_relaxed);
 }
 
@@ -77,6 +83,7 @@ static void runtime_triangle_bvh_counter_store(atomic_uint_fast64_t* counter,
 
 static void runtime_triangle_bvh_counter_max(atomic_uint_fast64_t* counter,
                                              uint64_t value) {
+    if (!runtime_triangle_bvh_trace_stats_enabled()) return;
     uint64_t current = atomic_load_explicit(counter, memory_order_relaxed);
     while (current < value &&
            !atomic_compare_exchange_weak_explicit(counter,
@@ -474,6 +481,7 @@ bool RuntimeTriangleMesh3D_BVHBuildStats(const RuntimeTriangleMesh3D* mesh,
 }
 
 void RuntimeTriangleBVH3D_ResetTraceStats(void) {
+    atomic_store_explicit(&g_trace_stats_enabled, true, memory_order_relaxed);
     runtime_triangle_bvh_counter_store(&g_trace_calls, 0u);
     runtime_triangle_bvh_counter_store(&g_trace_hits, 0u);
     runtime_triangle_bvh_counter_store(&g_trace_misses, 0u);
@@ -506,6 +514,10 @@ void RuntimeTriangleBVH3D_SnapshotTraceStats(RuntimeTriangleBVH3DTraceStats* out
     out_stats->triangleTests = runtime_triangle_bvh_counter_load(&g_triangle_tests);
     out_stats->triangleHits = runtime_triangle_bvh_counter_load(&g_triangle_hits);
     out_stats->maxStackDepth = runtime_triangle_bvh_counter_load(&g_max_stack_depth);
+}
+
+void RuntimeTriangleBVH3D_DisableTraceStats(void) {
+    atomic_store_explicit(&g_trace_stats_enabled, false, memory_order_relaxed);
 }
 
 void RuntimeTriangleBVH3D_RecordFlatFallback(bool due_to_overflow) {

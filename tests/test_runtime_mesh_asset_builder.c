@@ -93,6 +93,45 @@ static void assert_low_sphere_bounds(const RuntimeScene3D* scene) {
     assert_near("mrt3_low_sphere_max_z", max_z, 1.40, 1e-9);
 }
 
+static void assert_low_sphere_object_texture_coords(const RuntimeScene3D* scene) {
+    double min_x = 1000000.0;
+    double max_x = -1000000.0;
+    double min_y = 1000000.0;
+    double max_y = -1000000.0;
+    double min_z = 1000000.0;
+    double max_z = -1000000.0;
+
+    for (int i = 0; i < 48; ++i) {
+        const RuntimeTriangle3D* triangle = &scene->triangleMesh.triangles[i];
+        const Vec3 coords[3] = {
+            triangle->objectTexture0,
+            triangle->objectTexture1,
+            triangle->objectTexture2
+        };
+        assert_true("mrt3_low_sphere_triangle_has_object_texture_coords",
+                    triangle->hasObjectTextureCoords);
+        for (int j = 0; j < 3; ++j) {
+            assert_true("mrt3_low_sphere_object_texture_coord_in_range",
+                        coords[j].x >= -1e-9 && coords[j].x <= 1.0 + 1e-9 &&
+                            coords[j].y >= -1e-9 && coords[j].y <= 1.0 + 1e-9 &&
+                            coords[j].z >= -1e-9 && coords[j].z <= 1.0 + 1e-9);
+            if (coords[j].x < min_x) min_x = coords[j].x;
+            if (coords[j].x > max_x) max_x = coords[j].x;
+            if (coords[j].y < min_y) min_y = coords[j].y;
+            if (coords[j].y > max_y) max_y = coords[j].y;
+            if (coords[j].z < min_z) min_z = coords[j].z;
+            if (coords[j].z > max_z) max_z = coords[j].z;
+        }
+    }
+
+    assert_near("mrt3_low_sphere_object_texture_min_x", min_x, 0.0, 1e-9);
+    assert_near("mrt3_low_sphere_object_texture_max_x", max_x, 1.0, 1e-9);
+    assert_near("mrt3_low_sphere_object_texture_min_y", min_y, 0.0, 1e-9);
+    assert_near("mrt3_low_sphere_object_texture_max_y", max_y, 1.0, 1e-9);
+    assert_near("mrt3_low_sphere_object_texture_min_z", min_z, 0.0, 1e-9);
+    assert_near("mrt3_low_sphere_object_texture_max_z", max_z, 1.0, 1e-9);
+}
+
 static int test_append_mesh_asset_set_preserves_scene_object_lookup(void) {
     RayTracingRuntimeMeshAssetSet set;
     RuntimeScene3D scene;
@@ -133,6 +172,7 @@ static int test_append_mesh_asset_set_preserves_scene_object_lookup(void) {
                     scene.triangleMesh.triangles[1231].primitiveIndex == 2 &&
                         scene.triangleMesh.triangles[1231].sceneObjectIndex == 5);
         assert_low_sphere_bounds(&scene);
+        assert_low_sphere_object_texture_coords(&scene);
     }
 
     RuntimeScene3D_Free(&scene);

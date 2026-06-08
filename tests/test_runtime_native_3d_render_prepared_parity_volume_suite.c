@@ -460,6 +460,12 @@ static int test_runtime_native_3d_prepare_frame_attaches_configured_volume(void)
                     frame.scene.volume.sourceKind == RUNTIME_VOLUME_3D_SOURCE_RAW_VF3D);
         assert_true("runtime_native_3d_prepare_volume_affects_lighting_false",
                     !frame.scene.volume.affectsLighting);
+        assert_true("runtime_native_3d_prepare_volume_caps_valid",
+                    frame.scene.capabilities.valid);
+        assert_true("runtime_native_3d_prepare_volume_caps_no_extinction",
+                    !frame.scene.capabilities.hasLightingExtinctionVolume);
+        assert_true("runtime_native_3d_prepare_volume_caps_skip_scatter",
+                    frame.scene.capabilities.canSkipVolumeScatter);
         assert_true("runtime_native_3d_prepare_volume_debug_true",
                     frame.scene.volume.debugOverlayEnabled);
         assert_true("runtime_native_3d_prepare_volume_dims_d",

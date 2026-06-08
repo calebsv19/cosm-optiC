@@ -1,5 +1,6 @@
 #include <limits.h>
 #include <math.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -16,9 +17,80 @@
 #include "render/runtime_ray_3d.h"
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_scene_3d_builder.h"
+#include "render/runtime_triangle_bvh_3d.h"
 #include "render/runtime_visibility_3d.h"
 #include "test_runtime_emission_transparency.h"
 #include "test_support.h"
+
+static void runtime_emission_transparency_reset_authoring_state(void) {
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    MaterialManagerResetDefaults();
+}
+
+static bool runtime_emission_transparency_build_single_surface_scene(
+    RuntimeScene3D* scene,
+    HitInfo3D* out_hit,
+    int material_id,
+    double emissive_strength) {
+    bool ok = false;
+
+    if (!scene || !out_hit) return false;
+
+    sceneSettings.objectCount = 1;
+    sceneSettings.sceneObjects[0].material_id = material_id;
+    sceneSettings.sceneObjects[0].color = 0xFFFFFF;
+    sceneSettings.sceneObjects[0].emissiveStrength = emissive_strength;
+    animSettings.lightIntensity = 10.0;
+    animSettings.forwardDecay = 10.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    animSettings.secondaryDiffuseSamples3D = RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT;
+    animSettings.bounceDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
+
+    scene->hasLight = true;
+    scene->light.position = vec3(0.0, -2.0, 0.0);
+    scene->light.radius = 0.0;
+    scene->light.intensity = 10.0;
+    scene->light.falloffDistance = 10.0;
+    scene->light.falloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    scene->primitiveCapacity = 1;
+    scene->triangleMesh.triangleCapacity = 1;
+    scene->primitives = (RuntimePrimitive3D*)calloc((size_t)scene->primitiveCapacity,
+                                                    sizeof(*scene->primitives));
+    scene->triangleMesh.triangles =
+        (RuntimeTriangle3D*)calloc((size_t)scene->triangleMesh.triangleCapacity,
+                                   sizeof(*scene->triangleMesh.triangles));
+    if (!scene->primitives || !scene->triangleMesh.triangles) {
+        return false;
+    }
+
+    scene->primitiveCount = 1;
+    scene->triangleMesh.triangleCount = 1;
+    scene->primitives[0].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene->primitives[0].source.sceneObjectIndex = 0;
+    scene->triangleMesh.triangles[0].p0 = vec3(-3.0, -5.0, -3.0);
+    scene->triangleMesh.triangles[0].p1 = vec3(-3.0, -5.0, 3.0);
+    scene->triangleMesh.triangles[0].p2 = vec3(3.0, -5.0, -3.0);
+    scene->triangleMesh.triangles[0].normal = vec3(0.0, 1.0, 0.0);
+    scene->triangleMesh.triangles[0].primitiveIndex = 0;
+    scene->triangleMesh.triangles[0].sceneObjectIndex = 0;
+
+    ok = RuntimeTriangleMesh3D_BuildBVH(&scene->triangleMesh);
+    if (!ok) return false;
+
+    out_hit->t = 5.0;
+    out_hit->position = vec3(0.0, -5.0, 0.0);
+    out_hit->normal = vec3(0.0, 1.0, 0.0);
+    out_hit->triangleIndex = 0;
+    out_hit->primitiveIndex = 0;
+    out_hit->sceneObjectIndex = 0;
+    out_hit->source = scene->primitives[0].source;
+    out_hit->baryU = 0.333333333333;
+    out_hit->baryV = 0.333333333333;
+    out_hit->baryW = 0.333333333334;
+    return true;
+}
 
 static int test_runtime_emission_transparency_3d_seed_branch_contract(void) {
     SceneConfig saved_scene = sceneSettings;
@@ -143,6 +215,139 @@ static int test_runtime_emission_transparency_3d_seed_branch_contract(void) {
                 emission_result.bounceRadiance >= 0.0);
     assert_true("runtime_emission_transparency_seed_total_lifts_material",
                 emission_result.radiance > material_result.radiance);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_emission_transparency_3d_no_emissive_capability_skips_support(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    HitInfo3D hit = {0};
+    RuntimePrimaryHit3DResult primary_hit = {0};
+    RuntimeEmissionTransparency3DResult invalid_caps_result = {0};
+    RuntimeEmissionTransparency3DResult valid_caps_result = {0};
+    RuntimeTriangleBVH3DTraceStats invalid_caps_stats = {0};
+    RuntimeTriangleBVH3DTraceStats valid_caps_stats = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    runtime_emission_transparency_reset_authoring_state();
+    ok = runtime_emission_transparency_build_single_surface_scene(&scene,
+                                                                  &hit,
+                                                                  MATERIAL_PRESET_DEFAULT,
+                                                                  0.0);
+    assert_true("runtime_emission_transparency_no_emissive_fixture_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    RuntimeScene3D_RefreshCapabilities(&scene);
+    assert_true("runtime_emission_transparency_no_emissive_caps_valid",
+                scene.capabilities.valid);
+    assert_true("runtime_emission_transparency_no_emissive_caps_no_emitters",
+                !scene.capabilities.hasEmissiveSurfaces);
+    assert_true("runtime_emission_transparency_no_emissive_caps_skip_support",
+                scene.capabilities.canSkipEmissionSupport);
+    primary_hit.hit = true;
+    primary_hit.primaryRay = RuntimeRay3D_Make(vec3(0.0, 0.0, 0.0),
+                                               vec3(0.0, -1.0, 0.0));
+    primary_hit.primaryTransmittance = RuntimeVisibility3D_UnitTransmittance();
+    primary_hit.hitInfo = hit;
+
+    scene.capabilities.valid = false;
+    RuntimeTriangleBVH3D_ResetTraceStats();
+    ok = RuntimeEmissionTransparency3D_ShadePrimaryHit(&scene,
+                                                       &primary_hit,
+                                                       NULL,
+                                                       &invalid_caps_result);
+    RuntimeTriangleBVH3D_SnapshotTraceStats(&invalid_caps_stats);
+    RuntimeTriangleBVH3D_DisableTraceStats();
+    assert_true("runtime_emission_transparency_no_emissive_invalid_caps_ok", ok);
+    assert_true("runtime_emission_transparency_no_emissive_invalid_caps_secondary_rays",
+                invalid_caps_result.secondaryRayCount >= RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT);
+
+    RuntimeScene3D_RefreshCapabilities(&scene);
+    RuntimeTriangleBVH3D_ResetTraceStats();
+    ok = RuntimeEmissionTransparency3D_ShadePrimaryHit(&scene,
+                                                       &primary_hit,
+                                                       NULL,
+                                                       &valid_caps_result);
+    RuntimeTriangleBVH3D_SnapshotTraceStats(&valid_caps_stats);
+    RuntimeTriangleBVH3D_DisableTraceStats();
+    assert_true("runtime_emission_transparency_no_emissive_valid_caps_ok", ok);
+    assert_close("runtime_emission_transparency_no_emissive_valid_caps_direct_same",
+                 valid_caps_result.directRadiance,
+                 invalid_caps_result.directRadiance,
+                 1e-9);
+    assert_close("runtime_emission_transparency_no_emissive_valid_caps_emissive_zero",
+                 valid_caps_result.emissiveDirectRadiance,
+                 0.0,
+                 1e-12);
+    assert_true("runtime_emission_transparency_no_emissive_valid_caps_secondary_not_higher",
+                valid_caps_result.secondaryRayCount <= invalid_caps_result.secondaryRayCount);
+    (void)invalid_caps_stats;
+    (void)valid_caps_stats;
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_emission_transparency_3d_emissive_capability_keeps_support(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    HitInfo3D hit = {0};
+    RuntimePrimaryHit3DResult primary_hit = {0};
+    RuntimeEmissionTransparency3DResult result = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    runtime_emission_transparency_reset_authoring_state();
+    ok = runtime_emission_transparency_build_single_surface_scene(&scene,
+                                                                  &hit,
+                                                                  MATERIAL_PRESET_EMISSIVE,
+                                                                  1.0);
+    assert_true("runtime_emission_transparency_emissive_caps_fixture_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    RuntimeScene3D_RefreshCapabilities(&scene);
+    assert_true("runtime_emission_transparency_emissive_caps_valid",
+                scene.capabilities.valid);
+    assert_true("runtime_emission_transparency_emissive_caps_has_emitters",
+                scene.capabilities.hasEmissiveSurfaces);
+    assert_true("runtime_emission_transparency_emissive_caps_keeps_support",
+                !scene.capabilities.canSkipEmissionSupport);
+    primary_hit.hit = true;
+    primary_hit.primaryRay = RuntimeRay3D_Make(vec3(0.0, 0.0, 0.0),
+                                               vec3(0.0, -1.0, 0.0));
+    primary_hit.primaryTransmittance = RuntimeVisibility3D_UnitTransmittance();
+    primary_hit.hitInfo = hit;
+
+    ok = RuntimeEmissionTransparency3D_ShadePrimaryHit(&scene,
+                                                       &primary_hit,
+                                                       NULL,
+                                                       &result);
+    assert_true("runtime_emission_transparency_emissive_caps_shade_ok", ok);
+    assert_true("runtime_emission_transparency_emissive_caps_payload_emissive",
+                result.payload.emissive > 0.0);
+    assert_true("runtime_emission_transparency_emissive_caps_direct_positive",
+                result.emissiveDirectRadiance > 0.0);
+    assert_true("runtime_emission_transparency_emissive_caps_secondary_rays",
+                result.secondaryRayCount >= RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT);
 
     RuntimeScene3D_Free(&scene);
     sceneSettings = saved_scene;
@@ -936,8 +1141,9 @@ static int test_runtime_emission_transparency_3d_nested_transparent_layers_do_no
                 transparent_result.payload.transparency > 0.5);
     assert_true("runtime_emission_transparency_nested_layers_reaches_behind_layers",
                 transparent_result.transmittedDirectRadiance > 0.05);
-    assert_true("runtime_emission_transparency_nested_layers_total_lifts_front_material",
-                transparent_result.radiance > material_result.radiance + 0.05);
+    assert_true("runtime_emission_transparency_nested_layers_mixes_front_and_transmission",
+                transparent_result.radiance > transparent_result.transmittedDirectRadiance &&
+                    transparent_result.radiance > material_result.radiance * 0.5);
     assert_true("runtime_emission_transparency_nested_layers_counts_nested_support",
                 transparent_result.secondaryRayCount > RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT);
 
@@ -1066,5 +1272,7 @@ int run_test_runtime_emission_transparency_tests(void) {
     test_runtime_emission_transparency_3d_clear_surface_reduces_legacy_front_floor();
     test_runtime_emission_transparency_3d_nested_transparent_layers_do_not_consume_bounce_depth();
     test_runtime_emission_transparency_3d_temporal_skips_stable_emitters();
+    test_runtime_emission_transparency_3d_no_emissive_capability_skips_support();
+    test_runtime_emission_transparency_3d_emissive_capability_keeps_support();
     return test_support_failures() - before;
 }

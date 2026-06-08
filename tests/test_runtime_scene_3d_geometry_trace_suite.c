@@ -20,6 +20,10 @@ static int test_runtime_ray_3d_triangle_intersection_contract(void) {
     triangle.p1 = vec3(1.0, 0.0, 0.0);
     triangle.p2 = vec3(0.0, 1.0, 0.0);
     triangle.normal = vec3(0.0, 0.0, 1.0);
+    triangle.hasObjectTextureCoords = true;
+    triangle.objectTexture0 = vec3(0.10, 0.20, 0.30);
+    triangle.objectTexture1 = vec3(0.70, 0.20, 0.30);
+    triangle.objectTexture2 = vec3(0.10, 0.80, 0.30);
     triangle.primitiveIndex = 3;
     triangle.sceneObjectIndex = 7;
     triangle.localTriangleIndex = 5;
@@ -42,6 +46,20 @@ static int test_runtime_ray_3d_triangle_intersection_contract(void) {
                  1e-6);
     assert_true("runtime_ray_3d_triangle_hit_bary_inside",
                 hit.baryU >= 0.0 && hit.baryV >= 0.0 && hit.baryW >= 0.0);
+    assert_true("runtime_ray_3d_triangle_hit_object_texture_coord",
+                hit.hasObjectTextureCoord);
+    assert_close("runtime_ray_3d_triangle_hit_object_texture_x",
+                 hit.objectTextureCoord.x,
+                 0.25,
+                 1e-6);
+    assert_close("runtime_ray_3d_triangle_hit_object_texture_y",
+                 hit.objectTextureCoord.y,
+                 0.35,
+                 1e-6);
+    assert_close("runtime_ray_3d_triangle_hit_object_texture_z",
+                 hit.objectTextureCoord.z,
+                 0.30,
+                 1e-6);
     return 0;
 }
 

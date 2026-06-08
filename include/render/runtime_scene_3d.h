@@ -73,6 +73,10 @@ typedef struct {
     Vec3 p1;
     Vec3 p2;
     Vec3 normal;
+    bool hasObjectTextureCoords;
+    Vec3 objectTexture0;
+    Vec3 objectTexture1;
+    Vec3 objectTexture2;
     int primitiveIndex;
     int sceneObjectIndex;
     int localTriangleIndex;
@@ -113,6 +117,28 @@ typedef struct {
 } RuntimeCamera3D;
 
 typedef struct {
+    bool valid;
+    bool hasTransparentSurfaces;
+    bool hasEmissiveSurfaces;
+    bool hasUnresolvedSurfaces;
+} RuntimeScene3DMaterialFlags;
+
+typedef struct {
+    bool valid;
+    bool hasTransparentSurfaces;
+    bool hasEmissiveSurfaces;
+    bool hasUnresolvedSurfaces;
+    bool hasSpecularSurfaces;
+    bool hasTransmissionSurfaces;
+    bool hasLightingExtinctionVolume;
+    bool hasLightingScatterVolume;
+    bool canUseOpaqueNoVolumeVisibilityFastPath;
+    bool canSkipEmissionSupport;
+    bool canSkipTransparencySupport;
+    bool canSkipVolumeScatter;
+} RuntimeScene3DCapabilities;
+
+typedef struct {
     RuntimeScene3DPrimitiveScope scope;
     RuntimeScene3DOwnershipContract ownership;
     RuntimePrimitive3D* primitives;
@@ -125,6 +151,8 @@ typedef struct {
     bool hasLight;
     RuntimeCamera3D camera;
     bool hasCamera;
+    RuntimeScene3DMaterialFlags materialFlags;
+    RuntimeScene3DCapabilities capabilities;
 } RuntimeScene3D;
 
 const char* RuntimePrimitive3DKindLabel(RuntimePrimitive3DKind kind);
@@ -139,5 +167,7 @@ void RuntimeScene3D_Init(RuntimeScene3D* scene);
 void RuntimeScene3D_Reset(RuntimeScene3D* scene);
 void RuntimeScene3D_Free(RuntimeScene3D* scene);
 bool RuntimeScene3D_CopyGeometryFrom(RuntimeScene3D* dst, const RuntimeScene3D* src);
+void RuntimeScene3D_RefreshCapabilities(RuntimeScene3D* scene);
+void RuntimeScene3D_RefreshMaterialFlags(RuntimeScene3D* scene);
 
 #endif

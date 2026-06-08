@@ -396,6 +396,7 @@ static bool runtime_native_3d_render_build_live_scene(RuntimeScene3D* scene,
                                              &gRuntimeNative3DPreparedSceneCache)) {
             return false;
         }
+        RuntimeScene3D_RefreshMaterialFlags(scene);
     } else {
         RuntimeScene3D built_scene = {0};
         RuntimeScene3D_Init(&built_scene);
@@ -417,6 +418,7 @@ static bool runtime_native_3d_render_build_live_scene(RuntimeScene3D* scene,
                                              &gRuntimeNative3DPreparedSceneCache)) {
             return false;
         }
+        RuntimeScene3D_RefreshMaterialFlags(scene);
     }
 
     runtime_native_3d_render_apply_live_light(scene,
@@ -577,6 +579,7 @@ bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
         RuntimeScene3D_Free(&frame.scene);
         return false;
     }
+    RuntimeScene3D_RefreshCapabilities(&frame.scene);
 
     if (!RuntimeCameraProjector3D_Build(&frame.scene.camera, width, height, &frame.projector)) {
         snprintf(gRuntimeNative3DPrepareFrameLastDiagnostics,

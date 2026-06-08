@@ -122,6 +122,13 @@ bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
     hit.baryU = bary_u;
     hit.baryV = bary_v;
     hit.baryW = bary_w;
+    if (triangle->hasObjectTextureCoords) {
+        hit.hasObjectTextureCoord = true;
+        hit.objectTextureCoord =
+            vec3_add(vec3_add(vec3_scale(triangle->objectTexture0, bary_u),
+                              vec3_scale(triangle->objectTexture1, bary_v)),
+                     vec3_scale(triangle->objectTexture2, bary_w));
+    }
 
     *out_hit = hit;
     return true;
