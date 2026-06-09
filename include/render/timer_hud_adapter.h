@@ -43,6 +43,7 @@ void ts_session_init(TimerHUDSession* session);
 void ts_session_shutdown(TimerHUDSession* session);
 void ts_session_start_timer(TimerHUDSession* session, const char* name);
 void ts_session_stop_timer(TimerHUDSession* session, const char* name);
+void ts_session_record_duration_ms(TimerHUDSession* session, const char* name, double duration_ms);
 void ts_session_frame_start(TimerHUDSession* session);
 void ts_session_frame_end(TimerHUDSession* session);
 void ts_session_emit_event(TimerHUDSession* session, const char* tag);
@@ -61,5 +62,7 @@ TimerHUDSession* timer_hud_session(void);
 void timer_hud_register_backend(void);
 void timer_hud_apply_startup_env_overrides(void);
 void timer_hud_shutdown_session(void);
+bool timer_hud_is_active(void);
+void timer_hud_record_duration_ms(const char* name, double duration_ms);
 
 #endif // RENDER_TIMER_HUD_ADAPTER_H

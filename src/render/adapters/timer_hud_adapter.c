@@ -274,3 +274,14 @@ void timer_hud_shutdown_session(void) {
     ts_session_destroy(g_timer_hud_session);
     g_timer_hud_session = NULL;
 }
+
+bool timer_hud_is_active(void) {
+    return g_timer_hud_session && ts_session_is_hud_enabled(g_timer_hud_session);
+}
+
+void timer_hud_record_duration_ms(const char* name, double duration_ms) {
+    if (!timer_hud_is_active() || !name || !name[0]) {
+        return;
+    }
+    ts_session_record_duration_ms(g_timer_hud_session, name, duration_ms);
+}

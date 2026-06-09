@@ -505,7 +505,13 @@ void RenderFrame(double lightX, double lightY, int* frameCounter, bool* running)
         
     // Render scene objects
     SetLightPosition(lightX, lightY);
+    if (timer_hud) {
+        ts_session_start_timer(timer_hud, "Render Scene Frame");
+    }
     RenderRayTracingScene(renderer);
+    if (timer_hud) {
+        ts_session_stop_timer(timer_hud, "Render Scene Frame");
+    }
         
     // Handle deep render mode frame saving
     if (animSettings.deepRenderMode) {

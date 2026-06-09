@@ -11,6 +11,7 @@
 #include "core_queue.h"
 #include "core_workers.h"
 #include "render/integrators/integrator_common.h"
+#include "render/timer_hud_adapter.h"
 #include "render/runtime_native_3d_resolution.h"
 #include "render/runtime_native_3d_render_unit.h"
 
@@ -82,6 +83,14 @@ typedef struct RuntimeNative3DAdaptiveTilePlan {
 } RuntimeNative3DAdaptiveTilePlan;
 
 static RuntimeNative3DAdaptiveTilePlan s_runtime_native_3d_adaptive_tile_plan = {0};
+
+static double runtime_native_3d_tile_scheduler_ticks_to_ms(uint64_t ticks) {
+    const uint64_t frequency = (uint64_t)SDL_GetPerformanceFrequency();
+    if (frequency == 0u) {
+        return 0.0;
+    }
+    return ((double)ticks * 1000.0) / (double)frequency;
+}
 
 static void runtime_native_3d_tile_scheduler_reset(RuntimeNative3DTileScheduler* scheduler) {
     if (!scheduler) return;
@@ -515,6 +524,7 @@ static bool runtime_native_3d_tile_scheduler_dispatch_subpass(
     RuntimeNative3DTileSchedulerProgressCallback tile_progress_callback,
     void* tile_progress_user_data) {
     size_t dispatched = 0u;
+    uint64_t subpass_wait_start_ticks = 0u;
 
     for (size_t i = 0; i < scheduler->jobCount; ++i) {
         RuntimeNative3DTileSchedulerJob* job = &scheduler->jobs[i];
@@ -549,6 +559,7 @@ static bool runtime_native_3d_tile_scheduler_dispatch_subpass(
         }
     }
 
+    subpass_wait_start_ticks = (uint64_t)SDL_GetPerformanceCounter();
     if (!runtime_native_3d_tile_scheduler_wait_for_subpass(scheduler,
                                                            completion_queue,
                                                            dispatched,
@@ -560,6 +571,10 @@ static bool runtime_native_3d_tile_scheduler_dispatch_subpass(
                                                            tile_progress_user_data)) {
         return false;
     }
+    timer_hud_record_duration_ms(
+        "Tile Subpass",
+        runtime_native_3d_tile_scheduler_ticks_to_ms((uint64_t)SDL_GetPerformanceCounter() -
+                                                     subpass_wait_start_ticks));
 
     for (size_t i = 0; i < scheduler->jobCount; ++i) {
         RuntimeNative3DTileSchedulerJob* job = &scheduler->jobs[i];
@@ -601,9 +616,7 @@ static void runtime_native_3d_tile_scheduler_collect_activity(
 
 static void runtime_native_3d_tile_scheduler_collect_metrics(
     RuntimeNative3DTileScheduler* scheduler) {
-    const uint64_t frequency = (uint64_t)SDL_GetPerformanceFrequency();
-
-    if (!scheduler || frequency == 0u) {
+    if (!scheduler) {
         return;
     }
 
@@ -624,12 +637,13 @@ static void runtime_native_3d_tile_scheduler_collect_metrics(
         const RuntimeNative3DTileSchedulerParentMetric* parent_metric =
             &scheduler->parentMetrics[i];
         const double total_tile_ms =
-            ((double)parent_metric->totalRunTicks * 1000.0) / (double)frequency;
+            runtime_native_3d_tile_scheduler_ticks_to_ms(parent_metric->totalRunTicks);
         const double max_subpass_ms =
-            ((double)parent_metric->maxSubpassTicks * 1000.0) / (double)frequency;
+            runtime_native_3d_tile_scheduler_ticks_to_ms(parent_metric->maxSubpassTicks);
 
         scheduler->stats.temporalMeasuredTileJobs += 1;
         scheduler->stats.temporalTotalTileMs += total_tile_ms;
+        timer_hud_record_duration_ms("Tile Single", total_tile_ms);
         if (parent_metric->splitApplied) {
             scheduler->stats.temporalAdaptiveSplitParentCount += 1;
             scheduler->stats.temporalAdaptiveChildTileCount += parent_metric->childTileCount;
@@ -650,6 +664,30 @@ static void runtime_native_3d_tile_scheduler_collect_metrics(
         scheduler->stats.temporalAverageTileMs =
             scheduler->stats.temporalTotalTileMs /
             (double)scheduler->stats.temporalMeasuredTileJobs;
+        timer_hud_record_duration_ms("Tile Average", scheduler->stats.temporalAverageTileMs);
+        timer_hud_record_duration_ms("Tile Slowest", scheduler->stats.temporalMaxTileMs);
+    }
+
+    for (size_t i = 0; i < scheduler->parentMetricCount; ++i) {
+        const int row_y = scheduler->parentMetrics[i].tile.originY;
+        double row_total_ms = 0.0;
+        bool already_recorded = false;
+        for (size_t previous = 0; previous < i; ++previous) {
+            if (scheduler->parentMetrics[previous].tile.originY == row_y) {
+                already_recorded = true;
+                break;
+            }
+        }
+        if (already_recorded) {
+            continue;
+        }
+        for (size_t j = i; j < scheduler->parentMetricCount; ++j) {
+            if (scheduler->parentMetrics[j].tile.originY == row_y) {
+                row_total_ms += runtime_native_3d_tile_scheduler_ticks_to_ms(
+                    scheduler->parentMetrics[j].totalRunTicks);
+            }
+        }
+        timer_hud_record_duration_ms("Tile Row", row_total_ms);
     }
 }
 
@@ -764,6 +802,7 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgress(
     void* tile_progress_user_data,
     RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DTileScheduler scheduler = {0};
+    const uint64_t frame_start_ticks = (uint64_t)SDL_GetPerformanceCounter();
     const int effective_temporal_frames = (temporal_frames <= 1) ? 1 : temporal_frames;
     const int effective_tile_size = RuntimeNative3DTileSchedulerResolveTileSizeForScale(
         animSettings.tileSize,
@@ -865,6 +904,10 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgress(
     runtime_native_3d_tile_scheduler_collect_metrics(&scheduler);
 
 finalize:
+    timer_hud_record_duration_ms(
+        "Tile Full Frame",
+        runtime_native_3d_tile_scheduler_ticks_to_ms((uint64_t)SDL_GetPerformanceCounter() -
+                                                     frame_start_ticks));
     if (ok && out_stats) {
         *out_stats = scheduler.stats;
         out_stats->temporalCommittedSubpasses = scheduler.committedSubpasses;
