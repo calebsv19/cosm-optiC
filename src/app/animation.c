@@ -516,14 +516,8 @@ void RenderFrame(double lightX, double lightY, int* frameCounter, bool* running)
     // Handle deep render mode frame saving
     if (animSettings.deepRenderMode) {
         int absoluteFrameIndex = s_deepRenderStartFrameIndex + *frameCounter;
-        if (timer_hud) {
-            ts_session_start_timer(timer_hud, "Frame Save");
-        }
         SaveFrame(absoluteFrameIndex);
         (*frameCounter)++;
-        if (timer_hud) {
-            ts_session_stop_timer(timer_hud, "Frame Save");
-        }
         if (*frameCounter >= animSettings.frameLimit) {
             printf("Deep render mode complete. Final frame saved.\n");
             SDL_Delay(500);

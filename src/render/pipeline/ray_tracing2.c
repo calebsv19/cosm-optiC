@@ -415,7 +415,6 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
         else if (animSettings.blurMode == 2) blurRadius = 2;
         else if (animSettings.blurMode == 3) blurRadius = 3;
 
-        ts_session_start_timer(timer_hud_session(), "Buffer Present");
         if (nativeRenderOk) {
             if (blurRadius > 0) {
                 RayTracingPreview_ApplySeparableBlurABGR(native3DRenderBuffer,
@@ -464,7 +463,6 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
             }
         }
 #endif
-        ts_session_stop_timer(timer_hud_session(), "Buffer Present");
         return;
     }
 
@@ -585,7 +583,6 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
     if (animSettings.blurMode == 1) blurRadius = 1;
     else if (animSettings.blurMode == 2) blurRadius = 2;
     else if (animSettings.blurMode == 3) blurRadius = 3;
-    ts_session_start_timer(timer_hud_session(), "Buffer Present");
     if (route.tilePreviewEnabled) {
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_Rect bg = {0, 0, WIDTH, HEIGHT};
@@ -631,8 +628,6 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
 
     // Fluid overlay (density) drawn after objects for visibility.
     RayTracing2Fluid_RenderOverlay(renderer, WIDTH, HEIGHT);
-
-    ts_session_stop_timer(timer_hud_session(), "Buffer Present");
 }
 
 

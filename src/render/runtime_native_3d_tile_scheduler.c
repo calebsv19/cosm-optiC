@@ -668,27 +668,6 @@ static void runtime_native_3d_tile_scheduler_collect_metrics(
         timer_hud_record_duration_ms("Tile Slowest", scheduler->stats.temporalMaxTileMs);
     }
 
-    for (size_t i = 0; i < scheduler->parentMetricCount; ++i) {
-        const int row_y = scheduler->parentMetrics[i].tile.originY;
-        double row_total_ms = 0.0;
-        bool already_recorded = false;
-        for (size_t previous = 0; previous < i; ++previous) {
-            if (scheduler->parentMetrics[previous].tile.originY == row_y) {
-                already_recorded = true;
-                break;
-            }
-        }
-        if (already_recorded) {
-            continue;
-        }
-        for (size_t j = i; j < scheduler->parentMetricCount; ++j) {
-            if (scheduler->parentMetrics[j].tile.originY == row_y) {
-                row_total_ms += runtime_native_3d_tile_scheduler_ticks_to_ms(
-                    scheduler->parentMetrics[j].totalRunTicks);
-            }
-        }
-        timer_hud_record_duration_ms("Tile Row", row_total_ms);
-    }
 }
 
 static int runtime_native_3d_tile_scheduler_compare_slow_parent_metrics(const void* lhs,
