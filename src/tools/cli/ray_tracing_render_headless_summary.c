@@ -483,13 +483,32 @@ static bool write_progress_file(const char *path,
                                 int temporal_subpasses_started,
                                 int temporal_subpasses_completed,
                                 int temporal_subpasses_total,
+                                size_t completed_tiles_in_subpass,
+                                size_t total_tiles_in_subpass,
+                                double elapsed_seconds,
+                                double estimated_remaining_seconds,
                                 const char *state,
                                 const char *diagnostics) {
     FILE *file = NULL;
     char updated_at_utc[32] = {0};
+    double progress_ratio = 0.0;
     if (!path || !path[0] || !request) return true;
     if (!ensure_parent_directory_exists(path)) return false;
     utc_now_string(updated_at_utc, sizeof(updated_at_utc));
+    if (temporal_subpasses_total > 0) {
+        progress_ratio =
+            (double)temporal_subpasses_completed / (double)temporal_subpasses_total;
+        if (total_tiles_in_subpass > 0u &&
+            temporal_subpasses_started > temporal_subpasses_completed) {
+            progress_ratio +=
+                ((double)completed_tiles_in_subpass / (double)total_tiles_in_subpass) /
+                (double)temporal_subpasses_total;
+        }
+    } else if (request->frame_count > 0) {
+        progress_ratio = (double)frames_completed / (double)request->frame_count;
+    }
+    if (progress_ratio < 0.0) progress_ratio = 0.0;
+    if (progress_ratio > 1.0) progress_ratio = 1.0;
     file = fopen(path, "wb");
     if (!file) return false;
     fprintf(file, "{\n");
@@ -509,12 +528,12 @@ static bool write_progress_file(const char *path,
     fprintf(file, "  \"temporal_subpasses_started\": %d,\n", temporal_subpasses_started);
     fprintf(file, "  \"temporal_subpasses_completed\": %d,\n", temporal_subpasses_completed);
     fprintf(file, "  \"temporal_subpasses_total\": %d,\n", temporal_subpasses_total);
-    fprintf(file, "  \"progress_ratio\": %.6f,\n",
-            (temporal_subpasses_total > 0)
-                ? ((double)temporal_subpasses_completed / (double)temporal_subpasses_total)
-                : ((request->frame_count > 0)
-                       ? ((double)frames_completed / (double)request->frame_count)
-                       : 0.0));
+    fprintf(file, "  \"completed_tiles_in_subpass\": %zu,\n", completed_tiles_in_subpass);
+    fprintf(file, "  \"total_tiles_in_subpass\": %zu,\n", total_tiles_in_subpass);
+    fprintf(file, "  \"elapsed_seconds\": %.6f,\n", elapsed_seconds > 0.0 ? elapsed_seconds : 0.0);
+    fprintf(file, "  \"estimated_remaining_seconds\": %.6f,\n",
+            estimated_remaining_seconds >= 0.0 ? estimated_remaining_seconds : -1.0);
+    fprintf(file, "  \"progress_ratio\": %.6f,\n", progress_ratio);
     fprintf(file, "  \"updated_at_utc\": ");
     json_write_string(file, updated_at_utc);
     fprintf(file, ",\n");
@@ -534,6 +553,10 @@ bool ray_tracing_render_headless_write_progress_and_job_status(
     int temporal_subpasses_started,
     int temporal_subpasses_completed,
     int temporal_subpasses_total,
+    size_t completed_tiles_in_subpass,
+    size_t total_tiles_in_subpass,
+    double elapsed_seconds,
+    double estimated_remaining_seconds,
     const char *state,
     const char *diagnostics,
     const char *job_status_path,
@@ -548,6 +571,10 @@ bool ray_tracing_render_headless_write_progress_and_job_status(
                              temporal_subpasses_started,
                              temporal_subpasses_completed,
                              temporal_subpasses_total,
+                             completed_tiles_in_subpass,
+                             total_tiles_in_subpass,
+                             elapsed_seconds,
+                             estimated_remaining_seconds,
                              state,
                              diagnostics)) {
         return false;
@@ -565,6 +592,10 @@ bool ray_tracing_render_headless_write_progress_and_job_status(
                                                                temporal_subpasses_started,
                                                                temporal_subpasses_completed,
                                                                temporal_subpasses_total,
+                                                               completed_tiles_in_subpass,
+                                                               total_tiles_in_subpass,
+                                                               elapsed_seconds,
+                                                               estimated_remaining_seconds,
                                                                diagnostics)) {
             return false;
         }
@@ -616,6 +647,10 @@ bool ray_tracing_render_headless_write_job_status_file(
     int temporal_subpasses_started,
     int temporal_subpasses_completed,
     int temporal_subpasses_total,
+    size_t completed_tiles_in_subpass,
+    size_t total_tiles_in_subpass,
+    double elapsed_seconds,
+    double estimated_remaining_seconds,
     const char *diagnostics) {
     FILE *file = NULL;
     char updated_at_utc[32] = {0};
@@ -629,6 +664,7 @@ bool ray_tracing_render_headless_write_job_status_file(
     char overwrite_policy[32] = {0};
     const char *slash = NULL;
     size_t job_root_len = 0u;
+    double progress_ratio = 0.0;
     if (!path || !path[0] || !job_id || !job_id[0] || !request) return true;
     if (!ensure_parent_directory_exists(path)) return false;
     load_existing_job_status_times(path,
@@ -669,6 +705,20 @@ bool ray_tracing_render_headless_write_job_status_file(
     } else {
         snprintf(overwrite_policy, sizeof(overwrite_policy), "fail_if_exists");
     }
+    if (temporal_subpasses_total > 0) {
+        progress_ratio =
+            (double)temporal_subpasses_completed / (double)temporal_subpasses_total;
+        if (total_tiles_in_subpass > 0u &&
+            temporal_subpasses_started > temporal_subpasses_completed) {
+            progress_ratio +=
+                ((double)completed_tiles_in_subpass / (double)total_tiles_in_subpass) /
+                (double)temporal_subpasses_total;
+        }
+    } else if (request->frame_count > 0) {
+        progress_ratio = (double)frames_completed / (double)request->frame_count;
+    }
+    if (progress_ratio < 0.0) progress_ratio = 0.0;
+    if (progress_ratio > 1.0) progress_ratio = 1.0;
     file = fopen(path, "wb");
     if (!file) return false;
     fprintf(file, "{\n");
@@ -722,12 +772,12 @@ bool ray_tracing_render_headless_write_job_status_file(
     fprintf(file, "  \"temporal_subpasses_started\": %d,\n", temporal_subpasses_started);
     fprintf(file, "  \"temporal_subpasses_completed\": %d,\n", temporal_subpasses_completed);
     fprintf(file, "  \"temporal_subpasses_total\": %d,\n", temporal_subpasses_total);
-    fprintf(file, "  \"progress_ratio\": %.6f,\n",
-            (temporal_subpasses_total > 0)
-                ? ((double)temporal_subpasses_completed / (double)temporal_subpasses_total)
-                : ((request->frame_count > 0)
-                       ? ((double)frames_completed / (double)request->frame_count)
-                       : 0.0));
+    fprintf(file, "  \"completed_tiles_in_subpass\": %zu,\n", completed_tiles_in_subpass);
+    fprintf(file, "  \"total_tiles_in_subpass\": %zu,\n", total_tiles_in_subpass);
+    fprintf(file, "  \"elapsed_seconds\": %.6f,\n", elapsed_seconds > 0.0 ? elapsed_seconds : 0.0);
+    fprintf(file, "  \"estimated_remaining_seconds\": %.6f,\n",
+            estimated_remaining_seconds >= 0.0 ? estimated_remaining_seconds : -1.0);
+    fprintf(file, "  \"progress_ratio\": %.6f,\n", progress_ratio);
     fprintf(file, "  \"submitted_at_utc\": ");
     json_write_string(file, submitted_at_utc);
     fprintf(file, ",\n");

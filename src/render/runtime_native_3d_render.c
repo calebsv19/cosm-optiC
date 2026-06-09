@@ -489,7 +489,64 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalProgressAtFrameIndex(
     RuntimeNative3DTemporalProgressCallback progress_callback,
     void* progress_user_data,
     RuntimeNative3DRenderStats* out_stats) {
+    return RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressAtFrameIndex(
+        pixel_buffer,
+        integrator_id,
+        width,
+        height,
+        normalized_t,
+        frame_index,
+        live_light_x,
+        live_light_y,
+        sampling,
+        temporal_frames,
+        progress_callback,
+        progress_user_data,
+        NULL,
+        NULL,
+        out_stats);
+}
+
+typedef struct RuntimeNative3DTileProgressAdapter {
+    RuntimeNative3DTemporalTileProgressCallback callback;
+    void* user_data;
+} RuntimeNative3DTileProgressAdapter;
+
+static bool runtime_native_3d_render_tile_progress_adapter(
+    const RuntimeNative3DTileSchedulerProgress* progress,
+    void* user_data) {
+    RuntimeNative3DTileProgressAdapter* adapter =
+        (RuntimeNative3DTileProgressAdapter*)user_data;
+    if (!progress || !adapter || !adapter->callback) {
+        return false;
+    }
+    adapter->callback(progress->startedSubpasses,
+                      progress->completedSubpasses,
+                      progress->totalSubpasses,
+                      progress->completedTilesInSubpass,
+                      progress->totalTilesInSubpass,
+                      adapter->user_data);
+    return true;
+}
+
+bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressAtFrameIndex(
+    uint8_t* pixel_buffer,
+    RayTracing3DIntegratorId integrator_id,
+    int width,
+    int height,
+    double normalized_t,
+    int frame_index,
+    double live_light_x,
+    double live_light_y,
+    const RuntimeNative3DSamplingContext* sampling,
+    int temporal_frames,
+    RuntimeNative3DTemporalProgressCallback progress_callback,
+    void* progress_user_data,
+    RuntimeNative3DTemporalTileProgressCallback tile_progress_callback,
+    void* tile_progress_user_data,
+    RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DPreparedFrame frame = {0};
+    RuntimeNative3DTileProgressAdapter tile_progress_adapter = {0};
     bool ok = false;
     const int effective_temporal_frames = (temporal_frames <= 1) ? 1 : temporal_frames;
 
@@ -511,13 +568,28 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalProgressAtFrameIndex(
         return false;
     }
     if (runtime_native_3d_render_should_use_tile_scheduler(width, height)) {
-        ok = RuntimeNative3DRenderPreparedFrameTemporalTiled(pixel_buffer,
-                                                             integrator_id,
-                                                             &frame,
-                                                             effective_temporal_frames,
-                                                             progress_callback,
-                                                             progress_user_data,
-                                                             out_stats);
+        if (tile_progress_callback) {
+            tile_progress_adapter.callback = tile_progress_callback;
+            tile_progress_adapter.user_data = tile_progress_user_data;
+            ok = RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgress(
+                pixel_buffer,
+                integrator_id,
+                &frame,
+                effective_temporal_frames,
+                progress_callback,
+                progress_user_data,
+                runtime_native_3d_render_tile_progress_adapter,
+                &tile_progress_adapter,
+                out_stats);
+        } else {
+            ok = RuntimeNative3DRenderPreparedFrameTemporalTiled(pixel_buffer,
+                                                                 integrator_id,
+                                                                 &frame,
+                                                                 effective_temporal_frames,
+                                                                 progress_callback,
+                                                                 progress_user_data,
+                                                                 out_stats);
+        }
     } else {
         ok = runtime_native_3d_render_prepared_frame_serial(pixel_buffer,
                                                             integrator_id,

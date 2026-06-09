@@ -61,6 +61,13 @@ typedef void (*RuntimeNative3DTemporalProgressCallback)(int started_subpasses,
                                                         int completed_subpasses,
                                                         int total_subpasses,
                                                         void* user_data);
+typedef void (*RuntimeNative3DTemporalTileProgressCallback)(
+    int started_subpasses,
+    int completed_subpasses,
+    int total_subpasses,
+    size_t completed_tiles_in_subpass,
+    size_t total_tiles_in_subpass,
+    void* user_data);
 
 void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
                                            const RuntimeNative3DRenderStats* src);
@@ -192,6 +199,22 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalProgressAtFrameIndex(
     int temporal_frames,
     RuntimeNative3DTemporalProgressCallback progress_callback,
     void* progress_user_data,
+    RuntimeNative3DRenderStats* out_stats);
+bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressAtFrameIndex(
+    uint8_t* pixel_buffer,
+    RayTracing3DIntegratorId integrator_id,
+    int width,
+    int height,
+    double normalized_t,
+    int frame_index,
+    double live_light_x,
+    double live_light_y,
+    const RuntimeNative3DSamplingContext* sampling,
+    int temporal_frames,
+    RuntimeNative3DTemporalProgressCallback progress_callback,
+    void* progress_user_data,
+    RuntimeNative3DTemporalTileProgressCallback tile_progress_callback,
+    void* tile_progress_user_data,
     RuntimeNative3DRenderStats* out_stats);
 uint8_t RuntimeNative3DResolveEnvironmentByte(void);
 void RuntimeNative3DFillPixelBufferEnvironment(uint8_t* pixel_buffer, size_t pixel_count);

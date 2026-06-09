@@ -487,6 +487,10 @@ Last updated: 2026-06-05
     `temporal_subpasses_total`, and `progress_ratio` in both
     `render_progress.json` and `job_status.json`, so a single expensive frame
     can show real progress while still inside `rendering_frame`
+  - detached live-job supervision now also surfaces tile/time progress through
+    `completed_tiles_in_subpass`, `total_tiles_in_subpass`,
+    `elapsed_seconds`, and `estimated_remaining_seconds`, so remote worker
+    readers can report active progress inside one long temporal subpass
   - detached live-job supervision now distinguishes "entered current subpass"
     from "committed current subpass"; a status like `started=6`,
     `completed=5`, `total=6` is now explicitly "final subpass active", not an
@@ -528,9 +532,9 @@ Last updated: 2026-06-05
   - missing legacy scene/animation config files now log as informational
     fallback messages during headless request-driven runs instead of looking
     like hard render failures in stdout
-  - remaining long-frame supervision limit: there is still no tile-level,
-    bounce-level, or non-temporal percent signal once a render is inside one
-    long temporal subpass
+  - remaining long-frame supervision limit: tile-level progress is now
+    available, but there is still no bounce-level or deeper convergence signal
+    inside one tile once a render is inside one long temporal subpass
   - `test-ray-tracing-job-runner-policy` now covers: clean submit, collision rejection without flags, partial contiguous resume after removing the final frame, and explicit overwrite rerender
   - multi-frame image export currently samples normalized time from `0.0` to `1.0` across the requested frame count
   - manifest-backed volume rendering currently imports one representative VF3D frame; animated VF3D frame selection remains a follow-up contract

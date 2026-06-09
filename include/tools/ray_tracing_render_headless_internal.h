@@ -100,6 +100,10 @@ bool ray_tracing_render_headless_write_job_status_file(
     int temporal_subpasses_started,
     int temporal_subpasses_completed,
     int temporal_subpasses_total,
+    size_t completed_tiles_in_subpass,
+    size_t total_tiles_in_subpass,
+    double elapsed_seconds,
+    double estimated_remaining_seconds,
     const char *diagnostics);
 bool ray_tracing_render_headless_write_progress_and_job_status(
     const char *progress_path,
@@ -110,6 +114,10 @@ bool ray_tracing_render_headless_write_progress_and_job_status(
     int temporal_subpasses_started,
     int temporal_subpasses_completed,
     int temporal_subpasses_total,
+    size_t completed_tiles_in_subpass,
+    size_t total_tiles_in_subpass,
+    double elapsed_seconds,
+    double estimated_remaining_seconds,
     const char *state,
     const char *diagnostics,
     const char *job_status_path,

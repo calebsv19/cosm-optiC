@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "app/agent_render_request.h"
@@ -341,6 +342,10 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                                   0,
                                   0,
                                   request->temporal_frames,
+                                  0u,
+                                  0u,
+                                  0.0,
+                                  -1.0,
                                   "running",
                                   "starting preflight",
                                   job_status_path,
@@ -373,6 +378,10 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                                       0,
                                       0,
                                       request->temporal_frames,
+                                      0u,
+                                      0u,
+                                      0.0,
+                                      -1.0,
                                       "failed",
                                       preflight.diagnostics,
                                       job_status_path,
@@ -403,6 +412,10 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                                           0,
                                           0,
                                           request->temporal_frames,
+                                          0u,
+                                          0u,
+                                          0.0,
+                                          -1.0,
                                           "failed",
                                           preflight.diagnostics,
                                           job_status_path,
@@ -433,6 +446,10 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                                       0,
                                       0,
                                       request->temporal_frames,
+                                      0u,
+                                      0u,
+                                      0.0,
+                                      -1.0,
                                       "failed",
                                       preflight.diagnostics,
                                       job_status_path,
@@ -473,6 +490,10 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                                       0,
                                       0,
                                       request->temporal_frames,
+                                      0u,
+                                      0u,
+                                      0.0,
+                                      -1.0,
                                       "failed",
                                       preflight.diagnostics,
                                       job_status_path,
@@ -491,6 +512,10 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                                   0,
                                   0,
                                   request->temporal_frames,
+                                  0u,
+                                  0u,
+                                  0.0,
+                                  -1.0,
                                   "running",
                                   "preflight ready",
                                   job_status_path,
@@ -518,7 +543,41 @@ typedef struct {
     const char *request_path;
     int frame_index;
     int frames_completed;
+    int started_subpasses;
+    int completed_subpasses;
+    int total_subpasses;
+    size_t completed_tiles_in_subpass;
+    size_t total_tiles_in_subpass;
+    struct timespec frame_started_at;
 } RayTracingTemporalProgressContext;
+
+static double ray_tracing_elapsed_seconds_since(const struct timespec *start_time) {
+    struct timespec now = {0};
+    double elapsed = 0.0;
+    if (!start_time) return 0.0;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return 0.0;
+    elapsed = (double)(now.tv_sec - start_time->tv_sec);
+    elapsed += (double)(now.tv_nsec - start_time->tv_nsec) / 1000000000.0;
+    return elapsed < 0.0 ? 0.0 : elapsed;
+}
+
+static double ray_tracing_estimate_remaining_seconds(double elapsed_seconds,
+                                                     int started_subpasses,
+                                                     int completed_subpasses,
+                                                     int total_subpasses,
+                                                     size_t completed_tiles_in_subpass,
+                                                     size_t total_tiles_in_subpass) {
+    double progress = 0.0;
+    if (elapsed_seconds <= 0.0 || total_subpasses <= 0) return -1.0;
+    progress = (double)completed_subpasses / (double)total_subpasses;
+    if (total_tiles_in_subpass > 0u && started_subpasses > completed_subpasses) {
+        progress += ((double)completed_tiles_in_subpass / (double)total_tiles_in_subpass) /
+                    (double)total_subpasses;
+    }
+    if (progress <= 0.001) return -1.0;
+    if (progress >= 1.0) return 0.0;
+    return (elapsed_seconds / progress) - elapsed_seconds;
+}
 
 static void ray_tracing_temporal_progress_callback(int started_subpasses,
                                                    int completed_subpasses,
@@ -528,6 +587,9 @@ static void ray_tracing_temporal_progress_callback(int started_subpasses,
         (RayTracingTemporalProgressContext *)user_data;
     char diagnostics[128];
     if (!context || !context->request) return;
+    context->started_subpasses = started_subpasses;
+    context->completed_subpasses = completed_subpasses;
+    context->total_subpasses = total_subpasses;
     if (completed_subpasses < started_subpasses) {
         snprintf(diagnostics,
                  sizeof(diagnostics),
@@ -549,12 +611,75 @@ static void ray_tracing_temporal_progress_callback(int started_subpasses,
                                         started_subpasses,
                                         completed_subpasses,
                                         total_subpasses,
+                                        context->completed_tiles_in_subpass,
+                                        context->total_tiles_in_subpass,
+                                        ray_tracing_elapsed_seconds_since(&context->frame_started_at),
+                                        ray_tracing_estimate_remaining_seconds(
+                                            ray_tracing_elapsed_seconds_since(&context->frame_started_at),
+                                            started_subpasses,
+                                            completed_subpasses,
+                                            total_subpasses,
+                                            context->completed_tiles_in_subpass,
+                                            context->total_tiles_in_subpass),
                                         "running",
                                         diagnostics,
                                         context->job_status_path,
                                         context->job_id,
                                         context->request_path,
                                         -1);
+}
+
+static void ray_tracing_tile_progress_callback(int started_subpasses,
+                                               int completed_subpasses,
+                                               int total_subpasses,
+                                               size_t completed_tiles_in_subpass,
+                                               size_t total_tiles_in_subpass,
+                                               void *user_data) {
+    RayTracingTemporalProgressContext *context =
+        (RayTracingTemporalProgressContext *)user_data;
+    char diagnostics[160];
+    double elapsed_seconds = 0.0;
+    double estimated_remaining_seconds = 0.0;
+    if (!context || !context->request) return;
+    context->started_subpasses = started_subpasses;
+    context->completed_subpasses = completed_subpasses;
+    context->total_subpasses = total_subpasses;
+    context->completed_tiles_in_subpass = completed_tiles_in_subpass;
+    context->total_tiles_in_subpass = total_tiles_in_subpass;
+    elapsed_seconds = ray_tracing_elapsed_seconds_since(&context->frame_started_at);
+    estimated_remaining_seconds = ray_tracing_estimate_remaining_seconds(
+        elapsed_seconds,
+        started_subpasses,
+        completed_subpasses,
+        total_subpasses,
+        completed_tiles_in_subpass,
+        total_tiles_in_subpass);
+    snprintf(diagnostics,
+             sizeof(diagnostics),
+             "rendering frame (subpass %d/%d, tiles %zu/%zu)",
+             started_subpasses > 0 ? started_subpasses : 1,
+             total_subpasses > 0 ? total_subpasses : 1,
+             completed_tiles_in_subpass,
+             total_tiles_in_subpass);
+    (void)ray_tracing_render_headless_write_progress_and_job_status(
+        context->request->progress_path,
+        context->request,
+        "rendering_frame",
+        context->frame_index,
+        context->frames_completed,
+        started_subpasses,
+        completed_subpasses,
+        total_subpasses,
+        completed_tiles_in_subpass,
+        total_tiles_in_subpass,
+        elapsed_seconds,
+        estimated_remaining_seconds,
+        "running",
+        diagnostics,
+        context->job_status_path,
+        context->job_id,
+        context->request_path,
+        -1);
 }
 
 static int run_render(const RayTracingAgentRenderRequest *request,
@@ -634,6 +759,10 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                                           0,
                                           0,
                                           request->temporal_frames,
+                                          0u,
+                                          0u,
+                                          0.0,
+                                          -1.0,
                                           "failed",
                                           preflight.diagnostics,
                                           job_status_path,
@@ -656,6 +785,10 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                                           0,
                                           0,
                                           request->temporal_frames,
+                                          0u,
+                                          0u,
+                                          0.0,
+                                          -1.0,
                                           "failed",
                                           preflight.diagnostics,
                                           job_status_path,
@@ -674,6 +807,10 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                                       0,
                                       0,
                                       request->temporal_frames,
+                                      0u,
+                                      0u,
+                                      0.0,
+                                      -1.0,
                                       "running",
                                       "rendering frame",
                                       job_status_path,
@@ -687,8 +824,10 @@ static int run_render(const RayTracingAgentRenderRequest *request,
         temporal_progress.request_path = request_path;
         temporal_progress.frame_index = frame_index;
         temporal_progress.frames_completed = preflight.frames_rendered;
+        temporal_progress.total_subpasses = request->temporal_frames;
+        (void)clock_gettime(CLOCK_MONOTONIC, &temporal_progress.frame_started_at);
 
-        if (!RuntimeNative3DRenderToPixelBufferWithSamplingTemporalProgressAtFrameIndex(
+        if (!RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressAtFrameIndex(
                 pixels,
                 preflight.route.integratorMode3D,
                 request->width,
@@ -700,6 +839,8 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                 NULL,
                 request->temporal_frames,
                 ray_tracing_temporal_progress_callback,
+                &temporal_progress,
+                ray_tracing_tile_progress_callback,
                 &temporal_progress,
                 &stats)) {
             snprintf(preflight.diagnostics, sizeof(preflight.diagnostics), "failed to render frame");
@@ -714,6 +855,10 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                                           request->temporal_frames,
                                           0,
                                           request->temporal_frames,
+                                          temporal_progress.completed_tiles_in_subpass,
+                                          temporal_progress.total_tiles_in_subpass,
+                                          ray_tracing_elapsed_seconds_since(&temporal_progress.frame_started_at),
+                                          -1.0,
                                           "failed",
                                           preflight.diagnostics,
                                           job_status_path,
@@ -750,6 +895,10 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                                           request->temporal_frames,
                                           request->temporal_frames,
                                           request->temporal_frames,
+                                          temporal_progress.total_tiles_in_subpass,
+                                          temporal_progress.total_tiles_in_subpass,
+                                          ray_tracing_elapsed_seconds_since(&temporal_progress.frame_started_at),
+                                          0.0,
                                           "failed",
                                           preflight.diagnostics,
                                           job_status_path,
@@ -779,6 +928,10 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                                       request->temporal_frames,
                                       request->temporal_frames,
                                       request->temporal_frames,
+                                      temporal_progress.total_tiles_in_subpass,
+                                      temporal_progress.total_tiles_in_subpass,
+                                      ray_tracing_elapsed_seconds_since(&temporal_progress.frame_started_at),
+                                      0.0,
                                       "running",
                                       frame_path,
                                       job_status_path,
@@ -801,6 +954,10 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                                       request->temporal_frames,
                                       request->temporal_frames,
                                       request->temporal_frames,
+                                      0u,
+                                      0u,
+                                      0.0,
+                                      -1.0,
                                       "running",
                                       request->video_path,
                                       job_status_path,
@@ -823,6 +980,10 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                                           request->temporal_frames,
                                           request->temporal_frames,
                                           request->temporal_frames,
+                                          0u,
+                                          0u,
+                                          0.0,
+                                          -1.0,
                                           "failed",
                                           preflight.diagnostics,
                                           job_status_path,
@@ -842,6 +1003,10 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                                   request->temporal_frames,
                                   request->temporal_frames,
                                   request->temporal_frames,
+                                  0u,
+                                  0u,
+                                  0.0,
+                                  0.0,
                                   "completed",
                                   "render completed",
                                   job_status_path,
@@ -912,6 +1077,10 @@ int main(int argc, char **argv) {
                               0,
                               0,
                               request.temporal_frames > 0 ? request.temporal_frames : 1,
+                              0u,
+                              0u,
+                              0.0,
+                              -1.0,
                               "render process started");
     }
 
@@ -940,6 +1109,10 @@ int main(int argc, char **argv) {
                               run_code == 0 ? (request.temporal_frames > 0 ? request.temporal_frames : 1) : 0,
                               run_code == 0 ? (request.temporal_frames > 0 ? request.temporal_frames : 1) : 0,
                               request.temporal_frames > 0 ? request.temporal_frames : 1,
+                              0u,
+                              0u,
+                              0.0,
+                              run_code == 0 ? 0.0 : -1.0,
                               preflight.diagnostics);
     }
     if (!ray_tracing_render_headless_write_summary_file(request.summary_path, &request, &preflight)) {

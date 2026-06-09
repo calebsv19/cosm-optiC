@@ -425,10 +425,17 @@ Phase 2 truth additions:
   - `temporal_subpasses_started`
   - `temporal_subpasses_completed`
   - `temporal_subpasses_total`
+  - `completed_tiles_in_subpass`
+  - `total_tiles_in_subpass`
+  - `elapsed_seconds`
+  - `estimated_remaining_seconds`
   - `progress_ratio`
 - long single-frame renders can now show real temporal-subpass movement while
   still in `rendering_frame`, instead of looking frozen until the frame
   finishes
+- active temporal subpasses can now also expose tile-level movement inside the
+  current subpass, so status readers can distinguish "slow but moving" from a
+  truly stale worker
 - interpret those fields carefully:
   - `temporal_subpasses_started` means the renderer has entered that subpass
   - `temporal_subpasses_completed` means the subpass has fully committed
@@ -439,9 +446,9 @@ Phase 2 truth additions:
 - a `stalled` state means "alive but no progress timestamp movement past the
   threshold"; if progress resumes on a later `status` read, the runner can move
   the state back to `running`
-- current long single-frame limitation: stage updates are truthful, but there is
-  still no tile-level or bounce-level progress signal beyond temporal subpass
-  completion
+- current long single-frame limitation: tile-level progress is now available,
+  but there is still no bounce-level or per-ray convergence signal beyond the
+  active subpass/tile counters
 - `--resume` is contiguous-frame resume, not blind overwrite:
   - if no target frames exist, it behaves like a normal clean submit
   - if a contiguous prefix exists, the runner stages a reduced effective frame
