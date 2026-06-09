@@ -46,8 +46,10 @@ void ts_session_shutdown(TimerHUDSession* session);
 // --- Timer Controls ---
 void ts_start_timer(const char* name);  // Begin named timer
 void ts_stop_timer(const char* name);   // End named timer
+void ts_record_duration_ms(const char* name, double duration_ms);
 void ts_session_start_timer(TimerHUDSession* session, const char* name);
 void ts_session_stop_timer(TimerHUDSession* session, const char* name);
+void ts_session_record_duration_ms(TimerHUDSession* session, const char* name, double duration_ms);
 
 // --- Frame Markers (optional) ---
 void ts_frame_start(void);       // Mark beginning of frame (future use)
