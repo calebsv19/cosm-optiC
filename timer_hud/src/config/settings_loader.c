@@ -65,6 +65,12 @@ const char* ts_visual_mode_name(TimerHUDVisualMode mode) {
             return "history_graph";
         case TIMER_HUD_VISUAL_MODE_HYBRID:
             return "hybrid";
+        case TIMER_HUD_VISUAL_MODE_STATS:
+            return "stats";
+        case TIMER_HUD_VISUAL_MODE_SPIKES:
+            return "spikes";
+        case TIMER_HUD_VISUAL_MODE_COMPARE:
+            return "compare";
         case TIMER_HUD_VISUAL_MODE_INVALID:
         default:
             return NULL;
@@ -81,8 +87,20 @@ TimerHUDVisualMode ts_visual_mode_from_string(const char* mode) {
     if (strcmp(mode, "history_graph") == 0) {
         return TIMER_HUD_VISUAL_MODE_HISTORY_GRAPH;
     }
+    if (strcmp(mode, "history") == 0) {
+        return TIMER_HUD_VISUAL_MODE_HISTORY_GRAPH;
+    }
     if (strcmp(mode, "hybrid") == 0) {
         return TIMER_HUD_VISUAL_MODE_HYBRID;
+    }
+    if (strcmp(mode, "stats") == 0) {
+        return TIMER_HUD_VISUAL_MODE_STATS;
+    }
+    if (strcmp(mode, "spikes") == 0) {
+        return TIMER_HUD_VISUAL_MODE_SPIKES;
+    }
+    if (strcmp(mode, "compare") == 0) {
+        return TIMER_HUD_VISUAL_MODE_COMPARE;
     }
     return TIMER_HUD_VISUAL_MODE_INVALID;
 }

@@ -544,3 +544,73 @@ void ts_session_render(TimerHUDSession* session) {
 void ts_render(void) {
     ts_session_render(ts_default_session_internal());
 }
+
+static bool point_in_rect(int x, int y, int rx, int ry, int rw, int rh) {
+    return rw > 0 && rh > 0 && x >= rx && x < rx + rw && y >= ry && y < ry + rh;
+}
+
+static TimerHUDVisualMode cycle_visual_mode(TimerHUDVisualMode mode, int delta) {
+    static const TimerHUDVisualMode modes[] = {
+        TIMER_HUD_VISUAL_MODE_HISTORY_GRAPH,
+        TIMER_HUD_VISUAL_MODE_STATS,
+        TIMER_HUD_VISUAL_MODE_SPIKES,
+        TIMER_HUD_VISUAL_MODE_COMPARE,
+    };
+    int count = (int)(sizeof(modes) / sizeof(modes[0]));
+    int index = 0;
+
+    for (int i = 0; i < count; ++i) {
+        if (modes[i] == mode || (mode == TIMER_HUD_VISUAL_MODE_HYBRID && modes[i] == TIMER_HUD_VISUAL_MODE_HISTORY_GRAPH)) {
+            index = i;
+            break;
+        }
+    }
+    index = (index + delta) % count;
+    if (index < 0) {
+        index += count;
+    }
+    return modes[index];
+}
+
+bool ts_session_handle_pointer_down(TimerHUDSession* session, int x, int y, int button) {
+    TimerHUDVisualMode mode = TIMER_HUD_VISUAL_MODE_INVALID;
+
+    if (!session || button != 1 || !ts_session_is_hud_enabled(session)) {
+        return false;
+    }
+
+    mode = ts_session_get_hud_visual_mode_kind(session);
+    if (point_in_rect(x,
+                      y,
+                      session->control_mode_prev_x,
+                      session->control_mode_prev_y,
+                      session->control_mode_prev_w,
+                      session->control_mode_prev_h)) {
+        (void)ts_session_set_hud_visual_mode_kind(session, cycle_visual_mode(mode, -1));
+        return true;
+    }
+    if (point_in_rect(x,
+                      y,
+                      session->control_mode_next_x,
+                      session->control_mode_next_y,
+                      session->control_mode_next_w,
+                      session->control_mode_next_h)) {
+        (void)ts_session_set_hud_visual_mode_kind(session, cycle_visual_mode(mode, 1));
+        return true;
+    }
+    if (point_in_rect(x,
+                      y,
+                      session->control_mode_history_x,
+                      session->control_mode_history_y,
+                      session->control_mode_history_w,
+                      session->control_mode_history_h)) {
+        (void)ts_session_set_hud_visual_mode_kind(session, TIMER_HUD_VISUAL_MODE_HISTORY_GRAPH);
+        return true;
+    }
+
+    return false;
+}
+
+bool ts_handle_pointer_down(int x, int y, int button) {
+    return ts_session_handle_pointer_down(ts_default_session_internal(), x, y, button);
+}

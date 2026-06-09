@@ -2,11 +2,9 @@
 
 #include <math.h>
 
-enum {
-    CORE_SIM_FNV1A_64_PRIME = 1099511628211ull,
-    CORE_SIM_FNV1A_64_OFFSET_HIGH = 0xcbf29ce4u,
-    CORE_SIM_FNV1A_64_OFFSET_LOW = 0x84222325u
-};
+static const uint64_t CORE_SIM_FNV1A_64_PRIME = 1099511628211ull;
+static const uint32_t CORE_SIM_FNV1A_64_OFFSET_HIGH = 0xcbf29ce4u;
+static const uint32_t CORE_SIM_FNV1A_64_OFFSET_LOW = 0x84222325u;
 
 enum {
     CORE_SIM_DEFAULT_MAX_TICKS_PER_FRAME = 8

@@ -47,6 +47,9 @@ typedef enum TimerHUDVisualMode {
     TIMER_HUD_VISUAL_MODE_TEXT_COMPACT = 0,
     TIMER_HUD_VISUAL_MODE_HISTORY_GRAPH = 1,
     TIMER_HUD_VISUAL_MODE_HYBRID = 2,
+    TIMER_HUD_VISUAL_MODE_STATS = 3,
+    TIMER_HUD_VISUAL_MODE_SPIKES = 4,
+    TIMER_HUD_VISUAL_MODE_COMPARE = 5,
 } TimerHUDVisualMode;
 
 const TimerHUDSettings* ts_get_settings(void);

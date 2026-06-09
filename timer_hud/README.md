@@ -2,7 +2,7 @@
 
 `timer_hud` provides shared frame-timing and HUD instrumentation utilities used by multiple CodeWork apps.
 
-Current version: `0.6.0`
+Current version: `0.7.0`
 
 ## Scope
 - timer lifecycle and frame tracking
@@ -44,6 +44,15 @@ Legacy compatibility:
   - `TimerHUDSession` now owns HUD/log/event settings as runtime state instead of relying on a mutable global settings object
   - `settings_loader.h` remains source-compatible through a default-session compatibility macro, but new integrations should treat it as legacy-only
   - `ide` now uses an explicit `TimerHUDSession*` for init, frame hooks, timer scopes, render, and shutdown
+- `0.6.1` refines HUD presentation for long-running timers:
+  - HUD labels now format large durations as seconds, minutes, or hours instead of always emitting raw milliseconds
+  - graph scale labels are captured in the render snapshot and drawn in the row header instead of over the graph trace
+  - hybrid/history rows stay graph-first while preserving the existing host backend and settings contracts
+- `0.7.0` adds analysis-backed visual modes:
+  - row snapshots now carry last/avg/min/max/p95-ish/stddev/sample/spike/percent-of-total analysis fields
+  - `stats`, `spikes`, and `compare` visual modes are accepted through the existing HUD visual-mode config path
+  - the renderer draws mode headers, spike-focused history rows, dense stats rows, and relative average-time compare bars without changing host backend hooks
+  - hosts can optionally pass pointer-down events to TimerHUD; only the three tiny header controls (`<`, `H`, `>`) are consumed, while all other points fall through to the host UI
 
 ## Public Contract Status
 - top-level module docs now present

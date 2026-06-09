@@ -7,7 +7,7 @@ Purpose:
 - Provide a small pure-math API for 2D content inspection without owning SDL/input policy.
 
 Current status:
-- v0.2.1 truth-lock and edge-policy coverage in place.
+- v0.2.2 truth-lock and edge-policy coverage in place, including Linux-safe internal pi constants so strict C11 builds no longer depend on libc exposing `M_PI`.
 - Source-level proving hosts are now live in DataLab sketch/image inspection, DrawingProgram canvas/document viewport bridges, MapForge camera target/rotation bridging, and GravityOrbitSim world camera math.
 
 Notes:

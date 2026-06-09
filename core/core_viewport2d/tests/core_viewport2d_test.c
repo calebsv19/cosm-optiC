@@ -3,6 +3,8 @@
 #include <math.h>
 #include <stdio.h>
 
+static const float CORE_VIEWPORT2D_PI = 3.14159265358979323846f;
+
 static int nearly_equal(float a, float b, float eps) {
     return fabsf(a - b) <= eps;
 }
@@ -134,7 +136,7 @@ int main(void) {
     viewport.pan_x = 100.0f;
     viewport.pan_y = 50.0f;
     viewport.zoom = 2.0f;
-    viewport.rotation_rad = (float)(M_PI * 0.5);
+    viewport.rotation_rad = CORE_VIEWPORT2D_PI * 0.5f;
     r = core_viewport2d_content_to_screen(&viewport, 10.0f, 5.0f, &x, &y);
     if (r.code != CORE_OK) return 1;
     if (!nearly_equal(x, 90.0f, 1e-5f)) return 1;
@@ -149,7 +151,7 @@ int main(void) {
     viewport.zoom = 1.0f;
     viewport.min_zoom = 0.25f;
     viewport.max_zoom = 4.0f;
-    viewport.rotation_rad = 5.5f * (float)M_PI;
+    viewport.rotation_rad = 5.5f * CORE_VIEWPORT2D_PI;
     r = core_viewport2d_content_to_screen(&viewport, 10.0f, 0.0f, &x, &y);
     if (r.code != CORE_OK) return 1;
     if (!nearly_equal(x, 0.0f, 1e-4f)) return 1;
@@ -195,9 +197,9 @@ int main(void) {
     viewport.rotation_rad = -0.4f;
     r = core_viewport2d_screen_to_content(&viewport, 144.0f, 96.0f, &x, &y);
     if (r.code != CORE_OK) return 1;
-    r = core_viewport2d_set_rotation_at_screen_anchor(&viewport, 144.0f, 96.0f, 5.5f * (float)M_PI);
+    r = core_viewport2d_set_rotation_at_screen_anchor(&viewport, 144.0f, 96.0f, 5.5f * CORE_VIEWPORT2D_PI);
     if (r.code != CORE_OK) return 1;
-    if (!nearly_equal(viewport.rotation_rad, -0.5f * (float)M_PI, 1e-5f)) return 1;
+    if (!nearly_equal(viewport.rotation_rad, -0.5f * CORE_VIEWPORT2D_PI, 1e-5f)) return 1;
     {
         float ax = 0.0f;
         float ay = 0.0f;
