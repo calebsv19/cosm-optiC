@@ -2,7 +2,7 @@
 
 `timer_hud` provides shared frame-timing and HUD instrumentation utilities used by multiple CodeWork apps.
 
-Current version: `0.7.0`
+Current version: `0.7.1`
 
 ## Scope
 - timer lifecycle and frame tracking
@@ -53,6 +53,7 @@ Legacy compatibility:
   - `stats`, `spikes`, and `compare` visual modes are accepted through the existing HUD visual-mode config path
   - the renderer draws mode headers, spike-focused history rows, dense stats rows, and relative average-time compare bars without changing host backend hooks
   - hosts can optionally pass pointer-down events to TimerHUD; only the three tiny header controls (`<`, `H`, `>`) are consumed, while all other points fall through to the host UI
+- `0.7.1` adds `ts_record_duration_ms` / `ts_session_record_duration_ms` for hosts that already measured a duration externally, such as worker-thread tile schedulers that need to publish timing samples from a safe aggregation path
 
 ## Public Contract Status
 - top-level module docs now present

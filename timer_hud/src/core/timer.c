@@ -27,13 +27,20 @@ void timer_stop(Timer* timer) {
     uint64_t end_time = get_time_ns();
     double duration_ms = (end_time - timer->start_time) / 1e6;
 
+    timer_record_duration_ms(timer, duration_ms);
+    timer->running = false;
+}
+
+void timer_record_duration_ms(Timer* timer, double duration_ms) {
+    if (!timer || !isfinite(duration_ms) || duration_ms < 0.0) {
+        return;
+    }
     timer->durations[timer->index] = duration_ms;
     timer->index = (timer->index + 1) % TIMER_HISTORY_SIZE;
     if (timer->count < TIMER_HISTORY_SIZE) {
         timer->count++;
     }
 
-    timer->running = false;
     timer_update_stats(timer);
 }
 

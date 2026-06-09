@@ -529,6 +529,17 @@ void ts_stop_timer(const char* name) {
     ts_session_stop_timer(ts_default_session_internal(), name);
 }
 
+void ts_session_record_duration_ms(TimerHUDSession* session, const char* name, double duration_ms) {
+    Timer* timer = tm_find_or_create_timer(session, name);
+    if (timer) {
+        timer_record_duration_ms(timer, duration_ms);
+    }
+}
+
+void ts_record_duration_ms(const char* name, double duration_ms) {
+    ts_session_record_duration_ms(ts_default_session_internal(), name, duration_ms);
+}
+
 void ts_frame_start(void) {
     ts_session_frame_start(ts_default_session_internal());
 }
