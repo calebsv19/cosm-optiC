@@ -30,6 +30,18 @@ struct TimerHUDSession {
     TimerHUDSettings settings;
 
     double display_max_ms[MAX_TIMERS];
+    int control_mode_prev_x;
+    int control_mode_prev_y;
+    int control_mode_prev_w;
+    int control_mode_prev_h;
+    int control_mode_next_x;
+    int control_mode_next_y;
+    int control_mode_next_w;
+    int control_mode_next_h;
+    int control_mode_history_x;
+    int control_mode_history_y;
+    int control_mode_history_w;
+    int control_mode_history_h;
 
     char event_buffer[MAX_EVENTS_PER_FRAME][MAX_EVENT_NAME_LENGTH];
     const char* event_ptrs[MAX_EVENTS_PER_FRAME];

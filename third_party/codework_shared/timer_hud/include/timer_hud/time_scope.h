@@ -63,6 +63,11 @@ void ts_session_emit_event(TimerHUDSession* session, const char* tag);
 void ts_render(void);
 void ts_session_render(TimerHUDSession* session);
 
+// --- HUD Controls ---
+// Returns true only when the HUD consumes the pointer event.
+bool ts_handle_pointer_down(int x, int y, int button);
+bool ts_session_handle_pointer_down(TimerHUDSession* session, int x, int y, int button);
+
 #ifdef __cplusplus
 }
 #endif
