@@ -3,7 +3,18 @@
 #include <math.h>
 #include <string.h>
 
+#include "render/runtime_path_depth_policy_3d.h"
 #include "render/runtime_direct_light_3d.h"
+#include "render/runtime_specular_reflection_3d.h"
+
+static bool runtime_material_response_3d_shade_hit_with_payload_depth(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeMaterialPayload3D* payload,
+    const RuntimeNative3DSamplingContext* sampling,
+    Vec3 view_dir,
+    int specular_depth_remaining,
+    RuntimeMaterialResponse3DResult* out_result);
 
 static double runtime_material_response_3d_clamp(double value,
                                                  double min_value,
@@ -83,18 +94,27 @@ static void runtime_material_response_3d_apply_transmittance(
     io_result->bounceRadianceR *= transmittance->r;
     io_result->bounceRadianceG *= transmittance->g;
     io_result->bounceRadianceB *= transmittance->b;
+    io_result->specularRadianceR *= transmittance->r;
+    io_result->specularRadianceG *= transmittance->g;
+    io_result->specularRadianceB *= transmittance->b;
     io_result->directRadiance = runtime_material_response_3d_peak(io_result->directRadianceR,
                                                                   io_result->directRadianceG,
                                                                   io_result->directRadianceB);
     io_result->bounceRadiance = runtime_material_response_3d_peak(io_result->bounceRadianceR,
                                                                   io_result->bounceRadianceG,
                                                                   io_result->bounceRadianceB);
+    io_result->specularRadiance = runtime_material_response_3d_peak(io_result->specularRadianceR,
+                                                                    io_result->specularRadianceG,
+                                                                    io_result->specularRadianceB);
     io_result->radianceR = io_result->directRadianceR + io_result->bounceRadianceR;
     io_result->radianceG = io_result->directRadianceG + io_result->bounceRadianceG;
     io_result->radianceB = io_result->directRadianceB + io_result->bounceRadianceB;
-    io_result->radiance = runtime_material_response_3d_peak(io_result->radianceR,
-                                                            io_result->radianceG,
-                                                            io_result->radianceB);
+    io_result->radianceR += io_result->specularRadianceR;
+    io_result->radianceG += io_result->specularRadianceG;
+    io_result->radianceB += io_result->specularRadianceB;
+    io_result->radiance = io_result->directRadiance +
+                           io_result->bounceRadiance +
+                           io_result->specularRadiance;
     if (!(transmittance->luma > 1e-9)) {
         io_result->visible = false;
     }
@@ -123,10 +143,99 @@ static void runtime_material_response_3d_apply_weights(
     out_result->bounceRadianceR = diffuse_result->bounceRadianceR * bounce_scale;
     out_result->bounceRadianceG = diffuse_result->bounceRadianceG * bounce_scale;
     out_result->bounceRadianceB = diffuse_result->bounceRadianceB * bounce_scale;
-    out_result->radiance = out_result->directRadiance + out_result->bounceRadiance;
     out_result->radianceR = out_result->directRadianceR + out_result->bounceRadianceR;
     out_result->radianceG = out_result->directRadianceG + out_result->bounceRadianceG;
     out_result->radianceB = out_result->directRadianceB + out_result->bounceRadianceB;
+    out_result->radiance = out_result->directRadiance + out_result->bounceRadiance;
+}
+
+static void runtime_material_response_3d_add_specular_rgb(
+    RuntimeMaterialResponse3DResult* io_result,
+    double r,
+    double g,
+    double b) {
+    if (!io_result) return;
+    io_result->specularRadianceR += r;
+    io_result->specularRadianceG += g;
+    io_result->specularRadianceB += b;
+    io_result->specularRadiance = runtime_material_response_3d_peak(io_result->specularRadianceR,
+                                                                    io_result->specularRadianceG,
+                                                                    io_result->specularRadianceB);
+    io_result->radianceR += r;
+    io_result->radianceG += g;
+    io_result->radianceB += b;
+    io_result->radiance = io_result->directRadiance +
+                          io_result->bounceRadiance +
+                          io_result->specularRadiance;
+    if (io_result->specularRadiance > 1e-9) {
+        io_result->visible = true;
+    }
+}
+
+static void runtime_material_response_3d_apply_specular_reflection(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeMaterialPayload3D* payload,
+    const RuntimeNative3DSamplingContext* sampling,
+    Vec3 view_dir,
+    int specular_depth_remaining,
+    RuntimeMaterialResponse3DResult* io_result) {
+    RuntimeSpecularReflection3DResult reflection = {0};
+    RuntimeMaterialResponse3DResult reflected_material = {0};
+    RuntimeMaterialPayload3D reflected_payload = {0};
+    double reflected_r = 0.0;
+    double reflected_g = 0.0;
+    double reflected_b = 0.0;
+
+    if (!scene || !hit || !payload || !io_result || specular_depth_remaining <= 0) return;
+    if (!RuntimeSpecularReflection3D_Trace(scene,
+                                           hit,
+                                           payload,
+                                           view_dir,
+                                           sampling,
+                                           &reflection)) {
+        return;
+    }
+    if (reflection.traced) {
+        io_result->specularRayCount += 1;
+    }
+    if (reflection.emitterWins) {
+        io_result->specularHitCount += 1;
+        reflected_r = reflection.emitterHitInfo.radiance;
+        reflected_g = reflection.emitterHitInfo.radiance;
+        reflected_b = reflection.emitterHitInfo.radiance;
+    } else if (reflection.geometryHit &&
+               reflection.hitInfo.triangleIndex >= 0 &&
+               reflection.hitInfo.triangleIndex != hit->triangleIndex &&
+               RuntimeMaterialPayload3D_ResolveFromHit(&reflection.hitInfo, &reflected_payload) &&
+               runtime_material_response_3d_shade_hit_with_payload_depth(
+                   scene,
+                   &reflection.hitInfo,
+                   &reflected_payload,
+                   sampling,
+                   vec3_scale(reflection.ray.direction, -1.0),
+                   specular_depth_remaining - 1,
+                   &reflected_material)) {
+        io_result->specularHitCount += 1;
+        io_result->specularRayCount += reflected_material.specularRayCount;
+        io_result->specularHitCount += reflected_material.specularHitCount;
+        io_result->specularContributingHitCount +=
+            reflected_material.specularContributingHitCount;
+        reflected_r = reflected_material.radianceR;
+        reflected_g = reflected_material.radianceG;
+        reflected_b = reflected_material.radianceB;
+    }
+
+    reflected_r *= reflection.weight * reflection.tintR;
+    reflected_g *= reflection.weight * reflection.tintG;
+    reflected_b *= reflection.weight * reflection.tintB;
+    if (runtime_material_response_3d_peak(reflected_r, reflected_g, reflected_b) > 1e-9) {
+        io_result->specularContributingHitCount += 1;
+        runtime_material_response_3d_add_specular_rgb(io_result,
+                                                      reflected_r,
+                                                      reflected_g,
+                                                      reflected_b);
+    }
 }
 
 bool RuntimeMaterialResponse3D_ShadeHit(const RuntimeScene3D* scene,
@@ -141,9 +250,27 @@ bool RuntimeMaterialResponse3D_ShadeHitWithPayload(const RuntimeScene3D* scene,
                                                    const RuntimeMaterialPayload3D* payload,
                                                    const RuntimeNative3DSamplingContext* sampling,
                                                    RuntimeMaterialResponse3DResult* out_result) {
+    RuntimePathDepthPolicy3D path_policy = RuntimePathDepthPolicy3D_Resolve();
+    return runtime_material_response_3d_shade_hit_with_payload_depth(
+        scene,
+        hit,
+        payload,
+        sampling,
+        runtime_material_response_3d_default_view_dir(hit),
+        path_policy.specularDepth,
+        out_result);
+}
+
+static bool runtime_material_response_3d_shade_hit_with_payload_depth(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeMaterialPayload3D* payload,
+    const RuntimeNative3DSamplingContext* sampling,
+    Vec3 view_dir,
+    int specular_depth_remaining,
+    RuntimeMaterialResponse3DResult* out_result) {
     RuntimeMaterialResponse3DResult result = {0};
     RuntimeDiffuseBounce3DResult diffuse_result = {0};
-    Vec3 view_dir = vec3(0.0, 0.0, 0.0);
 
     if (!scene || !hit || !out_result) return false;
     if (payload && payload->valid) {
@@ -163,7 +290,6 @@ bool RuntimeMaterialResponse3D_ShadeHitWithPayload(const RuntimeScene3D* scene,
     result.visible = diffuse_result.visible;
     result.materialResolved = result.payload.valid;
     result.hitInfo = diffuse_result.hitInfo;
-    view_dir = runtime_material_response_3d_default_view_dir(hit);
     runtime_material_response_3d_apply_weights(scene,
                                                hit,
                                                &result.payload,
@@ -173,6 +299,13 @@ bool RuntimeMaterialResponse3D_ShadeHitWithPayload(const RuntimeScene3D* scene,
     result.secondaryRayCount = diffuse_result.secondaryRayCount;
     result.secondaryHitCount = diffuse_result.secondaryHitCount;
     result.secondaryContributingHitCount = diffuse_result.secondaryContributingHitCount;
+    runtime_material_response_3d_apply_specular_reflection(scene,
+                                                           hit,
+                                                           &result.payload,
+                                                           sampling,
+                                                           view_dir,
+                                                           specular_depth_remaining,
+                                                           &result);
     *out_result = result;
     return true;
 }
@@ -220,6 +353,7 @@ bool RuntimeMaterialResponse3D_ShadePrimaryHitWithPayload(
     RuntimeMaterialResponse3DResult* out_result) {
     RuntimeMaterialResponse3DResult result = {0};
     RuntimeDiffuseBounce3DResult diffuse_result = {0};
+    RuntimePathDepthPolicy3D path_policy = RuntimePathDepthPolicy3D_Resolve();
     Vec3 view_dir = vec3(0.0, 0.0, 0.0);
 
     if (!scene || !primary_hit || !out_result) return false;
@@ -262,6 +396,13 @@ bool RuntimeMaterialResponse3D_ShadePrimaryHitWithPayload(
     result.secondaryHitCount = diffuse_result.secondaryHitCount;
     result.secondaryContributingHitCount = diffuse_result.secondaryContributingHitCount;
     result.primaryRay = primary_hit->primaryRay;
+    runtime_material_response_3d_apply_specular_reflection(scene,
+                                                           &result.hitInfo,
+                                                           &result.payload,
+                                                           sampling,
+                                                           view_dir,
+                                                           path_policy.specularDepth,
+                                                           &result);
     *out_result = result;
     return true;
 }

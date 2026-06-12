@@ -22,6 +22,10 @@ typedef struct {
     double bounceRadianceR;
     double bounceRadianceG;
     double bounceRadianceB;
+    double specularRadiance;
+    double specularRadianceR;
+    double specularRadianceG;
+    double specularRadianceB;
     double radiance;
     double radianceR;
     double radianceG;
@@ -29,6 +33,9 @@ typedef struct {
     int secondaryRayCount;
     int secondaryHitCount;
     int secondaryContributingHitCount;
+    int specularRayCount;
+    int specularHitCount;
+    int specularContributingHitCount;
 } RuntimeMaterialResponse3DResult;
 
 bool RuntimeMaterialResponse3D_ShadeHit(const RuntimeScene3D* scene,

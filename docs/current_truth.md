@@ -146,6 +146,14 @@ Last updated: 2026-06-05
   - per-object node-ready texture parameters persisted on scene objects: pattern mode, coverage, grain, edge softness, contrast, flow, color depth, surface damage, and seed
   - path-traced/native hit anchoring currently uses triangle barycentric hit coordinates so overlays remain attached to surfaces as view/light state changes
   - generated Material face-group texture overrides now feed the native `3D` material payload when a runtime hit carries a local triangle ordinal, so rust/fog overrides and their parameter blocks can change actual BSDF roughness, reflectivity/specular weight, diffuse response, color, and transparency in the simulation path
+- Native `3D Material` is now the first shipped tier that traces bounded opaque
+  specular scene reflection:
+  - mirror/glossy opaque hits can reflect ordinary non-emissive scene geometry
+    and preserve reflected chroma
+  - `Direct Light` and `Diffuse Bounce` remain cheaper lower tiers without the
+    opaque specular scene ray
+  - `Emission / Transparency` and `Disney` inherit the Material-tier specular
+    reflection signal in their composed radiance
 - Native `3D` material payloads also support the first v2 layered material texture stack:
   - bounded ordered stacks carry durable layer ids, base/overlay roles, blend modes, placement, procedural parameters, enabled state, opacity, and material influence fields
   - base layer kinds include solid, brushed metal, wood, brick, concrete, and stone in the stack/evaluator contract

@@ -788,10 +788,10 @@ static void runtime_emission_transparency_3d_copy_material_result(
     out_result->primaryRay = source->primaryRay;
     out_result->hitInfo = source->hitInfo;
     out_result->payload = *payload;
-    out_result->directRadiance = source->directRadiance;
-    out_result->directRadianceR = source->directRadianceR;
-    out_result->directRadianceG = source->directRadianceG;
-    out_result->directRadianceB = source->directRadianceB;
+    out_result->directRadiance = source->directRadiance + source->specularRadiance;
+    out_result->directRadianceR = source->directRadianceR + source->specularRadianceR;
+    out_result->directRadianceG = source->directRadianceG + source->specularRadianceG;
+    out_result->directRadianceB = source->directRadianceB + source->specularRadianceB;
     out_result->bounceRadiance = source->bounceRadiance;
     out_result->bounceRadianceR = source->bounceRadianceR;
     out_result->bounceRadianceG = source->bounceRadianceG;

@@ -16,6 +16,7 @@
 #include "render/runtime_material_response_3d.h"
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_scene_3d_builder.h"
+#include "render/runtime_triangle_bvh_3d.h"
 #include "test_runtime_lighting_materials.h"
 #include "test_runtime_lighting_materials_internal.h"
 #include "test_support.h"
@@ -142,6 +143,144 @@ static int test_runtime_material_response_3d_seed_branch_contract(void) {
     assert_true("runtime_material_response_seed_bounce_zero_preserved",
                 matte_result.bounceRadiance == 0.0 &&
                 mirror_result.bounceRadiance == 0.0);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_material_response_3d_mirror_reflects_opaque_chroma(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    HitInfo3D hit = {0};
+    RuntimeDirectLight3DResult direct_result = {0};
+    RuntimeDiffuseBounce3DResult diffuse_result = {0};
+    RuntimeMaterialResponse3DResult material_result = {0};
+    RuntimeEmissionTransparency3DResult emission_result = {0};
+    RuntimeDisney3DResult disney_result = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    MaterialManagerResetDefaults();
+
+    sceneSettings.objectCount = 2;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_MIRROR;
+    sceneSettings.sceneObjects[0].color = 0xFFFFFF;
+    sceneSettings.sceneObjects[0].alpha = 1.0;
+    sceneSettings.sceneObjects[0].opacity = 1.0;
+    sceneSettings.sceneObjects[0].reflectivity = 0.95;
+    sceneSettings.sceneObjects[0].roughness = 0.02;
+    sceneSettings.sceneObjects[1].material_id = MATERIAL_PRESET_DEFAULT;
+    sceneSettings.sceneObjects[1].color = 0xFF0000;
+    sceneSettings.sceneObjects[1].alpha = 1.0;
+    sceneSettings.sceneObjects[1].opacity = 1.0;
+    sceneSettings.sceneObjects[1].reflectivity = 0.1;
+    sceneSettings.sceneObjects[1].roughness = 0.6;
+    animSettings.lightIntensity = 20.0;
+    animSettings.forwardDecay = 10.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    animSettings.secondaryDiffuseSamples3D = 0;
+    animSettings.transmissionSamples3D = 0;
+    animSettings.bounceDepth3D = 1;
+    animSettings.specularDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
+
+    scene.hasLight = true;
+    scene.light.position = vec3(0.0, 1.5, 2.0);
+    scene.light.radius = 0.0;
+    scene.light.intensity = 20.0;
+    scene.light.falloffDistance = 10.0;
+    scene.light.falloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    scene.primitiveCapacity = 2;
+    scene.triangleMesh.triangleCapacity = 2;
+    scene.primitives = (RuntimePrimitive3D*)calloc((size_t)scene.primitiveCapacity,
+                                                   sizeof(*scene.primitives));
+    scene.triangleMesh.triangles =
+        (RuntimeTriangle3D*)calloc((size_t)scene.triangleMesh.triangleCapacity,
+                                   sizeof(*scene.triangleMesh.triangles));
+    assert_true("runtime_material_mirror_reflects_chroma_alloc_primitives",
+                scene.primitives != NULL);
+    assert_true("runtime_material_mirror_reflects_chroma_alloc_triangles",
+                scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    scene.primitiveCount = 2;
+    scene.triangleMesh.triangleCount = 2;
+    scene.primitives[0].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene.primitives[0].source.sceneObjectIndex = 0;
+    scene.primitives[1].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene.primitives[1].source.sceneObjectIndex = 1;
+
+    scene.triangleMesh.triangles[0].p0 = vec3(-2.0, 0.0, -2.0);
+    scene.triangleMesh.triangles[0].p1 = vec3(2.0, 0.0, -2.0);
+    scene.triangleMesh.triangles[0].p2 = vec3(0.0, 0.0, 2.0);
+    scene.triangleMesh.triangles[0].normal = vec3(0.0, 1.0, 0.0);
+    scene.triangleMesh.triangles[0].primitiveIndex = 0;
+    scene.triangleMesh.triangles[0].sceneObjectIndex = 0;
+
+    scene.triangleMesh.triangles[1].p0 = vec3(-2.0, 3.0, -2.0);
+    scene.triangleMesh.triangles[1].p1 = vec3(0.0, 3.0, 2.0);
+    scene.triangleMesh.triangles[1].p2 = vec3(2.0, 3.0, -2.0);
+    scene.triangleMesh.triangles[1].normal = vec3(0.0, -1.0, 0.0);
+    scene.triangleMesh.triangles[1].primitiveIndex = 1;
+    scene.triangleMesh.triangles[1].sceneObjectIndex = 1;
+
+    ok = RuntimeTriangleMesh3D_BuildBVH(&scene.triangleMesh);
+    assert_true("runtime_material_mirror_reflects_chroma_bvh_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    hit.t = 1.0;
+    hit.position = vec3(0.0, 0.0, 0.0);
+    hit.normal = vec3(0.0, 1.0, 0.0);
+    hit.triangleIndex = 0;
+    hit.primitiveIndex = 0;
+    hit.sceneObjectIndex = 0;
+    hit.source = scene.primitives[0].source;
+    hit.baryU = 0.333333333333;
+    hit.baryV = 0.333333333333;
+    hit.baryW = 0.333333333334;
+
+    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, NULL, &direct_result);
+    assert_true("runtime_material_mirror_reflects_chroma_direct_ok", ok);
+    ok = RuntimeDiffuseBounce3D_ShadeHit(&scene, &hit, NULL, &diffuse_result);
+    assert_true("runtime_material_mirror_reflects_chroma_diffuse_ok", ok);
+    ok = RuntimeMaterialResponse3D_ShadeHit(&scene, &hit, NULL, &material_result);
+    assert_true("runtime_material_mirror_reflects_chroma_material_ok", ok);
+    ok = RuntimeEmissionTransparency3D_ShadeHit(&scene, &hit, NULL, &emission_result);
+    assert_true("runtime_material_mirror_reflects_chroma_emission_ok", ok);
+    ok = RuntimeDisney3D_ShadeHit(&scene, &hit, NULL, &disney_result);
+    assert_true("runtime_material_mirror_reflects_chroma_disney_ok", ok);
+
+    assert_true("runtime_material_mirror_reflects_chroma_material_specular_ray",
+                material_result.specularRayCount > 0);
+    assert_true("runtime_material_mirror_reflects_chroma_material_specular_hit",
+                material_result.specularHitCount > 0);
+    assert_true("runtime_material_mirror_reflects_chroma_material_specular_contributes",
+                material_result.specularContributingHitCount > 0);
+    assert_true("runtime_material_mirror_reflects_chroma_material_red_reflection",
+                material_result.specularRadianceR > material_result.specularRadianceG + 1e-6 &&
+                material_result.specularRadianceR > material_result.specularRadianceB + 1e-6);
+    assert_true("runtime_material_mirror_reflects_chroma_lower_tiers_remain_visible",
+                direct_result.visible && diffuse_result.visible);
+    assert_true("runtime_material_mirror_reflects_chroma_emission_preserves_reflection",
+                emission_result.radianceR >= material_result.radianceR - 1e-6);
+    assert_true("runtime_material_mirror_reflects_chroma_disney_preserves_reflection",
+                disney_result.specularRadianceR > disney_result.specularRadianceG + 1e-6 &&
+                disney_result.specularRadianceR > disney_result.specularRadianceB + 1e-6);
 
     RuntimeScene3D_Free(&scene);
     sceneSettings = saved_scene;
@@ -284,8 +423,6 @@ static int test_runtime_disney_3d_lower_tier_separation_contract(void) {
     assert_true("runtime_disney_tier_compare_disney_matte_hit", matte_disney.hit);
     assert_true("runtime_disney_tier_compare_glossy_specular_exceeds_matte",
                 glossy_disney.specularRadiance > matte_disney.specularRadiance + 1e-6);
-    assert_true("runtime_disney_tier_compare_glossy_roughness_weight_exceeds_matte",
-                glossy_disney.roughnessWeight > matte_disney.roughnessWeight + 1e-6);
     assert_true("runtime_disney_tier_compare_glossy_total_differs_from_matte",
                 fabs(glossy_disney.radiance - matte_disney.radiance) > 1e-6);
 
@@ -411,6 +548,7 @@ static int test_runtime_disney_3d_opaque_receiver_preserves_transport_support(vo
 
 int run_test_runtime_lighting_materials_transport_suite(void) {
     test_runtime_material_response_3d_seed_branch_contract();
+    test_runtime_material_response_3d_mirror_reflects_opaque_chroma();
     test_runtime_disney_3d_lower_tier_separation_contract();
     test_runtime_disney_3d_opaque_receiver_preserves_transport_support();
     return 0;

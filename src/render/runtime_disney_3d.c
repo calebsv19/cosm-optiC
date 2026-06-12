@@ -324,7 +324,8 @@ static void runtime_disney_3d_apply_combiner(
                                 &out_result->diffuseRadianceG,
                                 &out_result->diffuseRadianceB);
     out_result->specularRadiance =
-        material_result->directRadiance * specular_scale;
+        (material_result->directRadiance * specular_scale) +
+        material_result->specularRadiance;
     runtime_disney_3d_scale_rgb(material_result->directRadianceR,
                                 material_result->directRadianceG,
                                 material_result->directRadianceB,
@@ -332,6 +333,9 @@ static void runtime_disney_3d_apply_combiner(
                                 &out_result->specularRadianceR,
                                 &out_result->specularRadianceG,
                                 &out_result->specularRadianceB);
+    out_result->specularRadianceR += material_result->specularRadianceR;
+    out_result->specularRadianceG += material_result->specularRadianceG;
+    out_result->specularRadianceB += material_result->specularRadianceB;
     out_result->emissionRadiance = emission_direct + emission_bounce;
     out_result->emissionRadianceR = emission_direct_r + emission_bounce_r;
     out_result->emissionRadianceG = emission_direct_g + emission_bounce_g;
