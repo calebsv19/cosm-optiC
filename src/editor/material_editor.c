@@ -117,16 +117,22 @@ static bool material_editor_resolve_controls_face_placement(
     if (!obj || focused_object_index < 0 || face_group_index < 0 || !out_placement) {
         return false;
     }
-    placement = SceneEditorMaterialFacePlacementGetEffective(obj,
-                                                             focused_object_index,
-                                                             face_group_index);
-    if (SceneEditorMaterialFacePlacementHasOverride(focused_object_index, face_group_index)) {
-        *out_placement = placement;
-        return true;
-    }
-    if (material_editor_get_active_layer(obj, NULL, &layer, &layer_index)) {
+    if (SceneEditorMaterialStackHasObjectStack(focused_object_index) &&
+        material_editor_get_active_layer(obj, NULL, &layer, &layer_index)) {
         layer = RuntimeMaterialTextureLayerNormalize(layer);
+        placement = SceneEditorMaterialFacePlacementGetEffectiveForLayer(
+            obj,
+            focused_object_index,
+            face_group_index,
+            layer.layerId);
+        if (SceneEditorMaterialFacePlacementHasOverrideForLayer(focused_object_index,
+                                                                face_group_index,
+                                                                layer.layerId)) {
+            *out_placement = placement;
+            return true;
+        }
         placement.layerIndex = layer_index;
+        snprintf(placement.layerId, sizeof(placement.layerId), "%s", layer.layerId);
         placement.textureId = layer.placement.textureId;
         placement.offsetU = layer.placement.offsetU;
         placement.offsetV = layer.placement.offsetV;
@@ -134,6 +140,15 @@ static bool material_editor_resolve_controls_face_placement(
         placement.strength = layer.placement.strength;
         placement.rotation = layer.placement.rotation;
         placement.params = layer.params;
+        *out_placement = placement;
+        return true;
+    }
+    placement = SceneEditorMaterialFacePlacementGetEffective(obj,
+                                                             focused_object_index,
+                                                             face_group_index);
+    if (SceneEditorMaterialFacePlacementHasOverride(focused_object_index, face_group_index)) {
+        *out_placement = placement;
+        return true;
     }
     *out_placement = placement;
     return true;
@@ -469,7 +484,20 @@ int MaterialEditorRenderPaneControls(SDL_Renderer* renderer,
     selected_faces = MaterialEditorSelectedFaceGroupCount();
     focused_faces = MaterialEditorFocusedFaceGroupCount();
     if (s_material_editor_active_face_group_index >= 0) {
-        bool has_override = SceneEditorMaterialFacePlacementHasOverride(focused_index, s_material_editor_active_face_group_index);
+        RuntimeMaterialTextureLayer active_layer = {0};
+        bool has_override = false;
+        if (SceneEditorMaterialStackHasObjectStack(focused_index) &&
+            material_editor_get_active_layer(obj, NULL, &active_layer, NULL)) {
+            has_override =
+                SceneEditorMaterialFacePlacementHasOverrideForLayer(
+                    focused_index,
+                    s_material_editor_active_face_group_index,
+                    active_layer.layerId);
+        } else {
+            has_override = SceneEditorMaterialFacePlacementHasOverride(
+                focused_index,
+                s_material_editor_active_face_group_index);
+        }
         snprintf(edit_text, sizeof(edit_text), "Face #%d %s", s_material_editor_active_face_group_index, has_override ? "override" : "default");
     } else {
         snprintf(edit_text, sizeof(edit_text), "Object defaults");
@@ -583,10 +611,22 @@ int MaterialEditorRenderPaneControls(SDL_Renderer* renderer,
     }
 
     if (cursor_y + MATERIAL_EDITOR_BUTTON_HEIGHT <= bottom_y) {
-        int reset_w = (s_material_editor_active_face_group_index >= 0 &&
-                       SceneEditorMaterialFacePlacementHasOverride(focused_index, s_material_editor_active_face_group_index))
-                          ? (content_bounds.w - MATERIAL_EDITOR_BUTTON_GAP) / 2
-                          : 0;
+        RuntimeMaterialTextureLayer active_layer = {0};
+        bool can_reset = false;
+        if (s_material_editor_active_face_group_index >= 0) {
+            if (SceneEditorMaterialStackHasObjectStack(focused_index) &&
+                material_editor_get_active_layer(obj, NULL, &active_layer, NULL)) {
+                can_reset = SceneEditorMaterialFacePlacementHasOverrideForLayer(
+                    focused_index,
+                    s_material_editor_active_face_group_index,
+                    active_layer.layerId);
+            } else {
+                can_reset = SceneEditorMaterialFacePlacementHasOverride(
+                    focused_index,
+                    s_material_editor_active_face_group_index);
+            }
+        }
+        int reset_w = can_reset ? (content_bounds.w - MATERIAL_EDITOR_BUTTON_GAP) / 2 : 0;
         s_solid_faces_rect = (SDL_Rect){content_bounds.x, cursor_y, reset_w > 0 ? reset_w : content_bounds.w, MATERIAL_EDITOR_BUTTON_HEIGHT};
         MaterialEditorDrawButton(renderer, s_solid_faces_rect, "Solid Preview", s_material_editor_solid_faces_enabled, palette);
         if (reset_w > 0) {

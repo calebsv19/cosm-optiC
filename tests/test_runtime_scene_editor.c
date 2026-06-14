@@ -25,6 +25,7 @@
 #include "editor/scene_editor_tool_state.h"
 #include "editor/scene_editor_viewport_nav.h"
 #include "editor/scene_editor_viewport_render.h"
+#include "import/runtime_mesh_asset_loader.h"
 #include "import/runtime_scene_bridge.h"
 #include "render/runtime_material_authored_texture_3d.h"
 #include "render/runtime_material_payload_3d.h"
@@ -89,6 +90,37 @@ cleanup:
     png_destroy_write_struct(&png_ptr, &info_ptr);
     fclose(png_file);
     return ok;
+}
+
+static bool test_scene_editor_write_text_file(const char* path, const char* text) {
+    FILE* file = NULL;
+    if (!path || !text) return false;
+    file = fopen(path, "w");
+    if (!file) return false;
+    if (fputs(text, file) < 0) {
+        fclose(file);
+        return false;
+    }
+    return fclose(file) == 0;
+}
+
+static bool test_scene_editor_write_large_placeholder_file(const char* path, size_t bytes) {
+    FILE* file = NULL;
+    char chunk[4096];
+    size_t remaining = bytes;
+    if (!path || bytes == 0u) return false;
+    memset(chunk, 'x', sizeof(chunk));
+    file = fopen(path, "w");
+    if (!file) return false;
+    while (remaining > 0u) {
+        size_t write_count = remaining < sizeof(chunk) ? remaining : sizeof(chunk);
+        if (fwrite(chunk, 1u, write_count, file) != write_count) {
+            fclose(file);
+            return false;
+        }
+        remaining -= write_count;
+    }
+    return fclose(file) == 0;
 }
 
 static bool test_scene_editor_add_surface_semantic_fields(json_object* surface,
@@ -429,6 +461,112 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip(void) {
     return 0;
 }
 
+static int test_scene_editor_runtime_scene_persist_keeps_preview_limited_mesh_reload(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char* dir = "/tmp/ray_tracing_runtime_scene_persist_preview_limited";
+    const char* scene_path = "/tmp/ray_tracing_runtime_scene_persist_preview_limited/scene_runtime.json";
+    const char* huge_path = "/tmp/ray_tracing_runtime_scene_persist_preview_limited/huge_skipped.runtime.json";
+    const char* small_path =
+        "tests/fixtures/mesh_asset_runtime_spheres/assets/mesh_assets/asset_sphere_8x4.runtime.json";
+    char small_abs[1024];
+    char scene_json[4096];
+    char diagnostics[256];
+    RuntimeSceneBridgePreflight summary = {0};
+    const RayTracingRuntimeMeshAssetSet* mesh_assets = NULL;
+    bool ok = false;
+
+    assert_true("runtime_scene_persist_preview_limited_mkdir",
+                mkdir(dir, 0777) == 0 || access(dir, F_OK) == 0);
+    assert_true("runtime_scene_persist_preview_limited_small_realpath",
+                realpath(small_path, small_abs) != NULL);
+    assert_true("runtime_scene_persist_preview_limited_huge_write",
+                test_scene_editor_write_large_placeholder_file(huge_path, 1024u * 1024u + 16u));
+    if (!small_abs[0]) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    snprintf(scene_json,
+             sizeof(scene_json),
+             "{"
+             "\"schema_family\":\"codework_scene\","
+             "\"schema_variant\":\"scene_runtime_v1\","
+             "\"schema_version\":1,"
+             "\"scene_id\":\"persist_preview_limited_mesh\","
+             "\"space_mode_default\":\"3d\","
+             "\"unit_system\":\"meters\","
+             "\"world_scale\":1.0,"
+             "\"objects\":["
+             "{"
+             "\"object_id\":\"obj_huge\","
+             "\"object_type\":\"mesh_asset_instance\","
+             "\"transform\":{\"position\":{\"x\":0,\"y\":0,\"z\":0},"
+             "\"rotation\":{\"x\":0,\"y\":0,\"z\":0},"
+             "\"scale\":{\"x\":1,\"y\":1,\"z\":1}},"
+             "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_huge\"},"
+             "\"extensions\":{\"line_drawing\":{\"runtime_mesh_path\":\"%s\"}}"
+             "},"
+             "{"
+             "\"object_id\":\"obj_plane\","
+             "\"object_type\":\"plane_primitive\","
+             "\"transform\":{\"position\":{\"x\":0,\"y\":0,\"z\":0},"
+             "\"rotation\":{\"x\":0,\"y\":0,\"z\":0},"
+             "\"scale\":{\"x\":1,\"y\":1,\"z\":1}},"
+             "\"primitive\":{\"kind\":\"plane_primitive\",\"width\":4,\"height\":4}"
+             "},"
+             "{"
+             "\"object_id\":\"obj_platform\","
+             "\"object_type\":\"mesh_asset_instance\","
+             "\"transform\":{\"position\":{\"x\":0,\"y\":0,\"z\":1.25},"
+             "\"rotation\":{\"x\":0,\"y\":0,\"z\":0},"
+             "\"scale\":{\"x\":2,\"y\":2,\"z\":2}},"
+             "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_sphere_8x4\"},"
+             "\"extensions\":{\"line_drawing\":{\"runtime_mesh_path\":\"%s\"}}"
+             "}],"
+             "\"materials\":[],"
+             "\"lights\":[{\"position\":{\"x\":0,\"y\":0,\"z\":4}}],"
+             "\"cameras\":[{\"position\":{\"x\":0,\"y\":-6,\"z\":4}}],"
+             "\"constraints\":[],"
+             "\"extensions\":{}"
+             "}",
+             huge_path,
+             small_abs);
+
+    assert_true("runtime_scene_persist_preview_limited_scene_write",
+                test_scene_editor_write_text_file(scene_path, scene_json));
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    ok = runtime_scene_bridge_apply_file_defer_mesh_assets(scene_path, &summary);
+    assert_true("runtime_scene_persist_preview_limited_initial_apply", ok);
+    mesh_assets = ray_tracing_runtime_mesh_assets_last();
+    assert_true("runtime_scene_persist_preview_limited_initial_mesh_state",
+                mesh_assets &&
+                mesh_assets->instance_count == 1 &&
+                mesh_assets->skipped_instance_count == 1);
+
+    sceneSettings.bezierPath.numPoints = 1;
+    sceneSettings.bezierPath.points[0].x = 1.0;
+    sceneSettings.bezierPath.points[0].y = 2.0;
+    ok = SceneEditorRuntimeScenePersistAuthoring(diagnostics, sizeof(diagnostics));
+    assert_true("runtime_scene_persist_preview_limited_persist_ok", ok);
+    mesh_assets = ray_tracing_runtime_mesh_assets_last();
+    assert_true("runtime_scene_persist_preview_limited_after_persist_mesh_state",
+                mesh_assets &&
+                mesh_assets->instance_count == 1 &&
+                mesh_assets->skipped_instance_count == 1 &&
+                mesh_assets->skipped_instances[0].scene_object_index == 0);
+
+    unlink(scene_path);
+    unlink(huge_path);
+    rmdir(dir);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 static int test_scene_editor_runtime_scene_persistence_roundtrip_object_materials(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -539,6 +677,8 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip_object_material
     face_placement.hasOverride = true;
     face_placement.sceneObjectIndex = 0;
     face_placement.faceGroupIndex = 4;
+    face_placement.layerIndex = 2;
+    snprintf(face_placement.layerId, sizeof(face_placement.layerId), "%s", "rust_detail");
     face_placement.textureId = RUNTIME_MATERIAL_TEXTURE_3D_FOG;
     face_placement.offsetU = 0.31;
     face_placement.offsetV = 0.42;
@@ -593,6 +733,10 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip_object_material
                     strstr(persisted_json, "\"face_placements\"") != NULL);
         assert_true("runtime_scene_authoring_material_persist_has_face_group",
                     strstr(persisted_json, "\"face_group_index\":4") != NULL);
+        assert_true("runtime_scene_authoring_material_persist_has_face_layer_index",
+                    strstr(persisted_json, "\"layer_index\":2") != NULL);
+        assert_true("runtime_scene_authoring_material_persist_has_face_layer_id",
+                    strstr(persisted_json, "\"layer_id\":\"rust_detail\"") != NULL);
         assert_true("runtime_scene_authoring_material_persist_has_face_texture_id",
                     strstr(persisted_json, "\"texture_id\":2") != NULL);
         assert_true("runtime_scene_authoring_material_persist_has_authored_texture",
@@ -646,7 +790,16 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip_object_material
                 sceneSettings.sceneObjects[0].textureSeed == 17);
     assert_true("runtime_scene_authoring_material_persist_hydrated_face_override",
                 SceneEditorMaterialFacePlacementHasOverride(0, 4));
-    face_placement = SceneEditorMaterialFacePlacementGetEffective(&sceneSettings.sceneObjects[0], 0, 4);
+    assert_true("runtime_scene_authoring_material_persist_hydrated_face_layer_override",
+                SceneEditorMaterialFacePlacementHasOverrideForLayer(0, 4, "rust_detail"));
+    face_placement = SceneEditorMaterialFacePlacementGetEffectiveForLayer(&sceneSettings.sceneObjects[0],
+                                                                          0,
+                                                                          4,
+                                                                          "rust_detail");
+    assert_true("runtime_scene_authoring_material_persist_hydrated_face_layer_id",
+                strcmp(face_placement.layerId, "rust_detail") == 0);
+    assert_true("runtime_scene_authoring_material_persist_hydrated_face_layer_index",
+                face_placement.layerIndex == 2);
     assert_true("runtime_scene_authoring_material_persist_hydrated_face_texture_id",
                 face_placement.textureId == RUNTIME_MATERIAL_TEXTURE_3D_FOG);
     assert_close("runtime_scene_authoring_material_persist_hydrated_face_offset_u",
@@ -3976,6 +4129,7 @@ int run_test_runtime_scene_editor_tests(void) {
 
     test_scene_editor_tool_state_contract();
     test_scene_editor_runtime_scene_persistence_roundtrip();
+    test_scene_editor_runtime_scene_persist_keeps_preview_limited_mesh_reload();
     test_scene_editor_runtime_scene_persistence_roundtrip_object_materials();
     test_scene_editor_runtime_scene_material_stack_roundtrip_payload();
     test_object_editor_material_assignment_preserves_object_color();

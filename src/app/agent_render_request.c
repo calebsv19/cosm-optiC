@@ -213,6 +213,9 @@ static RayTracing3DIntegratorId parse_integrator_3d(const char *label) {
     if (strcmp(label, "disney") == 0) {
         return RAY_TRACING_3D_INTEGRATOR_DISNEY;
     }
+    if (strcmp(label, "disney_v2") == 0) {
+        return RAY_TRACING_3D_INTEGRATOR_DISNEY_V2;
+    }
     return RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT;
 }
 
@@ -775,6 +778,8 @@ const char *ray_tracing_agent_render_request_volume_kind_label(int kind) {
 
 const char *ray_tracing_agent_render_request_integrator_label(RayTracing3DIntegratorId id) {
     switch (RayTracingIntegratorCatalog_Clamp3DToShipped((int)id)) {
+        case RAY_TRACING_3D_INTEGRATOR_DISNEY_V2:
+            return "disney_v2";
         case RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE:
             return "diffuse_bounce";
         case RAY_TRACING_3D_INTEGRATOR_MATERIAL:

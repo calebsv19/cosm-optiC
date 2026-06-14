@@ -34,10 +34,7 @@ void menu_render_draw_volume_dropdown(SDL_Renderer *renderer,
     SDL_Rect panel_rect = {0, 0, 0, 0};
     if (!state || !buttons) return;
 
-    if (screen_layout && screen_layout->manifestReserveRect.w > 0 &&
-        screen_layout->manifestReserveRect.h > 0) {
-        panel_rect = screen_layout->manifestReserveRect;
-    } else {
+    {
         int available = 0;
         panel_rect.x = buttons->attachVolumeRect.x;
         panel_rect.y = buttons->volumeClearRect.y + buttons->volumeClearRect.h + 6;

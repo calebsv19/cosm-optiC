@@ -28,6 +28,14 @@ static unsigned long long g_runtime_mesh_asset_cache_hits = 0u;
 static unsigned long long g_runtime_mesh_asset_cache_misses = 0u;
 static unsigned long long g_runtime_mesh_asset_cache_invalidations = 0u;
 
+static bool ray_tracing_runtime_mesh_asset_resolve_path_with_hint(const char* runtime_scene_path,
+                                                                  const char* asset_id,
+                                                                  const char* explicit_runtime_path,
+                                                                  char* out_path,
+                                                                  size_t out_path_size,
+                                                                  char* out_diagnostics,
+                                                                  size_t out_diagnostics_size);
+
 static void runtime_mesh_asset_diag(char* out_diagnostics,
                                     size_t out_diagnostics_size,
                                     const char* message) {
@@ -96,6 +104,23 @@ static const char* runtime_mesh_asset_string_field(json_object* obj, const char*
         return NULL;
     }
     return json_object_get_string(value);
+}
+
+static const char* runtime_mesh_asset_object_runtime_path(json_object* object) {
+    json_object* extensions = NULL;
+    json_object* line_drawing = NULL;
+    const char* path = NULL;
+    if (!object || !json_object_is_type(object, json_type_object)) return NULL;
+    if (!json_object_object_get_ex(object, "extensions", &extensions) ||
+        !json_object_is_type(extensions, json_type_object)) {
+        return NULL;
+    }
+    if (!json_object_object_get_ex(extensions, "line_drawing", &line_drawing) ||
+        !json_object_is_type(line_drawing, json_type_object)) {
+        return NULL;
+    }
+    path = runtime_mesh_asset_string_field(line_drawing, "runtime_mesh_path");
+    return (path && path[0]) ? path : NULL;
 }
 
 static bool runtime_mesh_asset_is_authoring_helper_object_type(const char* object_type) {
@@ -420,8 +445,14 @@ static bool runtime_mesh_asset_append_instance(RayTracingRuntimeMeshAssetSet* se
 
 static bool runtime_mesh_asset_load_unique_asset(const char* runtime_scene_path,
                                                  const char* asset_id,
+                                                 const char* explicit_runtime_path,
                                                  RayTracingRuntimeMeshAssetSet* set,
                                                  int* out_asset_index,
+                                                 bool* out_skipped,
+                                                 char* out_resolved_path,
+                                                 size_t out_resolved_path_size,
+                                                 size_t* out_file_size_bytes,
+                                                 size_t max_asset_file_bytes,
                                                  char* out_diagnostics,
                                                  size_t out_diagnostics_size) {
     RayTracingRuntimeMeshAsset* asset = NULL;
@@ -429,6 +460,9 @@ static bool runtime_mesh_asset_load_unique_asset(const char* runtime_scene_path,
     int existing = runtime_mesh_asset_find_asset_index(set, asset_id);
 
     if (out_asset_index) *out_asset_index = -1;
+    if (out_skipped) *out_skipped = false;
+    if (out_resolved_path && out_resolved_path_size > 0u) out_resolved_path[0] = '\0';
+    if (out_file_size_bytes) *out_file_size_bytes = 0u;
     if (existing >= 0) {
         if (out_asset_index) *out_asset_index = existing;
         return true;
@@ -441,13 +475,35 @@ static bool runtime_mesh_asset_load_unique_asset(const char* runtime_scene_path,
         runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size, "too many mesh assets");
         return false;
     }
-    if (!ray_tracing_runtime_mesh_asset_resolve_path(runtime_scene_path,
-                                                     asset_id,
-                                                     resolved_path,
-                                                     sizeof(resolved_path),
-                                                     out_diagnostics,
-                                                     out_diagnostics_size)) {
+    if (!ray_tracing_runtime_mesh_asset_resolve_path_with_hint(runtime_scene_path,
+                                                               asset_id,
+                                                               explicit_runtime_path,
+                                                               resolved_path,
+                                                               sizeof(resolved_path),
+                                                               out_diagnostics,
+                                                               out_diagnostics_size)) {
         return false;
+    }
+    if (max_asset_file_bytes > 0u) {
+        struct stat st;
+        if (stat(resolved_path, &st) != 0) {
+            runtime_mesh_asset_diag(out_diagnostics,
+                                    out_diagnostics_size,
+                                    "mesh asset runtime file stat failed");
+            return false;
+        }
+        if (out_file_size_bytes) *out_file_size_bytes = (size_t)st.st_size;
+        if (st.st_size > (off_t)max_asset_file_bytes) {
+            if (out_skipped) *out_skipped = true;
+            if (out_resolved_path && out_resolved_path_size > 0u) {
+                snprintf(out_resolved_path, out_resolved_path_size, "%s", resolved_path);
+            }
+            runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size, "ok");
+            return true;
+        }
+    }
+    if (out_resolved_path && out_resolved_path_size > 0u) {
+        snprintf(out_resolved_path, out_resolved_path_size, "%s", resolved_path);
     }
 
     asset = &set->assets[set->asset_count];
@@ -511,6 +567,22 @@ bool ray_tracing_runtime_mesh_asset_resolve_path(const char* runtime_scene_path,
                                                  size_t out_path_size,
                                                  char* out_diagnostics,
                                                  size_t out_diagnostics_size) {
+    return ray_tracing_runtime_mesh_asset_resolve_path_with_hint(runtime_scene_path,
+                                                                 asset_id,
+                                                                 NULL,
+                                                                 out_path,
+                                                                 out_path_size,
+                                                                 out_diagnostics,
+                                                                 out_diagnostics_size);
+}
+
+static bool ray_tracing_runtime_mesh_asset_resolve_path_with_hint(const char* runtime_scene_path,
+                                                                  const char* asset_id,
+                                                                  const char* explicit_runtime_path,
+                                                                  char* out_path,
+                                                                  size_t out_path_size,
+                                                                  char* out_diagnostics,
+                                                                  size_t out_diagnostics_size) {
     char base_dir[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
     char relative_path[256] = {0};
     CoreResult resolve_result = core_result_ok();
@@ -524,6 +596,25 @@ bool ray_tracing_runtime_mesh_asset_resolve_path(const char* runtime_scene_path,
     if (core_scene_dirname(runtime_scene_path, base_dir, sizeof(base_dir)).code != CORE_OK) {
         runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size, "runtime scene directory invalid");
         return false;
+    }
+
+    if (explicit_runtime_path && explicit_runtime_path[0]) {
+        char resolved_hint[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+        const char* use_hint = explicit_runtime_path;
+        if (explicit_runtime_path[0] != '/') {
+            resolve_result = core_scene_resolve_path(base_dir,
+                                                     explicit_runtime_path,
+                                                     resolved_hint,
+                                                     sizeof(resolved_hint));
+            if (resolve_result.code == CORE_OK && resolved_hint[0]) {
+                use_hint = resolved_hint;
+            }
+        }
+        if (core_io_path_exists(use_hint)) {
+            snprintf(out_path, out_path_size, "%s", use_hint);
+            runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size, "ok");
+            return true;
+        }
     }
 
     snprintf(relative_path, sizeof(relative_path), "assets/mesh_assets/%s.runtime.json", asset_id);
@@ -549,10 +640,12 @@ bool ray_tracing_runtime_mesh_asset_resolve_path(const char* runtime_scene_path,
     return false;
 }
 
-bool ray_tracing_runtime_mesh_assets_load_scene_file(const char* runtime_scene_path,
-                                                     RayTracingRuntimeMeshAssetSet* out_set,
-                                                     char* out_diagnostics,
-                                                     size_t out_diagnostics_size) {
+static bool ray_tracing_runtime_mesh_assets_load_scene_file_with_options(
+    const char* runtime_scene_path,
+    size_t max_asset_file_bytes,
+    RayTracingRuntimeMeshAssetSet* out_set,
+    char* out_diagnostics,
+    size_t out_diagnostics_size) {
     char* scene_text = NULL;
     json_object* root = NULL;
     json_object* objects = NULL;
@@ -602,7 +695,11 @@ bool ray_tracing_runtime_mesh_assets_load_scene_file(const char* runtime_scene_p
         const char* object_id = NULL;
         const char* geometry_kind = NULL;
         const char* asset_id = NULL;
+        const char* explicit_runtime_path = NULL;
         int asset_index = -1;
+        bool asset_skipped = false;
+        char resolved_asset_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+        size_t asset_file_size_bytes = 0u;
 
         if (!object || !json_object_is_type(object, json_type_object)) continue;
         object_type = runtime_mesh_asset_string_field(object, "object_type");
@@ -646,13 +743,25 @@ bool ray_tracing_runtime_mesh_assets_load_scene_file(const char* runtime_scene_p
                                     "mesh_asset_instance geometry_ref.id missing");
             return false;
         }
+        explicit_runtime_path = runtime_mesh_asset_object_runtime_path(object);
 
         if (!runtime_mesh_asset_load_unique_asset(runtime_scene_path,
                                                  asset_id,
+                                                 explicit_runtime_path,
                                                  out_set,
                                                  &asset_index,
+                                                 &asset_skipped,
+                                                 resolved_asset_path,
+                                                 sizeof(resolved_asset_path),
+                                                 &asset_file_size_bytes,
+                                                 max_asset_file_bytes,
                                                  out_diagnostics,
-                                                 out_diagnostics_size) ||
+                                                 out_diagnostics_size)) {
+            json_object_put(root);
+            ray_tracing_runtime_mesh_asset_set_free(out_set);
+            return false;
+        }
+        if (!asset_skipped &&
             !runtime_mesh_asset_append_instance(out_set,
                                                 object_id,
                                                 asset_id,
@@ -666,12 +775,62 @@ bool ray_tracing_runtime_mesh_assets_load_scene_file(const char* runtime_scene_p
             ray_tracing_runtime_mesh_asset_set_free(out_set);
             return false;
         }
+        if (asset_skipped) {
+            if (out_set->skipped_instance_count <
+                RAY_TRACING_RUNTIME_MESH_ASSET_MAX_INSTANCES) {
+                RayTracingRuntimeMeshAssetSkippedInstance* skipped =
+                    &out_set->skipped_instances[out_set->skipped_instance_count];
+                memset(skipped, 0, sizeof(*skipped));
+                runtime_mesh_asset_copy_id(skipped->object_id,
+                                           sizeof(skipped->object_id),
+                                           object_id,
+                                           out_diagnostics,
+                                           out_diagnostics_size);
+                runtime_mesh_asset_copy_id(skipped->asset_id,
+                                           sizeof(skipped->asset_id),
+                                           asset_id,
+                                           out_diagnostics,
+                                           out_diagnostics_size);
+                snprintf(skipped->path,
+                         sizeof(skipped->path),
+                         "%s",
+                         resolved_asset_path);
+                skipped->scene_object_index = runtime_object_index;
+                skipped->file_size_bytes = asset_file_size_bytes;
+                skipped->max_file_size_bytes = max_asset_file_bytes;
+                out_set->skipped_instance_count += 1;
+            }
+        }
         runtime_object_index += 1;
     }
 
     json_object_put(root);
     runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size, "ok");
     return true;
+}
+
+bool ray_tracing_runtime_mesh_assets_load_scene_file(const char* runtime_scene_path,
+                                                     RayTracingRuntimeMeshAssetSet* out_set,
+                                                     char* out_diagnostics,
+                                                     size_t out_diagnostics_size) {
+    return ray_tracing_runtime_mesh_assets_load_scene_file_with_options(runtime_scene_path,
+                                                                        0u,
+                                                                        out_set,
+                                                                        out_diagnostics,
+                                                                        out_diagnostics_size);
+}
+
+bool ray_tracing_runtime_mesh_assets_load_scene_file_preview_limited(
+    const char* runtime_scene_path,
+    size_t max_asset_file_bytes,
+    RayTracingRuntimeMeshAssetSet* out_set,
+    char* out_diagnostics,
+    size_t out_diagnostics_size) {
+    return ray_tracing_runtime_mesh_assets_load_scene_file_with_options(runtime_scene_path,
+                                                                        max_asset_file_bytes,
+                                                                        out_set,
+                                                                        out_diagnostics,
+                                                                        out_diagnostics_size);
 }
 
 void ray_tracing_runtime_mesh_assets_reset_last(void) {

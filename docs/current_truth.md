@@ -1,6 +1,6 @@
 # optiC Current Truth
 
-Last updated: 2026-06-05
+Last updated: 2026-06-13
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -84,6 +84,26 @@ Last updated: 2026-06-05
   - `Material`
   - `Emission / Transparency`
   - `Disney`
+  - `Disney v2` as an experimental principled-BSDF scaffold route available
+    through the distinct `disney_v2` headless/UI identity
+- Experimental `Disney v2` now carries the first stochastic transport RAM map:
+  it records a one-bounce path state with sampled diffuse/specular lobe, support
+  ray, RGB throughput, BSDF/light PDFs, balance-style MIS weights, stochastic
+  direct-light and BSDF radiance channels, and secondary ray/hit counters. This
+  is still a bounded proof slice, not the promoted full recursive Disney
+  integrator. Focused transport coverage now includes a two-triangle
+  one-bounce proof where a glossy sampled support ray hits secondary ordinary
+  geometry plus a finite-radius light-emitter proof where the sampled support
+  ray records `emitterHit/emitterWins` and contributes positive
+  emitter-driven stochastic BSDF radiance. A bounded recursive proof now adds a
+  depth-2 finite-light participation ray from the first secondary geometry hit;
+  it records separate recursive path state, emitter-hit fields, RGB throughput,
+  and positive recursive BSDF radiance in the final Disney v2 output. Disney v2
+  now consumes the shared native `RuntimePathDepthPolicy3D` resolver for this
+  bounded path: result diagnostics record the resolved lobe max depth and
+  roulette state, specular max depth `1` blocks depth-2 participation, and
+  low-throughput depth-2 paths can terminate through Russian roulette before
+  launching recursive work.
 - The shipped native `3D` direct-light tier samples area lights from a
   16-slot hit-seeded stratified finite-radius disk population. Shadow checks
   start with 4 samples and stop there for clearly fully visible or fully blocked
@@ -124,7 +144,8 @@ Last updated: 2026-06-05
   - tile occupancy culling
   - temporal accumulation upgrades
   - stratified + blue-noise sampling support
-  - Disney-only denoise
+  - Disney-only denoise for the original Disney route; Disney v2 does not
+    inherit this denoise/temporal-pruning policy yet
   - explicit environment-light modes:
     - `off`
     - `top_fill`
@@ -441,6 +462,68 @@ Last updated: 2026-06-05
     from `asset_sphere_8x4` through `asset_sphere_128x64`; the `64x32`
     sphere is the current high-fidelity visual proof tier used for glossy
     moving-light review
+  - LineDrawing runtime mesh scene-export parity is covered by
+    `test-ray-tracing-render-headless-line-drawing-mesh-asset`:
+    - fixture:
+      `tests/fixtures/line_drawing_mesh_asset_high_quality/scene_runtime.json`
+    - the mesh object uses LineDrawing's `mesh_asset_instance` object shape and
+      a relative `extensions.line_drawing.runtime_mesh_path`
+    - the headless proof renders `asset_sphere_128x64` as `16128` mesh
+      triangles, with `16130` total scene triangles in the BVH after the floor
+      primitive is included
+  - The RayTracing scene editor retained 3D viewport now consumes the retained
+    runtime mesh asset set for editor preview:
+    - `PreviewRetainedSceneBuildLineSegments(...)` samples runtime mesh
+      triangle edges after applying the same instance scale, rotation, and
+      translation used by the native `3D` builder
+    - `SceneEditorDigestOverlayResolveExtents(...)` includes loaded mesh
+      vertices, so editor fit/zoom frames complex mesh assets instead of only
+      primitive floors, prisms, bounds, or construction planes
+    - current editor preview is a sampled connection-edge view, not the final
+      LineDrawing feature-edge extractor; dense mesh readability is improved by
+      a second camera-aware silhouette overlay that classifies loaded mesh edges
+      by adjacent front/back-facing triangles for the active editor camera
+    - the camera-aware silhouette overlay is intentionally limited to
+      moderate mesh sizes; very large runtime meshes such as the external
+      skull proof (`171246` triangles in the current BodyParts3D sidecar) keep
+      the bounded sampled-edge preview but skip per-frame silhouette edge
+      sorting/allocation so the editor can load and navigate the scene
+    - menu scene-source discovery and row selection no longer preflight/apply
+      runtime scenes on the click path; `scene_runtime.json` discovery is
+      filename/path based and validation remains at apply/render boundaries
+    - scene-editor session startup applies runtime-scene authoring state
+      through `runtime_scene_bridge_apply_file_defer_mesh_assets(...)`; this
+      editor path loads mesh sidecars up to the preview byte budget so low-poly
+      runtime assets such as platforms appear in the retained preview, while
+      oversized sidecars are skipped before JSON parse to preserve editor
+      responsiveness
+    - runtime-scene editor Apply/Save writes the RayTracing authoring overlay
+      and then rehydrates the editor through the same preview-limited deferred
+      mesh path, so saving a skull-scale scene does not synchronously full-load
+      or parse over-budget mesh sidecars in the editor process
+    - the object-mode left pane now reports the current scene-object list plus
+      the retained loaded mesh-preview instance count; object rows distinguish
+      loaded mesh sidecars, over-budget skipped mesh sidecars, and primitive
+      scene objects such as planes, and rows can be clicked to select the
+      matching scene object
+    - for mixed skull/platform scenes, the expected editor reading is:
+      one over-budget skull mesh row marked skipped, one primitive plane row,
+      and one loaded platform mesh row counted in `Mesh Loaded`
+    - loaded mesh preview edges now use a dedicated high-contrast editor
+      diagnostic color and append a mesh-local bounds outline, so small
+      default-material meshes such as the platform do not visually blend into
+      the white plane primitive or the blue scene extents box
+    - in 3D runtime-scene authoring, the object pane hides legacy
+      Circle/Square/Polygon preset controls and keeps the space focused on
+      scene inspection plus material/asset panels
+    - the normal render/headless path still uses
+      `runtime_scene_bridge_apply_file(...)` and loads full mesh assets
+    - runtime mesh preview logic is now isolated in
+      `src/app/preview_retained_scene_mesh.c`; the retained renderer stays
+      focused on primitive retained lines, projection/drawing, orchestration,
+      and light markers
+    - the next parity boundary is converging the silhouette overlay with
+      LineDrawing's authored feature-edge selection
   - imported mesh visual proof now flows from LineDrawing's imported STL
     harness into RayTracing through the same runtime mesh loader and native
     `3D` builder; the richer deterministic stepped-column fixture is the

@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-#include "render/runtime_material_texture_3d.h"
+#include "render/runtime_material_texture_stack_3d.h"
 #include "scene/object_manager.h"
 
 typedef enum SceneEditorMaterialFacePlacementField {
@@ -31,6 +31,7 @@ typedef struct SceneEditorMaterialFacePlacement {
     int sceneObjectIndex;
     int faceGroupIndex;
     int layerIndex;
+    char layerId[RUNTIME_MATERIAL_TEXTURE_LAYER_ID_SIZE];
     int textureId;
     double offsetU;
     double offsetV;
@@ -43,7 +44,13 @@ typedef struct SceneEditorMaterialFacePlacement {
 void SceneEditorMaterialFacePlacementResetAll(void);
 void SceneEditorMaterialFacePlacementResetObject(int scene_object_index);
 bool SceneEditorMaterialFacePlacementResetFace(int scene_object_index, int face_group_index);
+bool SceneEditorMaterialFacePlacementResetFaceLayer(int scene_object_index,
+                                                    int face_group_index,
+                                                    const char* layer_id);
 bool SceneEditorMaterialFacePlacementHasOverride(int scene_object_index, int face_group_index);
+bool SceneEditorMaterialFacePlacementHasOverrideForLayer(int scene_object_index,
+                                                         int face_group_index,
+                                                         const char* layer_id);
 bool SceneEditorMaterialFacePlacementObjectHasActiveTextureOverride(int scene_object_index);
 bool SceneEditorMaterialFacePlacementSetOverride(
     const SceneEditorMaterialFacePlacement* placement);
@@ -56,6 +63,15 @@ SceneEditorMaterialFacePlacement SceneEditorMaterialFacePlacementGetEffective(
     const SceneObject* object,
     int scene_object_index,
     int face_group_index);
+SceneEditorMaterialFacePlacement SceneEditorMaterialFacePlacementGetEffectiveForLayer(
+    const SceneObject* object,
+    int scene_object_index,
+    int face_group_index,
+    const char* layer_id);
+bool SceneEditorMaterialFacePlacementApplyOverridesToStack(const SceneObject* object,
+                                                           int scene_object_index,
+                                                           int face_group_index,
+                                                           RuntimeMaterialTextureStack* stack);
 bool SceneEditorMaterialFacePlacementApplyNormalizedValue(const SceneObject* object,
                                                          int scene_object_index,
                                                          int face_group_index,

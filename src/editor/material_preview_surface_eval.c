@@ -148,21 +148,27 @@ bool MaterialPreviewSurfaceEvaluateFacePrimitive(const SceneObject* object,
                                                     v,
                                                     &grounded_u,
                                                     &grounded_v);
-    if (has_face_override) {
-        placement = SceneEditorMaterialFacePlacementGetEffective(object,
-                                                                 scene_object_index,
-                                                                 face_group_index);
-        if (!material_preview_surface_eval_apply_face_override_to_stack(object,
-                                                                        scene_object_index,
-                                                                        &placement,
-                                                                        &stack)) {
-            runtime_placement = SceneEditorMaterialFacePlacementToRuntime(&placement);
-            RuntimeMaterialTextureStackBuildLegacyFromPlacement(&runtime_placement, &stack);
-        }
-    } else if (!SceneEditorMaterialStackGetEffectiveObjectStack(object,
-                                                                scene_object_index,
-                                                                &stack)) {
+    if (!SceneEditorMaterialStackGetEffectiveObjectStack(object,
+                                                        scene_object_index,
+                                                        &stack)) {
         RuntimeMaterialTextureStackBuildLegacyFromObject(object, &stack);
+    }
+    if (has_face_override) {
+        if (!SceneEditorMaterialFacePlacementApplyOverridesToStack(object,
+                                                                   scene_object_index,
+                                                                   face_group_index,
+                                                                   &stack)) {
+            placement = SceneEditorMaterialFacePlacementGetEffective(object,
+                                                                     scene_object_index,
+                                                                     face_group_index);
+            if (!material_preview_surface_eval_apply_face_override_to_stack(object,
+                                                                            scene_object_index,
+                                                                            &placement,
+                                                                            &stack)) {
+                runtime_placement = SceneEditorMaterialFacePlacementToRuntime(&placement);
+                RuntimeMaterialTextureStackBuildLegacyFromPlacement(&runtime_placement, &stack);
+            }
+        }
     }
     if (!RuntimeMaterialTextureStackEvaluatePlacedUV(&stack,
                                                      object,

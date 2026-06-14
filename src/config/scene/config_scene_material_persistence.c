@@ -172,6 +172,12 @@ struct json_object* SaveMaterialFacePlacementsForObject(int scene_object_index) 
             return NULL;
         }
         json_object_object_add(entry, "faceGroupIndex", json_object_new_int(placement.faceGroupIndex));
+        if (placement.layerIndex >= 0) {
+            json_object_object_add(entry, "layerIndex", json_object_new_int(placement.layerIndex));
+        }
+        if (placement.layerId[0]) {
+            json_object_object_add(entry, "layerId", json_object_new_string(placement.layerId));
+        }
         json_object_object_add(entry, "textureId", json_object_new_int(placement.textureId));
         json_object_object_add(entry, "offsetU", json_object_new_double(placement.offsetU));
         json_object_object_add(entry, "offsetV", json_object_new_double(placement.offsetV));
@@ -354,6 +360,7 @@ void LoadMaterialFacePlacements(struct json_object* obj, int scene_object_index)
         placement.hasOverride = true;
         placement.sceneObjectIndex = scene_object_index;
         placement.faceGroupIndex = json_object_get_int(face_group);
+        placement.layerIndex = -1;
         placement.textureId = sceneSettings.sceneObjects[scene_object_index].textureId;
         placement.offsetU = sceneSettings.sceneObjects[scene_object_index].textureOffsetU;
         placement.offsetV = sceneSettings.sceneObjects[scene_object_index].textureOffsetV;
@@ -361,6 +368,17 @@ void LoadMaterialFacePlacements(struct json_object* obj, int scene_object_index)
         placement.strength = sceneSettings.sceneObjects[scene_object_index].textureStrength;
         placement.params =
             RuntimeMaterialTexture3DParamsFromObject(&sceneSettings.sceneObjects[scene_object_index]);
+        ConfigJsonGetInt(entry, "layerIndex", &placement.layerIndex);
+        {
+            struct json_object* layer_id = NULL;
+            if (json_object_object_get_ex(entry, "layerId", &layer_id) &&
+                json_object_is_type(layer_id, json_type_string)) {
+                snprintf(placement.layerId,
+                         sizeof(placement.layerId),
+                         "%s",
+                         json_object_get_string(layer_id));
+            }
+        }
         ConfigJsonGetInt(entry, "textureId", &placement.textureId);
         ConfigJsonGetDouble(entry, "offsetU", &placement.offsetU);
         ConfigJsonGetDouble(entry, "offsetV", &placement.offsetV);

@@ -736,7 +736,7 @@ void menu_state_init(MenuRuntimeState* state) {
     state->rouletteSliderValue = 10;
     state->envSliderValue = 0;
     state->cacheWeightSliderValue = 100;
-    state->lightIntensitySliderValue = 500;
+    state->lightIntensitySliderValue = (int)lround(RAY_TRACING_DEFAULT_LIGHT_INTENSITY * 100.0);
     state->lightDecaySoftnessSliderValue = 100;
     state->forwardDecaySliderValue = 2000;
     state->bounceDepth3DSliderValue = RUNTIME_3D_BOUNCE_DEPTH_DEFAULT;
@@ -751,8 +751,6 @@ void menu_state_init(MenuRuntimeState* state) {
     menu_state_sync_load_scene_dropdown_flags(state);
     menu_state_sync_from_anim(state);
     menu_state_sync_source_and_library(state);
-    menu_state_refresh_manifest_options(state);
-    menu_state_refresh_volume_options(state);
     if (animSettings.inputRoot[0]) {
         (void)setenv("RAY_TRACING_INPUT_ROOT", animSettings.inputRoot, 1);
     }
@@ -762,6 +760,8 @@ void menu_state_init(MenuRuntimeState* state) {
     if (animSettings.videoOutputRoot[0]) {
         (void)setenv("RAY_TRACING_VIDEO_OUTPUT_ROOT", animSettings.videoOutputRoot, 1);
     }
+    menu_state_refresh_manifest_options(state);
+    menu_state_refresh_volume_options(state);
     state->editingInputRoot = false;
     state->editingOutputRoot = false;
     state->editingFrameDir = false;
@@ -825,7 +825,7 @@ void menu_state_reset_defaults(MenuRuntimeState* state) {
     animSettings.pathSeed = 1;
     animSettings.cacheContributionWeight = 1.0;
     animSettings.bsdfModel = 1;
-    animSettings.lightIntensity = 5.0;
+    animSettings.lightIntensity = RAY_TRACING_DEFAULT_LIGHT_INTENSITY;
     animSettings.environmentLightMode = ENVIRONMENT_LIGHT_MODE_OFF;
     animSettings.disneyDenoiseEnabled = true;
     animSettings.spaceMode = SPACE_MODE_2D;

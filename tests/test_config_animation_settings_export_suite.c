@@ -5,6 +5,7 @@
 
 #include "app/animation.h"
 #include "app/animation_output.h"
+#include "app/agent_render_request.h"
 #include "app/data_paths.h"
 #include "app/render_export_batch.h"
 #include "config/config_manager.h"
@@ -46,6 +47,45 @@ static int test_animation_integrator_split_roundtrip_and_default_3d(void) {
                 animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DISNEY);
 
     restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
+static int test_agent_render_request_disney_v2_integrator_label_roundtrip(void) {
+    char request_path[PATH_MAX];
+    char diagnostics[256];
+    RayTracingAgentRenderRequest request;
+    const char* json_text =
+        "{\n"
+        "  \"schema_version\": \"ray_tracing_agent_render_request_v1\",\n"
+        "  \"run_id\": \"disney_v2_integrator_label_test\",\n"
+        "  \"scene\": {\"runtime_scene_path\": \"scene_runtime.json\"},\n"
+        "  \"render\": {\"integrator_3d\": \"disney_v2\"}\n"
+        "}\n";
+
+    snprintf(request_path,
+             sizeof(request_path),
+             "%s",
+             "/tmp/ray_tracing_agent_render_disney_v2_request.json");
+    assert_true("agent_render_disney_v2_request_write",
+                write_text_file(request_path, json_text));
+    assert_true("agent_render_disney_v2_request_load",
+                ray_tracing_agent_render_request_load_file(request_path,
+                                                           &request,
+                                                           diagnostics,
+                                                           sizeof(diagnostics)));
+    assert_true("agent_render_disney_v2_request_override",
+                request.has_integrator_3d_override);
+    assert_true("agent_render_disney_v2_request_id",
+                request.integrator_3d == RAY_TRACING_3D_INTEGRATOR_DISNEY_V2);
+    assert_true("agent_render_disney_v2_label",
+                strcmp(ray_tracing_agent_render_request_integrator_label(
+                           RAY_TRACING_3D_INTEGRATOR_DISNEY_V2),
+                       "disney_v2") == 0);
+    assert_true("agent_render_current_disney_label_stable",
+                strcmp(ray_tracing_agent_render_request_integrator_label(
+                           RAY_TRACING_3D_INTEGRATOR_DISNEY),
+                       "disney") == 0);
+    unlink(request_path);
     return 0;
 }
 
@@ -224,6 +264,28 @@ static int test_animation_environment_brightness_byte_floor_roundtrip_and_legacy
     LoadAnimationConfig();
     assert_true("environment_floor_roundtrip_persisted",
                 fabs(animSettings.environmentBrightness - 128.0) <= 1e-6);
+
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
+static int test_animation_light_intensity_missing_uses_authored_default(void) {
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+    const char* json_missing_light =
+        "{\n"
+        "  \"spaceMode\": 1,\n"
+        "  \"integratorMode3D\": 4\n"
+        "}\n";
+
+    animSettings.lightIntensity = 5.0;
+    assert_true("light_intensity_missing_write_partial",
+                write_text_file(kRuntimeAnimationConfigPath, json_missing_light));
+    LoadAnimationConfig();
+    assert_close("light_intensity_missing_uses_authored_default",
+                 animSettings.lightIntensity,
+                 RAY_TRACING_DEFAULT_LIGHT_INTENSITY,
+                 1e-9);
 
     restore_runtime_animation_config(backup, backup_size);
     return 0;
@@ -716,11 +778,13 @@ int run_test_config_animation_settings_export_suite(void) {
     int before = test_support_failures();
 
     test_animation_integrator_split_roundtrip_and_default_3d();
+    test_agent_render_request_disney_v2_integrator_label_roundtrip();
     test_animation_native_3d_temporal_frames_roundtrip_and_clamp();
     test_animation_native_3d_bounce_depth_and_roulette_roundtrip_and_clamp();
     test_animation_native_3d_top_fill_roundtrip_and_default();
     test_animation_native_3d_disney_denoise_roundtrip_and_default();
     test_animation_environment_brightness_byte_floor_roundtrip_and_legacy_migration();
+    test_animation_light_intensity_missing_uses_authored_default();
     test_animation_runtime_window_override_roundtrip_and_apply();
     test_animation_native_3d_render_scale_roundtrip_and_clamp();
     test_runtime_native_3d_resolution_scale_contract();

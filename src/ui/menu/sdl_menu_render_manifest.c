@@ -52,7 +52,7 @@ void menu_render_draw_manifest_dropdown(SDL_Renderer *renderer,
     } else {
         int available = 0;
         panel_rect.x = buttons->loadSceneRect.x;
-        panel_rect.y = buttons->inputRootValueRect.y + buttons->inputRootValueRect.h + 6;
+        panel_rect.y = buttons->loadSceneRect.y + buttons->loadSceneRect.h + 6;
         panel_rect.w = (buttons->inputRootApplyRect.x + buttons->inputRootApplyRect.w) - panel_rect.x;
         available = (screen_layout ? (screen_layout->leftPanelRect.y + screen_layout->leftPanelRect.h - 18)
                                    : SDL_MENU_RENDER_MANIFEST_FALLBACK_BOTTOM_Y) - panel_rect.y;

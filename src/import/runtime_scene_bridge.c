@@ -22,6 +22,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define RUNTIME_SCENE_BRIDGE_EDITOR_MESH_PREVIEW_MAX_ASSET_BYTES (1024u * 1024u)
+
 RuntimeSceneBridge3DScaffoldState g_last_3d_scaffold = {0};
 RuntimeSceneBridge3DDigestState g_last_3d_digest = {0};
 RuntimeSceneBridge3DPrimitiveSeedState g_last_3d_primitive_seeds = {0};
@@ -796,8 +798,9 @@ bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
     return true;
 }
 
-bool runtime_scene_bridge_apply_file(const char *runtime_scene_path,
-                                     RuntimeSceneBridgePreflight *out_summary) {
+static bool runtime_scene_bridge_apply_file_with_options(const char *runtime_scene_path,
+                                                         RuntimeSceneBridgePreflight *out_summary,
+                                                         bool load_mesh_assets) {
     CoreBuffer file_data = {0};
     CoreResult io_result;
     char runtime_scene_path_copy[sizeof(animSettings.runtimeScenePath)];
@@ -835,13 +838,25 @@ bool runtime_scene_bridge_apply_file(const char *runtime_scene_path,
     json_text[file_data.size] = '\0';
     core_io_buffer_free(&file_data);
 
-    if (!ray_tracing_runtime_mesh_assets_load_scene_file(
-            runtime_scene_path_copy,
-            &mesh_assets,
-            out_summary->diagnostics,
-            sizeof(out_summary->diagnostics))) {
-        free(json_text);
-        return false;
+    if (load_mesh_assets) {
+        if (!ray_tracing_runtime_mesh_assets_load_scene_file(
+                runtime_scene_path_copy,
+                &mesh_assets,
+                out_summary->diagnostics,
+                sizeof(out_summary->diagnostics))) {
+            free(json_text);
+            return false;
+        }
+    } else {
+        if (!ray_tracing_runtime_mesh_assets_load_scene_file_preview_limited(
+                runtime_scene_path_copy,
+                RUNTIME_SCENE_BRIDGE_EDITOR_MESH_PREVIEW_MAX_ASSET_BYTES,
+                &mesh_assets,
+                out_summary->diagnostics,
+                sizeof(out_summary->diagnostics))) {
+            free(json_text);
+            return false;
+        }
     }
 
     snprintf(animSettings.runtimeScenePath,
@@ -869,6 +884,16 @@ bool runtime_scene_bridge_apply_file(const char *runtime_scene_path,
     }
     free(json_text);
     return ok;
+}
+
+bool runtime_scene_bridge_apply_file(const char *runtime_scene_path,
+                                     RuntimeSceneBridgePreflight *out_summary) {
+    return runtime_scene_bridge_apply_file_with_options(runtime_scene_path, out_summary, true);
+}
+
+bool runtime_scene_bridge_apply_file_defer_mesh_assets(const char *runtime_scene_path,
+                                                       RuntimeSceneBridgePreflight *out_summary) {
+    return runtime_scene_bridge_apply_file_with_options(runtime_scene_path, out_summary, false);
 }
 
 bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_json,

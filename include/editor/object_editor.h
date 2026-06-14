@@ -33,6 +33,9 @@ void RenderObjectEditor(SDL_Renderer* renderer);
 int ObjectEditorRenderPaneControls(SDL_Renderer* renderer, SDL_Rect content_bounds, int top_y, int bottom_y);
 void HandleObjectEditorEvents(SDL_Event* event);
 ObjectEditorHitRegion ObjectEditorHitRegionAtPoint(int mx, int my);
+void ObjectEditorClearObjectListRows(void);
+void ObjectEditorRegisterObjectListRow(int object_index, SDL_Rect rect);
+int ObjectEditorObjectListIndexAtPoint(int mx, int my);
 
 // Sub-functions for event handling
 void HandleObjectEditorMouseClick(SDL_Event* event);

@@ -22,6 +22,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <string.h>
 
 #define MAX_POLYGON_POINTS 10  // Limit for custom polygons
 
@@ -54,6 +55,9 @@ extern SDL_Rect addButton;  // the existing definition from scene_editor.c
 extern SDL_Rect deleteButton;  // the existing definition from scene_editor.c
 extern SDL_Rect selectButton;  // the visible shared tool button
 SDL_Rect objectHandlesButton = {0};
+static SDL_Rect objectListRowRects[MAX_OBJECTS];
+static int objectListRowIndices[MAX_OBJECTS];
+static int objectListRowCount = 0;
 // Nested Buttons for Add Mode (Placed to the left of Add Button)
 SDL_Rect circleButton;  
 SDL_Rect squareButton;
@@ -91,6 +95,29 @@ bool ObjectEditorPointInRect(int x, int y, const SDL_Rect* rect) {
     if (!rect || rect->w <= 0 || rect->h <= 0) return false;
     return x >= rect->x && x <= rect->x + rect->w &&
            y >= rect->y && y <= rect->y + rect->h;
+}
+
+void ObjectEditorClearObjectListRows(void) {
+    memset(objectListRowRects, 0, sizeof(objectListRowRects));
+    memset(objectListRowIndices, 0, sizeof(objectListRowIndices));
+    objectListRowCount = 0;
+}
+
+void ObjectEditorRegisterObjectListRow(int object_index, SDL_Rect rect) {
+    if (objectListRowCount >= MAX_OBJECTS) return;
+    if (object_index < 0 || object_index >= sceneSettings.objectCount) return;
+    objectListRowRects[objectListRowCount] = rect;
+    objectListRowIndices[objectListRowCount] = object_index;
+    objectListRowCount += 1;
+}
+
+int ObjectEditorObjectListIndexAtPoint(int mx, int my) {
+    for (int i = 0; i < objectListRowCount; ++i) {
+        if (ObjectEditorPointInRect(mx, my, &objectListRowRects[i])) {
+            return objectListRowIndices[i];
+        }
+    }
+    return -1;
 }
 
 static void ObjectEditorDrawPaneButton(SDL_Renderer* renderer,
@@ -481,12 +508,15 @@ void RenderObjectEditor(SDL_Renderer* renderer) {
 
 
 int ObjectEditorRenderPaneControls(SDL_Renderer* renderer, SDL_Rect content_bounds, int top_y, int bottom_y) {
-    const int gap = 8;
+    const int gap = 6;
     const int row_gap = 10;
-    const int button_h = 34;
+    const int button_h = 28;
     int cursor_y = top_y;
     int third_w = (content_bounds.w - (row_gap * 2)) / 3;
     char label[128];
+    bool runtime_3d_scene =
+        animSettings.spaceMode == SPACE_MODE_3D &&
+        animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE;
 
     objectHandlesButton = (SDL_Rect){0, 0, 0, 0};
     circleButton = (SDL_Rect){0, 0, 0, 0};
@@ -503,7 +533,7 @@ int ObjectEditorRenderPaneControls(SDL_Renderer* renderer, SDL_Rect content_boun
     ObjectEditorDrawPaneButton(renderer, objectHandlesButton, label, renderHandles);
     cursor_y += button_h + gap;
 
-    if (cursor_y + button_h <= bottom_y) {
+    if (!runtime_3d_scene && cursor_y + button_h <= bottom_y) {
         int x0 = content_bounds.x;
         int x1 = x0 + third_w + row_gap;
         int x2 = x1 + third_w + row_gap;

@@ -23,6 +23,10 @@ static int test_runtime_native_3d_denoise_apply_policy(void) {
                 !RuntimeNative3DDenoise_ShouldApply(RAY_TRACING_3D_INTEGRATOR_MATERIAL,
                                                     12,
                                                     true));
+    assert_true("runtime_native_3d_denoise_policy_disney_v2_separate",
+                !RuntimeNative3DDenoise_ShouldApply(RAY_TRACING_3D_INTEGRATOR_DISNEY_V2,
+                                                    12,
+                                                    true));
     return 0;
 }
 

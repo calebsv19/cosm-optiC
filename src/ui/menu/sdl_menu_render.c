@@ -167,9 +167,12 @@ void menu_render_frame(SDL_Renderer* renderer,
     }
 
     char manifestLabel[160];
+    const bool sceneListVisible =
+        state->manifestDropdownOpen ||
+        animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D;
     menu_render_format_manifest_button_label(state, manifestLabel, sizeof(manifestLabel));
-    menu_render_draw_button_rect(renderer, font, &buttons.loadSceneRect, manifestLabel, state->manifestDropdownOpen);
-    if (state->manifestDropdownOpen) {
+    menu_render_draw_button_rect(renderer, font, &buttons.loadSceneRect, manifestLabel, sceneListVisible);
+    if (sceneListVisible) {
         menu_render_draw_manifest_dropdown(renderer, font, state, &buttons, &screenLayout);
     } else {
         state->manifestPanelRect = (SDL_Rect){0, 0, 0, 0};

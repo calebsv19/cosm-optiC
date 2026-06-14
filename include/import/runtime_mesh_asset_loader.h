@@ -31,11 +31,23 @@ typedef struct RayTracingRuntimeMeshAssetInstance {
     double scale_z;
 } RayTracingRuntimeMeshAssetInstance;
 
+typedef struct RayTracingRuntimeMeshAssetSkippedInstance {
+    char object_id[64];
+    char asset_id[64];
+    char path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX];
+    int scene_object_index;
+    size_t file_size_bytes;
+    size_t max_file_size_bytes;
+} RayTracingRuntimeMeshAssetSkippedInstance;
+
 typedef struct RayTracingRuntimeMeshAssetSet {
     int asset_count;
     RayTracingRuntimeMeshAsset assets[RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS];
     int instance_count;
     RayTracingRuntimeMeshAssetInstance instances[RAY_TRACING_RUNTIME_MESH_ASSET_MAX_INSTANCES];
+    int skipped_instance_count;
+    RayTracingRuntimeMeshAssetSkippedInstance
+        skipped_instances[RAY_TRACING_RUNTIME_MESH_ASSET_MAX_INSTANCES];
 } RayTracingRuntimeMeshAssetSet;
 
 void ray_tracing_runtime_mesh_asset_set_init(RayTracingRuntimeMeshAssetSet* set);
@@ -52,6 +64,12 @@ bool ray_tracing_runtime_mesh_assets_load_scene_file(const char* runtime_scene_p
                                                      RayTracingRuntimeMeshAssetSet* out_set,
                                                      char* out_diagnostics,
                                                      size_t out_diagnostics_size);
+bool ray_tracing_runtime_mesh_assets_load_scene_file_preview_limited(
+    const char* runtime_scene_path,
+    size_t max_asset_file_bytes,
+    RayTracingRuntimeMeshAssetSet* out_set,
+    char* out_diagnostics,
+    size_t out_diagnostics_size);
 
 void ray_tracing_runtime_mesh_assets_reset_last(void);
 void ray_tracing_runtime_mesh_assets_take_last(RayTracingRuntimeMeshAssetSet* loaded);

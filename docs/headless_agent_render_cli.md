@@ -149,6 +149,7 @@ Supported `render.integrator_3d` values:
 - `material`
 - `emission_transparency`
 - `disney`
+- `disney_v2`
 
 Relative paths resolve from the request file directory.
 

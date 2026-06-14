@@ -2,6 +2,8 @@
 
 #include <math.h>
 
+#include "import/runtime_mesh_asset_loader.h"
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -172,6 +174,93 @@ static bool scene_editor_digest_overlay_resolve_seed_extents(double* out_min_x,
         }
     }
     return seeded;
+}
+
+static void scene_editor_digest_overlay_rotate_mesh_point(
+    double* io_x,
+    double* io_y,
+    double* io_z,
+    const RayTracingRuntimeMeshAssetInstance* instance) {
+    double x = io_x ? *io_x : 0.0;
+    double y = io_y ? *io_y : 0.0;
+    double z = io_z ? *io_z : 0.0;
+    double cx = 0.0;
+    double sx = 0.0;
+    double cy = 0.0;
+    double sy = 0.0;
+    double cz = 0.0;
+    double sz = 0.0;
+    double tx = 0.0;
+    double ty = 0.0;
+    double tz = 0.0;
+    if (!io_x || !io_y || !io_z || !instance) return;
+
+    cx = cos(instance->rotation_x);
+    sx = sin(instance->rotation_x);
+    cy = cos(instance->rotation_y);
+    sy = sin(instance->rotation_y);
+    cz = cos(instance->rotation_z);
+    sz = sin(instance->rotation_z);
+
+    ty = y * cx - z * sx;
+    tz = y * sx + z * cx;
+    y = ty;
+    z = tz;
+
+    tx = x * cy + z * sy;
+    tz = -x * sy + z * cy;
+    x = tx;
+    z = tz;
+
+    tx = x * cz - y * sz;
+    ty = x * sz + y * cz;
+    x = tx;
+    y = ty;
+
+    *io_x = x;
+    *io_y = y;
+    *io_z = z;
+}
+
+static void scene_editor_digest_overlay_accumulate_mesh_asset_extents(
+    bool* seeded,
+    double* min_x,
+    double* min_y,
+    double* min_z,
+    double* max_x,
+    double* max_y,
+    double* max_z) {
+    const RayTracingRuntimeMeshAssetSet* mesh_assets = ray_tracing_runtime_mesh_assets_last();
+    if (!mesh_assets || !seeded || !min_x || !min_y || !min_z || !max_x || !max_y || !max_z) {
+        return;
+    }
+    for (int i = 0; i < mesh_assets->instance_count; ++i) {
+        const RayTracingRuntimeMeshAssetInstance* instance = &mesh_assets->instances[i];
+        const CoreMeshAssetRuntimeDocument* document = NULL;
+        if (instance->asset_index < 0 || instance->asset_index >= mesh_assets->asset_count) {
+            continue;
+        }
+        document = &mesh_assets->assets[instance->asset_index].document;
+        for (size_t j = 0; j < document->vertex_count; ++j) {
+            double x = document->vertices[j].position.x * instance->scale_x;
+            double y = document->vertices[j].position.y * instance->scale_y;
+            double z = document->vertices[j].position.z * instance->scale_z;
+            scene_editor_digest_overlay_rotate_mesh_point(&x, &y, &z, instance);
+            x += instance->position_x;
+            y += instance->position_y;
+            z += instance->position_z;
+            scene_editor_digest_overlay_accumulate_extents(x,
+                                                           y,
+                                                           z,
+                                                           seeded,
+                                                           min_x,
+                                                           min_y,
+                                                           min_z,
+                                                           max_x,
+                                                           max_y,
+                                                           max_z);
+        }
+    }
 }
 
 static bool scene_editor_digest_overlay_seed_matches_object(
@@ -481,6 +570,13 @@ bool SceneEditorDigestOverlayResolveExtents(const RuntimeSceneBridge3DDigestStat
     if (!digest->valid) return false;
 
     seeded = scene_editor_digest_overlay_resolve_seed_extents(&min_x,
+                                                              &min_y,
+                                                              &min_z,
+                                                              &max_x,
+                                                              &max_y,
+                                                              &max_z);
+    scene_editor_digest_overlay_accumulate_mesh_asset_extents(&seeded,
+                                                              &min_x,
                                                               &min_y,
                                                               &min_z,
                                                               &max_x,

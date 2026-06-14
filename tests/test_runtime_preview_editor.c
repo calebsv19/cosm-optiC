@@ -1,13 +1,19 @@
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "app/animation.h"
 #include "app/preview_camera_projector.h"
 #include "app/preview_camera_sample.h"
 #include "app/preview_mode_route.h"
 #include "app/preview_playback.h"
+#include "app/preview_retained_scene_mesh.h"
 #include "app/preview_retained_scene_renderer.h"
+#include "editor/scene_editor_digest_overlay.h"
+#include "import/runtime_mesh_asset_loader.h"
 #include "render/ray_tracing_mode_backend.h"
 #include "render/runtime_camera_3d_rays.h"
 #include "test_runtime_preview_editor.h"
@@ -16,6 +22,37 @@
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+
+static bool test_runtime_preview_write_text_file(const char* path, const char* text) {
+    FILE* f = NULL;
+    if (!path || !text) return false;
+    f = fopen(path, "w");
+    if (!f) return false;
+    if (fputs(text, f) < 0) {
+        fclose(f);
+        return false;
+    }
+    return fclose(f) == 0;
+}
+
+static bool test_runtime_preview_write_large_placeholder_file(const char* path, size_t bytes) {
+    FILE* f = NULL;
+    char chunk[4096];
+    size_t remaining = bytes;
+    if (!path || bytes == 0u) return false;
+    memset(chunk, 'x', sizeof(chunk));
+    f = fopen(path, "w");
+    if (!f) return false;
+    while (remaining > 0u) {
+        size_t write_count = remaining < sizeof(chunk) ? remaining : sizeof(chunk);
+        if (fwrite(chunk, 1u, write_count, f) != write_count) {
+            fclose(f);
+            return false;
+        }
+        remaining -= write_count;
+    }
+    return fclose(f) == 0;
+}
 
 static int test_runtime_camera_projector_3d_preview_projection_parity(void) {
     RuntimeCamera3D runtime_camera = {0};
@@ -486,6 +523,199 @@ static void test_preview_retained_scene_prism_edges_do_not_cross(void) {
     assert_close("preview_retained_scene_prism_edge_3_bz", segments[3].bz, -1.0, 1e-6);
 }
 
+static void test_preview_retained_scene_includes_runtime_mesh_asset_edges(void) {
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeSceneBridge3DDigestState digest = {0};
+    PreviewRetainedSceneLineSegment segments[PREVIEW_RETAINED_SCENE_MAX_LINE_SEGMENTS];
+    PreviewRetainedSceneLineSegment silhouette_segments[PREVIEW_RETAINED_SCENE_MAX_LINE_SEGMENTS];
+    PreviewCameraSample camera_sample = {0};
+    PreviewCameraProjector projector = {0};
+    SDL_Rect viewport = {0, 0, 512, 512};
+    int count = 0;
+    int silhouette_count = 0;
+    bool has_mesh_height_edge = false;
+    bool has_silhouette_height_edge = false;
+    double min_x = 0.0;
+    double min_y = 0.0;
+    double min_z = 0.0;
+    double max_x = 0.0;
+    double max_y = 0.0;
+    double max_z = 0.0;
+    double span_max = 0.0;
+    bool ok = runtime_scene_bridge_apply_file(
+        "tests/fixtures/line_drawing_mesh_asset_high_quality/scene_runtime.json",
+        &summary);
+
+    assert_true("preview_retained_scene_mesh_asset_apply_ok", ok);
+    if (!ok) return;
+    runtime_scene_bridge_get_last_3d_digest_state(&digest);
+
+    count = PreviewRetainedSceneBuildLineSegments(&digest,
+                                                  segments,
+                                                  PREVIEW_RETAINED_SCENE_MAX_LINE_SEGMENTS);
+    assert_true("preview_retained_scene_mesh_asset_segment_count", count > 4);
+    for (int i = 0; i < count; ++i) {
+        if (segments[i].az > 0.7 || segments[i].bz > 0.7) {
+            has_mesh_height_edge = true;
+            break;
+        }
+    }
+    assert_true("preview_retained_scene_mesh_asset_draws_mesh_edges", has_mesh_height_edge);
+
+    assert_true("preview_retained_scene_mesh_asset_resolves_extents",
+                SceneEditorDigestOverlayResolveExtents(&digest,
+                                                       &min_x,
+                                                       &min_y,
+                                                       &min_z,
+                                                       &max_x,
+                                                       &max_y,
+                                                       &max_z,
+                                                       &span_max));
+    assert_true("preview_retained_scene_mesh_asset_extent_height", max_z > 0.7);
+    assert_true("preview_retained_scene_mesh_asset_extent_span", span_max > 1.0);
+
+    camera_sample.valid = true;
+    camera_sample.position_x = 0.0;
+    camera_sample.position_y = 4.0;
+    camera_sample.position_z = 0.65;
+    camera_sample.yaw_radians = 0.0;
+    camera_sample.pitch_radians = 0.0;
+    camera_sample.fov_y_degrees = 55.0;
+    camera_sample.aspect_ratio = 1.0;
+    assert_true("preview_retained_scene_mesh_asset_silhouette_projector",
+                PreviewCameraProjectorBuild(&camera_sample, viewport, &projector));
+    silhouette_count = PreviewRetainedSceneBuildSilhouetteSegments(
+        &digest,
+        &projector,
+        silhouette_segments,
+        PREVIEW_RETAINED_SCENE_MAX_LINE_SEGMENTS);
+    assert_true("preview_retained_scene_mesh_asset_silhouette_count",
+                silhouette_count > 8 && silhouette_count < count);
+    for (int i = 0; i < silhouette_count; ++i) {
+        if (silhouette_segments[i].az > 0.7 || silhouette_segments[i].bz > 0.7) {
+            has_silhouette_height_edge = true;
+            break;
+        }
+    }
+    assert_true("preview_retained_scene_mesh_asset_silhouette_height",
+                has_silhouette_height_edge);
+}
+
+static void test_preview_retained_scene_deferred_path_keeps_small_mesh_edges(void) {
+    const char* dir = "/private/tmp/ray_tracing_preview_deferred_mixed_mesh";
+    const char* scene_path = "/private/tmp/ray_tracing_preview_deferred_mixed_mesh/scene_runtime.json";
+    const char* huge_path = "/private/tmp/ray_tracing_preview_deferred_mixed_mesh/huge_skipped.runtime.json";
+    const char* small_path =
+        "tests/fixtures/mesh_asset_runtime_spheres/assets/mesh_assets/asset_sphere_8x4.runtime.json";
+    char small_abs[1024];
+    char scene_json[4096];
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeSceneBridge3DDigestState digest = {0};
+    PreviewRetainedSceneLineSegment segments[PREVIEW_RETAINED_SCENE_MAX_LINE_SEGMENTS];
+    const RayTracingRuntimeMeshAssetSet* mesh_assets = NULL;
+    int count = 0;
+    bool has_small_mesh_edge = false;
+    bool has_small_mesh_preview_color = false;
+    bool ok = false;
+
+    assert_true("preview_retained_scene_deferred_mixed_mkdir", mkdir(dir, 0777) == 0 || access(dir, F_OK) == 0);
+    assert_true("preview_retained_scene_deferred_mixed_small_realpath",
+                realpath(small_path, small_abs) != NULL);
+    assert_true("preview_retained_scene_deferred_mixed_huge_write",
+                test_runtime_preview_write_large_placeholder_file(huge_path, 1024u * 1024u + 16u));
+    if (!small_abs[0]) return;
+
+    snprintf(scene_json,
+             sizeof(scene_json),
+             "{"
+             "\"schema_family\":\"codework_scene\","
+             "\"schema_variant\":\"scene_runtime_v1\","
+             "\"schema_version\":1,"
+             "\"scene_id\":\"preview_deferred_mixed_mesh\","
+             "\"space_mode_default\":\"3d\","
+             "\"unit_system\":\"meters\","
+             "\"world_scale\":1.0,"
+             "\"objects\":["
+             "{"
+             "\"object_id\":\"obj_huge\","
+             "\"object_type\":\"mesh_asset_instance\","
+             "\"transform\":{\"position\":{\"x\":0,\"y\":0,\"z\":0},"
+             "\"rotation\":{\"x\":0,\"y\":0,\"z\":0},"
+             "\"scale\":{\"x\":1,\"y\":1,\"z\":1}},"
+             "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_huge\"},"
+             "\"extensions\":{\"line_drawing\":{\"runtime_mesh_path\":\"%s\"}}"
+             "},"
+             "{"
+             "\"object_id\":\"obj_plane\","
+             "\"object_type\":\"plane_primitive\","
+             "\"transform\":{\"position\":{\"x\":0,\"y\":0,\"z\":0},"
+             "\"rotation\":{\"x\":0,\"y\":0,\"z\":0},"
+             "\"scale\":{\"x\":1,\"y\":1,\"z\":1}},"
+             "\"primitive\":{\"kind\":\"plane_primitive\",\"width\":4,\"height\":4}"
+             "},"
+             "{"
+             "\"object_id\":\"obj_platform\","
+             "\"object_type\":\"mesh_asset_instance\","
+             "\"transform\":{\"position\":{\"x\":0,\"y\":0,\"z\":1.25},"
+             "\"rotation\":{\"x\":0,\"y\":0,\"z\":0},"
+             "\"scale\":{\"x\":2,\"y\":2,\"z\":2}},"
+             "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_sphere_8x4\"},"
+             "\"extensions\":{\"line_drawing\":{\"runtime_mesh_path\":\"%s\"}}"
+             "}"
+             "]"
+             "}",
+             huge_path,
+             small_abs);
+    assert_true("preview_retained_scene_deferred_mixed_scene_write",
+                test_runtime_preview_write_text_file(scene_path, scene_json));
+
+    ok = runtime_scene_bridge_apply_file_defer_mesh_assets(scene_path, &summary);
+    assert_true("preview_retained_scene_deferred_mixed_apply_ok", ok);
+    if (ok) {
+        mesh_assets = ray_tracing_runtime_mesh_assets_last();
+        assert_true("preview_retained_scene_deferred_mixed_asset_count",
+                    mesh_assets && mesh_assets->asset_count == 1);
+        assert_true("preview_retained_scene_deferred_mixed_instance_count",
+                    mesh_assets && mesh_assets->instance_count == 1);
+        assert_true("preview_retained_scene_deferred_mixed_skipped_count",
+                    mesh_assets && mesh_assets->skipped_instance_count == 1);
+        assert_true("preview_retained_scene_deferred_mixed_skipped_index",
+                    mesh_assets && mesh_assets->skipped_instances[0].scene_object_index == 0);
+
+        runtime_scene_bridge_get_last_3d_digest_state(&digest);
+        count = PreviewRetainedSceneBuildLineSegments(&digest,
+                                                      segments,
+                                                      PREVIEW_RETAINED_SCENE_MAX_LINE_SEGMENTS);
+        assert_true("preview_retained_scene_deferred_mixed_segment_count", count > 4);
+        for (int i = 0; i < count; ++i) {
+            if (segments[i].az > 1.2 || segments[i].bz > 1.2) {
+                has_small_mesh_edge = true;
+                if (segments[i].color.r == 255 && segments[i].color.g == 170 &&
+                    segments[i].color.b == 82) {
+                    has_small_mesh_preview_color = true;
+                }
+            }
+        }
+        assert_true("preview_retained_scene_deferred_mixed_draws_small_mesh",
+                    has_small_mesh_edge);
+        assert_true("preview_retained_scene_deferred_mixed_mesh_has_diagnostic_color",
+                    has_small_mesh_preview_color);
+    }
+
+    remove(scene_path);
+    remove(huge_path);
+    rmdir(dir);
+}
+
+static void test_preview_retained_scene_large_mesh_silhouette_policy(void) {
+    assert_true("preview_retained_scene_silhouette_policy_empty",
+                !PreviewRetainedSceneMeshShouldBuildSilhouetteForTriangleCount(0u));
+    assert_true("preview_retained_scene_silhouette_policy_fixture_size",
+                PreviewRetainedSceneMeshShouldBuildSilhouetteForTriangleCount(16128u));
+    assert_true("preview_retained_scene_silhouette_policy_skull_scale",
+                !PreviewRetainedSceneMeshShouldBuildSilhouetteForTriangleCount(171246u));
+}
+
 static void test_preview_mode_route_select_contract(void) {
     RayTracingRuntimeRoute route = {0};
     RayTracingSceneDigestStatus digest_status = {0};
@@ -568,6 +798,9 @@ int run_test_runtime_preview_editor_tests(void) {
     test_preview_retained_scene_line_segments_contract();
     test_preview_retained_scene_uses_primitive_seed_truth();
     test_preview_retained_scene_prism_edges_do_not_cross();
+    test_preview_retained_scene_includes_runtime_mesh_asset_edges();
+    test_preview_retained_scene_deferred_path_keeps_small_mesh_edges();
+    test_preview_retained_scene_large_mesh_silhouette_policy();
     test_preview_mode_route_select_contract();
     test_preview_playback_evaluate_contract();
     return test_support_failures() - before;

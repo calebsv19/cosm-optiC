@@ -17,6 +17,8 @@ typedef struct RuntimeNative3DProgressHUDState {
     int startedSubpasses;
     int completedSubpasses;
     int totalSubpasses;
+    int frameIndex;
+    int pathFrameCount;
     size_t completedTilesInSubpass;
     size_t totalTilesInSubpass;
 } RuntimeNative3DProgressHUDState;
@@ -70,6 +72,8 @@ static const char* runtime_native_3d_progress_hud_integrator_label(
             return "Emission";
         case RAY_TRACING_3D_INTEGRATOR_DISNEY:
             return "Disney";
+        case RAY_TRACING_3D_INTEGRATOR_DISNEY_V2:
+            return "Disney v2";
         default:
             return "Native 3D";
     }
@@ -171,13 +175,17 @@ void RuntimeNative3DProgressHUD_Reset(void) {
 }
 
 void RuntimeNative3DProgressHUD_BeginFrame(RayTracing3DIntegratorId integrator_id,
-                                           int total_subpasses) {
+                                           int total_subpasses,
+                                           int frame_index,
+                                           int path_frame_count) {
     RuntimeNative3DProgressHUDState* state = &g_runtime_native_3d_progress_hud;
     memset(state, 0, sizeof(*state));
     state->active = true;
     state->integratorId = integrator_id;
     state->frameStartCounter = (uint64_t)SDL_GetPerformanceCounter();
     state->totalSubpasses = (total_subpasses <= 0) ? 1 : total_subpasses;
+    state->frameIndex = (frame_index < 0) ? 0 : frame_index;
+    state->pathFrameCount = (path_frame_count < 0) ? 0 : path_frame_count;
 }
 
 void RuntimeNative3DProgressHUD_UpdateTemporal(int started_subpasses,
@@ -248,6 +256,7 @@ void RuntimeNative3DProgressHUD_Draw(SDL_Renderer* renderer) {
     SDL_Color detail_color = {164, 175, 192, 255};
     SDL_Color accent_color = {113, 214, 182, 255};
     char title[64] = {0};
+    char frame_line[64] = {0};
     char subpass_line[64] = {0};
     char tile_line[64] = {0};
     char elapsed_value[32] = {0};
@@ -256,6 +265,8 @@ void RuntimeNative3DProgressHUD_Draw(SDL_Renderer* renderer) {
     char estimate_line[40] = {0};
     int title_w = 0;
     int title_h = 0;
+    int frame_w = 0;
+    int frame_h = 0;
     int subpass_w = 0;
     int subpass_h = 0;
     int tile_w = 0;
@@ -267,6 +278,9 @@ void RuntimeNative3DProgressHUD_Draw(SDL_Renderer* renderer) {
     int left_col_w = 0;
     int right_col_w = 0;
     int column_gap = 18;
+    int title_row_gap = 18;
+    int title_row_w = 0;
+    int frame_x = 0;
     int right_col_x = 0;
     int max_text_w = 0;
     int panel_w = 0;
@@ -316,6 +330,13 @@ void RuntimeNative3DProgressHUD_Draw(SDL_Renderer* renderer) {
                    "%s %d%%",
                    runtime_native_3d_progress_hud_integrator_label(state->integratorId),
                    progress_pct);
+    if (state->pathFrameCount > 0) {
+        (void)snprintf(frame_line,
+                       sizeof(frame_line),
+                       "frame %d/%d",
+                       state->frameIndex,
+                       state->pathFrameCount);
+    }
     (void)snprintf(subpass_line,
                    sizeof(subpass_line),
                    "subpass %d/%d",
@@ -336,6 +357,12 @@ void RuntimeNative3DProgressHUD_Draw(SDL_Renderer* renderer) {
     (void)snprintf(estimate_line, sizeof(estimate_line), "est=%s", estimate_value);
 
     if (!runtime_native_3d_progress_hud_measure_line(renderer, font, title, &title_w, &title_h) ||
+        (frame_line[0] != '\0' &&
+         !runtime_native_3d_progress_hud_measure_line(renderer,
+                                                      font,
+                                                      frame_line,
+                                                      &frame_w,
+                                                      &frame_h)) ||
         !runtime_native_3d_progress_hud_measure_line(renderer,
                                                      font,
                                                      subpass_line,
@@ -357,7 +384,11 @@ void RuntimeNative3DProgressHUD_Draw(SDL_Renderer* renderer) {
 
     left_col_w = subpass_w > tile_w ? subpass_w : tile_w;
     right_col_w = elapsed_w > estimate_w ? elapsed_w : estimate_w;
-    max_text_w = title_w;
+    title_row_w = title_w;
+    if (frame_line[0] != '\0') {
+        title_row_w += title_row_gap + frame_w;
+    }
+    max_text_w = title_row_w;
     if (left_col_w + column_gap + right_col_w > max_text_w) {
         max_text_w = left_col_w + column_gap + right_col_w;
     }
@@ -398,6 +429,18 @@ void RuntimeNative3DProgressHUD_Draw(SDL_Renderer* renderer) {
                                              panel.x + padding,
                                              panel.y + padding,
                                              title_color);
+    if (frame_line[0] != '\0') {
+        frame_x = panel.x + panel_w - padding - frame_w;
+        if (frame_x < panel.x + padding + title_w + title_row_gap) {
+            frame_x = panel.x + padding + title_w + title_row_gap;
+        }
+        runtime_native_3d_progress_hud_draw_line(renderer,
+                                                 font,
+                                                 frame_line,
+                                                 frame_x,
+                                                 panel.y + padding,
+                                                 detail_color);
+    }
     runtime_native_3d_progress_hud_draw_line(renderer,
                                              font,
                                              subpass_line,

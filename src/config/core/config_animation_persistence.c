@@ -575,8 +575,11 @@ void LoadAnimationConfig(void) {
         animSettings.cacheContributionWeight = json_object_get_double(temp);
     if (json_object_object_get_ex(config, "bsdfModel", &temp))
         animSettings.bsdfModel = json_object_get_int(temp);
-    if (json_object_object_get_ex(config, "lightIntensity", &temp))
+    if (json_object_object_get_ex(config, "lightIntensity", &temp)) {
         animSettings.lightIntensity = json_object_get_double(temp);
+    } else {
+        animSettings.lightIntensity = RAY_TRACING_DEFAULT_LIGHT_INTENSITY;
+    }
     if (json_object_object_get_ex(config, "forwardDecay", &temp))
         animSettings.forwardDecay = json_object_get_double(temp);
     if (json_object_object_get_ex(config, "forwardFalloffMode", &temp))

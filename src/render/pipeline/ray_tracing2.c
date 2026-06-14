@@ -360,7 +360,9 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
                                                  nativePreviewByteCount /
                                                      (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES);
         RuntimeNative3DProgressHUD_BeginFrame(route.integratorMode3D,
-                                              ResolveNative3DTemporalFrames(route.integratorMode3D));
+                                              ResolveNative3DTemporalFrames(route.integratorMode3D),
+                                              AnimationCurrentAbsoluteFrameIndex(),
+                                              AnimationConfiguredPathFrameCount());
 
         ts_session_start_timer(timer_hud_session(), "Buffer Calc");
         if (useTiles && tileGrid.tiles && tileGrid.count > 0) {

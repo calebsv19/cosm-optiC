@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <limits.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -218,6 +219,56 @@ static int test_runtime_mesh_asset_loader_reports_malformed_asset(void) {
     return 0;
 }
 
+static int test_runtime_mesh_asset_loader_uses_line_drawing_runtime_path_hint(void) {
+    const char* dir = "/private/tmp/ray_tracing_mrt2_external_hint";
+    const char* scene_path = "/private/tmp/ray_tracing_mrt2_external_hint/scene_runtime.json";
+    const char* source_asset_path =
+        "tests/fixtures/mesh_asset_runtime_spheres/assets/mesh_assets/asset_sphere_8x4.runtime.json";
+    char source_asset_abs[PATH_MAX];
+    char scene_json[1024];
+    RayTracingRuntimeMeshAssetSet set;
+    char diagnostics[256] = {0};
+    bool ok = false;
+
+    assert_true("mrt2_external_hint_source_realpath",
+                realpath(source_asset_path, source_asset_abs) != NULL);
+    if (!source_asset_abs[0]) {
+        snprintf(source_asset_abs, sizeof(source_asset_abs), "%s", source_asset_path);
+    }
+
+    snprintf(scene_json,
+             sizeof(scene_json),
+             "{"
+             "\"world_scale\":1.0,"
+             "\"objects\":[{"
+             "\"object_id\":\"obj_external_mesh\","
+             "\"object_type\":\"mesh_asset_instance\","
+             "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_sphere_8x4\"},"
+             "\"extensions\":{\"line_drawing\":{\"runtime_mesh_path\":\"%s\"}}"
+             "}]"
+             "}",
+             source_asset_abs);
+
+    mkdir(dir, 0777);
+    assert_true("mrt2_external_hint_write_scene", write_text_file(scene_path, scene_json));
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    ok = ray_tracing_runtime_mesh_assets_load_scene_file(scene_path,
+                                                        &set,
+                                                        diagnostics,
+                                                        sizeof(diagnostics));
+    assert_true("mrt2_external_hint_loads", ok);
+    if (ok) {
+        assert_true("mrt2_external_hint_asset_count", set.asset_count == 1);
+        assert_true("mrt2_external_hint_instance_count", set.instance_count == 1);
+        assert_true("mrt2_external_hint_path",
+                    strstr(set.assets[0].path, "asset_sphere_8x4.runtime.json") != NULL);
+    }
+    ray_tracing_runtime_mesh_asset_set_free(&set);
+    remove(scene_path);
+    rmdir(dir);
+    return 0;
+}
+
 static int test_runtime_mesh_asset_loader_reuses_cache_and_invalidates(void) {
     const char* dir = "/private/tmp/ray_tracing_mrt9_cache";
     const char* assets_dir = "/private/tmp/ray_tracing_mrt9_cache/assets";
@@ -316,13 +367,36 @@ static int test_runtime_mesh_asset_loader_reuses_cache_and_invalidates(void) {
     return 0;
 }
 
+static int test_runtime_mesh_asset_loader_preview_limited_skips_oversized_asset(void) {
+    RayTracingRuntimeMeshAssetSet set;
+    char diag[256] = {0};
+    bool ok = false;
+
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    ok = ray_tracing_runtime_mesh_assets_load_scene_file_preview_limited(
+        "tests/fixtures/mesh_asset_runtime_spheres/scene_runtime_pressure_mrt8.json",
+        1024u * 1024u,
+        &set,
+        diag,
+        sizeof(diag));
+    assert_true("mrt2_preview_limited_load_ok", ok);
+    if (ok) {
+        assert_true("mrt2_preview_limited_asset_skipped", set.asset_count == 0);
+        assert_true("mrt2_preview_limited_instance_skipped", set.instance_count == 0);
+    }
+    ray_tracing_runtime_mesh_asset_set_free(&set);
+    return 0;
+}
+
 int run_test_runtime_mesh_asset_loader_tests(void) {
     int before = g_runtime_mesh_asset_loader_failures;
 
     test_runtime_mesh_asset_loader_resolves_and_loads_mrt0_fixture();
     test_runtime_mesh_asset_loader_reports_missing_asset();
     test_runtime_mesh_asset_loader_reports_malformed_asset();
+    test_runtime_mesh_asset_loader_uses_line_drawing_runtime_path_hint();
     test_runtime_mesh_asset_loader_reuses_cache_and_invalidates();
+    test_runtime_mesh_asset_loader_preview_limited_skips_oversized_asset();
 
     return g_runtime_mesh_asset_loader_failures - before;
 }

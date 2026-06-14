@@ -427,6 +427,10 @@ void menu_render_build_button_layout(TTF_Font* font,
         int root_buttons_w = ROOT_CTRL_BUTTON_W * 3 + 8;
         int root_value_w = maxLeftWidth - root_buttons_w;
         int root_y = layout.loadSceneRect.y + layout.loadSceneRect.h + ROOT_ROW_SPACING;
+        if ((state && state->manifestDropdownOpen) ||
+            animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D) {
+            root_y += SDL_MENU_RENDER_MANIFEST_PANEL_MAX_HEIGHT + ROOT_ROW_SPACING;
+        }
         if (root_value_w < 140) {
             root_value_w = 140;
         }

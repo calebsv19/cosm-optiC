@@ -47,6 +47,10 @@ static bool IsClickingButton(int mx, int my) {
         return true;
     }
 
+    if (ObjectEditorObjectListIndexAtPoint(mx, my) >= 0) {
+        return true;
+    }
+
     if (ObjectEditorPointInRect(mx, my, &circleButton) ||
         ObjectEditorPointInRect(mx, my, &squareButton) ||
         ObjectEditorPointInRect(mx, my, &polygonButton)) {
@@ -199,7 +203,18 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
     if (event->button.button == SDL_BUTTON_LEFT) {
         int mx = event->button.x;
         int my = event->button.y;
+        int object_list_index = -1;
         viewportPanDragging = false;
+        object_list_index = ObjectEditorObjectListIndexAtPoint(mx, my);
+        if (object_list_index >= 0) {
+            ObjectEditorSetSelectedObjectIndex(object_list_index);
+            selectedAssetIndex = -1;
+            activeMaterialSlider = OBJECT_EDITOR_PANEL_SLIDER_NONE;
+            if (selectedObjectIndex >= 0 && selectedObjectIndex < sceneSettings.objectCount) {
+                selectedMaterialIndex = sceneSettings.sceneObjects[selectedObjectIndex].material_id;
+            }
+            return;
+        }
         if (mx >= assetPanelRect.x && mx <= assetPanelRect.x + assetPanelRect.w &&
             my >= assetPanelRect.y && my <= assetPanelRect.y + assetPanelRect.h) {
             if (mx >= assetCollapseRect.x && mx <= assetCollapseRect.x + assetCollapseRect.w &&

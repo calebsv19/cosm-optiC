@@ -56,6 +56,8 @@ void SaveFrame(int frameNumber);
 
 // Returns the current normalized playback position used by the live runtime loop.
 double AnimationCurrentNormalizedT(void);
+int AnimationCurrentAbsoluteFrameIndex(void);
+int AnimationConfiguredPathFrameCount(void);
 
 // Indicates whether a fluid scene should override the default scene.
 bool AnimationUseFluidScene(void);

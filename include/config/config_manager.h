@@ -96,6 +96,8 @@ typedef enum {
 #define RUNTIME_3D_UPSCALE_MODE_MAX RUNTIME_3D_UPSCALE_MODE_BILINEAR
 #define RUNTIME_3D_UPSCALE_MODE_DEFAULT RUNTIME_3D_UPSCALE_MODE_OFF
 
+#define RAY_TRACING_DEFAULT_LIGHT_INTENSITY 0.4
+
 // **Animation Config Struct**
 typedef struct {
     bool interactiveMode;

@@ -148,7 +148,7 @@ static int test_menu_layout_builds_non_overlapping_primary_zones(void) {
     return 0;
 }
 
-static int test_menu_layout_keeps_manifest_dropdown_inside_left_panel(void) {
+static int test_menu_layout_keeps_manifest_list_inside_left_panel(void) {
     MenuRuntimeState state;
     MenuButtonLayout buttons;
     MenuScreenLayout screen;
@@ -167,14 +167,16 @@ static int test_menu_layout_keeps_manifest_dropdown_inside_left_panel(void) {
 
     menu_layout_finalize_with_buttons(&screen, &buttons, &state);
 
-    assert_true("menu_layout_manifest_overlay_visible", screen.manifestReserveRect.w > 0 && screen.manifestReserveRect.h > 0);
-    assert_true("menu_layout_manifest_overlay_below_input_row",
-                screen.manifestReserveRect.y >= buttons.inputRootValueRect.y + buttons.inputRootValueRect.h);
-    assert_true("menu_layout_manifest_overlay_inside_left_panel_left",
+    assert_true("menu_layout_manifest_list_visible", screen.manifestReserveRect.w > 0 && screen.manifestReserveRect.h > 0);
+    assert_true("menu_layout_manifest_list_below_load_scene",
+                screen.manifestReserveRect.y >= buttons.loadSceneRect.y + buttons.loadSceneRect.h);
+    assert_true("menu_layout_input_root_below_manifest_list",
+                buttons.inputRootValueRect.y >= screen.manifestReserveRect.y + screen.manifestReserveRect.h);
+    assert_true("menu_layout_manifest_list_inside_left_panel_left",
                 screen.manifestReserveRect.x >= screen.leftPanelRect.x);
-    assert_true("menu_layout_manifest_overlay_inside_left_panel_right",
+    assert_true("menu_layout_manifest_list_inside_left_panel_right",
                 test_rect_right(&screen.manifestReserveRect) <= test_rect_right(&screen.leftPanelRect));
-    assert_true("menu_layout_manifest_overlay_inside_left_panel_bottom",
+    assert_true("menu_layout_manifest_list_inside_left_panel_bottom",
                 test_rect_bottom(&screen.manifestReserveRect) <= test_rect_bottom(&screen.leftPanelRect));
     assert_true("menu_layout_batch_y_unchanged_when_manifest_opens",
                 screen.centerBatchRect.y == screen.centerControlsRect.y + screen.centerControlsRect.h + 18);
@@ -345,7 +347,7 @@ static int test_integrator_catalog_menu_routes_by_space_mode(void) {
     assert_true("integrator_menu_3d_label",
                 strcmp(menu_state.buttonLabel, "Integrator: 3D Disney") == 0);
     assert_true("integrator_menu_3d_no_path_toggles", !menu_state.showPathToggles);
-    assert_true("integrator_menu_3d_visible_count_five", menu_state.visibleCount == 5);
+    assert_true("integrator_menu_3d_visible_count_six", menu_state.visibleCount == 6);
 
     animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE;
     menu_state = RayTracingIntegratorCatalog_BuildMenuState(&animSettings);
@@ -362,6 +364,14 @@ static int test_integrator_catalog_menu_routes_by_space_mode(void) {
     assert_true("integrator_menu_3d_emission_transparency_label",
                 strcmp(menu_state.buttonLabel,
                        "Integrator: 3D Emission / Transparency") == 0);
+
+    animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DISNEY_V2;
+    menu_state = RayTracingIntegratorCatalog_BuildMenuState(&animSettings);
+    assert_true("integrator_menu_3d_disney_v2_label",
+                strcmp(menu_state.buttonLabel, "Integrator: 3D Disney v2") == 0);
+    assert_true("integrator_menu_3d_disney_v2_status_label",
+                strcmp(RayTracingIntegratorCatalog_3DStatusLabel(RAY_TRACING_3D_INTEGRATOR_DISNEY_V2),
+                       "integrator: 3D Disney v2") == 0);
 
     memset(&buttons, 0, sizeof(buttons));
     memset(&state, 0, sizeof(state));
@@ -508,7 +518,11 @@ static int test_integrator_catalog_cycle_preserves_inactive_mode(void) {
     RayTracingIntegratorCatalog_CycleActiveSelection(&animSettings);
     assert_true("integrator_cycle_3d_keeps_2d",
                 animSettings.integratorMode == RAY_TRACING_2D_INTEGRATOR_HYBRID);
-    assert_true("integrator_cycle_3d_wraps_disney_to_direct_light",
+    assert_true("integrator_cycle_3d_advances_disney_to_disney_v2",
+                animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DISNEY_V2);
+
+    RayTracingIntegratorCatalog_CycleActiveSelection(&animSettings);
+    assert_true("integrator_cycle_3d_wraps_disney_v2_to_direct_light",
                 animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT);
 
     RayTracingIntegratorCatalog_CycleActiveSelection(&animSettings);
@@ -672,6 +686,114 @@ static int test_scene_source_catalog_collect_admits_runtime_and_manifest_lanes(v
     remove(runtime_path);
     remove(authoring_path);
     remove(manifest_path);
+    rmdir(tmp_root);
+    return 0;
+}
+
+static int test_scene_source_catalog_collects_all_runtime_scene_folders(void) {
+    char tmp_template[] = "/tmp/ray_tracing_catalog_many_XXXXXX";
+    char *tmp_root = mkdtemp(tmp_template);
+    const char *scene_names[] = {
+        "column_overhang",
+        "column_overhang_wall",
+        "prism_maze_corner_room_v1",
+        "simple_plane",
+        "skull_plane_with_platform",
+        "texture_blocks"
+    };
+    char scene_dirs[6][PATH_MAX];
+    char runtime_paths[6][PATH_MAX];
+    const char *roots[1];
+    SceneSourceCatalogEntry entries[16];
+    size_t entry_count = 0;
+
+    assert_true("scene_catalog_many_tmpdir_created", tmp_root != NULL);
+    if (!tmp_root) return 0;
+
+    for (size_t i = 0; i < sizeof(scene_names) / sizeof(scene_names[0]); ++i) {
+        char runtime_json[512];
+        snprintf(scene_dirs[i], sizeof(scene_dirs[i]), "%s/%s", tmp_root, scene_names[i]);
+        snprintf(runtime_paths[i], sizeof(runtime_paths[i]), "%s/scene_runtime.json", scene_dirs[i]);
+        snprintf(runtime_json,
+                 sizeof(runtime_json),
+                 "{"
+                 "\"schema_family\":\"codework_scene\","
+                 "\"schema_variant\":\"scene_runtime_v1\","
+                 "\"schema_version\":1,"
+                 "\"scene_id\":\"%s\","
+                 "\"unit_system\":\"meters\","
+                 "\"world_scale\":1.0,"
+                 "\"space_mode_default\":\"3d\","
+                 "\"objects\":[],"
+                 "\"materials\":[],"
+                 "\"lights\":[],"
+                 "\"cameras\":[]"
+                 "}",
+                 scene_names[i]);
+        assert_true("scene_catalog_many_mkdir", mkdir(scene_dirs[i], 0700) == 0);
+        assert_true("scene_catalog_many_write_runtime", write_text_file(runtime_paths[i], runtime_json));
+    }
+
+    roots[0] = tmp_root;
+    entry_count = scene_source_catalog_collect(entries,
+                                               sizeof(entries) / sizeof(entries[0]),
+                                               roots,
+                                               1,
+                                               NULL,
+                                               NULL);
+
+    assert_true("scene_catalog_many_runtime_count",
+                catalog_count_source(entries, entry_count, SCENE_SOURCE_RUNTIME_SCENE) == 6);
+    for (size_t i = 0; i < sizeof(scene_names) / sizeof(scene_names[0]); ++i) {
+        assert_true("scene_catalog_many_runtime_present",
+                    catalog_contains_path_source(entries,
+                                                 entry_count,
+                                                 runtime_paths[i],
+                                                 SCENE_SOURCE_RUNTIME_SCENE));
+    }
+
+    for (size_t i = 0; i < sizeof(scene_names) / sizeof(scene_names[0]); ++i) {
+        remove(runtime_paths[i]);
+        rmdir(scene_dirs[i]);
+    }
+    rmdir(tmp_root);
+    return 0;
+}
+
+static int test_scene_source_catalog_runtime_discovery_is_filename_based(void) {
+    char tmp_template[] = "/tmp/ray_tracing_catalog_lazy_XXXXXX";
+    char *tmp_root = mkdtemp(tmp_template);
+    char scene_dir[PATH_MAX];
+    char runtime_path[PATH_MAX];
+    const char *roots[1];
+    SceneSourceCatalogEntry entries[16];
+    size_t entry_count = 0;
+
+    assert_true("scene_catalog_lazy_tmpdir_created", tmp_root != NULL);
+    if (!tmp_root) return 0;
+
+    snprintf(scene_dir, sizeof(scene_dir), "%s/skull_plane_with_platform", tmp_root);
+    snprintf(runtime_path, sizeof(runtime_path), "%s/scene_runtime.json", scene_dir);
+    assert_true("scene_catalog_lazy_mkdir", mkdir(scene_dir, 0700) == 0);
+    assert_true("scene_catalog_lazy_write_runtime",
+                write_text_file(runtime_path, "{\"not\":\"validated during catalog\"}"));
+
+    roots[0] = tmp_root;
+    entry_count = scene_source_catalog_collect(entries,
+                                               sizeof(entries) / sizeof(entries[0]),
+                                               roots,
+                                               1,
+                                               NULL,
+                                               NULL);
+
+    assert_true("scene_catalog_lazy_runtime_present",
+                catalog_contains_path_source(entries,
+                                             entry_count,
+                                             runtime_path,
+                                             SCENE_SOURCE_RUNTIME_SCENE));
+
+    remove(runtime_path);
+    rmdir(scene_dir);
     rmdir(tmp_root);
     return 0;
 }
@@ -939,7 +1061,7 @@ int run_test_ui_menu_contract_tests(void) {
     test_menu_batch_panel_click_starts_frame_dir_edit();
     test_menu_batch_panel_clear_button_updates_frame_count();
     test_menu_layout_builds_non_overlapping_primary_zones();
-    test_menu_layout_keeps_manifest_dropdown_inside_left_panel();
+    test_menu_layout_keeps_manifest_list_inside_left_panel();
     test_menu_button_layout_respects_owned_screen_zones();
     test_menu_button_layout_exposes_volume_controls_in_3d_only();
     test_menu_batch_panel_layout_centers_inside_batch_zone();
@@ -951,6 +1073,8 @@ int run_test_ui_menu_contract_tests(void) {
     test_menu_fit_text_to_width_supports_in_place_buffer();
     test_manifest_default_roots_expands_runtime_and_legacy_paths();
     test_scene_source_catalog_collect_admits_runtime_and_manifest_lanes();
+    test_scene_source_catalog_collects_all_runtime_scene_folders();
+    test_scene_source_catalog_runtime_discovery_is_filename_based();
     test_volume_source_catalog_collects_bundle_and_direct_files();
     test_menu_state_manifest_label_uses_scene_directory_name();
     test_menu_state_manifest_option_visibility_matrix();

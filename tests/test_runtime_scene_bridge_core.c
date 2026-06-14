@@ -3,6 +3,7 @@
 
 #include "app/animation.h"
 #include "core_scene_compile.h"
+#include "import/runtime_mesh_asset_loader.h"
 #include "import/runtime_scene_bridge.h"
 #include "test_runtime_scene_bridge_core.h"
 #include "test_support.h"
@@ -1220,6 +1221,31 @@ static int test_runtime_scene_bridge_apply_compile_output(void) {
     return 0;
 }
 
+static int test_runtime_scene_bridge_apply_file_can_defer_mesh_assets(void) {
+    RuntimeSceneBridgePreflight summary = {0};
+    const RayTracingRuntimeMeshAssetSet* mesh_assets = NULL;
+    const char* runtime_scene_path =
+        "tests/fixtures/mesh_asset_runtime_spheres/scene_runtime.json";
+    bool ok = false;
+
+    ray_tracing_runtime_mesh_assets_reset_last();
+    ok = runtime_scene_bridge_apply_file_defer_mesh_assets(runtime_scene_path, &summary);
+    assert_true("runtime_scene_apply_defer_mesh_ok", ok);
+    if (ok) {
+        mesh_assets = ray_tracing_runtime_mesh_assets_last();
+        assert_true("runtime_scene_apply_defer_mesh_source",
+                    animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE);
+        assert_true("runtime_scene_apply_defer_mesh_path",
+                    strcmp(animSettings.runtimeScenePath, runtime_scene_path) == 0);
+        assert_true("runtime_scene_apply_defer_mesh_objects", sceneSettings.objectCount > 0);
+        assert_true("runtime_scene_apply_defer_mesh_assets_loaded",
+                    mesh_assets && mesh_assets->asset_count == 3);
+        assert_true("runtime_scene_apply_defer_mesh_instances_loaded",
+                    mesh_assets && mesh_assets->instance_count == 3);
+    }
+    return 0;
+}
+
 
 int run_test_runtime_scene_bridge_core_tests(void) {
     int before = test_support_failures();
@@ -1248,6 +1274,7 @@ int run_test_runtime_scene_bridge_core_tests(void) {
     test_runtime_scene_bridge_authoring_overlay_procedural_texture_shorthand_preserved();
     test_runtime_scene_bridge_authoring_overlay_default_emissive_strength_zero();
     test_runtime_scene_bridge_apply_compile_output();
+    test_runtime_scene_bridge_apply_file_can_defer_mesh_assets();
 
     return test_support_failures() - before;
 }

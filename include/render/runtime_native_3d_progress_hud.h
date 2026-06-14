@@ -10,7 +10,9 @@
 
 void RuntimeNative3DProgressHUD_Reset(void);
 void RuntimeNative3DProgressHUD_BeginFrame(RayTracing3DIntegratorId integrator_id,
-                                           int total_subpasses);
+                                           int total_subpasses,
+                                           int frame_index,
+                                           int path_frame_count);
 void RuntimeNative3DProgressHUD_UpdateTemporal(int started_subpasses,
                                                int completed_subpasses,
                                                int total_subpasses);

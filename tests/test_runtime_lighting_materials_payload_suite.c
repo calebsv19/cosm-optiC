@@ -19,6 +19,7 @@
 #include "render/runtime_emission_transparency_3d.h"
 #include "render/runtime_material_authored_texture_3d.h"
 #include "render/runtime_material_payload_3d.h"
+#include "render/runtime_principled_bsdf_3d.h"
 #include "render/runtime_material_response_3d.h"
 #include "render/runtime_material_texture_3d.h"
 #include "render/runtime_material_texture_stack_3d.h"
@@ -1710,6 +1711,145 @@ static int test_runtime_material_payload_3d_surface_damage_controls_roughness(vo
     return 0;
 }
 
+static int test_runtime_principled_bsdf_normalizes_core_parameters(void) {
+    RuntimePrincipledBSDF3D bsdf = RuntimePrincipledBSDF3D_Default();
+    RuntimePrincipledBSDF3D normalized = {0};
+
+    bsdf.baseColorR = 1.4;
+    bsdf.baseColorG = -0.5;
+    bsdf.baseColorB = 0.25;
+    bsdf.metallic = 1.5;
+    bsdf.roughness = 0.0;
+    bsdf.specularWeight = 0.8;
+    bsdf.diffuseWeight = 0.8;
+    bsdf.reflectivity = 0.2;
+    bsdf.ior = 1.5;
+    bsdf.opacity = 1.2;
+    bsdf.transmissionWeight = -1.0;
+
+    normalized = RuntimePrincipledBSDF3D_Normalize(bsdf);
+
+    assert_true("runtime_principled_bsdf_normalize_valid", normalized.valid);
+    assert_close("runtime_principled_bsdf_normalize_color_r",
+                 normalized.baseColorR,
+                 1.0,
+                 1e-12);
+    assert_close("runtime_principled_bsdf_normalize_color_g",
+                 normalized.baseColorG,
+                 0.0,
+                 1e-12);
+    assert_close("runtime_principled_bsdf_normalize_roughness_floor",
+                 normalized.roughness,
+                 0.02,
+                 1e-12);
+    assert_close("runtime_principled_bsdf_normalize_metal_diffuse",
+                 normalized.diffuseWeight,
+                 0.0,
+                 1e-12);
+    assert_true("runtime_principled_bsdf_normalize_specular_f0_colored",
+                normalized.specularF0R > normalized.specularF0G &&
+                normalized.specularF0R > normalized.specularF0B);
+    assert_close("runtime_principled_bsdf_dielectric_f0_ior15",
+                 RuntimePrincipledBSDF3D_DielectricF0FromIor(1.5),
+                 0.04,
+                 1e-12);
+    assert_close("runtime_principled_bsdf_fresnel_normal",
+                 RuntimePrincipledBSDF3D_FresnelSchlick(1.0, 0.04),
+                 0.04,
+                 1e-12);
+    assert_close("runtime_principled_bsdf_fresnel_grazing",
+                 RuntimePrincipledBSDF3D_FresnelSchlick(0.0, 0.04),
+                 1.0,
+                 1e-12);
+
+    return 0;
+}
+
+static int test_runtime_principled_bsdf_payload_adapter_preserves_material_signal(void) {
+    SceneConfig saved_scene = sceneSettings;
+    RuntimeMaterialPayload3D payload = {0};
+    RuntimePrincipledBSDF3D bsdf = {0};
+    MaterialBSDF legacy = {0};
+
+    MaterialManagerResetDefaults();
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 8.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].color = 0x336699;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_GLOSSY;
+    sceneSettings.sceneObjects[0].alpha = 0.70;
+    sceneSettings.sceneObjects[0].opacity = 1.0;
+    sceneSettings.sceneObjects[0].reflectivity = 0.35;
+    sceneSettings.sceneObjects[0].roughness = 0.22;
+    sceneSettings.sceneObjects[0].emissiveStrength = 0.4;
+
+    assert_true("runtime_principled_bsdf_payload_resolve",
+                RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(0, &payload));
+    bsdf = RuntimePrincipledBSDF3D_FromMaterialPayload(&payload);
+    legacy = RuntimePrincipledBSDF3D_ToMaterialBSDF(&bsdf);
+
+    assert_true("runtime_principled_bsdf_payload_valid", bsdf.valid);
+    assert_close("runtime_principled_bsdf_payload_color_r",
+                 bsdf.baseColorR,
+                 payload.baseColorR,
+                 1e-12);
+    assert_close("runtime_principled_bsdf_payload_roughness",
+                 bsdf.roughness,
+                 payload.bsdf.roughness,
+                 1e-12);
+    assert_close("runtime_principled_bsdf_payload_transmission",
+                 bsdf.transmissionWeight,
+                 payload.transparency,
+                 1e-12);
+    assert_true("runtime_principled_bsdf_payload_f0_reflectivity",
+                bsdf.dielectricF0 >= payload.bsdf.reflectivity - 1e-12);
+    assert_close("runtime_principled_bsdf_to_legacy_albedo",
+                 legacy.albedo,
+                 payload.bsdf.albedo,
+                 1e-12);
+    assert_close("runtime_principled_bsdf_to_legacy_roughness",
+                 legacy.roughness,
+                 payload.bsdf.roughness,
+                 1e-12);
+
+    sceneSettings = saved_scene;
+    return 0;
+}
+
+static int test_runtime_principled_bsdf_surface_eval_adapter_and_lobes(void) {
+    RuntimeMaterialSurfaceEval surface =
+        RuntimeMaterialSurfaceEvalMakeBase(0.25, 0.50, 0.75, 0.30, 0.18, 0.45, 0.55, 0.20);
+    RuntimePrincipledBSDF3D bsdf =
+        RuntimePrincipledBSDF3D_FromSurfaceEval(&surface, 1.45, 0.2);
+    double diffuse = RuntimePrincipledBSDF3D_EvaluateDiffuseCos(&bsdf, 0.8);
+    double spec_smooth = RuntimePrincipledBSDF3D_EvaluateGGXSpecularCos(&bsdf, 0.8, 0.8, 0.9);
+    double pdf = RuntimePrincipledBSDF3D_GGXHalfVectorPdf(&bsdf, 0.9, 0.8);
+
+    assert_true("runtime_principled_bsdf_surface_valid", bsdf.valid);
+    assert_close("runtime_principled_bsdf_surface_color_b",
+                 bsdf.baseColorB,
+                 0.75,
+                 1e-12);
+    assert_close("runtime_principled_bsdf_surface_transmission",
+                 bsdf.transmissionWeight,
+                 0.20,
+                 1e-12);
+    assert_true("runtime_principled_bsdf_surface_probabilities",
+                RuntimePrincipledBSDF3D_DiffuseProbability(&bsdf) > 0.0 &&
+                RuntimePrincipledBSDF3D_SpecularProbability(&bsdf) > 0.0);
+    assert_true("runtime_principled_bsdf_surface_diffuse_positive", diffuse > 0.0);
+    assert_true("runtime_principled_bsdf_surface_specular_positive", spec_smooth > 0.0);
+    assert_true("runtime_principled_bsdf_surface_pdf_positive", pdf > 0.0);
+
+    bsdf.roughness = 0.85;
+    bsdf = RuntimePrincipledBSDF3D_Normalize(bsdf);
+    assert_true("runtime_principled_bsdf_surface_rough_spec_changes",
+                fabs(RuntimePrincipledBSDF3D_EvaluateGGXSpecularCos(&bsdf, 0.8, 0.8, 0.9) -
+                     spec_smooth) > 1e-5);
+
+    return 0;
+}
+
 static int test_runtime_material_texture_stack_legacy_object_adapter_contract(void) {
     SceneObject object;
     RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
@@ -2320,6 +2460,97 @@ static int test_runtime_material_payload_uses_object_v2_stack_override(void) {
     return 0;
 }
 
+static int test_runtime_material_payload_face_override_targets_v2_layer_id_after_reorder(void) {
+    SceneConfig saved_scene = sceneSettings;
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    RuntimeMaterialPayload3D baseline = {0};
+    RuntimeMaterialPayload3D face_oil = {0};
+    SceneEditorMaterialFacePlacement placement = {0};
+    HitInfo3D hit = {0};
+    bool ok = false;
+    bool found_oil = false;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    SceneEditorMaterialFacePlacementResetAll();
+    SceneEditorMaterialStackResetAll();
+    MaterialManagerResetDefaults();
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_POLYGON, 0.0, 0.0, 1.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].color = 0x505050;
+    sceneSettings.sceneObjects[0].textureId = RUNTIME_MATERIAL_TEXTURE_3D_NONE;
+    sceneSettings.sceneObjects[0].textureStrength = 0.0;
+    sceneSettings.sceneObjects[0].reflectivity = 0.10;
+    sceneSettings.sceneObjects[0].roughness = 0.70;
+
+    stack.layerCount = 3;
+    stack.layers[0] =
+        RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID);
+    stack.layers[1] =
+        runtime_material_test_make_strong_overlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME, 3.0);
+    stack.layers[1].placement.strength = 0.0;
+    stack.layers[2] =
+        runtime_material_test_make_strong_overlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL, 3.0);
+    stack.layers[2].placement.strength = 0.0;
+    assert_true("runtime_material_payload_face_layer_id_stack_set",
+                SceneEditorMaterialStackSetObjectStack(0, &stack));
+
+    HitInfo3D_Reset(&hit);
+    hit.sceneObjectIndex = 0;
+    hit.triangleIndex = 2;
+    hit.localTriangleIndex = 2;
+    hit.primitiveIndex = 0;
+    hit.baryU = 0.24;
+    hit.baryV = 0.31;
+    hit.baryW = 0.45;
+    ok = RuntimeMaterialPayload3D_ResolveFromHit(&hit, &baseline);
+    assert_true("runtime_material_payload_face_layer_id_baseline_ok", ok);
+
+    placement.hasOverride = true;
+    placement.sceneObjectIndex = 0;
+    placement.faceGroupIndex = 1;
+    placement.layerIndex = 1;
+    snprintf(placement.layerId, sizeof(placement.layerId), "%s", stack.layers[2].layerId);
+    placement.textureId = RUNTIME_MATERIAL_TEXTURE_3D_RUST;
+    placement.scale = 3.0;
+    placement.strength = 1.0;
+    placement.params.coverage = 1.0;
+    placement.params.grain = 0.55;
+    placement.params.edgeSoftness = 1.0;
+    placement.params.contrast = 0.45;
+    placement.params.flow = 0.65;
+    placement.params.colorDepth = 1.0;
+    placement.params.surfaceDamage = 1.0;
+    assert_true("runtime_material_payload_face_layer_id_override_set",
+                SceneEditorMaterialFacePlacementSetOverride(&placement));
+
+    for (int u = 1; u < 9 && !found_oil; ++u) {
+        for (int v = 1; v < 9 && !found_oil; ++v) {
+            double bary_v = (double)u / 10.0;
+            double bary_w = (double)v / 10.0;
+            if (bary_v + bary_w >= 0.95) continue;
+            hit.baryV = bary_v;
+            hit.baryW = bary_w;
+            hit.baryU = 1.0 - bary_v - bary_w;
+            ok = RuntimeMaterialPayload3D_ResolveFromHit(&hit, &face_oil);
+            assert_true("runtime_material_payload_face_layer_id_retry_ok", ok);
+            found_oil = face_oil.textureMask > baseline.textureMask + 1e-9 &&
+                        face_oil.bsdf.reflectivity > baseline.bsdf.reflectivity + 1e-6 &&
+                        face_oil.bsdf.roughness < baseline.bsdf.roughness - 1e-6;
+        }
+    }
+
+    assert_true("runtime_material_payload_face_layer_id_oil_applied", found_oil);
+    assert_true("runtime_material_payload_face_layer_id_durable",
+                SceneEditorMaterialFacePlacementHasOverrideForLayer(0, 1, "oil"));
+    assert_true("runtime_material_payload_face_layer_id_not_grime",
+                !SceneEditorMaterialFacePlacementHasOverrideForLayer(0, 1, "grime"));
+
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialFacePlacementResetAll();
+    sceneSettings = saved_scene;
+    return 0;
+}
+
 static int test_runtime_material_config_loads_v2_stack_schema(void) {
     SceneConfig saved_scene = sceneSettings;
     json_object* root = json_object_new_object();
@@ -2327,6 +2558,7 @@ static int test_runtime_material_config_loads_v2_stack_schema(void) {
     json_object* obj = json_object_new_object();
     json_object* stack_obj = json_object_new_object();
     json_object* layers = json_object_new_array();
+    json_object* face_placements = json_object_new_array();
     RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
 
     SceneEditorMaterialStackResetAll();
@@ -2361,6 +2593,17 @@ static int test_runtime_material_config_loads_v2_stack_schema(void) {
     json_object_object_add(stack_obj, "version", json_object_new_int(1));
     json_object_object_add(stack_obj, "layers", layers);
     json_object_object_add(obj, "materialTextureStack", stack_obj);
+    {
+        json_object* face_entry = json_object_new_object();
+        json_object_object_add(face_entry, "faceGroupIndex", json_object_new_int(3));
+        json_object_object_add(face_entry, "layerIndex", json_object_new_int(1));
+        json_object_object_add(face_entry, "layerId", json_object_new_string("grime"));
+        json_object_object_add(face_entry, "textureId", json_object_new_int(RUNTIME_MATERIAL_TEXTURE_3D_RUST));
+        json_object_object_add(face_entry, "scale", json_object_new_double(2.5));
+        json_object_object_add(face_entry, "strength", json_object_new_double(0.65));
+        json_object_array_add(face_placements, face_entry);
+    }
+    json_object_object_add(obj, "materialFacePlacements", face_placements);
     json_object_array_add(objects, obj);
     json_object_object_add(root, "objects", objects);
 
@@ -2377,6 +2620,21 @@ static int test_runtime_material_config_loads_v2_stack_schema(void) {
                  stack.layers[1].placement.scale,
                  3.0,
                  1e-9);
+    assert_true("runtime_material_config_v2_face_layer_loaded",
+                SceneEditorMaterialFacePlacementHasOverrideForLayer(0, 3, "grime"));
+    {
+        SceneEditorMaterialFacePlacement placement =
+            SceneEditorMaterialFacePlacementGetEffectiveForLayer(&sceneSettings.sceneObjects[0],
+                                                                 0,
+                                                                 3,
+                                                                 "grime");
+        assert_true("runtime_material_config_v2_face_layer_index",
+                    placement.layerIndex == 1);
+        assert_close("runtime_material_config_v2_face_layer_strength",
+                     placement.strength,
+                     0.65,
+                     1e-9);
+    }
 
     json_object_put(root);
     SceneEditorMaterialStackResetAll();
@@ -2404,6 +2662,9 @@ int run_test_runtime_lighting_materials_payload_suite(void) {
     test_runtime_material_texture_3d_uv_sampler_matches_hit_sampler();
     test_runtime_material_texture_3d_rust_parameter_modes_change_masks();
     test_runtime_material_payload_3d_surface_damage_controls_roughness();
+    test_runtime_principled_bsdf_normalizes_core_parameters();
+    test_runtime_principled_bsdf_payload_adapter_preserves_material_signal();
+    test_runtime_principled_bsdf_surface_eval_adapter_and_lobes();
     test_runtime_material_texture_stack_legacy_object_adapter_contract();
     test_runtime_material_texture_stack_normalizes_bounds_contract();
     test_runtime_material_texture_stack_surface_eval_applies_rust_response();
@@ -2414,6 +2675,7 @@ int run_test_runtime_lighting_materials_payload_suite(void) {
     test_runtime_material_texture_stack_grime_oil_order_changes_result();
     test_runtime_material_texture_stack_overlays_do_not_reopen_transparency();
     test_runtime_material_payload_uses_object_v2_stack_override();
+    test_runtime_material_payload_face_override_targets_v2_layer_id_after_reorder();
     test_runtime_material_config_loads_v2_stack_schema();
     return 0;
 }

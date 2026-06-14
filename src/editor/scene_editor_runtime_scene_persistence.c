@@ -452,6 +452,16 @@ static json_object* scene_editor_runtime_scene_build_object_materials_json(void)
                 json_object_object_add(face_entry,
                                        "face_group_index",
                                        json_object_new_int(placement.faceGroupIndex));
+                if (placement.layerIndex >= 0) {
+                    json_object_object_add(face_entry,
+                                           "layer_index",
+                                           json_object_new_int(placement.layerIndex));
+                }
+                if (placement.layerId[0]) {
+                    json_object_object_add(face_entry,
+                                           "layer_id",
+                                           json_object_new_string(placement.layerId));
+                }
                 json_object_object_add(face_entry, "texture_id", json_object_new_int(placement.textureId));
                 json_object_object_add(face_entry, "offset_u", json_object_new_double(placement.offsetU));
                 json_object_object_add(face_entry, "offset_v", json_object_new_double(placement.offsetV));
@@ -676,7 +686,7 @@ bool SceneEditorRuntimeScenePersistAuthoring(char* out_diagnostics, size_t out_d
         return false;
     }
 
-    if (!runtime_scene_bridge_apply_file(animSettings.runtimeScenePath, &summary)) {
+    if (!runtime_scene_bridge_apply_file_defer_mesh_assets(animSettings.runtimeScenePath, &summary)) {
         scene_editor_runtime_scene_diag(out_diagnostics, out_diagnostics_size, summary.diagnostics);
         return false;
     }

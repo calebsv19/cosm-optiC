@@ -15,6 +15,9 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_light_emitter_3d.o \
 	$(BUILD_DIR)/render/runtime_specular_reflection_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_3d.o \
+	$(BUILD_DIR)/render/runtime_disney_v2_3d.o \
+	$(BUILD_DIR)/render/runtime_disney_v2_transport_3d.o \
+	$(BUILD_DIR)/render/runtime_disney_v2_transmission_3d.o \
 	$(BUILD_DIR)/render/runtime_emission_transparency_3d.o \
 	$(BUILD_DIR)/render/runtime_emission_transparency_3d_sampling.o \
 	$(BUILD_DIR)/render/runtime_path_depth_policy_3d.o \
@@ -27,6 +30,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/materials/runtime_material_authored_texture_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_authored_texture_3d_manifest.o \
 	$(BUILD_DIR)/render/materials/runtime_material_payload_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_principled_bsdf_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_texture_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_texture_stack_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_texture_stack_3d_metadata.o \
@@ -111,6 +115,7 @@ NATIVE3D_AUDIT_DEPS = \
 
 RAY_TRACING_RENDER_HEADLESS_DEPS = \
 	$(BUILD_DIR)/app/agent_render_request.o \
+	$(BUILD_DIR)/render/adapters/timer_hud_headless_stub.o \
 	$(BUILD_DIR)/tools/make_video.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_summary.o \
 	$(NATIVE3D_AUDIT_DEPS)
@@ -202,6 +207,9 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_light_emitter_3d.o \
 		$(BUILD_DIR)/render/runtime_specular_reflection_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_3d.o \
+		$(BUILD_DIR)/render/runtime_disney_v2_3d.o \
+		$(BUILD_DIR)/render/runtime_disney_v2_transport_3d.o \
+		$(BUILD_DIR)/render/runtime_disney_v2_transmission_3d.o \
 		$(BUILD_DIR)/render/runtime_emission_transparency_3d.o \
 		$(BUILD_DIR)/render/runtime_path_depth_policy_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_feature_buffer.o \
@@ -212,6 +220,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_native_3d_sampling.o \
 	$(BUILD_DIR)/render/materials/runtime_material_authored_texture_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_payload_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_principled_bsdf_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_texture_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_texture_stack_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_response_3d.o \
@@ -280,6 +289,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/app/preview_playback.o \
 	$(BUILD_DIR)/app/preview_camera_sample.o \
 	$(BUILD_DIR)/app/preview_camera_projector.o \
+	$(BUILD_DIR)/app/preview_retained_scene_mesh.o \
 	$(BUILD_DIR)/app/preview_retained_scene_renderer.o \
 	$(BUILD_DIR)/app/animation_output.o \
 	$(BUILD_DIR)/app/render_export_batch.o \
@@ -357,6 +367,7 @@ SRC := $(shell find $(SRC_DIR) -name '*.c' \
 VK_RENDERER_SRCS := $(shell find $(VK_RENDERER_DIR)/src -name '*.c')
 OBJ := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRC))
 OBJ := $(filter-out $(BUILD_DIR)/render/integrators/camera_path_integrator_old_version.o,$(OBJ))
+OBJ := $(filter-out $(BUILD_DIR)/render/adapters/timer_hud_headless_stub.o,$(OBJ))
 
 TIMER_HUD_SRCS := $(shell find $(TIMER_HUD_DIR)/src -name '*.c')
 TIMER_HUD_EXTERNAL_SRCS := $(TIMER_HUD_DIR)/external/cJSON.c

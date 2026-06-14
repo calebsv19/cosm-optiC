@@ -13,6 +13,14 @@
 #include "config/config_manager.h"
 #include "import/runtime_scene_bridge.h"
 
+#define SCENE_SOURCE_CATALOG_MAX_SCAN_DEPTH 2
+
+static void add_catalog_entry(SceneSourceCatalogEntry *entries,
+                              size_t max_entries,
+                              size_t *entry_count,
+                              const char *path,
+                              int source);
+
 static bool file_exists_regular(const char *path) {
     struct stat st;
     if (!path || !*path) return false;
@@ -36,12 +44,30 @@ static bool path_is_manifest_lane_file(const char *path) {
            strcmp(filename, "scene_bundle.json") == 0;
 }
 
-static bool path_is_runtime_scene_contract(const char *path) {
-    RuntimeSceneBridgePreflight preflight;
+static bool path_is_runtime_scene_catalog_candidate(const char *path) {
+    const char *filename;
     if (!path_has_json_extension(path)) return false;
     if (path_is_manifest_lane_file(path)) return false;
-    if (!runtime_scene_bridge_preflight_file(path, &preflight)) return false;
-    return preflight.valid_contract;
+    filename = strrchr(path, '/');
+    filename = filename ? filename + 1 : path;
+    if (strcmp(filename, "scene_authoring.json") == 0) return false;
+    if (strcmp(filename, "scene_runtime.json") == 0) return true;
+    return strstr(filename, "runtime") != NULL;
+}
+
+static void maybe_add_runtime_scene_in_dir(SceneSourceCatalogEntry *entries,
+                                           size_t max_entries,
+                                           size_t *entry_count,
+                                           const char *dir) {
+    char runtime_path[PATH_MAX];
+    if (!dir || !dir[0]) return;
+    if (snprintf(runtime_path, sizeof(runtime_path), "%s/scene_runtime.json", dir) >=
+        (int)sizeof(runtime_path)) {
+        return;
+    }
+    if (path_is_runtime_scene_catalog_candidate(runtime_path)) {
+        add_catalog_entry(entries, max_entries, entry_count, runtime_path, SCENE_SOURCE_RUNTIME_SCENE);
+    }
 }
 
 static void add_catalog_entry(SceneSourceCatalogEntry *entries,
@@ -75,7 +101,8 @@ static void add_catalog_entry(SceneSourceCatalogEntry *entries,
 static void scan_manifest_root(SceneSourceCatalogEntry *entries,
                                size_t max_entries,
                                size_t *entry_count,
-                               const char *root) {
+                               const char *root,
+                               int depth) {
     DIR *dir;
     struct dirent *ent = NULL;
     char path_buf[PATH_MAX];
@@ -85,6 +112,7 @@ static void scan_manifest_root(SceneSourceCatalogEntry *entries,
     add_catalog_entry(entries, max_entries, entry_count, path_buf, SCENE_SOURCE_FLUID_MANIFEST);
     snprintf(path_buf, sizeof(path_buf), "%s/scene_bundle.json", root);
     add_catalog_entry(entries, max_entries, entry_count, path_buf, SCENE_SOURCE_FLUID_MANIFEST);
+    maybe_add_runtime_scene_in_dir(entries, max_entries, entry_count, root);
 
     dir = opendir(root);
     if (!dir) return;
@@ -92,37 +120,27 @@ static void scan_manifest_root(SceneSourceCatalogEntry *entries,
     while ((ent = readdir(dir)) != NULL) {
         struct stat st;
         if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) continue;
-        snprintf(path_buf, sizeof(path_buf), "%s/%s", root, ent->d_name);
+        if (snprintf(path_buf, sizeof(path_buf), "%s/%s", root, ent->d_name) >= (int)sizeof(path_buf)) {
+            continue;
+        }
         if (stat(path_buf, &st) != 0) continue;
         if (S_ISDIR(st.st_mode)) {
-            DIR *sub = NULL;
-            struct dirent *sub_ent = NULL;
             char manifest_path[PATH_MAX];
             char bundle_path[PATH_MAX];
             snprintf(manifest_path, sizeof(manifest_path), "%s/manifest.json", path_buf);
             add_catalog_entry(entries, max_entries, entry_count, manifest_path, SCENE_SOURCE_FLUID_MANIFEST);
             snprintf(bundle_path, sizeof(bundle_path), "%s/scene_bundle.json", path_buf);
             add_catalog_entry(entries, max_entries, entry_count, bundle_path, SCENE_SOURCE_FLUID_MANIFEST);
-            sub = opendir(path_buf);
-            if (!sub) continue;
-            while ((sub_ent = readdir(sub)) != NULL) {
-                char candidate_path[PATH_MAX];
-                struct stat sub_st;
-                if (strcmp(sub_ent->d_name, ".") == 0 || strcmp(sub_ent->d_name, "..") == 0) continue;
-                snprintf(candidate_path, sizeof(candidate_path), "%s/%s", path_buf, sub_ent->d_name);
-                if (stat(candidate_path, &sub_st) != 0 || !S_ISREG(sub_st.st_mode)) continue;
-                if (path_is_manifest_lane_file(candidate_path)) {
-                    add_catalog_entry(entries, max_entries, entry_count, candidate_path, SCENE_SOURCE_FLUID_MANIFEST);
-                } else if (path_is_runtime_scene_contract(candidate_path)) {
-                    add_catalog_entry(entries, max_entries, entry_count, candidate_path, SCENE_SOURCE_RUNTIME_SCENE);
-                }
+            maybe_add_runtime_scene_in_dir(entries, max_entries, entry_count, path_buf);
+            if (depth < SCENE_SOURCE_CATALOG_MAX_SCAN_DEPTH && *entry_count < max_entries) {
+                scan_manifest_root(entries, max_entries, entry_count, path_buf, depth + 1);
             }
-            closedir(sub);
         } else if (S_ISREG(st.st_mode) && path_is_manifest_lane_file(path_buf)) {
             add_catalog_entry(entries, max_entries, entry_count, path_buf, SCENE_SOURCE_FLUID_MANIFEST);
-        } else if (S_ISREG(st.st_mode) && path_is_runtime_scene_contract(path_buf)) {
+        } else if (S_ISREG(st.st_mode) && path_is_runtime_scene_catalog_candidate(path_buf)) {
             add_catalog_entry(entries, max_entries, entry_count, path_buf, SCENE_SOURCE_RUNTIME_SCENE);
         }
+        if (*entry_count >= max_entries) break;
     }
 
     closedir(dir);
@@ -138,7 +156,7 @@ size_t scene_source_catalog_collect(SceneSourceCatalogEntry *out_entries,
     if (!out_entries || max_entries == 0) return 0;
 
     for (size_t i = 0; i < root_count; ++i) {
-        scan_manifest_root(out_entries, max_entries, &entry_count, roots[i]);
+        scan_manifest_root(out_entries, max_entries, &entry_count, roots[i], 0);
         if (entry_count >= max_entries) break;
     }
 
@@ -147,7 +165,7 @@ size_t scene_source_catalog_collect(SceneSourceCatalogEntry *out_entries,
                       &entry_count,
                       fluid_manifest_path,
                       SCENE_SOURCE_FLUID_MANIFEST);
-    if (path_is_runtime_scene_contract(runtime_scene_path)) {
+    if (path_is_runtime_scene_catalog_candidate(runtime_scene_path)) {
         add_catalog_entry(out_entries,
                           max_entries,
                           &entry_count,

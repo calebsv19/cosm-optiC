@@ -294,6 +294,9 @@ test-ray-tracing-render-headless-mesh-asset-sphere-pressure-mrt10: $(RAY_TRACING
 test-ray-tracing-render-headless-mesh-asset-sphere-pressure-mrt12-static-cache: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	tests/integration/run_ray_tracing_render_headless_mesh_asset_sphere_pressure_mrt12_static_cache.sh
 
+test-ray-tracing-render-headless-line-drawing-mesh-asset: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	tests/integration/run_ray_tracing_render_headless_line_drawing_mesh_asset.sh
+
 test-ray-tracing-render-headless-volume-handoff: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	tests/integration/run_ray_tracing_render_headless_volume_handoff.sh
 

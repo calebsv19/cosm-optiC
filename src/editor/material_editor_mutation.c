@@ -5,9 +5,31 @@
 #include "editor/scene_editor_material_face_placement.h"
 #include "editor/scene_editor_material_stack.h"
 
+#include <stdio.h>
+
 static void material_editor_apply_object_scope_to_all_faces(int scene_object_index) {
     if (scene_object_index < 0) return;
     SceneEditorMaterialFacePlacementResetObject(scene_object_index);
+}
+
+static bool material_editor_active_layer_id_for_object(const SceneObject* obj,
+                                                       int scene_object_index,
+                                                       char* out_layer_id,
+                                                       size_t out_layer_id_size) {
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    int layer_index = -1;
+    if (!out_layer_id || out_layer_id_size == 0) return false;
+    out_layer_id[0] = '\0';
+    if (!SceneEditorMaterialStackHasObjectStack(scene_object_index) ||
+        !SceneEditorMaterialStackGetEffectiveObjectStack(obj, scene_object_index, &stack)) {
+        return false;
+    }
+    layer_index = MaterialEditorLayerModelGetActiveIndex(obj, scene_object_index);
+    if (layer_index < 0 || layer_index >= stack.layerCount || !stack.layers[layer_index].layerId[0]) {
+        return false;
+    }
+    snprintf(out_layer_id, out_layer_id_size, "%s", stack.layers[layer_index].layerId);
+    return true;
 }
 
 static bool material_editor_seed_face_override_from_active_layer(const SceneObject* obj,
@@ -34,6 +56,9 @@ static bool material_editor_seed_face_override_from_active_layer(const SceneObje
     placement.sceneObjectIndex = scene_object_index;
     placement.faceGroupIndex = face_group_index;
     placement.layerIndex = layer_index;
+    if (SceneEditorMaterialStackHasObjectStack(scene_object_index)) {
+        snprintf(placement.layerId, sizeof(placement.layerId), "%s", layer.layerId);
+    }
     placement.textureId = layer.placement.textureId;
     placement.offsetU = layer.placement.offsetU;
     placement.offsetV = layer.placement.offsetV;
@@ -67,7 +92,6 @@ bool MaterialEditorAddOverlayLayerToFocused(void) {
         MaterialEditorClearTriangleSelection();
     }
     if (!MaterialEditorLayerModelAddOverlay(obj, focused_object_index)) return false;
-    material_editor_apply_object_scope_to_all_faces(focused_object_index);
     MarkObjectDirty(obj);
     MaterialEditorFacePreviewInvalidate();
     return true;
@@ -81,7 +105,6 @@ bool MaterialEditorDeleteActiveLayer(void) {
         MaterialEditorClearTriangleSelection();
     }
     if (!MaterialEditorLayerModelDeleteActiveLayer(obj, focused_object_index)) return false;
-    material_editor_apply_object_scope_to_all_faces(focused_object_index);
     MarkObjectDirty(obj);
     MaterialEditorFacePreviewInvalidate();
     return true;
@@ -95,7 +118,6 @@ bool MaterialEditorMoveActiveLayer(int direction) {
         MaterialEditorClearTriangleSelection();
     }
     if (!MaterialEditorLayerModelMoveActiveLayer(obj, focused_object_index, direction)) return false;
-    material_editor_apply_object_scope_to_all_faces(focused_object_index);
     MarkObjectDirty(obj);
     MaterialEditorFacePreviewInvalidate();
     return true;
@@ -109,7 +131,6 @@ bool MaterialEditorToggleActiveLayerEnabled(void) {
         MaterialEditorClearTriangleSelection();
     }
     if (!MaterialEditorLayerModelToggleActiveLayerEnabled(obj, focused_object_index)) return false;
-    material_editor_apply_object_scope_to_all_faces(focused_object_index);
     MarkObjectDirty(obj);
     MaterialEditorFacePreviewInvalidate();
     return true;
@@ -123,7 +144,6 @@ bool MaterialEditorApplyLayerKindToFocused(RuntimeMaterialTextureLayerKind kind)
         MaterialEditorClearTriangleSelection();
     }
     if (!MaterialEditorLayerModelApplyLayerKind(obj, focused_object_index, kind)) return false;
-    material_editor_apply_object_scope_to_all_faces(focused_object_index);
     MarkObjectDirty(obj);
     MaterialEditorFacePreviewInvalidate();
     return true;
@@ -342,11 +362,18 @@ bool MaterialEditorApplyTextureParamValueToFocused(MaterialEditorTextureParamKin
 bool MaterialEditorResetActiveFacePlacement(void) {
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
+    char layer_id[RUNTIME_MATERIAL_TEXTURE_LAYER_ID_SIZE];
     if (!obj || focused_object_index < 0 || s_material_editor_active_face_group_index < 0) {
         return false;
     }
-    if (!SceneEditorMaterialFacePlacementResetFace(focused_object_index,
-                                                  s_material_editor_active_face_group_index)) {
+    material_editor_active_layer_id_for_object(obj,
+                                               focused_object_index,
+                                               layer_id,
+                                               sizeof(layer_id));
+    if (!SceneEditorMaterialFacePlacementResetFaceLayer(
+            focused_object_index,
+            s_material_editor_active_face_group_index,
+            layer_id)) {
         return false;
     }
     MarkObjectDirty(obj);
@@ -358,15 +385,22 @@ bool MaterialEditorCopyActiveFacePlacementToSelected(void) {
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
     SceneEditorMaterialFacePlacement active;
+    char layer_id[RUNTIME_MATERIAL_TEXTURE_LAYER_ID_SIZE];
     int copied = 0;
     int seen[MATERIAL_EDITOR_MAX_SELECTED_TRIANGLES];
     int seen_count = 0;
     if (!obj || focused_object_index < 0 || s_material_editor_active_face_group_index < 0) {
         return false;
     }
-    active = SceneEditorMaterialFacePlacementGetEffective(obj,
-                                                          focused_object_index,
-                                                          s_material_editor_active_face_group_index);
+    material_editor_active_layer_id_for_object(obj,
+                                               focused_object_index,
+                                               layer_id,
+                                               sizeof(layer_id));
+    active = SceneEditorMaterialFacePlacementGetEffectiveForLayer(
+        obj,
+        focused_object_index,
+        s_material_editor_active_face_group_index,
+        layer_id);
     for (int i = 0; i < MATERIAL_EDITOR_MAX_SELECTED_TRIANGLES; ++i) {
         seen[i] = -1;
     }

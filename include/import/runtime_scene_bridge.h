@@ -118,6 +118,8 @@ bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
                                      RuntimeSceneBridgePreflight *out_summary);
 bool runtime_scene_bridge_apply_file(const char *runtime_scene_path,
                                      RuntimeSceneBridgePreflight *out_summary);
+bool runtime_scene_bridge_apply_file_defer_mesh_assets(const char *runtime_scene_path,
+                                                       RuntimeSceneBridgePreflight *out_summary);
 
 bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_json,
                                                      const char *overlay_json,

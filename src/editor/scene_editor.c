@@ -588,7 +588,21 @@ static bool SceneEditorLoadSessionState(SceneEditor* editor) {
     LoadAnimationConfig();
     LoadSceneConfig();
     ApplyAnimationWindowSizeOverride();
-    if (!AnimationRestoreActiveSceneSource(true)) {
+    if (animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE &&
+        animSettings.runtimeScenePath[0] != '\0') {
+        RuntimeSceneBridgePreflight summary = {0};
+        char runtime_scene_path[sizeof(animSettings.runtimeScenePath)];
+        snprintf(runtime_scene_path, sizeof(runtime_scene_path), "%s", animSettings.runtimeScenePath);
+        if (!runtime_scene_bridge_apply_file_defer_mesh_assets(runtime_scene_path, &summary)) {
+            fprintf(stderr,
+                    "[editor] failed to apply runtime scene source '%s': %s\n",
+                    runtime_scene_path,
+                    summary.diagnostics);
+            animSettings.sceneSource = SCENE_SOURCE_CONFIG_2D;
+            animSettings.runtimeScenePath[0] = '\0';
+            SaveAnimationConfig();
+        }
+    } else if (!AnimationRestoreActiveSceneSource(true)) {
         fprintf(stderr, "[editor] failed to apply active scene source; fallback persisted.\n");
     }
     ApplyAnimationWindowSizeOverride();

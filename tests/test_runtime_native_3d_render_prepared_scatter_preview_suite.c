@@ -142,6 +142,7 @@ static int test_runtime_native_3d_surface_volume_single_scatter_lifts_unlit_hit_
         RAY_TRACING_3D_INTEGRATOR_MATERIAL,
         RAY_TRACING_3D_INTEGRATOR_EMISSION_TRANSPARENCY,
         RAY_TRACING_3D_INTEGRATOR_DISNEY,
+        RAY_TRACING_3D_INTEGRATOR_DISNEY_V2,
     };
     RuntimeScene3D scene;
     RuntimeNative3DPreparedFrame frame = {0};

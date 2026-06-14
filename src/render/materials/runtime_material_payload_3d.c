@@ -395,7 +395,16 @@ static void runtime_material_payload_3d_apply_texture(
             base_eval.textureU = island_u;
             base_eval.textureV = island_v;
         }
-        if (has_face_override) {
+        if (!SceneEditorMaterialStackGetEffectiveObjectStack(object,
+                                                            hit->sceneObjectIndex,
+                                                            &stack)) {
+            return;
+        }
+        if (has_face_override &&
+            !SceneEditorMaterialFacePlacementApplyOverridesToStack(object,
+                                                                   hit->sceneObjectIndex,
+                                                                   face_group_index,
+                                                                   &stack)) {
             face_placement = SceneEditorMaterialFacePlacementGetEffective(object,
                                                                           hit->sceneObjectIndex,
                                                                           face_group_index);
@@ -403,10 +412,6 @@ static void runtime_material_payload_3d_apply_texture(
             if (!RuntimeMaterialTextureStackBuildLegacyFromPlacement(&runtime_placement, &stack)) {
                 return;
             }
-        } else if (!SceneEditorMaterialStackGetEffectiveObjectStack(object,
-                                                                    hit->sceneObjectIndex,
-                                                                    &stack)) {
-            return;
         }
         if (overlay_only) {
             if (!RuntimeMaterialTextureStackEvaluateOverlayPlacedUV(&stack,

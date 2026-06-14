@@ -3,7 +3,26 @@
 #include <math.h>
 #include <string.h>
 
+#include "app/preview_retained_scene_mesh.h"
 #include "config/config_manager.h"
+
+static PreviewRetainedSceneLineSegment preview_retained_scene_make_segment(double ax,
+                                                                           double ay,
+                                                                           double az,
+                                                                           double bx,
+                                                                           double by,
+                                                                           double bz,
+                                                                           SDL_Color color) {
+    PreviewRetainedSceneLineSegment segment = {0};
+    segment.ax = ax;
+    segment.ay = ay;
+    segment.az = az;
+    segment.bx = bx;
+    segment.by = by;
+    segment.bz = bz;
+    segment.color = color;
+    return segment;
+}
 
 static SDL_Color preview_retained_scene_primitive_color(int primitive_index) {
     static const SDL_Color k_palette[] = {
@@ -68,13 +87,7 @@ static void preview_retained_scene_append_segment(
     if (!segments || !io_count || *io_count < 0) return;
     if (*io_count >= max_segments) return;
     segment = &segments[*io_count];
-    segment->ax = ax;
-    segment->ay = ay;
-    segment->az = az;
-    segment->bx = bx;
-    segment->by = by;
-    segment->bz = bz;
-    segment->color = color;
+    *segment = preview_retained_scene_make_segment(ax, ay, az, bx, by, bz, color);
     *io_count += 1;
 }
 
@@ -480,6 +493,13 @@ int PreviewRetainedSceneBuildLineSegments(const RuntimeSceneBridge3DDigestState*
                                                                    &seed_max_x,
                                                                    &seed_max_y,
                                                                    &seed_max_z);
+    (void)PreviewRetainedSceneMeshResolveExtents(&has_seed_extents,
+                                                 &seed_min_x,
+                                                 &seed_min_y,
+                                                 &seed_min_z,
+                                                 &seed_max_x,
+                                                 &seed_max_y,
+                                                 &seed_max_z);
 
     if (digest->has_scene_bounds) {
         SDL_Color bounds_color = digest->bounds_enabled
@@ -528,6 +548,7 @@ int PreviewRetainedSceneBuildLineSegments(const RuntimeSceneBridge3DDigestState*
                                                          color);
             }
         }
+        PreviewRetainedSceneMeshAppendEdges(out_segments, max_segments, &count);
         return count;
     }
 
@@ -564,6 +585,7 @@ int PreviewRetainedSceneBuildLineSegments(const RuntimeSceneBridge3DDigestState*
         }
     }
 
+    PreviewRetainedSceneMeshAppendEdges(out_segments, max_segments, &count);
     return count;
 }
 
@@ -571,7 +593,9 @@ void PreviewRetainedSceneRender(SDL_Renderer* renderer,
                                 const RuntimeSceneBridge3DDigestState* digest,
                                 const PreviewCameraProjector* projector) {
     PreviewRetainedSceneLineSegment segments[PREVIEW_RETAINED_SCENE_MAX_LINE_SEGMENTS];
+    PreviewRetainedSceneLineSegment silhouette_segments[PREVIEW_RETAINED_SCENE_MAX_LINE_SEGMENTS];
     int segment_count = 0;
+    int silhouette_segment_count = 0;
     int i = 0;
 
     if (!renderer || !digest || !projector) return;
@@ -580,6 +604,14 @@ void PreviewRetainedSceneRender(SDL_Renderer* renderer,
                                                           PREVIEW_RETAINED_SCENE_MAX_LINE_SEGMENTS);
     for (i = 0; i < segment_count; ++i) {
         preview_retained_scene_draw_segment(renderer, projector, &segments[i]);
+    }
+    silhouette_segment_count = PreviewRetainedSceneBuildSilhouetteSegments(
+        digest,
+        projector,
+        silhouette_segments,
+        PREVIEW_RETAINED_SCENE_MAX_LINE_SEGMENTS);
+    for (i = 0; i < silhouette_segment_count; ++i) {
+        preview_retained_scene_draw_segment(renderer, projector, &silhouette_segments[i]);
     }
 }
 

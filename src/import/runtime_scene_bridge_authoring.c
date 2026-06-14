@@ -485,6 +485,8 @@ static void apply_ray_authoring_object_procedural_texture(json_object *entry,
     for (size_t i = 0u; i < json_object_array_length(face_placements); ++i) {
         json_object *face_entry = json_object_array_get_idx(face_placements, i);
         json_object *face_group_index = NULL;
+        json_object *face_layer_index = NULL;
+        json_object *face_layer_id = NULL;
         json_object *face_texture_id = NULL;
         SceneEditorMaterialFacePlacement placement;
         if (!face_entry || !json_object_is_type(face_entry, json_type_object)) continue;
@@ -497,12 +499,27 @@ static void apply_ray_authoring_object_procedural_texture(json_object *entry,
         placement.hasOverride = true;
         placement.sceneObjectIndex = scene_index;
         placement.faceGroupIndex = json_object_get_int(face_group_index);
+        placement.layerIndex = -1;
         placement.textureId = object->textureId;
         placement.scale = object->textureScale;
         placement.strength = object->textureStrength;
         placement.offsetU = object->textureOffsetU;
         placement.offsetV = object->textureOffsetV;
         placement.params = RuntimeMaterialTexture3DParamsFromObject(object);
+        if ((json_object_object_get_ex(face_entry, "layer_index", &face_layer_index) ||
+             json_object_object_get_ex(face_entry, "layerIndex", &face_layer_index)) &&
+            (json_object_is_type(face_layer_index, json_type_int) ||
+             json_object_is_type(face_layer_index, json_type_double))) {
+            placement.layerIndex = json_object_get_int(face_layer_index);
+        }
+        if ((json_object_object_get_ex(face_entry, "layer_id", &face_layer_id) ||
+             json_object_object_get_ex(face_entry, "layerId", &face_layer_id)) &&
+            json_object_is_type(face_layer_id, json_type_string)) {
+            snprintf(placement.layerId,
+                     sizeof(placement.layerId),
+                     "%s",
+                     json_object_get_string(face_layer_id));
+        }
         if (json_object_object_get_ex(face_entry, "texture_id", &face_texture_id) &&
             (json_object_is_type(face_texture_id, json_type_int) ||
              json_object_is_type(face_texture_id, json_type_double))) {

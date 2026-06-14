@@ -33,6 +33,12 @@ static bool path_edit_active(const MenuRuntimeState *state) {
            menu_batch_panel_edit_active(state);
 }
 
+static bool scene_manifest_list_visible(const MenuRuntimeState *state) {
+    return state &&
+           (state->manifestDropdownOpen ||
+            animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D);
+}
+
 static bool pick_folder_macos(const char *prompt, char *out_path, size_t out_cap) {
 #if defined(__APPLE__)
     FILE *pipe = NULL;
@@ -324,7 +330,7 @@ void menu_input_handle_key(SDL_Event* event,
 
 void menu_input_handle_mouse_motion(SDL_Event* event, MenuRuntimeState* state) {
     if (!event || !state) return;
-    if (state->manifestScrollbarDragging && state->manifestDropdownOpen && state->manifestScrollbarVisible) {
+    if (state->manifestScrollbarDragging && scene_manifest_list_visible(state) && state->manifestScrollbarVisible) {
         float trackRange = state->manifestTrackHeight - state->manifestThumbHeight;
         if (trackRange < 1.0f) trackRange = 1.0f;
         int deltaY = event->motion.y - state->manifestDragStartY;
@@ -371,7 +377,7 @@ void menu_input_handle_mouse_wheel(SDL_Event *event, MenuRuntimeState* state) {
     int mx = 0;
     int my = 0;
     SDL_GetMouseState(&mx, &my);
-    if (state->manifestDropdownOpen && point_in_rect(&state->manifestPanelRect, mx, my)) {
+    if (scene_manifest_list_visible(state) && point_in_rect(&state->manifestPanelRect, mx, my)) {
         float delta = (float)event->wheel.y * (float)(SDL_MENU_MANIFEST_ITEM_HEIGHT * 2);
         menu_state_manifest_scroll_by(state, -delta);
         return;
@@ -416,7 +422,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     int x = event->button.x;
     int y = event->button.y;
 
-    if (state->manifestDropdownOpen) {
+    if (scene_manifest_list_visible(state)) {
         if (point_in_rect(&state->manifestPanelRect, x, y)) {
             if (state->manifestScrollbarVisible && point_in_rect(&state->manifestScrollbarRect, x, y)) {
                 state->manifestScrollbarDragging = true;
@@ -443,7 +449,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
                     int source = animation_config_scene_source_clamp(state->manifestOptions[idx].source);
                     bool ok = AnimationSelectSceneSource(source,
                                                          state->manifestOptions[idx].path,
-                                                         true);
+                                                         false);
                     if (ok) {
                         scene_source_ui_format_scene_select_status(source,
                                                                    state->manifestOptions[idx].path,
@@ -452,7 +458,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
                         SaveAnimationConfig();
                         state->statusColor = (SDL_Color){140, 220, 200, 255};
                     } else {
-                        strncpy(state->statusLabel, "Scene apply failed", sizeof(state->statusLabel) - 1);
+                        strncpy(state->statusLabel, "Scene selection failed", sizeof(state->statusLabel) - 1);
                         state->statusColor = (SDL_Color){240, 120, 120, 255};
                     }
                     state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
@@ -503,6 +509,12 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     }
 
     if (point_in_rect(&buttons.loadSceneRect, x, y)) {
+        if (animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D) {
+            menu_state_refresh_manifest_options(state);
+            state->manifestScroll = 0.0f;
+            state->manifestScrollbarDragging = false;
+            return;
+        }
         menu_state_set_load_scene_enabled(state, !state->manifestDropdownOpen);
         return;
     }

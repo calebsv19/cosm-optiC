@@ -457,6 +457,17 @@ double AnimationCurrentNormalizedT(void) {
     return t_param;
 }
 
+int AnimationCurrentAbsoluteFrameIndex(void) {
+    if (animSettings.deepRenderMode) {
+        return s_deepRenderStartFrameIndex + ClampNonNegativeFrameIndex(frameCounter);
+    }
+    return ClampNonNegativeFrameIndex(frameCounter);
+}
+
+int AnimationConfiguredPathFrameCount(void) {
+    return (animSettings.framesForTravel > 0) ? animSettings.framesForTravel : 0;
+}
+
 static void UpdateCameraPosition(double t) {
     if (animSettings.interactiveMode) {
         return;

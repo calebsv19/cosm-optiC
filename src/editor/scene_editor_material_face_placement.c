@@ -1,6 +1,7 @@
 #include "editor/scene_editor_material_face_placement.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 #ifndef M_PI
@@ -28,6 +29,31 @@ static int scene_editor_material_face_placement_clamp_texture_id(int texture_id)
     return texture_id;
 }
 
+static bool scene_editor_material_face_placement_layer_matches(
+    const SceneEditorMaterialFacePlacement* placement,
+    const char* layer_id) {
+    const bool wants_legacy = !layer_id || !layer_id[0];
+    if (!placement) return false;
+    if (wants_legacy) return placement->layerId[0] == '\0';
+    return strcmp(placement->layerId, layer_id) == 0;
+}
+
+static int scene_editor_material_face_placement_find_layer(int scene_object_index,
+                                                           int face_group_index,
+                                                           const char* layer_id) {
+    if (scene_object_index < 0 || face_group_index < 0) return -1;
+    for (int i = 0; i < SCENE_EDITOR_MATERIAL_FACE_PLACEMENT_MAX_OVERRIDES; ++i) {
+        if (s_face_placements[i].hasOverride &&
+            s_face_placements[i].sceneObjectIndex == scene_object_index &&
+            s_face_placements[i].faceGroupIndex == face_group_index &&
+            scene_editor_material_face_placement_layer_matches(&s_face_placements[i],
+                                                               layer_id)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 static int scene_editor_material_face_placement_find(int scene_object_index,
                                                      int face_group_index) {
     if (scene_object_index < 0 || face_group_index < 0) return -1;
@@ -41,9 +67,14 @@ static int scene_editor_material_face_placement_find(int scene_object_index,
     return -1;
 }
 
-static int scene_editor_material_face_placement_find_or_alloc(int scene_object_index,
-                                                              int face_group_index) {
-    int existing = scene_editor_material_face_placement_find(scene_object_index, face_group_index);
+static int scene_editor_material_face_placement_find_or_alloc_layer(
+    int scene_object_index,
+    int face_group_index,
+    const char* layer_id) {
+    int existing =
+        scene_editor_material_face_placement_find_layer(scene_object_index,
+                                                        face_group_index,
+                                                        layer_id);
     if (existing >= 0) return existing;
     if (scene_object_index < 0 || face_group_index < 0) return -1;
     for (int i = 0; i < SCENE_EDITOR_MATERIAL_FACE_PLACEMENT_MAX_OVERRIDES; ++i) {
@@ -51,6 +82,12 @@ static int scene_editor_material_face_placement_find_or_alloc(int scene_object_i
             s_face_placements[i].hasOverride = true;
             s_face_placements[i].sceneObjectIndex = scene_object_index;
             s_face_placements[i].faceGroupIndex = face_group_index;
+            if (layer_id && layer_id[0]) {
+                snprintf(s_face_placements[i].layerId,
+                         sizeof(s_face_placements[i].layerId),
+                         "%s",
+                         layer_id);
+            }
             return i;
         }
     }
@@ -102,8 +139,28 @@ bool SceneEditorMaterialFacePlacementResetFace(int scene_object_index, int face_
     return true;
 }
 
+bool SceneEditorMaterialFacePlacementResetFaceLayer(int scene_object_index,
+                                                    int face_group_index,
+                                                    const char* layer_id) {
+    int index =
+        scene_editor_material_face_placement_find_layer(scene_object_index,
+                                                        face_group_index,
+                                                        layer_id);
+    if (index < 0) return false;
+    memset(&s_face_placements[index], 0, sizeof(s_face_placements[index]));
+    return true;
+}
+
 bool SceneEditorMaterialFacePlacementHasOverride(int scene_object_index, int face_group_index) {
     return scene_editor_material_face_placement_find(scene_object_index, face_group_index) >= 0;
+}
+
+bool SceneEditorMaterialFacePlacementHasOverrideForLayer(int scene_object_index,
+                                                         int face_group_index,
+                                                         const char* layer_id) {
+    return scene_editor_material_face_placement_find_layer(scene_object_index,
+                                                           face_group_index,
+                                                           layer_id) >= 0;
 }
 
 bool SceneEditorMaterialFacePlacementObjectHasActiveTextureOverride(int scene_object_index) {
@@ -128,8 +185,9 @@ bool SceneEditorMaterialFacePlacementSetOverride(
     if (!placement || placement->sceneObjectIndex < 0 || placement->faceGroupIndex < 0) {
         return false;
     }
-    index = scene_editor_material_face_placement_find_or_alloc(placement->sceneObjectIndex,
-                                                               placement->faceGroupIndex);
+    index = scene_editor_material_face_placement_find_or_alloc_layer(placement->sceneObjectIndex,
+                                                                     placement->faceGroupIndex,
+                                                                     placement->layerId);
     if (index < 0) return false;
     stored = *placement;
     stored.hasOverride = true;
@@ -182,6 +240,68 @@ SceneEditorMaterialFacePlacement SceneEditorMaterialFacePlacementGetEffective(
     return scene_editor_material_face_placement_defaults(object, scene_object_index, face_group_index);
 }
 
+SceneEditorMaterialFacePlacement SceneEditorMaterialFacePlacementGetEffectiveForLayer(
+    const SceneObject* object,
+    int scene_object_index,
+    int face_group_index,
+    const char* layer_id) {
+    int index =
+        scene_editor_material_face_placement_find_layer(scene_object_index,
+                                                        face_group_index,
+                                                        layer_id);
+    if (index >= 0) return s_face_placements[index];
+    return scene_editor_material_face_placement_defaults(object, scene_object_index, face_group_index);
+}
+
+static bool scene_editor_material_face_placement_apply_to_layer(
+    const SceneEditorMaterialFacePlacement* placement,
+    RuntimeMaterialTextureLayer* layer) {
+    if (!placement || !layer) return false;
+    layer->placement.textureId = placement->textureId;
+    layer->placement.offsetU = placement->offsetU;
+    layer->placement.offsetV = placement->offsetV;
+    layer->placement.scale = placement->scale;
+    layer->placement.strength = placement->strength;
+    layer->placement.rotation = placement->rotation;
+    layer->params = placement->params;
+    layer->placement.params = placement->params;
+    *layer = RuntimeMaterialTextureLayerNormalize(*layer);
+    return true;
+}
+
+bool SceneEditorMaterialFacePlacementApplyOverridesToStack(const SceneObject* object,
+                                                           int scene_object_index,
+                                                           int face_group_index,
+                                                           RuntimeMaterialTextureStack* stack) {
+    bool applied = false;
+    if (!object || !stack || scene_object_index < 0 || face_group_index < 0) {
+        return false;
+    }
+    for (int i = 0; i < SCENE_EDITOR_MATERIAL_FACE_PLACEMENT_MAX_OVERRIDES; ++i) {
+        SceneEditorMaterialFacePlacement* placement = &s_face_placements[i];
+        if (!placement->hasOverride ||
+            placement->sceneObjectIndex != scene_object_index ||
+            placement->faceGroupIndex != face_group_index) {
+            continue;
+        }
+        if (!placement->layerId[0]) {
+            continue;
+        }
+        for (int layer_i = 0; layer_i < stack->layerCount; ++layer_i) {
+            if (strcmp(stack->layers[layer_i].layerId, placement->layerId) == 0) {
+                scene_editor_material_face_placement_apply_to_layer(placement,
+                                                                    &stack->layers[layer_i]);
+                applied = true;
+                break;
+            }
+        }
+    }
+    if (applied) {
+        *stack = RuntimeMaterialTextureStackNormalize(*stack);
+    }
+    return applied;
+}
+
 bool SceneEditorMaterialFacePlacementApplyNormalizedValue(const SceneObject* object,
                                                          int scene_object_index,
                                                          int face_group_index,
@@ -191,7 +311,9 @@ bool SceneEditorMaterialFacePlacementApplyNormalizedValue(const SceneObject* obj
     SceneEditorMaterialFacePlacement effective;
     if (!object || scene_object_index < 0 || face_group_index < 0) return false;
     effective = SceneEditorMaterialFacePlacementGetEffective(object, scene_object_index, face_group_index);
-    index = scene_editor_material_face_placement_find_or_alloc(scene_object_index, face_group_index);
+    index = scene_editor_material_face_placement_find_or_alloc_layer(scene_object_index,
+                                                                     face_group_index,
+                                                                     effective.layerId);
     if (index < 0) return false;
     effective.hasOverride = true;
     effective.sceneObjectIndex = scene_object_index;
@@ -224,7 +346,9 @@ bool SceneEditorMaterialFacePlacementApplyTextureKind(const SceneObject* object,
     effective = SceneEditorMaterialFacePlacementGetEffective(object,
                                                              scene_object_index,
                                                              face_group_index);
-    index = scene_editor_material_face_placement_find_or_alloc(scene_object_index, face_group_index);
+    index = scene_editor_material_face_placement_find_or_alloc_layer(scene_object_index,
+                                                                     face_group_index,
+                                                                     effective.layerId);
     if (index < 0) return false;
     effective.hasOverride = true;
     effective.sceneObjectIndex = scene_object_index;
@@ -244,7 +368,9 @@ bool SceneEditorMaterialFacePlacementApplyTextureParamNormalizedValue(
     SceneEditorMaterialFacePlacement effective;
     if (!object || scene_object_index < 0 || face_group_index < 0) return false;
     effective = SceneEditorMaterialFacePlacementGetEffective(object, scene_object_index, face_group_index);
-    index = scene_editor_material_face_placement_find_or_alloc(scene_object_index, face_group_index);
+    index = scene_editor_material_face_placement_find_or_alloc_layer(scene_object_index,
+                                                                     face_group_index,
+                                                                     effective.layerId);
     if (index < 0) return false;
     effective.hasOverride = true;
     effective.sceneObjectIndex = scene_object_index;
@@ -283,7 +409,9 @@ bool SceneEditorMaterialFacePlacementApplyTextureParamPatternMode(
     SceneEditorMaterialFacePlacement effective;
     if (!object || scene_object_index < 0 || face_group_index < 0) return false;
     effective = SceneEditorMaterialFacePlacementGetEffective(object, scene_object_index, face_group_index);
-    index = scene_editor_material_face_placement_find_or_alloc(scene_object_index, face_group_index);
+    index = scene_editor_material_face_placement_find_or_alloc_layer(scene_object_index,
+                                                                     face_group_index,
+                                                                     effective.layerId);
     if (index < 0) return false;
     effective.hasOverride = true;
     effective.sceneObjectIndex = scene_object_index;

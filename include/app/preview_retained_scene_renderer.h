@@ -6,7 +6,7 @@
 #include "app/preview_camera_projector.h"
 #include "import/runtime_scene_bridge.h"
 
-#define PREVIEW_RETAINED_SCENE_MAX_LINE_SEGMENTS 256
+#define PREVIEW_RETAINED_SCENE_MAX_LINE_SEGMENTS 2048
 
 typedef struct PreviewRetainedSceneLineSegment {
     double ax;
@@ -20,6 +20,12 @@ typedef struct PreviewRetainedSceneLineSegment {
 
 int PreviewRetainedSceneBuildLineSegments(
     const RuntimeSceneBridge3DDigestState* digest,
+    PreviewRetainedSceneLineSegment* out_segments,
+    int max_segments);
+
+int PreviewRetainedSceneBuildSilhouetteSegments(
+    const RuntimeSceneBridge3DDigestState* digest,
+    const PreviewCameraProjector* projector,
     PreviewRetainedSceneLineSegment* out_segments,
     int max_segments);
 
