@@ -790,6 +790,13 @@ static void runtime_disney_v2_3d_apply_stochastic_transport(
                                                                   contribution_r,
                                                                   contribution_g,
                                                                   contribution_b);
+            runtime_disney_v2_3d_record_bsdf_sample_contribution(
+                io_result,
+                1,
+                contribution_r,
+                contribution_g,
+                contribution_b,
+                RUNTIME_DISNEY_V2_3D_EMITTER_FINITE_LIGHT);
         }
         RuntimeDisneyV2_3D_ApplyRecursivePathLoop(scene,
                                                   &trace.geometryHitInfo,

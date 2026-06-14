@@ -29,7 +29,7 @@ RuntimePathDepthPolicy3D RuntimePathDepthPolicy3D_Resolve(void) {
                                                               RUNTIME_3D_SPECULAR_DEPTH_MAX);
     policy.transmissionDepth =
         runtime_path_depth_policy_3d_clamp(animSettings.transmissionDepth3D,
-                                           RUNTIME_3D_TRANSMISSION_DEPTH_MIN,
+                                           0,
                                            RUNTIME_3D_TRANSMISSION_DEPTH_MAX);
     policy.minDepthBeforeRoulette = kRuntimePathDepthPolicy3DMinDepthBeforeRoulette;
     policy.rouletteThreshold =

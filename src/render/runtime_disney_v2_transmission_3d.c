@@ -5,17 +5,40 @@
 
 #include "app/animation.h"
 #include "config/config_manager.h"
+#include "material/material.h"
 #include "render/runtime_direct_light_3d.h"
 #include "render/runtime_ray_3d.h"
 
 enum {
     RUNTIME_DISNEY_V2_3D_PRIMARY_TRANSMISSION_SKIP_CAP = 4,
-    RUNTIME_DISNEY_V2_3D_PRIMARY_TRANSMISSION_DEPTH_CAP = 8
+    RUNTIME_DISNEY_V2_3D_PRIMARY_TRANSMISSION_DEPTH_CAP = 8,
+    RUNTIME_DISNEY_V2_3D_MEDIUM_STACK_CAP = 8
 };
 
 static const double kRuntimeDisneyV2_3DPrimaryTransmissionEpsilon = 1e-4;
 static const double kRuntimeDisneyV2_3DPrimaryTransmissionMaxDistance = 1.0e6;
 static const double kRuntimeDisneyV2_3DPrimaryTransmissionRoughConeScale = 0.18;
+static const double kRuntimeDisneyV2_3DMinimumTransmittance = 1.0e-4;
+
+typedef struct {
+    double transmissionWeight;
+    double visibleWeight;
+    double tintR;
+    double tintG;
+    double tintB;
+    bool thinWalled;
+    bool physicalTransmission;
+    bool alphaOnly;
+} RuntimeDisneyV2_3DTransparentPolicy;
+
+typedef struct {
+    int objectStack[RUNTIME_DISNEY_V2_3D_MEDIUM_STACK_CAP];
+    int depth;
+    int maxDepth;
+    int entryCount;
+    int exitCount;
+    int mismatchCount;
+} RuntimeDisneyV2_3DMediumStackTracker;
 
 static double runtime_disney_v2_transmission_3d_clamp(double value,
                                                       double min_value,
@@ -27,6 +50,19 @@ static double runtime_disney_v2_transmission_3d_clamp(double value,
 
 static double runtime_disney_v2_transmission_3d_clamp01(double value) {
     return runtime_disney_v2_transmission_3d_clamp(value, 0.0, 1.0);
+}
+
+static double runtime_disney_v2_transmission_3d_peak(double r, double g, double b) {
+    return fmax(r, fmax(g, b));
+}
+
+static bool runtime_disney_v2_3d_payload_has_transparent_alpha(
+    const RuntimeMaterialPayload3D* payload,
+    const RuntimePrincipledBSDF3D* principled) {
+    if (payload && payload->valid && payload->transparency > 1e-6) {
+        return true;
+    }
+    return principled && principled->valid && principled->opacity < 0.999;
 }
 
 static int runtime_disney_v2_3d_resolve_primary_transmission_sample_count(void) {
@@ -158,6 +194,173 @@ static double runtime_disney_v2_3d_transparent_surface_weight(
     return runtime_disney_v2_transmission_3d_clamp(weight, 0.05, 1.0);
 }
 
+static double runtime_disney_v2_3d_transparent_layer_visible_weight(
+    const RuntimePrincipledBSDF3D* principled) {
+    double transmission_weight = runtime_disney_v2_3d_transparent_surface_weight(principled);
+    return runtime_disney_v2_transmission_3d_clamp01(1.0 - transmission_weight);
+}
+
+static bool runtime_disney_v2_3d_policy_is_physical_transmission(
+    const RuntimeMaterialPayload3D* payload,
+    const RuntimePrincipledBSDF3D* principled) {
+    if (!runtime_disney_v2_3d_payload_has_transparent_alpha(payload, principled)) {
+        return false;
+    }
+    if (!payload || !payload->valid) {
+        return false;
+    }
+    if (payload->materialId == MATERIAL_PRESET_TRANSPARENT) {
+        return true;
+    }
+    if (payload->thinWalled) {
+        return true;
+    }
+    if (payload->opticalIor > 1.0001) {
+        return true;
+    }
+    if (fabs(payload->absorptionDistance - 1.0) > 1e-6) {
+        return true;
+    }
+    return false;
+}
+
+static RuntimeDisneyV2_3DTransparentPolicy runtime_disney_v2_3d_resolve_transparent_policy(
+    const RuntimeMaterialPayload3D* payload,
+    const RuntimePrincipledBSDF3D* principled,
+    double segment_distance) {
+    RuntimeDisneyV2_3DTransparentPolicy policy = {0};
+    double absorption_distance = 1.0;
+    double distance_ratio = 1.0;
+
+    policy.transmissionWeight = runtime_disney_v2_3d_transparent_surface_weight(principled);
+    policy.visibleWeight = runtime_disney_v2_3d_transparent_layer_visible_weight(principled);
+    policy.tintR = principled ? runtime_disney_v2_transmission_3d_clamp01(principled->baseColorR)
+                              : 1.0;
+    policy.tintG = principled ? runtime_disney_v2_transmission_3d_clamp01(principled->baseColorG)
+                              : 1.0;
+    policy.tintB = principled ? runtime_disney_v2_transmission_3d_clamp01(principled->baseColorB)
+                              : 1.0;
+    policy.thinWalled = payload ? payload->thinWalled : false;
+    policy.physicalTransmission =
+        runtime_disney_v2_3d_policy_is_physical_transmission(payload, principled);
+    policy.alphaOnly =
+        runtime_disney_v2_3d_payload_has_transparent_alpha(payload, principled) &&
+        !policy.physicalTransmission;
+    if (!payload || payload->thinWalled || policy.alphaOnly) {
+        return policy;
+    }
+
+    absorption_distance =
+        fmax(payload->absorptionDistance, kRuntimeDisneyV2_3DPrimaryTransmissionEpsilon);
+    distance_ratio = fmax(segment_distance, 0.0) / absorption_distance;
+    policy.tintR = pow(fmax(policy.tintR, kRuntimeDisneyV2_3DMinimumTransmittance),
+                       distance_ratio);
+    policy.tintG = pow(fmax(policy.tintG, kRuntimeDisneyV2_3DMinimumTransmittance),
+                       distance_ratio);
+    policy.tintB = pow(fmax(policy.tintB, kRuntimeDisneyV2_3DMinimumTransmittance),
+                       distance_ratio);
+    return policy;
+}
+
+static void runtime_disney_v2_3d_medium_stack_init(
+    RuntimeDisneyV2_3DMediumStackTracker* stack) {
+    if (!stack) return;
+    *stack = (RuntimeDisneyV2_3DMediumStackTracker){0};
+    for (int i = 0; i < RUNTIME_DISNEY_V2_3D_MEDIUM_STACK_CAP; ++i) {
+        stack->objectStack[i] = -1;
+    }
+}
+
+static void runtime_disney_v2_3d_medium_stack_enter(
+    RuntimeDisneyV2_3DMediumStackTracker* stack,
+    int scene_object_index) {
+    if (!stack || scene_object_index < 0) return;
+    if (stack->depth >= RUNTIME_DISNEY_V2_3D_MEDIUM_STACK_CAP) {
+        stack->mismatchCount += 1;
+        return;
+    }
+    stack->objectStack[stack->depth] = scene_object_index;
+    stack->depth += 1;
+    stack->entryCount += 1;
+    if (stack->depth > stack->maxDepth) {
+        stack->maxDepth = stack->depth;
+    }
+}
+
+static void runtime_disney_v2_3d_medium_stack_observe_solid_hit(
+    RuntimeDisneyV2_3DMediumStackTracker* stack,
+    int scene_object_index) {
+    if (!stack || scene_object_index < 0) return;
+    if (stack->depth > 0 &&
+        stack->objectStack[stack->depth - 1] == scene_object_index) {
+        stack->objectStack[stack->depth - 1] = -1;
+        stack->depth -= 1;
+        stack->exitCount += 1;
+        return;
+    }
+    runtime_disney_v2_3d_medium_stack_enter(stack, scene_object_index);
+}
+
+static void runtime_disney_v2_3d_medium_stack_commit(
+    RuntimeDisneyV2_3DResult* io_result,
+    const RuntimeDisneyV2_3DMediumStackTracker* stack) {
+    if (!io_result || !stack) return;
+    io_result->primaryTransmissionMediumStackDepth = stack->depth;
+    io_result->primaryTransmissionMaxMediumStackDepth = stack->maxDepth;
+    io_result->primaryTransmissionMediumEntryCount = stack->entryCount;
+    io_result->primaryTransmissionMediumExitCount = stack->exitCount;
+    io_result->primaryTransmissionMediumMismatchCount =
+        stack->mismatchCount + stack->depth;
+}
+
+static bool runtime_disney_v2_3d_record_solid_interior_return(
+    RuntimeDisneyV2_3DResult* io_result,
+    const RuntimeDisneyV2_3DTransparentPolicy* transparent_policy,
+    const RuntimeDisneyV2_3DResult* layer_result,
+    double throughput_r,
+    double throughput_g,
+    double throughput_b,
+    double blend_weight) {
+    double return_weight = 0.0;
+    double return_r = 0.0;
+    double return_g = 0.0;
+    double return_b = 0.0;
+
+    if (!io_result || !transparent_policy || !layer_result ||
+        transparent_policy->thinWalled || !transparent_policy->physicalTransmission ||
+        !layer_result->visible) {
+        return false;
+    }
+
+    return_weight =
+        runtime_disney_v2_transmission_3d_clamp01(
+            transparent_policy->transmissionWeight *
+            (1.0 - transparent_policy->visibleWeight)) *
+        0.45;
+    if (!(return_weight > 1e-9)) {
+        return false;
+    }
+
+    return_r = layer_result->radianceR * throughput_r * blend_weight *
+               transparent_policy->tintR * transparent_policy->tintR *
+               return_weight;
+    return_g = layer_result->radianceG * throughput_g * blend_weight *
+               transparent_policy->tintG * transparent_policy->tintG *
+               return_weight;
+    return_b = layer_result->radianceB * throughput_b * blend_weight *
+               transparent_policy->tintB * transparent_policy->tintB *
+               return_weight;
+    if (runtime_disney_v2_transmission_3d_peak(return_r, return_g, return_b) <= 1e-9) {
+        return false;
+    }
+
+    io_result->primaryTransmissionInteriorReturnRadianceR += return_r;
+    io_result->primaryTransmissionInteriorReturnRadianceG += return_g;
+    io_result->primaryTransmissionInteriorReturnRadianceB += return_b;
+    io_result->primaryTransmissionInteriorReturnSurfaceCount += 1;
+    return true;
+}
+
 bool RuntimeDisneyV2_3D_SampleTransmission(
     const RuntimeMaterialPayload3D* payload,
     const RuntimePrincipledBSDF3D* principled,
@@ -280,7 +483,8 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
     double* out_throughput_r,
     double* out_throughput_g,
     double* out_throughput_b,
-    int* out_depth) {
+    int* out_depth,
+    bool* out_receiver_found) {
     HitInfo3D source_hit = {0};
     HitInfo3D hit = {0};
     Ray3D ray = {0};
@@ -288,19 +492,34 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
     RuntimePrincipledBSDF3D principled = {0};
     RuntimeDirectLight3DResult direct = {0};
     RuntimeDisneyV2_3DResult receiver_result = {0};
+    RuntimeDisneyV2_3DMediumStackTracker medium_stack = {0};
     Vec3 direction = sample_direction;
     double throughput_r = initial_sample ? initial_sample->throughputR : 0.0;
     double throughput_g = initial_sample ? initial_sample->throughputG : 0.0;
     double throughput_b = initial_sample ? initial_sample->throughputB : 0.0;
+    double accum_r = 0.0;
+    double accum_g = 0.0;
+    double accum_b = 0.0;
     int depth = 1;
+    bool contributed = false;
+    bool receiver_found = false;
 
     if (!scene || !primary_hit || !primary_hit->hit || !initial_sample || !io_result ||
         !out_direct || !out_hit || !out_ray || !out_throughput_r || !out_throughput_g ||
-        !out_throughput_b || !out_depth) {
+        !out_throughput_b || !out_depth || !out_receiver_found) {
         return false;
     }
 
+    *out_receiver_found = false;
     source_hit = primary_hit->hitInfo;
+    runtime_disney_v2_3d_medium_stack_init(&medium_stack);
+    if (runtime_disney_v2_3d_policy_is_physical_transmission(&io_result->payload,
+                                                             &io_result->principled) &&
+        !io_result->payload.thinWalled) {
+        runtime_disney_v2_3d_medium_stack_enter(&medium_stack,
+                                                primary_hit->hitInfo.sceneObjectIndex);
+        runtime_disney_v2_3d_medium_stack_commit(io_result, &medium_stack);
+    }
     for (depth = 1; depth <= RUNTIME_DISNEY_V2_3D_PRIMARY_TRANSMISSION_DEPTH_CAP; ++depth) {
         int ray_count = 0;
 
@@ -308,7 +527,7 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
                                                   RUNTIME_PATH_DEPTH_POLICY_3D_LOBE_TRANSMISSION,
                                                   depth)) {
             io_result->primaryTransmissionDepthLimitCount += 1;
-            return false;
+            break;
         }
         if (!runtime_disney_v2_3d_trace_transmission_next_hit(scene,
                                                               &source_hit,
@@ -317,7 +536,7 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
                                                               &ray,
                                                               &ray_count)) {
             io_result->primaryTransmissionRayCount += ray_count;
-            return false;
+            break;
         }
         io_result->primaryTransmissionRayCount += ray_count;
         io_result->primaryTransmissionHitCount += 1;
@@ -329,11 +548,6 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
         if (!runtime_disney_v2_3d_payload_is_transparent(&payload, &principled)) {
             if (RuntimeDisneyV2_3D_ShadeHit(scene, &hit, sampling, &receiver_result) &&
                 receiver_result.visible) {
-                direct.visible = true;
-                direct.radianceR = receiver_result.radianceR;
-                direct.radianceG = receiver_result.radianceG;
-                direct.radianceB = receiver_result.radianceB;
-                direct.radiance = receiver_result.radiance;
                 io_result->primaryTransmissionReceiverShadeCount += 1;
                 io_result->primaryTransmissionReceiverRadianceR += receiver_result.radianceR;
                 io_result->primaryTransmissionReceiverRadianceG += receiver_result.radianceG;
@@ -346,7 +560,16 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
                                                               &direct)) {
                     return false;
                 }
+                receiver_result.radianceR = direct.radianceR;
+                receiver_result.radianceG = direct.radianceG;
+                receiver_result.radianceB = direct.radianceB;
+                receiver_result.radiance = direct.radiance;
             }
+            accum_r += receiver_result.radianceR * throughput_r * blend_weight;
+            accum_g += receiver_result.radianceG * throughput_g * blend_weight;
+            accum_b += receiver_result.radianceB * throughput_b * blend_weight;
+            contributed = runtime_disney_v2_transmission_3d_peak(accum_r, accum_g, accum_b) > 1e-9;
+            receiver_found = true;
             *out_direct = direct;
             *out_hit = hit;
             *out_ray = ray;
@@ -354,28 +577,106 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
             *out_throughput_g = throughput_g * blend_weight;
             *out_throughput_b = throughput_b * blend_weight;
             *out_depth = depth;
-            return true;
+            break;
         }
 
         io_result->primaryTransmissionTransparentSurfaceCount += 1;
-        throughput_r *= principled.baseColorR *
-                        runtime_disney_v2_3d_transparent_surface_weight(&principled);
-        throughput_g *= principled.baseColorG *
-                        runtime_disney_v2_3d_transparent_surface_weight(&principled);
-        throughput_b *= principled.baseColorB *
-                        runtime_disney_v2_3d_transparent_surface_weight(&principled);
+        double segment_distance = vec3_length(vec3_sub(hit.position, source_hit.position));
+        RuntimeDisneyV2_3DTransparentPolicy transparent_policy =
+            runtime_disney_v2_3d_resolve_transparent_policy(&payload,
+                                                            &principled,
+                                                            segment_distance);
+        if (transparent_policy.alphaOnly) {
+            io_result->primaryTransmissionAlphaOnlySurfaceCount += 1;
+        } else if (transparent_policy.thinWalled) {
+            io_result->primaryTransmissionThinWalledSurfaceCount += 1;
+        } else {
+            io_result->primaryTransmissionSolidSurfaceCount += 1;
+            if (transparent_policy.physicalTransmission) {
+                runtime_disney_v2_3d_medium_stack_observe_solid_hit(
+                    &medium_stack,
+                    hit.sceneObjectIndex);
+                runtime_disney_v2_3d_medium_stack_commit(io_result, &medium_stack);
+            }
+        }
+        if (transparent_policy.physicalTransmission) {
+            io_result->primaryTransmissionPhysicalSurfaceCount += 1;
+        }
+        if (RuntimeDisneyV2_3D_ShadeHit(scene, &hit, sampling, &receiver_result) &&
+            receiver_result.visible) {
+            double layer_r = receiver_result.radianceR *
+                             throughput_r * blend_weight * transparent_policy.visibleWeight;
+            double layer_g = receiver_result.radianceG *
+                             throughput_g * blend_weight * transparent_policy.visibleWeight;
+            double layer_b = receiver_result.radianceB *
+                             throughput_b * blend_weight * transparent_policy.visibleWeight;
+            accum_r += layer_r;
+            accum_g += layer_g;
+            accum_b += layer_b;
+            io_result->primaryTransmissionTransparentLayerShadeCount += 1;
+            io_result->primaryTransmissionTransparentLayerRadianceR += layer_r;
+            io_result->primaryTransmissionTransparentLayerRadianceG += layer_g;
+            io_result->primaryTransmissionTransparentLayerRadianceB += layer_b;
+            contributed = contributed ||
+                          runtime_disney_v2_transmission_3d_peak(layer_r, layer_g, layer_b) > 1e-9;
+            double interior_before_r =
+                io_result->primaryTransmissionInteriorReturnRadianceR;
+            double interior_before_g =
+                io_result->primaryTransmissionInteriorReturnRadianceG;
+            double interior_before_b =
+                io_result->primaryTransmissionInteriorReturnRadianceB;
+            if (runtime_disney_v2_3d_record_solid_interior_return(io_result,
+                                                                  &transparent_policy,
+                                                                  &receiver_result,
+                                                                  throughput_r,
+                                                                  throughput_g,
+                                                                  throughput_b,
+                                                                  blend_weight)) {
+                accum_r += io_result->primaryTransmissionInteriorReturnRadianceR -
+                           interior_before_r;
+                accum_g += io_result->primaryTransmissionInteriorReturnRadianceG -
+                           interior_before_g;
+                accum_b += io_result->primaryTransmissionInteriorReturnRadianceB -
+                           interior_before_b;
+                io_result->primaryTransmissionInteriorReturnSampleCount += 1;
+                contributed = true;
+            }
+        }
+
+        throughput_r *= transparent_policy.tintR * transparent_policy.transmissionWeight;
+        throughput_g *= transparent_policy.tintG * transparent_policy.transmissionWeight;
+        throughput_b *= transparent_policy.tintB * transparent_policy.transmissionWeight;
 
         if (!RuntimePathDepthPolicy3D_AllowsDepth(&io_result->pathPolicy,
                                                   RUNTIME_PATH_DEPTH_POLICY_3D_LOBE_TRANSMISSION,
                                                   depth + 1)) {
             io_result->primaryTransmissionDepthLimitCount += 1;
-            return false;
+            break;
         }
         source_hit = hit;
     }
 
-    io_result->primaryTransmissionDepthLimitCount += 1;
-    return false;
+    if (!contributed) {
+        if (depth > RUNTIME_DISNEY_V2_3D_PRIMARY_TRANSMISSION_DEPTH_CAP) {
+            io_result->primaryTransmissionDepthLimitCount += 1;
+        }
+        return false;
+    }
+
+    direct.visible = true;
+    direct.radianceR = accum_r;
+    direct.radianceG = accum_g;
+    direct.radianceB = accum_b;
+    direct.radiance = runtime_disney_v2_transmission_3d_peak(accum_r, accum_g, accum_b);
+    *out_direct = direct;
+    *out_hit = hit;
+    *out_ray = ray;
+    *out_throughput_r = throughput_r * blend_weight;
+    *out_throughput_g = throughput_g * blend_weight;
+    *out_throughput_b = throughput_b * blend_weight;
+    *out_depth = depth;
+    *out_receiver_found = receiver_found;
+    return true;
 }
 
 bool RuntimeDisneyV2_3D_ApplyPrimaryTransmissionContinuation(
@@ -407,6 +708,7 @@ bool RuntimeDisneyV2_3D_ApplyPrimaryTransmissionContinuation(
     double best_throughput_b = 0.0;
     int sample_count = 1;
     int contributing_sample_count = 0;
+    int receiver_sample_count = 0;
     int receiver_depth = 0;
     int best_depth = 0;
     uint32_t sample_seed = 0U;
@@ -476,6 +778,7 @@ bool RuntimeDisneyV2_3D_ApplyPrimaryTransmissionContinuation(
         path_throughput_g = 0.0;
         path_throughput_b = 0.0;
         receiver_depth = 0;
+        bool receiver_found = false;
         if (!runtime_disney_v2_3d_trace_primary_transmission_receiver(scene,
                                                                       primary_hit,
                                                                       sampling,
@@ -489,16 +792,20 @@ bool RuntimeDisneyV2_3D_ApplyPrimaryTransmissionContinuation(
                                                                       &path_throughput_r,
                                                                       &path_throughput_g,
                                                                       &path_throughput_b,
-                                                                      &receiver_depth)) {
+                                                                      &receiver_depth,
+                                                                      &receiver_found)) {
             continue;
         }
-        accum_r += continuation_direct.radianceR * path_throughput_r;
-        accum_g += continuation_direct.radianceG * path_throughput_g;
-        accum_b += continuation_direct.radianceB * path_throughput_b;
+        accum_r += continuation_direct.radianceR;
+        accum_g += continuation_direct.radianceG;
+        accum_b += continuation_direct.radianceB;
         accum_throughput_r += path_throughput_r;
         accum_throughput_g += path_throughput_g;
         accum_throughput_b += path_throughput_b;
         contributing_sample_count += 1;
+        if (receiver_found) {
+            receiver_sample_count += 1;
+        }
         best_depth = receiver_depth;
         best_hit = continuation_hit;
         best_ray = continuation_ray;
@@ -552,6 +859,20 @@ bool RuntimeDisneyV2_3D_ApplyPrimaryTransmissionContinuation(
                  fmax(io_result->primaryTransmissionReceiverRadianceG,
                       io_result->primaryTransmissionReceiverRadianceB));
     }
+    if (io_result->primaryTransmissionTransparentLayerShadeCount > 0) {
+        double layer_count =
+            (double)io_result->primaryTransmissionTransparentLayerShadeCount;
+        io_result->primaryTransmissionTransparentLayerRadianceR /= layer_count;
+        io_result->primaryTransmissionTransparentLayerRadianceG /= layer_count;
+        io_result->primaryTransmissionTransparentLayerRadianceB /= layer_count;
+    }
+    if (io_result->primaryTransmissionInteriorReturnSampleCount > 0) {
+        double interior_count =
+            (double)io_result->primaryTransmissionInteriorReturnSampleCount;
+        io_result->primaryTransmissionInteriorReturnRadianceR /= interior_count;
+        io_result->primaryTransmissionInteriorReturnRadianceG /= interior_count;
+        io_result->primaryTransmissionInteriorReturnRadianceB /= interior_count;
+    }
     io_result->primaryTransmissionFrontDiffuseWeight = front_diffuse_weight;
     io_result->primaryTransmissionFrontSpecularWeight = front_specular_weight;
     io_result->primaryTransmissionCameraThroughputR =
@@ -560,7 +881,16 @@ bool RuntimeDisneyV2_3D_ApplyPrimaryTransmissionContinuation(
         accum_throughput_g / (double)contributing_sample_count;
     io_result->primaryTransmissionCameraThroughputB =
         accum_throughput_b / (double)contributing_sample_count;
-    io_result->primaryTransmissionReceiverSampleCount = contributing_sample_count;
+    io_result->primaryTransmissionContributingSampleCount = contributing_sample_count;
+    io_result->primaryTransmissionReceiverSampleCount = receiver_sample_count;
+    io_result->primaryTransmissionTransparentLayerRadiance =
+        fmax(io_result->primaryTransmissionTransparentLayerRadianceR,
+             fmax(io_result->primaryTransmissionTransparentLayerRadianceG,
+                  io_result->primaryTransmissionTransparentLayerRadianceB));
+    io_result->primaryTransmissionInteriorReturnRadiance =
+        fmax(io_result->primaryTransmissionInteriorReturnRadianceR,
+             fmax(io_result->primaryTransmissionInteriorReturnRadianceG,
+                  io_result->primaryTransmissionInteriorReturnRadianceB));
     io_result->primaryTransmissionContinued = true;
     io_result->primaryTransmissionPathState.valid = true;
     io_result->primaryTransmissionPathState.hit = true;

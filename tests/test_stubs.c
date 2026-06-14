@@ -152,6 +152,8 @@ RAY_TRACING_TEST_WEAK void AnimationParseArgs(int argc, char* argv[]) {
 RAY_TRACING_TEST_WEAK void AnimationLoadRuntimeDefaults(void) {}
 RAY_TRACING_TEST_WEAK int AnimationRunAppSession(void) { return 0; }
 RAY_TRACING_TEST_WEAK double AnimationCurrentNormalizedT(void) { return 0.0; }
+RAY_TRACING_TEST_WEAK int AnimationCurrentAbsoluteFrameIndex(void) { return 0; }
+RAY_TRACING_TEST_WEAK int AnimationConfiguredPathFrameCount(void) { return 0; }
 RAY_TRACING_TEST_WEAK RenderContext* getRenderContext(void) { return NULL; }
 RAY_TRACING_TEST_WEAK bool render_begin_frame(void) { return true; }
 RAY_TRACING_TEST_WEAK void render_end_frame(void) {}
