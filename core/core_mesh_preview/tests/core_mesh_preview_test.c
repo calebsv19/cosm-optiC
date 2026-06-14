@@ -41,17 +41,48 @@ static int make_tetra(CoreMeshAssetRuntimeDocument *doc) {
     return expect_ok(core_mesh_asset_runtime_document_validate(doc), "validate tetra");
 }
 
+static int write_legacy_preview_file(const char *path) {
+    FILE *f = fopen(path, "wb");
+    if (!f) return 1;
+    if (fprintf(f,
+                "{\n"
+                "\"schema_variant\":\"line_drawing_mesh_runtime_preview_v1\",\n"
+                "\"asset_id\":\"legacy_asset\",\n"
+                "\"source_asset_id\":\"legacy_source\",\n"
+                "\"runtime_path\":\"/tmp/legacy.runtime.json\",\n"
+                "\"vertex_count\":4,\n"
+                "\"triangle_count\":4,\n"
+                "\"local_bounds\":{\"min\":{\"x\":0,\"y\":0,\"z\":0},"
+                "\"max\":{\"x\":1,\"y\":1,\"z\":1}},\n"
+                "\"sampled_triangle_count\":1,\n"
+                "\"edges\":[{\"a\":{\"x\":0,\"y\":0,\"z\":0},"
+                "\"b\":{\"x\":1,\"y\":0,\"z\":0}}]\n"
+                "}\n") < 0) {
+        fclose(f);
+        return 1;
+    }
+    return fclose(f) != 0;
+}
+
 int main(void) {
     CoreMeshAssetRuntimeDocument doc;
     CoreMeshPreviewRuntimePayload payload;
     CoreMeshPreviewRuntimePayload loaded;
+    CoreMeshPreviewRuntimeMetadata metadata;
+    CoreMeshPreviewFileProbe probe;
     char preview_path[256];
+    char generated_preview_path[256];
+    char legacy_preview_path[256];
     const char *runtime_path = "/tmp/core_mesh_preview_test.runtime.json";
     int failed = 0;
 
     core_mesh_preview_runtime_payload_init(&payload);
     core_mesh_preview_runtime_payload_init(&loaded);
+    core_mesh_preview_runtime_metadata_init(&metadata);
+    core_mesh_preview_file_probe_init(&probe);
     if (make_tetra(&doc) != 0) return 1;
+    failed |= expect_ok(core_mesh_asset_runtime_document_save_file(&doc, runtime_path),
+                        "save runtime mesh");
 
     failed |= expect_ok(core_mesh_preview_build_runtime_payload(&doc,
                                                                runtime_path,
@@ -59,7 +90,15 @@ int main(void) {
                                                                &payload),
                         "build preview");
     if (payload.edge_count != 3u ||
+        payload.preview_edge_count != 3u ||
+        payload.preview_vertex_count != 6u ||
+        payload.preview_triangle_count != 0u ||
+        payload.max_budget != 3u ||
         payload.source_triangle_count != 4u ||
+        payload.source_feature_edge_count == 0u ||
+        payload.max_span != 1.0 ||
+        payload.bounding_sphere_radius <= 0.0 ||
+        payload.sample_strategy != CORE_MESH_PREVIEW_SAMPLE_STRATEGY_FEATURE_EDGE_STRIDE_V1 ||
         strcmp(payload.asset_id, "asset_tetra") != 0) {
         fprintf(stderr, "unexpected preview payload metadata\n");
         failed = 1;
@@ -70,9 +109,37 @@ int main(void) {
                                                            sizeof(preview_path)),
                         "preview path");
     failed |= expect_ok(core_mesh_preview_save_file(&payload, preview_path), "save preview");
+    failed |= expect_ok(core_mesh_preview_load_metadata_only(preview_path, &metadata),
+                        "load preview metadata");
+    if (metadata.mode != CORE_MESH_PREVIEW_MODE_FEATURE_EDGES_V1 ||
+        metadata.preview_edge_count != payload.preview_edge_count ||
+        metadata.preview_vertex_count != payload.preview_vertex_count ||
+        metadata.source_triangle_count != payload.source_triangle_count ||
+        metadata.has_drawable_payload == false ||
+        strcmp(metadata.asset_id, payload.asset_id) != 0) {
+        fprintf(stderr, "metadata-only preview did not match payload\n");
+        failed = 1;
+    }
+    failed |= expect_ok(core_mesh_preview_probe_file(preview_path, &probe), "probe preview");
+    if (!probe.exists ||
+        !probe.readable ||
+        !probe.schema_supported ||
+        !probe.metadata_valid ||
+        probe.file_size_bytes == 0u ||
+        probe.metadata.preview_edge_count != payload.preview_edge_count) {
+        fprintf(stderr, "preview probe did not report expected metadata\n");
+        failed = 1;
+    }
     failed |= expect_ok(core_mesh_preview_load_file(preview_path, &loaded), "load preview");
     if (loaded.edge_count != payload.edge_count ||
+        loaded.preview_edge_count != payload.preview_edge_count ||
+        loaded.preview_vertex_count != payload.preview_vertex_count ||
+        loaded.preview_triangle_count != payload.preview_triangle_count ||
+        loaded.max_budget != payload.max_budget ||
         loaded.source_vertex_count != payload.source_vertex_count ||
+        loaded.source_feature_edge_count != payload.source_feature_edge_count ||
+        loaded.sample_strategy != payload.sample_strategy ||
+        loaded.max_span != payload.max_span ||
         strcmp(loaded.asset_id, payload.asset_id) != 0) {
         fprintf(stderr, "loaded preview did not match saved payload\n");
         failed = 1;
@@ -80,6 +147,164 @@ int main(void) {
 
     core_mesh_preview_runtime_payload_free(&loaded);
     core_mesh_preview_runtime_payload_free(&payload);
+    failed |= expect_ok(core_mesh_preview_build_from_runtime_file(
+                            runtime_path,
+                            CORE_MESH_PREVIEW_MODE_POINT_CLOUD_V1,
+                            3u,
+                            &payload),
+                        "build preview from runtime file");
+    if (payload.mode != CORE_MESH_PREVIEW_MODE_POINT_CLOUD_V1 ||
+        payload.preview_vertex_count != 2u ||
+        !payload.points ||
+        strcmp(payload.runtime_path, runtime_path) != 0) {
+        fprintf(stderr, "runtime-file build did not produce point preview\n");
+        failed = 1;
+    }
+    failed |= expect_ok(core_mesh_preview_save_for_runtime_file(
+                            runtime_path,
+                            CORE_MESH_PREVIEW_MODE_TRIANGLE_SAMPLES_V1,
+                            2u,
+                            generated_preview_path,
+                            sizeof(generated_preview_path)),
+                        "save preview for runtime file");
+    if (strcmp(generated_preview_path, preview_path) != 0) {
+        fprintf(stderr, "runtime-file save returned unexpected preview path\n");
+        failed = 1;
+    }
+    failed |= expect_ok(core_mesh_preview_load_metadata_only(generated_preview_path, &metadata),
+                        "load generated preview metadata");
+    if (metadata.mode != CORE_MESH_PREVIEW_MODE_TRIANGLE_SAMPLES_V1 ||
+        metadata.preview_triangle_count != 2u ||
+        metadata.preview_vertex_count != 6u ||
+        !metadata.has_drawable_payload) {
+        fprintf(stderr, "generated preview metadata did not match triangle mode\n");
+        failed = 1;
+    }
+
+    snprintf(legacy_preview_path,
+             sizeof(legacy_preview_path),
+             "/tmp/core_mesh_preview_legacy_test.preview.json");
+    if (write_legacy_preview_file(legacy_preview_path) != 0) {
+        fprintf(stderr, "failed to write legacy preview fixture\n");
+        failed = 1;
+    } else {
+        failed |= expect_ok(core_mesh_preview_load_metadata_only(legacy_preview_path, &metadata),
+                            "load legacy preview metadata");
+        if (metadata.mode != CORE_MESH_PREVIEW_MODE_FEATURE_EDGES_V1 ||
+            metadata.preview_edge_count != 1u ||
+            metadata.preview_vertex_count != 2u ||
+            strcmp(metadata.asset_id, "legacy_asset") != 0) {
+            fprintf(stderr, "legacy preview metadata did not load correctly\n");
+            failed = 1;
+        }
+    }
+
+    core_mesh_preview_runtime_payload_free(&loaded);
+    core_mesh_preview_runtime_payload_free(&payload);
+    failed |= expect_ok(core_mesh_preview_build_runtime_payload_with_mode(
+                            &doc,
+                            runtime_path,
+                            CORE_MESH_PREVIEW_MODE_TRIANGLE_SAMPLES_V1,
+                            2u,
+                            &payload),
+                        "build triangle preview");
+    if (payload.mode != CORE_MESH_PREVIEW_MODE_TRIANGLE_SAMPLES_V1 ||
+        payload.sample_strategy != CORE_MESH_PREVIEW_SAMPLE_STRATEGY_TRIANGLE_STRIDE_V1 ||
+        payload.preview_triangle_count != 2u ||
+        payload.preview_vertex_count != 6u ||
+        payload.preview_edge_count != 0u ||
+        payload.max_budget != 2u ||
+        payload.coverage_ratio <= 0.0 ||
+        payload.coverage_ratio > 1.0 ||
+        !payload.triangles) {
+        fprintf(stderr, "unexpected triangle preview payload metadata\n");
+        failed = 1;
+    }
+    failed |= expect_ok(core_mesh_preview_save_file(&payload, preview_path),
+                        "save triangle preview");
+    failed |= expect_ok(core_mesh_preview_load_file(preview_path, &loaded),
+                        "load triangle preview");
+    if (loaded.mode != payload.mode ||
+        loaded.preview_triangle_count != payload.preview_triangle_count ||
+        loaded.preview_vertex_count != payload.preview_vertex_count ||
+        loaded.preview_edge_count != 0u ||
+        !loaded.triangles) {
+        fprintf(stderr, "loaded triangle preview did not match saved payload\n");
+        failed = 1;
+    }
+
+    core_mesh_preview_runtime_payload_free(&loaded);
+    core_mesh_preview_runtime_payload_free(&payload);
+    failed |= expect_ok(core_mesh_preview_build_runtime_payload_with_mode(
+                            &doc,
+                            runtime_path,
+                            CORE_MESH_PREVIEW_MODE_POINT_CLOUD_V1,
+                            3u,
+                            &payload),
+                        "build point preview");
+    if (payload.mode != CORE_MESH_PREVIEW_MODE_POINT_CLOUD_V1 ||
+        payload.sample_strategy != CORE_MESH_PREVIEW_SAMPLE_STRATEGY_POINT_VERTEX_STRIDE_V1 ||
+        payload.preview_vertex_count != 2u ||
+        payload.preview_edge_count != 0u ||
+        payload.preview_triangle_count != 0u ||
+        payload.max_budget != 3u ||
+        payload.coverage_ratio <= 0.0 ||
+        payload.coverage_ratio > 1.0 ||
+        !payload.points) {
+        fprintf(stderr, "unexpected point preview payload metadata\n");
+        failed = 1;
+    }
+    failed |= expect_ok(core_mesh_preview_save_file(&payload, preview_path),
+                        "save point preview");
+    failed |= expect_ok(core_mesh_preview_load_file(preview_path, &loaded),
+                        "load point preview");
+    if (loaded.mode != payload.mode ||
+        loaded.preview_vertex_count != payload.preview_vertex_count ||
+        loaded.preview_edge_count != 0u ||
+        loaded.preview_triangle_count != 0u ||
+        !loaded.points) {
+        fprintf(stderr, "loaded point preview did not match saved payload\n");
+        failed = 1;
+    }
+
+    core_mesh_preview_runtime_payload_free(&loaded);
+    core_mesh_preview_runtime_payload_free(&payload);
+    failed |= expect_ok(core_mesh_preview_build_runtime_payload_with_mode(
+                            &doc,
+                            runtime_path,
+                            CORE_MESH_PREVIEW_MODE_BOUNDS_PROXY_V1,
+                            0u,
+                            &payload),
+                        "build bounds preview");
+    if (payload.mode != CORE_MESH_PREVIEW_MODE_BOUNDS_PROXY_V1 ||
+        payload.sample_strategy != CORE_MESH_PREVIEW_SAMPLE_STRATEGY_BOUNDS_PROXY_V1 ||
+        payload.preview_vertex_count != 0u ||
+        payload.preview_edge_count != 0u ||
+        payload.preview_triangle_count != 0u ||
+        payload.max_budget != 0u ||
+        payload.coverage_ratio != 1.0 ||
+        payload.max_span != 1.0) {
+        fprintf(stderr, "unexpected bounds preview payload metadata\n");
+        failed = 1;
+    }
+    failed |= expect_ok(core_mesh_preview_save_file(&payload, preview_path),
+                        "save bounds preview");
+    failed |= expect_ok(core_mesh_preview_load_file(preview_path, &loaded),
+                        "load bounds preview");
+    if (loaded.mode != payload.mode ||
+        loaded.preview_vertex_count != 0u ||
+        loaded.preview_edge_count != 0u ||
+        loaded.preview_triangle_count != 0u ||
+        loaded.coverage_ratio != 1.0) {
+        fprintf(stderr, "loaded bounds preview did not match saved payload\n");
+        failed = 1;
+    }
+
+    core_mesh_preview_runtime_payload_free(&loaded);
+    core_mesh_preview_runtime_payload_free(&payload);
     core_mesh_asset_runtime_document_free(&doc);
+    (void)remove(runtime_path);
+    (void)remove(preview_path);
+    (void)remove(legacy_preview_path);
     return failed;
 }
