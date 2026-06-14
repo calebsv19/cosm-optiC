@@ -553,6 +553,22 @@ void kit_render_external_text_unregister_font_source(TTF_Font *font) {
     }
 }
 
+int kit_render_external_text_has_font_source(TTF_Font *font) {
+    return kit_render_external_text_find_font_source(font) != NULL;
+}
+
+void kit_render_external_text_reset_font_system(void) {
+    int i = 0;
+
+    for (i = 0; i < KIT_RENDER_EXTERNAL_TEXT_FONT_CACHE_CAPACITY; ++i) {
+        if (g_font_cache[i].font) {
+            kit_render_external_text_font_cache_destroy_entry(&g_font_cache[i]);
+        }
+    }
+    memset(g_font_sources, 0, sizeof(g_font_sources));
+    g_font_cache_tick = 1u;
+}
+
 void kit_render_external_text_reset_renderer(SDL_Renderer *renderer) {
     int i = 0;
     if (!renderer) {

@@ -500,6 +500,88 @@ static int test_reject_invalid_primitive_payload_shape(void) {
     return 0;
 }
 
+static int test_accept_mesh_asset_instance_geometry_ref(void) {
+    const char *json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_authoring_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_mesh_asset\","
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"obj_mesh\","
+          "\"object_type\":\"mesh_asset_instance\","
+          "\"dimensional_mode\":\"full_3d\","
+          "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_bookshelf_01\",\"variant\":\"runtime_default\"}"
+        "}],"
+        "\"materials\":[]"
+        "}";
+    char diagnostics[256];
+    char *runtime_json = NULL;
+    CoreResult r = core_scene_compile_authoring_to_runtime(json,
+                                                           &runtime_json,
+                                                           diagnostics,
+                                                           sizeof(diagnostics));
+    if (r.code != CORE_OK) return 1;
+    if (!runtime_json) return 1;
+    if (!strstr(runtime_json, "\"object_type\":\"mesh_asset_instance\"")) return 1;
+    if (!strstr(runtime_json, "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_bookshelf_01\",\"variant\":\"runtime_default\"}")) return 1;
+    core_free(runtime_json);
+    return 0;
+}
+
+static int test_reject_mesh_asset_instance_wrong_geometry_ref_kind(void) {
+    const char *bad_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_authoring_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_mesh_asset_bad_kind\","
+        "\"objects\":[{"
+          "\"object_id\":\"obj_mesh\","
+          "\"object_type\":\"mesh_asset_instance\","
+          "\"dimensional_mode\":\"full_3d\","
+          "\"geometry_ref\":{\"kind\":\"shape_asset\",\"id\":\"asset_bookshelf_01\"}"
+        "}]"
+        "}";
+    char diagnostics[256];
+    char *runtime_json = NULL;
+    CoreResult r = core_scene_compile_authoring_to_runtime(bad_json,
+                                                           &runtime_json,
+                                                           diagnostics,
+                                                           sizeof(diagnostics));
+    if (r.code == CORE_OK) return 1;
+    if (runtime_json != NULL) return 1;
+    if (!strstr(diagnostics, "requires geometry_ref.kind mesh_asset")) return 1;
+    return 0;
+}
+
+static int test_reject_mesh_asset_instance_wrong_dimensional_mode(void) {
+    const char *bad_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_authoring_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_mesh_asset_bad_mode\","
+        "\"objects\":[{"
+          "\"object_id\":\"obj_mesh\","
+          "\"object_type\":\"mesh_asset_instance\","
+          "\"dimensional_mode\":\"plane_locked\","
+          "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_bookshelf_01\"}"
+        "}]"
+        "}";
+    char diagnostics[256];
+    char *runtime_json = NULL;
+    CoreResult r = core_scene_compile_authoring_to_runtime(bad_json,
+                                                           &runtime_json,
+                                                           diagnostics,
+                                                           sizeof(diagnostics));
+    if (r.code == CORE_OK) return 1;
+    if (runtime_json != NULL) return 1;
+    if (!strstr(diagnostics, "dimensional_mode must be full_3d")) return 1;
+    return 0;
+}
+
 static int test_authoring_file_read_failure_diagnostics(void) {
     char diagnostics[256];
     CoreResult r = core_scene_compile_authoring_file_to_runtime_file("build/no_such_scene_authoring.json",
@@ -817,6 +899,9 @@ int main(void) {
     RUN_TEST(test_preserve_canonical_primitive_payloads);
     RUN_TEST(test_reject_missing_primitive_payload_for_primitive_object);
     RUN_TEST(test_reject_invalid_primitive_payload_shape);
+    RUN_TEST(test_accept_mesh_asset_instance_geometry_ref);
+    RUN_TEST(test_reject_mesh_asset_instance_wrong_geometry_ref_kind);
+    RUN_TEST(test_reject_mesh_asset_instance_wrong_dimensional_mode);
     RUN_TEST(test_authoring_file_read_failure_diagnostics);
     RUN_TEST(test_runtime_file_write_failure_diagnostics);
     RUN_TEST(test_overlay_merge_rejects_wrong_producer);

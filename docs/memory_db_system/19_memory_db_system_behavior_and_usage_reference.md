@@ -393,6 +393,24 @@ Hierarchy-first active-link policy (Phase 1 contract direction):
   - `write-hier-linked` encodes this policy as a bounded default path for active memory writes
 - allow cross-project links only for explicit shared implementation/dependency bridges
 - for first recategorization passes, prefer additive pillar linking before removing historical links
+- host/site/project routing guidance:
+  - `project` is not limited to application programs
+  - first-class project buckets may represent:
+    - programs/apps
+    - deployed websites
+    - host environments such as `vps_server` or `home_server`
+    - cross-cutting coordination lanes such as `websites` or `workspace`
+  - choose host buckets when the durable truth is mainly about:
+    - machine/runtime state
+    - service health or service-control policy
+    - deploy-environment configuration
+    - shared host audits across multiple sites/programs
+  - choose site/program buckets when the durable truth is mainly about:
+    - implementation work
+    - site-specific deploy outcomes
+    - app-specific packaging, feature, or issue state
+  - use explicit links when one memory depends on both a host bucket and a
+    site/program bucket; do not duplicate the same row across multiple projects
 
 Maintenance:
 - run `rollup` in explicit maintenance windows, not inside every agent turn

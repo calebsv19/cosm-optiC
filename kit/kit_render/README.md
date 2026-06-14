@@ -56,6 +56,9 @@ Borrowed data and lifetime rules:
 - global runtime policy
 - renderer host lifecycle beyond the explicit attach/adopt boundary
 - app-local wrapped-layout rules, cursor policy, hit testing, or widget state
+- optional plain-SDL HUD draw bridges such as `kit_ui_sdl`; those bridge
+  helpers may reuse shared color/style structs while keeping SDL renderer,
+  font-cache, and event-loop ownership in the host
 
 ## Progress
 
@@ -79,6 +82,7 @@ Implemented now:
 16. Vulkan `KIT_RENDER_CMD_TEXT` now delegates to that same extracted shared runtime, removing the duplicate internal raster-font cache path and giving bridge hosts and full command-frame hosts one shared SDL_ttf/cache implementation
 17. additive wrapped UTF-8 draw support through `kit_render_external_text_draw_utf8_wrapped(...)`, so bridge hosts can reuse the same shared cached Vulkan text runtime for wrapped labels instead of keeping one last app-local wrapped-text path
 18. external text font-source unregister now clears derived point-size font cache entries for that source path, preventing stale SDL_ttf font handles from surviving app/menu shutdown and later crashing text measurement
+19. additive external text font-system reset seam through `kit_render_external_text_reset_font_system(...)`, so bridge hosts can flush shared point-size/font-source helper state before `TTF_Quit` and avoid stale derived SDL_ttf handles after runtime/menu lifecycle restarts
 
 ## Planned Growth
 
@@ -196,8 +200,16 @@ The Vulkan backend's internal `KIT_RENDER_CMD_TEXT` path now uses this same shar
 
 These calls are intended for between-frame use so apps can respond to runtime preset-cycle shortcuts without rebuilding the render context.
 
+Plain-SDL hosts that are not using a live `KitRenderContext` can still share the
+same theme/font vocabulary by mapping `core_theme` / `core_font` state into
+their local draw adapter. DataLab currently uses this bridge shape for its
+`kit_ui_sdl` HUDs: `kit_ui` supplies HUD style/layout/corner semantics, while
+DataLab owns active theme selection, SDL text drawing, playback/session policy,
+and runtime preference persistence.
+
 Press `Esc` or close the window to exit.
 
 Recent update notes:
+- `0.14.3`: added `kit_render_external_text_reset_font_system(...)` so bridge hosts can clear shared external-text font caches before SDL_ttf shutdown/restart and avoid stale derived font handles in later text measurement.
 - `0.14.2`: truth-locked the live backend/text boundary, documented borrowed frame-data lifetime rules, added lifecycle/zoom/borrow-contract tests, and rejected backend attachment during an open frame.
 - `0.14.1`: external text font-source unregister now clears derived point-size font cache entries for that source path, preventing stale SDL_ttf font handles from surviving app/menu shutdown and later crashing text measurement.

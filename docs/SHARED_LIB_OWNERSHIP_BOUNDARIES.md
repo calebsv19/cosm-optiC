@@ -18,6 +18,7 @@ This document defines what each shared library owns so behavior does not overlap
 - `core_kernel`: runtime phase orchestration and module lifecycle policy.
 - `core_scene`: scene schema and scene-level object grouping/state metadata.
 - `core_scene_compile`: shared authoring-to-runtime scene compile and normalization boundary.
+- `core_mesh_preview`: viewport-safe runtime mesh preview sidecar contract, bounded feature-edge payload generation, local bounds/source-count metadata, and file-backed preview save/load helpers.
 - `core_space`: coordinate-space mapping, transforms, and grid/window/world conversion.
 - `core_viewport2d`: renderer-agnostic 2D viewport/camera state transitions for fit-to-window, screen/content transforms, drag pan, and cursor-anchor zoom.
 - `core_units`: unit vocabulary, unit conversions, and world-scale conversion primitives.
@@ -27,6 +28,7 @@ This document defines what each shared library owns so behavior does not overlap
 - `core_layout`: renderer-agnostic layout transaction state (runtime/authoring mode, apply/cancel, revision/rebuild flags).
 - `core_config`: lightweight typed runtime configuration table boundary.
 - `core_action`: action identity + trigger-binding registry boundary.
+- `core_headless_job`: shared outer headless job-envelope/report semantics and validation.
 - `core_pane_module`: renderer-agnostic pane-module descriptor registry and binding validation semantics.
 - `core_trace`: trace capture/ingest/export primitives.
 - `core_sim`: UI-free simulation control-plane semantics for fixed-step accumulation, pause/play/single-step state, max-tick clamping, ordered pass execution, and deterministic frame outcomes.
@@ -38,6 +40,7 @@ This document defines what each shared library owns so behavior does not overlap
 ## Kit Libs
 
 - `kit_render`: shared render command vocabulary, frame-recording/submission contract, backend attach/adopt boundary, shared theme/font/text policy resolution, and renderer-adjacent external text helpers. It does not own widget behavior, pane semantics, host event loops/window lifetimes, persistence, or app-local layout/cursor policy.
+- `kit_ui`: shared immediate-mode widget expression, reusable button/state/style semantics, HUD button-row/readout layout, alpha-aware floating HUD style fields, nested corner/inset math, and optional SDL rounded-surface draw adapters. It does not own app action dispatch, playback/session policy, active theme persistence, event loops, retained focus, pane topology, or renderer lifecycle.
 - `kit_viz`: visualization-specific helpers layered on top of core contracts.
 - `kit_workspace_authoring`: host-agnostic authoring interaction glue (entry chord checks, trigger mapping, callback-driven action/text-step adapters) plus host-attach contract guidance for theme/font state handoff and top-level shell parity expectations.
 

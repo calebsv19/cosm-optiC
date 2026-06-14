@@ -99,6 +99,67 @@ static CoreResult kit_ui_button_push_outline(KitRenderFrame *frame,
     return result;
 }
 
+static float kit_ui_button_clampf(float value, float min_value, float max_value) {
+    if (value < min_value) return min_value;
+    if (value > max_value) return max_value;
+    return value;
+}
+
+static KitRenderRect kit_ui_button_inset_rect(KitRenderRect rect, float inset) {
+    if (inset <= 0.0f) {
+        return rect;
+    }
+    rect.x += inset;
+    rect.y += inset;
+    rect.width -= inset * 2.0f;
+    rect.height -= inset * 2.0f;
+    if (rect.width < 0.0f) {
+        rect.width = 0.0f;
+    }
+    if (rect.height < 0.0f) {
+        rect.height = 0.0f;
+    }
+    return rect;
+}
+
+static CoreResult kit_ui_button_push_appearance_fill(KitRenderFrame *frame,
+                                                     KitRenderRect bounds,
+                                                     const KitUiButtonAppearance *appearance,
+                                                     KitRenderColor fill_color,
+                                                     KitRenderColor outline_color) {
+    KitRenderRectCommand rect_cmd;
+    float border = 0.0f;
+    float max_radius = 0.0f;
+    float radius = 0.0f;
+    CoreResult result;
+
+    if (frame == 0 || appearance == 0 || bounds.width <= 0.0f || bounds.height <= 0.0f) {
+        CoreResult invalid = { CORE_ERR_INVALID_ARG, "invalid button appearance bounds" };
+        return invalid;
+    }
+
+    max_radius = (bounds.width < bounds.height ? bounds.width : bounds.height) * 0.5f;
+    radius = kit_ui_button_clampf(appearance->corner_radius, 0.0f, max_radius);
+    border = kit_ui_button_clampf(appearance->border_thickness, 0.0f, max_radius);
+
+    rect_cmd.rect = bounds;
+    rect_cmd.corner_radius = radius;
+    rect_cmd.transform = kit_render_identity_transform();
+
+    if (border > 0.0f) {
+        rect_cmd.color = outline_color;
+        result = kit_render_push_rect(frame, &rect_cmd);
+        if (result.code != CORE_OK) {
+            return result;
+        }
+        rect_cmd.rect = kit_ui_button_inset_rect(bounds, border);
+        rect_cmd.corner_radius = kit_ui_button_clampf(radius - border, 0.0f, max_radius);
+    }
+
+    rect_cmd.color = fill_color;
+    return kit_render_push_rect(frame, &rect_cmd);
+}
+
 void kit_ui_button_state_init(KitUiButtonState *state) {
     if (state == 0) {
         return;
@@ -123,6 +184,51 @@ void kit_ui_button_layout_init(KitUiButtonLayout *layout,
     }
     layout->text_offset_x = text_offset_x;
     layout->text_offset_y = text_offset_y;
+}
+
+void kit_ui_button_appearance_init(KitUiButtonAppearance *appearance) {
+    if (appearance == 0) {
+        return;
+    }
+    appearance->corner_radius = 0.0f;
+    appearance->border_thickness = 1.0f;
+    appearance->padding_x = 14.0f;
+    appearance->padding_y = 9.0f;
+}
+
+int kit_ui_button_appearance_preset(KitUiButtonAppearancePreset preset,
+                                    KitUiButtonAppearance *out_appearance) {
+    if (out_appearance == 0) {
+        return 0;
+    }
+    kit_ui_button_appearance_init(out_appearance);
+    switch (preset) {
+        case KIT_UI_BUTTON_APPEARANCE_DEFAULT:
+            return 1;
+        case KIT_UI_BUTTON_APPEARANCE_ROUNDED:
+            out_appearance->corner_radius = 8.0f;
+            return 1;
+        case KIT_UI_BUTTON_APPEARANCE_COMPACT_ROUNDED:
+            out_appearance->corner_radius = 7.0f;
+            out_appearance->padding_x = 10.0f;
+            out_appearance->padding_y = 7.0f;
+            return 1;
+        case KIT_UI_BUTTON_APPEARANCE_PILL:
+            out_appearance->corner_radius = 9999.0f;
+            out_appearance->padding_x = 12.0f;
+            out_appearance->padding_y = 7.0f;
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+void kit_ui_button_layout_from_appearance(const KitUiButtonAppearance *appearance,
+                                          KitUiButtonLayout *out_layout) {
+    if (appearance == 0 || out_layout == 0) {
+        return;
+    }
+    kit_ui_button_layout_init(out_layout, appearance->padding_x, appearance->padding_y);
 }
 
 void kit_ui_button_text_origin(const KitUiButtonLayout *layout,
@@ -310,6 +416,76 @@ CoreResult kit_ui_draw_button_spec_custom(KitUiContext *ctx,
     result = kit_ui_button_push_outline(
         frame,
         bounds,
+        (KitRenderColor){ style.outline.r, style.outline.g, style.outline.b, style.outline.a });
+    if (result.code != CORE_OK) {
+        return result;
+    }
+
+    kit_ui_button_text_origin(layout, bounds.x, bounds.y, &text_x, &text_y);
+    text_token = spec->state.disabled ? CORE_THEME_COLOR_TEXT_MUTED
+                                      : CORE_THEME_COLOR_TEXT_PRIMARY;
+    text_cmd.origin.x = text_x;
+    text_cmd.origin.y = text_y;
+    text_cmd.text = spec->label;
+    text_cmd.font_role = font_role;
+    text_cmd.text_tier = text_tier;
+    text_cmd.color_token = text_token;
+    text_cmd.transform = kit_render_identity_transform();
+    return kit_render_push_text(frame, &text_cmd);
+}
+
+CoreResult kit_ui_draw_button_spec_appearance(KitUiContext *ctx,
+                                              KitRenderFrame *frame,
+                                              KitRenderRect bounds,
+                                              const KitUiButtonSpec *spec,
+                                              const KitUiButtonLayout *layout,
+                                              const KitUiButtonAppearance *appearance) {
+    return kit_ui_draw_button_spec_appearance_custom(ctx,
+                                                     frame,
+                                                     bounds,
+                                                     spec,
+                                                     layout,
+                                                     appearance,
+                                                     CORE_FONT_ROLE_UI_REGULAR,
+                                                     CORE_FONT_TEXT_SIZE_BASIC);
+}
+
+CoreResult kit_ui_draw_button_spec_appearance_custom(KitUiContext *ctx,
+                                                     KitRenderFrame *frame,
+                                                     KitRenderRect bounds,
+                                                     const KitUiButtonSpec *spec,
+                                                     const KitUiButtonLayout *layout,
+                                                     const KitUiButtonAppearance *appearance,
+                                                     CoreFontRoleId font_role,
+                                                     CoreFontTextSizeTier text_tier) {
+    KitUiButtonStyle style;
+    KitRenderTextCommand text_cmd;
+    CoreThemeColorToken text_token;
+    float text_x;
+    float text_y;
+    CoreResult result;
+
+    if (!ctx || !ctx->render_ctx || !frame || !spec || !layout || !appearance || !spec->label) {
+        CoreResult invalid = { CORE_ERR_INVALID_ARG, "invalid button appearance spec" };
+        return invalid;
+    }
+    if (appearance->corner_radius < 0.0f ||
+        appearance->border_thickness < 0.0f ||
+        appearance->padding_x < 0.0f ||
+        appearance->padding_y < 0.0f) {
+        CoreResult invalid = { CORE_ERR_INVALID_ARG, "invalid button appearance values" };
+        return invalid;
+    }
+    if (!kit_ui_button_style_resolve_preset(&ctx->render_ctx->theme, spec, &style)) {
+        CoreResult invalid = { CORE_ERR_INVALID_ARG, "failed button appearance style resolve" };
+        return invalid;
+    }
+
+    result = kit_ui_button_push_appearance_fill(
+        frame,
+        bounds,
+        appearance,
+        (KitRenderColor){ style.fill.r, style.fill.g, style.fill.b, style.fill.a },
         (KitRenderColor){ style.outline.r, style.outline.g, style.outline.b, style.outline.a });
     if (result.code != CORE_OK) {
         return result;

@@ -34,9 +34,11 @@ static int test_parse_failures_and_root_contract_edges(void) {
     CHECK(core_scene_object_kind_parse("capsule_primitive", &kind).code == CORE_ERR_NOT_FOUND);
     CHECK(kind == CORE_SCENE_OBJECT_KIND_UNKNOWN);
     CHECK(core_scene_object_kind_parse("curve_path", NULL).code == CORE_ERR_INVALID_ARG);
+    CHECK(core_scene_geometry_ref_kind_parse(NULL, NULL).code == CORE_ERR_INVALID_ARG);
 
     CHECK(strcmp(core_scene_space_mode_name(CORE_SCENE_SPACE_MODE_UNKNOWN), "unknown") == 0);
     CHECK(strcmp(core_scene_object_kind_name(CORE_SCENE_OBJECT_KIND_UNKNOWN), "unknown") == 0);
+    CHECK(strcmp(core_scene_geometry_ref_kind_name(CORE_SCENE_GEOMETRY_REF_KIND_UNKNOWN), "unknown") == 0);
 
     core_scene_root_contract_init(&root);
     CHECK(core_scene_root_contract_validate(NULL).code == CORE_ERR_INVALID_ARG);
@@ -234,8 +236,10 @@ static int test_typed_scene_contract_helpers(void) {
     CoreSceneRootContract root;
     CoreSceneObjectContract plane_object;
     CoreSceneObjectContract prism_object;
+    CoreSceneObjectContract mesh_object;
     CoreSceneSpaceMode mode = CORE_SCENE_SPACE_MODE_UNKNOWN;
     CoreSceneObjectKind kind = CORE_SCENE_OBJECT_KIND_UNKNOWN;
+    CoreSceneGeometryRefKind geometry_kind = CORE_SCENE_GEOMETRY_REF_KIND_UNKNOWN;
     CoreResult r;
 
     if (strcmp(core_scene_space_mode_name(CORE_SCENE_SPACE_MODE_2D), "2d") != 0) return 1;
@@ -247,6 +251,12 @@ static int test_typed_scene_contract_helpers(void) {
                "plane_primitive") != 0) return 1;
     if (core_scene_object_kind_parse("rect_prism_primitive", &kind).code != CORE_OK) return 1;
     if (kind != CORE_SCENE_OBJECT_KIND_RECT_PRISM_PRIMITIVE) return 1;
+    if (core_scene_object_kind_parse("mesh_asset_instance", &kind).code != CORE_OK) return 1;
+    if (kind != CORE_SCENE_OBJECT_KIND_MESH_ASSET_INSTANCE) return 1;
+    if (core_scene_geometry_ref_kind_parse("mesh_asset", &geometry_kind).code != CORE_OK) return 1;
+    if (geometry_kind != CORE_SCENE_GEOMETRY_REF_KIND_MESH_ASSET) return 1;
+    if (strcmp(core_scene_geometry_ref_kind_name(CORE_SCENE_GEOMETRY_REF_KIND_SHAPE_ASSET),
+               "shape_asset") != 0) return 1;
 
     core_scene_root_contract_init(&root);
     r = core_scene_root_contract_set_scene_id(&root, "scene_contract");
@@ -282,6 +292,12 @@ static int test_typed_scene_contract_helpers(void) {
 
     prism_object.rect_prism_primitive.depth = 0.0;
     if (core_scene_object_contract_validate(&prism_object).code == CORE_OK) return 1;
+
+    core_scene_object_contract_prepare(&mesh_object, "obj_mesh", CORE_SCENE_OBJECT_KIND_MESH_ASSET_INSTANCE);
+    if (mesh_object.object.dimensional_mode != CORE_OBJECT_DIMENSIONAL_MODE_FULL_3D) return 1;
+    if (core_scene_object_contract_validate(&mesh_object).code != CORE_OK) return 1;
+    mesh_object.has_plane_primitive = true;
+    if (core_scene_object_contract_validate(&mesh_object).code == CORE_OK) return 1;
 
     return 0;
 }

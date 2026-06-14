@@ -1,6 +1,6 @@
 # Program Shared-Lib Connection Gaps
 
-Last updated: 2026-05-06
+Last updated: 2026-06-06
 Purpose: canonical per-program list of shared-lib connection gaps and next integrations.
 
 Use this with:
@@ -14,18 +14,97 @@ Use this with:
 
 ## Per-Program Gap List
 
+### `ball_bounce_sim`
+Current shared profile:
+- `core_sim >= 0.4.0` is now directly adopted in the interactive SDL shell.
+- The adoption is intentionally narrow: shared `core_sim` owns fixed-step
+  control-plane state, pass dispatch, frame outcome status, and tick-count
+  reporting for the `world_run_fixed_tick` pass.
+- Ball Bounce still owns scenarios, units-annotated solver formulas, headless
+  summaries/artifacts, worker-job parsing, worker-exchange packaging, SDL
+  drawing, and `fisiCs` overlay proof behavior.
+- The host links the live shared root through `../shared/core/core_sim` rather
+  than a vendored subtree.
+
+Gaps:
+- `Stabilize`: keep the current `core_sim` adoption as a shell adapter only.
+  Do not move solver equations, scenario meaning, worker contracts, or
+  artifact schemas into shared code without a separate evidence-backed slice.
+- `Missing`: `core_sim_trace` stays deferred unless a future Ball Bounce
+  artifact/report lane needs standardized control-plane trace samples.
+- `Missing`: broader execution-core adoption (`core_queue`, `core_sched`,
+  `core_jobs`, `core_workers`, `core_wake`, `core_kernel`) stays deferred until
+  Ball Bounce has real async/background work or cross-thread wake ownership.
+
+### `video_editor`
+Current shared profile:
+- `core_base`, `core_pane`, `core_theme`, `core_font`, `kit_render`, and
+  `kit_ui` are now linked from the live shared root by the desktop SDL shell.
+- Shared `core_theme` owns palette tokens, shared `core_font` owns role specs,
+  shared `kit_render` owns role/tier/text-zoom policy through a
+  `KIT_RENDER_BACKEND_NULL` context, and shared `kit_ui` owns bounded toolbar
+  button style resolution plus point-in-rect hit semantics for app-local shell
+  routing.
+- Active UTF-8 rasterization and SDL draw submission remain app-local through
+  `src/ui/video_editor_ui_theme_text.c`.
+- Shared `core_pane` owns split-pane solve and splitter-hitbox collection for
+  Library width and Preview/Timeline resizing, while SDL drag lifecycle and
+  `ui_settings.cfg` persistence remain app-local.
+- Shared `core_queue`, `core_jobs`, and `core_workers` now back the first
+  execution-core thumbnail lane: Video Editor schedules decoder thumbnail/sample
+  work off the SDL thread, receives bounded worker completions through a shared
+  queue, and applies those completions through a main-thread job budget.
+- Shared `core_sched`, `core_wake`, and `core_kernel` now back the first outer
+  SDL loop bridge: Video Editor registers an app-owned SDL wake event, preserves
+  user events consumed during wait, uses a shared scheduler timer for frame
+  cadence, exposes the wake object to worker completions, and ticks the shared
+  kernel instead of sleeping through fixed `SDL_Delay(16)` polling.
+- Shared font assets are bundled into `VideoEditor.app`.
+
+Gaps:
+- `Stabilize`: keep the current text/theme bridge honest about its boundary:
+  shared policy is adopted, but SDL drawing, text texture creation, demo-shell
+  layout tuning, and app-specific palette mapping remain Video Editor-owned.
+- `Stabilize`: keep future pane work additive on top of the adopted
+  `core_pane >= 0.3.1` seam. Do not reintroduce app-local split math for pane
+  solve or splitter hitbox collection.
+- `Missing`: shared retained/Vulkan renderer adoption stays deferred until
+  there is a real video preview/render backend seam. Do not route the plain SDL
+  shell through `kit_render_external_text.*` because that helper currently
+  assumes the shared Vulkan renderer runtime.
+- `Missing`: `kit_pane`, `kit_workspace_authoring`, `core_action`, and broader
+  input-control adoption stay deferred until pane interaction presentation,
+  authoring overlays, and command routing need shared ownership.
+- `Partial`: execution-core adoption now covers the first thumbnail/sample
+  worker lane and the first outer SDL loop wait/wake bridge. Broaden this to
+  priority scheduling, preview/proxy/export job classes, and diagnostics only
+  after the thumbnail and loop lanes stay stable under real media.
+
 ### `datalab`
 Current shared profile:
 - Strong on `core_base/core_io/core_data/core_pack`, `core_font`, and `kit_viz`.
 - `WASR-S3` now adopts the shared `kit_workspace_authoring >= 0.5.0` font/theme surface with the required `kit_render`/`core_theme` dependency chain.
+- `kit_ui >= 0.11.1` now owns the bottom playback HUD and top-left session
+  HUD alpha-aware floating style, button/readout row layout, nested
+  corner/inset sizing, and optional SDL rounded panel/button/readout adapter
+  while DataLab keeps playback/action policy, session content, file stepping,
+  manual edge-wrap navigation, active theme persistence, and theme/custom-token
+  mapping local.
 - First incremental `kit_graph_timeseries` adoption is now in place (shared stride guidance for trace decimation).
 
 Gaps:
 - `Stabilize`: Workspace Authoring `WASR-S3` is complete; DataLab now uses the shared font/theme authoring layout, hit IDs, labels, preset mappings, and button-to-action classification while SDL drawing, custom theme editor state, accepted mutation, and persistence remain host-owned.
+- `Stabilize`: the playback HUD and session data HUD are now the first direct
+  DataLab `kit_ui` HUD-row/SDL-adapter adopters; reuse this adapter in one more
+  SDL program before promoting broader app-agnostic action semantics, and only
+  then broaden rounded-surface polish to picker/session panels.
 - `Stabilize`: `core_viewport2d` proving-host adoption is now in place for sketch/image lanes; keep viewport persistence, fit-reset behavior, and future large-image/tiled follow-ons aligned to the shared math contract instead of regressing into app-local viewport drift.
 - `Partial`: continue `kit_graph_timeseries` migration (shared view math, hover inspection, then one shared draw path).
 - `Missing`: `core_trace` trace-import/view path standardization.
-- `Partial`: broaden `core_theme` beyond the authoring surface if/when DataLab UI colors should align fully with shared preset tokens.
+- `Stabilize`: active DataLab runtime HUD colors now follow the persisted
+  workspace-authoring theme/custom palette. Startup/reopen picker polish and
+  broader non-HUD surface theming remain normal UI polish, not a core-theme
+  adoption blocker.
 - `Partial`: normalize profile loaders so all external data lanes map through one shared parsing contract.
 
 ### `daw`
@@ -113,6 +192,8 @@ Current shared profile:
   fit-reset camera math through an app-local world-meter bridge.
 - first `kit_render` adoption is now in place for shared role/tier text sizing
   and text zoom policy through a `KIT_RENDER_BACKEND_NULL` context.
+- `kit_ui >= 0.9.1` is now adopted for the bounded shared button
+  spec/state/style lane through an app-local SDL wrapper.
 - `timer_hud` is now adopted through a thin app-local session adapter with a
   runtime-owned settings path, HUD-off-by-default packaged launcher policy, and
   only two initial scopes: `Gravity Tick` and `Render Frame`.
@@ -149,10 +230,19 @@ Gaps:
   `core_theme` / `core_font` / `kit_render` own policy, while active SDL host
   draw/runtime stays local unless the host later moves onto a shared renderer
   backend that can actually consume `kit_render_external_text.*`.
+- `Stabilize`: first `kit_ui` adoption is now code-backed and intentionally
+  narrow. Keep SDL drawing, palette tuning, interaction routing, and
+  app-specific button placement local while shared `kit_ui >= 0.9.1` owns the
+  reusable button spec/state/style semantics.
 - `Stabilize`: first shared `core_viewport2d` camera slice is now complete;
   keep world-meter bridge policy, viewport input routing, edit-handle hit
   semantics, and far-body despawn behavior app-local while shared
   `core_viewport2d >= 0.1.0` owns generic pan/zoom/fit math.
+- `Partial`: first shared `core_headless_job` protocol adoption is now in
+  place at the wrapper layer only; the visual-review bundle adapter proves the
+  outer `codework_job / headless_bundle_v1` plus shared report surface around
+  the current orbit/body request family, but detached worker-style run roots,
+  status polling, and VPS package wiring remain future work.
 - `Partial`: first TimerHUD adoption is now in place and intentionally narrow;
   keep scope count small, keep the SDL text/render bridge app-local, and avoid
   broad instrumentation churn unless Gravity Orbit Sim becomes an active
@@ -186,12 +276,60 @@ Gaps:
 - `Missing`: `core_data` / `core_pack` should stay deferred until scenario
   persistence expands beyond the current plain-text authoring seam.
 
+### `growth_sim`
+Current shared profile:
+- `core_sim` is adopted through the vendored subtree host for Mold and Fire
+  pass execution.
+- `core_sim_trace >= 0.1.1` over `core_trace >= 1.0.0` is adopted for the
+  deterministic control-plane trace diagnostics route.
+- `core_data >= 1.0.0` is adopted for copied typed Mold and Fire field
+  snapshots.
+- `core_pack >= 1.1.1` is adopted for producer-side Mold and Fire field-frame
+  export and validation.
+- `core_pane` / `kit_pane` are adopted for the pane-backed editor shell.
+- `core_theme`, `core_font`, and `kit_render` are adopted for visual text and
+  theme policy.
+- `kit_ui >= 0.9.0` is now adopted for the richer selected/pressed/focused
+  button semantic contract proven first through the FireSim shell chrome.
+- `core_io` remains an indirect support dependency through shared trace/pack
+  lanes rather than a first-class Growth-owned file API.
+
+Gaps:
+- `Stabilize`: keep Phase 18 trace adoption bounded to shared `core_sim.*`
+  control-plane lanes while mold occupancy/nutrient/decay metrics and launcher
+  handoff markers stay app-owned.
+- `Stabilize`: copied `core_data` snapshots now cover both Mold and Fire scalar
+  fields while live solver storage and domain semantics remain app-local.
+- `Stabilize`: producer-side `core_pack` export is now in place for Mold and
+  Fire field-frame bundles; keep chunk meaning, schema evolution, export-root
+  policy, and consumer handoff semantics app-owned until a second real consumer
+  stabilizes the interchange contract.
+- `Partial`: first shared `core_headless_job` protocol adoption is now in
+  place at the wrapper layer only; the visual-review bundle adapter proves the
+  outer `codework_job / headless_bundle_v1` plus shared report surface around
+  the current field/grid review request family, but detached worker-style run
+  roots, status polling, and VPS package wiring remain future work.
+- `Missing`: shared `sim_growth` extraction remains deferred until a second real
+  Growth ruleset proves repeated solver/domain shape.
+- `Partial`: Growth/Kinetic interop remains unimplemented even though durable
+  field-frame bundles now exist; the next consumer-side work should start from
+  the exported bundle contract instead of inventing a second transport.
+- `Stabilize`: first shared `kit_ui` button-semantics adoption is in place;
+  keep app-specific palette tuning, SDL launcher drawing, and editor behavior
+  policy app-local while shared `kit_ui >= 0.9.0` owns the reusable
+  selected/pressed/focused/variant-aware button contract.
+
 ### `ide`
 Current shared profile:
 - Full execution-core stack adopted (`time/queue/sched/jobs/workers/wake/kernel`).
 - `core_base/core_io/core_data/core_pack` and `core_theme/core_font` are adopted.
 - `kit_workspace_authoring >= 0.5.0` is adopted for the first Workspace
   Authoring host lane.
+- `kit_graph_struct >= 0.8.1` is adopted for the Libraries-panel include
+  dependency graph layout and node hit testing over the IDE-local
+  `include_graph` snapshot.
+- `core_viewport2d >= 0.2.1` is adopted for Libraries-panel graph camera state,
+  cursor-anchor wheel zoom, and drag-pan math.
 
 Gaps:
 - `Partial`: complete migration of remaining ad-hoc file/diagnostics paths into shared `core_io`/`core_data` patterns.
@@ -206,6 +344,12 @@ Gaps:
   and accepted-only preference persistence. Normal runtime remains free of
   authoring HUD/reminder text. Future work should start a new plan for real
   pane/module mutation rather than extending the host-attach lane.
+- `Stabilize`: first `kit_graph_struct` adoption is in place for the
+  Libraries-panel `Graph` view, with `core_viewport2d` now owning graph camera
+  math. Keep compiler include-graph storage, source/header semantics, SDL
+  drawing, graph HUD, collapse policy, and package/build execution behavior
+  IDE-owned while shared modules own generic layout, hit-test, and viewport
+  camera math.
 
 ### `line_drawing`
 Current shared profile:
@@ -234,6 +378,7 @@ Gaps:
 ### `map_forge`
 Current shared profile:
 - `core_base/core_io/core_space/core_time/core_queue/core_sched/core_jobs/core_workers/core_wake/core_kernel/core_theme/core_font` adopted.
+- `core_pane` is now adopted for the first left-pane + constrained-viewport shell under the header.
 - `kit_runtime_diag` adopted for runtime perf diagnostics stage timing and input counter totals.
 - `core_data/core_pack/core_trace` partial/additive.
 
@@ -244,6 +389,7 @@ Gaps:
 - `Stabilize`: Slice 4 diagnostics contract guard complete - deterministic `test_build_safety.sh` assertions now lock required `meta.dataset.json` schema/table keys, and deterministic `map_trace_contract_test` locks shared trace pack chunk presence (`TRHD/TRSM/TREV`) plus canonical runtime lane/marker vocabulary (including `trace_start/trace_end` lifecycle markers).
 - `Stabilize`: Slice 5 trace pack parity guard complete - deterministic `map_trace_contract_test` now locks exact shared `core_pack` chunk count/order (`TRHD` -> `TRSM` -> `TREV`) and deterministic payload sizes for sample/marker chunks.
 - `Stabilize`: runtime diagnostics math/counter consolidation now uses shared `kit_runtime_diag` helpers; app-specific routing/render semantics remain local.
+- `Partial`: first bounded `core_pane` runtime-shell adoption is now in place for the pin workflow lane: the top header now owns a `PINS` toggle, shared `core_pane` solves the left-pane + viewport split, and app-local pane chrome plus pane meaning remain local while splitter interaction and broader pane-host consolidation stay deferred.
 - `Partial`: first bounded `core_viewport2d` camera bridge is now in place for cursor-anchor zoom and drag-pan math; keep Mercator projection, hot `screen<->world` render transforms, region-fit policy, and smoothing semantics local while stabilizing parity coverage.
 - `Partial`: Workspace Authoring `MFWA1-S0/S1/S2/S3/S4` baseline, host-entry, active pane/surface overlay, shared Font/Theme overlay, and accepted-only persistence slices are complete. Vendored `kit_workspace_authoring` is refreshed to `0.5.0`, Carta routes the shared `Alt+C` then `Alt+V` entry/toggle chord before normal map input while keeping normal runtime free of authoring HUD/reminder text, active pane/surface mode uses shared overlay button geometry/hit testing with app-local surface inventory drawing over the live map shell, and Font/Theme mode uses the shared full-screen layout, hit testing, labels, enabled checks, preset mappings, and action classification while MapForge owns SDL drawing plus live theme/font/text-size preview mutation. Apply persists accepted drafts through app-owned preference lanes; Cancel/toggle-off/shutdown restore the entry baseline. Next is closeout and next-host selection.
 - `Partial`: consolidate map diagnostics into stronger `core_data` contracts and route optional diagnostics archives through `core_pack`.
@@ -253,7 +399,11 @@ Gaps:
 Current shared profile:
 - Strong on `core_base/core_io/core_pack/core_scene`, plus `kit_viz`, theme/font.
 - `core_pane` is now adopted for editor-shell geometry in `PS4D-2B`, and live splitter hover/drag now adopts shared `kit_pane` through the vendored subtree host.
+- `core_viewport2d >= 0.2.1` is now partially adopted for the retained-scene `2D` editor camera path: fit-reset, cursor-anchor zoom, drag-pan, and screen/content transforms now route through the shared viewport math while canvas selection, scene-world meaning, and `3D` orbit behavior remain app-local.
 - first `kit_render` adoption is now in place for shared font policy resolution plus one shared Vulkan text runtime path through the app-local font bridge.
+- first `kit_ui >= 0.9.1` adoption is now in place for bounded menu/editor
+  button spec/state/style semantics through the app-local
+  `physics_sim_ui_button` SDL wrapper.
 - `core_sim >= 0.2.0` is now partially adopted for scene-level runtime stepping and the 3D solver first-pass shell: `SceneState` owns persistent loop state, the frame substep loop runs through seven ordered simulation passes, the scaffold backend owns nested solver loop state, and frame outcome diagnostics are test-covered.
 - the host now consumes those shared modules through a vendored `third_party/codework_shared` subtree instead of direct workspace-local `../shared` linkage.
 - `core_data` and `core_trace` partial.
@@ -261,7 +411,11 @@ Current shared profile:
 Gaps:
 - `Stabilize`: first scene-level `core_sim` pass-network slice is now complete; keep fluid equations, mode hook bodies, emitter/backend/object operations, scene time semantics, and HUD/render payloads app-local while shared `core_sim` owns pass ordering, tick/frame outcome shape, pause sync, and exact substep-count execution.
 - `Stabilize`: first shared pane-resize slice is now complete; keep pane purpose, viewport behavior, and editor semantics app-local while shared `core_pane >= 0.2.0` owns split solve and shared `kit_pane >= 0.2.0` owns splitter hover/drag interaction state.
+- `Stabilize`: the retained-scene `2D` editor viewport bridge is now complete; keep scene bounds authority, local canvas rect routing, `3D` orbit projection, and higher-level editor gesture policy app-local while shared `core_viewport2d` owns fit-reset, cursor-anchor zoom, drag-pan, and screen/content transform math.
 - `Partial`: complete PhysicsSim visual parity validation and trim the remaining bridge-only wrappers now that the cache/runtime layer itself lives in shared `kit_render`.
+- `Stabilize`: keep the current `kit_ui` lane bounded to shared button
+  spec/state/style semantics while SDL drawing, palette tuning, and exact
+  menu/editor placement remain app-local.
 - `Stabilize`: Workspace Authoring `PSWA1-S1/S2/S3/S4/S5` is complete on the menu/editor shell; shared `kit_workspace_authoring >= 0.5.0` owns the entry/toggle chord, active reserved-trigger capture, active pane-overlay button geometry/hit testing, and full-screen Font/Theme layout/hit/action semantics while SDL drawing, pane/module labels, `SceneEditorPaneHost` geometry readout, runtime preview mutation, and accepted-only persistence remain app-local. Apply saves theme/font/text-size through ignored `data/runtime` state, Cancel/shutdown restore active previews without saving, and S5 closed as docs/status only with no additional app commit.
 - `Partial`: deepen `core_data` model breadth beyond current export tables into broader sim-domain datasets.
 - `Partial`: further align `core_pack` payload semantics with canonical `core_data` schema.
@@ -271,7 +425,7 @@ Gaps:
 Current shared profile:
 - `core_font` adopted for shell text through the vendored shared subtree.
 - `core_pane` adopted for top-level shell geometry in `UI-S3`.
-- `core_theme`, `kit_render`, and `kit_pane` are now also adopted for shared splitter hover/drag interaction and shared shell color/text policy while active SDL draw ownership stays local.
+- `core_theme`, `kit_render`, `kit_ui`, and `kit_pane` are now also adopted for shared splitter hover/drag interaction, shared shell color/text policy, direct `KitRenderRect` authoring-overlay handoff types, and shared button spec/state/style semantics while active SDL draw ownership stays local.
 - `core_sim >= 0.4.0` adopted for persistent `CoreSimLoopState` ownership, frame records, and behavior-preserving ordered stub-pass execution through a 30ms simulation shell.
 - `core_sim_trace >= 0.1.0` adopted for shared headless control-plane trace sample/marker diagnostics beside app-owned behavior metrics.
 - `kit_workspace_authoring >= 0.5.0` adopted for the first Workspace Authoring host-attach slices: shared `Alt+C`/`Alt+V` entry chord handling, active authoring reserved-trigger classification, shared overlay button layout/hit testing for active-only pane mode, and shared font/theme layout/hit/action classification for text-size preview.
@@ -286,29 +440,44 @@ Gaps:
 - `Stabilize`: persistent `core_sim` behavior host slice is complete; keep window wait policy, world/entity storage, metrics meaning, and domain policies app-local while shared `core_sim` owns fixed-step loop state, single-step consumption, frame outcomes, frame records, and ordered pass-routing shell.
 - `Stabilize`: `core_sim_trace` adoption is now complete for the headless control-plane summary; keep behavior-domain trace lanes and durable data/pack artifacts deferred until multiple hosts prove those schemas.
 - `Partial`: Workspace Authoring `BWA1-S1` is complete as an invisible host state; next stabilization step is an active-only pane overlay before adopting the shared full-screen font/theme panel.
-- `Missing`: evaluate broader `kit_ui` adoption only if later shell chrome and interaction semantics justify a fuller shared presentation host.
+- `Stabilize`: `kit_ui` is now directly adopted for the bounded shell button semantics lane; keep app-local drawing, palette tuning, and interaction routing outside the shared button contract.
 - `Missing`: broader runtime/domain shared-lib promotion beyond pass routing should stay deferred until the local sim model proves stable enough to generalize.
 
 ### `drawing_program`
 Current shared profile:
-- `core_base`, `core_pack`, `core_theme`, and `core_font` are adopted.
+- `core_base`, `core_pack`, `core_theme`, `core_font`, `core_scene`, and `core_viewport2d` are adopted.
+- `core_object` is also directly adopted in the bounded texture-scene import lane for `CoreObjectVec3` parsing and plane-lock helpers while broader object/store semantics remain app-local.
+- `core_authored_texture >= 0.1.1` is now partially adopted through the authored-texture export contract lane: manifest schema/version, binding/output/primitive vocabulary, and JSON-free contract validation helpers now come from the shared module while JSON writing and PNG export policy remain app-local.
 - the host now defaults to a vendored `third_party/codework_shared` subtree for build/package/shared-font asset resolution instead of live `../shared` wiring.
 - the active SDL text/runtime lane is centralized in app-local facade files and already defaults to the shared `ide` font baseline.
 - pane-shell geometry and layout transaction state also adopt shared `core_pane`, `core_layout`, and `core_pane_module`, and live splitter hover/drag now adopts shared `kit_pane` through the vendored subtree host.
-- `WA1-S4` plus `WASR-S4` now adopt vendored `kit_workspace_authoring >= 0.5.0` for shared entry-chord, reserved-trigger, overlay-cycle, font/theme layout, standard button hit testing, labels, enabled-state checks, preset mappings, and button-to-action classification while the app-local frame chrome derives pane/module readout from shared pane-module bindings and keeps SDL drawing, accepted-only state mutation, snapshot persistence, and pane/module content host-owned; module swapping remains a future WA1 slice.
+- panel button framing now adopts shared `kit_ui` button spec/state/style semantics while SDL drawing and palette policy stay app-local.
+- `WA1-S4` plus `WASR-S4` now adopt vendored `kit_workspace_authoring >= 0.5.0` for shared entry-chord, reserved-trigger, overlay-cycle, font/theme layout, standard button hit testing, labels, enabled-state checks, preset mappings, and button-to-action classification, and the authoring chrome also directly consumes `kit_workspace_authoring_ui` helpers plus narrow `kit_render` geometry types (`KitRenderRect`) while the app-local frame chrome derives pane/module readout from shared pane-module bindings and keeps SDL drawing, accepted-only state mutation, snapshot persistence, and pane/module content host-owned; module swapping remains a future WA1 slice.
 
 Gaps:
 - `Stabilize`: mixed vendored/live host cleanup is complete; keep future shared updates flowing through `bin/update_shared_subtrees.sh` instead of reopening workspace-linked defaults except for bounded local debugging.
 - `Stabilize`: packaged font assets and runtime font-path fallback now resolve through vendored/shared packaged locations first; keep launcher/package expectations aligned with that contract.
 - `Stabilize`: first shared pane-resize slice is now complete; keep pane meaning and panel/canvas semantics app-local while shared `core_pane >= 0.3.0` owns split solve plus cached splitter-hit enumeration and shared `kit_pane >= 0.3.0` owns splitter hover/drag interaction state. `drawing_program` is now the first proving host routing hover/begin-drag through the cached-hit registry before any IDE cutover.
 - `Stabilize`: startup/session persistence failures observed during this rollout were traced to stale incremental objects after shared header churn, not to invalid `core_pane` / `kit_pane` pack contracts. Future hosts that adopt pane/session struct changes should either run an explicit clean rebuild before diagnosis or keep Makefile/header dependency coverage in place so saved pack debugging is not polluted by mixed-object binaries.
+- `Partial`: first `core_authored_texture` cutover is now in place for authored-texture export semantics, but it is intentionally bridge-first. `drawing_program` still defaults to the vendored subtree host and uses a bounded workspace-shared fallback until the next clean subtree refresh lands. Keep JSON writing, PNG/file IO, and editor UX app-local while only schema meaning/validation stays shared.
 - `Partial`: first Workspace Authoring `WA1` host attach is in place through pane/module chrome, draft Apply/Cancel, accepted-only persistence, overlay cycling, and shared `kit_workspace_authoring >= 0.5.0` font/theme surface adoption; next stabilize step is visual acceptance plus closeout before module-content swapping or next-host rollout.
-- `Missing`: evaluate shared `kit_render` adoption only if a future visual/runtime pass shows clear value beyond the existing centralized SDL text lane.
+- `Stabilize`: keep the current `kit_render` surface narrow to shared authoring-overlay geometry/layout types unless a future visual/runtime pass justifies broader renderer/runtime extraction beyond the centralized SDL text lane.
 - `Missing`: broader shared-core promotion (`core_io`, `core_data`, `core_trace`, execution core) should stay deferred until a concrete app lane needs it.
 
 ### `ray_tracing`
 Current shared profile:
 - Broad shared adoption: `core_base/core_io/core_scene/core_space/core_time`, theme/font, `kit_viz`.
+- partial execution-core adoption is now in place through shared
+  `core_queue >= 1.0.0` and `core_workers >= 1.0.0` in the native `3D` tile
+  scheduler completion and worker lanes, while tile planning, adaptive split
+  policy, and the rest of execution-core ownership remain RayTracing-owned.
+- `core_mesh_asset >= 0.3.0` is now partially adopted through the MRT2 runtime
+  mesh asset loader: schema meaning, runtime payload validation, and file-backed
+  runtime mesh document loading route through the shared module, while
+  scene-relative asset resolution, JSON scene traversal, retained app-local mesh
+  asset sets, native triangle build, material lookup, and acceleration remain
+  RayTracing-owned.
+- `core_authored_texture >= 0.1.1` is now partially adopted through the authored-texture loader/runtime-binding lane: schema/version, binding/output/primitive vocabulary, face-role semantics, and JSON-free manifest-contract validation now route through the shared module while JSON parsing, image loading, runtime invalid-binding UX, and scene persistence remain app-local.
 - `core_data/core_pack/core_trace` are partly additive/tooling-oriented.
 - `core_scene_compile` pre-`TP-S3` baseline wiring is now in place for authoring->runtime handoff preflight.
 - first `kit_render` adoption slice is now in place for the font migration: Makefile wiring, shared role/tier/render-scale bridge policy, active helper/menu/timer-HUD UTF-8 measure/draw runtime, and wrapped helper labels now route through the shared external text path.
@@ -332,20 +501,33 @@ Gaps:
 - `Stabilize`: vendored shared simulation cutover is complete; `CORE_SIM_DIR` now resolves through `third_party/codework_shared` and the subtree snapshot is refreshed to the current committed shared baseline.
 - `Stabilize`: native `3D` tile preview now relies on the additive shared `vk_renderer` in-place texture subrect update seam (`shared/vk_renderer >= 1.1.0`) instead of recreating a fresh full-frame preview texture for each visible tile step.
 - `Stabilize`: first Workspace Authoring host attach is closed for rollout over the menu/scene-editor shell. `RWA1-S0/S1/S2/S3/S4/S5` are complete as an implementation/docs lane: the vendored authoring kit is refreshed to `kit_workspace_authoring >= 0.5.0`, the shared `Alt+C` then `Alt+V` entry/toggle chord routes before menu/editor input, active-only pane overlay drawing uses shared overlay button layout/hit testing with app-local RayTracing pane/module readout, the full-screen Font/Theme overlay uses shared layout, hit testing, labels, enabled checks, preset mappings, and button-to-action classification, and accepted-only persistence routes text/font/theme drafts through app-owned preference lanes. Reserved authoring triggers are consumed only while active, `Tab` / Mode cycles overlay state, `Enter` / Apply accepts and persists the runtime draft, `Esc` / Cancel restores the entry baseline, Add/custom theme slots remain stubs, and normal runtime remains free of authoring HUD/reminder text. The package gate is no longer blocked by TimerHUD drift when built against the current live shared root; the vendored TimerHUD subtree refresh remains a separate support-lane follow-up, and `map_forge` has since started its follow-on attach through `MFWA1-S1`.
+- `Partial`: first `core_authored_texture` cutover is now in place for authored-texture loader validation and face-role vocabulary, but it is intentionally bridge-first. `ray_tracing` still defaults to the vendored subtree host and uses a bounded workspace-shared fallback until the next clean subtree refresh lands. Keep JSON parsing, PNG/image IO, runtime invalid-binding UX, and scene persistence app-local while only schema meaning/validation stays shared.
+- `Partial`: first `core_mesh_asset` cutover is now in place for runtime mesh
+  asset file validation and payload ownership. `ray_tracing` uses a
+  workspace-shared fallback until the vendored subtree includes
+  `core_mesh_asset`; keep native `3D` triangle generation and BVH out of this
+  shared contract.
 - `Partial`: TimerHUD host adoption is now on the explicit `TimerHUDSession` path for `ray_tracing`: the app owns session creation/config, frame and per-pass timer hooks now route through session APIs, and the packaged launcher exports runtime-owned TimerHUD settings/output defaults with the overlay forced on for proof. The remaining follow-up is vendored `third_party/codework_shared/timer_hud` subtree refresh in a clean worktree so the default subtree-backed build matches the live shared-root verification path.
-- `Missing`: execution-core adoption beyond `core_time` if worker/job/scheduler behavior should be standardized with IDE/MapForge.
+- `Partial`: native `3D` tile scheduling now uses shared `core_queue` and
+  `core_workers` for bounded completion handoff plus worker-pool dispatch; keep
+  scheduler/job/wake/kernel policy and tile-domain behavior app-local unless a
+  broader execution-core convergence is justified later.
 
 ### `line_drawing`
 Current shared profile:
-- Broad shared adoption: `core_base/core_scene/core_trace/core_math/core_time`, theme/font, vendored shape/timer HUD dependencies.
+- Broad shared adoption: `core_base/core_scene/core_trace/core_math/core_time`, theme/font, and vendored shape dependencies.
 - the host now consumes that shared surface through a vendored `third_party/codework_shared` subtree instead of direct workspace-local `../shared` linkage.
 - first `kit_render` adoption slice is now in place for the font migration: Makefile wiring, shared role/tier/zoom bridge policy, active Vulkan UTF-8 draw/measure runtime, and packaged launcher/runtime default alignment to the shared `ide` font baseline.
 - first pane-host interaction slice is now in place for layout resizing: shared `core_pane` owns pane solve and shared `kit_pane` owns splitter hover/drag state while pane purpose stays app-local.
+- first `core_mesh_asset >= 0.3.1` adoption slice is now in place for the object-workspace asset lane: primitive-seed authored object assets save/load through shared `mesh_asset_authoring_v1` documents while `ObjectAuthoring` evaluation, app-local extensions, and asset-browser UX remain local.
+- first `core_mesh_preview >= 0.1.0` adoption slice is now in place for the imported STL/runtime mesh viewport lane: shared `core_mesh_preview_runtime_v1` sidecars own bounded feature-edge preview payloads, source counts, and local bounds while `line_drawing` keeps renderer colors, selection, hitboxes, auto-scale placement, scene-bounds preservation, and pane readouts local.
 - first Workspace Authoring host slices are now in place: `kit_workspace_authoring >= 0.5.0` owns the entry chord, reserved trigger semantics, overlay button layout/hit testing, and full-screen font/theme panel layout/hit/action semantics while `line_drawing` owns SDL routing, host state, app-local pane readout drawing, runtime font/theme preview, and accepted-only preference persistence.
 
 Gaps:
 - `Stabilize`: first font-runtime unification slice is complete; active Vulkan text and the former scattered fallback UI text paths now route through the centralized bridge/helper layer over shared `kit_render`, while remaining drift is bounded to centralized non-Vulkan fallback behavior and thin local fallback font-path ownership.
 - `Stabilize`: first shared pane-resize slice is complete; keep future resizing/persistence/layout-authoring work additive on top of the shared `core_pane` + `kit_pane` seam instead of reopening app-local splitter math.
+- `Stabilize`: keep the object-asset primitive-seed save/load lane on shared `core_mesh_asset` documents while `ObjectAuthoring` evaluation, line-drawing extension payloads, mesh generation, and asset browser/UI semantics remain app-local.
+- `Stabilize`: keep runtime mesh viewport previews on shared `core_mesh_preview` sidecars so high-triangle imported STL assets do not require full triangle rendering in UI paths; defer retopo/LOD/GPU-buffer/collision-proxy ownership until RayTracing and PhysicsSim adoption needs are concrete.
 - `Stabilize`: `LDWA1` host attach is complete through S5; active-only pane overlay, shared full-screen font/theme panel adoption, accepted-only preference persistence, and closeout are done, with module content placement still deferred.
 - `Missing`: decide later whether the centralized non-Vulkan fallback in `text_draw.c` should also move fully into shared runtime, or whether it should remain intentionally local because the Vulkan path is the authoritative host mode.
 - `Missing`: execution-core adoption beyond `core_time` only if future loop/dispatch behavior warrants standardization.
@@ -370,7 +552,9 @@ Gaps:
    (`ray_tracing`).
 2. Complete `core_data` + `core_pack` consolidation in `map_forge`, `ray_tracing`, `physics_sim` (DAW is now stabilize-only for this lane).
 3. Expand standardized runtime `core_trace` lanes in `map_forge`, `physics_sim`, and later `core_sim` host adapters where tooling-first usage still dominates.
-4. Evaluate high-value execution-core adoption candidates in `ray_tracing` (`queue/sched/jobs/workers/wake/kernel`) beyond `core_time`.
+4. Evaluate whether `ray_tracing` should widen beyond the current
+   `core_queue`/`core_workers` tile-scheduler slice into broader execution-core
+   adoption (`sched/jobs/wake/kernel`).
 4. Keep `line_drawing` in stabilize mode and only migrate additional IO/helpers or fallback text paths when they provide clear value beyond the now-shared active Vulkan runtime.
 5. Keep `drawing_program` in stabilize mode and only revisit shared text-runtime extraction if the centralized SDL lane becomes a real maintenance problem.
 6. Expand `fisiCs` shared-core usage only where it improves compiler/runtime clarity without disrupting shim-focused flows.

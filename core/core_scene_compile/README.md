@@ -5,7 +5,7 @@ Shared authoring-to-runtime scene compiler for the CodeWork scene pipeline.
 ## Purpose
 Compile `scene_authoring_v1` JSON into deterministic `scene_runtime_v1` JSON that downstream apps such as `ray_tracing`, `physics_sim`, and `line_drawing` can consume.
 
-## Current Scope (v0.3.1)
+## Current Scope (v0.4.0)
 - owns the shared authoring-to-runtime normalization boundary only:
   - validates core authoring contract keys and semantic lanes,
   - emits deterministic runtime JSON with normalized canonical lanes,
@@ -27,6 +27,11 @@ Compile `scene_authoring_v1` JSON into deterministic `scene_runtime_v1` JSON tha
   - `object_type=rect_prism_primitive` requires a valid `objects[].primitive`,
   - malformed primitive payloads are rejected before runtime handoff,
   - validated canonical `primitive` payload remains intact in `scene_runtime_v1`.
+- validates staged shared geometry-reference semantics for reusable assets:
+  - existing `geometry_ref.id` handling remains backward-compatible,
+  - `geometry_ref.kind` now accepts shared vocabulary from `core_scene`,
+  - `object_type=mesh_asset_instance` requires `geometry_ref.kind=mesh_asset`,
+  - `mesh_asset_instance` must remain `full_3d` and carries no primitive payload.
 - includes helper surfaces around the compiler boundary:
   - `tools/scene_contract_diff.c` performs semantic diff checks for runtime scene drift,
   - `include/core_scene_overlay_merge_shared.h` centralizes overlay metadata validation and shared writeback merge guards for app bridges.
@@ -53,6 +58,10 @@ Compile `scene_authoring_v1` JSON into deterministic `scene_runtime_v1` JSON tha
 - binary/pack output generation,
 - app-specific override merge policy,
 - retained runtime-scene ownership, renderer behavior, or editor UX.
+
+## 2026-05-25 Update (v0.4.0)
+- extended the shared scene compiler to recognize `mesh_asset_instance` and shared `geometry_ref.kind` vocabulary.
+- kept legacy `shape_asset` geometry references backward-compatible while adding staged validation for `mesh_asset`.
 
 ## 2026-05-16 Update (v0.3.1)
 - truth-locked the bounded parser and helper-surface boundary.

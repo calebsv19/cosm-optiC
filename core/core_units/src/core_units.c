@@ -13,17 +13,18 @@
 
 typedef struct CoreUnitInfo {
     CoreUnitKind kind;
-    const char *name;
+    const char *canonical_name;
+    const char *legacy_name;
     const char *symbol;
     double meters_per_unit;
 } CoreUnitInfo;
 
 static const CoreUnitInfo k_units[] = {
-    { CORE_UNIT_METER, "meters", "m", 1.0 },
-    { CORE_UNIT_CENTIMETER, "centimeters", "cm", 0.01 },
-    { CORE_UNIT_MILLIMETER, "millimeters", "mm", 0.001 },
-    { CORE_UNIT_INCH, "inches", "in", 0.0254 },
-    { CORE_UNIT_FOOT, "feet", "ft", 0.3048 }
+    { CORE_UNIT_METER, "meter", "meters", "m", 1.0 },
+    { CORE_UNIT_CENTIMETER, "centimeter", "centimeters", "cm", 0.01 },
+    { CORE_UNIT_MILLIMETER, "millimeter", "millimeters", "mm", 0.001 },
+    { CORE_UNIT_INCH, "inch", "inches", "in", 0.0254 },
+    { CORE_UNIT_FOOT, "foot", "feet", "ft", 0.3048 }
 };
 
 static const CoreUnitInfo *core_units_info(CoreUnitKind kind) {
@@ -52,7 +53,7 @@ static int text_equals_ci(const char *a, const char *b) {
 
 const char *core_units_kind_name(CoreUnitKind kind) {
     const CoreUnitInfo *info = core_units_info(kind);
-    return info ? info->name : "unknown";
+    return info ? info->canonical_name : "unknown";
 }
 
 const char *core_units_kind_symbol(CoreUnitKind kind) {
@@ -72,7 +73,9 @@ CoreResult core_units_parse_kind(const char *text, CoreUnitKind *out_kind) {
 
     for (i = 0; i < sizeof(k_units) / sizeof(k_units[0]); ++i) {
         const CoreUnitInfo *info = &k_units[i];
-        if (text_equals_ci(text, info->name) || text_equals_ci(text, info->symbol)) {
+        if (text_equals_ci(text, info->canonical_name) ||
+            text_equals_ci(text, info->legacy_name) ||
+            text_equals_ci(text, info->symbol)) {
             *out_kind = info->kind;
             return core_result_ok();
         }

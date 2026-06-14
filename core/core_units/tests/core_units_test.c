@@ -13,11 +13,11 @@ int main(void) {
     CoreResult r;
     double value = 0.0;
 
-    if (strcmp(core_units_kind_name(CORE_UNIT_METER), "meters") != 0) return 1;
-    if (strcmp(core_units_kind_name(CORE_UNIT_CENTIMETER), "centimeters") != 0) return 1;
-    if (strcmp(core_units_kind_name(CORE_UNIT_MILLIMETER), "millimeters") != 0) return 1;
-    if (strcmp(core_units_kind_name(CORE_UNIT_INCH), "inches") != 0) return 1;
-    if (strcmp(core_units_kind_name(CORE_UNIT_FOOT), "feet") != 0) return 1;
+    if (strcmp(core_units_kind_name(CORE_UNIT_METER), "meter") != 0) return 1;
+    if (strcmp(core_units_kind_name(CORE_UNIT_CENTIMETER), "centimeter") != 0) return 1;
+    if (strcmp(core_units_kind_name(CORE_UNIT_MILLIMETER), "millimeter") != 0) return 1;
+    if (strcmp(core_units_kind_name(CORE_UNIT_INCH), "inch") != 0) return 1;
+    if (strcmp(core_units_kind_name(CORE_UNIT_FOOT), "foot") != 0) return 1;
     if (strcmp(core_units_kind_name(CORE_UNIT_UNKNOWN), "unknown") != 0) return 1;
 
     if (strcmp(core_units_kind_symbol(CORE_UNIT_METER), "m") != 0) return 1;
@@ -27,22 +27,32 @@ int main(void) {
     if (strcmp(core_units_kind_symbol(CORE_UNIT_FOOT), "ft") != 0) return 1;
     if (strcmp(core_units_kind_symbol(CORE_UNIT_UNKNOWN), "?") != 0) return 1;
 
+    r = core_units_parse_kind("meter", &kind);
+    if (r.code != CORE_OK || kind != CORE_UNIT_METER) return 1;
     r = core_units_parse_kind("meters", &kind);
     if (r.code != CORE_OK || kind != CORE_UNIT_METER) return 1;
     r = core_units_parse_kind("M", &kind);
     if (r.code != CORE_OK || kind != CORE_UNIT_METER) return 1;
+    r = core_units_parse_kind("centimeter", &kind);
+    if (r.code != CORE_OK || kind != CORE_UNIT_CENTIMETER) return 1;
     r = core_units_parse_kind("CENTIMETERS", &kind);
     if (r.code != CORE_OK || kind != CORE_UNIT_CENTIMETER) return 1;
     r = core_units_parse_kind("Cm", &kind);
     if (r.code != CORE_OK || kind != CORE_UNIT_CENTIMETER) return 1;
+    r = core_units_parse_kind("millimeter", &kind);
+    if (r.code != CORE_OK || kind != CORE_UNIT_MILLIMETER) return 1;
     r = core_units_parse_kind("millimeters", &kind);
     if (r.code != CORE_OK || kind != CORE_UNIT_MILLIMETER) return 1;
     r = core_units_parse_kind("MM", &kind);
     if (r.code != CORE_OK || kind != CORE_UNIT_MILLIMETER) return 1;
+    r = core_units_parse_kind("inch", &kind);
+    if (r.code != CORE_OK || kind != CORE_UNIT_INCH) return 1;
     r = core_units_parse_kind("inches", &kind);
     if (r.code != CORE_OK || kind != CORE_UNIT_INCH) return 1;
     r = core_units_parse_kind("IN", &kind);
     if (r.code != CORE_OK || kind != CORE_UNIT_INCH) return 1;
+    r = core_units_parse_kind("foot", &kind);
+    if (r.code != CORE_OK || kind != CORE_UNIT_FOOT) return 1;
     r = core_units_parse_kind("feet", &kind);
     if (r.code != CORE_OK || kind != CORE_UNIT_FOOT) return 1;
     r = core_units_parse_kind("Ft", &kind);

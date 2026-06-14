@@ -162,6 +162,7 @@ const char *core_scene_object_kind_name(CoreSceneObjectKind kind) {
         case CORE_SCENE_OBJECT_KIND_EDGE_SET: return "edge_set";
         case CORE_SCENE_OBJECT_KIND_PLANE_PRIMITIVE: return "plane_primitive";
         case CORE_SCENE_OBJECT_KIND_RECT_PRISM_PRIMITIVE: return "rect_prism_primitive";
+        case CORE_SCENE_OBJECT_KIND_MESH_ASSET_INSTANCE: return "mesh_asset_instance";
         case CORE_SCENE_OBJECT_KIND_UNKNOWN:
         default: return "unknown";
     }
@@ -196,9 +197,44 @@ CoreResult core_scene_object_kind_parse(const char *text, CoreSceneObjectKind *o
         *out_kind = CORE_SCENE_OBJECT_KIND_RECT_PRISM_PRIMITIVE;
         return core_result_ok();
     }
+    if (strcmp(text, "mesh_asset_instance") == 0) {
+        *out_kind = CORE_SCENE_OBJECT_KIND_MESH_ASSET_INSTANCE;
+        return core_result_ok();
+    }
 
     {
         CoreResult r = { CORE_ERR_NOT_FOUND, "unknown scene object kind" };
+        return r;
+    }
+}
+
+const char *core_scene_geometry_ref_kind_name(CoreSceneGeometryRefKind kind) {
+    switch (kind) {
+        case CORE_SCENE_GEOMETRY_REF_KIND_SHAPE_ASSET: return "shape_asset";
+        case CORE_SCENE_GEOMETRY_REF_KIND_MESH_ASSET: return "mesh_asset";
+        case CORE_SCENE_GEOMETRY_REF_KIND_UNKNOWN:
+        default: return "unknown";
+    }
+}
+
+CoreResult core_scene_geometry_ref_kind_parse(const char *text, CoreSceneGeometryRefKind *out_kind) {
+    if (out_kind) {
+        *out_kind = CORE_SCENE_GEOMETRY_REF_KIND_UNKNOWN;
+    }
+    if (!text || !out_kind) {
+        CoreResult r = { CORE_ERR_INVALID_ARG, "invalid argument" };
+        return r;
+    }
+    if (strcmp(text, "shape_asset") == 0) {
+        *out_kind = CORE_SCENE_GEOMETRY_REF_KIND_SHAPE_ASSET;
+        return core_result_ok();
+    }
+    if (strcmp(text, "mesh_asset") == 0) {
+        *out_kind = CORE_SCENE_GEOMETRY_REF_KIND_MESH_ASSET;
+        return core_result_ok();
+    }
+    {
+        CoreResult r = { CORE_ERR_NOT_FOUND, "unknown geometry_ref kind" };
         return r;
     }
 }
@@ -336,7 +372,8 @@ CoreResult core_scene_object_contract_prepare(CoreSceneObjectContract *contract,
         if (r.code != CORE_OK) return r;
     }
 
-    if (kind == CORE_SCENE_OBJECT_KIND_RECT_PRISM_PRIMITIVE) {
+    if (kind == CORE_SCENE_OBJECT_KIND_RECT_PRISM_PRIMITIVE ||
+        kind == CORE_SCENE_OBJECT_KIND_MESH_ASSET_INSTANCE) {
         return core_object_promote_to_full_3d(&contract->object);
     }
 
@@ -386,6 +423,18 @@ CoreResult core_scene_object_contract_validate(const CoreSceneObjectContract *co
             return r;
         }
         return core_scene_rect_prism_primitive_validate(&contract->rect_prism_primitive);
+    }
+
+    if (contract->kind == CORE_SCENE_OBJECT_KIND_MESH_ASSET_INSTANCE) {
+        if (contract->has_plane_primitive || contract->has_rect_prism_primitive) {
+            CoreResult r = { CORE_ERR_INVALID_ARG, "mesh asset instance cannot carry primitive payload" };
+            return r;
+        }
+        if (contract->object.dimensional_mode != CORE_OBJECT_DIMENSIONAL_MODE_FULL_3D) {
+            CoreResult r = { CORE_ERR_INVALID_ARG, "mesh asset instance must be full_3d" };
+            return r;
+        }
+        return core_result_ok();
     }
 
     if (contract->has_plane_primitive || contract->has_rect_prism_primitive) {
