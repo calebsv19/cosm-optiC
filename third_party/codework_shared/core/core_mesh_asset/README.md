@@ -31,7 +31,7 @@ Shared reusable 3D mesh-asset contract semantics for the physics trio object-aut
 - No scene-instance ownership (`core_scene` remains the long-term scene envelope owner)
 - No render acceleration structures, GPU buffers, solver voxelization, or SDF ownership
 
-## Current Contract (v0.5.0)
+## Current Contract (v0.5.2)
 - Supported schema variants are exactly:
   - `mesh_asset_authoring_v1`
   - `mesh_asset_runtime_v1`
@@ -79,6 +79,12 @@ Shared reusable 3D mesh-asset contract semantics for the physics trio object-aut
 ## Status
 - Bootstrap contract module for the shared mesh-asset lane.
 - First fixtures now cover both the editable `primitive_seed` authoring document lane and runtime mesh payloads ahead of richer mesh-compile integration.
+- v0.5.2 keeps the `mesh_asset_runtime_v1` schema stable and switches runtime
+  document save to streaming temp-file output so large imported meshes can
+  materialize runtime JSON above the previous fixed print-buffer cap.
+- v0.5.1 keeps file-save behavior and schema output compatible while avoiding
+  cJSON realloc-backed print buffers for fisiCs memory-check allocator
+  tracking.
 - v0.5.0 adds file-backed `mesh_asset_runtime_v1` save support so generated
   runtime mesh assets can be materialized for downstream app fixture
   consumption.

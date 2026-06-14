@@ -44,7 +44,7 @@ endif
 OBJ_DIR = build
 
 LIB = $(OBJ_DIR)/libkit_ui.a
-LIB_OBJ = $(OBJ_DIR)/kit_ui.o $(OBJ_DIR)/kit_ui_button.o
+LIB_OBJ = $(OBJ_DIR)/kit_ui.o $(OBJ_DIR)/kit_ui_button.o $(OBJ_DIR)/kit_ui_hud.o
 TEST_BIN = $(OBJ_DIR)/kit_ui_test
 VALIDATION_BIN = $(OBJ_DIR)/kit_ui_vk_validation
 
@@ -74,6 +74,9 @@ $(OBJ_DIR)/kit_ui.o: src/kit_ui.c include/kit_ui.h | $(OBJ_DIR)
 	$(CC) $(CFLAGS) $(INC) -c $< -o $@
 
 $(OBJ_DIR)/kit_ui_button.o: src/kit_ui_button.c include/kit_ui.h | $(OBJ_DIR)
+	$(CC) $(CFLAGS) $(INC) -c $< -o $@
+
+$(OBJ_DIR)/kit_ui_hud.o: src/kit_ui_hud.c include/kit_ui.h | $(OBJ_DIR)
 	$(CC) $(CFLAGS) $(INC) -c $< -o $@
 
 $(LIB): $(LIB_OBJ)

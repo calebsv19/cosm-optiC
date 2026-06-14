@@ -96,6 +96,20 @@ Graph link policy:
 - cross-project link gate:
   - allow only when explicit implementation/dependency bridge exists across projects
   - avoid broad fan-out cross-project linking
+- host/site routing policy:
+  - `project` is a general durable bucket key, not an app-program-only field
+  - host buckets such as `vps_server` and `home_server` are valid first-class
+    `project` values
+  - use host buckets for machine/runtime/service/deploy-environment state
+    broader than one app or site
+  - use site or program buckets for implementation and deploy outcomes specific
+    to one app/site
+  - for laptop-local authoring, packaging, docs, or repo prep, keep the memory
+    in the owning program/site bucket unless the point of the memory is the
+    host environment itself
+  - when host state and site/program state both matter, choose one primary
+    project bucket and express the relationship through explicit links rather
+    than duplicating rows
 - hierarchy-first helper behavior (`write-hier-linked`):
   - resolves pillar anchors by stable id within `(workspace, project)` scope
   - candidate ordering: `parent` -> `primary pillar` -> `scope pillar` -> explicit related ids -> `misc fallback`

@@ -269,6 +269,153 @@ static int test_button_spec_rendering_and_style(void) {
     return 0;
 }
 
+static int test_button_appearance_presets_and_rendering(void) {
+    KitRenderContext render_ctx;
+    KitUiContext ui_ctx;
+    KitRenderCommand storage[32];
+    KitRenderCommandBuffer buffer;
+    KitRenderFrame frame;
+    KitUiButtonSpec spec;
+    KitUiButtonLayout layout;
+    KitUiButtonAppearance appearance;
+    CoreResult result;
+
+    result = kit_render_context_init(&render_ctx,
+                                     KIT_RENDER_BACKEND_NULL,
+                                     CORE_THEME_PRESET_DAW_DEFAULT,
+                                     CORE_FONT_PRESET_DAW_DEFAULT);
+    if (result.code != CORE_OK) return 1;
+
+    result = kit_ui_context_init(&ui_ctx, &render_ctx);
+    if (result.code != CORE_OK) return 1;
+
+    kit_ui_button_spec_init(&spec, "Loop");
+    spec.variant = KIT_UI_BUTTON_VARIANT_PRIMARY;
+    spec.state.selected = 1;
+
+    if (!kit_ui_button_appearance_preset(KIT_UI_BUTTON_APPEARANCE_COMPACT_ROUNDED,
+                                         &appearance)) {
+        fprintf(stderr, "compact rounded appearance preset failed\n");
+        return 1;
+    }
+    kit_ui_button_layout_from_appearance(&appearance, &layout);
+    if (!nearf(appearance.corner_radius, 7.0f)) return 1;
+    if (!nearf(appearance.border_thickness, 1.0f)) return 1;
+    if (!nearf(layout.text_offset_x, 10.0f)) return 1;
+    if (!nearf(layout.text_offset_y, 7.0f)) return 1;
+
+    buffer.commands = storage;
+    buffer.capacity = 32;
+    buffer.count = 0;
+    result = kit_render_begin_frame(&render_ctx, 800, 600, &buffer, &frame);
+    if (result.code != CORE_OK) return 1;
+
+    result = kit_ui_draw_button_spec_appearance(&ui_ctx,
+                                                &frame,
+                                                (KitRenderRect){40.0f, 50.0f, 96.0f, 28.0f},
+                                                &spec,
+                                                &layout,
+                                                &appearance);
+    if (result.code != CORE_OK) return 1;
+
+    if (buffer.count != 3u) {
+        fprintf(stderr, "expected 3 commands for rounded appearance draw, got %zu\n", buffer.count);
+        return 1;
+    }
+    if (buffer.commands[0].kind != KIT_RENDER_CMD_RECT) return 1;
+    if (buffer.commands[1].kind != KIT_RENDER_CMD_RECT) return 1;
+    if (buffer.commands[2].kind != KIT_RENDER_CMD_TEXT) return 1;
+    if (!nearf(buffer.commands[0].data.rect.corner_radius, 7.0f)) return 1;
+    if (!nearf(buffer.commands[1].data.rect.corner_radius, 6.0f)) return 1;
+    if (!nearf(buffer.commands[1].data.rect.rect.x, 41.0f)) return 1;
+    if (!nearf(buffer.commands[1].data.rect.rect.y, 51.0f)) return 1;
+    if (!nearf(buffer.commands[1].data.rect.rect.width, 94.0f)) return 1;
+    if (!nearf(buffer.commands[1].data.rect.rect.height, 26.0f)) return 1;
+    if (!nearf(buffer.commands[2].data.text.origin.x, 50.0f)) return 1;
+    if (!nearf(buffer.commands[2].data.text.origin.y, 57.0f)) return 1;
+
+    result = kit_render_end_frame(&render_ctx, &frame);
+    if (result.code != CORE_OK) return 1;
+
+    if (!kit_ui_button_appearance_preset(KIT_UI_BUTTON_APPEARANCE_PILL, &appearance)) {
+        return 1;
+    }
+    if (appearance.corner_radius < 1000.0f) {
+        fprintf(stderr, "pill preset should request radius clamping by draw path\n");
+        return 1;
+    }
+    if (kit_ui_button_appearance_preset((KitUiButtonAppearancePreset)99, &appearance)) {
+        fprintf(stderr, "invalid appearance preset should fail\n");
+        return 1;
+    }
+    return 0;
+}
+
+static int test_button_appearance_invalid_args(void) {
+    KitRenderContext render_ctx;
+    KitUiContext ui_ctx;
+    KitRenderCommand storage[16];
+    KitRenderCommandBuffer buffer;
+    KitRenderFrame frame;
+    KitUiButtonSpec spec;
+    KitUiButtonLayout layout;
+    KitUiButtonAppearance appearance;
+    CoreResult result;
+
+    result = kit_render_context_init(&render_ctx,
+                                     KIT_RENDER_BACKEND_NULL,
+                                     CORE_THEME_PRESET_DAW_DEFAULT,
+                                     CORE_FONT_PRESET_DAW_DEFAULT);
+    if (result.code != CORE_OK) return 1;
+    result = kit_ui_context_init(&ui_ctx, &render_ctx);
+    if (result.code != CORE_OK) return 1;
+
+    kit_ui_button_spec_init(&spec, "Bad");
+    kit_ui_button_appearance_init(&appearance);
+    kit_ui_button_layout_from_appearance(&appearance, &layout);
+
+    buffer.commands = storage;
+    buffer.capacity = 16;
+    buffer.count = 0;
+    result = kit_render_begin_frame(&render_ctx, 320, 240, &buffer, &frame);
+    if (result.code != CORE_OK) return 1;
+
+    result = kit_ui_draw_button_spec_appearance(&ui_ctx,
+                                                &frame,
+                                                (KitRenderRect){0.0f, 0.0f, 80.0f, 24.0f},
+                                                &spec,
+                                                &layout,
+                                                0);
+    if (result.code != CORE_ERR_INVALID_ARG) return 1;
+
+    appearance.corner_radius = -1.0f;
+    result = kit_ui_draw_button_spec_appearance(&ui_ctx,
+                                                &frame,
+                                                (KitRenderRect){0.0f, 0.0f, 80.0f, 24.0f},
+                                                &spec,
+                                                &layout,
+                                                &appearance);
+    if (result.code != CORE_ERR_INVALID_ARG) return 1;
+
+    kit_ui_button_appearance_init(&appearance);
+    appearance.border_thickness = 0.0f;
+    result = kit_ui_draw_button_spec_appearance(&ui_ctx,
+                                                &frame,
+                                                (KitRenderRect){0.0f, 0.0f, 80.0f, 24.0f},
+                                                &spec,
+                                                &layout,
+                                                &appearance);
+    if (result.code != CORE_OK) return 1;
+    if (buffer.count != 2u) {
+        fprintf(stderr, "expected fill+text when border thickness is zero, got %zu\n", buffer.count);
+        return 1;
+    }
+
+    result = kit_render_end_frame(&render_ctx, &frame);
+    if (result.code != CORE_OK) return 1;
+    return 0;
+}
+
 static int test_input_and_behaviors(void) {
     KitUiInputState input;
     KitRenderRect bounds = {10.0f, 20.0f, 100.0f, 30.0f};
@@ -691,12 +838,67 @@ static int test_draw_invalid_args(void) {
     return 0;
 }
 
+static int test_hud_button_row_layout_and_alpha(void) {
+    KitUiHudStyle style;
+    KitUiHudButtonRowConfig config;
+    KitUiHudButtonRowLayout layout;
+    KitRenderColor color = {10u, 20u, 30u, 255u};
+
+    kit_ui_hud_style_dark_floating(&style);
+    if (style.panel_fill.a != 218u) return 1;
+    if (style.button_fill.a != 224u) return 1;
+    if (!nearf(style.button_corner_radius, 6.0f)) return 1;
+    color = kit_ui_color_with_alpha(color, 123u);
+    if (color.r != 10u || color.g != 20u || color.b != 30u || color.a != 123u) return 1;
+    if (!nearf(kit_ui_corner_radius_for_inset(14.0f, 8.0f), 6.0f)) return 1;
+    if (!nearf(kit_ui_corner_radius_for_inset(14.0f, 0.0f), 14.0f)) return 1;
+    if (!nearf(kit_ui_corner_radius_for_inset(8.0f, 12.0f), 0.0f)) return 1;
+    if (!nearf(kit_ui_corner_radius_clamp(20.0f, 30.0f, 10.0f), 5.0f)) return 1;
+
+    kit_ui_hud_button_row_config_init(&config);
+    config.viewport_width = 900.0f;
+    config.viewport_height = 640.0f;
+    config.button_count = 3u;
+    config.button_widths[0] = 38.0f;
+    config.button_widths[1] = 58.0f;
+    config.button_widths[2] = 38.0f;
+    if (!nearf(kit_ui_hud_button_row_control_corner_radius(&style, &config), 6.0f)) return 1;
+
+    if (!kit_ui_hud_button_row_layout(&config, &layout)) return 1;
+    if (layout.button_count != 3u) return 1;
+    if (!layout.has_readout) return 1;
+    if (!nearf(layout.panel_rect.height, 44.0f)) return 1;
+    if (!nearf(layout.button_rects[0].x, layout.panel_rect.x + 8.0f)) return 1;
+    if (!nearf(layout.button_rects[1].x, layout.button_rects[0].x + 38.0f + 5.0f)) return 1;
+    if (!nearf(layout.button_rects[2].x, layout.button_rects[1].x + 58.0f + 5.0f)) return 1;
+    if (!nearf(layout.readout_rect.width, 260.0f)) return 1;
+    if (layout.readout_rect.x <= layout.button_rects[2].x + layout.button_rects[2].width) return 1;
+    if (!nearf(kit_ui_rect_inset(layout.panel_rect, config.pad).x, layout.button_rects[0].x)) return 1;
+
+    config.viewport_width = 230.0f;
+    config.max_width = 210.0f;
+    if (!kit_ui_hud_button_row_layout(&config, &layout)) return 1;
+    if (layout.has_readout) return 1;
+    if (layout.readout_rect.width != 0.0f) return 1;
+
+    config.button_count = KIT_UI_HUD_BUTTON_ROW_MAX + 1u;
+    if (kit_ui_hud_button_row_layout(&config, &layout)) return 1;
+    config.button_count = 1u;
+    config.button_widths[0] = 0.0f;
+    if (kit_ui_hud_button_row_layout(&config, &layout)) return 1;
+
+    return 0;
+}
+
 int main(void) {
     if (test_theme_scaled_style() != 0) return 1;
     if (test_stack_layout() != 0) return 1;
     if (test_invalid_layout_args() != 0) return 1;
     if (test_widget_rendering() != 0) return 1;
     if (test_button_spec_rendering_and_style() != 0) return 1;
+    if (test_button_appearance_presets_and_rendering() != 0) return 1;
+    if (test_button_appearance_invalid_args() != 0) return 1;
+    if (test_hud_button_row_layout_and_alpha() != 0) return 1;
     if (test_input_and_behaviors() != 0) return 1;
     if (test_input_edge_behaviors() != 0) return 1;
     if (test_scroll_top_anchor_content_height() != 0) return 1;

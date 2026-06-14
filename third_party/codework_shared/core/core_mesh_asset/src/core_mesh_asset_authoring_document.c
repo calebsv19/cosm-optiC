@@ -25,6 +25,26 @@ static bool core_mesh_asset_doc_text_equals(const char *a, const char *b) {
     return a && b && strcmp(a, b) == 0;
 }
 
+static char *core_mesh_asset_doc_print_json(const cJSON *root) {
+    size_t capacity = 65536u;
+    const size_t max_capacity = 4u * 1024u * 1024u;
+    if (!root) {
+        return NULL;
+    }
+    while (capacity <= max_capacity) {
+        char *text = (char *)malloc(capacity);
+        if (!text) {
+            return NULL;
+        }
+        if (cJSON_PrintPreallocated((cJSON *)root, text, (int)capacity, cJSON_True)) {
+            return text;
+        }
+        free(text);
+        capacity *= 2u;
+    }
+    return NULL;
+}
+
 static bool core_mesh_asset_doc_vec3_equalish(CoreObjectVec3 a, CoreObjectVec3 b) {
     const double eps = 1e-6;
     return fabs(a.x - b.x) <= eps && fabs(a.y - b.y) <= eps && fabs(a.z - b.z) <= eps;
@@ -956,7 +976,7 @@ CoreResult core_mesh_asset_authoring_document_save_file(
                           document->contract.topology_manifold_expected);
     cJSON_AddItemToObject(root, "extensions", cJSON_CreateObject());
 
-    json_text = cJSON_Print(root);
+    json_text = core_mesh_asset_doc_print_json(root);
     cJSON_Delete(root);
     if (!json_text) {
         return (CoreResult){ CORE_ERR_OUT_OF_MEMORY, "out of memory" };

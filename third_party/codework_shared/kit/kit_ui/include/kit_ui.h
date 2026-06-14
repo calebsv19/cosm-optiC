@@ -8,6 +8,7 @@ extern "C" {
 #endif
 
 #define KIT_UI_CLIP_STACK_MAX 16
+#define KIT_UI_HUD_BUTTON_ROW_MAX 16
 
 typedef enum KitUiAxis {
     KIT_UI_AXIS_VERTICAL = 0,
@@ -58,6 +59,13 @@ typedef enum KitUiButtonVariant {
     KIT_UI_BUTTON_VARIANT_POSITIVE = 2
 } KitUiButtonVariant;
 
+typedef enum KitUiButtonAppearancePreset {
+    KIT_UI_BUTTON_APPEARANCE_DEFAULT = 0,
+    KIT_UI_BUTTON_APPEARANCE_ROUNDED = 1,
+    KIT_UI_BUTTON_APPEARANCE_COMPACT_ROUNDED = 2,
+    KIT_UI_BUTTON_APPEARANCE_PILL = 3
+} KitUiButtonAppearancePreset;
+
 typedef struct KitUiButtonState {
     int hovered;
     int selected;
@@ -82,6 +90,48 @@ typedef struct KitUiButtonLayout {
     float text_offset_x;
     float text_offset_y;
 } KitUiButtonLayout;
+
+typedef struct KitUiButtonAppearance {
+    float corner_radius;
+    float border_thickness;
+    float padding_x;
+    float padding_y;
+} KitUiButtonAppearance;
+
+typedef struct KitUiHudStyle {
+    KitRenderColor panel_fill;
+    KitRenderColor button_fill;
+    KitRenderColor button_active_fill;
+    KitRenderColor button_disabled_fill;
+    KitRenderColor readout_fill;
+    KitRenderColor text;
+    KitRenderColor text_disabled;
+    float panel_corner_radius;
+    float button_corner_radius;
+} KitUiHudStyle;
+
+typedef struct KitUiHudButtonRowConfig {
+    float viewport_width;
+    float viewport_height;
+    float max_width;
+    float pad;
+    float gap;
+    float button_height;
+    float bottom_margin;
+    float min_top_y;
+    float readout_min_width;
+    float readout_max_width;
+    uint32_t button_count;
+    float button_widths[KIT_UI_HUD_BUTTON_ROW_MAX];
+} KitUiHudButtonRowConfig;
+
+typedef struct KitUiHudButtonRowLayout {
+    KitRenderRect panel_rect;
+    KitRenderRect button_rects[KIT_UI_HUD_BUTTON_ROW_MAX];
+    KitRenderRect readout_rect;
+    uint32_t button_count;
+    int has_readout;
+} KitUiHudButtonRowLayout;
 
 typedef struct KitUiButtonTheme {
     CoreThemeColor idle_fill;
@@ -138,6 +188,22 @@ void kit_ui_button_spec_init(KitUiButtonSpec *spec, const char *label);
 void kit_ui_button_layout_init(KitUiButtonLayout *layout,
                                float text_offset_x,
                                float text_offset_y);
+void kit_ui_button_appearance_init(KitUiButtonAppearance *appearance);
+int kit_ui_button_appearance_preset(KitUiButtonAppearancePreset preset,
+                                    KitUiButtonAppearance *out_appearance);
+void kit_ui_button_layout_from_appearance(const KitUiButtonAppearance *appearance,
+                                          KitUiButtonLayout *out_layout);
+KitRenderColor kit_ui_color_with_alpha(KitRenderColor color, uint8_t alpha);
+float kit_ui_corner_radius_clamp(float radius, float width, float height);
+float kit_ui_corner_radius_for_inset(float outer_radius, float inset);
+KitRenderRect kit_ui_rect_inset(KitRenderRect rect, float inset);
+void kit_ui_hud_style_scale(KitUiHudStyle *style, float scale);
+void kit_ui_hud_style_dark_floating(KitUiHudStyle *out_style);
+void kit_ui_hud_button_row_config_init(KitUiHudButtonRowConfig *config);
+float kit_ui_hud_button_row_control_corner_radius(const KitUiHudStyle *style,
+                                                  const KitUiHudButtonRowConfig *config);
+int kit_ui_hud_button_row_layout(const KitUiHudButtonRowConfig *config,
+                                 KitUiHudButtonRowLayout *out_layout);
 void kit_ui_button_text_origin(const KitUiButtonLayout *layout,
                                float rect_x,
                                float rect_y,
@@ -237,6 +303,20 @@ CoreResult kit_ui_draw_button_spec_custom(KitUiContext *ctx,
                                           const KitUiButtonLayout *layout,
                                           CoreFontRoleId font_role,
                                           CoreFontTextSizeTier text_tier);
+CoreResult kit_ui_draw_button_spec_appearance(KitUiContext *ctx,
+                                              KitRenderFrame *frame,
+                                              KitRenderRect bounds,
+                                              const KitUiButtonSpec *spec,
+                                              const KitUiButtonLayout *layout,
+                                              const KitUiButtonAppearance *appearance);
+CoreResult kit_ui_draw_button_spec_appearance_custom(KitUiContext *ctx,
+                                                     KitRenderFrame *frame,
+                                                     KitRenderRect bounds,
+                                                     const KitUiButtonSpec *spec,
+                                                     const KitUiButtonLayout *layout,
+                                                     const KitUiButtonAppearance *appearance,
+                                                     CoreFontRoleId font_role,
+                                                     CoreFontTextSizeTier text_tier);
 
 CoreResult kit_ui_draw_checkbox(KitUiContext *ctx,
                                 KitRenderFrame *frame,

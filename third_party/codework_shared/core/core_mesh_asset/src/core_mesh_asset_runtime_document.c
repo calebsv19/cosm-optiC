@@ -4,8 +4,10 @@
 
 #include <math.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "../../../shape/external/cjson/cJSON.h"
 
@@ -54,15 +56,150 @@ static bool runtime_doc_vec3_from_json(const cJSON *node, CoreObjectVec3 *out_ve
     return true;
 }
 
-static cJSON *runtime_doc_vec3_to_json(CoreObjectVec3 v) {
-    cJSON *obj = cJSON_CreateObject();
-    if (!obj) {
+static char *runtime_doc_build_temp_template(const char *path) {
+    const char *suffix = ".tmp.XXXXXX";
+    size_t path_len = path ? strlen(path) : 0u;
+    size_t suffix_len = strlen(suffix);
+    char *temp_path = NULL;
+    if (path_len == 0u || path_len > SIZE_MAX - suffix_len - 1u) {
         return NULL;
     }
-    cJSON_AddNumberToObject(obj, "x", v.x);
-    cJSON_AddNumberToObject(obj, "y", v.y);
-    cJSON_AddNumberToObject(obj, "z", v.z);
-    return obj;
+    temp_path = (char *)malloc(path_len + suffix_len + 1u);
+    if (!temp_path) {
+        return NULL;
+    }
+    memcpy(temp_path, path, path_len);
+    memcpy(temp_path + path_len, suffix, suffix_len + 1u);
+    return temp_path;
+}
+
+static bool runtime_doc_write_json_string(FILE *f, const char *text) {
+    const unsigned char *p = (const unsigned char *)(text ? text : "");
+    if (fputc('"', f) == EOF) return false;
+    while (*p) {
+        unsigned char ch = *p++;
+        switch (ch) {
+            case '\\': if (fputs("\\\\", f) == EOF) return false; break;
+            case '"': if (fputs("\\\"", f) == EOF) return false; break;
+            case '\b': if (fputs("\\b", f) == EOF) return false; break;
+            case '\f': if (fputs("\\f", f) == EOF) return false; break;
+            case '\n': if (fputs("\\n", f) == EOF) return false; break;
+            case '\r': if (fputs("\\r", f) == EOF) return false; break;
+            case '\t': if (fputs("\\t", f) == EOF) return false; break;
+            default:
+                if (ch < 0x20u) {
+                    if (fprintf(f, "\\u%04x", (unsigned int)ch) < 0) return false;
+                } else {
+                    if (fputc((int)ch, f) == EOF) return false;
+                }
+                break;
+        }
+    }
+    return fputc('"', f) != EOF;
+}
+
+static bool runtime_doc_write_vec3(FILE *f, CoreObjectVec3 v) {
+    return fprintf(f, "{\"x\":%.17g,\"y\":%.17g,\"z\":%.17g}", v.x, v.y, v.z) >= 0;
+}
+
+static CoreResult runtime_doc_save_file_streaming(const CoreMeshAssetRuntimeDocument *document,
+                                                  const char *path) {
+    char *temp_path = NULL;
+    int fd = -1;
+    FILE *f = NULL;
+    size_t i;
+    bool ok = false;
+
+    temp_path = runtime_doc_build_temp_template(path);
+    if (!temp_path) {
+        return (CoreResult){ CORE_ERR_OUT_OF_MEMORY, "out of memory" };
+    }
+    fd = mkstemp(temp_path);
+    if (fd < 0) {
+        free(temp_path);
+        return (CoreResult){ CORE_ERR_IO, "failed to create temporary file" };
+    }
+    f = fdopen(fd, "wb");
+    if (!f) {
+        close(fd);
+        unlink(temp_path);
+        free(temp_path);
+        return (CoreResult){ CORE_ERR_IO, "failed to open temporary file for write" };
+    }
+
+    ok = fprintf(f, "{\n") >= 0;
+    ok = ok && fprintf(f, "\t\"schema_family\":") >= 0 &&
+         runtime_doc_write_json_string(f, "codework_geometry") && fprintf(f, ",\n") >= 0;
+    ok = ok && fprintf(f, "\t\"schema_variant\":") >= 0 &&
+         runtime_doc_write_json_string(f, "mesh_asset_runtime_v1") && fprintf(f, ",\n") >= 0;
+    ok = ok && fprintf(f, "\t\"schema_version\":%d,\n", CORE_MESH_ASSET_SCHEMA_VERSION_1) >= 0;
+    ok = ok && fprintf(f, "\t\"asset_id\":") >= 0 &&
+         runtime_doc_write_json_string(f, document->contract.asset_id) && fprintf(f, ",\n") >= 0;
+    ok = ok && fprintf(f, "\t\"source_asset_id\":") >= 0 &&
+         runtime_doc_write_json_string(f, document->contract.source_asset_id) && fprintf(f, ",\n") >= 0;
+    ok = ok && fprintf(f, "\t\"asset_type\":") >= 0 &&
+         runtime_doc_write_json_string(f, core_mesh_asset_type_name(document->contract.asset_type)) &&
+         fprintf(f, ",\n") >= 0;
+
+    ok = ok && fprintf(f, "\t\"local_bounds\":{\"min\":") >= 0 &&
+         runtime_doc_write_vec3(f, document->contract.local_bounds.min) &&
+         fprintf(f, ",\"max\":") >= 0 &&
+         runtime_doc_write_vec3(f, document->contract.local_bounds.max) &&
+         fprintf(f, "},\n") >= 0;
+    ok = ok && fprintf(f,
+                       "\t\"topology_flags\":{\"closed_volume\":%s,\"manifold_expected\":%s},\n",
+                       document->contract.topology_closed_volume ? "true" : "false",
+                       document->contract.topology_manifold_expected ? "true" : "false") >= 0;
+
+    ok = ok && fprintf(f,
+                       "\t\"mesh\":{\"vertex_count\":%zu,\"triangle_count\":%zu,\"vertices\":[\n",
+                       document->vertex_count,
+                       document->triangle_count) >= 0;
+    for (i = 0u; ok && i < document->vertex_count; ++i) {
+        ok = fprintf(f, "\t\t") >= 0 &&
+             runtime_doc_write_vec3(f, document->vertices[i].position) &&
+             fprintf(f, "%s\n", (i + 1u < document->vertex_count) ? "," : "") >= 0;
+    }
+    ok = ok && fprintf(f, "\t],\"triangles\":[\n") >= 0;
+    for (i = 0u; ok && i < document->triangle_count; ++i) {
+        const CoreMeshAssetRuntimeTriangle *triangle = &document->triangles[i];
+        ok = fprintf(f,
+                     "\t\t{\"a\":%zu,\"b\":%zu,\"c\":%zu,\"surface_group_id\":",
+                     triangle->a,
+                     triangle->b,
+                     triangle->c) >= 0 &&
+             runtime_doc_write_json_string(f, triangle->surface_group_id) &&
+             fprintf(f, "}%s\n", (i + 1u < document->triangle_count) ? "," : "") >= 0;
+    }
+    ok = ok && fprintf(f, "\t]},\n\t\"surface_groups\":[\n") >= 0;
+    for (i = 0u; ok && i < document->surface_group_count; ++i) {
+        const CoreMeshAssetSurfaceGroup *group = &document->surface_groups[i];
+        ok = fprintf(f, "\t\t{\"group_id\":") >= 0 &&
+             runtime_doc_write_json_string(f, group->group_id) &&
+             fprintf(f, ",\"semantic\":") >= 0 &&
+             runtime_doc_write_json_string(f, group->group_id) &&
+             fprintf(f,
+                     ",\"triangle_span\":{\"start\":%zu,\"count\":%zu}}%s\n",
+                     group->triangle_start,
+                     group->triangle_count,
+                     (i + 1u < document->surface_group_count) ? "," : "") >= 0;
+    }
+    ok = ok && fprintf(f, "\t],\n\t\"extensions\":{}\n}\n") >= 0;
+
+    if (!ok || fclose(f) != 0) {
+        if (ok) f = NULL;
+        unlink(temp_path);
+        free(temp_path);
+        return (CoreResult){ CORE_ERR_IO, "failed to write runtime mesh file" };
+    }
+    f = NULL;
+    if (rename(temp_path, path) != 0) {
+        unlink(temp_path);
+        free(temp_path);
+        return (CoreResult){ CORE_ERR_IO, "failed to replace runtime mesh file" };
+    }
+    free(temp_path);
+    return core_result_ok();
 }
 
 static double runtime_doc_triangle_area_sq(const CoreMeshAssetRuntimeDocument *document,
@@ -547,16 +684,7 @@ CoreResult core_mesh_asset_runtime_document_load_file(const char *path,
 CoreResult core_mesh_asset_runtime_document_save_file(
     const CoreMeshAssetRuntimeDocument *document,
     const char *path) {
-    cJSON *root = NULL;
-    cJSON *local_bounds = NULL;
-    cJSON *topology_flags = NULL;
-    cJSON *mesh = NULL;
-    cJSON *vertices = NULL;
-    cJSON *triangles = NULL;
-    cJSON *surface_groups = NULL;
-    char *json_text = NULL;
     CoreResult r;
-    size_t i;
 
     if (!document || !path) {
         return runtime_doc_invalid_arg("invalid argument");
@@ -565,113 +693,5 @@ CoreResult core_mesh_asset_runtime_document_save_file(
     if (r.code != CORE_OK) {
         return r;
     }
-
-    root = cJSON_CreateObject();
-    if (!root) {
-        return (CoreResult){ CORE_ERR_OUT_OF_MEMORY, "out of memory" };
-    }
-    cJSON_AddStringToObject(root, "schema_family", "codework_geometry");
-    cJSON_AddStringToObject(root, "schema_variant", "mesh_asset_runtime_v1");
-    cJSON_AddNumberToObject(root, "schema_version", CORE_MESH_ASSET_SCHEMA_VERSION_1);
-    cJSON_AddStringToObject(root, "asset_id", document->contract.asset_id);
-    cJSON_AddStringToObject(root, "source_asset_id", document->contract.source_asset_id);
-    cJSON_AddStringToObject(root, "asset_type",
-                            core_mesh_asset_type_name(document->contract.asset_type));
-
-    local_bounds = cJSON_CreateObject();
-    if (!local_bounds) {
-        cJSON_Delete(root);
-        return (CoreResult){ CORE_ERR_OUT_OF_MEMORY, "out of memory" };
-    }
-    cJSON_AddItemToObject(root, "local_bounds", local_bounds);
-    cJSON_AddItemToObject(local_bounds,
-                          "min",
-                          runtime_doc_vec3_to_json(document->contract.local_bounds.min));
-    cJSON_AddItemToObject(local_bounds,
-                          "max",
-                          runtime_doc_vec3_to_json(document->contract.local_bounds.max));
-
-    topology_flags = cJSON_CreateObject();
-    if (!topology_flags) {
-        cJSON_Delete(root);
-        return (CoreResult){ CORE_ERR_OUT_OF_MEMORY, "out of memory" };
-    }
-    cJSON_AddItemToObject(root, "topology_flags", topology_flags);
-    cJSON_AddBoolToObject(topology_flags,
-                          "closed_volume",
-                          document->contract.topology_closed_volume);
-    cJSON_AddBoolToObject(topology_flags,
-                          "manifold_expected",
-                          document->contract.topology_manifold_expected);
-
-    mesh = cJSON_CreateObject();
-    if (!mesh) {
-        cJSON_Delete(root);
-        return (CoreResult){ CORE_ERR_OUT_OF_MEMORY, "out of memory" };
-    }
-    cJSON_AddItemToObject(root, "mesh", mesh);
-    cJSON_AddNumberToObject(mesh, "vertex_count", (double)document->vertex_count);
-    cJSON_AddNumberToObject(mesh, "triangle_count", (double)document->triangle_count);
-    vertices = cJSON_CreateArray();
-    triangles = cJSON_CreateArray();
-    if (!vertices || !triangles) {
-        cJSON_Delete(vertices);
-        cJSON_Delete(triangles);
-        cJSON_Delete(root);
-        return (CoreResult){ CORE_ERR_OUT_OF_MEMORY, "out of memory" };
-    }
-    cJSON_AddItemToObject(mesh, "vertices", vertices);
-    cJSON_AddItemToObject(mesh, "triangles", triangles);
-    for (i = 0u; i < document->vertex_count; ++i) {
-        cJSON_AddItemToArray(vertices, runtime_doc_vec3_to_json(document->vertices[i].position));
-    }
-    for (i = 0u; i < document->triangle_count; ++i) {
-        cJSON *triangle = cJSON_CreateObject();
-        if (!triangle) {
-            cJSON_Delete(root);
-            return (CoreResult){ CORE_ERR_OUT_OF_MEMORY, "out of memory" };
-        }
-        cJSON_AddItemToArray(triangles, triangle);
-        cJSON_AddNumberToObject(triangle, "a", (double)document->triangles[i].a);
-        cJSON_AddNumberToObject(triangle, "b", (double)document->triangles[i].b);
-        cJSON_AddNumberToObject(triangle, "c", (double)document->triangles[i].c);
-        cJSON_AddStringToObject(triangle,
-                                "surface_group_id",
-                                document->triangles[i].surface_group_id);
-    }
-
-    surface_groups = cJSON_CreateArray();
-    if (!surface_groups) {
-        cJSON_Delete(root);
-        return (CoreResult){ CORE_ERR_OUT_OF_MEMORY, "out of memory" };
-    }
-    cJSON_AddItemToObject(root, "surface_groups", surface_groups);
-    for (i = 0u; i < document->surface_group_count; ++i) {
-        cJSON *group = cJSON_CreateObject();
-        cJSON *span = cJSON_CreateObject();
-        if (!group || !span) {
-            cJSON_Delete(group);
-            cJSON_Delete(span);
-            cJSON_Delete(root);
-            return (CoreResult){ CORE_ERR_OUT_OF_MEMORY, "out of memory" };
-        }
-        cJSON_AddItemToArray(surface_groups, group);
-        cJSON_AddStringToObject(group, "group_id", document->surface_groups[i].group_id);
-        cJSON_AddStringToObject(group, "semantic", document->surface_groups[i].group_id);
-        cJSON_AddItemToObject(group, "triangle_span", span);
-        cJSON_AddNumberToObject(span, "start",
-                                (double)document->surface_groups[i].triangle_start);
-        cJSON_AddNumberToObject(span, "count",
-                                (double)document->surface_groups[i].triangle_count);
-    }
-    cJSON_AddItemToObject(root, "extensions", cJSON_CreateObject());
-
-    json_text = cJSON_Print(root);
-    cJSON_Delete(root);
-    if (!json_text) {
-        return (CoreResult){ CORE_ERR_OUT_OF_MEMORY, "out of memory" };
-    }
-    r = core_io_write_all_atomic(path, json_text, strlen(json_text));
-    free(json_text);
-    return r;
+    return runtime_doc_save_file_streaming(document, path);
 }

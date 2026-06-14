@@ -33,6 +33,13 @@ Checklist:
    - retrieve before write
    - bounded limits only
    - enforce write cap per session
+   - treat `project` as a durable bucket key that may represent app, site,
+     host, or cross-cutting coordination lanes
+   - route VPS-wide or machine-wide state into host buckets such as
+     `vps_server` or `home_server`
+   - keep site/program-specific implementation memories in the owning
+     site/program bucket and link them to host buckets when environment context
+     matters
    - capture the returned `id=<rowid>` after every `add` and use that exact row id for follow-up commands
    - never guess row ids from insertion order, neighboring ids, or stable-id text
    - nightly rollup recommendation must remain policy-gated (`min_active_nodes_before_rollup`, `min_stale_candidates_before_rollup`)

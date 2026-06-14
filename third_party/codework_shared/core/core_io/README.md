@@ -17,6 +17,9 @@ Unified IO abstractions for byte streams and files.
 ## Current Limits
 - `core_io_read_all` now reads incrementally and does not depend on
   `fseek` / `ftell` / `long` file-size measurement.
+- `core_io_write_all_atomic` now declares the POSIX feature surface it relies
+  on directly in the implementation so `mkstemp` / `fdopen` stay visible under
+  strict C11 Linux package builds.
 - The API is still a whole-file helper, so the practical limit remains bounded
   by available memory and `size_t` addressable buffer size.
 - `core_io_write_all_atomic` is intentionally minimal: it writes to a temporary
