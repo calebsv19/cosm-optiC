@@ -133,11 +133,14 @@ Generated on 2026-06-13:
 
 Current promotion blockers:
 
-- post-ELA4 promotion-gate rerun using the recursive emissive-area policy
-  counters before release-candidate performance interpretation
-- production-quality estimator tuning beyond the first power-heuristic MIS
-  and adaptive rough-reflection sample pass, especially BRDF-evaluated rough
-  reflection/transmission direct-light quality
+- production-quality estimator tuning beyond the first power-heuristic MIS,
+  adaptive rough-reflection sample pass, and finite-light direct-light PDF
+  estimate, especially material-aware BRDF/BTDF direct-light quality for rough
+  reflection/transmission
+- visual signoff documenting visible improvement or meaningful new behavior
+  over shipped Disney for imported-mesh proof scenes
+- skull-scale or other external high-triangle scene signoff once large
+  sidecar/BVH readiness is portable in the local proof workspace
 - repeated release-candidate convergence-threshold reports before any
   route-default discussion
 
@@ -272,3 +275,27 @@ Covered after ELA4:
 - The generated `many_emitters` case reported `96` candidates, kept primary
   samples active at `219107`, suppressed recursive direct area samples to `0`,
   and recorded `371325` recursive policy skips with `0` full-scan fallbacks.
+
+Covered after D2.26:
+
+- Post-ELA4 promotion-gate report passed with hard gates, performance
+  thresholds, and quality thresholds true at:
+  `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_post_ela4_promotion_gates/promotion_gate_report.json`.
+- The primitive corridor stayed on the emissive cache path with `2` candidates,
+  `1904` selected candidates, `829` visibility rays, `1105` primary area
+  samples, `799` recursive area samples, `0` recursive policy skips, and `0`
+  full-scan fallbacks.
+- Disney v2 now estimates finite-radius runtime light PDF from light radius and
+  hit distance through `RuntimeDisneyV2_3D_EstimateDirectLightPdf(...)`; point
+  lights and emissive-area-only direct paths keep the conservative `1.0`
+  proxy pending fuller area/candidate PDF estimation.
+- Primary and recursive Disney v2 MIS use the estimator helper instead of
+  open-coding `lightPdf=1.0` whenever direct light exists.
+- D2.26 estimator report passed hard gates, performance thresholds, and quality
+  thresholds at:
+  `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_d226_direct_light_pdf_estimator_initial/promotion_gate_report.json`.
+- D2.26 Disney v2 threshold metrics: primitive glass corridor `1.125s`, ratio
+  `0.666`, secondary `5911`/`1377`, max radiance `0.552`; imported mesh
+  material `4.615s`, ratio `0.169`, secondary `18674`/`6667`, max radiance
+  `0.522`; imported mesh pressure MRT8 `3.375s`, ratio `0.204`, secondary
+  `13894`/`4920`, max radiance `0.484`.
