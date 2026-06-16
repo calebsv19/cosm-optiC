@@ -17,6 +17,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_specular_reflection_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_3d.o \
+	$(BUILD_DIR)/render/runtime_disney_v2_estimator_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_transport_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_transmission_3d.o \
 	$(BUILD_DIR)/render/runtime_emission_transparency_3d.o \
@@ -210,6 +211,7 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_specular_reflection_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_3d.o \
+		$(BUILD_DIR)/render/runtime_disney_v2_estimator_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_transport_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_transmission_3d.o \
 		$(BUILD_DIR)/render/runtime_emission_transparency_3d.o \
