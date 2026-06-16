@@ -121,7 +121,7 @@ void runtime_native_3d_render_apply_ambient_hit_lighting(const RuntimeScene3D* s
         return;
     }
 
-    intensity = runtime_native_3d_render_clamp01(scene->environment.ambientIntensity);
+    intensity = RuntimeEnvironment3D_AmbientStrength(&scene->environment);
     if (!(intensity > 0.0)) return;
 
     bias = runtime_native_3d_render_clamp01(scene->environment.topDownBias);
@@ -159,7 +159,7 @@ void runtime_native_3d_render_background_rgb(const RuntimeScene3D* scene,
         return;
     }
 
-    strength = runtime_native_3d_render_clamp01(scene->environment.ambientIntensity);
+    strength = RuntimeEnvironment3D_BackgroundBrightness(&scene->environment);
     if (!(strength > 0.0)) return;
 
     mix_t = runtime_native_3d_render_clamp01((primary_ray->direction.z + 1.0) * 0.5);

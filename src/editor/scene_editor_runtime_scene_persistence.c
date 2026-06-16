@@ -585,6 +585,36 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
                                0.0,
                                fmin(1.0, animSettings.environmentBrightness / 255.0))));
     json_object_object_add(environment,
+                           "environment_preset",
+                           json_object_new_int(animation_config_environment_preset_clamp(
+                               animSettings.environmentPreset)));
+    json_object_object_add(environment,
+                           "background_brightness_auto",
+                           json_object_new_boolean(animSettings.environmentBackgroundBrightnessAuto));
+    json_object_object_add(environment,
+                           "background_brightness",
+                           json_object_new_double(animSettings.environmentBackgroundBrightnessAuto
+                                                      ? fmax(0.0,
+                                                             fmin(1.0,
+                                                                  animSettings.environmentBrightness /
+                                                                      255.0))
+                                                      : animSettings.environmentBackgroundBrightness));
+    {
+        json_object *background_color = json_object_new_object();
+        if (background_color) {
+            json_object_object_add(background_color,
+                                   "r",
+                                   json_object_new_double(animSettings.environmentBackgroundColorR));
+            json_object_object_add(background_color,
+                                   "g",
+                                   json_object_new_double(animSettings.environmentBackgroundColorG));
+            json_object_object_add(background_color,
+                                   "b",
+                                   json_object_new_double(animSettings.environmentBackgroundColorB));
+            json_object_object_add(environment, "background_color", background_color);
+        }
+    }
+    json_object_object_add(environment,
                            "top_fill_strength",
                            json_object_new_double(animSettings.topFillStrength));
     json_object_object_add(authoring, "light_path", light_path);

@@ -643,14 +643,7 @@ static void runtime_scene_3d_builder_apply_authored_samples(RuntimeScene3D* scen
     RuntimeCamera3D camera = {0};
     if (!scene) return;
 
-    scene->environment.lightMode =
-        animation_config_environment_light_mode_clamp(animSettings.environmentLightMode);
-    scene->environment.ambientIntensity = fmax(0.0, fmin(1.0, animSettings.environmentBrightness / 255.0));
-    scene->environment.topFillIntensity = fmax(0.0, fmin(20.0, animSettings.topFillStrength));
-    scene->environment.ambientColor = vec3(1.0, 1.0, 1.0);
-    scene->environment.backgroundTopColor = vec3(0.66, 0.70, 0.76);
-    scene->environment.backgroundBottomColor = vec3(0.84, 0.85, 0.87);
-    scene->environment.topDownBias = 0.18;
+    RuntimeEnvironment3D_ResolveFromAnimationConfig(&scene->environment, &animSettings);
 
     if (RuntimeScene3DSampleAuthoredLight(normalized_t, &light)) {
         scene->light = light;

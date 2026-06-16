@@ -24,11 +24,10 @@ static double runtime_native_3d_render_clamp_unit(double value) {
 }
 
 uint8_t RuntimeNative3DResolveEnvironmentByte(void) {
-    double value = animSettings.environmentBrightness;
-    if (animation_config_environment_light_mode_clamp(animSettings.environmentLightMode) !=
-        ENVIRONMENT_LIGHT_MODE_AMBIENT) {
-        return 0u;
-    }
+    RuntimeEnvironment3D environment;
+    double value = 0.0;
+    RuntimeEnvironment3D_ResolveFromAnimationConfig(&environment, &animSettings);
+    value = RuntimeEnvironment3D_BackgroundBrightness(&environment) * 255.0;
     if (value < 0.0) value = 0.0;
     if (value > 255.0) value = 255.0;
     return (uint8_t)lround(value);

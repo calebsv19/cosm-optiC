@@ -102,9 +102,13 @@ typedef struct {
 
 typedef struct {
     EnvironmentLightMode lightMode;
+    EnvironmentPreset preset;
     double ambientIntensity;
+    double backgroundIntensity;
+    bool backgroundIntensityDerivedFromAmbient;
     double topFillIntensity;
     Vec3 ambientColor;
+    Vec3 backgroundColor;
     Vec3 backgroundTopColor;
     Vec3 backgroundBottomColor;
     double topDownBias;
@@ -163,6 +167,14 @@ typedef struct RuntimeScene3D {
 
 const char* RuntimePrimitive3DKindLabel(RuntimePrimitive3DKind kind);
 bool RuntimePrimitive3DKindSupportedByR0(RuntimePrimitive3DKind kind);
+const char* RuntimeEnvironment3DPresetLabel(EnvironmentPreset preset);
+EnvironmentPreset RuntimeEnvironment3DPresetFromLabel(const char* label);
+void RuntimeEnvironment3D_Init(RuntimeEnvironment3D* environment);
+void RuntimeEnvironment3D_ApplyPreset(RuntimeEnvironment3D* environment);
+void RuntimeEnvironment3D_ResolveFromAnimationConfig(RuntimeEnvironment3D* environment,
+                                                     const AnimationConfig* config);
+double RuntimeEnvironment3D_AmbientStrength(const RuntimeEnvironment3D* environment);
+double RuntimeEnvironment3D_BackgroundBrightness(const RuntimeEnvironment3D* environment);
 
 void RuntimeTriangleMesh3D_Init(RuntimeTriangleMesh3D* mesh);
 void RuntimeTriangleMesh3D_Free(RuntimeTriangleMesh3D* mesh);

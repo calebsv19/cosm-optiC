@@ -47,6 +47,12 @@ int animation_config_environment_light_mode_clamp(int mode) {
     return mode;
 }
 
+int animation_config_environment_preset_clamp(int preset) {
+    if (preset < ENVIRONMENT_PRESET_NEUTRAL) return ENVIRONMENT_PRESET_SKY;
+    if (preset > ENVIRONMENT_PRESET_WARM_SKY) return ENVIRONMENT_PRESET_SKY;
+    return preset;
+}
+
 int animation_config_space_mode_clamp(int mode) {
     if (mode < SPACE_MODE_2D) return SPACE_MODE_2D;
     if (mode > SPACE_MODE_3D) return SPACE_MODE_2D;
@@ -306,6 +312,29 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "pathEnableMIS", json_object_new_boolean(animSettings.pathEnableMIS));
     json_object_object_add(config, "environmentBrightness", json_object_new_double(animSettings.environmentBrightness));
     json_object_object_add(config, "environmentBrightnessUsesByteFloor", json_object_new_boolean(true));
+    json_object_object_add(config,
+                           "environmentBackgroundLightingAuthored",
+                           json_object_new_boolean(
+                               animSettings.environmentBackgroundLightingAuthored));
+    json_object_object_add(config,
+                           "environmentPreset",
+                           json_object_new_int(animation_config_environment_preset_clamp(
+                               animSettings.environmentPreset)));
+    json_object_object_add(config,
+                           "environmentBackgroundBrightnessAuto",
+                           json_object_new_boolean(animSettings.environmentBackgroundBrightnessAuto));
+    json_object_object_add(config,
+                           "environmentBackgroundBrightness",
+                           json_object_new_double(animSettings.environmentBackgroundBrightness));
+    json_object_object_add(config,
+                           "environmentBackgroundColorR",
+                           json_object_new_double(animSettings.environmentBackgroundColorR));
+    json_object_object_add(config,
+                           "environmentBackgroundColorG",
+                           json_object_new_double(animSettings.environmentBackgroundColorG));
+    json_object_object_add(config,
+                           "environmentBackgroundColorB",
+                           json_object_new_double(animSettings.environmentBackgroundColorB));
     json_object_object_add(config, "pathSeed", json_object_new_int(animSettings.pathSeed));
     json_object_object_add(config, "cacheContributionWeight", json_object_new_double(animSettings.cacheContributionWeight));
     json_object_object_add(config, "bsdfModel", json_object_new_int(animSettings.bsdfModel));
@@ -413,7 +442,31 @@ void LoadAnimationConfig(void) {
     }
 
     struct json_object* temp;
+    struct json_object* authored_environment_temp = NULL;
+    struct json_object* authored_environment_key_temp = NULL;
     bool has_scene_source = false;
+    bool has_environment_background_lighting_authored =
+        json_object_object_get_ex(config,
+                                  "environmentBackgroundLightingAuthored",
+                                  &authored_environment_temp) &&
+        json_object_is_type(authored_environment_temp, json_type_boolean);
+    bool has_environment_background_authored_field =
+        json_object_object_get_ex(config, "environmentPreset", &authored_environment_key_temp) ||
+        json_object_object_get_ex(config,
+                                  "environmentBackgroundBrightnessAuto",
+                                  &authored_environment_key_temp) ||
+        json_object_object_get_ex(config,
+                                  "environmentBackgroundBrightness",
+                                  &authored_environment_key_temp) ||
+        json_object_object_get_ex(config,
+                                  "environmentBackgroundColorR",
+                                  &authored_environment_key_temp) ||
+        json_object_object_get_ex(config,
+                                  "environmentBackgroundColorG",
+                                  &authored_environment_key_temp) ||
+        json_object_object_get_ex(config,
+                                  "environmentBackgroundColorB",
+                                  &authored_environment_key_temp);
 
     if (json_object_object_get_ex(config, "interactiveMode", &temp))
         animSettings.interactiveMode = json_object_get_boolean(temp);
@@ -569,6 +622,42 @@ void LoadAnimationConfig(void) {
                 animation_config_legacy_environment_radiance_to_byte_floor(raw_environment);
         }
     }
+    if (json_object_object_get_ex(config, "environmentPreset", &temp)) {
+        animSettings.environmentPreset =
+            animation_config_environment_preset_clamp(json_object_get_int(temp));
+    } else {
+        animSettings.environmentPreset = ENVIRONMENT_PRESET_SKY;
+    }
+    if (json_object_object_get_ex(config, "environmentBackgroundBrightnessAuto", &temp) &&
+        json_object_is_type(temp, json_type_boolean)) {
+        animSettings.environmentBackgroundBrightnessAuto = json_object_get_boolean(temp) != 0;
+    } else {
+        animSettings.environmentBackgroundBrightnessAuto = true;
+    }
+    if (json_object_object_get_ex(config, "environmentBackgroundBrightness", &temp)) {
+        animSettings.environmentBackgroundBrightness = json_object_get_double(temp);
+    } else {
+        animSettings.environmentBackgroundBrightness = 0.0;
+    }
+    if (json_object_object_get_ex(config, "environmentBackgroundColorR", &temp)) {
+        animSettings.environmentBackgroundColorR = json_object_get_double(temp);
+    } else {
+        animSettings.environmentBackgroundColorR = 1.0;
+    }
+    if (json_object_object_get_ex(config, "environmentBackgroundColorG", &temp)) {
+        animSettings.environmentBackgroundColorG = json_object_get_double(temp);
+    } else {
+        animSettings.environmentBackgroundColorG = 1.0;
+    }
+    if (json_object_object_get_ex(config, "environmentBackgroundColorB", &temp)) {
+        animSettings.environmentBackgroundColorB = json_object_get_double(temp);
+    } else {
+        animSettings.environmentBackgroundColorB = 1.0;
+    }
+    animSettings.environmentBackgroundLightingAuthored =
+        has_environment_background_lighting_authored
+            ? (json_object_get_boolean(authored_environment_temp) != 0)
+            : has_environment_background_authored_field;
     if (json_object_object_get_ex(config, "pathSeed", &temp))
         animSettings.pathSeed = json_object_get_int(temp);
     if (json_object_object_get_ex(config, "cacheContributionWeight", &temp))
@@ -803,6 +892,30 @@ void LoadAnimationConfig(void) {
     }
     animSettings.environmentLightMode =
         animation_config_environment_light_mode_clamp(animSettings.environmentLightMode);
+    animSettings.environmentPreset =
+        animation_config_environment_preset_clamp(animSettings.environmentPreset);
+    if (!isfinite(animSettings.environmentBackgroundBrightness) ||
+        animSettings.environmentBackgroundBrightness < 0.0) {
+        animSettings.environmentBackgroundBrightness = 0.0;
+    }
+    if (animSettings.environmentBackgroundBrightness > 4.0) {
+        animSettings.environmentBackgroundBrightness = 4.0;
+    }
+    if (!isfinite(animSettings.environmentBackgroundColorR)) {
+        animSettings.environmentBackgroundColorR = 1.0;
+    }
+    if (!isfinite(animSettings.environmentBackgroundColorG)) {
+        animSettings.environmentBackgroundColorG = 1.0;
+    }
+    if (!isfinite(animSettings.environmentBackgroundColorB)) {
+        animSettings.environmentBackgroundColorB = 1.0;
+    }
+    animSettings.environmentBackgroundColorR =
+        ClampDoubleValue(animSettings.environmentBackgroundColorR, 0.0, 1.0);
+    animSettings.environmentBackgroundColorG =
+        ClampDoubleValue(animSettings.environmentBackgroundColorG, 0.0, 1.0);
+    animSettings.environmentBackgroundColorB =
+        ClampDoubleValue(animSettings.environmentBackgroundColorB, 0.0, 1.0);
     if (!isfinite(animSettings.topFillStrength) || animSettings.topFillStrength < 0.0) {
         animSettings.topFillStrength = 1.0;
     }

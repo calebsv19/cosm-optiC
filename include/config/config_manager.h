@@ -40,6 +40,12 @@ typedef enum {
 } EnvironmentLightMode;
 
 typedef enum {
+    ENVIRONMENT_PRESET_NEUTRAL = 0,
+    ENVIRONMENT_PRESET_SKY = 1,
+    ENVIRONMENT_PRESET_WARM_SKY = 2
+} EnvironmentPreset;
+
+typedef enum {
     SCENE_SOURCE_CONFIG_2D = 0,
     SCENE_SOURCE_FLUID_MANIFEST = 1,
     SCENE_SOURCE_RUNTIME_SCENE = 2
@@ -136,6 +142,13 @@ typedef struct {
     bool pathRussianRoulette;
     bool pathEnableMIS;
     double environmentBrightness;
+    int environmentPreset;
+    bool environmentBackgroundLightingAuthored;
+    bool environmentBackgroundBrightnessAuto;
+    double environmentBackgroundBrightness;
+    double environmentBackgroundColorR;
+    double environmentBackgroundColorG;
+    double environmentBackgroundColorB;
     int pathSeed;
     int editorMode;
     SpaceMode spaceMode;
@@ -225,6 +238,7 @@ int animation_config_scale_text_point_size(const AnimationConfig* cfg,
                                            int base_point_size,
                                            int min_point_size);
 int animation_config_environment_light_mode_clamp(int mode);
+int animation_config_environment_preset_clamp(int preset);
 int animation_config_space_mode_clamp(int mode);
 int animation_config_scene_source_clamp(int source);
 int animation_config_volume_source_kind_clamp(int kind);
