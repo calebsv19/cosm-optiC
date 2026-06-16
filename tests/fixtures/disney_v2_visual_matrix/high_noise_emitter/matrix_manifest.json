@@ -1,0 +1,28 @@
+{
+  "schema_version": "ray_tracing_visual_matrix_v1",
+  "matrix_id": "high_noise_emitter",
+  "title": "High Noise Emitter Denoise Matrix",
+  "scene_path": "scene_runtime.json",
+  "default_output_root": "../../../../build/agent_runs/ray_tracing/disney_v2_visual_matrix/high_noise_emitter",
+  "private_workspace_output_root": "../../../../../_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_visual_matrix/high_noise_emitter",
+  "default_review_root": "../../../../../_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_visual_matrix/high_noise_emitter/matrix_review",
+  "groups": [
+    {
+      "id": "disney_v2_denoise_ablation",
+      "purpose": "Verify denoise impact around a small bright source and stable receiving surfaces.",
+      "requests": [
+        "request_disney_v2_denoise_off_12.json",
+        "request_disney_v2_denoise_on_12.json"
+      ]
+    }
+  ],
+  "comparisons": [
+    {
+      "id": "high_noise_emitter_denoise_off_vs_on_12",
+      "group": "disney_v2_denoise_ablation",
+      "before": "request_disney_v2_denoise_off_12.json",
+      "after": "request_disney_v2_denoise_on_12.json",
+      "purpose": "Check stable receiving-surface smoothing around a compact bright emitter without broad edge blur."
+    }
+  ]
+}

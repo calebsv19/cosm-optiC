@@ -1,0 +1,28 @@
+{
+  "schema_version": "ray_tracing_visual_matrix_v1",
+  "matrix_id": "mirror_glossy_preservation",
+  "title": "Mirror Glossy Preservation Denoise Matrix",
+  "scene_path": "scene_runtime.json",
+  "default_output_root": "../../../../build/agent_runs/ray_tracing/disney_v2_visual_matrix/mirror_glossy_preservation",
+  "private_workspace_output_root": "../../../../../_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_visual_matrix/mirror_glossy_preservation",
+  "default_review_root": "../../../../../_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_visual_matrix/mirror_glossy_preservation/matrix_review",
+  "groups": [
+    {
+      "id": "disney_v2_denoise_ablation",
+      "purpose": "Verify low-roughness mirror/glossy first-hit surfaces are preserved by Disney v2 denoise.",
+      "requests": [
+        "request_disney_v2_denoise_off_12.json",
+        "request_disney_v2_denoise_on_12.json"
+      ]
+    }
+  ],
+  "comparisons": [
+    {
+      "id": "mirror_glossy_denoise_off_vs_on_12",
+      "group": "disney_v2_denoise_ablation",
+      "before": "request_disney_v2_denoise_off_12.json",
+      "after": "request_disney_v2_denoise_on_12.json",
+      "purpose": "Check denoise smooths eligible stable surfaces while preserving mirror/glossy first-hit pixels."
+    }
+  ]
+}

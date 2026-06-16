@@ -1,0 +1,30 @@
+{
+  "pixels": 57600,
+  "changed_pixels": 6106,
+  "changed_pixel_ratio": 0.10600694444444445,
+  "changed_pixels_gt_2": 1338,
+  "changed_pixels_gt_2_ratio": 0.023229166666666665,
+  "changed_pixels_gt_8": 23,
+  "changed_pixels_gt_8_ratio": 0.0003993055555555556,
+  "mean_abs_rgb": [
+    0.16010416666666666,
+    0.16355902777777778,
+    0.16041666666666668
+  ],
+  "mean_abs_all_channels": 0.1613599537037037,
+  "mean_abs_luma": 0.1625976458333344,
+  "rms_rgb_error": 0.6986884207279088,
+  "max_abs_channel_delta": 12,
+  "max_luma_delta": 12.0,
+  "before_bmp": "/Users/calebsv/Desktop/CodeWork/ray_tracing/build/agent_runs/ray_tracing/disney_v2_visual_matrix/primitive_glass_corridor/disney_v2_denoise_off_12/frames/frame_0000.bmp",
+  "after_bmp": "/Users/calebsv/Desktop/CodeWork/ray_tracing/build/agent_runs/ray_tracing/disney_v2_visual_matrix/primitive_glass_corridor/disney_v2_denoise_on_12/frames/frame_0000.bmp",
+  "before_png": "/Users/calebsv/Desktop/CodeWork/ray_tracing/docs/render_review_sets/disney_v2_d218_denoise_on_off_visual_proof/denoise_off_12.png",
+  "after_png": "/Users/calebsv/Desktop/CodeWork/ray_tracing/docs/render_review_sets/disney_v2_d218_denoise_on_off_visual_proof/denoise_on_12.png",
+  "diff_png": "/Users/calebsv/Desktop/CodeWork/ray_tracing/docs/render_review_sets/disney_v2_d218_denoise_on_off_visual_proof/diff_abs_amplified4x.png",
+  "diff_8x_png": "/Users/calebsv/Desktop/CodeWork/ray_tracing/docs/render_review_sets/disney_v2_d218_denoise_on_off_visual_proof/diff_abs_amplified8x.png",
+  "side_by_side_png": "/Users/calebsv/Desktop/CodeWork/ray_tracing/docs/render_review_sets/disney_v2_d218_denoise_on_off_visual_proof/side_by_side_denoise_off_12_denoise_on_12_diff4x.png",
+  "diff_amplification": 4,
+  "diff8": {
+    "diff_amplification": 8
+  }
+}

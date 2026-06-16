@@ -1,0 +1,32 @@
+{
+  "pixels": 57600,
+  "changed_pixels": 12732,
+  "changed_pixel_ratio": 0.22104166666666666,
+  "mean_abs_rgb": [
+    1.2675,
+    1.35953125,
+    1.3624479166666668
+  ],
+  "mean_abs_all_channels": 1.3298263888888888,
+  "rms_rgb_error": 4.281025102230297,
+  "max_abs_channel_delta": 47,
+  "max_luma_delta": 46.068200000000004,
+  "diff_amplification": 4,
+  "raw_frame": "/Users/calebsv/Desktop/CodeWork/ray_tracing/build/agent_runs/ray_tracing/disney_v2_d218_denoise_visual_proof/raw_single/frames/frame_0000.bmp",
+  "denoised_frame": "/Users/calebsv/Desktop/CodeWork/ray_tracing/build/agent_runs/ray_tracing/disney_v2_d218_denoise_visual_proof/denoised_temporal12/frames/frame_0000.bmp",
+  "raw_png": "/Users/calebsv/Desktop/CodeWork/ray_tracing/build/agent_runs/ray_tracing/disney_v2_d218_denoise_visual_proof/review/raw_single.png",
+  "denoised_png": "/Users/calebsv/Desktop/CodeWork/ray_tracing/build/agent_runs/ray_tracing/disney_v2_d218_denoise_visual_proof/review/denoised_temporal12.png",
+  "diff_png": "/Users/calebsv/Desktop/CodeWork/ray_tracing/build/agent_runs/ray_tracing/disney_v2_d218_denoise_visual_proof/review/diff_abs_amplified4x.png",
+  "diff_8x_png": "/Users/calebsv/Desktop/CodeWork/ray_tracing/build/agent_runs/ray_tracing/disney_v2_d218_denoise_visual_proof/review/diff_abs_amplified8x.png",
+  "side_by_side_png": "/Users/calebsv/Desktop/CodeWork/ray_tracing/build/agent_runs/ray_tracing/disney_v2_d218_denoise_visual_proof/review/side_by_side_raw_denoised_diff4x.png",
+  "stable_review_set_root": "ray_tracing/docs/render_review_sets/disney_v2_d218_denoise_visual_proof",
+  "stable_raw_png": "raw_single.png",
+  "stable_denoised_png": "denoised_temporal12.png",
+  "stable_diff_png": "diff_abs_amplified4x.png",
+  "stable_diff_8x_png": "diff_abs_amplified8x.png",
+  "stable_side_by_side_png": "side_by_side_raw_denoised_diff4x.png",
+  "comparison_note": "Raw uses temporal_frames=1, which bypasses Disney-v2 denoise; denoised uses temporal_frames=12 with the Disney-v2 edge-safe final-resolve denoise policy enabled by default.",
+  "diff8": {
+    "diff_amplification": 8
+  }
+}

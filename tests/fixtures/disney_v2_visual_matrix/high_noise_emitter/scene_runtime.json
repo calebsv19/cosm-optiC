@@ -1,0 +1,90 @@
+{
+  "schema_family": "codework_scene",
+  "schema_variant": "scene_runtime_v1",
+  "schema_version": 1,
+  "scene_id": "visual_matrix_high_noise_emitter",
+  "space_mode_default": "3d",
+  "unit_system": "meters",
+  "world_scale": 1.0,
+  "objects": [
+    {
+      "object_id": "receiver_floor",
+      "object_type": "plane_primitive",
+      "space_mode_intent": "2d",
+      "dimensional_mode": "plane_locked",
+      "locked_plane": "xy",
+      "transform": { "position": { "x": 0.0, "y": 0.0, "z": -1.0 }, "scale": { "x": 1.0, "y": 1.0, "z": 1.0 } },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 7.0,
+        "height": 5.0,
+        "frame": {
+          "origin": { "x": 0.0, "y": 0.0, "z": -1.0 },
+          "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+          "axis_v": { "x": 0.0, "y": 1.0, "z": 0.0 },
+          "normal": { "x": 0.0, "y": 0.0, "z": 1.0 }
+        }
+      }
+    },
+    {
+      "object_id": "receiver_wall",
+      "object_type": "plane_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": { "position": { "x": 0.0, "y": 1.45, "z": 0.1 }, "scale": { "x": 1.0, "y": 1.0, "z": 1.0 } },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 5.2,
+        "height": 2.4,
+        "frame": {
+          "origin": { "x": 0.0, "y": 1.45, "z": 0.1 },
+          "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+          "axis_v": { "x": 0.0, "y": 0.0, "z": 1.0 },
+          "normal": { "x": 0.0, "y": -1.0, "z": 0.0 }
+        }
+      }
+    },
+    {
+      "object_id": "small_warm_emitter",
+      "object_type": "rect_prism_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": { "position": { "x": -0.15, "y": 0.15, "z": 0.35 }, "scale": { "x": 1.0, "y": 1.0, "z": 1.0 } },
+      "primitive": { "kind": "rect_prism_primitive", "width": 0.34, "height": 0.34, "depth": 0.34 }
+    },
+    {
+      "object_id": "shadow_occluder",
+      "object_type": "rect_prism_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": { "position": { "x": 0.75, "y": 0.25, "z": -0.25 }, "scale": { "x": 1.0, "y": 1.0, "z": 1.0 } },
+      "primitive": { "kind": "rect_prism_primitive", "width": 0.65, "height": 0.8, "depth": 1.1 }
+    },
+    {
+      "object_id": "cool_reference_block",
+      "object_type": "rect_prism_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": { "position": { "x": -1.15, "y": 0.75, "z": -0.4 }, "scale": { "x": 1.0, "y": 1.0, "z": 1.0 } },
+      "primitive": { "kind": "rect_prism_primitive", "width": 0.6, "height": 0.55, "depth": 0.85 }
+    }
+  ],
+  "materials": [],
+  "lights": [],
+  "cameras": [],
+  "extensions": {
+    "ray_tracing": {
+      "authoring": {
+        "light_settings": { "intensity": 8.4, "radius": 0.08 },
+        "environment": { "light_mode": 2, "ambient_strength": 0.22, "top_fill_strength": 1.05 },
+        "object_materials": [
+          { "object_id": "receiver_floor", "material_id": 0, "object_color": 9606037, "roughness": 0.78, "reflectivity": 0.08 },
+          { "object_id": "receiver_wall", "material_id": 0, "object_color": 8356748, "roughness": 0.72, "reflectivity": 0.06 },
+          { "object_id": "small_warm_emitter", "material_id": 4, "object_color": 16760644, "roughness": 1.0, "reflectivity": 0.0, "emissive_strength": 1.0 },
+          { "object_id": "shadow_occluder", "material_id": 0, "object_color": 13257283, "roughness": 0.52, "reflectivity": 0.12 },
+          { "object_id": "cool_reference_block", "material_id": 0, "object_color": 3155708, "roughness": 0.6, "reflectivity": 0.08 }
+        ]
+      }
+    }
+  }
+}

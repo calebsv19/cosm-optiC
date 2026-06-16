@@ -1,0 +1,119 @@
+{
+  "schema_family": "codework_scene",
+  "schema_variant": "scene_runtime_v1",
+  "schema_version": 1,
+  "scene_id": "visual_matrix_transparent_interior_stack",
+  "space_mode_default": "3d",
+  "unit_system": "meters",
+  "world_scale": 1.0,
+  "objects": [
+    {
+      "object_id": "floor_matte",
+      "object_type": "plane_primitive",
+      "space_mode_intent": "2d",
+      "dimensional_mode": "plane_locked",
+      "locked_plane": "xy",
+      "transform": { "position": { "x": 0.0, "y": 0.0, "z": -1.0 }, "scale": { "x": 1.0, "y": 1.0, "z": 1.0 } },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 7.0,
+        "height": 5.0,
+        "frame": {
+          "origin": { "x": 0.0, "y": 0.0, "z": -1.0 },
+          "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+          "axis_v": { "x": 0.0, "y": 1.0, "z": 0.0 },
+          "normal": { "x": 0.0, "y": 0.0, "z": 1.0 }
+        }
+      }
+    },
+    {
+      "object_id": "rear_blue_panel",
+      "object_type": "plane_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": { "position": { "x": 0.0, "y": 1.2, "z": 0.1 }, "scale": { "x": 1.0, "y": 1.0, "z": 1.0 } },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 4.8,
+        "height": 2.6,
+        "frame": {
+          "origin": { "x": 0.0, "y": 1.2, "z": 0.1 },
+          "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+          "axis_v": { "x": 0.0, "y": 0.0, "z": 1.0 },
+          "normal": { "x": 0.0, "y": -1.0, "z": 0.0 }
+        }
+      }
+    },
+    {
+      "object_id": "interior_red_block",
+      "object_type": "rect_prism_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": { "position": { "x": -0.8, "y": 0.65, "z": -0.25 }, "scale": { "x": 1.0, "y": 1.0, "z": 1.0 } },
+      "primitive": { "kind": "rect_prism_primitive", "width": 0.8, "height": 0.8, "depth": 1.3 }
+    },
+    {
+      "object_id": "interior_green_block",
+      "object_type": "rect_prism_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": { "position": { "x": 0.9, "y": 0.75, "z": -0.35 }, "scale": { "x": 1.0, "y": 1.0, "z": 1.0 } },
+      "primitive": { "kind": "rect_prism_primitive", "width": 0.7, "height": 0.7, "depth": 1.1 }
+    },
+    {
+      "object_id": "glass_front",
+      "object_type": "plane_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": { "position": { "x": 0.0, "y": -0.9, "z": 0.0 }, "scale": { "x": 1.0, "y": 1.0, "z": 1.0 } },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 4.4,
+        "height": 2.2,
+        "frame": {
+          "origin": { "x": 0.0, "y": -0.9, "z": 0.0 },
+          "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+          "axis_v": { "x": 0.0, "y": 0.0, "z": 1.0 },
+          "normal": { "x": 0.0, "y": -1.0, "z": 0.0 }
+        }
+      }
+    },
+    {
+      "object_id": "glass_rear",
+      "object_type": "plane_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": { "position": { "x": 0.0, "y": -0.25, "z": 0.05 }, "scale": { "x": 1.0, "y": 1.0, "z": 1.0 } },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 3.6,
+        "height": 2.0,
+        "frame": {
+          "origin": { "x": 0.0, "y": -0.25, "z": 0.05 },
+          "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+          "axis_v": { "x": 0.0, "y": 0.0, "z": 1.0 },
+          "normal": { "x": 0.0, "y": -1.0, "z": 0.0 }
+        }
+      }
+    }
+  ],
+  "materials": [],
+  "lights": [],
+  "cameras": [],
+  "extensions": {
+    "ray_tracing": {
+      "authoring": {
+        "light_settings": { "intensity": 6.4, "radius": 0.16 },
+        "environment": { "light_mode": 2, "ambient_strength": 0.38, "top_fill_strength": 1.8 },
+        "object_materials": [
+          { "object_id": "floor_matte", "material_id": 0, "object_color": 10333392, "roughness": 0.72, "reflectivity": 0.08 },
+          { "object_id": "rear_blue_panel", "material_id": 0, "object_color": 3842806, "roughness": 0.55, "reflectivity": 0.08 },
+          { "object_id": "interior_red_block", "material_id": 0, "object_color": 13578555, "roughness": 0.48, "reflectivity": 0.12 },
+          { "object_id": "interior_green_block", "material_id": 0, "object_color": 3316537, "roughness": 0.58, "reflectivity": 0.10 },
+          { "object_id": "glass_front", "material_id": 5, "object_color": 12643583, "alpha": 0.62, "roughness": 1.0, "reflectivity": 0.02 },
+          { "object_id": "glass_rear", "material_id": 5, "object_color": 11788021, "alpha": 0.54, "roughness": 1.0, "reflectivity": 0.02 }
+        ]
+      }
+    }
+  }
+}
