@@ -21,7 +21,20 @@ void RuntimeNative3DFeatureBuffer_Free(RuntimeNative3DFeatureBuffer* buffer) {
     free(buffer->roughnessBuffer);
     free(buffer->transparencyBuffer);
     free(buffer->hitMaskBuffer);
+    free(buffer->triangleIndexBuffer);
+    free(buffer->sceneObjectIndexBuffer);
     memset(buffer, 0, sizeof(*buffer));
+}
+
+static void runtime_native_3d_feature_buffer_clear_identity(RuntimeNative3DFeatureBuffer* buffer,
+                                                            size_t pixel_count) {
+    if (!buffer || !buffer->triangleIndexBuffer || !buffer->sceneObjectIndexBuffer) {
+        return;
+    }
+    for (size_t i = 0; i < pixel_count; ++i) {
+        buffer->triangleIndexBuffer[i] = -1;
+        buffer->sceneObjectIndexBuffer[i] = -1;
+    }
 }
 
 bool RuntimeNative3DFeatureBuffer_Ensure(RuntimeNative3DFeatureBuffer* buffer,
@@ -33,6 +46,8 @@ bool RuntimeNative3DFeatureBuffer_Ensure(RuntimeNative3DFeatureBuffer* buffer,
     float* roughness = NULL;
     float* transparency = NULL;
     unsigned char* hit_mask = NULL;
+    int* triangle_index = NULL;
+    int* scene_object_index = NULL;
     size_t pixel_count = 0;
     if (!buffer || width <= 0 || height <= 0) return false;
     if (buffer->normalBuffer &&
@@ -41,6 +56,8 @@ bool RuntimeNative3DFeatureBuffer_Ensure(RuntimeNative3DFeatureBuffer* buffer,
         buffer->roughnessBuffer &&
         buffer->transparencyBuffer &&
         buffer->hitMaskBuffer &&
+        buffer->triangleIndexBuffer &&
+        buffer->sceneObjectIndexBuffer &&
         buffer->width == width &&
         buffer->height == height) {
         return true;
@@ -53,13 +70,18 @@ bool RuntimeNative3DFeatureBuffer_Ensure(RuntimeNative3DFeatureBuffer* buffer,
     roughness = (float*)calloc(pixel_count, sizeof(*roughness));
     transparency = (float*)calloc(pixel_count, sizeof(*transparency));
     hit_mask = (unsigned char*)calloc(pixel_count, sizeof(*hit_mask));
-    if (!normals || !depths || !reflectivity || !roughness || !transparency || !hit_mask) {
+    triangle_index = (int*)calloc(pixel_count, sizeof(*triangle_index));
+    scene_object_index = (int*)calloc(pixel_count, sizeof(*scene_object_index));
+    if (!normals || !depths || !reflectivity || !roughness || !transparency || !hit_mask ||
+        !triangle_index || !scene_object_index) {
         free(normals);
         free(depths);
         free(reflectivity);
         free(roughness);
         free(transparency);
         free(hit_mask);
+        free(triangle_index);
+        free(scene_object_index);
         return false;
     }
 
@@ -69,14 +91,19 @@ bool RuntimeNative3DFeatureBuffer_Ensure(RuntimeNative3DFeatureBuffer* buffer,
     free(buffer->roughnessBuffer);
     free(buffer->transparencyBuffer);
     free(buffer->hitMaskBuffer);
+    free(buffer->triangleIndexBuffer);
+    free(buffer->sceneObjectIndexBuffer);
     buffer->normalBuffer = normals;
     buffer->depthBuffer = depths;
     buffer->reflectivityBuffer = reflectivity;
     buffer->roughnessBuffer = roughness;
     buffer->transparencyBuffer = transparency;
     buffer->hitMaskBuffer = hit_mask;
+    buffer->triangleIndexBuffer = triangle_index;
+    buffer->sceneObjectIndexBuffer = scene_object_index;
     buffer->width = width;
     buffer->height = height;
+    runtime_native_3d_feature_buffer_clear_identity(buffer, pixel_count);
     return true;
 }
 
@@ -85,6 +112,7 @@ void RuntimeNative3DFeatureBuffer_Clear(RuntimeNative3DFeatureBuffer* buffer) {
     if (!buffer || !buffer->normalBuffer || !buffer->depthBuffer ||
         !buffer->reflectivityBuffer || !buffer->roughnessBuffer ||
         !buffer->transparencyBuffer || !buffer->hitMaskBuffer ||
+        !buffer->triangleIndexBuffer || !buffer->sceneObjectIndexBuffer ||
         buffer->width <= 0 || buffer->height <= 0) {
         return;
     }
@@ -95,6 +123,7 @@ void RuntimeNative3DFeatureBuffer_Clear(RuntimeNative3DFeatureBuffer* buffer) {
     memset(buffer->roughnessBuffer, 0, pixel_count * sizeof(*buffer->roughnessBuffer));
     memset(buffer->transparencyBuffer, 0, pixel_count * sizeof(*buffer->transparencyBuffer));
     memset(buffer->hitMaskBuffer, 0, pixel_count * sizeof(*buffer->hitMaskBuffer));
+    runtime_native_3d_feature_buffer_clear_identity(buffer, pixel_count);
 }
 
 bool RuntimeNative3DFeatureBuffer_RenderRegion(RuntimeNative3DFeatureBuffer* buffer,
@@ -142,6 +171,9 @@ bool RuntimeNative3DFeatureBuffer_RenderRegion(RuntimeNative3DFeatureBuffer* buf
             } else if (trace.geometryHit) {
                 normal = trace.geometryHitInfo.normal;
                 depth = trace.geometryHitInfo.t;
+                buffer->triangleIndexBuffer[pixel_index] = trace.geometryHitInfo.triangleIndex;
+                buffer->sceneObjectIndexBuffer[pixel_index] =
+                    trace.geometryHitInfo.sceneObjectIndex;
                 if (RuntimeMaterialPayload3D_ResolveFromHit(&trace.geometryHitInfo, &payload) &&
                     payload.valid) {
                     buffer->reflectivityBuffer[pixel_index] = (float)fmax(payload.bsdf.reflectivity, 0.0);

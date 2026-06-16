@@ -13,6 +13,8 @@ typedef struct {
     float* roughnessBuffer;
     float* transparencyBuffer;
     unsigned char* hitMaskBuffer;
+    int* triangleIndexBuffer;
+    int* sceneObjectIndexBuffer;
     int width;
     int height;
 } RuntimeNative3DFeatureBuffer;
