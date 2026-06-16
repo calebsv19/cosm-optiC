@@ -5,6 +5,7 @@
 
 #include "render/runtime_path_depth_policy_3d.h"
 #include "render/runtime_direct_light_3d.h"
+#include "render/runtime_mirror_composition_3d.h"
 #include "render/runtime_specular_reflection_3d.h"
 
 static bool runtime_material_response_3d_shade_hit_with_payload_depth(
@@ -97,6 +98,8 @@ static void runtime_material_response_3d_apply_transmittance(
     io_result->specularRadianceR *= transmittance->r;
     io_result->specularRadianceG *= transmittance->g;
     io_result->specularRadianceB *= transmittance->b;
+    io_result->mirrorBaseRadianceBeforeAttenuation *= transmittance->luma;
+    io_result->mirrorBaseRadianceAfterAttenuation *= transmittance->luma;
     io_result->directRadiance = runtime_material_response_3d_peak(io_result->directRadianceR,
                                                                   io_result->directRadianceG,
                                                                   io_result->directRadianceB);
@@ -147,6 +150,51 @@ static void runtime_material_response_3d_apply_weights(
     out_result->radianceG = out_result->directRadianceG + out_result->bounceRadianceG;
     out_result->radianceB = out_result->directRadianceB + out_result->bounceRadianceB;
     out_result->radiance = out_result->directRadiance + out_result->bounceRadiance;
+}
+
+static void runtime_material_response_3d_apply_mirror_composition(
+    const RuntimeMaterialPayload3D* payload,
+    RuntimeMaterialResponse3DResult* io_result) {
+    RuntimeMirrorComposition3DPolicy policy = RuntimeMirrorComposition3D_Evaluate(payload);
+    double before_r = 0.0;
+    double before_g = 0.0;
+    double before_b = 0.0;
+
+    if (!io_result) return;
+
+    before_r = io_result->directRadianceR + io_result->bounceRadianceR;
+    before_g = io_result->directRadianceG + io_result->bounceRadianceG;
+    before_b = io_result->directRadianceB + io_result->bounceRadianceB;
+    io_result->mirrorDominance = policy.dominance;
+    io_result->mirrorBaseAttenuation = policy.baseAttenuation;
+    io_result->mirrorBaseRadianceBeforeAttenuation =
+        runtime_material_response_3d_peak(before_r, before_g, before_b);
+
+    if (policy.active) {
+        io_result->directRadianceR *= policy.baseAttenuation;
+        io_result->directRadianceG *= policy.baseAttenuation;
+        io_result->directRadianceB *= policy.baseAttenuation;
+        io_result->bounceRadianceR *= policy.baseAttenuation;
+        io_result->bounceRadianceG *= policy.baseAttenuation;
+        io_result->bounceRadianceB *= policy.baseAttenuation;
+        io_result->directRadiance =
+            runtime_material_response_3d_peak(io_result->directRadianceR,
+                                              io_result->directRadianceG,
+                                              io_result->directRadianceB);
+        io_result->bounceRadiance =
+            runtime_material_response_3d_peak(io_result->bounceRadianceR,
+                                              io_result->bounceRadianceG,
+                                              io_result->bounceRadianceB);
+        io_result->radianceR = io_result->directRadianceR + io_result->bounceRadianceR;
+        io_result->radianceG = io_result->directRadianceG + io_result->bounceRadianceG;
+        io_result->radianceB = io_result->directRadianceB + io_result->bounceRadianceB;
+        io_result->radiance = io_result->directRadiance + io_result->bounceRadiance;
+    }
+
+    io_result->mirrorBaseRadianceAfterAttenuation =
+        runtime_material_response_3d_peak(io_result->directRadianceR + io_result->bounceRadianceR,
+                                          io_result->directRadianceG + io_result->bounceRadianceG,
+                                          io_result->directRadianceB + io_result->bounceRadianceB);
 }
 
 static void runtime_material_response_3d_add_specular_rgb(
@@ -296,6 +344,7 @@ static bool runtime_material_response_3d_shade_hit_with_payload_depth(
                                                view_dir,
                                                &diffuse_result,
                                                &result);
+    runtime_material_response_3d_apply_mirror_composition(&result.payload, &result);
     result.secondaryRayCount = diffuse_result.secondaryRayCount;
     result.secondaryHitCount = diffuse_result.secondaryHitCount;
     result.secondaryContributingHitCount = diffuse_result.secondaryContributingHitCount;
@@ -391,6 +440,7 @@ bool RuntimeMaterialResponse3D_ShadePrimaryHitWithPayload(
                                                view_dir,
                                                &diffuse_result,
                                                &result);
+    runtime_material_response_3d_apply_mirror_composition(&result.payload, &result);
     runtime_material_response_3d_apply_transmittance(&primary_hit->primaryTransmittance, &result);
     result.secondaryRayCount = diffuse_result.secondaryRayCount;
     result.secondaryHitCount = diffuse_result.secondaryHitCount;

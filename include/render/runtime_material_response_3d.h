@@ -26,6 +26,10 @@ typedef struct {
     double specularRadianceR;
     double specularRadianceG;
     double specularRadianceB;
+    double mirrorDominance;
+    double mirrorBaseAttenuation;
+    double mirrorBaseRadianceBeforeAttenuation;
+    double mirrorBaseRadianceAfterAttenuation;
     double radiance;
     double radianceR;
     double radianceG;
