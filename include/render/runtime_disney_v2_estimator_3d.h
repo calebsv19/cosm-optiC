@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 
+#include "render/runtime_principled_bsdf_3d.h"
 #include "render/runtime_ray_3d.h"
 
 typedef struct {
@@ -28,6 +29,19 @@ double RuntimeDisneyV2_3D_EstimateDirectLightPdfForHit(
     const RuntimeScene3D* scene,
     const HitInfo3D* hit,
     bool has_emissive_area_direct);
+
+double RuntimeDisneyV2_3D_EstimateDirectBsdfPdf(const RuntimePrincipledBSDF3D* principled,
+                                                const HitInfo3D* hit,
+                                                Vec3 incoming_dir,
+                                                Vec3 light_dir,
+                                                bool include_transmission);
+
+double RuntimeDisneyV2_3D_EstimateDirectBsdfPdfForSceneLight(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimePrincipledBSDF3D* principled,
+    Vec3 incoming_dir,
+    bool include_transmission);
 
 int RuntimeDisneyV2_3D_RoughReflectionEstimatorSampleCount(double roughness);
 
