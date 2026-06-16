@@ -73,6 +73,7 @@ typedef struct {
     Vec3 p1;
     Vec3 p2;
     Vec3 normal;
+    bool twoSided;
     bool hasObjectTextureCoords;
     Vec3 objectTexture0;
     Vec3 objectTexture1;

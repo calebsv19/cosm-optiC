@@ -21,6 +21,15 @@ static Vec3 runtime_ray_3d_triangle_normal(const RuntimeTriangle3D* triangle) {
     return vec3_normalize(vec3_cross(edge1, edge2));
 }
 
+static Vec3 runtime_ray_3d_orient_shading_normal(Vec3 normal, const Ray3D* ray) {
+    normal = vec3_normalize(normal);
+    if (!ray || vec3_length(normal) <= 1e-9) return normal;
+    if (vec3_dot(normal, ray->direction) > 0.0) {
+        return vec3_scale(normal, -1.0);
+    }
+    return normal;
+}
+
 Ray3D RuntimeRay3D_Make(Vec3 origin, Vec3 direction) {
     Ray3D ray = {0};
     ray.origin = origin;
@@ -114,7 +123,9 @@ bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
     HitInfo3D_Reset(&hit);
     hit.t = t;
     hit.position = vec3_add(ray->origin, vec3_scale(ray->direction, t));
-    hit.normal = runtime_ray_3d_triangle_normal(triangle);
+    hit.normal = runtime_ray_3d_orient_shading_normal(
+        runtime_ray_3d_triangle_normal(triangle),
+        ray);
     hit.triangleIndex = triangle_index;
     hit.localTriangleIndex = triangle->localTriangleIndex;
     hit.primitiveIndex = triangle->primitiveIndex;

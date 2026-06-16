@@ -60,6 +60,21 @@ static int test_runtime_ray_3d_triangle_intersection_contract(void) {
                  hit.objectTextureCoord.z,
                  0.30,
                  1e-6);
+
+    triangle.twoSided = true;
+    ray = RuntimeRay3D_Make(vec3(0.25, 0.25, -3.0), vec3(0.0, 0.0, 2.0));
+    ok = RuntimeRay3D_IntersectTriangle(&ray, &triangle, 12, 0.001, 10.0, &hit);
+    assert_true("runtime_ray_3d_triangle_two_sided_back_hit_ok", ok);
+    assert_close("runtime_ray_3d_triangle_two_sided_back_hit_nz", hit.normal.z, -1.0, 1e-6);
+
+    triangle.twoSided = false;
+    ray = RuntimeRay3D_Make(vec3(0.25, 0.25, -3.0), vec3(0.0, 0.0, 2.0));
+    ok = RuntimeRay3D_IntersectTriangle(&ray, &triangle, 13, 0.001, 10.0, &hit);
+    assert_true("runtime_ray_3d_triangle_single_sided_back_hit_ok", ok);
+    assert_close("runtime_ray_3d_triangle_single_sided_shading_normal_oriented",
+                 hit.normal.z,
+                 -1.0,
+                 1e-6);
     return 0;
 }
 
