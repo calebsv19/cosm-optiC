@@ -1,6 +1,6 @@
 # RayTracing Headless Agent Render CLI
 
-Status: Phase 4 volume handoff image export contract landed, with runtime-scene camera fallback for native `3D` renders, additive colored volume inspection tint support, and a first detached RayTracing local job runner.
+Status: Phase 4 volume handoff image export contract landed, with runtime-scene camera fallback for native `3D` renders, additive colored volume inspection tint support, first PhysicsSim water-surface sidecar ingestion, and a first detached RayTracing local job runner.
 
 Environment-light inspection overrides now also support the shipped three-way
 renderer lane:
@@ -9,9 +9,13 @@ renderer lane:
 - `ambient`
 
 Use `ambient_strength` for the ambient-mode surface-fill amount (`0.0..1.0`)
-and `top_fill_strength` for the top-fill lane (`0.0..20.0`). The older
-`environment_brightness` override remains available as a compatibility knob for
-the underlying byte-domain environment brightness state.
+and `top_fill_strength` for the top-fill lane (`0.0..20.0`). Ambient mode now
+resolves through an authored native `3D` environment model:
+`environment_preset` selects `sky`, `warm_sky`, or `neutral`;
+`background_brightness` controls miss-pixel/background radiance independently
+from ambient surface fill; and `background_color` tints the preset gradient.
+The older `environment_brightness` override remains available as a
+compatibility knob for the underlying byte-domain environment brightness state.
 
 The first RayTracing agent command is:
 
@@ -80,6 +84,12 @@ There are two different post-render publication targets:
 `publish_render_review_set.sh` is not a live website deploy step. Use it for
 local docs only.
 
+The current D2.18 denoise ablation review set is:
+
+```text
+ray_tracing/docs/render_review_sets/disney_v2_d218_denoise_on_off_visual_proof/
+```
+
 ## Request Schema
 
 The request root must declare:
@@ -105,7 +115,8 @@ The request root must declare:
     "height": 360,
     "normalized_t": 0.0,
     "temporal_frames": 1,
-    "integrator_3d": "direct_light"
+    "integrator_3d": "direct_light",
+    "denoise_enabled": true
   },
   "inspection": {
     "preset": "glass_preview",
@@ -114,6 +125,9 @@ The request root must declare:
     "camera_look_at": { "x": -0.2, "y": 0.8, "z": 1.2 },
     "environment_light_mode": "ambient",
     "ambient_strength": 0.25,
+    "environment_preset": "sky",
+    "background_brightness": 0.35,
+    "background_color": { "r": 0.90, "g": 0.95, "b": 1.00 },
     "light_intensity": 2.6,
     "light_radius": 0.10,
     "forward_decay": 220.0,
@@ -121,6 +135,8 @@ The request root must declare:
     "volume_step_scale": 1.0,
     "secondary_diffuse_samples_3d": 8,
     "transmission_samples_3d": 4,
+    "object_audit_enabled": true,
+    "object_audit_max_dimension": 160,
     "volume_tint": { "r": 0.35, "g": 0.65, "b": 1.80 }
   },
   "output": {
@@ -151,7 +167,58 @@ Supported `render.integrator_3d` values:
 - `disney`
 - `disney_v2`
 
+Optional `render.denoise_enabled` overrides the runtime animation setting for
+that detached request. It is intended for apples-to-apples denoise ablations,
+for example rendering the same `disney_v2` scene with `temporal_frames=12`
+once with denoise off and once with denoise on.
+
 Relative paths resolve from the request file directory.
+
+## Visual Matrix Runner
+
+Use the visual matrix runner when a proof needs multiple comparable headless
+cells, copied summaries, PNG frames, contact sheets, and amplified difference
+metrics:
+
+```bash
+make -C /Users/calebsv/Desktop/CodeWork/ray_tracing \
+  build/toolchains/clang/arm64/tools/cli/ray_tracing_render_headless
+
+/Users/calebsv/Desktop/CodeWork/ray_tracing/tests/integration/run_ray_tracing_visual_matrix.py \
+  --manifest /Users/calebsv/Desktop/CodeWork/ray_tracing/tests/fixtures/disney_v2_visual_matrix/transparent_interior_stack/matrix_manifest.json \
+  --group disney_v2_denoise_ablation
+```
+
+The first Disney v2 D2.18b canonical matrix fixtures live under:
+
+```text
+ray_tracing/tests/fixtures/disney_v2_visual_matrix/
+  primitive_glass_corridor/
+  transparent_interior_stack/
+  mirror_glossy_preservation/
+  high_noise_emitter/
+```
+
+Each matrix writes a private review package by default under:
+
+```text
+_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_visual_matrix/<matrix_id>/matrix_review/
+```
+
+Generated packages include:
+
+- `matrix_report.json`
+- `index.md`
+- `matrix_contact_sheet.png`
+- `frames/<cell>.png`
+- `requests/*.json`
+- `summaries/summary_<cell>.json`
+- `comparisons/<comparison_id>/diff_metrics.json`
+- `comparisons/<comparison_id>/side_by_side_*.png`
+
+The D2.18b fixture manifests use `render.denoise_enabled=false` and `true`
+with the same `temporal_frames=12` budget so the resulting diff is the
+Disney-v2 edge-safe final resolve only, not a temporal-sample-count change.
 
 Optional `inspection` fields are headless-only tuning overrides. They do not
 change the persisted runtime scene:
@@ -161,6 +228,9 @@ change the persisted runtime scene:
 - `camera_look_at`
 - `environment_light_mode`
 - `ambient_strength`
+- `environment_preset`
+- `background_brightness`
+- `background_color`
 - `top_fill_strength`
 - `environment_brightness`
 - `light_intensity`
@@ -171,15 +241,37 @@ change the persisted runtime scene:
 - `preset`
 - `secondary_diffuse_samples_3d`
 - `transmission_samples_3d`
+- `object_audit_enabled`
+- `object_audit_max_dimension`
 - `volume_tint`
 
 Preferred environment-light override contract:
 - `environment_light_mode = "off"` disables the extra environment fill lane
 - `environment_light_mode = "top_fill"` uses `top_fill_strength`
 - `environment_light_mode = "ambient"` uses `ambient_strength`
+- `environment_preset = "sky" | "warm_sky" | "neutral"` selects the resolved
+  background gradient before `background_color` tinting
+- `background_brightness` (`0.0..4.0`) explicitly controls background/miss
+  radiance. When omitted, it is derived from `ambient_strength` for
+  compatibility with existing ambient requests.
+- `background_color` accepts `{ "r": ..., "g": ..., "b": ... }` or
+  `[r, g, b]` with channels clamped to `0.0..1.0`
 - `environment_brightness` still maps directly to the persisted
   `0..255` environment brightness value and should be treated as a lower-level
   compatibility override rather than the first-choice authored request field
+
+The headless summary writes a resolved `environment_lighting` object with:
+- `mode`
+- `preset`
+- `ambient_strength`
+- `background_brightness`
+- `background_brightness_source`
+- `background_color`
+- `background_top_color`
+- `background_bottom_color`
+- `ambient_surface_fill_contributes`
+- `background_miss_contributes`
+- `top_fill_contributes`
 
 ## Current Behavior
 
@@ -187,7 +279,8 @@ Preferred environment-light override contract:
 
 1. parses the request schema
 2. applies the runtime scene through the existing bridge
-3. optionally validates and attaches the configured VF3D volume source
+3. optionally validates and attaches the configured VF3D volume source and
+   `scene_bundle.json.water_source` water-surface sidecar
 4. resolves the native 3D route
 5. prepares a native 3D frame in memory
 6. writes `ray_tracing_headless_summary_v1`
@@ -200,8 +293,18 @@ Preferred environment-light override contract:
 
 When `progress.progress_path` is set, the render CLI now also writes a
 `ray_tracing_render_progress_v1` JSON file with stage transitions such as
-`loading_scene`, `preflight_ready`, `rendering_frame`, `writing_frame`, and
-`completed`.
+`loading_settings`, `applying_runtime_scene`, `runtime_scene_applied`,
+`attaching_volume`, `resolving_native_route`, `preparing_native_frame`,
+`bvh_ready`, `object_audit`, `object_audit_ready`, `preflight_ready`,
+`rendering_frame`, `writing_frame`, and `completed`.
+
+Headless object-audit summaries are enabled by default but capped by
+`inspection.object_audit_max_dimension`, which defaults to `160` pixels on the
+longest side. The audit still records per-object primary hit counts, but uses a
+downsampled primary-ray pass and scales hit counts by the audit stride so large
+worker renders do not perform a full-resolution diagnostic ray pass before the
+first frame. Set `inspection.object_audit_enabled` to `false` to skip this
+diagnostic pass entirely for production-only runs.
 
 The frame index starts at `render.start_frame` and writes `render.frame_count`
 frames. The summary reports:
@@ -211,13 +314,73 @@ frames. The summary reports:
 - `outputs.frame_dir`
 - `outputs.first_frame_path`
 - `outputs.last_frame_path`
+- `render.has_denoise_enabled_override`
+- `render.denoise_enabled`
+- `denoise.has_request_override`
+- `denoise.enabled`
+- `denoise.applied`
 - `volume_summary_built`
 - `volume_summary.density_non_zero_cell_count`
+- `water_surface_source_found`
+- `water_surface_loaded`
+- `water_surface_mesh_attached`
+- `water_surface.frame_selection_dynamic`
+- `water_surface.selected_first_frame_path`
+- `water_surface.selected_last_frame_path`
+- `water_surface.triangle_count`
+- `water_surface.grid_w`
+- `water_surface.grid_d`
+- `water_surface.wet_columns`
+- `water_surface.surface_min_y`
+- `water_surface.surface_max_y`
+- `water_surface.material.ior`
+- `water_surface.material.absorption_distance_m`
+- `water_surface.material.absorption_rgb`
+- `water_surface.payload.applied`
+- `water_surface.payload.ior`
+- `water_surface.payload.absorption_distance_m`
+- `water_surface.payload.transparency`
+- `water_surface.payload.tint_rgb`
 - `render_stats.hit_pixels`
 - `render_stats.visible_pixels`
 - `render_stats.nonzero_pixels`
 - `render_stats.max_radiance`
 - `render_stats.max_rgb`
+- `render_stats.emissive_area_candidate_count`
+- `render_stats.emissive_area_selected_candidate_count`
+- `render_stats.emissive_area_visibility_ray_count`
+- `render_stats.emissive_area_primary_sample_count`
+- `render_stats.emissive_area_recursive_sample_count`
+- `render_stats.emissive_area_full_scan_fallback_count`
+- `render_stats.mirror_dominant_pixels`
+- `render_stats.mirror_base_attenuated_pixels`
+- `render_stats.mirror_reflection_hit_pixels`
+- `render_stats.mirror_emitter_reflection_pixels`
+- `render_stats.mirror_geometry_reflection_pixels`
+- `render_stats.max_mirror_dominance`
+- `render_stats.max_mirror_specular_reflection_radiance`
+- `render_stats.max_mirror_base_radiance_before_attenuation`
+- `render_stats.max_mirror_base_radiance_after_attenuation`
+- `render_stats.total_mirror_specular_reflection_radiance`
+- `render_stats.total_mirror_base_radiance_before_attenuation`
+- `render_stats.total_mirror_base_radiance_after_attenuation`
+- `render_stats.denoise_temporal_frame_count`
+- `render_stats.denoise_raw_pixel_count`
+- `render_stats.denoise_reconstructed_pixel_count`
+- `render_stats.denoise_stable_interior_sample_count`
+- `render_stats.denoise_rejected_edge_sample_count`
+- `render_stats.denoise_preserved_transparent_pixel_count`
+- `render_stats.denoise_preserved_mirror_glossy_pixel_count`
+- `render_stats.denoise_skipped_unstable_temporal_pixel_count`
+- `render_stats.denoise_skipped_invalid_surface_pixel_count`
+- `render_stats.denoise_raw_radiance_luma_total`
+- `render_stats.denoise_reconstructed_radiance_luma_total`
+- `render_stats.denoise_radiance_luma_delta`
+- `object_audit_summary.enabled`
+- `object_audit_summary.width`
+- `object_audit_summary.height`
+- `object_audit_summary.sample_count`
+- `object_audit_summary.full_resolution_pixel_count`
 - `object_audit[*].object_id`
 - `object_audit[*].material_id`
 - `object_audit[*].alpha`
@@ -351,10 +514,34 @@ ray_tracing/build/agent_runs/physics_trio/volume_handoff_image_export/ray_tracin
 ```
 
 The summary validates native `3D` route readiness, successful volume
-attachment, nonzero VF3D density ingestion, and whether the final frame export
-produced visible pixels. Current manifest-backed rendering resolves one
-representative VF3D frame from the scene bundle; animated per-render-frame VF3D
-playback remains a follow-up contract.
+attachment, nonzero VF3D density ingestion, selected first/last volume frame
+paths, loaded first/last VF3D frame indices, and whether the final frame export
+produced visible pixels. Manifest-backed and scene-bundle-backed rendering now
+resolves VF3D or pack sources by requested render frame.
+
+For PhysicsSim water-surface handoff, the validation flow runs
+`physics_sim_headless --water-mode --save-volume-frames`, points RayTracing at
+the generated `scene_bundle.json`, imports `water_source`, and appends the
+selected Y-up heightfield frame as native `3D` triangle geometry with a
+first-pass `water_surface` material slot. The current backend path is headless
+only; editor controls and LineDrawing liquid-region authoring remain follow-up
+work.
+
+```text
+ray_tracing/build/agent_runs/physics_trio/water_surface_handoff_image_export/ray_tracing/frames/
+```
+
+The water summary reports whether a water source was found, whether the frame
+loaded, whether mesh triangles were attached, requested/loaded first and last
+frame indices, selected frame paths, grid dimensions, wet/dry/solid column
+counts, surface height statistics, finite-normal status, material IOR and
+absorption metadata, the resolved RayTracing water payload, and appended
+triangle count. The source `material.absorption_rgb` values are absorption
+coefficients; the resolved `payload.tint_rgb` values are the Beer-Lambert
+transmittance tint used by the native `3D` material path. Per-render-frame
+native `3D` preparation reloads the water heightfield for the requested
+absolute render frame, so animated PhysicsSim sidecars can move with the
+existing camera/light path sampling.
 
 The current volume-handoff smoke uses an explicit oblique inspection camera:
 
@@ -495,6 +682,7 @@ make -C ray_tracing ray-tracing-job-runner
 make -C ray_tracing test-ray-tracing-render-headless-preflight
 make -C ray_tracing test-ray-tracing-render-headless-image-export
 make -C ray_tracing test-ray-tracing-render-headless-volume-handoff
+make -C ray_tracing test-ray-tracing-render-headless-water-surface-handoff
 make -C ray_tracing test-ray-tracing-job-runner-smoke
 make -C ray_tracing test-ray-tracing-job-runner-policy
 ```

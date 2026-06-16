@@ -1,6 +1,6 @@
 # Ray Tracing Future Intent
 
-Last updated: 2026-06-05
+Last updated: 2026-06-16
 
 ## Direction
 
@@ -41,7 +41,21 @@ Keep `ray_tracing` stable as a hybrid editor/runtime while treating the shipped 
      loop for imported mesh material presets before running expensive full
      native `3D` render proofs.
 
-4. Defer VF3D / `physics_sim` ingestion until the next internal renderer boundary is chosen and stabilized.
+4. Build the next native `3D` lighting pass around an authored lighting model
+   rather than one-off inspection overrides.
+   - Keep `environment_light_mode`, `ambient_strength`, `top_fill_strength`,
+     and `environment_brightness` compatible with existing headless requests.
+   - Add a clearer lighting preset/authoring layer for scene work, including
+     readable ambient contribution and optional sky-tinted background/fill
+     behavior.
+   - Treat background color/brightness and ambient contribution as related but
+     separately inspectable controls so headless summaries can explain why a
+     scene is bright, dark, or sky-tinted.
+   - Preserve the current direct-light, diffuse-bounce, material, emission,
+     Disney, and Disney-v2 route identities while centralizing shared
+     environment-light normalization.
+
+5. Defer VF3D / `physics_sim` ingestion until the next internal renderer boundary is chosen and stabilized.
 
 ## Structural Intent
 

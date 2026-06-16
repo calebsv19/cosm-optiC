@@ -1,6 +1,6 @@
 # optiC Current Truth
 
-Last updated: 2026-06-13
+Last updated: 2026-06-16
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -86,24 +86,88 @@ Last updated: 2026-06-13
   - `Disney`
   - `Disney v2` as an experimental principled-BSDF scaffold route available
     through the distinct `disney_v2` headless/UI identity
-- Experimental `Disney v2` now carries the first stochastic transport RAM map:
-  it records a one-bounce path state with sampled diffuse/specular lobe, support
-  ray, RGB throughput, BSDF/light PDFs, balance-style MIS weights, stochastic
-  direct-light and BSDF radiance channels, and secondary ray/hit counters. This
-  is still a bounded proof slice, not the promoted full recursive Disney
-  integrator. Focused transport coverage now includes a two-triangle
-  one-bounce proof where a glossy sampled support ray hits secondary ordinary
-  geometry plus a finite-radius light-emitter proof where the sampled support
-  ray records `emitterHit/emitterWins` and contributes positive
-  emitter-driven stochastic BSDF radiance. A bounded recursive proof now adds a
-  depth-2 finite-light participation ray from the first secondary geometry hit;
-  it records separate recursive path state, emitter-hit fields, RGB throughput,
-  and positive recursive BSDF radiance in the final Disney v2 output. Disney v2
-  now consumes the shared native `RuntimePathDepthPolicy3D` resolver for this
-  bounded path: result diagnostics record the resolved lobe max depth and
-  roulette state, specular max depth `1` blocks depth-2 participation, and
-  low-throughput depth-2 paths can terminate through Russian roulette before
-  launching recursive work.
+- Experimental `Disney v2` is a separate principled-BSDF route, not a
+  replacement for the shipped Disney combiner. It consumes cached native `3D`
+  material payloads through `RuntimePrincipledBSDF3D`, records stochastic
+  direct/BSDF path state with RGB throughput, PDFs, power-heuristic MIS
+  weights, emitter-hit
+  diagnostics, secondary material diagnostics, bounded recursive path-loop
+  state, and shared `RuntimePathDepthPolicy3D` max-depth/roulette decisions.
+  The route now has bounded proof support for transmission/glass
+  participation, primary camera-through transparent layer accumulation,
+  thin-walled versus solid-glass policy, solid transparent interior-return
+  contribution, physical-transmission versus alpha-only classification,
+  object-level medium-stack diagnostics, and primary mirror-material geometry
+  reflection through the native specular reflection helper. Its bounded
+  recursive path loop now re-resolves each secondary material vertex and
+  resamples a local diffuse/specular/transmission lobe with local
+  throughput/PDF/MIS diagnostics. Reflected mirror/glossy geometry can now
+  re-enter that Disney v2 vertex loop with separate reflected geometry,
+  emitter, no-hit, rough-sample, contribution, and depth/roulette diagnostics.
+  The first estimator-quality pass moved Disney v2 MIS to a focused
+  power-heuristic sidecar and added adaptive rough-reflection sample counts:
+  tiny canonical proofs can use multiple rough probes, while imported and
+  skull-scale scenes cap rough probes to protect local proof cost.
+  Disney v2 now also has its own final-resolve denoise/temporal reconstruction
+  policy: it only filters stable same-triangle/same-object interiors after
+  temporal accumulation, rejects clean visual edges, preserves transparent and
+  genuinely low-roughness mirror/glossy pixels, skips high-temporal-activity
+  pixels, leaves rough reflective stable interiors eligible for blur, and
+  exposes raw-versus-reconstructed/preserved/skipped diagnostics through native
+  render stats. Headless `ray_tracing_render_headless` requests can override
+  `render.denoise_enabled` per detached run. The D2.18b visual matrix runner
+  now renders comparable Disney-v2 proof cells, copies summaries/requests,
+  emits PNG frames, contact sheets, amplified diffs, and `diff_metrics.json`
+  packages. The first canonical matrices cover the primitive glass corridor,
+  transparent/interior preservation, mirror/glossy preservation, and high-noise
+  emitter review under
+  `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_visual_matrix/`.
+  Ordinary emissive material surfaces now participate as bounded Disney v2
+  path endpoints for first BSDF secondary hits and recursive-loop hits, with
+  emissive-material counters/MIS endpoint classification kept separate from
+  finite-radius runtime light sphere hits. Disney v2 also samples ordinary
+  emissive material triangles directly from the primary visible vertex and
+  from bounded recursive transport vertices as area lights through the shared
+  native emissive-direct helper, with separate emissive-area radiance and
+  sample/contribution counters. Reflected mirror/glossy recursion preserves
+  recursive emissive-area radiance and per-vertex light-branch diagnostics
+  when merging reflected geometry back into the primary result. Native
+  emissive-direct shading uses derived scene capabilities to skip mesh-emission
+  support when a scene proves there are no emissive surfaces. On the normal
+  cache-valid Disney v2 path, ordinary emissive material triangles are now
+  collected once into a cached `RuntimeEmissiveLightSet3D` during runtime scene
+  capability refresh, then sampled as bounded candidates from primary and
+  recursive vertices instead of scanning the full triangle mesh per receiver
+  hit. Headless summaries and promotion reports expose candidate count,
+  selected candidates, visibility rays, primary and recursive area samples, and
+  invalid-cache full-scan fallback count.
+  The visual-matrix lane now includes a repo-local imported-mesh pressure MRT8
+  proof using `asset_sphere_128x64`; its private review package compares
+  direct/material/shipped-Disney/Disney-v2 layers, includes a Disney v2
+  `temporal_frames=12` denoise on/off diff, and feeds a thresholded promotion
+  report with two imported-mesh scenes. The threshold report is a local
+  regression gate with separate performance and quality/convergence threshold
+  outcomes for elapsed cost, route ratio, visible pixels, secondary rays/hits,
+  bounded max radiance, BVH health, and route isolation. It still keeps
+  `promotion_ready=false`.
+  The skull/high-triangle proof now has a preparer that stages the relocated
+  skull runtime sidecar into a private scene package, rewrites stale absolute
+  mesh paths to relative scene-local paths, and renders a first direct-light
+  versus Disney-v2 smoke matrix at `171,272` BVH triangles with zero trace
+  overflows. The D2.22 repeat helper now reruns the D2.20 candidate threshold
+  report and D2.21 skull smoke matrix into a private stability report. Current
+  policy keeps recurring shipped/local gates on low-to-moderate imported mesh
+  fixtures, keeps skull/high-triangle proof private/manual, and excludes
+  shipped `disney` from skull-scale comparison for cost. SU4 mirror
+  surface-unification proofs now compare the same mirror wall as an authored
+  plane, thin rect prism, and runtime mesh asset; all three report the same
+  mirror-dominant/reflection-hit/emitter-hit structure in the canonical visual
+  matrix.
+  This is still an experimental bounded integrator: it does not yet provide
+  full production-quality recursive estimator tuning, a settled recursive
+  emissive-area sampling policy for large emitter sets, BRDF-evaluated
+  direct-light estimator quality for rough reflection/transmission, or
+  release-candidate threshold repetitions.
 - The shipped native `3D` direct-light tier samples area lights from a
   16-slot hit-seeded stratified finite-radius disk population. Shadow checks
   start with 4 samples and stop there for clearly fully visible or fully blocked
@@ -123,6 +187,12 @@ Last updated: 2026-06-13
   transparency support only when valid capabilities and the current payload prove
   the scene is opaque/non-transmissive. `ShadeHit`/`ShadePixel` compatibility
   paths and transparent or unresolved scenes stay on the full support path.
+- Native `3D` ray hits now use camera-facing shading normals for triangle
+  intersections, and generated zero-thickness plane primitives are explicitly
+  marked `twoSided` in runtime triangle metadata. This keeps authored room-wall
+  planes visible to direct lighting even when the camera/light sees the back
+  side of the authored plane, while rect-prism and imported/runtime mesh
+  triangles still carry single-sided metadata for future material policy.
 - Native `3D` integrator dispatch now shares one primary camera-ray geometry
   trace per pixel across visible-emitter resolution and the selected integrator;
   hit-based entrypoints consume the cached primary hit/transmittance/material
@@ -144,13 +214,22 @@ Last updated: 2026-06-13
   - tile occupancy culling
   - temporal accumulation upgrades
   - stratified + blue-noise sampling support
-  - Disney-only denoise for the original Disney route; Disney v2 does not
-    inherit this denoise/temporal-pruning policy yet
+  - Disney denoise for the original Disney route plus a separate Disney-v2
+    edge-safe final-resolve reconstruction policy; Disney v2 still does not
+    inherit shipped Disney temporal pruning
   - explicit environment-light modes:
     - `off`
     - `top_fill`
     - `ambient`
   - separate ambient and top-fill strength controls
+  - authored native `3D` environment resolution for ambient-mode scenes:
+    - `environment_preset`: `sky`, `warm_sky`, or `neutral`
+    - `background_brightness`: explicit miss-pixel/background radiance, or
+      ambient-strength-derived compatibility when omitted
+    - `background_color`: RGB tint applied to the preset gradient
+    - headless summaries expose a resolved `environment_lighting` block that
+      says whether ambient surface fill, background miss radiance, or top-fill
+      can contribute
 - Native `3D` low-resolution presentation no longer has one hardcoded upscale policy:
   - preview dirty-rect redraw and completed-frame resolve both route through
     `runtime_native_3d_preview_reconstruction.*`
@@ -415,9 +494,12 @@ Last updated: 2026-06-13
   - preflight command: `ray_tracing_render_headless --request <request.json> --preflight`
   - frame export command: `ray_tracing_render_headless --request <request.json> --render`
   - summary schema: `ray_tracing_headless_summary_v1`
-  - current scope: runtime-scene apply, optional VF3D source validation, native `3D` route readiness, prepared-frame validation, and BMP frame export under `<output.root>/frames/`
+  - current scope: runtime-scene apply, optional VF3D source validation, optional PhysicsSim water-surface sidecar validation, native `3D` route readiness, prepared-frame validation, and BMP frame export under `<output.root>/frames/`
   - PhysicsSim `scene_bundle.json` handoff is covered by `test-ray-tracing-render-headless-volume-handoff`, which now uses a room-style LineDrawing emitter fixture (floor, wall planes, contrast prism, emitter prism), then runs PhysicsSim headless VF3D export and RayTracing BMP export into `ray_tracing/build/agent_runs/physics_trio/volume_handoff_image_export/`
+  - PhysicsSim Water Basin `scene_bundle.json.water_source` handoff is covered by `test-ray-tracing-render-headless-water-surface-handoff`, which runs `physics_sim_headless --water-mode --save-volume-frames`, imports `water_manifest_v1.json`, appends the selected Y-up heightfield as native `3D` water-surface triangles, and renders BMP frames into `ray_tracing/build/agent_runs/physics_trio/water_surface_handoff_image_export/`
   - volume handoff summaries now report VF3D channel/grid/density debug fields, including `volume_summary.density_non_zero_cell_count`
+  - water-surface summaries now report `water_surface_source_found`, `water_surface_loaded`, `water_surface_mesh_attached`, selected first/last frame paths, requested/loaded frame indices, grid dimensions, wet/dry/solid column counts, surface min/max/average/slope, material IOR/absorption metadata, resolved RayTracing water payload fields, and appended triangle count
+  - RayTracing resolves PhysicsSim `water_manifest_v1.material.absorption_rgb` as absorption coefficients, derives a Beer-Lambert `water_surface.payload.tint_rgb` transmittance color over `absorption_distance_m`, and applies a water material payload with IOR, transparency, solid-dielectric state, and the derived tint to the native `3D` material path
   - generic runtime-scene light/camera seeds from `transform.position` are promoted into the native `3D` route, matching LineDrawing-generated scene shape
   - runtime-scene camera seeds now also accept authored orientation fields (`yaw` / `rotation_z` / `transform.rotation.z`, plus optional pitch fields), and when no camera orientation is authored the native `3D` render auto-aims the seeded camera toward the built scene center so headless runtime-scene exports do not fall into all-black horizontal views
   - authored moving-camera scenes now also accept `extensions.ray_tracing.authoring.camera_focus_target = { x, y, z }`; when present, headless runtime-scene sampling preserves authored camera-path translation/depth motion but recomputes yaw/pitch toward that focus target each sample, which is safer than hand-authoring moving camera orientation curves
@@ -561,6 +643,9 @@ Last updated: 2026-06-13
   - the current volume-handoff smoke now uses an explicit oblique camera rig (`camera_zoom=0.95`, `camera_position=(-3.8,-7.2,2.2)`, `camera_look_at=(-0.2,0.8,1.2)`) plus moderated lighting/scatter (`light_intensity=2.6`, `light_radius=0.10`, `forward_decay=220.0`, `volume_scatter_gain=3.0`, `volume_step_scale=1.0`) and a blue-biased inspection tint (`volume_tint=(0.35,0.65,1.80)`) so the room, emitter prism, and plume region read as a side-view `3D` scene instead of an overhead floor patch
   - runtime VF3D density reconstruction is now trilinear instead of nearest-cell lookup, reducing block-edge artifacting in headless and runtime volume shading
   - native `3D` direct-light renders now honor `temporalFrames3D` / `render.temporal_frames`; the old forced-single-subpass path is gone
+  - headless render requests now support `render.denoise_enabled` as a
+    detached-run override, and summaries serialize `denoise.*` plus
+    `render_stats.denoise_*` counters for Disney-v2 visual-matrix comparisons
   - detached local supervision now has a first RayTracing adapter through `make -C ray_tracing ray-tracing-job-runner`, with `submit`, `status`, and `cancel` commands that stage canonicalized absolute-path request files into `build/agent_runs/jobs/<job_id>/`, then supervise `ray_tracing_render_headless` through `job_status.json`, `render_progress.json`, `stdout.log`, `stderr.log`, `pid.txt`, and `result_summary.json`
   - the first trio detached chain adapter now routes into that runner through
     `bin/run_trio_detached_job_chain.sh`, which waits on detached PhysicsSim
@@ -628,7 +713,14 @@ Last updated: 2026-06-13
     inside one tile once a render is inside one long temporal subpass
   - `test-ray-tracing-job-runner-policy` now covers: clean submit, collision rejection without flags, partial contiguous resume after removing the final frame, and explicit overwrite rerender
   - multi-frame image export currently samples normalized time from `0.0` to `1.0` across the requested frame count
-  - manifest-backed volume rendering currently imports one representative VF3D frame; animated VF3D frame selection remains a follow-up contract
+  - manifest-backed and scene-bundle-backed volume rendering now resolves VF3D
+    or pack sources by requested render frame; headless summaries report
+    selected first/last volume frame paths and loaded frame indices
+  - scene-bundle-backed water rendering now resolves
+    `scene_bundle.json.water_source` by requested render frame, loads the
+    matching `physics_sim_water_surface_heightfield_v1` frame, skips dry quads,
+    appends a `water_surface` runtime object/mesh, and records selected frame,
+    material, and triangle-count diagnostics in the headless summary
 - Menu/control-surface implementation is now split across:
   - `src/ui/menu/sdl_menu_render.c` for orchestration/layout pass ownership
   - `src/ui/menu/sdl_menu_render_controls.c` for shared text/button/control rendering helpers

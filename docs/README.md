@@ -6,7 +6,7 @@ Public identity:
 - packaged desktop product: `optiC`
 - repository/program key: `ray_tracing`
 
-Last audited: 2026-06-07.
+Last audited: 2026-06-16.
 
 Current public focus:
 - dual-toolchain compiler-units rollout now starts at the runtime-scene import
@@ -26,11 +26,33 @@ Current public focus:
   - `src/render/runtime_camera_3d_rays.c`
   - `src/render/runtime_ray_3d.c`
 - shipped native `3D` runtime ladder through `Disney`
+- experimental `Disney v2` remains isolated behind `disney_v2` and now has
+  bounded proof support for transparent camera-through accumulation,
+  thin-walled/solid glass handling, medium-stack diagnostics, solid
+  interior-return contribution, recursive per-vertex BSDF lobe resampling,
+  recursive mirror/glossy reflection, ordinary emissive-material endpoint hits,
+  primary and recursive emissive-area sampling, cached emissive-light
+  candidates, Disney-v2-specific edge-safe denoise/temporal reconstruction,
+  and SU4 plane/prism/runtime-mesh mirror surface-unification visual proof;
+  remaining promotion blockers are recursive emissive-area policy for larger
+  emitter sets, BRDF-evaluated direct-light estimator quality, and repeated
+  release-candidate threshold signoff
 - Phase 4.1/4.2 headless-agent render request preflight CLI
+- first headless PhysicsSim Water Basin sidecar bridge: RayTracing can import
+  `scene_bundle.json.water_source`, select animated water heightfield frames,
+  append native `3D` water-surface triangles, and report water diagnostics
 - explicit environment-light request overrides for headless native `3D`
   renders:
   - mode: `off` / `top_fill` / `ambient`
   - strengths: `ambient_strength` and `top_fill_strength`
+  - authored environment fields: `environment_preset`, `background_brightness`,
+    and `background_color`
+  - resolved headless `environment_lighting` summary fields explain whether
+    ambient fill, background miss radiance, or top-fill can contribute
+- native `3D` zero-thickness plane surfaces now shade from both camera sides:
+  plane-generated triangles are marked `twoSided`, ray hits orient shading
+  normals against the incoming ray, and solid rect-prism/runtime-mesh geometry
+  keeps explicit single-sided triangle metadata
 - deep-render start/resume and export workflow
 - hardened worker-backed frame-range continuation workflow:
   seed -> `start_stage = ray_tracing` continuation -> optional publish
@@ -52,7 +74,8 @@ Current public focus:
 - `docs/current_truth.md`: current runtime contract and active boundaries.
 - `docs/future_intent.md`: near-term renderer and workflow direction.
 - `docs/headless_agent_render_cli.md`: `ray_tracing_agent_render_request_v1`
-  request schema and preflight CLI command.
+  request schema, preflight/render CLI command, PhysicsSim VF3D handoff, and
+  first water-surface sidecar handoff.
 - `docs/headless_continuation_visualizer_workflow.md`: operator workflow for
   seed render -> RayTracing-only continuation -> cancel/publish-backfill ->
   visualizer grouping, including shared sampling-window chunks for continuous
@@ -113,8 +136,13 @@ Public product-facing docs should treat `optiC` as the primary app name and
 use `ray_tracing` where repo/runtime identifiers need to stay exact.
 
 ## Review Sets
-- `docs/render_review_sets/grime_screen_motion_review_v2/index.md`: latest published
-  detached Disney motion review for the grime-screen scene.
+- `docs/render_review_sets/disney_v2_d218_denoise_on_off_visual_proof/index.md`:
+  repo-local Disney v2 denoise on/off visual proof.
+- private visual-matrix outputs under
+  `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_visual_matrix/`
+  now include primitive glass, transparent interior, mirror/glossy, high-noise
+  emitter, imported-mesh pressure, skull-local, and SU4 mirror
+  surface-unification matrices.
 
 ## Private Planning Docs
 - Private scaffold plans and internal execution docs are in the workspace private docs bucket:
