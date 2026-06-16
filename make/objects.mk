@@ -12,6 +12,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_diffuse_bounce_3d.o \
 	$(BUILD_DIR)/render/runtime_dielectric_transport_3d.o \
 	$(BUILD_DIR)/render/runtime_emissive_direct_3d.o \
+	$(BUILD_DIR)/render/runtime_emissive_light_set_3d.o \
 	$(BUILD_DIR)/render/runtime_light_emitter_3d.o \
 	$(BUILD_DIR)/render/runtime_specular_reflection_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_3d.o \
@@ -204,6 +205,7 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_diffuse_bounce_3d.o \
 		$(BUILD_DIR)/render/runtime_dielectric_transport_3d.o \
 		$(BUILD_DIR)/render/runtime_emissive_direct_3d.o \
+		$(BUILD_DIR)/render/runtime_emissive_light_set_3d.o \
 		$(BUILD_DIR)/render/runtime_light_emitter_3d.o \
 		$(BUILD_DIR)/render/runtime_specular_reflection_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_3d.o \

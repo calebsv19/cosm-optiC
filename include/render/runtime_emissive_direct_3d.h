@@ -13,6 +13,10 @@ typedef struct {
     double directRadianceB;
     int sampledTriangleCount;
     int contributingTriangleCount;
+    int candidateCount;
+    int selectedCandidateCount;
+    int visibilityRayCount;
+    int fullScanFallbackCount;
 } RuntimeEmissiveDirect3DResult;
 
 bool RuntimeEmissiveDirect3D_ShadeHit(const RuntimeScene3D* scene,

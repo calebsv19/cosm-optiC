@@ -5,6 +5,7 @@
 
 #include "config/config_manager.h"
 #include "math/vec3.h"
+#include "render/runtime_emissive_light_set_3d.h"
 #include "render/runtime_volume_3d.h"
 
 #define RUNTIME_SCENE_3D_MAX_OBJECT_ID 64
@@ -133,19 +134,23 @@ typedef struct {
     bool hasTransmissionSurfaces;
     bool hasLightingExtinctionVolume;
     bool hasLightingScatterVolume;
+    bool emissiveLightSetValid;
     bool canUseOpaqueNoVolumeVisibilityFastPath;
     bool canSkipEmissionSupport;
     bool canSkipTransparencySupport;
     bool canSkipVolumeScatter;
+    int emissiveLightCandidateCount;
+    double emissiveLightTotalWeight;
 } RuntimeScene3DCapabilities;
 
-typedef struct {
+typedef struct RuntimeScene3D {
     RuntimeScene3DPrimitiveScope scope;
     RuntimeScene3DOwnershipContract ownership;
     RuntimePrimitive3D* primitives;
     int primitiveCount;
     int primitiveCapacity;
     RuntimeTriangleMesh3D triangleMesh;
+    RuntimeEmissiveLightSet3D emissiveLightSet;
     RuntimeVolumeAttachment3D volume;
     RuntimeEnvironment3D environment;
     RuntimeLight3D light;

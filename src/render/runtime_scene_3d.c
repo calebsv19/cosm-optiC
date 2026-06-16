@@ -98,6 +98,7 @@ void RuntimeScene3D_Init(RuntimeScene3D* scene) {
     scene->camera.nearPlane = 0.1;
 
     RuntimeTriangleMesh3D_Init(&scene->triangleMesh);
+    RuntimeEmissiveLightSet3D_Init(&scene->emissiveLightSet);
     RuntimeVolumeAttachment3D_Init(&scene->volume);
 }
 
@@ -121,6 +122,7 @@ void RuntimeScene3D_Free(RuntimeScene3D* scene) {
     scene->primitiveCount = 0;
     scene->primitiveCapacity = 0;
     RuntimeTriangleMesh3D_Free(&scene->triangleMesh);
+    RuntimeEmissiveLightSet3D_Free(&scene->emissiveLightSet);
     RuntimeVolumeAttachment3D_Free(&scene->volume);
     scene->hasLight = false;
     scene->hasCamera = false;
@@ -157,6 +159,12 @@ bool RuntimeScene3D_CopyGeometryFrom(RuntimeScene3D* dst, const RuntimeScene3D* 
     }
 
     if (!RuntimeTriangleMesh3D_CopyFrom(&dst->triangleMesh, &src->triangleMesh)) {
+        RuntimeScene3D_Free(dst);
+        RuntimeScene3D_Init(dst);
+        return false;
+    }
+    if (!RuntimeEmissiveLightSet3D_CopyFrom(&dst->emissiveLightSet,
+                                            &src->emissiveLightSet)) {
         RuntimeScene3D_Free(dst);
         RuntimeScene3D_Init(dst);
         return false;

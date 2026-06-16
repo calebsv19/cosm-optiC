@@ -7,6 +7,8 @@
 
 static const double kRuntimeEmissiveDirect3DEpsilon = 1e-4;
 static const double kRuntimeEmissiveDirect3DEnergyScale = 1.25;
+static const int kRuntimeEmissiveDirect3DMaxCandidateSamples = 1;
+static const int kRuntimeEmissiveDirect3DMaxSelectionAttempts = 4;
 
 static double runtime_emissive_direct_3d_clamp(double value,
                                                double min_value,
@@ -91,94 +93,304 @@ static Vec3 runtime_emissive_direct_3d_sample_triangle_point(
                              vec3_scale(vec3_sub(triangle->p2, triangle->p0), v)));
 }
 
+static int runtime_emissive_direct_3d_select_candidate_index(
+    const RuntimeEmissiveLightSet3D* light_set,
+    double target_weight) {
+    int lo = 0;
+    int hi = 0;
+
+    if (!light_set || !light_set->candidates || light_set->candidateCount <= 0) {
+        return -1;
+    }
+
+    if (!(target_weight > 0.0)) {
+        return 0;
+    }
+    if (target_weight >= light_set->totalWeight) {
+        return light_set->candidateCount - 1;
+    }
+
+    hi = light_set->candidateCount - 1;
+    while (lo < hi) {
+        const int mid = lo + ((hi - lo) / 2);
+        if (target_weight <= light_set->candidates[mid].cumulativeWeight) {
+            hi = mid;
+        } else {
+            lo = mid + 1;
+        }
+    }
+    return lo;
+}
+
+static const RuntimeEmissiveLightCandidate3D*
+runtime_emissive_direct_3d_select_candidate(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeNative3DSamplingContext* sampling,
+    uint32_t base_seed,
+    int sample_index,
+    int* out_candidate_index) {
+    const RuntimeEmissiveLightSet3D* light_set = NULL;
+    double u = 0.5;
+    double v = 0.5;
+
+    if (out_candidate_index) *out_candidate_index = -1;
+    if (!scene || !hit) return NULL;
+    light_set = &scene->emissiveLightSet;
+    if (!light_set->valid ||
+        !light_set->candidates ||
+        light_set->candidateCount <= 0 ||
+        !(light_set->totalWeight > 0.0)) {
+        return NULL;
+    }
+
+    for (int attempt = 0; attempt < kRuntimeEmissiveDirect3DMaxSelectionAttempts; ++attempt) {
+        const uint32_t dimension = (uint32_t)(173U + (uint32_t)attempt);
+        const RuntimeEmissiveLightCandidate3D* candidate = NULL;
+        int candidate_index = -1;
+
+        RuntimeNative3DSampling_Stratified2D(sampling,
+                                             base_seed ^
+                                                 (uint32_t)(sample_index * 0x9e3779b9U) ^
+                                                 (uint32_t)(attempt * 0x85ebca6bU),
+                                             kRuntimeEmissiveDirect3DMaxCandidateSamples,
+                                             sample_index,
+                                             dimension,
+                                             &u,
+                                             &v);
+        (void)v;
+        candidate_index =
+            runtime_emissive_direct_3d_select_candidate_index(light_set,
+                                                              u * light_set->totalWeight);
+        if (candidate_index < 0 || candidate_index >= light_set->candidateCount) {
+            continue;
+        }
+        candidate = &light_set->candidates[candidate_index];
+        if (candidate->sceneObjectIndex < 0 ||
+            candidate->sceneObjectIndex == hit->sceneObjectIndex) {
+            continue;
+        }
+        if (out_candidate_index) *out_candidate_index = candidate_index;
+        return candidate;
+    }
+    return NULL;
+}
+
+static bool runtime_emissive_direct_3d_accumulate_triangle(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeNative3DSamplingContext* sampling,
+    uint32_t base_seed,
+    int triangle_index,
+    double emissive,
+    double base_color_r,
+    double base_color_g,
+    double base_color_b,
+    double area,
+    RuntimeEmissiveDirect3DResult* io_result) {
+    const RuntimeTriangle3D* triangle = NULL;
+    Vec3 sample_point = vec3(0.0, 0.0, 0.0);
+    Vec3 to_emitter = vec3(0.0, 0.0, 0.0);
+    Vec3 light_dir = vec3(0.0, 0.0, 0.0);
+    double distance = 0.0;
+    double receiver_facing = 0.0;
+    double emitter_facing = 0.0;
+    double transmittance = 0.0;
+    double sample_energy = 0.0;
+
+    if (!scene || !hit || !io_result ||
+        !scene->triangleMesh.triangles ||
+        triangle_index < 0 ||
+        triangle_index >= scene->triangleMesh.triangleCount ||
+        !(emissive > 0.0)) {
+        return false;
+    }
+
+    triangle = &scene->triangleMesh.triangles[triangle_index];
+    if (triangle->sceneObjectIndex < 0 ||
+        triangle->sceneObjectIndex == hit->sceneObjectIndex) {
+        return false;
+    }
+
+    sample_point = runtime_emissive_direct_3d_sample_triangle_point(triangle,
+                                                                    sampling,
+                                                                    base_seed,
+                                                                    triangle_index);
+    to_emitter = vec3_sub(sample_point, hit->position);
+    distance = vec3_length(to_emitter);
+    if (!(distance > kRuntimeEmissiveDirect3DEpsilon)) {
+        return false;
+    }
+
+    light_dir = vec3_scale(to_emitter, 1.0 / distance);
+    receiver_facing = fmax(0.0, vec3_dot(hit->normal, light_dir));
+    emitter_facing = fmax(0.0, vec3_dot(triangle->normal, vec3_scale(light_dir, -1.0)));
+    if (!(receiver_facing > 0.0) || !(emitter_facing > 0.0)) {
+        return false;
+    }
+
+    io_result->sampledTriangleCount += 1;
+    io_result->visibilityRayCount += 1;
+    transmittance = RuntimeVisibility3D_TransmittanceFromHitToPoint(scene,
+                                                                    hit,
+                                                                    sample_point,
+                                                                    triangle->sceneObjectIndex,
+                                                                    triangle_index);
+    if (!(transmittance > 1e-6)) {
+        return false;
+    }
+
+    sample_energy = emissive *
+                    receiver_facing *
+                    emitter_facing *
+                    transmittance *
+                    runtime_emissive_direct_3d_distance_decay(distance) *
+                    runtime_emissive_direct_3d_clamp(area, 0.25, 4.0) *
+                    kRuntimeEmissiveDirect3DEnergyScale;
+    if (!(sample_energy > 0.0)) {
+        return false;
+    }
+
+    io_result->contributingTriangleCount += 1;
+    io_result->directRadiance += sample_energy;
+    io_result->directRadianceR += sample_energy * base_color_r;
+    io_result->directRadianceG += sample_energy * base_color_g;
+    io_result->directRadianceB += sample_energy * base_color_b;
+    return true;
+}
+
+static bool runtime_emissive_direct_3d_shade_hit_with_light_set(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeNative3DSamplingContext* sampling,
+    uint32_t base_seed,
+    RuntimeEmissiveDirect3DResult* io_result) {
+    bool contributed = false;
+
+    if (!scene || !hit || !io_result || !scene->emissiveLightSet.valid) {
+        return false;
+    }
+    io_result->candidateCount = scene->emissiveLightSet.candidateCount;
+    if (scene->emissiveLightSet.candidateCount <= 0) {
+        return false;
+    }
+
+    for (int sample_index = 0;
+         sample_index < kRuntimeEmissiveDirect3DMaxCandidateSamples;
+         ++sample_index) {
+        int candidate_index = -1;
+        const RuntimeEmissiveLightCandidate3D* candidate =
+            runtime_emissive_direct_3d_select_candidate(scene,
+                                                        hit,
+                                                        sampling,
+                                                        base_seed,
+                                                        sample_index,
+                                                        &candidate_index);
+        (void)candidate_index;
+        if (!candidate) {
+            continue;
+        }
+        io_result->selectedCandidateCount += 1;
+        if (runtime_emissive_direct_3d_accumulate_triangle(scene,
+                                                           hit,
+                                                           sampling,
+                                                           base_seed,
+                                                           candidate->triangleIndex,
+                                                           candidate->emissive,
+                                                           candidate->baseColorR,
+                                                           candidate->baseColorG,
+                                                           candidate->baseColorB,
+                                                           candidate->area,
+                                                           io_result)) {
+            contributed = true;
+        }
+    }
+    return contributed;
+}
+
+static bool runtime_emissive_direct_3d_shade_hit_full_scan_fallback(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeNative3DSamplingContext* sampling,
+    uint32_t base_seed,
+    RuntimeEmissiveDirect3DResult* io_result) {
+    bool contributed = false;
+
+    if (!scene || !hit || !io_result ||
+        !scene->triangleMesh.triangles ||
+        scene->triangleMesh.triangleCount <= 0) {
+        return false;
+    }
+
+    io_result->fullScanFallbackCount += 1;
+    for (int i = 0; i < scene->triangleMesh.triangleCount; ++i) {
+        const RuntimeTriangle3D* triangle = &scene->triangleMesh.triangles[i];
+        RuntimeMaterialPayload3D payload = {0};
+        double area = 0.0;
+
+        if (triangle->sceneObjectIndex < 0 ||
+            triangle->sceneObjectIndex == hit->sceneObjectIndex) {
+            continue;
+        }
+        if (!RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(triangle->sceneObjectIndex,
+                                                                  &payload) ||
+            !(payload.emissive > 0.0)) {
+            continue;
+        }
+        area = runtime_emissive_direct_3d_triangle_area(triangle);
+        if (runtime_emissive_direct_3d_accumulate_triangle(scene,
+                                                           hit,
+                                                           sampling,
+                                                           base_seed,
+                                                           i,
+                                                           payload.emissive,
+                                                           payload.baseColorR,
+                                                           payload.baseColorG,
+                                                           payload.baseColorB,
+                                                           area,
+                                                           io_result)) {
+            contributed = true;
+        }
+    }
+    return contributed;
+}
+
 bool RuntimeEmissiveDirect3D_ShadeHit(const RuntimeScene3D* scene,
                                       const HitInfo3D* hit,
                                       const RuntimeNative3DSamplingContext* sampling,
                                       RuntimeEmissiveDirect3DResult* out_result) {
     RuntimeEmissiveDirect3DResult result = {0};
     uint32_t base_seed = 0U;
+    bool contributed = false;
 
     if (!scene || !hit || !out_result) return false;
+    if (scene->emissiveLightSet.valid) {
+        result.candidateCount = scene->emissiveLightSet.candidateCount;
+    }
+    if (scene->capabilities.valid && scene->capabilities.canSkipEmissionSupport) {
+        *out_result = result;
+        return false;
+    }
     if (!scene->triangleMesh.triangles || scene->triangleMesh.triangleCount <= 0) {
         *out_result = result;
         return false;
     }
 
     base_seed = runtime_emissive_direct_3d_seed_from_hit(hit, sampling);
-    for (int i = 0; i < scene->triangleMesh.triangleCount; ++i) {
-        const RuntimeTriangle3D* triangle = &scene->triangleMesh.triangles[i];
-        RuntimeMaterialPayload3D payload = {0};
-        Vec3 sample_point = vec3(0.0, 0.0, 0.0);
-        Vec3 to_emitter = vec3(0.0, 0.0, 0.0);
-        Vec3 light_dir = vec3(0.0, 0.0, 0.0);
-        double distance = 0.0;
-        double receiver_facing = 0.0;
-        double emitter_facing = 0.0;
-        double transmittance = 0.0;
-        double area = 0.0;
-        double sample_energy = 0.0;
-        double sample_energy_r = 0.0;
-        double sample_energy_g = 0.0;
-        double sample_energy_b = 0.0;
-
-        if (triangle->sceneObjectIndex < 0 ||
-            triangle->sceneObjectIndex == hit->sceneObjectIndex) {
-            continue;
-        }
-        if (!RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(triangle->sceneObjectIndex, &payload) ||
-            !(payload.emissive > 0.0)) {
-            continue;
-        }
-
-        sample_point = runtime_emissive_direct_3d_sample_triangle_point(triangle,
-                                                                        sampling,
-                                                                        base_seed,
-                                                                        i);
-        to_emitter = vec3_sub(sample_point, hit->position);
-        distance = vec3_length(to_emitter);
-        if (!(distance > kRuntimeEmissiveDirect3DEpsilon)) {
-            continue;
-        }
-
-        light_dir = vec3_scale(to_emitter, 1.0 / distance);
-        receiver_facing = fmax(0.0, vec3_dot(hit->normal, light_dir));
-        emitter_facing = fmax(0.0, vec3_dot(triangle->normal, vec3_scale(light_dir, -1.0)));
-        if (!(receiver_facing > 0.0) || !(emitter_facing > 0.0)) {
-            continue;
-        }
-
-        result.sampledTriangleCount += 1;
-        transmittance = RuntimeVisibility3D_TransmittanceFromHitToPoint(scene,
-                                                                        hit,
-                                                                        sample_point,
-                                                                        triangle->sceneObjectIndex,
-                                                                        i);
-        if (!(transmittance > 1e-6)) {
-            continue;
-        }
-
-        area = runtime_emissive_direct_3d_triangle_area(triangle);
-        sample_energy = payload.emissive *
-                        receiver_facing *
-                        emitter_facing *
-                        transmittance *
-                        runtime_emissive_direct_3d_distance_decay(distance) *
-                        runtime_emissive_direct_3d_clamp(area, 0.25, 4.0) *
-                        kRuntimeEmissiveDirect3DEnergyScale;
-        if (!(sample_energy > 0.0)) {
-            continue;
-        }
-        sample_energy_r = sample_energy * payload.baseColorR;
-        sample_energy_g = sample_energy * payload.baseColorG;
-        sample_energy_b = sample_energy * payload.baseColorB;
-
-        result.contributingTriangleCount += 1;
-        result.directRadiance += sample_energy;
-        result.directRadianceR += sample_energy_r;
-        result.directRadianceG += sample_energy_g;
-        result.directRadianceB += sample_energy_b;
+    if (scene->emissiveLightSet.valid) {
+        contributed = runtime_emissive_direct_3d_shade_hit_with_light_set(scene,
+                                                                          hit,
+                                                                          sampling,
+                                                                          base_seed,
+                                                                          &result);
+    } else {
+        contributed = runtime_emissive_direct_3d_shade_hit_full_scan_fallback(scene,
+                                                                              hit,
+                                                                              sampling,
+                                                                              base_seed,
+                                                                              &result);
     }
 
     *out_result = result;
-    return result.contributingTriangleCount > 0;
+    return contributed && result.contributingTriangleCount > 0;
 }

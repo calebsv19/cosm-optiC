@@ -58,7 +58,9 @@ void RuntimeScene3D_RefreshCapabilities(RuntimeScene3D* scene) {
         !capabilities.hasTransparentSurfaces &&
         !capabilities.hasUnresolvedSurfaces &&
         !capabilities.hasLightingExtinctionVolume;
-    capabilities.canSkipEmissionSupport = !capabilities.hasEmissiveSurfaces;
+    capabilities.canSkipEmissionSupport =
+        !capabilities.hasEmissiveSurfaces &&
+        !capabilities.hasUnresolvedSurfaces;
     capabilities.canSkipTransparencySupport =
         !capabilities.hasTransparentSurfaces &&
         !capabilities.hasTransmissionSurfaces;
@@ -70,6 +72,15 @@ void RuntimeScene3D_RefreshCapabilities(RuntimeScene3D* scene) {
     flags.hasTransparentSurfaces = capabilities.hasTransparentSurfaces;
     flags.hasEmissiveSurfaces = capabilities.hasEmissiveSurfaces;
     flags.hasUnresolvedSurfaces = capabilities.hasUnresolvedSurfaces;
+    if (RuntimeEmissiveLightSet3D_BuildForScene(&scene->emissiveLightSet, scene)) {
+        capabilities.emissiveLightSetValid = scene->emissiveLightSet.valid;
+        capabilities.emissiveLightCandidateCount = scene->emissiveLightSet.candidateCount;
+        capabilities.emissiveLightTotalWeight = scene->emissiveLightSet.totalWeight;
+    } else {
+        capabilities.emissiveLightSetValid = false;
+        capabilities.emissiveLightCandidateCount = 0;
+        capabilities.emissiveLightTotalWeight = 0.0;
+    }
     scene->capabilities = capabilities;
     scene->materialFlags = flags;
 }
