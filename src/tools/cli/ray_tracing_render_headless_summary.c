@@ -22,6 +22,18 @@ static const char *route_family_label(RayTracingRouteFamily family) {
     }
 }
 
+static const char *environment_light_mode_label(EnvironmentLightMode mode) {
+    switch (animation_config_environment_light_mode_clamp(mode)) {
+        case ENVIRONMENT_LIGHT_MODE_TOP_FILL:
+            return "top_fill";
+        case ENVIRONMENT_LIGHT_MODE_AMBIENT:
+            return "ambient";
+        case ENVIRONMENT_LIGHT_MODE_OFF:
+        default:
+            return "off";
+    }
+}
+
 static void json_write_string(FILE *file, const char *value) {
     const unsigned char *cursor = (const unsigned char *)(value ? value : "");
     fputc('"', file);
@@ -70,6 +82,12 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "  \"volume_attached\": %s,\n", preflight->volume_attached ? "true" : "false");
     fprintf(file, "  \"volume_summary_built\": %s,\n",
             preflight->volume_summary_built ? "true" : "false");
+    fprintf(file, "  \"water_surface_source_found\": %s,\n",
+            preflight->water_surface_source_found ? "true" : "false");
+    fprintf(file, "  \"water_surface_loaded\": %s,\n",
+            preflight->water_surface_loaded ? "true" : "false");
+    fprintf(file, "  \"water_surface_mesh_attached\": %s,\n",
+            preflight->water_surface_mesh_attached ? "true" : "false");
     fprintf(file, "  \"route_family\": ");
     json_write_string(file, route_family_label(preflight->route.routeFamily));
     fprintf(file, ",\n");
@@ -99,7 +117,19 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "    \"width\": %d,\n", request->width);
     fprintf(file, "    \"height\": %d,\n", request->height);
     fprintf(file, "    \"normalized_t\": %.9f,\n", request->normalized_t);
-    fprintf(file, "    \"temporal_frames\": %d\n", request->temporal_frames);
+    fprintf(file, "    \"temporal_frames\": %d,\n", request->temporal_frames);
+    fprintf(file, "    \"has_denoise_enabled_override\": %s,\n",
+            request->has_denoise_enabled_override ? "true" : "false");
+    fprintf(file, "    \"denoise_enabled\": %s\n",
+            preflight->denoise_enabled ? "true" : "false");
+    fprintf(file, "  },\n");
+    fprintf(file, "  \"denoise\": {\n");
+    fprintf(file, "    \"has_request_override\": %s,\n",
+            request->has_denoise_enabled_override ? "true" : "false");
+    fprintf(file, "    \"enabled\": %s,\n",
+            preflight->denoise_enabled ? "true" : "false");
+    fprintf(file, "    \"applied\": %s\n",
+            preflight->stats.denoiseRawPixelCount > 0 ? "true" : "false");
     fprintf(file, "  },\n");
     fprintf(file, "  \"inspection\": {\n");
     fprintf(file, "    \"preset\": ");
@@ -132,14 +162,25 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "    \"has_environment_light_mode_override\": %s,\n",
             request->has_environment_light_mode_override ? "true" : "false");
     fprintf(file, "    \"environment_light_mode\": ");
-    json_write_string(file,
-                      request->environment_light_mode_override == ENVIRONMENT_LIGHT_MODE_TOP_FILL
-                          ? "top_fill"
-                          : (request->environment_light_mode_override ==
-                                     ENVIRONMENT_LIGHT_MODE_AMBIENT
-                                 ? "ambient"
-                                 : "off"));
+    json_write_string(file, environment_light_mode_label(request->environment_light_mode_override));
     fprintf(file, ",\n");
+    fprintf(file, "    \"has_environment_preset_override\": %s,\n",
+            request->has_environment_preset_override ? "true" : "false");
+    fprintf(file, "    \"environment_preset\": ");
+    json_write_string(file,
+                      RuntimeEnvironment3DPresetLabel(
+                          (EnvironmentPreset)request->environment_preset_override));
+    fprintf(file, ",\n");
+    fprintf(file, "    \"has_background_brightness_override\": %s,\n",
+            request->has_background_brightness_override ? "true" : "false");
+    fprintf(file, "    \"background_brightness\": %.9f,\n",
+            request->background_brightness_override);
+    fprintf(file, "    \"has_background_color_override\": %s,\n",
+            request->has_background_color_override ? "true" : "false");
+    fprintf(file, "    \"background_color\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
+            request->background_color_r,
+            request->background_color_g,
+            request->background_color_b);
     fprintf(file, "    \"has_top_fill_strength_override\": %s,\n",
             request->has_top_fill_strength_override ? "true" : "false");
     fprintf(file, "    \"top_fill_strength\": %.9f,\n", request->top_fill_strength_override);
@@ -174,6 +215,84 @@ void ray_tracing_render_headless_write_summary(
             request->volume_tint_r,
             request->volume_tint_g,
             request->volume_tint_b);
+    fprintf(file, "  },\n");
+    {
+        const RuntimeEnvironment3D *environment = &preflight->environment_summary;
+        const double ambient_strength =
+            RuntimeEnvironment3D_AmbientStrength(environment);
+        const double background_brightness =
+            RuntimeEnvironment3D_BackgroundBrightness(environment);
+        const bool ambient_contributes =
+            preflight->environment_summary_built &&
+            environment->lightMode == ENVIRONMENT_LIGHT_MODE_AMBIENT &&
+            ambient_strength > 0.0;
+        const bool background_contributes =
+            preflight->environment_summary_built &&
+            environment->lightMode == ENVIRONMENT_LIGHT_MODE_AMBIENT &&
+            background_brightness > 0.0;
+        const bool top_fill_contributes =
+            preflight->environment_summary_built &&
+            environment->lightMode == ENVIRONMENT_LIGHT_MODE_TOP_FILL &&
+            environment->topFillIntensity > 0.0;
+        fprintf(file, "  \"environment_lighting\": {\n");
+        fprintf(file, "    \"built\": %s,\n",
+                preflight->environment_summary_built ? "true" : "false");
+        fprintf(file, "    \"mode\": ");
+        json_write_string(file, environment_light_mode_label(environment->lightMode));
+        fprintf(file, ",\n");
+        fprintf(file, "    \"preset\": ");
+        json_write_string(file, RuntimeEnvironment3DPresetLabel(environment->preset));
+        fprintf(file, ",\n");
+        fprintf(file, "    \"ambient_strength\": %.9f,\n", ambient_strength);
+        fprintf(file, "    \"ambient_color\": [%.9f, %.9f, %.9f],\n",
+                environment->ambientColor.x,
+                environment->ambientColor.y,
+                environment->ambientColor.z);
+        fprintf(file, "    \"background_brightness\": %.9f,\n", background_brightness);
+        fprintf(file, "    \"background_brightness_source\": ");
+        json_write_string(file,
+                          environment->backgroundIntensityDerivedFromAmbient
+                              ? "ambient_strength_compat"
+                              : "background_brightness");
+        fprintf(file, ",\n");
+        fprintf(file, "    \"background_color\": [%.9f, %.9f, %.9f],\n",
+                environment->backgroundColor.x,
+                environment->backgroundColor.y,
+                environment->backgroundColor.z);
+        fprintf(file, "    \"background_top_color\": [%.9f, %.9f, %.9f],\n",
+                environment->backgroundTopColor.x,
+                environment->backgroundTopColor.y,
+                environment->backgroundTopColor.z);
+        fprintf(file, "    \"background_bottom_color\": [%.9f, %.9f, %.9f],\n",
+                environment->backgroundBottomColor.x,
+                environment->backgroundBottomColor.y,
+                environment->backgroundBottomColor.z);
+        fprintf(file, "    \"top_fill_strength\": %.9f,\n",
+                environment->topFillIntensity);
+        fprintf(file, "    \"ambient_surface_fill_contributes\": %s,\n",
+                ambient_contributes ? "true" : "false");
+        fprintf(file, "    \"background_miss_contributes\": %s,\n",
+                background_contributes ? "true" : "false");
+        fprintf(file, "    \"top_fill_contributes\": %s,\n",
+                top_fill_contributes ? "true" : "false");
+        fprintf(file, "    \"authored_direct_light_count\": %d\n",
+                preflight->scene_summary.light_count);
+        fprintf(file, "  },\n");
+    }
+    fprintf(file, "  \"object_audit_summary\": {\n");
+    fprintf(file, "    \"enabled\": %s,\n", preflight->object_audit_enabled ? "true" : "false");
+    fprintf(file, "    \"requested_max_dimension\": %d,\n", request->object_audit_max_dimension);
+    fprintf(file, "    \"width\": %d,\n", preflight->object_audit_width);
+    fprintf(file, "    \"height\": %d,\n", preflight->object_audit_height);
+    fprintf(file, "    \"stride_x\": %d,\n", preflight->object_audit_stride_x);
+    fprintf(file, "    \"stride_y\": %d,\n", preflight->object_audit_stride_y);
+    fprintf(file, "    \"scale_factor\": %d,\n", preflight->object_audit_scale_factor);
+    fprintf(file, "    \"sample_count\": %d,\n", preflight->object_audit_sample_count);
+    fprintf(file, "    \"full_resolution_pixel_count\": %llu\n",
+            (unsigned long long)((request->width > 0 && request->height > 0)
+                                     ? ((unsigned long long)request->width *
+                                        (unsigned long long)request->height)
+                                     : 0ull));
     fprintf(file, "  },\n");
     fprintf(file, "  \"outputs\": {\n");
     fprintf(file, "    \"root\": ");
@@ -229,11 +348,147 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "    \"density_min\": %.9f,\n", preflight->volume_summary.densityMin);
     fprintf(file, "    \"density_max\": %.9f\n", preflight->volume_summary.densityMax);
     fprintf(file, "  },\n");
+    fprintf(file, "  \"volume_frame_selection\": {\n");
+    fprintf(file, "    \"built\": %s,\n",
+            preflight->volume_frame_selection_built ? "true" : "false");
+    fprintf(file, "    \"dynamic\": %s,\n",
+            preflight->volume_frame_selection_dynamic ? "true" : "false");
+    fprintf(file, "    \"requested_first_frame_index\": %d,\n",
+            preflight->volume_requested_first_frame_index);
+    fprintf(file, "    \"requested_last_frame_index\": %d,\n",
+            preflight->volume_requested_last_frame_index);
+    fprintf(file, "    \"loaded_first_frame_index\": %llu,\n",
+            (unsigned long long)preflight->volume_loaded_first_frame_index);
+    fprintf(file, "    \"loaded_last_frame_index\": %llu,\n",
+            (unsigned long long)preflight->volume_loaded_last_frame_index);
+    fprintf(file, "    \"selected_first_frame_path\": ");
+    json_write_string(file, preflight->volume_selected_first_frame_path);
+    fprintf(file, ",\n");
+    fprintf(file, "    \"selected_last_frame_path\": ");
+    json_write_string(file, preflight->volume_selected_last_frame_path);
+    fprintf(file, "\n");
+    fprintf(file, "  },\n");
+    fprintf(file, "  \"water_surface\": {\n");
+    fprintf(file, "    \"source_found\": %s,\n",
+            preflight->water_surface_source_found ? "true" : "false");
+    fprintf(file, "    \"loaded\": %s,\n",
+            preflight->water_surface_loaded ? "true" : "false");
+    fprintf(file, "    \"frame_selection_built\": %s,\n",
+            preflight->water_surface_frame_selection_built ? "true" : "false");
+    fprintf(file, "    \"dynamic\": %s,\n",
+            preflight->water_surface_frame_selection_dynamic ? "true" : "false");
+    fprintf(file, "    \"mesh_attached\": %s,\n",
+            preflight->water_surface_mesh_attached ? "true" : "false");
+    fprintf(file, "    \"triangle_count\": %d,\n",
+            preflight->water_surface_triangle_count);
+    fprintf(file, "    \"requested_first_frame_index\": %d,\n",
+            preflight->water_surface_requested_first_frame_index);
+    fprintf(file, "    \"requested_last_frame_index\": %d,\n",
+            preflight->water_surface_requested_last_frame_index);
+    fprintf(file, "    \"loaded_first_frame_index\": %llu,\n",
+            (unsigned long long)preflight->water_surface_loaded_first_frame_index);
+    fprintf(file, "    \"loaded_last_frame_index\": %llu,\n",
+            (unsigned long long)preflight->water_surface_loaded_last_frame_index);
+    fprintf(file, "    \"manifest_path\": ");
+    json_write_string(file, preflight->water_surface_manifest_path);
+    fprintf(file, ",\n");
+    fprintf(file, "    \"selected_first_frame_path\": ");
+    json_write_string(file, preflight->water_surface_selected_first_frame_path);
+    fprintf(file, ",\n");
+    fprintf(file, "    \"selected_last_frame_path\": ");
+    json_write_string(file, preflight->water_surface_selected_last_frame_path);
+    fprintf(file, ",\n");
+    fprintf(file, "    \"surface_axis\": ");
+    json_write_string(file, preflight->water_surface_axis);
+    fprintf(file, ",\n");
+    fprintf(file, "    \"grid_w\": %u,\n", preflight->water_surface_grid_w);
+    fprintf(file, "    \"grid_d\": %u,\n", preflight->water_surface_grid_d);
+    fprintf(file, "    \"sample_count\": %llu,\n",
+            (unsigned long long)preflight->water_surface_sample_count);
+    fprintf(file, "    \"wet_columns\": %u,\n", preflight->water_surface_wet_columns);
+    fprintf(file, "    \"dry_columns\": %u,\n", preflight->water_surface_dry_columns);
+    fprintf(file, "    \"solid_columns\": %u,\n", preflight->water_surface_solid_columns);
+    fprintf(file, "    \"water_cells\": %u,\n", preflight->water_surface_water_cells);
+    fprintf(file, "    \"surface_min_y\": %.9f,\n", preflight->water_surface_min_y);
+    fprintf(file, "    \"surface_max_y\": %.9f,\n", preflight->water_surface_max_y);
+    fprintf(file, "    \"surface_avg_y\": %.9f,\n", preflight->water_surface_avg_y);
+    fprintf(file, "    \"max_slope\": %.9f,\n", preflight->water_surface_max_slope);
+    fprintf(file, "    \"finite_normals\": %s,\n",
+            preflight->water_surface_finite_normals ? "true" : "false");
+    fprintf(file, "    \"material\": {\n");
+    fprintf(file, "      \"ior\": %.9f,\n", preflight->water_surface_material_ior);
+    fprintf(file, "      \"absorption_distance_m\": %.9f,\n",
+            preflight->water_surface_absorption_distance_m);
+    fprintf(file, "      \"absorption_rgb\": [%.9f, %.9f, %.9f]\n",
+            preflight->water_surface_absorption_r,
+            preflight->water_surface_absorption_g,
+            preflight->water_surface_absorption_b);
+    fprintf(file, "    },\n");
+    fprintf(file, "    \"payload\": {\n");
+    fprintf(file, "      \"applied\": %s,\n",
+            preflight->water_surface_material_payload_applied ? "true" : "false");
+    fprintf(file, "      \"ior\": %.9f,\n", preflight->water_surface_payload_ior);
+    fprintf(file, "      \"absorption_distance_m\": %.9f,\n",
+            preflight->water_surface_payload_absorption_distance_m);
+    fprintf(file, "      \"transparency\": %.9f,\n",
+            preflight->water_surface_payload_transparency);
+    fprintf(file, "      \"tint_rgb\": [%.9f, %.9f, %.9f]\n",
+            preflight->water_surface_payload_tint_r,
+            preflight->water_surface_payload_tint_g,
+            preflight->water_surface_payload_tint_b);
+    fprintf(file, "    }\n");
+    fprintf(file, "  },\n");
     fprintf(file, "  \"render_stats\": {\n");
     fprintf(file, "    \"hit_pixels\": %d,\n", preflight->stats.hitPixelCount);
     fprintf(file, "    \"visible_pixels\": %d,\n", preflight->stats.visiblePixelCount);
     fprintf(file, "    \"secondary_rays\": %d,\n", preflight->stats.secondaryRayCount);
     fprintf(file, "    \"secondary_hits\": %d,\n", preflight->stats.secondaryHitCount);
+    fprintf(file, "    \"emissive_area_candidate_count\": %d,\n",
+            preflight->stats.emissiveAreaCandidateCount);
+    fprintf(file, "    \"emissive_area_selected_candidates\": %d,\n",
+            preflight->stats.emissiveAreaSelectedCandidateCount);
+    fprintf(file, "    \"emissive_area_visibility_rays\": %d,\n",
+            preflight->stats.emissiveAreaVisibilityRayCount);
+    fprintf(file, "    \"emissive_area_primary_samples\": %d,\n",
+            preflight->stats.emissiveAreaPrimarySampleCount);
+    fprintf(file, "    \"emissive_area_recursive_samples\": %d,\n",
+            preflight->stats.emissiveAreaRecursiveSampleCount);
+    fprintf(file, "    \"emissive_area_recursive_policy_skips\": %d,\n",
+            preflight->stats.emissiveAreaRecursivePolicySkipCount);
+    fprintf(file, "    \"emissive_area_recursive_candidate_cap_skips\": %d,\n",
+            preflight->stats.emissiveAreaRecursiveCandidateCapSkipCount);
+    fprintf(file, "    \"emissive_area_recursive_triangle_cap_skips\": %d,\n",
+            preflight->stats.emissiveAreaRecursiveTriangleCapSkipCount);
+    fprintf(file, "    \"emissive_area_recursive_candidate_cap\": %d,\n",
+            preflight->stats.emissiveAreaRecursiveCandidateCap);
+    fprintf(file, "    \"emissive_area_recursive_triangle_cap\": %d,\n",
+            preflight->stats.emissiveAreaRecursiveTriangleCap);
+    fprintf(file, "    \"emissive_area_full_scan_fallbacks\": %d,\n",
+            preflight->stats.emissiveAreaFullScanFallbackCount);
+    fprintf(file, "    \"mirror_dominant_pixels\": %d,\n",
+            preflight->stats.mirrorDominantPixelCount);
+    fprintf(file, "    \"mirror_base_attenuated_pixels\": %d,\n",
+            preflight->stats.mirrorBaseAttenuatedPixelCount);
+    fprintf(file, "    \"mirror_reflection_hit_pixels\": %d,\n",
+            preflight->stats.mirrorReflectionHitPixelCount);
+    fprintf(file, "    \"mirror_emitter_reflection_pixels\": %d,\n",
+            preflight->stats.mirrorEmitterReflectionPixelCount);
+    fprintf(file, "    \"mirror_geometry_reflection_pixels\": %d,\n",
+            preflight->stats.mirrorGeometryReflectionPixelCount);
+    fprintf(file, "    \"max_mirror_dominance\": %.9f,\n",
+            preflight->stats.maxMirrorDominance);
+    fprintf(file, "    \"max_mirror_specular_reflection_radiance\": %.9f,\n",
+            preflight->stats.maxMirrorSpecularReflectionRadiance);
+    fprintf(file, "    \"max_mirror_base_radiance_before_attenuation\": %.9f,\n",
+            preflight->stats.maxMirrorBaseRadianceBeforeAttenuation);
+    fprintf(file, "    \"max_mirror_base_radiance_after_attenuation\": %.9f,\n",
+            preflight->stats.maxMirrorBaseRadianceAfterAttenuation);
+    fprintf(file, "    \"total_mirror_specular_reflection_radiance\": %.9f,\n",
+            preflight->stats.totalMirrorSpecularReflectionRadiance);
+    fprintf(file, "    \"total_mirror_base_radiance_before_attenuation\": %.9f,\n",
+            preflight->stats.totalMirrorBaseRadianceBeforeAttenuation);
+    fprintf(file, "    \"total_mirror_base_radiance_after_attenuation\": %.9f,\n",
+            preflight->stats.totalMirrorBaseRadianceAfterAttenuation);
     fprintf(file, "    \"temporal_committed_subpasses\": %d,\n",
             preflight->stats.temporalCommittedSubpasses);
     fprintf(file, "    \"temporal_pixels_rendered\": %d,\n",
@@ -246,6 +501,31 @@ void ray_tracing_render_headless_write_summary(
             preflight->stats.temporalActiveTileCount);
     fprintf(file, "    \"temporal_inactive_tiles\": %d,\n",
             preflight->stats.temporalInactiveTileCount);
+    fprintf(file, "    \"denoise_temporal_frame_count\": %d,\n",
+            preflight->stats.denoiseTemporalFrameCount);
+    fprintf(file, "    \"denoise_raw_pixel_count\": %d,\n",
+            preflight->stats.denoiseRawPixelCount);
+    fprintf(file, "    \"denoise_reconstructed_pixel_count\": %d,\n",
+            preflight->stats.denoiseReconstructedPixelCount);
+    fprintf(file, "    \"denoise_stable_interior_sample_count\": %d,\n",
+            preflight->stats.denoiseStableInteriorSampleCount);
+    fprintf(file, "    \"denoise_rejected_edge_sample_count\": %d,\n",
+            preflight->stats.denoiseRejectedEdgeSampleCount);
+    fprintf(file, "    \"denoise_preserved_transparent_pixel_count\": %d,\n",
+            preflight->stats.denoisePreservedTransparentPixelCount);
+    fprintf(file, "    \"denoise_preserved_mirror_glossy_pixel_count\": %d,\n",
+            preflight->stats.denoisePreservedMirrorGlossyPixelCount);
+    fprintf(file, "    \"denoise_skipped_unstable_temporal_pixel_count\": %d,\n",
+            preflight->stats.denoiseSkippedUnstableTemporalPixelCount);
+    fprintf(file, "    \"denoise_skipped_invalid_surface_pixel_count\": %d,\n",
+            preflight->stats.denoiseSkippedInvalidSurfacePixelCount);
+    fprintf(file, "    \"denoise_raw_radiance_luma_total\": %.9f,\n",
+            preflight->stats.denoiseRawRadianceLumaTotal);
+    fprintf(file, "    \"denoise_reconstructed_radiance_luma_total\": %.9f,\n",
+            preflight->stats.denoiseReconstructedRadianceLumaTotal);
+    fprintf(file, "    \"denoise_radiance_luma_delta\": %.9f,\n",
+            preflight->stats.denoiseReconstructedRadianceLumaTotal -
+                preflight->stats.denoiseRawRadianceLumaTotal);
     fprintf(file, "    \"max_radiance\": %.9f,\n", preflight->stats.maxRadiance);
     fprintf(file, "    \"max_bounce_radiance\": %.9f,\n",
             preflight->stats.maxBounceRadiance);

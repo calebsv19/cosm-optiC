@@ -1,6 +1,6 @@
 # optiC Current Truth
 
-Last updated: 2026-06-16
+Last updated: 2026-06-18
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -479,14 +479,28 @@ Last updated: 2026-06-16
   - top-fill strength
   - Disney denoise toggle
   - runtime-scene and optional atmosphere-source paths
+  - `meshAssetRoot` as a separate external runtime mesh sidecar root, distinct
+    from scene input-root discovery
 - Deep-render export now supports:
   - absolute start-frame selection
   - resume from highest existing saved frame
   - shared absolute-frame truth across output numbering and path sampling
+  - authored Bezier light/camera path sampling in native `3D` deep render even
+    when an older saved config still carries the legacy `interactiveMode=true`
+    bit; deep-render config load treats deep render as the authoritative
+    authored-motion mode instead of freezing the light at the interactive seed
 - Export/video workflow state:
   - `frameDir` remains frame export root
   - `videoOutputRoot` remains persisted runtime config state
   - menu exposes grouped Data I/O + batch actions
+- Main-menu Renderer Controls now use a tabbed center panel:
+  - `Lighting` owns environment mode, environment preset, background
+    brightness auto/manual, ambient brightness, top-fill strength, direct-light
+    intensity, and falloff controls
+  - `Performance` owns tile renderer, tile preview, Disney denoise, upscale
+    mode, and tile size
+  - the right `Render Settings` slider panel now stays focused on global
+    frame/render dimensions and sample/depth controls
 - Scene-editor digest truth now preserves pickable guide-only helper overlays without promoting them into native `3D` render geometry.
 - Headless agent rendering now has a Phase 4 request-driven CLI:
   - request schema: `ray_tracing_agent_render_request_v1`
@@ -496,10 +510,14 @@ Last updated: 2026-06-16
   - summary schema: `ray_tracing_headless_summary_v1`
   - current scope: runtime-scene apply, optional VF3D source validation, optional PhysicsSim water-surface sidecar validation, native `3D` route readiness, prepared-frame validation, and BMP frame export under `<output.root>/frames/`
   - PhysicsSim `scene_bundle.json` handoff is covered by `test-ray-tracing-render-headless-volume-handoff`, which now uses a room-style LineDrawing emitter fixture (floor, wall planes, contrast prism, emitter prism), then runs PhysicsSim headless VF3D export and RayTracing BMP export into `ray_tracing/build/agent_runs/physics_trio/volume_handoff_image_export/`
-  - PhysicsSim Water Basin `scene_bundle.json.water_source` handoff is covered by `test-ray-tracing-render-headless-water-surface-handoff`, which runs `physics_sim_headless --water-mode --save-volume-frames`, imports `water_manifest_v1.json`, appends the selected Y-up heightfield as native `3D` water-surface triangles, and renders BMP frames into `ray_tracing/build/agent_runs/physics_trio/water_surface_handoff_image_export/`
+  - PhysicsSim Water Basin `scene_bundle.json.water_source` handoff is covered by `test-ray-tracing-render-headless-water-surface-handoff`, which runs `physics_sim_headless --water-mode --save-volume-frames`, imports `water_manifest_v1.json`, appends the selected PhysicsSim Y-up heightfield as native `3D` water-surface triangles, remaps height `y` into RayTracing scene-up `z` for physically horizontal rendered water, and renders BMP frames into `ray_tracing/build/agent_runs/physics_trio/water_surface_handoff_image_export/`
   - volume handoff summaries now report VF3D channel/grid/density debug fields, including `volume_summary.density_non_zero_cell_count`
   - water-surface summaries now report `water_surface_source_found`, `water_surface_loaded`, `water_surface_mesh_attached`, selected first/last frame paths, requested/loaded frame indices, grid dimensions, wet/dry/solid column counts, surface min/max/average/slope, material IOR/absorption metadata, resolved RayTracing water payload fields, and appended triangle count
   - RayTracing resolves PhysicsSim `water_manifest_v1.material.absorption_rgb` as absorption coefficients, derives a Beer-Lambert `water_surface.payload.tint_rgb` transmittance color over `absorption_distance_m`, and applies a water material payload with IOR, transparency, solid-dielectric state, and the derived tint to the native `3D` material path
+  - `test-ray-tracing-render-headless-water-basin-surface-review` runs the square-footprint PhysicsSim Water Basin, imports the final `water_surface` sidecar through `scene_bundle.json.water_source`, remaps it into the native Z-up render frame, and renders a broader single-frame transparent-water review BMP into `ray_tracing/build/agent_runs/physics_trio/water_basin_surface_review_single_frame/`
+  - `test-ray-tracing-render-headless-water-moving-light-review` runs the WTR-5.4 headless sequence proof: PhysicsSim exports a warmed/rippled Water Basin, RayTracing renders four consecutive transparent-water frames (`0008..0011`) with an authored moving light path, and the test verifies both water height evolution and measurable frame-to-frame image deltas under `ray_tracing/build/agent_runs/physics_trio/water_moving_light_review/`
+  - `test-ray-tracing-render-headless-water-long-motion-review` runs the WTR-5.5 long-motion sparse-frame proof: PhysicsSim exports `201` Water Basin frames with `4` sim steps per frame, samples frames `40, 80, 120, 160, 200`, and renders full RayTracing basin BMP frames plus a contact sheet from `scene_bundle.json.water_source` under `ray_tracing/build/agent_runs/physics_trio/water_long_motion_review/`; this is the readable long-time-separation proof before WTR-6, while full-length video/output throughput remains later work
+  - `test-ray-tracing-render-headless-water-object-coupling-review` runs the WTR-6 object-water proof: PhysicsSim exports a `water_pool_submerged_solid` Water Basin, RayTracing renders full basin frames `0008`, `0018`, and `0027` from `scene_bundle.json.water_source` with a visible block object, verifies object audit hits, water mesh attachment, secondary water hits, and frame deltas, and writes BMP frames plus `water_object_coupling_review.mp4` under `ray_tracing/build/agent_runs/physics_trio/water_object_coupling_review/`
   - generic runtime-scene light/camera seeds from `transform.position` are promoted into the native `3D` route, matching LineDrawing-generated scene shape
   - runtime-scene camera seeds now also accept authored orientation fields (`yaw` / `rotation_z` / `transform.rotation.z`, plus optional pitch fields), and when no camera orientation is authored the native `3D` render auto-aims the seeded camera toward the built scene center so headless runtime-scene exports do not fall into all-black horizontal views
   - authored moving-camera scenes now also accept `extensions.ray_tracing.authoring.camera_focus_target = { x, y, z }`; when present, headless runtime-scene sampling preserves authored camera-path translation/depth motion but recomputes yaw/pitch toward that focus target each sample, which is safer than hand-authoring moving camera orientation curves
@@ -516,6 +534,10 @@ Last updated: 2026-06-16
     - file-backed assets are resolved beside the runtime scene from
       `assets/mesh_assets/<asset_id>.runtime.json` or
       `mesh_assets/<asset_id>.runtime.json`
+    - desktop/runtime config also persists a separate `meshAssetRoot` value for
+      moved or external sidecar libraries; the loader checks that root before
+      falling back to input-root based discovery, and the menu exposes it as
+      `Mesh Root` independently from the scene `Input Root`
     - the loader retains shared `mesh_asset_runtime_v1` documents, object ids,
       transforms, and scene object indices for material lookup
     - the native `3D` builder appends runtime mesh triangles into the same
@@ -721,6 +743,11 @@ Last updated: 2026-06-16
     matching `physics_sim_water_surface_heightfield_v1` frame, skips dry quads,
     appends a `water_surface` runtime object/mesh, and records selected frame,
     material, and triangle-count diagnostics in the headless summary
+  - the WTR-6 object-coupling review keeps the full RayTracing basin path:
+    object geometry is authored into the runtime scene while the water surface
+    still comes from PhysicsSim `scene_bundle.json.water_source`; the MP4 is a
+    review packaging output over rendered BMP frames, not a replacement 2D
+    preview path
 - Menu/control-surface implementation is now split across:
   - `src/ui/menu/sdl_menu_render.c` for orchestration/layout pass ownership
   - `src/ui/menu/sdl_menu_render_controls.c` for shared text/button/control rendering helpers

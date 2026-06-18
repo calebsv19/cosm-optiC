@@ -53,15 +53,23 @@ typedef struct MenuButtonLayout {
     SDL_Rect inputRootEditRect;
     SDL_Rect inputRootFolderRect;
     SDL_Rect inputRootApplyRect;
+    SDL_Rect meshAssetRootValueRect;
+    SDL_Rect meshAssetRootEditRect;
+    SDL_Rect meshAssetRootFolderRect;
+    SDL_Rect meshAssetRootApplyRect;
     SDL_Rect outputRootValueRect;
     SDL_Rect outputRootEditRect;
     SDL_Rect outputRootFolderRect;
     SDL_Rect outputRootApplyRect;
+    SDL_Rect rendererLightingTabRect;
+    SDL_Rect rendererPerformanceTabRect;
     SDL_Rect falloffRect;
     SDL_Rect tileRect;
     SDL_Rect tilePreviewRect;
     SDL_Rect denoiseRect;
     SDL_Rect topFillRect;
+    SDL_Rect environmentPresetRect;
+    SDL_Rect environmentBackgroundModeRect;
     SDL_Rect upscaleModeRect;
     SDL_Rect lightHeightRect;
     SDL_Rect resumeFramesRect;
@@ -75,6 +83,7 @@ typedef struct MenuButtonLayout {
     SDL_Rect previewRect;
     SDL_Rect exitRect;
     SDL_Rect startRect;
+    SliderLayout rendererControlSliders;
     bool showLightHeight;
     bool showPathToggles;
 } MenuButtonLayout;
@@ -93,6 +102,11 @@ void menu_render_draw_sliders(SDL_Renderer* renderer,
                               TTF_Font* font,
                               MenuRuntimeState* state,
                               const SliderLayout* layout);
+void menu_render_draw_slider_items(SDL_Renderer* renderer,
+                                   TTF_Font* font,
+                                   MenuRuntimeState* state,
+                                   const SliderLayout* layout,
+                                   const char* panel_title);
 
 void menu_render_frame(SDL_Renderer* renderer,
                        TTF_Font* font,

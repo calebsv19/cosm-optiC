@@ -44,6 +44,7 @@ AnimationConfig animSettings = {
     .fps = 30,
     .frameDuration = 1.0 / 30.0,
     .inputRoot = "config",
+    .meshAssetRoot = "",
     .outputRoot = "data/runtime",
     .frameDir = FRAME_DIR_DEFAULT,
     .videoOutputRoot = "data/runtime/videos",
@@ -127,14 +128,6 @@ SceneConfig sceneSettings = {
 
 static void SyncSceneSourceLegacyFieldsForSave(void) {
     animSettings.sceneSource = animation_config_scene_source_clamp(animSettings.sceneSource);
-    if (animSettings.sceneSource == SCENE_SOURCE_FLUID_MANIFEST &&
-        animSettings.fluidManifest[0] == '\0') {
-        animSettings.sceneSource = SCENE_SOURCE_CONFIG_2D;
-    }
-    if (animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE &&
-        animSettings.runtimeScenePath[0] == '\0') {
-        animSettings.sceneSource = SCENE_SOURCE_CONFIG_2D;
-    }
     animSettings.useFluidScene = animation_config_scene_source_is_fluid(animSettings.sceneSource);
 }
 
@@ -147,13 +140,66 @@ void SaveAllSettings(void) {
     SaveAnimationConfig();
 }
 
+static bool LoadMaterialsFromDirIfPresent(const char* material_dir) {
+    if (!config_io_directory_exists(material_dir)) {
+        return false;
+    }
+    MaterialManagerLoadDir(material_dir);
+    return true;
+}
+
+static void LoadMaterialPresets(void) {
+    char stable_input_root[PATH_MAX];
+    char stable_materials_dir[PATH_MAX];
+
+    if (LoadMaterialsFromDirIfPresent(MATERIALS_DEFAULT_DIR)) {
+        return;
+    }
+
+    if (ray_tracing_find_stable_input_root(stable_input_root, sizeof(stable_input_root)) &&
+        ray_tracing_compose_path(stable_input_root,
+                                 "materials",
+                                 stable_materials_dir,
+                                 sizeof(stable_materials_dir)) &&
+        LoadMaterialsFromDirIfPresent(stable_materials_dir)) {
+        return;
+    }
+
+    (void)LoadMaterialsFromDirIfPresent(MATERIALS_LEGACY_DIR);
+}
+
+static FILE* OpenSceneConfigRead(const char** loaded_path) {
+    char stable_input_root[PATH_MAX];
+    char stable_output_root[PATH_MAX];
+    char stable_runtime_file[PATH_MAX];
+    char stable_default_file[PATH_MAX];
+    const char* candidates[5] = {0};
+    size_t candidate_count = 0;
+
+    candidates[candidate_count++] = SCENE_CONFIG_RUNTIME_FILE;
+    if (ray_tracing_find_stable_output_root(stable_output_root, sizeof(stable_output_root)) &&
+        ray_tracing_compose_path(stable_output_root,
+                                 "scene_config.json",
+                                 stable_runtime_file,
+                                 sizeof(stable_runtime_file))) {
+        candidates[candidate_count++] = stable_runtime_file;
+    }
+    candidates[candidate_count++] = SCENE_CONFIG_DEFAULT_FILE;
+    if (ray_tracing_find_stable_input_root(stable_input_root, sizeof(stable_input_root)) &&
+        ray_tracing_compose_path(stable_input_root,
+                                 "scene_config.json",
+                                 stable_default_file,
+                                 sizeof(stable_default_file))) {
+        candidates[candidate_count++] = stable_default_file;
+    }
+
+    candidates[candidate_count++] = SCENE_CONFIG_LEGACY_FILE;
+    return config_io_open_read_first(candidates, candidate_count, loaded_path);
+}
+
 void LoadAllSettings(void) {
     MaterialManagerInit();
-    if (config_io_directory_exists(MATERIALS_DEFAULT_DIR)) {
-        MaterialManagerLoadDir(MATERIALS_DEFAULT_DIR);
-    } else {
-        MaterialManagerLoadDir(MATERIALS_LEGACY_DIR);
-    }
+    LoadMaterialPresets();
     LoadSceneConfig();
     LoadAnimationConfig();
     ApplyAnimationWindowSizeOverride();
@@ -627,10 +673,7 @@ void LoadSceneObjects(struct json_object* config) {
 
 void LoadSceneConfig(void) {
     const char *loaded_path = NULL;
-    FILE *file = config_io_open_read_with_fallback(SCENE_CONFIG_RUNTIME_FILE,
-                                                   SCENE_CONFIG_DEFAULT_FILE,
-                                                   SCENE_CONFIG_LEGACY_FILE,
-                                                   &loaded_path);
+    FILE *file = OpenSceneConfigRead(&loaded_path);
     if (!file) {
         printf("INFO: Scene config file not found (tried %s, %s, %s); using defaults/runtime overrides.\n",
                SCENE_CONFIG_RUNTIME_FILE,

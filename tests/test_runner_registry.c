@@ -15,6 +15,8 @@
 #include "test_runtime_emission_transparency.h"
 #include "test_runtime_native_3d_denoise.h"
 #include "test_runtime_native_3d_render.h"
+#include "test_runtime_native_3d_render_internal.h"
+#include "test_runtime_native_3d_render_prepared_suite_internal.h"
 #include "test_runtime_render_metrics_export.h"
 #include "test_runtime_preview_editor.h"
 #include "test_runtime_scene_editor.h"
@@ -25,6 +27,7 @@
 #include "test_runtime_mesh_asset_loader.h"
 #include "test_runtime_scene_3d_geometry.h"
 #include "test_runtime_volume_3d.h"
+#include "test_water_surface_runtime.h"
 #include "test_runtime_scene_bridge_core.h"
 #include "test_runtime_scene_bridge_writeback.h"
 #include "test_support.h"
@@ -67,6 +70,29 @@ static int run_bridge_apply_file_mode(const char* runtime_scene_path) {
     return EXIT_SUCCESS;
 }
 
+static int run_bridge_apply_file_defer_mesh_assets_mode(const char* runtime_scene_path) {
+    RuntimeSceneBridgePreflight summary;
+    bool ok = false;
+    if (!runtime_scene_path || !runtime_scene_path[0]) {
+        fprintf(stderr, "runtime_scene_bridge_apply_file_defer_mesh_assets: missing path\n");
+        return EXIT_FAILURE;
+    }
+    ok = runtime_scene_bridge_apply_file_defer_mesh_assets(runtime_scene_path, &summary);
+    if (!ok) {
+        fprintf(stderr,
+                "runtime_scene_bridge_apply_file_defer_mesh_assets failed: %s\n",
+                summary.diagnostics);
+        return EXIT_FAILURE;
+    }
+    printf("runtime_scene_bridge_apply_file_defer_mesh_assets: PASS scene_id=%s objects=%d materials=%d lights=%d cameras=%d\n",
+           summary.scene_id,
+           summary.object_count,
+           summary.material_count,
+           summary.light_count,
+           summary.camera_count);
+    return EXIT_SUCCESS;
+}
+
 int test_runner_main(int argc, char** argv) {
     static const TestGroup groups[] = {
         {"config_animation", run_test_config_animation_tests},
@@ -76,6 +102,7 @@ int test_runner_main(int argc, char** argv) {
         {"runtime_scene_bridge_writeback", run_test_runtime_scene_bridge_writeback_tests},
         {"runtime_scene_3d_geometry", run_test_runtime_scene_3d_geometry_tests},
         {"runtime_volume_3d", run_test_runtime_volume_3d_tests},
+        {"water_surface_runtime", run_test_water_surface_runtime_tests},
         {"runtime_lighting_materials_payload", run_test_runtime_lighting_materials_payload_tests},
         {"runtime_lighting_materials_direct_light", run_test_runtime_lighting_materials_direct_light_suite},
         {"runtime_lighting_materials", run_test_runtime_lighting_materials_tests},
@@ -84,6 +111,12 @@ int test_runner_main(int argc, char** argv) {
         {"runtime_emission_transparency", run_test_runtime_emission_transparency_tests},
         {"runtime_native_3d_denoise", run_test_runtime_native_3d_denoise_tests},
         {"runtime_native_3d_render", run_test_runtime_native_3d_render_tests},
+        {"runtime_native_3d_render_live", run_test_runtime_native_3d_render_live_suite},
+        {"runtime_native_3d_render_prepared", run_test_runtime_native_3d_render_prepared_suite},
+        {"runtime_native_3d_render_prepared_parity_volume",
+         run_test_runtime_native_3d_render_prepared_parity_volume_suite},
+        {"runtime_native_3d_render_prepared_scatter_preview",
+         run_test_runtime_native_3d_render_prepared_scatter_preview_suite},
         {"runtime_render_metrics_export", run_test_runtime_render_metrics_export_tests},
         {"runtime_preview_editor", run_test_runtime_preview_editor_tests},
         {"runtime_scene_editor", run_test_runtime_scene_editor_tests},
@@ -109,8 +142,13 @@ int test_runner_main(int argc, char** argv) {
     if (argc == 3 && strcmp(argv[1], "--bridge-apply-file") == 0) {
         return run_bridge_apply_file_mode(argv[2]);
     }
+    if (argc == 3 && strcmp(argv[1], "--bridge-apply-file-defer-mesh-assets") == 0) {
+        return run_bridge_apply_file_defer_mesh_assets_mode(argv[2]);
+    }
     if (argc != 1) {
-        fprintf(stderr, "usage: %s [--bridge-apply-file <scene_runtime.json>]\n", argv[0]);
+        fprintf(stderr,
+                "usage: %s [--bridge-apply-file <scene_runtime.json>] [--bridge-apply-file-defer-mesh-assets <scene_runtime.json>]\n",
+                argv[0]);
         return EXIT_FAILURE;
     }
 

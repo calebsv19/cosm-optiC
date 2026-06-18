@@ -250,6 +250,7 @@ static bool menu_state_interaction_active(const MenuRuntimeState* state) {
            state->editingFrame ||
            state->editingStartFrame ||
            state->editingInputRoot ||
+           state->editingMeshAssetRoot ||
            state->editingOutputRoot ||
            menu_batch_panel_edit_active(state);
 }
@@ -360,7 +361,9 @@ static bool menu_process_event(SDL_Window* window,
             if (menu_batch_panel_append_text(menu_state, mutable_event.text.text)) {
                 return true;
             }
-            if (menu_state->editingInputRoot || menu_state->editingOutputRoot) {
+            if (menu_state->editingInputRoot ||
+                menu_state->editingMeshAssetRoot ||
+                menu_state->editingOutputRoot) {
                 if (strlen(menu_state->pathInputBuffer) + strlen(mutable_event.text.text) <
                     sizeof(menu_state->pathInputBuffer)) {
                     strcat(menu_state->pathInputBuffer, mutable_event.text.text);

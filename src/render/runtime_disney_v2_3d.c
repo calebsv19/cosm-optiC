@@ -8,10 +8,13 @@
 #endif
 
 #include "render/runtime_light_emitter_3d.h"
+#include "render/runtime_disney_v2_estimator_3d.h"
 #include "render/runtime_disney_v2_transport_3d.h"
 #include "render/runtime_disney_v2_transmission_3d.h"
+#include "render/runtime_mirror_composition_3d.h"
 #include "render/runtime_path_depth_policy_3d.h"
 #include "render/runtime_ray_3d.h"
+#include "render/runtime_specular_reflection_3d.h"
 
 static const double kRuntimeDisneyV2_3DEpsilon = 1e-4;
 static const double kRuntimeDisneyV2_3DMaxDistance = 48.0;
@@ -70,16 +73,25 @@ static void runtime_disney_v2_3d_balance_mis(double light_pdf,
                                              double bsdf_pdf,
                                              double* out_light_weight,
                                              double* out_bsdf_weight) {
-    const double pdf_sum = light_pdf + bsdf_pdf;
-    double light_weight = 0.0;
-    double bsdf_weight = 0.0;
+    RuntimeDisneyV2_3DMisWeights weights = {0};
 
-    if (pdf_sum > 1e-9) {
-        light_weight = light_pdf / pdf_sum;
-        bsdf_weight = bsdf_pdf / pdf_sum;
-    }
-    if (out_light_weight) *out_light_weight = light_weight;
-    if (out_bsdf_weight) *out_bsdf_weight = bsdf_weight;
+    (void)RuntimeDisneyV2_3D_ResolvePowerHeuristicMIS(light_pdf, bsdf_pdf, &weights);
+    if (out_light_weight) *out_light_weight = weights.lightWeight;
+    if (out_bsdf_weight) *out_bsdf_weight = weights.bsdfWeight;
+}
+
+static RuntimeDisneyV2_3DMisBranch runtime_disney_v2_3d_make_mis_branch(
+    double light_pdf,
+    double bsdf_pdf) {
+    RuntimeDisneyV2_3DMisWeights weights = {0};
+    RuntimeDisneyV2_3DMisBranch branch = {0};
+
+    (void)RuntimeDisneyV2_3D_ResolvePowerHeuristicMIS(light_pdf, bsdf_pdf, &weights);
+    branch.lightPdf = weights.lightPdf;
+    branch.bsdfPdf = weights.bsdfPdf;
+    branch.weightLight = weights.lightWeight;
+    branch.weightBsdf = weights.bsdfWeight;
+    return branch;
 }
 
 static void runtime_disney_v2_3d_record_mis_vertex(RuntimeDisneyV2_3DResult* io_result,
@@ -96,8 +108,32 @@ static void runtime_disney_v2_3d_record_mis_vertex(RuntimeDisneyV2_3DResult* io_
     io_result->misVertexBsdfPdf[vertex_index] = bsdf_pdf;
     io_result->misVertexWeightLight[vertex_index] = light_weight;
     io_result->misVertexWeightBsdf[vertex_index] = bsdf_weight;
+    io_result->misHeuristicPower = 2.0;
+    io_result->misPowerHeuristicCount += 1;
     if (io_result->misVertexCount < vertex_index + 1) {
         io_result->misVertexCount = vertex_index + 1;
+    }
+}
+
+static void runtime_disney_v2_3d_record_mis_branch_vertex(
+    RuntimeDisneyV2_3DResult* io_result,
+    int vertex_index,
+    RuntimeDisneyV2_3DMisBranch finite_light_branch,
+    RuntimeDisneyV2_3DMisBranch emissive_area_branch) {
+    if (!io_result || vertex_index < 0 ||
+        vertex_index >= RUNTIME_DISNEY_V2_3D_RECURSIVE_LOOP_STATE_CAPACITY) {
+        return;
+    }
+
+    io_result->misVertexFiniteLight[vertex_index] = finite_light_branch;
+    io_result->misVertexEmissiveArea[vertex_index] = emissive_area_branch;
+    if (finite_light_branch.lightPdf + finite_light_branch.bsdfPdf > 1e-12 &&
+        io_result->finiteLightMisVertexCount < vertex_index + 1) {
+        io_result->finiteLightMisVertexCount = vertex_index + 1;
+    }
+    if (emissive_area_branch.lightPdf + emissive_area_branch.bsdfPdf > 1e-12 &&
+        io_result->emissiveAreaMisVertexCount < vertex_index + 1) {
+        io_result->emissiveAreaMisVertexCount = vertex_index + 1;
     }
 }
 
@@ -381,9 +417,23 @@ static void runtime_disney_v2_3d_apply_transmittance(
     io_result->specularRadianceR *= transmittance->r;
     io_result->specularRadianceG *= transmittance->g;
     io_result->specularRadianceB *= transmittance->b;
+    io_result->mirrorBaseRadianceBeforeAttenuation *= transmittance->luma;
+    io_result->mirrorBaseRadianceAfterAttenuation *= transmittance->luma;
+    io_result->specularReflectionRadianceR *= transmittance->r;
+    io_result->specularReflectionRadianceG *= transmittance->g;
+    io_result->specularReflectionRadianceB *= transmittance->b;
+    io_result->specularReflectionRecursiveRadianceR *= transmittance->r;
+    io_result->specularReflectionRecursiveRadianceG *= transmittance->g;
+    io_result->specularReflectionRecursiveRadianceB *= transmittance->b;
+    io_result->specularReflectionRoughContributionR *= transmittance->r;
+    io_result->specularReflectionRoughContributionG *= transmittance->g;
+    io_result->specularReflectionRoughContributionB *= transmittance->b;
     io_result->emissionRadianceR *= transmittance->r;
     io_result->emissionRadianceG *= transmittance->g;
     io_result->emissionRadianceB *= transmittance->b;
+    io_result->emissiveAreaRadianceR *= transmittance->r;
+    io_result->emissiveAreaRadianceG *= transmittance->g;
+    io_result->emissiveAreaRadianceB *= transmittance->b;
     io_result->transmissionRadianceR *= transmittance->r;
     io_result->transmissionRadianceG *= transmittance->g;
     io_result->transmissionRadianceB *= transmittance->b;
@@ -412,6 +462,9 @@ static void runtime_disney_v2_3d_apply_transmittance(
         io_result->recursiveLoopContributionR[i] *= transmittance->r;
         io_result->recursiveLoopContributionG[i] *= transmittance->g;
         io_result->recursiveLoopContributionB[i] *= transmittance->b;
+        io_result->specularReflectionRecursiveContributionR[i] *= transmittance->r;
+        io_result->specularReflectionRecursiveContributionG[i] *= transmittance->g;
+        io_result->specularReflectionRecursiveContributionB[i] *= transmittance->b;
     }
     io_result->lightSampleContributionTotalR *= transmittance->r;
     io_result->lightSampleContributionTotalG *= transmittance->g;
@@ -435,9 +488,25 @@ static void runtime_disney_v2_3d_refresh_peaks(RuntimeDisneyV2_3DResult* result)
     result->specularRadiance = runtime_disney_v2_3d_peak(result->specularRadianceR,
                                                          result->specularRadianceG,
                                                          result->specularRadianceB);
+    result->specularReflectionRadiance =
+        runtime_disney_v2_3d_peak(result->specularReflectionRadianceR,
+                                  result->specularReflectionRadianceG,
+                                  result->specularReflectionRadianceB);
+    result->specularReflectionRecursiveRadiance =
+        runtime_disney_v2_3d_peak(result->specularReflectionRecursiveRadianceR,
+                                  result->specularReflectionRecursiveRadianceG,
+                                  result->specularReflectionRecursiveRadianceB);
+    result->specularReflectionRoughContribution =
+        runtime_disney_v2_3d_peak(result->specularReflectionRoughContributionR,
+                                  result->specularReflectionRoughContributionG,
+                                  result->specularReflectionRoughContributionB);
     result->emissionRadiance = runtime_disney_v2_3d_peak(result->emissionRadianceR,
                                                          result->emissionRadianceG,
                                                          result->emissionRadianceB);
+    result->emissiveAreaRadiance =
+        runtime_disney_v2_3d_peak(result->emissiveAreaRadianceR,
+                                  result->emissiveAreaRadianceG,
+                                  result->emissiveAreaRadianceB);
     result->transmissionRadiance = runtime_disney_v2_3d_peak(result->transmissionRadianceR,
                                                              result->transmissionRadianceG,
                                                              result->transmissionRadianceB);
@@ -579,6 +648,7 @@ static void runtime_disney_v2_3d_apply_stochastic_transport(
     RuntimeLightEmitterTrace3DResult trace = {0};
     RuntimeDirectLight3DResult secondary_direct = {0};
     RuntimeDisneyV2_3DTransmissionSample transmission_sample = {0};
+    RuntimeEmissiveDirect3DResult emissive_area_direct = {0};
     Vec3 sample_dir = vec3(0.0, 1.0, 0.0);
     double lobe_sample = 0.5;
     double sample_pdf = 0.0;
@@ -586,8 +656,22 @@ static void runtime_disney_v2_3d_apply_stochastic_transport(
     double throughput_r = 0.0;
     double throughput_g = 0.0;
     double throughput_b = 0.0;
+    double finite_direct_bsdf_pdf = 0.0;
+    double area_direct_bsdf_pdf = 0.0;
+    RuntimeDisneyV2_3DMisBranch finite_light_branch = {0};
+    RuntimeDisneyV2_3DMisBranch emissive_area_branch = {0};
+    bool has_emissive_area_direct = false;
 
     if (!scene || !hit || !io_result || !io_result->principled.valid) return;
+    if (RuntimeDisneyV2_3D_ShouldEvaluateEmissiveAreaLightSample(scene,
+                                                                 false,
+                                                                 io_result)) {
+        has_emissive_area_direct =
+            RuntimeDisneyV2_3D_EvaluateEmissiveAreaLightSample(scene,
+                                                               hit,
+                                                               sampling,
+                                                               &emissive_area_direct);
+    }
 
     io_result->sampledLobe = runtime_disney_v2_3d_choose_lobe(io_result,
                                                               sampling,
@@ -669,8 +753,41 @@ static void runtime_disney_v2_3d_apply_stochastic_transport(
             2.0);
     }
 
-    io_result->bsdfSamplePdf = sample_pdf;
-    io_result->lightSamplePdf = scene->hasLight ? 1.0 : 0.0;
+    finite_direct_bsdf_pdf =
+        RuntimeDisneyV2_3D_EstimateDirectBsdfPdfForSceneLight(scene,
+                                                              hit,
+                                                              &io_result->principled,
+                                                              vec3_scale(view_dir, -1.0),
+                                                              io_result->transmissionProbability >
+                                                                  1e-9);
+    if (has_emissive_area_direct &&
+        emissive_area_direct.lightPdf > 0.0 &&
+        vec3_length(emissive_area_direct.sampleDirection) > 1e-9) {
+        area_direct_bsdf_pdf =
+            RuntimeDisneyV2_3D_EstimateDirectBsdfPdf(&io_result->principled,
+                                                     hit,
+                                                     vec3_scale(view_dir, -1.0),
+                                                     emissive_area_direct.sampleDirection,
+                                                     io_result->transmissionProbability >
+                                                         1e-9);
+    }
+    finite_light_branch =
+        runtime_disney_v2_3d_make_mis_branch(
+            RuntimeDisneyV2_3D_EstimateFiniteLightPdfForHit(scene, hit),
+            finite_direct_bsdf_pdf);
+    emissive_area_branch =
+        runtime_disney_v2_3d_make_mis_branch(
+            has_emissive_area_direct ? emissive_area_direct.lightPdf : 0.0,
+            area_direct_bsdf_pdf);
+    io_result->finiteLightMis = finite_light_branch;
+    io_result->emissiveAreaMis = emissive_area_branch;
+    io_result->bsdfSamplePdf = fmax(finite_direct_bsdf_pdf, area_direct_bsdf_pdf);
+    io_result->lightSamplePdf =
+        RuntimeDisneyV2_3D_EstimateDirectLightPdfForHitWithAreaPdf(
+            scene,
+            hit,
+            has_emissive_area_direct,
+            emissive_area_direct.lightPdf);
     runtime_disney_v2_3d_balance_mis(io_result->lightSamplePdf,
                                       io_result->bsdfSamplePdf,
                                       &io_result->misWeightLight,
@@ -681,19 +798,33 @@ static void runtime_disney_v2_3d_apply_stochastic_transport(
                                            io_result->bsdfSamplePdf,
                                            io_result->misWeightLight,
                                            io_result->misWeightBsdf);
+    runtime_disney_v2_3d_record_mis_branch_vertex(io_result,
+                                                  0,
+                                                  finite_light_branch,
+                                                  emissive_area_branch);
 
     io_result->stochasticDirectRadianceR =
-        io_result->directRadianceR * io_result->misWeightLight;
+        io_result->directRadianceR * finite_light_branch.weightLight;
     io_result->stochasticDirectRadianceG =
-        io_result->directRadianceG * io_result->misWeightLight;
+        io_result->directRadianceG * finite_light_branch.weightLight;
     io_result->stochasticDirectRadianceB =
-        io_result->directRadianceB * io_result->misWeightLight;
+        io_result->directRadianceB * finite_light_branch.weightLight;
     runtime_disney_v2_3d_record_light_sample_contribution(
         io_result,
         0,
         io_result->stochasticDirectRadianceR,
         io_result->stochasticDirectRadianceG,
         io_result->stochasticDirectRadianceB);
+    if (has_emissive_area_direct) {
+        (void)RuntimeDisneyV2_3D_AccumulateEmissiveAreaLightSample(&emissive_area_direct,
+                                                                   1.0,
+                                                                   1.0,
+                                                                   1.0,
+                                                                   emissive_area_branch.weightLight,
+                                                                   0,
+                                                                   false,
+                                                                   io_result);
+    }
 
     io_result->pathState.valid = sample_pdf > 1e-9 &&
                                  runtime_disney_v2_3d_peak(throughput_r,
@@ -731,6 +862,7 @@ static void runtime_disney_v2_3d_apply_stochastic_transport(
         double secondary_throughput_g = throughput_g;
         double secondary_throughput_b = throughput_b;
         bool secondary_payload_resolved = false;
+        bool secondary_material_emitter = false;
 
         io_result->pathState.hit = true;
         io_result->pathState.hitInfo = trace.geometryHitInfo;
@@ -756,8 +888,25 @@ static void runtime_disney_v2_3d_apply_stochastic_transport(
             io_result->secondaryVertexThroughputR = secondary_throughput_r;
             io_result->secondaryVertexThroughputG = secondary_throughput_g;
             io_result->secondaryVertexThroughputB = secondary_throughput_b;
+            secondary_material_emitter = RuntimeDisneyV2_3D_AccumulateEmissiveMaterialHit(
+                &trace.geometryHitInfo,
+                &secondary_payload,
+                &secondary_principled,
+                &io_result->pathState.ray,
+                throughput_r,
+                throughput_g,
+                throughput_b,
+                io_result->misWeightBsdf,
+                1,
+                false,
+                &io_result->pathState,
+                NULL,
+                NULL,
+                NULL,
+                io_result);
         }
-        if ((secondary_payload_resolved
+        if (!secondary_material_emitter &&
+            (secondary_payload_resolved
                  ? RuntimeDirectLight3D_ShadeHitWithPayload(scene,
                                                             &trace.geometryHitInfo,
                                                             &secondary_payload,
@@ -796,15 +945,19 @@ static void runtime_disney_v2_3d_apply_stochastic_transport(
                 contribution_r,
                 contribution_g,
                 contribution_b,
-                RUNTIME_DISNEY_V2_3D_EMITTER_FINITE_LIGHT);
+                scene && scene->hasLight && scene->light.radius > 1e-9
+                    ? RUNTIME_DISNEY_V2_3D_EMITTER_FINITE_LIGHT
+                    : RUNTIME_DISNEY_V2_3D_EMITTER_NONE);
         }
-        RuntimeDisneyV2_3D_ApplyRecursivePathLoop(scene,
-                                                  &trace.geometryHitInfo,
-                                                  sampling,
-                                                  secondary_throughput_r,
-                                                  secondary_throughput_g,
-                                                  secondary_throughput_b,
-                                                  io_result);
+        if (!secondary_material_emitter) {
+            RuntimeDisneyV2_3D_ApplyRecursivePathLoop(scene,
+                                                      &trace.geometryHitInfo,
+                                                      sampling,
+                                                      throughput_r,
+                                                      throughput_g,
+                                                      throughput_b,
+                                                      io_result);
+        }
     }
     if (trace.emitterWins) {
         const double emitter_radiance = trace.emitterHitInfo.radiance;
@@ -833,6 +986,115 @@ static void runtime_disney_v2_3d_apply_stochastic_transport(
                                   io_result->stochasticBsdfRadianceB) > 1e-9) {
         io_result->secondaryContributingHitCount += 1;
     }
+}
+
+static void runtime_disney_v2_3d_apply_mirror_composition(
+    const RuntimeMaterialPayload3D* payload,
+    RuntimeDisneyV2_3DResult* io_result) {
+    RuntimeMirrorComposition3DPolicy policy = RuntimeMirrorComposition3D_Evaluate(payload);
+    double before_r = 0.0;
+    double before_g = 0.0;
+    double before_b = 0.0;
+
+    if (!io_result) return;
+
+    before_r = io_result->directRadianceR + io_result->diffuseRadianceR;
+    before_g = io_result->directRadianceG + io_result->diffuseRadianceG;
+    before_b = io_result->directRadianceB + io_result->diffuseRadianceB;
+    io_result->mirrorDominance = policy.dominance;
+    io_result->mirrorBaseAttenuation = policy.baseAttenuation;
+    io_result->mirrorBaseRadianceBeforeAttenuation =
+        runtime_disney_v2_3d_peak(before_r, before_g, before_b);
+
+    if (policy.active) {
+        io_result->directRadianceR *= policy.baseAttenuation;
+        io_result->directRadianceG *= policy.baseAttenuation;
+        io_result->directRadianceB *= policy.baseAttenuation;
+        io_result->diffuseRadianceR *= policy.baseAttenuation;
+        io_result->diffuseRadianceG *= policy.baseAttenuation;
+        io_result->diffuseRadianceB *= policy.baseAttenuation;
+    }
+
+    io_result->mirrorBaseRadianceAfterAttenuation =
+        runtime_disney_v2_3d_peak(io_result->directRadianceR + io_result->diffuseRadianceR,
+                                  io_result->directRadianceG + io_result->diffuseRadianceG,
+                                  io_result->directRadianceB + io_result->diffuseRadianceB);
+}
+
+static void runtime_disney_v2_3d_apply_specular_reflection(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeNative3DSamplingContext* sampling,
+    Vec3 view_dir,
+    RuntimeDisneyV2_3DResult* io_result) {
+    RuntimeSpecularReflection3DResult reflection = {0};
+    RuntimeMaterialPayload3D reflected_payload = {0};
+    RuntimeDirectLight3DResult reflected_direct = {0};
+    double reflected_r = 0.0;
+    double reflected_g = 0.0;
+    double reflected_b = 0.0;
+
+    if (!scene || !hit || !io_result || !io_result->payloadResolved ||
+        !RuntimePathDepthPolicy3D_AllowsDepth(&io_result->pathPolicy,
+                                              RUNTIME_PATH_DEPTH_POLICY_3D_LOBE_SPECULAR,
+                                              1)) {
+        return;
+    }
+    if (!RuntimeSpecularReflection3D_Trace(scene,
+                                           hit,
+                                           &io_result->payload,
+                                           view_dir,
+                                           sampling,
+                                           &reflection)) {
+        return;
+    }
+    if (reflection.traced) {
+        io_result->specularReflectionRayCount += 1;
+    }
+    if (reflection.emitterWins) {
+        io_result->specularReflectionHitCount += 1;
+        io_result->specularReflectionEmitterHitCount += 1;
+        reflected_r = reflection.emitterHitInfo.radiance;
+        reflected_g = reflection.emitterHitInfo.radiance;
+        reflected_b = reflection.emitterHitInfo.radiance;
+    } else if (reflection.geometryHit && reflection.hitInfo.triangleIndex >= 0 &&
+               reflection.hitInfo.triangleIndex != hit->triangleIndex) {
+        io_result->specularReflectionHitCount += 1;
+        io_result->specularReflectionGeometryHitCount += 1;
+        (void)RuntimeDisneyV2_3D_ApplySpecularReflectionRecursion(scene,
+                                                                  hit,
+                                                                  &reflection,
+                                                                  sampling,
+                                                                  io_result);
+        if (RuntimeMaterialPayload3D_ResolveFromHit(&reflection.hitInfo, &reflected_payload) &&
+            reflected_payload.valid &&
+            RuntimeDirectLight3D_ShadeHitWithPayload(scene,
+                                                     &reflection.hitInfo,
+                                                     &reflected_payload,
+                                                     sampling,
+                                                     &reflected_direct)) {
+            reflected_r = reflected_direct.radianceR;
+            reflected_g = reflected_direct.radianceG;
+            reflected_b = reflected_direct.radianceB;
+        }
+    } else if (reflection.traced) {
+        io_result->specularReflectionNoHitCount += 1;
+    }
+
+    reflected_r *= reflection.weight * reflection.tintR;
+    reflected_g *= reflection.weight * reflection.tintG;
+    reflected_b *= reflection.weight * reflection.tintB;
+    if (runtime_disney_v2_3d_peak(reflected_r, reflected_g, reflected_b) <= 1e-9) {
+        return;
+    }
+
+    io_result->specularReflectionContributingHitCount += 1;
+    io_result->specularReflectionRadianceR += reflected_r;
+    io_result->specularReflectionRadianceG += reflected_g;
+    io_result->specularReflectionRadianceB += reflected_b;
+    io_result->specularRadianceR += reflected_r;
+    io_result->specularRadianceG += reflected_g;
+    io_result->specularRadianceB += reflected_b;
 }
 
 static bool runtime_disney_v2_3d_shade_hit_with_payload(
@@ -933,6 +1195,8 @@ static bool runtime_disney_v2_3d_shade_hit_with_payload(
     result.emissionRadianceG = result.principled.emissiveG * result.principled.emissiveStrength;
     result.emissionRadianceB = result.principled.emissiveB * result.principled.emissiveStrength;
 
+    runtime_disney_v2_3d_apply_mirror_composition(&result.payload, &result);
+    runtime_disney_v2_3d_apply_specular_reflection(scene, hit, sampling, view_dir, &result);
     runtime_disney_v2_3d_apply_stochastic_transport(scene, hit, sampling, view_dir, &result);
     runtime_disney_v2_3d_refresh_peaks(&result);
     *out_result = result;

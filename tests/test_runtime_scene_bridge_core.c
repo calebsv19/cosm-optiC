@@ -1246,6 +1246,61 @@ static int test_runtime_scene_bridge_apply_file_can_defer_mesh_assets(void) {
     return 0;
 }
 
+static int test_runtime_scene_bridge_deferred_mesh_missing_sidecar_keeps_runtime_scene(void) {
+    RuntimeSceneBridgePreflight summary = {0};
+    const RayTracingRuntimeMeshAssetSet* mesh_assets = NULL;
+    const char* runtime_scene_path = "/private/tmp/ray_tracing_bridge_missing_mesh_scene_runtime.json";
+    const char* runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_missing_editor_mesh\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"obj_missing_mesh\","
+          "\"object_type\":\"mesh_asset_instance\","
+          "\"transform\":{"
+            "\"position\":{\"x\":1.0,\"y\":2.0,\"z\":3.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+          "},"
+          "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_missing_for_editor\"},"
+          "\"extensions\":{\"line_drawing\":{"
+            "\"runtime_mesh_path\":\"/private/tmp/ray_tracing_missing_asset_for_editor.runtime.json\""
+          "}}"
+        "}],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[]"
+        "}";
+    bool ok = false;
+
+    assert_true("runtime_scene_defer_missing_mesh_write",
+                write_text_file(runtime_scene_path, runtime_json));
+    ray_tracing_runtime_mesh_assets_reset_last();
+    ok = runtime_scene_bridge_apply_file_defer_mesh_assets(runtime_scene_path, &summary);
+    assert_true("runtime_scene_defer_missing_mesh_ok", ok);
+    if (ok) {
+        mesh_assets = ray_tracing_runtime_mesh_assets_last();
+        assert_true("runtime_scene_defer_missing_mesh_source",
+                    animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE);
+        assert_true("runtime_scene_defer_missing_mesh_path",
+                    strcmp(animSettings.runtimeScenePath, runtime_scene_path) == 0);
+        assert_true("runtime_scene_defer_missing_mesh_space",
+                    animSettings.spaceMode == SPACE_MODE_3D);
+        assert_true("runtime_scene_defer_missing_mesh_objects",
+                    sceneSettings.objectCount == 1);
+        assert_true("runtime_scene_defer_missing_mesh_assets_empty",
+                    mesh_assets && mesh_assets->asset_count == 0);
+        assert_true("runtime_scene_defer_missing_mesh_instances_empty",
+                    mesh_assets && mesh_assets->instance_count == 0);
+    }
+    remove(runtime_scene_path);
+    return 0;
+}
+
 
 int run_test_runtime_scene_bridge_core_tests(void) {
     int before = test_support_failures();
@@ -1275,6 +1330,7 @@ int run_test_runtime_scene_bridge_core_tests(void) {
     test_runtime_scene_bridge_authoring_overlay_default_emissive_strength_zero();
     test_runtime_scene_bridge_apply_compile_output();
     test_runtime_scene_bridge_apply_file_can_defer_mesh_assets();
+    test_runtime_scene_bridge_deferred_mesh_missing_sidecar_keeps_runtime_scene();
 
     return test_support_failures() - before;
 }

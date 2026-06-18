@@ -868,12 +868,16 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgress(
     }
 
     for (size_t i = 0; i < scheduler.jobCount; ++i) {
-        if (!RuntimeNative3DRenderUnit_ResolveCurrentToPixels(&scheduler.jobs[i].renderUnit,
-                                                              pixel_buffer,
-                                                              frame->width)) {
+        RuntimeNative3DRenderStats resolve_stats = {0};
+        if (!RuntimeNative3DRenderUnit_ResolveCurrentToPixelsWithStats(
+                &scheduler.jobs[i].renderUnit,
+                pixel_buffer,
+                frame->width,
+                &resolve_stats)) {
             ok = false;
             break;
         }
+        RuntimeNative3DRenderStats_Accumulate(&scheduler.stats, &resolve_stats);
     }
     if (!ok) {
         goto finalize;

@@ -20,8 +20,8 @@
 #define MENU_ROUTE_STACK_BUTTON_HEIGHT 50
 #define MENU_ROUTE_STACK_GAP 8
 #define MENU_BOTTOM_ACTION_HEIGHT 64
-#define MENU_CENTER_CONTROLS_MIN_HEIGHT 196
-#define MENU_CENTER_CONTROLS_MAX_HEIGHT 232
+#define MENU_CENTER_CONTROLS_MIN_HEIGHT 300
+#define MENU_CENTER_CONTROLS_MAX_HEIGHT 336
 #define MENU_MANIFEST_PANEL_MIN_HEIGHT 140
 #define MENU_MANIFEST_PANEL_MAX_HEIGHT 260
 #define MENU_MANIFEST_PANEL_GAP 6
@@ -79,13 +79,23 @@ void menu_layout_build_base(TTF_Font* font,
     const int slider_x = menu_width - MENU_MARGIN_X - MENU_SLIDER_PANEL_WIDTH;
     int center_width = slider_x - MENU_ZONE_GAP - center_left;
     int center_controls_h = MENU_CENTER_CONTROLS_MIN_HEIGHT + (show_path_toggles ? 56 : 0);
+    int center_controls_available_h = 0;
     int center_batch_y = 0;
     int center_batch_h = 0;
 
     (void)state;
 
+    center_controls_available_h =
+        bottom_row_y - MENU_PANEL_BOTTOM_GAP - MENU_MARGIN_Y - MENU_ZONE_GAP -
+        MENU_BATCH_MIN_HEIGHT;
+    if (center_controls_available_h < 196) {
+        center_controls_available_h = 196;
+    }
     if (center_controls_h > MENU_CENTER_CONTROLS_MAX_HEIGHT) {
         center_controls_h = MENU_CENTER_CONTROLS_MAX_HEIGHT;
+    }
+    if (center_controls_h > center_controls_available_h) {
+        center_controls_h = center_controls_available_h;
     }
     if (center_width < 300) {
         center_width = 300;

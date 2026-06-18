@@ -4,15 +4,27 @@
 #include <stddef.h>
 
 #include "core_mesh_asset.h"
+#include "core_mesh_preview.h"
 
 #define RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS 32
 #define RAY_TRACING_RUNTIME_MESH_ASSET_MAX_INSTANCES 64
 #define RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX 4096
 
+typedef struct RayTracingRuntimeMeshPreviewInfo {
+    bool preview_path_resolved;
+    bool preview_file_exists;
+    bool preview_file_readable;
+    bool preview_schema_supported;
+    bool preview_metadata_valid;
+    char preview_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX];
+    CoreMeshPreviewRuntimeMetadata metadata;
+} RayTracingRuntimeMeshPreviewInfo;
+
 typedef struct RayTracingRuntimeMeshAsset {
     char asset_id[64];
     char path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX];
     CoreMeshAssetRuntimeDocument document;
+    RayTracingRuntimeMeshPreviewInfo preview;
 } RayTracingRuntimeMeshAsset;
 
 typedef struct RayTracingRuntimeMeshAssetInstance {
@@ -38,6 +50,7 @@ typedef struct RayTracingRuntimeMeshAssetSkippedInstance {
     int scene_object_index;
     size_t file_size_bytes;
     size_t max_file_size_bytes;
+    RayTracingRuntimeMeshPreviewInfo preview;
 } RayTracingRuntimeMeshAssetSkippedInstance;
 
 typedef struct RayTracingRuntimeMeshAssetSet {

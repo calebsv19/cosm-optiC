@@ -81,6 +81,7 @@ static void begin_frame_dir_edit(MenuRuntimeState *state) {
     if (!state) return;
     clear_batch_edit_flags(state);
     state->editingInputRoot = false;
+    state->editingMeshAssetRoot = false;
     state->editingOutputRoot = false;
     state->editingFrameDir = true;
     snprintf(state->pathInputBuffer, sizeof(state->pathInputBuffer), "%s", animSettings.frameDir);
@@ -90,6 +91,7 @@ static void begin_video_root_edit(MenuRuntimeState *state) {
     if (!state) return;
     clear_batch_edit_flags(state);
     state->editingInputRoot = false;
+    state->editingMeshAssetRoot = false;
     state->editingOutputRoot = false;
     state->editingVideoOutputRoot = true;
     snprintf(state->pathInputBuffer, sizeof(state->pathInputBuffer), "%s", animSettings.videoOutputRoot);

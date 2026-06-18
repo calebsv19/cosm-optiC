@@ -854,8 +854,8 @@ static bool runtime_scene_bridge_apply_file_with_options(const char *runtime_sce
                 &mesh_assets,
                 out_summary->diagnostics,
                 sizeof(out_summary->diagnostics))) {
-            free(json_text);
-            return false;
+            ray_tracing_runtime_mesh_asset_set_free(&mesh_assets);
+            ray_tracing_runtime_mesh_asset_set_init(&mesh_assets);
         }
     }
 

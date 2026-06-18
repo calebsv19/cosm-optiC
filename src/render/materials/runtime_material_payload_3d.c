@@ -9,6 +9,7 @@
 #include "material/material_manager.h"
 #include "render/runtime_material_authored_texture_3d.h"
 #include "render/runtime_material_texture_stack_3d.h"
+#include "render/runtime_water_material_3d.h"
 
 static bool runtime_material_payload_3d_valid_scene_object_index(int scene_object_index) {
     return scene_object_index >= 0 &&
@@ -499,6 +500,7 @@ static bool runtime_material_payload_3d_resolve(int scene_object_index,
     payload.thinWalled = material ? material->thin_walled : false;
     payload.valid = true;
     runtime_material_payload_3d_apply_texture(&object_copy, hit, &payload);
+    RuntimeWaterMaterial3D_ApplyToPayload(scene_object_index, &payload);
 
     *out_payload = payload;
     return true;

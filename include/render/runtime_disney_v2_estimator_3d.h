@@ -30,6 +30,16 @@ double RuntimeDisneyV2_3D_EstimateDirectLightPdfForHit(
     const HitInfo3D* hit,
     bool has_emissive_area_direct);
 
+double RuntimeDisneyV2_3D_EstimateFiniteLightPdfForHit(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit);
+
+double RuntimeDisneyV2_3D_EstimateDirectLightPdfForHitWithAreaPdf(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    bool has_emissive_area_direct,
+    double emissive_area_light_pdf);
+
 double RuntimeDisneyV2_3D_EstimateDirectBsdfPdf(const RuntimePrincipledBSDF3D* principled,
                                                 const HitInfo3D* hit,
                                                 Vec3 incoming_dir,

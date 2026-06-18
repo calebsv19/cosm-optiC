@@ -2,6 +2,7 @@
 
 #include <float.h>
 #include <math.h>
+#include <stdio.h>
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
@@ -61,6 +62,18 @@ static atomic_uint_fast64_t g_triangle_hits;
 static atomic_uint_fast64_t g_max_stack_depth;
 static atomic_bool g_trace_stats_enabled;
 static atomic_int g_traversal_stack_limit;
+static char gRuntimeTriangleBVH3DLastDiagnostics[512] = "ok";
+
+static void runtime_triangle_bvh_set_diag(const char* message) {
+    snprintf(gRuntimeTriangleBVH3DLastDiagnostics,
+             sizeof(gRuntimeTriangleBVH3DLastDiagnostics),
+             "%s",
+             (message && message[0]) ? message : "ok");
+}
+
+const char* RuntimeTriangleMesh3D_BVHLastDiagnostics(void) {
+    return gRuntimeTriangleBVH3DLastDiagnostics;
+}
 
 static bool runtime_triangle_bvh_trace_stats_enabled(void) {
     return atomic_load_explicit(&g_trace_stats_enabled, memory_order_relaxed);
@@ -131,6 +144,10 @@ static Vec3 runtime_triangle_bvh_triangle_centroid(const RuntimeTriangle3D* tria
                 (triangle->p0.z + triangle->p1.z + triangle->p2.z) / 3.0);
 }
 
+static bool runtime_triangle_bvh_vec3_isfinite(Vec3 value) {
+    return isfinite(value.x) && isfinite(value.y) && isfinite(value.z);
+}
+
 static double runtime_triangle_bvh_axis_value(Vec3 value, int axis) {
     if (axis == 0) return value.x;
     if (axis == 1) return value.y;
@@ -155,13 +172,52 @@ static bool runtime_triangle_bvh_sort_indices(RuntimeTriangleBVH3D* bvh,
                                               int axis) {
     if (!bvh || !bvh->indices || !bvh->centroids || !bvh->sortScratch ||
         start < 0 || count <= 0 || start + count > bvh->indexCount) {
+        char diag[256];
+        snprintf(diag,
+                 sizeof(diag),
+                 "sort indices invalid input: start=%d count=%d index_count=%d axis=%d has_indices=%s has_centroids=%s has_sort_scratch=%s",
+                 start,
+                 count,
+                 bvh ? bvh->indexCount : -1,
+                 axis,
+                 (bvh && bvh->indices) ? "true" : "false",
+                 (bvh && bvh->centroids) ? "true" : "false",
+                 (bvh && bvh->sortScratch) ? "true" : "false");
+        runtime_triangle_bvh_set_diag(diag);
         return false;
     }
     for (int i = 0; i < count; ++i) {
         int index = bvh->indices[start + i];
+        if (index < 0 || index >= bvh->indexCount) {
+            char diag[256];
+            snprintf(diag,
+                     sizeof(diag),
+                     "sort indices invalid triangle index: start=%d count=%d offset=%d triangle_index=%d index_count=%d",
+                     start,
+                     count,
+                     i,
+                     index,
+                     bvh->indexCount);
+            runtime_triangle_bvh_set_diag(diag);
+            return false;
+        }
         bvh->sortScratch[i].index = index;
         bvh->sortScratch[i].centroid =
             runtime_triangle_bvh_axis_value(bvh->centroids[index], axis);
+        if (!isfinite(bvh->sortScratch[i].centroid)) {
+            char diag[256];
+            snprintf(diag,
+                     sizeof(diag),
+                     "sort indices nonfinite centroid: start=%d count=%d offset=%d triangle_index=%d axis=%d centroid=%g",
+                     start,
+                     count,
+                     i,
+                     index,
+                     axis,
+                     bvh->sortScratch[i].centroid);
+            runtime_triangle_bvh_set_diag(diag);
+            return false;
+        }
     }
     qsort(bvh->sortScratch,
           (size_t)count,
@@ -195,14 +251,63 @@ static bool runtime_triangle_bvh_range_bounds(const RuntimeTriangleMesh3D* mesh,
     Vec3 bounds_max = vec3(-DBL_MAX, -DBL_MAX, -DBL_MAX);
     Vec3 centroid_min = vec3(DBL_MAX, DBL_MAX, DBL_MAX);
     Vec3 centroid_max = vec3(-DBL_MAX, -DBL_MAX, -DBL_MAX);
-    if (!mesh || !indices || !centroids || count <= 0) return false;
+    if (!mesh || !indices || !centroids || start < 0 || count <= 0 ||
+        start + count > mesh->triangleCount) {
+        char diag[256];
+        snprintf(diag,
+                 sizeof(diag),
+                 "range bounds invalid input: start=%d count=%d triangle_count=%d has_indices=%s has_centroids=%s",
+                 start,
+                 count,
+                 mesh ? mesh->triangleCount : -1,
+                 indices ? "true" : "false",
+                 centroids ? "true" : "false");
+        runtime_triangle_bvh_set_diag(diag);
+        return false;
+    }
 
     for (int i = 0; i < count; ++i) {
         int index = indices[start + i];
+        if (index < 0 || index >= mesh->triangleCount) {
+            char diag[256];
+            snprintf(diag,
+                     sizeof(diag),
+                     "range bounds invalid triangle index: start=%d count=%d offset=%d triangle_index=%d triangle_count=%d",
+                     start,
+                     count,
+                     i,
+                     index,
+                     mesh->triangleCount);
+            runtime_triangle_bvh_set_diag(diag);
+            return false;
+        }
         const RuntimeTriangle3D* triangle = &mesh->triangles[index];
         Vec3 tri_min = runtime_triangle_bvh_triangle_min(triangle);
         Vec3 tri_max = runtime_triangle_bvh_triangle_max(triangle);
         Vec3 centroid = centroids[index];
+        if (!runtime_triangle_bvh_vec3_isfinite(tri_min) ||
+            !runtime_triangle_bvh_vec3_isfinite(tri_max) ||
+            !runtime_triangle_bvh_vec3_isfinite(centroid)) {
+            char diag[256];
+            snprintf(diag,
+                     sizeof(diag),
+                     "range bounds nonfinite triangle: start=%d count=%d offset=%d triangle_index=%d tri_min=(%g,%g,%g) tri_max=(%g,%g,%g) centroid=(%g,%g,%g)",
+                     start,
+                     count,
+                     i,
+                     index,
+                     tri_min.x,
+                     tri_min.y,
+                     tri_min.z,
+                     tri_max.x,
+                     tri_max.y,
+                     tri_max.z,
+                     centroid.x,
+                     centroid.y,
+                     centroid.z);
+            runtime_triangle_bvh_set_diag(diag);
+            return false;
+        }
         bounds_min = runtime_triangle_bvh_min3(bounds_min, tri_min);
         bounds_max = runtime_triangle_bvh_max3(bounds_max, tri_max);
         centroid_min = runtime_triangle_bvh_min3(centroid_min, centroid);
@@ -225,7 +330,19 @@ static int runtime_triangle_bvh_append_node(RuntimeTriangleBVH3D* bvh) {
         nodes = (RuntimeTriangleBVH3DNode*)realloc(bvh->nodes,
                                                    sizeof(*bvh->nodes) *
                                                        (size_t)new_capacity);
-        if (!nodes) return -1;
+        if (!nodes) {
+            char diag[256];
+            snprintf(diag,
+                     sizeof(diag),
+                     "node realloc failed: node_count=%d old_capacity=%d new_capacity=%d bytes=%llu",
+                     bvh->nodeCount,
+                     bvh->nodeCapacity,
+                     new_capacity,
+                     (unsigned long long)(sizeof(*bvh->nodes) *
+                                          (size_t)new_capacity));
+            runtime_triangle_bvh_set_diag(diag);
+            return -1;
+        }
         bvh->nodes = nodes;
         bvh->nodeCapacity = new_capacity;
     }
@@ -261,6 +378,16 @@ static int runtime_triangle_bvh_build_node(RuntimeTriangleBVH3D* bvh,
                                            &bounds_max,
                                            &centroid_min,
                                            &centroid_max)) {
+        char diag[512];
+        const char* lower_diag = RuntimeTriangleMesh3D_BVHLastDiagnostics();
+        snprintf(diag,
+                 sizeof(diag),
+                 "build node range bounds failed: start=%d count=%d depth=%d lower=%s",
+                 start,
+                 count,
+                 depth,
+                 lower_diag ? lower_diag : "unknown");
+        runtime_triangle_bvh_set_diag(diag);
         return -1;
     }
 
@@ -282,14 +409,50 @@ static int runtime_triangle_bvh_build_node(RuntimeTriangleBVH3D* bvh,
     }
 
     if (!runtime_triangle_bvh_sort_indices(bvh, start, count, axis)) {
+        char diag[512];
+        const char* lower_diag = RuntimeTriangleMesh3D_BVHLastDiagnostics();
+        snprintf(diag,
+                 sizeof(diag),
+                 "build node sort failed: start=%d count=%d depth=%d axis=%d lower=%s",
+                 start,
+                 count,
+                 depth,
+                 axis,
+                 lower_diag ? lower_diag : "unknown");
+        runtime_triangle_bvh_set_diag(diag);
         return -1;
     }
     mid = start + count / 2;
     bvh->nodes[node_index].left =
         runtime_triangle_bvh_build_node(bvh, mesh, start, mid - start, depth + 1);
+    if (bvh->nodes[node_index].left < 0) {
+        char diag[512];
+        const char* lower_diag = RuntimeTriangleMesh3D_BVHLastDiagnostics();
+        snprintf(diag,
+                 sizeof(diag),
+                 "build node left child failed: start=%d count=%d depth=%d mid=%d lower=%s",
+                 start,
+                 count,
+                 depth,
+                 mid,
+                 lower_diag ? lower_diag : "unknown");
+        runtime_triangle_bvh_set_diag(diag);
+        return -1;
+    }
     bvh->nodes[node_index].right =
         runtime_triangle_bvh_build_node(bvh, mesh, mid, start + count - mid, depth + 1);
-    if (bvh->nodes[node_index].left < 0 || bvh->nodes[node_index].right < 0) {
+    if (bvh->nodes[node_index].right < 0) {
+        char diag[512];
+        const char* lower_diag = RuntimeTriangleMesh3D_BVHLastDiagnostics();
+        snprintf(diag,
+                 sizeof(diag),
+                 "build node right child failed: start=%d count=%d depth=%d mid=%d lower=%s",
+                 start,
+                 count,
+                 depth,
+                 mid,
+                 lower_diag ? lower_diag : "unknown");
+        runtime_triangle_bvh_set_diag(diag);
         return -1;
     }
     bvh->nodes[node_index].count = 0;
@@ -402,13 +565,29 @@ bool RuntimeTriangleMesh3D_BuildBVH(RuntimeTriangleMesh3D* mesh) {
     RuntimeTriangleBVH3D* bvh = NULL;
     clock_t build_start = 0;
     clock_t build_end = 0;
-    if (!mesh) return false;
+    runtime_triangle_bvh_set_diag("ok");
+    if (!mesh) {
+        runtime_triangle_bvh_set_diag("build failed: mesh missing");
+        return false;
+    }
     RuntimeTriangleMesh3D_ClearBVH(mesh);
-    if (!mesh->triangles || mesh->triangleCount <= 0) return true;
+    if (!mesh->triangles || mesh->triangleCount <= 0) {
+        runtime_triangle_bvh_set_diag("ok");
+        return true;
+    }
 
     build_start = clock();
     bvh = (RuntimeTriangleBVH3D*)calloc(1u, sizeof(*bvh));
-    if (!bvh) return false;
+    if (!bvh) {
+        char diag[160];
+        snprintf(diag,
+                 sizeof(diag),
+                 "initial bvh calloc failed: triangle_count=%d bytes=%llu",
+                 mesh->triangleCount,
+                 (unsigned long long)sizeof(*bvh));
+        runtime_triangle_bvh_set_diag(diag);
+        return false;
+    }
     bvh->indexCount = mesh->triangleCount;
     bvh->indices = (int*)malloc(sizeof(*bvh->indices) * (size_t)bvh->indexCount);
     bvh->centroids = (Vec3*)malloc(sizeof(*bvh->centroids) * (size_t)bvh->indexCount);
@@ -416,14 +595,50 @@ bool RuntimeTriangleMesh3D_BuildBVH(RuntimeTriangleMesh3D* mesh) {
         (RuntimeTriangleBVH3DSortItem*)malloc(sizeof(*bvh->sortScratch) *
                                               (size_t)bvh->indexCount);
     if (!bvh->indices || !bvh->centroids || !bvh->sortScratch) {
+        char diag[384];
+        snprintf(diag,
+                 sizeof(diag),
+                 "build scratch allocation failed: triangle_count=%d indices=%s centroids=%s sort_scratch=%s index_bytes=%llu centroid_bytes=%llu sort_scratch_bytes=%llu",
+                 bvh->indexCount,
+                 bvh->indices ? "ok" : "failed",
+                 bvh->centroids ? "ok" : "failed",
+                 bvh->sortScratch ? "ok" : "failed",
+                 (unsigned long long)(sizeof(*bvh->indices) *
+                                      (size_t)bvh->indexCount),
+                 (unsigned long long)(sizeof(*bvh->centroids) *
+                                      (size_t)bvh->indexCount),
+                 (unsigned long long)(sizeof(*bvh->sortScratch) *
+                                      (size_t)bvh->indexCount));
+        runtime_triangle_bvh_set_diag(diag);
         runtime_triangle_bvh_destroy(bvh);
         return false;
     }
     for (int i = 0; i < bvh->indexCount; ++i) {
         bvh->indices[i] = i;
         bvh->centroids[i] = runtime_triangle_bvh_triangle_centroid(&mesh->triangles[i]);
+        if (!runtime_triangle_bvh_vec3_isfinite(bvh->centroids[i])) {
+            char diag[256];
+            snprintf(diag,
+                     sizeof(diag),
+                     "centroid build nonfinite triangle: triangle_index=%d centroid=(%g,%g,%g)",
+                     i,
+                     bvh->centroids[i].x,
+                     bvh->centroids[i].y,
+                     bvh->centroids[i].z);
+            runtime_triangle_bvh_set_diag(diag);
+            runtime_triangle_bvh_destroy(bvh);
+            return false;
+        }
     }
     if (runtime_triangle_bvh_build_node(bvh, mesh, 0, bvh->indexCount, 1) < 0) {
+        char diag[512];
+        const char* lower_diag = RuntimeTriangleMesh3D_BVHLastDiagnostics();
+        snprintf(diag,
+                 sizeof(diag),
+                 "build failed: triangle_count=%d lower=%s",
+                 bvh->indexCount,
+                 lower_diag ? lower_diag : "unknown");
+        runtime_triangle_bvh_set_diag(diag);
         runtime_triangle_bvh_destroy(bvh);
         return false;
     }
@@ -440,6 +655,7 @@ bool RuntimeTriangleMesh3D_BuildBVH(RuntimeTriangleMesh3D* mesh) {
     runtime_triangle_bvh_free_build_scratch(bvh);
     mesh->bvh = bvh;
     mesh->bvhDirty = false;
+    runtime_triangle_bvh_set_diag("ok");
     return true;
 }
 

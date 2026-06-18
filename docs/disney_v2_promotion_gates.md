@@ -134,9 +134,11 @@ Generated on 2026-06-13:
 Current promotion blockers:
 
 - production-quality estimator tuning beyond the first power-heuristic MIS,
-  adaptive rough-reflection sample pass, and finite-light direct-light PDF
-  estimate, especially material-aware BRDF/BTDF direct-light quality for rough
-  reflection/transmission
+  adaptive rough-reflection sample pass, finite-light direct-light PDF
+  estimate, material-aware direct-light BSDF/BTDF PDF estimate, and sampled
+  emissive-area PDF estimate, especially branch-separated multi-light MIS,
+  physically complete BTDF PDFs, and repeated rough reflection/transmission
+  convergence
 - visual signoff documenting visible improvement or meaningful new behavior
   over shipped Disney for imported-mesh proof scenes
 - skull-scale or other external high-triangle scene signoff once large
@@ -299,3 +301,169 @@ Covered after D2.26:
   material `4.615s`, ratio `0.169`, secondary `18674`/`6667`, max radiance
   `0.522`; imported mesh pressure MRT8 `3.375s`, ratio `0.204`, secondary
   `13894`/`4920`, max radiance `0.484`.
+
+Covered after D2.27:
+
+- Disney v2 now estimates the material BSDF/BTDF PDF toward finite runtime
+  light directions through `RuntimeDisneyV2_3D_EstimateDirectBsdfPdf(...)`
+  instead of using the sampled support-ray PDF as the direct-light MIS
+  comparator.
+- Primary and recursive Disney v2 MIS diagnostics record the material-aware
+  direct-light BSDF/BTDF PDF while preserving the sampled lobe support PDF for
+  path continuation.
+- Focused transport tests cover Lambert diffuse PDF, GGX roughness-sensitive
+  specular PDF, and bounded opposite-hemisphere transmission PDF behavior.
+- D2.27 estimator report passed hard gates, performance thresholds, and quality
+  thresholds at:
+  `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_d227_direct_bsdf_pdf_estimator_initial/promotion_gate_report.json`.
+- D2.27 Disney v2 threshold metrics: primitive glass corridor `1.369s`, ratio
+  `0.333`, secondary `5919`/`1384`, max radiance `0.553`; imported mesh
+  material `4.765s`, ratio `0.121`, secondary `18674`/`6667`, max radiance
+  `0.522`; imported mesh pressure MRT8 `4.798s`, ratio `0.235`, secondary
+  `13894`/`4920`, max radiance `0.484`.
+
+Covered after D2.28:
+
+- Cached emissive-area samples now report selected sample direction, distance,
+  triangle area, receiver/emitter cosines, candidate-selection PDF, area PDF,
+  and solid-angle light PDF.
+- Disney v2 primary and recursive emissive-area MIS now uses the sampled
+  solid-angle light PDF and evaluates the BSDF/BTDF comparator toward the
+  selected area-light sample direction when available.
+- Focused tests prove the sampled-area solid-angle PDF formula and prove
+  emissive-area-only primary/recursive MIS records positive direct-light and
+  area-direction BSDF PDFs.
+- D2.28 estimator report passed hard gates, performance thresholds, and quality
+  thresholds at:
+  `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_d228_emissive_area_pdf_estimator_initial/promotion_gate_report.json`.
+- D2.28 Disney v2 threshold metrics: primitive glass corridor `1.827s`, ratio
+  `0.491`, secondary `5917`/`1383`, max radiance `0.553`; imported mesh
+  material `3.932s`, ratio `0.120`, secondary `18674`/`6667`, max radiance
+  `0.522`; imported mesh pressure MRT8 `5.394s`, ratio `0.267`, secondary
+  `13894`/`4920`, max radiance `0.484`.
+- D2.28 emissive stress report passed with `0` full-scan fallbacks at:
+  `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_emissive_stress/d228_area_pdf_initial/emissive_stress_report.json`.
+
+Covered after D2.29:
+
+- Disney v2 now records branch-separated finite runtime-light and
+  emissive-area direct-light MIS diagnostics while preserving the legacy
+  aggregate MIS fields.
+- Primary finite runtime-light direct radiance uses the finite branch weight;
+  primary and recursive emissive-area accumulation use the sampled emissive
+  area branch weight.
+- Focused transport coverage proves finite-only, area-only, mixed
+  finite-plus-area, and recursive area-only branch records and power-heuristic
+  weights.
+- D2.29 estimator report passed hard gates, performance thresholds, and quality
+  thresholds at:
+  `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_d229_branch_separated_direct_light_mis_initial/promotion_gate_report.json`.
+- D2.29 Disney v2 threshold metrics: primitive glass corridor `0.722s`, ratio
+  `0.433`, secondary `5917`/`1383`, max radiance `4.904`; imported mesh
+  material `2.008s`, ratio `0.128`, secondary `18674`/`6667`, max radiance
+  `4.780`; imported mesh pressure MRT8 `1.897s`, ratio `0.220`, secondary
+  `13894`/`4920`, max radiance `5.310`.
+- D2.29 temporal-12 emissive stress report passed with `0` full-scan fallbacks
+  at:
+  `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_emissive_stress/d229_branch_separated_mis_temporal12/emissive_stress_report.json`.
+- `promotion_ready` remains false. The next gate must repeat convergence and
+  visual signoff, including review of the brighter current max-radiance scale,
+  before any route-default decision.
+
+Covered after D2.30:
+
+- Repeated promotion/convergence report passed at:
+  `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_stability/d230_branch_mis_repeats_r3/stability_report.json`.
+- All three repeats passed hard gates and threshold gates while keeping
+  `promotion_ready=false`.
+- Disney v2 max radiance and participation counters were deterministic across
+  repeats:
+  - primitive glass corridor max radiance `4.903733882`
+  - imported mesh material max radiance `4.779915613`
+  - imported mesh pressure MRT8 max radiance `5.310446615`
+- Elapsed timing was still noisy, especially primitive glass corridor
+  Disney v2, so this is not yet a release-candidate timing signoff.
+- Repeated temporal-12 emissive stress report passed with `0` full-scan
+  fallbacks at:
+  `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_emissive_stress/d230_branch_mis_repeats_r2_temporal12/emissive_stress_report.json`.
+- Current D2.30 visual-readiness artifacts:
+  - imported mesh route compare:
+    `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_visual_matrix/imported_mesh_pressure_mrt8/d230_branch_mis_promotion_route_compare/matrix_contact_sheet.png`
+  - high-noise emitter denoise ablation:
+    `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_visual_matrix/high_noise_emitter/d230_branch_mis_denoise_ablation/matrix_contact_sheet.png`
+- Visual-readiness interpretation: Disney v2's brighter current output is
+  deterministic and reviewable; denoise is not the source of that brightness.
+  Human/user visual signoff and physically complete BTDF/PTDF PDF work remain
+  blockers before any default-route promotion.
+
+Covered after D2.31:
+
+- Disney v2 now replaces the bounded transmission PDF proxy with a physical
+  BTDF/PTDF direct-light PDF estimator in
+  `RuntimeDisneyV2_3D_EstimateDirectBsdfPdf(...)`.
+- The estimator uses explicit lobe probabilities from normalized principled
+  material weights, requires opposite-hemisphere transmission support,
+  handles entering/exiting eta, rejects total internal reflection, applies
+  dielectric Fresnel transmission probability, and evaluates a GGX refractive
+  half-vector PDF with the BTDF Jacobian.
+- Focused transport tests cover positive normal refraction PDF, off-axis and
+  roughness sensitivity, disabled transmission, and TIR rejection.
+- D2.31 promotion report passed hard gates, performance thresholds, and
+  quality thresholds at:
+  `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_d231_physical_btdf_pdf_initial/promotion_gate_report.json`.
+- D2.31 Disney v2 threshold metrics: primitive glass corridor `1.391s`, ratio
+  `0.462`, secondary `5917`/`1383`, max radiance `0.552737781`; imported mesh
+  material `3.787s`, ratio `0.120`, secondary `18674`/`6667`, max radiance
+  `0.521580803`; imported mesh pressure MRT8 `3.720s`, ratio `0.237`,
+  secondary `13894`/`4920`, max radiance `0.484088724`.
+- D2.31 temporal-12 emissive stress passed with `0` full-scan fallbacks at:
+  `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_emissive_stress/d231_physical_btdf_pdf_temporal12/emissive_stress_report.json`.
+- `promotion_ready` remains false. D2.32 later found that the lower D2.31
+  promotion-scene radiance scale is cwd-sensitive, so this report is not
+  sufficient for route-default signoff.
+
+Covered after D2.32:
+
+- Repeat-3 convergence passed at:
+  `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_stability/d232_physical_btdf_repeats_r3/stability_report.json`.
+- The recurring `ray_tracing/` cwd repeat lane was deterministic at the bright
+  D2.29/D2.30 scale: primitive `4.903733882`, imported material
+  `4.779915613`, imported pressure MRT8 `5.310446615`.
+- Explicit `CodeWork/` cwd repeats were deterministic at the lower D2.31 scale:
+  primitive `0.552737781`, imported material `0.521580803`, imported pressure
+  MRT8 `0.484088724`.
+- Generated requests differed only by output paths and object audit/material
+  ids matched. The remaining promotion blocker is therefore cwd-sensitive
+  headless runtime/config resolution, not stochastic convergence noise.
+- Refreshed visual review artifacts:
+  - imported route compare:
+    `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_visual_matrix/imported_mesh_pressure_mrt8/d232_physical_btdf_route_compare/matrix_contact_sheet.png`
+  - high-noise emitter denoise ablation:
+    `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_visual_matrix/high_noise_emitter/d232_physical_btdf_denoise_ablation/matrix_contact_sheet.png`
+- `promotion_ready` remains false. The next gate must first make headless
+  promotion/visual rendering cwd-invariant, then rerun repeat convergence and
+  visual review before any route-default decision.
+
+Covered after D2.33:
+
+- Headless config loading is cwd-invariant for promotion/report runs while
+  still preserving local runtime/config override precedence. Material presets,
+  scene config, and animation config now fall back to stable workspace paths
+  when relative cwd paths are absent.
+- Paired cwd reports passed hard gates and threshold gates while matching
+  Disney v2 max radiance exactly:
+  - `CodeWork/` cwd:
+    `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_d233_cwd_invariant_codework_confirm_v3/promotion_gate_report.json`
+  - `ray_tracing/` cwd:
+    `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_d233_cwd_invariant_ray_tracing_confirm_v3/promotion_gate_report.json`
+  - primitive glass corridor max radiance `4.903733882`
+  - imported mesh material max radiance `4.779915613`
+  - imported mesh pressure MRT8 max radiance `5.310446615`
+- Repeat-3 convergence from `CodeWork/` cwd passed at:
+  `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_stability/d233_cwd_invariant_repeats_r3/stability_report.json`.
+- The stable post-D2.33 promotion scale is the bright D2.29/D2.30/D2.32
+  `ray_tracing/` cwd scale. The lower D2.31 scale is now classified as a
+  cwd-sensitive config artifact.
+- `promotion_ready` remains false. The next gate is visual signoff refresh at
+  the fixed bright scale, then rough reflection/transmission convergence and
+  release-candidate threshold repetition.

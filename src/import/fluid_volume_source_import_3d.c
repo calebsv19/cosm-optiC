@@ -265,6 +265,126 @@ static bool fluid_volume_source_import_3d_load_internal(const char* path,
     }
 }
 
+static bool fluid_volume_source_import_3d_copy_frame_path(const char* path,
+                                                          char* out_frame_path,
+                                                          size_t out_frame_path_size,
+                                                          char* out_diagnostics,
+                                                          size_t out_diagnostics_size) {
+    if (!path || !path[0] || !out_frame_path || out_frame_path_size == 0u) {
+        fluid_volume_source_import_3d_diag(out_diagnostics, out_diagnostics_size,
+                                           "invalid input");
+        return false;
+    }
+    if (snprintf(out_frame_path, out_frame_path_size, "%s", path) >=
+        (int)out_frame_path_size) {
+        out_frame_path[0] = '\0';
+        fluid_volume_source_import_3d_diag(out_diagnostics, out_diagnostics_size,
+                                           "vf3d source frame path too long");
+        return false;
+    }
+    fluid_volume_source_import_3d_diag(out_diagnostics, out_diagnostics_size, "ok");
+    return true;
+}
+
+static bool fluid_volume_source_import_3d_resolve_source_frame_path_internal(
+    const char* path,
+    RuntimeVolume3DSourceKind source_kind,
+    int requested_frame_index,
+    char* out_frame_path,
+    size_t out_frame_path_size,
+    char* out_diagnostics,
+    size_t out_diagnostics_size,
+    int indirection_depth) {
+    RuntimeVolume3DSourceKind resolved_kind = source_kind;
+    char resolved_path[4096] = {0};
+    SceneBundleImportResult bundle = {0};
+
+    fluid_volume_source_import_3d_diag(out_diagnostics, out_diagnostics_size, "invalid input");
+    if (!path || !path[0] || !out_frame_path || out_frame_path_size == 0u) {
+        return false;
+    }
+    out_frame_path[0] = '\0';
+
+    if (indirection_depth > 4) {
+        fluid_volume_source_import_3d_diag(out_diagnostics, out_diagnostics_size,
+                                           "vf3d source indirection limit exceeded");
+        return false;
+    }
+
+    if (resolved_kind == RUNTIME_VOLUME_3D_SOURCE_NONE) {
+        if (!fluid_volume_import_3d_classify_path(path, &resolved_kind)) {
+            fluid_volume_source_import_3d_diag(out_diagnostics, out_diagnostics_size,
+                                               "unsupported vf3d source path");
+            return false;
+        }
+    }
+
+    switch (resolved_kind) {
+        case RUNTIME_VOLUME_3D_SOURCE_RAW_VF3D:
+        case RUNTIME_VOLUME_3D_SOURCE_PACK:
+            return fluid_volume_source_import_3d_copy_frame_path(path,
+                                                                 out_frame_path,
+                                                                 out_frame_path_size,
+                                                                 out_diagnostics,
+                                                                 out_diagnostics_size);
+
+        case RUNTIME_VOLUME_3D_SOURCE_MANIFEST:
+            if (core_scene_path_is_scene_bundle(path)) {
+                if (!scene_bundle_import_resolve_fluid_source(path, &bundle) ||
+                    !bundle.fluid_source_path[0]) {
+                    fluid_volume_source_import_3d_diag(out_diagnostics,
+                                                       out_diagnostics_size,
+                                                       "vf3d scene bundle resolve failed");
+                    return false;
+                }
+                if (strcmp(bundle.fluid_source_path, path) == 0) {
+                    fluid_volume_source_import_3d_diag(out_diagnostics,
+                                                       out_diagnostics_size,
+                                                       "vf3d scene bundle self-reference");
+                    return false;
+                }
+                return fluid_volume_source_import_3d_resolve_source_frame_path_internal(
+                    bundle.fluid_source_path,
+                    RUNTIME_VOLUME_3D_SOURCE_NONE,
+                    requested_frame_index,
+                    out_frame_path,
+                    out_frame_path_size,
+                    out_diagnostics,
+                    out_diagnostics_size,
+                    indirection_depth + 1);
+            }
+
+            if (!fluid_volume_source_import_3d_resolve_manifest_frame_path(path,
+                                                                           requested_frame_index,
+                                                                           resolved_path,
+                                                                           sizeof(resolved_path),
+                                                                           out_diagnostics,
+                                                                           out_diagnostics_size)) {
+                return false;
+            }
+            if (strcmp(resolved_path, path) == 0) {
+                fluid_volume_source_import_3d_diag(out_diagnostics, out_diagnostics_size,
+                                                   "vf3d manifest self-reference");
+                return false;
+            }
+            return fluid_volume_source_import_3d_resolve_source_frame_path_internal(
+                resolved_path,
+                RUNTIME_VOLUME_3D_SOURCE_NONE,
+                requested_frame_index,
+                out_frame_path,
+                out_frame_path_size,
+                out_diagnostics,
+                out_diagnostics_size,
+                indirection_depth + 1);
+
+        case RUNTIME_VOLUME_3D_SOURCE_NONE:
+        default:
+            fluid_volume_source_import_3d_diag(out_diagnostics, out_diagnostics_size,
+                                               "unsupported vf3d source kind");
+            return false;
+    }
+}
+
 bool fluid_volume_import_3d_load_source(const char* path,
                                         RuntimeVolume3DSourceKind source_kind_hint,
                                         RuntimeVolumeAttachment3D* out_attachment,
@@ -297,4 +417,26 @@ bool fluid_volume_import_3d_load_source_at_frame(const char* path,
                                                        out_diagnostics,
                                                        out_diagnostics_size,
                                                        0);
+}
+
+bool fluid_volume_import_3d_resolve_source_frame_path(const char* path,
+                                                      RuntimeVolume3DSourceKind source_kind_hint,
+                                                      int requested_frame_index,
+                                                      char* out_frame_path,
+                                                      size_t out_frame_path_size,
+                                                      char* out_diagnostics,
+                                                      size_t out_diagnostics_size) {
+    fluid_volume_source_import_3d_diag(out_diagnostics, out_diagnostics_size, "invalid input");
+    if (!path || !path[0] || !out_frame_path || out_frame_path_size == 0u) {
+        return false;
+    }
+    out_frame_path[0] = '\0';
+    return fluid_volume_source_import_3d_resolve_source_frame_path_internal(path,
+                                                                           source_kind_hint,
+                                                                           requested_frame_index,
+                                                                           out_frame_path,
+                                                                           out_frame_path_size,
+                                                                           out_diagnostics,
+                                                                           out_diagnostics_size,
+                                                                           0);
 }

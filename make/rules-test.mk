@@ -50,10 +50,16 @@ test-runtime-scene-bridge-contract: $(APP_TARGET) $(TEST_BIN)
 	@TEST_RUNNER_GROUP=runtime_scene_bridge_writeback ./$(TEST_BIN) || (echo "ray tracing runtime scene bridge writeback contract test failed."; exit 1)
 	@echo "ray tracing runtime scene bridge contract lane passed"
 
+test-water-surface-import-contract: $(APP_TARGET) $(TEST_BIN)
+	@TEST_RUNNER_GROUP=fluid_volume_import_3d ./$(TEST_BIN) || (echo "ray tracing water surface import contract test failed."; exit 1)
+	@TEST_RUNNER_GROUP=water_surface_runtime ./$(TEST_BIN) || (echo "ray tracing water surface heightfield builder test failed."; exit 1)
+	@echo "ray tracing water surface import and builder contract lane passed"
+
 RUNTIME_MESH_ASSET_LOADER_TEST_BIN := $(BUILD_DIR)/tests/runtime_mesh_asset_loader_test
 RUNTIME_MESH_ASSET_LOADER_TEST_SRCS := \
 	$(TEST_DIR)/test_runtime_mesh_asset_loader.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_loader.c \
+	$(CORE_MESH_PREVIEW_DIR)/src/core_mesh_preview.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
 	$(CORE_IO_DIR)/src/core_io.c \
@@ -67,6 +73,7 @@ $(RUNTIME_MESH_ASSET_LOADER_TEST_BIN): $(RUNTIME_MESH_ASSET_LOADER_TEST_SRCS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
 		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) -I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_MESH_PREVIEW_DIR)/include -I$(CORE_MESH_PREVIEW_DIR)/../../shape/external \
 		-I$(CORE_IO_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_OBJECT_DIR)/include \
 		-I$(CORE_UNITS_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-DRAY_TRACING_RUNTIME_MESH_ASSET_LOADER_STANDALONE \
@@ -104,9 +111,13 @@ test-runtime-mesh-asset-pack: $(RUNTIME_MESH_ASSET_PACK_TEST_BIN)
 RUNTIME_MESH_ASSET_BUILDER_TEST_BIN := $(BUILD_DIR)/tests/runtime_mesh_asset_builder_test
 RUNTIME_MESH_ASSET_BUILDER_TEST_SRCS := \
 	$(TEST_DIR)/test_runtime_mesh_asset_builder.c \
+	$(TEST_DIR)/test_runtime_material_payload_stub.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_loader.c \
+	$(CORE_MESH_PREVIEW_DIR)/src/core_mesh_preview.c \
 	$(SRC_DIR)/render/runtime_ray_3d.c \
 	$(SRC_DIR)/render/runtime_scene_3d.c \
+	$(SRC_DIR)/render/runtime_emissive_light_set_3d.c \
+	$(SRC_DIR)/render/runtime_environment_3d.c \
 	$(SRC_DIR)/render/runtime_scene_3d_builder.c \
 	$(SRC_DIR)/render/runtime_triangle_bvh_3d.c \
 	$(SRC_DIR)/render/runtime_volume_3d.c \
@@ -123,6 +134,7 @@ $(RUNTIME_MESH_ASSET_BUILDER_TEST_BIN): $(RUNTIME_MESH_ASSET_BUILDER_TEST_SRCS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
 		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) -I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_MESH_PREVIEW_DIR)/include -I$(CORE_MESH_PREVIEW_DIR)/../../shape/external \
 		-I$(CORE_IO_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_OBJECT_DIR)/include \
 		-I$(CORE_UNITS_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-o $@ $(RUNTIME_MESH_ASSET_BUILDER_TEST_SRCS) $(JSON_LIBS) -lm
@@ -134,10 +146,14 @@ test-runtime-mesh-asset-builder: $(RUNTIME_MESH_ASSET_BUILDER_TEST_BIN)
 RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_BIN := $(BUILD_DIR)/tests/runtime_mesh_asset_headless_audit_test
 RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_SRCS := \
 	$(TEST_DIR)/test_runtime_mesh_asset_headless_audit.c \
+	$(TEST_DIR)/test_runtime_material_payload_stub.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_loader.c \
+	$(CORE_MESH_PREVIEW_DIR)/src/core_mesh_preview.c \
 	$(SRC_DIR)/render/runtime_camera_3d_rays.c \
 	$(SRC_DIR)/render/runtime_ray_3d.c \
 	$(SRC_DIR)/render/runtime_scene_3d.c \
+	$(SRC_DIR)/render/runtime_emissive_light_set_3d.c \
+	$(SRC_DIR)/render/runtime_environment_3d.c \
 	$(SRC_DIR)/render/runtime_scene_3d_builder.c \
 	$(SRC_DIR)/render/runtime_triangle_bvh_3d.c \
 	$(SRC_DIR)/render/runtime_volume_3d.c \
@@ -154,6 +170,7 @@ $(RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_BIN): $(RUNTIME_MESH_ASSET_HEADLESS_AUD
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
 		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) -I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_MESH_PREVIEW_DIR)/include -I$(CORE_MESH_PREVIEW_DIR)/../../shape/external \
 		-I$(CORE_IO_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_OBJECT_DIR)/include \
 		-I$(CORE_UNITS_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-o $@ $(RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_SRCS) $(JSON_LIBS) -lm $(FISICS_MEMCHECK_LINK_LIBS)
@@ -179,8 +196,11 @@ test-line-drawing-imported-mesh-runtime: $(RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TES
 RUNTIME_TRIANGLE_BVH_3D_TEST_BIN := $(BUILD_DIR)/tests/runtime_triangle_bvh_3d_test
 RUNTIME_TRIANGLE_BVH_3D_TEST_SRCS := \
 	$(TEST_DIR)/test_runtime_triangle_bvh_3d.c \
+	$(TEST_DIR)/test_runtime_material_payload_stub.c \
 	$(SRC_DIR)/render/runtime_ray_3d.c \
 	$(SRC_DIR)/render/runtime_scene_3d.c \
+	$(SRC_DIR)/render/runtime_emissive_light_set_3d.c \
+	$(SRC_DIR)/render/runtime_environment_3d.c \
 	$(SRC_DIR)/render/runtime_triangle_bvh_3d.c \
 	$(SRC_DIR)/render/runtime_volume_3d.c
 
@@ -299,6 +319,27 @@ test-ray-tracing-render-headless-line-drawing-mesh-asset: $(RAY_TRACING_RENDER_H
 
 test-ray-tracing-render-headless-volume-handoff: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	tests/integration/run_ray_tracing_render_headless_volume_handoff.sh
+
+test-ray-tracing-render-headless-water-surface-handoff: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	tests/integration/run_ray_tracing_render_headless_water_surface_handoff.sh
+
+test-ray-tracing-render-headless-water-optics-review: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	tests/integration/run_ray_tracing_render_headless_water_optics_review.sh
+
+test-ray-tracing-render-headless-water-basin-surface-review: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	tests/integration/run_ray_tracing_render_headless_water_basin_surface_review.sh
+
+test-ray-tracing-render-headless-water-moving-light-review: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	tests/integration/run_ray_tracing_render_headless_water_moving_light_review.sh
+
+test-ray-tracing-render-headless-water-long-motion-review: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	tests/integration/run_ray_tracing_render_headless_water_long_motion_review.sh
+
+test-ray-tracing-render-headless-water-object-coupling-review: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	bash tests/integration/run_ray_tracing_render_headless_water_object_coupling_review.sh
+
+test-ray-tracing-render-headless-water-object-coupling-long-review: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	bash tests/integration/run_ray_tracing_render_headless_water_object_coupling_long_review.sh
 
 test-ray-tracing-job-runner-smoke: $(RAY_TRACING_RENDER_HEADLESS_BIN) $(RAY_TRACING_JOB_RUNNER_BIN)
 	tests/integration/run_ray_tracing_job_runner_smoke.sh

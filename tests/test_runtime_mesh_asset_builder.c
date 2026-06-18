@@ -180,6 +180,67 @@ static int test_append_mesh_asset_set_preserves_scene_object_lookup(void) {
     return 0;
 }
 
+static int test_append_mesh_asset_set_skips_degenerate_triangles(void) {
+    RayTracingRuntimeMeshAssetSet set;
+    RuntimeScene3D scene;
+    CoreMeshAssetRuntimeDocument* document = NULL;
+    bool ok = false;
+
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    RuntimeScene3D_Init(&scene);
+
+    set.asset_count = 1;
+    snprintf(set.assets[0].asset_id, sizeof(set.assets[0].asset_id), "asset_degenerate_mix");
+    document = &set.assets[0].document;
+    core_mesh_asset_runtime_document_set_vertex_count(document, 4u);
+    core_mesh_asset_runtime_document_set_triangle_count(document, 2u);
+
+    document->vertices[0].position.x = 0.0;
+    document->vertices[0].position.y = 0.0;
+    document->vertices[0].position.z = 0.0;
+    document->vertices[1].position.x = 0.0;
+    document->vertices[1].position.y = 0.0;
+    document->vertices[1].position.z = 0.0;
+    document->vertices[2].position.x = 1.0;
+    document->vertices[2].position.y = 0.0;
+    document->vertices[2].position.z = 0.0;
+    document->vertices[3].position.x = 0.0;
+    document->vertices[3].position.y = 1.0;
+    document->vertices[3].position.z = 0.0;
+
+    document->triangles[0].a = 0u;
+    document->triangles[0].b = 1u;
+    document->triangles[0].c = 2u;
+    document->triangles[1].a = 0u;
+    document->triangles[1].b = 2u;
+    document->triangles[1].c = 3u;
+
+    set.instance_count = 1;
+    snprintf(set.instances[0].object_id, sizeof(set.instances[0].object_id), "obj_degenerate_mix");
+    snprintf(set.instances[0].asset_id, sizeof(set.instances[0].asset_id), "asset_degenerate_mix");
+    set.instances[0].asset_index = 0;
+    set.instances[0].scene_object_index = 7;
+    set.instances[0].scale_x = 1.0;
+    set.instances[0].scale_y = 1.0;
+    set.instances[0].scale_z = 1.0;
+
+    ok = RuntimeScene3DBuilder_AppendMeshAssetSet(&scene, &set);
+    assert_true("mrt3_append_degenerate_mix_ok", ok);
+    assert_true("mrt3_append_degenerate_mix_primitive_count", scene.primitiveCount == 1);
+    assert_true("mrt3_append_degenerate_mix_triangle_count",
+                scene.triangleMesh.triangleCount == 1);
+    if (scene.triangleMesh.triangleCount == 1) {
+        assert_true("mrt3_append_degenerate_mix_local_triangle_index",
+                    scene.triangleMesh.triangles[0].localTriangleIndex == 1);
+        assert_true("mrt3_append_degenerate_mix_scene_object_index",
+                    scene.triangleMesh.triangles[0].sceneObjectIndex == 7);
+    }
+
+    RuntimeScene3D_Free(&scene);
+    ray_tracing_runtime_mesh_asset_set_free(&set);
+    return 0;
+}
+
 static int test_bridge_builder_consumes_retained_mesh_assets(void) {
     RuntimeScene3D scene;
     char diagnostics[256] = {0};
@@ -207,6 +268,7 @@ static int test_bridge_builder_consumes_retained_mesh_assets(void) {
 
 int main(void) {
     test_append_mesh_asset_set_preserves_scene_object_lookup();
+    test_append_mesh_asset_set_skips_degenerate_triangles();
     test_bridge_builder_consumes_retained_mesh_assets();
     return g_failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

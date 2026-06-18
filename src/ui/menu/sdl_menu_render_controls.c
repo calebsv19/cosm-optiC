@@ -72,6 +72,13 @@
 #define ROOT_ROW_HEIGHT 34
 #define ROOT_ROW_SPACING 8
 #define ROOT_CTRL_BUTTON_W 56
+#define RENDERER_CONTROL_TAB_WIDTH 112
+#define RENDERER_CONTROL_TAB_HEIGHT 22
+#define RENDERER_CONTROL_BUTTON_HEIGHT 32
+#define RENDERER_CONTROL_ROW_GAP 8
+#define RENDERER_CONTROL_COLUMN_GAP 10
+#define RENDERER_CONTROL_SLIDER_HEIGHT 6
+#define RENDERER_CONTROL_SLIDER_SPACING 5
 
 static const char* menu_upscale_mode_button_label(void) {
     switch ((Runtime3DUpscaleMode)animSettings.upscaleMode3D) {
@@ -82,6 +89,18 @@ static const char* menu_upscale_mode_button_label(void) {
         case RUNTIME_3D_UPSCALE_MODE_OFF:
         default:
             return "Upscale: OFF";
+    }
+}
+
+static const char* menu_environment_preset_label(void) {
+    switch ((EnvironmentPreset)animSettings.environmentPreset) {
+        case ENVIRONMENT_PRESET_NEUTRAL:
+            return "Preset: Neutral";
+        case ENVIRONMENT_PRESET_WARM_SKY:
+            return "Preset: Warm";
+        case ENVIRONMENT_PRESET_SKY:
+        default:
+            return "Preset: Sky";
     }
 }
 
@@ -184,6 +203,150 @@ static int max_int(int a, int b) {
 
 static int min_int(int a, int b) {
     return (a < b) ? a : b;
+}
+
+static int menu_renderer_controls_text_height(TTF_Font* font) {
+    int textHeight = 18;
+    if (font) {
+        int measured_h = 0;
+        if (ray_tracing_text_line_height(menu_context_renderer(), font, &measured_h)) {
+            textHeight = measured_h;
+        }
+    }
+    if (textHeight < 12) textHeight = 12;
+    return textHeight;
+}
+
+static void menu_renderer_controls_add_slider(SliderLayout* layout,
+                                              int* target,
+                                              int min_value,
+                                              int max_value,
+                                              const char* label,
+                                              int slider_x,
+                                              int slider_width,
+                                              int text_height) {
+    int label_y;
+    int track_y;
+    if (!layout || !target || !label || layout->count >= SDL_MENU_MAX_SLIDERS) return;
+    label_y = layout->nextY;
+    track_y = label_y + text_height + 2;
+    layout->items[layout->count++] = (MenuSlider){
+        target,
+        min_value,
+        max_value,
+        (SDL_Rect){slider_x, track_y, slider_width, layout->trackHeight},
+        (SDL_Rect){slider_x, track_y - 6, slider_width, layout->trackHeight + 12},
+        slider_x,
+        label_y,
+        slider_x + slider_width + 10,
+        track_y - ((text_height - layout->trackHeight) / 2),
+        label
+    };
+    layout->nextY = track_y + layout->trackHeight + RENDERER_CONTROL_SLIDER_SPACING;
+}
+
+static void menu_renderer_controls_build_slider_layout(TTF_Font* font,
+                                                       MenuRuntimeState* state,
+                                                       const MenuScreenLayout* screen_layout,
+                                                       int start_y,
+                                                       SliderLayout* out_layout) {
+    SliderLayout layout = {0};
+    int text_height;
+    int content_left;
+    int content_right;
+    int value_reserve = 88;
+    int slider_x;
+    int slider_width;
+    int panel_bottom;
+    if (!state || !screen_layout || !out_layout) return;
+
+    text_height = menu_renderer_controls_text_height(font);
+    content_left = screen_layout->centerControlsRect.x + 12;
+    content_right = screen_layout->centerControlsRect.x +
+                    screen_layout->centerControlsRect.w - 12;
+    slider_x = content_left;
+    slider_width = content_right - content_left - value_reserve;
+    if (slider_width < 120) slider_width = content_right - content_left;
+    if (slider_width < 80) slider_width = 80;
+
+    layout.trackHeight = max_int(RENDERER_CONTROL_SLIDER_HEIGHT, text_height / 3);
+    layout.knobWidth = max_int(8, (text_height * 3) / 8);
+    layout.knobHeight = layout.trackHeight + 4;
+    layout.nextY = start_y;
+    panel_bottom = screen_layout->centerControlsRect.y + screen_layout->centerControlsRect.h - 10;
+    layout.panelRect = (SDL_Rect){
+        content_left,
+        start_y - 4,
+        content_right - content_left,
+        panel_bottom - (start_y - 4)
+    };
+    if (layout.panelRect.h < 0) layout.panelRect.h = 0;
+
+    menu_state_sync_from_anim(state);
+    if (state->rendererControlsTab == MENU_RENDERER_CONTROLS_PERFORMANCE) {
+        menu_renderer_controls_add_slider(&layout,
+                                          &animSettings.tileSize,
+                                          4,
+                                          256,
+                                          "Tile Size",
+                                          slider_x,
+                                          slider_width,
+                                          text_height);
+    } else {
+        menu_renderer_controls_add_slider(&layout,
+                                          &state->envSliderValue,
+                                          0,
+                                          255,
+                                          "Ambient Brightness",
+                                          slider_x,
+                                          slider_width,
+                                          text_height);
+        menu_renderer_controls_add_slider(&layout,
+                                          &state->topFillStrengthSliderValue,
+                                          0,
+                                          2000,
+                                          "Top Fill Strength",
+                                          slider_x,
+                                          slider_width,
+                                          text_height);
+        menu_renderer_controls_add_slider(&layout,
+                                          &state->environmentBackgroundBrightnessSliderValue,
+                                          0,
+                                          400,
+                                          "BG Brightness",
+                                          slider_x,
+                                          slider_width,
+                                          text_height);
+        menu_renderer_controls_add_slider(&layout,
+                                          &state->lightIntensitySliderValue,
+                                          0,
+                                          2000,
+                                          "Light Intensity",
+                                          slider_x,
+                                          slider_width,
+                                          text_height);
+        menu_renderer_controls_add_slider(&layout,
+                                          &state->lightDecaySoftnessSliderValue,
+                                          10,
+                                          1000,
+                                          "Falloff Softness",
+                                          slider_x,
+                                          slider_width,
+                                          text_height);
+        menu_renderer_controls_add_slider(&layout,
+                                          &state->forwardDecaySliderValue,
+                                          SDL_MENU_FORWARD_FALLOFF_DISTANCE_MIN,
+                                          SDL_MENU_FORWARD_FALLOFF_DISTANCE_MAX,
+                                          "Falloff Distance",
+                                          slider_x,
+                                          slider_width,
+                                          text_height);
+    }
+
+    layout.contentBottomY = layout.nextY;
+    layout.maxScroll = 0.0f;
+    layout.scroll = 0.0f;
+    *out_layout = layout;
 }
 
 static SDL_Rect build_adaptive_button_rect(TTF_Font* font,
@@ -440,11 +603,27 @@ void menu_render_build_button_layout(TTF_Font* font,
                                                 root_y, ROOT_CTRL_BUTTON_W, ROOT_ROW_HEIGHT};
         layout.inputRootApplyRect = (SDL_Rect){layout.inputRootFolderRect.x + ROOT_CTRL_BUTTON_W + 2,
                                                root_y, ROOT_CTRL_BUTTON_W, ROOT_ROW_HEIGHT};
+        layout.meshAssetRootValueRect = (SDL_Rect){leftX,
+                                                   root_y + ROOT_ROW_HEIGHT + ROOT_ROW_SPACING,
+                                                   root_value_w,
+                                                   ROOT_ROW_HEIGHT};
+        layout.meshAssetRootEditRect = (SDL_Rect){leftX + root_value_w + 4,
+                                                  layout.meshAssetRootValueRect.y,
+                                                  ROOT_CTRL_BUTTON_W,
+                                                  ROOT_ROW_HEIGHT};
+        layout.meshAssetRootFolderRect = (SDL_Rect){layout.meshAssetRootEditRect.x + ROOT_CTRL_BUTTON_W + 2,
+                                                    layout.meshAssetRootValueRect.y,
+                                                    ROOT_CTRL_BUTTON_W,
+                                                    ROOT_ROW_HEIGHT};
+        layout.meshAssetRootApplyRect = (SDL_Rect){layout.meshAssetRootFolderRect.x + ROOT_CTRL_BUTTON_W + 2,
+                                                   layout.meshAssetRootValueRect.y,
+                                                   ROOT_CTRL_BUTTON_W,
+                                                   ROOT_ROW_HEIGHT};
         layout.attachVolumeRect = (SDL_Rect){0, 0, 0, 0};
         layout.volumeToggleRect = (SDL_Rect){0, 0, 0, 0};
         layout.volumeClearRect = (SDL_Rect){0, 0, 0, 0};
         if (animSettings.spaceMode == SPACE_MODE_3D) {
-            int volume_buttons_y = root_y + ROOT_ROW_HEIGHT + ROOT_ROW_SPACING + 4;
+            int volume_buttons_y = layout.meshAssetRootValueRect.y + ROOT_ROW_HEIGHT + ROOT_ROW_SPACING + 4;
             int half_width = (maxLeftWidth - 6) / 2;
             if (half_width < 120) half_width = 120;
             volume_source_ui_format_active_button_label(volumeLabel, sizeof(volumeLabel));
@@ -484,75 +663,134 @@ void menu_render_build_button_layout(TTF_Font* font,
     }
     leftColumnRight = max_int(leftColumnRight, layout.loadSceneRect.x + layout.loadSceneRect.w);
     leftColumnRight = max_int(leftColumnRight, layout.inputRootApplyRect.x + layout.inputRootApplyRect.w);
+    leftColumnRight = max_int(leftColumnRight, layout.meshAssetRootApplyRect.x + layout.meshAssetRootApplyRect.w);
     leftColumnRight = max_int(leftColumnRight, layout.attachVolumeRect.x + layout.attachVolumeRect.w);
     leftColumnRight = max_int(leftColumnRight, layout.volumeClearRect.x + layout.volumeClearRect.w);
-    centerX = leftColumnRight + 24;
-    centerMaxWidth =
-        (screen_layout ? (screen_layout->centerControlsRect.x + screen_layout->centerControlsRect.w)
-                       : SLIDER_MARGIN_X) -
-        centerX - 16;
-    if (centerMaxWidth < 120) centerMaxWidth = 120;
-    if (screen_layout && centerX < screen_layout->centerControlsRect.x + 12) {
-        centerX = screen_layout->centerControlsRect.x + 12;
-    }
-    centerLeftX = centerX;
-    centerRightX = centerX + centerMaxWidth / 2;
-    centerColumnMaxWidth = centerMaxWidth;
     if (screen_layout) {
         int content_left = screen_layout->centerControlsRect.x + 12;
         int content_right = screen_layout->centerControlsRect.x +
                             screen_layout->centerControlsRect.w - 12;
         int content_width = content_right - content_left;
-        int column_gap = 14;
-        int column_width = (content_width - column_gap) / 2;
-        if (column_width < 120) {
-            column_width = 120;
-        }
+        int tab_y = screen_layout->centerControlsRect.y + 3;
+        int tab_right = content_right;
+        int first_row_y = screen_layout->centerControlsRect.y +
+                          MENU_PANEL_CHROME_TITLE_BAND + 10;
+        int second_row_y = first_row_y + RENDERER_CONTROL_BUTTON_HEIGHT +
+                           RENDERER_CONTROL_ROW_GAP;
+        int slider_start_y = second_row_y + RENDERER_CONTROL_BUTTON_HEIGHT + 12;
+        int column_width =
+            (content_width - RENDERER_CONTROL_COLUMN_GAP) / 2;
+        if (column_width < 120) column_width = 120;
+
+        layout.rendererPerformanceTabRect = (SDL_Rect){
+            tab_right - RENDERER_CONTROL_TAB_WIDTH,
+            tab_y,
+            RENDERER_CONTROL_TAB_WIDTH,
+            RENDERER_CONTROL_TAB_HEIGHT
+        };
+        layout.rendererLightingTabRect = (SDL_Rect){
+            layout.rendererPerformanceTabRect.x - RENDERER_CONTROL_COLUMN_GAP -
+                RENDERER_CONTROL_TAB_WIDTH,
+            tab_y,
+            RENDERER_CONTROL_TAB_WIDTH,
+            RENDERER_CONTROL_TAB_HEIGHT
+        };
         centerLeftX = content_left;
-        centerRightX = centerLeftX + column_width + column_gap;
+        centerRightX = centerLeftX + column_width + RENDERER_CONTROL_COLUMN_GAP;
         centerColumnMaxWidth = column_width;
-    } else {
-        int column_gap = 14;
-        centerColumnMaxWidth = (centerMaxWidth - column_gap) / 2;
-        if (centerColumnMaxWidth < 120) {
-            centerColumnMaxWidth = 120;
+
+        if (state &&
+            state->rendererControlsTab == MENU_RENDERER_CONTROLS_PERFORMANCE) {
+            layout.tileRect = build_adaptive_button_rect(font,
+                                                         centerLeftX,
+                                                         first_row_y,
+                                                         column_width,
+                                                         RENDERER_CONTROL_BUTTON_HEIGHT,
+                                                         animSettings.useTiledRenderer
+                                                             ? "Tile Renderer: ON"
+                                                             : "Tile Renderer: OFF",
+                                                         centerColumnMaxWidth);
+            layout.tilePreviewRect =
+                build_adaptive_button_rect(font,
+                                           centerRightX,
+                                           first_row_y,
+                                           column_width,
+                                           RENDERER_CONTROL_BUTTON_HEIGHT,
+                                           animSettings.tilePreviewEnabled
+                                               ? "Tile Preview: ON"
+                                               : "Tile Preview: OFF",
+                                           centerColumnMaxWidth);
+            layout.denoiseRect =
+                build_adaptive_button_rect(font,
+                                           centerLeftX,
+                                           second_row_y,
+                                           column_width,
+                                           RENDERER_CONTROL_BUTTON_HEIGHT,
+                                           animSettings.disneyDenoiseEnabled
+                                               ? "Disney Denoise: ON"
+                                               : "Disney Denoise: OFF",
+                                           centerColumnMaxWidth);
+            layout.upscaleModeRect =
+                build_adaptive_button_rect(font,
+                                           centerRightX,
+                                           second_row_y,
+                                           column_width,
+                                           RENDERER_CONTROL_BUTTON_HEIGHT,
+                                           menu_upscale_mode_button_label(),
+                                           centerColumnMaxWidth);
+        } else {
+            layout.topFillRect =
+                build_adaptive_button_rect(font,
+                                           centerLeftX,
+                                           first_row_y,
+                                           column_width,
+                                           RENDERER_CONTROL_BUTTON_HEIGHT,
+                                           "Env: Ambient",
+                                           centerColumnMaxWidth);
+            layout.environmentPresetRect =
+                build_adaptive_button_rect(font,
+                                           centerRightX,
+                                           first_row_y,
+                                           column_width,
+                                           RENDERER_CONTROL_BUTTON_HEIGHT,
+                                           menu_environment_preset_label(),
+                                           centerColumnMaxWidth);
+            layout.falloffRect =
+                build_adaptive_button_rect(font,
+                                           centerLeftX,
+                                           second_row_y,
+                                           column_width,
+                                           RENDERER_CONTROL_BUTTON_HEIGHT,
+                                           "Falloff: Quadratic",
+                                           centerColumnMaxWidth);
+            layout.environmentBackgroundModeRect =
+                build_adaptive_button_rect(font,
+                                           centerRightX,
+                                           second_row_y,
+                                           column_width,
+                                           RENDERER_CONTROL_BUTTON_HEIGHT,
+                                           animSettings.environmentBackgroundBrightnessAuto
+                                               ? "BG: Auto"
+                                               : "BG: Manual",
+                                           centerColumnMaxWidth);
         }
-        centerRightX = centerLeftX + centerColumnMaxWidth + column_gap;
+        menu_renderer_controls_build_slider_layout(font,
+                                                   state,
+                                                   screen_layout,
+                                                   slider_start_y,
+                                                   &layout.rendererControlSliders);
+    } else {
+        centerX = leftColumnRight + 24;
+        centerMaxWidth = SLIDER_MARGIN_X - centerX - 16;
+        if (centerMaxWidth < 120) centerMaxWidth = 120;
+        layout.falloffRect = build_adaptive_button_rect(font,
+                                                        centerX,
+                                                        TOGGLE_BUTTON_MARGIN_Y + 10,
+                                                        FORWARD_FALLOFF_BUTTON_WIDTH,
+                                                        FORWARD_FALLOFF_BUTTON_HEIGHT,
+                                                        "Quadratic (1/r^2)",
+                                                        centerMaxWidth);
     }
-    layout.falloffRect = build_adaptive_button_rect(font, centerLeftX,
-                                                    screen_layout ? (screen_layout->centerControlsRect.y + MENU_PANEL_CHROME_TITLE_BAND + 12) : (TOGGLE_BUTTON_MARGIN_Y + 10),
-                                                    FORWARD_FALLOFF_BUTTON_WIDTH, FORWARD_FALLOFF_BUTTON_HEIGHT,
-                                                    "Quadratic (1/r^2)", centerColumnMaxWidth);
-    layout.tileRect = build_adaptive_button_rect(font, centerLeftX,
-                                                 layout.falloffRect.y + layout.falloffRect.h + FORWARD_FALLOFF_BUTTON_SPACING,
-                                                 TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT,
-                                                 animSettings.useTiledRenderer ? "Tile Renderer: ON" : "Tile Renderer: OFF",
-                                                 centerColumnMaxWidth);
-    layout.tilePreviewRect = build_adaptive_button_rect(font, centerLeftX,
-                                                        layout.tileRect.y + layout.tileRect.h + FORWARD_FALLOFF_BUTTON_SPACING,
-                                                        TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT,
-                                                        animSettings.tilePreviewEnabled ? "Tile Preview: ON" : "Tile Preview: OFF",
-                                                        centerColumnMaxWidth);
-    layout.denoiseRect = build_adaptive_button_rect(font, centerRightX,
-                                                    layout.falloffRect.y,
-                                                    TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT,
-                                                    animSettings.disneyDenoiseEnabled ? "Disney Denoise: ON"
-                                                                                     : "Disney Denoise: OFF",
-                                                    centerColumnMaxWidth);
-    layout.topFillRect = build_adaptive_button_rect(font, centerRightX,
-                                                    layout.denoiseRect.y + layout.denoiseRect.h + FORWARD_FALLOFF_BUTTON_SPACING,
-                                                    TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT,
-                                                    "Env Light: Ambient",
-                                                    centerColumnMaxWidth);
-    layout.upscaleModeRect = build_adaptive_button_rect(font, centerRightX,
-                                                        layout.topFillRect.y + layout.topFillRect.h + FORWARD_FALLOFF_BUTTON_SPACING,
-                                                        TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT,
-                                                        menu_upscale_mode_button_label(),
-                                                        centerColumnMaxWidth);
-    layout.lightHeightRect = build_adaptive_button_rect(font, centerRightX,
-                                                        layout.upscaleModeRect.y + layout.upscaleModeRect.h + FORWARD_FALLOFF_BUTTON_SPACING,
-                                                        TILE_BUTTON_WIDTH, TILE_BUTTON_HEIGHT,
-                                                        "Light Height", centerColumnMaxWidth);
 
     layout.startRect = build_adaptive_button_rect_right(font, rightEdge,
                                                         screen_layout ? (routeTopY + (BOTTOM_BUTTON_HEIGHT_START + 8) * 3) : BOTTOM_BUTTON_MARGIN_Y_START,

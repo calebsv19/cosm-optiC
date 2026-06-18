@@ -180,7 +180,7 @@ int AnimationInit(void) {
     ApplyAnimationWindowSizeOverride();
     if (!AnimationRestoreActiveSceneSource(true)) {
         fprintf(stderr,
-                "[startup] active scene source could not be applied; fallback persisted.\n");
+                "[startup] active scene source could not be applied; selection preserved for editor/menu recovery.\n");
     }
     ApplyAnimationWindowSizeOverride();
     UpdateObjects();
@@ -430,8 +430,12 @@ void UpdateSimulation(double* accumulator, double* currentTime, int* loopCount) 
 }
 
 
+static bool AnimationShouldSampleAuthoredMotion(void) {
+    return !animSettings.interactiveMode || animSettings.deepRenderMode;
+}
+
 void UpdateLightPosition(double* lightX, double* lightY) {
-    if (animSettings.interactiveMode) {
+    if (!AnimationShouldSampleAuthoredMotion()) {
         GetCurrentLightPosition(lightX, lightY);
     } else {
         if (sceneSettings.bezierPath.numPoints < 1) {
@@ -469,7 +473,7 @@ int AnimationConfiguredPathFrameCount(void) {
 }
 
 static void UpdateCameraPosition(double t) {
-    if (animSettings.interactiveMode) {
+    if (!AnimationShouldSampleAuthoredMotion()) {
         return;
     }
     if (sceneSettings.cameraPath.numPoints < 1) {

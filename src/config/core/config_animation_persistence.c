@@ -8,6 +8,7 @@
 #include <string.h>
 #include <json-c/json.h>
 #include <math.h>
+#include <limits.h>
 
 #define ANIMATION_CONFIG_DEFAULT_FILE "config/animation_config.json"
 #define ANIMATION_CONFIG_RUNTIME_FILE "data/runtime/animation_config.json"
@@ -20,6 +21,35 @@ static double ClampDoubleValue(double value, double minValue, double maxValue) {
     if (value < minValue) return minValue;
     if (value > maxValue) return maxValue;
     return value;
+}
+
+static FILE* OpenAnimationConfigRead(const char** loaded_path) {
+    char stable_input_root[PATH_MAX];
+    char stable_output_root[PATH_MAX];
+    char stable_runtime_file[PATH_MAX];
+    char stable_default_file[PATH_MAX];
+    const char* candidates[5] = {0};
+    size_t candidate_count = 0;
+
+    candidates[candidate_count++] = ANIMATION_CONFIG_RUNTIME_FILE;
+    if (ray_tracing_find_stable_output_root(stable_output_root, sizeof(stable_output_root)) &&
+        ray_tracing_compose_path(stable_output_root,
+                                 "animation_config.json",
+                                 stable_runtime_file,
+                                 sizeof(stable_runtime_file))) {
+        candidates[candidate_count++] = stable_runtime_file;
+    }
+    candidates[candidate_count++] = ANIMATION_CONFIG_DEFAULT_FILE;
+    if (ray_tracing_find_stable_input_root(stable_input_root, sizeof(stable_input_root)) &&
+        ray_tracing_compose_path(stable_input_root,
+                                 "animation_config.json",
+                                 stable_default_file,
+                                 sizeof(stable_default_file))) {
+        candidates[candidate_count++] = stable_default_file;
+    }
+
+    candidates[candidate_count++] = ANIMATION_CONFIG_LEGACY_FILE;
+    return config_io_open_read_first(candidates, candidate_count, loaded_path);
 }
 
 static double animation_config_legacy_environment_radiance_to_byte_floor(double radiance) {
@@ -78,14 +108,6 @@ bool animation_config_scene_source_is_fluid(int source) {
 static void animation_config_sync_scene_source_legacy_fields(AnimationConfig* cfg) {
     if (!cfg) return;
     cfg->sceneSource = animation_config_scene_source_clamp(cfg->sceneSource);
-    if (cfg->sceneSource == SCENE_SOURCE_FLUID_MANIFEST &&
-        cfg->fluidManifest[0] == '\0') {
-        cfg->sceneSource = SCENE_SOURCE_CONFIG_2D;
-    }
-    if (cfg->sceneSource == SCENE_SOURCE_RUNTIME_SCENE &&
-        cfg->runtimeScenePath[0] == '\0') {
-        cfg->sceneSource = SCENE_SOURCE_CONFIG_2D;
-    }
     cfg->useFluidScene = animation_config_scene_source_is_fluid(cfg->sceneSource);
 }
 
@@ -280,6 +302,7 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "frameDuration", json_object_new_double(animSettings.frameDuration));
     config_runtime_paths_normalize_data_roots();
     json_object_object_add(config, "inputRoot", json_object_new_string(animSettings.inputRoot));
+    json_object_object_add(config, "meshAssetRoot", json_object_new_string(animSettings.meshAssetRoot));
     json_object_object_add(config, "outputRoot", json_object_new_string(animSettings.outputRoot));
     config_runtime_paths_normalize_frame_dir();
     json_object_object_add(config, "frameDir", json_object_new_string(animSettings.frameDir));
@@ -421,10 +444,7 @@ void LoadAnimationConfig(void) {
     const char* loaded_path = NULL;
     animSettings.startFrameIndex = 0;
     animSettings.resumeFromExistingFrames = false;
-    FILE* file = config_io_open_read_with_fallback(ANIMATION_CONFIG_RUNTIME_FILE,
-                                                   ANIMATION_CONFIG_DEFAULT_FILE,
-                                                   ANIMATION_CONFIG_LEGACY_FILE,
-                                                   &loaded_path);
+    FILE* file = OpenAnimationConfigRead(&loaded_path);
     if (!file) {
         printf("INFO: Animation config file not found (tried %s, %s, %s); using defaults.\n",
                ANIMATION_CONFIG_RUNTIME_FILE,
@@ -474,6 +494,9 @@ void LoadAnimationConfig(void) {
         animSettings.deepRenderMode = json_object_get_boolean(temp);
     if (json_object_object_get_ex(config, "bounceMode", &temp))
         animSettings.bounceMode = json_object_get_boolean(temp);
+    if (animSettings.deepRenderMode) {
+        animSettings.interactiveMode = false;
+    }
     if (json_object_object_get_ex(config, "autoMP4", &temp))
         animSettings.autoMP4 = json_object_get_boolean(temp);
     if (json_object_object_get_ex(config, "bounceLimit", &temp))
@@ -504,6 +527,13 @@ void LoadAnimationConfig(void) {
             animSettings.inputRoot[sizeof(animSettings.inputRoot) - 1] = '\0';
         }
     }
+    if (json_object_object_get_ex(config, "meshAssetRoot", &temp) && json_object_is_type(temp, json_type_string)) {
+        const char* path = json_object_get_string(temp);
+        if (path) {
+            strncpy(animSettings.meshAssetRoot, path, sizeof(animSettings.meshAssetRoot) - 1);
+            animSettings.meshAssetRoot[sizeof(animSettings.meshAssetRoot) - 1] = '\0';
+        }
+    }
     if (json_object_object_get_ex(config, "outputRoot", &temp) && json_object_is_type(temp, json_type_string)) {
         const char* path = json_object_get_string(temp);
         if (path) {
@@ -513,6 +543,11 @@ void LoadAnimationConfig(void) {
     }
     config_runtime_paths_normalize_data_roots();
     (void)setenv("RAY_TRACING_INPUT_ROOT", animSettings.inputRoot, 1);
+    if (animSettings.meshAssetRoot[0]) {
+        (void)setenv("RAY_TRACING_MESH_ASSET_ROOT", animSettings.meshAssetRoot, 1);
+    } else {
+        (void)unsetenv("RAY_TRACING_MESH_ASSET_ROOT");
+    }
     (void)setenv("RAY_TRACING_OUTPUT_ROOT", animSettings.outputRoot, 1);
     if (json_object_object_get_ex(config, "loopMode", &temp)) {
         strncpy(animSettings.loopMode, json_object_get_string(temp), sizeof(animSettings.loopMode) - 1);
@@ -950,6 +985,13 @@ void LoadAnimationConfig(void) {
                                                          "input",
                                                          false,
                                                          false);
+    if (animSettings.meshAssetRoot[0] && !config_io_directory_exists(animSettings.meshAssetRoot)) {
+        fprintf(stderr,
+                "[startup] mesh asset root '%s' missing; clearing mesh asset root.\n",
+                animSettings.meshAssetRoot);
+        animSettings.meshAssetRoot[0] = '\0';
+        root_corrected = true;
+    }
     root_corrected |= config_runtime_paths_validate_root(animSettings.outputRoot,
                                                          sizeof(animSettings.outputRoot),
                                                          ray_tracing_default_output_root(),
@@ -963,6 +1005,11 @@ void LoadAnimationConfig(void) {
                                                          true,
                                                          true);
     (void)setenv("RAY_TRACING_INPUT_ROOT", animSettings.inputRoot, 1);
+    if (animSettings.meshAssetRoot[0]) {
+        (void)setenv("RAY_TRACING_MESH_ASSET_ROOT", animSettings.meshAssetRoot, 1);
+    } else {
+        (void)unsetenv("RAY_TRACING_MESH_ASSET_ROOT");
+    }
     (void)setenv("RAY_TRACING_OUTPUT_ROOT", animSettings.outputRoot, 1);
     (void)setenv("RAY_TRACING_VIDEO_OUTPUT_ROOT", animSettings.videoOutputRoot, 1);
     if (root_corrected) {

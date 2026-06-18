@@ -1,3 +1,4 @@
+#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -12,13 +13,27 @@
 #include "config/config_manager.h"
 #include "import/fluid_volume_import_3d.h"
 #include "import/runtime_scene_bridge.h"
+#include "import/water_surface_import.h"
 #include "render/pipeline/ray_tracing2_native3d_overlay.h"
 #include "render/ray_tracing_mode_backend.h"
+#include "render/runtime_material_payload_3d.h"
 #include "render/runtime_native_3d_render.h"
 #include "render/runtime_volume_3d_debug.h"
 #include "render/runtime_volume_3d_scatter.h"
 #include "tools/make_video.h"
 #include "tools/ray_tracing_render_headless_internal.h"
+
+static int positive_max_int(int a, int b) {
+    return (a > b) ? a : b;
+}
+
+static int ceil_div_int(int value, int divisor) {
+    if (divisor <= 0) return value;
+    if (value <= 0) return 0;
+    return (value + divisor - 1) / divisor;
+}
+
+static double ray_tracing_elapsed_seconds_since(const struct timespec *start_time);
 
 static RayTracingHeadlessObjectAuditEntry *ray_tracing_headless_object_audit_ensure_entry(
     RayTracingHeadlessPreflight *preflight,
@@ -110,8 +125,34 @@ static void ray_tracing_headless_object_audit_note_primitive_center(
 
 static void ray_tracing_headless_audit_prepared_frame(
     RayTracingHeadlessPreflight *preflight,
-    const RuntimeNative3DPreparedFrame *frame) {
+    const RuntimeNative3DPreparedFrame *frame,
+    const RayTracingAgentRenderRequest *request) {
+    int max_dimension = 0;
+    int source_max_dimension = 0;
+    int stride = 1;
+    int audit_width = 0;
+    int audit_height = 0;
     if (!preflight || !frame || !frame->valid) return;
+
+    preflight->object_audit_enabled = request ? request->object_audit_enabled : true;
+    max_dimension = request ? request->object_audit_max_dimension : 160;
+    if (max_dimension < 16) max_dimension = 16;
+    if (!preflight->object_audit_enabled) {
+        preflight->object_audit_scale_factor = 0;
+        return;
+    }
+    source_max_dimension = positive_max_int(frame->width, frame->height);
+    if (source_max_dimension > max_dimension) {
+        stride = ceil_div_int(source_max_dimension, max_dimension);
+        if (stride < 1) stride = 1;
+    }
+    audit_width = ceil_div_int(frame->width, stride);
+    audit_height = ceil_div_int(frame->height, stride);
+    preflight->object_audit_stride_x = stride;
+    preflight->object_audit_stride_y = stride;
+    preflight->object_audit_width = audit_width;
+    preflight->object_audit_height = audit_height;
+    preflight->object_audit_scale_factor = stride;
 
     for (int i = 0; i < sceneSettings.objectCount; ++i) {
         (void)ray_tracing_headless_object_audit_ensure_entry(preflight, i);
@@ -136,12 +177,13 @@ static void ray_tracing_headless_audit_prepared_frame(
         entry->triangle_count += 1;
     }
 
-    for (int y = 0; y < frame->height; ++y) {
-        for (int x = 0; x < frame->width; ++x) {
+    for (int y = 0; y < frame->height; y += stride) {
+        for (int x = 0; x < frame->width; x += stride) {
             HitInfo3D hit = {0};
             Ray3D ray = RuntimeCameraProjector3D_MakePrimaryRay(&frame->projector,
                                                                 (double)x,
                                                                 (double)y);
+            preflight->object_audit_sample_count += 1;
             if (!RuntimeRay3D_TraceSceneFirstHit(&frame->scene, &ray, 1e-6, 1.0e9, &hit)) {
                 continue;
             }
@@ -150,7 +192,7 @@ static void ray_tracing_headless_audit_prepared_frame(
                 ray_tracing_headless_object_audit_ensure_entry(preflight,
                                                                hit.sceneObjectIndex);
             if (!entry) continue;
-            entry->primary_hit_pixels += 1;
+            entry->primary_hit_pixels += stride * stride;
         }
     }
 
@@ -235,29 +277,368 @@ static RuntimeVolume3DSourceKind runtime_volume_source_kind_from_request(int kin
     }
 }
 
-static bool build_volume_debug_summary(const RayTracingAgentRenderRequest *request,
-                                       RuntimeVolumeDebugSummary3D *out_summary) {
+static int ray_tracing_headless_last_requested_frame_index(
+    const RayTracingAgentRenderRequest *request) {
+    int frame_count = 1;
+    int frame_offset = 0;
+    if (!request) return 0;
+    frame_count = request->frame_count > 0 ? request->frame_count : 1;
+    frame_offset = frame_count - 1;
+    if (frame_offset <= 0) return request->start_frame;
+    if (request->start_frame > INT_MAX - frame_offset) return INT_MAX;
+    return request->start_frame + frame_offset;
+}
+
+static bool ray_tracing_headless_inspect_volume_frame(
+    const RayTracingAgentRenderRequest *request,
+    int requested_frame_index,
+    char *out_selected_path,
+    size_t out_selected_path_size,
+    uint64_t *out_loaded_frame_index,
+    RuntimeVolumeDebugSummary3D *out_summary,
+    char *out_diagnostics,
+    size_t out_diagnostics_size) {
     RuntimeVolumeAttachment3D attachment = {0};
     RuntimeVolume3DSourceKind source_kind = RUNTIME_VOLUME_3D_SOURCE_NONE;
     char diagnostics[128] = {0};
     bool ok = false;
 
-    if (!request || !out_summary || !request->volume_enabled) return false;
+    if (out_selected_path && out_selected_path_size > 0u) {
+        out_selected_path[0] = '\0';
+    }
+    if (out_loaded_frame_index) {
+        *out_loaded_frame_index = 0u;
+    }
+    if (out_diagnostics && out_diagnostics_size > 0u) {
+        snprintf(out_diagnostics, out_diagnostics_size, "invalid input");
+    }
+    if (!request || !request->volume_enabled || !out_selected_path ||
+        out_selected_path_size == 0u) {
+        return false;
+    }
     source_kind = runtime_volume_source_kind_from_request(request->volume_source_kind);
     if (source_kind == RUNTIME_VOLUME_3D_SOURCE_NONE || !request->volume_source_path[0]) {
+        if (out_diagnostics && out_diagnostics_size > 0u) {
+            snprintf(out_diagnostics, out_diagnostics_size, "volume source missing");
+        }
+        return false;
+    }
+    if (!fluid_volume_import_3d_resolve_source_frame_path(request->volume_source_path,
+                                                          source_kind,
+                                                          requested_frame_index,
+                                                          out_selected_path,
+                                                          out_selected_path_size,
+                                                          diagnostics,
+                                                          sizeof(diagnostics))) {
+        if (out_diagnostics && out_diagnostics_size > 0u) {
+            snprintf(out_diagnostics,
+                     out_diagnostics_size,
+                     "failed to resolve volume frame %d: %s",
+                     requested_frame_index,
+                     diagnostics);
+        }
         return false;
     }
     RuntimeVolumeAttachment3D_Init(&attachment);
-    ok = fluid_volume_import_3d_load_source(request->volume_source_path,
-                                            source_kind,
-                                            &attachment,
-                                            diagnostics,
-                                            sizeof(diagnostics));
-    if (ok) {
+    ok = fluid_volume_import_3d_load_source_at_frame(request->volume_source_path,
+                                                     source_kind,
+                                                     requested_frame_index,
+                                                     &attachment,
+                                                     diagnostics,
+                                                     sizeof(diagnostics));
+    if (!ok) {
+        if (out_diagnostics && out_diagnostics_size > 0u) {
+            snprintf(out_diagnostics,
+                     out_diagnostics_size,
+                     "failed to load volume frame %d: %s",
+                     requested_frame_index,
+                     diagnostics);
+        }
+        RuntimeVolumeAttachment3D_Reset(&attachment);
+        return false;
+    }
+    if (out_loaded_frame_index) {
+        *out_loaded_frame_index = attachment.grid.frameIndex;
+    }
+    if (out_summary) {
         ok = RuntimeVolumeDebugSummary3D_Build(&attachment, out_summary);
+        if (!ok) {
+            if (out_diagnostics && out_diagnostics_size > 0u) {
+                snprintf(out_diagnostics,
+                         out_diagnostics_size,
+                         "failed to build volume summary for frame %d",
+                         requested_frame_index);
+            }
+            RuntimeVolumeAttachment3D_Reset(&attachment);
+            return false;
+        }
     }
     RuntimeVolumeAttachment3D_Reset(&attachment);
-    return ok;
+    if (out_diagnostics && out_diagnostics_size > 0u) {
+        snprintf(out_diagnostics, out_diagnostics_size, "ok");
+    }
+    return true;
+}
+
+static bool ray_tracing_headless_populate_volume_frame_selection(
+    RayTracingHeadlessPreflight *preflight,
+    const RayTracingAgentRenderRequest *request) {
+    char diagnostics[256] = {0};
+    const int first_frame_index = request ? request->start_frame : 0;
+    const int last_frame_index = ray_tracing_headless_last_requested_frame_index(request);
+
+    if (!preflight || !request || !request->volume_enabled) return false;
+    preflight->volume_requested_first_frame_index = first_frame_index;
+    preflight->volume_requested_last_frame_index = last_frame_index;
+
+    if (!ray_tracing_headless_inspect_volume_frame(
+            request,
+            first_frame_index,
+            preflight->volume_selected_first_frame_path,
+            sizeof(preflight->volume_selected_first_frame_path),
+            &preflight->volume_loaded_first_frame_index,
+            &preflight->volume_summary,
+            diagnostics,
+            sizeof(diagnostics))) {
+        snprintf(preflight->diagnostics,
+                 sizeof(preflight->diagnostics),
+                 "%s",
+                 diagnostics);
+        return false;
+    }
+    preflight->volume_summary_built = true;
+
+    if (last_frame_index == first_frame_index) {
+        snprintf(preflight->volume_selected_last_frame_path,
+                 sizeof(preflight->volume_selected_last_frame_path),
+                 "%s",
+                 preflight->volume_selected_first_frame_path);
+        preflight->volume_loaded_last_frame_index =
+            preflight->volume_loaded_first_frame_index;
+    } else if (!ray_tracing_headless_inspect_volume_frame(
+                   request,
+                   last_frame_index,
+                   preflight->volume_selected_last_frame_path,
+                   sizeof(preflight->volume_selected_last_frame_path),
+                   &preflight->volume_loaded_last_frame_index,
+                   NULL,
+                   diagnostics,
+                   sizeof(diagnostics))) {
+        snprintf(preflight->diagnostics,
+                 sizeof(preflight->diagnostics),
+                 "%s",
+                 diagnostics);
+        return false;
+    }
+
+    preflight->volume_frame_selection_dynamic =
+        strcmp(preflight->volume_selected_first_frame_path,
+               preflight->volume_selected_last_frame_path) != 0 ||
+        preflight->volume_loaded_first_frame_index !=
+            preflight->volume_loaded_last_frame_index;
+    preflight->volume_frame_selection_built = true;
+    return true;
+}
+
+static bool ray_tracing_headless_inspect_water_surface_frame(
+    const RayTracingAgentRenderRequest *request,
+    int requested_frame_index,
+    RuntimeWaterSurfaceFrame *out_frame,
+    bool *out_found,
+    char *out_diagnostics,
+    size_t out_diagnostics_size) {
+    RuntimeVolume3DSourceKind source_kind = RUNTIME_VOLUME_3D_SOURCE_NONE;
+    char diagnostics[256] = {0};
+
+    if (out_found) *out_found = false;
+    if (out_diagnostics && out_diagnostics_size > 0u) {
+        snprintf(out_diagnostics, out_diagnostics_size, "invalid input");
+    }
+    if (!request || !request->volume_enabled || !out_frame) {
+        return false;
+    }
+
+    source_kind = runtime_volume_source_kind_from_request(request->volume_source_kind);
+    if (source_kind != RUNTIME_VOLUME_3D_SOURCE_MANIFEST || !request->volume_source_path[0]) {
+        if (out_diagnostics && out_diagnostics_size > 0u) {
+            snprintf(out_diagnostics, out_diagnostics_size, "water surface source not found");
+        }
+        return true;
+    }
+
+    if (!RuntimeWaterSurfaceImport_LoadSourceAtFrame(request->volume_source_path,
+                                                     requested_frame_index,
+                                                     out_frame,
+                                                     out_found,
+                                                     diagnostics,
+                                                     sizeof(diagnostics))) {
+        if (out_diagnostics && out_diagnostics_size > 0u) {
+            snprintf(out_diagnostics,
+                     out_diagnostics_size,
+                     "failed to load water surface frame %d: %s",
+                     requested_frame_index,
+                     diagnostics);
+        }
+        return false;
+    }
+    if (out_diagnostics && out_diagnostics_size > 0u) {
+        snprintf(out_diagnostics, out_diagnostics_size, "ok");
+    }
+    return true;
+}
+
+static void ray_tracing_headless_copy_water_surface_first_frame(
+    RayTracingHeadlessPreflight *preflight,
+    const RuntimeWaterSurfaceFrame *frame) {
+    if (!preflight || !frame) return;
+    preflight->water_surface_loaded = frame->valid;
+    preflight->water_surface_loaded_first_frame_index = frame->frame_index;
+    snprintf(preflight->water_surface_manifest_path,
+             sizeof(preflight->water_surface_manifest_path),
+             "%s",
+             frame->source_manifest_path);
+    snprintf(preflight->water_surface_selected_first_frame_path,
+             sizeof(preflight->water_surface_selected_first_frame_path),
+             "%s",
+             frame->frame_path);
+    snprintf(preflight->water_surface_axis,
+             sizeof(preflight->water_surface_axis),
+             "%s",
+             frame->surface_axis);
+    preflight->water_surface_grid_w = frame->grid_w;
+    preflight->water_surface_grid_d = frame->grid_d;
+    preflight->water_surface_sample_count = frame->sample_count;
+    preflight->water_surface_wet_columns = frame->wet_columns;
+    preflight->water_surface_dry_columns = frame->dry_columns;
+    preflight->water_surface_solid_columns = frame->solid_columns;
+    preflight->water_surface_water_cells = frame->water_cells;
+    preflight->water_surface_min_y = frame->surface_min_y;
+    preflight->water_surface_max_y = frame->surface_max_y;
+    preflight->water_surface_avg_y = frame->surface_avg_y;
+    preflight->water_surface_max_slope = frame->max_slope;
+    preflight->water_surface_finite_normals = frame->finite_normals;
+    if (frame->material.valid) {
+        preflight->water_surface_material_ior = frame->material.ior;
+        preflight->water_surface_absorption_distance_m =
+            frame->material.absorption_distance_m;
+        preflight->water_surface_absorption_r = frame->material.absorption_rgb[0];
+        preflight->water_surface_absorption_g = frame->material.absorption_rgb[1];
+        preflight->water_surface_absorption_b = frame->material.absorption_rgb[2];
+    }
+}
+
+static bool ray_tracing_headless_populate_water_surface_frame_selection(
+    RayTracingHeadlessPreflight *preflight,
+    const RayTracingAgentRenderRequest *request) {
+    RuntimeWaterSurfaceFrame first = {0};
+    RuntimeWaterSurfaceFrame last = {0};
+    char diagnostics[256] = {0};
+    bool found = false;
+    const int first_frame_index = request ? request->start_frame : 0;
+    const int last_frame_index = ray_tracing_headless_last_requested_frame_index(request);
+
+    if (!preflight || !request || !request->volume_enabled) return false;
+    preflight->water_surface_requested_first_frame_index = first_frame_index;
+    preflight->water_surface_requested_last_frame_index = last_frame_index;
+
+    RuntimeWaterSurfaceFrame_Init(&first);
+    RuntimeWaterSurfaceFrame_Init(&last);
+    if (!ray_tracing_headless_inspect_water_surface_frame(request,
+                                                          first_frame_index,
+                                                          &first,
+                                                          &found,
+                                                          diagnostics,
+                                                          sizeof(diagnostics))) {
+        snprintf(preflight->diagnostics, sizeof(preflight->diagnostics), "%s", diagnostics);
+        RuntimeWaterSurfaceFrame_Free(&first);
+        RuntimeWaterSurfaceFrame_Free(&last);
+        return false;
+    }
+    if (!found) {
+        RuntimeWaterSurfaceFrame_Free(&first);
+        RuntimeWaterSurfaceFrame_Free(&last);
+        return true;
+    }
+
+    preflight->water_surface_source_found = true;
+    ray_tracing_headless_copy_water_surface_first_frame(preflight, &first);
+
+    if (last_frame_index == first_frame_index) {
+        snprintf(preflight->water_surface_selected_last_frame_path,
+                 sizeof(preflight->water_surface_selected_last_frame_path),
+                 "%s",
+                 preflight->water_surface_selected_first_frame_path);
+        preflight->water_surface_loaded_last_frame_index =
+            preflight->water_surface_loaded_first_frame_index;
+    } else {
+        bool last_found = false;
+        if (!ray_tracing_headless_inspect_water_surface_frame(request,
+                                                              last_frame_index,
+                                                              &last,
+                                                              &last_found,
+                                                              diagnostics,
+                                                              sizeof(diagnostics)) ||
+            !last_found) {
+            snprintf(preflight->diagnostics,
+                     sizeof(preflight->diagnostics),
+                     "%s",
+                     last_found ? diagnostics : "water surface last frame not found");
+            RuntimeWaterSurfaceFrame_Free(&first);
+            RuntimeWaterSurfaceFrame_Free(&last);
+            return false;
+        }
+        preflight->water_surface_loaded_last_frame_index = last.frame_index;
+        snprintf(preflight->water_surface_selected_last_frame_path,
+                 sizeof(preflight->water_surface_selected_last_frame_path),
+                 "%s",
+                 last.frame_path);
+    }
+
+    preflight->water_surface_frame_selection_dynamic =
+        strcmp(preflight->water_surface_selected_first_frame_path,
+               preflight->water_surface_selected_last_frame_path) != 0 ||
+        preflight->water_surface_loaded_first_frame_index !=
+            preflight->water_surface_loaded_last_frame_index;
+    preflight->water_surface_frame_selection_built = true;
+    RuntimeWaterSurfaceFrame_Free(&first);
+    RuntimeWaterSurfaceFrame_Free(&last);
+    return true;
+}
+
+static void ray_tracing_headless_note_water_surface_mesh(
+    RayTracingHeadlessPreflight *preflight,
+    const RuntimeNative3DPreparedFrame *frame) {
+    int triangle_count = 0;
+    int payload_scene_object_index = -1;
+    if (!preflight || !frame || !preflight->water_surface_source_found) return;
+    for (int i = 0; i < frame->scene.triangleMesh.triangleCount; ++i) {
+        const int scene_object_index = frame->scene.triangleMesh.triangles[i].sceneObjectIndex;
+        if (scene_object_index >= 0 &&
+            scene_object_index < sceneSettings.objectCount &&
+            strcmp(sceneSettings.sceneObjects[scene_object_index].type, "water_surface") == 0) {
+            triangle_count += 1;
+            if (payload_scene_object_index < 0) {
+                payload_scene_object_index = scene_object_index;
+            }
+        }
+    }
+    preflight->water_surface_triangle_count = triangle_count;
+    preflight->water_surface_mesh_attached = triangle_count > 0;
+    if (payload_scene_object_index >= 0) {
+        RuntimeMaterialPayload3D payload = {0};
+        if (RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(payload_scene_object_index,
+                                                                 &payload) &&
+            payload.valid) {
+            preflight->water_surface_material_payload_applied = true;
+            preflight->water_surface_payload_ior = payload.opticalIor;
+            preflight->water_surface_payload_absorption_distance_m =
+                payload.absorptionDistance;
+            preflight->water_surface_payload_transparency = payload.transparency;
+            preflight->water_surface_payload_tint_r = payload.baseColorR;
+            preflight->water_surface_payload_tint_g = payload.baseColorG;
+            preflight->water_surface_payload_tint_b = payload.baseColorB;
+        }
+    }
 }
 
 static void apply_inspection_overrides(const RayTracingAgentRenderRequest *request) {
@@ -290,6 +671,22 @@ static void apply_inspection_overrides(const RayTracingAgentRenderRequest *reque
         animSettings.environmentLightMode =
             animation_config_environment_light_mode_clamp(
                 request->environment_light_mode_override);
+    }
+    if (request->has_environment_preset_override) {
+        animSettings.environmentBackgroundLightingAuthored = true;
+        animSettings.environmentPreset =
+            animation_config_environment_preset_clamp(request->environment_preset_override);
+    }
+    if (request->has_background_brightness_override) {
+        animSettings.environmentBackgroundLightingAuthored = true;
+        animSettings.environmentBackgroundBrightnessAuto = false;
+        animSettings.environmentBackgroundBrightness = request->background_brightness_override;
+    }
+    if (request->has_background_color_override) {
+        animSettings.environmentBackgroundLightingAuthored = true;
+        animSettings.environmentBackgroundColorR = request->background_color_r;
+        animSettings.environmentBackgroundColorG = request->background_color_g;
+        animSettings.environmentBackgroundColorB = request->background_color_b;
     }
     if (request->has_top_fill_strength_override) {
         animSettings.topFillStrength = request->top_fill_strength_override;
@@ -330,13 +727,17 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
     RuntimeNative3DPreparedFrame frame = {0};
     Point light_point = {0.0, 0.0};
     RayTracingHeadlessPreflight preflight = {0};
+    struct timespec preflight_started_at = {0};
+    char progress_diag[256] = {0};
 
     if (!request || !out_preflight) return 2;
+    (void)clock_gettime(CLOCK_MONOTONIC, &preflight_started_at);
     preflight.request_loaded = true;
+    preflight.object_audit_enabled = request->object_audit_enabled;
     snprintf(preflight.diagnostics, sizeof(preflight.diagnostics), "ok");
     ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
                                   request,
-                                  "loading_scene",
+                                  "loading_settings",
                                   request->start_frame,
                                   0,
                                   0,
@@ -347,7 +748,7 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                                   0.0,
                                   -1.0,
                                   "running",
-                                  "starting preflight",
+                                  "loading runtime settings",
                                   job_status_path,
                                   job_id,
                                   request_path,
@@ -358,9 +759,31 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
     animSettings.interactiveMode = false;
     animSettings.integratorMode3D = (int)request->integrator_3d;
     animSettings.temporalFrames3D = request->temporal_frames;
+    if (request->has_denoise_enabled_override) {
+        animSettings.disneyDenoiseEnabled = request->denoise_enabled_override;
+    }
+    preflight.denoise_enabled = animSettings.disneyDenoiseEnabled;
     sceneSettings.windowWidth = request->width;
     sceneSettings.windowHeight = request->height;
 
+    ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
+                                  request,
+                                  "applying_runtime_scene",
+                                  request->start_frame,
+                                  0,
+                                  0,
+                                  0,
+                                  request->temporal_frames,
+                                  0u,
+                                  0u,
+                                  ray_tracing_elapsed_seconds_since(&preflight_started_at),
+                                  -1.0,
+                                  "running",
+                                  "applying runtime scene",
+                                  job_status_path,
+                                  job_id,
+                                  request_path,
+                                  -1);
     preflight.scene_applied =
         AnimationSelectSceneSource(SCENE_SOURCE_RUNTIME_SCENE,
                                    request->runtime_scene_path,
@@ -391,15 +814,56 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
         *out_preflight = preflight;
         return 3;
     }
+    snprintf(progress_diag,
+             sizeof(progress_diag),
+             "runtime scene applied (%d objects, %d materials)",
+             preflight.scene_summary.object_count,
+             preflight.scene_summary.material_count);
+    ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
+                                  request,
+                                  "runtime_scene_applied",
+                                  request->start_frame,
+                                  0,
+                                  0,
+                                  0,
+                                  request->temporal_frames,
+                                  0u,
+                                  0u,
+                                  ray_tracing_elapsed_seconds_since(&preflight_started_at),
+                                  -1.0,
+                                  "running",
+                                  progress_diag,
+                                  job_status_path,
+                                  job_id,
+                                  request_path,
+                                  -1);
     apply_inspection_overrides(request);
 
     if (request->volume_enabled) {
         animSettings.volumeAffectsLighting = request->volume_affects_lighting;
         animSettings.volumeDebugOverlayEnabled = request->volume_debug_overlay;
+        ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
+                                      request,
+                                      "attaching_volume",
+                                      request->start_frame,
+                                      0,
+                                      0,
+                                      0,
+                                      request->temporal_frames,
+                                      0u,
+                                      0u,
+                                      ray_tracing_elapsed_seconds_since(&preflight_started_at),
+                                      -1.0,
+                                      "running",
+                                      "attaching volume source",
+                                      job_status_path,
+                                      job_id,
+                                      request_path,
+                                      -1);
         preflight.volume_attached =
             AnimationSelectVolumeSource(request->volume_source_kind,
                                         request->volume_source_path,
-                                        true);
+                                        false);
         if (!preflight.volume_attached) {
             snprintf(preflight.diagnostics,
                      sizeof(preflight.diagnostics),
@@ -425,13 +889,73 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
             *out_preflight = preflight;
             return 4;
         }
-        preflight.volume_summary_built =
-            build_volume_debug_summary(request, &preflight.volume_summary);
+        if (!ray_tracing_headless_populate_volume_frame_selection(&preflight, request)) {
+            ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
+                                          request,
+                                          "failed",
+                                          request->start_frame,
+                                          0,
+                                          0,
+                                          0,
+                                          request->temporal_frames,
+                                          0u,
+                                          0u,
+                                          0.0,
+                                          -1.0,
+                                          "failed",
+                                          preflight.diagnostics,
+                                          job_status_path,
+                                          job_id,
+                                          request_path,
+                                          4);
+            *out_preflight = preflight;
+            return 4;
+        }
+        if (!ray_tracing_headless_populate_water_surface_frame_selection(&preflight, request)) {
+            ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
+                                          request,
+                                          "failed",
+                                          request->start_frame,
+                                          0,
+                                          0,
+                                          0,
+                                          request->temporal_frames,
+                                          0u,
+                                          0u,
+                                          0.0,
+                                          -1.0,
+                                          "failed",
+                                          preflight.diagnostics,
+                                          job_status_path,
+                                          job_id,
+                                          request_path,
+                                          4);
+            *out_preflight = preflight;
+            return 4;
+        }
     } else {
         AnimationClearVolumeSource();
         preflight.volume_attached = false;
     }
 
+    ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
+                                  request,
+                                  "resolving_native_route",
+                                  request->start_frame,
+                                  0,
+                                  0,
+                                  0,
+                                  request->temporal_frames,
+                                  0u,
+                                  0u,
+                                  ray_tracing_elapsed_seconds_since(&preflight_started_at),
+                                  -1.0,
+                                  "running",
+                                  "resolving native 3D route",
+                                  job_status_path,
+                                  job_id,
+                                  request_path,
+                                  -1);
     preflight.route = RayTracingModeBackend_ResolveRoute();
     preflight.route_native_3d = RayTracingModeBackend_IsNative3D(&preflight.route);
     if (!preflight.route_native_3d) {
@@ -463,17 +987,137 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
     if (sceneSettings.bezierPath.numPoints >= 1) {
         light_point = sceneSettings.bezierPath.points[0];
     }
+    ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
+                                  request,
+                                  "preparing_native_frame",
+                                  request->start_frame,
+                                  0,
+                                  0,
+                                  0,
+                                  request->temporal_frames,
+                                  0u,
+                                  0u,
+                                  ray_tracing_elapsed_seconds_since(&preflight_started_at),
+                                  -1.0,
+                                  "running",
+                                  "preparing native frame and acceleration structures",
+                                  job_status_path,
+                                  job_id,
+                                  request_path,
+                                  -1);
     preflight.prepared_frame =
-        RuntimeNative3DPrepareFrame(&frame,
-                                    request->width,
-                                    request->height,
-                                    request->normalized_t,
-                                    light_point.x,
-                                    light_point.y);
+        RuntimeNative3DPrepareFrameAtFrameIndex(&frame,
+                                                request->width,
+                                                request->height,
+                                                request->normalized_t,
+                                                request->start_frame,
+                                                light_point.x,
+                                                light_point.y);
     if (preflight.prepared_frame) {
+        preflight.environment_summary = frame.scene.environment;
+        preflight.environment_summary_built = true;
         RuntimeTriangleMesh3D_BVHBuildStats(&frame.scene.triangleMesh,
                                             &preflight.bvh_build_stats);
-        ray_tracing_headless_audit_prepared_frame(&preflight, &frame);
+        if (!preflight.bvh_build_stats.ready ||
+            preflight.bvh_build_stats.nodeCount <= 0) {
+            snprintf(preflight.diagnostics,
+                     sizeof(preflight.diagnostics),
+                     "native 3D BVH unavailable after prepare: triangles=%d nodes=%d",
+                     preflight.bvh_build_stats.triangleCount,
+                     preflight.bvh_build_stats.nodeCount);
+            RuntimeNative3DPreparedFrame_Free(&frame);
+            ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
+                                          request,
+                                          "bvh_failed",
+                                          request->start_frame,
+                                          0,
+                                          0,
+                                          0,
+                                          request->temporal_frames,
+                                          0u,
+                                          0u,
+                                          ray_tracing_elapsed_seconds_since(&preflight_started_at),
+                                          -1.0,
+                                          "failed",
+                                          preflight.diagnostics,
+                                          job_status_path,
+                                          job_id,
+                                          request_path,
+                                          6);
+            *out_preflight = preflight;
+            return 6;
+        }
+        ray_tracing_headless_note_water_surface_mesh(&preflight, &frame);
+        snprintf(progress_diag,
+                 sizeof(progress_diag),
+                 "BVH ready (%d triangles, %d nodes, %.3f ms build)",
+                 preflight.bvh_build_stats.triangleCount,
+                 preflight.bvh_build_stats.nodeCount,
+                 preflight.bvh_build_stats.buildCpuMs);
+        ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
+                                      request,
+                                      "bvh_ready",
+                                      request->start_frame,
+                                      0,
+                                      0,
+                                      0,
+                                      request->temporal_frames,
+                                      0u,
+                                      0u,
+                                      ray_tracing_elapsed_seconds_since(&preflight_started_at),
+                                      -1.0,
+                                      "running",
+                                      progress_diag,
+                                      job_status_path,
+                                      job_id,
+                                      request_path,
+                                      -1);
+        snprintf(progress_diag,
+                 sizeof(progress_diag),
+                 "auditing objects (max dimension %d)",
+                 request->object_audit_enabled ? request->object_audit_max_dimension : 0);
+        ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
+                                      request,
+                                      "object_audit",
+                                      request->start_frame,
+                                      0,
+                                      0,
+                                      0,
+                                      request->temporal_frames,
+                                      0u,
+                                      0u,
+                                      ray_tracing_elapsed_seconds_since(&preflight_started_at),
+                                      -1.0,
+                                      "running",
+                                      progress_diag,
+                                      job_status_path,
+                                      job_id,
+                                      request_path,
+                                      -1);
+        ray_tracing_headless_audit_prepared_frame(&preflight, &frame, request);
+        snprintf(progress_diag,
+                 sizeof(progress_diag),
+                 "object audit ready (%d samples, stride %d)",
+                 preflight.object_audit_sample_count,
+                 preflight.object_audit_scale_factor);
+        ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
+                                      request,
+                                      "object_audit_ready",
+                                      request->start_frame,
+                                      0,
+                                      0,
+                                      0,
+                                      request->temporal_frames,
+                                      0u,
+                                      0u,
+                                      ray_tracing_elapsed_seconds_since(&preflight_started_at),
+                                      -1.0,
+                                      "running",
+                                      progress_diag,
+                                      job_status_path,
+                                      job_id,
+                                      request_path,
+                                      -1);
         RuntimeNative3DPreparedFrame_Free(&frame);
         RuntimeNative3DPreparedSceneCacheStatsSnapshot(
             &preflight.prepared_scene_cache_stats);
@@ -514,7 +1158,7 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                                   request->temporal_frames,
                                   0u,
                                   0u,
-                                  0.0,
+                                  ray_tracing_elapsed_seconds_since(&preflight_started_at),
                                   -1.0,
                                   "running",
                                   "preflight ready",
@@ -854,6 +1498,37 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                                           preflight.frames_rendered,
                                           request->temporal_frames,
                                           0,
+                                          request->temporal_frames,
+                                          temporal_progress.completed_tiles_in_subpass,
+                                          temporal_progress.total_tiles_in_subpass,
+                                          ray_tracing_elapsed_seconds_since(&temporal_progress.frame_started_at),
+                                          -1.0,
+                                          "failed",
+                                          preflight.diagnostics,
+                                          job_status_path,
+                                          job_id,
+                                          request_path,
+                                          9);
+            free(pixels);
+            *out_preflight = preflight;
+            return 9;
+        }
+        RuntimeTriangleBVH3D_SnapshotTraceStats(&preflight.bvh_trace_stats);
+        if (preflight.bvh_trace_stats.flatFallbackCalls > 0u) {
+            snprintf(preflight.diagnostics,
+                     sizeof(preflight.diagnostics),
+                     "native 3D BVH flat fallback detected: calls=%llu overflow_calls=%llu",
+                     (unsigned long long)preflight.bvh_trace_stats.flatFallbackCalls,
+                     (unsigned long long)preflight.bvh_trace_stats.overflowFallbackCalls);
+            RuntimeNative3DPreparedSceneCacheStatsSnapshot(
+                &preflight.prepared_scene_cache_stats);
+            ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
+                                          request,
+                                          "bvh_flat_fallback_failed",
+                                          frame_index,
+                                          preflight.frames_rendered,
+                                          request->temporal_frames,
+                                          request->temporal_frames,
                                           request->temporal_frames,
                                           temporal_progress.completed_tiles_in_subpass,
                                           temporal_progress.total_tiles_in_subpass,

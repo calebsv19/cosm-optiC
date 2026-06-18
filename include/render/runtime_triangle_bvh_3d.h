@@ -49,6 +49,7 @@ typedef struct RuntimeTriangleBVH3DTraceStats {
 
 void RuntimeTriangleMesh3D_ClearBVH(RuntimeTriangleMesh3D* mesh);
 bool RuntimeTriangleMesh3D_BuildBVH(RuntimeTriangleMesh3D* mesh);
+const char* RuntimeTriangleMesh3D_BVHLastDiagnostics(void);
 bool RuntimeTriangleMesh3D_CopyBVH(RuntimeTriangleMesh3D* dst,
                                    const RuntimeTriangleMesh3D* src);
 bool RuntimeTriangleMesh3D_HasReadyBVH(const RuntimeTriangleMesh3D* mesh);

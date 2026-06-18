@@ -23,6 +23,7 @@
 #include "render/runtime_material_response_3d.h"
 #include "render/runtime_material_texture_3d.h"
 #include "render/runtime_material_texture_stack_3d.h"
+#include "render/runtime_water_material_3d.h"
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_scene_3d_builder.h"
 #include "test_runtime_lighting_materials.h"
@@ -669,6 +670,89 @@ static int test_runtime_material_payload_3d_object_multipliers_contract(void) {
                  0.4 * 0.5,
                  1e-9);
 
+    sceneSettings = saved_scene;
+    return 0;
+}
+
+static int test_runtime_material_payload_3d_water_override_contract(void) {
+    SceneConfig saved_scene = sceneSettings;
+    RuntimeMaterialPayload3D payload = {0};
+    RuntimeWaterMaterial3DOverride override = {0};
+    double expected_tint_r = 0.0;
+    double expected_tint_g = 0.0;
+    double expected_tint_b = 0.0;
+    bool ok = false;
+
+    MaterialManagerResetDefaults();
+    RuntimeWaterMaterial3D_ClearAll();
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 10.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
+    sceneSettings.sceneObjects[0].alpha = 1.0;
+    sceneSettings.sceneObjects[0].opacity = 1.0;
+
+    override.valid = true;
+    override.ior = 1.333;
+    override.absorptionDistance = 4.0;
+    override.absorptionR = 0.10;
+    override.absorptionG = 0.035;
+    override.absorptionB = 0.015;
+    override.transparency = 0.92;
+    override.reflectivity = 0.0;
+    override.roughness = 0.02;
+    ok = RuntimeWaterMaterial3D_Set(0, &override);
+    assert_true("runtime_material_payload_water_override_set", ok);
+    RuntimeWaterMaterial3D_ComputeTransmittanceTint(override.absorptionDistance,
+                                                    override.absorptionR,
+                                                    override.absorptionG,
+                                                    override.absorptionB,
+                                                    &expected_tint_r,
+                                                    &expected_tint_g,
+                                                    &expected_tint_b);
+
+    ok = RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(0, &payload);
+    assert_true("runtime_material_payload_water_override_resolve", ok);
+    assert_true("runtime_material_payload_water_override_valid", payload.valid);
+    assert_close("runtime_material_payload_water_override_ior",
+                 payload.opticalIor,
+                 1.333,
+                 1e-9);
+    assert_close("runtime_material_payload_water_override_bsdf_ior",
+                 payload.bsdf.ior,
+                 1.333,
+                 1e-9);
+    assert_close("runtime_material_payload_water_override_absorption_distance",
+                 payload.absorptionDistance,
+                 4.0,
+                 1e-9);
+    assert_close("runtime_material_payload_water_override_transparency",
+                 payload.transparency,
+                 0.92,
+                 1e-9);
+    assert_close("runtime_material_payload_water_override_tint_r",
+                 payload.baseColorR,
+                 expected_tint_r,
+                 1e-9);
+    assert_close("runtime_material_payload_water_override_tint_g",
+                 payload.baseColorG,
+                 expected_tint_g,
+                 1e-9);
+    assert_close("runtime_material_payload_water_override_tint_b",
+                 payload.baseColorB,
+                 expected_tint_b,
+                 1e-9);
+    assert_close("runtime_material_payload_water_override_reflectivity",
+                 payload.bsdf.reflectivity,
+                 0.0,
+                 1e-9);
+    assert_close("runtime_material_payload_water_override_roughness",
+                 payload.bsdf.roughness,
+                 0.02,
+                 1e-9);
+    assert_true("runtime_material_payload_water_override_solid", !payload.thinWalled);
+
+    RuntimeWaterMaterial3D_ClearAll();
     sceneSettings = saved_scene;
     return 0;
 }
@@ -2647,6 +2731,7 @@ int run_test_runtime_lighting_materials_payload_suite(void) {
     test_runtime_material_payload_3d_scene_object_resolution_contract();
     test_runtime_material_payload_3d_authoring_object_values_override_preset();
     test_runtime_material_payload_3d_object_multipliers_contract();
+    test_runtime_material_payload_3d_water_override_contract();
     test_material_manager_default_presets_include_i4_entries();
     test_material_manager_load_dir_preserves_shipped_preset_ids();
     test_runtime_material_payload_3d_hit_resolution_contract();

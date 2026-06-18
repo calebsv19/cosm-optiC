@@ -7,6 +7,19 @@
 #include <stdio.h>
 #include <string.h>
 
+static char gRuntimeScene3DBuilderLastDiagnostics[256] = "ok";
+
+static void runtime_scene_3d_builder_set_diag(const char* message) {
+    snprintf(gRuntimeScene3DBuilderLastDiagnostics,
+             sizeof(gRuntimeScene3DBuilderLastDiagnostics),
+             "%s",
+             (message && message[0]) ? message : "ok");
+}
+
+const char* RuntimeScene3DBuilder_LastDiagnostics(void) {
+    return gRuntimeScene3DBuilderLastDiagnostics;
+}
+
 static RuntimePrimitive3DKind runtime_scene_3d_builder_map_kind(
     RuntimeSceneBridgePrimitiveKind kind) {
     switch (kind) {
@@ -77,6 +90,28 @@ typedef struct {
     Vec3 extent;
     bool valid;
 } RuntimeScene3DBuilderMeshBounds;
+
+static bool runtime_scene_3d_builder_rebuild_bvh(RuntimeScene3D* scene) {
+    if (!scene) {
+        runtime_scene_3d_builder_set_diag("bvh rebuild failed: scene missing");
+        return false;
+    }
+    if (!RuntimeTriangleMesh3D_BuildBVH(&scene->triangleMesh)) {
+        char diag[512];
+        snprintf(diag,
+                 sizeof(diag),
+                 "bvh rebuild failed: %s",
+                 RuntimeTriangleMesh3D_BVHLastDiagnostics());
+        runtime_scene_3d_builder_set_diag(diag);
+        return false;
+    }
+    if (scene->triangleMesh.triangleCount > 0 &&
+        !RuntimeTriangleMesh3D_HasReadyBVH(&scene->triangleMesh)) {
+        runtime_scene_3d_builder_set_diag("bvh rebuild failed: BVH not ready after build");
+        return false;
+    }
+    return true;
+}
 
 static RuntimeScene3DBuilderMeshBounds runtime_scene_3d_builder_mesh_bounds(
     const CoreMeshAssetRuntimeDocument* document,
@@ -246,6 +281,7 @@ static bool runtime_scene_3d_builder_append_triangle_internal(RuntimeScene3D* sc
                                                               Vec3 p2,
                                                               Vec3 expected_normal,
                                                               int local_triangle_index_override,
+                                                              bool two_sided,
                                                               bool has_object_texture_coords,
                                                               Vec3 object_texture0,
                                                               Vec3 object_texture1,
@@ -288,6 +324,7 @@ static bool runtime_scene_3d_builder_append_triangle_internal(RuntimeScene3D* sc
     triangle->p1 = p1;
     triangle->p2 = p2;
     triangle->normal = normal;
+    triangle->twoSided = two_sided;
     triangle->hasObjectTextureCoords = has_object_texture_coords;
     triangle->objectTexture0 = object_texture0;
     triangle->objectTexture1 = object_texture1;
@@ -299,28 +336,6 @@ static bool runtime_scene_3d_builder_append_triangle_internal(RuntimeScene3D* sc
     return true;
 }
 
-static bool runtime_scene_3d_builder_append_triangle(RuntimeScene3D* scene,
-                                                     int primitive_index,
-                                                     int scene_object_index,
-                                                     Vec3 p0,
-                                                     Vec3 p1,
-                                                     Vec3 p2,
-                                                     Vec3 expected_normal,
-                                                     int local_triangle_index_override) {
-    return runtime_scene_3d_builder_append_triangle_internal(scene,
-                                                            primitive_index,
-                                                            scene_object_index,
-                                                            p0,
-                                                            p1,
-                                                            p2,
-                                                            expected_normal,
-                                                            local_triangle_index_override,
-                                                            false,
-                                                            vec3(0.0, 0.0, 0.0),
-                                                            vec3(0.0, 0.0, 0.0),
-                                                            vec3(0.0, 0.0, 0.0));
-}
-
 static bool runtime_scene_3d_builder_append_quad(RuntimeScene3D* scene,
                                                  int primitive_index,
                                                  int scene_object_index,
@@ -328,25 +343,36 @@ static bool runtime_scene_3d_builder_append_quad(RuntimeScene3D* scene,
                                                  Vec3 p1,
                                                  Vec3 p2,
                                                  Vec3 p3,
-                                                 Vec3 expected_normal) {
-    if (!runtime_scene_3d_builder_append_triangle(scene,
-                                                  primitive_index,
-                                                  scene_object_index,
-                                                  p0,
-                                                  p1,
-                                                  p2,
-                                                  expected_normal,
-                                                  -1)) {
+                                                 Vec3 expected_normal,
+                                                 bool two_sided) {
+    if (!runtime_scene_3d_builder_append_triangle_internal(scene,
+                                                           primitive_index,
+                                                           scene_object_index,
+                                                           p0,
+                                                           p1,
+                                                           p2,
+                                                           expected_normal,
+                                                           -1,
+                                                           two_sided,
+                                                           false,
+                                                           vec3(0.0, 0.0, 0.0),
+                                                           vec3(0.0, 0.0, 0.0),
+                                                           vec3(0.0, 0.0, 0.0))) {
         return false;
     }
-    return runtime_scene_3d_builder_append_triangle(scene,
-                                                    primitive_index,
-                                                    scene_object_index,
-                                                    p0,
-                                                    p2,
-                                                    p3,
-                                                    expected_normal,
-                                                    -1);
+    return runtime_scene_3d_builder_append_triangle_internal(scene,
+                                                            primitive_index,
+                                                            scene_object_index,
+                                                            p0,
+                                                            p2,
+                                                            p3,
+                                                            expected_normal,
+                                                            -1,
+                                                            two_sided,
+                                                            false,
+                                                            vec3(0.0, 0.0, 0.0),
+                                                            vec3(0.0, 0.0, 0.0),
+                                                            vec3(0.0, 0.0, 0.0));
 }
 
 static bool runtime_scene_3d_builder_append_plane(RuntimeScene3D* scene,
@@ -384,7 +410,8 @@ static bool runtime_scene_3d_builder_append_plane(RuntimeScene3D* scene,
                                                 p1,
                                                 p2,
                                                 p3,
-                                                normal);
+                                                normal,
+                                                true);
 }
 
 static bool runtime_scene_3d_builder_append_rect_prism(RuntimeScene3D* scene,
@@ -436,7 +463,8 @@ static bool runtime_scene_3d_builder_append_rect_prism(RuntimeScene3D* scene,
                                               top1,
                                               top2,
                                               top3,
-                                              normal)) {
+                                              normal,
+                                              false)) {
         return false;
     }
     if (!runtime_scene_3d_builder_append_quad(scene,
@@ -446,7 +474,8 @@ static bool runtime_scene_3d_builder_append_rect_prism(RuntimeScene3D* scene,
                                               bottom3,
                                               bottom2,
                                               bottom1,
-                                              vec3_scale(normal, -1.0))) {
+                                              vec3_scale(normal, -1.0),
+                                              false)) {
         return false;
     }
     if (!runtime_scene_3d_builder_append_quad(scene,
@@ -456,7 +485,8 @@ static bool runtime_scene_3d_builder_append_rect_prism(RuntimeScene3D* scene,
                                               bottom1,
                                               top1,
                                               top0,
-                                              vec3_scale(axis_v, -1.0))) {
+                                              vec3_scale(axis_v, -1.0),
+                                              false)) {
         return false;
     }
     if (!runtime_scene_3d_builder_append_quad(scene,
@@ -466,7 +496,8 @@ static bool runtime_scene_3d_builder_append_rect_prism(RuntimeScene3D* scene,
                                               top3,
                                               top2,
                                               bottom2,
-                                              axis_v)) {
+                                              axis_v,
+                                              false)) {
         return false;
     }
     if (!runtime_scene_3d_builder_append_quad(scene,
@@ -476,7 +507,8 @@ static bool runtime_scene_3d_builder_append_rect_prism(RuntimeScene3D* scene,
                                               top0,
                                               top3,
                                               bottom3,
-                                              vec3_scale(axis_u, -1.0))) {
+                                              vec3_scale(axis_u, -1.0),
+                                              false)) {
         return false;
     }
     return runtime_scene_3d_builder_append_quad(scene,
@@ -486,7 +518,8 @@ static bool runtime_scene_3d_builder_append_rect_prism(RuntimeScene3D* scene,
                                                 bottom2,
                                                 top2,
                                                 top1,
-                                                axis_u);
+                                                axis_u,
+                                                false);
 }
 
 static bool runtime_scene_3d_builder_append_triangles(RuntimeScene3D* scene,
@@ -505,17 +538,179 @@ static bool runtime_scene_3d_builder_append_triangles(RuntimeScene3D* scene,
     }
 }
 
-bool RuntimeScene3DBuilder_AppendMeshAssetSet(
+static bool runtime_scene_3d_builder_heightfield_quad_is_dry(
+    const RuntimeScene3DHeightfieldSurfaceDesc* desc,
+    uint32_t x,
+    uint32_t z) {
+    const uint32_t w = desc ? desc->grid_w : 0u;
+    const double threshold = desc ? desc->dry_height + desc->dry_height_epsilon : 0.0;
+    double h00;
+    double h10;
+    double h11;
+    double h01;
+    if (!desc || !desc->heights_y || w == 0u) return true;
+    if (!desc->skip_dry_quads) return false;
+    h00 = desc->heights_y[(size_t)z * (size_t)w + (size_t)x];
+    h10 = desc->heights_y[(size_t)z * (size_t)w + (size_t)(x + 1u)];
+    h11 = desc->heights_y[(size_t)(z + 1u) * (size_t)w + (size_t)(x + 1u)];
+    h01 = desc->heights_y[(size_t)(z + 1u) * (size_t)w + (size_t)x];
+    return h00 <= threshold && h10 <= threshold && h11 <= threshold && h01 <= threshold;
+}
+
+static int runtime_scene_3d_builder_heightfield_quad_count(
+    const RuntimeScene3DHeightfieldSurfaceDesc* desc) {
+    int count = 0;
+    if (!desc || desc->grid_w < 2u || desc->grid_d < 2u || !desc->heights_y) return 0;
+    for (uint32_t z = 0u; z + 1u < desc->grid_d; ++z) {
+        for (uint32_t x = 0u; x + 1u < desc->grid_w; ++x) {
+            if (!runtime_scene_3d_builder_heightfield_quad_is_dry(desc, x, z)) {
+                count += 1;
+            }
+        }
+    }
+    return count;
+}
+
+static Vec3 runtime_scene_3d_builder_heightfield_point(
+    const RuntimeScene3DHeightfieldSurfaceDesc* desc,
+    uint32_t x,
+    uint32_t z) {
+    const size_t index = (size_t)z * (size_t)desc->grid_w + (size_t)x;
+    const double sample_x = desc->sample_origin_x + ((double)x * desc->sample_spacing_x);
+    const double sample_z = desc->sample_origin_z + ((double)z * desc->sample_spacing_z);
+    const double height_y = desc->heights_y[index];
+    if (desc->map_y_height_to_scene_z) {
+        return vec3(sample_x, sample_z, height_y);
+    }
+    return vec3(sample_x, height_y, sample_z);
+}
+
+static bool runtime_scene_3d_builder_heightfield_desc_valid(
+    const RuntimeScene3DHeightfieldSurfaceDesc* desc) {
+    if (!desc || !desc->heights_y) return false;
+    if (desc->scene_object_index < 0 || desc->grid_w < 2u || desc->grid_d < 2u) return false;
+    if (!(desc->sample_spacing_x > 0.0) || !(desc->sample_spacing_z > 0.0)) return false;
+    if (!isfinite(desc->sample_origin_x) ||
+        !isfinite(desc->sample_origin_z) ||
+        !isfinite(desc->sample_spacing_x) ||
+        !isfinite(desc->sample_spacing_z) ||
+        !isfinite(desc->dry_height) ||
+        !isfinite(desc->dry_height_epsilon)) {
+        return false;
+    }
+    for (uint64_t i = 0u; i < (uint64_t)desc->grid_w * (uint64_t)desc->grid_d; ++i) {
+        if (!isfinite(desc->heights_y[i])) return false;
+    }
+    return true;
+}
+
+bool RuntimeScene3DBuilder_AppendHeightfieldSurface(
     RuntimeScene3D* scene,
-    const RayTracingRuntimeMeshAssetSet* mesh_assets) {
+    const RuntimeScene3DHeightfieldSurfaceDesc* desc,
+    int* out_appended_triangle_count) {
+    const int old_primitive_count = scene ? scene->primitiveCount : 0;
+    const int old_triangle_count = scene ? scene->triangleMesh.triangleCount : 0;
+    const int valid_quad_count =
+        runtime_scene_3d_builder_heightfield_quad_count(desc);
+    const int extra_triangle_count = valid_quad_count * 2;
+    RuntimePrimitive3D* primitive = NULL;
+    int primitive_index = 0;
+    int appended_triangle_count = 0;
+
+    if (out_appended_triangle_count) *out_appended_triangle_count = 0;
+    if (!scene || !runtime_scene_3d_builder_heightfield_desc_valid(desc)) return false;
+    if (valid_quad_count <= 0) return true;
+    if (!runtime_scene_3d_builder_reserve_primitives(scene, scene->primitiveCount + 1) ||
+        !runtime_scene_3d_builder_reserve_triangles(scene,
+                                                    scene->triangleMesh.triangleCount +
+                                                        extra_triangle_count)) {
+        return false;
+    }
+
+    primitive_index = scene->primitiveCount;
+    primitive = &scene->primitives[primitive_index];
+    memset(primitive, 0, sizeof(*primitive));
+    primitive->kind = RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH;
+    primitive->source.kind = RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH;
+    primitive->source.sceneObjectIndex = desc->scene_object_index;
+    snprintf(primitive->source.objectId,
+             sizeof(primitive->source.objectId),
+             "%s",
+             (desc->object_id && desc->object_id[0]) ? desc->object_id : "water_surface");
+
+    for (uint32_t z = 0u; z + 1u < desc->grid_d; ++z) {
+        for (uint32_t x = 0u; x + 1u < desc->grid_w; ++x) {
+            Vec3 p00;
+            Vec3 p10;
+            Vec3 p11;
+            Vec3 p01;
+            const Vec3 expected_normal = desc->map_y_height_to_scene_z
+                                             ? vec3(0.0, 0.0, 1.0)
+                                             : vec3(0.0, 1.0, 0.0);
+            if (runtime_scene_3d_builder_heightfield_quad_is_dry(desc, x, z)) {
+                continue;
+            }
+            p00 = runtime_scene_3d_builder_heightfield_point(desc, x, z);
+            p10 = runtime_scene_3d_builder_heightfield_point(desc, x + 1u, z);
+            p11 = runtime_scene_3d_builder_heightfield_point(desc, x + 1u, z + 1u);
+            p01 = runtime_scene_3d_builder_heightfield_point(desc, x, z + 1u);
+            if (!runtime_scene_3d_builder_append_quad(scene,
+                                                      primitive_index,
+                                                      desc->scene_object_index,
+                                                      p00,
+                                                      p01,
+                                                      p11,
+                                                      p10,
+                                                      expected_normal,
+                                                      desc->two_sided)) {
+                scene->primitiveCount = old_primitive_count;
+                scene->triangleMesh.triangleCount = old_triangle_count;
+                scene->triangleMesh.bvhDirty = true;
+                (void)runtime_scene_3d_builder_rebuild_bvh(scene);
+                return false;
+            }
+            appended_triangle_count += 2;
+        }
+    }
+
+    if (appended_triangle_count <= 0) {
+        scene->primitiveCount = old_primitive_count;
+        scene->triangleMesh.triangleCount = old_triangle_count;
+        scene->triangleMesh.bvhDirty = true;
+        return runtime_scene_3d_builder_rebuild_bvh(scene);
+    }
+
+    scene->primitiveCount += 1;
+    scene->scope.triangleMeshEnabled = true;
+    if (!runtime_scene_3d_builder_rebuild_bvh(scene)) {
+        scene->primitiveCount = old_primitive_count;
+        scene->triangleMesh.triangleCount = old_triangle_count;
+        scene->triangleMesh.bvhDirty = true;
+        (void)runtime_scene_3d_builder_rebuild_bvh(scene);
+        return false;
+    }
+    if (out_appended_triangle_count) {
+        *out_appended_triangle_count = appended_triangle_count;
+    }
+    return true;
+}
+
+static bool runtime_scene_3d_builder_append_mesh_asset_set(
+    RuntimeScene3D* scene,
+    const RayTracingRuntimeMeshAssetSet* mesh_assets,
+    bool require_ready_bvh) {
     int extra_primitives = 0;
     int extra_triangles = 0;
-    if (!scene || !mesh_assets) return false;
+    if (!scene || !mesh_assets) {
+        runtime_scene_3d_builder_set_diag("append mesh assets failed: scene or mesh set missing");
+        return false;
+    }
     if (mesh_assets->instance_count <= 0) return true;
 
     for (int i = 0; i < mesh_assets->instance_count; ++i) {
         const RayTracingRuntimeMeshAssetInstance* instance = &mesh_assets->instances[i];
         if (instance->asset_index < 0 || instance->asset_index >= mesh_assets->asset_count) {
+            runtime_scene_3d_builder_set_diag("append mesh assets failed: invalid asset index");
             return false;
         }
         extra_primitives += 1;
@@ -523,11 +718,13 @@ bool RuntimeScene3DBuilder_AppendMeshAssetSet(
     }
     if (!runtime_scene_3d_builder_reserve_primitives(scene,
                                                      scene->primitiveCount + extra_primitives)) {
+        runtime_scene_3d_builder_set_diag("append mesh assets failed: primitive reserve failed");
         return false;
     }
     if (!runtime_scene_3d_builder_reserve_triangles(
             scene,
             scene->triangleMesh.triangleCount + extra_triangles)) {
+        runtime_scene_3d_builder_set_diag("append mesh assets failed: triangle reserve failed");
         return false;
     }
 
@@ -541,6 +738,7 @@ bool RuntimeScene3DBuilder_AppendMeshAssetSet(
             runtime_scene_3d_builder_resolve_mesh_scene_object_index(instance);
         RuntimeScene3DBuilderMeshBounds bounds =
             runtime_scene_3d_builder_mesh_bounds(document, instance);
+        int appended_triangle_count = 0;
 
         memset(primitive, 0, sizeof(*primitive));
         primitive->kind = RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH;
@@ -565,12 +763,10 @@ bool RuntimeScene3DBuilder_AppendMeshAssetSet(
             Vec3 tex0 = runtime_scene_3d_builder_object_texture_coord(p0, &bounds);
             Vec3 tex1 = runtime_scene_3d_builder_object_texture_coord(p1, &bounds);
             Vec3 tex2 = runtime_scene_3d_builder_object_texture_coord(p2, &bounds);
-            Vec3 expected_normal = vec3_normalize(vec3_cross(vec3_sub(p1, p0),
-                                                             vec3_sub(p2, p0)));
-            if (vec3_length(expected_normal) <= 1e-9) {
-                RuntimeScene3D_Reset(scene);
-                return false;
-            }
+            Vec3 expected_normal = vec3_cross(vec3_sub(p1, p0), vec3_sub(p2, p0));
+            double normal_len = vec3_length(expected_normal);
+            if (normal_len <= 1e-18) continue;
+            expected_normal = vec3_scale(expected_normal, 1.0 / normal_len);
             if (!runtime_scene_3d_builder_append_triangle_internal(scene,
                                                                    primitive_index,
                                                                    scene_object_index,
@@ -579,19 +775,32 @@ bool RuntimeScene3DBuilder_AppendMeshAssetSet(
                                                                    p2,
                                                                    expected_normal,
                                                                    (int)j,
+                                                                   false,
                                                                    bounds.valid,
                                                                    tex0,
                                                                    tex1,
                                                                    tex2)) {
+                runtime_scene_3d_builder_set_diag("append mesh assets failed: triangle append failed");
                 RuntimeScene3D_Reset(scene);
                 return false;
             }
+            appended_triangle_count += 1;
         }
+        if (appended_triangle_count <= 0) continue;
         scene->primitiveCount += 1;
     }
     scene->scope.triangleMeshEnabled = true;
-    RuntimeTriangleMesh3D_BuildBVH(&scene->triangleMesh);
+    if (require_ready_bvh && !runtime_scene_3d_builder_rebuild_bvh(scene)) {
+        RuntimeScene3D_Reset(scene);
+        return false;
+    }
     return true;
+}
+
+bool RuntimeScene3DBuilder_AppendMeshAssetSet(
+    RuntimeScene3D* scene,
+    const RayTracingRuntimeMeshAssetSet* mesh_assets) {
+    return runtime_scene_3d_builder_append_mesh_asset_set(scene, mesh_assets, true);
 }
 
 static void runtime_scene_3d_builder_fill_primitive(RuntimePrimitive3D* primitive,
@@ -655,14 +864,18 @@ static void runtime_scene_3d_builder_apply_authored_samples(RuntimeScene3D* scen
     }
 }
 
-bool RuntimeScene3DBuilder_BuildFromPrimitiveSeedStateAtT(
+static bool runtime_scene_3d_builder_build_from_primitive_seed_state_at_t(
     RuntimeScene3D* scene,
     const RuntimeSceneBridge3DPrimitiveSeedState* seed_state,
-    double normalized_t) {
+    double normalized_t,
+    bool require_ready_bvh) {
     int retained_primitive_count = 0;
     int expected_triangle_count = 0;
 
-    if (!scene || !seed_state || !seed_state->valid) return false;
+    if (!scene || !seed_state || !seed_state->valid) {
+        runtime_scene_3d_builder_set_diag("primitive seed build failed: invalid seed state");
+        return false;
+    }
 
     RuntimeScene3D_Reset(scene);
     runtime_scene_3d_builder_apply_authored_samples(scene, normalized_t);
@@ -675,8 +888,14 @@ bool RuntimeScene3DBuilder_BuildFromPrimitiveSeedStateAtT(
     }
 
     if (retained_primitive_count <= 0) return true;
-    if (!runtime_scene_3d_builder_reserve_primitives(scene, retained_primitive_count)) return false;
-    if (!runtime_scene_3d_builder_reserve_triangles(scene, expected_triangle_count)) return false;
+    if (!runtime_scene_3d_builder_reserve_primitives(scene, retained_primitive_count)) {
+        runtime_scene_3d_builder_set_diag("primitive seed build failed: primitive reserve failed");
+        return false;
+    }
+    if (!runtime_scene_3d_builder_reserve_triangles(scene, expected_triangle_count)) {
+        runtime_scene_3d_builder_set_diag("primitive seed build failed: triangle reserve failed");
+        return false;
+    }
 
     for (int i = 0; i < seed_state->primitive_count; ++i) {
         RuntimePrimitive3DKind kind =
@@ -687,14 +906,28 @@ bool RuntimeScene3DBuilder_BuildFromPrimitiveSeedStateAtT(
         primitive = &scene->primitives[scene->primitiveCount];
         runtime_scene_3d_builder_fill_primitive(primitive, &seed_state->primitives[i]);
         if (!runtime_scene_3d_builder_append_triangles(scene, scene->primitiveCount, primitive)) {
+            runtime_scene_3d_builder_set_diag("primitive seed build failed: triangle append failed");
             RuntimeScene3D_Reset(scene);
             return false;
         }
         scene->primitiveCount += 1;
     }
 
-    RuntimeTriangleMesh3D_BuildBVH(&scene->triangleMesh);
+    if (require_ready_bvh && !runtime_scene_3d_builder_rebuild_bvh(scene)) {
+        RuntimeScene3D_Reset(scene);
+        return false;
+    }
     return true;
+}
+
+bool RuntimeScene3DBuilder_BuildFromPrimitiveSeedStateAtT(
+    RuntimeScene3D* scene,
+    const RuntimeSceneBridge3DPrimitiveSeedState* seed_state,
+    double normalized_t) {
+    return runtime_scene_3d_builder_build_from_primitive_seed_state_at_t(scene,
+                                                                         seed_state,
+                                                                         normalized_t,
+                                                                         true);
 }
 
 bool RuntimeScene3DBuilder_BuildFromPrimitiveSeedState(
@@ -710,14 +943,110 @@ bool RuntimeScene3DBuilder_BuildFromBridgeSeeds(RuntimeScene3D* scene) {
 bool RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(RuntimeScene3D* scene, double normalized_t) {
     RuntimeSceneBridge3DPrimitiveSeedState seed_state = {0};
     const RayTracingRuntimeMeshAssetSet* mesh_assets = NULL;
+    int mesh_instance_count = 0;
+    int mesh_asset_count = 0;
+    runtime_scene_3d_builder_set_diag("ok");
     runtime_scene_bridge_get_last_3d_primitive_seed_state(&seed_state);
-    if (!RuntimeScene3DBuilder_BuildFromPrimitiveSeedStateAtT(scene, &seed_state, normalized_t)) {
+    if (!runtime_scene_3d_builder_build_from_primitive_seed_state_at_t(scene,
+                                                                       &seed_state,
+                                                                       normalized_t,
+                                                                       false)) {
+        char diag[512];
+        const char* lower_diag = RuntimeScene3DBuilder_LastDiagnostics();
+        snprintf(diag,
+                 sizeof(diag),
+                 "bridge primitive seed build failed: seed_valid=%s seed_primitive_count=%d seed_plane_count=%d seed_rect_prism_count=%d seed_excluded_count=%d lower=%s",
+                 seed_state.valid ? "true" : "false",
+                 seed_state.primitive_count,
+                 seed_state.plane_primitive_count,
+                 seed_state.rect_prism_primitive_count,
+                 seed_state.excluded_primitive_count,
+                 lower_diag ? lower_diag : "unknown");
+        runtime_scene_3d_builder_set_diag(diag);
         return false;
     }
     mesh_assets = ray_tracing_runtime_mesh_assets_last();
-    if (!RuntimeScene3DBuilder_AppendMeshAssetSet(scene, mesh_assets)) {
+    mesh_instance_count = mesh_assets ? mesh_assets->instance_count : -1;
+    mesh_asset_count = mesh_assets ? mesh_assets->asset_count : -1;
+    if (!runtime_scene_3d_builder_append_mesh_asset_set(scene, mesh_assets, false)) {
+        char diag[512];
+        const char* lower_diag = RuntimeScene3DBuilder_LastDiagnostics();
+        snprintf(diag,
+                 sizeof(diag),
+                 "bridge mesh append failed: seed_valid=%s seed_primitive_count=%d mesh_instance_count=%d mesh_asset_count=%d lower=%s",
+                 seed_state.valid ? "true" : "false",
+                 seed_state.primitive_count,
+                 mesh_instance_count,
+                 mesh_asset_count,
+                 lower_diag ? lower_diag : "unknown");
+        runtime_scene_3d_builder_set_diag(diag);
         return false;
     }
-    RuntimeTriangleMesh3D_BuildBVH(&scene->triangleMesh);
+    if (!scene || scene->primitiveCount <= 0 || scene->triangleMesh.triangleCount <= 0) {
+        char diag[512];
+        snprintf(diag,
+                 sizeof(diag),
+                 "bridge geometry unavailable: seed_valid=%s seed_primitive_count=%d seed_plane_count=%d seed_rect_prism_count=%d seed_excluded_count=%d mesh_instance_count=%d mesh_asset_count=%d",
+                 seed_state.valid ? "true" : "false",
+                 seed_state.primitive_count,
+                 seed_state.plane_primitive_count,
+                 seed_state.rect_prism_primitive_count,
+                 seed_state.excluded_primitive_count,
+                 mesh_instance_count,
+                 mesh_asset_count);
+        runtime_scene_3d_builder_set_diag(diag);
+        return false;
+    }
+    if (!runtime_scene_3d_builder_rebuild_bvh(scene)) {
+        char diag[512];
+        const char* lower_diag = RuntimeScene3DBuilder_LastDiagnostics();
+        snprintf(diag,
+                 sizeof(diag),
+                 "bridge bvh rebuild failed: seed_valid=%s seed_primitive_count=%d seed_plane_count=%d seed_rect_prism_count=%d seed_excluded_count=%d mesh_instance_count=%d mesh_asset_count=%d primitive_count=%d triangle_count=%d lower=%s",
+                 seed_state.valid ? "true" : "false",
+                 seed_state.primitive_count,
+                 seed_state.plane_primitive_count,
+                 seed_state.rect_prism_primitive_count,
+                 seed_state.excluded_primitive_count,
+                 mesh_instance_count,
+                 mesh_asset_count,
+                 scene ? scene->primitiveCount : -1,
+                 scene ? scene->triangleMesh.triangleCount : -1,
+                 lower_diag ? lower_diag : "unknown");
+        runtime_scene_3d_builder_set_diag(diag);
+        return false;
+    }
+    runtime_scene_3d_builder_set_diag("ok");
     return true;
+}
+
+bool RuntimeScene3DBuilder_BuildRouteProbeFromBridgeSeedsAtT(RuntimeScene3D* scene,
+                                                             double normalized_t) {
+    RuntimeSceneBridge3DPrimitiveSeedState seed_state = {0};
+    const RayTracingRuntimeMeshAssetSet* mesh_assets = NULL;
+    runtime_scene_3d_builder_set_diag("ok");
+    mesh_assets = ray_tracing_runtime_mesh_assets_last();
+    if (!mesh_assets || mesh_assets->instance_count <= 0) {
+        runtime_scene_bridge_get_last_3d_primitive_seed_state(&seed_state);
+        if (!seed_state.valid || seed_state.primitive_count <= 0) {
+            runtime_scene_3d_builder_set_diag("route probe failed: no mesh assets and no valid primitive seeds");
+            return false;
+        }
+        for (int i = 0; i < seed_state.primitive_count; ++i) {
+            if (!seed_state.primitives[i].has_dimensions) {
+                runtime_scene_3d_builder_set_diag("route probe failed: primitive seed missing dimensions");
+                return false;
+            }
+        }
+        return RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(scene, normalized_t);
+    }
+
+    runtime_scene_bridge_get_last_3d_primitive_seed_state(&seed_state);
+    if (!runtime_scene_3d_builder_build_from_primitive_seed_state_at_t(scene,
+                                                                       &seed_state,
+                                                                       normalized_t,
+                                                                       false)) {
+        return false;
+    }
+    return runtime_scene_3d_builder_append_mesh_asset_set(scene, mesh_assets, false);
 }

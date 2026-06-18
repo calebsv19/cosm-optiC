@@ -16,7 +16,12 @@
     "temporal_frames": 1
   },
   "inspection": {
-    "preset": "glass_preview"
+    "preset": "glass_preview",
+    "environment_light_mode": "ambient",
+    "ambient_strength": 0.30,
+    "environment_preset": "sky",
+    "background_brightness": 0.42,
+    "background_color": { "r": 0.90, "g": 0.95, "b": 1.00 }
   },
   "output": {
     "root": "../../build/agent_runs/ray_tracing/preflight_smoke",

@@ -18,7 +18,7 @@ static bool ray_tracing_mode_backend_native_route_ready(double* out_camera_z,
     if (!seed_state.valid) return false;
 
     RuntimeScene3D_Init(&scene);
-    ready = RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(&scene, 0.0) &&
+    ready = RuntimeScene3DBuilder_BuildRouteProbeFromBridgeSeedsAtT(&scene, 0.0) &&
             scene.primitiveCount > 0 && scene.triangleMesh.triangleCount > 0;
     if (ready) {
         if (out_camera_z) {

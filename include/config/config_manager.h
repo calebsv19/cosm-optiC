@@ -119,6 +119,7 @@ typedef struct {
     int fps;
     double frameDuration;
     char inputRoot[256];
+    char meshAssetRoot[PATH_MAX];
     char outputRoot[256];
     char frameDir[256];
     char videoOutputRoot[256];

@@ -30,6 +30,16 @@ static bool dir_exists(const char *path) {
     return true;
 }
 
+static bool root_list_contains(const char **roots, size_t count, const char *path) {
+    if (!roots || !path || !path[0]) return false;
+    for (size_t i = 0; i < count; ++i) {
+        if (roots[i] && strcmp(roots[i], path) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool resolve_candidate_program_root(const char *candidate,
                                            char *out,
                                            size_t out_size) {
@@ -172,18 +182,11 @@ static void append_workspace_program_roots(const char *base_dir,
     for (size_t i = 0; i < 4; ++i) {
         char resolved[PATH_MAX];
         const char *final_path = candidates[i];
-        bool duplicate = false;
         if (!dir_exists(candidates[i])) continue;
         if (realpath(candidates[i], resolved)) {
             final_path = resolved;
         }
-        for (size_t r = 0; r < *count; ++r) {
-            if (roots[r] && strcmp(roots[r], final_path) == 0) {
-                duplicate = true;
-                break;
-            }
-        }
-        if (duplicate) continue;
+        if (root_list_contains(roots, *count, final_path)) continue;
         if (*count >= max_roots) return;
         if (*discovered_count >= 16u) return;
         snprintf(discovered[*discovered_count],

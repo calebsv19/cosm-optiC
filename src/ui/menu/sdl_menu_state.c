@@ -507,6 +507,31 @@ static void sync_forward_decay_slider_from_settings(MenuRuntimeState* state) {
     state->forwardDecaySliderValue = (int)lround(distance);
 }
 
+static void sync_top_fill_strength_slider_from_settings(MenuRuntimeState* state) {
+    double strength;
+    if (!state) return;
+    if (state->draggingSlider &&
+        state->selectedSlider == &state->topFillStrengthSliderValue) {
+        return;
+    }
+    strength = clamp_double(animSettings.topFillStrength, 0.0, 20.0);
+    state->topFillStrengthSliderValue = (int)lround(strength * 100.0);
+}
+
+static void sync_environment_background_slider_from_settings(MenuRuntimeState* state) {
+    double brightness;
+    if (!state) return;
+    if (state->draggingSlider &&
+        state->selectedSlider == &state->environmentBackgroundBrightnessSliderValue) {
+        return;
+    }
+    brightness = animSettings.environmentBackgroundBrightnessAuto
+                     ? clamp_double(animSettings.environmentBrightness / 255.0, 0.0, 4.0)
+                     : clamp_double(animSettings.environmentBackgroundBrightness, 0.0, 4.0);
+    state->environmentBackgroundBrightnessSliderValue =
+        (int)lround(brightness * 100.0);
+}
+
 static void sync_secondary_diffuse_samples_3d_slider_from_settings(MenuRuntimeState* state) {
     if (!state) return;
     if (state->draggingSlider &&
@@ -576,6 +601,8 @@ void menu_state_sync_from_anim(MenuRuntimeState* state) {
     sync_light_slider_from_settings(state);
     sync_decay_softness_slider_from_settings(state);
     sync_forward_decay_slider_from_settings(state);
+    sync_top_fill_strength_slider_from_settings(state);
+    sync_environment_background_slider_from_settings(state);
     sync_bounce_depth_3d_slider_from_settings(state);
     sync_roulette_threshold_3d_slider_from_settings(state);
     sync_secondary_diffuse_samples_3d_slider_from_settings(state);
@@ -667,6 +694,20 @@ void menu_state_apply_special_slider_rules(MenuRuntimeState* state, int* target)
             state->forwardDecaySliderValue = SDL_MENU_FORWARD_FALLOFF_DISTANCE_MAX;
         }
         animSettings.forwardDecay = state->forwardDecaySliderValue;
+    } else if (target == &state->topFillStrengthSliderValue) {
+        if (state->topFillStrengthSliderValue < 0) state->topFillStrengthSliderValue = 0;
+        if (state->topFillStrengthSliderValue > 2000) state->topFillStrengthSliderValue = 2000;
+        animSettings.topFillStrength = state->topFillStrengthSliderValue / 100.0;
+    } else if (target == &state->environmentBackgroundBrightnessSliderValue) {
+        if (state->environmentBackgroundBrightnessSliderValue < 0) {
+            state->environmentBackgroundBrightnessSliderValue = 0;
+        }
+        if (state->environmentBackgroundBrightnessSliderValue > 400) {
+            state->environmentBackgroundBrightnessSliderValue = 400;
+        }
+        animSettings.environmentBackgroundBrightnessAuto = false;
+        animSettings.environmentBackgroundBrightness =
+            state->environmentBackgroundBrightnessSliderValue / 100.0;
     } else if (target == &state->bounceDepth3DSliderValue) {
         state->bounceDepth3DSliderValue =
             clamp_bounce_depth_3d_menu(state->bounceDepth3DSliderValue);
@@ -739,6 +780,8 @@ void menu_state_init(MenuRuntimeState* state) {
     state->lightIntensitySliderValue = (int)lround(RAY_TRACING_DEFAULT_LIGHT_INTENSITY * 100.0);
     state->lightDecaySoftnessSliderValue = 100;
     state->forwardDecaySliderValue = 2000;
+    state->topFillStrengthSliderValue = 100;
+    state->environmentBackgroundBrightnessSliderValue = 0;
     state->bounceDepth3DSliderValue = RUNTIME_3D_BOUNCE_DEPTH_DEFAULT;
     state->rouletteThreshold3DSliderValue =
         (int)lround(RUNTIME_3D_ROULETTE_THRESHOLD_DEFAULT * 1000.0);
@@ -748,11 +791,17 @@ void menu_state_init(MenuRuntimeState* state) {
     state->renderScale3DSliderValue = RUNTIME_3D_RENDER_SCALE_DEFAULT;
     state->manifestDropdownOpen = false;
     state->volumeDropdownOpen = false;
+    state->rendererControlsTab = MENU_RENDERER_CONTROLS_LIGHTING;
     menu_state_sync_load_scene_dropdown_flags(state);
     menu_state_sync_from_anim(state);
     menu_state_sync_source_and_library(state);
     if (animSettings.inputRoot[0]) {
         (void)setenv("RAY_TRACING_INPUT_ROOT", animSettings.inputRoot, 1);
+    }
+    if (animSettings.meshAssetRoot[0]) {
+        (void)setenv("RAY_TRACING_MESH_ASSET_ROOT", animSettings.meshAssetRoot, 1);
+    } else {
+        (void)unsetenv("RAY_TRACING_MESH_ASSET_ROOT");
     }
     if (animSettings.outputRoot[0]) {
         (void)setenv("RAY_TRACING_OUTPUT_ROOT", animSettings.outputRoot, 1);
@@ -763,6 +812,7 @@ void menu_state_init(MenuRuntimeState* state) {
     menu_state_refresh_manifest_options(state);
     menu_state_refresh_volume_options(state);
     state->editingInputRoot = false;
+    state->editingMeshAssetRoot = false;
     state->editingOutputRoot = false;
     state->editingFrameDir = false;
     state->editingVideoOutputRoot = false;
@@ -790,6 +840,7 @@ void menu_state_reset_defaults(MenuRuntimeState* state) {
     animSettings.fps = 30;
     strncpy(animSettings.inputRoot, ray_tracing_default_input_root(), sizeof(animSettings.inputRoot) - 1);
     animSettings.inputRoot[sizeof(animSettings.inputRoot) - 1] = '\0';
+    animSettings.meshAssetRoot[0] = '\0';
     strncpy(animSettings.outputRoot, ray_tracing_default_output_root(), sizeof(animSettings.outputRoot) - 1);
     animSettings.outputRoot[sizeof(animSettings.outputRoot) - 1] = '\0';
     strncpy(animSettings.frameDir, ray_tracing_default_frame_dir(), sizeof(animSettings.frameDir) - 1);
@@ -799,10 +850,12 @@ void menu_state_reset_defaults(MenuRuntimeState* state) {
             sizeof(animSettings.videoOutputRoot) - 1);
     animSettings.videoOutputRoot[sizeof(animSettings.videoOutputRoot) - 1] = '\0';
     (void)setenv("RAY_TRACING_INPUT_ROOT", animSettings.inputRoot, 1);
+    (void)unsetenv("RAY_TRACING_MESH_ASSET_ROOT");
     (void)setenv("RAY_TRACING_OUTPUT_ROOT", animSettings.outputRoot, 1);
     (void)setenv("RAY_TRACING_VIDEO_OUTPUT_ROOT", animSettings.videoOutputRoot, 1);
     if (state) {
         state->editingInputRoot = false;
+        state->editingMeshAssetRoot = false;
         state->editingOutputRoot = false;
         state->editingFrameDir = false;
         state->editingVideoOutputRoot = false;
@@ -822,11 +875,19 @@ void menu_state_reset_defaults(MenuRuntimeState* state) {
     animSettings.pathRussianRoulette = true;
     animSettings.pathEnableMIS = true;
     animSettings.environmentBrightness = 0.0;
+    animSettings.environmentPreset = ENVIRONMENT_PRESET_SKY;
+    animSettings.environmentBackgroundLightingAuthored = true;
+    animSettings.environmentBackgroundBrightnessAuto = true;
+    animSettings.environmentBackgroundBrightness = 0.0;
+    animSettings.environmentBackgroundColorR = 1.0;
+    animSettings.environmentBackgroundColorG = 1.0;
+    animSettings.environmentBackgroundColorB = 1.0;
     animSettings.pathSeed = 1;
     animSettings.cacheContributionWeight = 1.0;
     animSettings.bsdfModel = 1;
     animSettings.lightIntensity = RAY_TRACING_DEFAULT_LIGHT_INTENSITY;
     animSettings.environmentLightMode = ENVIRONMENT_LIGHT_MODE_OFF;
+    animSettings.topFillStrength = 1.0;
     animSettings.disneyDenoiseEnabled = true;
     animSettings.spaceMode = SPACE_MODE_2D;
     animSettings.sceneSource = SCENE_SOURCE_CONFIG_2D;
@@ -839,6 +900,7 @@ void menu_state_reset_defaults(MenuRuntimeState* state) {
     animSettings.previewDuration = 5.0;
     if (state) {
         state->sliderScroll = 0.0f;
+        state->rendererControlsTab = MENU_RENDERER_CONTROLS_LIGHTING;
     }
     double diag = hypot(sceneSettings.windowWidth, sceneSettings.windowHeight);
     animSettings.forwardDecay = (diag > 0.0) ? diag : 2000.0;

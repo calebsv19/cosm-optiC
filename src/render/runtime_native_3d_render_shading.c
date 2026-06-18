@@ -58,6 +58,82 @@ static RuntimeNative3DPrimaryTrace runtime_native_3d_render_trace_primary(
     return trace;
 }
 
+static void runtime_native_3d_render_record_disney_v2_emissive_area_stats(
+    RuntimeNative3DRenderStats* stats,
+    const RuntimeDisneyV2_3DResult* result) {
+    if (!stats || !result) return;
+    if (result->emissiveAreaCandidateCount > stats->emissiveAreaCandidateCount) {
+        stats->emissiveAreaCandidateCount = result->emissiveAreaCandidateCount;
+    }
+    stats->emissiveAreaSelectedCandidateCount +=
+        result->emissiveAreaSelectedCandidateCount;
+    stats->emissiveAreaVisibilityRayCount += result->emissiveAreaVisibilityRayCount;
+    stats->emissiveAreaPrimarySampleCount += result->emissiveAreaPrimarySampleCount;
+    stats->emissiveAreaRecursiveSampleCount += result->emissiveAreaRecursiveSampleCount;
+    stats->emissiveAreaRecursivePolicySkipCount +=
+        result->emissiveAreaRecursivePolicySkipCount;
+    stats->emissiveAreaRecursiveCandidateCapSkipCount +=
+        result->emissiveAreaRecursiveCandidateCapSkipCount;
+    stats->emissiveAreaRecursiveTriangleCapSkipCount +=
+        result->emissiveAreaRecursiveTriangleCapSkipCount;
+    if (result->emissiveAreaRecursiveCandidateCap >
+        stats->emissiveAreaRecursiveCandidateCap) {
+        stats->emissiveAreaRecursiveCandidateCap =
+            result->emissiveAreaRecursiveCandidateCap;
+    }
+    if (result->emissiveAreaRecursiveTriangleCap >
+        stats->emissiveAreaRecursiveTriangleCap) {
+        stats->emissiveAreaRecursiveTriangleCap =
+            result->emissiveAreaRecursiveTriangleCap;
+    }
+    stats->emissiveAreaFullScanFallbackCount += result->emissiveAreaFullScanFallbackCount;
+}
+
+static void runtime_native_3d_render_record_disney_v2_mirror_stats(
+    RuntimeNative3DRenderStats* stats,
+    const RuntimeDisneyV2_3DResult* result) {
+    if (!stats || !result) return;
+
+    if (result->mirrorDominance > stats->maxMirrorDominance) {
+        stats->maxMirrorDominance = result->mirrorDominance;
+    }
+    if (result->mirrorDominance >= 0.75) {
+        stats->mirrorDominantPixelCount += 1;
+    }
+    if (result->mirrorBaseRadianceBeforeAttenuation > 1e-9 &&
+        result->mirrorBaseRadianceAfterAttenuation <
+            result->mirrorBaseRadianceBeforeAttenuation * 0.75) {
+        stats->mirrorBaseAttenuatedPixelCount += 1;
+    }
+    if (result->specularReflectionHitCount > 0) {
+        stats->mirrorReflectionHitPixelCount += 1;
+    }
+    if (result->specularReflectionEmitterHitCount > 0) {
+        stats->mirrorEmitterReflectionPixelCount += 1;
+    }
+    if (result->specularReflectionGeometryHitCount > 0) {
+        stats->mirrorGeometryReflectionPixelCount += 1;
+    }
+    if (result->specularReflectionRadiance > stats->maxMirrorSpecularReflectionRadiance) {
+        stats->maxMirrorSpecularReflectionRadiance = result->specularReflectionRadiance;
+    }
+    if (result->mirrorBaseRadianceBeforeAttenuation >
+        stats->maxMirrorBaseRadianceBeforeAttenuation) {
+        stats->maxMirrorBaseRadianceBeforeAttenuation =
+            result->mirrorBaseRadianceBeforeAttenuation;
+    }
+    if (result->mirrorBaseRadianceAfterAttenuation >
+        stats->maxMirrorBaseRadianceAfterAttenuation) {
+        stats->maxMirrorBaseRadianceAfterAttenuation =
+            result->mirrorBaseRadianceAfterAttenuation;
+    }
+    stats->totalMirrorSpecularReflectionRadiance += result->specularReflectionRadiance;
+    stats->totalMirrorBaseRadianceBeforeAttenuation +=
+        result->mirrorBaseRadianceBeforeAttenuation;
+    stats->totalMirrorBaseRadianceAfterAttenuation +=
+        result->mirrorBaseRadianceAfterAttenuation;
+}
+
 static bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
                                                         int radiance_stride,
                                                         int width,
@@ -86,7 +162,6 @@ static bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
         }
         return true;
     }
-
     for (int y = start_y; y < end_y; ++y) {
         for (int x = start_x; x < end_x; ++x) {
             RuntimeDirectLight3DResult result = {0};
@@ -330,7 +405,6 @@ static bool runtime_native_3d_render_shade_material(float* radiance_buffer,
         }
         return true;
     }
-
     for (int y = start_y; y < end_y; ++y) {
         for (int x = start_x; x < end_x; ++x) {
             RuntimeMaterialResponse3DResult result = {0};
@@ -458,7 +532,6 @@ static bool runtime_native_3d_render_shade_emission_transparency(
         }
         return true;
     }
-
     for (int y = start_y; y < end_y; ++y) {
         for (int x = start_x; x < end_x; ++x) {
             RuntimeEmissionTransparency3DResult result = {0};
@@ -585,7 +658,6 @@ static bool runtime_native_3d_render_shade_disney(float* radiance_buffer,
         }
         return true;
     }
-
     for (int y = start_y; y < end_y; ++y) {
         for (int x = start_x; x < end_x; ++x) {
             RuntimeDisney3DResult result = {0};
@@ -712,6 +784,9 @@ static bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
         }
         return true;
     }
+    if (scene->emissiveLightSet.valid) {
+        stats.emissiveAreaCandidateCount = scene->emissiveLightSet.candidateCount;
+    }
 
     for (int y = start_y; y < end_y; ++y) {
         for (int x = start_x; x < end_x; ++x) {
@@ -786,6 +861,8 @@ static bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
             stats.secondaryRayCount += result.secondaryRayCount;
             stats.secondaryHitCount += result.secondaryHitCount;
             stats.secondaryContributingHitCount += result.secondaryContributingHitCount;
+            runtime_native_3d_render_record_disney_v2_emissive_area_stats(&stats, &result);
+            runtime_native_3d_render_record_disney_v2_mirror_stats(&stats, &result);
             if (result.radiance > stats.maxRadiance) {
                 stats.maxRadiance = result.radiance;
             }

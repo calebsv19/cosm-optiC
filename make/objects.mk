@@ -32,6 +32,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/materials/runtime_material_authored_texture_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_authored_texture_3d_manifest.o \
 	$(BUILD_DIR)/render/materials/runtime_material_payload_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_water_material_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_principled_bsdf_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_texture_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_texture_stack_3d.o \
@@ -70,6 +71,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/import/fluid_volume_import_3d.o \
 	$(BUILD_DIR)/import/fluid_volume_source_import_3d.o \
 	$(BUILD_DIR)/import/fluid_volume_pack_import_3d.o \
+	$(BUILD_DIR)/import/water_surface_import.o \
 	$(BUILD_DIR)/import/fluid_pack_import.o \
 	$(BUILD_DIR)/import/scene_bundle_import.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_json_utils.o \
@@ -106,6 +108,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(CORE_SCENE_OBJS) \
 	$(CORE_SCENE_COMPILE_OBJS) \
 	$(CORE_MESH_ASSET_OBJS) \
+	$(CORE_MESH_PREVIEW_OBJS) \
 	$(CORE_AUTHORED_TEXTURE_OBJS) \
 	$(CORE_OBJECT_OBJS) \
 	$(CORE_UNITS_OBJS) \
@@ -150,6 +153,7 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry_builder_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry_trace_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_mesh_asset_loader.o \
+	$(BUILD_DIR)/tests/test_water_surface_runtime.o \
 	$(BUILD_DIR)/tests/test_runtime_volume_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials.o \
 	$(BUILD_DIR)/tests/test_runtime_material_authored_texture_validation_suite.o \
@@ -225,6 +229,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_native_3d_sampling.o \
 	$(BUILD_DIR)/render/materials/runtime_material_authored_texture_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_payload_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_water_material_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_principled_bsdf_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_texture_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_texture_stack_3d.o \
@@ -317,6 +322,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/import/fluid_volume_import_3d.o \
 	$(BUILD_DIR)/import/fluid_volume_source_import_3d.o \
 	$(BUILD_DIR)/import/fluid_volume_pack_import_3d.o \
+	$(BUILD_DIR)/import/water_surface_import.o \
 	$(BUILD_DIR)/import/fluid_pack_import.o \
 	$(BUILD_DIR)/import/scene_bundle_import.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_json_utils.o \
@@ -350,6 +356,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/core_mesh_asset/core_mesh_asset.o \
 	$(BUILD_DIR)/core_mesh_asset/core_mesh_asset_authoring_document.o \
 	$(BUILD_DIR)/core_mesh_asset/core_mesh_asset_runtime_document.o \
+	$(BUILD_DIR)/core_mesh_preview/core_mesh_preview.o \
 	$(BUILD_DIR)/core_object/core_object.o \
 	$(BUILD_DIR)/core_units/core_units.o \
 	$(BUILD_DIR)/core_space/core_space.o \
@@ -399,6 +406,7 @@ CORE_MESH_ASSET_SRCS := \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_authoring_document.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c
+CORE_MESH_PREVIEW_SRCS := $(CORE_MESH_PREVIEW_DIR)/src/core_mesh_preview.c
 CORE_OBJECT_SRCS := $(CORE_OBJECT_DIR)/src/core_object.c
 CORE_UNITS_SRCS := $(CORE_UNITS_DIR)/src/core_units.c
 CORE_SPACE_SRCS := $(CORE_SPACE_DIR)/src/core_space.c
@@ -430,6 +438,7 @@ CORE_SCENE_OBJS := $(patsubst $(CORE_SCENE_DIR)/src/%.c,$(BUILD_DIR)/core_scene/
 CORE_AUTHORED_TEXTURE_OBJS := $(patsubst $(CORE_AUTHORED_TEXTURE_DIR)/src/%.c,$(BUILD_DIR)/core_authored_texture/%.o,$(CORE_AUTHORED_TEXTURE_SRCS))
 CORE_SCENE_COMPILE_OBJS := $(patsubst $(CORE_SCENE_COMPILE_DIR)/src/%.c,$(BUILD_DIR)/core_scene_compile/%.o,$(CORE_SCENE_COMPILE_SRCS))
 CORE_MESH_ASSET_OBJS := $(patsubst $(CORE_MESH_ASSET_DIR)/src/%.c,$(BUILD_DIR)/core_mesh_asset/%.o,$(CORE_MESH_ASSET_SRCS))
+CORE_MESH_PREVIEW_OBJS := $(patsubst $(CORE_MESH_PREVIEW_DIR)/src/%.c,$(BUILD_DIR)/core_mesh_preview/%.o,$(CORE_MESH_PREVIEW_SRCS))
 CORE_OBJECT_OBJS := $(patsubst $(CORE_OBJECT_DIR)/src/%.c,$(BUILD_DIR)/core_object/%.o,$(CORE_OBJECT_SRCS))
 CORE_UNITS_OBJS := $(patsubst $(CORE_UNITS_DIR)/src/%.c,$(BUILD_DIR)/core_units/%.o,$(CORE_UNITS_SRCS))
 CORE_SPACE_OBJS := $(patsubst $(CORE_SPACE_DIR)/src/%.c,$(BUILD_DIR)/core_space/%.o,$(CORE_SPACE_SRCS))
@@ -450,6 +459,17 @@ TEST_DEPS += $(KIT_RENDER_OBJS) $(CORE_PANE_OBJS) $(KIT_PANE_OBJS) $(KIT_WORKSPA
 
 OBJ := $(OBJ) $(TIMER_HUD_OBJS) $(TIMER_HUD_EXTERNAL_OBJS) \
 	$(patsubst $(VK_RENDERER_DIR)/src/%.c,$(BUILD_DIR)/vk_renderer/%.o,$(VK_RENDERER_SRCS)) \
-	$(CORE_BASE_OBJS) $(CORE_IO_OBJS) $(CORE_DATA_OBJS) $(CORE_PACK_OBJS) $(CORE_QUEUE_OBJS) $(CORE_TIME_OBJS) $(CORE_WORKERS_OBJS) $(CORE_SIM_OBJS) $(CORE_SCENE_OBJS) $(CORE_AUTHORED_TEXTURE_OBJS) $(CORE_SCENE_COMPILE_OBJS) $(CORE_MESH_ASSET_OBJS) $(CORE_OBJECT_OBJS) $(CORE_UNITS_OBJS) $(CORE_SPACE_OBJS) $(CORE_PANE_OBJS) $(CORE_THEME_OBJS) $(CORE_FONT_OBJS) $(CORE_HEADLESS_JOB_OBJS) $(KIT_RENDER_OBJS) $(KIT_PANE_OBJS) $(KIT_VIZ_OBJS) $(KIT_RUNTIME_DIAG_OBJS) $(KIT_WORKSPACE_AUTHORING_OBJS)
+	$(CORE_BASE_OBJS) $(CORE_IO_OBJS) $(CORE_DATA_OBJS) $(CORE_PACK_OBJS) $(CORE_QUEUE_OBJS) $(CORE_TIME_OBJS) $(CORE_WORKERS_OBJS) $(CORE_SIM_OBJS) $(CORE_SCENE_OBJS) $(CORE_AUTHORED_TEXTURE_OBJS) $(CORE_SCENE_COMPILE_OBJS) $(CORE_MESH_ASSET_OBJS) $(CORE_MESH_PREVIEW_OBJS) $(CORE_OBJECT_OBJS) $(CORE_UNITS_OBJS) $(CORE_SPACE_OBJS) $(CORE_PANE_OBJS) $(CORE_THEME_OBJS) $(CORE_FONT_OBJS) $(CORE_HEADLESS_JOB_OBJS) $(KIT_RENDER_OBJS) $(KIT_PANE_OBJS) $(KIT_VIZ_OBJS) $(KIT_RUNTIME_DIAG_OBJS) $(KIT_WORKSPACE_AUTHORING_OBJS)
 TEST_DEPS := $(sort $(TEST_DEPS) $(filter-out $(BUILD_DIR)/app/animation.o $(BUILD_DIR)/app/ray_tracing_job_runner.o,$(OBJ)))
-DEP := $(OBJ:.o=.d)
+DEP := $(sort \
+	$(OBJ:.o=.d) \
+	$(TEST_OBJ:.o=.d) \
+	$(TEST_DEPS:.o=.d) \
+	$(NATIVE3D_AUDIT_OBJ:.o=.d) \
+	$(NATIVE3D_AUDIT_DEPS:.o=.d) \
+	$(RAY_TRACING_RENDER_HEADLESS_OBJ:.o=.d) \
+	$(RAY_TRACING_RENDER_HEADLESS_DEPS:.o=.d) \
+	$(RAY_TRACING_JOB_RUNNER_OBJ:.o=.d) \
+	$(RAY_TRACING_JOB_RUNNER_DEPS:.o=.d) \
+	$(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_OBJ:.o=.d) \
+	$(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_DEPS:.o=.d))

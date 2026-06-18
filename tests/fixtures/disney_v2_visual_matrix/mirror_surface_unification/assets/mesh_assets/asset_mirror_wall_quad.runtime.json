@@ -1,0 +1,38 @@
+{
+  "schema_family": "codework_geometry",
+  "schema_variant": "mesh_asset_runtime_v1",
+  "schema_version": 1,
+  "asset_id": "asset_mirror_wall_quad",
+  "source_asset_id": "asset_mirror_wall_quad",
+  "asset_type": "solid_mesh",
+  "local_bounds": {
+    "min": { "x": -1.2, "y": 0.0, "z": -0.85 },
+    "max": { "x": 1.2, "y": 0.0, "z": 1.05 }
+  },
+  "topology_flags": {
+    "closed_volume": false,
+    "manifold_expected": false
+  },
+  "mesh": {
+    "vertex_count": 4,
+    "triangle_count": 2,
+    "vertices": [
+      { "x": -1.2, "y": 0.0, "z": -0.85 },
+      { "x": 1.2, "y": 0.0, "z": -0.85 },
+      { "x": -1.2, "y": 0.0, "z": 1.05 },
+      { "x": 1.2, "y": 0.0, "z": 1.05 }
+    ],
+    "triangles": [
+      { "a": 0, "b": 1, "c": 2, "surface_group_id": "mirror_wall" },
+      { "a": 1, "b": 3, "c": 2, "surface_group_id": "mirror_wall" }
+    ]
+  },
+  "surface_groups": [
+    {
+      "group_id": "mirror_wall",
+      "semantic": "mirror_surface",
+      "triangle_span": { "start": 0, "count": 2 }
+    }
+  ],
+  "extensions": {}
+}

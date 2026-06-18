@@ -104,6 +104,38 @@ static const char* menu_upscale_mode_button_label(void) {
     }
 }
 
+static const char* menu_environment_preset_button_label(void) {
+    switch ((EnvironmentPreset)animSettings.environmentPreset) {
+        case ENVIRONMENT_PRESET_NEUTRAL:
+            return "Preset: Neutral";
+        case ENVIRONMENT_PRESET_WARM_SKY:
+            return "Preset: Warm";
+        case ENVIRONMENT_PRESET_SKY:
+        default:
+            return "Preset: Sky";
+    }
+}
+
+static const char* menu_environment_light_button_label(void) {
+    if (animSettings.environmentLightMode == ENVIRONMENT_LIGHT_MODE_TOP_FILL) {
+        return "Env: Top Fill";
+    }
+    if (animSettings.environmentLightMode == ENVIRONMENT_LIGHT_MODE_AMBIENT) {
+        return "Env: Ambient";
+    }
+    return "Env: Off";
+}
+
+static const char* menu_forward_falloff_button_label(void) {
+    if (animSettings.forwardFalloffMode == FORWARD_FALLOFF_MODE_LINEAR) {
+        return "Falloff: Linear";
+    }
+    if (animSettings.forwardFalloffMode == FORWARD_FALLOFF_MODE_NONE) {
+        return "Falloff: None";
+    }
+    return "Falloff: Quadratic";
+}
+
 void menu_render_frame(SDL_Renderer* renderer,
                        TTF_Font* font,
                        MenuRuntimeState* state,
@@ -189,6 +221,13 @@ void menu_render_frame(SDL_Renderer* renderer,
     menu_render_draw_button_rect(renderer, font, &buttons.inputRootEditRect, "Edit", state->editingInputRoot);
     menu_render_draw_button_rect(renderer, font, &buttons.inputRootFolderRect, "Folder", false);
     menu_render_draw_button_rect(renderer, font, &buttons.inputRootApplyRect, "Apply", false);
+    menu_render_draw_root_row(renderer, font, &buttons.meshAssetRootValueRect,
+                              "Mesh Root",
+                              state->editingMeshAssetRoot ? state->pathInputBuffer : animSettings.meshAssetRoot,
+                              state->editingMeshAssetRoot);
+    menu_render_draw_button_rect(renderer, font, &buttons.meshAssetRootEditRect, "Edit", state->editingMeshAssetRoot);
+    menu_render_draw_button_rect(renderer, font, &buttons.meshAssetRootFolderRect, "Folder", false);
+    menu_render_draw_button_rect(renderer, font, &buttons.meshAssetRootApplyRect, "Apply", false);
     if (buttons.attachVolumeRect.w > 0 && buttons.attachVolumeRect.h > 0) {
         char volumeLabel[160];
         menu_render_format_volume_button_label(state, volumeLabel, sizeof(volumeLabel));
@@ -245,48 +284,73 @@ void menu_render_frame(SDL_Renderer* renderer,
         state->volumeThumbHeight = 0.0f;
         state->volumeTrackHeight = 0.0f;
     }
-    const char* falloffLabel = "Quadratic (1/r^2)";
-    if (animSettings.forwardFalloffMode == FORWARD_FALLOFF_MODE_LINEAR) {
-        falloffLabel = "Linear (1/r)";
-    } else if (animSettings.forwardFalloffMode == FORWARD_FALLOFF_MODE_NONE) {
-        falloffLabel = "Falloff: None";
-    }
-    menu_render_draw_button_rect(renderer, font, &buttons.falloffRect, falloffLabel,
-                                 animSettings.forwardFalloffMode == FORWARD_FALLOFF_MODE_LINEAR);
-
-    const char* tileButtonLabel = animSettings.useTiledRenderer ? "Tile Renderer: ON" : "Tile Renderer: OFF";
-    menu_render_draw_button_rect(renderer, font, &buttons.tileRect, tileButtonLabel, animSettings.useTiledRenderer);
-
-    const char* previewLabel = animSettings.tilePreviewEnabled ? "Tile Preview: ON" : "Tile Preview: OFF";
-    menu_render_draw_button_rect(renderer, font, &buttons.tilePreviewRect, previewLabel, animSettings.tilePreviewEnabled);
-
-    const char* denoiseLabel = animSettings.disneyDenoiseEnabled ? "Disney Denoise: ON"
-                                                                 : "Disney Denoise: OFF";
-    menu_render_draw_button_rect(renderer, font, &buttons.denoiseRect, denoiseLabel, animSettings.disneyDenoiseEnabled);
-
-    const char* environmentLightLabel = "Env Light: Off";
-    if (animSettings.environmentLightMode == ENVIRONMENT_LIGHT_MODE_TOP_FILL) {
-        environmentLightLabel = "Env Light: Top Fill";
-    } else if (animSettings.environmentLightMode == ENVIRONMENT_LIGHT_MODE_AMBIENT) {
-        environmentLightLabel = "Env Light: Ambient";
-    }
     menu_render_draw_button_rect(renderer,
                                  font,
-                                 &buttons.topFillRect,
-                                 environmentLightLabel,
-                                 animSettings.environmentLightMode != ENVIRONMENT_LIGHT_MODE_OFF);
-
+                                 &buttons.rendererLightingTabRect,
+                                 "Lighting",
+                                 state->rendererControlsTab == MENU_RENDERER_CONTROLS_LIGHTING);
     menu_render_draw_button_rect(renderer,
                                  font,
-                                 &buttons.upscaleModeRect,
-                                 menu_upscale_mode_button_label(),
-                                 animSettings.upscaleMode3D != RUNTIME_3D_UPSCALE_MODE_OFF);
-
-    if (buttons.showLightHeight) {
-        char heightLabel[64];
-        snprintf(heightLabel, sizeof(heightLabel), "Light Height: %.1f", animSettings.lightHeight);
-        menu_render_draw_button_rect(renderer, font, &buttons.lightHeightRect, heightLabel, true);
+                                 &buttons.rendererPerformanceTabRect,
+                                 "Performance",
+                                 state->rendererControlsTab == MENU_RENDERER_CONTROLS_PERFORMANCE);
+    if (state->rendererControlsTab == MENU_RENDERER_CONTROLS_PERFORMANCE) {
+        const char* tileButtonLabel =
+            animSettings.useTiledRenderer ? "Tile Renderer: ON" : "Tile Renderer: OFF";
+        const char* previewLabel =
+            animSettings.tilePreviewEnabled ? "Tile Preview: ON" : "Tile Preview: OFF";
+        const char* denoiseLabel = animSettings.disneyDenoiseEnabled
+                                       ? "Disney Denoise: ON"
+                                       : "Disney Denoise: OFF";
+        menu_render_draw_button_rect(renderer,
+                                     font,
+                                     &buttons.tileRect,
+                                     tileButtonLabel,
+                                     animSettings.useTiledRenderer);
+        menu_render_draw_button_rect(renderer,
+                                     font,
+                                     &buttons.tilePreviewRect,
+                                     previewLabel,
+                                     animSettings.tilePreviewEnabled);
+        menu_render_draw_button_rect(renderer,
+                                     font,
+                                     &buttons.denoiseRect,
+                                     denoiseLabel,
+                                     animSettings.disneyDenoiseEnabled);
+        menu_render_draw_button_rect(renderer,
+                                     font,
+                                     &buttons.upscaleModeRect,
+                                     menu_upscale_mode_button_label(),
+                                     animSettings.upscaleMode3D != RUNTIME_3D_UPSCALE_MODE_OFF);
+    } else {
+        menu_render_draw_button_rect(renderer,
+                                     font,
+                                     &buttons.topFillRect,
+                                     menu_environment_light_button_label(),
+                                     animSettings.environmentLightMode != ENVIRONMENT_LIGHT_MODE_OFF);
+        menu_render_draw_button_rect(renderer,
+                                     font,
+                                     &buttons.environmentPresetRect,
+                                     menu_environment_preset_button_label(),
+                                     animSettings.environmentPreset != ENVIRONMENT_PRESET_NEUTRAL);
+        menu_render_draw_button_rect(renderer,
+                                     font,
+                                     &buttons.falloffRect,
+                                     menu_forward_falloff_button_label(),
+                                     animSettings.forwardFalloffMode != FORWARD_FALLOFF_MODE_QUADRATIC);
+        menu_render_draw_button_rect(renderer,
+                                     font,
+                                     &buttons.environmentBackgroundModeRect,
+                                     animSettings.environmentBackgroundBrightnessAuto
+                                         ? "BG: Auto"
+                                         : "BG: Manual",
+                                     !animSettings.environmentBackgroundBrightnessAuto);
     }
+    menu_render_draw_slider_items(renderer,
+                                  font,
+                                  state,
+                                  &buttons.rendererControlSliders,
+                                  NULL);
 
     if (buttons.resumeFramesRect.w > 0 && buttons.resumeFramesRect.h > 0) {
         char resumeLabel[64];

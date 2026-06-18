@@ -38,6 +38,7 @@ package-linux-worker-contract:
 
 package-linux-worker-clean:
 	@rm -rf "$(LINUX_WORKER_DIR)" "$(LINUX_WORKER_ARCHIVE)"
+	@$(MAKE) clean
 	@echo "Removed Linux worker package artifacts: $(LINUX_WORKER_BASENAME)"
 
 package-linux-worker: ray-tracing-render-headless ray-tracing-job-runner

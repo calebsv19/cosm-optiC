@@ -13,11 +13,16 @@
 #include "render/runtime_disney_v2_3d.h"
 #include "render/runtime_diffuse_bounce_3d.h"
 #include "render/runtime_direct_light_3d.h"
+#include "render/runtime_dielectric_transport_3d.h"
 #include "render/runtime_emission_transparency_3d.h"
+#include "render/runtime_disney_v2_estimator_3d.h"
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_material_response_3d.h"
+#include "render/runtime_disney_v2_transport_3d.h"
+#include "render/runtime_ray_3d.h"
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_scene_3d_builder.h"
+#include "render/runtime_specular_reflection_3d.h"
 #include "render/runtime_triangle_bvh_3d.h"
 #include "test_runtime_lighting_materials.h"
 #include "test_runtime_lighting_materials_internal.h"
@@ -108,6 +113,95 @@ static bool runtime_disney_v2_test_load_alpha_only_default_preset(double transpa
     remove(default_path);
     rmdir(dir_template);
     return ok;
+}
+
+static bool runtime_disney_v2_test_load_preset_override(const char* filename,
+                                                        const char* json) {
+    char dir_template[] = "/tmp/raytracing_disney_v2_override_materials_XXXXXX";
+    char path[512];
+    bool ok = false;
+
+    if (!filename || !json || !mkdtemp(dir_template)) {
+        return false;
+    }
+    snprintf(path, sizeof(path), "%s/%s", dir_template, filename);
+    ok = runtime_disney_v2_test_write_text_file(path, json);
+    if (ok) {
+        MaterialManagerLoadDir(dir_template);
+    }
+    remove(path);
+    rmdir(dir_template);
+    return ok;
+}
+
+static bool runtime_disney_v2_test_load_forced_diffuse_default_preset(void) {
+    return runtime_disney_v2_test_load_preset_override(
+        "default.json",
+        "{"
+        "\"diffuse\":1.0,"
+        "\"specular\":0.0,"
+        "\"reflectivity\":0.0,"
+        "\"roughness\":1.0,"
+        "\"transparency\":0.0,"
+        "\"ior\":1.0,"
+        "\"absorption_distance\":1.0,"
+        "\"thin_walled\":false,"
+        "\"base_color\":[1.0,1.0,1.0],"
+        "\"emissive\":[0.0,0.0,0.0]"
+        "}");
+}
+
+static bool runtime_disney_v2_test_load_forced_transparent_preset(void) {
+    return runtime_disney_v2_test_load_preset_override(
+        "transparent.json",
+        "{"
+        "\"diffuse\":0.0,"
+        "\"specular\":0.0,"
+        "\"reflectivity\":0.0,"
+        "\"roughness\":0.02,"
+        "\"transparency\":1.0,"
+        "\"ior\":1.45,"
+        "\"absorption_distance\":1.0,"
+        "\"thin_walled\":false,"
+        "\"base_color\":[1.0,1.0,1.0],"
+        "\"emissive\":[0.0,0.0,0.0]"
+        "}");
+}
+
+static int test_runtime_dielectric_transport_water_ior_fresnel_contract(void) {
+    RuntimeMaterialPayload3D payload = {0};
+    RuntimeDielectricTransport3D transport = {0};
+    const double water_ior = 1.333;
+    const double expected_f0 = pow((water_ior - 1.0) / (water_ior + 1.0), 2.0);
+    bool ok = false;
+
+    payload.valid = true;
+    payload.opticalIor = water_ior;
+    payload.bsdf.ior = water_ior;
+    payload.bsdf.reflectivity = 0.0;
+
+    ok = RuntimeDielectricTransport3D_Resolve(&payload,
+                                              vec3(0.0, 1.0, 0.0),
+                                              vec3(0.0, -1.0, 0.0),
+                                              &transport);
+    assert_true("runtime_dielectric_transport_water_ior_resolve", ok);
+    assert_true("runtime_dielectric_transport_water_ior_refracts", transport.hasRefraction);
+    assert_close("runtime_dielectric_transport_water_ior_fresnel",
+                 transport.fresnel,
+                 expected_f0,
+                 1e-6);
+
+    payload.bsdf.reflectivity = 0.25;
+    ok = RuntimeDielectricTransport3D_Resolve(&payload,
+                                              vec3(0.0, 1.0, 0.0),
+                                              vec3(0.0, -1.0, 0.0),
+                                              &transport);
+    assert_true("runtime_dielectric_transport_water_reflectivity_resolve", ok);
+    assert_close("runtime_dielectric_transport_water_reflectivity_override",
+                 transport.fresnel,
+                 0.25,
+                 1e-9);
+    return 0;
 }
 
 static int test_runtime_material_response_3d_seed_branch_contract(void) {
@@ -249,6 +343,7 @@ static int test_runtime_material_response_3d_mirror_reflects_opaque_chroma(void)
     RuntimeMaterialResponse3DResult material_result = {0};
     RuntimeEmissionTransparency3DResult emission_result = {0};
     RuntimeDisney3DResult disney_result = {0};
+    RuntimeDisneyV2_3DResult disney_v2_result = {0};
     bool ok = false;
 
     RuntimeScene3D_Init(&scene);
@@ -353,6 +448,8 @@ static int test_runtime_material_response_3d_mirror_reflects_opaque_chroma(void)
     assert_true("runtime_material_mirror_reflects_chroma_emission_ok", ok);
     ok = RuntimeDisney3D_ShadeHit(&scene, &hit, NULL, &disney_result);
     assert_true("runtime_material_mirror_reflects_chroma_disney_ok", ok);
+    ok = RuntimeDisneyV2_3D_ShadeHit(&scene, &hit, NULL, &disney_v2_result);
+    assert_true("runtime_material_mirror_reflects_chroma_disney_v2_ok", ok);
 
     assert_true("runtime_material_mirror_reflects_chroma_material_specular_ray",
                 material_result.specularRayCount > 0);
@@ -370,6 +467,301 @@ static int test_runtime_material_response_3d_mirror_reflects_opaque_chroma(void)
     assert_true("runtime_material_mirror_reflects_chroma_disney_preserves_reflection",
                 disney_result.specularRadianceR > disney_result.specularRadianceG + 1e-6 &&
                 disney_result.specularRadianceR > disney_result.specularRadianceB + 1e-6);
+    assert_true("runtime_material_mirror_reflects_chroma_disney_v2_specular_ray",
+                disney_v2_result.specularReflectionRayCount > 0);
+    assert_true("runtime_material_mirror_reflects_chroma_disney_v2_specular_hit",
+                disney_v2_result.specularReflectionHitCount > 0);
+    assert_true("runtime_material_mirror_reflects_chroma_disney_v2_specular_contributes",
+                disney_v2_result.specularReflectionContributingHitCount > 0);
+    assert_true("runtime_material_mirror_reflects_chroma_disney_v2_red_reflection",
+                disney_v2_result.specularReflectionRadianceR >
+                    disney_v2_result.specularReflectionRadianceG + 1e-6 &&
+                disney_v2_result.specularReflectionRadianceR >
+                    disney_v2_result.specularReflectionRadianceB + 1e-6);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_material_response_3d_mirror_surface_kind_parity(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimePrimitive3DKind kinds[3] = {
+        RUNTIME_PRIMITIVE_3D_KIND_PLANE,
+        RUNTIME_PRIMITIVE_3D_KIND_RECT_PRISM,
+        RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH
+    };
+    const char* labels[3] = {"plane", "prism", "mesh"};
+    double reference_specular_r = -1.0;
+    bool reference_set = false;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    MaterialManagerResetDefaults();
+
+    sceneSettings.objectCount = 2;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_MIRROR;
+    sceneSettings.sceneObjects[0].color = 0xFFFFFF;
+    sceneSettings.sceneObjects[0].alpha = 1.0;
+    sceneSettings.sceneObjects[0].opacity = 1.0;
+    sceneSettings.sceneObjects[0].reflectivity = 0.95;
+    sceneSettings.sceneObjects[0].roughness = 0.02;
+    sceneSettings.sceneObjects[1].material_id = MATERIAL_PRESET_DEFAULT;
+    sceneSettings.sceneObjects[1].color = 0xFF0000;
+    sceneSettings.sceneObjects[1].alpha = 1.0;
+    sceneSettings.sceneObjects[1].opacity = 1.0;
+    sceneSettings.sceneObjects[1].reflectivity = 0.0;
+    sceneSettings.sceneObjects[1].roughness = 0.6;
+    animSettings.lightIntensity = 24.0;
+    animSettings.forwardDecay = 10.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    animSettings.secondaryDiffuseSamples3D = 0;
+    animSettings.transmissionSamples3D = 0;
+    animSettings.bounceDepth3D = 1;
+    animSettings.specularDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
+
+    for (int i = 0; i < 3; ++i) {
+        RuntimeScene3D scene;
+        Ray3D primary_ray = {0};
+        HitInfo3D hit = {0};
+        RuntimeMaterialResponse3DResult material_result = {0};
+        bool ok = false;
+        char name[160];
+
+        RuntimeScene3D_Init(&scene);
+        scene.hasLight = true;
+        scene.light.position = vec3(0.0, -1.0, 0.0);
+        scene.light.radius = 0.0;
+        scene.light.intensity = 24.0;
+        scene.light.falloffDistance = 10.0;
+        scene.light.falloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+        scene.primitiveCapacity = 2;
+        scene.triangleMesh.triangleCapacity = 2;
+        scene.primitives = (RuntimePrimitive3D*)calloc((size_t)scene.primitiveCapacity,
+                                                       sizeof(*scene.primitives));
+        scene.triangleMesh.triangles =
+            (RuntimeTriangle3D*)calloc((size_t)scene.triangleMesh.triangleCapacity,
+                                       sizeof(*scene.triangleMesh.triangles));
+        snprintf(name, sizeof(name), "runtime_material_mirror_surface_%s_alloc", labels[i]);
+        assert_true(name, scene.primitives != NULL && scene.triangleMesh.triangles != NULL);
+        if (!scene.primitives || !scene.triangleMesh.triangles) {
+            RuntimeScene3D_Free(&scene);
+            continue;
+        }
+
+        scene.primitiveCount = 2;
+        scene.triangleMesh.triangleCount = 2;
+        scene.primitives[0].source.kind = kinds[i];
+        scene.primitives[0].source.sceneObjectIndex = 0;
+        snprintf(scene.primitives[0].source.objectId,
+                 sizeof(scene.primitives[0].source.objectId),
+                 "mirror_%s",
+                 labels[i]);
+        scene.primitives[1].source.kind = RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH;
+        scene.primitives[1].source.sceneObjectIndex = 1;
+        snprintf(scene.primitives[1].source.objectId,
+                 sizeof(scene.primitives[1].source.objectId),
+                 "reflected_red");
+
+        scene.triangleMesh.triangles[0].p0 = vec3(-2.0, 0.0, -2.0);
+        scene.triangleMesh.triangles[0].p1 = vec3(0.0, 0.0, 2.0);
+        scene.triangleMesh.triangles[0].p2 = vec3(2.0, 0.0, -2.0);
+        scene.triangleMesh.triangles[0].normal = vec3(0.0, 1.0, 0.0);
+        scene.triangleMesh.triangles[0].twoSided = kinds[i] == RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+        scene.triangleMesh.triangles[0].primitiveIndex = 0;
+        scene.triangleMesh.triangles[0].sceneObjectIndex = 0;
+        scene.triangleMesh.triangles[0].localTriangleIndex = 0;
+
+        scene.triangleMesh.triangles[1].p0 = vec3(-2.0, -2.0, -2.0);
+        scene.triangleMesh.triangles[1].p1 = vec3(0.0, -2.0, 2.0);
+        scene.triangleMesh.triangles[1].p2 = vec3(2.0, -2.0, -2.0);
+        scene.triangleMesh.triangles[1].normal = vec3(0.0, 1.0, 0.0);
+        scene.triangleMesh.triangles[1].twoSided = false;
+        scene.triangleMesh.triangles[1].primitiveIndex = 1;
+        scene.triangleMesh.triangles[1].sceneObjectIndex = 1;
+        scene.triangleMesh.triangles[1].localTriangleIndex = 0;
+
+        ok = RuntimeTriangleMesh3D_BuildBVH(&scene.triangleMesh);
+        snprintf(name, sizeof(name), "runtime_material_mirror_surface_%s_bvh", labels[i]);
+        assert_true(name, ok);
+        if (!ok) {
+            RuntimeScene3D_Free(&scene);
+            continue;
+        }
+
+        primary_ray = RuntimeRay3D_Make(vec3(0.0, -0.25, 0.0), vec3(0.0, 1.0, 0.0));
+        ok = RuntimeRay3D_TraceSceneFirstHit(&scene, &primary_ray, 0.001, 4.0, &hit);
+        snprintf(name, sizeof(name), "runtime_material_mirror_surface_%s_primary_hit", labels[i]);
+        assert_true(name, ok);
+        snprintf(name, sizeof(name), "runtime_material_mirror_surface_%s_source_kind", labels[i]);
+        assert_true(name, hit.source.kind == kinds[i]);
+        snprintf(name, sizeof(name), "runtime_material_mirror_surface_%s_scene_object", labels[i]);
+        assert_true(name, hit.sceneObjectIndex == 0);
+        snprintf(name, sizeof(name), "runtime_material_mirror_surface_%s_normal_oriented", labels[i]);
+        assert_close(name, hit.normal.y, -1.0, 1e-6);
+
+        ok = RuntimeMaterialResponse3D_ShadeHit(&scene, &hit, NULL, &material_result);
+        snprintf(name, sizeof(name), "runtime_material_mirror_surface_%s_shade", labels[i]);
+        assert_true(name, ok);
+        snprintf(name, sizeof(name), "runtime_material_mirror_surface_%s_material_resolved", labels[i]);
+        assert_true(name,
+                    material_result.materialResolved &&
+                    material_result.payload.materialId == MATERIAL_PRESET_MIRROR);
+        snprintf(name, sizeof(name), "runtime_material_mirror_surface_%s_specular_ray", labels[i]);
+        assert_true(name, material_result.specularRayCount > 0);
+        snprintf(name, sizeof(name), "runtime_material_mirror_surface_%s_specular_hit", labels[i]);
+        assert_true(name, material_result.specularHitCount > 0);
+        snprintf(name, sizeof(name), "runtime_material_mirror_surface_%s_specular_contributes", labels[i]);
+        assert_true(name, material_result.specularContributingHitCount > 0);
+        snprintf(name, sizeof(name), "runtime_material_mirror_surface_%s_red_reflection", labels[i]);
+        assert_true(name,
+                    material_result.specularRadianceR >
+                        material_result.specularRadianceG + 1e-6 &&
+                    material_result.specularRadianceR >
+                        material_result.specularRadianceB + 1e-6);
+        snprintf(name, sizeof(name), "runtime_material_mirror_surface_%s_direct_separate", labels[i]);
+        assert_true(name, material_result.directRadiance > 0.0);
+
+        if (!reference_set) {
+            reference_specular_r = material_result.specularRadianceR;
+            reference_set = true;
+        } else {
+            snprintf(name, sizeof(name), "runtime_material_mirror_surface_%s_specular_parity", labels[i]);
+            assert_close(name, material_result.specularRadianceR, reference_specular_r, 1e-6);
+        }
+
+        RuntimeScene3D_Free(&scene);
+    }
+
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_material_response_3d_mirror_dominance_reflects_light_emitter(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    HitInfo3D hit = {0};
+    RuntimeMaterialPayload3D payload = {0};
+    RuntimeSpecularReflection3DResult reflection = {0};
+    RuntimeMaterialResponse3DResult mirror_result = {0};
+    RuntimeMaterialResponse3DResult rough_result = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    MaterialManagerResetDefaults();
+
+    sceneSettings.objectCount = 1;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_MIRROR;
+    sceneSettings.sceneObjects[0].color = 0xFFFFFF;
+    sceneSettings.sceneObjects[0].alpha = 1.0;
+    sceneSettings.sceneObjects[0].opacity = 1.0;
+    sceneSettings.sceneObjects[0].reflectivity = 0.95;
+    sceneSettings.sceneObjects[0].roughness = 0.02;
+    animSettings.lightIntensity = 36.0;
+    animSettings.forwardDecay = 10.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    animSettings.secondaryDiffuseSamples3D = 0;
+    animSettings.transmissionSamples3D = 0;
+    animSettings.bounceDepth3D = 1;
+    animSettings.specularDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
+
+    scene.hasLight = true;
+    scene.light.position = vec3(0.0, 2.0, 0.0);
+    scene.light.radius = 0.45;
+    scene.light.intensity = 36.0;
+    scene.light.falloffDistance = 10.0;
+    scene.light.falloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    scene.primitiveCapacity = 1;
+    scene.triangleMesh.triangleCapacity = 1;
+    scene.primitives = (RuntimePrimitive3D*)calloc((size_t)scene.primitiveCapacity,
+                                                   sizeof(*scene.primitives));
+    scene.triangleMesh.triangles =
+        (RuntimeTriangle3D*)calloc((size_t)scene.triangleMesh.triangleCapacity,
+                                   sizeof(*scene.triangleMesh.triangles));
+    assert_true("runtime_material_mirror_dominance_alloc",
+                scene.primitives != NULL && scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    scene.primitiveCount = 1;
+    scene.triangleMesh.triangleCount = 1;
+    scene.primitives[0].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene.primitives[0].source.sceneObjectIndex = 0;
+    scene.triangleMesh.triangles[0].p0 = vec3(-2.0, 0.0, -2.0);
+    scene.triangleMesh.triangles[0].p1 = vec3(2.0, 0.0, -2.0);
+    scene.triangleMesh.triangles[0].p2 = vec3(0.0, 0.0, 2.0);
+    scene.triangleMesh.triangles[0].normal = vec3(0.0, 1.0, 0.0);
+    scene.triangleMesh.triangles[0].twoSided = true;
+    scene.triangleMesh.triangles[0].primitiveIndex = 0;
+    scene.triangleMesh.triangles[0].sceneObjectIndex = 0;
+    ok = RuntimeTriangleMesh3D_BuildBVH(&scene.triangleMesh);
+    assert_true("runtime_material_mirror_dominance_bvh", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    hit.t = 1.0;
+    hit.position = vec3(0.0, 0.0, 0.0);
+    hit.normal = vec3(0.0, 1.0, 0.0);
+    hit.triangleIndex = 0;
+    hit.primitiveIndex = 0;
+    hit.sceneObjectIndex = 0;
+    hit.source = scene.primitives[0].source;
+    hit.baryU = 0.333333333333;
+    hit.baryV = 0.333333333333;
+    hit.baryW = 0.333333333334;
+
+    ok = RuntimeMaterialPayload3D_ResolveFromHit(&hit, &payload);
+    assert_true("runtime_material_mirror_dominance_payload", ok && payload.valid);
+    ok = RuntimeSpecularReflection3D_Trace(&scene,
+                                           &hit,
+                                           &payload,
+                                           vec3(0.0, 1.0, 0.0),
+                                           NULL,
+                                           &reflection);
+    assert_true("runtime_material_mirror_dominance_reflection_trace", ok);
+    assert_true("runtime_material_mirror_dominance_reflects_emitter",
+                reflection.traced && reflection.emitterWins && reflection.emitterHit);
+
+    ok = RuntimeMaterialResponse3D_ShadeHit(&scene, &hit, NULL, &mirror_result);
+    assert_true("runtime_material_mirror_dominance_shade", ok);
+    assert_true("runtime_material_mirror_dominance_factor",
+                mirror_result.mirrorDominance > 0.90 &&
+                mirror_result.mirrorBaseAttenuation < 0.10);
+    assert_true("runtime_material_mirror_dominance_attenuates_base",
+                mirror_result.mirrorBaseRadianceBeforeAttenuation > 0.0 &&
+                mirror_result.mirrorBaseRadianceAfterAttenuation <
+                    mirror_result.mirrorBaseRadianceBeforeAttenuation * 0.12);
+    assert_true("runtime_material_mirror_dominance_light_visible",
+                mirror_result.specularHitCount > 0 &&
+                mirror_result.specularContributingHitCount > 0 &&
+                mirror_result.specularRadiance >
+                    mirror_result.mirrorBaseRadianceAfterAttenuation);
+
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_ROUGH_METAL;
+    sceneSettings.sceneObjects[0].reflectivity = 0.70;
+    sceneSettings.sceneObjects[0].roughness = 0.60;
+    ok = RuntimeMaterialResponse3D_ShadeHit(&scene, &hit, NULL, &rough_result);
+    assert_true("runtime_material_mirror_dominance_rough_shade", ok);
+    assert_true("runtime_material_mirror_dominance_rough_stays_mixed",
+                rough_result.mirrorDominance > 0.05 &&
+                rough_result.mirrorDominance < 0.40 &&
+                rough_result.mirrorBaseAttenuation > 0.60);
 
     RuntimeScene3D_Free(&scene);
     sceneSettings = saved_scene;
@@ -842,6 +1234,50 @@ static void runtime_disney_v2_test_init_recursive_scene(RuntimeScene3D* scene) {
     scene->light.falloffMode = FORWARD_FALLOFF_MODE_LINEAR;
 }
 
+static void runtime_disney_v2_test_init_reflection_scene(RuntimeScene3D* scene) {
+    RuntimeScene3D_Init(scene);
+    scene->hasLight = true;
+    scene->light.position = vec3(0.0, 1.5, 2.0);
+    scene->light.radius = 0.45;
+    scene->light.intensity = 20.0;
+    scene->light.falloffDistance = 10.0;
+    scene->light.falloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    scene->environment.topFillIntensity = 0.0;
+    scene->primitiveCapacity = 2;
+    scene->triangleMesh.triangleCapacity = 2;
+    scene->primitives = (RuntimePrimitive3D*)calloc((size_t)scene->primitiveCapacity,
+                                                    sizeof(*scene->primitives));
+    scene->triangleMesh.triangles =
+        (RuntimeTriangle3D*)calloc((size_t)scene->triangleMesh.triangleCapacity,
+                                   sizeof(*scene->triangleMesh.triangles));
+    if (!scene->primitives || !scene->triangleMesh.triangles) {
+        return;
+    }
+
+    scene->primitiveCount = 2;
+    scene->triangleMesh.triangleCount = 2;
+    scene->primitives[0].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene->primitives[0].source.sceneObjectIndex = 0;
+    scene->primitives[1].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene->primitives[1].source.sceneObjectIndex = 1;
+
+    scene->triangleMesh.triangles[0].p0 = vec3(-2.0, 0.0, -2.0);
+    scene->triangleMesh.triangles[0].p1 = vec3(2.0, 0.0, -2.0);
+    scene->triangleMesh.triangles[0].p2 = vec3(0.0, 0.0, 2.0);
+    scene->triangleMesh.triangles[0].normal = vec3(0.0, 1.0, 0.0);
+    scene->triangleMesh.triangles[0].primitiveIndex = 0;
+    scene->triangleMesh.triangles[0].sceneObjectIndex = 0;
+
+    scene->triangleMesh.triangles[1].p0 = vec3(-2.0, 3.0, -2.0);
+    scene->triangleMesh.triangles[1].p1 = vec3(0.0, 3.0, 2.0);
+    scene->triangleMesh.triangles[1].p2 = vec3(2.0, 3.0, -2.0);
+    scene->triangleMesh.triangles[1].normal = vec3(0.0, -1.0, 0.0);
+    scene->triangleMesh.triangles[1].primitiveIndex = 1;
+    scene->triangleMesh.triangles[1].sceneObjectIndex = 1;
+
+    (void)RuntimeTriangleMesh3D_BuildBVH(&scene->triangleMesh);
+}
+
 static void runtime_disney_v2_test_init_recursive_depth_three_scene(RuntimeScene3D* scene) {
     RuntimeScene3D_Init(scene);
     scene->hasLight = true;
@@ -981,6 +1417,162 @@ static void runtime_disney_v2_test_configure_scene_material(int scene_object_ind
     sceneSettings.sceneObjects[scene_object_index].roughness = roughness;
 }
 
+static int test_runtime_disney_v2_3d_direct_light_pdf_estimator(void) {
+    const double inv_pi = 0.31830988618379067154;
+    HitInfo3D hit = {0};
+    RuntimePrincipledBSDF3D matte = RuntimePrincipledBSDF3D_Default();
+    RuntimePrincipledBSDF3D smooth_gloss = RuntimePrincipledBSDF3D_Default();
+    RuntimePrincipledBSDF3D rough_gloss = RuntimePrincipledBSDF3D_Default();
+    RuntimePrincipledBSDF3D glass = RuntimePrincipledBSDF3D_Default();
+    RuntimePrincipledBSDF3D rough_glass = RuntimePrincipledBSDF3D_Default();
+    double matte_pdf = 0.0;
+    double smooth_gloss_pdf = 0.0;
+    double rough_gloss_pdf = 0.0;
+    double glass_forward_pdf = 0.0;
+    double glass_back_pdf = 0.0;
+    double glass_oblique_back_pdf = 0.0;
+    double rough_glass_back_pdf = 0.0;
+    double glass_disabled_pdf = 0.0;
+    double glass_tir_pdf = 0.0;
+    const double no_light_pdf =
+        RuntimeDisneyV2_3D_EstimateDirectLightPdf(false, 0.0, 0.0, 0, false);
+    const double point_light_pdf =
+        RuntimeDisneyV2_3D_EstimateDirectLightPdf(true, 0.0, 4.0, 0, false);
+    const double emissive_area_pdf =
+        RuntimeDisneyV2_3D_EstimateDirectLightPdf(false, 0.0, 0.0, 1, true);
+    const double small_radius_pdf =
+        RuntimeDisneyV2_3D_EstimateDirectLightPdf(true, 0.25, 4.0, 0, false);
+    const double large_radius_pdf =
+        RuntimeDisneyV2_3D_EstimateDirectLightPdf(true, 1.00, 4.0, 0, false);
+    const double far_light_pdf =
+        RuntimeDisneyV2_3D_EstimateDirectLightPdf(true, 0.25, 8.0, 0, false);
+
+    assert_close("runtime_disney_v2_direct_pdf_no_light", no_light_pdf, 0.0, 1e-12);
+    assert_close("runtime_disney_v2_direct_pdf_point_light",
+                 point_light_pdf,
+                 1.0,
+                 1e-12);
+    assert_close("runtime_disney_v2_direct_pdf_emissive_area",
+                 emissive_area_pdf,
+                 1.0,
+                 1e-12);
+    assert_true("runtime_disney_v2_direct_pdf_finite_positive", small_radius_pdf > 1.0);
+    assert_true("runtime_disney_v2_direct_pdf_radius_scales",
+                large_radius_pdf < small_radius_pdf);
+    assert_true("runtime_disney_v2_direct_pdf_distance_scales",
+                far_light_pdf > small_radius_pdf);
+
+    hit.normal = vec3(0.0, 1.0, 0.0);
+    hit.position = vec3(0.0, 0.0, 0.0);
+
+    matte.diffuseWeight = 1.0;
+    matte.specularWeight = 0.0;
+    matte.transmissionWeight = 0.0;
+    matte = RuntimePrincipledBSDF3D_Normalize(matte);
+    matte_pdf = RuntimeDisneyV2_3D_EstimateDirectBsdfPdf(&matte,
+                                                         &hit,
+                                                         vec3(0.0, -1.0, 0.0),
+                                                         vec3(0.0, 1.0, 0.0),
+                                                         false);
+    assert_close("runtime_disney_v2_direct_bsdf_pdf_diffuse_lambert",
+                 matte_pdf,
+                 inv_pi,
+                 1e-9);
+
+    smooth_gloss.diffuseWeight = 0.0;
+    smooth_gloss.specularWeight = 1.0;
+    smooth_gloss.transmissionWeight = 0.0;
+    smooth_gloss.roughness = 0.08;
+    smooth_gloss = RuntimePrincipledBSDF3D_Normalize(smooth_gloss);
+    rough_gloss = smooth_gloss;
+    rough_gloss.roughness = 0.70;
+    rough_gloss = RuntimePrincipledBSDF3D_Normalize(rough_gloss);
+    smooth_gloss_pdf =
+        RuntimeDisneyV2_3D_EstimateDirectBsdfPdf(&smooth_gloss,
+                                                 &hit,
+                                                 vec3(0.0, -1.0, 0.0),
+                                                 vec3(0.0, 1.0, 0.0),
+                                                 false);
+    rough_gloss_pdf =
+        RuntimeDisneyV2_3D_EstimateDirectBsdfPdf(&rough_gloss,
+                                                 &hit,
+                                                 vec3(0.0, -1.0, 0.0),
+                                                 vec3(0.0, 1.0, 0.0),
+                                                 false);
+    assert_true("runtime_disney_v2_direct_bsdf_pdf_specular_positive",
+                smooth_gloss_pdf > 0.0 && rough_gloss_pdf > 0.0);
+    assert_true("runtime_disney_v2_direct_bsdf_pdf_specular_roughness",
+                smooth_gloss_pdf > rough_gloss_pdf);
+
+    glass.diffuseWeight = 0.0;
+    glass.specularWeight = 0.0;
+    glass.transmissionWeight = 1.0;
+    glass.baseColorR = 1.0;
+    glass.baseColorG = 1.0;
+    glass.baseColorB = 1.0;
+    glass.ior = 1.5;
+    glass = RuntimePrincipledBSDF3D_Normalize(glass);
+    rough_glass = glass;
+    rough_glass.roughness = 0.85;
+    rough_glass = RuntimePrincipledBSDF3D_Normalize(rough_glass);
+    glass_forward_pdf =
+        RuntimeDisneyV2_3D_EstimateDirectBsdfPdf(&glass,
+                                                 &hit,
+                                                 vec3(0.0, -1.0, 0.0),
+                                                 vec3(0.0, 1.0, 0.0),
+                                                 true);
+    glass_back_pdf =
+        RuntimeDisneyV2_3D_EstimateDirectBsdfPdf(&glass,
+                                                 &hit,
+                                                 vec3(0.0, -1.0, 0.0),
+                                                 vec3(0.0, -1.0, 0.0),
+                                                 true);
+    glass_oblique_back_pdf =
+        RuntimeDisneyV2_3D_EstimateDirectBsdfPdf(&glass,
+                                                 &hit,
+                                                 vec3(0.0, -1.0, 0.0),
+                                                 vec3_normalize(vec3(0.35, -1.0, 0.0)),
+                                                 true);
+    rough_glass_back_pdf =
+        RuntimeDisneyV2_3D_EstimateDirectBsdfPdf(&rough_glass,
+                                                 &hit,
+                                                 vec3(0.0, -1.0, 0.0),
+                                                 vec3(0.0, -1.0, 0.0),
+                                                 true);
+    glass_disabled_pdf =
+        RuntimeDisneyV2_3D_EstimateDirectBsdfPdf(&glass,
+                                                 &hit,
+                                                 vec3(0.0, -1.0, 0.0),
+                                                 vec3(0.0, -1.0, 0.0),
+                                                 false);
+    glass_tir_pdf =
+        RuntimeDisneyV2_3D_EstimateDirectBsdfPdf(&glass,
+                                                 &hit,
+                                                 vec3_normalize(vec3(0.8, 0.6, 0.0)),
+                                                 vec3(0.0, 1.0, 0.0),
+                                                 true);
+    assert_close("runtime_disney_v2_direct_bsdf_pdf_transmission_front",
+                 glass_forward_pdf,
+                 0.0,
+                 1e-12);
+    assert_true("runtime_disney_v2_direct_bsdf_pdf_transmission_back_positive",
+                glass_back_pdf > 0.0);
+    assert_true("runtime_disney_v2_direct_bsdf_pdf_transmission_refraction_peak",
+                glass_back_pdf > glass_oblique_back_pdf);
+    assert_true("runtime_disney_v2_direct_bsdf_pdf_transmission_roughness",
+                glass_back_pdf > rough_glass_back_pdf);
+    assert_close("runtime_disney_v2_direct_bsdf_pdf_transmission_disabled",
+                 glass_disabled_pdf,
+                 0.0,
+                 1e-12);
+    assert_close("runtime_disney_v2_direct_bsdf_pdf_transmission_tir",
+                 glass_tir_pdf,
+                 0.0,
+                 1e-12);
+
+    return 0;
+}
+
 static int test_runtime_disney_v2_3d_consumes_cached_principled_payload(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -995,6 +1587,9 @@ static int test_runtime_disney_v2_3d_consumes_cached_principled_payload(void) {
     };
     RuntimeDisneyV2_3DResult v2_result = {0};
     RuntimeDisney3DResult current_disney = {0};
+    double light_term = 0.0;
+    double bsdf_term = 0.0;
+    double mis_total = 0.0;
     bool ok = false;
 
     memset(&sceneSettings, 0, sizeof(sceneSettings));
@@ -1042,8 +1637,43 @@ static int test_runtime_disney_v2_3d_consumes_cached_principled_payload(void) {
                  v2_result.misWeightLight + v2_result.misWeightBsdf,
                  1.0,
                  1e-9);
+    light_term = v2_result.lightSamplePdf * v2_result.lightSamplePdf;
+    bsdf_term = v2_result.bsdfSamplePdf * v2_result.bsdfSamplePdf;
+    mis_total = light_term + bsdf_term;
+    assert_true("runtime_disney_v2_cached_mis_power_ready",
+                v2_result.misHeuristicPower == 2.0 &&
+                v2_result.misPowerHeuristicCount >= 1 &&
+                mis_total > 0.0);
+    assert_close("runtime_disney_v2_cached_mis_power_light",
+                 v2_result.misWeightLight,
+                 light_term / mis_total,
+                 1e-9);
+    assert_close("runtime_disney_v2_cached_mis_power_bsdf",
+                 v2_result.misWeightBsdf,
+                 bsdf_term / mis_total,
+                 1e-9);
+    assert_true("runtime_disney_v2_cached_finite_branch_only",
+                v2_result.finiteLightMis.lightPdf > 0.0 &&
+                v2_result.finiteLightMis.bsdfPdf > 0.0 &&
+                v2_result.finiteLightMis.weightLight > 0.0 &&
+                v2_result.finiteLightMisVertexCount >= 1 &&
+                v2_result.emissiveAreaMis.lightPdf == 0.0 &&
+                v2_result.emissiveAreaMis.bsdfPdf == 0.0 &&
+                v2_result.emissiveAreaMisVertexCount == 0);
+    assert_close("runtime_disney_v2_cached_finite_branch_light_pdf",
+                 v2_result.finiteLightMis.lightPdf,
+                 v2_result.lightSamplePdf,
+                 1e-9);
+    assert_close("runtime_disney_v2_cached_finite_branch_weight",
+                 v2_result.finiteLightMis.weightLight,
+                 v2_result.misWeightLight,
+                 1e-9);
     assert_true("runtime_disney_v2_cached_stochastic_direct_positive",
                 v2_result.stochasticDirectRadiance > 0.0);
+    assert_close("runtime_disney_v2_cached_direct_uses_finite_branch_r",
+                 v2_result.stochasticDirectRadianceR,
+                 v2_result.directRadianceR * v2_result.finiteLightMis.weightLight,
+                 1e-9);
     assert_true("runtime_disney_v2_cached_path_throughput_positive",
                 runtime_disney_v2_3d_test_peak(v2_result.pathState.throughputR,
                                                v2_result.pathState.throughputG,
@@ -1388,6 +2018,480 @@ static int test_runtime_disney_v2_3d_secondary_material_vertex_modulates_contrib
     RuntimeScene3D_Free(&scene);
     sceneSettings = saved_scene;
     animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_disney_v2_3d_recursive_lobe_resamples_secondary_material(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    RuntimePrimaryHit3DResult primary = {0};
+    RuntimeMaterialPayload3D glossy =
+        runtime_disney_v2_test_payload(0.90, 0.78, 0.52, 0.90, 0.02, 0.0, 1.0, 0.0, 0.0);
+    RuntimeNative3DSamplingContext sampling = {
+        .sampleSequence = 7U,
+        .temporalSubpassIndex = 0U,
+        .temporalSubpassCount = 1U,
+    };
+    RuntimeDisneyV2_3DResult red = {0};
+    RuntimeDisneyV2_3DResult blue = {0};
+    RuntimeDisneyV2_3DResult metal = {0};
+    RuntimeDisneyV2_3DResult glass = {0};
+    bool ok = false;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    MaterialManagerResetDefaults();
+    animSettings.bounceDepth3D = 3;
+    animSettings.specularDepth3D = 3;
+    animSettings.transmissionDepth3D = 3;
+    animSettings.rouletteThreshold3D = 0.0;
+    runtime_disney_v2_test_init_recursive_scene(&scene);
+    assert_true("runtime_disney_v2_recursive_resample_scene_alloc",
+                scene.primitives != NULL && scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        MaterialManagerResetDefaults();
+        return 0;
+    }
+    primary = runtime_disney_v2_test_primary_hit(&scene);
+    runtime_disney_v2_test_configure_scene_material(0,
+                                                    MATERIAL_PRESET_GLOSSY,
+                                                    0xFFFFFF,
+                                                    0.9,
+                                                    0.02);
+
+    ok = runtime_disney_v2_test_load_forced_diffuse_default_preset();
+    assert_true("runtime_disney_v2_recursive_resample_load_diffuse", ok);
+    runtime_disney_v2_test_configure_scene_material(1,
+                                                    MATERIAL_PRESET_DEFAULT,
+                                                    0xFF0000,
+                                                    0.0,
+                                                    1.0);
+    ok = RuntimeDisneyV2_3D_ShadePrimaryHitWithPayload(&scene,
+                                                       &primary,
+                                                       &glossy,
+                                                       &sampling,
+                                                       &red);
+    assert_true("runtime_disney_v2_recursive_resample_red_ok", ok);
+
+    runtime_disney_v2_test_configure_scene_material(1,
+                                                    MATERIAL_PRESET_DEFAULT,
+                                                    0x0000FF,
+                                                    0.0,
+                                                    1.0);
+    ok = RuntimeDisneyV2_3D_ShadePrimaryHitWithPayload(&scene,
+                                                       &primary,
+                                                       &glossy,
+                                                       &sampling,
+                                                       &blue);
+    assert_true("runtime_disney_v2_recursive_resample_blue_ok", ok);
+
+    MaterialManagerResetDefaults();
+    runtime_disney_v2_test_configure_scene_material(1,
+                                                    MATERIAL_PRESET_MIRROR,
+                                                    0xE5E5E5,
+                                                    0.95,
+                                                    0.02);
+    ok = RuntimeDisneyV2_3D_ShadePrimaryHitWithPayload(&scene,
+                                                       &primary,
+                                                       &glossy,
+                                                       &sampling,
+                                                       &metal);
+    assert_true("runtime_disney_v2_recursive_resample_metal_ok", ok);
+
+    MaterialManagerResetDefaults();
+    ok = runtime_disney_v2_test_load_forced_transparent_preset();
+    assert_true("runtime_disney_v2_recursive_resample_load_glass", ok);
+    runtime_disney_v2_test_configure_scene_material(1,
+                                                    MATERIAL_PRESET_TRANSPARENT,
+                                                    0xB8E6FF,
+                                                    0.0,
+                                                    0.02);
+    ok = RuntimeDisneyV2_3D_ShadePrimaryHitWithPayload(&scene,
+                                                       &primary,
+                                                       &glossy,
+                                                       &sampling,
+                                                       &glass);
+    assert_true("runtime_disney_v2_recursive_resample_glass_ok", ok);
+
+    assert_true("runtime_disney_v2_recursive_resample_primary_stays_specular",
+                red.sampledLobe == RUNTIME_DISNEY_V2_3D_LOBE_SPECULAR &&
+                blue.sampledLobe == RUNTIME_DISNEY_V2_3D_LOBE_SPECULAR &&
+                metal.sampledLobe == RUNTIME_DISNEY_V2_3D_LOBE_SPECULAR &&
+                glass.sampledLobe == RUNTIME_DISNEY_V2_3D_LOBE_SPECULAR);
+    assert_true("runtime_disney_v2_recursive_resample_all_record_vertex",
+                red.recursiveLoopVertexCount >= 1 &&
+                blue.recursiveLoopVertexCount >= 1 &&
+                metal.recursiveLoopVertexCount >= 1 &&
+                glass.recursiveLoopVertexCount >= 1);
+    assert_true("runtime_disney_v2_recursive_resample_lobes_recomputed",
+                red.recursiveLoopStates[0].sampledLobe ==
+                    RUNTIME_DISNEY_V2_3D_LOBE_DIFFUSE &&
+                blue.recursiveLoopStates[0].sampledLobe ==
+                    RUNTIME_DISNEY_V2_3D_LOBE_DIFFUSE &&
+                metal.recursiveLoopStates[0].sampledLobe ==
+                    RUNTIME_DISNEY_V2_3D_LOBE_SPECULAR &&
+                glass.recursiveLoopStates[0].sampledLobe ==
+                    RUNTIME_DISNEY_V2_3D_LOBE_TRANSMISSION);
+    assert_true("runtime_disney_v2_recursive_resample_material_color_local",
+                red.recursiveLoopPrincipled[0].valid &&
+                blue.recursiveLoopPrincipled[0].valid &&
+                red.recursiveLoopPrincipled[0].baseColorR >
+                    red.recursiveLoopPrincipled[0].baseColorB + 0.5 &&
+                blue.recursiveLoopPrincipled[0].baseColorB >
+                    blue.recursiveLoopPrincipled[0].baseColorR + 0.5);
+    assert_true("runtime_disney_v2_recursive_resample_metal_glass_materials",
+                metal.recursiveLoopPrincipled[0].valid &&
+                metal.recursiveLoopPrincipled[0].specularWeight > 0.95 &&
+                glass.recursiveLoopPrincipled[0].valid &&
+                glass.recursiveLoopPrincipled[0].transmissionWeight > 0.95);
+    assert_true("runtime_disney_v2_recursive_resample_pdf_and_throughput",
+                red.recursiveLoopStates[0].pdf > 0.0 &&
+                blue.recursiveLoopStates[0].pdf > 0.0 &&
+                metal.recursiveLoopStates[0].pdf > 0.0 &&
+                glass.recursiveLoopStates[0].pdf > 0.0 &&
+                runtime_disney_v2_3d_test_peak(red.recursiveLoopStates[0].throughputR,
+                                               red.recursiveLoopStates[0].throughputG,
+                                               red.recursiveLoopStates[0].throughputB) > 0.0 &&
+                runtime_disney_v2_3d_test_peak(glass.recursiveLoopStates[0].throughputR,
+                                               glass.recursiveLoopStates[0].throughputG,
+                                               glass.recursiveLoopStates[0].throughputB) > 0.0);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    MaterialManagerResetDefaults();
+    return 0;
+}
+
+static int test_runtime_disney_v2_3d_reflection_recurses_reflected_geometry(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    HitInfo3D hit = {0};
+    RuntimeNative3DSamplingContext sampling = {
+        .sampleSequence = 19U,
+        .temporalSubpassIndex = 0U,
+        .temporalSubpassCount = 1U,
+    };
+    RuntimeDisneyV2_3DResult result = {0};
+    bool ok = false;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    MaterialManagerResetDefaults();
+    ok = runtime_disney_v2_test_load_forced_diffuse_default_preset();
+    assert_true("runtime_disney_v2_reflection_recursive_load_diffuse", ok);
+    animSettings.bounceDepth3D = 2;
+    animSettings.specularDepth3D = 2;
+    animSettings.transmissionDepth3D = 2;
+    animSettings.rouletteThreshold3D = 0.0;
+    runtime_disney_v2_test_configure_scene_material(0,
+                                                    MATERIAL_PRESET_MIRROR,
+                                                    0xFFFFFF,
+                                                    0.95,
+                                                    0.02);
+    runtime_disney_v2_test_configure_scene_material(1,
+                                                    MATERIAL_PRESET_DEFAULT,
+                                                    0xFF0000,
+                                                    0.0,
+                                                    1.0);
+    runtime_disney_v2_test_init_reflection_scene(&scene);
+    assert_true("runtime_disney_v2_reflection_recursive_scene_alloc",
+                scene.primitives != NULL && scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        MaterialManagerResetDefaults();
+        return 0;
+    }
+    hit = runtime_disney_v2_test_hit(&scene);
+
+    ok = RuntimeDisneyV2_3D_ShadeHit(&scene, &hit, &sampling, &result);
+    assert_true("runtime_disney_v2_reflection_recursive_ok", ok);
+    assert_true("runtime_disney_v2_reflection_recursive_primary_ray",
+                result.specularReflectionRayCount == 1);
+    assert_true("runtime_disney_v2_reflection_recursive_geometry_outcome",
+                result.specularReflectionGeometryHitCount == 1 &&
+                result.specularReflectionEmitterHitCount == 0 &&
+                result.specularReflectionNoHitCount == 0);
+    assert_true("runtime_disney_v2_reflection_recursive_vertex",
+                result.specularReflectionRecursiveVertexCount >= 1 &&
+                result.specularReflectionRecursiveStates[0].valid &&
+                result.specularReflectionRecursiveStates[0].depth == 2 &&
+                result.specularReflectionRecursivePrincipled[0].valid);
+    assert_true("runtime_disney_v2_reflection_recursive_local_material",
+                result.specularReflectionRecursivePrincipled[0].baseColorR >
+                    result.specularReflectionRecursivePrincipled[0].baseColorB + 0.5 &&
+                result.specularReflectionRecursiveStates[0].sampledLobe ==
+                    RUNTIME_DISNEY_V2_3D_LOBE_DIFFUSE);
+    assert_true("runtime_disney_v2_reflection_recursive_emitter_contributes",
+                result.specularReflectionRecursiveRayCount >= 1 &&
+                result.specularReflectionRecursiveEmitterHitCount >= 1 &&
+                result.specularReflectionRecursiveContributingHitCount >= 1 &&
+                result.specularReflectionRecursiveRadianceR > 0.0);
+    assert_true("runtime_disney_v2_reflection_recursive_final_includes_delta",
+                result.recursiveBsdfRadianceR >=
+                    result.specularReflectionRecursiveRadianceR - 1e-9 &&
+                result.radianceR >= result.specularReflectionRecursiveRadianceR);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    MaterialManagerResetDefaults();
+    return 0;
+}
+
+static int test_runtime_disney_v2_3d_mirror_dominance_reflects_light_emitter(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    HitInfo3D hit = {0};
+    RuntimeNative3DSamplingContext sampling = {
+        .sampleSequence = 23U,
+        .temporalSubpassIndex = 0U,
+        .temporalSubpassCount = 1U,
+    };
+    RuntimeDisneyV2_3DResult result = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    MaterialManagerResetDefaults();
+    sceneSettings.objectCount = 1;
+    runtime_disney_v2_test_configure_scene_material(0,
+                                                    MATERIAL_PRESET_MIRROR,
+                                                    0xFFFFFF,
+                                                    0.95,
+                                                    0.02);
+    animSettings.bounceDepth3D = 1;
+    animSettings.specularDepth3D = 1;
+    animSettings.transmissionDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
+
+    scene.hasLight = true;
+    scene.light.position = vec3(0.0, 2.0, 0.0);
+    scene.light.radius = 0.45;
+    scene.light.intensity = 36.0;
+    scene.light.falloffDistance = 10.0;
+    scene.light.falloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    scene.primitiveCapacity = 1;
+    scene.triangleMesh.triangleCapacity = 1;
+    scene.primitives = (RuntimePrimitive3D*)calloc((size_t)scene.primitiveCapacity,
+                                                   sizeof(*scene.primitives));
+    scene.triangleMesh.triangles =
+        (RuntimeTriangle3D*)calloc((size_t)scene.triangleMesh.triangleCapacity,
+                                   sizeof(*scene.triangleMesh.triangles));
+    assert_true("runtime_disney_v2_mirror_dominance_alloc",
+                scene.primitives != NULL && scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        MaterialManagerResetDefaults();
+        return 0;
+    }
+
+    scene.primitiveCount = 1;
+    scene.triangleMesh.triangleCount = 1;
+    scene.primitives[0].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene.primitives[0].source.sceneObjectIndex = 0;
+    scene.triangleMesh.triangles[0].p0 = vec3(-2.0, 0.0, -2.0);
+    scene.triangleMesh.triangles[0].p1 = vec3(2.0, 0.0, -2.0);
+    scene.triangleMesh.triangles[0].p2 = vec3(0.0, 0.0, 2.0);
+    scene.triangleMesh.triangles[0].normal = vec3(0.0, 1.0, 0.0);
+    scene.triangleMesh.triangles[0].twoSided = true;
+    scene.triangleMesh.triangles[0].primitiveIndex = 0;
+    scene.triangleMesh.triangles[0].sceneObjectIndex = 0;
+    ok = RuntimeTriangleMesh3D_BuildBVH(&scene.triangleMesh);
+    assert_true("runtime_disney_v2_mirror_dominance_bvh", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        MaterialManagerResetDefaults();
+        return 0;
+    }
+
+    hit = runtime_disney_v2_test_hit(&scene);
+    ok = RuntimeDisneyV2_3D_ShadeHit(&scene, &hit, &sampling, &result);
+    assert_true("runtime_disney_v2_mirror_dominance_ok", ok);
+    assert_true("runtime_disney_v2_mirror_dominance_factor",
+                result.mirrorDominance > 0.90 &&
+                result.mirrorBaseAttenuation < 0.10);
+    assert_true("runtime_disney_v2_mirror_dominance_attenuates_base",
+                result.mirrorBaseRadianceBeforeAttenuation > 0.0 &&
+                result.mirrorBaseRadianceAfterAttenuation <
+                    result.mirrorBaseRadianceBeforeAttenuation * 0.12);
+    assert_true("runtime_disney_v2_mirror_dominance_reflects_emitter",
+                result.specularReflectionRayCount == 1 &&
+                result.specularReflectionEmitterHitCount == 1 &&
+                result.specularReflectionGeometryHitCount == 0 &&
+                result.specularReflectionContributingHitCount == 1 &&
+                result.specularReflectionRadiance >
+                    result.mirrorBaseRadianceAfterAttenuation);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    MaterialManagerResetDefaults();
+    return 0;
+}
+
+static int test_runtime_disney_v2_3d_rough_reflection_records_stochastic_sample(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    RuntimePrimaryHit3DResult primary = {0};
+    RuntimeMaterialPayload3D rough_glossy =
+        runtime_disney_v2_test_payload(0.90, 0.90, 0.90, 0.85, 0.45, 0.0, 1.0, 0.0, 0.0);
+    RuntimeNative3DSamplingContext sampling = {
+        .sampleSequence = 23U,
+        .temporalSubpassIndex = 0U,
+        .temporalSubpassCount = 1U,
+    };
+    RuntimeDisneyV2_3DResult result = {0};
+    bool ok = false;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    MaterialManagerResetDefaults();
+    ok = runtime_disney_v2_test_load_forced_diffuse_default_preset();
+    assert_true("runtime_disney_v2_rough_reflection_load_diffuse", ok);
+    animSettings.bounceDepth3D = 2;
+    animSettings.specularDepth3D = 2;
+    animSettings.transmissionDepth3D = 2;
+    animSettings.rouletteThreshold3D = 0.0;
+    runtime_disney_v2_test_configure_scene_material(1,
+                                                    MATERIAL_PRESET_DEFAULT,
+                                                    0xFF0000,
+                                                    0.0,
+                                                    1.0);
+    runtime_disney_v2_test_init_reflection_scene(&scene);
+    assert_true("runtime_disney_v2_rough_reflection_scene_alloc",
+                scene.primitives != NULL && scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        MaterialManagerResetDefaults();
+        return 0;
+    }
+    primary = runtime_disney_v2_test_primary_hit(&scene);
+
+    ok = RuntimeDisneyV2_3D_ShadePrimaryHitWithPayload(&scene,
+                                                       &primary,
+                                                       &rough_glossy,
+                                                       &sampling,
+                                                       &result);
+    assert_true("runtime_disney_v2_rough_reflection_ok", ok);
+    assert_true("runtime_disney_v2_rough_reflection_primary_geometry",
+                result.specularReflectionRayCount == 1 &&
+                result.specularReflectionGeometryHitCount == 1);
+    assert_true("runtime_disney_v2_rough_reflection_sample_diagnostics",
+                result.specularReflectionRoughSampleCount == 4 &&
+                result.specularReflectionRoughness > 0.40 &&
+                result.specularReflectionRoughHitCount > 0 &&
+                result.specularReflectionRoughHitCount +
+                    result.specularReflectionRoughNoHitCount ==
+                    result.specularReflectionRoughSampleCount);
+    assert_true("runtime_disney_v2_rough_reflection_recursive_contributes",
+                result.specularReflectionRecursiveVertexCount >= 1 &&
+                result.specularReflectionRecursiveRayCount >= 1 &&
+                result.specularReflectionRoughContributingSampleCount > 0 &&
+                result.specularReflectionRoughContribution > 0.0 &&
+                result.specularReflectionRecursiveRadianceR > 0.0);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    MaterialManagerResetDefaults();
+    return 0;
+}
+
+static int test_runtime_disney_v2_3d_reflection_recursion_respects_policy(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    HitInfo3D hit = {0};
+    RuntimeNative3DSamplingContext sampling = {
+        .sampleSequence = 29U,
+        .temporalSubpassIndex = 0U,
+        .temporalSubpassCount = 1U,
+    };
+    RuntimeDisneyV2_3DResult limited = {0};
+    RuntimeDisneyV2_3DResult roulette = {0};
+    bool ok = false;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    MaterialManagerResetDefaults();
+    ok = runtime_disney_v2_test_load_forced_diffuse_default_preset();
+    assert_true("runtime_disney_v2_reflection_policy_load_diffuse", ok);
+    runtime_disney_v2_test_configure_scene_material(0,
+                                                    MATERIAL_PRESET_MIRROR,
+                                                    0xFFFFFF,
+                                                    0.95,
+                                                    0.02);
+    runtime_disney_v2_test_configure_scene_material(1,
+                                                    MATERIAL_PRESET_DEFAULT,
+                                                    0xFF0000,
+                                                    0.0,
+                                                    1.0);
+    runtime_disney_v2_test_init_reflection_scene(&scene);
+    assert_true("runtime_disney_v2_reflection_policy_scene_alloc",
+                scene.primitives != NULL && scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        MaterialManagerResetDefaults();
+        return 0;
+    }
+    hit = runtime_disney_v2_test_hit(&scene);
+
+    animSettings.bounceDepth3D = 1;
+    animSettings.specularDepth3D = 1;
+    animSettings.transmissionDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
+    ok = RuntimeDisneyV2_3D_ShadeHit(&scene, &hit, &sampling, &limited);
+    assert_true("runtime_disney_v2_reflection_policy_limited_ok", ok);
+    assert_true("runtime_disney_v2_reflection_policy_limited_primary",
+                limited.specularReflectionGeometryHitCount == 1);
+    assert_true("runtime_disney_v2_reflection_policy_limited_stops",
+                limited.specularReflectionRecursivePolicyTerminationCount == 1 &&
+                limited.specularReflectionRecursiveRayCount == 0 &&
+                limited.specularReflectionRecursiveVertexCount == 0 &&
+                limited.specularReflectionRecursiveRadiance == 0.0);
+
+    runtime_disney_v2_test_configure_scene_material(1,
+                                                    MATERIAL_PRESET_DEFAULT,
+                                                    0x000001,
+                                                    0.0,
+                                                    1.0);
+    animSettings.bounceDepth3D = 2;
+    animSettings.specularDepth3D = 2;
+    animSettings.transmissionDepth3D = 2;
+    animSettings.rouletteThreshold3D = 0.1;
+    ok = RuntimeDisneyV2_3D_ShadeHit(&scene, &hit, &sampling, &roulette);
+    assert_true("runtime_disney_v2_reflection_policy_roulette_ok", ok);
+    assert_true("runtime_disney_v2_reflection_policy_roulette_primary",
+                roulette.specularReflectionGeometryHitCount == 1);
+    assert_true("runtime_disney_v2_reflection_policy_roulette_stops",
+                roulette.specularReflectionRecursiveRouletteTerminationCount == 1 &&
+                roulette.specularReflectionRecursiveRayCount == 0 &&
+                roulette.specularReflectionRecursiveVertexCount == 0 &&
+                roulette.specularReflectionRecursiveRadiance == 0.0);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    MaterialManagerResetDefaults();
     return 0;
 }
 
@@ -2132,6 +3236,8 @@ static int test_runtime_disney_v2_3d_mis_and_emitter_accounting_separates_branch
                     RUNTIME_DISNEY_V2_3D_EMITTER_FINITE_LIGHT);
     assert_true("runtime_disney_v2_mis_accounting_vertex_count",
                 result.misVertexCount >= 2);
+    assert_true("runtime_disney_v2_mis_accounting_finite_light_pdf",
+                result.misVertexLightPdf[0] > 1.0);
     for (i = 0; i < result.misVertexCount; ++i) {
         if (result.misVertexLightPdf[i] + result.misVertexBsdfPdf[i] > 1e-9) {
             assert_close("runtime_disney_v2_mis_accounting_weight_sum",
@@ -2157,6 +3263,585 @@ static int test_runtime_disney_v2_3d_mis_and_emitter_accounting_separates_branch
     RuntimeScene3D_Free(&scene);
     sceneSettings = saved_scene;
     animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_disney_v2_3d_emissive_material_surface_hit_contributes(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    RuntimePrimaryHit3DResult primary = {0};
+    RuntimeMaterialPayload3D glossy =
+        runtime_disney_v2_test_payload(0.90, 0.78, 0.52, 0.90, 0.02, 0.0, 1.0, 0.0, 0.0);
+    RuntimeNative3DSamplingContext sampling = {
+        .sampleSequence = 7U,
+        .temporalSubpassIndex = 0U,
+        .temporalSubpassCount = 1U,
+    };
+    RuntimeDisneyV2_3DResult result = {0};
+    bool ok = false;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    MaterialManagerResetDefaults();
+    animSettings.bounceDepth3D = 2;
+    animSettings.specularDepth3D = 2;
+    animSettings.transmissionDepth3D = 2;
+    animSettings.rouletteThreshold3D = 0.0;
+    runtime_disney_v2_test_init_one_bounce_scene(&scene);
+    assert_true("runtime_disney_v2_emissive_surface_scene_alloc",
+                scene.primitives != NULL && scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        MaterialManagerResetDefaults();
+        return 0;
+    }
+    scene.light.radius = 0.0;
+    runtime_disney_v2_test_configure_scene_material(1,
+                                                    MATERIAL_PRESET_EMISSIVE,
+                                                    0xFFAA44,
+                                                    0.0,
+                                                    1.0);
+    sceneSettings.sceneObjects[1].emissiveStrength = 1.0;
+    primary = runtime_disney_v2_test_primary_hit(&scene);
+
+    ok = RuntimeDisneyV2_3D_ShadePrimaryHitWithPayload(&scene,
+                                                       &primary,
+                                                       &glossy,
+                                                       &sampling,
+                                                       &result);
+    assert_true("runtime_disney_v2_emissive_surface_ok", ok);
+    assert_true("runtime_disney_v2_emissive_surface_hit",
+                result.pathState.valid &&
+                result.pathState.hit &&
+                result.pathState.hitInfo.sceneObjectIndex == 1);
+    assert_true("runtime_disney_v2_emissive_surface_endpoint",
+                result.pathState.emitterHit &&
+                result.pathState.emitterWins &&
+                result.pathState.emitterHitInfo.radiance > 0.0);
+    assert_true("runtime_disney_v2_emissive_surface_accounting",
+                result.emissiveMaterialHitCount == 1 &&
+                result.finiteLightEmitterHitCount == 0 &&
+                result.misVertexEmitterKind[1] ==
+                    RUNTIME_DISNEY_V2_3D_EMITTER_EMISSIVE_MATERIAL);
+    assert_true("runtime_disney_v2_emissive_surface_contribution",
+                result.bsdfSampleContributionR[1] > 0.0 &&
+                result.stochasticBsdfRadianceR > 0.0 &&
+                result.bsdfSampleContributionR[1] > result.bsdfSampleContributionB[1]);
+    assert_true("runtime_disney_v2_emissive_surface_terminates_before_recursion",
+                result.recursiveLoopVertexCount == 0 &&
+                result.secondaryContributingHitCount == 1);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    MaterialManagerResetDefaults();
+    return 0;
+}
+
+static int test_runtime_disney_v2_3d_emissive_area_sample_lights_primary_vertex(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    RuntimePrimaryHit3DResult primary = {0};
+    RuntimeMaterialPayload3D matte =
+        runtime_disney_v2_test_payload(0.64, 0.62, 0.58, 0.02, 0.70, 1.0, 0.0, 0.0, 0.0);
+    RuntimeNative3DSamplingContext sampling = {
+        .sampleSequence = 41U,
+        .temporalSubpassIndex = 0U,
+        .temporalSubpassCount = 1U,
+    };
+    RuntimeEmissiveDirect3DResult area_pdf_probe = {0};
+    RuntimeDisneyV2_3DResult result = {0};
+    double expected_area_light_pdf = 0.0;
+    bool ok = false;
+    bool area_ok = false;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    MaterialManagerResetDefaults();
+    animSettings.bounceDepth3D = 1;
+    animSettings.specularDepth3D = 1;
+    animSettings.transmissionDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
+    runtime_disney_v2_test_init_reflection_scene(&scene);
+    assert_true("runtime_disney_v2_emissive_area_scene_alloc",
+                scene.primitives != NULL && scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        MaterialManagerResetDefaults();
+        return 0;
+    }
+    scene.hasLight = false;
+    runtime_disney_v2_test_configure_scene_material(1,
+                                                    MATERIAL_PRESET_EMISSIVE,
+                                                    0x3366FF,
+                                                    0.0,
+                                                    1.0);
+    sceneSettings.sceneObjects[1].emissiveStrength = 1.0;
+    RuntimeScene3D_RefreshCapabilities(&scene);
+    assert_true("runtime_disney_v2_emissive_area_light_set_cached",
+                scene.emissiveLightSet.valid &&
+                scene.emissiveLightSet.candidateCount == 1 &&
+                scene.capabilities.emissiveLightCandidateCount == 1 &&
+                !scene.capabilities.canSkipEmissionSupport);
+    primary = runtime_disney_v2_test_primary_hit(&scene);
+    area_ok = RuntimeEmissiveDirect3D_ShadeHit(&scene,
+                                               &primary.hitInfo,
+                                               &sampling,
+                                               &area_pdf_probe);
+    expected_area_light_pdf = area_pdf_probe.candidateSelectionPdf *
+                              area_pdf_probe.areaPdf *
+                              area_pdf_probe.sampleDistance *
+                              area_pdf_probe.sampleDistance /
+                              fmax(area_pdf_probe.sampleEmitterCos, 1e-12);
+    assert_true("runtime_disney_v2_emissive_area_pdf_probe_ok", area_ok);
+    assert_true("runtime_disney_v2_emissive_area_pdf_probe_diagnostics",
+                area_pdf_probe.candidateSelectionPdf > 0.0 &&
+                area_pdf_probe.areaPdf > 0.0 &&
+                area_pdf_probe.lightPdf > 1.0 &&
+                area_pdf_probe.sampleDistance > 0.0 &&
+                area_pdf_probe.sampleEmitterCos > 0.0 &&
+                vec3_length(area_pdf_probe.sampleDirection) > 0.99);
+    assert_close("runtime_disney_v2_emissive_area_pdf_solid_angle",
+                 area_pdf_probe.lightPdf,
+                 expected_area_light_pdf,
+                 1e-9);
+
+    ok = RuntimeDisneyV2_3D_ShadePrimaryHitWithPayload(&scene,
+                                                       &primary,
+                                                       &matte,
+                                                       &sampling,
+                                                       &result);
+    assert_true("runtime_disney_v2_emissive_area_ok", ok);
+    assert_true("runtime_disney_v2_emissive_area_no_finite_light",
+                result.directRadiance == 0.0 &&
+                result.finiteLightEmitterHitCount == 0);
+    assert_true("runtime_disney_v2_emissive_area_sampled",
+                result.emissiveAreaLightSampleCount == 1 &&
+                result.emissiveAreaSampledTriangleCount == 1 &&
+                result.emissiveAreaContributingTriangleCount == 1);
+    assert_true("runtime_disney_v2_emissive_area_bounded_diagnostics",
+                result.emissiveAreaCandidateCount == 1 &&
+                result.emissiveAreaSelectedCandidateCount == 1 &&
+                result.emissiveAreaVisibilityRayCount == 1 &&
+                result.emissiveAreaPrimarySampleCount == 1 &&
+                result.emissiveAreaRecursiveSampleCount == 0 &&
+                result.emissiveAreaRecursivePolicySkipCount == 0 &&
+                result.emissiveAreaFullScanFallbackCount == 0);
+    assert_true("runtime_disney_v2_emissive_area_mis_light_branch",
+                result.lightSamplePdf > 0.0 &&
+                result.misWeightLight > 0.0 &&
+                result.lightSampleContributionCount >= 1);
+    assert_true("runtime_disney_v2_emissive_area_branch_only",
+                result.finiteLightMis.lightPdf == 0.0 &&
+                result.finiteLightMis.bsdfPdf == 0.0 &&
+                result.finiteLightMisVertexCount == 0 &&
+                result.emissiveAreaMis.lightPdf > 0.0 &&
+                result.emissiveAreaMis.bsdfPdf > 0.0 &&
+                result.emissiveAreaMis.weightLight > 0.0 &&
+                result.emissiveAreaMisVertexCount >= 1);
+    assert_close("runtime_disney_v2_emissive_area_mis_uses_area_pdf",
+                 result.lightSamplePdf,
+                 area_pdf_probe.lightPdf,
+                 1e-9);
+    assert_close("runtime_disney_v2_emissive_area_branch_uses_area_pdf",
+                 result.emissiveAreaMis.lightPdf,
+                 area_pdf_probe.lightPdf,
+                 1e-9);
+    assert_close("runtime_disney_v2_emissive_area_vertex_branch_pdf",
+                 result.misVertexEmissiveArea[0].lightPdf,
+                 area_pdf_probe.lightPdf,
+                 1e-9);
+    assert_true("runtime_disney_v2_emissive_area_bsdf_pdf_from_area_direction",
+                result.bsdfSamplePdf > 0.0 &&
+                result.misVertexBsdfPdf[0] > 0.0);
+    assert_true("runtime_disney_v2_emissive_area_blue_contribution",
+                result.emissiveAreaRadianceB > 0.0 &&
+                result.emissiveAreaRadianceB >
+                    result.emissiveAreaRadianceR + 1e-6 &&
+                result.stochasticDirectRadianceB >=
+                    result.emissiveAreaRadianceB - 1e-9);
+    assert_close("runtime_disney_v2_emissive_area_light_sample_total_b",
+                 result.lightSampleContributionB[0],
+                 result.emissiveAreaRadianceB,
+                 1e-9);
+    assert_true("runtime_disney_v2_emissive_area_not_endpoint_hit",
+                result.emissiveMaterialHitCount == 0 &&
+                result.misVertexEmitterKind[0] !=
+                    RUNTIME_DISNEY_V2_3D_EMITTER_EMISSIVE_MATERIAL);
+    assert_true("runtime_disney_v2_emissive_area_affects_final",
+                result.radianceB >= result.emissiveAreaRadianceB &&
+                result.radianceWithoutLightSamplesB <
+                    result.radianceB - 1e-9);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    MaterialManagerResetDefaults();
+    return 0;
+}
+
+static int test_runtime_disney_v2_3d_mixed_finite_and_emissive_area_branches(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    RuntimePrimaryHit3DResult primary = {0};
+    RuntimeMaterialPayload3D matte =
+        runtime_disney_v2_test_payload(0.64, 0.62, 0.58, 0.02, 0.70, 1.0, 0.0, 0.0, 0.0);
+    RuntimeNative3DSamplingContext sampling = {
+        .sampleSequence = 41U,
+        .temporalSubpassIndex = 0U,
+        .temporalSubpassCount = 1U,
+    };
+    RuntimeDisneyV2_3DResult result = {0};
+    double finite_light_term = 0.0;
+    double finite_bsdf_term = 0.0;
+    double finite_total = 0.0;
+    double area_light_term = 0.0;
+    double area_bsdf_term = 0.0;
+    double area_total = 0.0;
+    bool ok = false;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    MaterialManagerResetDefaults();
+    animSettings.bounceDepth3D = 1;
+    animSettings.specularDepth3D = 1;
+    animSettings.transmissionDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
+    runtime_disney_v2_test_init_reflection_scene(&scene);
+    assert_true("runtime_disney_v2_mixed_area_scene_alloc",
+                scene.primitives != NULL && scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        MaterialManagerResetDefaults();
+        return 0;
+    }
+    runtime_disney_v2_test_configure_scene_material(1,
+                                                    MATERIAL_PRESET_EMISSIVE,
+                                                    0x3366FF,
+                                                    0.0,
+                                                    1.0);
+    sceneSettings.sceneObjects[1].emissiveStrength = 1.0;
+    RuntimeScene3D_RefreshCapabilities(&scene);
+    primary = runtime_disney_v2_test_primary_hit(&scene);
+
+    ok = RuntimeDisneyV2_3D_ShadePrimaryHitWithPayload(&scene,
+                                                       &primary,
+                                                       &matte,
+                                                       &sampling,
+                                                       &result);
+    assert_true("runtime_disney_v2_mixed_area_ok", ok);
+    assert_true("runtime_disney_v2_mixed_area_both_branches",
+                result.directRadiance > 0.0 &&
+                result.emissiveAreaRadianceB > 0.0 &&
+                result.finiteLightMis.lightPdf > 0.0 &&
+                result.finiteLightMis.bsdfPdf > 0.0 &&
+                result.emissiveAreaMis.lightPdf > 0.0 &&
+                result.emissiveAreaMis.bsdfPdf > 0.0 &&
+                result.finiteLightMisVertexCount >= 1 &&
+                result.emissiveAreaMisVertexCount >= 1);
+
+    finite_light_term = result.finiteLightMis.lightPdf * result.finiteLightMis.lightPdf;
+    finite_bsdf_term = result.finiteLightMis.bsdfPdf * result.finiteLightMis.bsdfPdf;
+    finite_total = finite_light_term + finite_bsdf_term;
+    area_light_term = result.emissiveAreaMis.lightPdf * result.emissiveAreaMis.lightPdf;
+    area_bsdf_term = result.emissiveAreaMis.bsdfPdf * result.emissiveAreaMis.bsdfPdf;
+    area_total = area_light_term + area_bsdf_term;
+    assert_true("runtime_disney_v2_mixed_area_branch_totals",
+                finite_total > 0.0 && area_total > 0.0);
+    assert_close("runtime_disney_v2_mixed_finite_branch_light_weight",
+                 result.finiteLightMis.weightLight,
+                 finite_light_term / finite_total,
+                 1e-9);
+    assert_close("runtime_disney_v2_mixed_finite_branch_bsdf_weight",
+                 result.finiteLightMis.weightBsdf,
+                 finite_bsdf_term / finite_total,
+                 1e-9);
+    assert_close("runtime_disney_v2_mixed_area_branch_light_weight",
+                 result.emissiveAreaMis.weightLight,
+                 area_light_term / area_total,
+                 1e-9);
+    assert_close("runtime_disney_v2_mixed_area_branch_bsdf_weight",
+                 result.emissiveAreaMis.weightBsdf,
+                 area_bsdf_term / area_total,
+                 1e-9);
+    assert_close("runtime_disney_v2_mixed_vertex_finite_pdf",
+                 result.misVertexFiniteLight[0].lightPdf,
+                 result.finiteLightMis.lightPdf,
+                 1e-9);
+    assert_close("runtime_disney_v2_mixed_vertex_area_pdf",
+                 result.misVertexEmissiveArea[0].lightPdf,
+                 result.emissiveAreaMis.lightPdf,
+                 1e-9);
+    assert_close("runtime_disney_v2_mixed_light_contribution_sum_b",
+                 result.lightSampleContributionB[0],
+                 result.directRadianceB * result.finiteLightMis.weightLight +
+                     result.emissiveAreaRadianceB,
+                 1e-9);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    MaterialManagerResetDefaults();
+    return 0;
+}
+
+static int test_runtime_disney_v2_3d_recursive_emissive_area_sample_lights_vertex(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    HitInfo3D start_hit = {0};
+    RuntimeNative3DSamplingContext sampling = {
+        .sampleSequence = 41U,
+        .temporalSubpassIndex = 0U,
+        .temporalSubpassCount = 1U,
+    };
+    RuntimeDisneyV2_3DResult result = {0};
+    bool ok = false;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    MaterialManagerResetDefaults();
+    animSettings.bounceDepth3D = 2;
+    animSettings.specularDepth3D = 2;
+    animSettings.transmissionDepth3D = 2;
+    animSettings.rouletteThreshold3D = 0.0;
+    runtime_disney_v2_test_init_reflection_scene(&scene);
+    assert_true("runtime_disney_v2_recursive_emissive_area_scene_alloc",
+                scene.primitives != NULL && scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        MaterialManagerResetDefaults();
+        return 0;
+    }
+    scene.hasLight = false;
+    runtime_disney_v2_test_configure_scene_material(0,
+                                                    MATERIAL_PRESET_DEFAULT,
+                                                    0xD8D8D8,
+                                                    0.0,
+                                                    1.0);
+    runtime_disney_v2_test_configure_scene_material(1,
+                                                    MATERIAL_PRESET_EMISSIVE,
+                                                    0x3366FF,
+                                                    0.0,
+                                                    1.0);
+    sceneSettings.sceneObjects[1].emissiveStrength = 1.0;
+    RuntimeScene3D_RefreshCapabilities(&scene);
+    assert_true("runtime_disney_v2_recursive_emissive_area_light_set_cached",
+                scene.emissiveLightSet.valid &&
+                scene.emissiveLightSet.candidateCount == 1 &&
+                scene.capabilities.emissiveLightCandidateCount == 1 &&
+                !scene.capabilities.canSkipEmissionSupport);
+    start_hit = runtime_disney_v2_test_hit(&scene);
+    result.pathPolicy = RuntimePathDepthPolicy3D_Resolve();
+    result.pathPolicyResolved = true;
+
+    ok = RuntimeDisneyV2_3D_ApplyRecursivePathLoopFromDirection(&scene,
+                                                                &start_hit,
+                                                                &sampling,
+                                                                vec3(0.0, -1.0, 0.0),
+                                                                2,
+                                                                0.55,
+                                                                0.50,
+                                                                0.45,
+                                                                &result);
+    assert_true("runtime_disney_v2_recursive_emissive_area_ok", ok);
+    assert_true("runtime_disney_v2_recursive_emissive_area_no_finite_light",
+                result.directRadiance == 0.0 &&
+                result.stochasticDirectRadianceR == 0.0 &&
+                result.finiteLightEmitterHitCount == 0);
+    assert_true("runtime_disney_v2_recursive_emissive_area_sampled",
+                result.emissiveAreaLightSampleCount == 1 &&
+                result.emissiveAreaSampledTriangleCount == 1 &&
+                result.emissiveAreaContributingTriangleCount == 1);
+    assert_true("runtime_disney_v2_recursive_emissive_area_bounded_diagnostics",
+                result.emissiveAreaCandidateCount == 1 &&
+                result.emissiveAreaSelectedCandidateCount == 1 &&
+                result.emissiveAreaVisibilityRayCount == 1 &&
+                result.emissiveAreaPrimarySampleCount == 0 &&
+                result.emissiveAreaRecursiveSampleCount == 1 &&
+                result.emissiveAreaRecursivePolicySkipCount == 0 &&
+                result.emissiveAreaFullScanFallbackCount == 0);
+    assert_true("runtime_disney_v2_recursive_emissive_area_branch",
+                result.lightSamplePdf > 0.0 &&
+                result.bsdfSamplePdf > 0.0 &&
+                result.misWeightLight > 0.0 &&
+                result.lightSampleContributionCount == 1 &&
+                result.lightSampleContributionB[1] > 0.0);
+    assert_true("runtime_disney_v2_recursive_emissive_area_branch_split",
+                result.finiteLightMis.lightPdf == 0.0 &&
+                result.finiteLightMis.bsdfPdf == 0.0 &&
+                result.finiteLightMisVertexCount == 0 &&
+                result.emissiveAreaMis.lightPdf > 0.0 &&
+                result.emissiveAreaMis.bsdfPdf > 0.0 &&
+                result.emissiveAreaMis.weightLight > 0.0 &&
+                result.emissiveAreaMisVertexCount >= 2 &&
+                result.misVertexEmissiveArea[1].lightPdf > 0.0 &&
+                result.misVertexFiniteLight[1].lightPdf == 0.0);
+    assert_true("runtime_disney_v2_recursive_emissive_area_blue",
+                result.emissiveAreaRadianceB > 0.0 &&
+                result.emissiveAreaRadianceB >
+                    result.emissiveAreaRadianceR + 1e-6 &&
+                result.recursiveBsdfRadianceB >=
+                    result.emissiveAreaRadianceB - 1e-9);
+    assert_close("runtime_disney_v2_recursive_emissive_area_light_total_b",
+                 result.lightSampleContributionB[1],
+                 result.emissiveAreaRadianceB,
+                 1e-9);
+    assert_true("runtime_disney_v2_recursive_emissive_area_not_endpoint",
+                result.emissiveMaterialHitCount == 0 &&
+                result.misVertexEmitterKind[1] !=
+                    RUNTIME_DISNEY_V2_3D_EMITTER_EMISSIVE_MATERIAL);
+    assert_true("runtime_disney_v2_recursive_emissive_area_mis_vertex",
+                result.misVertexCount >= 2 &&
+                result.misVertexLightPdf[1] > 0.0 &&
+                result.misVertexBsdfPdf[1] > 0.0 &&
+                result.misVertexWeightLight[1] > 0.0);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    MaterialManagerResetDefaults();
+    return 0;
+}
+
+static int test_runtime_disney_v2_3d_recursive_emissive_area_policy_caps(void) {
+    RuntimeScene3D scene;
+    RuntimeDisneyV2_3DResult result = {0};
+    bool allow_primary = false;
+    bool allow_recursive = false;
+
+    RuntimeScene3D_Init(&scene);
+    scene.emissiveLightSet.valid = true;
+    scene.emissiveLightSet.candidateCount = 17;
+    scene.triangleMesh.triangleCount = 128;
+
+    allow_primary = RuntimeDisneyV2_3D_ShouldEvaluateEmissiveAreaLightSample(&scene,
+                                                                             false,
+                                                                             &result);
+    allow_recursive = RuntimeDisneyV2_3D_ShouldEvaluateEmissiveAreaLightSample(&scene,
+                                                                               true,
+                                                                               &result);
+    assert_true("runtime_disney_v2_emissive_area_policy_primary_allowed",
+                allow_primary);
+    assert_true("runtime_disney_v2_emissive_area_policy_candidate_cap",
+                !allow_recursive &&
+                result.emissiveAreaCandidateCount == 17 &&
+                result.emissiveAreaRecursiveCandidateCap == 16 &&
+                result.emissiveAreaRecursiveTriangleCap == 8192 &&
+                result.emissiveAreaRecursivePolicySkipCount == 1 &&
+                result.emissiveAreaRecursiveCandidateCapSkipCount == 1 &&
+                result.emissiveAreaRecursiveTriangleCapSkipCount == 0);
+
+    memset(&result, 0, sizeof(result));
+    scene.emissiveLightSet.candidateCount = 1;
+    scene.triangleMesh.triangleCount = 8193;
+    allow_recursive = RuntimeDisneyV2_3D_ShouldEvaluateEmissiveAreaLightSample(&scene,
+                                                                               true,
+                                                                               &result);
+    assert_true("runtime_disney_v2_emissive_area_policy_triangle_cap",
+                !allow_recursive &&
+                result.emissiveAreaCandidateCount == 1 &&
+                result.emissiveAreaRecursivePolicySkipCount == 1 &&
+                result.emissiveAreaRecursiveCandidateCapSkipCount == 0 &&
+                result.emissiveAreaRecursiveTriangleCapSkipCount == 1);
+
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
+static int test_runtime_disney_v2_3d_recursive_emissive_material_surface_terminates(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    RuntimePrimaryHit3DResult primary = {0};
+    RuntimeMaterialPayload3D glossy =
+        runtime_disney_v2_test_payload(0.90, 0.78, 0.52, 0.90, 0.02, 0.0, 1.0, 0.0, 0.0);
+    RuntimeNative3DSamplingContext sampling = {
+        .sampleSequence = 7U,
+        .temporalSubpassIndex = 0U,
+        .temporalSubpassCount = 1U,
+    };
+    RuntimeDisneyV2_3DResult result = {0};
+    bool ok = false;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    MaterialManagerResetDefaults();
+    animSettings.bounceDepth3D = 3;
+    animSettings.specularDepth3D = 3;
+    animSettings.transmissionDepth3D = 3;
+    animSettings.rouletteThreshold3D = 0.0;
+    runtime_disney_v2_test_init_recursive_depth_three_scene(&scene);
+    assert_true("runtime_disney_v2_recursive_emissive_scene_alloc",
+                scene.primitives != NULL && scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        MaterialManagerResetDefaults();
+        return 0;
+    }
+    scene.light.radius = 0.0;
+    runtime_disney_v2_test_configure_scene_material(1,
+                                                    MATERIAL_PRESET_DEFAULT,
+                                                    0xD8D8D8,
+                                                    0.05,
+                                                    0.60);
+    runtime_disney_v2_test_configure_scene_material(2,
+                                                    MATERIAL_PRESET_EMISSIVE,
+                                                    0x44AAFF,
+                                                    0.0,
+                                                    1.0);
+    sceneSettings.sceneObjects[2].emissiveStrength = 1.0;
+    primary = runtime_disney_v2_test_primary_hit(&scene);
+
+    ok = RuntimeDisneyV2_3D_ShadePrimaryHitWithPayload(&scene,
+                                                       &primary,
+                                                       &glossy,
+                                                       &sampling,
+                                                       &result);
+    assert_true("runtime_disney_v2_recursive_emissive_ok", ok);
+    assert_true("runtime_disney_v2_recursive_emissive_first_hit",
+                result.pathState.valid &&
+                result.pathState.hit &&
+                result.pathState.hitInfo.sceneObjectIndex == 1);
+    assert_true("runtime_disney_v2_recursive_emissive_endpoint",
+                result.recursiveLoopVertexCount == 1 &&
+                result.recursiveLoopStates[0].hit &&
+                result.recursiveLoopStates[0].hitInfo.sceneObjectIndex == 2 &&
+                result.recursiveLoopStates[0].emitterHit &&
+                result.recursiveLoopStates[0].emitterWins &&
+                result.recursiveLoopStates[0].emitterHitInfo.radiance > 0.0);
+    assert_true("runtime_disney_v2_recursive_emissive_accounting",
+                result.emissiveMaterialHitCount == 1 &&
+                result.finiteLightEmitterHitCount == 0 &&
+                result.recursiveLoopEmitterHitCount == 1 &&
+                result.misVertexEmitterKind[1] ==
+                    RUNTIME_DISNEY_V2_3D_EMITTER_EMISSIVE_MATERIAL);
+    assert_true("runtime_disney_v2_recursive_emissive_contribution",
+                result.recursiveLoopContributionB[0] > 0.0 &&
+                result.recursiveBsdfRadianceB > 0.0 &&
+                result.recursiveLoopContributionB[0] > result.recursiveLoopContributionR[0]);
+    assert_true("runtime_disney_v2_recursive_emissive_terminates",
+                result.recursiveLoopContributingHitCount == 1 &&
+                result.recursiveLoopTerminationReason ==
+                    RUNTIME_DISNEY_V2_3D_LOOP_TERMINATION_EMITTER);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    MaterialManagerResetDefaults();
     return 0;
 }
 
@@ -2456,15 +4141,24 @@ static int test_runtime_disney_v2_3d_path_policy_roulette_can_terminate_recursiv
 }
 
 int run_test_runtime_lighting_materials_transport_suite(void) {
+    test_runtime_dielectric_transport_water_ior_fresnel_contract();
     test_runtime_material_response_3d_seed_branch_contract();
     test_runtime_material_response_3d_mirror_reflects_opaque_chroma();
+    test_runtime_material_response_3d_mirror_surface_kind_parity();
+    test_runtime_material_response_3d_mirror_dominance_reflects_light_emitter();
     test_runtime_disney_3d_lower_tier_separation_contract();
     test_runtime_disney_3d_opaque_receiver_preserves_transport_support();
+    test_runtime_disney_v2_3d_direct_light_pdf_estimator();
     test_runtime_disney_v2_3d_consumes_cached_principled_payload();
     test_runtime_disney_v2_3d_material_diagnostics_order_lobes();
     test_runtime_disney_v2_3d_sampling_context_moves_bsdf_path_state();
     test_runtime_disney_v2_3d_one_bounce_geometry_contributes();
     test_runtime_disney_v2_3d_secondary_material_vertex_modulates_contribution();
+    test_runtime_disney_v2_3d_recursive_lobe_resamples_secondary_material();
+    test_runtime_disney_v2_3d_reflection_recurses_reflected_geometry();
+    test_runtime_disney_v2_3d_mirror_dominance_reflects_light_emitter();
+    test_runtime_disney_v2_3d_rough_reflection_records_stochastic_sample();
+    test_runtime_disney_v2_3d_reflection_recursion_respects_policy();
     test_runtime_disney_v2_3d_one_bounce_light_emitter_contributes();
     test_runtime_disney_v2_3d_transmission_glass_participates();
     test_runtime_disney_v2_3d_primary_transparency_continues_camera_ray();
@@ -2474,6 +4168,12 @@ int run_test_runtime_lighting_materials_transport_suite(void) {
     test_runtime_disney_v2_3d_transparency_policy_classifies_alpha_only();
     test_runtime_disney_v2_3d_bounded_recursive_participates();
     test_runtime_disney_v2_3d_mis_and_emitter_accounting_separates_branches();
+    test_runtime_disney_v2_3d_emissive_material_surface_hit_contributes();
+    test_runtime_disney_v2_3d_emissive_area_sample_lights_primary_vertex();
+    test_runtime_disney_v2_3d_mixed_finite_and_emissive_area_branches();
+    test_runtime_disney_v2_3d_recursive_emissive_area_sample_lights_vertex();
+    test_runtime_disney_v2_3d_recursive_emissive_area_policy_caps();
+    test_runtime_disney_v2_3d_recursive_emissive_material_surface_terminates();
     test_runtime_disney_v2_3d_bounded_recursive_loop_depth_three_participates();
     test_runtime_disney_v2_3d_bounded_recursive_loop_depth_limit_stops_before_emitter();
     test_runtime_disney_v2_3d_path_depth_policy_blocks_recursive_depth();

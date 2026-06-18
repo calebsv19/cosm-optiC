@@ -14,6 +14,7 @@
 #include "engine/Render/render_font.h"
 #include "engine/Render/render_pipeline.h"
 #include "render/ray_tracing_integrator_catalog.h"
+#include "import/runtime_scene_bridge.h"
 #include "ui/menu_batch_panel.h"
 #include "ui/scene_source_ui_labels.h"
 #include "ui/shared_theme_font_adapter.h"
@@ -21,7 +22,7 @@
 #include "ui/volume_source_ui_labels.h"
 
 static bool point_in_rect(const SDL_Rect *rect, int x, int y) {
-    if (!rect) return false;
+    if (!rect || rect->w <= 0 || rect->h <= 0) return false;
     return x >= rect->x && x <= rect->x + rect->w &&
            y >= rect->y && y <= rect->y + rect->h;
 }
@@ -29,6 +30,7 @@ static bool point_in_rect(const SDL_Rect *rect, int x, int y) {
 static bool path_edit_active(const MenuRuntimeState *state) {
     if (!state) return false;
     return state->editingInputRoot ||
+           state->editingMeshAssetRoot ||
            state->editingOutputRoot ||
            menu_batch_panel_edit_active(state);
 }
@@ -71,16 +73,28 @@ static bool pick_folder_macos(const char *prompt, char *out_path, size_t out_cap
 static void begin_input_root_edit(MenuRuntimeState *state) {
     if (!state) return;
     state->editingInputRoot = true;
+    state->editingMeshAssetRoot = false;
     state->editingOutputRoot = false;
     state->editingFrameDir = false;
     state->editingVideoOutputRoot = false;
     snprintf(state->pathInputBuffer, sizeof(state->pathInputBuffer), "%s", animSettings.inputRoot);
 }
 
+static void begin_mesh_asset_root_edit(MenuRuntimeState *state) {
+    if (!state) return;
+    state->editingMeshAssetRoot = true;
+    state->editingInputRoot = false;
+    state->editingOutputRoot = false;
+    state->editingFrameDir = false;
+    state->editingVideoOutputRoot = false;
+    snprintf(state->pathInputBuffer, sizeof(state->pathInputBuffer), "%s", animSettings.meshAssetRoot);
+}
+
 static void begin_output_root_edit(MenuRuntimeState *state) {
     if (!state) return;
     state->editingOutputRoot = true;
     state->editingInputRoot = false;
+    state->editingMeshAssetRoot = false;
     state->editingFrameDir = false;
     state->editingVideoOutputRoot = false;
     snprintf(state->pathInputBuffer, sizeof(state->pathInputBuffer), "%s", animSettings.outputRoot);
@@ -92,9 +106,30 @@ static void apply_input_root(MenuRuntimeState *state, const char *path) {
     (void)setenv("RAY_TRACING_INPUT_ROOT", animSettings.inputRoot, 1);
     menu_state_refresh_manifest_options(state);
     menu_state_refresh_volume_options(state);
+    SaveAnimationConfig();
     snprintf(state->statusLabel, sizeof(state->statusLabel), "Input root set");
     state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
     state->statusColor = (SDL_Color){120, 220, 180, 255};
+    state->statusExpireMs = SDL_GetTicks() + 1800;
+}
+
+static void apply_mesh_asset_root(MenuRuntimeState *state, const char *path) {
+    RuntimeSceneBridgePreflight summary = {0};
+    if (!state || !path) return;
+    snprintf(animSettings.meshAssetRoot, sizeof(animSettings.meshAssetRoot), "%s", path);
+    if (animSettings.meshAssetRoot[0]) {
+        (void)setenv("RAY_TRACING_MESH_ASSET_ROOT", animSettings.meshAssetRoot, 1);
+    } else {
+        (void)unsetenv("RAY_TRACING_MESH_ASSET_ROOT");
+    }
+    SaveAnimationConfig();
+    if (animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE &&
+        animSettings.runtimeScenePath[0] != '\0') {
+        (void)runtime_scene_bridge_apply_file(animSettings.runtimeScenePath, &summary);
+    }
+    snprintf(state->statusLabel, sizeof(state->statusLabel), "Mesh asset root set");
+    state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
+    state->statusColor = (SDL_Color){150, 210, 255, 255};
     state->statusExpireMs = SDL_GetTicks() + 1800;
 }
 
@@ -117,11 +152,14 @@ static void finish_root_edit(MenuRuntimeState *state, bool apply) {
     if (apply && state->pathInputBuffer[0]) {
         if (state->editingInputRoot) {
             apply_input_root(state, state->pathInputBuffer);
+        } else if (state->editingMeshAssetRoot) {
+            apply_mesh_asset_root(state, state->pathInputBuffer);
         } else if (state->editingOutputRoot) {
             apply_output_root(state, state->pathInputBuffer);
         }
     }
     state->editingInputRoot = false;
+    state->editingMeshAssetRoot = false;
     state->editingOutputRoot = false;
     state->pathInputBuffer[0] = '\0';
 }
@@ -132,6 +170,7 @@ static void begin_start_frame_edit(MenuRuntimeState *state) {
     state->editingBounce = false;
     state->editingFrame = false;
     state->editingInputRoot = false;
+    state->editingMeshAssetRoot = false;
     state->editingOutputRoot = false;
     state->inputBuffer[0] = '\0';
     snprintf(state->inputBuffer, sizeof(state->inputBuffer), "%d", animSettings.startFrameIndex);
@@ -148,13 +187,13 @@ static void finish_start_frame_edit(MenuRuntimeState *state, bool apply) {
     state->inputBuffer[0] = '\0';
 }
 
-static void handle_slider_click(SDL_Event* event,
+static bool handle_slider_click(SDL_Event* event,
                                 const SliderLayout* layout,
                                 MenuRuntimeState* state) {
-    if (!event || !layout || !state) return;
+    if (!event || !layout || !state) return false;
     int x = event->button.x;
     int y = event->button.y;
-    if (!point_in_rect(&layout->panelRect, x, y)) return;
+    if (!point_in_rect(&layout->panelRect, x, y)) return false;
     for (size_t i = 0; i < layout->count; i++) {
         const MenuSlider* slider = &layout->items[i];
         if (point_in_rect(&slider->hitRect, x, y)) {
@@ -186,9 +225,10 @@ static void handle_slider_click(SDL_Event* event,
                 state->oldWindowWidth = sceneSettings.windowWidth;
                 state->oldWindowHeight = sceneSettings.windowHeight;
             }
-            return;
+            return true;
         }
     }
+    return false;
 }
 
 void menu_input_handle_key(SDL_Event* event,
@@ -261,7 +301,10 @@ void menu_input_handle_key(SDL_Event* event,
                 menu_batch_panel_backspace_edit(state);
                 break;
             }
-            if ((state->editingInputRoot || state->editingOutputRoot) && strlen(state->pathInputBuffer) > 0) {
+            if ((state->editingInputRoot ||
+                 state->editingMeshAssetRoot ||
+                 state->editingOutputRoot) &&
+                strlen(state->pathInputBuffer) > 0) {
                 state->pathInputBuffer[strlen(state->pathInputBuffer) - 1] = '\0';
                 break;
             }
@@ -417,7 +460,12 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     menu_layout_finalize_with_buttons(&screenLayout, &buttons, state);
     menu_render_build_slider_layout(*font, state, &screenLayout, &layout);
     menu_batch_panel_build_layout(*font, state, &screenLayout, &batchLayout);
-    handle_slider_click(event, &layout, state);
+    if (handle_slider_click(event, &buttons.rendererControlSliders, state)) {
+        return;
+    }
+    if (handle_slider_click(event, &layout, state)) {
+        return;
+    }
 
     int x = event->button.x;
     int y = event->button.y;
@@ -508,6 +556,19 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         }
     }
 
+    if (point_in_rect(&buttons.rendererLightingTabRect, x, y)) {
+        state->rendererControlsTab = MENU_RENDERER_CONTROLS_LIGHTING;
+        state->draggingSlider = false;
+        state->selectedSlider = NULL;
+        return;
+    }
+    if (point_in_rect(&buttons.rendererPerformanceTabRect, x, y)) {
+        state->rendererControlsTab = MENU_RENDERER_CONTROLS_PERFORMANCE;
+        state->draggingSlider = false;
+        state->selectedSlider = NULL;
+        return;
+    }
+
     if (point_in_rect(&buttons.loadSceneRect, x, y)) {
         if (animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D) {
             menu_state_refresh_manifest_options(state);
@@ -575,6 +636,26 @@ void menu_input_handle_mouse_click(SDL_Event* event,
             finish_root_edit(state, true);
         } else {
             apply_input_root(state, animSettings.inputRoot);
+        }
+        return;
+    }
+    if (point_in_rect(&buttons.meshAssetRootFolderRect, x, y)) {
+        char selected[PATH_MAX];
+        if (pick_folder_macos("Choose optiC Mesh Asset Root", selected, sizeof(selected))) {
+            apply_mesh_asset_root(state, selected);
+        }
+        return;
+    }
+    if (point_in_rect(&buttons.meshAssetRootEditRect, x, y) ||
+        point_in_rect(&buttons.meshAssetRootValueRect, x, y)) {
+        begin_mesh_asset_root_edit(state);
+        return;
+    }
+    if (point_in_rect(&buttons.meshAssetRootApplyRect, x, y)) {
+        if (state->editingMeshAssetRoot) {
+            finish_root_edit(state, true);
+        } else {
+            apply_mesh_asset_root(state, animSettings.meshAssetRoot);
         }
         return;
     }
@@ -687,6 +768,43 @@ void menu_input_handle_mouse_click(SDL_Event* event,
                      : ((animSettings.environmentLightMode == ENVIRONMENT_LIGHT_MODE_AMBIENT)
                             ? "Ambient"
                             : "Off"));
+        state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
+        state->statusColor = (SDL_Color){160, 210, 255, 255};
+        state->statusExpireMs = SDL_GetTicks() + 1800;
+        return;
+    }
+    if (point_in_rect(&buttons.environmentPresetRect, x, y)) {
+        const char* preset_label = "Sky";
+        animSettings.environmentPreset =
+            (animation_config_environment_preset_clamp(animSettings.environmentPreset) + 1) %
+            (ENVIRONMENT_PRESET_WARM_SKY + 1);
+        animSettings.environmentBackgroundLightingAuthored = true;
+        if (animSettings.environmentPreset == ENVIRONMENT_PRESET_NEUTRAL) {
+            preset_label = "Neutral";
+        } else if (animSettings.environmentPreset == ENVIRONMENT_PRESET_WARM_SKY) {
+            preset_label = "Warm";
+        }
+        snprintf(state->statusLabel,
+                 sizeof(state->statusLabel),
+                 "Env Preset: %s",
+                 preset_label);
+        state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
+        state->statusColor = (SDL_Color){160, 210, 255, 255};
+        state->statusExpireMs = SDL_GetTicks() + 1800;
+        return;
+    }
+    if (point_in_rect(&buttons.environmentBackgroundModeRect, x, y)) {
+        animSettings.environmentBackgroundLightingAuthored = true;
+        animSettings.environmentBackgroundBrightnessAuto =
+            !animSettings.environmentBackgroundBrightnessAuto;
+        if (!animSettings.environmentBackgroundBrightnessAuto) {
+            animSettings.environmentBackgroundBrightness =
+                state->environmentBackgroundBrightnessSliderValue / 100.0;
+        }
+        snprintf(state->statusLabel,
+                 sizeof(state->statusLabel),
+                 "BG Brightness: %s",
+                 animSettings.environmentBackgroundBrightnessAuto ? "Auto" : "Manual");
         state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
         state->statusColor = (SDL_Color){160, 210, 255, 255};
         state->statusExpireMs = SDL_GetTicks() + 1800;

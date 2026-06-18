@@ -655,10 +655,7 @@ bool AnimationApplyActiveSceneSource(void) {
 
     if (source == SCENE_SOURCE_FLUID_MANIFEST) {
         if (animSettings.fluidManifest[0] == '\0') {
-            animSettings.sceneSource = SCENE_SOURCE_CONFIG_2D;
             animSettings.useFluidScene = false;
-            animSettings.fluidManifest[0] = '\0';
-            animSettings.runtimeScenePath[0] = '\0';
             AnimationClearFluidGrid();
             return false;
         }
@@ -666,10 +663,7 @@ bool AnimationApplyActiveSceneSource(void) {
             fprintf(stderr,
                     "[fluid-scene] failed to apply fluid scene source '%s'\n",
                     animSettings.fluidManifest);
-            animSettings.sceneSource = SCENE_SOURCE_CONFIG_2D;
             animSettings.useFluidScene = false;
-            animSettings.fluidManifest[0] = '\0';
-            animSettings.runtimeScenePath[0] = '\0';
             AnimationClearFluidGrid();
             return false;
         }
@@ -679,10 +673,7 @@ bool AnimationApplyActiveSceneSource(void) {
     if (source == SCENE_SOURCE_RUNTIME_SCENE) {
         RuntimeSceneBridgePreflight summary;
         if (animSettings.runtimeScenePath[0] == '\0') {
-            animSettings.sceneSource = SCENE_SOURCE_CONFIG_2D;
             animSettings.useFluidScene = false;
-            animSettings.fluidManifest[0] = '\0';
-            animSettings.runtimeScenePath[0] = '\0';
             AnimationClearFluidGrid();
             return false;
         }
@@ -691,10 +682,14 @@ bool AnimationApplyActiveSceneSource(void) {
                     "[runtime-scene] failed to apply runtime scene source '%s': %s\n",
                     animSettings.runtimeScenePath,
                     summary.diagnostics);
-            animSettings.sceneSource = SCENE_SOURCE_CONFIG_2D;
+            if (runtime_scene_bridge_apply_file_defer_mesh_assets(animSettings.runtimeScenePath, &summary)) {
+                fprintf(stderr,
+                        "[runtime-scene] applied runtime scene source '%s' with mesh assets deferred.\n",
+                        animSettings.runtimeScenePath);
+                animSettings.useFluidScene = false;
+                return true;
+            }
             animSettings.useFluidScene = false;
-            animSettings.fluidManifest[0] = '\0';
-            animSettings.runtimeScenePath[0] = '\0';
             AnimationClearFluidGrid();
             return false;
         }
@@ -726,7 +721,13 @@ bool AnimationSelectSceneSource(int source, const char *path, bool apply_immedia
 }
 
 bool AnimationRestoreActiveSceneSource(bool persist_on_failure) {
+    AnimationSceneSourceSnapshot snapshot = {0};
+    int source = animation_config_scene_source_clamp(animSettings.sceneSource);
+    animation_scene_source_snapshot_capture(&snapshot);
     bool ok = AnimationApplyActiveSceneSource();
+    if (!ok && source == SCENE_SOURCE_RUNTIME_SCENE) {
+        animation_scene_source_snapshot_restore(&snapshot);
+    }
     if (!ok && persist_on_failure) {
         SaveAnimationConfig();
     }

@@ -270,6 +270,109 @@ static int test_runtime_native_3d_render_live_buffer_contract(void) {
     return 0;
 }
 
+static int test_runtime_native_3d_deep_render_samples_authored_light_when_legacy_interactive_flag_is_set(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_native_runtime_deep_motion\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"lit_wall\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":8.0,\"height\":8.0,"
+            "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+            "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":0.0,\"y\":-2.0,\"z\":1.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{"
+          "\"ray_tracing\":{"
+            "\"authoring\":{"
+              "\"light_path\":{"
+                "\"mode\":\"BEZIER_CUBIC\","
+                "\"points\":["
+                  "{\"x\":0.0,\"y\":-2.0,\"rotation\":0.0,\"handleLink\":false},"
+                  "{\"x\":3.0,\"y\":-2.0,\"rotation\":0.0,\"handleLink\":false}"
+                "]"
+              "},"
+              "\"light_path_depth\":{"
+                "\"points\":["
+                  "{\"z\":1.0},"
+                  "{\"z\":4.0}"
+                "]"
+              "}"
+            "}"
+          "}"
+        "}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeNative3DPreparedFrame start_frame = {0};
+    RuntimeNative3DPreparedFrame end_frame = {0};
+    bool ok = false;
+
+    RuntimeNative3DPreparedSceneCacheResetForTests();
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_native_3d_deep_motion_apply_ok", ok);
+    if (!ok) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        RuntimeNative3DPreparedSceneCacheResetForTests();
+        return 0;
+    }
+
+    animSettings.interactiveMode = true;
+    animSettings.deepRenderMode = true;
+    animSettings.lightIntensity = 10.0;
+    animSettings.forwardDecay = 10.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    animSettings.spaceMode = SPACE_MODE_3D;
+    sceneSettings.camera.x = 0.0;
+    sceneSettings.camera.y = 0.0;
+    sceneSettings.cameraZ = 0.0;
+    sceneSettings.camera.rotation = 0.0;
+    sceneSettings.camera.zoom = 1.0;
+
+    ok = RuntimeNative3DPrepareFrame(&start_frame, 51, 51, 0.0, -99.0, -99.0);
+    assert_true("runtime_native_3d_deep_motion_prepare_start_ok", ok);
+    ok = ok && RuntimeNative3DPrepareFrame(&end_frame, 51, 51, 1.0, -99.0, -99.0);
+    assert_true("runtime_native_3d_deep_motion_prepare_end_ok", ok);
+    if (ok) {
+        assert_close("runtime_native_3d_deep_motion_start_light_x",
+                     start_frame.scene.light.position.x,
+                     0.0,
+                     1e-9);
+        assert_close("runtime_native_3d_deep_motion_end_light_x",
+                     end_frame.scene.light.position.x,
+                     3.0,
+                     1e-9);
+        assert_close("runtime_native_3d_deep_motion_end_light_z",
+                     end_frame.scene.light.position.z,
+                     4.0,
+                     1e-9);
+    }
+
+    RuntimeNative3DPreparedFrame_Free(&start_frame);
+    RuntimeNative3DPreparedFrame_Free(&end_frame);
+    RuntimeNative3DPreparedSceneCacheResetForTests();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 static int test_runtime_native_3d_render_direct_light_color_tint_contract(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -627,6 +730,12 @@ static int test_runtime_native_3d_render_environment_floor_lights_miss_pixels(vo
     animSettings.spaceMode = SPACE_MODE_3D;
     animSettings.environmentBrightness = 128.0;
     animSettings.environmentLightMode = ENVIRONMENT_LIGHT_MODE_AMBIENT;
+    animSettings.environmentPreset = ENVIRONMENT_PRESET_SKY;
+    animSettings.environmentBackgroundLightingAuthored = true;
+    animSettings.environmentBackgroundBrightnessAuto = true;
+    animSettings.environmentBackgroundColorR = 1.0;
+    animSettings.environmentBackgroundColorG = 1.0;
+    animSettings.environmentBackgroundColorB = 1.0;
     sceneSettings.camera.x = 0.0;
     sceneSettings.camera.y = 0.0;
     sceneSettings.cameraZ = 0.0;
@@ -661,6 +770,7 @@ int run_test_runtime_native_3d_render_live_suite(void) {
     int before = test_support_failures();
 
     test_runtime_native_3d_render_live_buffer_contract();
+    test_runtime_native_3d_deep_render_samples_authored_light_when_legacy_interactive_flag_is_set();
     test_runtime_native_3d_render_direct_light_color_tint_contract();
     test_runtime_native_3d_disney_result_contract();
     test_runtime_native_3d_render_live_visible_emitter_bounded();

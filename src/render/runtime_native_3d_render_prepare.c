@@ -11,9 +11,13 @@
 #include "config/config_manager.h"
 #include "import/fluid_volume_import_3d.h"
 #include "import/runtime_scene_bridge.h"
+#include "import/water_surface_import.h"
+#include "material/material.h"
 #include "render/runtime_scene_3d_builder.h"
 #include "render/runtime_scene_3d_samples.h"
 #include "render/runtime_triangle_bvh_3d.h"
+#include "render/runtime_water_material_3d.h"
+#include "scene/object_manager.h"
 
 static bool gRuntimeNative3DInspectionCameraPositionEnabled = false;
 static bool gRuntimeNative3DInspectionCameraLookAtEnabled = false;
@@ -229,6 +233,10 @@ static bool runtime_native_3d_render_scene_center(const RuntimeScene3D* scene, V
     return true;
 }
 
+static bool runtime_native_3d_render_should_sample_authored_motion(void) {
+    return !animSettings.interactiveMode || animSettings.deepRenderMode;
+}
+
 static bool runtime_native_3d_render_camera_path_has_authored_rotation(void) {
     for (int i = 0; i < sceneSettings.cameraPath.numPoints && i < MAX_BEZIER_POINTS; ++i) {
         if (sceneSettings.cameraPath.rotationSet[i]) {
@@ -311,7 +319,7 @@ static void runtime_native_3d_render_apply_live_light(RuntimeScene3D* scene,
     bool has_authored_light = false;
     if (!scene) return;
 
-    if (!animSettings.interactiveMode &&
+    if (runtime_native_3d_render_should_sample_authored_motion() &&
         RuntimeScene3DSampleAuthoredLight(normalized_t, &sampled_light)) {
         light = sampled_light;
         has_authored_light = true;
@@ -348,7 +356,7 @@ static void runtime_native_3d_render_apply_live_camera(RuntimeScene3D* scene,
     camera.zoom = (sceneSettings.camera.zoom > 0.0) ? sceneSettings.camera.zoom : 1.0;
     camera.nearPlane = (camera.nearPlane > 0.0) ? camera.nearPlane : 0.1;
     camera.lookPitch = 0.0;
-    if (!animSettings.interactiveMode) {
+    if (runtime_native_3d_render_should_sample_authored_motion()) {
         if (RuntimeScene3DSampleAuthoredCamera(normalized_t, &sampled)) {
             camera = sampled;
             camera.nearPlane = (camera.nearPlane > 0.0) ? camera.nearPlane : 0.1;
@@ -485,6 +493,190 @@ static bool runtime_native_3d_render_attach_configured_volume(RuntimeScene3D* sc
     return true;
 }
 
+static void runtime_native_3d_render_configure_water_surface_object(
+    SceneObject* object,
+    const RuntimeWaterSurfaceFrame* water) {
+    unsigned char r = 88u;
+    unsigned char g = 178u;
+    unsigned char b = 235u;
+    double tint_r = 88.0 / 255.0;
+    double tint_g = 178.0 / 255.0;
+    double tint_b = 235.0 / 255.0;
+    if (!object || !water) return;
+
+    RuntimeWaterMaterial3D_ComputeTransmittanceTint(
+        water->material.valid ? water->material.absorption_distance_m : 4.0,
+        water->material.valid ? water->material.absorption_rgb[0] : 0.10,
+        water->material.valid ? water->material.absorption_rgb[1] : 0.035,
+        water->material.valid ? water->material.absorption_rgb[2] : 0.015,
+        &tint_r,
+        &tint_g,
+        &tint_b);
+    r = (unsigned char)(runtime_native_3d_render_clamp01(tint_r) * 255.0);
+    g = (unsigned char)(runtime_native_3d_render_clamp01(tint_g) * 255.0);
+    b = (unsigned char)(runtime_native_3d_render_clamp01(tint_b) * 255.0);
+
+    snprintf(object->type, sizeof(object->type), "%s", "water_surface");
+    object->x = water->sample_origin_x +
+                (((double)water->grid_w - 1.0) * water->sample_spacing_x * 0.5);
+    object->y = water->sample_origin_z +
+                (((double)water->grid_d - 1.0) * water->sample_spacing_z * 0.5);
+    object->z = water->surface_avg_y;
+    object->scale = 1.0;
+    object->color = SceneObjectPackRGBBytes(r, g, b);
+    object->opacity = 1.0;
+    object->alpha = 1.0;
+    object->reflectivity = 0.0;
+    object->roughness = 0.02;
+    object->material_id = MATERIAL_PRESET_TRANSPARENT;
+    object->dirty = false;
+    object->guideOnly = false;
+}
+
+static int runtime_native_3d_render_ensure_water_surface_object(
+    const RuntimeWaterSurfaceFrame* water) {
+    SceneObject* object = NULL;
+    if (!water) return -1;
+    for (int i = 0; i < sceneSettings.objectCount && i < MAX_OBJECTS; ++i) {
+        if (strcmp(sceneSettings.sceneObjects[i].type, "water_surface") == 0) {
+            runtime_native_3d_render_configure_water_surface_object(&sceneSettings.sceneObjects[i],
+                                                                    water);
+            return i;
+        }
+    }
+    if (sceneSettings.objectCount < 0 || sceneSettings.objectCount >= MAX_OBJECTS) {
+        return -1;
+    }
+
+    object = &sceneSettings.sceneObjects[sceneSettings.objectCount];
+    memset(object, 0, sizeof(*object));
+    runtime_native_3d_render_configure_water_surface_object(object, water);
+    sceneSettings.objectCount += 1;
+    return sceneSettings.objectCount - 1;
+}
+
+static bool runtime_native_3d_render_apply_water_surface_material(
+    int scene_object_index,
+    const RuntimeWaterSurfaceFrame* water) {
+    RuntimeWaterMaterial3DOverride override = {0};
+    if (scene_object_index < 0 || !water) {
+        return false;
+    }
+
+    override.valid = true;
+    override.ior = water->material.valid ? water->material.ior : 1.333;
+    override.absorptionDistance =
+        water->material.valid ? water->material.absorption_distance_m : 4.0;
+    override.absorptionR = water->material.valid ? water->material.absorption_rgb[0]
+                                                 : 0.10;
+    override.absorptionG = water->material.valid ? water->material.absorption_rgb[1]
+                                                 : 0.035;
+    override.absorptionB = water->material.valid ? water->material.absorption_rgb[2]
+                                                 : 0.015;
+    override.transparency = 0.92;
+    override.reflectivity = 0.0;
+    override.roughness = 0.02;
+    return RuntimeWaterMaterial3D_Set(scene_object_index, &override);
+}
+
+static bool runtime_native_3d_render_attach_configured_water_surface(RuntimeScene3D* scene,
+                                                                     int frame_index) {
+    RuntimeWaterSurfaceFrame water = {0};
+    RuntimeScene3DHeightfieldSurfaceDesc desc = {0};
+    bool found = false;
+    char diagnostics[1024] = {0};
+    int scene_object_index = -1;
+    int appended_triangle_count = 0;
+
+    if (!scene) return false;
+    if (!animSettings.volumeInteractionEnabled ||
+        animSettings.volumeSourceKind != VOLUME_SOURCE_MANIFEST ||
+        animSettings.volumeSourcePath[0] == '\0') {
+        return true;
+    }
+
+    RuntimeWaterSurfaceFrame_Init(&water);
+    if (!RuntimeWaterSurfaceImport_LoadSourceAtFrame(animSettings.volumeSourcePath,
+                                                     frame_index,
+                                                     &water,
+                                                     &found,
+                                                     diagnostics,
+                                                     sizeof(diagnostics))) {
+        runtime_native_3d_prepare_frame_set_diag(diagnostics[0] ? diagnostics
+                                                                : "water surface import failed");
+        RuntimeWaterSurfaceFrame_Free(&water);
+        return false;
+    }
+    if (!found) {
+        RuntimeWaterSurfaceFrame_Free(&water);
+        return true;
+    }
+
+    scene_object_index = runtime_native_3d_render_ensure_water_surface_object(&water);
+    if (scene_object_index < 0) {
+        runtime_native_3d_prepare_frame_set_diag("water surface scene object unavailable");
+        RuntimeWaterSurfaceFrame_Free(&water);
+        return false;
+    }
+    if (!runtime_native_3d_render_apply_water_surface_material(scene_object_index, &water)) {
+        runtime_native_3d_prepare_frame_set_diag("water surface material payload unavailable");
+        RuntimeWaterSurfaceFrame_Free(&water);
+        return false;
+    }
+
+    desc.object_id = "water_surface";
+    desc.scene_object_index = scene_object_index;
+    desc.grid_w = water.grid_w;
+    desc.grid_d = water.grid_d;
+    desc.heights_y = water.heights_y;
+    desc.sample_origin_x = water.sample_origin_x;
+    desc.sample_origin_z = water.sample_origin_z;
+    desc.sample_spacing_x = water.sample_spacing_x;
+    desc.sample_spacing_z = water.sample_spacing_z;
+    desc.dry_height = water.surface_min_y;
+    desc.dry_height_epsilon = 1e-6;
+    desc.skip_dry_quads = true;
+    desc.two_sided = true;
+    desc.map_y_height_to_scene_z = true;
+
+    if (!RuntimeScene3DBuilder_AppendHeightfieldSurface(scene,
+                                                        &desc,
+                                                        &appended_triangle_count)) {
+        runtime_native_3d_prepare_frame_set_diag("water surface mesh append failed");
+        RuntimeWaterSurfaceFrame_Free(&water);
+        return false;
+    }
+
+    RuntimeWaterSurfaceFrame_Free(&water);
+    return true;
+}
+
+static bool runtime_native_3d_render_ensure_ready_bvh(RuntimeScene3D* scene) {
+    RuntimeTriangleBVH3DBuildStats stats = {0};
+    if (!scene || scene->triangleMesh.triangleCount <= 0) return false;
+    if (!RuntimeTriangleMesh3D_HasReadyBVH(&scene->triangleMesh)) {
+        if (!RuntimeTriangleMesh3D_BuildBVH(&scene->triangleMesh)) {
+            snprintf(gRuntimeNative3DPrepareFrameLastDiagnostics,
+                     sizeof(gRuntimeNative3DPrepareFrameLastDiagnostics),
+                     "triangle BVH build failed: triangle_count=%d lower=%s",
+                     scene->triangleMesh.triangleCount,
+                     RuntimeTriangleMesh3D_BVHLastDiagnostics());
+            return false;
+        }
+    }
+    if (!RuntimeTriangleMesh3D_BVHBuildStats(&scene->triangleMesh, &stats) ||
+        !stats.ready ||
+        stats.nodeCount <= 0) {
+        snprintf(gRuntimeNative3DPrepareFrameLastDiagnostics,
+                 sizeof(gRuntimeNative3DPrepareFrameLastDiagnostics),
+                 "triangle BVH unavailable after build: triangle_count=%d node_count=%d",
+                 stats.triangleCount,
+                 stats.nodeCount);
+        return false;
+    }
+    return true;
+}
+
 bool RuntimeNative3DPrepareFrame(RuntimeNative3DPreparedFrame* out_frame,
                                  int width,
                                  int height,
@@ -548,6 +740,7 @@ bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
 
     runtime_native_3d_prepare_frame_set_diag("ok");
     if (!out_frame || width <= 0 || height <= 0) return false;
+    RuntimeWaterMaterial3D_ClearAll();
 
     RuntimeNative3DTileOccupancy_Init(&frame.tileOccupancy);
     RuntimeScene3D_Init(&frame.scene);
@@ -559,11 +752,12 @@ bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
                                                    live_light_y)) {
         snprintf(gRuntimeNative3DPrepareFrameLastDiagnostics,
                  sizeof(gRuntimeNative3DPrepareFrameLastDiagnostics),
-                 "build_live_scene failed: primitive_count=%d triangle_count=%d has_light=%s has_camera=%s",
+                 "build_live_scene failed: primitive_count=%d triangle_count=%d has_light=%s has_camera=%s builder=%s",
                  frame.scene.primitiveCount,
                  frame.scene.triangleMesh.triangleCount,
                  frame.scene.hasLight ? "true" : "false",
-                 frame.scene.hasCamera ? "true" : "false");
+                 frame.scene.hasCamera ? "true" : "false",
+                 RuntimeScene3DBuilder_LastDiagnostics());
         RuntimeScene3D_Free(&frame.scene);
         return false;
     }
@@ -576,6 +770,22 @@ bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
                  animSettings.volumeSourceKind,
                  animSettings.volumeSourcePath,
                  frame_index);
+        RuntimeScene3D_Free(&frame.scene);
+        return false;
+    }
+    if (!runtime_native_3d_render_attach_configured_water_surface(&frame.scene, frame_index)) {
+        snprintf(gRuntimeNative3DPrepareFrameLastDiagnostics,
+                 sizeof(gRuntimeNative3DPrepareFrameLastDiagnostics),
+                 "attach_configured_water_surface failed: %s | volume_enabled=%s source_kind=%d source_path=%s frame_index=%d",
+                 RuntimeNative3DPrepareFrameLastDiagnostics(),
+                 animSettings.volumeInteractionEnabled ? "true" : "false",
+                 animSettings.volumeSourceKind,
+                 animSettings.volumeSourcePath,
+                 frame_index);
+        RuntimeScene3D_Free(&frame.scene);
+        return false;
+    }
+    if (!runtime_native_3d_render_ensure_ready_bvh(&frame.scene)) {
         RuntimeScene3D_Free(&frame.scene);
         return false;
     }

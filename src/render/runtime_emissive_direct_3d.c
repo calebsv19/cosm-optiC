@@ -9,6 +9,7 @@ static const double kRuntimeEmissiveDirect3DEpsilon = 1e-4;
 static const double kRuntimeEmissiveDirect3DEnergyScale = 1.25;
 static const int kRuntimeEmissiveDirect3DMaxCandidateSamples = 1;
 static const int kRuntimeEmissiveDirect3DMaxSelectionAttempts = 4;
+static const double kRuntimeEmissiveDirect3DMaxPdf = 1.0e6;
 
 static double runtime_emissive_direct_3d_clamp(double value,
                                                double min_value,
@@ -20,6 +21,24 @@ static double runtime_emissive_direct_3d_clamp(double value,
 
 static double runtime_emissive_direct_3d_distance_decay(double distance) {
     return 1.0 / (1.0 + distance * distance);
+}
+
+static double runtime_emissive_direct_3d_solid_angle_pdf(double selection_pdf,
+                                                         double area,
+                                                         double distance,
+                                                         double emitter_facing) {
+    double pdf = 0.0;
+
+    if (!(selection_pdf > 0.0) ||
+        !(area > 1e-12) ||
+        !(distance > kRuntimeEmissiveDirect3DEpsilon) ||
+        !(emitter_facing > 1e-9)) {
+        return 0.0;
+    }
+
+    pdf = (selection_pdf / area) * distance * distance / emitter_facing;
+    if (!isfinite(pdf)) return 0.0;
+    return runtime_emissive_direct_3d_clamp(pdf, 0.0, kRuntimeEmissiveDirect3DMaxPdf);
 }
 
 static uint32_t runtime_emissive_direct_3d_hash_u32(uint32_t x) {
@@ -187,6 +206,7 @@ static bool runtime_emissive_direct_3d_accumulate_triangle(
     double base_color_g,
     double base_color_b,
     double area,
+    double candidate_selection_pdf,
     RuntimeEmissiveDirect3DResult* io_result) {
     const RuntimeTriangle3D* triangle = NULL;
     Vec3 sample_point = vec3(0.0, 0.0, 0.0);
@@ -197,6 +217,7 @@ static bool runtime_emissive_direct_3d_accumulate_triangle(
     double emitter_facing = 0.0;
     double transmittance = 0.0;
     double sample_energy = 0.0;
+    double light_pdf = 0.0;
 
     if (!scene || !hit || !io_result ||
         !scene->triangleMesh.triangles ||
@@ -228,6 +249,10 @@ static bool runtime_emissive_direct_3d_accumulate_triangle(
     if (!(receiver_facing > 0.0) || !(emitter_facing > 0.0)) {
         return false;
     }
+    light_pdf = runtime_emissive_direct_3d_solid_angle_pdf(candidate_selection_pdf,
+                                                           area,
+                                                           distance,
+                                                           emitter_facing);
 
     io_result->sampledTriangleCount += 1;
     io_result->visibilityRayCount += 1;
@@ -252,6 +277,14 @@ static bool runtime_emissive_direct_3d_accumulate_triangle(
     }
 
     io_result->contributingTriangleCount += 1;
+    io_result->sampleDirection = light_dir;
+    io_result->sampleDistance = distance;
+    io_result->sampleArea = area;
+    io_result->sampleReceiverCos = receiver_facing;
+    io_result->sampleEmitterCos = emitter_facing;
+    io_result->candidateSelectionPdf = candidate_selection_pdf;
+    io_result->areaPdf = area > 1e-12 ? 1.0 / area : 0.0;
+    io_result->lightPdf = light_pdf;
     io_result->directRadiance += sample_energy;
     io_result->directRadianceR += sample_energy * base_color_r;
     io_result->directRadianceG += sample_energy * base_color_g;
@@ -279,6 +312,7 @@ static bool runtime_emissive_direct_3d_shade_hit_with_light_set(
          sample_index < kRuntimeEmissiveDirect3DMaxCandidateSamples;
          ++sample_index) {
         int candidate_index = -1;
+        double candidate_selection_pdf = 0.0;
         const RuntimeEmissiveLightCandidate3D* candidate =
             runtime_emissive_direct_3d_select_candidate(scene,
                                                         hit,
@@ -291,6 +325,12 @@ static bool runtime_emissive_direct_3d_shade_hit_with_light_set(
             continue;
         }
         io_result->selectedCandidateCount += 1;
+        if (scene->emissiveLightSet.totalWeight > 1e-12 && candidate->weight > 0.0) {
+            candidate_selection_pdf = runtime_emissive_direct_3d_clamp(
+                candidate->weight / scene->emissiveLightSet.totalWeight,
+                0.0,
+                1.0);
+        }
         if (runtime_emissive_direct_3d_accumulate_triangle(scene,
                                                            hit,
                                                            sampling,
@@ -301,6 +341,7 @@ static bool runtime_emissive_direct_3d_shade_hit_with_light_set(
                                                            candidate->baseColorG,
                                                            candidate->baseColorB,
                                                            candidate->area,
+                                                           candidate_selection_pdf,
                                                            io_result)) {
             contributed = true;
         }
@@ -348,6 +389,7 @@ static bool runtime_emissive_direct_3d_shade_hit_full_scan_fallback(
                                                            payload.baseColorG,
                                                            payload.baseColorB,
                                                            area,
+                                                           1.0,
                                                            io_result)) {
             contributed = true;
         }

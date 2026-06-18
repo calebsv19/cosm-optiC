@@ -91,6 +91,33 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
     dst->secondaryRayCount += src->secondaryRayCount;
     dst->secondaryHitCount += src->secondaryHitCount;
     dst->secondaryContributingHitCount += src->secondaryContributingHitCount;
+    if (src->emissiveAreaCandidateCount > dst->emissiveAreaCandidateCount) {
+        dst->emissiveAreaCandidateCount = src->emissiveAreaCandidateCount;
+    }
+    dst->emissiveAreaSelectedCandidateCount += src->emissiveAreaSelectedCandidateCount;
+    dst->emissiveAreaVisibilityRayCount += src->emissiveAreaVisibilityRayCount;
+    dst->emissiveAreaPrimarySampleCount += src->emissiveAreaPrimarySampleCount;
+    dst->emissiveAreaRecursiveSampleCount += src->emissiveAreaRecursiveSampleCount;
+    dst->emissiveAreaRecursivePolicySkipCount +=
+        src->emissiveAreaRecursivePolicySkipCount;
+    dst->emissiveAreaRecursiveCandidateCapSkipCount +=
+        src->emissiveAreaRecursiveCandidateCapSkipCount;
+    dst->emissiveAreaRecursiveTriangleCapSkipCount +=
+        src->emissiveAreaRecursiveTriangleCapSkipCount;
+    if (src->emissiveAreaRecursiveCandidateCap >
+        dst->emissiveAreaRecursiveCandidateCap) {
+        dst->emissiveAreaRecursiveCandidateCap =
+            src->emissiveAreaRecursiveCandidateCap;
+    }
+    if (src->emissiveAreaRecursiveTriangleCap > dst->emissiveAreaRecursiveTriangleCap) {
+        dst->emissiveAreaRecursiveTriangleCap = src->emissiveAreaRecursiveTriangleCap;
+    }
+    dst->emissiveAreaFullScanFallbackCount += src->emissiveAreaFullScanFallbackCount;
+    dst->mirrorDominantPixelCount += src->mirrorDominantPixelCount;
+    dst->mirrorBaseAttenuatedPixelCount += src->mirrorBaseAttenuatedPixelCount;
+    dst->mirrorReflectionHitPixelCount += src->mirrorReflectionHitPixelCount;
+    dst->mirrorEmitterReflectionPixelCount += src->mirrorEmitterReflectionPixelCount;
+    dst->mirrorGeometryReflectionPixelCount += src->mirrorGeometryReflectionPixelCount;
     dst->temporalCommittedSubpasses += src->temporalCommittedSubpasses;
     dst->temporalPixelsRendered += src->temporalPixelsRendered;
     dst->temporalPixelsSkipped += src->temporalPixelsSkipped;
@@ -100,14 +127,49 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
     dst->temporalMeasuredTileJobs += src->temporalMeasuredTileJobs;
     dst->temporalAdaptiveSplitParentCount += src->temporalAdaptiveSplitParentCount;
     dst->temporalAdaptiveChildTileCount += src->temporalAdaptiveChildTileCount;
+    if (src->denoiseTemporalFrameCount > dst->denoiseTemporalFrameCount) {
+        dst->denoiseTemporalFrameCount = src->denoiseTemporalFrameCount;
+    }
+    dst->denoiseRawPixelCount += src->denoiseRawPixelCount;
+    dst->denoiseReconstructedPixelCount += src->denoiseReconstructedPixelCount;
+    dst->denoiseStableInteriorSampleCount += src->denoiseStableInteriorSampleCount;
+    dst->denoiseRejectedEdgeSampleCount += src->denoiseRejectedEdgeSampleCount;
+    dst->denoisePreservedTransparentPixelCount += src->denoisePreservedTransparentPixelCount;
+    dst->denoisePreservedMirrorGlossyPixelCount += src->denoisePreservedMirrorGlossyPixelCount;
+    dst->denoiseSkippedUnstableTemporalPixelCount +=
+        src->denoiseSkippedUnstableTemporalPixelCount;
+    dst->denoiseSkippedInvalidSurfacePixelCount += src->denoiseSkippedInvalidSurfacePixelCount;
     if (src->maxRadiance > dst->maxRadiance) {
         dst->maxRadiance = src->maxRadiance;
     }
     if (src->maxBounceRadiance > dst->maxBounceRadiance) {
         dst->maxBounceRadiance = src->maxBounceRadiance;
     }
+    if (src->maxMirrorDominance > dst->maxMirrorDominance) {
+        dst->maxMirrorDominance = src->maxMirrorDominance;
+    }
+    if (src->maxMirrorSpecularReflectionRadiance > dst->maxMirrorSpecularReflectionRadiance) {
+        dst->maxMirrorSpecularReflectionRadiance = src->maxMirrorSpecularReflectionRadiance;
+    }
+    if (src->maxMirrorBaseRadianceBeforeAttenuation >
+        dst->maxMirrorBaseRadianceBeforeAttenuation) {
+        dst->maxMirrorBaseRadianceBeforeAttenuation =
+            src->maxMirrorBaseRadianceBeforeAttenuation;
+    }
+    if (src->maxMirrorBaseRadianceAfterAttenuation >
+        dst->maxMirrorBaseRadianceAfterAttenuation) {
+        dst->maxMirrorBaseRadianceAfterAttenuation =
+            src->maxMirrorBaseRadianceAfterAttenuation;
+    }
     dst->totalBounceRadiance += src->totalBounceRadiance;
+    dst->totalMirrorSpecularReflectionRadiance += src->totalMirrorSpecularReflectionRadiance;
+    dst->totalMirrorBaseRadianceBeforeAttenuation +=
+        src->totalMirrorBaseRadianceBeforeAttenuation;
+    dst->totalMirrorBaseRadianceAfterAttenuation +=
+        src->totalMirrorBaseRadianceAfterAttenuation;
     dst->temporalTotalTileMs += src->temporalTotalTileMs;
+    dst->denoiseRawRadianceLumaTotal += src->denoiseRawRadianceLumaTotal;
+    dst->denoiseReconstructedRadianceLumaTotal += src->denoiseReconstructedRadianceLumaTotal;
     if (src->temporalMaxTileMs > dst->temporalMaxTileMs) {
         dst->temporalMaxTileMs = src->temporalMaxTileMs;
         dst->temporalSlowTileOriginX = src->temporalSlowTileOriginX;
@@ -145,7 +207,20 @@ static void runtime_native_3d_render_stats_normalize_temporal(
         runtime_native_3d_render_stats_round_divide(stats->secondaryHitCount, committed_subpasses);
     stats->secondaryContributingHitCount = runtime_native_3d_render_stats_round_divide(
         stats->secondaryContributingHitCount, committed_subpasses);
+    stats->mirrorDominantPixelCount = runtime_native_3d_render_stats_round_divide(
+        stats->mirrorDominantPixelCount, committed_subpasses);
+    stats->mirrorBaseAttenuatedPixelCount = runtime_native_3d_render_stats_round_divide(
+        stats->mirrorBaseAttenuatedPixelCount, committed_subpasses);
+    stats->mirrorReflectionHitPixelCount = runtime_native_3d_render_stats_round_divide(
+        stats->mirrorReflectionHitPixelCount, committed_subpasses);
+    stats->mirrorEmitterReflectionPixelCount = runtime_native_3d_render_stats_round_divide(
+        stats->mirrorEmitterReflectionPixelCount, committed_subpasses);
+    stats->mirrorGeometryReflectionPixelCount = runtime_native_3d_render_stats_round_divide(
+        stats->mirrorGeometryReflectionPixelCount, committed_subpasses);
     stats->totalBounceRadiance /= (double)committed_subpasses;
+    stats->totalMirrorSpecularReflectionRadiance /= (double)committed_subpasses;
+    stats->totalMirrorBaseRadianceBeforeAttenuation /= (double)committed_subpasses;
+    stats->totalMirrorBaseRadianceAfterAttenuation /= (double)committed_subpasses;
 }
 
 static bool runtime_native_3d_render_prepared_frame_serial(
@@ -203,7 +278,14 @@ static bool runtime_native_3d_render_prepared_frame_serial(
     }
 
     if (ok) {
-        ok = RuntimeNative3DRenderUnit_ResolveCurrentToPixels(&render_unit, pixel_buffer, frame->width);
+        RuntimeNative3DRenderStats resolve_stats = {0};
+        ok = RuntimeNative3DRenderUnit_ResolveCurrentToPixelsWithStats(&render_unit,
+                                                                       pixel_buffer,
+                                                                       frame->width,
+                                                                       &resolve_stats);
+        if (ok && out_stats) {
+            RuntimeNative3DRenderStats_Accumulate(out_stats, &resolve_stats);
+        }
     }
     if (ok && out_stats) {
         out_stats->temporalCommittedSubpasses =

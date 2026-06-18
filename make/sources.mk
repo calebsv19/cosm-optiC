@@ -29,6 +29,7 @@ CORE_MESH_ASSET_SRCS := \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_authoring_document.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c
+CORE_MESH_PREVIEW_SRCS := $(CORE_MESH_PREVIEW_DIR)/src/core_mesh_preview.c
 CORE_OBJECT_SRCS := $(CORE_OBJECT_DIR)/src/core_object.c
 CORE_UNITS_SRCS := $(CORE_UNITS_DIR)/src/core_units.c
 CORE_SPACE_SRCS := $(CORE_SPACE_DIR)/src/core_space.c

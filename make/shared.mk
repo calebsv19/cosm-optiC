@@ -14,6 +14,7 @@ CORE_SCENE_DIR := $(SHARED_ROOT)/core/core_scene
 CORE_AUTHORED_TEXTURE_DIR := $(SHARED_ROOT)/core/core_authored_texture
 CORE_SCENE_COMPILE_DIR := $(SHARED_ROOT)/core/core_scene_compile
 CORE_MESH_ASSET_DIR := $(SHARED_ROOT)/core/core_mesh_asset
+CORE_MESH_PREVIEW_DIR := $(SHARED_ROOT)/core/core_mesh_preview
 CORE_OBJECT_DIR := $(SHARED_ROOT)/core/core_object
 CORE_UNITS_DIR := $(SHARED_ROOT)/core/core_units
 CORE_TRACE_DIR := $(SHARED_ROOT)/core/core_trace
@@ -32,6 +33,9 @@ CORE_AUTHORED_TEXTURE_DIR := $(SHARED_WORKSPACE_DIR)/core/core_authored_texture
 endif
 ifeq ($(wildcard $(CORE_MESH_ASSET_DIR)/include/core_mesh_asset.h),)
 CORE_MESH_ASSET_DIR := $(SHARED_WORKSPACE_DIR)/core/core_mesh_asset
+endif
+ifeq ($(wildcard $(CORE_MESH_PREVIEW_DIR)/include/core_mesh_preview.h),)
+CORE_MESH_PREVIEW_DIR := $(SHARED_WORKSPACE_DIR)/core/core_mesh_preview
 endif
 ifeq ($(wildcard $(CORE_HEADLESS_JOB_DIR)/include/core_headless_job.h),)
 CORE_HEADLESS_JOB_DIR := $(SHARED_WORKSPACE_DIR)/core/core_headless_job

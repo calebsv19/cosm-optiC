@@ -582,11 +582,27 @@ bool SceneEditorHandlePaneSplitterEvent(SceneEditor* editor, SDL_Event* event) {
 }
 
 static bool SceneEditorLoadSessionState(SceneEditor* editor) {
+    AnimationConfig live_config;
+    bool has_live_runtime_selection = false;
     if (!editor) {
         return false;
     }
+    live_config = animSettings;
+    has_live_runtime_selection =
+        animation_config_scene_source_clamp(live_config.sceneSource) == SCENE_SOURCE_RUNTIME_SCENE &&
+        live_config.runtimeScenePath[0] != '\0';
     LoadAnimationConfig();
     LoadSceneConfig();
+    if (has_live_runtime_selection) {
+        animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+        animSettings.useFluidScene = false;
+        animSettings.fluidManifest[0] = '\0';
+        animSettings.spaceMode = live_config.spaceMode;
+        snprintf(animSettings.runtimeScenePath,
+                 sizeof(animSettings.runtimeScenePath),
+                 "%s",
+                 live_config.runtimeScenePath);
+    }
     ApplyAnimationWindowSizeOverride();
     if (animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE &&
         animSettings.runtimeScenePath[0] != '\0') {
@@ -598,12 +614,9 @@ static bool SceneEditorLoadSessionState(SceneEditor* editor) {
                     "[editor] failed to apply runtime scene source '%s': %s\n",
                     runtime_scene_path,
                     summary.diagnostics);
-            animSettings.sceneSource = SCENE_SOURCE_CONFIG_2D;
-            animSettings.runtimeScenePath[0] = '\0';
-            SaveAnimationConfig();
         }
     } else if (!AnimationRestoreActiveSceneSource(true)) {
-        fprintf(stderr, "[editor] failed to apply active scene source; fallback persisted.\n");
+        fprintf(stderr, "[editor] failed to apply active scene source; selection preserved.\n");
     }
     ApplyAnimationWindowSizeOverride();
     if (animSettings.editorMode < 0) {

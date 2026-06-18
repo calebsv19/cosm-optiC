@@ -346,8 +346,8 @@ static int test_mode_backend_scene_digest_status_ps4d_fixture(void) {
     route = RayTracingModeBackend_ResolveRoute();
     status = RayTracingModeBackend_BuildSceneDigestStatus(&route);
 
-    assert_true("digestps4d_route_compat",
-                route.routeFamily == RAY_TRACING_ROUTE_COMPAT_3D_FALLBACK);
+    assert_true("digestps4d_route_native",
+                route.routeFamily == RAY_TRACING_ROUTE_NATIVE_3D);
     assert_true("digestps4d_status_valid", status.valid);
     assert_true("digestps4d_bounds_present", status.hasSceneBounds);
     assert_true("digestps4d_bounds_enabled", status.boundsEnabled);

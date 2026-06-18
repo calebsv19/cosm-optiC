@@ -31,6 +31,8 @@ typedef struct RayTracingAgentRenderRequest {
     int height;
     double normalized_t;
     int temporal_frames;
+    bool has_denoise_enabled_override;
+    bool denoise_enabled_override;
     bool has_sampling_window;
     int sampling_frame_offset;
     int sampling_frame_count;
@@ -53,6 +55,14 @@ typedef struct RayTracingAgentRenderRequest {
     double ambient_strength_override;
     bool has_environment_light_mode_override;
     int environment_light_mode_override;
+    bool has_environment_preset_override;
+    int environment_preset_override;
+    bool has_background_brightness_override;
+    double background_brightness_override;
+    bool has_background_color_override;
+    double background_color_r;
+    double background_color_g;
+    double background_color_b;
     bool has_top_fill_strength_override;
     double top_fill_strength_override;
     bool has_light_intensity_override;
@@ -73,6 +83,8 @@ typedef struct RayTracingAgentRenderRequest {
     double volume_tint_r;
     double volume_tint_g;
     double volume_tint_b;
+    bool object_audit_enabled;
+    int object_audit_max_dimension;
     bool overwrite;
 } RayTracingAgentRenderRequest;
 

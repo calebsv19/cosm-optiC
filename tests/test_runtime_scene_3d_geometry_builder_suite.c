@@ -185,10 +185,17 @@ static int test_runtime_scene_3d_builder_builds_ps4d_triangle_scene(void) {
                     triangle->primitiveIndex == plane_index);
         assert_true("runtime_scene_3d_builder_ps4d_plane_triangle_scene_object_index",
                     triangle->sceneObjectIndex == scene.primitives[plane_index].source.sceneObjectIndex);
+        assert_true("runtime_scene_3d_builder_ps4d_plane_triangle_two_sided",
+                    triangle->twoSided);
         assert_close("runtime_scene_3d_builder_ps4d_plane_triangle_normal_z",
                      triangle->normal.z,
                      1.0,
                      1e-9);
+    }
+    for (int i = 2; i < scene.triangleMesh.triangleCount; ++i) {
+        const RuntimeTriangle3D *triangle = &scene.triangleMesh.triangles[i];
+        assert_true("runtime_scene_3d_builder_ps4d_rect_prism_triangle_single_sided",
+                    !triangle->twoSided);
     }
 
     RuntimeScene3D_Free(&scene);
@@ -284,6 +291,13 @@ static int test_runtime_scene_3d_builder_promotes_authored_light_camera_samples(
     animSettings.environmentLightMode = ENVIRONMENT_LIGHT_MODE_TOP_FILL;
     animSettings.topFillStrength = 2.5;
     animSettings.environmentBrightness = 96.0;
+    animSettings.environmentPreset = ENVIRONMENT_PRESET_WARM_SKY;
+    animSettings.environmentBackgroundLightingAuthored = true;
+    animSettings.environmentBackgroundBrightnessAuto = false;
+    animSettings.environmentBackgroundBrightness = 0.72;
+    animSettings.environmentBackgroundColorR = 0.75;
+    animSettings.environmentBackgroundColorG = 0.85;
+    animSettings.environmentBackgroundColorB = 1.0;
 
     expected_light_xy = GetPositionAlongPathNormalized(&sceneSettings.bezierPath, 0.5);
     expected_light_z =
@@ -336,6 +350,22 @@ static int test_runtime_scene_3d_builder_promotes_authored_light_camera_samples(
     assert_close("runtime_scene_3d_builder_samples_environment_ambient_strength",
                  scene.environment.ambientIntensity,
                  96.0 / 255.0,
+                 1e-6);
+    assert_true("runtime_scene_3d_builder_samples_environment_preset",
+                scene.environment.preset == ENVIRONMENT_PRESET_WARM_SKY);
+    assert_true("runtime_scene_3d_builder_samples_environment_background_explicit",
+                !scene.environment.backgroundIntensityDerivedFromAmbient);
+    assert_close("runtime_scene_3d_builder_samples_environment_background_brightness",
+                 scene.environment.backgroundIntensity,
+                 0.72,
+                 1e-6);
+    assert_close("runtime_scene_3d_builder_samples_environment_background_top_red",
+                 scene.environment.backgroundTopColor.x,
+                 0.90 * 0.75,
+                 1e-6);
+    assert_close("runtime_scene_3d_builder_samples_environment_background_top_blue",
+                 scene.environment.backgroundTopColor.z,
+                 0.62,
                  1e-6);
     assert_close("runtime_scene_3d_builder_samples_camera_x",
                  scene.camera.position.x,

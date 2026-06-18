@@ -6,12 +6,15 @@
 #include <unistd.h>
 
 #include "app/animation.h"
+#include "material/material.h"
+#include "material/material_manager.h"
 #include "render/integrators/integrator_common.h"
 #include "render/ray_tracing2_preview.h"
 #include "render/runtime_camera_3d_rays.h"
 #include "render/runtime_native_3d_preview_reconstruction.h"
 #include "render/runtime_native_3d_render.h"
 #include "render/runtime_scene_3d.h"
+#include "render/runtime_triangle_bvh_3d.h"
 #include "test_runtime_native_3d_render_prepared_suite_internal.h"
 #include "test_support.h"
 
@@ -273,6 +276,144 @@ static int test_runtime_native_3d_surface_volume_single_scatter_lifts_unlit_hit_
     return 0;
 }
 
+static int test_runtime_native_3d_disney_v2_mirror_stats_visible_from_render_path(void) {
+    enum { kWidth = 21, kHeight = 21 };
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    RuntimeNative3DPreparedFrame frame = {0};
+    float radiance[kWidth * kHeight * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS];
+    RuntimeNative3DRenderStats stats = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    RuntimeNative3DTileOccupancy_Init(&frame.tileOccupancy);
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    MaterialManagerResetDefaults();
+
+    sceneSettings.objectCount = 1;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_MIRROR;
+    sceneSettings.sceneObjects[0].color = 0xFFFFFF;
+    sceneSettings.sceneObjects[0].alpha = 1.0;
+    sceneSettings.sceneObjects[0].opacity = 1.0;
+    sceneSettings.sceneObjects[0].reflectivity = 0.95;
+    sceneSettings.sceneObjects[0].roughness = 0.02;
+    animSettings.environmentBrightness = 0.0;
+    animSettings.environmentLightMode = ENVIRONMENT_LIGHT_MODE_OFF;
+    animSettings.lightIntensity = 36.0;
+    animSettings.forwardDecay = 10.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    animSettings.secondaryDiffuseSamples3D = 0;
+    animSettings.transmissionSamples3D = 0;
+    animSettings.bounceDepth3D = 1;
+    animSettings.specularDepth3D = 1;
+    animSettings.transmissionDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
+
+    scene.hasLight = true;
+    scene.light.position = vec3(0.0, 3.0, 0.0);
+    scene.light.radius = 0.45;
+    scene.light.intensity = 36.0;
+    scene.light.falloffDistance = 10.0;
+    scene.light.falloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    scene.hasCamera = true;
+    scene.camera.position = vec3(0.0, 2.0, 0.0);
+    scene.camera.rotation = 0.0;
+    scene.camera.lookPitch = 0.0;
+    scene.camera.zoom = 1.0;
+    scene.camera.nearPlane = 0.1;
+    scene.primitiveCapacity = 1;
+    scene.triangleMesh.triangleCapacity = 1;
+    scene.primitives = (RuntimePrimitive3D*)calloc((size_t)scene.primitiveCapacity,
+                                                   sizeof(*scene.primitives));
+    scene.triangleMesh.triangles =
+        (RuntimeTriangle3D*)calloc((size_t)scene.triangleMesh.triangleCapacity,
+                                   sizeof(*scene.triangleMesh.triangles));
+    assert_true("runtime_native_3d_mirror_stats_alloc",
+                scene.primitives != NULL && scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        MaterialManagerResetDefaults();
+        return 0;
+    }
+
+    scene.primitiveCount = 1;
+    scene.triangleMesh.triangleCount = 1;
+    scene.primitives[0].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene.primitives[0].source.sceneObjectIndex = 0;
+    snprintf(scene.primitives[0].source.objectId,
+             sizeof(scene.primitives[0].source.objectId),
+             "%s",
+             "mirror_stats_plane");
+    scene.triangleMesh.triangles[0].p0 = vec3(-2.0, 0.0, -2.0);
+    scene.triangleMesh.triangles[0].p1 = vec3(2.0, 0.0, -2.0);
+    scene.triangleMesh.triangles[0].p2 = vec3(0.0, 0.0, 2.0);
+    scene.triangleMesh.triangles[0].normal = vec3(0.0, 1.0, 0.0);
+    scene.triangleMesh.triangles[0].twoSided = true;
+    scene.triangleMesh.triangles[0].primitiveIndex = 0;
+    scene.triangleMesh.triangles[0].sceneObjectIndex = 0;
+    ok = RuntimeTriangleMesh3D_BuildBVH(&scene.triangleMesh);
+    assert_true("runtime_native_3d_mirror_stats_bvh", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        MaterialManagerResetDefaults();
+        return 0;
+    }
+
+    ok = RuntimeCameraProjector3D_Build(&scene.camera, kWidth, kHeight, &frame.projector);
+    assert_true("runtime_native_3d_mirror_stats_projector", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        MaterialManagerResetDefaults();
+        return 0;
+    }
+
+    frame.scene = scene;
+    frame.width = kWidth;
+    frame.height = kHeight;
+    frame.valid = true;
+    memset(radiance, 0, sizeof(radiance));
+    ok = RuntimeNative3DRenderPreparedRegionRadianceRGB(radiance,
+                                                        kWidth,
+                                                        RAY_TRACING_3D_INTEGRATOR_DISNEY_V2,
+                                                        &frame,
+                                                        0,
+                                                        0,
+                                                        kWidth,
+                                                        kHeight,
+                                                        &stats);
+    assert_true("runtime_native_3d_mirror_stats_render", ok);
+    assert_true("runtime_native_3d_mirror_stats_dominant_pixels",
+                stats.mirrorDominantPixelCount > 0);
+    assert_true("runtime_native_3d_mirror_stats_base_attenuated",
+                stats.mirrorBaseAttenuatedPixelCount > 0);
+    assert_true("runtime_native_3d_mirror_stats_reflection_hits",
+                stats.mirrorReflectionHitPixelCount > 0 &&
+                stats.mirrorEmitterReflectionPixelCount > 0);
+    assert_true("runtime_native_3d_mirror_stats_dominance_max",
+                stats.maxMirrorDominance > 0.90);
+    assert_true("runtime_native_3d_mirror_stats_reflection_radiance",
+                stats.maxMirrorSpecularReflectionRadiance > 0.0 &&
+                stats.totalMirrorSpecularReflectionRadiance > 0.0);
+    assert_true("runtime_native_3d_mirror_stats_base_totals",
+                stats.totalMirrorBaseRadianceBeforeAttenuation > 0.0 &&
+                stats.totalMirrorBaseRadianceAfterAttenuation <
+                    stats.totalMirrorBaseRadianceBeforeAttenuation * 0.25);
+
+    RuntimeNative3DPreparedFrame_Free(&frame);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    MaterialManagerResetDefaults();
+    return 0;
+}
+
 static int test_runtime_native_3d_dirty_rect_preview_base_parity(void) {
     enum { kWidth = 8, kHeight = 6 };
     Uint8 luminance[kWidth * kHeight];
@@ -483,6 +624,7 @@ int run_test_runtime_native_3d_render_prepared_scatter_preview_suite(void) {
 
     test_runtime_native_3d_background_volume_single_scatter_lifts_black_miss();
     test_runtime_native_3d_surface_volume_single_scatter_lifts_unlit_hit_across_tiers();
+    test_runtime_native_3d_disney_v2_mirror_stats_visible_from_render_path();
     test_runtime_native_3d_dirty_rect_preview_base_parity();
     test_runtime_native_3d_preview_reconstruction_rect_parity();
     test_runtime_native_3d_preview_reconstruction_dirty_tile_parity();

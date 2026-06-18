@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 
+#include "math/vec3.h"
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_native_3d_sampling.h"
 
@@ -17,6 +18,14 @@ typedef struct {
     int selectedCandidateCount;
     int visibilityRayCount;
     int fullScanFallbackCount;
+    Vec3 sampleDirection;
+    double sampleDistance;
+    double sampleArea;
+    double sampleReceiverCos;
+    double sampleEmitterCos;
+    double candidateSelectionPdf;
+    double areaPdf;
+    double lightPdf;
 } RuntimeEmissiveDirect3DResult;
 
 bool RuntimeEmissiveDirect3D_ShadeHit(const RuntimeScene3D* scene,

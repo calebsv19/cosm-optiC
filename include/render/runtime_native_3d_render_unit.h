@@ -55,6 +55,11 @@ bool RuntimeNative3DRenderUnit_RenderSubpass(RuntimeNative3DRenderUnit* unit,
 bool RuntimeNative3DRenderUnit_ResolveCurrentToPixels(const RuntimeNative3DRenderUnit* unit,
                                                       uint8_t* pixel_buffer,
                                                       int pixel_width);
+bool RuntimeNative3DRenderUnit_ResolveCurrentToPixelsWithStats(
+    const RuntimeNative3DRenderUnit* unit,
+    uint8_t* pixel_buffer,
+    int pixel_width,
+    RuntimeNative3DRenderStats* out_stats);
 int RuntimeNative3DRenderUnit_CommittedSubpasses(const RuntimeNative3DRenderUnit* unit);
 void RuntimeNative3DRenderUnit_GetActivityCounts(const RuntimeNative3DRenderUnit* unit,
                                                  int* out_active_pixels,

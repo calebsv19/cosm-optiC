@@ -1,6 +1,7 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "app/animation.h"
@@ -127,10 +128,10 @@ static int test_animation_scene_source_legacy_migration(void) {
     assert_true("scene_source_legacy_write_missing_manifest", wrote);
     if (wrote) {
         LoadAnimationConfig();
-        assert_true("scene_source_legacy_missing_manifest_fallback_2d",
-                    animSettings.sceneSource == SCENE_SOURCE_CONFIG_2D);
-        assert_true("scene_source_legacy_missing_manifest_use_fluid_false",
-                    !animSettings.useFluidScene);
+        assert_true("scene_source_legacy_missing_manifest_preserves_fluid",
+                    animSettings.sceneSource == SCENE_SOURCE_FLUID_MANIFEST);
+        assert_true("scene_source_legacy_missing_manifest_use_fluid_true",
+                    animSettings.useFluidScene);
     }
 
     restore_runtime_animation_config(backup, backup_size);
@@ -470,7 +471,7 @@ static int test_animation_volume_source_select_missing_apply_rolls_back(void) {
     return 0;
 }
 
-static int test_animation_apply_active_scene_source_invalid_fluid_falls_back_2d(void) {
+static int test_animation_apply_active_scene_source_invalid_fluid_preserves_selection(void) {
     static const char *kMissingFluidPath = "/tmp/ray_tracing_missing_fluid_manifest.json";
     static const char *kRuntimeFixturePath = "third_party/codework_shared/assets/scenes/trio_contract/scene_runtime_min.json";
     size_t backup_size = 0;
@@ -486,20 +487,20 @@ static int test_animation_apply_active_scene_source_invalid_fluid_falls_back_2d(
 
     assert_true("scene_source_invalid_fluid_apply_rejected",
                 !AnimationApplyActiveSceneSource());
-    assert_true("scene_source_invalid_fluid_fallback_source_2d",
-                animSettings.sceneSource == SCENE_SOURCE_CONFIG_2D);
+    assert_true("scene_source_invalid_fluid_preserves_source",
+                animSettings.sceneSource == SCENE_SOURCE_FLUID_MANIFEST);
     assert_true("scene_source_invalid_fluid_fallback_not_fluid",
                 !animSettings.useFluidScene);
-    assert_true("scene_source_invalid_fluid_fallback_fluid_path_cleared",
-                animSettings.fluidManifest[0] == '\0');
-    assert_true("scene_source_invalid_fluid_fallback_runtime_path_cleared",
-                animSettings.runtimeScenePath[0] == '\0');
+    assert_true("scene_source_invalid_fluid_path_preserved",
+                strcmp(animSettings.fluidManifest, kMissingFluidPath) == 0);
+    assert_true("scene_source_invalid_fluid_runtime_path_preserved",
+                strcmp(animSettings.runtimeScenePath, kRuntimeFixturePath) == 0);
 
     restore_runtime_animation_config(backup, backup_size);
     return 0;
 }
 
-static int test_animation_restore_active_scene_source_persists_fallback_correction(void) {
+static int test_animation_restore_active_scene_source_preserves_runtime_selection_on_failure(void) {
     static const char *kMissingRuntimePath = "/tmp/ray_tracing_missing_restore_runtime_scene.json";
     size_t backup_size = 0;
     char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
@@ -521,21 +522,120 @@ static int test_animation_restore_active_scene_source_persists_fallback_correcti
 
     assert_true("scene_source_restore_invalid_runtime_rejected",
                 !AnimationRestoreActiveSceneSource(true));
-    assert_true("scene_source_restore_invalid_runtime_fallback_source_2d",
-                animSettings.sceneSource == SCENE_SOURCE_CONFIG_2D);
-    assert_true("scene_source_restore_invalid_runtime_fallback_runtime_path_cleared",
-                animSettings.runtimeScenePath[0] == '\0');
+    assert_true("scene_source_restore_invalid_runtime_preserves_source",
+                animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE);
+    assert_true("scene_source_restore_invalid_runtime_preserves_path",
+                strcmp(animSettings.runtimeScenePath, kMissingRuntimePath) == 0);
 
     animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
     animSettings.runtimeScenePath[0] = 'x';
     animSettings.runtimeScenePath[1] = '\0';
     LoadAnimationConfig();
-    assert_true("scene_source_restore_persisted_source_2d",
-                animSettings.sceneSource == SCENE_SOURCE_CONFIG_2D);
-    assert_true("scene_source_restore_persisted_runtime_path_cleared",
+    assert_true("scene_source_restore_persisted_source_runtime",
+                animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE);
+    assert_true("scene_source_restore_persisted_runtime_path_preserved",
+                strcmp(animSettings.runtimeScenePath, kMissingRuntimePath) == 0);
+
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
+static int test_animation_apply_runtime_scene_defers_missing_mesh_assets(void) {
+    static const char *kRuntimeScenePath =
+        "/private/tmp/ray_tracing_animation_missing_mesh_scene_runtime.json";
+    static const char *kMissingMeshPath =
+        "/private/tmp/ray_tracing_animation_missing_mesh_asset.runtime.json";
+    const char* runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_animation_missing_mesh\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"obj_missing_mesh\","
+          "\"object_type\":\"mesh_asset_instance\","
+          "\"transform\":{"
+            "\"position\":{\"x\":1.0,\"y\":2.0,\"z\":3.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+          "},"
+          "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_missing_for_animation\"},"
+          "\"extensions\":{\"line_drawing\":{"
+            "\"runtime_mesh_path\":\"/private/tmp/ray_tracing_animation_missing_mesh_asset.runtime.json\""
+          "}}"
+        "}],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[]"
+        "}";
+
+    remove(kMissingMeshPath);
+    assert_true("scene_source_runtime_missing_mesh_write",
+                write_text_file(kRuntimeScenePath, runtime_json));
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    animSettings.useFluidScene = false;
+    strncpy(animSettings.runtimeScenePath, kRuntimeScenePath, sizeof(animSettings.runtimeScenePath) - 1);
+    animSettings.runtimeScenePath[sizeof(animSettings.runtimeScenePath) - 1] = '\0';
+    sceneSettings.objectCount = 0;
+
+    assert_true("scene_source_runtime_missing_mesh_apply_deferred",
+                AnimationApplyActiveSceneSource());
+    assert_true("scene_source_runtime_missing_mesh_preserves_source",
+                animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE);
+    assert_true("scene_source_runtime_missing_mesh_preserves_path",
+                strcmp(animSettings.runtimeScenePath, kRuntimeScenePath) == 0);
+    assert_true("scene_source_runtime_missing_mesh_space_3d",
+                animSettings.spaceMode == SPACE_MODE_3D);
+    assert_true("scene_source_runtime_missing_mesh_scene_resident",
+                sceneSettings.objectCount == 1);
+
+    remove(kRuntimeScenePath);
+    return 0;
+}
+
+static int test_animation_save_preserves_runtime_source_even_without_path(void) {
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    animSettings.useFluidScene = false;
+    animSettings.fluidManifest[0] = '\0';
+    animSettings.runtimeScenePath[0] = '\0';
+
+    SaveAnimationConfig();
+    animSettings.sceneSource = SCENE_SOURCE_CONFIG_2D;
+    LoadAnimationConfig();
+
+    assert_true("scene_source_save_empty_runtime_path_preserves_runtime_source",
+                animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE);
+    assert_true("scene_source_save_empty_runtime_path_preserves_empty_path",
                 animSettings.runtimeScenePath[0] == '\0');
 
     restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
+static int test_animation_mesh_asset_root_roundtrip(void) {
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+    const char* mesh_root = "/private/tmp/ray_tracing_mesh_asset_root_roundtrip";
+
+    mkdir(mesh_root, 0777);
+    snprintf(animSettings.meshAssetRoot, sizeof(animSettings.meshAssetRoot), "%s", mesh_root);
+    SaveAnimationConfig();
+    animSettings.meshAssetRoot[0] = '\0';
+    LoadAnimationConfig();
+
+    assert_true("mesh_asset_root_roundtrip_path",
+                strcmp(animSettings.meshAssetRoot, mesh_root) == 0);
+    assert_true("mesh_asset_root_roundtrip_env",
+                getenv("RAY_TRACING_MESH_ASSET_ROOT") &&
+                strcmp(getenv("RAY_TRACING_MESH_ASSET_ROOT"), mesh_root) == 0);
+
+    restore_runtime_animation_config(backup, backup_size);
+    rmdir(mesh_root);
     return 0;
 }
 
@@ -552,7 +652,10 @@ int run_test_config_animation_source_volume_suite(void) {
     test_animation_scene_source_select_runtime_updates_auto_paired_volume_and_preserves_disable();
     test_animation_volume_source_select_without_apply_updates_lane_and_clear_resets();
     test_animation_volume_source_select_missing_apply_rolls_back();
-    test_animation_apply_active_scene_source_invalid_fluid_falls_back_2d();
-    test_animation_restore_active_scene_source_persists_fallback_correction();
+    test_animation_apply_active_scene_source_invalid_fluid_preserves_selection();
+    test_animation_restore_active_scene_source_preserves_runtime_selection_on_failure();
+    test_animation_apply_runtime_scene_defers_missing_mesh_assets();
+    test_animation_save_preserves_runtime_source_even_without_path();
+    test_animation_mesh_asset_root_roundtrip();
     return test_support_failures() - before;
 }

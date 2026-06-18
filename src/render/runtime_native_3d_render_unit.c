@@ -249,9 +249,32 @@ bool RuntimeNative3DRenderUnit_RenderSubpass(RuntimeNative3DRenderUnit* unit,
     return true;
 }
 
-bool RuntimeNative3DRenderUnit_ResolveCurrentToPixels(const RuntimeNative3DRenderUnit* unit,
-                                                      uint8_t* pixel_buffer,
-                                                      int pixel_width) {
+static void runtime_native_3d_render_unit_record_denoise_diagnostics(
+    RuntimeNative3DRenderStats* stats,
+    const RuntimeNative3DDenoiseDiagnostics* diagnostics) {
+    if (!stats || !diagnostics) return;
+    stats->denoiseTemporalFrameCount = diagnostics->temporalFrameCount;
+    stats->denoiseRawPixelCount = diagnostics->rawPixelCount;
+    stats->denoiseReconstructedPixelCount = diagnostics->reconstructedPixelCount;
+    stats->denoiseStableInteriorSampleCount = diagnostics->stableInteriorSampleCount;
+    stats->denoiseRejectedEdgeSampleCount = diagnostics->rejectedEdgeSampleCount;
+    stats->denoisePreservedTransparentPixelCount = diagnostics->preservedTransparentPixelCount;
+    stats->denoisePreservedMirrorGlossyPixelCount =
+        diagnostics->preservedMirrorGlossyPixelCount;
+    stats->denoiseSkippedUnstableTemporalPixelCount =
+        diagnostics->skippedUnstableTemporalPixelCount;
+    stats->denoiseSkippedInvalidSurfacePixelCount =
+        diagnostics->skippedInvalidSurfacePixelCount;
+    stats->denoiseRawRadianceLumaTotal = diagnostics->rawRadianceLumaTotal;
+    stats->denoiseReconstructedRadianceLumaTotal =
+        diagnostics->reconstructedRadianceLumaTotal;
+}
+
+bool RuntimeNative3DRenderUnit_ResolveCurrentToPixelsWithStats(
+    const RuntimeNative3DRenderUnit* unit,
+    uint8_t* pixel_buffer,
+    int pixel_width,
+    RuntimeNative3DRenderStats* out_stats) {
     size_t pixel_count = 0;
 
     if (!unit || !pixel_buffer || pixel_width <= 0 || unit->width <= 0 || unit->height <= 0) {
@@ -270,15 +293,29 @@ bool RuntimeNative3DRenderUnit_ResolveCurrentToPixels(const RuntimeNative3DRende
     pixel_count = (size_t)unit->width * (size_t)unit->height *
                   (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
     memset(unit->resolvedRadiance, 0, pixel_count * sizeof(*unit->resolvedRadiance));
-    if (!RuntimeNative3DTemporalAccumulation_ResolveRegionToRadianceBuffer(&unit->accumulation,
-                                                                           unit->resolvedRadiance,
-                                                                           unit->width,
-                                                                           0,
-                                                                           0,
-                                                                           unit->width,
-                                                                           unit->height) ||
-        !RuntimeNative3DDenoise_Apply(unit->resolvedRadiance, unit->width, &unit->featureBuffer)) {
-        return false;
+    {
+        RuntimeNative3DDenoiseDiagnostics diagnostics = {0};
+        if (!RuntimeNative3DTemporalAccumulation_ResolveRegionToRadianceBuffer(
+                &unit->accumulation,
+                unit->resolvedRadiance,
+                unit->width,
+                0,
+                0,
+                unit->width,
+                unit->height) ||
+            !RuntimeNative3DDenoise_ApplyForIntegrator(unit->resolvedRadiance,
+                                                       unit->width,
+                                                       &unit->featureBuffer,
+                                                       unit->integratorId,
+                                                       unit->committedSubpasses,
+                                                       unit->accumulation.activityBuffer,
+                                                       unit->accumulation.width,
+                                                       out_stats ? &diagnostics : NULL)) {
+            return false;
+        }
+        if (out_stats) {
+            runtime_native_3d_render_unit_record_denoise_diagnostics(out_stats, &diagnostics);
+        }
     }
 
     RuntimeNative3DResolveRadianceRegionToPixels(pixel_buffer,
@@ -290,6 +327,15 @@ bool RuntimeNative3DRenderUnit_ResolveCurrentToPixels(const RuntimeNative3DRende
                                                  unit->endX,
                                                  unit->endY);
     return true;
+}
+
+bool RuntimeNative3DRenderUnit_ResolveCurrentToPixels(const RuntimeNative3DRenderUnit* unit,
+                                                      uint8_t* pixel_buffer,
+                                                      int pixel_width) {
+    return RuntimeNative3DRenderUnit_ResolveCurrentToPixelsWithStats(unit,
+                                                                     pixel_buffer,
+                                                                     pixel_width,
+                                                                     NULL);
 }
 
 int RuntimeNative3DRenderUnit_CommittedSubpasses(const RuntimeNative3DRenderUnit* unit) {

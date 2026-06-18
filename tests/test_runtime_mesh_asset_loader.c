@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include "import/runtime_mesh_asset_loader.h"
+#include "config/config_manager.h"
 
 static const char* kMrt0ScenePath =
     "tests/fixtures/mesh_asset_runtime_spheres/scene_runtime.json";
@@ -269,6 +270,224 @@ static int test_runtime_mesh_asset_loader_uses_line_drawing_runtime_path_hint(vo
     return 0;
 }
 
+static int test_runtime_mesh_asset_loader_falls_back_from_stale_line_drawing_hint_to_asset_root(void) {
+    const char* dir = "/private/tmp/ray_tracing_mrt2_stale_external_hint";
+    const char* mesh_root = "/private/tmp/ray_tracing_mrt2_stale_external_hint/curated";
+    const char* scene_path = "/private/tmp/ray_tracing_mrt2_stale_external_hint/scene_runtime.json";
+    const char* asset_path =
+        "/private/tmp/ray_tracing_mrt2_stale_external_hint/curated/asset_sphere_8x4.runtime.json";
+    const char* stale_asset_path =
+        "/private/tmp/ray_tracing_mrt2_stale_external_hint/missing/asset_sphere_8x4.runtime.json";
+    const char* source_asset_path =
+        "tests/fixtures/mesh_asset_runtime_spheres/assets/mesh_assets/asset_sphere_8x4.runtime.json";
+    const char* saved_root = getenv("RAY_TRACING_MESH_ASSET_ROOT");
+    char saved_root_copy[PATH_MAX] = {0};
+    char scene_json[1024];
+    char* asset_text = NULL;
+    RayTracingRuntimeMeshAssetSet set;
+    char diagnostics[256] = {0};
+    bool ok = false;
+
+    if (saved_root && saved_root[0]) {
+        strncpy(saved_root_copy, saved_root, sizeof(saved_root_copy) - 1);
+        saved_root_copy[sizeof(saved_root_copy) - 1] = '\0';
+    }
+
+    asset_text = read_text_file_alloc(source_asset_path);
+    assert_true("mrt2_stale_hint_read_source_asset", asset_text != NULL);
+    mkdir(dir, 0777);
+    mkdir(mesh_root, 0777);
+    assert_true("mrt2_stale_hint_write_asset", asset_text && write_text_file(asset_path, asset_text));
+    free(asset_text);
+
+    snprintf(scene_json,
+             sizeof(scene_json),
+             "{"
+             "\"world_scale\":1.0,"
+             "\"objects\":[{"
+             "\"object_id\":\"obj_external_mesh\","
+             "\"object_type\":\"mesh_asset_instance\","
+             "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_sphere_8x4\"},"
+             "\"extensions\":{\"line_drawing\":{\"runtime_mesh_path\":\"%s\"}}"
+             "}]"
+             "}",
+             stale_asset_path);
+
+    assert_true("mrt2_stale_hint_write_scene", write_text_file(scene_path, scene_json));
+    setenv("RAY_TRACING_MESH_ASSET_ROOT", mesh_root, 1);
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    ok = ray_tracing_runtime_mesh_assets_load_scene_file(scene_path,
+                                                        &set,
+                                                        diagnostics,
+                                                        sizeof(diagnostics));
+    assert_true("mrt2_stale_hint_fallback_loads", ok);
+    if (ok) {
+        assert_true("mrt2_stale_hint_fallback_asset_count", set.asset_count == 1);
+        assert_true("mrt2_stale_hint_fallback_instance_count", set.instance_count == 1);
+        assert_true("mrt2_stale_hint_fallback_path",
+                    strcmp(set.assets[0].path, asset_path) == 0);
+    }
+    ray_tracing_runtime_mesh_asset_set_free(&set);
+    if (saved_root_copy[0]) {
+        setenv("RAY_TRACING_MESH_ASSET_ROOT", saved_root_copy, 1);
+    } else {
+        unsetenv("RAY_TRACING_MESH_ASSET_ROOT");
+    }
+    remove(asset_path);
+    remove(scene_path);
+    rmdir(mesh_root);
+    rmdir(dir);
+    return 0;
+}
+
+static int test_runtime_mesh_asset_loader_uses_config_mesh_asset_root(void) {
+    const char* dir = "/private/tmp/ray_tracing_mrt2_config_mesh_root";
+    const char* mesh_root = "/private/tmp/ray_tracing_mrt2_config_mesh_root/curated";
+    const char* scene_path = "/private/tmp/ray_tracing_mrt2_config_mesh_root/scene_runtime.json";
+    const char* asset_path =
+        "/private/tmp/ray_tracing_mrt2_config_mesh_root/curated/asset_sphere_8x4.runtime.json";
+    const char* stale_asset_path =
+        "/private/tmp/ray_tracing_mrt2_config_mesh_root/missing/asset_sphere_8x4.runtime.json";
+    const char* source_asset_path =
+        "tests/fixtures/mesh_asset_runtime_spheres/assets/mesh_assets/asset_sphere_8x4.runtime.json";
+    const char* saved_env_root = getenv("RAY_TRACING_MESH_ASSET_ROOT");
+    char saved_env_root_copy[PATH_MAX] = {0};
+    char saved_config_root[PATH_MAX] = {0};
+    char scene_json[1024];
+    char* asset_text = NULL;
+    RayTracingRuntimeMeshAssetSet set;
+    char diagnostics[256] = {0};
+    bool ok = false;
+
+    if (saved_env_root && saved_env_root[0]) {
+        strncpy(saved_env_root_copy, saved_env_root, sizeof(saved_env_root_copy) - 1);
+        saved_env_root_copy[sizeof(saved_env_root_copy) - 1] = '\0';
+    }
+    strncpy(saved_config_root, animSettings.meshAssetRoot, sizeof(saved_config_root) - 1);
+    saved_config_root[sizeof(saved_config_root) - 1] = '\0';
+
+    asset_text = read_text_file_alloc(source_asset_path);
+    assert_true("mrt2_config_mesh_root_read_source_asset", asset_text != NULL);
+    mkdir(dir, 0777);
+    mkdir(mesh_root, 0777);
+    assert_true("mrt2_config_mesh_root_write_asset", asset_text && write_text_file(asset_path, asset_text));
+    free(asset_text);
+
+    snprintf(scene_json,
+             sizeof(scene_json),
+             "{"
+             "\"world_scale\":1.0,"
+             "\"objects\":[{"
+             "\"object_id\":\"obj_config_mesh_root\","
+             "\"object_type\":\"mesh_asset_instance\","
+             "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_sphere_8x4\"},"
+             "\"extensions\":{\"line_drawing\":{\"runtime_mesh_path\":\"%s\"}}"
+             "}]"
+             "}",
+             stale_asset_path);
+
+    assert_true("mrt2_config_mesh_root_write_scene", write_text_file(scene_path, scene_json));
+    unsetenv("RAY_TRACING_MESH_ASSET_ROOT");
+    snprintf(animSettings.meshAssetRoot, sizeof(animSettings.meshAssetRoot), "%s", mesh_root);
+
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    ok = ray_tracing_runtime_mesh_assets_load_scene_file(scene_path,
+                                                        &set,
+                                                        diagnostics,
+                                                        sizeof(diagnostics));
+    assert_true("mrt2_config_mesh_root_loads", ok);
+    if (ok) {
+        assert_true("mrt2_config_mesh_root_asset_count", set.asset_count == 1);
+        assert_true("mrt2_config_mesh_root_instance_count", set.instance_count == 1);
+        assert_true("mrt2_config_mesh_root_path",
+                    strcmp(set.assets[0].path, asset_path) == 0);
+    }
+    ray_tracing_runtime_mesh_asset_set_free(&set);
+
+    snprintf(animSettings.meshAssetRoot, sizeof(animSettings.meshAssetRoot), "%s", saved_config_root);
+    if (saved_env_root_copy[0]) {
+        setenv("RAY_TRACING_MESH_ASSET_ROOT", saved_env_root_copy, 1);
+    } else {
+        unsetenv("RAY_TRACING_MESH_ASSET_ROOT");
+    }
+    remove(asset_path);
+    remove(scene_path);
+    rmdir(mesh_root);
+    rmdir(dir);
+    return 0;
+}
+
+static int test_runtime_mesh_asset_loader_attaches_preview_metadata(void) {
+    const char* dir = "/private/tmp/ray_tracing_mrt_preview_meta";
+    const char* assets_dir = "/private/tmp/ray_tracing_mrt_preview_meta/assets";
+    const char* mesh_dir = "/private/tmp/ray_tracing_mrt_preview_meta/assets/mesh_assets";
+    const char* scene_path = "/private/tmp/ray_tracing_mrt_preview_meta/scene_runtime.json";
+    const char* asset_path =
+        "/private/tmp/ray_tracing_mrt_preview_meta/assets/mesh_assets/asset_sphere_8x4.runtime.json";
+    const char* source_asset_path =
+        "tests/fixtures/mesh_asset_runtime_spheres/assets/mesh_assets/asset_sphere_8x4.runtime.json";
+    const char* scene_json =
+        "{"
+        "\"objects\":[{"
+        "\"object_id\":\"obj_preview_mesh\","
+        "\"object_type\":\"mesh_asset_instance\","
+        "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_sphere_8x4\"}"
+        "}]"
+        "}";
+    RayTracingRuntimeMeshAssetSet set;
+    CoreResult preview_result = core_result_ok();
+    char diagnostics[256] = {0};
+    char preview_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+    char* asset_text = NULL;
+    bool ok = false;
+
+    mkdir(dir, 0777);
+    mkdir(assets_dir, 0777);
+    mkdir(mesh_dir, 0777);
+    asset_text = read_text_file_alloc(source_asset_path);
+    assert_true("mrt_preview_meta_read_source_asset", asset_text != NULL);
+    assert_true("mrt_preview_meta_write_asset", asset_text && write_text_file(asset_path, asset_text));
+    assert_true("mrt_preview_meta_write_scene", write_text_file(scene_path, scene_json));
+    preview_result = core_mesh_preview_save_for_runtime_file(asset_path,
+                                                            CORE_MESH_PREVIEW_MODE_FEATURE_EDGES_V1,
+                                                            32u,
+                                                            preview_path,
+                                                            sizeof(preview_path));
+    assert_true("mrt_preview_meta_sidecar_write", preview_result.code == CORE_OK);
+
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    ok = ray_tracing_runtime_mesh_assets_load_scene_file(scene_path,
+                                                        &set,
+                                                        diagnostics,
+                                                        sizeof(diagnostics));
+    assert_true("mrt_preview_meta_load_scene", ok);
+    if (ok) {
+        const RayTracingRuntimeMeshPreviewInfo* preview = &set.assets[0].preview;
+        assert_true("mrt_preview_meta_asset_count", set.asset_count == 1);
+        assert_true("mrt_preview_meta_path_resolved", preview->preview_path_resolved);
+        assert_true("mrt_preview_meta_file_exists", preview->preview_file_exists);
+        assert_true("mrt_preview_meta_file_readable", preview->preview_file_readable);
+        assert_true("mrt_preview_meta_schema_supported", preview->preview_schema_supported);
+        assert_true("mrt_preview_meta_valid", preview->preview_metadata_valid);
+        assert_true("mrt_preview_meta_drawable", preview->metadata.has_drawable_payload);
+        assert_true("mrt_preview_meta_mode",
+                    preview->metadata.mode == CORE_MESH_PREVIEW_MODE_FEATURE_EDGES_V1);
+        assert_true("mrt_preview_meta_source_triangles",
+                    preview->metadata.source_triangle_count ==
+                        set.assets[0].document.triangle_count);
+        assert_true("mrt_preview_meta_budget", preview->metadata.max_budget == 32u);
+    }
+    ray_tracing_runtime_mesh_asset_set_free(&set);
+    free(asset_text);
+    remove(preview_path);
+    remove(asset_path);
+    remove(scene_path);
+    rmdir(mesh_dir);
+    rmdir(assets_dir);
+    rmdir(dir);
+    return 0;
+}
+
 static int test_runtime_mesh_asset_loader_reuses_cache_and_invalidates(void) {
     const char* dir = "/private/tmp/ray_tracing_mrt9_cache";
     const char* assets_dir = "/private/tmp/ray_tracing_mrt9_cache/assets";
@@ -388,6 +607,81 @@ static int test_runtime_mesh_asset_loader_preview_limited_skips_oversized_asset(
     return 0;
 }
 
+static int test_runtime_mesh_asset_loader_preview_limited_keeps_sidecar_metadata(void) {
+    const char* dir = "/private/tmp/ray_tracing_mrt_preview_limited_meta";
+    const char* assets_dir = "/private/tmp/ray_tracing_mrt_preview_limited_meta/assets";
+    const char* mesh_dir = "/private/tmp/ray_tracing_mrt_preview_limited_meta/assets/mesh_assets";
+    const char* scene_path = "/private/tmp/ray_tracing_mrt_preview_limited_meta/scene_runtime.json";
+    const char* asset_path =
+        "/private/tmp/ray_tracing_mrt_preview_limited_meta/assets/mesh_assets/asset_sphere_8x4.runtime.json";
+    const char* source_asset_path =
+        "tests/fixtures/mesh_asset_runtime_spheres/assets/mesh_assets/asset_sphere_8x4.runtime.json";
+    const char* scene_json =
+        "{"
+        "\"objects\":[{"
+        "\"object_id\":\"obj_preview_limited_mesh\","
+        "\"object_type\":\"mesh_asset_instance\","
+        "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_sphere_8x4\"}"
+        "}]"
+        "}";
+    RayTracingRuntimeMeshAssetSet set;
+    CoreResult preview_result = core_result_ok();
+    char diagnostics[256] = {0};
+    char preview_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+    char* asset_text = NULL;
+    bool ok = false;
+
+    mkdir(dir, 0777);
+    mkdir(assets_dir, 0777);
+    mkdir(mesh_dir, 0777);
+    asset_text = read_text_file_alloc(source_asset_path);
+    assert_true("mrt_preview_limited_meta_read_source_asset", asset_text != NULL);
+    assert_true("mrt_preview_limited_meta_write_asset",
+                asset_text && write_text_file(asset_path, asset_text));
+    assert_true("mrt_preview_limited_meta_write_scene", write_text_file(scene_path, scene_json));
+    preview_result = core_mesh_preview_save_for_runtime_file(asset_path,
+                                                            CORE_MESH_PREVIEW_MODE_BOUNDS_PROXY_V1,
+                                                            0u,
+                                                            preview_path,
+                                                            sizeof(preview_path));
+    assert_true("mrt_preview_limited_meta_sidecar_write", preview_result.code == CORE_OK);
+
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    ok = ray_tracing_runtime_mesh_assets_load_scene_file_preview_limited(scene_path,
+                                                                         1u,
+                                                                         &set,
+                                                                         diagnostics,
+                                                                         sizeof(diagnostics));
+    assert_true("mrt_preview_limited_meta_load_ok", ok);
+    if (ok) {
+        const RayTracingRuntimeMeshPreviewInfo* preview = &set.skipped_instances[0].preview;
+        assert_true("mrt_preview_limited_meta_no_full_asset", set.asset_count == 0);
+        assert_true("mrt_preview_limited_meta_no_full_instance", set.instance_count == 0);
+        assert_true("mrt_preview_limited_meta_one_skipped", set.skipped_instance_count == 1);
+        assert_true("mrt_preview_limited_meta_valid", preview->preview_metadata_valid);
+        assert_true("mrt_preview_limited_meta_bounds_mode",
+                    preview->metadata.mode == CORE_MESH_PREVIEW_MODE_BOUNDS_PROXY_V1);
+        assert_true("mrt_preview_limited_meta_zero_edges",
+                    preview->metadata.preview_edge_count == 0u);
+        assert_true("mrt_preview_limited_meta_zero_triangles",
+                    preview->metadata.preview_triangle_count == 0u);
+        assert_true("mrt_preview_limited_meta_zero_vertices",
+                    preview->metadata.preview_vertex_count == 0u);
+        assert_true("mrt_preview_limited_meta_radius",
+                    preview->metadata.bounding_sphere_radius > 0.0);
+    }
+
+    ray_tracing_runtime_mesh_asset_set_free(&set);
+    free(asset_text);
+    remove(preview_path);
+    remove(asset_path);
+    remove(scene_path);
+    rmdir(mesh_dir);
+    rmdir(assets_dir);
+    rmdir(dir);
+    return 0;
+}
+
 int run_test_runtime_mesh_asset_loader_tests(void) {
     int before = g_runtime_mesh_asset_loader_failures;
 
@@ -395,8 +689,12 @@ int run_test_runtime_mesh_asset_loader_tests(void) {
     test_runtime_mesh_asset_loader_reports_missing_asset();
     test_runtime_mesh_asset_loader_reports_malformed_asset();
     test_runtime_mesh_asset_loader_uses_line_drawing_runtime_path_hint();
+    test_runtime_mesh_asset_loader_falls_back_from_stale_line_drawing_hint_to_asset_root();
+    test_runtime_mesh_asset_loader_uses_config_mesh_asset_root();
+    test_runtime_mesh_asset_loader_attaches_preview_metadata();
     test_runtime_mesh_asset_loader_reuses_cache_and_invalidates();
     test_runtime_mesh_asset_loader_preview_limited_skips_oversized_asset();
+    test_runtime_mesh_asset_loader_preview_limited_keeps_sidecar_metadata();
 
     return g_runtime_mesh_asset_loader_failures - before;
 }

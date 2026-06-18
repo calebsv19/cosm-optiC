@@ -98,17 +98,9 @@ void menu_render_build_slider_layout(TTF_Font* font,
     ADD_SLIDER(&sceneSettings.rays, 0, 10000, "Num Rays");
     ADD_SLIDER(&sceneSettings.windowWidth, 200, 4000, "Width");
     ADD_SLIDER(&sceneSettings.windowHeight, 200, 2400, "Height");
-    ADD_SLIDER(&animSettings.tileSize, 4, 256, "Tile Size");
     if (!is_3d) {
         ADD_SLIDER(&state->rouletteSliderValue, 1, 2000, "Roulette Threshold");
     }
-    ADD_SLIDER(&state->envSliderValue, 0, 255, "Ambient Brightness");
-    ADD_SLIDER(&state->lightIntensitySliderValue, 0, 2000, "Light Intensity");
-    ADD_SLIDER(&state->lightDecaySoftnessSliderValue, 10, 1000, "Falloff Softness");
-    ADD_SLIDER(&state->forwardDecaySliderValue,
-               SDL_MENU_FORWARD_FALLOFF_DISTANCE_MIN,
-               SDL_MENU_FORWARD_FALLOFF_DISTANCE_MAX,
-               "Falloff Distance");
     if (is_3d) {
         ADD_SLIDER(&state->bounceDepth3DSliderValue,
                    RUNTIME_3D_BOUNCE_DEPTH_MIN,
@@ -170,16 +162,19 @@ void menu_render_build_slider_layout(TTF_Font* font,
     }
 }
 
-void menu_render_draw_sliders(SDL_Renderer* renderer,
-                              TTF_Font* font,
-                              MenuRuntimeState* state,
-                              const SliderLayout* layout) {
+void menu_render_draw_slider_items(SDL_Renderer* renderer,
+                                   TTF_Font* font,
+                                   MenuRuntimeState* state,
+                                   const SliderLayout* layout,
+                                   const char* panel_title) {
     RayTracingThemePalette palette = {0};
     const bool has_shared_palette = ray_tracing_shared_theme_resolve_palette(&palette);
     if (!state || !layout) return;
     if (layout->panelRect.w > 0 && layout->panelRect.h > 0) {
         SDL_Rect panel = layout->panelRect;
-        menu_panel_chrome_draw(renderer, font, &panel, "Render Settings", false);
+        if (panel_title && panel_title[0]) {
+            menu_panel_chrome_draw(renderer, font, &panel, panel_title, false);
+        }
         SDL_RenderSetClipRect(renderer, &panel);
     }
 
@@ -240,6 +235,19 @@ void menu_render_draw_sliders(SDL_Renderer* renderer,
         } else if (slider->value == &state->forwardDecaySliderValue) {
             RenderText(renderer, font, slider->valueX, slider->valueY,
                        "%d", state->forwardDecaySliderValue);
+        } else if (slider->value == &state->topFillStrengthSliderValue) {
+            RenderText(renderer, font, slider->valueX, slider->valueY,
+                       "%.2f", state->topFillStrengthSliderValue / 100.0);
+        } else if (slider->value == &state->environmentBackgroundBrightnessSliderValue) {
+            if (animSettings.environmentBackgroundBrightnessAuto) {
+                RenderText(renderer, font, slider->valueX, slider->valueY,
+                           "Auto %.2f",
+                           state->environmentBackgroundBrightnessSliderValue / 100.0);
+            } else {
+                RenderText(renderer, font, slider->valueX, slider->valueY,
+                           "%.2f",
+                           state->environmentBackgroundBrightnessSliderValue / 100.0);
+            }
         } else if (slider->value == &state->bounceDepth3DSliderValue) {
             RenderText(renderer, font, slider->valueX, slider->valueY,
                        "%d", state->bounceDepth3DSliderValue);
@@ -300,4 +308,11 @@ void menu_render_draw_sliders(SDL_Renderer* renderer,
             SDL_RenderFillRect(renderer, &thumb);
         }
     }
+}
+
+void menu_render_draw_sliders(SDL_Renderer* renderer,
+                              TTF_Font* font,
+                              MenuRuntimeState* state,
+                              const SliderLayout* layout) {
+    menu_render_draw_slider_items(renderer, font, state, layout, "Render Settings");
 }

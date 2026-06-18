@@ -288,8 +288,12 @@ The headless summary writes a resolved `environment_lighting` object with:
 `--render` runs the same readiness path and then writes BMP frames to:
 
 ```text
-<output.root>/frames/frame_0000.bmp
+<output.root>/frames/frame_%04d.bmp
 ```
+
+Frame filenames use the requested absolute render frame index. For example, a
+single-frame request with `render.start_frame = 17` writes
+`frames/frame_0017.bmp`.
 
 When `progress.progress_path` is set, the render CLI now also writes a
 `ray_tracing_render_progress_v1` JSON file with stage transitions such as
@@ -522,14 +526,98 @@ resolves VF3D or pack sources by requested render frame.
 For PhysicsSim water-surface handoff, the validation flow runs
 `physics_sim_headless --water-mode --save-volume-frames`, points RayTracing at
 the generated `scene_bundle.json`, imports `water_source`, and appends the
-selected Y-up heightfield frame as native `3D` triangle geometry with a
-first-pass `water_surface` material slot. The current backend path is headless
-only; editor controls and LineDrawing liquid-region authoring remain follow-up
-work.
+selected PhysicsSim Y-up heightfield frame as native `3D` triangle geometry.
+The render mesh maps PhysicsSim height `y` into RayTracing scene-up `z`, so the
+water surface displays as a horizontal basin plane while preserving the
+producer-side `surface_axis: "y"` contract. The current backend path is
+headless only; editor controls and LineDrawing liquid-region authoring remain
+follow-up work.
 
 ```text
 ray_tracing/build/agent_runs/physics_trio/water_surface_handoff_image_export/ray_tracing/frames/
 ```
+
+For single-frame water optics review, the WTR-5.3 validation flow runs
+`physics_sim_headless --water-mode --water-review-ripples`, warms the basin for
+18 frames, selects the final `water_surface_000017.json` sidecar through
+`scene_bundle.json.water_source`, and renders one `emission_transparency` frame
+with contrast geometry behind the imported water surface:
+
+```text
+ray_tracing/build/agent_runs/physics_trio/water_optics_review_single_frame/ray_tracing/frames/frame_0017.bmp
+```
+
+The test asserts that the review sidecar applied ripples, the selected
+heightfield has non-flat finite heights/normals, the water material payload is
+active, the camera visibly hits the generated `water_surface` object, and the
+render traces through transparent water.
+
+For larger-surface visual review, use
+`make -C ray_tracing test-ray-tracing-render-headless-water-basin-surface-review`.
+This fixture keeps the same PhysicsSim -> `scene_bundle.json.water_source` ->
+RayTracing path, but the standalone Water Basin now resolves to a square X/Z
+footprint so the imported surface frame is broad instead of a narrow strip. The
+review run uses a lighter `32 x 32` water surface, deterministic review
+ripples, a plain basin/floor/wall scene, and a closer camera to produce:
+
+```text
+ray_tracing/build/agent_runs/physics_trio/water_basin_surface_review_single_frame/ray_tracing/frames/frame_0011.bmp
+```
+
+This is still a headless backend optics/review fixture. The current producer
+contract remains the PhysicsSim-authored Y-up heightfield, while the RayTracing
+builder now remaps that imported heightfield into a Z-up rendered water sheet.
+
+For moving-light multi-frame water optics review, use
+`make -C ray_tracing test-ray-tracing-render-headless-water-moving-light-review`.
+This WTR-5.4 fixture warms a standalone PhysicsSim Water Basin for `16` frames,
+renders four consecutive RayTracing frames (`0008..0011`) through the generated
+`scene_bundle.json.water_source`, and samples an authored
+`extensions.ray_tracing.authoring.light_path` across normalized render time:
+
+```text
+ray_tracing/build/agent_runs/physics_trio/water_moving_light_review/ray_tracing/frames/frame_0008.bmp
+ray_tracing/build/agent_runs/physics_trio/water_moving_light_review/ray_tracing/frames/frame_0011.bmp
+```
+
+The test asserts that the selected first/last water surface sidecars are both
+loaded, the heightfield evolves between those frames, transparent-water
+secondary hits remain active, and the rendered BMP sequence has measurable
+frame-to-frame pixel deltas from the moving light over the rippled water
+surface.
+
+For long-motion sparse-frame review before object displacement work, use
+`make -C ray_tracing test-ray-tracing-render-headless-water-long-motion-review`.
+This WTR-5.5 fixture runs PhysicsSim Water mode for `201` frames with `4`
+simulation steps per exported frame, samples frames `40, 80, 120, 160, 200`,
+and renders full RayTracing basin BMP frames from `scene_bundle.json.water_source`:
+
+```text
+ray_tracing/build/agent_runs/physics_trio/water_long_motion_review/ray_tracing/frames/frame_0040.bmp
+ray_tracing/build/agent_runs/physics_trio/water_long_motion_review/ray_tracing/frames/frame_0200.bmp
+ray_tracing/build/agent_runs/physics_trio/water_long_motion_review/ray_tracing/frames/water_long_motion_contact_sheet.bmp
+```
+
+This target is a sparse full-RayTracing basin proof for large time separation:
+it shades the actual simulated water surfaces with a moving light inside the
+same basin-style render composition and asserts height/image deltas across
+sparse frames. Full-length video/output throughput remains a later optimization.
+
+For WTR-6 object-water review, use
+`make -C ray_tracing test-ray-tracing-render-headless-water-object-coupling-review`.
+This fixture runs PhysicsSim Water mode with `--water-object-fixture`, then
+renders full RayTracing basin frames `0008`, `0018`, and `0027` through
+`scene_bundle.json.water_source` with a visible block object in the basin:
+
+```text
+ray_tracing/build/agent_runs/physics_trio/water_object_coupling_review/ray_tracing/frames/frame_0008.bmp
+ray_tracing/build/agent_runs/physics_trio/water_object_coupling_review/ray_tracing/frames/frame_0027.bmp
+ray_tracing/build/agent_runs/physics_trio/water_object_coupling_review/ray_tracing/frames/water_object_coupling_review.mp4
+```
+
+The BMP sequence is the deterministic acceptance artifact. When local `ffmpeg`
+is available, the test also encodes the MP4 review helper without replacing the
+full RayTracing basin render path.
 
 The water summary reports whether a water source was found, whether the frame
 loaded, whether mesh triangles were attached, requested/loaded first and last

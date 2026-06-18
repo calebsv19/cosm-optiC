@@ -53,6 +53,13 @@ typedef enum {
 } RuntimeDisneyV2_3DEmitterKind;
 
 typedef struct {
+    double lightPdf;
+    double bsdfPdf;
+    double weightLight;
+    double weightBsdf;
+} RuntimeDisneyV2_3DMisBranch;
+
+typedef struct {
     bool hit;
     bool visible;
     bool payloadResolved;
@@ -81,10 +88,63 @@ typedef struct {
     double specularRadianceR;
     double specularRadianceG;
     double specularRadianceB;
+    double mirrorDominance;
+    double mirrorBaseAttenuation;
+    double mirrorBaseRadianceBeforeAttenuation;
+    double mirrorBaseRadianceAfterAttenuation;
+    double specularReflectionRadiance;
+    double specularReflectionRadianceR;
+    double specularReflectionRadianceG;
+    double specularReflectionRadianceB;
+    int specularReflectionRayCount;
+    int specularReflectionHitCount;
+    int specularReflectionGeometryHitCount;
+    int specularReflectionEmitterHitCount;
+    int specularReflectionNoHitCount;
+    int specularReflectionContributingHitCount;
+    double specularReflectionRecursiveRadiance;
+    double specularReflectionRecursiveRadianceR;
+    double specularReflectionRecursiveRadianceG;
+    double specularReflectionRecursiveRadianceB;
+    double specularReflectionRoughContribution;
+    double specularReflectionRoughContributionR;
+    double specularReflectionRoughContributionG;
+    double specularReflectionRoughContributionB;
+    double specularReflectionRoughness;
+    int specularReflectionRecursiveRayCount;
+    int specularReflectionRecursiveVertexCount;
+    int specularReflectionRecursiveGeometryHitCount;
+    int specularReflectionRecursiveEmitterHitCount;
+    int specularReflectionRecursiveContributingHitCount;
+    int specularReflectionRecursivePolicyTerminationCount;
+    int specularReflectionRecursiveRouletteTerminationCount;
+    int specularReflectionRecursiveNoHitTerminationCount;
+    int specularReflectionRoughSampleCount;
+    int specularReflectionRoughHitCount;
+    int specularReflectionRoughNoHitCount;
+    int specularReflectionRoughContributingSampleCount;
     double emissionRadiance;
     double emissionRadianceR;
     double emissionRadianceG;
     double emissionRadianceB;
+    double emissiveAreaRadiance;
+    double emissiveAreaRadianceR;
+    double emissiveAreaRadianceG;
+    double emissiveAreaRadianceB;
+    int emissiveAreaSampledTriangleCount;
+    int emissiveAreaContributingTriangleCount;
+    int emissiveAreaLightSampleCount;
+    int emissiveAreaCandidateCount;
+    int emissiveAreaSelectedCandidateCount;
+    int emissiveAreaVisibilityRayCount;
+    int emissiveAreaPrimarySampleCount;
+    int emissiveAreaRecursiveSampleCount;
+    int emissiveAreaRecursivePolicySkipCount;
+    int emissiveAreaRecursiveCandidateCapSkipCount;
+    int emissiveAreaRecursiveTriangleCapSkipCount;
+    int emissiveAreaRecursiveCandidateCap;
+    int emissiveAreaRecursiveTriangleCap;
+    int emissiveAreaFullScanFallbackCount;
     double transmissionRadiance;
     double transmissionRadianceR;
     double transmissionRadianceG;
@@ -170,6 +230,18 @@ typedef struct {
         RUNTIME_DISNEY_V2_3D_RECURSIVE_LOOP_STATE_CAPACITY];
     double recursiveLoopContributionB[
         RUNTIME_DISNEY_V2_3D_RECURSIVE_LOOP_STATE_CAPACITY];
+    RuntimeDisneyV2_3DPathState specularReflectionRecursiveStates[
+        RUNTIME_DISNEY_V2_3D_RECURSIVE_LOOP_STATE_CAPACITY];
+    RuntimePrincipledBSDF3D specularReflectionRecursivePrincipled[
+        RUNTIME_DISNEY_V2_3D_RECURSIVE_LOOP_STATE_CAPACITY];
+    RuntimeDisneyV2_3DLoopTerminationReason specularReflectionRecursiveTerminationReasons[
+        RUNTIME_DISNEY_V2_3D_RECURSIVE_LOOP_STATE_CAPACITY];
+    double specularReflectionRecursiveContributionR[
+        RUNTIME_DISNEY_V2_3D_RECURSIVE_LOOP_STATE_CAPACITY];
+    double specularReflectionRecursiveContributionG[
+        RUNTIME_DISNEY_V2_3D_RECURSIVE_LOOP_STATE_CAPACITY];
+    double specularReflectionRecursiveContributionB[
+        RUNTIME_DISNEY_V2_3D_RECURSIVE_LOOP_STATE_CAPACITY];
     double misVertexLightPdf[
         RUNTIME_DISNEY_V2_3D_RECURSIVE_LOOP_STATE_CAPACITY];
     double misVertexBsdfPdf[
@@ -177,6 +249,10 @@ typedef struct {
     double misVertexWeightLight[
         RUNTIME_DISNEY_V2_3D_RECURSIVE_LOOP_STATE_CAPACITY];
     double misVertexWeightBsdf[
+        RUNTIME_DISNEY_V2_3D_RECURSIVE_LOOP_STATE_CAPACITY];
+    RuntimeDisneyV2_3DMisBranch misVertexFiniteLight[
+        RUNTIME_DISNEY_V2_3D_RECURSIVE_LOOP_STATE_CAPACITY];
+    RuntimeDisneyV2_3DMisBranch misVertexEmissiveArea[
         RUNTIME_DISNEY_V2_3D_RECURSIVE_LOOP_STATE_CAPACITY];
     double lightSampleContributionR[
         RUNTIME_DISNEY_V2_3D_RECURSIVE_LOOP_STATE_CAPACITY];
@@ -211,6 +287,8 @@ typedef struct {
     RuntimeDisneyV2_3DLoopTerminationReason recursiveLoopTerminationReason;
     int recursiveLoopVertexCount;
     int misVertexCount;
+    int finiteLightMisVertexCount;
+    int emissiveAreaMisVertexCount;
     int recursiveLoopRayCount;
     int recursiveLoopGeometryHitCount;
     int recursiveLoopEmitterHitCount;
@@ -225,6 +303,10 @@ typedef struct {
     double bsdfSamplePdf;
     double misWeightLight;
     double misWeightBsdf;
+    double misHeuristicPower;
+    RuntimeDisneyV2_3DMisBranch finiteLightMis;
+    RuntimeDisneyV2_3DMisBranch emissiveAreaMis;
+    int misPowerHeuristicCount;
     double rouletteThroughputLuma;
     double rouletteSample;
     double rouletteSurvivalProbability;

@@ -42,6 +42,11 @@ typedef enum {
     MENU_VIEW_SCENE_EDITOR = 1
 } MenuViewMode;
 
+typedef enum {
+    MENU_RENDERER_CONTROLS_LIGHTING = 0,
+    MENU_RENDERER_CONTROLS_PERFORMANCE = 1
+} MenuRendererControlsTab;
+
 typedef struct {
     bool draggingSlider;
     int *selectedSlider;
@@ -55,6 +60,7 @@ typedef struct {
     bool editingFrame;
     bool editingStartFrame;
     bool editingInputRoot;
+    bool editingMeshAssetRoot;
     bool editingOutputRoot;
     bool editingFrameDir;
     bool editingVideoOutputRoot;
@@ -66,6 +72,8 @@ typedef struct {
     int lightIntensitySliderValue;
     int lightDecaySoftnessSliderValue;
     int forwardDecaySliderValue;
+    int topFillStrengthSliderValue;
+    int environmentBackgroundBrightnessSliderValue;
     int bounceDepth3DSliderValue;
     int rouletteThreshold3DSliderValue;
     int secondaryDiffuseSamples3DSliderValue;
@@ -80,6 +88,7 @@ typedef struct {
     char statusLabel[64];
     RayTracingRenderExportStatus exportBatchStatus;
     MenuViewMode activeView;
+    MenuRendererControlsTab rendererControlsTab;
     int activeSceneSource;
     MenuSceneLibraryLane activeSceneLibraryLane;
 

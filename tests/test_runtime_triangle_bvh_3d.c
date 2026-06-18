@@ -265,9 +265,42 @@ static void test_bvh_overflow_falls_back_to_flat_trace(void) {
     RuntimeScene3D_Free(&scene);
 }
 
+static void test_bvh_reports_nonfinite_centroid(void) {
+    RuntimeScene3D scene;
+    const char* diagnostics = NULL;
+
+    RuntimeScene3D_Init(&scene);
+    scene.triangleMesh.triangleCapacity = 1;
+    scene.triangleMesh.triangles =
+        (RuntimeTriangle3D*)calloc(1u, sizeof(*scene.triangleMesh.triangles));
+    assert_true("bvh_nonfinite_alloc", scene.triangleMesh.triangles != NULL);
+    if (!scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        return;
+    }
+
+    scene.triangleMesh.triangleCount = 1;
+    scene.triangleMesh.triangles[0] = make_triangle(vec3(NAN, 0.0, 0.0),
+                                                    vec3(1.0, 0.0, 0.0),
+                                                    vec3(0.0, 1.0, 0.0),
+                                                    0,
+                                                    0,
+                                                    0);
+    assert_true("bvh_nonfinite_build_fails",
+                !RuntimeTriangleMesh3D_BuildBVH(&scene.triangleMesh));
+    diagnostics = RuntimeTriangleMesh3D_BVHLastDiagnostics();
+    assert_true("bvh_nonfinite_diag_present",
+                diagnostics && strstr(diagnostics, "nonfinite") != NULL);
+    assert_true("bvh_nonfinite_diag_index",
+                diagnostics && strstr(diagnostics, "triangle_index=0") != NULL);
+
+    RuntimeScene3D_Free(&scene);
+}
+
 int main(void) {
     test_bvh_matches_flat_trace();
     test_bvh_copy_preserves_trace_results();
     test_bvh_overflow_falls_back_to_flat_trace();
+    test_bvh_reports_nonfinite_centroid();
     return g_failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

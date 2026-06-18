@@ -22,6 +22,7 @@ output.mp4
 data/runtime/
 data/snapshots/
 tmp/
+captures/
 /dist/
 tools/packaging/macos/local_app_icon/
 

@@ -7,6 +7,7 @@
 
 #include "core_pack.h"
 #include "import/fluid_volume_import_3d.h"
+#include "import/water_surface_import.h"
 #include "render/runtime_volume_3d_debug.h"
 #include "test_fluid_volume_import_3d.h"
 #include "test_support.h"
@@ -550,6 +551,101 @@ static int test_fluid_volume_import_3d_manifest_selects_requested_frame_index(vo
     return 0;
 }
 
+static int test_fluid_volume_import_3d_scene_bundle_manifest_selects_requested_frame_index(void) {
+    char dir[PATH_MAX] = {0};
+    char first_vf3d_path[PATH_MAX] = {0};
+    char second_vf3d_path[PATH_MAX] = {0};
+    char manifest_path[PATH_MAX] = {0};
+    char bundle_path[PATH_MAX] = {0};
+    char selected_path[PATH_MAX] = {0};
+    RuntimeVolumeAttachment3D attachment;
+    char diagnostics[128] = {0};
+    bool ok = false;
+    const char* manifest_json =
+        "{\n"
+        "  \"manifest_version\": 2,\n"
+        "  \"frame_contract\": \"vf3d\",\n"
+        "  \"space_mode\": \"3d\",\n"
+        "  \"frames\": [\n"
+        "    {\n"
+        "      \"frame_index\": 1,\n"
+        "      \"path\": \"frame_000001.vf3d\",\n"
+        "      \"frame_contract\": \"vf3d\"\n"
+        "    },\n"
+        "    {\n"
+        "      \"frame_index\": 2,\n"
+        "      \"path\": \"frame_000002.vf3d\",\n"
+        "      \"frame_contract\": \"vf3d\"\n"
+        "    }\n"
+        "  ]\n"
+        "}\n";
+    const char* bundle_json =
+        "{\n"
+        "  \"bundle_type\": \"physics_scene_bundle_v1\",\n"
+        "  \"bundle_version\": 1,\n"
+        "  \"profile\": \"physics\",\n"
+        "  \"fluid_source\": {\n"
+        "    \"kind\": \"manifest\",\n"
+        "    \"path\": \"manifest.json\"\n"
+        "  }\n"
+        "}\n";
+
+    RuntimeVolumeAttachment3D_Init(&attachment);
+    assert_true("fluid_volume_import_3d_bundle_manifest_index_temp_dir",
+                make_temp_volume_dir(dir, sizeof(dir)));
+    assert_true("fluid_volume_import_3d_bundle_manifest_index_frame_path_a",
+                snprintf(first_vf3d_path, sizeof(first_vf3d_path), "%s/frame_000001.vf3d", dir) <
+                    (int)sizeof(first_vf3d_path));
+    assert_true("fluid_volume_import_3d_bundle_manifest_index_frame_path_b",
+                snprintf(second_vf3d_path, sizeof(second_vf3d_path), "%s/frame_000002.vf3d", dir) <
+                    (int)sizeof(second_vf3d_path));
+    assert_true("fluid_volume_import_3d_bundle_manifest_index_manifest_path",
+                snprintf(manifest_path, sizeof(manifest_path), "%s/manifest.json", dir) <
+                    (int)sizeof(manifest_path));
+    assert_true("fluid_volume_import_3d_bundle_manifest_index_bundle_path",
+                snprintf(bundle_path, sizeof(bundle_path), "%s/scene_bundle.json", dir) <
+                    (int)sizeof(bundle_path));
+    assert_true("fluid_volume_import_3d_bundle_manifest_index_write_a",
+                write_sample_vf3d_custom(first_vf3d_path, 1u, false, false, 0.0f, 1u));
+    assert_true("fluid_volume_import_3d_bundle_manifest_index_write_b",
+                write_sample_vf3d_custom(second_vf3d_path, 1u, false, false, 1.0f, 2u));
+    assert_true("fluid_volume_import_3d_bundle_manifest_index_write_manifest",
+                write_local_text_file(manifest_path, manifest_json));
+    assert_true("fluid_volume_import_3d_bundle_manifest_index_write_bundle",
+                write_local_text_file(bundle_path, bundle_json));
+
+    ok = fluid_volume_import_3d_resolve_source_frame_path(bundle_path,
+                                                          RUNTIME_VOLUME_3D_SOURCE_MANIFEST,
+                                                          1,
+                                                          selected_path,
+                                                          sizeof(selected_path),
+                                                          diagnostics,
+                                                          sizeof(diagnostics));
+    assert_true("fluid_volume_import_3d_bundle_manifest_index_resolve_ok", ok);
+    assert_true("fluid_volume_import_3d_bundle_manifest_index_resolve_second",
+                strstr(selected_path, "frame_000002.vf3d") != NULL);
+
+    ok = fluid_volume_import_3d_load_source_at_frame(bundle_path,
+                                                     RUNTIME_VOLUME_3D_SOURCE_MANIFEST,
+                                                     1,
+                                                     &attachment,
+                                                     diagnostics,
+                                                     sizeof(diagnostics));
+    assert_true("fluid_volume_import_3d_bundle_manifest_index_load_ok", ok);
+    assert_true("fluid_volume_import_3d_bundle_manifest_index_density_from_second",
+                attachment.channels.density && attachment.channels.density[4] == 1.5f);
+    assert_true("fluid_volume_import_3d_bundle_manifest_index_frame_header",
+                attachment.grid.frameIndex == 2u);
+
+    RuntimeVolumeAttachment3D_Free(&attachment);
+    unlink(bundle_path);
+    unlink(manifest_path);
+    unlink(first_vf3d_path);
+    unlink(second_vf3d_path);
+    rmdir(dir);
+    return 0;
+}
+
 static int test_fluid_volume_import_3d_loads_scene_bundle_pack_source(void) {
     char dir[PATH_MAX] = {0};
     char pack_path[PATH_MAX] = {0};
@@ -651,6 +747,222 @@ static int test_fluid_volume_import_3d_rejects_non_vf3d_manifest(void) {
     return 0;
 }
 
+static int test_water_surface_import_loads_scene_bundle_heightfield(void) {
+    char dir[PATH_MAX] = {0};
+    char bundle_path[PATH_MAX] = {0};
+    char water_manifest_path[PATH_MAX] = {0};
+    char frame0_path[PATH_MAX] = {0};
+    char frame1_path[PATH_MAX] = {0};
+    RuntimeWaterSurfaceFrame frame;
+    char diagnostics[256] = {0};
+    bool found = false;
+    bool ok = false;
+    const char* bundle_json =
+        "{\n"
+        "  \"bundle_type\": \"physics_scene_bundle_v1\",\n"
+        "  \"fluid_source\": { \"kind\": \"manifest\", \"path\": \"manifest.json\", \"contract\": \"vf3d\" },\n"
+        "  \"water_source\": {\n"
+        "    \"kind\": \"water_manifest\",\n"
+        "    \"path\": \"water_manifest_v1.json\",\n"
+        "    \"contract\": \"water_manifest_v1\",\n"
+        "    \"surface_representation\": \"heightfield\"\n"
+        "  }\n"
+        "}\n";
+    const char* manifest_json =
+        "{\n"
+        "  \"schema\": \"physics_sim_water_manifest_v1\",\n"
+        "  \"version\": 1,\n"
+        "  \"frame_contract\": \"water_surface_heightfield_v1\",\n"
+        "  \"surface_representation\": \"heightfield\",\n"
+        "  \"surface_axis\": \"y\",\n"
+        "  \"volume_grid_w\": 3,\n"
+        "  \"volume_grid_h\": 3,\n"
+        "  \"volume_grid_d\": 3,\n"
+        "  \"density_threshold\": 0.5,\n"
+        "  \"material\": {\n"
+        "    \"ior\": 1.333,\n"
+        "    \"absorption_distance_m\": 4.0,\n"
+        "    \"absorption_rgb\": [0.1, 0.035, 0.015]\n"
+        "  },\n"
+        "  \"frames\": [\n"
+        "    { \"path\": \"water_surface_000000.json\", \"frame_contract\": \"water_surface_heightfield_v1\" },\n"
+        "    { \"path\": \"water_surface_000001.json\", \"frame_contract\": \"water_surface_heightfield_v1\" }\n"
+        "  ]\n"
+        "}\n";
+    const char* frame0_json =
+        "{\n"
+        "  \"schema\": \"physics_sim_water_surface_heightfield_v1\",\n"
+        "  \"version\": 1,\n"
+        "  \"frame_contract\": \"water_surface_heightfield_v1\",\n"
+        "  \"frame_index\": 0,\n"
+        "  \"time_seconds\": 0.0,\n"
+        "  \"dt_seconds\": 0.016,\n"
+        "  \"layout\": \"row_major_z_x\",\n"
+        "  \"surface_axis\": \"y\",\n"
+        "  \"grid_w\": 3,\n"
+        "  \"grid_d\": 3,\n"
+        "  \"sample_count\": 9,\n"
+        "  \"origin_x\": -1.0,\n"
+        "  \"origin_y\": 0.0,\n"
+        "  \"origin_z\": -1.0,\n"
+        "  \"sample_origin_x\": -1.0,\n"
+        "  \"sample_origin_z\": -1.0,\n"
+        "  \"sample_spacing_x\": 0.5,\n"
+        "  \"sample_spacing_z\": 0.5,\n"
+        "  \"summary\": {\n"
+        "    \"wet_columns\": 4,\n"
+        "    \"dry_columns\": 5,\n"
+        "    \"solid_columns\": 0,\n"
+        "    \"water_cells\": 12,\n"
+        "    \"surface_min_y\": 0.0,\n"
+        "    \"surface_max_y\": 0.5,\n"
+        "    \"surface_avg_y\": 0.22,\n"
+        "    \"max_slope\": 0.4,\n"
+        "    \"finite_normals\": true\n"
+        "  },\n"
+        "  \"heights_y\": [0.0,0.0,0.0, 0.0,0.4,0.5, 0.0,0.5,0.5],\n"
+        "  \"normals_xyz\": [0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0]\n"
+        "}\n";
+    const char* frame1_json =
+        "{\n"
+        "  \"schema\": \"physics_sim_water_surface_heightfield_v1\",\n"
+        "  \"version\": 1,\n"
+        "  \"frame_contract\": \"water_surface_heightfield_v1\",\n"
+        "  \"frame_index\": 1,\n"
+        "  \"time_seconds\": 0.016,\n"
+        "  \"dt_seconds\": 0.016,\n"
+        "  \"layout\": \"row_major_z_x\",\n"
+        "  \"surface_axis\": \"y\",\n"
+        "  \"grid_w\": 3,\n"
+        "  \"grid_d\": 3,\n"
+        "  \"sample_count\": 9,\n"
+        "  \"origin_x\": -1.0,\n"
+        "  \"origin_y\": 0.0,\n"
+        "  \"origin_z\": -1.0,\n"
+        "  \"sample_origin_x\": -1.0,\n"
+        "  \"sample_origin_z\": -1.0,\n"
+        "  \"sample_spacing_x\": 0.5,\n"
+        "  \"sample_spacing_z\": 0.5,\n"
+        "  \"summary\": {\n"
+        "    \"wet_columns\": 5,\n"
+        "    \"dry_columns\": 4,\n"
+        "    \"solid_columns\": 0,\n"
+        "    \"water_cells\": 15,\n"
+        "    \"surface_min_y\": 0.0,\n"
+        "    \"surface_max_y\": 0.6,\n"
+        "    \"surface_avg_y\": 0.27,\n"
+        "    \"max_slope\": 0.5,\n"
+        "    \"finite_normals\": true\n"
+        "  },\n"
+        "  \"heights_y\": [0.0,0.0,0.0, 0.0,0.45,0.55, 0.0,0.55,0.6],\n"
+        "  \"normals_xyz\": [0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0]\n"
+        "}\n";
+
+    RuntimeWaterSurfaceFrame_Init(&frame);
+    assert_true("water_surface_import_temp_dir", make_temp_volume_dir(dir, sizeof(dir)));
+    assert_true("water_surface_import_bundle_path",
+                snprintf(bundle_path, sizeof(bundle_path), "%s/scene_bundle.json", dir) <
+                    (int)sizeof(bundle_path));
+    assert_true("water_surface_import_manifest_path",
+                snprintf(water_manifest_path,
+                         sizeof(water_manifest_path),
+                         "%s/water_manifest_v1.json",
+                         dir) < (int)sizeof(water_manifest_path));
+    assert_true("water_surface_import_frame0_path",
+                snprintf(frame0_path, sizeof(frame0_path), "%s/water_surface_000000.json", dir) <
+                    (int)sizeof(frame0_path));
+    assert_true("water_surface_import_frame1_path",
+                snprintf(frame1_path, sizeof(frame1_path), "%s/water_surface_000001.json", dir) <
+                    (int)sizeof(frame1_path));
+    assert_true("water_surface_import_write_bundle", write_local_text_file(bundle_path, bundle_json));
+    assert_true("water_surface_import_write_manifest",
+                write_local_text_file(water_manifest_path, manifest_json));
+    assert_true("water_surface_import_write_frame0", write_local_text_file(frame0_path, frame0_json));
+    assert_true("water_surface_import_write_frame1", write_local_text_file(frame1_path, frame1_json));
+
+    ok = RuntimeWaterSurfaceImport_LoadSourceAtFrame(bundle_path,
+                                                     7,
+                                                     &frame,
+                                                     &found,
+                                                     diagnostics,
+                                                     sizeof(diagnostics));
+    assert_true("water_surface_import_bundle_ok", ok);
+    assert_true("water_surface_import_bundle_found", found);
+    assert_true("water_surface_import_bundle_valid", frame.valid);
+    assert_true("water_surface_import_bundle_frame_clamped", frame.frame_index == 1u);
+    assert_true("water_surface_import_bundle_grid_w", frame.grid_w == 3u);
+    assert_true("water_surface_import_bundle_grid_d", frame.grid_d == 3u);
+    assert_true("water_surface_import_bundle_samples", frame.sample_count == 9u);
+    assert_true("water_surface_import_bundle_heights", frame.heights_y != NULL);
+    assert_true("water_surface_import_bundle_normals", frame.normals_xyz != NULL);
+    if (!ok || !found || !frame.valid || !frame.heights_y || !frame.normals_xyz) {
+        RuntimeWaterSurfaceFrame_Free(&frame);
+        unlink(bundle_path);
+        unlink(water_manifest_path);
+        unlink(frame0_path);
+        unlink(frame1_path);
+        rmdir(dir);
+        return 0;
+    }
+    assert_close("water_surface_import_bundle_height_sample", frame.heights_y[8], 0.6, 1e-6);
+    assert_true("water_surface_import_bundle_manifest_path",
+                strstr(frame.source_manifest_path, "water_manifest_v1.json") != NULL);
+    assert_true("water_surface_import_bundle_frame_path",
+                strstr(frame.frame_path, "water_surface_000001.json") != NULL);
+    assert_close("water_surface_import_bundle_material_ior", frame.material.ior, 1.333, 1e-6);
+    assert_close("water_surface_import_bundle_material_absorption_distance",
+                 frame.material.absorption_distance_m,
+                 4.0,
+                 1e-9);
+    assert_true("water_surface_import_bundle_wet_columns", frame.wet_columns == 5u);
+    assert_true("water_surface_import_bundle_finite_normals", frame.finite_normals);
+
+    RuntimeWaterSurfaceFrame_Free(&frame);
+    unlink(bundle_path);
+    unlink(water_manifest_path);
+    unlink(frame0_path);
+    unlink(frame1_path);
+    rmdir(dir);
+    return 0;
+}
+
+static int test_water_surface_import_ignores_bundle_without_water_source(void) {
+    char dir[PATH_MAX] = {0};
+    char bundle_path[PATH_MAX] = {0};
+    RuntimeWaterSurfaceFrame frame;
+    char diagnostics[256] = {0};
+    bool found = true;
+    bool ok = false;
+    const char* bundle_json =
+        "{\n"
+        "  \"bundle_type\": \"physics_scene_bundle_v1\",\n"
+        "  \"fluid_source\": { \"kind\": \"manifest\", \"path\": \"manifest.json\", \"contract\": \"vf3d\" }\n"
+        "}\n";
+
+    RuntimeWaterSurfaceFrame_Init(&frame);
+    assert_true("water_surface_import_missing_temp_dir", make_temp_volume_dir(dir, sizeof(dir)));
+    assert_true("water_surface_import_missing_bundle_path",
+                snprintf(bundle_path, sizeof(bundle_path), "%s/scene_bundle.json", dir) <
+                    (int)sizeof(bundle_path));
+    assert_true("water_surface_import_missing_write_bundle",
+                write_local_text_file(bundle_path, bundle_json));
+
+    ok = RuntimeWaterSurfaceImport_LoadSourceAtFrame(bundle_path,
+                                                     0,
+                                                     &frame,
+                                                     &found,
+                                                     diagnostics,
+                                                     sizeof(diagnostics));
+    assert_true("water_surface_import_missing_ok", ok);
+    assert_true("water_surface_import_missing_not_found", !found);
+    assert_true("water_surface_import_missing_not_valid", !frame.valid);
+
+    RuntimeWaterSurfaceFrame_Free(&frame);
+    unlink(bundle_path);
+    rmdir(dir);
+    return 0;
+}
+
 int run_test_fluid_volume_import_3d_tests(void) {
     int before = test_support_failures();
 
@@ -662,7 +974,10 @@ int run_test_fluid_volume_import_3d_tests(void) {
     test_fluid_volume_import_3d_loads_manifest_backed_raw_source();
     test_fluid_volume_import_3d_manifest_prefers_first_frame_by_default();
     test_fluid_volume_import_3d_manifest_selects_requested_frame_index();
+    test_fluid_volume_import_3d_scene_bundle_manifest_selects_requested_frame_index();
     test_fluid_volume_import_3d_loads_scene_bundle_pack_source();
     test_fluid_volume_import_3d_rejects_non_vf3d_manifest();
+    test_water_surface_import_loads_scene_bundle_heightfield();
+    test_water_surface_import_ignores_bundle_without_water_source();
     return test_support_failures() - before;
 }

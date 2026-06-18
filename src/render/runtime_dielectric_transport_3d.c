@@ -65,9 +65,9 @@ bool RuntimeDielectricTransport3D_Resolve(const RuntimeMaterialPayload3D* payloa
 
     if (ior > 1.0 + 1e-6) {
         double ior_ratio = (ior - 1.0) / (ior + 1.0);
-        dielectric_f0 = runtime_dielectric_transport_3d_clamp(ior_ratio * ior_ratio, 0.04, 1.0);
+        dielectric_f0 = runtime_dielectric_transport_3d_clamp(ior_ratio * ior_ratio, 0.0, 1.0);
     }
-    authored_f0 = runtime_dielectric_transport_3d_clamp(0.04 + (reflectivity * 0.96), 0.04, 1.0);
+    authored_f0 = runtime_dielectric_transport_3d_clamp(reflectivity, 0.0, 1.0);
     f0 = fmax(dielectric_f0, authored_f0);
     transport.fresnel = FresnelSchlick(cos_i, f0);
 

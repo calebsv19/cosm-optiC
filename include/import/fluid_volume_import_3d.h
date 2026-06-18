@@ -31,3 +31,10 @@ bool fluid_volume_import_3d_load_source_at_frame(const char* path,
                                                  RuntimeVolumeAttachment3D* out_attachment,
                                                  char* out_diagnostics,
                                                  size_t out_diagnostics_size);
+bool fluid_volume_import_3d_resolve_source_frame_path(const char* path,
+                                                      RuntimeVolume3DSourceKind source_kind_hint,
+                                                      int requested_frame_index,
+                                                      char* out_frame_path,
+                                                      size_t out_frame_path_size,
+                                                      char* out_diagnostics,
+                                                      size_t out_diagnostics_size);

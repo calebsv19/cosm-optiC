@@ -89,6 +89,111 @@ static int test_agent_render_request_disney_v2_integrator_label_roundtrip(void) 
     return 0;
 }
 
+static int test_agent_render_request_denoise_override_roundtrip(void) {
+    char request_path[PATH_MAX];
+    char diagnostics[256];
+    RayTracingAgentRenderRequest request;
+    const char* json_text =
+        "{\n"
+        "  \"schema_version\": \"ray_tracing_agent_render_request_v1\",\n"
+        "  \"run_id\": \"disney_v2_denoise_override_test\",\n"
+        "  \"scene\": {\"runtime_scene_path\": \"scene_runtime.json\"},\n"
+        "  \"render\": {\n"
+        "    \"integrator_3d\": \"disney_v2\",\n"
+        "    \"temporal_frames\": 12,\n"
+        "    \"denoise_enabled\": false\n"
+        "  }\n"
+        "}\n";
+
+    snprintf(request_path,
+             sizeof(request_path),
+             "%s",
+             "/tmp/ray_tracing_agent_render_denoise_override_request.json");
+    assert_true("agent_render_denoise_override_write",
+                write_text_file(request_path, json_text));
+    assert_true("agent_render_denoise_override_load",
+                ray_tracing_agent_render_request_load_file(request_path,
+                                                           &request,
+                                                           diagnostics,
+                                                           sizeof(diagnostics)));
+    assert_true("agent_render_denoise_override_present",
+                request.has_denoise_enabled_override);
+    assert_true("agent_render_denoise_override_false",
+                !request.denoise_enabled_override);
+    assert_true("agent_render_denoise_override_temporal",
+                request.temporal_frames == 12);
+    assert_true("agent_render_denoise_override_integrator",
+                request.integrator_3d == RAY_TRACING_3D_INTEGRATOR_DISNEY_V2);
+    unlink(request_path);
+    return 0;
+}
+
+static int test_agent_render_request_environment_lighting_overrides(void) {
+    char request_path[PATH_MAX];
+    char diagnostics[256];
+    RayTracingAgentRenderRequest request;
+    const char* json_text =
+        "{\n"
+        "  \"schema_version\": \"ray_tracing_agent_render_request_v1\",\n"
+        "  \"run_id\": \"environment_lighting_override_test\",\n"
+        "  \"scene\": {\"runtime_scene_path\": \"scene_runtime.json\"},\n"
+        "  \"inspection\": {\n"
+        "    \"environment_light_mode\": \"ambient\",\n"
+        "    \"ambient_strength\": 0.32,\n"
+        "    \"environment_preset\": \"warm_sky\",\n"
+        "    \"background_brightness\": 0.74,\n"
+        "    \"background_color\": [0.70, 0.80, 1.00],\n"
+        "    \"top_fill_strength\": 1.25\n"
+        "  }\n"
+        "}\n";
+
+    snprintf(request_path,
+             sizeof(request_path),
+             "%s",
+             "/tmp/ray_tracing_agent_render_environment_lighting_request.json");
+    assert_true("agent_render_environment_lighting_request_write",
+                write_text_file(request_path, json_text));
+    assert_true("agent_render_environment_lighting_request_load",
+                ray_tracing_agent_render_request_load_file(request_path,
+                                                           &request,
+                                                           diagnostics,
+                                                           sizeof(diagnostics)));
+    assert_true("agent_render_environment_lighting_mode_override",
+                request.has_environment_light_mode_override &&
+                    request.environment_light_mode_override == ENVIRONMENT_LIGHT_MODE_AMBIENT);
+    assert_true("agent_render_environment_lighting_ambient_override",
+                request.has_ambient_strength_override);
+    assert_close("agent_render_environment_lighting_ambient_strength",
+                 request.ambient_strength_override,
+                 0.32,
+                 1e-9);
+    assert_true("agent_render_environment_lighting_preset_override",
+                request.has_environment_preset_override &&
+                    request.environment_preset_override == ENVIRONMENT_PRESET_WARM_SKY);
+    assert_true("agent_render_environment_lighting_background_brightness_override",
+                request.has_background_brightness_override);
+    assert_close("agent_render_environment_lighting_background_brightness",
+                 request.background_brightness_override,
+                 0.74,
+                 1e-9);
+    assert_true("agent_render_environment_lighting_background_color_override",
+                request.has_background_color_override);
+    assert_close("agent_render_environment_lighting_background_color_r",
+                 request.background_color_r,
+                 0.70,
+                 1e-9);
+    assert_close("agent_render_environment_lighting_background_color_g",
+                 request.background_color_g,
+                 0.80,
+                 1e-9);
+    assert_close("agent_render_environment_lighting_background_color_b",
+                 request.background_color_b,
+                 1.00,
+                 1e-9);
+    unlink(request_path);
+    return 0;
+}
+
 static int test_animation_native_3d_temporal_frames_roundtrip_and_clamp(void) {
     size_t backup_size = 0;
     char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
@@ -209,6 +314,97 @@ static int test_animation_native_3d_top_fill_roundtrip_and_default(void) {
     assert_close("native_3d_top_fill_strength_roundtrip_persisted",
                  animSettings.topFillStrength,
                  2.5,
+                 1e-9);
+
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
+static int test_animation_native_3d_environment_model_roundtrip_and_default(void) {
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+    const char* json_missing_environment_model =
+        "{\n"
+        "  \"spaceMode\": 1,\n"
+        "  \"environmentLightMode\": 2,\n"
+        "  \"environmentBrightness\": 96.0,\n"
+        "  \"environmentBrightnessUsesByteFloor\": true\n"
+        "}\n";
+    const char* json_invalid_environment_model =
+        "{\n"
+        "  \"spaceMode\": 1,\n"
+        "  \"environmentPreset\": 999,\n"
+        "  \"environmentBackgroundBrightnessAuto\": false,\n"
+        "  \"environmentBackgroundBrightness\": 9.0,\n"
+        "  \"environmentBackgroundColorR\": -1.0,\n"
+        "  \"environmentBackgroundColorG\": 0.5,\n"
+        "  \"environmentBackgroundColorB\": 2.0\n"
+        "}\n";
+
+    assert_true("native_3d_environment_model_write_missing",
+                write_text_file(kRuntimeAnimationConfigPath, json_missing_environment_model));
+    LoadAnimationConfig();
+    assert_true("native_3d_environment_model_missing_preset_sky",
+                animSettings.environmentPreset == ENVIRONMENT_PRESET_SKY);
+    assert_true("native_3d_environment_model_missing_background_auto",
+                animSettings.environmentBackgroundBrightnessAuto);
+    assert_true("native_3d_environment_model_missing_background_legacy",
+                !animSettings.environmentBackgroundLightingAuthored);
+    assert_close("native_3d_environment_model_missing_background_color_r",
+                 animSettings.environmentBackgroundColorR,
+                 1.0,
+                 1e-9);
+
+    assert_true("native_3d_environment_model_write_invalid",
+                write_text_file(kRuntimeAnimationConfigPath, json_invalid_environment_model));
+    LoadAnimationConfig();
+    assert_true("native_3d_environment_model_invalid_preset_clamped",
+                animSettings.environmentPreset == ENVIRONMENT_PRESET_SKY);
+    assert_true("native_3d_environment_model_invalid_auto_false",
+                !animSettings.environmentBackgroundBrightnessAuto);
+    assert_true("native_3d_environment_model_invalid_background_authored",
+                animSettings.environmentBackgroundLightingAuthored);
+    assert_close("native_3d_environment_model_invalid_brightness_clamped",
+                 animSettings.environmentBackgroundBrightness,
+                 4.0,
+                 1e-9);
+    assert_close("native_3d_environment_model_invalid_color_r_clamped",
+                 animSettings.environmentBackgroundColorR,
+                 0.0,
+                 1e-9);
+    assert_close("native_3d_environment_model_invalid_color_b_clamped",
+                 animSettings.environmentBackgroundColorB,
+                 1.0,
+                 1e-9);
+
+    animSettings.environmentPreset = ENVIRONMENT_PRESET_WARM_SKY;
+    animSettings.environmentBackgroundLightingAuthored = true;
+    animSettings.environmentBackgroundBrightnessAuto = false;
+    animSettings.environmentBackgroundBrightness = 0.65;
+    animSettings.environmentBackgroundColorR = 0.70;
+    animSettings.environmentBackgroundColorG = 0.80;
+    animSettings.environmentBackgroundColorB = 0.95;
+    SaveAnimationConfig();
+    animSettings.environmentPreset = ENVIRONMENT_PRESET_SKY;
+    animSettings.environmentBackgroundBrightnessAuto = true;
+    animSettings.environmentBackgroundBrightness = 0.0;
+    animSettings.environmentBackgroundColorR = 1.0;
+    animSettings.environmentBackgroundColorG = 1.0;
+    animSettings.environmentBackgroundColorB = 1.0;
+    LoadAnimationConfig();
+    assert_true("native_3d_environment_model_roundtrip_preset",
+                animSettings.environmentPreset == ENVIRONMENT_PRESET_WARM_SKY);
+    assert_true("native_3d_environment_model_roundtrip_auto_false",
+                !animSettings.environmentBackgroundBrightnessAuto);
+    assert_true("native_3d_environment_model_roundtrip_background_authored",
+                animSettings.environmentBackgroundLightingAuthored);
+    assert_close("native_3d_environment_model_roundtrip_brightness",
+                 animSettings.environmentBackgroundBrightness,
+                 0.65,
+                 1e-9);
+    assert_close("native_3d_environment_model_roundtrip_color_g",
+                 animSettings.environmentBackgroundColorG,
+                 0.80,
                  1e-9);
 
     restore_runtime_animation_config(backup, backup_size);
@@ -779,9 +975,12 @@ int run_test_config_animation_settings_export_suite(void) {
 
     test_animation_integrator_split_roundtrip_and_default_3d();
     test_agent_render_request_disney_v2_integrator_label_roundtrip();
+    test_agent_render_request_denoise_override_roundtrip();
+    test_agent_render_request_environment_lighting_overrides();
     test_animation_native_3d_temporal_frames_roundtrip_and_clamp();
     test_animation_native_3d_bounce_depth_and_roulette_roundtrip_and_clamp();
     test_animation_native_3d_top_fill_roundtrip_and_default();
+    test_animation_native_3d_environment_model_roundtrip_and_default();
     test_animation_native_3d_disney_denoise_roundtrip_and_default();
     test_animation_environment_brightness_byte_floor_roundtrip_and_legacy_migration();
     test_animation_light_intensity_missing_uses_authored_default();

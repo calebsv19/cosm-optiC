@@ -53,8 +53,6 @@ static int test_runtime_native_3d_render_prepared_region_parity(void) {
     RuntimeSceneBridgePreflight summary = {0};
     RuntimeNative3DRenderStats full_stats = {0};
     RuntimeNative3DRenderStats tiled_stats = {0};
-    RuntimeNative3DPreparedFrame frame = {0};
-    TileGrid grid = {0};
     uint8_t full_pixels[51 * 51 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
     uint8_t tiled_pixels[51 * 51 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
     bool ok = false;
@@ -73,12 +71,15 @@ static int test_runtime_native_3d_render_prepared_region_parity(void) {
     animSettings.interactiveMode = false;
     animSettings.spaceMode = SPACE_MODE_3D;
     animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE;
+    animSettings.tileSize = 16;
     sceneSettings.camera.x = 0.0;
     sceneSettings.camera.y = 0.0;
     sceneSettings.cameraZ = 0.0;
     sceneSettings.camera.rotation = 0.0;
     sceneSettings.camera.zoom = 1.0;
 
+    animSettings.useTiledRenderer = false;
+    memset(full_pixels, 0, sizeof(full_pixels));
     ok = RuntimeNative3DRenderToPixelBuffer(full_pixels,
                                             RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
                                             51,
@@ -89,36 +90,17 @@ static int test_runtime_native_3d_render_prepared_region_parity(void) {
                                             &full_stats);
     assert_true("runtime_native_3d_tile_parity_full_ok", ok);
 
-    memset(tiled_pixels, 0, sizeof(tiled_pixels));
-    ok = RuntimeNative3DPrepareFrame(&frame, 51, 51, 0.0, 0.0, -2.0);
-    assert_true("runtime_native_3d_tile_parity_prepare_ok", ok);
-    if (ok) {
-        TileGridEnsure(&grid, 51, 51, 16);
-        ok = RuntimeNative3DPrepareFrameTileOccupancy(&frame, grid.tileSize);
-        assert_true("runtime_native_3d_tile_parity_occupancy_prepare_ok", ok);
-        for (size_t ti = 0; ti < grid.count; ++ti) {
-            const IntegratorTile* tile = &grid.tiles[ti];
-            RuntimeNative3DRenderStats tile_stats = {0};
-            if (!RuntimeNative3DPreparedRegionMayContainGeometry(&frame,
-                                                                 tile->originX,
-                                                                 tile->originY,
-                                                                 tile->originX + tile->width,
-                                                                 tile->originY + tile->height)) {
-                continue;
-            }
-            ok = RuntimeNative3DRenderPreparedRegion(tiled_pixels,
-                                                     RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
-                                                     &frame,
-                                                     tile->originX,
-                                                     tile->originY,
-                                                     tile->originX + tile->width,
-                                                     tile->originY + tile->height,
-                                                     &tile_stats);
-            assert_true("runtime_native_3d_tile_parity_region_ok", ok);
-            if (!ok) break;
-            RuntimeNative3DRenderStats_Accumulate(&tiled_stats, &tile_stats);
-        }
-    }
+    animSettings.useTiledRenderer = true;
+    RuntimeNative3DFillPixelBufferEnvironment(tiled_pixels, 51u * 51u);
+    ok = RuntimeNative3DRenderToPixelBuffer(tiled_pixels,
+                                            RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE,
+                                            51,
+                                            51,
+                                            0.0,
+                                            0.0,
+                                            -2.0,
+                                            &tiled_stats);
+    assert_true("runtime_native_3d_tile_parity_tiled_ok", ok);
 
     assert_true("runtime_native_3d_tile_parity_pixels_match",
                 memcmp(full_pixels, tiled_pixels, sizeof(full_pixels)) == 0);
@@ -148,8 +130,6 @@ static int test_runtime_native_3d_render_prepared_region_parity(void) {
                  tiled_stats.totalBounceRadiance,
                  1e-9);
 
-    TileGridFree(&grid);
-    RuntimeNative3DPreparedFrame_Free(&frame);
     sceneSettings = saved_scene;
     animSettings = saved_anim;
     return 0;
@@ -721,19 +701,14 @@ static int test_runtime_native_3d_background_volume_transmittance_dims_environme
     uint8_t baseline_pixels[51 * 51 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
     uint8_t attenuated_pixels[51 * 51 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
     RuntimeNative3DRenderStats stats = {0};
-    size_t center_idx = 0u;
     bool ok = false;
 
     RuntimeScene3D_Init(&scene);
     RuntimeNative3DTileOccupancy_Init(&frame.tileOccupancy);
     animSettings.environmentBrightness = 128.0;
     animSettings.environmentLightMode = ENVIRONMENT_LIGHT_MODE_AMBIENT;
-    scene.environment.lightMode = ENVIRONMENT_LIGHT_MODE_AMBIENT;
-    scene.environment.ambientIntensity = 128.0 / 255.0;
-    scene.environment.ambientColor = vec3(1.0, 1.0, 1.0);
-    scene.environment.backgroundTopColor = vec3(0.66, 0.70, 0.76);
-    scene.environment.backgroundBottomColor = vec3(0.84, 0.85, 0.87);
-    scene.environment.topDownBias = 0.18;
+    animSettings.environmentBackgroundLightingAuthored = false;
+    RuntimeEnvironment3D_ResolveFromAnimationConfig(&scene.environment, &animSettings);
     scene.hasLight = true;
     scene.light.position = vec3(4.0, -4.0, 0.0);
     scene.light.radius = 0.25;
@@ -841,7 +816,6 @@ static int test_runtime_native_3d_background_volume_transmittance_dims_environme
                                                  51,
                                                  51);
 
-    center_idx = (((size_t)25u * 51u) + 25u) * (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
     assert_true("runtime_native_3d_volume_background_baseline_pixel_positive",
                 native3d_test_pixel_r(baseline_pixels, 51, 25, 25) > 0);
     assert_true("runtime_native_3d_volume_background_baseline_sky_tinted",

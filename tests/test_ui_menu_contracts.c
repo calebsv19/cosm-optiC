@@ -376,20 +376,36 @@ static int test_integrator_catalog_menu_routes_by_space_mode(void) {
     memset(&buttons, 0, sizeof(buttons));
     memset(&state, 0, sizeof(state));
     memset(&screen, 0, sizeof(screen));
+    state.rendererControlsTab = MENU_RENDERER_CONTROLS_LIGHTING;
     menu_layout_build_base(NULL, &state, TEST_MENU_WIDTH, TEST_MENU_HEIGHT, &screen);
     menu_render_build_button_layout(NULL, &state, &screen, &buttons);
     assert_true("integrator_menu_top_fill_button_in_center_controls",
                 buttons.topFillRect.x >= screen.centerControlsRect.x &&
                 buttons.topFillRect.x + buttons.topFillRect.w <=
                     screen.centerControlsRect.x + screen.centerControlsRect.w);
-    assert_true("integrator_menu_denoise_button_in_center_controls",
+    assert_true("integrator_menu_preset_button_in_center_controls",
+                buttons.environmentPresetRect.x >= screen.centerControlsRect.x &&
+                buttons.environmentPresetRect.x + buttons.environmentPresetRect.w <=
+                    screen.centerControlsRect.x + screen.centerControlsRect.w);
+    assert_true("integrator_menu_lighting_tab_rects_in_title_band",
+                buttons.rendererLightingTabRect.y >= screen.centerControlsRect.y &&
+                buttons.rendererPerformanceTabRect.y >= screen.centerControlsRect.y &&
+                buttons.rendererLightingTabRect.x < buttons.rendererPerformanceTabRect.x);
+    assert_true("integrator_menu_lighting_sliders_present",
+                buttons.rendererControlSliders.count >= 5);
+
+    memset(&buttons, 0, sizeof(buttons));
+    state.rendererControlsTab = MENU_RENDERER_CONTROLS_PERFORMANCE;
+    menu_render_build_button_layout(NULL, &state, &screen, &buttons);
+    assert_true("integrator_menu_denoise_button_in_performance_controls",
                 buttons.denoiseRect.x >= screen.centerControlsRect.x &&
                 buttons.denoiseRect.x + buttons.denoiseRect.w <=
                     screen.centerControlsRect.x + screen.centerControlsRect.w);
-    assert_true("integrator_menu_denoise_button_right_of_tile_column",
-                buttons.denoiseRect.x > buttons.tilePreviewRect.x);
-    assert_true("integrator_menu_top_fill_button_below_denoise",
-                buttons.topFillRect.y >= buttons.denoiseRect.y + buttons.denoiseRect.h);
+    assert_true("integrator_menu_performance_tile_buttons_share_top_row",
+                buttons.tileRect.y == buttons.tilePreviewRect.y);
+    assert_true("integrator_menu_performance_tile_size_slider_present",
+                buttons.rendererControlSliders.count >= 1 &&
+                buttons.rendererControlSliders.items[0].value == &animSettings.tileSize);
 
     animSettings.spaceMode = SPACE_MODE_2D;
     menu_state = RayTracingIntegratorCatalog_BuildMenuState(&animSettings);
@@ -406,31 +422,65 @@ static int test_menu_slider_layout_includes_environment_control(void) {
     AnimationConfig saved_anim = animSettings;
     MenuRuntimeState state;
     MenuScreenLayout screen;
+    MenuButtonLayout buttons;
     SliderLayout sliders;
     bool found_environment = false;
+    bool found_environment_in_right_panel = false;
+    bool found_top_fill = false;
+    bool found_background = false;
 
     memset(&state, 0, sizeof(state));
     memset(&screen, 0, sizeof(screen));
+    memset(&buttons, 0, sizeof(buttons));
     memset(&sliders, 0, sizeof(sliders));
     memset(&animSettings, 0, sizeof(animSettings));
     animSettings.spaceMode = SPACE_MODE_3D;
     animSettings.environmentBrightness = 128.0;
+    animSettings.topFillStrength = 1.5;
+    animSettings.environmentBackgroundBrightnessAuto = false;
+    animSettings.environmentBackgroundBrightness = 0.75;
+    state.rendererControlsTab = MENU_RENDERER_CONTROLS_LIGHTING;
 
     menu_layout_build_base(NULL, &state, TEST_MENU_WIDTH, TEST_MENU_HEIGHT, &screen);
+    menu_render_build_button_layout(NULL, &state, &screen, &buttons);
     menu_render_build_slider_layout(NULL, &state, &screen, &sliders);
 
+    for (size_t i = 0; i < buttons.rendererControlSliders.count; ++i) {
+        if (buttons.rendererControlSliders.items[i].label &&
+            strcmp(buttons.rendererControlSliders.items[i].label, "Ambient Brightness") == 0 &&
+            buttons.rendererControlSliders.items[i].value == &state.envSliderValue) {
+            found_environment = true;
+        }
+        if (buttons.rendererControlSliders.items[i].label &&
+            strcmp(buttons.rendererControlSliders.items[i].label, "Top Fill Strength") == 0 &&
+            buttons.rendererControlSliders.items[i].value == &state.topFillStrengthSliderValue) {
+            found_top_fill = true;
+        }
+        if (buttons.rendererControlSliders.items[i].label &&
+            strcmp(buttons.rendererControlSliders.items[i].label, "BG Brightness") == 0 &&
+            buttons.rendererControlSliders.items[i].value ==
+                &state.environmentBackgroundBrightnessSliderValue) {
+            found_background = true;
+        }
+    }
     for (size_t i = 0; i < sliders.count; ++i) {
         if (sliders.items[i].label &&
-            strcmp(sliders.items[i].label, "Ambient Brightness") == 0 &&
-            sliders.items[i].value == &state.envSliderValue) {
-            found_environment = true;
-            break;
+            strcmp(sliders.items[i].label, "Ambient Brightness") == 0) {
+            found_environment_in_right_panel = true;
         }
     }
 
-    assert_true("menu_slider_layout_environment_present", found_environment);
+    assert_true("menu_renderer_controls_environment_present", found_environment);
+    assert_true("menu_renderer_controls_top_fill_present", found_top_fill);
+    assert_true("menu_renderer_controls_background_present", found_background);
+    assert_true("menu_slider_layout_environment_moved_from_right_panel",
+                !found_environment_in_right_panel);
     assert_true("menu_slider_layout_environment_value_synced",
                 state.envSliderValue == 128);
+    assert_true("menu_slider_layout_top_fill_value_synced",
+                state.topFillStrengthSliderValue == 150);
+    assert_true("menu_slider_layout_background_value_synced",
+                state.environmentBackgroundBrightnessSliderValue == 75);
     animSettings = saved_anim;
     return 0;
 }
@@ -566,14 +616,21 @@ static int test_menu_fit_text_to_width_supports_in_place_buffer(void) {
 }
 
 static int test_manifest_default_roots_expands_runtime_and_legacy_paths(void) {
+    char tmp_input_template[] = "/tmp/ray_tracing_menu_input_XXXXXX";
+    char *tmp_input = mkdtemp(tmp_input_template);
     const char *input_env = getenv("RAY_TRACING_INPUT_ROOT");
     const char *output_env = getenv("RAY_TRACING_OUTPUT_ROOT");
     char input_backup[PATH_MAX] = {0};
     char output_backup[PATH_MAX] = {0};
+    char input_scenes_dir[PATH_MAX];
+    char input_samples_dir[PATH_MAX];
     bool had_input_env = false;
     bool had_output_env = false;
     const char **roots = NULL;
     size_t root_count = 0;
+
+    assert_true("manifest_roots_tmp_input_created", tmp_input != NULL);
+    if (!tmp_input) return 0;
 
     if (input_env && input_env[0]) {
         strncpy(input_backup, input_env, sizeof(input_backup) - 1);
@@ -586,13 +643,21 @@ static int test_manifest_default_roots_expands_runtime_and_legacy_paths(void) {
         had_output_env = true;
     }
 
-    unsetenv("RAY_TRACING_INPUT_ROOT");
+    snprintf(input_scenes_dir, sizeof(input_scenes_dir), "%s/scenes", tmp_input);
+    snprintf(input_samples_dir, sizeof(input_samples_dir), "%s/samples", tmp_input);
+    assert_true("manifest_roots_tmp_input_scenes_created", mkdir(input_scenes_dir, 0700) == 0);
+
+    setenv("RAY_TRACING_INPUT_ROOT", tmp_input, 1);
     unsetenv("RAY_TRACING_OUTPUT_ROOT");
 
     root_count = ray_tracing_manifest_default_roots(&roots);
     assert_true("manifest_roots_nonempty", root_count > 0 && roots != NULL);
-    assert_true("manifest_roots_has_config_samples",
-                path_list_contains(roots, root_count, "config/samples"));
+    assert_true("manifest_roots_has_configured_input_root",
+                path_list_contains(roots, root_count, tmp_input));
+    assert_true("manifest_roots_has_configured_input_scenes",
+                path_list_contains(roots, root_count, input_scenes_dir));
+    assert_true("manifest_roots_has_configured_input_samples",
+                path_list_contains(roots, root_count, input_samples_dir));
     assert_true("manifest_roots_has_runtime_scenes",
                 path_list_contains(roots, root_count, "data/runtime/scenes"));
     assert_true("manifest_roots_has_legacy_physics_samples",
@@ -608,6 +673,8 @@ static int test_manifest_default_roots_expands_runtime_and_legacy_paths(void) {
     } else {
         unsetenv("RAY_TRACING_OUTPUT_ROOT");
     }
+    rmdir(input_scenes_dir);
+    rmdir(tmp_input);
     return 0;
 }
 
@@ -756,6 +823,78 @@ static int test_scene_source_catalog_collects_all_runtime_scene_folders(void) {
         remove(runtime_paths[i]);
         rmdir(scene_dirs[i]);
     }
+    rmdir(tmp_root);
+    return 0;
+}
+
+static int test_menu_state_manifest_options_follow_configured_input_root(void) {
+    char tmp_template[] = "/tmp/ray_tracing_menu_input_scene_XXXXXX";
+    char *tmp_root = mkdtemp(tmp_template);
+    char scenes_dir[PATH_MAX];
+    char scene_dir[PATH_MAX];
+    char runtime_path[PATH_MAX];
+    char resolved_runtime_path[PATH_MAX];
+    const char *input_env = getenv("RAY_TRACING_INPUT_ROOT");
+    char input_backup[PATH_MAX] = {0};
+    bool had_input_env = false;
+    AnimationConfig saved_anim = animSettings;
+    MenuRuntimeState state = {0};
+    bool found = false;
+
+    assert_true("menu_input_scene_tmpdir_created", tmp_root != NULL);
+    if (!tmp_root) return 0;
+    if (input_env && input_env[0]) {
+        strncpy(input_backup, input_env, sizeof(input_backup) - 1);
+        input_backup[sizeof(input_backup) - 1] = '\0';
+        had_input_env = true;
+    }
+
+    snprintf(scenes_dir, sizeof(scenes_dir), "%s/scenes", tmp_root);
+    snprintf(scene_dir, sizeof(scene_dir), "%s/skull_plane_with_platform", scenes_dir);
+    snprintf(runtime_path, sizeof(runtime_path), "%s/scene_runtime.json", scene_dir);
+    assert_true("menu_input_scene_mkdir_scenes", mkdir(scenes_dir, 0700) == 0);
+    assert_true("menu_input_scene_mkdir_scene", mkdir(scene_dir, 0700) == 0);
+    assert_true("menu_input_scene_write_runtime",
+                write_text_file(runtime_path,
+                                "{"
+                                "\"schema_family\":\"codework_scene\","
+                                "\"schema_variant\":\"scene_runtime_v1\","
+                                "\"schema_version\":1,"
+                                "\"scene_id\":\"configured_input_scene\","
+                                "\"unit_system\":\"meters\","
+                                "\"world_scale\":1.0,"
+                                "\"space_mode_default\":\"3d\","
+                                "\"objects\":[],"
+                                "\"materials\":[],"
+                                "\"lights\":[],"
+                                "\"cameras\":[]"
+                                "}"));
+    if (!realpath(runtime_path, resolved_runtime_path)) {
+        snprintf(resolved_runtime_path, sizeof(resolved_runtime_path), "%s", runtime_path);
+    }
+
+    snprintf(animSettings.inputRoot, sizeof(animSettings.inputRoot), "%s", tmp_root);
+    animSettings.spaceMode = SPACE_MODE_3D;
+    setenv("RAY_TRACING_INPUT_ROOT", animSettings.inputRoot, 1);
+    menu_state_refresh_manifest_options(&state);
+    for (size_t i = 0; i < state.manifestOptionCount; ++i) {
+        if (state.manifestOptions[i].source == SCENE_SOURCE_RUNTIME_SCENE &&
+            strcmp(state.manifestOptions[i].path, resolved_runtime_path) == 0) {
+            found = true;
+            break;
+        }
+    }
+    assert_true("menu_input_scene_runtime_option_found", found);
+
+    animSettings = saved_anim;
+    if (had_input_env) {
+        setenv("RAY_TRACING_INPUT_ROOT", input_backup, 1);
+    } else {
+        unsetenv("RAY_TRACING_INPUT_ROOT");
+    }
+    remove(runtime_path);
+    rmdir(scene_dir);
+    rmdir(scenes_dir);
     rmdir(tmp_root);
     return 0;
 }
@@ -1074,6 +1213,7 @@ int run_test_ui_menu_contract_tests(void) {
     test_manifest_default_roots_expands_runtime_and_legacy_paths();
     test_scene_source_catalog_collect_admits_runtime_and_manifest_lanes();
     test_scene_source_catalog_collects_all_runtime_scene_folders();
+    test_menu_state_manifest_options_follow_configured_input_root();
     test_scene_source_catalog_runtime_discovery_is_filename_based();
     test_volume_source_catalog_collects_bundle_and_direct_files();
     test_menu_state_manifest_label_uses_scene_directory_name();

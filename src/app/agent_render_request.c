@@ -1,11 +1,13 @@
 #include "app/agent_render_request.h"
 
 #include <json-c/json.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "import/fluid_volume_import_3d.h"
+#include "render/runtime_scene_3d.h"
 
 static void diag_set(char *out, size_t out_size, const char *message) {
     if (!out || out_size == 0u || !message) return;
@@ -160,6 +162,34 @@ static bool json_get_bool(json_object *owner, const char *key, bool *out_value) 
     return true;
 }
 
+static bool json_get_rgb(json_object *owner,
+                         const char *key,
+                         double *out_r,
+                         double *out_g,
+                         double *out_b) {
+    json_object *obj = NULL;
+    if (out_r) *out_r = 0.0;
+    if (out_g) *out_g = 0.0;
+    if (out_b) *out_b = 0.0;
+    if (!owner || !key || !out_r || !out_g || !out_b ||
+        !json_object_object_get_ex(owner, key, &obj)) {
+        return false;
+    }
+    if (json_object_is_type(obj, json_type_object)) {
+        return json_get_double(obj, "r", out_r) &&
+               json_get_double(obj, "g", out_g) &&
+               json_get_double(obj, "b", out_b);
+    }
+    if (json_object_is_type(obj, json_type_array) &&
+        json_object_array_length(obj) >= 3u) {
+        *out_r = json_object_get_double(json_object_array_get_idx(obj, 0));
+        *out_g = json_object_get_double(json_object_array_get_idx(obj, 1));
+        *out_b = json_object_get_double(json_object_array_get_idx(obj, 2));
+        return true;
+    }
+    return false;
+}
+
 static int volume_kind_from_runtime(RuntimeVolume3DSourceKind kind) {
     switch (kind) {
         case RUNTIME_VOLUME_3D_SOURCE_MANIFEST:
@@ -251,6 +281,10 @@ static int parse_environment_light_mode(const char *label) {
     return ENVIRONMENT_LIGHT_MODE_OFF;
 }
 
+static int parse_environment_preset(const char *label) {
+    return RuntimeEnvironment3DPresetFromLabel(label);
+}
+
 static int clamp_secondary_diffuse_samples_3d_override(int value) {
     if (value < RUNTIME_3D_SECONDARY_SAMPLES_MIN) {
         value = RUNTIME_3D_SECONDARY_SAMPLES_MIN;
@@ -300,6 +334,8 @@ void ray_tracing_agent_render_request_defaults(RayTracingAgentRenderRequest *req
     request->height = 360;
     request->normalized_t = 0.0;
     request->temporal_frames = 1;
+    request->has_denoise_enabled_override = false;
+    request->denoise_enabled_override = true;
     request->has_sampling_window = false;
     request->sampling_frame_offset = 0;
     request->sampling_frame_count = 1;
@@ -316,6 +352,11 @@ void ray_tracing_agent_render_request_defaults(RayTracingAgentRenderRequest *req
     request->environment_brightness_override = 0.0;
     request->ambient_strength_override = 0.0;
     request->environment_light_mode_override = ENVIRONMENT_LIGHT_MODE_OFF;
+    request->environment_preset_override = ENVIRONMENT_PRESET_SKY;
+    request->background_brightness_override = 0.0;
+    request->background_color_r = 1.0;
+    request->background_color_g = 1.0;
+    request->background_color_b = 1.0;
     request->top_fill_strength_override = 1.0;
     request->light_intensity_override = 0.0;
     request->light_radius_override = 0.0;
@@ -327,6 +368,8 @@ void ray_tracing_agent_render_request_defaults(RayTracingAgentRenderRequest *req
     request->volume_tint_r = 1.0;
     request->volume_tint_g = 1.0;
     request->volume_tint_b = 1.0;
+    request->object_audit_enabled = true;
+    request->object_audit_max_dimension = 160;
     request->overwrite = false;
 }
 
@@ -433,6 +476,10 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
         }
         if (json_get_int(render, "temporal_frames", &int_value)) {
             request.temporal_frames = int_value;
+        }
+        if (json_get_bool(render, "denoise_enabled", &bool_value)) {
+            request.has_denoise_enabled_override = true;
+            request.denoise_enabled_override = bool_value;
         }
         if (json_get_string(render, "integrator_3d", &value)) {
             request.integrator_3d = parse_integrator_3d(value);
@@ -565,6 +612,21 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             request.has_environment_light_mode_override = true;
             request.environment_light_mode_override = parse_environment_light_mode(value);
         }
+        if (json_get_string(inspection, "environment_preset", &value)) {
+            request.has_environment_preset_override = true;
+            request.environment_preset_override = parse_environment_preset(value);
+        }
+        if (json_get_double(inspection, "background_brightness", &double_value)) {
+            request.has_background_brightness_override = true;
+            request.background_brightness_override = double_value;
+        }
+        if (json_get_rgb(inspection,
+                         "background_color",
+                         &request.background_color_r,
+                         &request.background_color_g,
+                         &request.background_color_b)) {
+            request.has_background_color_override = true;
+        }
         if (json_get_double(inspection, "top_fill_strength", &double_value)) {
             request.has_top_fill_strength_override = true;
             request.top_fill_strength_override = double_value;
@@ -610,6 +672,12 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
                 request.has_volume_tint_override = true;
                 request.volume_tint_b = double_value;
             }
+        }
+        if (json_get_bool(inspection, "object_audit_enabled", &bool_value)) {
+            request.object_audit_enabled = bool_value;
+        }
+        if (json_get_int(inspection, "object_audit_max_dimension", &int_value)) {
+            request.object_audit_max_dimension = int_value;
         }
     }
 
@@ -670,6 +738,30 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     if (request.has_environment_light_mode_override) {
         request.environment_light_mode_override =
             animation_config_environment_light_mode_clamp(request.environment_light_mode_override);
+    }
+    if (request.has_environment_preset_override) {
+        request.environment_preset_override =
+            animation_config_environment_preset_clamp(request.environment_preset_override);
+    }
+    if (request.has_background_brightness_override) {
+        if (!isfinite(request.background_brightness_override) ||
+            request.background_brightness_override < 0.0) {
+            request.background_brightness_override = 0.0;
+        }
+        if (request.background_brightness_override > 4.0) {
+            request.background_brightness_override = 4.0;
+        }
+    }
+    if (request.has_background_color_override) {
+        if (!isfinite(request.background_color_r)) request.background_color_r = 1.0;
+        if (!isfinite(request.background_color_g)) request.background_color_g = 1.0;
+        if (!isfinite(request.background_color_b)) request.background_color_b = 1.0;
+        if (request.background_color_r < 0.0) request.background_color_r = 0.0;
+        if (request.background_color_g < 0.0) request.background_color_g = 0.0;
+        if (request.background_color_b < 0.0) request.background_color_b = 0.0;
+        if (request.background_color_r > 1.0) request.background_color_r = 1.0;
+        if (request.background_color_g > 1.0) request.background_color_g = 1.0;
+        if (request.background_color_b > 1.0) request.background_color_b = 1.0;
     }
     if (request.has_top_fill_strength_override) {
         if (request.top_fill_strength_override < 0.0) {
@@ -750,6 +842,12 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             diag_set(out_diagnostics, out_diagnostics_size, "inspection.volume_tint out of range");
             return false;
         }
+    }
+    if (request.object_audit_max_dimension < 16) {
+        request.object_audit_max_dimension = 16;
+    }
+    if (request.object_audit_max_dimension > 2048) {
+        request.object_audit_max_dimension = 2048;
     }
 
     if (json_get_bool(root, "overwrite", &bool_value)) {
