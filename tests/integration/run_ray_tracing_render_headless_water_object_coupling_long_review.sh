@@ -64,6 +64,7 @@ FPS="${WTR6_LONG_FPS:-$DEFAULT_FPS}"
 RIPPLE_AMPLITUDE="${WTR6_LONG_RIPPLE_AMPLITUDE:-$DEFAULT_RIPPLE_AMPLITUDE}"
 RUN_SLUG="${WTR6_LONG_RUN_SLUG:-$DEFAULT_RUN_SLUG}"
 WATER_LEVEL="${WTR6_LONG_WATER_LEVEL:-0.58}"
+INTEGRATOR_3D="${WTR6_LONG_INTEGRATOR_3D:-emission_transparency}"
 
 if (( OUTPUT_FRAMES < 2 )); then
   echo "WTR6_LONG_OUTPUT_FRAMES must be at least 2" >&2
@@ -124,7 +125,7 @@ fi
 python3 - "$RUN_ROOT" "$RUNTIME_SCENE" "$SCENE_BUNDLE" "$RAY_OUT" "$REQUEST_DIR" "$SUMMARY_DIR" \
   "$SELECTED_FRAMES_FILE" "$SETTINGS_JSON" "$PROFILE" "$WARMUP_FRAMES" "$OUTPUT_FRAMES" \
   "$FRAME_STRIDE" "$SIM_STEPS_PER_FRAME" "$GRID" "$WIDTH" "$HEIGHT" "$TEMPORAL_FRAMES" \
-  "$FPS" "$RIPPLE_AMPLITUDE" "$WATER_LEVEL" <<'PY'
+  "$FPS" "$RIPPLE_AMPLITUDE" "$WATER_LEVEL" "$INTEGRATOR_3D" <<'PY'
 import json
 import math
 import os
@@ -151,6 +152,7 @@ import sys
     fps_text,
     ripple_text,
     water_level_text,
+    integrator_3d,
 ) = sys.argv[1:]
 
 warmup = int(warmup_text)
@@ -313,6 +315,7 @@ settings = {
     "fps": fps,
     "ripple_amplitude_m": float(ripple_text),
     "water_level": float(water_level_text),
+    "integrator_3d": integrator_3d,
     "scene_bundle": scene_bundle_path,
 }
 with open(settings_path, "w", encoding="utf-8") as f:
@@ -339,7 +342,7 @@ for i, frame in enumerate(selected_frames):
             "height": height,
             "normalized_t": normalized_t,
             "temporal_frames": temporal_frames,
-            "integrator_3d": "emission_transparency",
+            "integrator_3d": integrator_3d,
         },
         "inspection": {
             "camera_zoom": 0.75,
@@ -393,6 +396,7 @@ with open(selected_frames_path, "r", encoding="utf-8") as f:
     frames = [int(line.strip()) for line in f if line.strip()]
 with open(settings_path, "r", encoding="utf-8") as f:
     settings = json.load(f)
+expected_integrator = settings.get("integrator_3d", "emission_transparency")
 with open(physics_summary_path, "r", encoding="utf-8") as f:
     physics_summary = json.load(f)
 
@@ -474,6 +478,8 @@ secondary_hits = []
 for frame in frames:
     summary = load_json(os.path.join(summary_dir, f"render_summary_{frame:04d}.json"))
     require(summary.get("rendered_frames") is True, f"render {frame} did not complete")
+    require(summary.get("integrator_3d") == expected_integrator,
+            f"render {frame} used {summary.get('integrator_3d')} not {expected_integrator}")
     water = summary.get("water_surface") or {}
     require(water.get("loaded") is True, f"render {frame} did not load water")
     require(water.get("mesh_attached") is True, f"render {frame} did not attach water mesh")

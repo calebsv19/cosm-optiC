@@ -1,0 +1,27 @@
+{
+  "schema_version": "ray_tracing_agent_render_request_v1",
+  "run_id": "ray_tracing_visual_artifact_source_first_frame",
+  "scene": {
+    "runtime_scene_path": "../../config/samples/ps4d_runtime_scene_visual_test.json"
+  },
+  "volume": {
+    "enabled": false
+  },
+  "render": {
+    "start_frame": 0,
+    "frame_count": 1,
+    "width": 160,
+    "height": 96,
+    "normalized_t": 0.0,
+    "temporal_frames": 1,
+    "integrator_3d": "direct_light"
+  },
+  "output": {
+    "root": "../../visual_artifacts/source_first_frame",
+    "overwrite": true
+  },
+  "progress": {
+    "summary_path": "../../visual_artifacts/source_first_frame/render_summary.json",
+    "progress_path": "../../visual_artifacts/source_first_frame/render_progress.json"
+  }
+}

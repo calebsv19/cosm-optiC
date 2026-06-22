@@ -7,6 +7,7 @@ STABLE_TEST_TARGETS := \
 	test-runtime-mesh-asset-headless-audit \
 	test-runtime-triangle-bvh-3d \
 	test-ray-tracing-core-sim-runtime-frame-contract \
+	test-ray-tracing-runtime-host-lifecycle-contract \
 	test-scene-editor-pane-host-contract \
 	test-ray-tracing-render-headless-preflight \
 	test-ray-tracing-render-headless-image-export \
@@ -18,7 +19,12 @@ STABLE_TEST_TARGETS := \
 	test-ray-tracing-material-preview-headless \
 	test-ray-tracing-job-runner-smoke \
 	test-ray-tracing-job-runner-bundle-smoke \
+	test-ray-tracing-publish-helper-validation \
+	test-ray-tracing-repo-doc-redaction \
+	test-ray-tracing-linux-worker-package-validator \
+	test-ray-tracing-release-contract-redaction \
 	test-ray-tracing-job-runner-policy \
+	test-ray-tracing-wtr66-preview-matrix-planner-dry-run \
 	test-manifest-to-trace-export \
 	test-fluid-pack-contract-parity \
 	test-trio-scene-contract-diff \
@@ -41,6 +47,9 @@ run-headless-smoke: all test-stable
 
 visual-harness: $(APP_TARGET)
 	@echo "visual harness binary ready: $(APP_TARGET)"
+
+visual-artifact: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	tests/integration/run_ray_tracing_visual_artifact.sh
 
 test: $(APP_TARGET) $(TEST_BIN)
 	./$(TEST_BIN)
@@ -193,6 +202,18 @@ test-line-drawing-imported-mesh-runtime: $(RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TES
 		(echo "ray tracing line drawing generated imported mesh runtime test failed."; exit 1)
 	@echo "ray tracing line drawing generated imported mesh runtime lane passed"
 
+test-ray-tracing-publish-helper-validation:
+	tests/integration/run_ray_tracing_publish_helper_validation.sh
+
+test-ray-tracing-repo-doc-redaction:
+	tests/integration/run_ray_tracing_repo_doc_redaction.sh
+
+test-ray-tracing-linux-worker-package-validator:
+	python3 tests/integration/run_ray_tracing_linux_worker_package_validator.py
+
+test-ray-tracing-release-contract-redaction:
+	tests/integration/run_ray_tracing_release_contract_redaction.sh
+
 RUNTIME_TRIANGLE_BVH_3D_TEST_BIN := $(BUILD_DIR)/tests/runtime_triangle_bvh_3d_test
 RUNTIME_TRIANGLE_BVH_3D_TEST_SRCS := \
 	$(TEST_DIR)/test_runtime_triangle_bvh_3d.c \
@@ -270,6 +291,20 @@ $(RAY_TRACING_CORE_SIM_RUNTIME_FRAME_TEST_BIN): $(RAY_TRACING_CORE_SIM_RUNTIME_F
 
 test-ray-tracing-core-sim-runtime-frame-contract: $(RAY_TRACING_CORE_SIM_RUNTIME_FRAME_TEST_BIN)
 	@$(RAY_TRACING_CORE_SIM_RUNTIME_FRAME_TEST_BIN) || (echo "ray tracing core_sim runtime frame contract test failed."; exit 1)
+
+RAY_TRACING_RUNTIME_HOST_LIFECYCLE_TEST_BIN := $(BUILD_DIR)/tests/ray_tracing_runtime_host_lifecycle_contract_test
+RAY_TRACING_RUNTIME_HOST_LIFECYCLE_TEST_SRCS := \
+	$(TEST_DIR)/ray_tracing_runtime_host_lifecycle_contract_test.c \
+	$(SRC_DIR)/app/ray_tracing_runtime_host.c
+
+$(RAY_TRACING_RUNTIME_HOST_LIFECYCLE_TEST_BIN): $(RAY_TRACING_RUNTIME_HOST_LIFECYCLE_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g -DUSE_VULKAN=0 \
+		$(SDL_CFLAGS) $(TIMER_HUD_INCLUDE) -I$(INC_DIR) -I$(SRC_DIR) -I$(VK_RENDERER_DIR)/include \
+		-o $@ $(RAY_TRACING_RUNTIME_HOST_LIFECYCLE_TEST_SRCS) -lm
+
+test-ray-tracing-runtime-host-lifecycle-contract: $(RAY_TRACING_RUNTIME_HOST_LIFECYCLE_TEST_BIN)
+	@$(RAY_TRACING_RUNTIME_HOST_LIFECYCLE_TEST_BIN) || (echo "ray tracing runtime host lifecycle contract test failed."; exit 1)
 
 SCENE_EDITOR_PANE_HOST_TEST_BIN := $(BUILD_DIR)/tests/scene_editor_pane_host_contract_test
 SCENE_EDITOR_PANE_HOST_TEST_SRCS := \
@@ -349,6 +384,12 @@ test-ray-tracing-job-runner-bundle-smoke: $(RAY_TRACING_RENDER_HEADLESS_BIN) $(R
 
 test-ray-tracing-job-runner-policy: $(RAY_TRACING_RENDER_HEADLESS_BIN) $(RAY_TRACING_JOB_RUNNER_BIN)
 	tests/integration/run_ray_tracing_job_runner_policy.sh
+
+test-ray-tracing-wtr66-preview-matrix-planner-dry-run:
+	bash tests/integration/run_ray_tracing_wtr66_preview_matrix_planner_dry_run.sh
+
+test-ray-tracing-wtr66-preview-matrix-local-job-runner: $(RAY_TRACING_RENDER_HEADLESS_BIN) $(RAY_TRACING_JOB_RUNNER_BIN)
+	bash tests/integration/run_ray_tracing_wtr66_preview_matrix_local_job_runner.sh
 
 test-ray-tracing-material-preview-headless: $(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_BIN)
 	tests/integration/run_ray_tracing_material_preview_headless.sh

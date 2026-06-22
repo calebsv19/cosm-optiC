@@ -23,6 +23,7 @@ data/runtime/
 data/snapshots/
 tmp/
 captures/
+visual_artifacts/
 /dist/
 tools/packaging/macos/local_app_icon/
 
