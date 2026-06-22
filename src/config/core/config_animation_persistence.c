@@ -105,6 +105,106 @@ bool animation_config_scene_source_is_fluid(int source) {
     return animation_config_scene_source_clamp(source) == SCENE_SOURCE_FLUID_MANIFEST;
 }
 
+static void animation_config_copy_path(char* dst, size_t dst_size, const char* src) {
+    if (!dst || dst_size == 0u) return;
+    if (!src) src = "";
+    strncpy(dst, src, dst_size - 1u);
+    dst[dst_size - 1u] = '\0';
+}
+
+void animation_config_scene_source_state_capture(const AnimationConfig* cfg,
+                                                 AnimationConfigSceneSourceState* out_state) {
+    if (!cfg || !out_state) return;
+    out_state->source = animation_config_scene_source_clamp(cfg->sceneSource);
+    out_state->useFluidScene = cfg->useFluidScene;
+    animation_config_copy_path(out_state->fluidManifest,
+                               sizeof(out_state->fluidManifest),
+                               cfg->fluidManifest);
+    animation_config_copy_path(out_state->runtimeScenePath,
+                               sizeof(out_state->runtimeScenePath),
+                               cfg->runtimeScenePath);
+    out_state->volumeInteractionEnabled = cfg->volumeInteractionEnabled;
+    out_state->volumeSourceKind =
+        animation_config_volume_source_kind_clamp(cfg->volumeSourceKind);
+    animation_config_copy_path(out_state->volumeSourcePath,
+                               sizeof(out_state->volumeSourcePath),
+                               cfg->volumeSourcePath);
+}
+
+void animation_config_scene_source_state_restore(AnimationConfig* cfg,
+                                                 const AnimationConfigSceneSourceState* state) {
+    if (!cfg || !state) return;
+    cfg->sceneSource = (SceneSource)animation_config_scene_source_clamp(state->source);
+    cfg->useFluidScene = state->useFluidScene;
+    animation_config_copy_path(cfg->fluidManifest,
+                               sizeof(cfg->fluidManifest),
+                               state->fluidManifest);
+    animation_config_copy_path(cfg->runtimeScenePath,
+                               sizeof(cfg->runtimeScenePath),
+                               state->runtimeScenePath);
+    cfg->volumeInteractionEnabled = state->volumeInteractionEnabled;
+    cfg->volumeSourceKind =
+        animation_config_volume_source_kind_clamp(state->volumeSourceKind);
+    animation_config_copy_path(cfg->volumeSourcePath,
+                               sizeof(cfg->volumeSourcePath),
+                               state->volumeSourcePath);
+}
+
+bool animation_config_set_scene_source_selection(AnimationConfig* cfg,
+                                                int source,
+                                                const char* path) {
+    if (!cfg) return false;
+    source = animation_config_scene_source_clamp(source);
+    if (source == SCENE_SOURCE_CONFIG_2D) {
+        cfg->sceneSource = SCENE_SOURCE_CONFIG_2D;
+        cfg->useFluidScene = false;
+        cfg->fluidManifest[0] = '\0';
+        cfg->runtimeScenePath[0] = '\0';
+        return true;
+    }
+    if (!path || !path[0]) {
+        return false;
+    }
+    if (source == SCENE_SOURCE_FLUID_MANIFEST) {
+        cfg->sceneSource = SCENE_SOURCE_FLUID_MANIFEST;
+        cfg->useFluidScene = true;
+        animation_config_copy_path(cfg->fluidManifest, sizeof(cfg->fluidManifest), path);
+        cfg->runtimeScenePath[0] = '\0';
+        return true;
+    }
+    if (source == SCENE_SOURCE_RUNTIME_SCENE) {
+        cfg->sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+        cfg->useFluidScene = false;
+        animation_config_copy_path(cfg->runtimeScenePath,
+                                   sizeof(cfg->runtimeScenePath),
+                                   path);
+        cfg->fluidManifest[0] = '\0';
+        return true;
+    }
+    return false;
+}
+
+bool animation_config_set_volume_source_selection(AnimationConfig* cfg,
+                                                 int kind,
+                                                 const char* path) {
+    if (!cfg) return false;
+    kind = animation_config_volume_source_kind_clamp(kind);
+    if (kind == VOLUME_SOURCE_NONE || !path || !path[0]) {
+        return false;
+    }
+    cfg->volumeSourceKind = kind;
+    animation_config_copy_path(cfg->volumeSourcePath, sizeof(cfg->volumeSourcePath), path);
+    cfg->volumeInteractionEnabled = true;
+    return true;
+}
+
+void animation_config_clear_volume_source_selection(AnimationConfig* cfg) {
+    if (!cfg) return;
+    cfg->volumeInteractionEnabled = false;
+    cfg->volumeSourceKind = VOLUME_SOURCE_NONE;
+    cfg->volumeSourcePath[0] = '\0';
+}
+
 static void animation_config_sync_scene_source_legacy_fields(AnimationConfig* cfg) {
     if (!cfg) return;
     cfg->sceneSource = animation_config_scene_source_clamp(cfg->sceneSource);

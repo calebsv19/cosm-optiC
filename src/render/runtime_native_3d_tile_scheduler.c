@@ -171,21 +171,84 @@ void RuntimeNative3DTileSchedulerResetAdaptivePlan(void) {
     memset(&s_runtime_native_3d_adaptive_tile_plan, 0, sizeof(s_runtime_native_3d_adaptive_tile_plan));
 }
 
-size_t RuntimeNative3DTileSchedulerResolveWorkerCountForCpu(size_t job_count,
-                                                            int cpu_count,
-                                                            bool interactive_preview) {
+void RuntimeNative3DTileSchedulerSnapshotAdaptivePlan(
+    RuntimeNative3DAdaptiveTilePlanSnapshot* out_snapshot) {
+    if (!out_snapshot) {
+        return;
+    }
+    memset(out_snapshot, 0, sizeof(*out_snapshot));
+    out_snapshot->valid = s_runtime_native_3d_adaptive_tile_plan.valid;
+    out_snapshot->frameWidth = s_runtime_native_3d_adaptive_tile_plan.frameWidth;
+    out_snapshot->frameHeight = s_runtime_native_3d_adaptive_tile_plan.frameHeight;
+    out_snapshot->tileSize = s_runtime_native_3d_adaptive_tile_plan.tileSize;
+    out_snapshot->temporalFrames = s_runtime_native_3d_adaptive_tile_plan.temporalFrames;
+    out_snapshot->integratorId = s_runtime_native_3d_adaptive_tile_plan.integratorId;
+    out_snapshot->splitEntryCount = s_runtime_native_3d_adaptive_tile_plan.splitEntryCount;
+    if (out_snapshot->splitEntryCount > kRuntimeNative3DTileSchedulerAdaptiveMaxSplitParents) {
+        out_snapshot->splitEntryCount = kRuntimeNative3DTileSchedulerAdaptiveMaxSplitParents;
+    }
+    for (size_t i = 0; i < out_snapshot->splitEntryCount; ++i) {
+        out_snapshot->splitEntries[i] =
+            s_runtime_native_3d_adaptive_tile_plan.splitEntries[i].parentTile;
+    }
+}
+
+static size_t runtime_native_3d_tile_scheduler_cpu_percent_cap(int cpu_count,
+                                                               int cpu_percent) {
+    double scaled = 0.0;
+    if (cpu_count <= 0 || cpu_percent <= 0) {
+        return 0u;
+    }
+    if (cpu_percent > 100) {
+        cpu_percent = 100;
+    }
+    scaled = ((double)cpu_count * (double)cpu_percent) / 100.0;
+    if (scaled < 1.0) {
+        return 1u;
+    }
+    return (size_t)ceil(scaled);
+}
+
+size_t RuntimeNative3DTileSchedulerResolveWorkerCountForCpuBudgeted(
+    size_t job_count,
+    int cpu_count,
+    bool interactive_preview,
+    const RuntimeNative3DResourceBudget* resource_budget) {
     size_t worker_count = 0u;
+    size_t cap = 0u;
+    int effective_cpu_count = cpu_count;
 
     if (job_count == 0u) {
         return 0u;
     }
 
-    worker_count = (cpu_count > 0) ? (size_t)cpu_count : 1u;
+    if (resource_budget && resource_budget->reserveCpuCount > 0 && effective_cpu_count > 1) {
+        effective_cpu_count -= resource_budget->reserveCpuCount;
+        if (effective_cpu_count < 1) {
+            effective_cpu_count = 1;
+        }
+    }
+
+    worker_count = (effective_cpu_count > 0) ? (size_t)effective_cpu_count : 1u;
     if (interactive_preview && worker_count > 1u) {
         worker_count -= 1u;
     }
     if (worker_count == 0u) {
         worker_count = 1u;
+    }
+
+    if (resource_budget && resource_budget->cpuPercent > 0) {
+        cap = runtime_native_3d_tile_scheduler_cpu_percent_cap(effective_cpu_count,
+                                                               resource_budget->cpuPercent);
+        if (cap > 0u && worker_count > cap) {
+            worker_count = cap;
+        }
+    }
+    if (resource_budget && resource_budget->maxWorkerThreads > 0) {
+        cap = (size_t)resource_budget->maxWorkerThreads;
+        if (worker_count > cap) {
+            worker_count = cap;
+        }
     }
     if (worker_count > job_count) {
         worker_count = job_count;
@@ -193,7 +256,19 @@ size_t RuntimeNative3DTileSchedulerResolveWorkerCountForCpu(size_t job_count,
     if (worker_count > kRuntimeNative3DTileSchedulerMaxWorkers) {
         worker_count = kRuntimeNative3DTileSchedulerMaxWorkers;
     }
+    if (worker_count == 0u) {
+        worker_count = 1u;
+    }
     return worker_count;
+}
+
+size_t RuntimeNative3DTileSchedulerResolveWorkerCountForCpu(size_t job_count,
+                                                            int cpu_count,
+                                                            bool interactive_preview) {
+    return RuntimeNative3DTileSchedulerResolveWorkerCountForCpuBudgeted(job_count,
+                                                                        cpu_count,
+                                                                        interactive_preview,
+                                                                        NULL);
 }
 
 size_t RuntimeNative3DTileSchedulerResolveWorkerCount(size_t job_count,
@@ -780,6 +855,30 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgress(
     RuntimeNative3DTileSchedulerProgressCallback tile_progress_callback,
     void* tile_progress_user_data,
     RuntimeNative3DRenderStats* out_stats) {
+    return RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressAndBudget(
+        pixel_buffer,
+        integrator_id,
+        frame,
+        temporal_frames,
+        progress_callback,
+        progress_user_data,
+        tile_progress_callback,
+        tile_progress_user_data,
+        NULL,
+        out_stats);
+}
+
+bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressAndBudget(
+    uint8_t* pixel_buffer,
+    RayTracing3DIntegratorId integrator_id,
+    RuntimeNative3DPreparedFrame* frame,
+    int temporal_frames,
+    RuntimeNative3DTemporalProgressCallback progress_callback,
+    void* progress_user_data,
+    RuntimeNative3DTileSchedulerProgressCallback tile_progress_callback,
+    void* tile_progress_user_data,
+    const RuntimeNative3DResourceBudget* resource_budget,
+    RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DTileScheduler scheduler = {0};
     const uint64_t frame_start_ticks = (uint64_t)SDL_GetPerformanceCounter();
     const int effective_temporal_frames = (temporal_frames <= 1) ? 1 : temporal_frames;
@@ -819,8 +918,11 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgress(
         goto finalize;
     }
 
-    worker_count = RuntimeNative3DTileSchedulerResolveWorkerCount(
-        scheduler.jobCount, tile_progress_callback != NULL);
+    worker_count = RuntimeNative3DTileSchedulerResolveWorkerCountForCpuBudgeted(
+        scheduler.jobCount,
+        SDL_GetCPUCount(),
+        tile_progress_callback != NULL,
+        resource_budget);
 
     thread_slots = (pthread_t*)calloc(worker_count, sizeof(*thread_slots));
     task_slots = (CoreWorkerTask*)calloc(scheduler.jobCount, sizeof(*task_slots));

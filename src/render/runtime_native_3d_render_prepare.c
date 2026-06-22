@@ -1,6 +1,7 @@
 #include "render/runtime_native_3d_render_internal.h"
 
 #include <math.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -17,13 +18,13 @@
 #include "render/runtime_scene_3d_samples.h"
 #include "render/runtime_triangle_bvh_3d.h"
 #include "render/runtime_water_material_3d.h"
+#include "render/runtime_native_3d_prepare_diagnostics.h"
 #include "scene/object_manager.h"
 
 static bool gRuntimeNative3DInspectionCameraPositionEnabled = false;
 static bool gRuntimeNative3DInspectionCameraLookAtEnabled = false;
 static Vec3 gRuntimeNative3DInspectionCameraPosition = {0};
 static Vec3 gRuntimeNative3DInspectionCameraLookAt = {0};
-static char gRuntimeNative3DPrepareFrameLastDiagnostics[1024] = "ok";
 static RuntimeScene3D gRuntimeNative3DPreparedSceneCache;
 static bool gRuntimeNative3DPreparedSceneCacheInitialized = false;
 static bool gRuntimeNative3DPreparedSceneCacheValid = false;
@@ -39,14 +40,24 @@ static uint64_t gRuntimeNative3DPreparedSceneCacheInvalidations = 0u;
 static uint64_t gRuntimeNative3DPreparedSceneCacheTimeIndependentHits = 0u;
 
 void runtime_native_3d_prepare_frame_set_diag(const char* message) {
-    snprintf(gRuntimeNative3DPrepareFrameLastDiagnostics,
-             sizeof(gRuntimeNative3DPrepareFrameLastDiagnostics),
-             "%s",
-             message ? message : "unknown");
+    RuntimeNative3DPrepareDiagnostics_Set(message);
+}
+
+void runtime_native_3d_prepare_frame_set_diagf(const char* format, ...) {
+    va_list args;
+    char message[4096];
+    if (!format) {
+        runtime_native_3d_prepare_frame_set_diag("unknown");
+        return;
+    }
+    va_start(args, format);
+    vsnprintf(message, sizeof(message), format, args);
+    va_end(args);
+    runtime_native_3d_prepare_frame_set_diag(message);
 }
 
 const char* RuntimeNative3DPrepareFrameLastDiagnostics(void) {
-    return gRuntimeNative3DPrepareFrameLastDiagnostics;
+    return RuntimeNative3DPrepareDiagnostics_Get();
 }
 
 static void runtime_native_3d_prepared_scene_cache_ensure_initialized(void) {
@@ -656,22 +667,20 @@ static bool runtime_native_3d_render_ensure_ready_bvh(RuntimeScene3D* scene) {
     if (!scene || scene->triangleMesh.triangleCount <= 0) return false;
     if (!RuntimeTriangleMesh3D_HasReadyBVH(&scene->triangleMesh)) {
         if (!RuntimeTriangleMesh3D_BuildBVH(&scene->triangleMesh)) {
-            snprintf(gRuntimeNative3DPrepareFrameLastDiagnostics,
-                     sizeof(gRuntimeNative3DPrepareFrameLastDiagnostics),
-                     "triangle BVH build failed: triangle_count=%d lower=%s",
-                     scene->triangleMesh.triangleCount,
-                     RuntimeTriangleMesh3D_BVHLastDiagnostics());
+            runtime_native_3d_prepare_frame_set_diagf(
+                "triangle BVH build failed: triangle_count=%d lower=%s",
+                scene->triangleMesh.triangleCount,
+                RuntimeTriangleMesh3D_BVHLastDiagnostics());
             return false;
         }
     }
     if (!RuntimeTriangleMesh3D_BVHBuildStats(&scene->triangleMesh, &stats) ||
         !stats.ready ||
         stats.nodeCount <= 0) {
-        snprintf(gRuntimeNative3DPrepareFrameLastDiagnostics,
-                 sizeof(gRuntimeNative3DPrepareFrameLastDiagnostics),
-                 "triangle BVH unavailable after build: triangle_count=%d node_count=%d",
-                 stats.triangleCount,
-                 stats.nodeCount);
+        runtime_native_3d_prepare_frame_set_diagf(
+            "triangle BVH unavailable after build: triangle_count=%d node_count=%d",
+            stats.triangleCount,
+            stats.nodeCount);
         return false;
     }
     return true;
@@ -750,38 +759,45 @@ bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
                                                    normalized_t,
                                                    live_light_x,
                                                    live_light_y)) {
-        snprintf(gRuntimeNative3DPrepareFrameLastDiagnostics,
-                 sizeof(gRuntimeNative3DPrepareFrameLastDiagnostics),
-                 "build_live_scene failed: primitive_count=%d triangle_count=%d has_light=%s has_camera=%s builder=%s",
-                 frame.scene.primitiveCount,
-                 frame.scene.triangleMesh.triangleCount,
-                 frame.scene.hasLight ? "true" : "false",
-                 frame.scene.hasCamera ? "true" : "false",
-                 RuntimeScene3DBuilder_LastDiagnostics());
+        runtime_native_3d_prepare_frame_set_diagf(
+            "build_live_scene failed: primitive_count=%d triangle_count=%d has_light=%s has_camera=%s builder=%s",
+            frame.scene.primitiveCount,
+            frame.scene.triangleMesh.triangleCount,
+            frame.scene.hasLight ? "true" : "false",
+            frame.scene.hasCamera ? "true" : "false",
+            RuntimeScene3DBuilder_LastDiagnostics());
         RuntimeScene3D_Free(&frame.scene);
         return false;
     }
     if (!runtime_native_3d_render_attach_configured_volume(&frame.scene, frame_index)) {
-        snprintf(gRuntimeNative3DPrepareFrameLastDiagnostics,
-                 sizeof(gRuntimeNative3DPrepareFrameLastDiagnostics),
-                 "attach_configured_volume failed: %s | volume_enabled=%s source_kind=%d source_path=%s frame_index=%d",
-                 RuntimeNative3DPrepareFrameLastDiagnostics(),
-                 animSettings.volumeInteractionEnabled ? "true" : "false",
-                 animSettings.volumeSourceKind,
-                 animSettings.volumeSourcePath,
-                 frame_index);
+        char previous_diagnostics[4096];
+        snprintf(previous_diagnostics,
+                 sizeof(previous_diagnostics),
+                 "%s",
+                 RuntimeNative3DPrepareFrameLastDiagnostics());
+        runtime_native_3d_prepare_frame_set_diagf(
+            "attach_configured_volume failed: %s | volume_enabled=%s source_kind=%d source_path=%s frame_index=%d",
+            previous_diagnostics,
+            animSettings.volumeInteractionEnabled ? "true" : "false",
+            animSettings.volumeSourceKind,
+            animSettings.volumeSourcePath,
+            frame_index);
         RuntimeScene3D_Free(&frame.scene);
         return false;
     }
     if (!runtime_native_3d_render_attach_configured_water_surface(&frame.scene, frame_index)) {
-        snprintf(gRuntimeNative3DPrepareFrameLastDiagnostics,
-                 sizeof(gRuntimeNative3DPrepareFrameLastDiagnostics),
-                 "attach_configured_water_surface failed: %s | volume_enabled=%s source_kind=%d source_path=%s frame_index=%d",
-                 RuntimeNative3DPrepareFrameLastDiagnostics(),
-                 animSettings.volumeInteractionEnabled ? "true" : "false",
-                 animSettings.volumeSourceKind,
-                 animSettings.volumeSourcePath,
-                 frame_index);
+        char previous_diagnostics[4096];
+        snprintf(previous_diagnostics,
+                 sizeof(previous_diagnostics),
+                 "%s",
+                 RuntimeNative3DPrepareFrameLastDiagnostics());
+        runtime_native_3d_prepare_frame_set_diagf(
+            "attach_configured_water_surface failed: %s | volume_enabled=%s source_kind=%d source_path=%s frame_index=%d",
+            previous_diagnostics,
+            animSettings.volumeInteractionEnabled ? "true" : "false",
+            animSettings.volumeSourceKind,
+            animSettings.volumeSourcePath,
+            frame_index);
         RuntimeScene3D_Free(&frame.scene);
         return false;
     }
@@ -792,18 +808,17 @@ bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
     RuntimeScene3D_RefreshCapabilities(&frame.scene);
 
     if (!RuntimeCameraProjector3D_Build(&frame.scene.camera, width, height, &frame.projector)) {
-        snprintf(gRuntimeNative3DPrepareFrameLastDiagnostics,
-                 sizeof(gRuntimeNative3DPrepareFrameLastDiagnostics),
-                 "camera_projector_build failed: camera_pos=(%.6f,%.6f,%.6f) rotation=%.6f lookPitch=%.6f zoom=%.6f near=%.6f viewport=%dx%d",
-                 frame.scene.camera.position.x,
-                 frame.scene.camera.position.y,
-                 frame.scene.camera.position.z,
-                 frame.scene.camera.rotation,
-                 frame.scene.camera.lookPitch,
-                 frame.scene.camera.zoom,
-                 frame.scene.camera.nearPlane,
-                 width,
-                 height);
+        runtime_native_3d_prepare_frame_set_diagf(
+            "camera_projector_build failed: camera_pos=(%.6f,%.6f,%.6f) rotation=%.6f lookPitch=%.6f zoom=%.6f near=%.6f viewport=%dx%d",
+            frame.scene.camera.position.x,
+            frame.scene.camera.position.y,
+            frame.scene.camera.position.z,
+            frame.scene.camera.rotation,
+            frame.scene.camera.lookPitch,
+            frame.scene.camera.zoom,
+            frame.scene.camera.nearPlane,
+            width,
+            height);
         RuntimeScene3D_Free(&frame.scene);
         return false;
     }

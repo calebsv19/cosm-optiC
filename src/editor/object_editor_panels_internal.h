@@ -29,7 +29,6 @@ extern char importNames[][256];
 extern int importCount;
 extern SDL_Rect materialPanelRect;
 extern SDL_Rect materialCollapseRect;
-extern int selectedMaterialIndex;
 extern bool assetsCollapsed;
 extern bool materialsCollapsed;
 extern int assetScroll;

@@ -376,7 +376,7 @@ void ObjectEditorPanels_DrawMaterialListImpl(SDL_Renderer* renderer) {
         SDL_Color swatch_color =
             object_editor_panels_color_from_packed_rgb(object_editor_panels_resolve_material_swatch_color(i),
                                                        255);
-        bool selected = (i == selectedMaterialIndex);
+        bool selected = (i == ObjectEditorGetSelectedMaterialIndex());
         SDL_SetRenderDrawColor(renderer,
                                selected ? active_row_fill.r : inactive_row_fill.r,
                                selected ? active_row_fill.g : inactive_row_fill.g,

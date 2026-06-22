@@ -28,8 +28,6 @@
 
 int width, height;
 
-// **Tracks which object is currently selected**
-int selectedObjectIndex = -1;
 int handleRadius = 5;
 bool draggingRotationHandle = false;
 double lastWorldX = 0.0;
@@ -168,7 +166,8 @@ static int ObjectEditorPackedColorWithChannel(int packed_color,
 void ObjectEditorApplySliderValueToSelected(ObjectEditorPanelSliderKind kind,
                                             double slider_value) {
     Uint8 channel_value = 0u;
-    if (selectedObjectIndex < 0 || selectedObjectIndex >= sceneSettings.objectCount) {
+    int selected_index = ObjectEditorGetSelectedObjectIndex();
+    if (selected_index < 0 || selected_index >= sceneSettings.objectCount) {
         return;
     }
     if (slider_value < 0.0) slider_value = 0.0;
@@ -179,7 +178,7 @@ void ObjectEditorApplySliderValueToSelected(ObjectEditorPanelSliderKind kind,
         kind == OBJECT_EDITOR_PANEL_SLIDER_COLOR_B) {
         channel_value = (Uint8)lround(slider_value * 255.0);
         ObjectEditorAssignColorToSelected(
-            ObjectEditorPackedColorWithChannel(sceneSettings.sceneObjects[selectedObjectIndex].color,
+            ObjectEditorPackedColorWithChannel(sceneSettings.sceneObjects[selected_index].color,
                                                kind,
                                                channel_value));
         return;
@@ -423,14 +422,15 @@ bool ObjectEditorDeleteObjectIndex(int index) {
     if (index < 0 || index >= sceneSettings.objectCount) {
         return false;
     }
+    int selected_before = ObjectEditorGetSelectedObjectIndex();
     RemoveSceneObject(index);
-    if (selectedObjectIndex == index) {
-        selectedObjectIndex = -1;
-        selectedMaterialIndex = -1;
-    } else if (selectedObjectIndex > index) {
-        selectedObjectIndex -= 1;
-    }
     ObjectEditorSelectionTrackerNotifyDelete(index);
+    int selected_after = ObjectEditorGetSelectedObjectIndex();
+    if (selected_before == index || selected_after < 0) {
+        ObjectEditorSetSelectedMaterialIndex(-1);
+    } else if (selected_after < sceneSettings.objectCount) {
+        ObjectEditorSetSelectedMaterialIndex(sceneSettings.sceneObjects[selected_after].material_id);
+    }
     return true;
 }
 
@@ -470,13 +470,14 @@ void RenderObjectEditor(SDL_Renderer* renderer) {
     sceneSettings.camera = preview;
 
     bool fillObjects = !AnimationUseFluidScene();
+    int selected_index = ObjectEditorGetSelectedObjectIndex();
     for (int i = 0; i < sceneSettings.objectCount; i++) {
         SceneObject* obj = &sceneSettings.sceneObjects[i];
         SDL_Color drawColor = ObjectEditorColorFromPackedRGB(obj->color, 255);
         SDL_SetRenderDrawColor(renderer, drawColor.r, drawColor.g, drawColor.b, drawColor.a);
         RenderSceneObject(renderer, obj, fillObjects);
 
-        if (i == selectedObjectIndex) {
+        if (i == selected_index) {
             SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
             RenderSceneObject(renderer, obj, false);
             RenderHandles(renderer, obj, &preview);
@@ -565,22 +566,32 @@ int ObjectEditorRenderPaneControls(SDL_Renderer* renderer, SDL_Rect content_boun
 }
 
 int ObjectEditorGetSelectedObjectIndex(void) {
-    return selectedObjectIndex;
+    return ObjectEditorSelectionTrackerCurrent(sceneSettings.objectCount);
 }
 
 int ObjectEditorGetLastSelectedObjectIndex(void) {
     return ObjectEditorSelectionTrackerLast(sceneSettings.objectCount);
 }
 
+int ObjectEditorGetSelectedMaterialIndex(void) {
+    return selectedMaterialIndex;
+}
+
+void ObjectEditorSetSelectedMaterialIndex(int material_id) {
+    if (material_id < 0 || material_id >= MaterialManagerCount()) {
+        selectedMaterialIndex = -1;
+        return;
+    }
+    selectedMaterialIndex = material_id;
+}
+
 void ObjectEditorSetSelectedObjectIndex(int index) {
     if (index < 0 || index >= sceneSettings.objectCount) {
-        selectedObjectIndex = -1;
-        selectedMaterialIndex = -1;
+        ObjectEditorSetSelectedMaterialIndex(-1);
         ObjectEditorSelectionTrackerSetCurrent(-1, sceneSettings.objectCount);
     } else {
-        selectedObjectIndex = index;
         ObjectEditorSelectionTrackerSetCurrent(index, sceneSettings.objectCount);
-        selectedMaterialIndex = sceneSettings.sceneObjects[index].material_id;
+        ObjectEditorSetSelectedMaterialIndex(sceneSettings.sceneObjects[index].material_id);
     }
     selectedAssetIndex = -1;
     draggingRotationHandle = false;
@@ -588,39 +599,43 @@ void ObjectEditorSetSelectedObjectIndex(int index) {
 }
 
 void ObjectEditorAssignMaterialToSelected(int material_id) {
-    if (selectedObjectIndex < 0 || selectedObjectIndex >= sceneSettings.objectCount) {
+    int selected_index = ObjectEditorGetSelectedObjectIndex();
+    if (selected_index < 0 || selected_index >= sceneSettings.objectCount) {
         return;
     }
-    ObjectEditorObjectAssignMaterial(&sceneSettings.sceneObjects[selectedObjectIndex], material_id);
-    selectedMaterialIndex = material_id;
+    ObjectEditorObjectAssignMaterial(&sceneSettings.sceneObjects[selected_index], material_id);
+    ObjectEditorSetSelectedMaterialIndex(material_id);
 }
 
 void ObjectEditorAssignColorToSelected(int packed_color) {
-    if (selectedObjectIndex < 0 || selectedObjectIndex >= sceneSettings.objectCount) {
+    int selected_index = ObjectEditorGetSelectedObjectIndex();
+    if (selected_index < 0 || selected_index >= sceneSettings.objectCount) {
         return;
     }
-    if (SceneObjectIsGuideOnly(&sceneSettings.sceneObjects[selectedObjectIndex])) {
+    if (SceneObjectIsGuideOnly(&sceneSettings.sceneObjects[selected_index])) {
         return;
     }
-    ObjectEditorObjectAssignColor(&sceneSettings.sceneObjects[selectedObjectIndex], packed_color);
+    ObjectEditorObjectAssignColor(&sceneSettings.sceneObjects[selected_index], packed_color);
 }
 
 void ObjectEditorAssignAlphaToSelected(double alpha) {
-    if (selectedObjectIndex < 0 || selectedObjectIndex >= sceneSettings.objectCount) {
+    int selected_index = ObjectEditorGetSelectedObjectIndex();
+    if (selected_index < 0 || selected_index >= sceneSettings.objectCount) {
         return;
     }
-    if (SceneObjectIsGuideOnly(&sceneSettings.sceneObjects[selectedObjectIndex])) {
+    if (SceneObjectIsGuideOnly(&sceneSettings.sceneObjects[selected_index])) {
         return;
     }
-    ObjectEditorObjectAssignAlpha(&sceneSettings.sceneObjects[selectedObjectIndex],
+    ObjectEditorObjectAssignAlpha(&sceneSettings.sceneObjects[selected_index],
                                   alpha);
 }
 
 void ObjectEditorAssignEmissiveStrengthToSelected(double emissive_strength) {
-    if (selectedObjectIndex < 0 || selectedObjectIndex >= sceneSettings.objectCount) {
+    int selected_index = ObjectEditorGetSelectedObjectIndex();
+    if (selected_index < 0 || selected_index >= sceneSettings.objectCount) {
         return;
     }
     ObjectEditorObjectAssignEmissiveStrength(
-        &sceneSettings.sceneObjects[selectedObjectIndex],
+        &sceneSettings.sceneObjects[selected_index],
         emissive_strength);
 }

@@ -172,9 +172,9 @@ int maxLoopCount = 1;  // Default to 1 loop if not set
 int AnimationInit(void) {
     LoadAnimationConfig();
     if (s_fluidManifestOverride && s_fluidManifestOverride[0]) {
-        strncpy(animSettings.fluidManifest, s_fluidManifestOverride, sizeof(animSettings.fluidManifest) - 1);
-        animSettings.fluidManifest[sizeof(animSettings.fluidManifest) - 1] = '\0';
-        animSettings.sceneSource = SCENE_SOURCE_FLUID_MANIFEST;
+        (void)animation_config_set_scene_source_selection(&animSettings,
+                                                          SCENE_SOURCE_FLUID_MANIFEST,
+                                                          s_fluidManifestOverride);
     }
     LoadSceneConfig();
     ApplyAnimationWindowSizeOverride();

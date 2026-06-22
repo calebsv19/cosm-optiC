@@ -1616,6 +1616,15 @@ static int test_runtime_native_3d_temporal_worker_preview_progress_contract(void
 }
 
 static int test_runtime_native_3d_tile_scheduler_policy_contract(void) {
+    RuntimeNative3DResourceBudget half_budget = {0};
+    RuntimeNative3DResourceBudget max_two_budget = {0};
+    RuntimeNative3DResourceBudget reserve_budget = {0};
+
+    half_budget.cpuPercent = 50;
+    max_two_budget.maxWorkerThreads = 2;
+    reserve_budget.cpuPercent = 100;
+    reserve_budget.reserveCpuCount = 2;
+
     assert_true("runtime_native_3d_tile_scheduler_tile_size_default_16",
                 RuntimeNative3DTileSchedulerResolveTileSize(0) == 16);
     assert_true("runtime_native_3d_tile_scheduler_tile_size_clamps_low",
@@ -1665,6 +1674,18 @@ static int test_runtime_native_3d_tile_scheduler_policy_contract(void) {
                 RuntimeNative3DTileSchedulerResolveWorkerCountForCpu(12u, 1, true) == 1u);
     assert_true("runtime_native_3d_tile_scheduler_workers_cpu_fallback_one",
                 RuntimeNative3DTileSchedulerResolveWorkerCountForCpu(12u, 0, false) == 1u);
+    assert_true("runtime_native_3d_tile_scheduler_workers_budget_cpu_percent",
+                RuntimeNative3DTileSchedulerResolveWorkerCountForCpuBudgeted(
+                    12u, 8, false, &half_budget) == 4u);
+    assert_true("runtime_native_3d_tile_scheduler_workers_budget_max_workers",
+                RuntimeNative3DTileSchedulerResolveWorkerCountForCpuBudgeted(
+                    12u, 8, false, &max_two_budget) == 2u);
+    assert_true("runtime_native_3d_tile_scheduler_workers_budget_reserve_cpu",
+                RuntimeNative3DTileSchedulerResolveWorkerCountForCpuBudgeted(
+                    12u, 4, false, &reserve_budget) == 2u);
+    assert_true("runtime_native_3d_tile_scheduler_workers_budget_small_vps_half",
+                RuntimeNative3DTileSchedulerResolveWorkerCountForCpuBudgeted(
+                    12u, 2, false, &half_budget) == 1u);
     return 0;
 }
 

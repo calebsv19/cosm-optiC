@@ -245,6 +245,24 @@ void RuntimeNative3DProgressHUD_CompleteFrame(void) {
     }
 }
 
+void RuntimeNative3DProgressHUD_Snapshot(RuntimeNative3DProgressHUDSnapshot* out_snapshot) {
+    const RuntimeNative3DProgressHUDState* state = &g_runtime_native_3d_progress_hud;
+    if (!out_snapshot) {
+        return;
+    }
+    memset(out_snapshot, 0, sizeof(*out_snapshot));
+    out_snapshot->active = state->active;
+    out_snapshot->integratorId = state->integratorId;
+    out_snapshot->startedSubpasses = state->startedSubpasses;
+    out_snapshot->completedSubpasses = state->completedSubpasses;
+    out_snapshot->totalSubpasses = state->totalSubpasses;
+    out_snapshot->frameIndex = state->frameIndex;
+    out_snapshot->pathFrameCount = state->pathFrameCount;
+    out_snapshot->completedTilesInSubpass = state->completedTilesInSubpass;
+    out_snapshot->totalTilesInSubpass = state->totalTilesInSubpass;
+    out_snapshot->progress01 = runtime_native_3d_progress_hud_progress01();
+}
+
 void RuntimeNative3DProgressHUD_Draw(SDL_Renderer* renderer) {
     RuntimeNative3DProgressHUDState* state = &g_runtime_native_3d_progress_hud;
     RenderContext* ctx = getRenderContext();

@@ -46,6 +46,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading_background.o \
 	$(BUILD_DIR)/render/runtime_native_3d_preview_reconstruction.o \
+	$(BUILD_DIR)/render/runtime_native_3d_prepare_diagnostics.o \
 	$(BUILD_DIR)/render/runtime_native_3d_resolution.o \
 	$(BUILD_DIR)/render/runtime_native_3d_temporal_accum.o \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_occupancy.o \
@@ -120,6 +121,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(KIT_RUNTIME_DIAG_OBJS)
 
 RAY_TRACING_RENDER_HEADLESS_DEPS = \
+	$(BUILD_DIR)/app/ray_tracing_request_utils.o \
 	$(BUILD_DIR)/app/agent_render_request.o \
 	$(BUILD_DIR)/render/adapters/timer_hud_headless_stub.o \
 	$(BUILD_DIR)/tools/make_video.o \
@@ -135,8 +137,10 @@ RAY_TRACING_JOB_RUNNER_DEPS = \
 	$(RAY_TRACING_RENDER_HEADLESS_DEPS)
 
 RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_DEPS = \
+	$(BUILD_DIR)/app/ray_tracing_request_utils.o \
 	$(BUILD_DIR)/app/material_preview_request.o \
 	$(BUILD_DIR)/app/material_preview_headless.o \
+	$(BUILD_DIR)/render/adapters/timer_hud_headless_stub.o \
 	$(BUILD_DIR)/editor/material_preview_surface_eval.o \
 	$(BUILD_DIR)/editor/scene_editor_material_face_metrics.o \
 	$(NATIVE3D_AUDIT_DEPS)

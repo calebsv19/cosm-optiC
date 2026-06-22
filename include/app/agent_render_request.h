@@ -36,6 +36,10 @@ typedef struct RayTracingAgentRenderRequest {
     bool has_sampling_window;
     int sampling_frame_offset;
     int sampling_frame_count;
+    bool has_resource_budget;
+    int resource_cpu_percent;
+    int resource_max_workers;
+    int resource_reserve_cpu_count;
     RayTracing3DIntegratorId integrator_3d;
     bool has_integrator_3d_override;
     int inspection_preset;

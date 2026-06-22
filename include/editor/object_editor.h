@@ -57,6 +57,8 @@ bool CheckObjectClick(double mx, double my);
 int ObjectEditorGetSelectedObjectIndex(void);
 int ObjectEditorGetLastSelectedObjectIndex(void);
 void ObjectEditorSetSelectedObjectIndex(int index);
+int ObjectEditorGetSelectedMaterialIndex(void);
+void ObjectEditorSetSelectedMaterialIndex(int material_id);
 void ObjectEditorAssignMaterialToSelected(int material_id);
 void ObjectEditorAssignColorToSelected(int packed_color);
 void ObjectEditorAssignAlphaToSelected(double alpha);

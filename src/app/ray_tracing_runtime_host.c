@@ -8,6 +8,7 @@
 #include "render/timer_hud_api.h"
 #include "render/vk_shared_device.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -22,7 +23,13 @@ typedef struct RayTracingRuntimeHostState {
     bool timer_hud_session_ready;
 } RayTracingRuntimeHostState;
 
+typedef struct RayTracingRuntimeHostFailure {
+    char stage[64];
+    char detail[256];
+} RayTracingRuntimeHostFailure;
+
 static RayTracingRuntimeHostState g_runtime_host = {0};
+static RayTracingRuntimeHostFailure g_runtime_host_last_failure = {0};
 
 #if USE_VULKAN
 static VkRenderer g_runtime_host_renderer_storage;
@@ -32,9 +39,86 @@ static void ray_tracing_runtime_host_reset_state(void) {
     memset(&g_runtime_host, 0, sizeof(g_runtime_host));
 }
 
+static void ray_tracing_runtime_host_clear_last_failure(void) {
+    memset(&g_runtime_host_last_failure, 0, sizeof(g_runtime_host_last_failure));
+}
+
+static void ray_tracing_runtime_host_set_last_failure(const char *stage,
+                                                      const char *format,
+                                                      ...) {
+    va_list args;
+    snprintf(g_runtime_host_last_failure.stage,
+             sizeof(g_runtime_host_last_failure.stage),
+             "%s",
+             stage ? stage : "unknown");
+    if (!format) {
+        snprintf(g_runtime_host_last_failure.detail,
+                 sizeof(g_runtime_host_last_failure.detail),
+                 "unknown");
+        return;
+    }
+    va_start(args, format);
+    vsnprintf(g_runtime_host_last_failure.detail,
+              sizeof(g_runtime_host_last_failure.detail),
+              format,
+              args);
+    va_end(args);
+}
+
+void ray_tracing_runtime_host_snapshot(RayTracingRuntimeHostSnapshot *out_snapshot) {
+    if (!out_snapshot) return;
+    memset(out_snapshot, 0, sizeof(*out_snapshot));
+    out_snapshot->sdl_ready = g_runtime_host.sdl_ready;
+    out_snapshot->window_ready = g_runtime_host.window_ready;
+    out_snapshot->shared_device_ready = g_runtime_host.shared_device_ready;
+    out_snapshot->renderer_ready = g_runtime_host.renderer_ready;
+    out_snapshot->render_context_ready = g_runtime_host.render_context_ready;
+    out_snapshot->font_runtime_attached = g_runtime_host.font_runtime_attached;
+    out_snapshot->font_system_ready = g_runtime_host.font_system_ready;
+    out_snapshot->timer_hud_session_ready = g_runtime_host.timer_hud_session_ready;
+    out_snapshot->any_resource_ready =
+        out_snapshot->sdl_ready ||
+        out_snapshot->window_ready ||
+        out_snapshot->shared_device_ready ||
+        out_snapshot->renderer_ready ||
+        out_snapshot->render_context_ready ||
+        out_snapshot->font_runtime_attached ||
+        out_snapshot->font_system_ready ||
+        out_snapshot->timer_hud_session_ready ||
+        window != NULL ||
+        renderer != NULL;
+    snprintf(out_snapshot->last_failure_stage,
+             sizeof(out_snapshot->last_failure_stage),
+             "%s",
+             g_runtime_host_last_failure.stage);
+    snprintf(out_snapshot->last_failure_detail,
+             sizeof(out_snapshot->last_failure_detail),
+             "%s",
+             g_runtime_host_last_failure.detail);
+}
+
+bool ray_tracing_runtime_host_is_clean(void) {
+    RayTracingRuntimeHostSnapshot snapshot;
+    ray_tracing_runtime_host_snapshot(&snapshot);
+    return !snapshot.any_resource_ready;
+}
+
+const char *ray_tracing_runtime_host_last_failure_stage(void) {
+    return g_runtime_host_last_failure.stage;
+}
+
+const char *ray_tracing_runtime_host_last_failure_detail(void) {
+    return g_runtime_host_last_failure.detail;
+}
+
 static int ray_tracing_runtime_host_init_sdl(void) {
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-        fprintf(stderr, "SDL_Init Error: %s\n", SDL_GetError());
+        ray_tracing_runtime_host_set_last_failure("sdl_init",
+                                                  "SDL_Init failed: %s",
+                                                  SDL_GetError());
+        fprintf(stderr,
+                "ray_tracing_runtime_host: stage=sdl_init error=%s\n",
+                ray_tracing_runtime_host_last_failure_detail());
         return 0;
     }
     g_runtime_host.sdl_ready = true;
@@ -49,7 +133,14 @@ static int ray_tracing_runtime_host_create_window(int window_width, int window_h
                               window_height,
                               SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN | SDL_WINDOW_ALLOW_HIGHDPI);
     if (!window) {
-        fprintf(stderr, "SDL_CreateWindow Error: %s\n", SDL_GetError());
+        ray_tracing_runtime_host_set_last_failure("window_create",
+                                                  "SDL_CreateWindow failed width=%d height=%d: %s",
+                                                  window_width,
+                                                  window_height,
+                                                  SDL_GetError());
+        fprintf(stderr,
+                "ray_tracing_runtime_host: stage=window_create error=%s\n",
+                ray_tracing_runtime_host_last_failure_detail());
         return 0;
     }
     g_runtime_host.window_ready = true;
@@ -70,28 +161,48 @@ static int ray_tracing_runtime_host_create_renderer(int window_width, int window
     cfg.clear_color[3] = 1.0f;
 
     if (!vk_shared_device_init(window, &cfg)) {
-        fprintf(stderr, "vk_shared_device_init failed.\n");
+        ray_tracing_runtime_host_set_last_failure("vulkan_shared_device_init",
+                                                  "vk_shared_device_init failed");
+        fprintf(stderr,
+                "ray_tracing_runtime_host: stage=vulkan_shared_device_init error=%s\n",
+                ray_tracing_runtime_host_last_failure_detail());
         return 0;
     }
     g_runtime_host.shared_device_ready = true;
 
     shared_device = vk_shared_device_get();
     if (!shared_device) {
-        fprintf(stderr, "vk_shared_device_get failed.\n");
+        ray_tracing_runtime_host_set_last_failure("vulkan_shared_device_get",
+                                                  "vk_shared_device_get failed");
+        fprintf(stderr,
+                "ray_tracing_runtime_host: stage=vulkan_shared_device_get error=%s\n",
+                ray_tracing_runtime_host_last_failure_detail());
         return 0;
     }
 
     init = vk_renderer_init_with_device(&g_runtime_host_renderer_storage, shared_device, window, &cfg);
     if (init != VK_SUCCESS) {
-        fprintf(stderr, "vk_renderer_init failed: %d\n", init);
+        ray_tracing_runtime_host_set_last_failure("vulkan_renderer_init",
+                                                  "vk_renderer_init failed result=%d",
+                                                  (int)init);
+        fprintf(stderr,
+                "ray_tracing_runtime_host: stage=vulkan_renderer_init error=%s\n",
+                ray_tracing_runtime_host_last_failure_detail());
         return 0;
     }
     renderer = (SDL_Renderer*)&g_runtime_host_renderer_storage;
     vk_renderer_set_logical_size((VkRenderer*)renderer, (float)window_width, (float)window_height);
 #else
+    (void)window_width;
+    (void)window_height;
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!renderer) {
-        fprintf(stderr, "SDL_CreateRenderer Error: %s\n", SDL_GetError());
+        ray_tracing_runtime_host_set_last_failure("sdl_renderer_create",
+                                                  "SDL_CreateRenderer failed: %s",
+                                                  SDL_GetError());
+        fprintf(stderr,
+                "ray_tracing_runtime_host: stage=sdl_renderer_create error=%s\n",
+                ray_tracing_runtime_host_last_failure_detail());
         return 0;
     }
 #endif
@@ -107,7 +218,11 @@ static int ray_tracing_runtime_host_attach_runtime_contract(int window_width, in
     g_runtime_host.font_runtime_attached = true;
 
     if (!initFontSystem()) {
-        fprintf(stderr, "[runtime_host] Failed to initialise font system.\n");
+        ray_tracing_runtime_host_set_last_failure("font_system_init",
+                                                  "initFontSystem failed");
+        fprintf(stderr,
+                "ray_tracing_runtime_host: stage=font_system_init error=%s\n",
+                ray_tracing_runtime_host_last_failure_detail());
         return 0;
     }
     g_runtime_host.font_system_ready = true;
@@ -124,6 +239,7 @@ int ray_tracing_runtime_host_init(int window_width, int window_height) {
         ray_tracing_runtime_host_shutdown();
     }
     ray_tracing_runtime_host_reset_state();
+    ray_tracing_runtime_host_clear_last_failure();
 
     if (!ray_tracing_runtime_host_init_sdl()) {
         ray_tracing_runtime_host_shutdown();

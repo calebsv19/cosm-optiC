@@ -11,7 +11,6 @@
 #include "geo/shape_library.h"
 #include "scene/object_manager.h"
 
-extern int selectedObjectIndex;
 extern int handleRadius;
 extern bool draggingRotationHandle;
 extern double lastWorldX;
@@ -42,7 +41,6 @@ extern char importNames[][256];
 extern int importCount;
 extern SDL_Rect materialPanelRect;
 extern SDL_Rect materialCollapseRect;
-extern int selectedMaterialIndex;
 extern bool assetsCollapsed;
 extern bool materialsCollapsed;
 extern int assetScroll;

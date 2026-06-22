@@ -128,6 +128,77 @@ static int test_agent_render_request_denoise_override_roundtrip(void) {
     return 0;
 }
 
+static int test_agent_render_request_resource_budget_roundtrip(void) {
+    char request_path[PATH_MAX];
+    char diagnostics[256];
+    RayTracingAgentRenderRequest request;
+    const char* json_text =
+        "{\n"
+        "  \"schema_version\": \"ray_tracing_agent_render_request_v1\",\n"
+        "  \"run_id\": \"resource_budget_test\",\n"
+        "  \"scene\": {\"runtime_scene_path\": \"scene_runtime.json\"},\n"
+        "  \"resources\": {\n"
+        "    \"cpu_percent\": 50,\n"
+        "    \"max_workers\": 2,\n"
+        "    \"reserve_cpu_count\": 1\n"
+        "  }\n"
+        "}\n";
+
+    snprintf(request_path,
+             sizeof(request_path),
+             "%s",
+             "/tmp/ray_tracing_agent_render_resource_budget_request.json");
+    assert_true("agent_render_resource_budget_request_write",
+                write_text_file(request_path, json_text));
+    assert_true("agent_render_resource_budget_request_load",
+                ray_tracing_agent_render_request_load_file(request_path,
+                                                           &request,
+                                                           diagnostics,
+                                                           sizeof(diagnostics)));
+    assert_true("agent_render_resource_budget_present", request.has_resource_budget);
+    assert_true("agent_render_resource_budget_cpu_percent",
+                request.resource_cpu_percent == 50);
+    assert_true("agent_render_resource_budget_max_workers",
+                request.resource_max_workers == 2);
+    assert_true("agent_render_resource_budget_reserve",
+                request.resource_reserve_cpu_count == 1);
+    unlink(request_path);
+    return 0;
+}
+
+static int test_agent_render_request_resource_budget_env_default(void) {
+    char request_path[PATH_MAX];
+    char diagnostics[256];
+    RayTracingAgentRenderRequest request;
+    const char* json_text =
+        "{\n"
+        "  \"schema_version\": \"ray_tracing_agent_render_request_v1\",\n"
+        "  \"run_id\": \"resource_budget_env_test\",\n"
+        "  \"scene\": {\"runtime_scene_path\": \"scene_runtime.json\"}\n"
+        "}\n";
+
+    snprintf(request_path,
+             sizeof(request_path),
+             "%s",
+             "/tmp/ray_tracing_agent_render_resource_budget_env_request.json");
+    assert_true("agent_render_resource_budget_env_request_write",
+                write_text_file(request_path, json_text));
+    setenv("CODEWORK_RAY_TRACING_DEFAULT_CPU_PERCENT", "40", 1);
+    assert_true("agent_render_resource_budget_env_request_load",
+                ray_tracing_agent_render_request_load_file(request_path,
+                                                           &request,
+                                                           diagnostics,
+                                                           sizeof(diagnostics)));
+    unsetenv("CODEWORK_RAY_TRACING_DEFAULT_CPU_PERCENT");
+    assert_true("agent_render_resource_budget_env_present", request.has_resource_budget);
+    assert_true("agent_render_resource_budget_env_cpu_percent",
+                request.resource_cpu_percent == 40);
+    assert_true("agent_render_resource_budget_env_max_workers",
+                request.resource_max_workers == 0);
+    unlink(request_path);
+    return 0;
+}
+
 static int test_agent_render_request_environment_lighting_overrides(void) {
     char request_path[PATH_MAX];
     char diagnostics[256];
@@ -976,6 +1047,8 @@ int run_test_config_animation_settings_export_suite(void) {
     test_animation_integrator_split_roundtrip_and_default_3d();
     test_agent_render_request_disney_v2_integrator_label_roundtrip();
     test_agent_render_request_denoise_override_roundtrip();
+    test_agent_render_request_resource_budget_roundtrip();
+    test_agent_render_request_resource_budget_env_default();
     test_agent_render_request_environment_lighting_overrides();
     test_animation_native_3d_temporal_frames_roundtrip_and_clamp();
     test_animation_native_3d_bounce_depth_and_roulette_roundtrip_and_clamp();

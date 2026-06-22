@@ -126,9 +126,10 @@ static void DeleteSelected(void) {
         }
         return;
     }
-    if (selectedObjectIndex != -1) {
-        printf("Deleting Object %d\n", selectedObjectIndex);
-        ObjectEditorDeleteObjectIndex(selectedObjectIndex);
+    int selected_index = ObjectEditorGetSelectedObjectIndex();
+    if (selected_index != -1) {
+        printf("Deleting Object %d\n", selected_index);
+        ObjectEditorDeleteObjectIndex(selected_index);
         activeMaterialSlider = OBJECT_EDITOR_PANEL_SLIDER_NONE;
     }
 }
@@ -210,8 +211,9 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
             ObjectEditorSetSelectedObjectIndex(object_list_index);
             selectedAssetIndex = -1;
             activeMaterialSlider = OBJECT_EDITOR_PANEL_SLIDER_NONE;
-            if (selectedObjectIndex >= 0 && selectedObjectIndex < sceneSettings.objectCount) {
-                selectedMaterialIndex = sceneSettings.sceneObjects[selectedObjectIndex].material_id;
+            int selected_index = ObjectEditorGetSelectedObjectIndex();
+            if (selected_index >= 0 && selected_index < sceneSettings.objectCount) {
+                ObjectEditorSetSelectedMaterialIndex(sceneSettings.sceneObjects[selected_index].material_id);
             }
             return;
         }
@@ -286,7 +288,7 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
             if (!materialsCollapsed) {
                 int idx = ObjectEditorPanels_MaterialIndexAtPoint(mx, my);
                 if (idx >= 0 && idx < MaterialManagerCount()) {
-                    selectedMaterialIndex = idx;
+                    ObjectEditorSetSelectedMaterialIndex(idx);
                     ObjectEditorAssignMaterialToSelected(idx);
                     return;
                 }
@@ -405,8 +407,9 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
 
         if (CheckObjectClick(worldX, worldY)) {
             selectedAssetIndex = -1;
-            if (selectedObjectIndex >= 0 && selectedObjectIndex < sceneSettings.objectCount) {
-                selectedMaterialIndex = sceneSettings.sceneObjects[selectedObjectIndex].material_id;
+            int selected_index = ObjectEditorGetSelectedObjectIndex();
+            if (selected_index >= 0 && selected_index < sceneSettings.objectCount) {
+                ObjectEditorSetSelectedMaterialIndex(sceneSettings.sceneObjects[selected_index].material_id);
             }
             return;
         }
@@ -415,7 +418,7 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
             !ObjectEditorAddToolActive() &&
             !ObjectEditorDeleteToolActive() &&
             !polygonCreationActive &&
-            selectedObjectIndex == -1) {
+            ObjectEditorGetSelectedObjectIndex() == -1) {
             viewportPanDragging = true;
             viewportPanLastMouseX = mx;
             viewportPanLastMouseY = my;
@@ -433,7 +436,7 @@ void HandleObjectEditorMouseDrag(SDL_Event* event) {
         double worldY = worldPoint.y;
 
         if (viewportPanDragging &&
-            selectedObjectIndex == -1 &&
+            ObjectEditorGetSelectedObjectIndex() == -1 &&
             !draggingRotationHandle) {
             PanViewportObjectByScreenDelta(viewportPanLastMouseX,
                                            viewportPanLastMouseY,
@@ -449,8 +452,14 @@ void HandleObjectEditorMouseDrag(SDL_Event* event) {
                 ObjectEditorApplySliderValueToSelected(activeMaterialSlider,
                                                        slider_value);
             }
-        } else if (selectedObjectIndex != -1) {
-            SceneObject* obj = &sceneSettings.sceneObjects[selectedObjectIndex];
+        } else {
+            int selected_index = ObjectEditorGetSelectedObjectIndex();
+            if (selected_index == -1) {
+                lastWorldX = worldX;
+                lastWorldY = worldY;
+                return;
+            }
+            SceneObject* obj = &sceneSettings.sceneObjects[selected_index];
 
             if (draggingRotationHandle) {
                 double newAngle = atan2(worldY - obj->y, worldX - obj->x);

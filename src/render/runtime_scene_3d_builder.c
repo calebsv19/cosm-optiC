@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static char gRuntimeScene3DBuilderLastDiagnostics[256] = "ok";
+static char gRuntimeScene3DBuilderLastDiagnostics[4096] = "ok";
 
 static void runtime_scene_3d_builder_set_diag(const char* message) {
     snprintf(gRuntimeScene3DBuilderLastDiagnostics,
@@ -97,7 +97,7 @@ static bool runtime_scene_3d_builder_rebuild_bvh(RuntimeScene3D* scene) {
         return false;
     }
     if (!RuntimeTriangleMesh3D_BuildBVH(&scene->triangleMesh)) {
-        char diag[512];
+        char diag[2048];
         snprintf(diag,
                  sizeof(diag),
                  "bvh rebuild failed: %s",
@@ -951,7 +951,7 @@ bool RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(RuntimeScene3D* scene, double
                                                                        &seed_state,
                                                                        normalized_t,
                                                                        false)) {
-        char diag[512];
+        char diag[2048];
         const char* lower_diag = RuntimeScene3DBuilder_LastDiagnostics();
         snprintf(diag,
                  sizeof(diag),
@@ -969,7 +969,7 @@ bool RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(RuntimeScene3D* scene, double
     mesh_instance_count = mesh_assets ? mesh_assets->instance_count : -1;
     mesh_asset_count = mesh_assets ? mesh_assets->asset_count : -1;
     if (!runtime_scene_3d_builder_append_mesh_asset_set(scene, mesh_assets, false)) {
-        char diag[512];
+        char diag[2048];
         const char* lower_diag = RuntimeScene3DBuilder_LastDiagnostics();
         snprintf(diag,
                  sizeof(diag),
@@ -983,7 +983,7 @@ bool RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(RuntimeScene3D* scene, double
         return false;
     }
     if (!scene || scene->primitiveCount <= 0 || scene->triangleMesh.triangleCount <= 0) {
-        char diag[512];
+        char diag[2048];
         snprintf(diag,
                  sizeof(diag),
                  "bridge geometry unavailable: seed_valid=%s seed_primitive_count=%d seed_plane_count=%d seed_rect_prism_count=%d seed_excluded_count=%d mesh_instance_count=%d mesh_asset_count=%d",
@@ -998,7 +998,7 @@ bool RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(RuntimeScene3D* scene, double
         return false;
     }
     if (!runtime_scene_3d_builder_rebuild_bvh(scene)) {
-        char diag[512];
+        char diag[4096];
         const char* lower_diag = RuntimeScene3DBuilder_LastDiagnostics();
         snprintf(diag,
                  sizeof(diag),

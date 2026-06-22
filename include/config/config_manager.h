@@ -220,6 +220,16 @@ typedef struct {
 extern AnimationConfig animSettings;
 extern SceneConfig sceneSettings;
 
+typedef struct AnimationConfigSceneSourceState {
+    int source;
+    bool useFluidScene;
+    char fluidManifest[PATH_MAX];
+    char runtimeScenePath[PATH_MAX];
+    bool volumeInteractionEnabled;
+    int volumeSourceKind;
+    char volumeSourcePath[PATH_MAX];
+} AnimationConfigSceneSourceState;
+
 // Function prototypes
 void SaveAllSettings(void);
 void LoadAllSettings(void);
@@ -244,5 +254,16 @@ int animation_config_space_mode_clamp(int mode);
 int animation_config_scene_source_clamp(int source);
 int animation_config_volume_source_kind_clamp(int kind);
 bool animation_config_scene_source_is_fluid(int source);
+void animation_config_scene_source_state_capture(const AnimationConfig* cfg,
+                                                 AnimationConfigSceneSourceState* out_state);
+void animation_config_scene_source_state_restore(AnimationConfig* cfg,
+                                                 const AnimationConfigSceneSourceState* state);
+bool animation_config_set_scene_source_selection(AnimationConfig* cfg,
+                                                int source,
+                                                const char* path);
+bool animation_config_set_volume_source_selection(AnimationConfig* cfg,
+                                                 int kind,
+                                                 const char* path);
+void animation_config_clear_volume_source_selection(AnimationConfig* cfg);
 
 #endif // CONFIG_MANAGER_H
