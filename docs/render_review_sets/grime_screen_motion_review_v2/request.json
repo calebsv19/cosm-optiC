@@ -1,45 +1,45 @@
 {
-  "schema_version": "ray_tracing_agent_render_request_v1",
-  "run_id": "grime_screen_motion_review_v2",
-  "scene": {
-    "runtime_scene_path": "line_drawing/scene_runtime.json"
-  },
-  "volume": {
-    "enabled": false
-  },
-  "render": {
-    "start_frame": 0,
-    "frame_count": 6,
-    "width": 640,
-    "height": 384,
-    "normalized_t": 0.50,
-    "temporal_frames": 4,
-    "integrator_3d": "disney"
-  },
   "inspection": {
-    "light_intensity": 2.2,
-    "light_radius": 0.14,
-    "forward_decay": 180.0,
-    "environment_brightness": 0.0,
-    "camera_position": {
-      "x": -4.6,
-      "y": -6.2,
-      "z": 2.3
-    },
-    "has_camera_position_override": true,
     "camera_look_at": {
       "x": 0.8,
       "y": 0.2,
       "z": 1.0
     },
-    "has_camera_look_at_override": true
+    "camera_position": {
+      "x": -4.6,
+      "y": -6.2,
+      "z": 2.3
+    },
+    "environment_brightness": 0.0,
+    "forward_decay": 180.0,
+    "has_camera_look_at_override": true,
+    "has_camera_position_override": true,
+    "light_intensity": 2.2,
+    "light_radius": 0.14
   },
   "output": {
-    "root": "ray_tracing/output",
-    "overwrite": true
+    "overwrite": true,
+    "root": "ray_tracing/output"
   },
   "progress": {
-    "summary_path": "ray_tracing/render_summary.json",
-    "progress_path": "ray_tracing/render_progress.json"
+    "progress_path": "ray_tracing/render_progress.json",
+    "summary_path": "ray_tracing/render_summary.json"
+  },
+  "render": {
+    "frame_count": 6,
+    "height": 384,
+    "integrator_3d": "disney",
+    "normalized_t": 0.5,
+    "start_frame": 0,
+    "temporal_frames": 4,
+    "width": 640
+  },
+  "run_id": "grime_screen_motion_review_v2",
+  "scene": {
+    "runtime_scene_path": "line_drawing/scene_runtime.json"
+  },
+  "schema_version": "ray_tracing_agent_render_request_v1",
+  "volume": {
+    "enabled": false
   }
 }

@@ -1,48 +1,48 @@
 {
-  "schema_version": "ray_tracing_agent_render_request_v1",
-  "run_id": "disney_v2_d218_primitive_glass_corridor_raw_single",
-  "scene": {
-    "runtime_scene_path": "/Users/calebsv/Desktop/CodeWork/ray_tracing/config/samples/ps4d_runtime_scene_visual_test.json"
-  },
-  "volume": {
-    "enabled": false
-  },
-  "render": {
-    "start_frame": 0,
-    "frame_count": 1,
-    "width": 320,
-    "height": 180,
-    "normalized_t": 0.0,
-    "temporal_frames": 1,
-    "integrator_3d": "disney_v2"
-  },
   "inspection": {
-    "preset": "glass_review",
-    "camera_position": {
-      "x": -7.0,
-      "y": 1.0,
-      "z": 3.5
-    },
+    "ambient_strength": 0.28,
     "camera_look_at": {
       "x": 0.25,
       "y": 0.25,
       "z": 0.25
     },
+    "camera_position": {
+      "x": -7.0,
+      "y": 1.0,
+      "z": 3.5
+    },
     "camera_zoom": 0.95,
     "environment_light_mode": "ambient",
-    "ambient_strength": 0.28,
-    "top_fill_strength": 1.4,
     "light_intensity": 4.4,
     "light_radius": 0.18,
+    "preset": "glass_review",
     "secondary_diffuse_samples_3d": 8,
+    "top_fill_strength": 1.4,
     "transmission_samples_3d": 8
   },
   "output": {
-    "root": "/Users/calebsv/Desktop/CodeWork/ray_tracing/build/agent_runs/ray_tracing/disney_v2_d218_denoise_visual_proof/raw_single",
-    "overwrite": true
+    "overwrite": true,
+    "root": "<redacted-local-path:raw_single>"
   },
   "progress": {
-    "summary_path": "/Users/calebsv/Desktop/CodeWork/ray_tracing/build/agent_runs/ray_tracing/disney_v2_d218_denoise_visual_proof/raw_single/render_summary.json",
-    "progress_path": "/Users/calebsv/Desktop/CodeWork/ray_tracing/build/agent_runs/ray_tracing/disney_v2_d218_denoise_visual_proof/raw_single/render_progress.json"
+    "progress_path": "<redacted-local-path:render_progress.json>",
+    "summary_path": "<redacted-local-path:render_summary.json>"
+  },
+  "render": {
+    "frame_count": 1,
+    "height": 180,
+    "integrator_3d": "disney_v2",
+    "normalized_t": 0.0,
+    "start_frame": 0,
+    "temporal_frames": 1,
+    "width": 320
+  },
+  "run_id": "disney_v2_d218_primitive_glass_corridor_raw_single",
+  "scene": {
+    "runtime_scene_path": "<redacted-local-path:ps4d_runtime_scene_visual_test.json>"
+  },
+  "schema_version": "ray_tracing_agent_render_request_v1",
+  "volume": {
+    "enabled": false
   }
 }
