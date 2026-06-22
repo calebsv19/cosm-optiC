@@ -120,6 +120,10 @@ Current verification contract:
   - currently routes through `test-stable` rather than a separate runtime-only lane
 - `make -C ray_tracing visual-harness`
   - build-only readiness gate, not an unattended execution surface
+- `make -C ray_tracing visual-artifact`
+  - unattended source-run first-frame proof; renders and validates
+    `ray_tracing/visual_artifacts/source_first_frame/frames/frame_0000.bmp`
+    and writes metrics beside it under the ignored `visual_artifacts/` root
 - `make -C ray_tracing test-legacy`
 - `make -C ray_tracing package-linux-worker-self-test`
 - `make -C ray_tracing package-desktop-self-test`

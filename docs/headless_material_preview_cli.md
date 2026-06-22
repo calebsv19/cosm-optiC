@@ -136,10 +136,17 @@ sh ray_tracing/tools/publish_material_preview_set.sh \
   --title "Grime Overlay Sweep v1"
 ```
 
+The `set_id` is validated as one path segment before repo-doc publication. Use
+letters, numbers, dot, underscore, or dash; slashes, traversal segments, and
+leading dash values are rejected.
+
 That lane writes:
 
-- `request.json`
+- redacted `request.json`
 - `preview.bmp`
 - optional `preview.png`
-- `summary.json`
+- redacted `summary.json`
 - `index.md` with left-to-right, top-to-bottom variant order
+
+The full request/summary artifacts remain at their source paths. Repo-doc
+copies redact local/private paths before publication.

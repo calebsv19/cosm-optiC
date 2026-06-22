@@ -1,6 +1,6 @@
 # optiC Current Truth
 
-Last updated: 2026-06-18
+Last updated: 2026-06-19
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -518,6 +518,51 @@ Last updated: 2026-06-18
   - `test-ray-tracing-render-headless-water-moving-light-review` runs the WTR-5.4 headless sequence proof: PhysicsSim exports a warmed/rippled Water Basin, RayTracing renders four consecutive transparent-water frames (`0008..0011`) with an authored moving light path, and the test verifies both water height evolution and measurable frame-to-frame image deltas under `ray_tracing/build/agent_runs/physics_trio/water_moving_light_review/`
   - `test-ray-tracing-render-headless-water-long-motion-review` runs the WTR-5.5 long-motion sparse-frame proof: PhysicsSim exports `201` Water Basin frames with `4` sim steps per frame, samples frames `40, 80, 120, 160, 200`, and renders full RayTracing basin BMP frames plus a contact sheet from `scene_bundle.json.water_source` under `ray_tracing/build/agent_runs/physics_trio/water_long_motion_review/`; this is the readable long-time-separation proof before WTR-6, while full-length video/output throughput remains later work
   - `test-ray-tracing-render-headless-water-object-coupling-review` runs the WTR-6 object-water proof: PhysicsSim exports a `water_pool_submerged_solid` Water Basin, RayTracing renders full basin frames `0008`, `0018`, and `0027` from `scene_bundle.json.water_source` with a visible block object, verifies object audit hits, water mesh attachment, secondary water hits, and frame deltas, and writes BMP frames plus `water_object_coupling_review.mp4` under `ray_tracing/build/agent_runs/physics_trio/water_object_coupling_review/`
+  - `test-ray-tracing-render-headless-water-object-coupling-long-review` adds the WTR-6.4 long-review path. Its default `smoke` profile proves warm-up plus stride-sampled object-water rendering; `WTR6_LONG_PROFILE=full` is the intended expensive review profile with `200` warm-up PhysicsSim frames, `100` rendered RayTracing frames, stride `5`, selected water frames `200..695`, and a looped overhead light path. The full profile is operator-invoked and is not part of routine smoke.
+  - WTR-6.5 direct-light smoothed-wake preview passed with the current
+    toolchain-built headless renderer under
+    `ray_tracing/build/agent_runs/physics_trio/water_object_coupling_wtr65_direct_light_preview/`;
+    the run rendered selected frames `12, 16, 20, 24, 28` at `320x240`,
+    temporal-1/direct-light, verified stable block primary hits,
+    transparent-water secondary hits, nonzero image deltas, `776`
+    displacement samples, and zero capped displacement samples, and wrote
+    `ray_tracing/frames/water_object_coupling_long_review.mp4`.
+  - WTR-6.5 short Disney-v2 temporal-2 comparison also passed with a matched
+    direct-light baseline under
+    `ray_tracing/build/agent_runs/physics_trio/water_object_coupling_wtr65_direct_light_short_compare/`
+    and
+    `ray_tracing/build/agent_runs/physics_trio/water_object_coupling_wtr65_disney_v2_t2_short_compare/`;
+    both used selected frames `12, 18, 24` at `240x180` with `0.035 m`
+    review ripples. Disney-v2 summaries reported `integrator_3d: disney_v2`
+    and `render.temporal_frames: 2`; the comparison summary is
+    `ray_tracing/build/agent_runs/physics_trio/water_object_coupling_wtr65_disney_v2_t2_short_comparison_summary.json`.
+  - WTR-6.6 now has a dry-run cache-first preview-matrix planner:
+    `ray_tracing/tools/wtr66_preview_matrix_planner.py`. The planner writes a
+    planned PhysicsSim cache manifest, selected-frame lists, render request
+    JSONs, variant summaries, and a matrix summary under
+    `ray_tracing/build/agent_runs/physics_trio/wtr66_preview_matrix_dry_run/`
+    without launching PhysicsSim or RayTracing. The gate
+    `test-ray-tracing-wtr66-preview-matrix-planner-dry-run` proves the default
+    direct-light and Disney-v2 temporal-2 variants reuse the same planned
+    `scene_bundle.json` cache path.
+  - WTR-6.6B locally validates that cache-first plan through the detached job
+    runner: `test-ray-tracing-wtr66-preview-matrix-local-job-runner` executes
+    one `120`-frame PhysicsSim cache, submits direct-light and Disney-v2
+    temporal-2 variants over frames `12, 18, 24`, and writes
+    `ray_tracing/build/agent_runs/physics_trio/wtr66_preview_matrix_local_job_runner/local_job_runner_execution_summary.json`.
+    The readback checks completed jobs, rendered frames, requested integrator
+    and temporal-frame values, water mesh attachment, loaded water frame
+    indices, nonzero block primary hits, and nonzero secondary hits. The gate
+    prefers the current clang job-runner binary before legacy `build/<arch>`
+    paths to avoid stale-binary ambiguity.
+  - local WTR-6.4 artifact review also proved a corrected `100`-frame
+    Disney-v2 temporal-2 slow-light render from the existing high-quality
+    PhysicsSim VF3D cache under
+    `ray_tracing/build/agent_runs/physics_trio/water_object_coupling_hq_local_64/ray_tracing_disney_v2_local_t2_100f_slowlight_corrected/`;
+    all `100` summaries reported `integrator_3d: disney_v2`, native `3D`,
+    volume attached, and water surface mesh attached. The sibling
+    `ray_tracing_disney_v2_local_t2_100f_slowlight/` root is preserved as an
+    actual direct-light artifact because it used a stale May binary.
   - generic runtime-scene light/camera seeds from `transform.position` are promoted into the native `3D` route, matching LineDrawing-generated scene shape
   - runtime-scene camera seeds now also accept authored orientation fields (`yaw` / `rotation_z` / `transform.rotation.z`, plus optional pitch fields), and when no camera orientation is authored the native `3D` render auto-aims the seeded camera toward the built scene center so headless runtime-scene exports do not fall into all-black horizontal views
   - authored moving-camera scenes now also accept `extensions.ray_tracing.authoring.camera_focus_target = { x, y, z }`; when present, headless runtime-scene sampling preserves authored camera-path translation/depth motion but recomputes yaw/pitch toward that focus target each sample, which is safer than hand-authoring moving camera orientation curves
@@ -668,7 +713,7 @@ Last updated: 2026-06-18
   - headless render requests now support `render.denoise_enabled` as a
     detached-run override, and summaries serialize `denoise.*` plus
     `render_stats.denoise_*` counters for Disney-v2 visual-matrix comparisons
-  - detached local supervision now has a first RayTracing adapter through `make -C ray_tracing ray-tracing-job-runner`, with `submit`, `status`, and `cancel` commands that stage canonicalized absolute-path request files into `build/agent_runs/jobs/<job_id>/`, then supervise `ray_tracing_render_headless` through `job_status.json`, `render_progress.json`, `stdout.log`, `stderr.log`, `pid.txt`, and `result_summary.json`
+  - detached local supervision now has a first RayTracing adapter through `make -C ray_tracing ray-tracing-job-runner`, with `submit`, `status`, and `cancel` commands that stage canonicalized absolute-path request files into `build/agent_runs/jobs/<job_id>/`, then supervise `ray_tracing_render_headless` through `job_status.json`, `render_progress.json`, `stdout.log`, `stderr.log`, `pid.txt`, and `result_summary.json`; detached path policy requires absolute existing `--jobs-root` overrides, safe one-segment job ids, and absolute non-root direct request `output.root` paths while bundle artifacts remain job-local under `<job_root>/output/artifacts`
   - the first trio detached chain adapter now routes into that runner through
     `bin/run_trio_detached_job_chain.sh`, which waits on detached PhysicsSim
     completion and auto-submits the RayTracing child once the exported
@@ -706,8 +751,9 @@ Last updated: 2026-06-18
     grime/oil sweeps without rewriting the authored scene stack
   - `ray_tracing/tools/publish_material_preview_set.sh` now publishes one
     generated request into `ray_tracing/docs/material_preview_sets/<set_id>/`
-    with `request.json`, `preview.bmp`, optional `preview.png`, `summary.json`,
-    and an `index.md` that records left-to-right / top-to-bottom variant order
+    with redacted `request.json`, `preview.bmp`, optional `preview.png`,
+    redacted `summary.json`, and an `index.md` that records left-to-right /
+    top-to-bottom variant order
   - local repo-doc publication and live website publication are now explicitly
     separate lanes:
     - `ray_tracing/tools/publish_render_review_set.sh` and
@@ -723,6 +769,18 @@ Last updated: 2026-06-18
       that wrapper and can infer the latest completed run root, its last frame,
       a default set id, and a humanized title for routine publish-after-render
       work
+    - publish helpers now require absolute existing run roots for render-run
+      publication and validate `set_id`, `drop_id`, `job_type`, and selected
+      frame names as single path segments before constructing repo-doc or
+      visualizer staging paths
+    - repo-doc publication writes redacted public JSON copies for request and
+      summary artifacts, replacing local/private paths before they enter
+      `docs/render_review_sets/` or `docs/material_preview_sets/`
+  - Linux worker packaging now self-tests archive hygiene: private/generated
+    lanes are rejected from the worker tarball, macOS AppleDouble sidecars are
+    suppressed, and executable bits are limited to the worker binaries and
+    wrapper; release contract output reports only configured/unconfigured
+    signing/notary/team state instead of printing credential values
     - the visualizer staging script now rejects malformed drop ids instead of
       letting bad lowercase timestamp separators survive until VPS import time
     - remote staging cleanup now has an explicit helper script for stale invalid
@@ -748,6 +806,11 @@ Last updated: 2026-06-18
     still comes from PhysicsSim `scene_bundle.json.water_source`; the MP4 is a
     review packaging output over rendered BMP frames, not a replacement 2D
     preview path
+  - WTR-6.4 long output is profile-driven through
+    `tests/integration/run_ray_tracing_render_headless_water_object_coupling_long_review.sh`.
+    It renders selected PhysicsSim water frames one request at a time so a
+    long run can use warm-up/stride sampling while preserving per-frame
+    summaries, request files, and BMP outputs for inspection.
 - Menu/control-surface implementation is now split across:
   - `src/ui/menu/sdl_menu_render.c` for orchestration/layout pass ownership
   - `src/ui/menu/sdl_menu_render_controls.c` for shared text/button/control rendering helpers
@@ -797,28 +860,67 @@ Last updated: 2026-06-18
 ## Verification Contract
 - Build:
   - `make -C ray_tracing clean && make -C ray_tracing`
-- Runtime-scene bridge contract:
+- Fast C and contract lanes:
+  - `make -C ray_tracing test`
   - `make -C ray_tracing test-runtime-scene-bridge-contract`
-  - runs the focused core/apply and writeback/additive-merge bridge groups
-    without requiring the full generic `test` lane
+    - runs the focused core/apply and writeback/additive-merge bridge groups
+      without requiring the full generic `test` lane
+  - `make -C ray_tracing test-ray-tracing-runtime-host-lifecycle-contract`
+  - `make -C ray_tracing test-ray-tracing-core-sim-runtime-frame-contract`
+  - `make -C ray_tracing test-scene-editor-pane-host-contract`
+- Headless request/render/material lanes:
+  - `make -C ray_tracing test-ray-tracing-render-headless-preflight`
+    - includes positive preflight plus deterministic request-path negative
+      fixtures for missing scene path and invalid output root
+  - `make -C ray_tracing test-ray-tracing-render-headless-image-export`
+  - `make -C ray_tracing test-ray-tracing-material-preview-headless`
+    - uses repo-local generated roots and includes deterministic material
+      request negative fixtures for missing runtime scene and invalid output
+      path
+- Job-runner, publish, package, and release probes:
+  - `make -C ray_tracing test-ray-tracing-job-runner-smoke`
+  - `make -C ray_tracing test-ray-tracing-job-runner-bundle-smoke`
+  - `make -C ray_tracing test-ray-tracing-job-runner-policy`
+  - `make -C ray_tracing test-ray-tracing-publish-helper-validation`
+  - `make -C ray_tracing test-ray-tracing-repo-doc-redaction`
+  - `make -C ray_tracing test-ray-tracing-linux-worker-package-validator`
+  - `make -C ray_tracing test-ray-tracing-release-contract-redaction`
+  - `make -C ray_tracing package-linux-worker-self-test`
 - Stable tests:
   - `make -C ray_tracing test-stable`
+  - authoritative target membership is `STABLE_TEST_TARGETS` in
+    `make/rules-test.mk`
 - Smoke wording note:
   - `make -C ray_tracing run-headless-smoke`
   - currently routes through `test-stable` rather than a separate runtime-only lane
 - Build-only readiness:
   - `make -C ray_tracing visual-harness`
+- Source-run visual proof:
+  - `make -C ray_tracing visual-artifact`
+  - renders `ray_tracing/visual_artifacts/source_first_frame/frames/frame_0000.bmp`
+  - validates the BMP as parseable and nonblank before printing
+    `ray_tracing visual artifact ready: <artifact-path>`
+  - writes validation metrics to
+    `ray_tracing/visual_artifacts/source_first_frame/artifact_validation.json`
+  - generated proof files are under ignored `ray_tracing/visual_artifacts/`
+  - this is the R6 baseline visual proof; packaged-app visual capture remains
+    release-gated and is not a separate `package-visual-artifact` target
 - Current native `3D` regression coverage is also decomposed into narrower families under the stable lane:
   - config-animation source/volume and settings/export persistence
   - prepared-render parity and scatter-preview proofs
   - scene-geometry builder and trace contracts
 - Legacy lane:
   - `make -C ray_tracing test-legacy`
-- Linux worker packaging verification:
-  - `make -C ray_tracing package-linux-worker-self-test`
+  - currently empty unless a future compatibility lane is added
+- Operator-invoked visual/review lanes:
+  - expensive water/review or local worker-backed visual matrix targets remain
+    manual unless a slice explicitly promotes one into `STABLE_TEST_TARGETS`
 
 ## Release and Packaging Snapshot
 - Release-readiness and desktop packaging lanes are active and maintained.
+- Source-run `visual-artifact` is the current first-frame visual proof
+  baseline. Packaged-app visual proof is intentionally deferred unless package
+  runtime mismatch becomes the active release/readiness question.
 - Linux worker packaging now emits truthful host-architecture metadata for
   either `linux-x86_64` or `linux-aarch64` by default:
   - `make -C ray_tracing package-linux-worker`

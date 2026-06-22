@@ -74,9 +74,21 @@ Verification entry points:
 make -C ray_tracing clean && make -C ray_tracing
 make -C ray_tracing run-headless-smoke
 make -C ray_tracing visual-harness
+make -C ray_tracing visual-artifact
 make -C ray_tracing test-stable
 make -C ray_tracing test-legacy
 ```
+
+`visual-harness` is a build/readiness gate for the app binary. `visual-artifact`
+is the unattended source-run proof: it renders and validates a first-frame BMP,
+writes validation metrics, and prints:
+
+```text
+ray_tracing visual artifact ready: /Users/calebsv/Desktop/CodeWork/ray_tracing/visual_artifacts/source_first_frame/frames/frame_0000.bmp
+```
+
+Generated visual proof files live under the ignored
+`ray_tracing/visual_artifacts/` root.
 
 Video export helper:
 

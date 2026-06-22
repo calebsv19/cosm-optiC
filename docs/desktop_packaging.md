@@ -105,6 +105,17 @@ Local asset note:
     - `build/release/optiC-0.3.0-macOS-x86_64-stable.manifest.txt`
     - `build/release/notary_submit.json`
 
+Release and worker artifact hygiene:
+- `make -C ray_tracing package-linux-worker-self-test` validates the Linux
+  worker tarball structure, rejects private/generated review lanes, suppresses
+  macOS AppleDouble archive sidecars, and limits executable file bits to the
+  intended worker binaries and wrapper.
+- `release-contract` reports whether signing/notary/team inputs are configured
+  without printing identity, profile, or team values.
+- Signing, notarization, upload, and distribution targets remain explicit
+  operator actions; the contract and self-test targets do not sign, notarize,
+  upload, or publish.
+
 ## Launcher Runtime Contract
 
 - `--print-config` prints:
@@ -160,6 +171,19 @@ Bundled framework/runtime rules include:
 6. `/Users/<user>/Desktop/optiC.app/Contents/MacOS/raytracing-launcher --print-config`
 7. `open /Users/<user>/Desktop/optiC.app`
 8. `tail -n 120 ~/Library/Logs/RayTracing/launcher.log`
+
+## Visual Proof Boundary
+
+- `make -C ray_tracing visual-artifact` is the current source-run first-frame
+  visual proof. It renders and validates
+  `ray_tracing/visual_artifacts/source_first_frame/frames/frame_0000.bmp`
+  without launching the packaged app.
+- There is no `package-visual-artifact` target. Packaged-app visual capture is
+  intentionally release-gated and should be added only when package/runtime
+  mismatch is the active question.
+- Routine packaged-app confidence remains covered by `package-desktop-self-test`,
+  `release-bundle-audit`, launcher `--print-config`, and manual/local launch
+  checks.
 
 ## Current Limits
 

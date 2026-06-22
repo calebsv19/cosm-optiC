@@ -35,6 +35,24 @@ ray_tracing/build/arm64/tools/cli/ray_tracing_render_headless \
   --render
 ```
 
+For the baseline unattended visual proof, use the make target:
+
+```bash
+make -C ray_tracing visual-artifact
+```
+
+The target renders a deterministic first frame, validates that the BMP is
+parseable and nonblank, writes metrics to
+`ray_tracing/visual_artifacts/source_first_frame/artifact_validation.json`, and
+prints:
+
+```text
+ray_tracing visual artifact ready: /Users/calebsv/Desktop/CodeWork/ray_tracing/visual_artifacts/source_first_frame/frames/frame_0000.bmp
+```
+
+`visual_artifacts/` is ignored and is separate from the `build/agent_runs/`
+test-output roots.
+
 On non-Darwin builds the binary may be under:
 
 ```bash
@@ -81,8 +99,15 @@ There are two different post-render publication targets:
    - useful immediately after a completed detached render when you do not want
      to spell out every path manually
 
+Publish helpers require publish run roots to be absolute existing directories
+and treat `set_id`, `drop_id`, `job_type`, and selected frame names as single
+path segments. Use letters, numbers, dot, underscore, or dash; slashes,
+traversal segments, and leading dash values are rejected before staging.
+
 `publish_render_review_set.sh` is not a live website deploy step. Use it for
-local docs only.
+local docs only. Its public `request.json` and `summary.json` copies redact
+local/private paths before writing into `docs/render_review_sets/<set_id>/`;
+the full source artifacts remain in the private run root.
 
 The current D2.18 denoise ablation review set is:
 
@@ -118,6 +143,11 @@ The request root must declare:
     "integrator_3d": "direct_light",
     "denoise_enabled": true
   },
+  "resources": {
+    "cpu_percent": 50,
+    "max_workers": 2,
+    "reserve_cpu_count": 1
+  },
   "inspection": {
     "preset": "glass_preview",
     "camera_zoom": 0.95,
@@ -149,6 +179,22 @@ The request root must declare:
   }
 }
 ```
+
+The optional `resources` object controls native `3D` tile scheduler concurrency
+for headless renders:
+
+- `cpu_percent`: `1..100`, caps worker threads to an approximate percentage of
+  detected host CPUs. `50` on a 2-vCPU VPS resolves to one render worker.
+- `max_workers`: caps render workers directly, after CPU-percent and
+  scheduler-global limits.
+- `reserve_cpu_count`: subtracts host CPUs before resolving the worker cap, so
+  colocated services keep explicit headroom.
+
+When `resources` is omitted, direct local CLI runs keep legacy behavior. The
+packaged Linux worker wrapper sets `CODEWORK_RAY_TRACING_DEFAULT_CPU_PERCENT=50`
+unless the environment already provides another value, so older worker jobs get
+a conservative VPS-safe default after the worker package is refreshed. Explicit
+request JSON takes precedence over package environment defaults.
 
 Supported `volume.source_kind` values:
 - `auto`
@@ -619,6 +665,87 @@ The BMP sequence is the deterministic acceptance artifact. When local `ffmpeg`
 is available, the test also encodes the MP4 review helper without replacing the
 full RayTracing basin render path.
 
+For WTR-6.4 longer object-water output, use
+`make -C ray_tracing test-ray-tracing-render-headless-water-object-coupling-long-review`.
+The target is profile-driven:
+
+```bash
+# Small validation profile; this is what the make target runs by default.
+make -C ray_tracing test-ray-tracing-render-headless-water-object-coupling-long-review
+
+# Expensive review profile requested for long visual inspection.
+WTR6_LONG_PROFILE=full \
+  make -C ray_tracing test-ray-tracing-render-headless-water-object-coupling-long-review
+```
+
+The default `smoke` profile warms up `8` PhysicsSim frames, renders `4`
+RayTracing frames at stride `5`, and writes:
+
+```text
+ray_tracing/build/agent_runs/physics_trio/water_object_coupling_long_review_smoke/
+```
+
+The `full` profile warms up `200` PhysicsSim frames, selects `100` output
+frames at stride `5` from the evolved Water Basin (`200..695`), uses a looped
+overhead light path, and writes the full BMP/MP4 review under:
+
+```text
+ray_tracing/build/agent_runs/physics_trio/water_object_coupling_long_review/
+```
+
+Useful overrides:
+
+- `WTR6_LONG_PROFILE=smoke|review|full`
+- `WTR6_LONG_WARMUP_FRAMES=<n>`
+- `WTR6_LONG_OUTPUT_FRAMES=<n>`
+- `WTR6_LONG_FRAME_STRIDE=<n>`
+- `WTR6_LONG_SIM_STEPS_PER_FRAME=<n>`
+- `WTR6_LONG_GRID=<WxHxD>`
+- `WTR6_LONG_WIDTH=<px>`
+- `WTR6_LONG_HEIGHT=<px>`
+- `WTR6_LONG_TEMPORAL_FRAMES=<n>`
+- `WTR6_LONG_INTEGRATOR_3D=<emission_transparency|direct_light|disney_v2>`
+- `WTR6_LONG_FPS=<n>`
+- `WTR6_LONG_RIPPLE_AMPLITUDE=<meters>`
+
+For WTR-6.6 cache-first preview-matrix planning, use the dry-run planner before
+launching more PhysicsSim or RayTracing work:
+
+```bash
+python3 ray_tracing/tools/wtr66_preview_matrix_planner.py --overwrite
+make -C ray_tracing test-ray-tracing-wtr66-preview-matrix-planner-dry-run
+```
+
+The default dry-run writes:
+
+```text
+ray_tracing/build/agent_runs/physics_trio/wtr66_preview_matrix_dry_run/
+```
+
+It creates `matrix_request.json`, `matrix_summary.json`, one planned
+`cache_manifest.json`, named selected-frame lists such as `contact_short` and
+`every_10`, plus direct-light and Disney-v2 temporal-2 render request sets over
+the same planned PhysicsSim cache. It does not run PhysicsSim or RayTracing.
+
+To execute the first local cache/job-runner validation boundary:
+
+```bash
+make -C ray_tracing test-ray-tracing-wtr66-preview-matrix-local-job-runner
+```
+
+That explicit gate writes:
+
+```text
+ray_tracing/build/agent_runs/physics_trio/wtr66_preview_matrix_local_job_runner/
+```
+
+It runs one local PhysicsSim water/object cache and submits direct-light plus
+Disney-v2 temporal-2 one-frame jobs over the same selected frame set through
+`ray_tracing_job_runner`, then validates job status, render summaries, water
+mesh attachment, block visibility, secondary hits, and BMP outputs. The harness
+prefers the current clang toolchain job-runner binary before the legacy
+`build/<arch>` path to avoid stale local binaries.
+
 The water summary reports whether a water source was found, whether the frame
 loaded, whether mesh triangles were attached, requested/loaded first and last
 frame indices, selected frame paths, grid dimensions, wet/dry/solid column
@@ -751,6 +878,18 @@ ray_tracing/build/agent_runs/jobs/<job_id>/
 The staged `job_request.json` is canonicalized to absolute scene/volume/output
 paths so detached execution does not break on rebased relative paths inside the
 job directory.
+
+Detached path policy:
+
+- `--jobs-root` overrides must be absolute existing directories. Relative,
+  missing, or traversal-containing override paths are rejected.
+- `job_id` values from generated jobs and outer bundles are treated as one safe
+  path segment before any job path is built.
+- direct request `output.root` remains an explicit caller-selected artifact
+  root, but detached submit requires it to resolve to an absolute non-root path
+  before rendering starts.
+- outer bundle jobs continue to default artifacts to
+  `<job_root>/output/artifacts`.
 
 Successful detached renders may still print informational fallback lines to
 `stdout.log` when legacy scene or animation config files are absent. Those
