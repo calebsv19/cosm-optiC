@@ -18,6 +18,7 @@ bool runtime_native_3d_render_dispatch_integrator(float* radiance_buffer,
                                                   int end_y,
                                                   RuntimeNative3DRenderStats* out_stats);
 void runtime_native_3d_prepare_frame_set_diag(const char* message);
+void runtime_native_3d_prepare_frame_set_diagf(const char* format, ...);
 bool runtime_native_3d_render_trace_visible_emitter(
     const RuntimeScene3D* scene,
     const RuntimeCameraProjector3D* projector,
