@@ -50,6 +50,8 @@ package-linux-worker: ray-tracing-render-headless ray-tracing-job-runner
 	@printf '#!/usr/bin/env bash\n' > "$(LINUX_WORKER_BIN_DIR)/run_worker.sh"
 	@printf 'set -euo pipefail\n' >> "$(LINUX_WORKER_BIN_DIR)/run_worker.sh"
 	@printf 'SCRIPT_DIR="$$(cd "$$(dirname "$${BASH_SOURCE[0]}")" && pwd)"\n' >> "$(LINUX_WORKER_BIN_DIR)/run_worker.sh"
+	@printf ': "$${CODEWORK_RAY_TRACING_DEFAULT_CPU_PERCENT:=50}"\n' >> "$(LINUX_WORKER_BIN_DIR)/run_worker.sh"
+	@printf 'export CODEWORK_RAY_TRACING_DEFAULT_CPU_PERCENT\n' >> "$(LINUX_WORKER_BIN_DIR)/run_worker.sh"
 	@printf 'exec "$$SCRIPT_DIR/ray_tracing_render_headless" "$$@"\n' >> "$(LINUX_WORKER_BIN_DIR)/run_worker.sh"
 	@chmod +x "$(LINUX_WORKER_BIN_DIR)/run_worker.sh"
 	@cp -R config/. "$(LINUX_WORKER_CONFIG_DIR)/"
@@ -64,6 +66,9 @@ package-linux-worker: ray-tracing-render-headless ray-tracing-job-runner
 	@printf '  "job_types": ["trio_headless_stage"],\n' >> "$(LINUX_WORKER_MANIFEST_JSON)"
 	@printf '  "entrypoint": "bin/run_worker.sh",\n' >> "$(LINUX_WORKER_MANIFEST_JSON)"
 	@printf '  "default_args": [],\n' >> "$(LINUX_WORKER_MANIFEST_JSON)"
+	@printf '  "default_resource_budget": {\n' >> "$(LINUX_WORKER_MANIFEST_JSON)"
+	@printf '    "cpu_percent": 50\n' >> "$(LINUX_WORKER_MANIFEST_JSON)"
+	@printf '  },\n' >> "$(LINUX_WORKER_MANIFEST_JSON)"
 	@printf '  "runtime_dependencies": ["glibc", "libgcc_s", "libm", "SDL2", "SDL2_ttf", "json-c", "libpng16", "vulkan", "ffmpeg"]\n' >> "$(LINUX_WORKER_MANIFEST_JSON)"
 	@printf '}\n' >> "$(LINUX_WORKER_MANIFEST_JSON)"
 	@printf '{\n' > "$(LINUX_WORKER_MANIFEST)"
@@ -78,13 +83,16 @@ package-linux-worker: ray-tracing-render-headless ray-tracing-job-runner
 	@printf '    "job_runner": "bin/ray_tracing_job_runner"\n' >> "$(LINUX_WORKER_MANIFEST)"
 	@printf '  },\n' >> "$(LINUX_WORKER_MANIFEST)"
 	@printf '  "runtime_dependencies": ["glibc", "libgcc_s", "libm", "ffmpeg"],\n' >> "$(LINUX_WORKER_MANIFEST)"
+	@printf '  "default_resource_budget": {\n' >> "$(LINUX_WORKER_MANIFEST)"
+	@printf '    "cpu_percent": 50\n' >> "$(LINUX_WORKER_MANIFEST)"
+	@printf '  },\n' >> "$(LINUX_WORKER_MANIFEST)"
 	@printf '  "self_test": {\n' >> "$(LINUX_WORKER_MANIFEST)"
 	@printf '    "type": "command",\n' >> "$(LINUX_WORKER_MANIFEST)"
 	@printf '    "argv": ["bin/ray_tracing_job_runner", "--help"]\n' >> "$(LINUX_WORKER_MANIFEST)"
 	@printf '  }\n' >> "$(LINUX_WORKER_MANIFEST)"
 	@printf '}\n' >> "$(LINUX_WORKER_MANIFEST)"
 	@mkdir -p "$(RELEASE_DIR)"
-	@tar -czf "$(LINUX_WORKER_ARCHIVE)" -C "$(RELEASE_DIR)" "$(LINUX_WORKER_BASENAME)"
+	@COPYFILE_DISABLE=1 tar -czf "$(LINUX_WORKER_ARCHIVE)" -C "$(RELEASE_DIR)" "$(LINUX_WORKER_BASENAME)"
 	@echo "Linux worker package ready: $(LINUX_WORKER_ARCHIVE)"
 
 package-linux-worker-self-test: package-linux-worker
@@ -96,4 +104,5 @@ package-linux-worker-self-test: package-linux-worker
 	@test -f "$(LINUX_WORKER_DOCS_DIR)/headless_agent_render_cli.md" || (echo "Missing docs/headless_agent_render_cli.md"; exit 1)
 	@test -f "$(LINUX_WORKER_CONFIG_DIR)/scene_config.json" || (echo "Missing config/scene_config.json"; exit 1)
 	@test -f "$(LINUX_WORKER_ARCHIVE)" || (echo "Missing worker archive"; exit 1)
+	@python3 tools/validate_linux_worker_package.py --archive "$(LINUX_WORKER_ARCHIVE)" --package-root "$(LINUX_WORKER_BASENAME)"
 	@echo "package-linux-worker-self-test passed."

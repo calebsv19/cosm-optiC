@@ -2,6 +2,7 @@
 set -eu
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+. "$ROOT_DIR/tools/publish_validation.sh"
 PUBLISH_SCRIPT="$ROOT_DIR/tools/publish_render_outputs.sh"
 DEFAULT_RUNS_ROOT="$ROOT_DIR/../_private_workspace_artifacts/agent_runs/ray_tracing"
 
@@ -74,6 +75,13 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+rt_publish_require_absolute_existing_dir "--runs-root" "$RUNS_ROOT"
+RUNS_ROOT="$(rt_publish_canonical_dir "$RUNS_ROOT")"
+rt_publish_validate_optional_segment "--set-id" "$SET_ID"
+rt_publish_validate_optional_segment "--frame" "$FRAME_NAME"
+rt_publish_validate_segment "--job-type" "$JOB_TYPE"
+rt_publish_validate_optional_segment "--drop-id" "$DROP_ID"
+
 if [ -z "$RUN_ROOT" ]; then
   RUN_ROOT="$(python3 - "$RUNS_ROOT" <<'PY'
 import os
@@ -107,6 +115,8 @@ if [ ! -d "$RUN_ROOT" ]; then
   echo "run root not found: $RUN_ROOT" >&2
   exit 2
 fi
+rt_publish_require_absolute_existing_dir "--run-root" "$RUN_ROOT"
+RUN_ROOT="$(rt_publish_canonical_dir "$RUN_ROOT")"
 
 FRAME_DIR="$RUN_ROOT/ray_tracing/output/frames"
 if [ ! -d "$FRAME_DIR" ]; then
@@ -135,10 +145,12 @@ print(names[-1])
 PY
 )"
 fi
+rt_publish_validate_segment "--frame" "$FRAME_NAME"
 
 if [ -z "$SET_ID" ]; then
   SET_ID="$(basename "$RUN_ROOT")"
 fi
+rt_publish_validate_segment "--set-id" "$SET_ID"
 
 if [ -z "$TITLE" ]; then
   TITLE="$(python3 - "$SET_ID" <<'PY'

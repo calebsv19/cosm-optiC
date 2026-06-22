@@ -80,16 +80,62 @@ typedef enum RayTracingWrapperError {
     RAY_TRACING_WRAPPER_ERROR_RUN_LOOP_FAILED = 6
 } RayTracingWrapperError;
 
+static const char *ray_tracing_app_stage_label(RayTracingAppStage stage) {
+    switch (stage) {
+        case RAY_TRACING_APP_STAGE_INIT:
+            return "init";
+        case RAY_TRACING_APP_STAGE_BOOTSTRAPPED:
+            return "bootstrapped";
+        case RAY_TRACING_APP_STAGE_CONFIG_LOADED:
+            return "config_loaded";
+        case RAY_TRACING_APP_STAGE_STATE_SEEDED:
+            return "state_seeded";
+        case RAY_TRACING_APP_STAGE_SUBSYSTEMS_READY:
+            return "subsystems_ready";
+        case RAY_TRACING_APP_STAGE_RUNTIME_STARTED:
+            return "runtime_started";
+        case RAY_TRACING_APP_STAGE_LOOP_COMPLETED:
+            return "loop_completed";
+        case RAY_TRACING_APP_STAGE_SHUTDOWN_COMPLETED:
+            return "shutdown_completed";
+        default:
+            return "unknown";
+    }
+}
+
+static const char *ray_tracing_wrapper_error_label(RayTracingWrapperError wrapper_error) {
+    switch (wrapper_error) {
+        case RAY_TRACING_WRAPPER_ERROR_NONE:
+            return "none";
+        case RAY_TRACING_WRAPPER_ERROR_BOOTSTRAP_FAILED:
+            return "bootstrap_failed";
+        case RAY_TRACING_WRAPPER_ERROR_CONFIG_LOAD_FAILED:
+            return "config_load_failed";
+        case RAY_TRACING_WRAPPER_ERROR_STATE_SEED_FAILED:
+            return "state_seed_failed";
+        case RAY_TRACING_WRAPPER_ERROR_SUBSYSTEMS_INIT_FAILED:
+            return "subsystems_init_failed";
+        case RAY_TRACING_WRAPPER_ERROR_RUNTIME_START_FAILED:
+            return "runtime_start_failed";
+        case RAY_TRACING_WRAPPER_ERROR_RUN_LOOP_FAILED:
+            return "run_loop_failed";
+        default:
+            return "unknown";
+    }
+}
+
 static void ray_tracing_log_wrapper_error(const char *fn_name,
                                           RayTracingWrapperError wrapper_error,
                                           RayTracingAppStage stage,
                                           int exit_code,
                                           const char *detail) {
     fprintf(stderr,
-            "ray_tracing: wrapper error fn=%s code=%d stage=%d exit_code=%d detail=%s\n",
+            "ray_tracing: wrapper error fn=%s code=%d error=%s stage=%d stage_label=%s exit_code=%d detail=%s\n",
             fn_name ? fn_name : "unknown",
             (int)wrapper_error,
+            ray_tracing_wrapper_error_label(wrapper_error),
             (int)stage,
+            ray_tracing_app_stage_label(stage),
             exit_code,
             detail ? detail : "n/a");
 }
@@ -109,12 +155,15 @@ static bool ray_tracing_app_transition_stage(RayTracingAppContext *ctx,
     }
     if (ctx->stage != expected) {
         fprintf(stderr,
-                "ray_tracing: lifecycle stage order violation fn=%s stage=%s (expected=%d actual=%d next=%d)\n",
+                "ray_tracing: lifecycle stage order violation fn=%s stage=%s expected=%d expected_label=%s actual=%d actual_label=%s next=%d next_label=%s\n",
                 fn_name ? fn_name : "unknown",
                 stage_name ? stage_name : "unknown",
                 (int)expected,
+                ray_tracing_app_stage_label(expected),
                 (int)ctx->stage,
-                (int)next);
+                ray_tracing_app_stage_label(ctx->stage),
+                (int)next,
+                ray_tracing_app_stage_label(next));
         return false;
     }
     ctx->stage = next;

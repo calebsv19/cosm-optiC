@@ -2,6 +2,7 @@
 set -eu
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+. "$ROOT_DIR/tools/publish_validation.sh"
 STAGE_SCRIPT="$ROOT_DIR/../skills/codework-visualizer-drop/scripts/stage_visualizer_run.py"
 UPLOAD_SCRIPT="$ROOT_DIR/../skills/codework-visualizer-drop/scripts/upload_visualizer_drop.sh"
 LOCAL_REVIEW_SCRIPT="$ROOT_DIR/tools/publish_render_review_set.sh"
@@ -75,6 +76,13 @@ if [ -z "$RUN_ROOT" ] || [ -z "$SET_ID" ]; then
   exit 2
 fi
 
+rt_publish_require_absolute_existing_dir "--run-root" "$RUN_ROOT"
+RUN_ROOT="$(rt_publish_canonical_dir "$RUN_ROOT")"
+rt_publish_validate_segment "--set-id" "$SET_ID"
+rt_publish_validate_segment "--frame" "$FRAME_NAME"
+rt_publish_validate_segment "--job-type" "$JOB_TYPE"
+rt_publish_validate_optional_segment "--drop-id" "$DROP_ID"
+
 case "$MODE" in
   local|visualizer|both)
     ;;
@@ -147,6 +155,7 @@ EOF
     --program ray-tracing \
     --job-type "$JOB_TYPE" \
     --summary "$SUMMARY_TEXT" \
+    --staging-root "$ROOT_DIR/../_private_workspace_artifacts/codework_visualizer_runs" \
     --preview-source "$FRAME_PATH" \
     --log-source "$PUBLISH_LOG_PATH" \
     --primary-output-source "$FRAME_PATH" \
@@ -166,6 +175,7 @@ EOF
         continue
       fi
       base_name="$(basename "$candidate")"
+      rt_publish_validate_segment "frame file name" "$base_name"
       set -- "$@" --output "$candidate|outputs/frames/$base_name|frame|image/bmp"
     done
   fi

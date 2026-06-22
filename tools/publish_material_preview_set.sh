@@ -2,7 +2,8 @@
 set -eu
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-CLI="$ROOT_DIR/build/toolchains/clang/$(uname -m)/tools/cli/ray_tracing_material_preview_headless"
+. "$ROOT_DIR/tools/publish_validation.sh"
+CLI="${RAY_TRACING_MATERIAL_PREVIEW_CLI:-$ROOT_DIR/build/toolchains/clang/$(uname -m)/tools/cli/ray_tracing_material_preview_headless}"
 
 REQUEST=""
 SET_ID=""
@@ -34,18 +35,24 @@ if [ -z "$REQUEST" ] || [ -z "$SET_ID" ]; then
   exit 2
 fi
 
+if [ ! -f "$REQUEST" ]; then
+  echo "request not found: $REQUEST" >&2
+  exit 2
+fi
+rt_publish_validate_segment "--set-id" "$SET_ID"
+
 if [ -z "$TITLE" ]; then
   TITLE="$SET_ID"
 fi
 
-python3 - "$REQUEST" "$SET_ID" "$TITLE" "$ROOT_DIR" <<'PY'
+python3 - "$REQUEST" "$SET_ID" "$TITLE" "$ROOT_DIR" "$CLI" <<'PY'
 import json
 import os
 import shutil
 import subprocess
 import sys
 
-request_path, set_id, title, root_dir = sys.argv[1:5]
+request_path, set_id, title, root_dir, cli_path = sys.argv[1:6]
 with open(request_path, "r", encoding="utf-8") as f:
     request = json.load(f)
 
@@ -54,11 +61,11 @@ summary_path = request.get("summary_path", "")
 dest_dir = os.path.join(root_dir, "docs", "material_preview_sets", set_id)
 os.makedirs(dest_dir, exist_ok=True)
 
-subprocess.check_call([os.path.join(root_dir, "build", "arm64", "tools", "cli", "ray_tracing_material_preview_headless"),
-                       "--request", request_path])
+subprocess.check_call([cli_path, "--request", request_path])
 
 dest_bmp = os.path.join(dest_dir, "preview.bmp")
-shutil.copy2(request_path, os.path.join(dest_dir, "request.json"))
+subprocess.check_call([sys.executable, os.path.join(root_dir, "tools", "redact_public_json.py"),
+                       request_path, os.path.join(dest_dir, "request.json")])
 shutil.copy2(output_path, dest_bmp)
 
 png_written = False
@@ -73,7 +80,8 @@ if shutil.which("ffmpeg"):
         png_written = False
 
 if summary_path:
-    shutil.copy2(summary_path, os.path.join(dest_dir, "summary.json"))
+    subprocess.check_call([sys.executable, os.path.join(root_dir, "tools", "redact_public_json.py"),
+                           summary_path, os.path.join(dest_dir, "summary.json")])
 
 index_path = os.path.join(dest_dir, "index.md")
 variant_lines = []

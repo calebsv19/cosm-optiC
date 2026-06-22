@@ -9,7 +9,7 @@ release-contract:
 	@echo "  app_name: $(PACKAGE_APP_NAME)"
 	@echo "  artifact_base: $(RELEASE_ARTIFACT_BASENAME)"
 	@echo "  release_zip: $(RELEASE_APP_ZIP)"
-	@echo "  signing_identity: $(RELEASE_CODESIGN_IDENTITY)"
+	@echo "  signing_identity_set: $$( [ "$(RELEASE_CODESIGN_IDENTITY)" != "-" ] && echo yes || echo ad_hoc )"
 	@echo "  notary_profile_set: $$( [ -n \"$(APPLE_NOTARY_PROFILE)\" ] && echo yes || echo no )"
 	@echo "  team_id_set: $$( [ -n \"$(APPLE_TEAM_ID)\" ] && echo yes || echo no )"
 
@@ -57,7 +57,7 @@ release-bundle-audit: package-desktop-self-test
 	@echo "release-bundle-audit passed."
 
 release-sign: release-bundle-audit
-	@echo "Signing with identity: $(RELEASE_CODESIGN_IDENTITY)"
+	@echo "Signing with configured identity: $$( [ "$(RELEASE_CODESIGN_IDENTITY)" != "-" ] && echo yes || echo ad_hoc )"
 	@if [ "$(RELEASE_CODESIGN_IDENTITY)" = "-" ]; then \
 		for dylib in $$(/usr/bin/find "$(PACKAGE_FRAMEWORKS_DIR)" -type f -name '*.dylib' 2>/dev/null); do \
 			codesign --force --sign "$(RELEASE_CODESIGN_IDENTITY)" --timestamp=none "$$dylib"; \

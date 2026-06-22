@@ -35,6 +35,18 @@ static int ceil_div_int(int value, int divisor) {
 
 static double ray_tracing_elapsed_seconds_since(const struct timespec *start_time);
 
+static const RuntimeNative3DResourceBudget *ray_tracing_request_resource_budget(
+    const RayTracingAgentRenderRequest *request,
+    RuntimeNative3DResourceBudget *out_budget) {
+    if (!request || !out_budget || !request->has_resource_budget) {
+        return NULL;
+    }
+    out_budget->cpuPercent = request->resource_cpu_percent;
+    out_budget->maxWorkerThreads = request->resource_max_workers;
+    out_budget->reserveCpuCount = request->resource_reserve_cpu_count;
+    return out_budget;
+}
+
 static RayTracingHeadlessObjectAuditEntry *ray_tracing_headless_object_audit_ensure_entry(
     RayTracingHeadlessPreflight *preflight,
     int scene_object_index) {
@@ -1471,7 +1483,11 @@ static int run_render(const RayTracingAgentRenderRequest *request,
         temporal_progress.total_subpasses = request->temporal_frames;
         (void)clock_gettime(CLOCK_MONOTONIC, &temporal_progress.frame_started_at);
 
-        if (!RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressAtFrameIndex(
+        RuntimeNative3DResourceBudget resource_budget = {0};
+        const RuntimeNative3DResourceBudget *active_resource_budget =
+            ray_tracing_request_resource_budget(request, &resource_budget);
+
+        if (!RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudgetedAtFrameIndex(
                 pixels,
                 preflight.route.integratorMode3D,
                 request->width,
@@ -1486,6 +1502,7 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                 &temporal_progress,
                 ray_tracing_tile_progress_callback,
                 &temporal_progress,
+                active_resource_budget,
                 &stats)) {
             snprintf(preflight.diagnostics, sizeof(preflight.diagnostics), "failed to render frame");
             RuntimeTriangleBVH3D_SnapshotTraceStats(&preflight.bvh_trace_stats);

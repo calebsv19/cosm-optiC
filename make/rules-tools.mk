@@ -36,9 +36,9 @@ ray_trace_tool: $(RAY_TRACE_TOOL_SRCS)
 native3d-render-audit: $(NATIVE3D_AUDIT_BIN)
 	@$(NATIVE3D_AUDIT_BIN)
 
-$(NATIVE3D_AUDIT_BIN): $(NATIVE3D_AUDIT_OBJ) $(NATIVE3D_AUDIT_DEPS)
+$(NATIVE3D_AUDIT_BIN): $(NATIVE3D_AUDIT_OBJ) $(NATIVE3D_AUDIT_DEPS) $(BUILD_DIR)/render/adapters/timer_hud_headless_stub.o
 	@mkdir -p $(dir $@)
-	$(CC) $(NATIVE3D_AUDIT_OBJ) $(NATIVE3D_AUDIT_DEPS) -o $@ $(LDFLAGS)
+	$(CC) $(NATIVE3D_AUDIT_OBJ) $(NATIVE3D_AUDIT_DEPS) $(BUILD_DIR)/render/adapters/timer_hud_headless_stub.o -o $@ $(LDFLAGS)
 
 ray-tracing-render-headless: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	@echo "ray_tracing headless render CLI ready: $(RAY_TRACING_RENDER_HEADLESS_BIN)"

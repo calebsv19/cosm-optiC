@@ -2,6 +2,7 @@
 set -eu
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+. "$ROOT_DIR/tools/publish_validation.sh"
 
 RUN_ROOT=""
 SET_ID=""
@@ -38,6 +39,11 @@ if [ -z "$RUN_ROOT" ] || [ -z "$SET_ID" ]; then
   exit 2
 fi
 
+rt_publish_require_absolute_existing_dir "--run-root" "$RUN_ROOT"
+RUN_ROOT="$(rt_publish_canonical_dir "$RUN_ROOT")"
+rt_publish_validate_segment "--set-id" "$SET_ID"
+rt_publish_validate_segment "--frame" "$FRAME_NAME"
+
 if [ -z "$TITLE" ]; then
   TITLE="$SET_ID"
 fi
@@ -60,10 +66,12 @@ os.makedirs(dest_dir, exist_ok=True)
 dest_bmp = os.path.join(dest_dir, "preview.bmp")
 dest_png = os.path.join(dest_dir, "preview.png")
 
-shutil.copy2(request_path, os.path.join(dest_dir, "request.json"))
+subprocess.check_call([sys.executable, os.path.join(root_dir, "tools", "redact_public_json.py"),
+                       request_path, os.path.join(dest_dir, "request.json")])
 shutil.copy2(frame_path, dest_bmp)
 if os.path.exists(summary_path):
-    shutil.copy2(summary_path, os.path.join(dest_dir, "summary.json"))
+    subprocess.check_call([sys.executable, os.path.join(root_dir, "tools", "redact_public_json.py"),
+                           summary_path, os.path.join(dest_dir, "summary.json")])
 
 png_written = False
 if shutil.which("ffmpeg"):
@@ -106,17 +114,19 @@ with open(readme_path, "w", encoding="utf-8") as f:
     f.write("`skills/codework-visualizer-drop/`.\n\n")
     f.write("Use this lane for:\n\n")
     f.write("- one authored scene state\n")
-    f.write("- one detached render request\n")
+    f.write("- one redacted detached render request\n")
     f.write("- one selected output frame for repo-doc inspection\n")
-    f.write("- one copied render summary for downstream review\n\n")
+    f.write("- one redacted render summary for downstream review\n\n")
     f.write("Typical contents per set:\n\n")
-    f.write("- `request.json`\n")
+    f.write("- redacted `request.json`\n")
     f.write("- `preview.bmp`\n")
     f.write("- optional `preview.png`\n")
-    f.write("- `summary.json`\n")
+    f.write("- redacted `summary.json`\n")
     f.write("- `index.md`\n\n")
     f.write("These sets are intended to mirror one completed detached run in a stable\n")
-    f.write("repo-doc form without keeping the full private run root exposed.\n\n")
+    f.write("repo-doc form without keeping the full private run root exposed. Public JSON\n")
+    f.write("copies redact local/private paths such as `/Users/...`, `/private/...`, and\n")
+    f.write("`_private_workspace_artifacts/...`.\n\n")
     f.write("Current published sets:\n\n")
     for entry in entries:
         f.write(f"- `{entry}/`\n")

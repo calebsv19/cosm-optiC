@@ -1,4 +1,5 @@
 #include "app/ray_tracing_job_runner_internal.h"
+#include "app/ray_tracing_request_utils.h"
 
 #include <errno.h>
 #include <signal.h>
@@ -23,6 +24,123 @@ void ray_tracing_detached_job_record_defaults(RayTracingDetachedJobRecord *recor
     snprintf(record->diagnostics, sizeof(record->diagnostics), "queued");
     record->pid = 0;
     record->exit_code = -1;
+}
+
+static bool ray_tracing_detached_job_record_set_paths(RayTracingDetachedJobRecord *record,
+                                                      const RayTracingDetachedJobPaths *paths,
+                                                      const char *output_root) {
+    if (!record || !paths) return false;
+    if (!copy_string(record->request_path, sizeof(record->request_path), paths->job_request_path)) {
+        return false;
+    }
+    if (output_root &&
+        !copy_string(record->output_root, sizeof(record->output_root), output_root)) {
+        return false;
+    }
+    if (snprintf(record->progress_path,
+                 sizeof(record->progress_path),
+                 "%s/render_progress.json",
+                 paths->job_root) >= (int)sizeof(record->progress_path)) {
+        return false;
+    }
+    if (!copy_string(record->summary_path, sizeof(record->summary_path), paths->result_summary_path) ||
+        !copy_string(record->stdout_path, sizeof(record->stdout_path), paths->stdout_log_path) ||
+        !copy_string(record->stderr_path, sizeof(record->stderr_path), paths->stderr_log_path)) {
+        return false;
+    }
+    return true;
+}
+
+bool ray_tracing_detached_job_record_init_queued(RayTracingDetachedJobRecord *record,
+                                                 const RayTracingDetachedJobPaths *paths,
+                                                 const char *job_id,
+                                                 const char *output_root,
+                                                 const char *overwrite_policy,
+                                                 int requested_start_frame,
+                                                 int requested_frame_count,
+                                                 int effective_start_frame,
+                                                 int effective_frame_count,
+                                                 int temporal_subpasses_total) {
+    if (!record || !paths || !job_id || !job_id[0]) return false;
+    ray_tracing_detached_job_record_defaults(record);
+    if (!copy_string(record->job_id, sizeof(record->job_id), job_id)) return false;
+    if (!ray_tracing_detached_job_record_set_paths(record, paths, output_root)) return false;
+    if (!copy_string(record->overwrite_policy,
+                     sizeof(record->overwrite_policy),
+                     overwrite_policy ? overwrite_policy : "fail_if_exists")) {
+        return false;
+    }
+    utc_now_string(record->submitted_at_utc, sizeof(record->submitted_at_utc));
+    utc_now_string(record->updated_at_utc, sizeof(record->updated_at_utc));
+    record->requested_start_frame = requested_start_frame;
+    record->requested_frame_count = requested_frame_count;
+    record->effective_start_frame = effective_start_frame;
+    record->effective_frame_count = effective_frame_count;
+    record->frame_index = effective_start_frame;
+    record->frames_completed = 0;
+    record->temporal_subpasses_started = 0;
+    record->temporal_subpasses_completed = 0;
+    record->temporal_subpasses_total = temporal_subpasses_total > 0 ? temporal_subpasses_total : 1;
+    snprintf(record->state, sizeof(record->state), "queued");
+    snprintf(record->stage, sizeof(record->stage), "queued");
+    snprintf(record->diagnostics, sizeof(record->diagnostics), "queued for detached render");
+    return true;
+}
+
+void ray_tracing_detached_job_record_mark_spawn_failed(RayTracingDetachedJobRecord *record,
+                                                       const RayTracingDetachedJobPaths *paths,
+                                                       const char *render_cli_path) {
+    if (!record) return;
+    snprintf(record->state, sizeof(record->state), "failed");
+    snprintf(record->stage, sizeof(record->stage), "spawn_failed");
+    if (paths) {
+        (void)ray_tracing_detached_job_record_set_paths(
+            record,
+            paths,
+            record->output_root[0] ? record->output_root : NULL);
+    }
+    utc_now_string(record->finished_at_utc, sizeof(record->finished_at_utc));
+    utc_now_string(record->updated_at_utc, sizeof(record->updated_at_utc));
+    record->exit_code = 127;
+    snprintf(record->diagnostics,
+             sizeof(record->diagnostics),
+             "failed to spawn detached render cli=%s job_status=%s stdout=%s stderr=%s",
+             render_cli_path && render_cli_path[0] ? render_cli_path : "<unknown>",
+             paths && paths->job_status_path[0] ? paths->job_status_path : "<unknown-status>",
+             record->stdout_path[0] ? record->stdout_path : "<unknown-stdout>",
+             record->stderr_path[0] ? record->stderr_path : "<unknown-stderr>");
+}
+
+void ray_tracing_detached_job_record_mark_started(RayTracingDetachedJobRecord *record, pid_t pid) {
+    if (!record) return;
+    record->pid = pid;
+    utc_now_string(record->updated_at_utc, sizeof(record->updated_at_utc));
+    snprintf(record->state, sizeof(record->state), "starting");
+    snprintf(record->stage, sizeof(record->stage), "starting");
+    snprintf(record->diagnostics, sizeof(record->diagnostics), "detached render launched");
+}
+
+void ray_tracing_detached_job_record_mark_cancelled(RayTracingDetachedJobRecord *record,
+                                                    const RayTracingDetachedJobPaths *paths,
+                                                    const char *job_id,
+                                                    pid_t pid) {
+    if (!record) return;
+    if (job_id && job_id[0]) {
+        copy_string(record->job_id, sizeof(record->job_id), job_id);
+    }
+    snprintf(record->state, sizeof(record->state), "cancelled");
+    snprintf(record->stage, sizeof(record->stage), "cancelled");
+    record->pid = pid;
+    record->exit_code = 143;
+    if (paths) {
+        (void)ray_tracing_detached_job_record_set_paths(
+            record,
+            paths,
+            record->output_root[0] ? record->output_root : NULL);
+    }
+    utc_now_string(record->updated_at_utc, sizeof(record->updated_at_utc));
+    utc_now_string(record->finished_at_utc, sizeof(record->finished_at_utc));
+    snprintf(record->diagnostics, sizeof(record->diagnostics), "cancel requested");
 }
 
 bool ray_tracing_job_runner_write_job_status_file(const RayTracingDetachedJobPaths *paths,
@@ -79,14 +197,12 @@ bool ray_tracing_job_runner_write_job_status_file(const RayTracingDetachedJobPat
     fprintf(file, "  \"temporal_subpasses_started\": %d,\n", record->temporal_subpasses_started);
     fprintf(file, "  \"temporal_subpasses_completed\": %d,\n", record->temporal_subpasses_completed);
     fprintf(file, "  \"temporal_subpasses_total\": %d,\n", record->temporal_subpasses_total);
-    fprintf(file, "  \"progress_ratio\": %.6f,\n",
-            (record->temporal_subpasses_total > 0)
-                ? ((double)record->temporal_subpasses_completed /
-                   (double)record->temporal_subpasses_total)
-                : ((record->effective_frame_count > 0)
-                       ? ((double)record->frames_completed /
-                          (double)record->effective_frame_count)
-                       : 0.0));
+    fprintf(file,
+            "  \"progress_ratio\": %.6f,\n",
+            RayTracingProgressRatioCompleted(record->frames_completed,
+                                             record->effective_frame_count,
+                                             record->temporal_subpasses_completed,
+                                             record->temporal_subpasses_total));
     fprintf(file, "  \"submitted_at_utc\": ");
     json_write_string(file, record->submitted_at_utc);
     fprintf(file, ",\n");
@@ -220,28 +336,13 @@ bool ray_tracing_job_runner_print_file_to_stream(FILE *out, const char *path) {
 bool ray_tracing_job_runner_json_get_string(json_object *owner,
                                             const char *key,
                                             const char **out_value) {
-    json_object *obj = NULL;
-    if (out_value) *out_value = NULL;
-    if (!owner || !key || !json_object_object_get_ex(owner, key, &obj) ||
-        !json_object_is_type(obj, json_type_string)) {
-        return false;
-    }
-    if (out_value) *out_value = json_object_get_string(obj);
-    return true;
+    return RayTracingJsonGetString(owner, key, out_value);
 }
 
 bool ray_tracing_job_runner_json_get_int(json_object *owner,
                                          const char *key,
                                          int *out_value) {
-    json_object *obj = NULL;
-    if (out_value) *out_value = 0;
-    if (!owner || !key || !json_object_object_get_ex(owner, key, &obj) ||
-        (!json_object_is_type(obj, json_type_int) &&
-         !json_object_is_type(obj, json_type_double))) {
-        return false;
-    }
-    if (out_value) *out_value = json_object_get_int(obj);
-    return true;
+    return RayTracingJsonGetInt(owner, key, out_value);
 }
 
 bool ray_tracing_job_runner_load_job_status_record(const RayTracingDetachedJobPaths *paths,

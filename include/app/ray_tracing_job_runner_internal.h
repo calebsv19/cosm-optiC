@@ -75,9 +75,11 @@ bool ray_tracing_job_runner_build_jobs_root(const char *argv0,
                                             const char *jobs_root_override,
                                             char *out_jobs_root,
                                             size_t out_jobs_root_size);
-void ray_tracing_job_runner_build_job_paths(const char *jobs_root,
+bool ray_tracing_job_runner_validate_job_id(const char *job_id);
+bool ray_tracing_job_runner_build_job_paths(const char *jobs_root,
                                             const char *job_id,
                                             RayTracingDetachedJobPaths *out_paths);
+bool ray_tracing_job_runner_validate_output_root(const char *output_root);
 bool ray_tracing_job_runner_build_frames_dir_path(const char *output_root,
                                                   char *out_path,
                                                   size_t out_path_size);
@@ -87,6 +89,24 @@ bool ray_tracing_job_runner_build_frame_path(const char *output_root,
                                              size_t out_path_size);
 const char *ray_tracing_job_runner_shared_report_state_label(const char *state);
 void ray_tracing_detached_job_record_defaults(RayTracingDetachedJobRecord *record);
+bool ray_tracing_detached_job_record_init_queued(RayTracingDetachedJobRecord *record,
+                                                 const RayTracingDetachedJobPaths *paths,
+                                                 const char *job_id,
+                                                 const char *output_root,
+                                                 const char *overwrite_policy,
+                                                 int requested_start_frame,
+                                                 int requested_frame_count,
+                                                 int effective_start_frame,
+                                                 int effective_frame_count,
+                                                 int temporal_subpasses_total);
+void ray_tracing_detached_job_record_mark_spawn_failed(RayTracingDetachedJobRecord *record,
+                                                       const RayTracingDetachedJobPaths *paths,
+                                                       const char *render_cli_path);
+void ray_tracing_detached_job_record_mark_started(RayTracingDetachedJobRecord *record, pid_t pid);
+void ray_tracing_detached_job_record_mark_cancelled(RayTracingDetachedJobRecord *record,
+                                                    const RayTracingDetachedJobPaths *paths,
+                                                    const char *job_id,
+                                                    pid_t pid);
 bool ray_tracing_job_runner_write_job_status_file(const RayTracingDetachedJobPaths *paths,
                                                   const RayTracingDetachedJobRecord *record);
 bool ray_tracing_job_runner_write_shared_report_file(const RayTracingDetachedJobPaths *paths,

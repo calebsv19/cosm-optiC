@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-BUILD_ROOT="$ROOT_DIR/build/$(uname -m)"
-RUNNER="$BUILD_ROOT/tools/cli/ray_tracing_job_runner"
-if [[ ! -x "$RUNNER" ]]; then
-  RUNNER="$ROOT_DIR/build/toolchains/clang/$(uname -m)/tools/cli/ray_tracing_job_runner"
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/common.sh"
+
+ROOT_DIR="$(ray_tracing_root_dir)"
+RUNNER="$(ray_tracing_tool_path ray_tracing_job_runner "$ROOT_DIR")"
 
 JOBS_ROOT="$ROOT_DIR/build/agent_runs/jobs"
 BUNDLE_ROOT="/private/tmp/ray_tracing_job_runner_bundle_smoke"

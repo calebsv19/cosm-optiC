@@ -1,5 +1,7 @@
 #include "tools/ray_tracing_render_headless_internal.h"
 
+#include "app/ray_tracing_request_utils.h"
+
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -34,39 +36,6 @@ static const char *environment_light_mode_label(EnvironmentLightMode mode) {
     }
 }
 
-static void json_write_string(FILE *file, const char *value) {
-    const unsigned char *cursor = (const unsigned char *)(value ? value : "");
-    fputc('"', file);
-    while (*cursor) {
-        switch (*cursor) {
-            case '\\':
-                fputs("\\\\", file);
-                break;
-            case '"':
-                fputs("\\\"", file);
-                break;
-            case '\n':
-                fputs("\\n", file);
-                break;
-            case '\r':
-                fputs("\\r", file);
-                break;
-            case '\t':
-                fputs("\\t", file);
-                break;
-            default:
-                if (*cursor < 0x20u) {
-                    fprintf(file, "\\u%04x", (unsigned int)*cursor);
-                } else {
-                    fputc((int)*cursor, file);
-                }
-                break;
-        }
-        cursor++;
-    }
-    fputc('"', file);
-}
-
 void ray_tracing_render_headless_write_summary(
     FILE *file,
     const RayTracingAgentRenderRequest *request,
@@ -75,7 +44,7 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "{\n");
     fprintf(file, "  \"schema_version\": \"ray_tracing_headless_summary_v1\",\n");
     fprintf(file, "  \"run_id\": ");
-    json_write_string(file, request->run_id);
+    RayTracingJsonWriteString(file, request->run_id);
     fprintf(file, ",\n");
     fprintf(file, "  \"request_loaded\": %s,\n", preflight->request_loaded ? "true" : "false");
     fprintf(file, "  \"scene_applied\": %s,\n", preflight->scene_applied ? "true" : "false");
@@ -89,25 +58,25 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "  \"water_surface_mesh_attached\": %s,\n",
             preflight->water_surface_mesh_attached ? "true" : "false");
     fprintf(file, "  \"route_family\": ");
-    json_write_string(file, route_family_label(preflight->route.routeFamily));
+    RayTracingJsonWriteString(file, route_family_label(preflight->route.routeFamily));
     fprintf(file, ",\n");
     fprintf(file, "  \"route_native_3d\": %s,\n", preflight->route_native_3d ? "true" : "false");
     fprintf(file, "  \"prepared_frame\": %s,\n", preflight->prepared_frame ? "true" : "false");
     fprintf(file, "  \"rendered_frames\": %s,\n", preflight->rendered_frames ? "true" : "false");
     fprintf(file, "  \"frames_rendered\": %d,\n", preflight->frames_rendered);
     fprintf(file, "  \"runtime_scene_path\": ");
-    json_write_string(file, request->runtime_scene_path);
+    RayTracingJsonWriteString(file, request->runtime_scene_path);
     fprintf(file, ",\n");
     fprintf(file, "  \"volume_source_path\": ");
-    json_write_string(file, request->volume_source_path);
+    RayTracingJsonWriteString(file, request->volume_source_path);
     fprintf(file, ",\n");
     fprintf(file, "  \"volume_source_kind\": ");
-    json_write_string(file,
+    RayTracingJsonWriteString(file,
                       ray_tracing_agent_render_request_volume_kind_label(
                           request->volume_source_kind));
     fprintf(file, ",\n");
     fprintf(file, "  \"integrator_3d\": ");
-    json_write_string(file,
+    RayTracingJsonWriteString(file,
                       ray_tracing_agent_render_request_integrator_label(
                           request->integrator_3d));
     fprintf(file, ",\n");
@@ -123,6 +92,13 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "    \"denoise_enabled\": %s\n",
             preflight->denoise_enabled ? "true" : "false");
     fprintf(file, "  },\n");
+    fprintf(file, "  \"resources\": {\n");
+    fprintf(file, "    \"has_budget\": %s,\n",
+            request->has_resource_budget ? "true" : "false");
+    fprintf(file, "    \"cpu_percent\": %d,\n", request->resource_cpu_percent);
+    fprintf(file, "    \"max_workers\": %d,\n", request->resource_max_workers);
+    fprintf(file, "    \"reserve_cpu_count\": %d\n", request->resource_reserve_cpu_count);
+    fprintf(file, "  },\n");
     fprintf(file, "  \"denoise\": {\n");
     fprintf(file, "    \"has_request_override\": %s,\n",
             request->has_denoise_enabled_override ? "true" : "false");
@@ -133,7 +109,7 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "  },\n");
     fprintf(file, "  \"inspection\": {\n");
     fprintf(file, "    \"preset\": ");
-    json_write_string(file,
+    RayTracingJsonWriteString(file,
                       ray_tracing_agent_render_request_inspection_preset_label(
                           request->inspection_preset));
     fprintf(file, ",\n");
@@ -162,12 +138,12 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "    \"has_environment_light_mode_override\": %s,\n",
             request->has_environment_light_mode_override ? "true" : "false");
     fprintf(file, "    \"environment_light_mode\": ");
-    json_write_string(file, environment_light_mode_label(request->environment_light_mode_override));
+    RayTracingJsonWriteString(file, environment_light_mode_label(request->environment_light_mode_override));
     fprintf(file, ",\n");
     fprintf(file, "    \"has_environment_preset_override\": %s,\n",
             request->has_environment_preset_override ? "true" : "false");
     fprintf(file, "    \"environment_preset\": ");
-    json_write_string(file,
+    RayTracingJsonWriteString(file,
                       RuntimeEnvironment3DPresetLabel(
                           (EnvironmentPreset)request->environment_preset_override));
     fprintf(file, ",\n");
@@ -238,10 +214,10 @@ void ray_tracing_render_headless_write_summary(
         fprintf(file, "    \"built\": %s,\n",
                 preflight->environment_summary_built ? "true" : "false");
         fprintf(file, "    \"mode\": ");
-        json_write_string(file, environment_light_mode_label(environment->lightMode));
+        RayTracingJsonWriteString(file, environment_light_mode_label(environment->lightMode));
         fprintf(file, ",\n");
         fprintf(file, "    \"preset\": ");
-        json_write_string(file, RuntimeEnvironment3DPresetLabel(environment->preset));
+        RayTracingJsonWriteString(file, RuntimeEnvironment3DPresetLabel(environment->preset));
         fprintf(file, ",\n");
         fprintf(file, "    \"ambient_strength\": %.9f,\n", ambient_strength);
         fprintf(file, "    \"ambient_color\": [%.9f, %.9f, %.9f],\n",
@@ -250,7 +226,7 @@ void ray_tracing_render_headless_write_summary(
                 environment->ambientColor.z);
         fprintf(file, "    \"background_brightness\": %.9f,\n", background_brightness);
         fprintf(file, "    \"background_brightness_source\": ");
-        json_write_string(file,
+        RayTracingJsonWriteString(file,
                           environment->backgroundIntensityDerivedFromAmbient
                               ? "ambient_strength_compat"
                               : "background_brightness");
@@ -296,20 +272,20 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "  },\n");
     fprintf(file, "  \"outputs\": {\n");
     fprintf(file, "    \"root\": ");
-    json_write_string(file, request->output_root);
+    RayTracingJsonWriteString(file, request->output_root);
     fprintf(file, ",\n");
     fprintf(file, "    \"frame_dir\": ");
-    json_write_string(file, preflight->frame_dir);
+    RayTracingJsonWriteString(file, preflight->frame_dir);
     fprintf(file, ",\n");
     fprintf(file, "    \"first_frame_path\": ");
-    json_write_string(file, preflight->first_frame_path);
+    RayTracingJsonWriteString(file, preflight->first_frame_path);
     fprintf(file, ",\n");
     fprintf(file, "    \"last_frame_path\": ");
-    json_write_string(file, preflight->last_frame_path);
+    RayTracingJsonWriteString(file, preflight->last_frame_path);
     fprintf(file, ",\n");
     fprintf(file, "    \"video_enabled\": %s,\n", request->video_enabled ? "true" : "false");
     fprintf(file, "    \"video_path\": ");
-    json_write_string(file, request->video_path);
+    RayTracingJsonWriteString(file, request->video_path);
     fprintf(file, ",\n");
     fprintf(file, "    \"video_fps\": %d", request->video_fps);
     fprintf(file, "\n");
@@ -318,7 +294,7 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "    \"valid_contract\": %s,\n",
             preflight->scene_summary.valid_contract ? "true" : "false");
     fprintf(file, "    \"scene_id\": ");
-    json_write_string(file, preflight->scene_summary.scene_id);
+    RayTracingJsonWriteString(file, preflight->scene_summary.scene_id);
     fprintf(file, ",\n");
     fprintf(file, "    \"object_count\": %d,\n", preflight->scene_summary.object_count);
     fprintf(file, "    \"material_count\": %d,\n", preflight->scene_summary.material_count);
@@ -362,10 +338,10 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "    \"loaded_last_frame_index\": %llu,\n",
             (unsigned long long)preflight->volume_loaded_last_frame_index);
     fprintf(file, "    \"selected_first_frame_path\": ");
-    json_write_string(file, preflight->volume_selected_first_frame_path);
+    RayTracingJsonWriteString(file, preflight->volume_selected_first_frame_path);
     fprintf(file, ",\n");
     fprintf(file, "    \"selected_last_frame_path\": ");
-    json_write_string(file, preflight->volume_selected_last_frame_path);
+    RayTracingJsonWriteString(file, preflight->volume_selected_last_frame_path);
     fprintf(file, "\n");
     fprintf(file, "  },\n");
     fprintf(file, "  \"water_surface\": {\n");
@@ -390,16 +366,16 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "    \"loaded_last_frame_index\": %llu,\n",
             (unsigned long long)preflight->water_surface_loaded_last_frame_index);
     fprintf(file, "    \"manifest_path\": ");
-    json_write_string(file, preflight->water_surface_manifest_path);
+    RayTracingJsonWriteString(file, preflight->water_surface_manifest_path);
     fprintf(file, ",\n");
     fprintf(file, "    \"selected_first_frame_path\": ");
-    json_write_string(file, preflight->water_surface_selected_first_frame_path);
+    RayTracingJsonWriteString(file, preflight->water_surface_selected_first_frame_path);
     fprintf(file, ",\n");
     fprintf(file, "    \"selected_last_frame_path\": ");
-    json_write_string(file, preflight->water_surface_selected_last_frame_path);
+    RayTracingJsonWriteString(file, preflight->water_surface_selected_last_frame_path);
     fprintf(file, ",\n");
     fprintf(file, "    \"surface_axis\": ");
-    json_write_string(file, preflight->water_surface_axis);
+    RayTracingJsonWriteString(file, preflight->water_surface_axis);
     fprintf(file, ",\n");
     fprintf(file, "    \"grid_w\": %u,\n", preflight->water_surface_grid_w);
     fprintf(file, "    \"grid_d\": %u,\n", preflight->water_surface_grid_d);
@@ -635,10 +611,10 @@ void ray_tracing_render_headless_write_summary(
             fprintf(file, "    {\n");
             fprintf(file, "      \"scene_object_index\": %d,\n", entry->scene_object_index);
             fprintf(file, "      \"object_id\": ");
-            json_write_string(file, entry->object_id);
+            RayTracingJsonWriteString(file, entry->object_id);
             fprintf(file, ",\n");
             fprintf(file, "      \"object_type\": ");
-            json_write_string(file, entry->object_type);
+            RayTracingJsonWriteString(file, entry->object_type);
             fprintf(file, ",\n");
             fprintf(file, "      \"material_id\": %d,\n", entry->material_id);
             fprintf(file, "      \"alpha\": %.6f,\n", entry->alpha);
@@ -685,7 +661,7 @@ void ray_tracing_render_headless_write_summary(
     }
     fprintf(file, "  ],\n");
     fprintf(file, "  \"diagnostics\": ");
-    json_write_string(file, preflight->diagnostics);
+    RayTracingJsonWriteString(file, preflight->diagnostics);
     fprintf(file, "\n");
     fprintf(file, "}\n");
 }
@@ -771,36 +747,21 @@ static bool write_progress_file(const char *path,
                                 const char *diagnostics) {
     FILE *file = NULL;
     char updated_at_utc[32] = {0};
-    double progress_ratio = 0.0;
     if (!path || !path[0] || !request) return true;
     if (!ensure_parent_directory_exists(path)) return false;
     utc_now_string(updated_at_utc, sizeof(updated_at_utc));
-    if (temporal_subpasses_total > 0) {
-        progress_ratio =
-            (double)temporal_subpasses_completed / (double)temporal_subpasses_total;
-        if (total_tiles_in_subpass > 0u &&
-            temporal_subpasses_started > temporal_subpasses_completed) {
-            progress_ratio +=
-                ((double)completed_tiles_in_subpass / (double)total_tiles_in_subpass) /
-                (double)temporal_subpasses_total;
-        }
-    } else if (request->frame_count > 0) {
-        progress_ratio = (double)frames_completed / (double)request->frame_count;
-    }
-    if (progress_ratio < 0.0) progress_ratio = 0.0;
-    if (progress_ratio > 1.0) progress_ratio = 1.0;
     file = fopen(path, "wb");
     if (!file) return false;
     fprintf(file, "{\n");
     fprintf(file, "  \"schema_version\": \"ray_tracing_render_progress_v1\",\n");
     fprintf(file, "  \"run_id\": ");
-    json_write_string(file, request->run_id);
+    RayTracingJsonWriteString(file, request->run_id);
     fprintf(file, ",\n");
     fprintf(file, "  \"stage\": ");
-    json_write_string(file, stage ? stage : "unknown");
+    RayTracingJsonWriteString(file, stage ? stage : "unknown");
     fprintf(file, ",\n");
     fprintf(file, "  \"state\": ");
-    json_write_string(file, state ? state : "unknown");
+    RayTracingJsonWriteString(file, state ? state : "unknown");
     fprintf(file, ",\n");
     fprintf(file, "  \"frame_index\": %d,\n", frame_index);
     fprintf(file, "  \"frames_completed\": %d,\n", frames_completed);
@@ -813,12 +774,20 @@ static bool write_progress_file(const char *path,
     fprintf(file, "  \"elapsed_seconds\": %.6f,\n", elapsed_seconds > 0.0 ? elapsed_seconds : 0.0);
     fprintf(file, "  \"estimated_remaining_seconds\": %.6f,\n",
             estimated_remaining_seconds >= 0.0 ? estimated_remaining_seconds : -1.0);
-    fprintf(file, "  \"progress_ratio\": %.6f,\n", progress_ratio);
+    fprintf(file,
+            "  \"progress_ratio\": %.6f,\n",
+            RayTracingProgressRatioActive(frames_completed,
+                                          request->frame_count,
+                                          temporal_subpasses_started,
+                                          temporal_subpasses_completed,
+                                          temporal_subpasses_total,
+                                          completed_tiles_in_subpass,
+                                          total_tiles_in_subpass));
     fprintf(file, "  \"updated_at_utc\": ");
-    json_write_string(file, updated_at_utc);
+    RayTracingJsonWriteString(file, updated_at_utc);
     fprintf(file, ",\n");
     fprintf(file, "  \"diagnostics\": ");
-    json_write_string(file, diagnostics ? diagnostics : "");
+    RayTracingJsonWriteString(file, diagnostics ? diagnostics : "");
     fprintf(file, "\n}\n");
     fclose(file);
     return true;
@@ -944,7 +913,6 @@ bool ray_tracing_render_headless_write_job_status_file(
     char overwrite_policy[32] = {0};
     const char *slash = NULL;
     size_t job_root_len = 0u;
-    double progress_ratio = 0.0;
     if (!path || !path[0] || !job_id || !job_id[0] || !request) return true;
     if (!ensure_parent_directory_exists(path)) return false;
     load_existing_job_status_times(path,
@@ -985,20 +953,6 @@ bool ray_tracing_render_headless_write_job_status_file(
     } else {
         snprintf(overwrite_policy, sizeof(overwrite_policy), "fail_if_exists");
     }
-    if (temporal_subpasses_total > 0) {
-        progress_ratio =
-            (double)temporal_subpasses_completed / (double)temporal_subpasses_total;
-        if (total_tiles_in_subpass > 0u &&
-            temporal_subpasses_started > temporal_subpasses_completed) {
-            progress_ratio +=
-                ((double)completed_tiles_in_subpass / (double)total_tiles_in_subpass) /
-                (double)temporal_subpasses_total;
-        }
-    } else if (request->frame_count > 0) {
-        progress_ratio = (double)frames_completed / (double)request->frame_count;
-    }
-    if (progress_ratio < 0.0) progress_ratio = 0.0;
-    if (progress_ratio > 1.0) progress_ratio = 1.0;
     file = fopen(path, "wb");
     if (!file) return false;
     fprintf(file, "{\n");
@@ -1006,39 +960,39 @@ bool ray_tracing_render_headless_write_job_status_file(
     fprintf(file, "  \"program\": \"ray_tracing\",\n");
     fprintf(file, "  \"tool\": \"ray_tracing_render_headless\",\n");
     fprintf(file, "  \"job_id\": ");
-    json_write_string(file, job_id);
+    RayTracingJsonWriteString(file, job_id);
     fprintf(file, ",\n");
     fprintf(file, "  \"state\": ");
-    json_write_string(file, state ? state : "unknown");
+    RayTracingJsonWriteString(file, state ? state : "unknown");
     fprintf(file, ",\n");
     fprintf(file, "  \"stage\": ");
-    json_write_string(file, stage ? stage : "");
+    RayTracingJsonWriteString(file, stage ? stage : "");
     fprintf(file, ",\n");
     fprintf(file, "  \"request_path\": ");
-    json_write_string(file, request_path ? request_path : "");
+    RayTracingJsonWriteString(file, request_path ? request_path : "");
     fprintf(file, ",\n");
     fprintf(file, "  \"output_root\": ");
-    json_write_string(file, request->output_root);
+    RayTracingJsonWriteString(file, request->output_root);
     fprintf(file, ",\n");
     fprintf(file, "  \"progress_path\": ");
-    json_write_string(file, request->progress_path);
+    RayTracingJsonWriteString(file, request->progress_path);
     fprintf(file, ",\n");
     fprintf(file, "  \"summary_path\": ");
-    json_write_string(file, request->summary_path);
+    RayTracingJsonWriteString(file, request->summary_path);
     fprintf(file, ",\n");
     fprintf(file, "  \"stdout_path\": ");
-    json_write_string(file, stdout_path);
+    RayTracingJsonWriteString(file, stdout_path);
     fprintf(file, ",\n");
     fprintf(file, "  \"stderr_path\": ");
-    json_write_string(file, stderr_path);
+    RayTracingJsonWriteString(file, stderr_path);
     fprintf(file, ",\n");
     fprintf(file, "  \"pid_path\": ");
-    json_write_string(file, pid_path);
+    RayTracingJsonWriteString(file, pid_path);
     fprintf(file, ",\n");
     fprintf(file, "  \"pid\": %ld,\n", (long)getpid());
     fprintf(file, "  \"exit_code\": %d,\n", exit_code);
     fprintf(file, "  \"overwrite_policy\": ");
-    json_write_string(file, overwrite_policy);
+    RayTracingJsonWriteString(file, overwrite_policy);
     fprintf(file, ",\n");
     fprintf(file, "  \"requested_start_frame\": %d,\n",
             request->start_frame - (request->has_sampling_window ? request->sampling_frame_offset : 0));
@@ -1057,21 +1011,29 @@ bool ray_tracing_render_headless_write_job_status_file(
     fprintf(file, "  \"elapsed_seconds\": %.6f,\n", elapsed_seconds > 0.0 ? elapsed_seconds : 0.0);
     fprintf(file, "  \"estimated_remaining_seconds\": %.6f,\n",
             estimated_remaining_seconds >= 0.0 ? estimated_remaining_seconds : -1.0);
-    fprintf(file, "  \"progress_ratio\": %.6f,\n", progress_ratio);
+    fprintf(file,
+            "  \"progress_ratio\": %.6f,\n",
+            RayTracingProgressRatioActive(frames_completed,
+                                          request->frame_count,
+                                          temporal_subpasses_started,
+                                          temporal_subpasses_completed,
+                                          temporal_subpasses_total,
+                                          completed_tiles_in_subpass,
+                                          total_tiles_in_subpass));
     fprintf(file, "  \"submitted_at_utc\": ");
-    json_write_string(file, submitted_at_utc);
+    RayTracingJsonWriteString(file, submitted_at_utc);
     fprintf(file, ",\n");
     fprintf(file, "  \"started_at_utc\": ");
-    json_write_string(file, started_at_utc);
+    RayTracingJsonWriteString(file, started_at_utc);
     fprintf(file, ",\n");
     fprintf(file, "  \"finished_at_utc\": ");
-    json_write_string(file, finished_at_utc);
+    RayTracingJsonWriteString(file, finished_at_utc);
     fprintf(file, ",\n");
     fprintf(file, "  \"updated_at_utc\": ");
-    json_write_string(file, updated_at_utc);
+    RayTracingJsonWriteString(file, updated_at_utc);
     fprintf(file, ",\n");
     fprintf(file, "  \"diagnostics\": ");
-    json_write_string(file, diagnostics ? diagnostics : "");
+    RayTracingJsonWriteString(file, diagnostics ? diagnostics : "");
     fprintf(file, "\n}\n");
     fclose(file);
     return true;

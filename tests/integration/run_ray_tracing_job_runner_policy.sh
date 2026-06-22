@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-BUILD_ROOT="$ROOT_DIR/build/$(uname -m)"
-RUNNER="$BUILD_ROOT/tools/cli/ray_tracing_job_runner"
-if [[ ! -x "$RUNNER" ]]; then
-  RUNNER="$ROOT_DIR/build/toolchains/clang/$(uname -m)/tools/cli/ray_tracing_job_runner"
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/common.sh"
+
+ROOT_DIR="$(ray_tracing_root_dir)"
+RUNNER="$(ray_tracing_tool_path ray_tracing_job_runner "$ROOT_DIR")"
 
 REQUEST="$ROOT_DIR/tests/fixtures/agent_render_job_runner_resume_request.json"
 JOBS_ROOT="$ROOT_DIR/build/agent_runs/jobs"
 RENDER_OUTPUT_ROOT="$ROOT_DIR/build/agent_runs/ray_tracing/job_runner_resume_smoke/render_output"
-ERR_DIR="/private/tmp/ray_tracing_job_runner_policy"
+WORK_ROOT="$(ray_tracing_test_reset_work_root job_runner_policy "$ROOT_DIR")"
+ERR_DIR="$(ray_tracing_test_diagnostics_dir job_runner_policy "$ROOT_DIR")"
+BAD_REQUEST="$WORK_ROOT/job_runner_policy_bad_output_root_request.json"
+BAD_BUNDLE_ROOT="$WORK_ROOT/job_runner_policy_bad_bundle"
+BAD_BUNDLE_JOB="$BAD_BUNDLE_ROOT/job.json"
+BAD_BUNDLE_REQUEST="$BAD_BUNDLE_ROOT/input/run.ray_tracing.json"
 
 wait_for_job() {
   local job_id="$1"
@@ -39,8 +43,77 @@ submit_job() {
 }
 
 mkdir -p "$JOBS_ROOT"
-mkdir -p "$ERR_DIR"
 rm -rf "$RENDER_OUTPUT_ROOT"
+
+if "$RUNNER" submit --request "$REQUEST" --jobs-root ../jobs_escape >"$ERR_DIR/bad_jobs_root.out" 2>"$ERR_DIR/bad_jobs_root.err"; then
+  echo "expected relative jobs root to fail" >&2
+  exit 1
+fi
+grep -q 'failed to resolve jobs root' "$ERR_DIR/bad_jobs_root.err"
+
+python3 - "$REQUEST" "$BAD_REQUEST" <<'PY'
+import json
+import sys
+
+src, dst = sys.argv[1:3]
+with open(src, "r", encoding="utf-8") as handle:
+    request = json.load(handle)
+request["output"]["root"] = "/"
+with open(dst, "w", encoding="utf-8") as handle:
+    json.dump(request, handle, indent=2)
+    handle.write("\n")
+PY
+
+if "$RUNNER" submit --request "$BAD_REQUEST" --jobs-root "$JOBS_ROOT" >"$ERR_DIR/bad_output_root.out" 2>"$ERR_DIR/bad_output_root.err"; then
+  echo "expected root output path to fail" >&2
+  exit 1
+fi
+grep -q 'invalid detached output root' "$ERR_DIR/bad_output_root.err"
+
+rm -rf "$BAD_BUNDLE_ROOT"
+mkdir -p "$BAD_BUNDLE_ROOT/input"
+cp "$ROOT_DIR/tests/fixtures/agent_render_job_runner_bundle_request.json" "$BAD_BUNDLE_REQUEST"
+cat >"$BAD_BUNDLE_JOB" <<EOF
+{
+  "schema_family": "codework_job",
+  "schema_variant": "headless_bundle_v1",
+  "job_id": "../bad",
+  "program": "ray_tracing",
+  "tool": {
+    "name": "ray_tracing",
+    "version": "0.1.0",
+    "target_os": "linux",
+    "target_arch": "x86_64"
+  },
+  "scene_payload": {
+    "schema_family": "codework_scene",
+    "schema_variant": "scene_runtime_v1",
+    "path": "$ROOT_DIR/config/samples/ps4d_runtime_scene_visual_test.json"
+  },
+  "run_config": {
+    "schema_family": "ray_tracing_request",
+    "schema_variant": "ray_tracing_agent_render_request_v1",
+    "path": "input/run.ray_tracing.json"
+  },
+  "outputs": {
+    "root": ".",
+    "report_path": "output/report.json",
+    "logs_dir": ".",
+    "artifacts_dir": "output/artifacts"
+  },
+  "metadata": {
+    "title": "Bad bundle id",
+    "description": "Invalid bundle job id for policy test",
+    "created_by": "codex",
+    "created_at": "2026-05-22T00:00:00Z"
+  }
+}
+EOF
+if "$RUNNER" submit --request "$BAD_BUNDLE_JOB" --jobs-root "$JOBS_ROOT" >"$ERR_DIR/bad_bundle_id.out" 2>"$ERR_DIR/bad_bundle_id.err"; then
+  echo "expected invalid bundle job id to fail" >&2
+  exit 1
+fi
+grep -q 'invalid job id or job path' "$ERR_DIR/bad_bundle_id.err"
 
 JOB_ID="$(submit_job)"
 [[ -n "$JOB_ID" ]]
