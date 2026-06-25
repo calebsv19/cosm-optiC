@@ -130,6 +130,7 @@ Release and worker artifact hygiene:
 - `--self-test` verifies:
   - packaged runtime binary is executable
   - config/default asset presence is intact
+  - bundled material preset JSON has been refreshed into the writable runtime cache
   - runtime directories are writable
   - Vulkan portability files and shaders are present
   - when `PACKAGE_REQUIRE_FFMPEG=1`, bundled `ffmpeg` is present and exported through `RAY_TRACING_FFMPEG_BIN`
@@ -147,6 +148,8 @@ Release and worker artifact hygiene:
 
 Bundled resource lanes include:
 - `Resources/config/`
+- `Resources/config/materials/*.json` as shipped preset sources refreshed into
+  the writable runtime cache on launcher startup
 - `Resources/data/runtime/`
 - `Resources/data/runtime/frames/`
 - `Resources/data/runtime/videos/`
