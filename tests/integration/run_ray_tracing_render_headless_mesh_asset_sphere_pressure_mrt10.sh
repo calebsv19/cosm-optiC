@@ -39,8 +39,10 @@ assert bvh["max_depth"] > 1, bvh["max_depth"]
 assert bvh["max_leaf_triangle_count"] <= bvh["leaf_size"], bvh
 assert bvh["total_bytes"] > 0, bvh["total_bytes"]
 assert bvh["centroid_bytes"] > 0, bvh["centroid_bytes"]
-assert bvh["sort_scratch_bytes"] > 0, bvh["sort_scratch_bytes"]
-assert bvh["build_scratch_bytes"] == bvh["centroid_bytes"] + bvh["sort_scratch_bytes"], bvh
+assert bvh["triangle_bounds_min_bytes"] > 0, bvh["triangle_bounds_min_bytes"]
+assert bvh["triangle_bounds_max_bytes"] > 0, bvh["triangle_bounds_max_bytes"]
+assert bvh["sort_scratch_bytes"] == 0, bvh["sort_scratch_bytes"]
+assert bvh["build_scratch_bytes"] == bvh["centroid_bytes"] + bvh["triangle_bounds_min_bytes"] + bvh["triangle_bounds_max_bytes"] + bvh["sort_scratch_bytes"], bvh
 assert bvh["trace_calls"] > 0, bvh["trace_calls"]
 assert bvh["node_visits"] > 0, bvh["node_visits"]
 assert bvh["aabb_tests"] >= bvh["node_visits"], bvh
@@ -56,6 +58,19 @@ assert cache["stores"] == 1, cache
 assert cache["cached_triangle_count"] == 65030, cache
 assert cache["cached_bvh_node_count"] == bvh["node_count"], cache
 assert cache["cached_bvh_leaf_count"] == bvh["leaf_count"], cache
+
+accel = summary["prepared_acceleration"]
+assert accel["enabled"] is False, accel
+assert accel["prepared_accel_reuse_status"] == "disabled", accel
+assert accel["blas_cache_hits"] == 0, accel
+assert accel["blas_cache_misses"] == 0, accel
+assert accel["blas_cache_invalidations"] == 0, accel
+assert accel["blas_full_rebuilds"] == 0, accel
+assert accel["blas_cached_asset_count"] == 0, accel
+assert accel["tlas_node_count"] == 0, accel
+assert accel["tlas_instance_count"] == 0, accel
+assert accel["tlas_rebuilds"] == 0, accel
+assert accel["tlas_refits"] == 0, accel
 
 audit = {entry["object_id"]: entry for entry in summary["object_audit"]}
 entry = audit["obj_sphere_pressure_mrt10"]

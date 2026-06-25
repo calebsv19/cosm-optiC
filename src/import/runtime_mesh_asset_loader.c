@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <sys/stat.h>
 
 #include <json-c/json.h>
@@ -28,6 +29,17 @@ static RuntimeMeshAssetCacheEntry
 static unsigned long long g_runtime_mesh_asset_cache_hits = 0u;
 static unsigned long long g_runtime_mesh_asset_cache_misses = 0u;
 static unsigned long long g_runtime_mesh_asset_cache_invalidations = 0u;
+static RayTracingRuntimeMeshAssetTimingStats g_runtime_mesh_asset_timing;
+
+static double runtime_mesh_asset_elapsed_ms_since(const struct timespec* start_time) {
+    struct timespec now = {0};
+    double elapsed = 0.0;
+    if (!start_time) return 0.0;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return 0.0;
+    elapsed = (double)(now.tv_sec - start_time->tv_sec) * 1000.0;
+    elapsed += (double)(now.tv_nsec - start_time->tv_nsec) / 1000000.0;
+    return elapsed < 0.0 ? 0.0 : elapsed;
+}
 
 static bool ray_tracing_runtime_mesh_asset_resolve_path_with_hint(const char* runtime_scene_path,
                                                                   const char* asset_id,
@@ -122,6 +134,24 @@ static const char* runtime_mesh_asset_object_runtime_path(json_object* object) {
     }
     path = runtime_mesh_asset_string_field(line_drawing, "runtime_mesh_path");
     return (path && path[0]) ? path : NULL;
+}
+
+static bool runtime_mesh_asset_object_is_line_drawing_mesh_instance(json_object* object) {
+    json_object* extensions = NULL;
+    json_object* line_drawing = NULL;
+    const char* geometry_source = NULL;
+    if (!object || !json_object_is_type(object, json_type_object)) return false;
+    if (!json_object_object_get_ex(object, "extensions", &extensions) ||
+        !json_object_is_type(extensions, json_type_object)) {
+        return false;
+    }
+    if (!json_object_object_get_ex(extensions, "line_drawing", &line_drawing) ||
+        !json_object_is_type(line_drawing, json_type_object)) {
+        return false;
+    }
+    geometry_source = runtime_mesh_asset_string_field(line_drawing, "geometry_source");
+    if (geometry_source && strcmp(geometry_source, "mesh_asset_instance") == 0) return true;
+    return runtime_mesh_asset_object_runtime_path(object) != NULL;
 }
 
 static bool runtime_mesh_asset_try_asset_root(const char* root,
@@ -230,6 +260,7 @@ static void runtime_mesh_asset_read_vec3_or(json_object* obj,
 static void runtime_mesh_asset_read_transform(json_object* object,
                                               double world_scale,
                                               RayTracingRuntimeMeshAssetInstance* instance) {
+    static const double kDegreesToRadians = 0.017453292519943295769;
     json_object* transform = NULL;
     json_object* position = NULL;
     json_object* rotation = NULL;
@@ -270,6 +301,11 @@ static void runtime_mesh_asset_read_transform(json_object* object,
                                         &instance->rotation_x,
                                         &instance->rotation_y,
                                         &instance->rotation_z);
+        if (runtime_mesh_asset_object_is_line_drawing_mesh_instance(object)) {
+            instance->rotation_x *= kDegreesToRadians;
+            instance->rotation_y *= kDegreesToRadians;
+            instance->rotation_z *= kDegreesToRadians;
+        }
     }
     if (json_object_object_get_ex(transform, "scale", &scale) &&
         json_object_is_type(scale, json_type_object)) {
@@ -418,7 +454,12 @@ static bool runtime_mesh_asset_load_document_cached(const char* resolved_path,
     int cache_slot = -1;
     RuntimeMeshAssetCacheEntry* entry = NULL;
     CoreResult load_result = core_result_ok();
+    struct timespec load_start = {0};
+    struct timespec copy_start = {0};
+    bool copy_ok = false;
 
+    (void)clock_gettime(CLOCK_MONOTONIC, &load_start);
+    g_runtime_mesh_asset_timing.asset_load_calls += 1;
     if (!resolved_path || !asset_id || !out_document) {
         runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size, "mesh asset cache input missing");
         return false;
@@ -436,13 +477,21 @@ static bool runtime_mesh_asset_load_document_cached(const char* resolved_path,
                                                 file_size);
     if (cached_index >= 0) {
         g_runtime_mesh_asset_cache_hits += 1u;
-        return runtime_mesh_asset_document_copy(&g_runtime_mesh_asset_cache[cached_index].document,
-                                                out_document,
-                                                out_diagnostics,
-                                                out_diagnostics_size);
+        g_runtime_mesh_asset_timing.asset_cache_hits += 1;
+        (void)clock_gettime(CLOCK_MONOTONIC, &copy_start);
+        copy_ok = runtime_mesh_asset_document_copy(&g_runtime_mesh_asset_cache[cached_index].document,
+                                                   out_document,
+                                                   out_diagnostics,
+                                                   out_diagnostics_size);
+        g_runtime_mesh_asset_timing.asset_document_copy_ms +=
+            runtime_mesh_asset_elapsed_ms_since(&copy_start);
+        g_runtime_mesh_asset_timing.asset_load_total_ms +=
+            runtime_mesh_asset_elapsed_ms_since(&load_start);
+        return copy_ok;
     }
 
     g_runtime_mesh_asset_cache_misses += 1u;
+    g_runtime_mesh_asset_timing.asset_cache_misses += 1;
     cache_slot = runtime_mesh_asset_cache_slot_for(asset_id, resolved_path);
     if (cache_slot < 0) {
         runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size, "mesh asset cache full");
@@ -452,7 +501,13 @@ static bool runtime_mesh_asset_load_document_cached(const char* resolved_path,
     entry = &g_runtime_mesh_asset_cache[cache_slot];
     memset(entry, 0, sizeof(*entry));
     core_mesh_asset_runtime_document_init(&entry->document);
+    {
+        struct timespec document_load_start = {0};
+        (void)clock_gettime(CLOCK_MONOTONIC, &document_load_start);
     load_result = core_mesh_asset_runtime_document_load_file(resolved_path, &entry->document);
+        g_runtime_mesh_asset_timing.asset_runtime_document_load_ms +=
+            runtime_mesh_asset_elapsed_ms_since(&document_load_start);
+    }
     if (load_result.code != CORE_OK) {
         runtime_mesh_asset_diag(out_diagnostics,
                                 out_diagnostics_size,
@@ -469,10 +524,16 @@ static bool runtime_mesh_asset_load_document_cached(const char* resolved_path,
     entry->file_size = file_size;
     entry->valid = true;
 
-    return runtime_mesh_asset_document_copy(&entry->document,
-                                            out_document,
-                                            out_diagnostics,
-                                            out_diagnostics_size);
+    (void)clock_gettime(CLOCK_MONOTONIC, &copy_start);
+    copy_ok = runtime_mesh_asset_document_copy(&entry->document,
+                                               out_document,
+                                               out_diagnostics,
+                                               out_diagnostics_size);
+    g_runtime_mesh_asset_timing.asset_document_copy_ms +=
+        runtime_mesh_asset_elapsed_ms_since(&copy_start);
+    g_runtime_mesh_asset_timing.asset_load_total_ms +=
+        runtime_mesh_asset_elapsed_ms_since(&load_start);
+    return copy_ok;
 }
 
 static bool runtime_mesh_asset_append_instance(RayTracingRuntimeMeshAssetSet* set,
@@ -762,23 +823,33 @@ static bool ray_tracing_runtime_mesh_assets_load_scene_file_with_options(
     int object_count = 0;
     int i = 0;
     int runtime_object_index = 0;
+    struct timespec total_start = {0};
+    struct timespec stage_start = {0};
 
+    ray_tracing_runtime_mesh_assets_timing_reset();
+    (void)clock_gettime(CLOCK_MONOTONIC, &total_start);
     if (!out_set) {
         runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size, "mesh asset output missing");
         return false;
     }
     ray_tracing_runtime_mesh_asset_set_init(out_set);
     runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size, "ok");
+    (void)clock_gettime(CLOCK_MONOTONIC, &stage_start);
     if (!runtime_mesh_asset_read_text(runtime_scene_path,
                                       &scene_text,
                                       out_diagnostics,
                                       out_diagnostics_size)) {
         return false;
     }
+    g_runtime_mesh_asset_timing.scene_read_ms +=
+        runtime_mesh_asset_elapsed_ms_since(&stage_start);
 
+    (void)clock_gettime(CLOCK_MONOTONIC, &stage_start);
     root = json_tokener_parse(scene_text);
     free(scene_text);
     scene_text = NULL;
+    g_runtime_mesh_asset_timing.scene_parse_ms +=
+        runtime_mesh_asset_elapsed_ms_since(&stage_start);
     if (!root || !json_object_is_type(root, json_type_object)) {
         if (root) json_object_put(root);
         runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size, "invalid runtime scene json");
@@ -914,6 +985,21 @@ static bool ray_tracing_runtime_mesh_assets_load_scene_file_with_options(
     }
 
     json_object_put(root);
+    g_runtime_mesh_asset_timing.loaded_assets = out_set->asset_count;
+    g_runtime_mesh_asset_timing.loaded_instances = out_set->instance_count;
+    for (i = 0; i < out_set->asset_count; ++i) {
+        const RayTracingRuntimeMeshAsset* asset = &out_set->assets[i];
+        struct stat st;
+        if (stat(asset->path, &st) == 0 && st.st_size > 0) {
+            g_runtime_mesh_asset_timing.loaded_asset_bytes +=
+                (unsigned long long)st.st_size;
+        }
+        g_runtime_mesh_asset_timing.loaded_vertices +=
+            (unsigned long long)asset->document.vertex_count;
+        g_runtime_mesh_asset_timing.loaded_triangles +=
+            (unsigned long long)asset->document.triangle_count;
+    }
+    g_runtime_mesh_asset_timing.total_ms += runtime_mesh_asset_elapsed_ms_since(&total_start);
     runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size, "ok");
     return true;
 }
@@ -996,4 +1082,14 @@ void ray_tracing_runtime_mesh_assets_cache_stats(unsigned long long* out_hits,
     if (out_misses) *out_misses = g_runtime_mesh_asset_cache_misses;
     if (out_invalidations) *out_invalidations = g_runtime_mesh_asset_cache_invalidations;
     if (out_cached_assets) *out_cached_assets = cached_assets;
+}
+
+void ray_tracing_runtime_mesh_assets_timing_reset(void) {
+    memset(&g_runtime_mesh_asset_timing, 0, sizeof(g_runtime_mesh_asset_timing));
+}
+
+void ray_tracing_runtime_mesh_assets_timing_snapshot(
+    RayTracingRuntimeMeshAssetTimingStats* out_stats) {
+    if (!out_stats) return;
+    *out_stats = g_runtime_mesh_asset_timing;
 }

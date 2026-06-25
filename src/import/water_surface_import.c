@@ -404,13 +404,28 @@ static bool water_surface_import_resolve_frame_path(
                                   "water manifest frames empty");
         return false;
     }
-    if (requested_frame_index < 0) {
-        requested_frame_index = 0;
-    } else if (requested_frame_index >= frame_count) {
-        requested_frame_index = frame_count - 1;
+    if (requested_frame_index >= 0) {
+        for (int i = 0; i < frame_count; ++i) {
+            cJSON* candidate = cJSON_GetArrayItem(frames, i);
+            cJSON* frame_index = NULL;
+            if (!cJSON_IsObject(candidate)) continue;
+            frame_index = cJSON_GetObjectItem(candidate, "frame_index");
+            if (cJSON_IsNumber(frame_index) &&
+                (uint64_t)frame_index->valuedouble == (uint64_t)requested_frame_index) {
+                frame_entry = candidate;
+                break;
+            }
+        }
     }
 
-    frame_entry = cJSON_GetArrayItem(frames, requested_frame_index);
+    if (!frame_entry) {
+        if (requested_frame_index < 0) {
+            requested_frame_index = 0;
+        } else if (requested_frame_index >= frame_count) {
+            requested_frame_index = frame_count - 1;
+        }
+        frame_entry = cJSON_GetArrayItem(frames, requested_frame_index);
+    }
     if (!cJSON_IsObject(frame_entry)) {
         cJSON_Delete(root);
         water_surface_import_diag(out_diagnostics, out_diagnostics_size,

@@ -63,6 +63,23 @@ typedef struct RayTracingRuntimeMeshAssetSet {
         skipped_instances[RAY_TRACING_RUNTIME_MESH_ASSET_MAX_INSTANCES];
 } RayTracingRuntimeMeshAssetSet;
 
+typedef struct RayTracingRuntimeMeshAssetTimingStats {
+    double total_ms;
+    double scene_read_ms;
+    double scene_parse_ms;
+    double asset_load_total_ms;
+    double asset_runtime_document_load_ms;
+    double asset_document_copy_ms;
+    int asset_load_calls;
+    int asset_cache_hits;
+    int asset_cache_misses;
+    int loaded_assets;
+    int loaded_instances;
+    unsigned long long loaded_asset_bytes;
+    unsigned long long loaded_vertices;
+    unsigned long long loaded_triangles;
+} RayTracingRuntimeMeshAssetTimingStats;
+
 void ray_tracing_runtime_mesh_asset_set_init(RayTracingRuntimeMeshAssetSet* set);
 void ray_tracing_runtime_mesh_asset_set_free(RayTracingRuntimeMeshAssetSet* set);
 
@@ -96,3 +113,6 @@ void ray_tracing_runtime_mesh_assets_cache_stats(unsigned long long* out_hits,
                                                 unsigned long long* out_misses,
                                                 unsigned long long* out_invalidations,
                                                 int* out_cached_assets);
+void ray_tracing_runtime_mesh_assets_timing_reset(void);
+void ray_tracing_runtime_mesh_assets_timing_snapshot(
+    RayTracingRuntimeMeshAssetTimingStats* out_stats);

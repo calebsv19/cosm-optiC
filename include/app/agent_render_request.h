@@ -17,6 +17,7 @@ typedef struct RayTracingAgentRenderRequest {
     bool volume_enabled;
     int volume_source_kind;
     char volume_source_path[PATH_MAX];
+    bool volume_visible;
     bool volume_affects_lighting;
     bool volume_debug_overlay;
     char output_root[PATH_MAX];

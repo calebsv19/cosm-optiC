@@ -280,11 +280,14 @@ static bool write_canonical_request_file(const char *path,
         fprintf(file, "    \"source_path\": ");
         json_write_string(file, request->volume_source_path);
         fprintf(file, ",\n");
+        fprintf(file, "    \"visible\": %s,\n",
+                request->volume_visible ? "true" : "false");
         fprintf(file, "    \"affects_lighting\": %s,\n",
                 request->volume_affects_lighting ? "true" : "false");
         fprintf(file, "    \"debug_overlay\": %s\n",
                 request->volume_debug_overlay ? "true" : "false");
     } else {
+        fprintf(file, "    \"visible\": false,\n");
         fprintf(file, "    \"affects_lighting\": false,\n");
         fprintf(file, "    \"debug_overlay\": false\n");
     }

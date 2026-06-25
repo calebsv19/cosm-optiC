@@ -167,6 +167,7 @@ cat > "$REQUEST" <<JSON
     "enabled": true,
     "source_kind": "scene_bundle",
     "source_path": "$SCENE_BUNDLE",
+    "visible": false,
     "affects_lighting": true,
     "debug_overlay": false
   },
@@ -213,7 +214,9 @@ JSON
 
 grep -q '"schema_version": "ray_tracing_headless_summary_v1"' "$SUMMARY"
 grep -q '"scene_applied": true' "$SUMMARY"
-grep -q '"volume_attached": true' "$SUMMARY"
+grep -q '"volume_visible": false' "$SUMMARY"
+grep -q '"volume_attached": false' "$SUMMARY"
+grep -q '"volume_summary_built": false' "$SUMMARY"
 grep -q '"water_surface_source_found": true' "$SUMMARY"
 grep -q '"water_surface_loaded": true' "$SUMMARY"
 grep -q '"water_surface_mesh_attached": true' "$SUMMARY"

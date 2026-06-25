@@ -39,8 +39,10 @@ assert bvh["max_depth"] > 1, bvh["max_depth"]
 assert bvh["max_leaf_triangle_count"] <= bvh["leaf_size"], bvh
 assert bvh["total_bytes"] > 0, bvh["total_bytes"]
 assert bvh["centroid_bytes"] > 0, bvh["centroid_bytes"]
-assert bvh["sort_scratch_bytes"] > 0, bvh["sort_scratch_bytes"]
-assert bvh["build_scratch_bytes"] == bvh["centroid_bytes"] + bvh["sort_scratch_bytes"], bvh
+assert bvh["triangle_bounds_min_bytes"] > 0, bvh["triangle_bounds_min_bytes"]
+assert bvh["triangle_bounds_max_bytes"] > 0, bvh["triangle_bounds_max_bytes"]
+assert bvh["sort_scratch_bytes"] == 0, bvh["sort_scratch_bytes"]
+assert bvh["build_scratch_bytes"] == bvh["centroid_bytes"] + bvh["triangle_bounds_min_bytes"] + bvh["triangle_bounds_max_bytes"] + bvh["sort_scratch_bytes"], bvh
 assert bvh["trace_calls"] > 0, bvh["trace_calls"]
 assert bvh["node_visits"] > 0, bvh["node_visits"]
 assert bvh["aabb_tests"] >= bvh["node_visits"], bvh

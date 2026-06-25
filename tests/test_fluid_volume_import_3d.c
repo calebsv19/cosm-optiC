@@ -533,7 +533,7 @@ static int test_fluid_volume_import_3d_manifest_selects_requested_frame_index(vo
 
     ok = fluid_volume_import_3d_load_source_at_frame(manifest_path,
                                                      RUNTIME_VOLUME_3D_SOURCE_MANIFEST,
-                                                     1,
+                                                     2,
                                                      &attachment,
                                                      diagnostics,
                                                      sizeof(diagnostics));
@@ -616,7 +616,7 @@ static int test_fluid_volume_import_3d_scene_bundle_manifest_selects_requested_f
 
     ok = fluid_volume_import_3d_resolve_source_frame_path(bundle_path,
                                                           RUNTIME_VOLUME_3D_SOURCE_MANIFEST,
-                                                          1,
+                                                          2,
                                                           selected_path,
                                                           sizeof(selected_path),
                                                           diagnostics,
@@ -627,7 +627,7 @@ static int test_fluid_volume_import_3d_scene_bundle_manifest_selects_requested_f
 
     ok = fluid_volume_import_3d_load_source_at_frame(bundle_path,
                                                      RUNTIME_VOLUME_3D_SOURCE_MANIFEST,
-                                                     1,
+                                                     2,
                                                      &attachment,
                                                      diagnostics,
                                                      sizeof(diagnostics));

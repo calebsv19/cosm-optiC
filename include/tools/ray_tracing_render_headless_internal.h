@@ -6,8 +6,11 @@
 
 #include "app/agent_render_request.h"
 #include "import/runtime_scene_bridge.h"
+#include "import/runtime_mesh_asset_loader.h"
 #include "render/ray_tracing_mode_backend.h"
 #include "render/runtime_native_3d_render.h"
+#include "render/runtime_scene_accel_3d.h"
+#include "render/runtime_scene_3d_builder.h"
 #include "render/runtime_triangle_bvh_3d.h"
 #include "render/runtime_volume_3d_debug.h"
 
@@ -114,6 +117,19 @@ typedef struct RayTracingHeadlessPreflight {
     int water_surface_triangle_count;
     RuntimeNative3DRenderStats stats;
     RuntimeNative3DPreparedSceneCacheStats prepared_scene_cache_stats;
+    RuntimeSceneAcceleration3DDiagnostics scene_acceleration_stats;
+    RayTracingRuntimeMeshAssetTimingStats mesh_asset_timing_stats;
+    RuntimeScene3DBuilderTimingStats scene_builder_timing_stats;
+    double runtime_scene_apply_ms;
+    double runtime_scene_preflight_ms;
+    double native_prepare_frame_ms;
+    double object_audit_ms;
+    double render_frames_ms;
+    double render_trace_ms;
+    double frame_analysis_ms;
+    double frame_write_ms;
+    double video_encode_ms;
+    double total_run_ms;
     RuntimeTriangleBVH3DBuildStats bvh_build_stats;
     RuntimeTriangleBVH3DTraceStats bvh_trace_stats;
     size_t nonzero_pixels;

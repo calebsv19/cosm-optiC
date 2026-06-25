@@ -6,8 +6,20 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 static char gRuntimeScene3DBuilderLastDiagnostics[4096] = "ok";
+static RuntimeScene3DBuilderTimingStats gRuntimeScene3DBuilderTiming;
+
+static double runtime_scene_3d_builder_elapsed_ms_since(const struct timespec* start_time) {
+    struct timespec now = {0};
+    double elapsed = 0.0;
+    if (!start_time) return 0.0;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return 0.0;
+    elapsed = (double)(now.tv_sec - start_time->tv_sec) * 1000.0;
+    elapsed += (double)(now.tv_nsec - start_time->tv_nsec) / 1000000.0;
+    return elapsed < 0.0 ? 0.0 : elapsed;
+}
 
 static void runtime_scene_3d_builder_set_diag(const char* message) {
     snprintf(gRuntimeScene3DBuilderLastDiagnostics,
@@ -18,6 +30,15 @@ static void runtime_scene_3d_builder_set_diag(const char* message) {
 
 const char* RuntimeScene3DBuilder_LastDiagnostics(void) {
     return gRuntimeScene3DBuilderLastDiagnostics;
+}
+
+void RuntimeScene3DBuilder_TimingReset(void) {
+    memset(&gRuntimeScene3DBuilderTiming, 0, sizeof(gRuntimeScene3DBuilderTiming));
+}
+
+void RuntimeScene3DBuilder_TimingSnapshot(RuntimeScene3DBuilderTimingStats* out_stats) {
+    if (!out_stats) return;
+    *out_stats = gRuntimeScene3DBuilderTiming;
 }
 
 static RuntimePrimitive3DKind runtime_scene_3d_builder_map_kind(
@@ -92,11 +113,15 @@ typedef struct {
 } RuntimeScene3DBuilderMeshBounds;
 
 static bool runtime_scene_3d_builder_rebuild_bvh(RuntimeScene3D* scene) {
+    struct timespec stage_start = {0};
     if (!scene) {
         runtime_scene_3d_builder_set_diag("bvh rebuild failed: scene missing");
         return false;
     }
+    (void)clock_gettime(CLOCK_MONOTONIC, &stage_start);
     if (!RuntimeTriangleMesh3D_BuildBVH(&scene->triangleMesh)) {
+        gRuntimeScene3DBuilderTiming.bvh_rebuild_wall_ms +=
+            runtime_scene_3d_builder_elapsed_ms_since(&stage_start);
         char diag[2048];
         snprintf(diag,
                  sizeof(diag),
@@ -105,6 +130,8 @@ static bool runtime_scene_3d_builder_rebuild_bvh(RuntimeScene3D* scene) {
         runtime_scene_3d_builder_set_diag(diag);
         return false;
     }
+    gRuntimeScene3DBuilderTiming.bvh_rebuild_wall_ms +=
+        runtime_scene_3d_builder_elapsed_ms_since(&stage_start);
     if (scene->triangleMesh.triangleCount > 0 &&
         !RuntimeTriangleMesh3D_HasReadyBVH(&scene->triangleMesh)) {
         runtime_scene_3d_builder_set_diag("bvh rebuild failed: BVH not ready after build");
@@ -701,12 +728,18 @@ static bool runtime_scene_3d_builder_append_mesh_asset_set(
     bool require_ready_bvh) {
     int extra_primitives = 0;
     int extra_triangles = 0;
+    struct timespec total_start = {0};
+    struct timespec stage_start = {0};
+    (void)clock_gettime(CLOCK_MONOTONIC, &total_start);
+    gRuntimeScene3DBuilderTiming.mesh_append_calls += 1;
     if (!scene || !mesh_assets) {
         runtime_scene_3d_builder_set_diag("append mesh assets failed: scene or mesh set missing");
         return false;
     }
     if (mesh_assets->instance_count <= 0) return true;
 
+    gRuntimeScene3DBuilderTiming.mesh_append_assets += mesh_assets->asset_count;
+    gRuntimeScene3DBuilderTiming.mesh_append_instances += mesh_assets->instance_count;
     for (int i = 0; i < mesh_assets->instance_count; ++i) {
         const RayTracingRuntimeMeshAssetInstance* instance = &mesh_assets->instances[i];
         if (instance->asset_index < 0 || instance->asset_index >= mesh_assets->asset_count) {
@@ -716,18 +749,27 @@ static bool runtime_scene_3d_builder_append_mesh_asset_set(
         extra_primitives += 1;
         extra_triangles += (int)mesh_assets->assets[instance->asset_index].document.triangle_count;
     }
+    gRuntimeScene3DBuilderTiming.mesh_append_triangles_expected += extra_triangles;
+    (void)clock_gettime(CLOCK_MONOTONIC, &stage_start);
     if (!runtime_scene_3d_builder_reserve_primitives(scene,
                                                      scene->primitiveCount + extra_primitives)) {
+        gRuntimeScene3DBuilderTiming.mesh_append_reserve_ms +=
+            runtime_scene_3d_builder_elapsed_ms_since(&stage_start);
         runtime_scene_3d_builder_set_diag("append mesh assets failed: primitive reserve failed");
         return false;
     }
     if (!runtime_scene_3d_builder_reserve_triangles(
             scene,
             scene->triangleMesh.triangleCount + extra_triangles)) {
+        gRuntimeScene3DBuilderTiming.mesh_append_reserve_ms +=
+            runtime_scene_3d_builder_elapsed_ms_since(&stage_start);
         runtime_scene_3d_builder_set_diag("append mesh assets failed: triangle reserve failed");
         return false;
     }
+    gRuntimeScene3DBuilderTiming.mesh_append_reserve_ms +=
+        runtime_scene_3d_builder_elapsed_ms_since(&stage_start);
 
+    (void)clock_gettime(CLOCK_MONOTONIC, &stage_start);
     for (int i = 0; i < mesh_assets->instance_count; ++i) {
         const RayTracingRuntimeMeshAssetInstance* instance = &mesh_assets->instances[i];
         const RayTracingRuntimeMeshAsset* asset = &mesh_assets->assets[instance->asset_index];
@@ -786,14 +828,20 @@ static bool runtime_scene_3d_builder_append_mesh_asset_set(
             }
             appended_triangle_count += 1;
         }
+        gRuntimeScene3DBuilderTiming.mesh_append_triangles_appended +=
+            appended_triangle_count;
         if (appended_triangle_count <= 0) continue;
         scene->primitiveCount += 1;
     }
+    gRuntimeScene3DBuilderTiming.mesh_append_expand_ms +=
+        runtime_scene_3d_builder_elapsed_ms_since(&stage_start);
     scene->scope.triangleMeshEnabled = true;
     if (require_ready_bvh && !runtime_scene_3d_builder_rebuild_bvh(scene)) {
         RuntimeScene3D_Reset(scene);
         return false;
     }
+    gRuntimeScene3DBuilderTiming.mesh_append_total_ms +=
+        runtime_scene_3d_builder_elapsed_ms_since(&total_start);
     return true;
 }
 
@@ -871,7 +919,9 @@ static bool runtime_scene_3d_builder_build_from_primitive_seed_state_at_t(
     bool require_ready_bvh) {
     int retained_primitive_count = 0;
     int expected_triangle_count = 0;
+    struct timespec stage_start = {0};
 
+    (void)clock_gettime(CLOCK_MONOTONIC, &stage_start);
     if (!scene || !seed_state || !seed_state->valid) {
         runtime_scene_3d_builder_set_diag("primitive seed build failed: invalid seed state");
         return false;
@@ -917,6 +967,8 @@ static bool runtime_scene_3d_builder_build_from_primitive_seed_state_at_t(
         RuntimeScene3D_Reset(scene);
         return false;
     }
+    gRuntimeScene3DBuilderTiming.primitive_seed_ms +=
+        runtime_scene_3d_builder_elapsed_ms_since(&stage_start);
     return true;
 }
 
@@ -945,6 +997,8 @@ bool RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(RuntimeScene3D* scene, double
     const RayTracingRuntimeMeshAssetSet* mesh_assets = NULL;
     int mesh_instance_count = 0;
     int mesh_asset_count = 0;
+    struct timespec total_start = {0};
+    (void)clock_gettime(CLOCK_MONOTONIC, &total_start);
     runtime_scene_3d_builder_set_diag("ok");
     runtime_scene_bridge_get_last_3d_primitive_seed_state(&seed_state);
     if (!runtime_scene_3d_builder_build_from_primitive_seed_state_at_t(scene,
@@ -1017,6 +1071,8 @@ bool RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(RuntimeScene3D* scene, double
         return false;
     }
     runtime_scene_3d_builder_set_diag("ok");
+    gRuntimeScene3DBuilderTiming.total_ms +=
+        runtime_scene_3d_builder_elapsed_ms_since(&total_start);
     return true;
 }
 

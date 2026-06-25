@@ -75,6 +75,8 @@ void ray_tracing_render_headless_write_summary(
                       ray_tracing_agent_render_request_volume_kind_label(
                           request->volume_source_kind));
     fprintf(file, ",\n");
+    fprintf(file, "  \"volume_visible\": %s,\n",
+            request->volume_visible ? "true" : "false");
     fprintf(file, "  \"integrator_3d\": ");
     RayTracingJsonWriteString(file,
                       ray_tracing_agent_render_request_integrator_label(
@@ -514,6 +516,75 @@ void ray_tracing_render_headless_write_summary(
             (unsigned)preflight->max_g,
             (unsigned)preflight->max_b);
     fprintf(file, "  },\n");
+    fprintf(file, "  \"timing_breakdown\": {\n");
+    fprintf(file, "    \"runtime_scene_apply_ms\": %.6f,\n",
+            preflight->runtime_scene_apply_ms);
+    fprintf(file, "    \"runtime_scene_preflight_ms\": %.6f,\n",
+            preflight->runtime_scene_preflight_ms);
+    fprintf(file, "    \"native_prepare_frame_ms\": %.6f,\n",
+            preflight->native_prepare_frame_ms);
+    fprintf(file, "    \"object_audit_ms\": %.6f,\n", preflight->object_audit_ms);
+    fprintf(file, "    \"render_frames_ms\": %.6f,\n", preflight->render_frames_ms);
+    fprintf(file, "    \"render_trace_ms\": %.6f,\n", preflight->render_trace_ms);
+    fprintf(file, "    \"frame_analysis_ms\": %.6f,\n", preflight->frame_analysis_ms);
+    fprintf(file, "    \"frame_write_ms\": %.6f,\n", preflight->frame_write_ms);
+    fprintf(file, "    \"video_encode_ms\": %.6f,\n", preflight->video_encode_ms);
+    fprintf(file, "    \"total_run_ms\": %.6f,\n", preflight->total_run_ms);
+    fprintf(file, "    \"mesh_asset_loader\": {\n");
+    fprintf(file, "      \"total_ms\": %.6f,\n",
+            preflight->mesh_asset_timing_stats.total_ms);
+    fprintf(file, "      \"scene_read_ms\": %.6f,\n",
+            preflight->mesh_asset_timing_stats.scene_read_ms);
+    fprintf(file, "      \"scene_parse_ms\": %.6f,\n",
+            preflight->mesh_asset_timing_stats.scene_parse_ms);
+    fprintf(file, "      \"asset_load_total_ms\": %.6f,\n",
+            preflight->mesh_asset_timing_stats.asset_load_total_ms);
+    fprintf(file, "      \"asset_runtime_document_load_ms\": %.6f,\n",
+            preflight->mesh_asset_timing_stats.asset_runtime_document_load_ms);
+    fprintf(file, "      \"asset_document_copy_ms\": %.6f,\n",
+            preflight->mesh_asset_timing_stats.asset_document_copy_ms);
+    fprintf(file, "      \"asset_load_calls\": %d,\n",
+            preflight->mesh_asset_timing_stats.asset_load_calls);
+    fprintf(file, "      \"asset_cache_hits\": %d,\n",
+            preflight->mesh_asset_timing_stats.asset_cache_hits);
+    fprintf(file, "      \"asset_cache_misses\": %d,\n",
+            preflight->mesh_asset_timing_stats.asset_cache_misses);
+    fprintf(file, "      \"loaded_assets\": %d,\n",
+            preflight->mesh_asset_timing_stats.loaded_assets);
+    fprintf(file, "      \"loaded_instances\": %d,\n",
+            preflight->mesh_asset_timing_stats.loaded_instances);
+    fprintf(file, "      \"loaded_asset_bytes\": %llu,\n",
+            preflight->mesh_asset_timing_stats.loaded_asset_bytes);
+    fprintf(file, "      \"loaded_vertices\": %llu,\n",
+            preflight->mesh_asset_timing_stats.loaded_vertices);
+    fprintf(file, "      \"loaded_triangles\": %llu\n",
+            preflight->mesh_asset_timing_stats.loaded_triangles);
+    fprintf(file, "    },\n");
+    fprintf(file, "    \"scene_builder\": {\n");
+    fprintf(file, "      \"total_ms\": %.6f,\n",
+            preflight->scene_builder_timing_stats.total_ms);
+    fprintf(file, "      \"primitive_seed_ms\": %.6f,\n",
+            preflight->scene_builder_timing_stats.primitive_seed_ms);
+    fprintf(file, "      \"mesh_append_total_ms\": %.6f,\n",
+            preflight->scene_builder_timing_stats.mesh_append_total_ms);
+    fprintf(file, "      \"mesh_append_reserve_ms\": %.6f,\n",
+            preflight->scene_builder_timing_stats.mesh_append_reserve_ms);
+    fprintf(file, "      \"mesh_append_expand_ms\": %.6f,\n",
+            preflight->scene_builder_timing_stats.mesh_append_expand_ms);
+    fprintf(file, "      \"bvh_rebuild_wall_ms\": %.6f,\n",
+            preflight->scene_builder_timing_stats.bvh_rebuild_wall_ms);
+    fprintf(file, "      \"mesh_append_calls\": %d,\n",
+            preflight->scene_builder_timing_stats.mesh_append_calls);
+    fprintf(file, "      \"mesh_append_assets\": %d,\n",
+            preflight->scene_builder_timing_stats.mesh_append_assets);
+    fprintf(file, "      \"mesh_append_instances\": %d,\n",
+            preflight->scene_builder_timing_stats.mesh_append_instances);
+    fprintf(file, "      \"mesh_append_triangles_expected\": %d,\n",
+            preflight->scene_builder_timing_stats.mesh_append_triangles_expected);
+    fprintf(file, "      \"mesh_append_triangles_appended\": %d\n",
+            preflight->scene_builder_timing_stats.mesh_append_triangles_appended);
+    fprintf(file, "    }\n");
+    fprintf(file, "  },\n");
     fprintf(file, "  \"prepared_scene_cache\": {\n");
     fprintf(file, "    \"valid\": %s,\n",
             preflight->prepared_scene_cache_stats.valid ? "true" : "false");
@@ -547,6 +618,34 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "    \"cached_bvh_leaf_count\": %d\n",
             preflight->prepared_scene_cache_stats.cachedBVHLeafCount);
     fprintf(file, "  },\n");
+    fprintf(file, "  \"prepared_acceleration\": {\n");
+    fprintf(file, "    \"enabled\": %s,\n",
+            preflight->scene_acceleration_stats.enabled ? "true" : "false");
+    fprintf(file, "    \"prepared_accel_reuse_status\": ");
+    RayTracingJsonWriteString(
+        file,
+        RuntimeSceneAcceleration3DReuseStatusLabel(
+            preflight->scene_acceleration_stats.reuseStatus));
+    fprintf(file, ",\n");
+    fprintf(file, "    \"blas_cache_hits\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_stats.blasCacheHits);
+    fprintf(file, "    \"blas_cache_misses\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_stats.blasCacheMisses);
+    fprintf(file, "    \"blas_cache_invalidations\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_stats.blasCacheInvalidations);
+    fprintf(file, "    \"blas_full_rebuilds\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_stats.blasFullRebuilds);
+    fprintf(file, "    \"blas_cached_asset_count\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_stats.blasCachedAssetCount);
+    fprintf(file, "    \"tlas_node_count\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_stats.tlasNodeCount);
+    fprintf(file, "    \"tlas_instance_count\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_stats.tlasInstanceCount);
+    fprintf(file, "    \"tlas_rebuilds\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_stats.tlasRebuilds);
+    fprintf(file, "    \"tlas_refits\": %llu\n",
+            (unsigned long long)preflight->scene_acceleration_stats.tlasRefits);
+    fprintf(file, "  },\n");
     fprintf(file, "  \"bvh_summary\": {\n");
     fprintf(file, "    \"ready\": %s,\n",
             preflight->bvh_build_stats.ready ? "true" : "false");
@@ -560,12 +659,42 @@ void ray_tracing_render_headless_write_summary(
             preflight->bvh_build_stats.maxLeafTriangleCount);
     fprintf(file, "    \"build_cpu_ms\": %.6f,\n",
             preflight->bvh_build_stats.buildCpuMs);
+    fprintf(file, "    \"allocation_cpu_ms\": %.6f,\n",
+            preflight->bvh_build_stats.allocationCpuMs);
+    fprintf(file, "    \"centroid_build_cpu_ms\": %.6f,\n",
+            preflight->bvh_build_stats.centroidBuildCpuMs);
+    fprintf(file, "    \"tree_build_cpu_ms\": %.6f,\n",
+            preflight->bvh_build_stats.treeBuildCpuMs);
+    fprintf(file, "    \"range_bounds_cpu_ms\": %.6f,\n",
+            preflight->bvh_build_stats.rangeBoundsCpuMs);
+    fprintf(file, "    \"sort_cpu_ms\": %.6f,\n",
+            preflight->bvh_build_stats.sortCpuMs);
+    fprintf(file, "    \"node_append_cpu_ms\": %.6f,\n",
+            preflight->bvh_build_stats.nodeAppendCpuMs);
+    fprintf(file, "    \"final_stats_cpu_ms\": %.6f,\n",
+            preflight->bvh_build_stats.finalStatsCpuMs);
+    fprintf(file, "    \"build_unaccounted_cpu_ms\": %.6f,\n",
+            preflight->bvh_build_stats.buildUnaccountedCpuMs);
+    fprintf(file, "    \"range_bounds_calls\": %llu,\n",
+            (unsigned long long)preflight->bvh_build_stats.rangeBoundsCalls);
+    fprintf(file, "    \"sort_calls\": %llu,\n",
+            (unsigned long long)preflight->bvh_build_stats.sortCalls);
+    fprintf(file, "    \"node_append_calls\": %llu,\n",
+            (unsigned long long)preflight->bvh_build_stats.nodeAppendCalls);
+    fprintf(file, "    \"max_range_bounds_count\": %d,\n",
+            preflight->bvh_build_stats.maxRangeBoundsCount);
+    fprintf(file, "    \"max_sort_count\": %d,\n",
+            preflight->bvh_build_stats.maxSortCount);
     fprintf(file, "    \"node_bytes\": %llu,\n",
             (unsigned long long)preflight->bvh_build_stats.nodeBytes);
     fprintf(file, "    \"index_bytes\": %llu,\n",
             (unsigned long long)preflight->bvh_build_stats.indexBytes);
     fprintf(file, "    \"centroid_bytes\": %llu,\n",
             (unsigned long long)preflight->bvh_build_stats.centroidBytes);
+    fprintf(file, "    \"triangle_bounds_min_bytes\": %llu,\n",
+            (unsigned long long)preflight->bvh_build_stats.triangleBoundsMinBytes);
+    fprintf(file, "    \"triangle_bounds_max_bytes\": %llu,\n",
+            (unsigned long long)preflight->bvh_build_stats.triangleBoundsMaxBytes);
     fprintf(file, "    \"sort_scratch_bytes\": %llu,\n",
             (unsigned long long)preflight->bvh_build_stats.sortScratchBytes);
     fprintf(file, "    \"build_scratch_bytes\": %llu,\n",

@@ -128,6 +128,44 @@ static int test_agent_render_request_denoise_override_roundtrip(void) {
     return 0;
 }
 
+static int test_agent_render_request_volume_visible_roundtrip(void) {
+    char request_path[PATH_MAX];
+    char diagnostics[256];
+    RayTracingAgentRenderRequest request;
+    const char* json_text =
+        "{\n"
+        "  \"schema_version\": \"ray_tracing_agent_render_request_v1\",\n"
+        "  \"run_id\": \"volume_visible_roundtrip_test\",\n"
+        "  \"scene\": {\"runtime_scene_path\": \"scene_runtime.json\"},\n"
+        "  \"volume\": {\n"
+        "    \"enabled\": true,\n"
+        "    \"source_kind\": \"manifest\",\n"
+        "    \"source_path\": \"volume_manifest.json\",\n"
+        "    \"visible\": false,\n"
+        "    \"affects_lighting\": false,\n"
+        "    \"debug_overlay\": true\n"
+        "  }\n"
+        "}\n";
+
+    snprintf(request_path,
+             sizeof(request_path),
+             "%s",
+             "/tmp/ray_tracing_agent_render_volume_visible_request.json");
+    assert_true("agent_render_volume_visible_request_write",
+                write_text_file(request_path, json_text));
+    assert_true("agent_render_volume_visible_request_load",
+                ray_tracing_agent_render_request_load_file(request_path,
+                                                           &request,
+                                                           diagnostics,
+                                                           sizeof(diagnostics)));
+    assert_true("agent_render_volume_visible_source_enabled", request.volume_enabled);
+    assert_true("agent_render_volume_visible_false", !request.volume_visible);
+    assert_true("agent_render_volume_visible_affects_false", !request.volume_affects_lighting);
+    assert_true("agent_render_volume_visible_debug_true", request.volume_debug_overlay);
+    unlink(request_path);
+    return 0;
+}
+
 static int test_agent_render_request_resource_budget_roundtrip(void) {
     char request_path[PATH_MAX];
     char diagnostics[256];
@@ -1047,6 +1085,7 @@ int run_test_config_animation_settings_export_suite(void) {
     test_animation_integrator_split_roundtrip_and_default_3d();
     test_agent_render_request_disney_v2_integrator_label_roundtrip();
     test_agent_render_request_denoise_override_roundtrip();
+    test_agent_render_request_volume_visible_roundtrip();
     test_agent_render_request_resource_budget_roundtrip();
     test_agent_render_request_resource_budget_env_default();
     test_agent_render_request_environment_lighting_overrides();

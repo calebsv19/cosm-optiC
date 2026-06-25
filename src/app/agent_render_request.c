@@ -181,6 +181,7 @@ void ray_tracing_agent_render_request_defaults(RayTracingAgentRenderRequest *req
     snprintf(request->run_id, sizeof(request->run_id), "ray_tracing_agent_run");
     request->volume_enabled = false;
     request->volume_source_kind = VOLUME_SOURCE_NONE;
+    request->volume_visible = true;
     request->volume_affects_lighting = true;
     request->volume_debug_overlay = false;
     request->video_enabled = false;
@@ -346,6 +347,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
         }
         request.volume_source_kind =
             parse_volume_source_kind(kind_label, request.volume_source_path);
+        RayTracingJsonGetBool(volume, "visible", &request.volume_visible);
         RayTracingJsonGetBool(volume, "affects_lighting", &request.volume_affects_lighting);
         RayTracingJsonGetBool(volume, "debug_overlay", &request.volume_debug_overlay);
         if (request.volume_enabled &&

@@ -11,6 +11,8 @@
 #include "import/runtime_mesh_asset_loader.h"
 #include "config/config_manager.h"
 
+AnimationConfig animSettings;
+
 static const char* kMrt0ScenePath =
     "tests/fixtures/mesh_asset_runtime_spheres/scene_runtime.json";
 
@@ -263,6 +265,74 @@ static int test_runtime_mesh_asset_loader_uses_line_drawing_runtime_path_hint(vo
         assert_true("mrt2_external_hint_instance_count", set.instance_count == 1);
         assert_true("mrt2_external_hint_path",
                     strstr(set.assets[0].path, "asset_sphere_8x4.runtime.json") != NULL);
+    }
+    ray_tracing_runtime_mesh_asset_set_free(&set);
+    remove(scene_path);
+    rmdir(dir);
+    return 0;
+}
+
+static int test_runtime_mesh_asset_loader_converts_line_drawing_mesh_rotation_degrees(void) {
+    const char* dir = "/private/tmp/ray_tracing_mrt2_line_drawing_rotation";
+    const char* scene_path = "/private/tmp/ray_tracing_mrt2_line_drawing_rotation/scene_runtime.json";
+    const char* source_asset_path =
+        "tests/fixtures/mesh_asset_runtime_spheres/assets/mesh_assets/asset_sphere_8x4.runtime.json";
+    char source_asset_abs[PATH_MAX];
+    char scene_json[1536];
+    RayTracingRuntimeMeshAssetSet set;
+    char diagnostics[256] = {0};
+    bool ok = false;
+
+    assert_true("mrt2_line_drawing_rotation_source_realpath",
+                realpath(source_asset_path, source_asset_abs) != NULL);
+    if (!source_asset_abs[0]) {
+        snprintf(source_asset_abs, sizeof(source_asset_abs), "%s", source_asset_path);
+    }
+
+    snprintf(scene_json,
+             sizeof(scene_json),
+             "{"
+             "\"world_scale\":1.0,"
+             "\"objects\":[{"
+             "\"object_id\":\"obj_line_drawing_rotated_mesh\","
+             "\"object_type\":\"mesh_asset_instance\","
+             "\"transform\":{"
+             "\"position\":{\"x\":1.0,\"y\":2.0,\"z\":3.0},"
+             "\"rotation\":{\"x\":0.0,\"y\":45.0,\"z\":90.0},"
+             "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+             "},"
+             "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_sphere_8x4\"},"
+             "\"extensions\":{\"line_drawing\":{"
+             "\"geometry_source\":\"mesh_asset_instance\","
+             "\"runtime_mesh_path\":\"%s\""
+             "}}"
+             "}]"
+             "}",
+             source_asset_abs);
+
+    mkdir(dir, 0777);
+    assert_true("mrt2_line_drawing_rotation_write_scene", write_text_file(scene_path, scene_json));
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    ok = ray_tracing_runtime_mesh_assets_load_scene_file(scene_path,
+                                                        &set,
+                                                        diagnostics,
+                                                        sizeof(diagnostics));
+    assert_true("mrt2_line_drawing_rotation_loads", ok);
+    if (ok) {
+        const double kPi = 3.14159265358979323846;
+        assert_true("mrt2_line_drawing_rotation_instance_count", set.instance_count == 1);
+        assert_near("mrt2_line_drawing_rotation_x",
+                    set.instances[0].rotation_x,
+                    0.0,
+                    1e-9);
+        assert_near("mrt2_line_drawing_rotation_y",
+                    set.instances[0].rotation_y,
+                    kPi / 4.0,
+                    1e-9);
+        assert_near("mrt2_line_drawing_rotation_z",
+                    set.instances[0].rotation_z,
+                    kPi / 2.0,
+                    1e-9);
     }
     ray_tracing_runtime_mesh_asset_set_free(&set);
     remove(scene_path);
@@ -689,6 +759,7 @@ int run_test_runtime_mesh_asset_loader_tests(void) {
     test_runtime_mesh_asset_loader_reports_missing_asset();
     test_runtime_mesh_asset_loader_reports_malformed_asset();
     test_runtime_mesh_asset_loader_uses_line_drawing_runtime_path_hint();
+    test_runtime_mesh_asset_loader_converts_line_drawing_mesh_rotation_degrees();
     test_runtime_mesh_asset_loader_falls_back_from_stale_line_drawing_hint_to_asset_root();
     test_runtime_mesh_asset_loader_uses_config_mesh_asset_root();
     test_runtime_mesh_asset_loader_attaches_preview_metadata();
