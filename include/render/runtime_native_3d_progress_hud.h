@@ -19,6 +19,10 @@ typedef struct RuntimeNative3DProgressHUDSnapshot {
     size_t completedTilesInSubpass;
     size_t totalTilesInSubpass;
     double progress01;
+    bool estimateReady;
+    double estimatedRemainingSeconds;
+    double estimatedFrameRemainingSeconds;
+    double estimatedBatchRemainingSeconds;
 } RuntimeNative3DProgressHUDSnapshot;
 
 void RuntimeNative3DProgressHUD_Reset(void);
