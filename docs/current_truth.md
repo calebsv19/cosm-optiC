@@ -1,6 +1,6 @@
 # optiC Current Truth
 
-Last updated: 2026-06-19
+Last updated: 2026-06-25
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -493,6 +493,13 @@ Last updated: 2026-06-19
   - `frameDir` remains frame export root
   - `videoOutputRoot` remains persisted runtime config state
   - menu exposes grouped Data I/O + batch actions
+  - Data I/O + Batch now exposes a compact worker-export entry point:
+    `Worker Package: Scene-only` plus `Export Queue`
+  - the menu worker export action is intentionally narrow: it requires the
+    selected scene source to be a runtime scene and resolves the render request
+    from `RAY_TRACING_WORKER_RENDER_REQUEST`, `render_request.json`, or
+    `ray_tracing_request.json` beside that runtime scene before writing a
+    queue-ready item under `visual_artifacts/worker_queue_exports/`
 - Main-menu Renderer Controls now use a tabbed center panel:
   - `Lighting` owns environment mode, environment preset, background
     brightness auto/manual, ambient brightness, top-fill strength, direct-light
@@ -513,6 +520,7 @@ Last updated: 2026-06-19
   - PhysicsSim Water Basin `scene_bundle.json.water_source` handoff is covered by `test-ray-tracing-render-headless-water-surface-handoff`, which runs `physics_sim_headless --water-mode --save-volume-frames`, imports `water_manifest_v1.json`, appends the selected PhysicsSim Y-up heightfield as native `3D` water-surface triangles, remaps height `y` into RayTracing scene-up `z` for physically horizontal rendered water, and renders BMP frames into `ray_tracing/build/agent_runs/physics_trio/water_surface_handoff_image_export/`
   - volume handoff summaries now report VF3D channel/grid/density debug fields, including `volume_summary.density_non_zero_cell_count`
   - water-surface summaries now report `water_surface_source_found`, `water_surface_loaded`, `water_surface_mesh_attached`, selected first/last frame paths, requested/loaded frame indices, grid dimensions, wet/dry/solid column counts, surface min/max/average/slope, material IOR/absorption metadata, resolved RayTracing water payload fields, and appended triangle count
+  - headless agent render requests support `volume.visible=false` as a surface-only water review mode: the configured volume source remains available for `scene_bundle.json.water_source` sidecar import, while the visible VF3D volume body is not attached; summaries then report `volume_visible=false`, `volume_attached=false`, `volume_summary_built=false`, and `water_surface_mesh_attached=true` when the native water mesh loads correctly
   - RayTracing resolves PhysicsSim `water_manifest_v1.material.absorption_rgb` as absorption coefficients, derives a Beer-Lambert `water_surface.payload.tint_rgb` transmittance color over `absorption_distance_m`, and applies a water material payload with IOR, transparency, solid-dielectric state, and the derived tint to the native `3D` material path
   - `test-ray-tracing-render-headless-water-basin-surface-review` runs the square-footprint PhysicsSim Water Basin, imports the final `water_surface` sidecar through `scene_bundle.json.water_source`, remaps it into the native Z-up render frame, and renders a broader single-frame transparent-water review BMP into `ray_tracing/build/agent_runs/physics_trio/water_basin_surface_review_single_frame/`
   - `test-ray-tracing-render-headless-water-moving-light-review` runs the WTR-5.4 headless sequence proof: PhysicsSim exports a warmed/rippled Water Basin, RayTracing renders four consecutive transparent-water frames (`0008..0011`) with an authored moving light path, and the test verifies both water height evolution and measurable frame-to-frame image deltas under `ray_tracing/build/agent_runs/physics_trio/water_moving_light_review/`
@@ -555,6 +563,18 @@ Last updated: 2026-06-19
     indices, nonzero block primary hits, and nonzero secondary hits. The gate
     prefers the current clang job-runner binary before legacy `build/<arch>`
     paths to avoid stale-binary ambiguity.
+  - WTR-6.7C worker-backed external-cache consumption now has a repaired
+    Linux PC RayTracing package boundary: `ray_tracing_headless_worker@0.4.13`
+    is the current selected-frame worker package, nonzero render starts retain
+    output names such as `frame_0120.bmp`, and VF3D plus
+    `water_manifest_v1.json` imports resolve exact manifest `frame_index`
+    entries before falling back to legacy array-position clamping. The proof
+    `ray-tracing--wtr67c-cache-direct-probe--20260624T173200Z--wtr67crt05`
+    loaded VF3D `frame_000120.vf3d` and water sidecar
+    `water_surface_000120.json` for RayTracing frame `120`. This is a cache
+    addressing/package-readiness proof only; visible moving-water quality
+    still depends on PhysicsSim cache excitation and must be checked through
+    water-sidecar temporal height diagnostics before longer RayTracing runs.
   - local WTR-6.4 artifact review also proved a corrected `100`-frame
     Disney-v2 temporal-2 slow-light render from the existing high-quality
     PhysicsSim VF3D cache under
@@ -814,6 +834,8 @@ Last updated: 2026-06-19
 - Menu/control-surface implementation is now split across:
   - `src/ui/menu/sdl_menu_render.c` for orchestration/layout pass ownership
   - `src/ui/menu/sdl_menu_render_controls.c` for shared text/button/control rendering helpers
+  - `src/ui/menu/menu_worker_export.c` for the menu-triggered scene-only worker
+    export command wrapper
 
 ## Recommended Scene-Authoring / Render Loop
 - Treat `line_drawing` as the canonical source for room/object/camera/light

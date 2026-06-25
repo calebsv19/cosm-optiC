@@ -8,11 +8,12 @@
 #include "app/animation.h"
 #include "config/config_manager.h"
 #include "ui/menu_panel_chrome.h"
+#include "ui/menu_worker_export.h"
 #include "ui/sdl_menu_render.h"
 #include "ui/shared_theme_font_adapter.h"
 
 #define BATCH_PANEL_MIN_HEIGHT 150
-#define BATCH_PANEL_MAX_HEIGHT 228
+#define BATCH_PANEL_MAX_HEIGHT 272
 #define BATCH_PANEL_MIN_WIDTH 340
 #define BATCH_PANEL_TARGET_WIDTH 432
 #define BATCH_PANEL_INSET 12
@@ -231,6 +232,19 @@ void menu_batch_panel_build_layout(TTF_Font* font,
                                            BATCH_PANEL_CTRL_BUTTON_W,
                                            BATCH_PANEL_ROW_HEIGHT};
 
+    row_y += BATCH_PANEL_ROW_HEIGHT + BATCH_PANEL_ROW_GAP;
+    layout.workerPackageValueRect = (SDL_Rect){layout.panelRect.x + BATCH_PANEL_INSET,
+                                               row_y,
+                                               layout.panelRect.w - BATCH_PANEL_INSET * 2 - BATCH_PANEL_ACTION_W - 8,
+                                               BATCH_PANEL_ROW_HEIGHT};
+    if (layout.workerPackageValueRect.w < 180) {
+        layout.workerPackageValueRect.w = 180;
+    }
+    layout.workerExportRect = (SDL_Rect){layout.panelRect.x + layout.panelRect.w - BATCH_PANEL_INSET - BATCH_PANEL_ACTION_W,
+                                         row_y,
+                                         BATCH_PANEL_ACTION_W,
+                                         BATCH_PANEL_ROW_HEIGHT};
+
     footer_y = layout.panelRect.y + layout.panelRect.h - BATCH_PANEL_ACTION_HEIGHT - BATCH_PANEL_INSET;
     layout.frameCountValueRect = (SDL_Rect){layout.panelRect.x + BATCH_PANEL_INSET,
                                             footer_y,
@@ -406,6 +420,22 @@ bool menu_batch_panel_handle_click(const SDL_Event* event,
         set_export_action_status(state, &status, ok);
         return true;
     }
+    if (point_in_rect(&layout->workerExportRect, x, y)) {
+        RayTracingMenuWorkerExportStatus worker_status = {0};
+        SDL_Color color;
+        if (menu_batch_panel_edit_active(state)) {
+            menu_batch_panel_finish_edit(state, true);
+        }
+        ok = ray_tracing_menu_worker_export_scene_only(&worker_status);
+        color = ok ? (SDL_Color){120, 220, 180, 255}
+                   : (SDL_Color){255, 170, 140, 255};
+        set_status(state,
+                   worker_status.message[0] ? worker_status.message
+                                            : (ok ? "Worker export ready" : "Worker export failed"),
+                   color,
+                   ok ? 2600u : 3200u);
+        return true;
+    }
     return false;
 }
 
@@ -471,6 +501,14 @@ void menu_batch_panel_render(SDL_Renderer* renderer,
     menu_render_draw_button_rect(renderer, font, &layout->videoRootEditRect, "Edit", state->editingVideoOutputRoot);
     menu_render_draw_button_rect(renderer, font, &layout->videoRootFolderRect, "Folder", false);
     menu_render_draw_button_rect(renderer, font, &layout->videoRootApplyRect, "Apply", false);
+
+    menu_render_draw_root_row(renderer,
+                              font,
+                              &layout->workerPackageValueRect,
+                              "Worker Package",
+                              "Scene-only",
+                              false);
+    menu_render_draw_button_rect(renderer, font, &layout->workerExportRect, "Export Queue", true);
 
     menu_batch_panel_build_frame_count_label(state, frame_count, sizeof(frame_count));
     menu_render_draw_root_row(renderer,

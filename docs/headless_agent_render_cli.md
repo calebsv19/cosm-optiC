@@ -73,6 +73,49 @@ Optional submit policy flags:
 - `--resume`: continue from the first missing contiguous frame when earlier
   frames already exist
 
+## Portable Worker Queue Fixture Export
+
+RayTracing can now create a local, queue-root-style fixture package for the
+Desktop VPS worker queue without opening the UI or submitting remotely:
+
+```bash
+python3 ray_tracing/tools/export_worker_queue_fixture.py \
+  --fixture \
+  --output-root ray_tracing/visual_artifacts/worker_queue_exports \
+  --item-name ray-tracing-portable-fixture-20260624a
+python3 bin/vps_worker_job_queue.py \
+  --queue-root ray_tracing/visual_artifacts/worker_queue_exports \
+  validate \
+  --item-name ray-tracing-portable-fixture-20260624a
+```
+
+The first supported mode is `scene-only`: it exports a runtime scene, referenced
+`assets/mesh_assets/*.runtime.json` sidecars, `bundle/render_request.json`,
+queue-compatible `bundle/request/job.json`, `bundle/request/payload/...`, and a
+manifest. VF3D and PhysicsSim bundle attachment modes are intentionally deferred
+until the sidecar/package shape is clearer.
+
+The same helper can export explicit runtime scene and render-request paths:
+
+```bash
+python3 ray_tracing/tools/export_worker_queue_fixture.py \
+  --scene-runtime ray_tracing/tests/fixtures/mesh_asset_runtime_spheres/scene_runtime_pressure_mrt8.json \
+  --render-request ray_tracing/tests/fixtures/agent_render_mesh_asset_sphere_pressure_mrt8_request.json \
+  --mesh-asset-root ray_tracing/tests/fixtures/mesh_asset_runtime_spheres/assets/mesh_assets \
+  --output-root ray_tracing/visual_artifacts/worker_queue_exports \
+  --item-name ray-tracing-explicit-scene-only-20260624a \
+  --job-id ray-tracing--explicit-scene-only--20260624T000003Z--rtbundle04
+```
+
+Use `--scene-authoring <path>` when an authoring-state JSON should be copied
+alongside the runtime scene as `bundle/scene_authoring.json`.
+
+`bundle/render_request.json` is the portable render request for review and later
+direct tooling. Current Desktop queue prepare still expects
+`--ray-inspection-file` to be an inspection-settings JSON object, so the fixture
+also writes `bundle/presets/inspection_settings.json` and points queue
+`submit_args` at that file.
+
 ## Publication Lanes
 
 There are two different post-render publication targets:
@@ -130,6 +173,7 @@ The request root must declare:
     "enabled": false,
     "source_kind": "auto",
     "source_path": "scene_bundle.json",
+    "visible": true,
     "affects_lighting": true,
     "debug_overlay": false
   },
@@ -200,6 +244,12 @@ Supported `volume.source_kind` values:
 - `auto`
 - `manifest`
 - `scene_bundle`
+
+`volume.visible=false` keeps the configured volume source available for
+sidecar-driven imports such as `scene_bundle.json.water_source`, but skips
+attaching the visible VF3D volume body to the native `3D` render scene. This is
+the preferred WTR water-surface review mode when the water heightfield should
+render as a native mesh without the surrounding volumetric slab/box.
 - `raw_vf3d`
 - `vf3d`
 - `pack`
@@ -369,6 +419,7 @@ frames. The summary reports:
 - `denoise.has_request_override`
 - `denoise.enabled`
 - `denoise.applied`
+- `volume_visible`
 - `volume_summary_built`
 - `volume_summary.density_non_zero_cell_count`
 - `water_surface_source_found`
@@ -515,6 +566,24 @@ camera-ray first-hit pixel count per object. Use it when a runtime-scene object
 seems missing: if an object is absent from `object_audit`, it never reached the
 live render object lane; if it is present with `primitive_count > 0` but
 `primary_hit_pixels == 0`, the camera does not actually see it.
+
+The summary also emits diagnostic `timing_breakdown` fields for headless
+capacity proofs. Top-level fields separate runtime-scene application, duplicate
+scene preflight, native `3D` frame preparation, optional object audit, render
+trace, frame analysis/write, optional video encode, and total run time. Nested
+`mesh_asset_loader` fields cover runtime-scene read/parse, mesh runtime
+document load, cached document copy, cache hit/miss counts, loaded asset bytes,
+vertices, and triangles. Nested `scene_builder` fields cover primitive seeding,
+mesh append reserve/expansion, BVH rebuild wall time, mesh instance counts, and
+expected/appended triangle counts. Treat these fields as diagnostic timing
+telemetry for local/private performance proofing, not as promotion gates.
+
+The `bvh_summary` object includes diagnostic build microtiming fields for
+high-triangle capacity work: allocation, centroid build, inclusive tree build,
+range-bounds scans, sort/partition work, node append, final stats, unaccounted
+build overhead, range/sort/node call counts, and maximum range sizes. These are
+for local performance diagnosis and should not be used as route promotion
+criteria.
 
 When a runtime-scene camera seed provides position but no authored orientation,
 the native `3D` render path now auto-aims that camera toward the built scene
@@ -757,6 +826,16 @@ transmittance tint used by the native `3D` material path. Per-render-frame
 native `3D` preparation reloads the water heightfield for the requested
 absolute render frame, so animated PhysicsSim sidecars can move with the
 existing camera/light path sampling.
+
+For WTR-6.7C worker-backed external-cache probes, nonzero render start frames
+must keep their absolute frame identity. The repaired worker path publishes
+`frame_0120.bmp` for `render.start_frame=120`, and RayTracing imports VF3D and
+water-sidecar manifests by exact `frame_index` first. The Linux PC proof
+`ray-tracing--wtr67c-cache-direct-probe--20260624T173200Z--wtr67crt05`
+verified that frame `120` selected `frame_000120.vf3d` and
+`water_surface_000120.json`. Treat this as a plumbing/readiness proof, not a
+water-quality proof: before longer direct-light or Disney-v2 reviews, inspect
+the PhysicsSim water sidecars and require meaningful temporal height deltas.
 
 The current volume-handoff smoke uses an explicit oblique inspection camera:
 

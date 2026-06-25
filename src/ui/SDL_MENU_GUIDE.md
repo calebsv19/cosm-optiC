@@ -26,6 +26,8 @@ Buttons (top to bottom)
 - Top Fill: toggle the native `3D` overhead fill light.
 - Upscale: cycle native `3D` upscale mode (`OFF` → `Nearest` → `Bilinear`).
 - Light Height: cycle the native `3D` light-height preset.
+- Data I/O + Batch: owns render-frame root, video-output root, batch frame/video
+  actions, and the scene-only worker queue export action.
 
 **Right column**
 - Scene Editor: opens the scene editor window.
@@ -63,6 +65,9 @@ Status toast
 ------------
 - After Save: “Saved” appears next to the Save button and fades.
 - After Restore Defaults: “Restored” appears next to the Save button and fades.
+- After Export Queue: a worker-export success or failure toast appears. The
+  first supported package mode is scene-only and requires a runtime scene plus a
+  discoverable render request sidecar.
 
 Notes
 -----
