@@ -12,7 +12,11 @@ not own native `3D` shading policy or worker orchestration policy.
 - `runtime_scene_bridge*.c`: runtime-scene bridge and authoring adapters for
   retained scene data, light/camera seeds, and writeback paths.
 - `runtime_mesh_asset_*`: mesh asset loading, packing, and staging helpers used
-  by imported/runtime mesh scenes.
+  by imported/runtime mesh scenes. `runtime_mesh_asset_loader.c` owns runtime
+  sidecar path resolution, stable `asset_id` validation, parsed-document cache
+  validity, and loader timing/cache diagnostics. Render-side BLAS/TLAS work
+  should consume loaded mesh documents or prepared asset handles instead of
+  duplicating this path-resolution policy.
 - `fluid_*` and `water_surface_import.c`: PhysicsSim pack/manifest, VF3D, and
   water-surface sidecar import boundaries.
 - pack/manifest helpers: local parsing and preflight for scene bundles that
@@ -22,6 +26,8 @@ not own native `3D` shading policy or worker orchestration policy.
 
 - Keep JSON/file-format parsing and external-path normalization here.
 - Keep render-owned geometry compilation in `src/render/`.
+- Keep mesh-local acceleration structures and scene-level TLAS state in
+  render-owned modules; import code should not own ray traversal policy.
 - Keep editor interaction state in `src/editor/`.
 - Keep headless request orchestration in `src/app/` or `src/tools/cli/`.
 - Do not add remote worker, VPS, Linux PC, or visualizer publication behavior
