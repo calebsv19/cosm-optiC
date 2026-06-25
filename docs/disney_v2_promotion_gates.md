@@ -467,3 +467,72 @@ Covered after D2.33:
 - `promotion_ready` remains false. The next gate is visual signoff refresh at
   the fixed bright scale, then rough reflection/transmission convergence and
   release-candidate threshold repetition.
+
+Covered after D2.34:
+
+- Imported-mesh pressure MRT8 visual signoff was refreshed at the D2.33
+  cwd-invariant bright scale.
+- Route comparison artifacts:
+  `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_visual_matrix/imported_mesh_pressure_mrt8/d233_visual_signoff_refresh_route_compare/`
+  - `matrix_report.json` reported `passed=true`
+  - `matrix_contact_sheet.png` and
+    `comparisons/imported_mesh_disney_vs_disney_v2/side_by_side_disney_disney_v2_diff4x.png`
+    are the review images
+  - shipped `disney` and experimental `disney_v2` both rendered one frame with
+    `16134` BVH triangles and `0` trace overflows
+  - Disney v2 stayed on the fixed bright scale with max radiance
+    `5.310446615`
+  - route diff changed `10638/15360` pixels with max channel delta `100`
+- Denoise ablation artifacts:
+  `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_visual_matrix/imported_mesh_pressure_mrt8/d233_visual_signoff_refresh_denoise_ablation/`
+  - `matrix_report.json` reported `passed=true`
+  - off/on temporal-12 Disney v2 frames both reported max radiance
+    `5.328458129`, `16134` BVH triangles, and `0` trace overflows
+  - denoise-on reconstructed `10374` pixels while preserving mirror/glossy
+    samples
+  - denoise on/off diff changed `1628/15360` pixels, with only `1` pixel above
+    delta `8` and max channel delta `12`
+- Visual read:
+  - Disney v2 is visibly brighter and more directly lit than shipped Disney on
+    the imported runtime mesh pressure scene
+  - denoise on/off is near-identical at contact-sheet scale with only small,
+    localized differences
+- Current status:
+  - imported-mesh pressure MRT8 route-comparison signoff is refreshed and
+    accepted for this proof boundary
+  - `promotion_ready` remains false pending rough reflection/transmission
+    convergence, release-candidate threshold repetition, and private/manual
+    skull or other high-triangle signoff when pressure testing changes.
+
+Covered after D2.35:
+
+- Non-skull promotion blockers were re-run after D2.34 with skull/high-triangle
+  proof explicitly skipped by operator direction.
+- Focused rough/reflection/transmission-adjacent transport coverage passed:
+  `TEST_RUNNER_GROUP=runtime_lighting_materials_transport .../test_runner`
+  reported `TEST RESULT: PASS`.
+- Baseline candidate promotion gate passed at:
+  `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_release_candidate/d235_non_skull_baseline/promotion_gate_report.json`
+  - `hard_gates_passed=true`
+  - `performance_thresholds.passed=true`
+  - `performance_passed=true`
+  - `quality_passed=true`
+  - Disney v2 scene thresholds passed for primitive glass corridor, imported
+    mesh material, and imported mesh pressure MRT8
+- Repeat-3 non-skull release-candidate stability passed at:
+  `_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_stability/d235_non_skull_release_candidate_repeats_r3/stability_report.json`
+  - `passed=true`
+  - `repeat_count=3`
+  - all three promotion repeats reported `hard_gates_passed=true` and
+    `thresholds_passed=true`
+  - Disney v2 elapsed spread stayed bounded across the repeated proof scenes:
+    primitive glass corridor `0.102`, imported mesh material `0.123`, and
+    imported mesh pressure MRT8 `0.085`
+- Current status:
+  - rough reflection/transmission-focused transport coverage and
+    release-candidate threshold repetition are closed for the current
+    non-skull evidence lane
+  - no renderer/source change was needed for this closeout
+  - `promotion_ready` remains false because route-default promotion still
+    requires an explicit policy decision and the skull/high-triangle proof was
+    intentionally excluded from this slice.
