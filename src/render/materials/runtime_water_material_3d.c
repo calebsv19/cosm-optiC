@@ -135,6 +135,9 @@ bool RuntimeWaterMaterial3D_ApplyToPayload(int scene_object_index,
     double tint_g = 1.0;
     double tint_b = 1.0;
     double tint_luma = 0.0;
+    double spec_weight = 0.0;
+    double diffuse_weight = 0.0;
+    double weight_sum = 0.0;
     if (!payload || !payload->valid ||
         !RuntimeWaterMaterial3D_Get(scene_object_index, &override)) {
         return false;
@@ -165,5 +168,21 @@ bool RuntimeWaterMaterial3D_ApplyToPayload(int scene_object_index,
     payload->bsdf.roughness = override.roughness;
     payload->bsdf.model = override.reflectivity > 0.05 ? MATERIAL_BSDF_GGX
                                                        : MATERIAL_BSDF_LAMBERT;
+    spec_weight = runtime_water_material_3d_clamp(
+        fmax(payload->bsdf.specWeight, override.reflectivity),
+        0.0,
+        1.0);
+    diffuse_weight = runtime_water_material_3d_clamp(
+        fmin(payload->bsdf.diffuseWeight, 1.0 - spec_weight),
+        0.0,
+        1.0);
+    weight_sum = diffuse_weight + spec_weight;
+    if (weight_sum <= 1e-4) {
+        diffuse_weight = 1.0;
+        weight_sum = 1.0;
+    }
+    payload->bsdf.diffuseWeight = diffuse_weight;
+    payload->bsdf.specWeight = spec_weight;
+    payload->bsdf.weightSum = weight_sum;
     return true;
 }

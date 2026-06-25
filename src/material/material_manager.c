@@ -122,14 +122,17 @@ void MaterialManagerLoadDir(const char* dirPath) {
         if (!dot || strcmp(dot, ".json") != 0) continue;
         char path[512];
         snprintf(path, sizeof(path), "%s/%s", dirPath, ent->d_name);
+        preset_id = MaterialManagerPresetIdForFilename(ent->d_name);
 
         Material m = {
             .diffuse = 0.8f, .specular = 0.05f, .reflectivity = 0.1f, .roughness = 0.6f,
             .base_color = vec3(1,1,1), .emissive = vec3(0,0,0), .metallic = 0.0f,
             .transparency = 0.0f, .ior = 1.0f, .absorption_distance = 1.0f, .thin_walled = false
         };
+        if (preset_id >= 0 && preset_id < lib.count) {
+            m = lib.materials[preset_id];
+        }
         if (LoadMaterialFromJsonFile(path, &m)) {
-            preset_id = MaterialManagerPresetIdForFilename(ent->d_name);
             if (preset_id >= 0 && preset_id < MAX_MATERIALS) {
                 lib.materials[preset_id] = m;
             } else {

@@ -7,6 +7,7 @@
 #include "app/animation.h"
 #include "app/data_paths.h"
 #include "config/config_manager.h"
+#include "editor/object_editor_panels_internal.h"
 #include "render/ray_tracing_integrator_catalog.h"
 #include "render/render_helper.h"
 #include "test_support.h"
@@ -1193,6 +1194,13 @@ static int test_depth_projection_scalars(void) {
     return 0;
 }
 
+static int test_object_editor_transparent_alpha_slider_is_labeled_transparency(void) {
+    assert_true("object_editor_transparent_alpha_slider_label",
+                strcmp(ObjectEditorPanels_LabelForSliderKind(OBJECT_EDITOR_PANEL_SLIDER_COLOR_A),
+                       "Transparency") == 0);
+    return 0;
+}
+
 
 int run_test_ui_menu_contract_tests(void) {
     int before = test_support_failures();
@@ -1221,6 +1229,7 @@ int run_test_ui_menu_contract_tests(void) {
     test_scene_source_ui_runtime_labels_expose_paired_and_disabled_state();
     test_volume_source_ui_labels_expose_auto_custom_and_none();
     test_depth_projection_scalars();
+    test_object_editor_transparent_alpha_slider_is_labeled_transparency();
 
     return test_support_failures() - before;
 }

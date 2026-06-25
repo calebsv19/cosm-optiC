@@ -699,7 +699,7 @@ static int test_runtime_material_payload_3d_water_override_contract(void) {
     override.absorptionG = 0.035;
     override.absorptionB = 0.015;
     override.transparency = 0.92;
-    override.reflectivity = 0.0;
+    override.reflectivity = 0.12;
     override.roughness = 0.02;
     ok = RuntimeWaterMaterial3D_Set(0, &override);
     assert_true("runtime_material_payload_water_override_set", ok);
@@ -744,12 +744,16 @@ static int test_runtime_material_payload_3d_water_override_contract(void) {
                  1e-9);
     assert_close("runtime_material_payload_water_override_reflectivity",
                  payload.bsdf.reflectivity,
-                 0.0,
+                 0.12,
                  1e-9);
     assert_close("runtime_material_payload_water_override_roughness",
                  payload.bsdf.roughness,
                  0.02,
                  1e-9);
+    assert_true("runtime_material_payload_water_override_ggx",
+                payload.bsdf.model == MATERIAL_BSDF_GGX);
+    assert_true("runtime_material_payload_water_override_specular_weight",
+                payload.bsdf.specWeight >= 0.12);
     assert_true("runtime_material_payload_water_override_solid", !payload.thinWalled);
 
     RuntimeWaterMaterial3D_ClearAll();
@@ -784,8 +788,10 @@ static int test_material_manager_default_presets_include_i4_entries(void) {
                 transparent->ior > 1.0f);
     assert_true("material_manager_transparent_preset_has_absorption_distance",
                 transparent->absorption_distance > 0.0f);
-    assert_true("material_manager_transparent_preset_is_solid_by_default",
-                !transparent->thin_walled);
+    assert_true("material_manager_transparent_preset_low_roughness",
+                transparent->roughness <= 0.05f);
+    assert_true("material_manager_transparent_preset_is_thin_walled_by_default",
+                transparent->thin_walled);
     assert_close("material_manager_transparent_preset_emissive_zero",
                  transparent->emissive.x + transparent->emissive.y + transparent->emissive.z,
                  0.0,
@@ -883,6 +889,55 @@ static int test_material_manager_load_dir_preserves_shipped_preset_ids(void) {
 
     remove(mirror_path);
     remove(emissive_path);
+    remove(transparent_path);
+    rmdir(dir_template);
+    MaterialManagerResetDefaults();
+    return 0;
+}
+
+static int test_material_manager_transparent_override_inherits_shipped_defaults(void) {
+    char dir_template[] = "/tmp/rt_material_partial_ids_XXXXXX";
+    char transparent_path[512];
+    const Material* transparent = NULL;
+    bool ok = false;
+
+    MaterialManagerResetDefaults();
+    if (!mkdtemp(dir_template)) {
+        return 0;
+    }
+
+    snprintf(transparent_path, sizeof(transparent_path), "%s/transparent.json", dir_template);
+    ok = write_text_file(transparent_path,
+                         "{"
+                         "\"diffuse\":0.05,"
+                         "\"specular\":0.0,"
+                         "\"reflectivity\":0.0,"
+                         "\"roughness\":0.04,"
+                         "\"transparency\":0.70,"
+                         "\"base_color\":[1.0,1.0,1.0],"
+                         "\"emissive\":[0.0,0.0,0.0]"
+                         "}");
+    assert_true("material_manager_partial_transparent_file_ok", ok);
+
+    MaterialManagerLoadDir(dir_template);
+    transparent = MaterialManagerGet(MATERIAL_PRESET_TRANSPARENT);
+
+    assert_true("material_manager_partial_transparent_exists", transparent != NULL);
+    assert_close("material_manager_partial_transparent_keeps_override_transparency",
+                 transparent->transparency,
+                 0.70,
+                 1e-6);
+    assert_close("material_manager_partial_transparent_inherits_ior",
+                 transparent->ior,
+                 1.45,
+                 1e-6);
+    assert_close("material_manager_partial_transparent_inherits_absorption_distance",
+                 transparent->absorption_distance,
+                 2.0,
+                 1e-6);
+    assert_true("material_manager_partial_transparent_inherits_thin_walled",
+                transparent->thin_walled);
+
     remove(transparent_path);
     rmdir(dir_template);
     MaterialManagerResetDefaults();
@@ -2734,6 +2789,7 @@ int run_test_runtime_lighting_materials_payload_suite(void) {
     test_runtime_material_payload_3d_water_override_contract();
     test_material_manager_default_presets_include_i4_entries();
     test_material_manager_load_dir_preserves_shipped_preset_ids();
+    test_material_manager_transparent_override_inherits_shipped_defaults();
     test_runtime_material_payload_3d_hit_resolution_contract();
     test_runtime_material_payload_3d_rust_texture_is_hit_anchored();
     test_runtime_material_payload_3d_face_texture_override_affects_hit();

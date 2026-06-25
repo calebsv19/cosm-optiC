@@ -178,12 +178,23 @@ static int runtime_scene_bridge_color_from_material_preset(int material_id) {
 
 static void runtime_scene_bridge_apply_object_material_preset(SceneObject *out_object,
                                                               int material_id) {
+    const Material *preset = NULL;
     if (!out_object) return;
     if (material_id < 0 || material_id >= MaterialManagerCount()) {
         material_id = MaterialManagerDefaultId();
     }
+    preset = MaterialManagerGet(material_id);
     out_object->material_id = material_id;
     out_object->color = runtime_scene_bridge_color_from_material_preset(material_id);
+    if (preset) {
+        out_object->reflectivity = fmax(0.0, fmin(1.0, preset->reflectivity));
+        out_object->roughness = fmax(0.0, fmin(1.0, preset->roughness));
+        out_object->emissiveStrength =
+            (preset->emissive.x > 0.0f || preset->emissive.y > 0.0f ||
+             preset->emissive.z > 0.0f)
+                ? 1.0
+                : 0.0;
+    }
 }
 
 static bool runtime_scene_bridge_parse_double_field_any(json_object *obj,
@@ -675,6 +686,9 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
         double reflectivity = 0.35;
         double roughness = 0.65;
         double emissive_strength = 0.0;
+        bool has_reflectivity = false;
+        bool has_roughness = false;
+        bool has_emissive_strength = false;
         int scene_index = 0;
         if (!entry || !json_object_is_type(entry, json_type_object)) continue;
         if (!json_object_object_get_ex(entry, "object_id", &object_id_obj) ||
@@ -707,16 +721,19 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
             (json_object_is_type(reflectivity_obj, json_type_int) ||
              json_object_is_type(reflectivity_obj, json_type_double))) {
             reflectivity = json_object_get_double(reflectivity_obj);
+            has_reflectivity = true;
         }
         if (json_object_object_get_ex(entry, "roughness", &roughness_obj) &&
             (json_object_is_type(roughness_obj, json_type_int) ||
              json_object_is_type(roughness_obj, json_type_double))) {
             roughness = json_object_get_double(roughness_obj);
+            has_roughness = true;
         }
         if (json_object_object_get_ex(entry, "emissive_strength", &emissive_strength_obj) &&
             (json_object_is_type(emissive_strength_obj, json_type_int) ||
              json_object_is_type(emissive_strength_obj, json_type_double))) {
             emissive_strength = json_object_get_double(emissive_strength_obj);
+            has_emissive_strength = true;
         }
         if (!object_id || !object_id[0]) continue;
         for (scene_index = 0;
@@ -735,12 +752,18 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
                     sceneSettings.sceneObjects[scene_index].color = object_color;
                 }
                 sceneSettings.sceneObjects[scene_index].alpha = fmax(0.0, fmin(1.0, alpha));
-                sceneSettings.sceneObjects[scene_index].reflectivity =
-                    fmax(0.0, fmin(1.0, reflectivity));
-                sceneSettings.sceneObjects[scene_index].roughness =
-                    fmax(0.0, fmin(1.0, roughness));
-                sceneSettings.sceneObjects[scene_index].emissiveStrength =
-                    fmax(0.0, fmin(1.0, emissive_strength));
+                if (has_reflectivity) {
+                    sceneSettings.sceneObjects[scene_index].reflectivity =
+                        fmax(0.0, fmin(1.0, reflectivity));
+                }
+                if (has_roughness) {
+                    sceneSettings.sceneObjects[scene_index].roughness =
+                        fmax(0.0, fmin(1.0, roughness));
+                }
+                if (has_emissive_strength) {
+                    sceneSettings.sceneObjects[scene_index].emissiveStrength =
+                        fmax(0.0, fmin(1.0, emissive_strength));
+                }
                 apply_ray_authoring_object_authored_texture(entry, scene_index, object_id);
                 apply_ray_authoring_object_procedural_texture(entry, scene_index);
                 apply_ray_authoring_object_material_stack(entry, scene_index);

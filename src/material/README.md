@@ -28,8 +28,8 @@ Presets (MaterialLibrary):
 - `MATERIAL_PRESET_ROUGH_METAL` (2): Metallic, higher roughness and specular.
 - `MATERIAL_PRESET_GLOSSY` (3): Mid reflectivity, low roughness.
 - `MATERIAL_PRESET_EMISSIVE` (4): Preset-driven emissive surface with moderated grayscale test output.
-- `MATERIAL_PRESET_TRANSPARENT` (5): Preset-driven transmissive surface with moderately high transparency and reduced front-face diffuse weight for clearer grayscale readback.
-  The shipped preset now also seeds a glass-like `ior` and a finite absorption distance for more grounded transmission behavior.
+- `MATERIAL_PRESET_TRANSPARENT` (5): Preset-driven transmissive surface with moderately high transparency, low roughness, and thin-walled transport so default transparent objects read as clearer glass-like shells instead of frosted solid volume.
+  The shipped preset also seeds a glass-like `ior` and a finite absorption distance for grounded transmission behavior when a material override opts back into solid-thickness transport.
 
 Notes:
 - Presets use neutral base colors so SceneObject color can serve as albedo.

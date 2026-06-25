@@ -103,14 +103,14 @@ void MaterialLibraryInit(MaterialLibrary* lib) {
         .diffuse = 0.05f,
         .specular = 0.0f,
         .reflectivity = 0.0f,
-        .roughness = 1.0f,
+        .roughness = 0.04f,
         .base_color = vec3(1.0f, 1.0f, 1.0f),
         .emissive = vec3(0.0f, 0.0f, 0.0f),
         .metallic = 0.0f,
         .transparency = 0.75f,
         .ior = 1.45f,
         .absorption_distance = 2.0f,
-        .thin_walled = false
+        .thin_walled = true
     };
     MaterialAdd(lib, transparent); // MATERIAL_PRESET_TRANSPARENT
 }

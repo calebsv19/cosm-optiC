@@ -11,9 +11,20 @@ static double object_editor_object_ops_clamp01(double value) {
 }
 
 void ObjectEditorObjectAssignMaterial(SceneObject* obj, int material_id) {
+    const Material* preset = NULL;
     if (!obj) return;
     if (material_id < 0 || material_id >= MaterialManagerCount()) return;
+    preset = MaterialManagerGet(material_id);
     obj->material_id = material_id;
+    if (preset) {
+        obj->reflectivity = object_editor_object_ops_clamp01(preset->reflectivity);
+        obj->roughness = object_editor_object_ops_clamp01(preset->roughness);
+        obj->emissiveStrength =
+            (preset->emissive.x > 0.0f || preset->emissive.y > 0.0f ||
+             preset->emissive.z > 0.0f)
+                ? 1.0
+                : 0.0;
+    }
     MarkObjectDirty(obj);
 }
 

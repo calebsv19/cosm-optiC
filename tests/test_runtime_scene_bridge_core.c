@@ -916,6 +916,69 @@ static int test_runtime_scene_bridge_authoring_overlay_object_color_preserved(vo
     return 0;
 }
 
+static int test_runtime_scene_bridge_authoring_overlay_material_inherits_preset_scalars(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_overlay_material_scalars\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"obj_glass\","
+          "\"object_type\":\"rect_prism\","
+          "\"dimensional_mode\":\"full_3d\","
+          "\"transform\":{"
+            "\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+          "},"
+          "\"primitive\":{"
+            "\"kind\":\"rect_prism_primitive\","
+            "\"width\":1.0,"
+            "\"height\":1.0,"
+            "\"depth\":1.0"
+          "}"
+        "}],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{"
+          "\"ray_tracing\":{"
+            "\"authoring\":{"
+              "\"object_materials\":[{"
+              "\"object_id\":\"obj_glass\","
+              "\"material_id\":5,"
+              "\"alpha\":0.86"
+            "}]"
+          "}"
+        "}"
+        "}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    bool ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_scene_apply_authoring_overlay_material_scalars_ok", ok);
+    if (ok) {
+        assert_true("runtime_scene_apply_authoring_overlay_material_scalars_id",
+                    sceneSettings.sceneObjects[0].material_id == MATERIAL_PRESET_TRANSPARENT);
+        assert_close("runtime_scene_apply_authoring_overlay_material_scalars_alpha",
+                     sceneSettings.sceneObjects[0].alpha,
+                     0.86,
+                     1e-9);
+        assert_close("runtime_scene_apply_authoring_overlay_material_scalars_reflectivity",
+                     sceneSettings.sceneObjects[0].reflectivity,
+                     0.0,
+                     1e-9);
+        assert_close("runtime_scene_apply_authoring_overlay_material_scalars_roughness",
+                     sceneSettings.sceneObjects[0].roughness,
+                     0.04,
+                     1e-9);
+    }
+    return 0;
+}
+
 static int test_runtime_scene_bridge_authoring_overlay_light_settings_preserved(void) {
     const char *runtime_json =
         "{"
@@ -1324,6 +1387,7 @@ int run_test_runtime_scene_bridge_core_tests(void) {
     test_runtime_scene_bridge_apply_accepts_id_base_color_material();
     test_runtime_scene_bridge_apply_accepts_material_id_albedo_material();
     test_runtime_scene_bridge_authoring_overlay_object_color_preserved();
+    test_runtime_scene_bridge_authoring_overlay_material_inherits_preset_scalars();
     test_runtime_scene_bridge_authoring_overlay_light_settings_preserved();
     test_runtime_scene_bridge_authoring_overlay_environment_settings_preserved();
     test_runtime_scene_bridge_authoring_overlay_procedural_texture_shorthand_preserved();

@@ -235,7 +235,7 @@ const char* ObjectEditorPanels_LabelForSliderKind(ObjectEditorPanelSliderKind ki
         return "B";
     }
     if (kind == OBJECT_EDITOR_PANEL_SLIDER_COLOR_A) {
-        return "A";
+        return "Transparency";
     }
     if (kind == OBJECT_EDITOR_PANEL_SLIDER_EMISSIVE_STRENGTH) {
         return "Emitter Strength";

@@ -3,9 +3,12 @@
   "diffuse": 0.05,
   "specular": 0.0,
   "reflectivity": 0.0,
-  "roughness": 1.0,
+  "roughness": 0.04,
   "base_color": [1.0, 1.0, 1.0],
   "emissive": [0.0, 0.0, 0.0],
   "metallic": 0.0,
-  "transparency": 0.75
+  "transparency": 0.75,
+  "ior": 1.45,
+  "absorption_distance": 2.0,
+  "thin_walled": true
 }

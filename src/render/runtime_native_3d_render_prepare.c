@@ -21,6 +21,9 @@
 #include "render/runtime_native_3d_prepare_diagnostics.h"
 #include "scene/object_manager.h"
 
+static const double kRuntimeNative3DWaterSurfaceReflectivity = 0.12;
+static const double kRuntimeNative3DWaterSurfaceRoughness = 0.02;
+
 static bool gRuntimeNative3DInspectionCameraPositionEnabled = false;
 static bool gRuntimeNative3DInspectionCameraLookAtEnabled = false;
 static Vec3 gRuntimeNative3DInspectionCameraPosition = {0};
@@ -537,8 +540,8 @@ static void runtime_native_3d_render_configure_water_surface_object(
     object->color = SceneObjectPackRGBBytes(r, g, b);
     object->opacity = 1.0;
     object->alpha = 1.0;
-    object->reflectivity = 0.0;
-    object->roughness = 0.02;
+    object->reflectivity = kRuntimeNative3DWaterSurfaceReflectivity;
+    object->roughness = kRuntimeNative3DWaterSurfaceRoughness;
     object->material_id = MATERIAL_PRESET_TRANSPARENT;
     object->dirty = false;
     object->guideOnly = false;
@@ -585,8 +588,8 @@ static bool runtime_native_3d_render_apply_water_surface_material(
     override.absorptionB = water->material.valid ? water->material.absorption_rgb[2]
                                                  : 0.015;
     override.transparency = 0.92;
-    override.reflectivity = 0.0;
-    override.roughness = 0.02;
+    override.reflectivity = kRuntimeNative3DWaterSurfaceReflectivity;
+    override.roughness = kRuntimeNative3DWaterSurfaceRoughness;
     return RuntimeWaterMaterial3D_Set(scene_object_index, &override);
 }
 
@@ -600,8 +603,7 @@ static bool runtime_native_3d_render_attach_configured_water_surface(RuntimeScen
     int appended_triangle_count = 0;
 
     if (!scene) return false;
-    if (!animSettings.volumeInteractionEnabled ||
-        animSettings.volumeSourceKind != VOLUME_SOURCE_MANIFEST ||
+    if (animSettings.volumeSourceKind != VOLUME_SOURCE_MANIFEST ||
         animSettings.volumeSourcePath[0] == '\0') {
         return true;
     }

@@ -1986,13 +1986,28 @@ static int test_object_editor_material_assignment_preserves_object_color(void) {
     sceneSettings.objectCount = 1;
     sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_DEFAULT;
     sceneSettings.sceneObjects[0].color = 0x00FF00;
+    sceneSettings.sceneObjects[0].alpha = 0.42;
+    sceneSettings.sceneObjects[0].reflectivity = 0.35;
+    sceneSettings.sceneObjects[0].roughness = 0.65;
 
-    ObjectEditorObjectAssignMaterial(&sceneSettings.sceneObjects[0], MATERIAL_PRESET_GLOSSY);
+    ObjectEditorObjectAssignMaterial(&sceneSettings.sceneObjects[0], MATERIAL_PRESET_TRANSPARENT);
 
     assert_true("object_editor_assign_material_updates_material_id",
-                sceneSettings.sceneObjects[0].material_id == MATERIAL_PRESET_GLOSSY);
+                sceneSettings.sceneObjects[0].material_id == MATERIAL_PRESET_TRANSPARENT);
     assert_true("object_editor_assign_material_preserves_color",
                 sceneSettings.sceneObjects[0].color == 0x00FF00);
+    assert_close("object_editor_assign_material_preserves_alpha",
+                 sceneSettings.sceneObjects[0].alpha,
+                 0.42,
+                 1e-9);
+    assert_close("object_editor_assign_material_uses_preset_reflectivity",
+                 sceneSettings.sceneObjects[0].reflectivity,
+                 0.0,
+                 1e-9);
+    assert_close("object_editor_assign_material_uses_preset_roughness",
+                 sceneSettings.sceneObjects[0].roughness,
+                 0.04,
+                 1e-9);
 
     sceneSettings = saved_scene;
     animSettings = saved_anim;
