@@ -51,8 +51,8 @@ void LoadSceneConfig(void);
 // Saves animation settings to config file.
 void SaveSceneConfig(void);
 
-// Saves a single frame of animation to disk.
-void SaveFrame(int frameNumber);
+// Saves or requests a single frame of animation to disk.
+bool SaveFrame(int frameNumber);
 
 // Returns the current normalized playback position used by the live runtime loop.
 double AnimationCurrentNormalizedT(void);

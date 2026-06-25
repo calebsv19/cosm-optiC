@@ -14,6 +14,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 static bool AnimationOutputEnvEnabled(const char *name) {
     const char *v = getenv(name);
@@ -91,37 +92,89 @@ static void EnsureDirectoryExists(const char* path) {
     }
 }
 
-void SaveFrame(int frameNumber) {
+static bool AnimationResolveFrameOutputPath(int frameNumber,
+                                            char* out_path,
+                                            size_t out_path_size) {
     char frame_dir[PATH_MAX];
-    RayTracingRuntimeRoute route;
+    if (!out_path || out_path_size == 0) return false;
     if (!ray_tracing_resolve_frame_output_dir(animSettings.frameDir, frame_dir, sizeof(frame_dir))) {
-        fprintf(stderr, "SaveFrame failed to resolve frame directory.\n");
-        return;
+        return false;
+    }
+    return snprintf(out_path,
+                    out_path_size,
+                    "%s/frame_%04d.bmp",
+                    frame_dir,
+                    frameNumber) < (int)out_path_size;
+}
+
+bool AnimationFrameOutputExists(int frameNumber) {
+    char filename[PATH_MAX];
+    struct stat st;
+    if (!AnimationResolveFrameOutputPath(frameNumber, filename, sizeof(filename))) {
+        return false;
+    }
+    if (stat(filename, &st) != 0) {
+        return false;
+    }
+    return S_ISREG(st.st_mode) && st.st_size > 0;
+}
+
+static bool AnimationPrepareFrameOutputPathForWrite(const char* filename) {
+    struct stat st;
+    if (!filename || !filename[0]) {
+        return false;
+    }
+    if (lstat(filename, &st) != 0) {
+        return errno == ENOENT;
+    }
+    if (!S_ISREG(st.st_mode)) {
+        fprintf(stderr, "SaveFrame refused non-regular output path: %s\n", filename);
+        return false;
+    }
+    if (unlink(filename) != 0) {
+        fprintf(stderr, "SaveFrame failed to replace existing frame %s: %s\n",
+                filename,
+                strerror(errno));
+        return false;
+    }
+    return true;
+}
+
+bool SaveFrame(int frameNumber) {
+    char frame_dir[PATH_MAX];
+    char filename[PATH_MAX];
+    RayTracingRuntimeRoute route;
+    if (!ray_tracing_resolve_frame_output_dir(animSettings.frameDir, frame_dir, sizeof(frame_dir)) ||
+        !AnimationResolveFrameOutputPath(frameNumber, filename, sizeof(filename))) {
+        fprintf(stderr, "SaveFrame failed to resolve frame path.\n");
+        return false;
     }
 #if USE_VULKAN
     EnsureDirectoryExists(frame_dir);
-
-    char filename[PATH_MAX];
-    snprintf(filename, sizeof(filename), "%s/frame_%04d.bmp", frame_dir, frameNumber);
+    if (!AnimationPrepareFrameOutputPathForWrite(filename)) {
+        return false;
+    }
 
     route = RayTracingModeBackend_ResolveRoute();
     if (route.routeFamily == RAY_TRACING_ROUTE_NATIVE_3D) {
         if (!ExportCurrentNative3DFrameBMP(filename)) {
             fprintf(stderr, "SaveFrame failed to export native 3D frame.\n");
+            return false;
         }
-        return;
+        return true;
     }
 
     VkResult capture_result = vk_renderer_request_capture((VkRenderer*)renderer, filename);
     if (capture_result != VK_SUCCESS) {
         fprintf(stderr, "SaveFrame failed to request capture: %d\n", capture_result);
+        return false;
     }
-    return;
+    return true;
 #else
     EnsureDirectoryExists(frame_dir);
-
-    char filename[PATH_MAX];
-    snprintf(filename, sizeof(filename), "%s/frame_%04d.bmp", frame_dir, frameNumber);
+    if (!AnimationPrepareFrameOutputPathForWrite(filename)) {
+        return false;
+    }
 
     printf("Saving frame to: %s\n", filename);
 
@@ -132,22 +185,25 @@ void SaveFrame(int frameNumber) {
                                                 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
     if (!surface) {
         fprintf(stderr, "SDL_CreateRGBSurface failed: %s\n", SDL_GetError());
-        return;
+        return false;
     }
 
     if (SDL_RenderReadPixels(renderer, NULL, SDL_PIXELFORMAT_ARGB8888,
                              surface->pixels, surface->pitch) != 0) {
         fprintf(stderr, "SDL_RenderReadPixels failed: %s\n", SDL_GetError());
         SDL_FreeSurface(surface);
-        return;
+        return false;
     }
 
     if (SDL_SaveBMP(surface, filename) != 0) {
         fprintf(stderr, "SDL_SaveBMP failed: %s\n", SDL_GetError());
+        SDL_FreeSurface(surface);
+        return false;
     } else {
         printf("Saved %s\n", filename);
     }
 
     SDL_FreeSurface(surface);
+    return AnimationFrameOutputExists(frameNumber);
 #endif
 }

@@ -528,23 +528,47 @@ void RenderFrame(double lightX, double lightY, int* frameCounter, bool* running)
         ts_session_stop_timer(timer_hud, "Render Scene Frame");
     }
         
+    bool deep_render_frame_requested = false;
+    bool deep_render_save_requested = true;
+    int deep_render_frame_index = -1;
+
     // Handle deep render mode frame saving
     if (animSettings.deepRenderMode) {
-        int absoluteFrameIndex = s_deepRenderStartFrameIndex + *frameCounter;
-        SaveFrame(absoluteFrameIndex);
-        (*frameCounter)++;
-        if (*frameCounter >= animSettings.frameLimit) {
-            printf("Deep render mode complete. Final frame saved.\n");
-            SDL_Delay(500);
-            *running = false;
-        }
+        deep_render_frame_index = s_deepRenderStartFrameIndex + *frameCounter;
+        deep_render_save_requested = SaveFrame(deep_render_frame_index);
+        deep_render_frame_requested = true;
     }
 
     if (timer_hud) {
         ts_session_render(timer_hud);
     }
     RuntimeNative3DProgressHUD_Draw(renderer);
-    render_end_frame();
+    bool frame_presented = render_end_frame();
+    if (deep_render_frame_requested) {
+        if (!deep_render_save_requested) {
+            fprintf(stderr,
+                    "Deep render stopped: failed to request frame export for frame_%04d.bmp.\n",
+                    deep_render_frame_index);
+            *running = false;
+        } else if (!frame_presented) {
+            fprintf(stderr,
+                    "Deep render stopped: render frame end failed before frame_%04d.bmp was confirmed.\n",
+                    deep_render_frame_index);
+            *running = false;
+        } else if (!AnimationFrameOutputExists(deep_render_frame_index)) {
+            fprintf(stderr,
+                    "Deep render stopped: frame_%04d.bmp was not written after render present.\n",
+                    deep_render_frame_index);
+            *running = false;
+        } else {
+            (*frameCounter)++;
+            if (*frameCounter >= animSettings.frameLimit) {
+                printf("Deep render mode complete. Final frame saved.\n");
+                SDL_Delay(500);
+                *running = false;
+            }
+        }
+    }
     if (timer_hud) {
         ts_session_frame_end(timer_hud);
     }

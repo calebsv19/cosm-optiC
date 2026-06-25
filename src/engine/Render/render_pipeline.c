@@ -163,16 +163,17 @@ bool render_begin_frame(void) {
     return true;
 }
 
-void render_end_frame(void) {
+bool render_end_frame(void) {
     RenderContext* ctx = getRenderContext();
-    if (!ctx || !ctx->renderer) return;
+    if (!ctx || !ctx->renderer) return false;
 #if USE_VULKAN
-    if (s_device_lost) return;
+    if (s_device_lost) return false;
     VkResult endResult =
         vk_renderer_end_frame((VkRenderer*)ctx->renderer, ctx->command_buffer);
     if (endResult == VK_ERROR_OUT_OF_DATE_KHR || endResult == VK_SUBOPTIMAL_KHR) {
         vk_renderer_recreate_swapchain((VkRenderer*)ctx->renderer, ctx->window);
         s_logged_end_failure = 0;
+        return false;
     } else if (endResult == VK_ERROR_DEVICE_LOST) {
         if (!s_logged_device_lost) {
             fprintf(stderr, "[Render] vk_renderer_end_frame failed: device lost.\n");
@@ -180,16 +181,20 @@ void render_end_frame(void) {
         }
         s_device_lost = true;
         vk_shared_device_mark_lost();
+        return false;
     } else if (endResult != VK_SUCCESS) {
         if (!s_logged_end_failure) {
             fprintf(stderr, "[Render] vk_renderer_end_frame failed: %d\n", endResult);
             s_logged_end_failure = 1;
         }
+        return false;
     } else {
         s_logged_end_failure = 0;
     }
+    return true;
 #else
     SDL_RenderPresent(ctx->renderer);
+    return true;
 #endif
 }
 

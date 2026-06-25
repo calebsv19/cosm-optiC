@@ -156,7 +156,7 @@ RAY_TRACING_TEST_WEAK int AnimationCurrentAbsoluteFrameIndex(void) { return 0; }
 RAY_TRACING_TEST_WEAK int AnimationConfiguredPathFrameCount(void) { return 0; }
 RAY_TRACING_TEST_WEAK RenderContext* getRenderContext(void) { return NULL; }
 RAY_TRACING_TEST_WEAK bool render_begin_frame(void) { return true; }
-RAY_TRACING_TEST_WEAK void render_end_frame(void) {}
+RAY_TRACING_TEST_WEAK bool render_end_frame(void) { return true; }
 RAY_TRACING_TEST_WEAK bool render_device_lost(void) { return false; }
 RAY_TRACING_TEST_WEAK void render_set_clear_color(SDL_Renderer* renderer, Uint8 r, Uint8 g, Uint8 b, Uint8 a) {
     (void)renderer;
