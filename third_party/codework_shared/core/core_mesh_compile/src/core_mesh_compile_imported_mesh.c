@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define CORE_MESH_COMPILE_IMPORTED_STL_MAX_TRIANGLES 250000u
+#define CORE_MESH_COMPILE_IMPORTED_STL_MAX_TRIANGLES 3000000u
 
 typedef struct CoreMeshCompileParsedTriangle {
     size_t a;

@@ -140,10 +140,32 @@ static void test_bvh_matches_flat_trace(void) {
     assert_true("bvh_build_stats_depth", build_stats.maxDepth > 1);
     assert_true("bvh_build_stats_memory", build_stats.totalBytes > 0u);
     assert_true("bvh_build_stats_centroid_scratch", build_stats.centroidBytes > 0u);
-    assert_true("bvh_build_stats_sort_scratch", build_stats.sortScratchBytes > 0u);
+    assert_true("bvh_build_stats_triangle_bounds_min_scratch",
+                build_stats.triangleBoundsMinBytes > 0u);
+    assert_true("bvh_build_stats_triangle_bounds_max_scratch",
+                build_stats.triangleBoundsMaxBytes > 0u);
+    assert_true("bvh_build_stats_sort_scratch_removed", build_stats.sortScratchBytes == 0u);
     assert_true("bvh_build_stats_scratch_total",
                 build_stats.buildScratchBytes ==
-                    build_stats.centroidBytes + build_stats.sortScratchBytes);
+                    build_stats.centroidBytes + build_stats.triangleBoundsMinBytes +
+                        build_stats.triangleBoundsMaxBytes + build_stats.sortScratchBytes);
+    assert_true("bvh_build_stats_allocation_cpu", build_stats.allocationCpuMs >= 0.0);
+    assert_true("bvh_build_stats_centroid_cpu", build_stats.centroidBuildCpuMs >= 0.0);
+    assert_true("bvh_build_stats_tree_cpu", build_stats.treeBuildCpuMs >= 0.0);
+    assert_true("bvh_build_stats_range_bounds_cpu", build_stats.rangeBoundsCpuMs >= 0.0);
+    assert_true("bvh_build_stats_sort_cpu", build_stats.sortCpuMs >= 0.0);
+    assert_true("bvh_build_stats_node_append_cpu", build_stats.nodeAppendCpuMs >= 0.0);
+    assert_true("bvh_build_stats_unaccounted_cpu",
+                build_stats.buildUnaccountedCpuMs >= 0.0);
+    assert_true("bvh_build_stats_range_bounds_calls",
+                build_stats.rangeBoundsCalls == (uint64_t)build_stats.nodeCount);
+    assert_true("bvh_build_stats_sort_calls",
+                build_stats.sortCalls == (uint64_t)(build_stats.leafCount - 1));
+    assert_true("bvh_build_stats_node_append_calls",
+                build_stats.nodeAppendCalls == (uint64_t)build_stats.nodeCount);
+    assert_true("bvh_build_stats_max_range_bounds",
+                build_stats.maxRangeBoundsCount == build_stats.triangleCount);
+    assert_true("bvh_build_stats_max_sort", build_stats.maxSortCount == build_stats.triangleCount);
 
     rays[0] = RuntimeRay3D_Make(vec3(-3.5, 0.0, 1.0), vec3(0.0, 1.0, 0.0));
     rays[1] = RuntimeRay3D_Make(vec3(-0.5, 0.0, 1.0), vec3(0.0, 1.0, 0.0));
