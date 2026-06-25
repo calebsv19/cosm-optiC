@@ -7,6 +7,7 @@
 #include "app/preview_retained_scene_renderer.h"
 #include "app/runtime_time.h"
 #include "config/config_manager.h"
+#include "editor/material_editor_face_preview.h"
 #include "render/ray_tracing2.h"
 #include "render/render_helper.h"
 #include "render/space_mode_adapter.h"
@@ -419,12 +420,14 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
             VkRenderer* preview_vk = (VkRenderer*)preview_renderer;
             ray_tracing_text_reset_renderer(preview_renderer);
             vk_renderer_wait_idle(preview_vk);
+            MaterialEditorFacePreviewDetachRenderer(preview_renderer);
             vk_renderer_shutdown_surface(preview_vk);
             free(preview_vk);
         }
 #else
         if (preview_renderer) {
             ray_tracing_text_reset_renderer(preview_renderer);
+            MaterialEditorFacePreviewDetachRenderer(preview_renderer);
             SDL_DestroyRenderer(preview_renderer);
         }
 #endif

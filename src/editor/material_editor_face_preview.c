@@ -205,6 +205,12 @@ void MaterialEditorFacePreviewReset(void) {
     s_face_preview_alpha_toggle_rect = (SDL_Rect){0, 0, 0, 0};
 }
 
+void MaterialEditorFacePreviewDetachRenderer(SDL_Renderer* renderer) {
+    if (!renderer || s_face_preview_cache.renderer != renderer) return;
+    material_editor_face_preview_release_texture();
+    s_face_preview_cache.dirty = true;
+}
+
 void MaterialEditorFacePreviewInvalidate(void) {
     s_face_preview_cache.dirty = true;
 }

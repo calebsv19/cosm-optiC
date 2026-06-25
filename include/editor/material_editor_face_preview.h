@@ -32,6 +32,7 @@ bool MaterialEditorFacePreviewResolveDisplaySizeForAddress(
     int* out_height);
 
 void MaterialEditorFacePreviewReset(void);
+void MaterialEditorFacePreviewDetachRenderer(SDL_Renderer* renderer);
 void MaterialEditorFacePreviewInvalidate(void);
 bool MaterialEditorFacePreviewHandleEvent(const SDL_Event* event);
 bool MaterialEditorFacePreviewHitTest(int mx, int my);

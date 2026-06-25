@@ -1,6 +1,7 @@
 #include "app/ray_tracing_runtime_host.h"
 
 #include "app/animation.h"
+#include "editor/material_editor_face_preview.h"
 #include "engine/Render/render_font.h"
 #include "engine/Render/render_pipeline.h"
 #include "render/font_runtime.h"
@@ -280,8 +281,10 @@ void ray_tracing_runtime_host_shutdown(void) {
     if (g_runtime_host.renderer_ready && renderer) {
 #if USE_VULKAN
         vk_renderer_wait_idle((VkRenderer*)renderer);
+        MaterialEditorFacePreviewDetachRenderer(renderer);
         vk_renderer_shutdown_surface((VkRenderer*)renderer);
 #else
+        MaterialEditorFacePreviewDetachRenderer(renderer);
         SDL_DestroyRenderer(renderer);
 #endif
         renderer = NULL;
