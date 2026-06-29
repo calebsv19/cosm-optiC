@@ -19,6 +19,7 @@
 #include "editor/scene_editor_digest_overlay.h"
 #include "editor/scene_editor_material_face_metrics.h"
 #include "editor/scene_editor_material_face_placement.h"
+#include "editor/scene_editor_material_graph.h"
 #include "editor/scene_editor_material_preview.h"
 #include "editor/scene_editor_material_stack.h"
 #include "editor/scene_editor_runtime_scene_persistence.h"
@@ -28,6 +29,7 @@
 #include "import/runtime_mesh_asset_loader.h"
 #include "import/runtime_scene_bridge.h"
 #include "render/runtime_material_authored_texture_3d.h"
+#include "render/runtime_material_graph_3d.h"
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_material_texture_3d.h"
 #include "render/runtime_scene_3d_builder.h"
@@ -259,6 +261,74 @@ static bool test_scene_editor_write_authored_texture_manifest(const char* manife
         }
         json_object_array_add(base_surfaces, base_surface);
     }
+    json_object_object_add(root, "base_surfaces", base_surfaces);
+    write_ok = json_object_to_file_ext(manifest_path, root, JSON_C_TO_STRING_PRETTY);
+    json_object_put(root);
+    return write_ok == 0;
+}
+
+static bool test_scene_editor_write_channel_authored_texture_manifest(
+    const char* manifest_path,
+    const char* object_id,
+    const char* file_name) {
+    json_object* root = NULL;
+    json_object* base_surfaces = NULL;
+    json_object* base_surface = NULL;
+    json_object* channels = NULL;
+    const char* channel_names[] = {
+        "base_color.rgb",
+        "roughness.scalar",
+        "normal.tangent"
+    };
+    const char* channel_sources[] = {
+        "rgba",
+        "luminance",
+        "rgb"
+    };
+    int write_ok = 0;
+    if (!manifest_path || !object_id || !file_name) return false;
+    root = json_object_new_object();
+    base_surfaces = json_object_new_array();
+    base_surface = json_object_new_object();
+    channels = json_object_new_array();
+    if (!root || !base_surfaces || !base_surface || !channels) {
+        if (root) json_object_put(root);
+        if (base_surfaces) json_object_put(base_surfaces);
+        if (base_surface) json_object_put(base_surface);
+        if (channels) json_object_put(channels);
+        return false;
+    }
+    json_object_object_add(root, "schema_version", json_object_new_int(5));
+    json_object_object_add(root,
+                           "export_binding_kind",
+                           json_object_new_string("SEPARATE_FACES"));
+    json_object_object_add(root,
+                           "emitted_output_kind",
+                           json_object_new_string("FLATTENED_ONLY"));
+    json_object_object_add(root, "primitive_kind", json_object_new_string("PLANE"));
+    json_object_object_add(root, "source_scene_id", json_object_new_string("scene_channel_test"));
+    json_object_object_add(root, "source_object_id", json_object_new_string(object_id));
+    json_object_object_add(root, "base_surface_count", json_object_new_int(1));
+    json_object_object_add(base_surface, "surface_id", json_object_new_int(1));
+    json_object_object_add(base_surface, "face_role", json_object_new_string("FRONT"));
+    json_object_object_add(base_surface, "file_name", json_object_new_string(file_name));
+    if (!test_scene_editor_add_surface_semantic_fields(base_surface, "PLANE", "FRONT")) {
+        json_object_put(root);
+        return false;
+    }
+    for (int i = 0; i < 3; ++i) {
+        json_object* channel = json_object_new_object();
+        if (!channel) {
+            json_object_put(root);
+            return false;
+        }
+        json_object_object_add(channel, "channel", json_object_new_string(channel_names[i]));
+        json_object_object_add(channel, "source", json_object_new_string(channel_sources[i]));
+        json_object_object_add(channel, "file_name", json_object_new_string(file_name));
+        json_object_array_add(channels, channel);
+    }
+    json_object_object_add(base_surface, "material_channels", channels);
+    json_object_array_add(base_surfaces, base_surface);
     json_object_object_add(root, "base_surfaces", base_surfaces);
     write_ok = json_object_to_file_ext(manifest_path, root, JSON_C_TO_STRING_PRETTY);
     json_object_put(root);
@@ -743,6 +813,10 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip_object_material
                     strstr(persisted_json, "\"authored_texture\"") != NULL);
         assert_true("runtime_scene_authoring_material_persist_has_manifest_path",
                     strstr(persisted_json, texture_manifest_rel) != NULL);
+        assert_true("runtime_scene_authoring_material_persist_has_scene_relative_scope",
+                    strstr(persisted_json, "\"path_scope\":\"scene_relative\"") != NULL);
+        assert_true("runtime_scene_authoring_material_persist_no_local_manifest_path",
+                    strstr(persisted_json, "\"local_manifest_path\"") == NULL);
     }
 
     assert_true("runtime_scene_authoring_material_persist_hydrated_material_id",
@@ -1256,6 +1330,8 @@ static int test_material_editor_authored_texture_binding_replace_clear_roundtrip
     if (persisted_json) {
         assert_true("material_editor_authored_replace_clear_persisted_uses_b_relative",
                     strstr(persisted_json, texture_manifest_b_rel) != NULL);
+        assert_true("material_editor_authored_replace_clear_persisted_scene_relative_scope",
+                    strstr(persisted_json, "\"path_scope\":\"scene_relative\"") != NULL);
         assert_true("material_editor_authored_replace_clear_persisted_not_a_relative",
                     strstr(persisted_json, texture_manifest_a_rel) == NULL);
         assert_true("material_editor_authored_replace_clear_persisted_not_b_absolute",
@@ -1548,6 +1624,11 @@ static int test_material_editor_authored_texture_invalid_binding_persists_and_re
     if (persisted_json) {
         assert_true("material_editor_authored_invalid_reopen_persisted_relative_manifest",
                     strstr(persisted_json, texture_manifest_rel) != NULL);
+        assert_true("material_editor_authored_invalid_reopen_persisted_scene_relative_scope",
+                    strstr(persisted_json, "\"path_scope\":\"scene_relative\"") != NULL);
+        assert_true("material_editor_authored_invalid_reopen_persisted_reason",
+                    strstr(persisted_json,
+                           "\"invalid_reason\":\"schema or output contract invalid\"") != NULL);
         assert_true("material_editor_authored_invalid_reopen_persisted_not_null",
                     strstr(persisted_json, "\"authored_texture\":null") == NULL &&
                     strstr(persisted_json, "\"authored_texture\": null") == NULL);
@@ -1749,6 +1830,145 @@ static int test_scene_editor_runtime_scene_material_stack_roundtrip_payload(void
     SceneEditorMaterialStackResetAll();
     RuntimeMaterialAuthoredTextureResetAll();
     SceneEditorMaterialFacePlacementResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_authored_texture_local_absolute_reference_policy(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char* runtime_dir = "/tmp/ray_tracing_authored_texture_local_policy_scene";
+    const char* runtime_path = "/tmp/ray_tracing_authored_texture_local_policy_scene/scene_runtime.json";
+    const char* external_dir = "/tmp/ray_tracing_authored_texture_local_policy_external";
+    const char* texture_png = "/tmp/ray_tracing_authored_texture_local_policy_external/local_plane.png";
+    const char* texture_manifest =
+        "/tmp/ray_tracing_authored_texture_local_policy_external/local_plane_manifest.json";
+    const char* runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"authored_texture_local_policy\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"local_plane\","
+          "\"object_type\":\"plane_primitive\","
+          "\"transform\":{"
+            "\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+          "},"
+          "\"primitive\":{\"kind\":\"plane_primitive\",\"width\":1.0,\"height\":1.0},"
+          "\"flags\":{\"visible\":true}"
+        "}],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeSceneBridgePreflight reapply_summary = {0};
+    unsigned char texture_rgba[] = {180u, 90u, 40u, 255u};
+    char diagnostics[256];
+    char* persisted_json = NULL;
+    char authored_manifest_path[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
+    char authored_binding_mode[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MODE_CAPACITY];
+    char authored_reason[RUNTIME_MATERIAL_AUTHORED_TEXTURE_REASON_CAPACITY];
+    bool ok = false;
+
+    assert_true("material_editor_authored_local_policy_mkdir_runtime",
+                mkdir(runtime_dir, 0775) == 0 || access(runtime_dir, F_OK) == 0);
+    assert_true("material_editor_authored_local_policy_mkdir_external",
+                mkdir(external_dir, 0775) == 0 || access(external_dir, F_OK) == 0);
+    assert_true("material_editor_authored_local_policy_scene_write",
+                test_scene_editor_write_text_file(runtime_path, runtime_json));
+    assert_true("material_editor_authored_local_policy_png_write",
+                test_scene_editor_write_png_rgba(texture_png, texture_rgba, 1u, 1u));
+    assert_true("material_editor_authored_local_policy_manifest_write",
+                test_scene_editor_write_invalid_authored_texture_manifest_missing_output_kind(
+                    texture_manifest,
+                    "local_plane",
+                    "PLANE",
+                    "FRONT",
+                    "local_plane.png"));
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialFacePlacementResetAll();
+    SceneEditorMaterialStackResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    ok = runtime_scene_bridge_apply_file(runtime_path, &summary);
+    assert_true("material_editor_authored_local_policy_apply_ok", ok);
+    if (!ok) {
+        unlink(texture_png);
+        unlink(texture_manifest);
+        rmdir(external_dir);
+        unlink(runtime_path);
+        rmdir(runtime_dir);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    snprintf(animSettings.runtimeScenePath, sizeof(animSettings.runtimeScenePath), "%s", runtime_path);
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+    assert_true("material_editor_authored_local_policy_bind_rejected",
+                !MaterialEditorBindAuthoredTextureManifestForFocused(texture_manifest));
+    assert_true("material_editor_authored_local_policy_persist_ok",
+                SceneEditorRuntimeScenePersistAuthoring(diagnostics, sizeof(diagnostics)));
+
+    persisted_json = read_text_file_alloc(runtime_path, NULL);
+    assert_true("material_editor_authored_local_policy_readback_ok", persisted_json != NULL);
+    if (persisted_json) {
+        assert_true("material_editor_authored_local_policy_persisted_local_scope",
+                    strstr(persisted_json, "\"path_scope\":\"local_absolute\"") != NULL);
+        assert_true("material_editor_authored_local_policy_persisted_local_path",
+                    strstr(persisted_json, "\"local_manifest_path\":\"/tmp/ray_tracing_authored_texture_local_policy_external/local_plane_manifest.json\"") != NULL);
+        assert_true("material_editor_authored_local_policy_no_portable_absolute_manifest",
+                    strstr(persisted_json, "\"manifest_path\":\"/tmp/") == NULL);
+        assert_true("material_editor_authored_local_policy_persisted_reason",
+                    strstr(persisted_json,
+                           "\"invalid_reason\":\"schema or output contract invalid\"") != NULL);
+        free(persisted_json);
+        persisted_json = NULL;
+    }
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialFacePlacementResetAll();
+    SceneEditorMaterialStackResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    assert_true("material_editor_authored_local_policy_reapply_ok",
+                runtime_scene_bridge_apply_file(runtime_path, &reapply_summary));
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    snprintf(animSettings.runtimeScenePath, sizeof(animSettings.runtimeScenePath), "%s", runtime_path);
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+    assert_true("material_editor_authored_local_policy_invalid_summary",
+                MaterialEditorGetAuthoredTextureInvalidSummary(authored_manifest_path,
+                                                              sizeof(authored_manifest_path),
+                                                              authored_binding_mode,
+                                                              sizeof(authored_binding_mode),
+                                                              authored_reason,
+                                                              sizeof(authored_reason)));
+    assert_true("material_editor_authored_local_policy_invalid_summary_path",
+                strcmp(authored_manifest_path, texture_manifest) == 0);
+    assert_true("material_editor_authored_local_policy_invalid_summary_mode",
+                strcmp(authored_binding_mode, "override") == 0);
+    assert_true("material_editor_authored_local_policy_invalid_summary_reason",
+                strcmp(authored_reason, "schema or output contract invalid") == 0);
+
+    unlink(texture_png);
+    unlink(texture_manifest);
+    rmdir(external_dir);
+    unlink(runtime_path);
+    rmdir(runtime_dir);
+    RuntimeMaterialAuthoredTextureResetAll();
     sceneSettings = saved_scene;
     animSettings = saved_anim;
     return 0;
@@ -2046,6 +2266,10 @@ static int test_material_editor_focuses_last_selected_and_updates_texture_fields
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
     RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    MaterialEditorProofReadback proof_readback;
+    MaterialEditorCompactLayoutRects compact_rects;
+    SDL_Rect compact_bounds = {10, 20, 300, 360};
+    char proof_status[MATERIAL_EDITOR_PROOF_TEXT_CAPACITY];
 
     memset(&sceneSettings, 0, sizeof(sceneSettings));
     memset(&animSettings, 0, sizeof(animSettings));
@@ -2067,6 +2291,136 @@ static int test_material_editor_focuses_last_selected_and_updates_texture_fields
                 (MaterialEditorSetSolidFacesEnabled(true), MaterialEditorGetSolidFacesEnabled()));
     assert_true("material_editor_focuses_last_selected",
                 MaterialEditorResolveFocusedObjectIndex() == 1);
+    assert_true("material_editor_subpane_default_stack",
+                MaterialEditorGetActiveSubPane() == MATERIAL_EDITOR_SUBPANE_STACK &&
+                    strcmp(MaterialEditorSubPaneLabel(MATERIAL_EDITOR_SUBPANE_STACK),
+                           "Layer Stack") == 0 &&
+                    strcmp(MaterialEditorSubPaneCompactLabel(MATERIAL_EDITOR_SUBPANE_STACK),
+                           "Stack") == 0);
+    MaterialEditorSetActiveSubPane(MATERIAL_EDITOR_SUBPANE_TEXTURES);
+    assert_true("material_editor_subpane_switches_textures",
+                MaterialEditorGetActiveSubPane() == MATERIAL_EDITOR_SUBPANE_TEXTURES &&
+                    strcmp(MaterialEditorSubPaneLabel(MATERIAL_EDITOR_SUBPANE_TEXTURES),
+                           "Textures & Channels") == 0 &&
+                    strcmp(MaterialEditorSubPaneCompactLabel(MATERIAL_EDITOR_SUBPANE_TEXTURES),
+                           "Tex") == 0);
+    MaterialEditorSetActiveSubPane((MaterialEditorSubPane)999);
+    assert_true("material_editor_subpane_clamps_invalid",
+                MaterialEditorGetActiveSubPane() == MATERIAL_EDITOR_SUBPANE_STACK);
+    assert_true("material_editor_identity_popover_starts_closed",
+                !MaterialEditorIdentityPopoverOpen());
+    assert_true("material_editor_identity_popover_toggles_open",
+                MaterialEditorToggleIdentityPopover());
+    MaterialEditorSetIdentityPopoverOpen(false);
+    assert_true("material_editor_identity_popover_set_closed",
+                !MaterialEditorIdentityPopoverOpen());
+    compact_rects = MaterialEditorCompactLayoutBuild(compact_bounds, true);
+    assert_true("material_editor_compact_layout_header",
+                compact_rects.identity_header.x == 16 &&
+                    compact_rects.identity_header.y == 24 &&
+                    compact_rects.identity_header.h == MATERIAL_EDITOR_COMPACT_HEADER_HEIGHT &&
+                    compact_rects.identity_header.w == 288);
+    assert_true("material_editor_compact_layout_tabs",
+                compact_rects.tab_rects[MATERIAL_EDITOR_SUBPANE_STACK].h ==
+                        MATERIAL_EDITOR_COMPACT_TAB_HEIGHT &&
+                    compact_rects.tab_rects[MATERIAL_EDITOR_SUBPANE_TEXTURES].x >
+                        compact_rects.tab_rects[MATERIAL_EDITOR_SUBPANE_STACK].x &&
+                    compact_rects.tab_rects[MATERIAL_EDITOR_SUBPANE_PROOF].w > 0);
+    assert_true("material_editor_compact_layout_popover_overlays_content",
+                compact_rects.identity_popover_visible &&
+                    compact_rects.identity_popover.y <
+                        compact_rects.content.y &&
+                    compact_rects.content.y >
+                        compact_rects.identity_header.y + compact_rects.identity_header.h);
+    s_material_editor_compact_layout_rects =
+        MaterialEditorCompactLayoutBuild(compact_bounds, false);
+    {
+        SDL_Event click;
+        memset(&click, 0, sizeof(click));
+        click.type = SDL_MOUSEBUTTONDOWN;
+        click.button.button = SDL_BUTTON_LEFT;
+        click.button.x =
+            s_material_editor_compact_layout_rects.tab_rects[MATERIAL_EDITOR_SUBPANE_GRAPH].x + 2;
+        click.button.y =
+            s_material_editor_compact_layout_rects.tab_rects[MATERIAL_EDITOR_SUBPANE_GRAPH].y + 2;
+        HandleMaterialEditorEvents(&click);
+    }
+    assert_true("material_editor_compact_tab_input_switches_graph",
+                MaterialEditorGetActiveSubPane() == MATERIAL_EDITOR_SUBPANE_GRAPH);
+    {
+        SDL_Event click;
+        memset(&click, 0, sizeof(click));
+        click.type = SDL_MOUSEBUTTONDOWN;
+        click.button.button = SDL_BUTTON_LEFT;
+        click.button.x = compact_rects.identity_disclosure.x + 2;
+        click.button.y = compact_rects.identity_disclosure.y + 2;
+        HandleMaterialEditorEvents(&click);
+    }
+    assert_true("material_editor_compact_identity_input_toggles",
+                MaterialEditorIdentityPopoverOpen());
+    MaterialEditorSetIdentityPopoverOpen(false);
+    MaterialEditorSetActiveSubPane(MATERIAL_EDITOR_SUBPANE_STACK);
+    assert_true("material_editor_destination_stack_label",
+                MaterialEditorMutationDestinationForFocusedTextureControls() ==
+                    MATERIAL_EDITOR_MUTATION_DESTINATION_MATERIAL_STACK &&
+                    strcmp(MaterialEditorMutationDestinationLabel(
+                               MATERIAL_EDITOR_MUTATION_DESTINATION_MATERIAL_STACK),
+                           "material_stack") == 0);
+    assert_true("material_editor_stack_panel_group_label",
+                MaterialEditorPanelGroupForMutationDestination(
+                    MATERIAL_EDITOR_MUTATION_DESTINATION_MATERIAL_STACK) ==
+                    MATERIAL_EDITOR_PANEL_GROUP_BASE_LAYER &&
+                    strcmp(MaterialEditorPanelGroupLabel(MATERIAL_EDITOR_PANEL_GROUP_BASE_LAYER),
+                           "Base Layer") == 0);
+    assert_true("material_editor_texture_binding_panel_group_label",
+                MaterialEditorPanelGroupForMutationDestination(
+                    MATERIAL_EDITOR_MUTATION_DESTINATION_AUTHORED_TEXTURE_BINDING) ==
+                    MATERIAL_EDITOR_PANEL_GROUP_TEXTURE_BINDING &&
+                    strcmp(MaterialEditorPanelGroupLabel(
+                               MATERIAL_EDITOR_PANEL_GROUP_TEXTURE_BINDING),
+                           "Texture Binding") == 0);
+    assert_true("material_editor_physical_response_panel_group_label",
+                strcmp(MaterialEditorPanelGroupLabel(
+                           MATERIAL_EDITOR_PANEL_GROUP_PHYSICAL_RESPONSE),
+                       "Physical Response") == 0);
+    assert_true("material_editor_preview_panel_group_label",
+                strcmp(MaterialEditorPanelGroupLabel(
+                           MATERIAL_EDITOR_PANEL_GROUP_PREVIEW_READBACK),
+                       "Preview & Readback") == 0);
+    assert_true("material_editor_proof_readback_builds",
+                MaterialEditorBuildFocusedProofReadback(&proof_readback));
+    assert_true("material_editor_proof_readback_schema",
+                strcmp(proof_readback.request_schema,
+                       "ray_tracing_material_proof_package_request_v1") == 0 &&
+                    strcmp(proof_readback.summary_schema,
+                           "ray_tracing_material_proof_summary_v1") == 0);
+    assert_true("material_editor_proof_readback_route",
+                strcmp(proof_readback.route_primary, "headless_material_preview") == 0 &&
+                    strcmp(proof_readback.route_status,
+                           "request_shape_only_not_launched") == 0 &&
+                    proof_readback.m4_request_compatible &&
+                    proof_readback.launch_deferred);
+    assert_true("material_editor_proof_readback_artifacts",
+                strcmp(proof_readback.request_path, "request.json") == 0 &&
+                    strcmp(proof_readback.summary_path, "summary.json") == 0 &&
+                    strcmp(proof_readback.index_path, "index.md") == 0 &&
+                    strcmp(proof_readback.image_path, "preview.bmp") == 0 &&
+                    strcmp(proof_readback.image_status, "not_generated_by_editor") == 0);
+    assert_true("material_editor_proof_readback_destination_group",
+                strcmp(proof_readback.destination_label, "material_stack") == 0 &&
+                    strcmp(proof_readback.panel_group_label, "Base Layer") == 0);
+    MaterialEditorFormatProofReadbackStatus(&proof_readback,
+                                            proof_status,
+                                            sizeof(proof_status));
+    assert_true("material_editor_proof_readback_status_text",
+                strstr(proof_status, "headless_material_preview") != NULL &&
+                    strstr(proof_status, "material_stack") != NULL &&
+                    strstr(proof_status, "request_shape_only_not_launched") != NULL);
+    assert_true("material_editor_proof_readback_prime",
+                MaterialEditorPrimeProofReadbackForFocused() &&
+                    s_material_editor_proof_readback_valid &&
+                    strstr(s_material_editor_proof_readback_status,
+                           "headless_material_preview") != NULL);
     assert_true("material_editor_applies_rust_kind",
                 MaterialEditorApplyTextureKindToFocused(1));
     assert_true("material_editor_texture_kind_promotes_stack",
@@ -2132,6 +2486,446 @@ static int test_material_editor_focuses_last_selected_and_updates_texture_fields
     assert_true("material_editor_marks_object_dirty",
                 sceneSettings.sceneObjects[1].dirty);
 
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_graph_readback_reports_mvp_integration(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeMaterialGraphDocument graph =
+        RuntimeMaterialGraphDocumentMake("m7_s4_editor_graph");
+    RuntimeMaterialTextureLayer base =
+        RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_WOOD);
+    RuntimeMaterialTextureLayer oil =
+        RuntimeMaterialTextureLayerMakeOverlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL);
+    RuntimeMaterialGraphCompileResult compile_result = {0};
+    MaterialEditorGraphReadback readback = {0};
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+
+    sceneSettings.objectCount = 2;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, -3.0, 0.0, 5.0, 0.0, NULL, 0);
+    InitObject(&sceneSettings.sceneObjects[1], OBJECT_CIRCLE, 3.0, 0.0, 5.0, 0.0, NULL, 0);
+    ObjectEditorSelectionTrackerSetCurrent(1, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+
+    snprintf(base.layerId, sizeof(base.layerId), "%s", "graph_base_wood");
+    snprintf(oil.layerId, sizeof(oil.layerId), "%s", "graph_oil_overlay");
+    oil.params.coverage = 0.62;
+    oil.placement.strength = 1.0;
+    assert_true("material_editor_graph_readback_add_base",
+                RuntimeMaterialGraphDocumentAddNode(
+                    &graph,
+                    RuntimeMaterialGraphNodeMakeLayer("base_node", base)));
+    assert_true("material_editor_graph_readback_add_overlay",
+                RuntimeMaterialGraphDocumentAddNode(
+                    &graph,
+                    RuntimeMaterialGraphNodeMakeLayer("oil_node", oil)));
+    assert_true("material_editor_graph_readback_add_channel",
+                RuntimeMaterialGraphDocumentAddNode(
+                    &graph,
+                    RuntimeMaterialGraphNodeMakeChannelOutput("roughness_output",
+                                                              "roughness.scalar",
+                                                              "luminance",
+                                                              "roughness.png")));
+    assert_true("material_editor_graph_readback_set_graph",
+                SceneEditorMaterialGraphSetObjectGraph(1, &graph, &compile_result));
+    assert_true("material_editor_graph_readback_builds",
+                MaterialEditorBuildFocusedGraphReadback(&readback));
+    assert_true("material_editor_graph_readback_identity",
+                readback.has_graph &&
+                    strcmp(readback.phase, "M8-S6") == 0 &&
+                    strcmp(readback.graph_id, "m7_s4_editor_graph") == 0 &&
+                    readback.scene_object_index == 1);
+    assert_true("material_editor_graph_readback_counts",
+                readback.graph_node_count == 3 &&
+                    readback.compiled_stack_layer_count == 2 &&
+                    readback.channel_ref_count == 1);
+    assert_true("material_editor_graph_readback_route",
+                readback.has_compiled_stack_fallback &&
+                    strcmp(readback.authoring_state, "graph_document") == 0 &&
+                    strcmp(readback.evaluator_route, "compiled_stack_fallback") == 0);
+    assert_true("material_editor_graph_readback_mvp_status",
+                readback.visual_graph_mvp_available &&
+                    !readback.visual_node_ui_deferred &&
+                    strcmp(readback.integration_status,
+                           "visual_graph_mvp_compiled_stack") == 0);
+
+    SceneEditorMaterialGraphResetAll();
+    SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_graph_actions_create_layer_channel_and_clear(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeMaterialGraphDocument graph = RuntimeMaterialGraphDocumentEmpty();
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    MaterialEditorGraphReadback readback = {0};
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 5.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].textureId = RUNTIME_MATERIAL_TEXTURE_3D_RUST;
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+    MaterialEditorSetActiveSubPane(MATERIAL_EDITOR_SUBPANE_GRAPH);
+
+    assert_true("material_editor_graph_actions_initial_mvp",
+                MaterialEditorBuildFocusedGraphReadback(&readback) &&
+                    !readback.has_graph &&
+                    readback.visual_graph_mvp_available &&
+                    strcmp(readback.integration_status,
+                           "graph_mvp_create_layer_channel_clear") == 0);
+    assert_true("material_editor_graph_actions_create",
+                MaterialEditorEnsureGraphForFocused());
+    assert_true("material_editor_graph_actions_created_graph",
+                SceneEditorMaterialGraphGetObjectGraph(0, &graph) &&
+                    graph.nodeCount >= 1 &&
+                    SceneEditorMaterialStackGetObjectStack(0, &stack) &&
+                    stack.layerCount >= 1);
+    assert_true("material_editor_graph_actions_add_layer",
+                MaterialEditorAddGraphLayerNodeForFocused());
+    assert_true("material_editor_graph_actions_layer_readback",
+                MaterialEditorBuildFocusedGraphReadback(&readback) &&
+                    readback.has_graph &&
+                    readback.graph_node_count >= 2 &&
+                    readback.compiled_stack_layer_count >= 2);
+    assert_true("material_editor_graph_actions_add_channel",
+                MaterialEditorAddGraphChannelNodeForFocused());
+    assert_true("material_editor_graph_actions_channel_readback",
+                MaterialEditorBuildFocusedGraphReadback(&readback) &&
+                    readback.channel_ref_count == 1 &&
+                    SceneEditorMaterialGraphGetObjectGraph(0, &graph) &&
+                    graph.nodeCount >= 3);
+    assert_true("material_editor_graph_actions_clear",
+                MaterialEditorClearGraphForFocused());
+    assert_true("material_editor_graph_actions_cleared_readback",
+                MaterialEditorBuildFocusedGraphReadback(&readback) &&
+                    !readback.has_graph &&
+                    readback.has_compiled_stack_fallback);
+
+    SceneEditorMaterialGraphResetAll();
+    SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_material_readback_reports_preset_custom_and_graph(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    RuntimeMaterialGraphDocument graph =
+        RuntimeMaterialGraphDocumentMake("m8_s3_material_graph");
+    RuntimeMaterialTextureLayer base =
+        RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_WOOD);
+    RuntimeMaterialTextureLayer oil =
+        RuntimeMaterialTextureLayerMakeOverlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL);
+    RuntimeMaterialGraphCompileResult compile_result = {0};
+    MaterialEditorMaterialReadback material = {0};
+    MaterialEditorActiveLayerReadback layer = {0};
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 5.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_GLOSSY;
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+
+    assert_true("material_editor_material_readback_preset",
+                MaterialEditorBuildMaterialReadback(&material) &&
+                    material.preset_valid &&
+                    !material.custom_stack &&
+                    !material.graph_backed &&
+                    strcmp(material.state_label, "Preset material") == 0 &&
+                    strstr(material.preset_label, "Glossy") != NULL);
+    assert_true("material_editor_material_readback_save_deferred",
+                material.save_request_deferred &&
+                    strcmp(material.save_request_label,
+                           "save_preset_request_deferred") == 0);
+
+    stack.layerCount = 2;
+    stack.layers[0] =
+        RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_WOOD);
+    stack.layers[1] =
+        RuntimeMaterialTextureLayerMakeOverlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_RUST);
+    snprintf(stack.layers[1].layerId, sizeof(stack.layers[1].layerId), "%s", "rust_detail");
+    snprintf(stack.layers[1].displayName, sizeof(stack.layers[1].displayName), "%s", "Rust Detail");
+    stack.layers[1].placement.strength = 0.37;
+    assert_true("material_editor_material_readback_set_stack",
+                SceneEditorMaterialStackSetObjectStack(0, &stack));
+    assert_true("material_editor_material_readback_select_layer",
+                MaterialEditorSetActiveLayerIndex(1));
+    assert_true("material_editor_material_readback_custom",
+                MaterialEditorBuildMaterialReadback(&material) &&
+                    material.custom_stack &&
+                    !material.graph_backed &&
+                    material.stack_layer_count == 2 &&
+                    strcmp(material.state_label, "Customized material") == 0);
+    assert_true("material_editor_active_layer_readback",
+                MaterialEditorBuildActiveLayerReadback(&layer) &&
+                    layer.has_layer &&
+                    layer.active_index == 1 &&
+                    layer.layer_count == 2 &&
+                    !layer.base_layer &&
+                    strstr(layer.title, "Overlay 2/2") != NULL &&
+                    strstr(layer.detail, "Rust Detail") != NULL &&
+                    strstr(layer.detail, "rust_detail") != NULL);
+
+    snprintf(base.layerId, sizeof(base.layerId), "%s", "graph_base_wood");
+    snprintf(oil.layerId, sizeof(oil.layerId), "%s", "graph_oil_overlay");
+    assert_true("material_editor_material_readback_graph_base",
+                RuntimeMaterialGraphDocumentAddNode(
+                    &graph,
+                    RuntimeMaterialGraphNodeMakeLayer("base_node", base)));
+    assert_true("material_editor_material_readback_graph_oil",
+                RuntimeMaterialGraphDocumentAddNode(
+                    &graph,
+                    RuntimeMaterialGraphNodeMakeLayer("oil_node", oil)));
+    assert_true("material_editor_material_readback_set_graph",
+                SceneEditorMaterialGraphSetObjectGraph(0, &graph, &compile_result));
+    assert_true("material_editor_material_readback_graph",
+                MaterialEditorBuildMaterialReadback(&material) &&
+                    material.graph_backed &&
+                    material.custom_stack &&
+                    strcmp(material.state_label, "Graph-backed custom") == 0 &&
+                    strcmp(material.source_label, "graph_document + compiled_stack") == 0);
+
+    RuntimeMaterialAuthoredTextureResetAll();
+    SceneEditorMaterialGraphResetAll();
+    SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_recipe_readback_and_cycles_family_surface_finish(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    MaterialEditorRecipeReadback recipe = {0};
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 5.0, 0.0, NULL, 0);
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+
+    assert_true("material_editor_recipe_initial",
+                MaterialEditorBuildRecipeReadback(&recipe) &&
+                    strcmp(recipe.family_label, "Diffuse") == 0 &&
+                    strcmp(recipe.surface_label, "Solid Tint") == 0 &&
+                    strcmp(recipe.finish_label, "Clear") == 0 &&
+                    strstr(recipe.header_label, "Material Diffuse") != NULL &&
+                    strstr(recipe.header_label, "Surface Solid Tint") != NULL);
+    assert_true("material_editor_recipe_family_cycle",
+                MaterialEditorCycleRecipeFamilyForFocused() &&
+                    sceneSettings.sceneObjects[0].material_id == MATERIAL_PRESET_TRANSPARENT &&
+                    MaterialEditorBuildRecipeReadback(&recipe) &&
+                    strcmp(recipe.family_label, "Glass") == 0 &&
+                    strstr(recipe.header_label, "Material Glass") != NULL);
+    assert_true("material_editor_recipe_surface_cycle",
+                MaterialEditorCycleRecipeSurfaceForFocused() &&
+                    SceneEditorMaterialStackGetObjectStack(0, &stack) &&
+                    stack.layerCount >= 1 &&
+                    stack.layers[0].kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_WOOD &&
+                    MaterialEditorBuildRecipeReadback(&recipe) &&
+                    strcmp(recipe.surface_label, "Wood") == 0);
+    assert_true("material_editor_recipe_finish_cycle_rust",
+                MaterialEditorCycleRecipeFinishForFocused() &&
+                    SceneEditorMaterialStackGetObjectStack(0, &stack) &&
+                    stack.layerCount >= 2 &&
+                    stack.layers[1].kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_RUST &&
+                    MaterialEditorBuildRecipeReadback(&recipe) &&
+                    strcmp(recipe.finish_label, "Rust") == 0);
+    assert_true("material_editor_recipe_finish_cycle_grime",
+                MaterialEditorCycleRecipeFinishForFocused() &&
+                    SceneEditorMaterialStackGetObjectStack(0, &stack) &&
+                    stack.layerCount >= 2 &&
+                    stack.layers[1].kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME &&
+                    MaterialEditorBuildRecipeReadback(&recipe) &&
+                    strcmp(recipe.finish_label, "Grime") == 0);
+
+    SceneEditorMaterialGraphResetAll();
+    SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_recipe_dropdown_options_apply_exact_choices(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    MaterialEditorRecipeOption options[MATERIAL_EDITOR_RECIPE_MENU_MAX_ITEMS];
+    MaterialEditorRecipeReadback recipe = {0};
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    int option_count = 0;
+    int glass_index = -1;
+    int metal_index = -1;
+    int brushed_index = -1;
+    int rust_index = -1;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 5.0, 0.0, NULL, 0);
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+
+    option_count = MaterialEditorBuildRecipeOptions(MATERIAL_EDITOR_RECIPE_AXIS_FAMILY,
+                                                    options,
+                                                    MATERIAL_EDITOR_RECIPE_MENU_MAX_ITEMS);
+    for (int i = 0; i < option_count; ++i) {
+        if (options[i].material_id == MATERIAL_PRESET_TRANSPARENT) glass_index = i;
+        if (options[i].material_id == MATERIAL_PRESET_ROUGH_METAL) metal_index = i;
+    }
+    assert_true("material_editor_recipe_dropdown_has_family_choices",
+                glass_index >= 0 && metal_index >= 0);
+    assert_true("material_editor_recipe_dropdown_apply_glass",
+                MaterialEditorApplyRecipeOptionForFocused(MATERIAL_EDITOR_RECIPE_AXIS_FAMILY,
+                                                          glass_index) &&
+                    MaterialEditorBuildRecipeReadback(&recipe) &&
+                    strcmp(recipe.family_label, "Glass") == 0);
+    option_count = MaterialEditorBuildRecipeOptions(MATERIAL_EDITOR_RECIPE_AXIS_SURFACE,
+                                                    options,
+                                                    MATERIAL_EDITOR_RECIPE_MENU_MAX_ITEMS);
+    assert_true("material_editor_recipe_glass_surface_is_compact",
+                option_count == 1 &&
+                    options[0].layer_kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID);
+    assert_true("material_editor_recipe_dropdown_apply_metal",
+                MaterialEditorApplyRecipeOptionForFocused(MATERIAL_EDITOR_RECIPE_AXIS_FAMILY,
+                                                          metal_index) &&
+                    MaterialEditorBuildRecipeReadback(&recipe) &&
+                    strcmp(recipe.family_label, "Metal") == 0);
+    option_count = MaterialEditorBuildRecipeOptions(MATERIAL_EDITOR_RECIPE_AXIS_SURFACE,
+                                                    options,
+                                                    MATERIAL_EDITOR_RECIPE_MENU_MAX_ITEMS);
+    for (int i = 0; i < option_count; ++i) {
+        if (options[i].layer_kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_BRUSHED_METAL) {
+            brushed_index = i;
+        }
+    }
+    assert_true("material_editor_recipe_metal_surface_has_brushed", brushed_index >= 0);
+    assert_true("material_editor_recipe_dropdown_apply_brushed",
+                MaterialEditorApplyRecipeOptionForFocused(MATERIAL_EDITOR_RECIPE_AXIS_SURFACE,
+                                                          brushed_index) &&
+                    SceneEditorMaterialStackGetObjectStack(0, &stack) &&
+                    stack.layers[0].kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_BRUSHED_METAL);
+    option_count = MaterialEditorBuildRecipeOptions(MATERIAL_EDITOR_RECIPE_AXIS_FINISH,
+                                                    options,
+                                                    MATERIAL_EDITOR_RECIPE_MENU_MAX_ITEMS);
+    for (int i = 0; i < option_count; ++i) {
+        if (options[i].layer_kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_RUST) {
+            rust_index = i;
+        }
+    }
+    assert_true("material_editor_recipe_metal_finish_has_rust", rust_index >= 0);
+    assert_true("material_editor_recipe_dropdown_apply_rust",
+                MaterialEditorApplyRecipeOptionForFocused(MATERIAL_EDITOR_RECIPE_AXIS_FINISH,
+                                                          rust_index) &&
+                    SceneEditorMaterialStackGetObjectStack(0, &stack) &&
+                    stack.layerCount >= 2 &&
+                    stack.layers[1].kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_RUST &&
+                    MaterialEditorBuildRecipeReadback(&recipe) &&
+                    strcmp(recipe.finish_label, "Rust") == 0);
+
+    SceneEditorMaterialGraphResetAll();
+    SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_texture_channel_readback_groups_ownership(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char* texture_dir = "/tmp/ray_tracing_material_editor_s4_channels";
+    const char* texture_png = "/tmp/ray_tracing_material_editor_s4_channels/channel_plane.png";
+    const char* texture_manifest =
+        "/tmp/ray_tracing_material_editor_s4_channels/channel_manifest.json";
+    unsigned char texture_rgba[] = {120u, 180u, 210u, 255u};
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    MaterialEditorTextureChannelReadback readback = {0};
+
+    (void)mkdir(texture_dir, 0775);
+    assert_true("material_editor_channel_readback_png_write",
+                test_scene_editor_write_png_rgba(texture_png, texture_rgba, 1u, 1u));
+    assert_true("material_editor_channel_readback_manifest_write",
+                test_scene_editor_write_channel_authored_texture_manifest(texture_manifest,
+                                                                          "channel_plane",
+                                                                          "channel_plane.png"));
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_POLYGON, 0.0, 0.0, 1.0, 0.0, NULL, 0);
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+
+    stack.layerCount = 2;
+    stack.layers[0] =
+        RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID);
+    stack.layers[1] =
+        RuntimeMaterialTextureLayerMakeOverlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_RUST);
+    snprintf(stack.layers[1].layerId, sizeof(stack.layers[1].layerId), "%s", "rust_channel");
+    snprintf(stack.layers[1].displayName, sizeof(stack.layers[1].displayName), "%s", "Rust Channel");
+    assert_true("material_editor_channel_readback_stack_set",
+                SceneEditorMaterialStackSetObjectStack(0, &stack));
+    assert_true("material_editor_channel_readback_layer_select",
+                MaterialEditorSetActiveLayerIndex(1));
+    assert_true("material_editor_channel_readback_bind_manifest",
+                RuntimeMaterialAuthoredTextureBindManifestForObject(0,
+                                                                    "channel_plane",
+                                                                    texture_manifest,
+                                                                    "override"));
+    assert_true("material_editor_channel_readback_build",
+                MaterialEditorBuildTextureChannelReadback(0, &readback));
+    assert_true("material_editor_channel_readback_visual",
+                readback.has_authored_channels &&
+                    readback.visual_count == 1 &&
+                    strstr(readback.visual_channels, "base_color.rgb") != NULL);
+    assert_true("material_editor_channel_readback_physical",
+                readback.physical_count == 1 &&
+                    strstr(readback.physical_channels, "roughness.scalar") != NULL);
+    assert_true("material_editor_channel_readback_future",
+                readback.future_count == 1 &&
+                    strstr(readback.future_channels, "normal.tangent") != NULL);
+    assert_true("material_editor_channel_readback_deferred",
+                strstr(readback.deferred_channels, "displacement.height") != NULL);
+    assert_true("material_editor_channel_readback_procedural_source",
+                readback.has_procedural_source &&
+                    strstr(readback.procedural_source, "Rust Channel") != NULL &&
+                    strstr(readback.procedural_source, "placement") != NULL);
+
+    RuntimeMaterialAuthoredTextureResetAll();
+    SceneEditorMaterialStackResetAll();
     sceneSettings = saved_scene;
     animSettings = saved_anim;
     return 0;
@@ -3450,6 +4244,8 @@ static int test_material_editor_face_group_texture_island_and_override_controls(
     SceneEditorMaterialPreviewTriangleAddress address = {0};
     SceneEditorMaterialPreviewTriangleAddress second_address = {0};
     SceneEditorMaterialFacePlacement placement;
+    MaterialEditorProofReadback proof_readback;
+    MaterialEditorFaceRegionReadback region_readback;
     SDL_Color base = {128, 128, 132, 235};
     SDL_Color tri_a = {0, 0, 0, 0};
     SDL_Color tri_b = {0, 0, 0, 0};
@@ -3508,6 +4304,25 @@ static int test_material_editor_face_group_texture_island_and_override_controls(
     address.faceGroupIndex = 2;
     assert_true("material_face_override_selects_active",
                 MaterialEditorSetTriangleSelection(&address));
+    assert_true("material_face_override_destination_label",
+                MaterialEditorMutationDestinationForFocusedTextureControls() ==
+                    MATERIAL_EDITOR_MUTATION_DESTINATION_FACE_OVERRIDE &&
+                    strcmp(MaterialEditorMutationDestinationLabel(
+                               MATERIAL_EDITOR_MUTATION_DESTINATION_FACE_OVERRIDE),
+                           "face_override") == 0);
+    assert_true("material_face_override_panel_group_label",
+                MaterialEditorPanelGroupForMutationDestination(
+                    MATERIAL_EDITOR_MUTATION_DESTINATION_FACE_OVERRIDE) ==
+                    MATERIAL_EDITOR_PANEL_GROUP_FACE_OVERRIDE &&
+                    strcmp(MaterialEditorPanelGroupLabel(
+                               MATERIAL_EDITOR_PANEL_GROUP_FACE_OVERRIDE),
+                           "Face Override") == 0);
+    assert_true("material_face_override_proof_readback",
+                MaterialEditorBuildFocusedProofReadback(&proof_readback) &&
+                    strcmp(proof_readback.destination_label, "face_override") == 0 &&
+                    strcmp(proof_readback.panel_group_label, "Face Override") == 0 &&
+                    proof_readback.m4_request_compatible &&
+                    proof_readback.launch_deferred);
     assert_true("material_face_override_slider_applies",
                 MaterialEditorApplySliderValueToFocused(MATERIAL_EDITOR_SLIDER_OFFSET_U, 0.31));
     assert_close("material_face_override_object_offset_unchanged",
@@ -3576,6 +4391,19 @@ static int test_material_editor_face_group_texture_island_and_override_controls(
                 MaterialEditorToggleTriangleSelection(&second_address));
     assert_true("material_face_copy_restores_active_group",
                 MaterialEditorSetActiveFaceGroupIndex(2));
+    assert_true("material_face_region_readback_builds",
+                MaterialEditorBuildFaceRegionReadback(&region_readback));
+    assert_true("material_face_region_readback_active",
+                region_readback.active_face_group_index == 2 &&
+                    strstr(region_readback.active_label, "Face #2") != NULL);
+    assert_true("material_face_region_readback_selected_count",
+                region_readback.selected_face_group_count == 2 &&
+                    strstr(region_readback.selection_label, "Selected groups 2") != NULL);
+    assert_true("material_face_region_readback_reset_copy",
+                region_readback.can_reset && region_readback.can_copy_to_selected);
+    assert_true("material_face_region_readback_legacy_override",
+                region_readback.has_legacy_override &&
+                    strstr(region_readback.override_label, "object-face") != NULL);
     assert_true("material_face_copy_to_selected",
                 MaterialEditorCopyActiveFacePlacementToSelected());
     assert_true("material_face_copy_target_override_exists",
@@ -3657,6 +4485,20 @@ static int test_material_editor_face_override_inherits_active_stack_layer(void) 
                 MaterialEditorGetActiveFaceGroupIndex() == 2);
     assert_true("material_face_stack_override_exists",
                 SceneEditorMaterialFacePlacementHasOverride(0, 2));
+    {
+        MaterialEditorFaceRegionReadback region_readback = {0};
+        assert_true("material_face_stack_region_readback_builds",
+                    MaterialEditorBuildFaceRegionReadback(&region_readback));
+        assert_true("material_face_stack_region_readback_layer",
+                    region_readback.has_active_layer &&
+                        strstr(region_readback.layer_label, "Rust") != NULL);
+        assert_true("material_face_stack_region_readback_override",
+                    region_readback.can_reset &&
+                        region_readback.has_layer_specific_override &&
+                        strstr(region_readback.override_label, "layer-specific") != NULL);
+        assert_true("material_face_stack_region_readback_no_copy",
+                    !region_readback.can_copy_to_selected);
+    }
     placement = SceneEditorMaterialFacePlacementGetEffective(&sceneSettings.sceneObjects[0], 0, 2);
     assert_true("material_face_stack_override_tracks_layer",
                 placement.layerIndex == 1);
@@ -4150,6 +4992,12 @@ int run_test_runtime_scene_editor_tests(void) {
     test_object_editor_material_assignment_preserves_object_color();
     test_object_editor_slider_assignments_update_object_fields();
     test_material_editor_focuses_last_selected_and_updates_texture_fields();
+    test_material_editor_graph_readback_reports_mvp_integration();
+    test_material_editor_graph_actions_create_layer_channel_and_clear();
+    test_material_editor_material_readback_reports_preset_custom_and_graph();
+    test_material_editor_recipe_readback_and_cycles_family_surface_finish();
+    test_material_editor_recipe_dropdown_options_apply_exact_choices();
+    test_material_editor_texture_channel_readback_groups_ownership();
     test_material_editor_object_scope_clears_face_overrides_and_applies_all_faces();
     test_material_editor_layer_list_routes_object_stack_controls();
     test_material_editor_object_projector_centers_focused_object();
@@ -4182,6 +5030,7 @@ int run_test_runtime_scene_editor_tests(void) {
     test_material_editor_authored_texture_binding_replace_clear_roundtrip();
     test_material_editor_authored_texture_invalid_binding_surfaces_reason_and_clears();
     test_material_editor_authored_texture_invalid_binding_persists_and_reopens();
+    test_material_editor_authored_texture_local_absolute_reference_policy();
     test_scene_editor_runtime_scene_authored_texture_overlay_roundtrip_payload();
     return test_support_failures() - before;
 }

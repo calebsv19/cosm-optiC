@@ -84,6 +84,73 @@ static void material_editor_assign_object_params(SceneObject* obj,
     obj->textureSeed = params.seed;
 }
 
+const char* MaterialEditorMutationDestinationLabel(
+    MaterialEditorMutationDestination destination) {
+    if (destination == MATERIAL_EDITOR_MUTATION_DESTINATION_OBJECT_ASSIGNMENT) {
+        return "object_assignment";
+    }
+    if (destination == MATERIAL_EDITOR_MUTATION_DESTINATION_MATERIAL_STACK) {
+        return "material_stack";
+    }
+    if (destination == MATERIAL_EDITOR_MUTATION_DESTINATION_FACE_OVERRIDE) {
+        return "face_override";
+    }
+    if (destination == MATERIAL_EDITOR_MUTATION_DESTINATION_LEGACY_OBJECT_TEXTURE_FALLBACK) {
+        return "legacy_object_texture_fallback";
+    }
+    if (destination == MATERIAL_EDITOR_MUTATION_DESTINATION_AUTHORED_TEXTURE_BINDING) {
+        return "authored_texture_binding";
+    }
+    return "none";
+}
+
+const char* MaterialEditorPanelGroupLabel(MaterialEditorPanelGroup group) {
+    if (group == MATERIAL_EDITOR_PANEL_GROUP_BASE_LAYER) {
+        return "Base Layer";
+    }
+    if (group == MATERIAL_EDITOR_PANEL_GROUP_PHYSICAL_RESPONSE) {
+        return "Physical Response";
+    }
+    if (group == MATERIAL_EDITOR_PANEL_GROUP_TEXTURE_BINDING) {
+        return "Texture Binding";
+    }
+    if (group == MATERIAL_EDITOR_PANEL_GROUP_FACE_OVERRIDE) {
+        return "Face Override";
+    }
+    if (group == MATERIAL_EDITOR_PANEL_GROUP_PREVIEW_READBACK) {
+        return "Preview & Readback";
+    }
+    return "None";
+}
+
+MaterialEditorPanelGroup MaterialEditorPanelGroupForMutationDestination(
+    MaterialEditorMutationDestination destination) {
+    if (destination == MATERIAL_EDITOR_MUTATION_DESTINATION_MATERIAL_STACK) {
+        return MATERIAL_EDITOR_PANEL_GROUP_BASE_LAYER;
+    }
+    if (destination == MATERIAL_EDITOR_MUTATION_DESTINATION_FACE_OVERRIDE) {
+        return MATERIAL_EDITOR_PANEL_GROUP_FACE_OVERRIDE;
+    }
+    if (destination == MATERIAL_EDITOR_MUTATION_DESTINATION_LEGACY_OBJECT_TEXTURE_FALLBACK ||
+        destination == MATERIAL_EDITOR_MUTATION_DESTINATION_AUTHORED_TEXTURE_BINDING) {
+        return MATERIAL_EDITOR_PANEL_GROUP_TEXTURE_BINDING;
+    }
+    return MATERIAL_EDITOR_PANEL_GROUP_NONE;
+}
+
+MaterialEditorMutationDestination
+MaterialEditorMutationDestinationForFocusedTextureControls(void) {
+    SceneObject* obj = material_editor_focused_object();
+    if (!obj) return MATERIAL_EDITOR_MUTATION_DESTINATION_NONE;
+    if (s_material_editor_active_face_group_index >= 0) {
+        return MATERIAL_EDITOR_MUTATION_DESTINATION_FACE_OVERRIDE;
+    }
+    if (material_editor_use_object_layer_controls(obj)) {
+        return MATERIAL_EDITOR_MUTATION_DESTINATION_MATERIAL_STACK;
+    }
+    return MATERIAL_EDITOR_MUTATION_DESTINATION_LEGACY_OBJECT_TEXTURE_FALLBACK;
+}
+
 bool MaterialEditorAddOverlayLayerToFocused(void) {
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
@@ -152,9 +219,11 @@ bool MaterialEditorApplyLayerKindToFocused(RuntimeMaterialTextureLayerKind kind)
 bool MaterialEditorApplyTextureKindToFocused(int texture_id) {
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
+    MaterialEditorMutationDestination destination =
+        MaterialEditorMutationDestinationForFocusedTextureControls();
     if (!obj) return false;
     if (texture_id < 0 || texture_id > 2) return false;
-    if (s_material_editor_active_face_group_index >= 0) {
+    if (destination == MATERIAL_EDITOR_MUTATION_DESTINATION_FACE_OVERRIDE) {
         if (!material_editor_seed_face_override_from_active_layer(
                 obj,
                 focused_object_index,
@@ -172,7 +241,7 @@ bool MaterialEditorApplyTextureKindToFocused(int texture_id) {
         MaterialEditorFacePreviewInvalidate();
         return true;
     }
-    if (material_editor_use_object_layer_controls(obj)) {
+    if (destination == MATERIAL_EDITOR_MUTATION_DESTINATION_MATERIAL_STACK) {
         if (!MaterialEditorLayerModelApplyLegacyTextureKind(obj, focused_object_index, texture_id)) {
             return false;
         }
@@ -192,11 +261,13 @@ bool MaterialEditorApplyTextureKindToFocused(int texture_id) {
 bool MaterialEditorApplySliderValueToFocused(MaterialEditorSliderKind kind, double value) {
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
+    MaterialEditorMutationDestination destination =
+        MaterialEditorMutationDestinationForFocusedTextureControls();
     SceneEditorMaterialFacePlacementField field =
         SCENE_EDITOR_MATERIAL_FACE_PLACEMENT_STRENGTH;
     if (!obj) return false;
     value = material_editor_clamp01(value);
-    if (s_material_editor_active_face_group_index >= 0) {
+    if (destination == MATERIAL_EDITOR_MUTATION_DESTINATION_FACE_OVERRIDE) {
         if (!material_editor_seed_face_override_from_active_layer(
                 obj,
                 focused_object_index,
@@ -226,7 +297,7 @@ bool MaterialEditorApplySliderValueToFocused(MaterialEditorSliderKind kind, doub
         MaterialEditorFacePreviewInvalidate();
         return true;
     }
-    if (material_editor_use_object_layer_controls(obj)) {
+    if (destination == MATERIAL_EDITOR_MUTATION_DESTINATION_MATERIAL_STACK) {
         if (!MaterialEditorLayerModelApplyPlacementValue(obj,
                                                          focused_object_index,
                                                          (int)kind,
@@ -258,9 +329,11 @@ bool MaterialEditorApplySliderValueToFocused(MaterialEditorSliderKind kind, doub
 bool MaterialEditorApplyTexturePatternToFocused(int pattern_mode) {
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
+    MaterialEditorMutationDestination destination =
+        MaterialEditorMutationDestinationForFocusedTextureControls();
     RuntimeMaterialTexture3DParams params;
     if (!obj) return false;
-    if (s_material_editor_active_face_group_index >= 0) {
+    if (destination == MATERIAL_EDITOR_MUTATION_DESTINATION_FACE_OVERRIDE) {
         if (!material_editor_seed_face_override_from_active_layer(
                 obj,
                 focused_object_index,
@@ -278,7 +351,7 @@ bool MaterialEditorApplyTexturePatternToFocused(int pattern_mode) {
         MaterialEditorFacePreviewInvalidate();
         return true;
     }
-    if (material_editor_use_object_layer_controls(obj)) {
+    if (destination == MATERIAL_EDITOR_MUTATION_DESTINATION_MATERIAL_STACK) {
         if (!MaterialEditorLayerModelApplyPatternMode(obj, focused_object_index, pattern_mode)) {
             return false;
         }
@@ -299,11 +372,13 @@ bool MaterialEditorApplyTexturePatternToFocused(int pattern_mode) {
 bool MaterialEditorApplyTextureParamValueToFocused(MaterialEditorTextureParamKind kind, double value) {
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
+    MaterialEditorMutationDestination destination =
+        MaterialEditorMutationDestinationForFocusedTextureControls();
     RuntimeMaterialTexture3DParams params;
     if (!obj) return false;
     if (material_editor_texture_param_slot(kind) < 0) return false;
     value = material_editor_clamp01(value);
-    if (s_material_editor_active_face_group_index >= 0) {
+    if (destination == MATERIAL_EDITOR_MUTATION_DESTINATION_FACE_OVERRIDE) {
         if (!material_editor_seed_face_override_from_active_layer(
                 obj,
                 focused_object_index,
@@ -322,7 +397,7 @@ bool MaterialEditorApplyTextureParamValueToFocused(MaterialEditorTextureParamKin
         MaterialEditorFacePreviewInvalidate();
         return true;
     }
-    if (material_editor_use_object_layer_controls(obj)) {
+    if (destination == MATERIAL_EDITOR_MUTATION_DESTINATION_MATERIAL_STACK) {
         if (!MaterialEditorLayerModelApplyParamValue(obj,
                                                      focused_object_index,
                                                      (int)kind,

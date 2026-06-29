@@ -7,6 +7,10 @@
 
 #include "app/animation.h"
 #include "config/config_manager.h"
+#include "config/scene/config_scene_material_persistence.h"
+#include "editor/scene_editor_material_graph.h"
+#include "editor/scene_editor_runtime_scene_persistence.h"
+#include "editor/material_preview_surface_eval.h"
 #include "editor/scene_editor_material_face_placement.h"
 #include "editor/scene_editor_material_stack.h"
 #include "import/runtime_scene_bridge.h"
@@ -18,6 +22,7 @@
 #include "render/runtime_direct_light_3d.h"
 #include "render/runtime_emission_transparency_3d.h"
 #include "render/runtime_material_authored_texture_3d.h"
+#include "render/runtime_material_graph_3d.h"
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_principled_bsdf_3d.h"
 #include "render/runtime_material_response_3d.h"
@@ -35,6 +40,18 @@
 static RuntimeMaterialTextureLayer runtime_material_test_make_strong_overlay(
     RuntimeMaterialTextureLayerKind kind,
     double scale);
+
+static bool runtime_material_test_write_text_file(const char* path, const char* text) {
+    FILE* file = NULL;
+    if (!path || !text) return false;
+    file = fopen(path, "wb");
+    if (!file) return false;
+    if (fwrite(text, 1u, strlen(text), file) != strlen(text)) {
+        fclose(file);
+        return false;
+    }
+    return fclose(file) == 0;
+}
 
 static void runtime_material_payload_test_add_material_intent_summaries(
     json_object* surface,
@@ -527,6 +544,151 @@ static bool runtime_material_payload_test_write_authored_texture_manifest_with_e
     return write_ok == 0;
 }
 
+static bool runtime_material_payload_test_write_authored_texture_manifest_with_channels(
+    const char* manifest_path,
+    const char* object_id,
+    const char* primitive_kind,
+    const char* face_role,
+    const char* color_file_name,
+    const char* roughness_file_name) {
+    json_object* root = NULL;
+    json_object* base_surfaces = NULL;
+    json_object* base_surface = NULL;
+    json_object* channels = NULL;
+    json_object* color_channel = NULL;
+    json_object* roughness_channel = NULL;
+    int write_ok = 0;
+    if (!manifest_path || !object_id || !primitive_kind || !face_role || !color_file_name ||
+        !roughness_file_name) {
+        return false;
+    }
+    root = json_object_new_object();
+    base_surfaces = json_object_new_array();
+    base_surface = json_object_new_object();
+    channels = json_object_new_array();
+    color_channel = json_object_new_object();
+    roughness_channel = json_object_new_object();
+    if (!root || !base_surfaces || !base_surface || !channels || !color_channel ||
+        !roughness_channel) {
+        if (root) json_object_put(root);
+        if (base_surfaces) json_object_put(base_surfaces);
+        if (base_surface) json_object_put(base_surface);
+        if (channels) json_object_put(channels);
+        if (color_channel) json_object_put(color_channel);
+        if (roughness_channel) json_object_put(roughness_channel);
+        return false;
+    }
+    json_object_object_add(root, "schema_version", json_object_new_int(5));
+    json_object_object_add(root,
+                           "export_binding_kind",
+                           json_object_new_string("SEPARATE_FACES"));
+    json_object_object_add(root,
+                           "emitted_output_kind",
+                           json_object_new_string("FLATTENED_ONLY"));
+    json_object_object_add(root, "primitive_kind", json_object_new_string(primitive_kind));
+    json_object_object_add(root, "source_scene_id", json_object_new_string("scene_payload_test"));
+    json_object_object_add(root, "source_object_id", json_object_new_string(object_id));
+    json_object_object_add(root, "base_surface_count", json_object_new_int(1));
+    json_object_object_add(base_surface, "surface_id", json_object_new_int(1));
+    json_object_object_add(base_surface, "face_role", json_object_new_string(face_role));
+    json_object_object_add(base_surface, "file_name", json_object_new_string(color_file_name));
+    if (!runtime_material_payload_test_add_surface_semantic_fields(base_surface,
+                                                                   primitive_kind,
+                                                                   face_role,
+                                                                   NULL,
+                                                                   NULL,
+                                                                   NULL)) {
+        json_object_put(root);
+        return false;
+    }
+    json_object_object_add(color_channel,
+                           "channel",
+                           json_object_new_string("base_color.rgb"));
+    json_object_object_add(color_channel, "source", json_object_new_string("rgba"));
+    json_object_object_add(color_channel, "file_name", json_object_new_string(color_file_name));
+    json_object_array_add(channels, color_channel);
+    json_object_object_add(roughness_channel,
+                           "channel",
+                           json_object_new_string("roughness.scalar"));
+    json_object_object_add(roughness_channel, "source", json_object_new_string("luminance"));
+    json_object_object_add(roughness_channel,
+                           "file_name",
+                           json_object_new_string(roughness_file_name));
+    json_object_array_add(channels, roughness_channel);
+    json_object_object_add(base_surface, "material_channels", channels);
+    json_object_array_add(base_surfaces, base_surface);
+    json_object_object_add(root, "base_surfaces", base_surfaces);
+    write_ok = json_object_to_file_ext(manifest_path, root, JSON_C_TO_STRING_PRETTY);
+    json_object_put(root);
+    return write_ok == 0;
+}
+
+static bool runtime_material_payload_test_write_authored_texture_manifest_with_single_channel(
+    const char* manifest_path,
+    const char* object_id,
+    const char* primitive_kind,
+    const char* face_role,
+    const char* file_name,
+    const char* channel,
+    const char* source) {
+    json_object* root = NULL;
+    json_object* base_surfaces = NULL;
+    json_object* base_surface = NULL;
+    json_object* channels = NULL;
+    json_object* channel_ref = NULL;
+    int write_ok = 0;
+    if (!manifest_path || !object_id || !primitive_kind || !face_role || !file_name ||
+        !channel || !source) {
+        return false;
+    }
+    root = json_object_new_object();
+    base_surfaces = json_object_new_array();
+    base_surface = json_object_new_object();
+    channels = json_object_new_array();
+    channel_ref = json_object_new_object();
+    if (!root || !base_surfaces || !base_surface || !channels || !channel_ref) {
+        if (root) json_object_put(root);
+        if (base_surfaces) json_object_put(base_surfaces);
+        if (base_surface) json_object_put(base_surface);
+        if (channels) json_object_put(channels);
+        if (channel_ref) json_object_put(channel_ref);
+        return false;
+    }
+    json_object_object_add(root, "schema_version", json_object_new_int(5));
+    json_object_object_add(root,
+                           "export_binding_kind",
+                           json_object_new_string("SEPARATE_FACES"));
+    json_object_object_add(root,
+                           "emitted_output_kind",
+                           json_object_new_string("FLATTENED_ONLY"));
+    json_object_object_add(root, "primitive_kind", json_object_new_string(primitive_kind));
+    json_object_object_add(root, "source_scene_id", json_object_new_string("scene_payload_test"));
+    json_object_object_add(root, "source_object_id", json_object_new_string(object_id));
+    json_object_object_add(root, "base_surface_count", json_object_new_int(1));
+    json_object_object_add(base_surface, "surface_id", json_object_new_int(1));
+    json_object_object_add(base_surface, "face_role", json_object_new_string(face_role));
+    json_object_object_add(base_surface, "file_name", json_object_new_string(file_name));
+    if (!runtime_material_payload_test_add_surface_semantic_fields(base_surface,
+                                                                   primitive_kind,
+                                                                   face_role,
+                                                                   NULL,
+                                                                   NULL,
+                                                                   NULL)) {
+        json_object_put(root);
+        return false;
+    }
+    json_object_object_add(channel_ref, "channel", json_object_new_string(channel));
+    json_object_object_add(channel_ref, "source", json_object_new_string(source));
+    json_object_object_add(channel_ref, "file_name", json_object_new_string(file_name));
+    json_object_array_add(channels, channel_ref);
+    json_object_object_add(base_surface, "material_channels", channels);
+    json_object_array_add(base_surfaces, base_surface);
+    json_object_object_add(root, "base_surfaces", base_surfaces);
+    write_ok = json_object_to_file_ext(manifest_path, root, JSON_C_TO_STRING_PRETTY);
+    json_object_put(root);
+    return write_ok == 0;
+}
+
 static int test_runtime_material_payload_3d_scene_object_resolution_contract(void) {
     SceneConfig saved_scene = sceneSettings;
     RuntimeMaterialPayload3D payload = {0};
@@ -669,6 +831,97 @@ static int test_runtime_material_payload_3d_object_multipliers_contract(void) {
                  bsdf.emissive,
                  0.4 * 0.5,
                  1e-9);
+
+    sceneSettings = saved_scene;
+    return 0;
+}
+
+static int test_runtime_material_compatibility_bridges_are_explicit(void) {
+    SceneConfig saved_scene = sceneSettings;
+    RuntimeMaterialPayload3D payload = {0};
+    RuntimeMaterialSurfaceEval preview_eval = {0};
+    RuntimePrincipledBSDF3D principled = RuntimePrincipledBSDF3D_Default();
+    const Material* transparent = NULL;
+    const Material* glossy = NULL;
+    double expected_transparency = 0.0;
+    double expected_spec = 0.0;
+    double expected_diffuse = 0.0;
+    double expected_total = 0.0;
+
+    MaterialManagerResetDefaults();
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    sceneSettings.objectCount = 2;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 10.0, 0.0, NULL, 0);
+    InitObject(&sceneSettings.sceneObjects[1], OBJECT_CIRCLE, 5.0, -2.0, 6.0, 0.0, NULL, 0);
+
+    transparent = MaterialManagerGet(MATERIAL_PRESET_TRANSPARENT);
+    assert_true("runtime_material_bridge_transparent_preset_present", transparent != NULL);
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
+    sceneSettings.sceneObjects[0].alpha = 0.25;
+    expected_transparency = transparent->transparency * 0.25;
+    assert_true("runtime_material_bridge_payload_transparency_ok",
+                RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(0, &payload));
+    assert_true("runtime_material_bridge_preview_transparency_ok",
+                MaterialPreviewSurfaceEvaluateObject(&sceneSettings.sceneObjects[0],
+                                                     0,
+                                                     NULL,
+                                                     0.35,
+                                                     0.45,
+                                                     &preview_eval));
+    assert_close("runtime_material_bridge_payload_legacy_alpha_transparency",
+                 payload.transparency,
+                 expected_transparency,
+                 1e-9);
+    assert_close("runtime_material_bridge_preview_legacy_alpha_transparency",
+                 preview_eval.transparency,
+                 expected_transparency,
+                 1e-9);
+
+    glossy = MaterialManagerGet(MATERIAL_PRESET_GLOSSY);
+    assert_true("runtime_material_bridge_glossy_preset_present", glossy != NULL);
+    sceneSettings.sceneObjects[1].material_id = MATERIAL_PRESET_GLOSSY;
+    sceneSettings.sceneObjects[1].color = 0x3366CC;
+    sceneSettings.sceneObjects[1].reflectivity = 0.52;
+    sceneSettings.sceneObjects[1].roughness = 0.19;
+    expected_spec = glossy->specular + sceneSettings.sceneObjects[1].reflectivity;
+    expected_diffuse = glossy->diffuse;
+    expected_total = expected_spec + expected_diffuse;
+    if (expected_total > 1.0) {
+        expected_spec /= expected_total;
+        expected_diffuse /= expected_total;
+    }
+    assert_true("runtime_material_bridge_payload_object_preset_ok",
+                RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(1, &payload));
+    assert_close("runtime_material_bridge_object_reflectivity_authoritative",
+                 payload.bsdf.reflectivity,
+                 sceneSettings.sceneObjects[1].reflectivity,
+                 1e-9);
+    assert_close("runtime_material_bridge_preset_ior_fallback",
+                 payload.opticalIor,
+                 glossy->ior,
+                 1e-9);
+    assert_close("runtime_material_bridge_specular_fallback",
+                 payload.bsdf.specWeight,
+                 expected_spec,
+                 1e-9);
+    assert_close("runtime_material_bridge_diffuse_fallback",
+                 payload.bsdf.diffuseWeight,
+                 expected_diffuse,
+                 1e-9);
+
+    principled.ior = 1.33;
+    principled.reflectivity = 0.18;
+    principled.specularWeight = 0.25;
+    principled.dielectricF0 = 0.0;
+    principled = RuntimePrincipledBSDF3D_Normalize(principled);
+    assert_close("runtime_material_bridge_reflectivity_f0_floor",
+                 principled.dielectricF0,
+                 0.18,
+                 1e-12);
+    assert_close("runtime_material_bridge_reflectivity_floor_scales_specular",
+                 principled.specularF0R,
+                 0.18 * 0.25,
+                 1e-12);
 
     sceneSettings = saved_scene;
     return 0;
@@ -1378,6 +1631,169 @@ static int test_runtime_material_payload_authored_texture_explicit_summary_overr
     return 0;
 }
 
+static int test_runtime_material_payload_authored_texture_channel_references(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeMaterialAuthoredTextureChannelRef channels[4];
+    RuntimeMaterialAuthoredTextureFaceMetadata metadata;
+    char channel_summary[160];
+    const char* dir = "/tmp/ray_tracing_authored_texture_channel_refs";
+    const char* color_png_path = "/tmp/ray_tracing_authored_texture_channel_refs/plane_color.png";
+    const char* roughness_png_path =
+        "/tmp/ray_tracing_authored_texture_channel_refs/plane_roughness.png";
+    const char* manifest_path =
+        "/tmp/ray_tracing_authored_texture_channel_refs/plane_manifest.json";
+    const char* manifest_rel = "plane_manifest.json";
+    const unsigned char color_rgba[4] = {180u, 90u, 40u, 255u};
+    const unsigned char roughness_rgba[4] = {64u, 64u, 64u, 255u};
+    int channel_count = 0;
+
+    memset(channels, 0, sizeof(channels));
+    memset(&metadata, 0, sizeof(metadata));
+    memset(channel_summary, 0, sizeof(channel_summary));
+    (void)mkdir(dir, 0775);
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    RuntimeMaterialAuthoredTextureResetAll();
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 8.0, 0.0, NULL, 0);
+    snprintf(animSettings.runtimeScenePath,
+             sizeof(animSettings.runtimeScenePath),
+             "%s/scene_runtime.json",
+             dir);
+    assert_true("runtime_material_payload_channel_refs_color_png_write",
+                runtime_material_payload_test_write_png_rgba(color_png_path,
+                                                             color_rgba,
+                                                             1u,
+                                                             1u));
+    assert_true("runtime_material_payload_channel_refs_roughness_png_write",
+                runtime_material_payload_test_write_png_rgba(roughness_png_path,
+                                                             roughness_rgba,
+                                                             1u,
+                                                             1u));
+    assert_true("runtime_material_payload_channel_refs_manifest_write",
+                runtime_material_payload_test_write_authored_texture_manifest_with_channels(
+                    manifest_path,
+                    "channel_plane",
+                    "PLANE",
+                    "FRONT",
+                    "plane_color.png",
+                    "plane_roughness.png"));
+    assert_true("runtime_material_payload_channel_refs_bind_ok",
+                RuntimeMaterialAuthoredTextureBindManifestForObject(0,
+                                                                   "channel_plane",
+                                                                   manifest_rel,
+                                                                   "override"));
+    assert_true("runtime_material_payload_channel_refs_metadata_ok",
+                RuntimeMaterialAuthoredTextureGetFaceMetadata(0, 0, &metadata));
+    assert_true("runtime_material_payload_channel_refs_metadata_count",
+                metadata.channelRefCount == 2);
+    assert_true("runtime_material_payload_channel_refs_get_ok",
+                RuntimeMaterialAuthoredTextureGetFaceChannels(0,
+                                                              0,
+                                                              channels,
+                                                              4u,
+                                                              &channel_count));
+    assert_true("runtime_material_payload_channel_refs_count", channel_count == 2);
+    assert_true("runtime_material_payload_channel_refs_visual_supported",
+                RuntimeMaterialAuthoredTextureChannelNameSupported(channels[0].channel) &&
+                    RuntimeMaterialAuthoredTextureChannelIsVisual(channels[0].channel) &&
+                    strcmp(channels[0].channel, "base_color.rgb") == 0 &&
+                    strcmp(channels[0].source, "rgba") == 0 &&
+                    strcmp(channels[0].fileName, "plane_color.png") == 0);
+    assert_true("runtime_material_payload_channel_refs_physical_supported",
+                RuntimeMaterialAuthoredTextureChannelNameSupported(channels[1].channel) &&
+                    RuntimeMaterialAuthoredTextureChannelIsPhysicalScalar(channels[1].channel) &&
+                    strcmp(channels[1].channel, "roughness.scalar") == 0 &&
+                    strcmp(channels[1].source, "luminance") == 0 &&
+                    strcmp(channels[1].fileName, "plane_roughness.png") == 0);
+    assert_true("runtime_material_payload_channel_refs_summary_ok",
+                RuntimeMaterialAuthoredTextureGetChannelSummary(0,
+                                                                channel_summary,
+                                                                sizeof(channel_summary)));
+    assert_true("runtime_material_payload_channel_refs_summary_visual",
+                strstr(channel_summary, "base_color.rgb") != NULL);
+    assert_true("runtime_material_payload_channel_refs_summary_physical",
+                strstr(channel_summary, "roughness.scalar") != NULL);
+
+    RuntimeMaterialAuthoredTextureResetAll();
+    unlink(color_png_path);
+    unlink(roughness_png_path);
+    unlink(manifest_path);
+    rmdir(dir);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_material_payload_authored_texture_no_displacement_guard(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char* dir = "/tmp/ray_tracing_authored_texture_displacement_guard";
+    const char* png_path = "/tmp/ray_tracing_authored_texture_displacement_guard/height.png";
+    const char* manifest_path =
+        "/tmp/ray_tracing_authored_texture_displacement_guard/plane_manifest.json";
+    const char* manifest_rel = "plane_manifest.json";
+    const unsigned char rgba[4] = {128u, 128u, 128u, 255u};
+
+    (void)mkdir(dir, 0775);
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    RuntimeMaterialAuthoredTextureResetAll();
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 8.0, 0.0, NULL, 0);
+    snprintf(animSettings.runtimeScenePath,
+             sizeof(animSettings.runtimeScenePath),
+             "%s/scene_runtime.json",
+             dir);
+
+    assert_true("runtime_material_no_displacement_normal_supported",
+                RuntimeMaterialAuthoredTextureChannelNameSupported("normal.tangent"));
+    assert_true("runtime_material_no_displacement_normal_shading_only",
+                RuntimeMaterialAuthoredTextureChannelIsShadingNormal("normal.tangent") &&
+                    !RuntimeMaterialAuthoredTextureChannelIsVisual("normal.tangent") &&
+                    !RuntimeMaterialAuthoredTextureChannelIsPhysicalScalar("normal.tangent") &&
+                    !RuntimeMaterialAuthoredTextureChannelIsDisplacement("normal.tangent"));
+    assert_true("runtime_material_no_displacement_bump_supported",
+                RuntimeMaterialAuthoredTextureChannelNameSupported("bump.height"));
+    assert_true("runtime_material_no_displacement_bump_shading_only",
+                RuntimeMaterialAuthoredTextureChannelIsShadingNormal("bump.height") &&
+                    !RuntimeMaterialAuthoredTextureChannelIsVisual("bump.height") &&
+                    !RuntimeMaterialAuthoredTextureChannelIsPhysicalScalar("bump.height") &&
+                    !RuntimeMaterialAuthoredTextureChannelIsDisplacement("bump.height"));
+    assert_true("runtime_material_no_displacement_channel_deferred",
+                !RuntimeMaterialAuthoredTextureChannelNameSupported("displacement.height") &&
+                    RuntimeMaterialAuthoredTextureChannelIsDisplacement("displacement.height") &&
+                    !RuntimeMaterialAuthoredTextureChannelIsShadingNormal("displacement.height"));
+
+    assert_true("runtime_material_no_displacement_png_write",
+                runtime_material_payload_test_write_png_rgba(png_path, rgba, 1u, 1u));
+    assert_true("runtime_material_no_displacement_manifest_write",
+                runtime_material_payload_test_write_authored_texture_manifest_with_single_channel(
+                    manifest_path,
+                    "displacement_guard_plane",
+                    "PLANE",
+                    "FRONT",
+                    "height.png",
+                    "displacement.height",
+                    "luminance"));
+    assert_true("runtime_material_no_displacement_manifest_rejected",
+                !RuntimeMaterialAuthoredTextureBindManifestForObject(0,
+                                                                     "displacement_guard_plane",
+                                                                     manifest_rel,
+                                                                     "override"));
+    assert_true("runtime_material_no_displacement_invalid_recorded",
+                RuntimeMaterialAuthoredTextureGetInvalidBinding(0, NULL, 0u, NULL, 0u, NULL, 0u));
+
+    RuntimeMaterialAuthoredTextureResetAll();
+    unlink(png_path);
+    unlink(manifest_path);
+    rmdir(dir);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 static int test_runtime_material_payload_authored_texture_face_base_intent_modulates_bsdf(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -1989,6 +2405,104 @@ static int test_runtime_principled_bsdf_surface_eval_adapter_and_lobes(void) {
     return 0;
 }
 
+static int test_runtime_principled_bsdf_conversion_adapter_m2_contract(void) {
+    RuntimeMaterialPayload3D payload = {0};
+    RuntimeMaterialSurfaceEval surface =
+        RuntimeMaterialSurfaceEvalMakeBase(0.90, 0.10, 0.05, 0.34, 0.015, 0.25, 0.70, 0.40);
+    RuntimePrincipledBSDF3D payload_bsdf = {0};
+    RuntimePrincipledBSDF3D surface_bsdf = {0};
+    RuntimePrincipledBSDF3D floor_bsdf = {0};
+    double payload_f0 = RuntimePrincipledBSDF3D_DielectricF0FromIor(1.33);
+    double surface_f0 = RuntimePrincipledBSDF3D_DielectricF0FromIor(1.45);
+
+    payload.valid = true;
+    payload.baseColorR = 0.80;
+    payload.baseColorG = 0.20;
+    payload.baseColorB = 0.10;
+    payload.transparency = 0.40;
+    payload.opticalIor = 1.33;
+    payload.emissive = 0.0;
+    payload.bsdf.baseColorR = 0.10;
+    payload.bsdf.baseColorG = 0.10;
+    payload.bsdf.baseColorB = 0.10;
+    payload.bsdf.roughness = 0.34;
+    payload.bsdf.reflectivity = 0.015;
+    payload.bsdf.ior = 1.50;
+    payload.bsdf.opacity = 0.25;
+    payload.bsdf.specWeight = 0.25;
+    payload.bsdf.diffuseWeight = 0.70;
+
+    payload_bsdf = RuntimePrincipledBSDF3D_FromMaterialPayload(&payload);
+
+    assert_close("runtime_principled_bsdf_adapter_payload_ior",
+                 payload_bsdf.ior,
+                 1.33,
+                 1e-12);
+    assert_close("runtime_principled_bsdf_adapter_payload_ior_f0",
+                 payload_bsdf.dielectricF0,
+                 payload_f0,
+                 1e-12);
+    assert_close("runtime_principled_bsdf_adapter_payload_opacity_bridge",
+                 payload_bsdf.opacity,
+                 0.60,
+                 1e-12);
+    assert_close("runtime_principled_bsdf_adapter_payload_transmission_bridge",
+                 payload_bsdf.transmissionWeight,
+                 0.40,
+                 1e-12);
+    assert_close("runtime_principled_bsdf_adapter_payload_no_metallic",
+                 payload_bsdf.metallic,
+                 0.0,
+                 1e-12);
+    assert_close("runtime_principled_bsdf_adapter_payload_specular_scales_f0_r",
+                 payload_bsdf.specularF0R,
+                 payload_f0 * 0.25,
+                 1e-12);
+    assert_close("runtime_principled_bsdf_adapter_payload_specular_scales_f0_g",
+                 payload_bsdf.specularF0G,
+                 payload_f0 * 0.25,
+                 1e-12);
+    assert_close("runtime_principled_bsdf_adapter_payload_diffuse_transmission_scaled",
+                 payload_bsdf.diffuseWeight,
+                 0.70 * 0.60,
+                 1e-12);
+
+    surface_bsdf = RuntimePrincipledBSDF3D_FromSurfaceEval(&surface, 1.45, 0.0);
+    assert_close("runtime_principled_bsdf_adapter_surface_ior_f0",
+                 surface_bsdf.dielectricF0,
+                 surface_f0,
+                 1e-12);
+    assert_close("runtime_principled_bsdf_adapter_surface_opacity_bridge",
+                 surface_bsdf.opacity,
+                 0.60,
+                 1e-12);
+    assert_close("runtime_principled_bsdf_adapter_surface_no_metallic",
+                 surface_bsdf.metallic,
+                 0.0,
+                 1e-12);
+    assert_close("runtime_principled_bsdf_adapter_surface_specular_neutral_r",
+                 surface_bsdf.specularF0R,
+                 surface_f0 * 0.25,
+                 1e-12);
+    assert_close("runtime_principled_bsdf_adapter_surface_specular_neutral_b",
+                 surface_bsdf.specularF0B,
+                 surface_f0 * 0.25,
+                 1e-12);
+
+    payload.bsdf.reflectivity = 0.18;
+    floor_bsdf = RuntimePrincipledBSDF3D_FromMaterialPayload(&payload);
+    assert_close("runtime_principled_bsdf_adapter_reflectivity_floor",
+                 floor_bsdf.dielectricF0,
+                 0.18,
+                 1e-12);
+    assert_close("runtime_principled_bsdf_adapter_floor_specular_scales_f0",
+                 floor_bsdf.specularF0R,
+                 0.18 * 0.25,
+                 1e-12);
+
+    return 0;
+}
+
 static int test_runtime_material_texture_stack_legacy_object_adapter_contract(void) {
     SceneObject object;
     RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
@@ -2080,6 +2594,15 @@ static int test_runtime_material_texture_stack_normalizes_bounds_contract(void) 
     stack.layers[1].specularInfluence = 2.0;
     stack.layers[1].layerId[0] = '\0';
     stack.layers[1].displayName[0] = '\0';
+    stack.layers[2] =
+        RuntimeMaterialTextureLayerMakeOverlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL);
+    snprintf(stack.layers[2].layerId, sizeof(stack.layers[2].layerId), "%s", "oil");
+    stack.layers[3] =
+        RuntimeMaterialTextureLayerMakeOverlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME);
+    snprintf(stack.layers[3].layerId, sizeof(stack.layers[3].layerId), "%s", "grime_custom");
+    stack.layers[4] =
+        RuntimeMaterialTextureLayerMakeOverlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME);
+    snprintf(stack.layers[4].layerId, sizeof(stack.layers[4].layerId), "%s", "grime_custom");
 
     stack = RuntimeMaterialTextureStackNormalize(stack);
     assert_true("runtime_material_texture_stack_normalize_count_clamped",
@@ -2092,6 +2615,10 @@ static int test_runtime_material_texture_stack_normalizes_bounds_contract(void) 
                 stack.layers[1].kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL);
     assert_true("runtime_material_texture_stack_normalize_overlay_id",
                 strcmp(stack.layers[1].layerId, "oil") == 0);
+    assert_true("runtime_material_texture_stack_normalize_duplicate_kind_id",
+                strcmp(stack.layers[2].layerId, "oil_2") == 0);
+    assert_true("runtime_material_texture_stack_normalize_duplicate_custom_id",
+                strcmp(stack.layers[4].layerId, "grime_custom_4") == 0);
     assert_close("runtime_material_texture_stack_normalize_opacity",
                  stack.layers[1].opacity,
                  1.0,
@@ -2173,6 +2700,40 @@ static int test_runtime_material_texture_stack_surface_eval_applies_rust_respons
 static double runtime_material_test_surface_color_delta(RuntimeMaterialSurfaceEval a,
                                                         RuntimeMaterialSurfaceEval b) {
     return fabs(a.colorR - b.colorR) + fabs(a.colorG - b.colorG) + fabs(a.colorB - b.colorB);
+}
+
+static void runtime_material_test_assert_surface_matches_payload(
+    const char* label,
+    const RuntimeMaterialSurfaceEval* eval,
+    const RuntimeMaterialPayload3D* payload) {
+    char name[160];
+    if (!label || !eval || !payload) {
+        assert_true("runtime_material_surface_payload_compare_args", false);
+        return;
+    }
+
+    snprintf(name, sizeof(name), "%s_color_r", label);
+    assert_close(name, eval->colorR, payload->baseColorR, 1e-9);
+    snprintf(name, sizeof(name), "%s_color_g", label);
+    assert_close(name, eval->colorG, payload->baseColorG, 1e-9);
+    snprintf(name, sizeof(name), "%s_color_b", label);
+    assert_close(name, eval->colorB, payload->baseColorB, 1e-9);
+    snprintf(name, sizeof(name), "%s_roughness", label);
+    assert_close(name, eval->roughness, payload->bsdf.roughness, 1e-9);
+    snprintf(name, sizeof(name), "%s_reflectivity", label);
+    assert_close(name, eval->reflectivity, payload->bsdf.reflectivity, 1e-9);
+    snprintf(name, sizeof(name), "%s_spec_weight", label);
+    assert_close(name, eval->specWeight, payload->bsdf.specWeight, 1e-9);
+    snprintf(name, sizeof(name), "%s_diffuse_weight", label);
+    assert_close(name, eval->diffuseWeight, payload->bsdf.diffuseWeight, 1e-9);
+    snprintf(name, sizeof(name), "%s_transparency", label);
+    assert_close(name, eval->transparency, payload->transparency, 1e-9);
+    snprintf(name, sizeof(name), "%s_texture_mask", label);
+    assert_close(name, eval->textureMask, payload->textureMask, 1e-9);
+    snprintf(name, sizeof(name), "%s_texture_u", label);
+    assert_close(name, eval->textureU, payload->textureU, 1e-9);
+    snprintf(name, sizeof(name), "%s_texture_v", label);
+    assert_close(name, eval->textureV, payload->textureV, 1e-9);
 }
 
 static int test_runtime_material_texture_stack_base_patterns_change_surface_response(void) {
@@ -2375,6 +2936,422 @@ static RuntimeMaterialTextureLayer runtime_material_test_make_strong_overlay(
     return layer;
 }
 
+static int test_runtime_material_graph_compiles_stack_and_channels(void) {
+    RuntimeMaterialGraphDocument graph = RuntimeMaterialGraphDocumentMake("m7_s1_fixture");
+    RuntimeMaterialGraphDocument invalid_graph =
+        RuntimeMaterialGraphDocumentMake("m7_s1_invalid_fixture");
+    RuntimeMaterialTextureLayer base =
+        RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_WOOD);
+    RuntimeMaterialTextureLayer oil =
+        runtime_material_test_make_strong_overlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL, 2.25);
+    RuntimeMaterialGraphCompileResult compiled = {0};
+    RuntimeMaterialGraphCompileResult compiled_again = {0};
+    RuntimeMaterialGraphCompileResult invalid_result = {0};
+
+    snprintf(base.layerId, sizeof(base.layerId), "%s", "graph_base_wood");
+    snprintf(oil.layerId, sizeof(oil.layerId), "%s", "graph_oil_overlay");
+    oil.params.coverage = 0.58;
+    oil.params.seed = 41;
+
+    assert_true("runtime_material_graph_add_base",
+                RuntimeMaterialGraphDocumentAddNode(
+                    &graph,
+                    RuntimeMaterialGraphNodeMakeLayer("base_node", base)));
+    assert_true("runtime_material_graph_add_overlay",
+                RuntimeMaterialGraphDocumentAddNode(
+                    &graph,
+                    RuntimeMaterialGraphNodeMakeLayer("oil_node", oil)));
+    assert_true("runtime_material_graph_add_roughness_channel",
+                RuntimeMaterialGraphDocumentAddNode(
+                    &graph,
+                    RuntimeMaterialGraphNodeMakeChannelOutput("roughness_output",
+                                                              "roughness.scalar",
+                                                              "luminance",
+                                                              "roughness.png")));
+    assert_true("runtime_material_graph_rejects_duplicate_node",
+                !RuntimeMaterialGraphDocumentAddNode(
+                    &graph,
+                    RuntimeMaterialGraphNodeMakeChannelOutput("roughness_output",
+                                                              "specular.weight",
+                                                              "luminance",
+                                                              "specular.png")));
+
+    assert_true("runtime_material_graph_compile_ok",
+                RuntimeMaterialGraphCompileToStack(&graph, &compiled));
+    assert_true("runtime_material_graph_compile_again_ok",
+                RuntimeMaterialGraphCompileToStack(&graph, &compiled_again));
+    assert_true("runtime_material_graph_compile_active", compiled.active);
+    assert_true("runtime_material_graph_stack_layer_count",
+                compiled.stack.layerCount == 2);
+    assert_true("runtime_material_graph_stack_order_base",
+                compiled.stack.layers[0].kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_WOOD &&
+                    strcmp(compiled.stack.layers[0].layerId, "graph_base_wood") == 0);
+    assert_true("runtime_material_graph_stack_order_overlay",
+                compiled.stack.layers[1].kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL &&
+                    strcmp(compiled.stack.layers[1].layerId, "graph_oil_overlay") == 0);
+    assert_close("runtime_material_graph_overlay_coverage",
+                 compiled.stack.layers[1].params.coverage,
+                 0.58,
+                 1e-9);
+    assert_true("runtime_material_graph_channel_count", compiled.channelRefCount == 1);
+    assert_true("runtime_material_graph_channel_is_physical_scalar",
+                strcmp(compiled.channelRefs[0].channel, "roughness.scalar") == 0 &&
+                    RuntimeMaterialAuthoredTextureChannelIsPhysicalScalar(
+                        compiled.channelRefs[0].channel) &&
+                    !RuntimeMaterialAuthoredTextureChannelIsVisual(
+                        compiled.channelRefs[0].channel));
+    assert_true("runtime_material_graph_channel_source_stable",
+                strcmp(compiled.channelRefs[0].source, "luminance") == 0 &&
+                    strcmp(compiled.channelRefs[0].fileName, "roughness.png") == 0);
+    assert_true("runtime_material_graph_compile_deterministic_layers",
+                compiled_again.stack.layerCount == compiled.stack.layerCount &&
+                    strcmp(compiled_again.stack.layers[0].layerId,
+                           compiled.stack.layers[0].layerId) == 0 &&
+                    strcmp(compiled_again.stack.layers[1].layerId,
+                           compiled.stack.layers[1].layerId) == 0 &&
+                    compiled_again.stack.layers[1].params.seed ==
+                        compiled.stack.layers[1].params.seed);
+    assert_true("runtime_material_graph_compile_deterministic_channels",
+                compiled_again.channelRefCount == compiled.channelRefCount &&
+                    strcmp(compiled_again.channelRefs[0].channel,
+                           compiled.channelRefs[0].channel) == 0);
+
+    assert_true("runtime_material_graph_add_deferred_displacement",
+                RuntimeMaterialGraphDocumentAddNode(
+                    &invalid_graph,
+                    RuntimeMaterialGraphNodeMakeChannelOutput("displacement_output",
+                                                              "displacement.height",
+                                                              "height",
+                                                              "height.png")));
+    assert_true("runtime_material_graph_rejects_deferred_displacement",
+                !RuntimeMaterialGraphCompileToStack(&invalid_graph, &invalid_result));
+    assert_true("runtime_material_graph_deferred_displacement_inactive",
+                !invalid_result.active &&
+                    RuntimeMaterialAuthoredTextureChannelIsDisplacement(
+                        "displacement.height"));
+
+    return 0;
+}
+
+static RuntimeMaterialGraphDocument runtime_material_test_make_graph_document(
+    const char* graph_id) {
+    RuntimeMaterialGraphDocument graph = RuntimeMaterialGraphDocumentMake(graph_id);
+    RuntimeMaterialTextureLayer base =
+        RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_WOOD);
+    RuntimeMaterialTextureLayer oil =
+        runtime_material_test_make_strong_overlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL, 2.25);
+    snprintf(base.layerId, sizeof(base.layerId), "%s", "graph_base_wood");
+    snprintf(oil.layerId, sizeof(oil.layerId), "%s", "graph_oil_overlay");
+    oil.params.coverage = 0.58;
+    oil.params.seed = 41;
+    (void)RuntimeMaterialGraphDocumentAddNode(
+        &graph,
+        RuntimeMaterialGraphNodeMakeLayer("base_node", base));
+    (void)RuntimeMaterialGraphDocumentAddNode(
+        &graph,
+        RuntimeMaterialGraphNodeMakeLayer("oil_node", oil));
+    (void)RuntimeMaterialGraphDocumentAddNode(
+        &graph,
+        RuntimeMaterialGraphNodeMakeChannelOutput("roughness_output",
+                                                  "roughness.scalar",
+                                                  "luminance",
+                                                  "roughness.png"));
+    return graph;
+}
+
+static int test_runtime_material_graph_scene_config_round_trip_stack_fallback(void) {
+    SceneConfig saved_scene = sceneSettings;
+    RuntimeMaterialGraphDocument graph =
+        runtime_material_test_make_graph_document("m7_s2_config_graph");
+    RuntimeMaterialGraphDocument loaded_graph = RuntimeMaterialGraphDocumentEmpty();
+    RuntimeMaterialGraphCompileResult compile_result = {0};
+    RuntimeMaterialTextureStack saved_stack = RuntimeMaterialTextureStackEmpty();
+    RuntimeMaterialTextureStack loaded_stack = RuntimeMaterialTextureStackEmpty();
+    json_object* root = json_object_new_object();
+    json_object* objects = json_object_new_array();
+    json_object* obj = json_object_new_object();
+    json_object* material_graph = NULL;
+    json_object* material_stack = NULL;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0],
+               OBJECT_POLYGON,
+               0.0,
+               0.0,
+               1.0,
+               0.0,
+               NULL,
+               0);
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+    assert_true("runtime_material_graph_config_set_graph",
+                SceneEditorMaterialGraphSetObjectGraph(0, &graph, &compile_result));
+    assert_true("runtime_material_graph_config_stack_fallback_set",
+                SceneEditorMaterialStackGetObjectStack(0, &saved_stack));
+
+    material_graph = ConfigSaveMaterialGraphForObject(0);
+    material_stack = ConfigSaveMaterialTextureStackForObject(0);
+    assert_true("runtime_material_graph_config_saved_graph", material_graph != NULL);
+    assert_true("runtime_material_graph_config_saved_stack_fallback", material_stack != NULL);
+
+    json_object_object_add(obj, "type", json_object_new_string("rectangle"));
+    json_object_object_add(obj, "x", json_object_new_double(0.0));
+    json_object_object_add(obj, "y", json_object_new_double(0.0));
+    json_object_object_add(obj, "scale", json_object_new_double(1.0));
+    json_object_object_add(obj, "color", json_object_new_int(0x303030));
+    json_object_object_add(obj, "materialId", json_object_new_int(MaterialManagerDefaultId()));
+    json_object_object_add(obj, "materialGraph", material_graph);
+    json_object_object_add(obj, "materialTextureStack", material_stack);
+    json_object_array_add(objects, obj);
+    json_object_object_add(root, "objects", objects);
+
+    LoadSceneObjects(root);
+    assert_true("runtime_material_graph_config_loaded_graph",
+                SceneEditorMaterialGraphGetObjectGraph(0, &loaded_graph));
+    assert_true("runtime_material_graph_config_loaded_stack_fallback",
+                SceneEditorMaterialStackGetObjectStack(0, &loaded_stack));
+    assert_true("runtime_material_graph_config_graph_id",
+                strcmp(loaded_graph.graphId, "m7_s2_config_graph") == 0);
+    assert_true("runtime_material_graph_config_layer_count",
+                loaded_stack.layerCount == saved_stack.layerCount &&
+                    loaded_stack.layerCount == 2);
+    assert_true("runtime_material_graph_config_layer_ids",
+                strcmp(loaded_stack.layers[0].layerId, "graph_base_wood") == 0 &&
+                    strcmp(loaded_stack.layers[1].layerId, "graph_oil_overlay") == 0);
+    assert_close("runtime_material_graph_config_overlay_coverage",
+                 loaded_stack.layers[1].params.coverage,
+                 0.58,
+                 1e-9);
+
+    json_object_put(root);
+    SceneEditorMaterialGraphResetAll();
+    SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    return 0;
+}
+
+static int test_runtime_material_graph_runtime_scene_round_trip_stack_fallback(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char* runtime_path = "/tmp/ray_tracing_material_graph_runtime_scene.json";
+    const char* runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"material_graph_runtime\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"graph_box\","
+          "\"object_type\":\"rect_prism_primitive\","
+          "\"transform\":{"
+            "\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+          "},"
+          "\"primitive\":{\"kind\":\"rect_prism_primitive\",\"width\":1.0,\"height\":1.0,\"depth\":1.0},"
+          "\"flags\":{\"visible\":true}"
+        "}],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{\"ray_tracing\":{\"authoring\":{\"object_materials\":[{"
+          "\"object_id\":\"graph_box\","
+          "\"material_id\":0"
+        "}]}}}"
+        "}";
+    RuntimeMaterialGraphDocument graph =
+        runtime_material_test_make_graph_document("m7_s2_runtime_graph");
+    RuntimeMaterialGraphDocument loaded_graph = RuntimeMaterialGraphDocumentEmpty();
+    RuntimeMaterialGraphCompileResult compile_result = {0};
+    RuntimeMaterialTextureStack loaded_stack = RuntimeMaterialTextureStackEmpty();
+    RuntimeSceneBridgePreflight summary = {0};
+    char diagnostics[256];
+
+    assert_true("runtime_material_graph_runtime_write",
+                runtime_material_test_write_text_file(runtime_path, runtime_json));
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+    assert_true("runtime_material_graph_runtime_apply",
+                runtime_scene_bridge_apply_file(runtime_path, &summary));
+    assert_true("runtime_material_graph_runtime_set_graph",
+                SceneEditorMaterialGraphSetObjectGraph(0, &graph, &compile_result));
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    snprintf(animSettings.runtimeScenePath,
+             sizeof(animSettings.runtimeScenePath),
+             "%s",
+             runtime_path);
+    assert_true("runtime_material_graph_runtime_persist",
+                SceneEditorRuntimeScenePersistAuthoring(diagnostics, sizeof(diagnostics)));
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+    assert_true("runtime_material_graph_runtime_reload",
+                runtime_scene_bridge_apply_file(runtime_path, &summary));
+    assert_true("runtime_material_graph_runtime_loaded_graph",
+                SceneEditorMaterialGraphGetObjectGraph(0, &loaded_graph));
+    assert_true("runtime_material_graph_runtime_loaded_stack_fallback",
+                SceneEditorMaterialStackGetObjectStack(0, &loaded_stack));
+    assert_true("runtime_material_graph_runtime_graph_id",
+                strcmp(loaded_graph.graphId, "m7_s2_runtime_graph") == 0);
+    assert_true("runtime_material_graph_runtime_stack_layers",
+                loaded_stack.layerCount == 2 &&
+                    strcmp(loaded_stack.layers[0].layerId, "graph_base_wood") == 0 &&
+                    strcmp(loaded_stack.layers[1].layerId, "graph_oil_overlay") == 0);
+
+    unlink(runtime_path);
+    SceneEditorMaterialGraphResetAll();
+    SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_material_graph_evaluator_parity_matches_authored_stack(void) {
+    SceneConfig saved_scene = sceneSettings;
+    RuntimeMaterialGraphDocument graph =
+        runtime_material_test_make_graph_document("m7_s3_evaluator_graph");
+    RuntimeMaterialGraphCompileResult compile_result = {0};
+    RuntimeMaterialTextureStack authored_stack = RuntimeMaterialTextureStackEmpty();
+    RuntimeMaterialSurfaceEval stack_preview = {0};
+    RuntimeMaterialSurfaceEval graph_preview = {0};
+    RuntimeMaterialPayload3D stack_payload = {0};
+    RuntimeMaterialPayload3D graph_payload = {0};
+    HitInfo3D hit = {0};
+    SceneObject* object = NULL;
+    const int scene_object_index = 0;
+    const double sample_u = 0.18;
+    const double sample_v = 0.31;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    RuntimeWaterMaterial3D_ClearAll();
+    MaterialManagerResetDefaults();
+
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[scene_object_index],
+               OBJECT_CIRCLE,
+               0.0,
+               0.0,
+               8.0,
+               0.0,
+               NULL,
+               0);
+    object = &sceneSettings.sceneObjects[scene_object_index];
+    object->color = 0x6c5a42;
+    object->alpha = 1.0;
+    object->roughness = 0.46;
+    object->reflectivity = 0.12;
+    object->textureId = RUNTIME_MATERIAL_TEXTURE_3D_NONE;
+    object->textureStrength = 0.0;
+    object->textureSeed = 0;
+
+    assert_true("runtime_material_graph_parity_compile",
+                RuntimeMaterialGraphCompileToStack(&graph, &compile_result));
+    authored_stack = compile_result.stack;
+    assert_true("runtime_material_graph_parity_stack_set",
+                SceneEditorMaterialStackSetObjectStack(scene_object_index, &authored_stack));
+    assert_true("runtime_material_graph_parity_stack_preview",
+                MaterialPreviewSurfaceEvaluateObject(object,
+                                                     scene_object_index,
+                                                     NULL,
+                                                     sample_u,
+                                                     sample_v,
+                                                     &stack_preview));
+    memset(&hit, 0, sizeof(hit));
+    hit.sceneObjectIndex = scene_object_index;
+    hit.hasObjectTextureCoord = true;
+    hit.objectTextureCoord.x = sample_u;
+    hit.objectTextureCoord.y = sample_v;
+    hit.objectTextureCoord.z = 0.0;
+    hit.normal.x = 0.0;
+    hit.normal.y = 0.0;
+    hit.normal.z = 1.0;
+    assert_true("runtime_material_graph_parity_stack_payload",
+                RuntimeMaterialPayload3D_ResolveFromHit(&hit, &stack_payload));
+
+    SceneEditorMaterialStackResetAll();
+    assert_true("runtime_material_graph_parity_graph_set",
+                SceneEditorMaterialGraphSetObjectGraph(scene_object_index,
+                                                       &graph,
+                                                       &compile_result));
+    assert_true("runtime_material_graph_parity_graph_preview",
+                MaterialPreviewSurfaceEvaluateObject(object,
+                                                     scene_object_index,
+                                                     NULL,
+                                                     sample_u,
+                                                     sample_v,
+                                                     &graph_preview));
+    assert_true("runtime_material_graph_parity_graph_payload",
+                RuntimeMaterialPayload3D_ResolveFromHit(&hit, &graph_payload));
+
+    assert_true("runtime_material_graph_parity_active_graph",
+                SceneEditorMaterialGraphHasObjectGraph(scene_object_index));
+    assert_close("runtime_material_graph_parity_preview_color_r",
+                 graph_preview.colorR,
+                 stack_preview.colorR,
+                 1e-9);
+    assert_close("runtime_material_graph_parity_preview_color_g",
+                 graph_preview.colorG,
+                 stack_preview.colorG,
+                 1e-9);
+    assert_close("runtime_material_graph_parity_preview_color_b",
+                 graph_preview.colorB,
+                 stack_preview.colorB,
+                 1e-9);
+    assert_close("runtime_material_graph_parity_preview_roughness",
+                 graph_preview.roughness,
+                 stack_preview.roughness,
+                 1e-9);
+    assert_close("runtime_material_graph_parity_preview_reflectivity",
+                 graph_preview.reflectivity,
+                 stack_preview.reflectivity,
+                 1e-9);
+    assert_close("runtime_material_graph_parity_preview_spec",
+                 graph_preview.specWeight,
+                 stack_preview.specWeight,
+                 1e-9);
+    assert_close("runtime_material_graph_parity_payload_color_r",
+                 graph_payload.baseColorR,
+                 stack_payload.baseColorR,
+                 1e-9);
+    assert_close("runtime_material_graph_parity_payload_color_g",
+                 graph_payload.baseColorG,
+                 stack_payload.baseColorG,
+                 1e-9);
+    assert_close("runtime_material_graph_parity_payload_color_b",
+                 graph_payload.baseColorB,
+                 stack_payload.baseColorB,
+                 1e-9);
+    assert_close("runtime_material_graph_parity_payload_roughness",
+                 graph_payload.bsdf.roughness,
+                 stack_payload.bsdf.roughness,
+                 1e-9);
+    assert_close("runtime_material_graph_parity_payload_reflectivity",
+                 graph_payload.bsdf.reflectivity,
+                 stack_payload.bsdf.reflectivity,
+                 1e-9);
+    assert_close("runtime_material_graph_parity_payload_spec",
+                 graph_payload.bsdf.specWeight,
+                 stack_payload.bsdf.specWeight,
+                 1e-9);
+
+    SceneEditorMaterialGraphResetAll();
+    SceneEditorMaterialStackResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    sceneSettings = saved_scene;
+    return 0;
+}
+
 static int test_runtime_material_texture_stack_grime_and_oil_overlay_responses(void) {
     SceneObject object;
     RuntimeMaterialTextureStack grime_stack = RuntimeMaterialTextureStackEmpty();
@@ -2448,6 +3425,178 @@ static int test_runtime_material_texture_stack_grime_and_oil_overlay_responses(v
                  0.0,
                  1e-9);
 
+    return 0;
+}
+
+static int test_runtime_material_texture_stack_procedural_physical_channels(void) {
+    SceneConfig saved_scene = sceneSettings;
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    RuntimeMaterialSurfaceEval base_eval = {0};
+    RuntimeMaterialSurfaceEval channel_eval = {0};
+    RuntimeMaterialSurfaceEval preview_eval = {0};
+    RuntimeMaterialProceduralPhysicalChannels channels = {0};
+    RuntimeMaterialPayload3D payload = {0};
+    MaterialBSDF bsdf = {0};
+    HitInfo3D hit = {0};
+    SceneObject* object = NULL;
+    bool found_channels = false;
+    double found_u = 0.0;
+    double found_v = 0.0;
+    const int scene_object_index = 0;
+    const int seed_key = (scene_object_index + 1) * 19349663;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    SceneEditorMaterialFacePlacementResetAll();
+    SceneEditorMaterialStackResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    RuntimeWaterMaterial3D_ClearAll();
+    MaterialManagerResetDefaults();
+
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[scene_object_index],
+               OBJECT_CIRCLE,
+               0.0,
+               0.0,
+               8.0,
+               0.0,
+               NULL,
+               0);
+    object = &sceneSettings.sceneObjects[scene_object_index];
+    object->color = 0x6c5a42;
+    object->alpha = 1.0;
+    object->roughness = 0.46;
+    object->reflectivity = 0.12;
+    object->textureId = RUNTIME_MATERIAL_TEXTURE_3D_NONE;
+    object->textureStrength = 0.0;
+    object->textureSeed = seed_key;
+
+    stack.layerCount = 2;
+    stack.layers[0] =
+        RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID);
+    stack.layers[1] =
+        runtime_material_test_make_strong_overlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL, 2.65);
+    stack.layers[1].params.coverage = 0.64;
+    stack.layers[1].params.seed = 83;
+    assert_true("runtime_material_procedural_channels_stack_set",
+                SceneEditorMaterialStackSetObjectStack(scene_object_index, &stack));
+
+    MaterialBSDFInitFromSceneObject(object, &bsdf);
+    base_eval = RuntimeMaterialSurfaceEvalMakeBase(bsdf.baseColorR,
+                                                   bsdf.baseColorG,
+                                                   bsdf.baseColorB,
+                                                   bsdf.roughness,
+                                                   bsdf.reflectivity,
+                                                   bsdf.specWeight,
+                                                   bsdf.diffuseWeight,
+                                                   0.0);
+
+    for (int i = 0; i < 32 && !found_channels; ++i) {
+        double u = 0.08 + ((double)i * 0.031);
+        double v = 0.21 + ((double)i * 0.027);
+        memset(&channel_eval, 0, sizeof(channel_eval));
+        memset(&channels, 0, sizeof(channels));
+        found_channels =
+            RuntimeMaterialTextureStackEvaluatePhysicalChannelsPlacedUV(&stack,
+                                                                        object,
+                                                                        u,
+                                                                        v,
+                                                                        seed_key,
+                                                                        &base_eval,
+                                                                        &channel_eval,
+                                                                        &channels);
+        if (found_channels) {
+            found_u = u;
+            found_v = v;
+        }
+    }
+
+    assert_true("runtime_material_procedural_channels_found", found_channels);
+    assert_true("runtime_material_procedural_channels_active", channels.active);
+    assert_true("runtime_material_procedural_channels_mask", channels.layerMask > 1e-9);
+    assert_true("runtime_material_procedural_channels_roughness_active",
+                channels.roughnessActive);
+    assert_true("runtime_material_procedural_channels_reflectivity_active",
+                channels.reflectivityActive);
+    assert_true("runtime_material_procedural_channels_specular_active",
+                channels.specularActive);
+    assert_close("runtime_material_procedural_channels_roughness_value",
+                 channels.roughnessScalar,
+                 channel_eval.roughness,
+                 1e-12);
+    assert_close("runtime_material_procedural_channels_reflectivity_value",
+                 channels.reflectivityCompat,
+                 channel_eval.reflectivity,
+                 1e-12);
+    assert_close("runtime_material_procedural_channels_specular_value",
+                 channels.specularWeight,
+                 channel_eval.specWeight,
+                 1e-12);
+    assert_true("runtime_material_procedural_channels_no_opacity_promotion",
+                !channels.opacityCoverageActive);
+    assert_close("runtime_material_procedural_channels_coverage_default",
+                 channels.opacityCoverage,
+                 1.0,
+                 1e-12);
+    assert_true("runtime_material_procedural_channels_no_transmission_promotion",
+                !channels.transmissionWeightActive);
+    assert_close("runtime_material_procedural_channels_transmission_default",
+                 channels.transmissionWeight,
+                 base_eval.transparency,
+                 1e-12);
+
+    assert_true("runtime_material_procedural_channels_preview_ok",
+                MaterialPreviewSurfaceEvaluateObject(object,
+                                                     scene_object_index,
+                                                     NULL,
+                                                     found_u,
+                                                     found_v,
+                                                     &preview_eval));
+    assert_close("runtime_material_procedural_channels_preview_roughness",
+                 channels.roughnessScalar,
+                 preview_eval.roughness,
+                 1e-12);
+    assert_close("runtime_material_procedural_channels_preview_reflectivity",
+                 channels.reflectivityCompat,
+                 preview_eval.reflectivity,
+                 1e-12);
+    assert_close("runtime_material_procedural_channels_preview_specular",
+                 channels.specularWeight,
+                 preview_eval.specWeight,
+                 1e-12);
+
+    HitInfo3D_Reset(&hit);
+    hit.sceneObjectIndex = scene_object_index;
+    hit.triangleIndex = 0;
+    hit.localTriangleIndex = -1;
+    hit.primitiveIndex = 0;
+    hit.hasObjectTextureCoord = true;
+    hit.normal.z = 1.0;
+    hit.objectTextureCoord.x = found_u;
+    hit.objectTextureCoord.y = found_v;
+    assert_true("runtime_material_procedural_channels_payload_ok",
+                RuntimeMaterialPayload3D_ResolveFromHit(&hit, &payload));
+    assert_close("runtime_material_procedural_channels_payload_roughness",
+                 channels.roughnessScalar,
+                 payload.bsdf.roughness,
+                 1e-12);
+    assert_close("runtime_material_procedural_channels_payload_reflectivity",
+                 channels.reflectivityCompat,
+                 payload.bsdf.reflectivity,
+                 1e-12);
+    assert_close("runtime_material_procedural_channels_payload_specular",
+                 channels.specularWeight,
+                 payload.bsdf.specWeight,
+                 1e-12);
+    assert_close("runtime_material_procedural_channels_payload_transparency",
+                 payload.transparency,
+                 base_eval.transparency,
+                 1e-12);
+
+    RuntimeWaterMaterial3D_ClearAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialFacePlacementResetAll();
+    sceneSettings = saved_scene;
     return 0;
 }
 
@@ -2602,6 +3751,8 @@ static int test_runtime_material_payload_uses_object_v2_stack_override(void) {
 static int test_runtime_material_payload_face_override_targets_v2_layer_id_after_reorder(void) {
     SceneConfig saved_scene = sceneSettings;
     RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    RuntimeMaterialTextureStack reordered_stack = RuntimeMaterialTextureStackEmpty();
+    RuntimeMaterialTextureLayer tmp_layer;
     RuntimeMaterialPayload3D baseline = {0};
     RuntimeMaterialPayload3D face_oil = {0};
     SceneEditorMaterialFacePlacement placement = {0};
@@ -2621,15 +3772,18 @@ static int test_runtime_material_payload_face_override_targets_v2_layer_id_after
     sceneSettings.sceneObjects[0].reflectivity = 0.10;
     sceneSettings.sceneObjects[0].roughness = 0.70;
 
-    stack.layerCount = 3;
+    stack.layerCount = 4;
     stack.layers[0] =
         RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID);
     stack.layers[1] =
         runtime_material_test_make_strong_overlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME, 3.0);
     stack.layers[1].placement.strength = 0.0;
     stack.layers[2] =
-        runtime_material_test_make_strong_overlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL, 3.0);
+        runtime_material_test_make_strong_overlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SCRATCHES, 3.0);
     stack.layers[2].placement.strength = 0.0;
+    stack.layers[3] =
+        runtime_material_test_make_strong_overlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL, 3.0);
+    stack.layers[3].placement.strength = 0.0;
     assert_true("runtime_material_payload_face_layer_id_stack_set",
                 SceneEditorMaterialStackSetObjectStack(0, &stack));
 
@@ -2648,7 +3802,7 @@ static int test_runtime_material_payload_face_override_targets_v2_layer_id_after
     placement.sceneObjectIndex = 0;
     placement.faceGroupIndex = 1;
     placement.layerIndex = 1;
-    snprintf(placement.layerId, sizeof(placement.layerId), "%s", stack.layers[2].layerId);
+    snprintf(placement.layerId, sizeof(placement.layerId), "%s", stack.layers[3].layerId);
     placement.textureId = RUNTIME_MATERIAL_TEXTURE_3D_RUST;
     placement.scale = 3.0;
     placement.strength = 1.0;
@@ -2661,6 +3815,12 @@ static int test_runtime_material_payload_face_override_targets_v2_layer_id_after
     placement.params.surfaceDamage = 1.0;
     assert_true("runtime_material_payload_face_layer_id_override_set",
                 SceneEditorMaterialFacePlacementSetOverride(&placement));
+    reordered_stack = stack;
+    tmp_layer = reordered_stack.layers[1];
+    reordered_stack.layers[1] = reordered_stack.layers[2];
+    reordered_stack.layers[2] = tmp_layer;
+    assert_true("runtime_material_payload_face_layer_id_reordered_stack_set",
+                SceneEditorMaterialStackSetObjectStack(0, &reordered_stack));
 
     for (int u = 1; u < 9 && !found_oil; ++u) {
         for (int v = 1; v < 9 && !found_oil; ++v) {
@@ -2690,6 +3850,328 @@ static int test_runtime_material_payload_face_override_targets_v2_layer_id_after
     return 0;
 }
 
+static int test_runtime_material_preview_payload_surface_eval_parity_stack_face_path(void) {
+    SceneConfig saved_scene = sceneSettings;
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    RuntimeMaterialSurfaceEval preview_object = {0};
+    RuntimeMaterialSurfaceEval preview_face = {0};
+    RuntimeMaterialPayload3D payload_object = {0};
+    RuntimeMaterialPayload3D payload_face = {0};
+    SceneEditorMaterialFacePlacement placement = {0};
+    HitInfo3D hit = {0};
+    bool ok = false;
+    bool found_face_sample = false;
+    const int scene_object_index = 0;
+    const int face_group_index = 1;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    SceneEditorMaterialFacePlacementResetAll();
+    SceneEditorMaterialStackResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    RuntimeWaterMaterial3D_ClearAll();
+    MaterialManagerResetDefaults();
+
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[scene_object_index],
+               OBJECT_POLYGON,
+               0.0,
+               0.0,
+               1.0,
+               0.0,
+               NULL,
+               0);
+    sceneSettings.sceneObjects[scene_object_index].color = 0x4a5968;
+    sceneSettings.sceneObjects[scene_object_index].alpha = 1.0;
+    sceneSettings.sceneObjects[scene_object_index].textureId = RUNTIME_MATERIAL_TEXTURE_3D_NONE;
+    sceneSettings.sceneObjects[scene_object_index].textureStrength = 0.0;
+    sceneSettings.sceneObjects[scene_object_index].textureSeed =
+        (scene_object_index + 1) * 19349663;
+    sceneSettings.sceneObjects[scene_object_index].reflectivity = 0.18;
+    sceneSettings.sceneObjects[scene_object_index].roughness = 0.52;
+
+    stack.layerCount = 3;
+    stack.layers[0] =
+        RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_WOOD);
+    stack.layers[0].placement.scale = 2.75;
+    stack.layers[0].placement.strength = 1.0;
+    stack.layers[0].params.grain = 0.42;
+    stack.layers[0].params.colorDepth = 0.76;
+    stack.layers[0].params.seed = 17;
+    stack.layers[1] =
+        runtime_material_test_make_strong_overlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME, 3.25);
+    stack.layers[1].params.coverage = 0.35;
+    stack.layers[1].params.seed = 23;
+    stack.layers[2] =
+        runtime_material_test_make_strong_overlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL, 2.85);
+    stack.layers[2].params.coverage = 0.42;
+    stack.layers[2].params.seed = 29;
+
+    assert_true("runtime_material_preview_payload_parity_stack_set",
+                SceneEditorMaterialStackSetObjectStack(scene_object_index, &stack));
+
+    HitInfo3D_Reset(&hit);
+    hit.sceneObjectIndex = scene_object_index;
+    hit.triangleIndex = 0;
+    hit.localTriangleIndex = -1;
+    hit.primitiveIndex = 0;
+    hit.hasObjectTextureCoord = true;
+    hit.normal.z = 1.0;
+    hit.objectTextureCoord.x = 0.37;
+    hit.objectTextureCoord.y = 0.46;
+
+    assert_true("runtime_material_preview_payload_parity_object_preview_ok",
+                MaterialPreviewSurfaceEvaluateObject(&sceneSettings.sceneObjects[scene_object_index],
+                                                     scene_object_index,
+                                                     NULL,
+                                                     hit.objectTextureCoord.x,
+                                                     hit.objectTextureCoord.y,
+                                                     &preview_object));
+    assert_true("runtime_material_preview_payload_parity_object_payload_ok",
+                RuntimeMaterialPayload3D_ResolveFromHit(&hit, &payload_object));
+    assert_true("runtime_material_preview_payload_parity_object_stack_active",
+                preview_object.active && payload_object.textureMask > 0.0);
+    runtime_material_test_assert_surface_matches_payload(
+        "runtime_material_preview_payload_parity_object",
+        &preview_object,
+        &payload_object);
+
+    placement.hasOverride = true;
+    placement.sceneObjectIndex = scene_object_index;
+    placement.faceGroupIndex = face_group_index;
+    placement.layerIndex = 1;
+    snprintf(placement.layerId, sizeof(placement.layerId), "%s", stack.layers[2].layerId);
+    placement.textureId = RUNTIME_MATERIAL_TEXTURE_3D_RUST;
+    placement.offsetU = 0.13;
+    placement.offsetV = 0.21;
+    placement.scale = 3.75;
+    placement.strength = 1.0;
+    placement.params.coverage = 0.95;
+    placement.params.grain = 0.62;
+    placement.params.edgeSoftness = 1.0;
+    placement.params.contrast = 0.40;
+    placement.params.flow = 0.70;
+    placement.params.colorDepth = 1.0;
+    placement.params.surfaceDamage = 0.86;
+    placement.params.seed = 31;
+    assert_true("runtime_material_preview_payload_parity_face_override_set",
+                SceneEditorMaterialFacePlacementSetOverride(&placement));
+    assert_true("runtime_material_preview_payload_parity_face_layer_id",
+                SceneEditorMaterialFacePlacementHasOverrideForLayer(scene_object_index,
+                                                                    face_group_index,
+                                                                    "oil"));
+
+    for (int u = 1; u < 9 && !found_face_sample; ++u) {
+        for (int v = 1; v < 9 && !found_face_sample; ++v) {
+            double island_u = 0.0;
+            double island_v = 0.0;
+            double bary_v = (double)u / 10.0;
+            double bary_w = (double)v / 10.0;
+            if (bary_v + bary_w >= 0.95) continue;
+
+            HitInfo3D_Reset(&hit);
+            hit.sceneObjectIndex = scene_object_index;
+            hit.triangleIndex = 2;
+            hit.localTriangleIndex = 2;
+            hit.primitiveIndex = 0;
+            hit.baryV = bary_v;
+            hit.baryW = bary_w;
+            hit.baryU = 1.0 - bary_v - bary_w;
+            SceneEditorMaterialFacePlacementResolveIslandUV(hit.localTriangleIndex,
+                                                            hit.baryU,
+                                                            hit.baryV,
+                                                            hit.baryW,
+                                                            &island_u,
+                                                            &island_v);
+
+            ok = MaterialPreviewSurfaceEvaluateFace(&sceneSettings.sceneObjects[scene_object_index],
+                                                    scene_object_index,
+                                                    face_group_index,
+                                                    island_u,
+                                                    island_v,
+                                                    &preview_face);
+            assert_true("runtime_material_preview_payload_parity_face_preview_ok", ok);
+            ok = RuntimeMaterialPayload3D_ResolveFromHit(&hit, &payload_face);
+            assert_true("runtime_material_preview_payload_parity_face_payload_ok", ok);
+
+            if (preview_face.layerMasks[2] > 1e-9 && payload_face.textureMask > 1e-9) {
+                found_face_sample = true;
+                runtime_material_test_assert_surface_matches_payload(
+                    "runtime_material_preview_payload_parity_face",
+                    &preview_face,
+                    &payload_face);
+            }
+        }
+    }
+
+    assert_true("runtime_material_preview_payload_parity_face_sample_found", found_face_sample);
+
+    RuntimeWaterMaterial3D_ClearAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialFacePlacementResetAll();
+    sceneSettings = saved_scene;
+    return 0;
+}
+
+static int test_runtime_material_preview_payload_surface_eval_parity_grounded_primitive_face(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char* runtime_path = "/tmp/ray_tracing_material_m3s1_grounded_uv_parity.json";
+    const char* runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"material_m3s1_grounded_uv_parity\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"grounded_prism\","
+          "\"object_type\":\"rect_prism_primitive\","
+          "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}},"
+          "\"primitive\":{\"kind\":\"rect_prism_primitive\","
+            "\"width\":4.0,\"height\":3.0,\"depth\":2.0},"
+          "\"flags\":{\"visible\":true}"
+        "}],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    RuntimeMaterialSurfaceEval preview_face = {0};
+    RuntimeMaterialPayload3D payload_face = {0};
+    SceneEditorMaterialFacePlacement placement = {0};
+    HitInfo3D hit = {0};
+    bool found_face_sample = false;
+    const int scene_object_index = 0;
+    const int primitive_index = 0;
+    const int face_group_index = 2;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialFacePlacementResetAll();
+    SceneEditorMaterialStackResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    RuntimeWaterMaterial3D_ClearAll();
+    MaterialManagerResetDefaults();
+
+    assert_true("runtime_material_preview_payload_grounded_write",
+                runtime_material_test_write_text_file(runtime_path, runtime_json));
+    assert_true("runtime_material_preview_payload_grounded_apply",
+                runtime_scene_bridge_apply_file(runtime_path, &summary));
+    assert_true("runtime_material_preview_payload_grounded_object_count",
+                sceneSettings.objectCount == 1);
+
+    sceneSettings.sceneObjects[scene_object_index].color = 0x526170;
+    sceneSettings.sceneObjects[scene_object_index].alpha = 1.0;
+    sceneSettings.sceneObjects[scene_object_index].textureId = RUNTIME_MATERIAL_TEXTURE_3D_NONE;
+    sceneSettings.sceneObjects[scene_object_index].textureStrength = 0.0;
+    sceneSettings.sceneObjects[scene_object_index].reflectivity = 0.14;
+    sceneSettings.sceneObjects[scene_object_index].roughness = 0.56;
+
+    stack.layerCount = 3;
+    stack.layers[0] =
+        RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_WOOD);
+    stack.layers[0].placement.scale = 2.15;
+    stack.layers[0].placement.strength = 1.0;
+    stack.layers[0].params.grain = 0.58;
+    stack.layers[0].params.colorDepth = 0.72;
+    stack.layers[0].params.seed = 41;
+    stack.layers[1] =
+        runtime_material_test_make_strong_overlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME, 2.8);
+    stack.layers[1].params.coverage = 0.30;
+    stack.layers[1].params.seed = 43;
+    stack.layers[2] =
+        runtime_material_test_make_strong_overlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL, 3.1);
+    stack.layers[2].params.coverage = 0.50;
+    stack.layers[2].params.seed = 47;
+    assert_true("runtime_material_preview_payload_grounded_stack_set",
+                SceneEditorMaterialStackSetObjectStack(scene_object_index, &stack));
+
+    placement.hasOverride = true;
+    placement.sceneObjectIndex = scene_object_index;
+    placement.faceGroupIndex = face_group_index;
+    placement.layerIndex = 1;
+    snprintf(placement.layerId, sizeof(placement.layerId), "%s", stack.layers[2].layerId);
+    placement.textureId = RUNTIME_MATERIAL_TEXTURE_3D_RUST;
+    placement.offsetU = 0.19;
+    placement.offsetV = 0.27;
+    placement.scale = 4.2;
+    placement.strength = 1.0;
+    placement.params.coverage = 0.92;
+    placement.params.grain = 0.64;
+    placement.params.edgeSoftness = 1.0;
+    placement.params.contrast = 0.38;
+    placement.params.flow = 0.44;
+    placement.params.colorDepth = 1.0;
+    placement.params.surfaceDamage = 0.90;
+    placement.params.seed = 53;
+    assert_true("runtime_material_preview_payload_grounded_face_override_set",
+                SceneEditorMaterialFacePlacementSetOverride(&placement));
+
+    for (int u = 1; u < 9 && !found_face_sample; ++u) {
+        for (int v = 1; v < 9 && !found_face_sample; ++v) {
+            double island_u = 0.0;
+            double island_v = 0.0;
+            double bary_v = (double)u / 10.0;
+            double bary_w = (double)v / 10.0;
+            if (bary_v + bary_w >= 0.95) continue;
+
+            HitInfo3D_Reset(&hit);
+            hit.sceneObjectIndex = scene_object_index;
+            hit.triangleIndex = 4;
+            hit.localTriangleIndex = 4;
+            hit.primitiveIndex = primitive_index;
+            hit.baryV = bary_v;
+            hit.baryW = bary_w;
+            hit.baryU = 1.0 - bary_v - bary_w;
+            SceneEditorMaterialFacePlacementResolveIslandUV(hit.localTriangleIndex,
+                                                            hit.baryU,
+                                                            hit.baryV,
+                                                            hit.baryW,
+                                                            &island_u,
+                                                            &island_v);
+
+            assert_true("runtime_material_preview_payload_grounded_preview_ok",
+                        MaterialPreviewSurfaceEvaluateFacePrimitive(
+                            &sceneSettings.sceneObjects[scene_object_index],
+                            scene_object_index,
+                            primitive_index,
+                            face_group_index,
+                            island_u,
+                            island_v,
+                            &preview_face));
+            assert_true("runtime_material_preview_payload_grounded_payload_ok",
+                        RuntimeMaterialPayload3D_ResolveFromHit(&hit, &payload_face));
+
+            if (preview_face.layerMasks[2] > 1e-9 && payload_face.textureMask > 1e-9) {
+                found_face_sample = true;
+                runtime_material_test_assert_surface_matches_payload(
+                    "runtime_material_preview_payload_grounded_face",
+                    &preview_face,
+                    &payload_face);
+            }
+        }
+    }
+
+    assert_true("runtime_material_preview_payload_grounded_face_sample_found",
+                found_face_sample);
+
+    unlink(runtime_path);
+    RuntimeWaterMaterial3D_ClearAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialFacePlacementResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 static int test_runtime_material_config_loads_v2_stack_schema(void) {
     SceneConfig saved_scene = sceneSettings;
     json_object* root = json_object_new_object();
@@ -2710,6 +4192,7 @@ static int test_runtime_material_config_loads_v2_stack_schema(void) {
 
     {
         json_object* base = json_object_new_object();
+        json_object_object_add(base, "id", json_object_new_string("base_wood_custom"));
         json_object_object_add(base, "kind", json_object_new_string("wood"));
         json_object_object_add(base, "role", json_object_new_string("base"));
         json_object_array_add(layers, base);
@@ -2723,6 +4206,7 @@ static int test_runtime_material_config_loads_v2_stack_schema(void) {
         json_object_object_add(parameters, "coverage", json_object_new_double(1.0));
         json_object_object_add(parameters, "colorDepth", json_object_new_double(1.0));
         json_object_object_add(parameters, "surfaceDamage", json_object_new_double(1.0));
+        json_object_object_add(overlay, "id", json_object_new_string("grime_detail"));
         json_object_object_add(overlay, "kind", json_object_new_string("grime"));
         json_object_object_add(overlay, "role", json_object_new_string("overlay"));
         json_object_object_add(overlay, "placement", placement);
@@ -2736,7 +4220,7 @@ static int test_runtime_material_config_loads_v2_stack_schema(void) {
         json_object* face_entry = json_object_new_object();
         json_object_object_add(face_entry, "faceGroupIndex", json_object_new_int(3));
         json_object_object_add(face_entry, "layerIndex", json_object_new_int(1));
-        json_object_object_add(face_entry, "layerId", json_object_new_string("grime"));
+        json_object_object_add(face_entry, "layerId", json_object_new_string("grime_detail"));
         json_object_object_add(face_entry, "textureId", json_object_new_int(RUNTIME_MATERIAL_TEXTURE_3D_RUST));
         json_object_object_add(face_entry, "scale", json_object_new_double(2.5));
         json_object_object_add(face_entry, "strength", json_object_new_double(0.65));
@@ -2753,20 +4237,24 @@ static int test_runtime_material_config_loads_v2_stack_schema(void) {
     assert_true("runtime_material_config_v2_stack_layer_count", stack.layerCount == 2);
     assert_true("runtime_material_config_v2_stack_base_kind",
                 stack.layers[0].kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_WOOD);
+    assert_true("runtime_material_config_v2_stack_base_id",
+                strcmp(stack.layers[0].layerId, "base_wood_custom") == 0);
     assert_true("runtime_material_config_v2_stack_overlay_kind",
                 stack.layers[1].kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME);
+    assert_true("runtime_material_config_v2_stack_overlay_id",
+                strcmp(stack.layers[1].layerId, "grime_detail") == 0);
     assert_close("runtime_material_config_v2_stack_overlay_scale",
                  stack.layers[1].placement.scale,
                  3.0,
                  1e-9);
     assert_true("runtime_material_config_v2_face_layer_loaded",
-                SceneEditorMaterialFacePlacementHasOverrideForLayer(0, 3, "grime"));
+                SceneEditorMaterialFacePlacementHasOverrideForLayer(0, 3, "grime_detail"));
     {
         SceneEditorMaterialFacePlacement placement =
             SceneEditorMaterialFacePlacementGetEffectiveForLayer(&sceneSettings.sceneObjects[0],
                                                                  0,
                                                                  3,
-                                                                 "grime");
+                                                                 "grime_detail");
         assert_true("runtime_material_config_v2_face_layer_index",
                     placement.layerIndex == 1);
         assert_close("runtime_material_config_v2_face_layer_strength",
@@ -2782,10 +4270,287 @@ static int test_runtime_material_config_loads_v2_stack_schema(void) {
     return 0;
 }
 
+static int test_runtime_material_hydration_parity_scene_config_and_runtime_scene(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char* runtime_path = "/tmp/ray_tracing_material_hydration_parity_runtime.json";
+    const char* runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"material_hydration_parity\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"parity_box\","
+          "\"object_type\":\"rect_prism_primitive\","
+          "\"transform\":{"
+            "\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+          "},"
+          "\"primitive\":{\"kind\":\"rect_prism_primitive\",\"width\":1.0,\"height\":1.0,\"depth\":1.0},"
+          "\"flags\":{\"visible\":true}"
+        "}],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{\"ray_tracing\":{\"authoring\":{\"object_materials\":[{"
+          "\"object_id\":\"parity_box\","
+          "\"material_id\":0,"
+          "\"materialTextureStack\":{\"version\":1,\"layers\":["
+            "{"
+              "\"id\":\"base_parity\","
+              "\"kind\":\"wood\","
+              "\"role\":\"base\","
+              "\"placement\":{\"offsetU\":0.11,\"offsetV\":0.22,\"scale\":2.0,\"strength\":0.8},"
+              "\"parameters\":{\"patternMode\":2,\"coverage\":0.73,\"colorDepth\":0.61,\"surfaceDamage\":0.27}"
+            "},"
+            "{"
+              "\"id\":\"grime_parity\","
+              "\"kind\":\"grime\","
+              "\"role\":\"overlay\","
+              "\"opacity\":0.82,"
+              "\"placement\":{\"offsetU\":0.31,\"offsetV\":0.41,\"scale\":3.5,\"strength\":0.92},"
+              "\"parameters\":{\"patternMode\":3,\"coverage\":0.66,\"grain\":0.44,\"surfaceDamage\":0.58},"
+              "\"roughnessInfluence\":0.45,"
+              "\"specularInfluence\":-0.25"
+            "}"
+          "]},"
+          "\"procedural_texture\":{\"face_placements\":[{"
+            "\"face_group_index\":3,"
+            "\"layer_index\":1,"
+            "\"layer_id\":\"grime_parity\","
+            "\"texture_id\":1,"
+            "\"offset_u\":0.19,"
+            "\"offset_v\":0.29,"
+            "\"scale\":4.25,"
+            "\"strength\":0.64,"
+            "\"rotation\":0.33,"
+            "\"parameters\":{\"coverage\":0.57,\"surface_damage\":0.83,\"seed\":77}"
+          "}]}"
+        "}]}}}"
+        "}";
+    json_object* root = json_object_new_object();
+    json_object* objects = json_object_new_array();
+    json_object* obj = json_object_new_object();
+    json_object* stack_obj = json_object_new_object();
+    json_object* layers = json_object_new_array();
+    json_object* face_placements = json_object_new_array();
+    RuntimeMaterialTextureStack config_stack = RuntimeMaterialTextureStackEmpty();
+    RuntimeMaterialTextureStack runtime_stack = RuntimeMaterialTextureStackEmpty();
+    SceneEditorMaterialFacePlacement config_face;
+    SceneEditorMaterialFacePlacement runtime_face;
+    SceneEditorMaterialFacePlacement stale_face = {0};
+    RuntimeMaterialTextureStack stale_stack = RuntimeMaterialTextureStackEmpty();
+    RuntimeSceneBridgePreflight summary = {0};
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialFacePlacementResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+
+    json_object_object_add(obj, "type", json_object_new_string("rectangle"));
+    json_object_object_add(obj, "x", json_object_new_double(0.0));
+    json_object_object_add(obj, "y", json_object_new_double(0.0));
+    json_object_object_add(obj, "scale", json_object_new_double(1.0));
+    json_object_object_add(obj, "color", json_object_new_int(0x303030));
+    json_object_object_add(obj, "materialId", json_object_new_int(MaterialManagerDefaultId()));
+    {
+        json_object* base = json_object_new_object();
+        json_object* placement = json_object_new_object();
+        json_object* parameters = json_object_new_object();
+        json_object_object_add(placement, "offset_u", json_object_new_double(0.11));
+        json_object_object_add(placement, "offset_v", json_object_new_double(0.22));
+        json_object_object_add(placement, "scale", json_object_new_double(2.0));
+        json_object_object_add(placement, "strength", json_object_new_double(0.8));
+        json_object_object_add(parameters, "pattern_mode", json_object_new_int(2));
+        json_object_object_add(parameters, "coverage", json_object_new_double(0.73));
+        json_object_object_add(parameters, "color_depth", json_object_new_double(0.61));
+        json_object_object_add(parameters, "surface_damage", json_object_new_double(0.27));
+        json_object_object_add(base, "id", json_object_new_string("base_parity"));
+        json_object_object_add(base, "kind", json_object_new_string("wood"));
+        json_object_object_add(base, "role", json_object_new_string("base"));
+        json_object_object_add(base, "placement", placement);
+        json_object_object_add(base, "parameters", parameters);
+        json_object_array_add(layers, base);
+    }
+    {
+        json_object* overlay = json_object_new_object();
+        json_object* placement = json_object_new_object();
+        json_object* parameters = json_object_new_object();
+        json_object_object_add(placement, "offset_u", json_object_new_double(0.31));
+        json_object_object_add(placement, "offset_v", json_object_new_double(0.41));
+        json_object_object_add(placement, "scale", json_object_new_double(3.5));
+        json_object_object_add(placement, "strength", json_object_new_double(0.92));
+        json_object_object_add(parameters, "pattern_mode", json_object_new_int(3));
+        json_object_object_add(parameters, "coverage", json_object_new_double(0.66));
+        json_object_object_add(parameters, "grain", json_object_new_double(0.44));
+        json_object_object_add(parameters, "surface_damage", json_object_new_double(0.58));
+        json_object_object_add(overlay, "id", json_object_new_string("grime_parity"));
+        json_object_object_add(overlay, "kind", json_object_new_string("grime"));
+        json_object_object_add(overlay, "role", json_object_new_string("overlay"));
+        json_object_object_add(overlay, "opacity", json_object_new_double(0.82));
+        json_object_object_add(overlay, "placement", placement);
+        json_object_object_add(overlay, "parameters", parameters);
+        json_object_object_add(overlay, "roughness_influence", json_object_new_double(0.45));
+        json_object_object_add(overlay, "specular_influence", json_object_new_double(-0.25));
+        json_object_array_add(layers, overlay);
+    }
+    json_object_object_add(stack_obj, "version", json_object_new_int(1));
+    json_object_object_add(stack_obj, "layers", layers);
+    json_object_object_add(obj, "material_texture_stack", stack_obj);
+    {
+        json_object* face_entry = json_object_new_object();
+        json_object* parameters = json_object_new_object();
+        json_object_object_add(parameters, "coverage", json_object_new_double(0.57));
+        json_object_object_add(parameters, "surface_damage", json_object_new_double(0.83));
+        json_object_object_add(parameters, "seed", json_object_new_int(77));
+        json_object_object_add(face_entry, "face_group_index", json_object_new_int(3));
+        json_object_object_add(face_entry, "layer_index", json_object_new_int(1));
+        json_object_object_add(face_entry, "layer_id", json_object_new_string("grime_parity"));
+        json_object_object_add(face_entry, "texture_id", json_object_new_int(RUNTIME_MATERIAL_TEXTURE_3D_RUST));
+        json_object_object_add(face_entry, "offset_u", json_object_new_double(0.19));
+        json_object_object_add(face_entry, "offset_v", json_object_new_double(0.29));
+        json_object_object_add(face_entry, "scale", json_object_new_double(4.25));
+        json_object_object_add(face_entry, "strength", json_object_new_double(0.64));
+        json_object_object_add(face_entry, "rotation", json_object_new_double(0.33));
+        json_object_object_add(face_entry, "parameters", parameters);
+        json_object_array_add(face_placements, face_entry);
+    }
+    json_object_object_add(obj, "material_face_placements", face_placements);
+    json_object_array_add(objects, obj);
+    json_object_object_add(root, "objects", objects);
+    LoadSceneObjects(root);
+    assert_true("runtime_material_hydration_parity_config_stack",
+                SceneEditorMaterialStackGetObjectStack(0, &config_stack));
+    config_face = SceneEditorMaterialFacePlacementGetEffectiveForLayer(&sceneSettings.sceneObjects[0],
+                                                                       0,
+                                                                       3,
+                                                                       "grime_parity");
+
+    assert_true("runtime_material_hydration_parity_runtime_write",
+                runtime_material_test_write_text_file(runtime_path, runtime_json));
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialFacePlacementResetAll();
+    assert_true("runtime_material_hydration_parity_runtime_apply",
+                runtime_scene_bridge_apply_file(runtime_path, &summary));
+    assert_true("runtime_material_hydration_parity_runtime_stack",
+                SceneEditorMaterialStackGetObjectStack(0, &runtime_stack));
+    runtime_face = SceneEditorMaterialFacePlacementGetEffectiveForLayer(&sceneSettings.sceneObjects[0],
+                                                                        0,
+                                                                        3,
+                                                                        "grime_parity");
+
+    assert_true("runtime_material_hydration_parity_layer_count",
+                config_stack.layerCount == runtime_stack.layerCount && runtime_stack.layerCount == 2);
+    assert_true("runtime_material_hydration_parity_base_id",
+                strcmp(config_stack.layers[0].layerId, runtime_stack.layers[0].layerId) == 0);
+    assert_true("runtime_material_hydration_parity_overlay_id",
+                strcmp(config_stack.layers[1].layerId, runtime_stack.layers[1].layerId) == 0);
+    assert_true("runtime_material_hydration_parity_overlay_kind",
+                config_stack.layers[1].kind == runtime_stack.layers[1].kind);
+    assert_close("runtime_material_hydration_parity_overlay_scale",
+                 runtime_stack.layers[1].placement.scale,
+                 config_stack.layers[1].placement.scale,
+                 1e-9);
+    assert_close("runtime_material_hydration_parity_overlay_roughness",
+                 runtime_stack.layers[1].roughnessInfluence,
+                 config_stack.layers[1].roughnessInfluence,
+                 1e-9);
+    assert_true("runtime_material_hydration_parity_face_layer_id",
+                strcmp(config_face.layerId, runtime_face.layerId) == 0);
+    assert_true("runtime_material_hydration_parity_face_layer_index",
+                config_face.layerIndex == runtime_face.layerIndex);
+    assert_close("runtime_material_hydration_parity_face_strength",
+                 runtime_face.strength,
+                 config_face.strength,
+                 1e-9);
+    assert_close("runtime_material_hydration_parity_face_damage",
+                 runtime_face.params.surfaceDamage,
+                 config_face.params.surfaceDamage,
+                 1e-9);
+
+    stale_stack.layerCount = 1;
+    stale_stack.layers[0] =
+        RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_WOOD);
+    assert_true("runtime_material_hydration_parity_stale_stack_seed_config",
+                SceneEditorMaterialStackSetObjectStack(0, &stale_stack));
+    stale_face.hasOverride = true;
+    stale_face.sceneObjectIndex = 0;
+    stale_face.faceGroupIndex = 3;
+    snprintf(stale_face.layerId, sizeof(stale_face.layerId), "%s", "stale_layer");
+    stale_face.scale = 1.0;
+    assert_true("runtime_material_hydration_parity_stale_face_seed_config",
+                SceneEditorMaterialFacePlacementSetOverride(&stale_face));
+    assert_true("runtime_material_hydration_parity_stale_authored_seed_config",
+                !RuntimeMaterialAuthoredTextureBindManifestForObject(
+                    0,
+                    "stale_config",
+                    "/tmp/ray_tracing_missing_stale_config_authored_texture_manifest.json",
+                    "override"));
+    assert_true("runtime_material_hydration_parity_stale_authored_invalid_config",
+                RuntimeMaterialAuthoredTextureGetInvalidBinding(0, NULL, 0u, NULL, 0u, NULL, 0u));
+    {
+        json_object* reset_root = json_object_new_object();
+        json_object* reset_objects = json_object_new_array();
+        json_object* reset_obj = json_object_new_object();
+        json_object_object_add(reset_obj, "type", json_object_new_string("rectangle"));
+        json_object_object_add(reset_obj, "x", json_object_new_double(0.0));
+        json_object_object_add(reset_obj, "y", json_object_new_double(0.0));
+        json_object_object_add(reset_obj, "scale", json_object_new_double(1.0));
+        json_object_array_add(reset_objects, reset_obj);
+        json_object_object_add(reset_root, "objects", reset_objects);
+        LoadSceneObjects(reset_root);
+        json_object_put(reset_root);
+    }
+    assert_true("runtime_material_hydration_parity_config_clears_stack",
+                !SceneEditorMaterialStackHasObjectStack(0));
+    assert_true("runtime_material_hydration_parity_config_clears_face",
+                !SceneEditorMaterialFacePlacementHasOverride(0, 3));
+    assert_true("runtime_material_hydration_parity_config_clears_authored",
+                !RuntimeMaterialAuthoredTextureGetInvalidBinding(0, NULL, 0u, NULL, 0u, NULL, 0u));
+
+    assert_true("runtime_material_hydration_parity_stale_stack_seed_runtime",
+                SceneEditorMaterialStackSetObjectStack(0, &stale_stack));
+    assert_true("runtime_material_hydration_parity_stale_face_seed_runtime",
+                SceneEditorMaterialFacePlacementSetOverride(&stale_face));
+    assert_true("runtime_material_hydration_parity_stale_authored_seed_runtime",
+                !RuntimeMaterialAuthoredTextureBindManifestForObject(
+                    0,
+                    "stale_runtime",
+                    "/tmp/ray_tracing_missing_stale_runtime_authored_texture_manifest.json",
+                    "override"));
+    assert_true("runtime_material_hydration_parity_stale_authored_invalid_runtime",
+                RuntimeMaterialAuthoredTextureGetInvalidBinding(0, NULL, 0u, NULL, 0u, NULL, 0u));
+    assert_true("runtime_material_hydration_parity_runtime_reset_apply",
+                runtime_scene_bridge_apply_file(runtime_path, &summary));
+    assert_true("runtime_material_hydration_parity_runtime_reload_stack",
+                SceneEditorMaterialStackHasObjectStack(0));
+    assert_true("runtime_material_hydration_parity_runtime_no_stale_face",
+                !SceneEditorMaterialFacePlacementHasOverrideForLayer(0, 3, "stale_layer"));
+    assert_true("runtime_material_hydration_parity_runtime_no_stale_authored",
+                !RuntimeMaterialAuthoredTextureGetInvalidBinding(0, NULL, 0u, NULL, 0u, NULL, 0u));
+
+    unlink(runtime_path);
+    json_object_put(root);
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialFacePlacementResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 int run_test_runtime_lighting_materials_payload_suite(void) {
     test_runtime_material_payload_3d_scene_object_resolution_contract();
     test_runtime_material_payload_3d_authoring_object_values_override_preset();
     test_runtime_material_payload_3d_object_multipliers_contract();
+    test_runtime_material_compatibility_bridges_are_explicit();
     test_runtime_material_payload_3d_water_override_contract();
     test_material_manager_default_presets_include_i4_entries();
     test_material_manager_load_dir_preserves_shipped_preset_ids();
@@ -2795,6 +4560,8 @@ int run_test_runtime_lighting_materials_payload_suite(void) {
     test_runtime_material_payload_3d_face_texture_override_affects_hit();
     test_runtime_material_payload_3d_authored_texture_override_affects_hit();
     test_runtime_material_payload_authored_texture_becomes_base_but_keeps_overlay_stack();
+    test_runtime_material_payload_authored_texture_channel_references();
+    test_runtime_material_payload_authored_texture_no_displacement_guard();
     test_runtime_material_payload_authored_texture_metadata_contract();
     test_runtime_material_payload_authored_texture_explicit_summary_overrides_layer_list();
     test_runtime_material_payload_authored_texture_face_base_intent_modulates_bsdf();
@@ -2806,6 +4573,7 @@ int run_test_runtime_lighting_materials_payload_suite(void) {
     test_runtime_principled_bsdf_normalizes_core_parameters();
     test_runtime_principled_bsdf_payload_adapter_preserves_material_signal();
     test_runtime_principled_bsdf_surface_eval_adapter_and_lobes();
+    test_runtime_principled_bsdf_conversion_adapter_m2_contract();
     test_runtime_material_texture_stack_legacy_object_adapter_contract();
     test_runtime_material_texture_stack_normalizes_bounds_contract();
     test_runtime_material_texture_stack_surface_eval_applies_rust_response();
@@ -2813,10 +4581,18 @@ int run_test_runtime_lighting_materials_payload_suite(void) {
     test_runtime_material_texture_stack_base_patterns_are_repeat_stable();
     test_runtime_material_texture_stack_base_then_overlay_orders_response();
     test_runtime_material_texture_stack_grime_and_oil_overlay_responses();
+    test_runtime_material_texture_stack_procedural_physical_channels();
+    test_runtime_material_graph_compiles_stack_and_channels();
+    test_runtime_material_graph_scene_config_round_trip_stack_fallback();
+    test_runtime_material_graph_runtime_scene_round_trip_stack_fallback();
+    test_runtime_material_graph_evaluator_parity_matches_authored_stack();
     test_runtime_material_texture_stack_grime_oil_order_changes_result();
     test_runtime_material_texture_stack_overlays_do_not_reopen_transparency();
     test_runtime_material_payload_uses_object_v2_stack_override();
     test_runtime_material_payload_face_override_targets_v2_layer_id_after_reorder();
+    test_runtime_material_preview_payload_surface_eval_parity_stack_face_path();
+    test_runtime_material_preview_payload_surface_eval_parity_grounded_primitive_face();
     test_runtime_material_config_loads_v2_stack_schema();
+    test_runtime_material_hydration_parity_scene_config_and_runtime_scene();
     return 0;
 }

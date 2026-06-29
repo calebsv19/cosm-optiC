@@ -78,6 +78,23 @@ typedef struct {
     double layerMasks[RUNTIME_MATERIAL_TEXTURE_STACK_MAX_LAYERS];
 } RuntimeMaterialSurfaceEval;
 
+typedef struct {
+    bool active;
+    double layerMask;
+    bool roughnessActive;
+    double roughnessScalar;
+    bool reflectivityActive;
+    double reflectivityCompat;
+    bool specularActive;
+    double specularWeight;
+    bool diffuseActive;
+    double diffuseWeight;
+    bool opacityCoverageActive;
+    double opacityCoverage;
+    bool transmissionWeightActive;
+    double transmissionWeight;
+} RuntimeMaterialProceduralPhysicalChannels;
+
 const char* RuntimeMaterialTextureLayerKindStableId(RuntimeMaterialTextureLayerKind kind);
 const char* RuntimeMaterialTextureLayerKindDisplayName(RuntimeMaterialTextureLayerKind kind);
 RuntimeMaterialTextureLayerKind RuntimeMaterialTextureLayerKindFromStableId(
@@ -115,6 +132,10 @@ RuntimeMaterialSurfaceEval RuntimeMaterialSurfaceEvalMakeBase(double color_r,
                                                               double spec_weight,
                                                               double diffuse_weight,
                                                               double transparency);
+bool RuntimeMaterialSurfaceEvalProceduralPhysicalChannels(
+    const RuntimeMaterialSurfaceEval* base_eval,
+    const RuntimeMaterialSurfaceEval* surface_eval,
+    RuntimeMaterialProceduralPhysicalChannels* out_channels);
 bool RuntimeMaterialTextureStackEvaluatePlacedUV(
     const RuntimeMaterialTextureStack* stack,
     const SceneObject* object,
@@ -123,6 +144,16 @@ bool RuntimeMaterialTextureStackEvaluatePlacedUV(
     int seed_key,
     const RuntimeMaterialSurfaceEval* base_eval,
     RuntimeMaterialSurfaceEval* out_eval);
+
+bool RuntimeMaterialTextureStackEvaluatePhysicalChannelsPlacedUV(
+    const RuntimeMaterialTextureStack* stack,
+    const SceneObject* object,
+    double u,
+    double v,
+    int seed_key,
+    const RuntimeMaterialSurfaceEval* base_eval,
+    RuntimeMaterialSurfaceEval* out_eval,
+    RuntimeMaterialProceduralPhysicalChannels* out_channels);
 
 bool RuntimeMaterialTextureStackEvaluateOverlayPlacedUV(
     const RuntimeMaterialTextureStack* stack,

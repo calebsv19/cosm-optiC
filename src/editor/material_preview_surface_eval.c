@@ -16,6 +16,16 @@ static double material_preview_surface_eval_clamp01(double value) {
     return value;
 }
 
+static double material_preview_surface_eval_legacy_alpha_transparency_bridge(
+    const Material* material,
+    double display_alpha) {
+    if (!material) {
+        return 0.0;
+    }
+    return material_preview_surface_eval_clamp01(
+        material->transparency * material_preview_surface_eval_clamp01(display_alpha));
+}
+
 static RuntimeMaterialSurfaceEval material_preview_surface_eval_base(
     const SceneObject* object) {
     RuntimeMaterialSurfaceEval base_eval = {0};
@@ -26,11 +36,8 @@ static RuntimeMaterialSurfaceEval material_preview_surface_eval_base(
     if (!object) return base_eval;
     MaterialBSDFInitFromSceneObject(object, &bsdf);
     material = MaterialManagerGet(object->material_id);
-    transparency = material
-                       ? material_preview_surface_eval_clamp01(
-                             material->transparency *
-                             material_preview_surface_eval_clamp01(object->alpha))
-                       : 0.0;
+    transparency =
+        material_preview_surface_eval_legacy_alpha_transparency_bridge(material, object->alpha);
     return RuntimeMaterialSurfaceEvalMakeBase(bsdf.baseColorR,
                                               bsdf.baseColorG,
                                               bsdf.baseColorB,

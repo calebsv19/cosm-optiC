@@ -23,6 +23,18 @@ static double Clamp01(double v) {
     return Clamp(v, 0.0, 1.0);
 }
 
+static double MaterialBSDFLegacyIorFallback(const Material* preset, double reflectivity) {
+    return Clamp(preset ? preset->ior : ((reflectivity > 0.0) ? 1.45 : 1.0), 1.0, 4.0);
+}
+
+static double MaterialBSDFLegacySpecWeightFallback(const Material* preset, double reflectivity) {
+    return Clamp01((preset ? preset->specular : 0.0) + reflectivity);
+}
+
+static double MaterialBSDFLegacyDiffuseWeightFallback(const Material* preset, double reflectivity) {
+    return preset ? Clamp01(preset->diffuse) : Clamp01(1.0 - reflectivity);
+}
+
 static void ExtractBaseColor(const SceneObject* obj, double* out_r, double* out_g, double* out_b) {
     int packed = 0xFFFFFF;
     double r = 1.0;
@@ -262,13 +274,13 @@ void MaterialBSDFInitFromSceneObject(const SceneObject* obj, MaterialBSDF* mater
      */
     material->reflectivity = Clamp01(obj->reflectivity);
     material->roughness = Clamp(obj->roughness, 0.02, 1.0);
-    material->ior = Clamp(preset ? preset->ior : ((material->reflectivity > 0.0) ? 1.45 : 1.0),
-                          1.0,
-                          4.0);
+    material->ior = MaterialBSDFLegacyIorFallback(preset, material->reflectivity);
     material->textureId = obj->textureId;
     material->model = (material->reflectivity > 0.05) ? MATERIAL_BSDF_GGX : MATERIAL_BSDF_LAMBERT;
-    material->specWeight = (preset ? preset->specular : 0.0) + material->reflectivity;
-    material->diffuseWeight = preset ? preset->diffuse : Clamp01(1.0 - material->reflectivity);
+    material->specWeight =
+        MaterialBSDFLegacySpecWeightFallback(preset, material->reflectivity);
+    material->diffuseWeight =
+        MaterialBSDFLegacyDiffuseWeightFallback(preset, material->reflectivity);
 
     // Enforce energy conservation: diffuse + spec <= 1.0
     double total = material->diffuseWeight + material->specWeight;

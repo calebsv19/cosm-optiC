@@ -1,0 +1,47 @@
+{
+  "schema_version": "ray_tracing_agent_render_request_v1",
+  "run_id": "m4_s4_imported_mesh_material_regression",
+  "scene": {
+    "runtime_scene_path": "../../../tests/fixtures/mesh_asset_runtime_spheres/scene_runtime.json"
+  },
+  "volume": {
+    "enabled": false
+  },
+  "render": {
+    "start_frame": 0,
+    "frame_count": 1,
+    "width": 160,
+    "height": 96,
+    "normalized_t": 0.0,
+    "temporal_frames": 1,
+    "integrator_3d": "direct_light"
+  },
+  "inspection": {
+    "camera_position": {
+      "x": 0.0,
+      "y": -6.2,
+      "z": 2.2
+    },
+    "camera_look_at": {
+      "x": 0.0,
+      "y": 0.35,
+      "z": 0.9
+    },
+    "camera_zoom": 1.0,
+    "environment_light_mode": "ambient",
+    "ambient_strength": 0.35,
+    "top_fill_strength": 1.5,
+    "light_intensity": 4.0,
+    "light_radius": 0.12,
+    "object_audit_enabled": true,
+    "object_audit_max_dimension": 128
+  },
+  "output": {
+    "root": "render",
+    "overwrite": true
+  },
+  "progress": {
+    "summary_path": "render/render_summary.json",
+    "progress_path": "render/render_progress.json"
+  }
+}

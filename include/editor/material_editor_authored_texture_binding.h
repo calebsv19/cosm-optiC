@@ -32,5 +32,8 @@ bool MaterialEditorAuthoredTextureBindingGetInvalidSummary(int focused_object_in
                                                            size_t out_binding_mode_size,
                                                            char* out_reason,
                                                            size_t out_reason_size);
+bool MaterialEditorAuthoredTextureBindingGetChannelSummary(int focused_object_index,
+                                                           char* out_channel_summary,
+                                                           size_t out_channel_summary_size);
 
 #endif

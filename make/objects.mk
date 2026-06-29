@@ -31,6 +31,8 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_native_3d_sampling.o \
 	$(BUILD_DIR)/render/materials/runtime_material_authored_texture_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_authored_texture_3d_manifest.o \
+	$(BUILD_DIR)/render/materials/runtime_material_graph_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_material_graph_3d_json.o \
 	$(BUILD_DIR)/render/materials/runtime_material_payload_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_water_material_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_principled_bsdf_3d.o \
@@ -38,7 +40,9 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/materials/runtime_material_texture_stack_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_texture_stack_3d_metadata.o \
 	$(BUILD_DIR)/render/materials/runtime_material_response_3d.o \
+	$(BUILD_DIR)/editor/scene_editor_material_face_metrics.o \
 	$(BUILD_DIR)/editor/scene_editor_material_face_placement.o \
+	$(BUILD_DIR)/editor/scene_editor_material_graph.o \
 	$(BUILD_DIR)/editor/scene_editor_material_stack.o \
 	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render.o \
@@ -232,6 +236,8 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_native_3d_blue_noise.o \
 	$(BUILD_DIR)/render/runtime_native_3d_sampling.o \
 	$(BUILD_DIR)/render/materials/runtime_material_authored_texture_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_material_graph_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_material_graph_3d_json.o \
 	$(BUILD_DIR)/render/materials/runtime_material_payload_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_water_material_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_principled_bsdf_3d.o \
@@ -263,6 +269,15 @@ TEST_DEPS := \
 	$(BUILD_DIR)/editor/material_editor_layer_model.o \
 	$(BUILD_DIR)/editor/material_editor_authored_texture_binding.o \
 	$(BUILD_DIR)/editor/material_editor_face_preview.o \
+	$(BUILD_DIR)/editor/scene_editor_material_graph.o \
+	$(BUILD_DIR)/editor/material_editor_recipe.o \
+	$(BUILD_DIR)/editor/material_editor_graph_actions.o \
+	$(BUILD_DIR)/editor/material_editor_graph_readback.o \
+	$(BUILD_DIR)/editor/material_editor_material_readback.o \
+	$(BUILD_DIR)/editor/material_editor_texture_channel_readback.o \
+	$(BUILD_DIR)/editor/material_editor_face_region_readback.o \
+	$(BUILD_DIR)/editor/material_editor_compact_layout.o \
+	$(BUILD_DIR)/editor/material_editor_compact_render.o \
 	$(BUILD_DIR)/editor/material_editor.o \
 	$(BUILD_DIR)/editor/material_preview_surface_eval.o \
 	$(BUILD_DIR)/editor/scene_editor_material_face_metrics.o \

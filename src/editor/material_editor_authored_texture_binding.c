@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "app/data_paths.h"
+#include "editor/material_editor_internal.h"
 #include "import/runtime_scene_bridge.h"
 #include "render/render_helper.h"
 #include "render/runtime_material_authored_texture_3d.h"
@@ -294,6 +295,14 @@ bool MaterialEditorAuthoredTextureBindingGetInvalidSummary(int focused_object_in
                                                            out_reason_size);
 }
 
+bool MaterialEditorAuthoredTextureBindingGetChannelSummary(int focused_object_index,
+                                                           char* out_channel_summary,
+                                                           size_t out_channel_summary_size) {
+    return RuntimeMaterialAuthoredTextureGetChannelSummary(focused_object_index,
+                                                           out_channel_summary,
+                                                           out_channel_summary_size);
+}
+
 int MaterialEditorAuthoredTextureBindingRenderPaneControls(SDL_Renderer* renderer,
                                                            SDL_Rect content_bounds,
                                                            int cursor_y,
@@ -330,7 +339,8 @@ int MaterialEditorAuthoredTextureBindingRenderPaneControls(SDL_Renderer* rendere
                                                                         sizeof(invalid_reason));
     RenderLabelTextLeft(renderer,
                         (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, 16},
-                        "Authored Texture",
+                        MaterialEditorPanelGroupLabel(
+                            MATERIAL_EDITOR_PANEL_GROUP_TEXTURE_BINDING),
                         palette.text_primary);
     cursor_y += MATERIAL_EDITOR_AUTHORED_SECTION_HEIGHT;
 

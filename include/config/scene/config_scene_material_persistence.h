@@ -5,8 +5,10 @@
 #include <json-c/json.h>
 
 struct json_object* ConfigSaveMaterialTextureStackForObject(int scene_object_index);
+struct json_object* ConfigSaveMaterialGraphForObject(int scene_object_index);
 struct json_object* SaveMaterialFacePlacementsForObject(int scene_object_index);
 bool ConfigLoadMaterialTextureStack(struct json_object* obj, int scene_object_index);
+bool ConfigLoadMaterialGraph(struct json_object* obj, int scene_object_index);
 void LoadMaterialFacePlacements(struct json_object* obj, int scene_object_index);
 
 #endif

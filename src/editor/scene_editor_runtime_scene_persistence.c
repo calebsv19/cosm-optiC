@@ -5,10 +5,12 @@
 #include "config/config_scene_path_io.h"
 #include "core_scene.h"
 #include "core_io.h"
+#include "editor/scene_editor_material_graph.h"
 #include "editor/scene_editor_material_face_placement.h"
 #include "editor/scene_editor_material_stack.h"
 #include "import/runtime_scene_bridge.h"
 #include "render/runtime_material_texture_stack_3d.h"
+#include "render/runtime_material_graph_3d.h"
 #include "render/runtime_material_authored_texture_3d.h"
 
 #include <json-c/json.h>
@@ -43,6 +45,80 @@ static void scene_editor_runtime_scene_authored_manifest_write_path(
         return;
     }
     snprintf(out_path, out_path_size, "%s", manifest_path);
+}
+
+static bool scene_editor_runtime_scene_path_is_absolute(const char* path) {
+    return path && path[0] == '/';
+}
+
+static bool scene_editor_runtime_scene_authored_manifest_is_under_scene_dir(
+    const char* runtime_scene_path,
+    const char* manifest_path,
+    char* out_relative_path,
+    size_t out_relative_path_size) {
+    char scene_dir[4096];
+    size_t scene_dir_len = 0u;
+    if (out_relative_path && out_relative_path_size > 0u) {
+        out_relative_path[0] = '\0';
+    }
+    if (!runtime_scene_path || !runtime_scene_path[0] || !manifest_path || !manifest_path[0] ||
+        !scene_editor_runtime_scene_path_is_absolute(manifest_path) ||
+        !out_relative_path || out_relative_path_size == 0u) {
+        return false;
+    }
+    if (core_scene_dirname(runtime_scene_path, scene_dir, sizeof(scene_dir)).code != CORE_OK) {
+        return false;
+    }
+    scene_dir_len = strlen(scene_dir);
+    if (scene_dir_len == 0u ||
+        strncmp(manifest_path, scene_dir, scene_dir_len) != 0 ||
+        manifest_path[scene_dir_len] != '/') {
+        return false;
+    }
+    snprintf(out_relative_path, out_relative_path_size, "%s", manifest_path + scene_dir_len + 1u);
+    return out_relative_path[0] != '\0';
+}
+
+static void scene_editor_runtime_scene_authored_texture_add_path_fields(
+    json_object* authored_texture,
+    const char* runtime_scene_path,
+    const char* manifest_path) {
+    char manifest_write_path[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
+    if (!authored_texture || !manifest_path || !manifest_path[0]) return;
+    if (scene_editor_runtime_scene_authored_manifest_is_under_scene_dir(
+            runtime_scene_path,
+            manifest_path,
+            manifest_write_path,
+            sizeof(manifest_write_path))) {
+        json_object_object_add(authored_texture,
+                               "manifest_path",
+                               json_object_new_string(manifest_write_path));
+        json_object_object_add(authored_texture,
+                               "path_scope",
+                               json_object_new_string("scene_relative"));
+        return;
+    }
+    if (scene_editor_runtime_scene_path_is_absolute(manifest_path)) {
+        json_object_object_add(authored_texture,
+                               "path_scope",
+                               json_object_new_string("local_absolute"));
+        json_object_object_add(authored_texture,
+                               "local_manifest_path",
+                               json_object_new_string(manifest_path));
+        return;
+    }
+    scene_editor_runtime_scene_authored_manifest_write_path(runtime_scene_path,
+                                                            manifest_path,
+                                                            manifest_write_path,
+                                                            sizeof(manifest_write_path));
+    json_object_object_add(authored_texture,
+                           "manifest_path",
+                           json_object_new_string(manifest_write_path[0]
+                                                      ? manifest_write_path
+                                                      : manifest_path));
+    json_object_object_add(authored_texture,
+                           "path_scope",
+                           json_object_new_string("scene_relative"));
 }
 
 static void scene_editor_runtime_scene_diag(char* out_diagnostics,
@@ -275,6 +351,15 @@ static json_object* scene_editor_runtime_scene_material_stack_json(int scene_obj
     return stack_obj;
 }
 
+static json_object* scene_editor_runtime_scene_material_graph_json(int scene_object_index) {
+    RuntimeMaterialGraphDocument document;
+    if (scene_object_index < 0 || scene_object_index >= sceneSettings.objectCount) return NULL;
+    if (!SceneEditorMaterialGraphGetObjectGraph(scene_object_index, &document)) {
+        return NULL;
+    }
+    return RuntimeMaterialGraphDocumentToJsonObject(&document, true);
+}
+
 static json_object* scene_editor_runtime_scene_build_object_materials_json(void) {
     json_object* object_materials = json_object_new_array();
     int i = 0;
@@ -305,7 +390,6 @@ static json_object* scene_editor_runtime_scene_build_object_materials_json(void)
                                json_object_new_double(sceneSettings.sceneObjects[i].emissiveStrength));
         {
             char manifest_path[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
-            char manifest_write_path[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
             char binding_mode[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MODE_CAPACITY];
             char invalid_reason[RUNTIME_MATERIAL_AUTHORED_TEXTURE_REASON_CAPACITY];
             int face_count = 0;
@@ -321,15 +405,9 @@ static json_object* scene_editor_runtime_scene_build_object_materials_json(void)
                     json_object_put(entry);
                     return NULL;
                 }
-                scene_editor_runtime_scene_authored_manifest_write_path(animSettings.runtimeScenePath,
-                                                                        manifest_path,
-                                                                        manifest_write_path,
-                                                                        sizeof(manifest_write_path));
-                json_object_object_add(authored_texture,
-                                       "manifest_path",
-                                       json_object_new_string(manifest_write_path[0]
-                                                                  ? manifest_write_path
-                                                                  : manifest_path));
+                scene_editor_runtime_scene_authored_texture_add_path_fields(authored_texture,
+                                                                            animSettings.runtimeScenePath,
+                                                                            manifest_path);
                 json_object_object_add(authored_texture,
                                        "binding_mode",
                                        json_object_new_string(binding_mode[0] ? binding_mode
@@ -349,19 +427,18 @@ static json_object* scene_editor_runtime_scene_build_object_materials_json(void)
                     json_object_put(entry);
                     return NULL;
                 }
-                scene_editor_runtime_scene_authored_manifest_write_path(animSettings.runtimeScenePath,
-                                                                        manifest_path,
-                                                                        manifest_write_path,
-                                                                        sizeof(manifest_write_path));
-                json_object_object_add(authored_texture,
-                                       "manifest_path",
-                                       json_object_new_string(manifest_write_path[0]
-                                                                  ? manifest_write_path
-                                                                  : manifest_path));
+                scene_editor_runtime_scene_authored_texture_add_path_fields(authored_texture,
+                                                                            animSettings.runtimeScenePath,
+                                                                            manifest_path);
                 json_object_object_add(authored_texture,
                                        "binding_mode",
                                        json_object_new_string(binding_mode[0] ? binding_mode
                                                                               : "override"));
+                if (invalid_reason[0]) {
+                    json_object_object_add(authored_texture,
+                                           "invalid_reason",
+                                           json_object_new_string(invalid_reason));
+                }
                 json_object_object_add(entry, "authored_texture", authored_texture);
             } else {
                 json_object_object_add(entry, "authored_texture", json_object_new_null());
@@ -389,8 +466,10 @@ static json_object* scene_editor_runtime_scene_build_object_materials_json(void)
                 face_count > 0;
             json_object* procedural_texture = NULL;
             json_object* face_placements = NULL;
+            json_object* material_graph = NULL;
             json_object* material_texture_stack = NULL;
-            if (!has_procedural_texture) {
+            bool has_material_graph = SceneEditorMaterialGraphHasObjectGraph(i);
+            if (!has_procedural_texture && !has_material_graph) {
                 json_object_array_add(object_materials, entry);
                 continue;
             }
@@ -404,6 +483,10 @@ static json_object* scene_editor_runtime_scene_build_object_materials_json(void)
                 return NULL;
             }
             material_texture_stack = scene_editor_runtime_scene_material_stack_json(i);
+            material_graph = scene_editor_runtime_scene_material_graph_json(i);
+            if (material_graph) {
+                json_object_object_add(entry, "material_graph", material_graph);
+            }
             if (material_texture_stack) {
                 json_object_object_add(entry, "material_texture_stack", material_texture_stack);
             }

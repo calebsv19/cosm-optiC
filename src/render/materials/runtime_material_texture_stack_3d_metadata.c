@@ -365,6 +365,39 @@ RuntimeMaterialTextureStack RuntimeMaterialTextureStackEmpty(void) {
     return stack;
 }
 
+static bool runtime_material_texture_stack_layer_id_seen(const RuntimeMaterialTextureStack* stack,
+                                                         int before_index,
+                                                         const char* layer_id) {
+    if (!stack || !layer_id || !layer_id[0]) return false;
+    for (int i = 0; i < before_index; ++i) {
+        if (stack->layers[i].layerId[0] &&
+            strcmp(stack->layers[i].layerId, layer_id) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void runtime_material_texture_stack_make_indexed_layer_id(
+    RuntimeMaterialTextureLayer* layer,
+    int layer_index) {
+    char base[RUNTIME_MATERIAL_TEXTURE_LAYER_ID_SIZE];
+    int suffix_len = 0;
+    int base_limit = 0;
+    if (!layer) return;
+    runtime_material_texture_stack_copy_text(base, sizeof(base), layer->layerId);
+    suffix_len = snprintf(NULL, 0, "_%d", layer_index);
+    if (suffix_len < 0) suffix_len = 0;
+    base_limit = (int)sizeof(layer->layerId) - suffix_len - 1;
+    if (base_limit < 1) base_limit = 1;
+    snprintf(layer->layerId,
+             sizeof(layer->layerId),
+             "%.*s_%d",
+             base_limit,
+             base,
+             layer_index);
+}
+
 RuntimeMaterialTextureStack RuntimeMaterialTextureStackNormalize(
     RuntimeMaterialTextureStack stack) {
     if (stack.layerCount < 0) {
@@ -375,6 +408,12 @@ RuntimeMaterialTextureStack RuntimeMaterialTextureStackNormalize(
     }
     for (int i = 0; i < stack.layerCount; ++i) {
         stack.layers[i] = RuntimeMaterialTextureLayerNormalize(stack.layers[i]);
+        if (runtime_material_texture_stack_layer_id_seen(&stack, i, stack.layers[i].layerId)) {
+            runtime_material_texture_stack_make_indexed_layer_id(&stack.layers[i], i);
+            while (runtime_material_texture_stack_layer_id_seen(&stack, i, stack.layers[i].layerId)) {
+                runtime_material_texture_stack_make_indexed_layer_id(&stack.layers[i], i);
+            }
+        }
     }
     for (int i = stack.layerCount; i < RUNTIME_MATERIAL_TEXTURE_STACK_MAX_LAYERS; ++i) {
         memset(&stack.layers[i], 0, sizeof(stack.layers[i]));

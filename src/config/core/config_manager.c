@@ -4,9 +4,11 @@
 #include "config/config_scene_path_io.h"
 #include "config/core/config_runtime_paths.h"
 #include "app/data_paths.h"
+#include "editor/scene_editor_material_graph.h"
 #include "editor/scene_editor_material_face_placement.h"
 #include "editor/scene_editor_material_stack.h"
 #include "render/ray_tracing_integrator_catalog.h"
+#include "render/runtime_material_authored_texture_3d.h"
 #include "render/runtime_material_texture_stack_3d.h"
 #include "scene/object_manager.h"
 #include "material/material_manager.h"
@@ -273,7 +275,11 @@ void SaveSceneConfig(void) {
         json_object_object_add(jsonObj, "textureSeed", json_object_new_int(obj->textureSeed));
         {
             struct json_object* materialTextureStack = ConfigSaveMaterialTextureStackForObject(i);
+            struct json_object* materialGraph = ConfigSaveMaterialGraphForObject(i);
             struct json_object* facePlacements = SaveMaterialFacePlacementsForObject(i);
+            if (materialGraph) {
+                json_object_object_add(jsonObj, "materialGraph", materialGraph);
+            }
             if (materialTextureStack) {
                 json_object_object_add(jsonObj, "materialTextureStack", materialTextureStack);
             }
@@ -564,6 +570,8 @@ void LoadSceneObjects(struct json_object* config) {
     printf("DEBUG: Loading Scene Objects...\n");
     SceneEditorMaterialFacePlacementResetAll();
     SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
 
     struct json_object *objects;
     if (json_object_object_get_ex(config, "objects", &objects)) {
@@ -576,6 +584,7 @@ void LoadSceneObjects(struct json_object* config) {
 
             LoadObjectProperties(obj, sceneObj);
             ConfigLoadMaterialTextureStack(obj, i);
+            ConfigLoadMaterialGraph(obj, i);
             LoadMaterialFacePlacements(obj, i);
 
             struct json_object *type, *x, *y, *z, *scale, *rotation, *radius, *numPoints, *baseShapePoints, 

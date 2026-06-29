@@ -353,10 +353,91 @@ static void runtime_material_authored_texture_parse_face_material_intents(
     }
 }
 
+static bool runtime_material_authored_texture_channel_source_supported(const char* source) {
+    if (!source || !source[0]) return false;
+    return strcmp(source, "rgba") == 0 ||
+           strcmp(source, "rgb") == 0 ||
+           strcmp(source, "alpha") == 0 ||
+           strcmp(source, "red") == 0 ||
+           strcmp(source, "green") == 0 ||
+           strcmp(source, "blue") == 0 ||
+           strcmp(source, "luminance") == 0;
+}
+
+static bool runtime_material_authored_texture_parse_material_channels(
+    RuntimeMaterialAuthoredTextureFace* face,
+    json_object* surface,
+    const char* fallback_file_name) {
+    json_object* channels = NULL;
+    size_t channel_count = 0u;
+    if (!face || !surface) return false;
+    if (!json_object_object_get_ex(surface, "material_channels", &channels)) {
+        return true;
+    }
+    if (!channels || !json_object_is_type(channels, json_type_array)) {
+        return false;
+    }
+    channel_count = json_object_array_length(channels);
+    if (channel_count > RUNTIME_MATERIAL_AUTHORED_TEXTURE_MAX_CHANNEL_REFS) {
+        return false;
+    }
+    face->metadata.channelRefCount = 0;
+    for (size_t i = 0u; i < channel_count; ++i) {
+        json_object* entry = json_object_array_get_idx(channels, (int)i);
+        json_object* field = NULL;
+        const char* channel = NULL;
+        const char* source = "rgba";
+        const char* file_name = fallback_file_name;
+        RuntimeMaterialAuthoredTextureChannelRef* ref = NULL;
+        if (!entry || !json_object_is_type(entry, json_type_object)) {
+            return false;
+        }
+        if (!json_object_object_get_ex(entry, "channel", &field) ||
+            !json_object_is_type(field, json_type_string)) {
+            return false;
+        }
+        channel = json_object_get_string(field);
+        if (!RuntimeMaterialAuthoredTextureChannelNameSupported(channel)) {
+            return false;
+        }
+        if (json_object_object_get_ex(entry, "source", &field)) {
+            if (!field || !json_object_is_type(field, json_type_string)) {
+                return false;
+            }
+            source = json_object_get_string(field);
+        }
+        if (!runtime_material_authored_texture_channel_source_supported(source)) {
+            return false;
+        }
+        if (json_object_object_get_ex(entry, "file_name", &field)) {
+            if (!field || !json_object_is_type(field, json_type_string)) {
+                return false;
+            }
+            file_name = json_object_get_string(field);
+        }
+        if (!file_name || !file_name[0]) {
+            return false;
+        }
+        ref = &face->metadata.channelRefs[face->metadata.channelRefCount++];
+        ref->active = true;
+        runtime_material_authored_texture_copy_text(ref->channel,
+                                                    sizeof(ref->channel),
+                                                    channel);
+        runtime_material_authored_texture_copy_text(ref->source,
+                                                    sizeof(ref->source),
+                                                    source);
+        runtime_material_authored_texture_copy_text(ref->fileName,
+                                                    sizeof(ref->fileName),
+                                                    file_name);
+    }
+    return true;
+}
+
 static bool runtime_material_authored_texture_parse_face_metadata(
     RuntimeMaterialAuthoredTextureBinding* binding,
     RuntimeMaterialAuthoredTextureFace* face,
-    json_object* surface) {
+    json_object* surface,
+    const char* file_name) {
     json_object* field = NULL;
     bool has_base_summary = false;
     bool has_overlay_summary = false;
@@ -434,6 +515,9 @@ static bool runtime_material_authored_texture_parse_face_metadata(
     }
     runtime_material_authored_texture_parse_face_material_intents(
         face, surface, !has_base_summary, !has_overlay_summary);
+    if (!runtime_material_authored_texture_parse_material_channels(face, surface, file_name)) {
+        return false;
+    }
     if (json_object_object_get_ex(surface, "layout_offset_x", &field) &&
         (json_object_is_type(field, json_type_double) || json_object_is_type(field, json_type_int))) {
         face->metadata.layoutOffsetX = json_object_get_double(field);
@@ -600,7 +684,10 @@ static bool runtime_material_authored_texture_load_face_array(RuntimeMaterialAut
         face->width = width;
         face->height = height;
         face->rgba = rgba;
-        if (!runtime_material_authored_texture_parse_face_metadata(binding, face, surface)) {
+        if (!runtime_material_authored_texture_parse_face_metadata(binding,
+                                                                   face,
+                                                                   surface,
+                                                                   file_name)) {
             goto fail;
         }
         seen_face_groups[face_group_index] = true;

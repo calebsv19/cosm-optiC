@@ -1,0 +1,56 @@
+{
+  "schema": "ray_tracing_material_proof_summary_v1",
+  "proof_id": "m4_s0_contract_dry_run",
+  "phase": "M4-S0",
+  "route": {
+    "primary": "headless_material_preview",
+    "secondary": "selected_native_render",
+    "secondary_policy": "only when a later slice requires physical transport or imported mesh geometry evidence"
+  },
+  "status": "dry_run_validated",
+  "artifacts": {
+    "request_path": "request.json",
+    "summary_path": "summary.json",
+    "index_path": "index.md",
+    "image_path": "preview.png",
+    "image_status": "dry_run_not_rendered"
+  },
+  "rows": [
+    {
+      "row_id": "contract_base_row",
+      "label": "contract base material row",
+      "material_family": "contract",
+      "base_color": [1.0, 1.0, 1.0],
+      "display_alpha": 1.0,
+      "physical_opacity": "deferred_future_field",
+      "transmission_weight": 0.0,
+      "roughness": 0.5,
+      "reflectivity_floor": 0.04,
+      "specular_weight": 0.5,
+      "ior": 1.5,
+      "derived_dielectric_f0": 0.04,
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": "deferred_unpromoted",
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_route"
+      },
+      "compatibility_bridges": [
+        "legacy_alpha_transparency_bridge",
+        "legacy_reflectivity_f0_floor_bridge"
+      ],
+      "preview_interpretation": "dry-run row; no swatch rendered in M4-S0",
+      "bsdf_interpretation": "IOR-derived dielectric F0 remains canonical unless reflectivity floor raises it",
+      "deferred_status": {
+        "physical_opacity": "not promoted",
+        "authored_dielectric_f0": "not promoted",
+        "metallic": "not inferred from reflectivity"
+      }
+    }
+  ],
+  "readback_notes": [
+    "M4-S0 validates package shape only.",
+    "Later M4 slices must materialize image artifacts and row-specific numeric readback.",
+    "Compatibility bridges remain labeled instead of being reinterpreted as new physical fields."
+  ]
+}

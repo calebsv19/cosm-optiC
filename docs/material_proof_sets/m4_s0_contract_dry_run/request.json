@@ -1,0 +1,40 @@
+{
+  "schema": "ray_tracing_material_proof_package_request_v1",
+  "proof_id": "m4_s0_contract_dry_run",
+  "title": "M4-S0 Material Proof Package Contract Dry Run",
+  "phase": "M4-S0",
+  "route": {
+    "primary": "headless_material_preview",
+    "secondary": "selected_native_render",
+    "secondary_policy": "only when a later slice requires physical transport or imported mesh geometry evidence"
+  },
+  "artifacts": {
+    "request_path": "request.json",
+    "summary_path": "summary.json",
+    "index_path": "index.md",
+    "image_path": "preview.png",
+    "image_status": "dry_run_not_rendered"
+  },
+  "rows": [
+    {
+      "row_id": "contract_base_row",
+      "label": "contract base material row",
+      "material_family": "contract",
+      "source_material": {
+        "base_color": [1.0, 1.0, 1.0],
+        "display_alpha": 1.0,
+        "roughness": 0.5,
+        "reflectivity_floor": 0.04,
+        "specular_weight": 0.5,
+        "ior": 1.5,
+        "transmission_weight": 0.0
+      },
+      "expected_behavior": "row proves package shape only; no visual matrix rendered in M4-S0",
+      "deferred_status": {
+        "physical_opacity": "deferred_future_field",
+        "authored_dielectric_f0": "deferred_future_field",
+        "metallic": "deferred_unpromoted"
+      }
+    }
+  ]
+}

@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 void runtime_material_authored_texture_copy_text(char* dst,
                                                  size_t dst_size,
@@ -25,6 +26,42 @@ void runtime_material_authored_texture_face_metadata_reset(
     for (i = 0; i < RUNTIME_MATERIAL_AUTHORED_TEXTURE_FACE_EDGE_COUNT; ++i) {
         metadata->adjacentFaceGroupIndices[i] = -1;
     }
+}
+
+bool RuntimeMaterialAuthoredTextureChannelNameSupported(const char* channel) {
+    if (!channel || !channel[0]) return false;
+    return RuntimeMaterialAuthoredTextureChannelIsVisual(channel) ||
+           RuntimeMaterialAuthoredTextureChannelIsPhysicalScalar(channel) ||
+           RuntimeMaterialAuthoredTextureChannelIsShadingNormal(channel);
+}
+
+bool RuntimeMaterialAuthoredTextureChannelIsVisual(const char* channel) {
+    if (!channel) return false;
+    return strcmp(channel, "base_color.rgb") == 0 ||
+           strcmp(channel, "base_color.alpha_mask") == 0 ||
+           strcmp(channel, "emission.color") == 0;
+}
+
+bool RuntimeMaterialAuthoredTextureChannelIsPhysicalScalar(const char* channel) {
+    if (!channel) return false;
+    return strcmp(channel, "opacity.coverage") == 0 ||
+           strcmp(channel, "transmission.weight") == 0 ||
+           strcmp(channel, "roughness.scalar") == 0 ||
+           strcmp(channel, "reflectivity.compat") == 0 ||
+           strcmp(channel, "specular.weight") == 0 ||
+           strcmp(channel, "metallic.scalar") == 0 ||
+           strcmp(channel, "emission.strength") == 0;
+}
+
+bool RuntimeMaterialAuthoredTextureChannelIsShadingNormal(const char* channel) {
+    if (!channel) return false;
+    return strcmp(channel, "normal.tangent") == 0 ||
+           strcmp(channel, "bump.height") == 0;
+}
+
+bool RuntimeMaterialAuthoredTextureChannelIsDisplacement(const char* channel) {
+    if (!channel) return false;
+    return strcmp(channel, "displacement.height") == 0;
 }
 
 RuntimeMaterialAuthoredTextureBinding* runtime_material_authored_texture_binding_at(
@@ -96,6 +133,95 @@ bool RuntimeMaterialAuthoredTextureClearBindingForObject(int scene_object_index)
     }
     runtime_material_authored_texture_binding_reset(binding);
     return true;
+}
+
+bool RuntimeMaterialAuthoredTextureGetFaceChannels(
+    int scene_object_index,
+    int face_group_index,
+    RuntimeMaterialAuthoredTextureChannelRef* out_channels,
+    size_t max_channels,
+    int* out_channel_count) {
+    RuntimeMaterialAuthoredTextureBinding* binding =
+        runtime_material_authored_texture_binding_at(scene_object_index);
+    RuntimeMaterialAuthoredTextureFace* face = NULL;
+    int count = 0;
+    if (out_channel_count) {
+        *out_channel_count = 0;
+    }
+    if (!binding || !binding->active || face_group_index < 0 ||
+        face_group_index >= RUNTIME_MATERIAL_AUTHORED_TEXTURE_MAX_FACES) {
+        return false;
+    }
+    face = &binding->baseFaces[face_group_index];
+    if (!face->active || face->metadata.channelRefCount <= 0) {
+        return false;
+    }
+    count = face->metadata.channelRefCount;
+    if (out_channel_count) {
+        *out_channel_count = count;
+    }
+    if (out_channels && max_channels > 0u) {
+        size_t copy_count = (size_t)count < max_channels ? (size_t)count : max_channels;
+        for (size_t i = 0u; i < copy_count; ++i) {
+            out_channels[i] = face->metadata.channelRefs[i];
+        }
+    }
+    return true;
+}
+
+static bool runtime_material_authored_texture_summary_contains(const char* summary,
+                                                               const char* channel) {
+    const char* cursor = summary;
+    size_t channel_len = channel ? strlen(channel) : 0u;
+    if (!summary || !channel || channel_len == 0u) return false;
+    while ((cursor = strstr(cursor, channel)) != NULL) {
+        char before = cursor == summary ? '\0' : cursor[-1];
+        char after = cursor[channel_len];
+        if ((before == '\0' || before == ' ') && (after == '\0' || after == ' ')) {
+            return true;
+        }
+        cursor += channel_len;
+    }
+    return false;
+}
+
+bool RuntimeMaterialAuthoredTextureGetChannelSummary(int scene_object_index,
+                                                     char* out_summary,
+                                                     size_t out_summary_size) {
+    RuntimeMaterialAuthoredTextureBinding* binding =
+        runtime_material_authored_texture_binding_at(scene_object_index);
+    bool wrote = false;
+    if (!out_summary || out_summary_size == 0u) return false;
+    out_summary[0] = '\0';
+    if (!binding || !binding->active) {
+        return false;
+    }
+    for (int face_index = 0; face_index < RUNTIME_MATERIAL_AUTHORED_TEXTURE_MAX_FACES;
+         ++face_index) {
+        RuntimeMaterialAuthoredTextureFace* face = &binding->baseFaces[face_index];
+        if (!face->active || face->metadata.channelRefCount <= 0) {
+            continue;
+        }
+        for (int channel_index = 0; channel_index < face->metadata.channelRefCount;
+             ++channel_index) {
+            const char* channel = face->metadata.channelRefs[channel_index].channel;
+            size_t used = strlen(out_summary);
+            if (!channel[0] ||
+                runtime_material_authored_texture_summary_contains(out_summary, channel)) {
+                continue;
+            }
+            snprintf(out_summary + used,
+                     out_summary_size - used,
+                     "%s%s",
+                     used > 0u ? " " : "",
+                     channel);
+            wrote = true;
+            if (strlen(out_summary) + 2u >= out_summary_size) {
+                return wrote;
+            }
+        }
+    }
+    return wrote;
 }
 
 static void runtime_material_authored_texture_sample_channel(

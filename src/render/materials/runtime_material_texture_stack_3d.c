@@ -128,6 +128,54 @@ static void runtime_material_surface_eval_refresh(RuntimeMaterialSurfaceEval* ev
     }
 }
 
+static bool runtime_material_texture_stack_changed(double a, double b) {
+    return fabs(a - b) > 1e-9;
+}
+
+static void runtime_material_procedural_physical_channels_reset(
+    RuntimeMaterialProceduralPhysicalChannels* channels) {
+    if (!channels) return;
+    memset(channels, 0, sizeof(*channels));
+    channels->opacityCoverage = 1.0;
+}
+
+bool RuntimeMaterialSurfaceEvalProceduralPhysicalChannels(
+    const RuntimeMaterialSurfaceEval* base_eval,
+    const RuntimeMaterialSurfaceEval* surface_eval,
+    RuntimeMaterialProceduralPhysicalChannels* out_channels) {
+    RuntimeMaterialProceduralPhysicalChannels channels;
+    if (!base_eval || !surface_eval || !out_channels) return false;
+    runtime_material_procedural_physical_channels_reset(&channels);
+    channels.layerMask = runtime_material_texture_stack_clamp01(surface_eval->textureMask);
+    channels.roughnessActive =
+        runtime_material_texture_stack_changed(surface_eval->roughness, base_eval->roughness);
+    channels.roughnessScalar = surface_eval->roughness;
+    channels.reflectivityActive =
+        runtime_material_texture_stack_changed(surface_eval->reflectivity,
+                                               base_eval->reflectivity);
+    channels.reflectivityCompat = surface_eval->reflectivity;
+    channels.specularActive =
+        runtime_material_texture_stack_changed(surface_eval->specWeight, base_eval->specWeight);
+    channels.specularWeight = surface_eval->specWeight;
+    channels.diffuseActive =
+        runtime_material_texture_stack_changed(surface_eval->diffuseWeight,
+                                               base_eval->diffuseWeight);
+    channels.diffuseWeight = surface_eval->diffuseWeight;
+    channels.opacityCoverageActive = false;
+    channels.opacityCoverage = 1.0;
+    channels.transmissionWeightActive = false;
+    channels.transmissionWeight = base_eval->transparency;
+    channels.active = surface_eval->active &&
+                      (channels.roughnessActive ||
+                       channels.reflectivityActive ||
+                       channels.specularActive ||
+                       channels.diffuseActive ||
+                       channels.opacityCoverageActive ||
+                       channels.transmissionWeightActive);
+    *out_channels = channels;
+    return channels.active;
+}
+
 typedef struct {
     double u;
     double v;
@@ -673,6 +721,37 @@ bool RuntimeMaterialTextureStackEvaluatePlacedUV(
                                                                       base_eval,
                                                                       out_eval,
                                                                       true);
+}
+
+bool RuntimeMaterialTextureStackEvaluatePhysicalChannelsPlacedUV(
+    const RuntimeMaterialTextureStack* stack,
+    const SceneObject* object,
+    double u,
+    double v,
+    int seed_key,
+    const RuntimeMaterialSurfaceEval* base_eval,
+    RuntimeMaterialSurfaceEval* out_eval,
+    RuntimeMaterialProceduralPhysicalChannels* out_channels) {
+    RuntimeMaterialSurfaceEval eval;
+    bool ok = false;
+    if (out_channels) {
+        runtime_material_procedural_physical_channels_reset(out_channels);
+    }
+    if (!out_eval || !out_channels) return false;
+    memset(&eval, 0, sizeof(eval));
+    ok = RuntimeMaterialTextureStackEvaluatePlacedUV(stack,
+                                                     object,
+                                                     u,
+                                                     v,
+                                                     seed_key,
+                                                     base_eval,
+                                                     &eval);
+    *out_eval = eval;
+    if (!ok) {
+        return false;
+    }
+    (void)RuntimeMaterialSurfaceEvalProceduralPhysicalChannels(base_eval, &eval, out_channels);
+    return out_channels->active;
 }
 
 bool RuntimeMaterialTextureStackEvaluateOverlayPlacedUV(

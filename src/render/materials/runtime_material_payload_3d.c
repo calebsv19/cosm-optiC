@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "config/config_manager.h"
+#include "editor/scene_editor_material_face_metrics.h"
 #include "editor/scene_editor_material_face_placement.h"
 #include "editor/scene_editor_material_stack.h"
 #include "material/material_manager.h"
@@ -45,6 +46,23 @@ static double runtime_material_payload_3d_clamp_positive(double value, double fa
         return value;
     }
     return fallback;
+}
+
+static double runtime_material_payload_3d_legacy_alpha_transparency_bridge(
+    const Material* material,
+    double display_alpha) {
+    if (!material) {
+        return 0.0;
+    }
+    return runtime_material_payload_3d_clamp01(
+        material->transparency * runtime_material_payload_3d_clamp01(display_alpha));
+}
+
+static double runtime_material_payload_3d_legacy_material_ior_fallback(
+    const Material* material,
+    const MaterialBSDF* bsdf) {
+    return material ? runtime_material_payload_3d_clamp_positive(material->ior, 1.0)
+                    : runtime_material_payload_3d_clamp_positive(bsdf ? bsdf->ior : 1.0, 1.0);
 }
 
 static void runtime_material_payload_3d_apply_authored_overlay_material(
@@ -250,6 +268,8 @@ static void runtime_material_payload_3d_apply_texture(
     SceneEditorMaterialFacePlacement face_placement = {0};
     double island_u = 0.0;
     double island_v = 0.0;
+    double stack_u = 0.0;
+    double stack_v = 0.0;
     double object_u = 0.0;
     double object_v = 0.0;
     double authored_alpha = 0.0;
@@ -323,6 +343,15 @@ static void runtime_material_payload_3d_apply_texture(
                                                         hit->baryW,
                                                         &island_u,
                                                         &island_v);
+        stack_u = island_u;
+        stack_v = island_v;
+        SceneEditorMaterialFaceMetricsResolveGroundedUV(hit->primitiveIndex,
+                                                        hit->sceneObjectIndex,
+                                                        face_group_index,
+                                                        island_u,
+                                                        island_v,
+                                                        &stack_u,
+                                                        &stack_v);
         if (RuntimeMaterialAuthoredTextureSampleFace(hit->sceneObjectIndex,
                                                      face_group_index,
                                                      island_u,
@@ -417,8 +446,8 @@ static void runtime_material_payload_3d_apply_texture(
         if (overlay_only) {
             if (!RuntimeMaterialTextureStackEvaluateOverlayPlacedUV(&stack,
                                                                     object,
-                                                                    island_u,
-                                                                    island_v,
+                                                                    stack_u,
+                                                                    stack_v,
                                                                     seed_key,
                                                                     &base_eval,
                                                                     &surface_eval)) {
@@ -430,8 +459,8 @@ static void runtime_material_payload_3d_apply_texture(
         } else {
             if (!RuntimeMaterialTextureStackEvaluatePlacedUV(&stack,
                                                              object,
-                                                             island_u,
-                                                             island_v,
+                                                             stack_u,
+                                                             stack_v,
                                                              seed_key,
                                                              &base_eval,
                                                              &surface_eval)) {
@@ -488,12 +517,10 @@ static bool runtime_material_payload_3d_resolve(int scene_object_index,
     payload.baseColorB = payload.bsdf.baseColorB;
     payload.emissive = payload.bsdf.emissive;
     payload.transparency =
-        material ? runtime_material_payload_3d_clamp01(
-                       material->transparency *
-                       runtime_material_payload_3d_clamp01(object_copy.alpha))
-                 : 0.0;
-    payload.opticalIor = material ? runtime_material_payload_3d_clamp_positive(material->ior, 1.0)
-                                  : runtime_material_payload_3d_clamp_positive(payload.bsdf.ior, 1.0);
+        runtime_material_payload_3d_legacy_alpha_transparency_bridge(material,
+                                                                     object_copy.alpha);
+    payload.opticalIor =
+        runtime_material_payload_3d_legacy_material_ior_fallback(material, &payload.bsdf);
     payload.absorptionDistance =
         material ? runtime_material_payload_3d_clamp_positive(material->absorption_distance, 1.0)
                  : 1.0;

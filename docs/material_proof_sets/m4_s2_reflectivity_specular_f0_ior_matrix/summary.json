@@ -1,0 +1,319 @@
+{
+  "schema": "ray_tracing_material_proof_summary_v1",
+  "proof_id": "m4_s2_reflectivity_specular_f0_ior_matrix",
+  "phase": "M4-S2",
+  "route": {
+    "primary": "headless_material_preview",
+    "secondary": "runtime_lighting_materials_payload_tests",
+    "secondary_status": "source_contract_readback"
+  },
+  "status": "generated",
+  "artifacts": {
+    "request_path": "request.json",
+    "preview_request_path": "material_preview_request.json",
+    "preview_summary_path": "material_preview_summary.json",
+    "summary_path": "summary.json",
+    "index_path": "index.md",
+    "image_path": "preview.bmp",
+    "image_status": "generated"
+  },
+  "source": {
+    "runtime_scene_path": "../../../tests/fixtures/disney_v2_visual_matrix/transparent_interior_stack/scene_runtime.json",
+    "object_id": "rear_blue_panel",
+    "material_preset": "Default",
+    "derived_dielectric_f0_formula": "((ior - 1) / (ior + 1))^2",
+    "source_contract_tests": [
+      "test_runtime_principled_bsdf_conversion_adapter_m2_contract",
+      "test_runtime_material_compatibility_bridges_are_explicit"
+    ]
+  },
+  "rows": [
+    {
+      "row_id": "ior100_ref000_sp025",
+      "label": "IOR 1.00 reflectivity 0.00 specular 0.25",
+      "material_family": "dielectric",
+      "base_color": [
+        0.227451,
+        0.631373,
+        0.964706
+      ],
+      "display_alpha": 1.0,
+      "physical_opacity": "not_exposed_by_preview_route",
+      "transmission_weight": 0.0,
+      "roughness": 0.22,
+      "reflectivity_floor": 0.0,
+      "specular_weight": 0.25,
+      "ior": 1.0,
+      "derived_dielectric_f0": 0.0,
+      "effective_dielectric_f0_after_floor": 0.0,
+      "specular_f0_after_weight": 0.0,
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": 0.0,
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [],
+      "preview_interpretation": "lowest reflectivity preview row; IOR and specular are numeric readback only",
+      "bsdf_interpretation": "IOR-derived F0 is zero; specular weight scales zero",
+      "deferred_status": {
+        "authored_dielectric_f0": "not promoted",
+        "metallic": "not inferred"
+      }
+    },
+    {
+      "row_id": "ior133_ref0015_sp025",
+      "label": "IOR 1.33 reflectivity 0.015 specular 0.25",
+      "material_family": "dielectric",
+      "base_color": [
+        0.227451,
+        0.631373,
+        0.964706
+      ],
+      "display_alpha": 1.0,
+      "physical_opacity": "not_exposed_by_preview_route",
+      "transmission_weight": 0.0,
+      "roughness": 0.22,
+      "reflectivity_floor": 0.015,
+      "specular_weight": 0.25,
+      "ior": 1.33,
+      "derived_dielectric_f0": 0.020059312199524774,
+      "effective_dielectric_f0_after_floor": 0.020059312199524774,
+      "specular_f0_after_weight": 0.005014828049881194,
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": 0.0,
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [
+        "legacy_reflectivity_f0_floor_bridge"
+      ],
+      "preview_interpretation": "low reflectivity floor preview row",
+      "bsdf_interpretation": "IOR-derived F0 remains canonical because reflectivity floor is lower",
+      "deferred_status": {
+        "authored_dielectric_f0": "not promoted",
+        "metallic": "not inferred"
+      }
+    },
+    {
+      "row_id": "ior133_ref018_sp025",
+      "label": "IOR 1.33 reflectivity 0.18 specular 0.25",
+      "material_family": "dielectric",
+      "base_color": [
+        0.227451,
+        0.631373,
+        0.964706
+      ],
+      "display_alpha": 1.0,
+      "physical_opacity": "not_exposed_by_preview_route",
+      "transmission_weight": 0.0,
+      "roughness": 0.22,
+      "reflectivity_floor": 0.18,
+      "specular_weight": 0.25,
+      "ior": 1.33,
+      "derived_dielectric_f0": 0.020059312199524774,
+      "effective_dielectric_f0_after_floor": 0.18,
+      "specular_f0_after_weight": 0.045,
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": 0.0,
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [
+        "legacy_reflectivity_f0_floor_bridge"
+      ],
+      "preview_interpretation": "reflectivity floor visibly raises preview reflectivity",
+      "bsdf_interpretation": "legacy reflectivity floor raises dielectric F0 but does not imply metallic",
+      "deferred_status": {
+        "authored_dielectric_f0": "not promoted",
+        "metallic": "not inferred"
+      }
+    },
+    {
+      "row_id": "ior145_ref002_sp025",
+      "label": "IOR 1.45 reflectivity 0.02 specular 0.25",
+      "material_family": "dielectric",
+      "base_color": [
+        0.227451,
+        0.631373,
+        0.964706
+      ],
+      "display_alpha": 1.0,
+      "physical_opacity": "not_exposed_by_preview_route",
+      "transmission_weight": 0.0,
+      "roughness": 0.22,
+      "reflectivity_floor": 0.02,
+      "specular_weight": 0.25,
+      "ior": 1.45,
+      "derived_dielectric_f0": 0.033735943356934604,
+      "effective_dielectric_f0_after_floor": 0.033735943356934604,
+      "specular_f0_after_weight": 0.008433985839233651,
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": 0.0,
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [
+        "legacy_reflectivity_f0_floor_bridge"
+      ],
+      "preview_interpretation": "low reflectivity floor preview row",
+      "bsdf_interpretation": "IOR 1.45 derived F0 remains canonical because reflectivity floor is lower",
+      "deferred_status": {
+        "authored_dielectric_f0": "not promoted",
+        "metallic": "not inferred"
+      }
+    },
+    {
+      "row_id": "ior180_ref002_sp025",
+      "label": "IOR 1.80 reflectivity 0.02 specular 0.25",
+      "material_family": "dielectric",
+      "base_color": [
+        0.227451,
+        0.631373,
+        0.964706
+      ],
+      "display_alpha": 1.0,
+      "physical_opacity": "not_exposed_by_preview_route",
+      "transmission_weight": 0.0,
+      "roughness": 0.22,
+      "reflectivity_floor": 0.02,
+      "specular_weight": 0.25,
+      "ior": 1.8,
+      "derived_dielectric_f0": 0.08163265306122451,
+      "effective_dielectric_f0_after_floor": 0.08163265306122451,
+      "specular_f0_after_weight": 0.020408163265306128,
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": 0.0,
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [
+        "legacy_reflectivity_f0_floor_bridge"
+      ],
+      "preview_interpretation": "preview reflectivity floor stays low; IOR increase is numeric BSDF readback",
+      "bsdf_interpretation": "higher IOR raises derived F0 without using reflectivity as identity",
+      "deferred_status": {
+        "authored_dielectric_f0": "not promoted",
+        "metallic": "not inferred"
+      }
+    },
+    {
+      "row_id": "ior145_ref004_sp010",
+      "label": "IOR 1.45 reflectivity 0.04 specular 0.10",
+      "material_family": "dielectric",
+      "base_color": [
+        0.227451,
+        0.631373,
+        0.964706
+      ],
+      "display_alpha": 1.0,
+      "physical_opacity": "not_exposed_by_preview_route",
+      "transmission_weight": 0.0,
+      "roughness": 0.22,
+      "reflectivity_floor": 0.04,
+      "specular_weight": 0.1,
+      "ior": 1.45,
+      "derived_dielectric_f0": 0.033735943356934604,
+      "effective_dielectric_f0_after_floor": 0.04,
+      "specular_f0_after_weight": 0.004,
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": 0.0,
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [
+        "legacy_reflectivity_f0_floor_bridge"
+      ],
+      "preview_interpretation": "preview shows reflectivity floor only; specular weight is numeric readback",
+      "bsdf_interpretation": "low specular weight scales lobe strength without redefining F0",
+      "deferred_status": {
+        "authored_dielectric_f0": "not promoted",
+        "metallic": "not inferred"
+      }
+    },
+    {
+      "row_id": "ior145_ref004_sp080",
+      "label": "IOR 1.45 reflectivity 0.04 specular 0.80",
+      "material_family": "dielectric",
+      "base_color": [
+        0.227451,
+        0.631373,
+        0.964706
+      ],
+      "display_alpha": 1.0,
+      "physical_opacity": "not_exposed_by_preview_route",
+      "transmission_weight": 0.0,
+      "roughness": 0.22,
+      "reflectivity_floor": 0.04,
+      "specular_weight": 0.8,
+      "ior": 1.45,
+      "derived_dielectric_f0": 0.033735943356934604,
+      "effective_dielectric_f0_after_floor": 0.04,
+      "specular_f0_after_weight": 0.032,
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": 0.0,
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [
+        "legacy_reflectivity_f0_floor_bridge"
+      ],
+      "preview_interpretation": "same preview reflectivity floor as low-specular row; specular contrast is numeric BSDF readback",
+      "bsdf_interpretation": "higher specular weight scales lobe strength against the same effective F0",
+      "deferred_status": {
+        "authored_dielectric_f0": "not promoted",
+        "metallic": "not inferred"
+      }
+    },
+    {
+      "row_id": "ior180_ref060_sp025",
+      "label": "IOR 1.80 reflectivity 0.60 specular 0.25",
+      "material_family": "dielectric",
+      "base_color": [
+        0.227451,
+        0.631373,
+        0.964706
+      ],
+      "display_alpha": 1.0,
+      "physical_opacity": "not_exposed_by_preview_route",
+      "transmission_weight": 0.0,
+      "roughness": 0.22,
+      "reflectivity_floor": 0.6,
+      "specular_weight": 0.25,
+      "ior": 1.8,
+      "derived_dielectric_f0": 0.08163265306122451,
+      "effective_dielectric_f0_after_floor": 0.6,
+      "specular_f0_after_weight": 0.15,
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": 0.0,
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [
+        "legacy_reflectivity_f0_floor_bridge"
+      ],
+      "preview_interpretation": "high reflectivity preview row for compatibility floor contrast",
+      "bsdf_interpretation": "high dielectric reflectivity floor raises F0 but metallic remains zero",
+      "deferred_status": {
+        "authored_dielectric_f0": "not promoted",
+        "metallic": "not inferred"
+      }
+    }
+  ],
+  "readback_notes": [
+    "This S2 proof uses headless material preview for the reflectivity-floor visual matrix and source-backed numeric readback for IOR/specular semantics.",
+    "The preview request schema exposes reflectivity and roughness, but not IOR or specular weight; those fields are recorded in the proof summary as numeric BSDF contract readback.",
+    "IOR-derived F0 uses ((ior - 1) / (ior + 1))^2.",
+    "The legacy reflectivity floor raises effective dielectric F0 only when it is higher than the IOR-derived value.",
+    "Specular weight scales the lobe/specular F0 contribution and is not the identity of F0.",
+    "High dielectric reflectivity does not infer metallic; metallic remains 0.0 in every row.",
+    "Explicit authored dielectric F0 remains deferred."
+  ]
+}

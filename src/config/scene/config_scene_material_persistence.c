@@ -4,8 +4,10 @@
 #include <string.h>
 
 #include "config/config_manager.h"
+#include "editor/scene_editor_material_graph.h"
 #include "editor/scene_editor_material_face_placement.h"
 #include "editor/scene_editor_material_stack.h"
+#include "render/runtime_material_graph_3d.h"
 #include "render/runtime_material_texture_stack_3d.h"
 
 static bool ConfigJsonGetDouble(struct json_object* obj, const char* key, double* out_value) {
@@ -150,6 +152,15 @@ struct json_object* ConfigSaveMaterialTextureStackForObject(int scene_object_ind
     }
     json_object_object_add(stack_obj, "layers", layers);
     return stack_obj;
+}
+
+struct json_object* ConfigSaveMaterialGraphForObject(int scene_object_index) {
+    RuntimeMaterialGraphDocument document;
+    if (scene_object_index < 0 || scene_object_index >= sceneSettings.objectCount) return NULL;
+    if (!SceneEditorMaterialGraphGetObjectGraph(scene_object_index, &document)) {
+        return NULL;
+    }
+    return RuntimeMaterialGraphDocumentToJsonObject(&document, false);
 }
 
 struct json_object* SaveMaterialFacePlacementsForObject(int scene_object_index) {
@@ -338,11 +349,41 @@ bool ConfigLoadMaterialTextureStack(struct json_object* obj, int scene_object_in
     return SceneEditorMaterialStackSetObjectStack(scene_object_index, &stack);
 }
 
+bool ConfigLoadMaterialGraph(struct json_object* obj, int scene_object_index) {
+    struct json_object* graph_obj = NULL;
+    RuntimeMaterialGraphDocument document;
+    RuntimeMaterialGraphCompileResult compile_result;
+    if (!obj || scene_object_index < 0) return false;
+    if (!json_object_object_get_ex(obj, "materialGraph", &graph_obj)) {
+        json_object_object_get_ex(obj, "material_graph", &graph_obj);
+    }
+    if (!graph_obj || !json_object_is_type(graph_obj, json_type_object)) {
+        SceneEditorMaterialGraphClearObjectGraph(scene_object_index);
+        return false;
+    }
+    memset(&document, 0, sizeof(document));
+    memset(&compile_result, 0, sizeof(compile_result));
+    if (!RuntimeMaterialGraphDocumentFromJsonObject(graph_obj, &document)) {
+        SceneEditorMaterialGraphClearObjectGraph(scene_object_index);
+        return false;
+    }
+    if (!SceneEditorMaterialGraphSetObjectGraph(scene_object_index,
+                                                &document,
+                                                &compile_result)) {
+        SceneEditorMaterialGraphClearObjectGraph(scene_object_index);
+        return false;
+    }
+    return true;
+}
+
 void LoadMaterialFacePlacements(struct json_object* obj, int scene_object_index) {
     struct json_object* placements = NULL;
     size_t count = 0u;
     if (!obj || scene_object_index < 0) return;
-    if (!json_object_object_get_ex(obj, "materialFacePlacements", &placements) ||
+    if (!json_object_object_get_ex(obj, "materialFacePlacements", &placements)) {
+        json_object_object_get_ex(obj, "material_face_placements", &placements);
+    }
+    if (!placements ||
         !json_object_is_type(placements, json_type_array)) {
         return;
     }
@@ -352,7 +393,10 @@ void LoadMaterialFacePlacements(struct json_object* obj, int scene_object_index)
         struct json_object* face_group = NULL;
         SceneEditorMaterialFacePlacement placement;
         if (!entry || !json_object_is_type(entry, json_type_object)) continue;
-        if (!json_object_object_get_ex(entry, "faceGroupIndex", &face_group) ||
+        if (!json_object_object_get_ex(entry, "faceGroupIndex", &face_group)) {
+            json_object_object_get_ex(entry, "face_group_index", &face_group);
+        }
+        if (!face_group ||
             !json_object_is_type(face_group, json_type_int)) {
             continue;
         }
@@ -369,9 +413,13 @@ void LoadMaterialFacePlacements(struct json_object* obj, int scene_object_index)
         placement.params =
             RuntimeMaterialTexture3DParamsFromObject(&sceneSettings.sceneObjects[scene_object_index]);
         ConfigJsonGetInt(entry, "layerIndex", &placement.layerIndex);
+        ConfigJsonGetInt(entry, "layer_index", &placement.layerIndex);
         {
             struct json_object* layer_id = NULL;
-            if (json_object_object_get_ex(entry, "layerId", &layer_id) &&
+            if (!json_object_object_get_ex(entry, "layerId", &layer_id)) {
+                json_object_object_get_ex(entry, "layer_id", &layer_id);
+            }
+            if (layer_id &&
                 json_object_is_type(layer_id, json_type_string)) {
                 snprintf(placement.layerId,
                          sizeof(placement.layerId),
@@ -380,8 +428,11 @@ void LoadMaterialFacePlacements(struct json_object* obj, int scene_object_index)
             }
         }
         ConfigJsonGetInt(entry, "textureId", &placement.textureId);
+        ConfigJsonGetInt(entry, "texture_id", &placement.textureId);
         ConfigJsonGetDouble(entry, "offsetU", &placement.offsetU);
+        ConfigJsonGetDouble(entry, "offset_u", &placement.offsetU);
         ConfigJsonGetDouble(entry, "offsetV", &placement.offsetV);
+        ConfigJsonGetDouble(entry, "offset_v", &placement.offsetV);
         ConfigJsonGetDouble(entry, "scale", &placement.scale);
         ConfigJsonGetDouble(entry, "strength", &placement.strength);
         ConfigJsonGetDouble(entry, "rotation", &placement.rotation);

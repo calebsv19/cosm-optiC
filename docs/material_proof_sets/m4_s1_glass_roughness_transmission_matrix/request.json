@@ -1,0 +1,157 @@
+{
+  "schema": "ray_tracing_material_proof_package_request_v1",
+  "proof_id": "m4_s1_glass_roughness_transmission_matrix",
+  "title": "M4-S1 Glass Roughness And Transmission Matrix",
+  "phase": "M4-S1",
+  "route": {
+    "primary": "headless_material_preview",
+    "secondary": "selected_native_render",
+    "secondary_status": "deferred_not_required_for_s1_preview_matrix",
+    "secondary_policy": "native render is reserved for later transport-visible proof if preview/readback is insufficient"
+  },
+  "source": {
+    "runtime_scene_path": "../../../tests/fixtures/disney_v2_visual_matrix/transparent_interior_stack/scene_runtime.json",
+    "object_id": "glass_front",
+    "material_preset": "Transparent",
+    "material_preset_path": "../../../config/materials/transparent.json"
+  },
+  "artifacts": {
+    "request_path": "request.json",
+    "preview_request_path": "material_preview_request.json",
+    "preview_summary_path": "material_preview_summary.json",
+    "summary_path": "summary.json",
+    "index_path": "index.md",
+    "image_path": "preview.bmp",
+    "image_status": "generated"
+  },
+  "rows": [
+    {
+      "row_id": "r00_smooth_alpha085",
+      "label": "smooth glass alpha 0.85",
+      "material_family": "glass",
+      "source_material": {
+        "roughness": 0.04,
+        "display_alpha": 0.85,
+        "transmission_weight": 0.6375,
+        "ior": 1.45
+      },
+      "expected_behavior": "smooth highest-clarity preview row at fixed compatibility transmission",
+      "deferred_status": {
+        "caustics": "qualitative_deferred",
+        "physical_opacity": "coverage_conceptual_not_promoted"
+      }
+    },
+    {
+      "row_id": "r01_low_alpha085",
+      "label": "low roughness glass alpha 0.85",
+      "material_family": "glass",
+      "source_material": {
+        "roughness": 0.12,
+        "display_alpha": 0.85,
+        "transmission_weight": 0.6375,
+        "ior": 1.45
+      },
+      "expected_behavior": "slightly softened highlight relative to smooth row",
+      "deferred_status": {
+        "caustics": "qualitative_deferred",
+        "physical_opacity": "coverage_conceptual_not_promoted"
+      }
+    },
+    {
+      "row_id": "r02_soft_alpha085",
+      "label": "soft glass alpha 0.85",
+      "material_family": "glass",
+      "source_material": {
+        "roughness": 0.24,
+        "display_alpha": 0.85,
+        "transmission_weight": 0.6375,
+        "ior": 1.45
+      },
+      "expected_behavior": "visible roughness increase at same compatibility transmission",
+      "deferred_status": {
+        "caustics": "qualitative_deferred",
+        "physical_opacity": "coverage_conceptual_not_promoted"
+      }
+    },
+    {
+      "row_id": "r03_mid_alpha085",
+      "label": "mid rough glass alpha 0.85",
+      "material_family": "glass",
+      "source_material": {
+        "roughness": 0.4,
+        "display_alpha": 0.85,
+        "transmission_weight": 0.6375,
+        "ior": 1.45
+      },
+      "expected_behavior": "mid rough glass response without changing display alpha",
+      "deferred_status": {
+        "caustics": "qualitative_deferred",
+        "physical_opacity": "coverage_conceptual_not_promoted"
+      }
+    },
+    {
+      "row_id": "r04_rough_alpha085",
+      "label": "rough glass alpha 0.85",
+      "material_family": "glass",
+      "source_material": {
+        "roughness": 0.68,
+        "display_alpha": 0.85,
+        "transmission_weight": 0.6375,
+        "ior": 1.45
+      },
+      "expected_behavior": "rough glass/frosting contrast at same alpha bridge",
+      "deferred_status": {
+        "caustics": "qualitative_deferred",
+        "physical_opacity": "coverage_conceptual_not_promoted"
+      }
+    },
+    {
+      "row_id": "r05_frosted_alpha085",
+      "label": "frosted glass alpha 0.85",
+      "material_family": "glass",
+      "source_material": {
+        "roughness": 1.0,
+        "display_alpha": 0.85,
+        "transmission_weight": 0.6375,
+        "ior": 1.45
+      },
+      "expected_behavior": "maximum roughness row in bounded sweep",
+      "deferred_status": {
+        "caustics": "qualitative_deferred",
+        "physical_opacity": "coverage_conceptual_not_promoted"
+      }
+    },
+    {
+      "row_id": "t00_alpha100",
+      "label": "display alpha 1.00",
+      "material_family": "glass",
+      "source_material": {
+        "roughness": 0.18,
+        "display_alpha": 1.0,
+        "transmission_weight": 0.75,
+        "ior": 1.45
+      },
+      "expected_behavior": "highest compatibility transmission in alpha contrast set",
+      "deferred_status": {
+        "caustics": "qualitative_deferred",
+        "physical_opacity": "coverage_conceptual_not_promoted"
+      }
+    },
+    {
+      "row_id": "t01_alpha075",
+      "label": "display alpha 0.75",
+      "material_family": "glass",
+      "source_material": {
+        "roughness": 0.18,
+        "display_alpha": 0.75,
+        "transmission_weight": 0.5625,
+        "ior": 1.45
+      },
+      "expected_behavior": "reduced compatibility transmission from display alpha bridge",
+      "deferred_status": {
+        "caustics": "qualitative_deferred",
+        "physical_opacity": "coverage_conceptual_not_promoted"
+      }
+    }
+  ]
+}

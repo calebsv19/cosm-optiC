@@ -87,7 +87,8 @@ int MaterialEditorDrawGroupList(SDL_Renderer* renderer,
     header_rect = (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, 18};
     snprintf(s_group_header_label,
              sizeof(s_group_header_label),
-             "Face Groups %d/%d selected",
+             "%s Groups %d/%d selected",
+             MaterialEditorPanelGroupLabel(MATERIAL_EDITOR_PANEL_GROUP_FACE_OVERRIDE),
              selected_count,
              group_count);
     if (selected_count > 0 && content_bounds.w >= 180) {
@@ -238,7 +239,8 @@ int MaterialEditorDrawLayerList(SDL_Renderer* renderer,
 
     snprintf(header_text,
              sizeof(header_text),
-             "Layers %d %s",
+             "%s %d %s",
+             MaterialEditorPanelGroupLabel(MATERIAL_EDITOR_PANEL_GROUP_BASE_LAYER),
              stack.layerCount,
              SceneEditorMaterialStackHasObjectStack(focused_object_index) ? "v2" : "legacy");
     RenderLabelTextLeft(renderer,
@@ -376,8 +378,10 @@ int MaterialEditorDrawLayerKindButtons(SDL_Renderer* renderer,
     MATERIAL_EDITOR_SECTION_LABEL(renderer,
                                   content_bounds,
                                   cursor_y,
-                                  RuntimeMaterialTextureLayerKindIsBase(layer.kind) ? "Base Type"
-                                                                                    : "Overlay Type",
+                                  RuntimeMaterialTextureLayerKindIsBase(layer.kind)
+                                      ? MaterialEditorPanelGroupLabel(
+                                            MATERIAL_EDITOR_PANEL_GROUP_BASE_LAYER)
+                                      : "Overlay Layer",
                                   palette);
     cursor_y += 15;
     button_w = (content_bounds.w - MATERIAL_EDITOR_BUTTON_GAP * 3) /

@@ -32,6 +32,23 @@ static double runtime_principled_bsdf_3d_luma(double r, double g, double b) {
     return runtime_principled_bsdf_3d_clamp01((0.2126 * r) + (0.7152 * g) + (0.0722 * b));
 }
 
+static void runtime_principled_bsdf_3d_apply_legacy_transparency_bridge(
+    RuntimePrincipledBSDF3D* bsdf,
+    double transparency) {
+    double transmission_weight = runtime_principled_bsdf_3d_clamp01(transparency);
+    if (!bsdf) return;
+    bsdf->opacity = 1.0 - transmission_weight;
+    bsdf->transmissionWeight = transmission_weight;
+}
+
+static void runtime_principled_bsdf_3d_apply_legacy_reflectivity_f0_floor(
+    RuntimePrincipledBSDF3D* bsdf) {
+    if (!bsdf) return;
+    if (bsdf->reflectivity > bsdf->dielectricF0) {
+        bsdf->dielectricF0 = bsdf->reflectivity;
+    }
+}
+
 RuntimePrincipledBSDF3D RuntimePrincipledBSDF3D_Default(void) {
     RuntimePrincipledBSDF3D bsdf;
     memset(&bsdf, 0, sizeof(bsdf));
@@ -88,9 +105,7 @@ RuntimePrincipledBSDF3D RuntimePrincipledBSDF3D_Normalize(
         bsdf.dielectricF0 = dielectric_f0;
     }
     bsdf.dielectricF0 = runtime_principled_bsdf_3d_clamp01(bsdf.dielectricF0);
-    if (bsdf.reflectivity > bsdf.dielectricF0) {
-        bsdf.dielectricF0 = bsdf.reflectivity;
-    }
+    runtime_principled_bsdf_3d_apply_legacy_reflectivity_f0_floor(&bsdf);
 
     bsdf.diffuseWeight *= (1.0 - bsdf.metallic) * (1.0 - bsdf.transmissionWeight);
     weight_sum = bsdf.diffuseWeight + bsdf.specularWeight;
@@ -152,8 +167,9 @@ RuntimePrincipledBSDF3D RuntimePrincipledBSDF3D_FromMaterialPayload(
     bsdf.baseColorG = payload->baseColorG;
     bsdf.baseColorB = payload->baseColorB;
     bsdf.ior = payload->opticalIor > 0.0 ? payload->opticalIor : bsdf.ior;
-    bsdf.opacity = 1.0 - runtime_principled_bsdf_3d_clamp01(payload->transparency);
-    bsdf.transmissionWeight = runtime_principled_bsdf_3d_clamp01(payload->transparency);
+    bsdf.metallic = 0.0;
+    bsdf.dielectricF0 = 0.0;
+    runtime_principled_bsdf_3d_apply_legacy_transparency_bridge(&bsdf, payload->transparency);
     bsdf.emissiveR = payload->baseColorR;
     bsdf.emissiveG = payload->baseColorG;
     bsdf.emissiveB = payload->baseColorB;
@@ -175,8 +191,10 @@ RuntimePrincipledBSDF3D RuntimePrincipledBSDF3D_FromSurfaceEval(
     bsdf.specularWeight = surface_eval->specWeight;
     bsdf.diffuseWeight = surface_eval->diffuseWeight;
     bsdf.ior = ior;
-    bsdf.opacity = 1.0 - runtime_principled_bsdf_3d_clamp01(surface_eval->transparency);
-    bsdf.transmissionWeight = runtime_principled_bsdf_3d_clamp01(surface_eval->transparency);
+    bsdf.metallic = 0.0;
+    bsdf.dielectricF0 = 0.0;
+    runtime_principled_bsdf_3d_apply_legacy_transparency_bridge(&bsdf,
+                                                                surface_eval->transparency);
     bsdf.emissiveR = surface_eval->colorR;
     bsdf.emissiveG = surface_eval->colorG;
     bsdf.emissiveB = surface_eval->colorB;

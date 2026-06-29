@@ -45,8 +45,56 @@ void HandleMaterialEditorEvents(SDL_Event* event) {
         if (MaterialEditorFacePreviewHandleEvent(event)) {
             return;
         }
-        if (MaterialEditorAuthoredTextureBindingHandleEvent(event,
-                                                            MaterialEditorResolveFocusedObjectIndex())) {
+        for (int i = 0; i < MATERIAL_EDITOR_RECIPE_MENU_MAX_ITEMS; ++i) {
+            if (material_editor_point_in_rect(mx, my, &s_recipe_menu_item_rects[i])) {
+                MaterialEditorApplyRecipeOptionForFocused(MaterialEditorGetRecipeMenuAxis(), i);
+                return;
+            }
+        }
+        if (material_editor_point_in_rect(mx,
+                                          my,
+                                          &s_material_editor_compact_layout_rects.identity_disclosure)) {
+            MaterialEditorSetRecipeMenuAxis(MATERIAL_EDITOR_RECIPE_AXIS_NONE);
+            MaterialEditorToggleIdentityPopover();
+            return;
+        }
+        for (int i = 0; i < MATERIAL_EDITOR_RECIPE_ACTION_COUNT; ++i) {
+            if (material_editor_point_in_rect(mx, my, &s_recipe_action_rects[i])) {
+                MaterialEditorToggleRecipeMenuAxis((MaterialEditorRecipeAxis)i);
+                return;
+            }
+        }
+        if (MaterialEditorGetRecipeMenuAxis() != MATERIAL_EDITOR_RECIPE_AXIS_NONE) {
+            MaterialEditorSetRecipeMenuAxis(MATERIAL_EDITOR_RECIPE_AXIS_NONE);
+        }
+        if (material_editor_point_in_rect(mx,
+                                          my,
+                                          &s_material_editor_compact_layout_rects.identity_header)) {
+            MaterialEditorToggleIdentityPopover();
+            return;
+        }
+        if (s_material_editor_compact_layout_rects.identity_popover_visible) {
+            if (material_editor_point_in_rect(mx,
+                                              my,
+                                              &s_material_editor_compact_layout_rects.identity_popover)) {
+                return;
+            }
+            MaterialEditorSetIdentityPopoverOpen(false);
+            return;
+        }
+        for (int i = 0; i < MATERIAL_EDITOR_SUBPANE_COUNT; ++i) {
+            if (material_editor_point_in_rect(mx,
+                                              my,
+                                              &s_material_editor_compact_layout_rects.tab_rects[i])) {
+                MaterialEditorSetActiveSubPane((MaterialEditorSubPane)i);
+                MaterialEditorSetIdentityPopoverOpen(false);
+                return;
+            }
+        }
+        if (MaterialEditorGetActiveSubPane() == MATERIAL_EDITOR_SUBPANE_TEXTURES &&
+            MaterialEditorAuthoredTextureBindingHandleEvent(
+                event,
+                MaterialEditorResolveFocusedObjectIndex())) {
             return;
         }
         if (material_editor_point_in_rect(mx, my, &s_texture_none_rect)) {
@@ -72,6 +120,24 @@ void HandleMaterialEditorEvents(SDL_Event* event) {
         if (material_editor_point_in_rect(mx, my, &s_copy_face_rect)) {
             MaterialEditorCopyActiveFacePlacementToSelected();
             return;
+        }
+        if (material_editor_point_in_rect(mx, my, &s_proof_readback_rect)) {
+            MaterialEditorPrimeProofReadbackForFocused();
+            return;
+        }
+        for (int i = 0; i < MATERIAL_EDITOR_GRAPH_ACTION_COUNT; ++i) {
+            if (material_editor_point_in_rect(mx, my, &s_graph_action_rects[i])) {
+                if (i == 0) {
+                    MaterialEditorEnsureGraphForFocused();
+                } else if (i == 1) {
+                    MaterialEditorAddGraphLayerNodeForFocused();
+                } else if (i == 2) {
+                    MaterialEditorAddGraphChannelNodeForFocused();
+                } else if (i == 3) {
+                    MaterialEditorClearGraphForFocused();
+                }
+                return;
+            }
         }
         for (int i = 0; i < MATERIAL_EDITOR_LAYER_ACTION_COUNT; ++i) {
             if (material_editor_point_in_rect(mx, my, &s_layer_action_rects[i])) {
@@ -181,14 +247,42 @@ MaterialEditorHitRegion MaterialEditorHitRegionAtPoint(int mx, int my) {
     if (MaterialEditorFacePreviewHitTest(mx, my)) {
         return MATERIAL_EDITOR_HIT_CONTROLS;
     }
+    for (int i = 0; i < MATERIAL_EDITOR_RECIPE_MENU_MAX_ITEMS; ++i) {
+        if (material_editor_point_in_rect(mx, my, &s_recipe_menu_item_rects[i])) {
+            return MATERIAL_EDITOR_HIT_CONTROLS;
+        }
+    }
+    if (material_editor_point_in_rect(mx, my, &s_material_editor_compact_layout_rects.identity_header) ||
+        material_editor_point_in_rect(mx, my, &s_material_editor_compact_layout_rects.identity_disclosure) ||
+        material_editor_point_in_rect(mx, my, &s_material_editor_compact_layout_rects.identity_popover)) {
+        return MATERIAL_EDITOR_HIT_CONTROLS;
+    }
+    for (int i = 0; i < MATERIAL_EDITOR_RECIPE_ACTION_COUNT; ++i) {
+        if (material_editor_point_in_rect(mx, my, &s_recipe_action_rects[i])) {
+            return MATERIAL_EDITOR_HIT_CONTROLS;
+        }
+    }
+    for (int i = 0; i < MATERIAL_EDITOR_SUBPANE_COUNT; ++i) {
+        if (material_editor_point_in_rect(mx,
+                                          my,
+                                          &s_material_editor_compact_layout_rects.tab_rects[i])) {
+            return MATERIAL_EDITOR_HIT_CONTROLS;
+        }
+    }
     if (material_editor_point_in_rect(mx, my, &s_texture_none_rect) ||
         material_editor_point_in_rect(mx, my, &s_texture_rust_rect) ||
         material_editor_point_in_rect(mx, my, &s_texture_fog_rect) ||
         material_editor_point_in_rect(mx, my, &s_solid_faces_rect) ||
         material_editor_point_in_rect(mx, my, &s_reset_face_rect) ||
         material_editor_point_in_rect(mx, my, &s_copy_face_rect) ||
+        material_editor_point_in_rect(mx, my, &s_proof_readback_rect) ||
         material_editor_point_in_rect(mx, my, &s_clear_groups_rect)) {
         return MATERIAL_EDITOR_HIT_CONTROLS;
+    }
+    for (int i = 0; i < MATERIAL_EDITOR_GRAPH_ACTION_COUNT; ++i) {
+        if (material_editor_point_in_rect(mx, my, &s_graph_action_rects[i])) {
+            return MATERIAL_EDITOR_HIT_CONTROLS;
+        }
     }
     for (int i = 0; i < MATERIAL_EDITOR_LAYER_ACTION_COUNT; ++i) {
         if (material_editor_point_in_rect(mx, my, &s_layer_action_rects[i])) {

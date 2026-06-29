@@ -38,6 +38,7 @@ RuntimeMaterialTextureLayerKind
 SDL_Rect s_solid_faces_rect = {0, 0, 0, 0};
 SDL_Rect s_reset_face_rect = {0, 0, 0, 0};
 SDL_Rect s_copy_face_rect = {0, 0, 0, 0};
+SDL_Rect s_proof_readback_rect = {0, 0, 0, 0};
 SDL_Rect s_clear_groups_rect = {0, 0, 0, 0};
 SDL_Rect s_group_panel_rect = {0, 0, 0, 0};
 SDL_Rect s_group_list_rect = {0, 0, 0, 0};
@@ -65,8 +66,17 @@ int s_layer_row_count = 0;
 int s_layer_scroll_offset = 0;
 int s_layer_visible_capacity = 0;
 int s_layer_total_count = 0;
+SDL_Rect s_graph_action_rects[MATERIAL_EDITOR_GRAPH_ACTION_COUNT];
+SDL_Rect s_recipe_action_rects[MATERIAL_EDITOR_RECIPE_ACTION_COUNT];
+SDL_Rect s_recipe_menu_item_rects[MATERIAL_EDITOR_RECIPE_MENU_MAX_ITEMS];
 int s_material_editor_param_drag_start_y = 0;
 double s_material_editor_param_drag_start_value = 0.0;
+MaterialEditorProofReadback s_material_editor_proof_readback;
+bool s_material_editor_proof_readback_valid = false;
+char s_material_editor_proof_readback_status[MATERIAL_EDITOR_PROOF_TEXT_CAPACITY];
+MaterialEditorSubPane s_material_editor_active_subpane = MATERIAL_EDITOR_SUBPANE_STACK;
+bool s_material_editor_identity_popover_open = false;
+MaterialEditorRecipeAxis s_material_editor_recipe_menu_axis = MATERIAL_EDITOR_RECIPE_AXIS_NONE;
 
 SceneEditorMaterialTextureParamField material_editor_texture_param_field(
     MaterialEditorTextureParamKind kind) {
@@ -403,6 +413,13 @@ void InitializeMaterialEditor(void) {
     s_material_editor_active_param_slider = MATERIAL_EDITOR_TEXTURE_PARAM_NONE;
     s_group_scroll_offset = 0;
     s_layer_scroll_offset = 0;
+    s_material_editor_active_subpane =
+        MaterialEditorSubPaneClamp(s_material_editor_active_subpane);
+    s_material_editor_identity_popover_open = false;
+    s_material_editor_recipe_menu_axis = MATERIAL_EDITOR_RECIPE_AXIS_NONE;
+    memset(&s_material_editor_proof_readback, 0, sizeof(s_material_editor_proof_readback));
+    s_material_editor_proof_readback_valid = false;
+    s_material_editor_proof_readback_status[0] = '\0';
     MaterialEditorLayerModelReset();
     MaterialEditorAuthoredTextureBindingReset();
     MaterialEditorFacePreviewReset();
@@ -458,6 +475,7 @@ int MaterialEditorRenderPaneControls(SDL_Renderer* renderer,
     int focused_faces = 0;
     char line[128];
     char edit_text[48];
+    return MaterialEditorRenderCompactPaneControls(renderer, content_bounds, top_y, bottom_y);
     memset(s_slider_sections, 0, sizeof(s_slider_sections));
     memset(s_slider_tracks, 0, sizeof(s_slider_tracks));
     memset(s_param_sections, 0, sizeof(s_param_sections));
@@ -471,6 +489,7 @@ int MaterialEditorRenderPaneControls(SDL_Renderer* renderer,
     s_solid_faces_rect = (SDL_Rect){0, 0, 0, 0};
     s_reset_face_rect = (SDL_Rect){0, 0, 0, 0};
     s_copy_face_rect = (SDL_Rect){0, 0, 0, 0};
+    s_proof_readback_rect = (SDL_Rect){0, 0, 0, 0};
     MaterialEditorResetGroupListLayout();
     if (!renderer || content_bounds.w <= 0 || cursor_y >= bottom_y) return cursor_y;
 
@@ -524,7 +543,12 @@ int MaterialEditorRenderPaneControls(SDL_Renderer* renderer,
     } else {
         third_w = (content_bounds.w - MATERIAL_EDITOR_BUTTON_GAP * 2) / 3;
         if (cursor_y + 15 + MATERIAL_EDITOR_BUTTON_HEIGHT <= bottom_y) {
-            MATERIAL_EDITOR_SECTION_LABEL(renderer, content_bounds, cursor_y, "Texture", palette);
+            MATERIAL_EDITOR_SECTION_LABEL(
+                renderer,
+                content_bounds,
+                cursor_y,
+                MaterialEditorPanelGroupLabel(MATERIAL_EDITOR_PANEL_GROUP_TEXTURE_BINDING),
+                palette);
             cursor_y += 15;
             s_texture_none_rect = (SDL_Rect){content_bounds.x, cursor_y, third_w, MATERIAL_EDITOR_BUTTON_HEIGHT};
             s_texture_rust_rect = (SDL_Rect){s_texture_none_rect.x + third_w + MATERIAL_EDITOR_BUTTON_GAP, cursor_y, third_w, MATERIAL_EDITOR_BUTTON_HEIGHT};
@@ -545,7 +569,12 @@ int MaterialEditorRenderPaneControls(SDL_Renderer* renderer,
                 cursor_y,
                 15 + MATERIAL_EDITOR_SLIDER_HEIGHT * 2 + MATERIAL_EDITOR_CONTROL_GAP,
                 bottom_y)) {
-            MATERIAL_EDITOR_SECTION_LABEL(renderer, content_bounds, cursor_y, "Placement", palette);
+            MATERIAL_EDITOR_SECTION_LABEL(
+                renderer,
+                content_bounds,
+                cursor_y,
+                "Texture Placement",
+                palette);
             cursor_y += 15;
             grid_y = cursor_y;
         }
@@ -571,7 +600,12 @@ int MaterialEditorRenderPaneControls(SDL_Renderer* renderer,
             "Default", "Speck", "Patch", "Flow"
         };
         if (material_editor_has_room_for_optional_control(cursor_y, 15 + MATERIAL_EDITOR_BUTTON_HEIGHT, bottom_y)) {
-            MATERIAL_EDITOR_SECTION_LABEL(renderer, content_bounds, cursor_y, "Pattern", palette);
+            MATERIAL_EDITOR_SECTION_LABEL(
+                renderer,
+                content_bounds,
+                cursor_y,
+                MaterialEditorPanelGroupLabel(MATERIAL_EDITOR_PANEL_GROUP_PHYSICAL_RESPONSE),
+                palette);
             cursor_y += 15;
             for (int i = 0; i < MATERIAL_EDITOR_PATTERN_BUTTON_COUNT; ++i) {
                 int x = content_bounds.x + i * (pattern_w + MATERIAL_EDITOR_BUTTON_GAP);
@@ -589,7 +623,7 @@ int MaterialEditorRenderPaneControls(SDL_Renderer* renderer,
             int col_count = 4;
             int col_w = (content_bounds.w - MATERIAL_EDITOR_CONTROL_GAP * (col_count - 1)) / col_count;
             if (material_editor_has_room_for_optional_control(cursor_y, 15 + MATERIAL_EDITOR_KNOB_HEIGHT, bottom_y)) {
-                MATERIAL_EDITOR_SECTION_LABEL(renderer, content_bounds, cursor_y, "Parameters", palette);
+                MATERIAL_EDITOR_SECTION_LABEL(renderer, content_bounds, cursor_y, "Response Parameters", palette);
                 cursor_y += 15;
                 grid_y = cursor_y;
             }
@@ -627,6 +661,16 @@ int MaterialEditorRenderPaneControls(SDL_Renderer* renderer,
             }
         }
         int reset_w = can_reset ? (content_bounds.w - MATERIAL_EDITOR_BUTTON_GAP) / 2 : 0;
+        if (cursor_y + 15 + MATERIAL_EDITOR_BUTTON_HEIGHT <= bottom_y) {
+            MATERIAL_EDITOR_SECTION_LABEL(
+                renderer,
+                content_bounds,
+                cursor_y,
+                MaterialEditorPanelGroupLabel(can_reset ? MATERIAL_EDITOR_PANEL_GROUP_FACE_OVERRIDE
+                                                        : MATERIAL_EDITOR_PANEL_GROUP_PREVIEW_READBACK),
+                palette);
+            cursor_y += 15;
+        }
         s_solid_faces_rect = (SDL_Rect){content_bounds.x, cursor_y, reset_w > 0 ? reset_w : content_bounds.w, MATERIAL_EDITOR_BUTTON_HEIGHT};
         MaterialEditorDrawButton(renderer, s_solid_faces_rect, "Solid Preview", s_material_editor_solid_faces_enabled, palette);
         if (reset_w > 0) {
@@ -649,6 +693,38 @@ int MaterialEditorRenderPaneControls(SDL_Renderer* renderer,
                                       MATERIAL_EDITOR_BUTTON_HEIGHT};
         MaterialEditorDrawButton(renderer, s_copy_face_rect, "Copy to Selected", false, palette);
         cursor_y += MATERIAL_EDITOR_BUTTON_HEIGHT + MATERIAL_EDITOR_BUTTON_GAP;
+    }
+    if (material_editor_has_room_for_optional_control(cursor_y,
+                                                       15 + MATERIAL_EDITOR_BUTTON_HEIGHT,
+                                                       bottom_y)) {
+        MATERIAL_EDITOR_SECTION_LABEL(
+            renderer,
+            content_bounds,
+            cursor_y,
+            MaterialEditorPanelGroupLabel(MATERIAL_EDITOR_PANEL_GROUP_PREVIEW_READBACK),
+            palette);
+        cursor_y += 15;
+        s_proof_readback_rect = (SDL_Rect){content_bounds.x,
+                                           cursor_y,
+                                           content_bounds.w,
+                                           MATERIAL_EDITOR_BUTTON_HEIGHT};
+        MaterialEditorDrawButton(renderer,
+                                 s_proof_readback_rect,
+                                 "M4 Proof Readback",
+                                 s_material_editor_proof_readback_valid,
+                                 palette);
+        cursor_y += MATERIAL_EDITOR_BUTTON_HEIGHT + MATERIAL_EDITOR_BUTTON_GAP;
+        if (s_material_editor_proof_readback_valid &&
+            material_editor_has_room_for_optional_control(cursor_y, 18, bottom_y)) {
+            RenderLabelTextLeft(renderer,
+                                (SDL_Rect){content_bounds.x,
+                                           cursor_y,
+                                           content_bounds.w,
+                                           16},
+                                s_material_editor_proof_readback_status,
+                                palette.text_muted);
+            cursor_y += 20;
+        }
     }
     cursor_y = MaterialEditorDrawGroupList(renderer, content_bounds, cursor_y, bottom_y, palette);
     return cursor_y;

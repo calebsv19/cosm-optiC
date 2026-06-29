@@ -11,6 +11,10 @@
 #define RUNTIME_MATERIAL_AUTHORED_TEXTURE_MODE_CAPACITY 24
 #define RUNTIME_MATERIAL_AUTHORED_TEXTURE_INTENT_CAPACITY 32
 #define RUNTIME_MATERIAL_AUTHORED_TEXTURE_REASON_CAPACITY 128
+#define RUNTIME_MATERIAL_AUTHORED_TEXTURE_CHANNEL_CAPACITY 48
+#define RUNTIME_MATERIAL_AUTHORED_TEXTURE_CHANNEL_SOURCE_CAPACITY 24
+#define RUNTIME_MATERIAL_AUTHORED_TEXTURE_CHANNEL_FILE_CAPACITY 128
+#define RUNTIME_MATERIAL_AUTHORED_TEXTURE_MAX_CHANNEL_REFS 8
 #define RUNTIME_MATERIAL_AUTHORED_TEXTURE_FACE_CORNER_COUNT 4
 #define RUNTIME_MATERIAL_AUTHORED_TEXTURE_FACE_EDGE_COUNT 4
 
@@ -26,6 +30,13 @@ typedef struct RuntimeMaterialAuthoredTextureSample {
     double alpha;
 } RuntimeMaterialAuthoredTextureSample;
 
+typedef struct RuntimeMaterialAuthoredTextureChannelRef {
+    bool active;
+    char channel[RUNTIME_MATERIAL_AUTHORED_TEXTURE_CHANNEL_CAPACITY];
+    char source[RUNTIME_MATERIAL_AUTHORED_TEXTURE_CHANNEL_SOURCE_CAPACITY];
+    char fileName[RUNTIME_MATERIAL_AUTHORED_TEXTURE_CHANNEL_FILE_CAPACITY];
+} RuntimeMaterialAuthoredTextureChannelRef;
+
 typedef struct RuntimeMaterialAuthoredTextureFaceMetadata {
     bool active;
     int sceneObjectIndex;
@@ -40,6 +51,9 @@ typedef struct RuntimeMaterialAuthoredTextureFaceMetadata {
     int adjacentFaceGroupIndices[RUNTIME_MATERIAL_AUTHORED_TEXTURE_FACE_EDGE_COUNT];
     double layoutOffsetX;
     double layoutOffsetY;
+    int channelRefCount;
+    RuntimeMaterialAuthoredTextureChannelRef
+        channelRefs[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MAX_CHANNEL_REFS];
 } RuntimeMaterialAuthoredTextureFaceMetadata;
 
 void RuntimeMaterialAuthoredTextureResetAll(void);
@@ -69,6 +83,23 @@ bool RuntimeMaterialAuthoredTextureGetFaceMetadata(
     int scene_object_index,
     int face_group_index,
     RuntimeMaterialAuthoredTextureFaceMetadata* out_metadata);
+
+bool RuntimeMaterialAuthoredTextureGetFaceChannels(
+    int scene_object_index,
+    int face_group_index,
+    RuntimeMaterialAuthoredTextureChannelRef* out_channels,
+    size_t max_channels,
+    int* out_channel_count);
+
+bool RuntimeMaterialAuthoredTextureGetChannelSummary(int scene_object_index,
+                                                     char* out_summary,
+                                                     size_t out_summary_size);
+
+bool RuntimeMaterialAuthoredTextureChannelNameSupported(const char* channel);
+bool RuntimeMaterialAuthoredTextureChannelIsVisual(const char* channel);
+bool RuntimeMaterialAuthoredTextureChannelIsPhysicalScalar(const char* channel);
+bool RuntimeMaterialAuthoredTextureChannelIsShadingNormal(const char* channel);
+bool RuntimeMaterialAuthoredTextureChannelIsDisplacement(const char* channel);
 
 bool RuntimeMaterialAuthoredTextureGetOverlayMaterialIntent(int scene_object_index,
                                                             char* out_overlay_material_intent,

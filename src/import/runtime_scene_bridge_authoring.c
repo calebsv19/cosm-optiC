@@ -3,12 +3,14 @@
 #include "camera/camera_path_3d.h"
 #include "config/config_manager.h"
 #include "config/config_scene_path_io.h"
+#include "editor/scene_editor_material_graph.h"
 #include "editor/scene_editor_material_face_placement.h"
 #include "editor/scene_editor_material_stack.h"
 #include "import/runtime_scene_bridge_authoring_internal.h"
 #include "import/runtime_scene_bridge_json_utils.h"
 #include "material/material_manager.h"
 #include "render/runtime_material_authored_texture_3d.h"
+#include "render/runtime_material_graph_3d.h"
 #include "render/runtime_material_texture_stack_3d.h"
 #include "render/runtime_scene_3d.h"
 
@@ -370,6 +372,32 @@ static bool apply_ray_authoring_object_material_stack(json_object *entry,
     return SceneEditorMaterialStackSetObjectStack(scene_index, &stack);
 }
 
+static bool apply_ray_authoring_object_material_graph(json_object* entry,
+                                                      int scene_index) {
+    json_object* graph_obj = NULL;
+    RuntimeMaterialGraphDocument document;
+    RuntimeMaterialGraphCompileResult compile_result;
+    if (!entry || scene_index < 0 || scene_index >= sceneSettings.objectCount) return false;
+    if (!json_object_object_get_ex(entry, "material_graph", &graph_obj)) {
+        json_object_object_get_ex(entry, "materialGraph", &graph_obj);
+    }
+    if (!graph_obj || !json_object_is_type(graph_obj, json_type_object)) {
+        SceneEditorMaterialGraphClearObjectGraph(scene_index);
+        return false;
+    }
+    memset(&document, 0, sizeof(document));
+    memset(&compile_result, 0, sizeof(compile_result));
+    if (!RuntimeMaterialGraphDocumentFromJsonObject(graph_obj, &document)) {
+        SceneEditorMaterialGraphClearObjectGraph(scene_index);
+        return false;
+    }
+    if (!SceneEditorMaterialGraphSetObjectGraph(scene_index, &document, &compile_result)) {
+        SceneEditorMaterialGraphClearObjectGraph(scene_index);
+        return false;
+    }
+    return true;
+}
+
 static void apply_ray_authoring_object_procedural_texture(json_object *entry,
                                                           int scene_index) {
     json_object *procedural_texture = NULL;
@@ -636,20 +664,41 @@ static void apply_ray_authoring_object_authored_texture(json_object* entry,
                                                         const char* object_id) {
     json_object* authored_texture = NULL;
     json_object* manifest_path_obj = NULL;
+    json_object* local_manifest_path_obj = NULL;
+    json_object* path_scope_obj = NULL;
     json_object* binding_mode_obj = NULL;
     const char* manifest_path = NULL;
+    const char* local_manifest_path = NULL;
+    const char* path_scope = NULL;
     const char* binding_mode = NULL;
     if (!entry || !object_id || !object_id[0] || scene_index < 0 ||
         scene_index >= sceneSettings.objectCount) {
         return;
     }
     if (!json_object_object_get_ex(entry, "authored_texture", &authored_texture) ||
-        !json_object_is_type(authored_texture, json_type_object) ||
-        !json_object_object_get_ex(authored_texture, "manifest_path", &manifest_path_obj) ||
-        !json_object_is_type(manifest_path_obj, json_type_string)) {
+        !json_object_is_type(authored_texture, json_type_object)) {
         return;
     }
-    manifest_path = json_object_get_string(manifest_path_obj);
+    if (json_object_object_get_ex(authored_texture, "path_scope", &path_scope_obj) &&
+        json_object_is_type(path_scope_obj, json_type_string)) {
+        path_scope = json_object_get_string(path_scope_obj);
+    }
+    if (json_object_object_get_ex(authored_texture, "manifest_path", &manifest_path_obj) &&
+        json_object_is_type(manifest_path_obj, json_type_string)) {
+        manifest_path = json_object_get_string(manifest_path_obj);
+    }
+    if (json_object_object_get_ex(authored_texture, "local_manifest_path", &local_manifest_path_obj) &&
+        json_object_is_type(local_manifest_path_obj, json_type_string)) {
+        local_manifest_path = json_object_get_string(local_manifest_path_obj);
+    }
+    if ((!manifest_path || !manifest_path[0]) &&
+        path_scope && strcmp(path_scope, "local_absolute") == 0 &&
+        local_manifest_path && local_manifest_path[0]) {
+        manifest_path = local_manifest_path;
+    }
+    if (!manifest_path || !manifest_path[0]) {
+        return;
+    }
     if (json_object_object_get_ex(authored_texture, "binding_mode", &binding_mode_obj) &&
         json_object_is_type(binding_mode_obj, json_type_string)) {
         binding_mode = json_object_get_string(binding_mode_obj);
@@ -767,6 +816,7 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
                 apply_ray_authoring_object_authored_texture(entry, scene_index, object_id);
                 apply_ray_authoring_object_procedural_texture(entry, scene_index);
                 apply_ray_authoring_object_material_stack(entry, scene_index);
+                apply_ray_authoring_object_material_graph(entry, scene_index);
                 break;
             }
         }
