@@ -21,7 +21,7 @@ RAY_ROOT = SCRIPT_PATH.parents[1]
 WORKSPACE_ROOT = RAY_ROOT.parent
 DEFAULT_ITEM_NAME = "ray-tracing-portable-fixture-20260624a"
 DEFAULT_JOB_ID = "ray-tracing--portable-fixture--20260624T000000Z--rtbundle01"
-DEFAULT_RAY_VERSION = "0.4.12"
+DEFAULT_RAY_VERSION = "0.4.17"
 DEFAULT_PHYSICS_VERSION = "0.1.0"
 
 

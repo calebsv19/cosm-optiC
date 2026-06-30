@@ -23,7 +23,7 @@ from typing import Any
 CAPSULE_ID = "scene_capsule_iteration_fixture_v1"
 SCHEMA = "codework_scene_capsule_fixture_v1"
 PHYSICS_WORKER_VERSION = "0.3.0"
-RAY_WORKER_VERSION = "0.4.16"
+RAY_WORKER_VERSION = "0.4.17"
 
 
 def repo_root() -> Path:
