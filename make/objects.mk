@@ -13,10 +13,12 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_dielectric_transport_3d.o \
 	$(BUILD_DIR)/render/runtime_emissive_direct_3d.o \
 	$(BUILD_DIR)/render/runtime_emissive_light_set_3d.o \
+	$(BUILD_DIR)/render/runtime_light_set_3d.o \
 	$(BUILD_DIR)/render/runtime_light_emitter_3d.o \
 	$(BUILD_DIR)/render/runtime_specular_reflection_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_3d.o \
+	$(BUILD_DIR)/render/runtime_disney_v2_caustic_sidecar_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_estimator_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_transport_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_transmission_3d.o \
@@ -54,6 +56,8 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_native_3d_resolution.o \
 	$(BUILD_DIR)/render/runtime_native_3d_temporal_accum.o \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_occupancy.o \
+	$(BUILD_DIR)/render/runtime_mesh_blas_cache_3d.o \
+	$(BUILD_DIR)/render/runtime_scene_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \
 	$(BUILD_DIR)/render/runtime_environment_3d.o \
@@ -164,6 +168,7 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_water_surface_runtime.o \
 	$(BUILD_DIR)/tests/test_runtime_volume_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials.o \
+	$(BUILD_DIR)/tests/test_runtime_light_set_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_material_authored_texture_validation_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials_payload_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials_direct_light_suite.o \
@@ -220,10 +225,12 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_dielectric_transport_3d.o \
 		$(BUILD_DIR)/render/runtime_emissive_direct_3d.o \
 		$(BUILD_DIR)/render/runtime_emissive_light_set_3d.o \
+		$(BUILD_DIR)/render/runtime_light_set_3d.o \
 		$(BUILD_DIR)/render/runtime_light_emitter_3d.o \
 		$(BUILD_DIR)/render/runtime_specular_reflection_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_3d.o \
+		$(BUILD_DIR)/render/runtime_disney_v2_caustic_sidecar_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_estimator_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_transport_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_transmission_3d.o \
@@ -252,6 +259,8 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_native_3d_resolution.o \
 	$(BUILD_DIR)/render/runtime_native_3d_temporal_accum.o \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_occupancy.o \
+	$(BUILD_DIR)/render/runtime_mesh_blas_cache_3d.o \
+	$(BUILD_DIR)/render/runtime_scene_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \
 	$(BUILD_DIR)/render/runtime_environment_3d.o \
@@ -274,6 +283,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/editor/material_editor_graph_actions.o \
 	$(BUILD_DIR)/editor/material_editor_graph_readback.o \
 	$(BUILD_DIR)/editor/material_editor_material_readback.o \
+	$(BUILD_DIR)/editor/material_editor_response_readback.o \
 	$(BUILD_DIR)/editor/material_editor_texture_channel_readback.o \
 	$(BUILD_DIR)/editor/material_editor_face_region_readback.o \
 	$(BUILD_DIR)/editor/material_editor_compact_layout.o \
@@ -357,6 +367,8 @@ TEST_DEPS := \
 	$(BUILD_DIR)/ui/menu/menu_layout.o \
 	$(BUILD_DIR)/ui/menu/menu_panel_chrome.o \
 	$(BUILD_DIR)/ui/menu/menu_batch_panel.o \
+	$(BUILD_DIR)/ui/menu/menu_scene_project_summary.o \
+	$(BUILD_DIR)/ui/menu/menu_worker_export.o \
 	$(BUILD_DIR)/ui/menu/scene_source_catalog.o \
 	$(BUILD_DIR)/ui/menu/volume_source_catalog.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_state.o \

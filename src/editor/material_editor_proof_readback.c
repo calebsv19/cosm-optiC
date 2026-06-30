@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "editor/material_editor_layer_model.h"
+#include "material/material.h"
 
 static const char* material_editor_proof_texture_family(int texture_id) {
     if (texture_id == RUNTIME_MATERIAL_TEXTURE_3D_RUST) return "rust_procedural";
@@ -53,6 +54,79 @@ static RuntimeMaterialTextureLayerKind material_editor_proof_active_layer_kind(
     return RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE;
 }
 
+static bool material_editor_proof_object_has_tint(const SceneObject* obj) {
+    if (!obj) return false;
+    return SceneObjectColorR(obj) < 245u ||
+           SceneObjectColorG(obj) < 245u ||
+           SceneObjectColorB(obj) < 245u;
+}
+
+static double material_editor_proof_layer_roughness(const RuntimeMaterialTextureLayer* layer) {
+    if (!layer) return 0.0;
+    if (layer->roughnessInfluence > 0.0) return layer->roughnessInfluence;
+    return 0.0;
+}
+
+static void material_editor_proof_describe_glass(
+    const SceneObject* obj,
+    RuntimeMaterialTextureLayerKind layer_kind,
+    const RuntimeMaterialTextureLayer* active_layer,
+    MaterialEditorProofReadback* out_readback) {
+    bool tinted = material_editor_proof_object_has_tint(obj);
+    double roughness = material_editor_proof_layer_roughness(active_layer);
+    if (!obj || !out_readback || obj->material_id != MATERIAL_PRESET_TRANSPARENT) return;
+    out_readback->glass_proof_readback = true;
+    if (layer_kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_FOG ||
+        layer_kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SCRATCHES ||
+        layer_kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME ||
+        layer_kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL) {
+        snprintf(out_readback->glass_proof_case,
+                 sizeof(out_readback->glass_proof_case),
+                 "%s glass overlay",
+                 RuntimeMaterialTextureLayerKindDisplayName(layer_kind));
+        snprintf(out_readback->glass_proof_package,
+                 sizeof(out_readback->glass_proof_package),
+                 "m4_s3_overlay_stack_response_matrix");
+        snprintf(out_readback->glass_proof_coverage,
+                 sizeof(out_readback->glass_proof_coverage),
+                 "Existing M4-S3 overlay matrix covers fog/scratches/oil/grime response readback.");
+        snprintf(out_readback->glass_missing_proof,
+                 sizeof(out_readback->glass_missing_proof),
+                 "Missing: combined tinted dirty glass and full physical transport/caustic proof.");
+        return;
+    }
+    snprintf(out_readback->glass_proof_package,
+             sizeof(out_readback->glass_proof_package),
+             "m4_s1_glass_roughness_transmission_matrix");
+    if (roughness >= 0.35) {
+        snprintf(out_readback->glass_proof_case,
+                 sizeof(out_readback->glass_proof_case),
+                 "frosted glass");
+        snprintf(out_readback->glass_proof_coverage,
+                 sizeof(out_readback->glass_proof_coverage),
+                 "Existing M4-S1 roughness/transmission matrix covers smooth-to-frosted glass contrast.");
+    } else if (tinted) {
+        snprintf(out_readback->glass_proof_case,
+                 sizeof(out_readback->glass_proof_case),
+                 "tinted glass");
+        snprintf(out_readback->glass_proof_coverage,
+                 sizeof(out_readback->glass_proof_coverage),
+                 "Existing M4-S1 covers transmission/roughness route; tint-specific proof remains partial.");
+    } else {
+        snprintf(out_readback->glass_proof_case,
+                 sizeof(out_readback->glass_proof_case),
+                 "clear glass");
+        snprintf(out_readback->glass_proof_coverage,
+                 sizeof(out_readback->glass_proof_coverage),
+                 "Existing M4-S1 matrix covers clear/smooth glass via current alpha-transparency bridge.");
+    }
+    snprintf(out_readback->glass_missing_proof,
+             sizeof(out_readback->glass_missing_proof),
+             "%s",
+             tinted ? "Missing: dedicated tinted glass color/absorption proof and caustic/transport proof."
+                    : "Missing: full physical glass transport, caustics, absorption color/density proof.");
+}
+
 void MaterialEditorFormatProofReadbackStatus(const MaterialEditorProofReadback* readback,
                                              char* out,
                                              size_t out_size) {
@@ -72,6 +146,7 @@ void MaterialEditorFormatProofReadbackStatus(const MaterialEditorProofReadback* 
 bool MaterialEditorBuildFocusedProofReadback(MaterialEditorProofReadback* out_readback) {
     SceneObject* obj = material_editor_focused_object();
     RuntimeMaterialTextureLayerKind layer_kind = RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE;
+    RuntimeMaterialTextureLayer active_layer = {0};
     MaterialEditorMutationDestination destination =
         MaterialEditorMutationDestinationForFocusedTextureControls();
     MaterialEditorPanelGroup group =
@@ -81,6 +156,9 @@ bool MaterialEditorBuildFocusedProofReadback(MaterialEditorProofReadback* out_re
     memset(out_readback, 0, sizeof(*out_readback));
     if (!obj || focused_index < 0) return false;
     layer_kind = material_editor_proof_active_layer_kind(obj);
+    if (!material_editor_get_active_layer(obj, NULL, &active_layer, NULL)) {
+        memset(&active_layer, 0, sizeof(active_layer));
+    }
     snprintf(out_readback->request_schema,
              sizeof(out_readback->request_schema),
              "%s",
@@ -133,6 +211,7 @@ bool MaterialEditorBuildFocusedProofReadback(MaterialEditorProofReadback* out_re
                                                    layer_kind,
                                                    out_readback->source_material,
                                                    sizeof(out_readback->source_material));
+    material_editor_proof_describe_glass(obj, layer_kind, &active_layer, out_readback);
     snprintf(out_readback->expected_behavior,
              sizeof(out_readback->expected_behavior),
              "Editor emits M4-compatible proof request/readback labels only; no render launch");

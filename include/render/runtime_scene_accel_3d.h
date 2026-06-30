@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "render/runtime_scene_3d.h"
+
 typedef enum RuntimeSceneAcceleration3DReuseStatus {
     RUNTIME_SCENE_ACCEL_3D_REUSE_DISABLED = 0,
     RUNTIME_SCENE_ACCEL_3D_REUSE_REBUILT,
@@ -14,6 +16,7 @@ typedef enum RuntimeSceneAcceleration3DReuseStatus {
 typedef struct RuntimeSceneAcceleration3DDiagnostics {
     bool enabled;
     RuntimeSceneAcceleration3DReuseStatus reuseStatus;
+    uint64_t blasPrepareCalls;
     uint64_t blasCacheHits;
     uint64_t blasCacheMisses;
     uint64_t blasCacheInvalidations;
@@ -47,5 +50,11 @@ RuntimeSceneAcceleration3DDiagnostics_Disabled(void) {
     diagnostics.reuseStatus = RUNTIME_SCENE_ACCEL_3D_REUSE_DISABLED;
     return diagnostics;
 }
+
+bool RuntimeSceneAcceleration3D_RebuildTLASFromScene(const RuntimeScene3D* scene);
+void RuntimeSceneAcceleration3D_AppendTLASDiagnostics(
+    RuntimeSceneAcceleration3DDiagnostics* diagnostics);
+void RuntimeSceneAcceleration3D_ResetTLASForTests(void);
+const char* RuntimeSceneAcceleration3D_LastDiagnostics(void);
 
 #endif

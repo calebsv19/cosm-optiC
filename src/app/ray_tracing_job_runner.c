@@ -408,6 +408,34 @@ static bool write_canonical_request_file(const char *path,
                 request->volume_scatter_gain_override);
         wrote_field = true;
     }
+    if (request->has_volume_density_scale_override) {
+        fprintf(file,
+                "%s    \"volume_density_scale\": %.9f",
+                wrote_field ? ",\n" : "",
+                request->volume_density_scale_override);
+        wrote_field = true;
+    }
+    if (request->has_volume_density_gamma_override) {
+        fprintf(file,
+                "%s    \"volume_density_gamma\": %.9f",
+                wrote_field ? ",\n" : "",
+                request->volume_density_gamma_override);
+        wrote_field = true;
+    }
+    if (request->has_volume_absorption_gain_override) {
+        fprintf(file,
+                "%s    \"volume_absorption_gain\": %.9f",
+                wrote_field ? ",\n" : "",
+                request->volume_absorption_gain_override);
+        wrote_field = true;
+    }
+    if (request->has_volume_opacity_clamp_override) {
+        fprintf(file,
+                "%s    \"volume_opacity_clamp\": %.9f",
+                wrote_field ? ",\n" : "",
+                request->volume_opacity_clamp_override);
+        wrote_field = true;
+    }
     if (request->has_volume_step_scale_override) {
         fprintf(file,
                 "%s    \"volume_step_scale\": %.9f",
@@ -436,6 +464,15 @@ static bool write_canonical_request_file(const char *path,
                 request->volume_tint_r,
                 request->volume_tint_g,
                 request->volume_tint_b);
+        wrote_field = true;
+    }
+    if (request->has_volume_albedo_override) {
+        fprintf(file,
+                "%s    \"volume_albedo\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f }",
+                wrote_field ? ",\n" : "",
+                request->volume_albedo_r,
+                request->volume_albedo_g,
+                request->volume_albedo_b);
         wrote_field = true;
     }
     if (wrote_field) {

@@ -1,6 +1,6 @@
 # optiC Current Truth
 
-Last updated: 2026-06-25
+Last updated: 2026-06-29
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -114,7 +114,11 @@ Last updated: 2026-06-25
   genuinely low-roughness mirror/glossy pixels, skips high-temporal-activity
   pixels, leaves rough reflective stable interiors eligible for blur, and
   exposes raw-versus-reconstructed/preserved/skipped diagnostics through native
-  render stats. Headless `ray_tracing_render_headless` requests can override
+  render stats. Disney v2 also defaults to an analytic caustic sidecar policy
+  for focused glass caustic contribution. Headless requests can set
+  `inspection.caustic_mode = "off"` for comparison renders; `transport` /
+  `physical` are reserved and rejected until a true physical caustic transport
+  pass exists. Headless `ray_tracing_render_headless` requests can override
   `render.denoise_enabled` per detached run. The D2.18b visual matrix runner
   now renders comparable Disney-v2 proof cells, copies summaries/requests,
   emits PNG frames, contact sheets, amplified diffs, and `diff_metrics.json`
@@ -409,6 +413,11 @@ Last updated: 2026-06-25
   - Material
 - Material editor mode is the first focused object material lane:
   - focuses the current selected object or the most recently selected object
+  - keeps the global transparent material preset as the Glass default seed
+    while allowing object-local Glass transport overrides for transmission,
+    IOR, absorption distance, and thin-walled behavior through the compact
+    `Resp` pane; those overrides persist with the scene object and feed both
+    Material preview and native `3D` material payload resolution
   - shows an object-only focused viewport layer in 2D and retained native `3D` digest lanes
   - defaults native `3D` Material mode to an object-centered projector so the focused object orbits around its own center rather than its scene placement
   - retains the old scene-placement object-only projector path as an internal view mode for a later UI toggle
@@ -495,6 +504,11 @@ Last updated: 2026-06-25
   - menu exposes grouped Data I/O + batch actions
   - Data I/O + Batch now exposes a compact worker-export entry point:
     `Worker Package: Scene-only` plus `Export Queue`
+  - Data I/O + Batch also includes a read-only scene-project summary row when
+    the selected scene source is a runtime scene under a `scene_project.json`
+    project root; it reports scene/runtime, authoring, mesh sidecar,
+    PhysicsSim cache, PhysicsSim bundle, and RayTracing render-request
+    presence without changing paths or export modes
   - the menu worker export action is intentionally narrow: it requires the
     selected scene source to be a runtime scene and resolves the render request
     from `RAY_TRACING_WORKER_RENDER_REQUEST`, `render_request.json`, or
@@ -588,7 +602,8 @@ Last updated: 2026-06-25
   - authored moving-camera scenes now also accept `extensions.ray_tracing.authoring.camera_focus_target = { x, y, z }`; when present, headless runtime-scene sampling preserves authored camera-path translation/depth motion but recomputes yaw/pitch toward that focus target each sample, which is safer than hand-authoring moving camera orientation curves
   - render summaries now also report render-visibility truth through `render_stats.hit_pixels`, `render_stats.visible_pixels`, `render_stats.nonzero_pixels`, `render_stats.max_radiance`, and `render_stats.max_rgb`
   - render summaries now also expose `object_audit`, which reports per-object runtime-slot presence, built primitive/triangle counts, and primary camera-ray hit pixels for headless diagnosis
-  - headless requests now accept additive inspection-only render tuning fields: `preset`, `camera_zoom`, `camera_position`, `camera_look_at`, `environment_light_mode`, `ambient_strength`, `top_fill_strength`, `environment_brightness`, `light_intensity`, `light_radius`, `forward_decay`, `volume_scatter_gain`, `volume_step_scale`, `secondary_diffuse_samples_3d`, `transmission_samples_3d`, and `volume_tint`
+  - headless requests now accept additive inspection-only render tuning fields: `preset`, `camera_zoom`, `camera_position`, `camera_look_at`, `environment_light_mode`, `ambient_strength`, `top_fill_strength`, `environment_brightness`, `light_intensity`, `light_radius`, `forward_decay`, `volume_density_scale`, `volume_density_gamma`, `volume_scatter_gain`, `volume_absorption_gain`, `volume_opacity_clamp`, `volume_step_scale`, `secondary_diffuse_samples_3d`, `transmission_samples_3d`, `volume_tint`, and `volume_albedo`
+  - headless `volume.debug_overlay=true` now renders direct scene-camera density contribution instead of only carrying a summary flag; it uses the same volume source, camera, surface clipping, density remap, step scale, and albedo/tint path, but bypasses light-dependent single scattering so sparse smoke structure can be diagnosed in-scene
   - preferred environment-light headless contract is:
     - `environment_light_mode = off|top_fill|ambient`
     - `ambient_strength` for the ambient surface-fill amount (`0.0..1.0`)
@@ -727,7 +742,9 @@ Last updated: 2026-06-25
   - the shipped `glass_preview` inspection preset defaults to `emission_transparency` plus a bounded low-cost preview budget (`secondary_diffuse_samples_3d = 8`, `transmission_samples_3d = 4`) unless explicit request fields replace those values
   - the shipped `glass_review` inspection preset defaults to `emission_transparency` plus a slower review budget (`secondary_diffuse_samples_3d = 24`, `transmission_samples_3d = 12`) unless explicit request fields replace those values
   - runtime-scene apply now skips authoring helper objects (`point_set`, `curve_path`, `edge_set`) when populating live render object slots, so helper records do not crowd out later renderable primitives such as thin transparent review slabs
-  - the current volume-handoff smoke now uses an explicit oblique camera rig (`camera_zoom=0.95`, `camera_position=(-3.8,-7.2,2.2)`, `camera_look_at=(-0.2,0.8,1.2)`) plus moderated lighting/scatter (`light_intensity=2.6`, `light_radius=0.10`, `forward_decay=220.0`, `volume_scatter_gain=3.0`, `volume_step_scale=1.0`) and a blue-biased inspection tint (`volume_tint=(0.35,0.65,1.80)`) so the room, emitter prism, and plume region read as a side-view `3D` scene instead of an overhead floor patch
+  - the current volume-handoff smoke now uses an explicit oblique camera rig (`camera_zoom=0.95`, `camera_position=(-3.8,-7.2,2.2)`, `camera_look_at=(-0.2,0.8,1.2)`) plus moderated lighting/scatter (`light_intensity=2.6`, `light_radius=0.10`, `forward_decay=220.0`, `volume_density_scale=0.35`, `volume_density_gamma=0.65`, `volume_scatter_gain=3.0`, `volume_absorption_gain=0.15`, `volume_opacity_clamp=0.70`, `volume_step_scale=1.0`) and a near-white inspection albedo (`volume_albedo=(0.92,0.91,0.88)`) so the room, emitter prism, and plume region read as a side-view `3D` scene instead of an overhead floor patch
+  - volume material remap overrides are read back in headless summaries and reinterpret the same VF3D scalar cache by separating density curve, scatter, absorption, albedo, and opacity clamp; defaults preserve the previous direct-density render behavior
+  - volume summaries now also read back `debug_overlay_enabled`, and frame-selection inspection stamps request-side `affects_lighting` / `debug_overlay` flags onto the inspected attachment before summary generation so preflight and render summaries match request intent
   - runtime VF3D density reconstruction is now trilinear instead of nearest-cell lookup, reducing block-edge artifacting in headless and runtime volume shading
   - native `3D` direct-light renders now honor `temporalFrames3D` / `render.temporal_frames`; the old forced-single-subpass path is gone
   - headless render requests now support `render.denoise_enabled` as a
@@ -834,6 +851,10 @@ Last updated: 2026-06-25
 - Menu/control-surface implementation is now split across:
   - `src/ui/menu/sdl_menu_render.c` for orchestration/layout pass ownership
   - `src/ui/menu/sdl_menu_render_controls.c` for shared text/button/control rendering helpers
+  - `src/ui/menu/menu_batch_panel.c` for the grouped frame/video/export panel
+    and its read-only scene-project summary row
+  - `src/ui/menu/menu_scene_project_summary.c` for scene-project file presence
+    detection from the selected runtime-scene path
   - `src/ui/menu/menu_worker_export.c` for the menu-triggered scene-only worker
     export command wrapper
 
@@ -948,6 +969,11 @@ Last updated: 2026-06-25
   - `make -C ray_tracing package-linux-worker`
   - the package manifest platform follows the Linux build host architecture
   - `LINUX_WORKER_PLATFORM=<value>` remains available for explicit override
+- Linux PC package promotion requires the package manifest to report
+  `platform=linux-x86_64`. The local Mac-side package lane can produce/stage
+  Linux PC `x86_64` worker artifacts when the x86_64 package/toolchain mode is
+  selected, so agents must verify the manifest rather than assuming Apple
+  Silicon implies `linux-aarch64`.
 - Standard package flow is available through `package-desktop*` targets.
 - Release flow includes contract/audit/sign/notary/staple/verify/distribute gates.
 

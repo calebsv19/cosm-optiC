@@ -16,6 +16,7 @@ void ObjectEditorObjectAssignMaterial(SceneObject* obj, int material_id) {
     if (material_id < 0 || material_id >= MaterialManagerCount()) return;
     preset = MaterialManagerGet(material_id);
     obj->material_id = material_id;
+    SceneObjectClearGlassTransportOverride(obj);
     if (preset) {
         obj->reflectivity = object_editor_object_ops_clamp01(preset->reflectivity);
         obj->roughness = object_editor_object_ops_clamp01(preset->roughness);

@@ -8,6 +8,7 @@
 #include "import/runtime_scene_bridge.h"
 #include "import/runtime_mesh_asset_loader.h"
 #include "render/ray_tracing_mode_backend.h"
+#include "render/runtime_mesh_blas_cache_3d.h"
 #include "render/runtime_native_3d_render.h"
 #include "render/runtime_scene_accel_3d.h"
 #include "render/runtime_scene_3d_builder.h"
@@ -68,6 +69,25 @@ typedef struct RayTracingHeadlessPreflight {
     RuntimeSceneBridgePreflight scene_summary;
     RuntimeEnvironment3D environment_summary;
     bool environment_summary_built;
+    int registered_light_count;
+    int registered_enabled_light_count;
+    int registered_light_point_count;
+    int registered_light_sphere_count;
+    int registered_light_disk_count;
+    int registered_light_rect_count;
+    int registered_light_mesh_emissive_count;
+    int registered_light_authored_count;
+    int registered_light_material_emitter_count;
+    int registered_light_compatibility_count;
+    int registered_light_material_emitter_enabled_count;
+    int registered_light_mesh_area_sampler_only_count;
+    int registered_light_emissive_candidate_count;
+    double registered_light_emissive_area;
+    double registered_light_emissive_weight;
+    double registered_light_emissive_proxy_radius_max;
+    double registered_light_first_color_r;
+    double registered_light_first_color_g;
+    double registered_light_first_color_b;
     RuntimeVolumeDebugSummary3D volume_summary;
     bool volume_frame_selection_built;
     bool volume_frame_selection_dynamic;
@@ -107,10 +127,14 @@ typedef struct RayTracingHeadlessPreflight {
     double water_surface_absorption_r;
     double water_surface_absorption_g;
     double water_surface_absorption_b;
+    double water_surface_material_reflectivity;
+    double water_surface_material_roughness;
     bool water_surface_material_payload_applied;
     double water_surface_payload_ior;
     double water_surface_payload_absorption_distance_m;
     double water_surface_payload_transparency;
+    double water_surface_payload_reflectivity;
+    double water_surface_payload_roughness;
     double water_surface_payload_tint_r;
     double water_surface_payload_tint_g;
     double water_surface_payload_tint_b;

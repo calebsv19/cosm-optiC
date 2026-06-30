@@ -3,10 +3,12 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "render/runtime_light_set_3d.h"
 #include "scene/object_manager.h"
 
 #define RUNTIME_SCENE_BRIDGE_MAX_DIGEST_PRIMITIVES 16
 #define RUNTIME_SCENE_BRIDGE_MAX_PRIMITIVE_SEEDS MAX_OBJECTS
+#define RUNTIME_SCENE_BRIDGE_MAX_LIGHT_SEEDS 16
 
 typedef struct RuntimeSceneBridgePreflight {
     bool valid_contract;
@@ -24,6 +26,7 @@ typedef struct RuntimeSceneBridge3DScaffoldState {
     bool has_camera_rotation_seed;
     bool has_camera_pitch_seed;
     bool has_camera_focus_target;
+    bool has_light_path;
     double camera_z;
     double camera_focus_target_x;
     double camera_focus_target_y;
@@ -109,6 +112,23 @@ typedef struct RuntimeSceneBridge3DPrimitiveSeedState {
         primitives[RUNTIME_SCENE_BRIDGE_MAX_PRIMITIVE_SEEDS];
 } RuntimeSceneBridge3DPrimitiveSeedState;
 
+typedef struct RuntimeSceneBridge3DLightSeedState {
+    bool valid;
+    int light_count;
+    int enabled_count;
+    int point_count;
+    int sphere_count;
+    int disk_count;
+    int rect_count;
+    int mesh_emissive_count;
+    int authored_count;
+    int material_emitter_count;
+    int compatibility_count;
+    int moving_count;
+    int static_count;
+    RuntimeLightSource3D lights[RUNTIME_SCENE_BRIDGE_MAX_LIGHT_SEEDS];
+} RuntimeSceneBridge3DLightSeedState;
+
 bool runtime_scene_bridge_preflight_json(const char *runtime_scene_json,
                                          RuntimeSceneBridgePreflight *out_preflight);
 bool runtime_scene_bridge_preflight_file(const char *runtime_scene_path,
@@ -131,6 +151,8 @@ void runtime_scene_bridge_get_last_3d_scaffold_state(RuntimeSceneBridge3DScaffol
 void runtime_scene_bridge_get_last_3d_digest_state(RuntimeSceneBridge3DDigestState *out_state);
 void runtime_scene_bridge_get_last_3d_primitive_seed_state(
     RuntimeSceneBridge3DPrimitiveSeedState *out_state);
+void runtime_scene_bridge_get_last_3d_light_seed_state(
+    RuntimeSceneBridge3DLightSeedState *out_state);
 bool runtime_scene_bridge_get_last_object_id_for_scene_index(int scene_index,
                                                              char *out_object_id,
                                                              size_t out_object_id_size);

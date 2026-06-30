@@ -5,6 +5,7 @@
 
 #include "render/runtime_disney_3d.h"
 #include "render/runtime_disney_v2_3d.h"
+#include "render/runtime_disney_v2_caustic_sidecar_3d.h"
 #include "render/runtime_direct_light_3d.h"
 #include "render/runtime_diffuse_bounce_3d.h"
 #include "render/runtime_emission_transparency_3d.h"
@@ -769,6 +770,9 @@ static bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
                                                      const RuntimeNative3DSamplingContext* sampling,
                                                      RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DRenderStats stats = {0};
+    RuntimeDisneyV2CausticSidecarProbe3D caustic_probe = {0};
+    const bool caustic_sidecar_active =
+        RuntimeDisneyV2_3D_BuildCausticSidecarProbe(scene, &caustic_probe);
 
     if (!radiance_buffer || radiance_stride <= 0 || width <= 0 || height <= 0 || !scene ||
         !projector) {
@@ -786,6 +790,9 @@ static bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
     }
     if (scene->emissiveLightSet.valid) {
         stats.emissiveAreaCandidateCount = scene->emissiveLightSet.candidateCount;
+    }
+    if (caustic_sidecar_active) {
+        stats.causticSidecarEnabled = 1;
     }
 
     for (int y = start_y; y < end_y; ++y) {
@@ -855,6 +862,24 @@ static bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
                                                                 &result.radianceB,
                                                                 &result.radiance,
                                                                 &result.visible);
+            if (caustic_sidecar_active) {
+                RuntimeDisneyV2CausticSidecarContribution3D caustic = {0};
+                stats.causticSidecarSampleCount += 1;
+                if (RuntimeDisneyV2_3D_EvaluateCausticSidecar(&caustic_probe,
+                                                               &result.hitInfo,
+                                                               &caustic)) {
+                    result.radianceR += caustic.r;
+                    result.radianceG += caustic.g;
+                    result.radianceB += caustic.b;
+                    result.radiance =
+                        fmax(fmax(result.radianceR, result.radianceG), result.radianceB);
+                    stats.causticSidecarContributingSampleCount += 1;
+                    stats.totalCausticSidecarRadiance += caustic.luma;
+                    if (caustic.luma > stats.maxCausticSidecarRadiance) {
+                        stats.maxCausticSidecarRadiance = caustic.luma;
+                    }
+                }
+            }
             if (result.visible) {
                 stats.visiblePixelCount += 1;
             }

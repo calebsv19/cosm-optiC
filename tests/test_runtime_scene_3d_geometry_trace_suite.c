@@ -188,6 +188,39 @@ static int test_runtime_light_emitter_3d_center_hit_contract(void) {
     return 0;
 }
 
+static int test_runtime_light_emitter_3d_light_set_sphere_hit_contract(void) {
+    RuntimeScene3D scene;
+    RuntimeLightSource3D light;
+    Ray3D ray = {0};
+    RuntimeLightEmitterHit3DResult result = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    RuntimeLightSource3D_Init(&light);
+    snprintf(light.id, sizeof(light.id), "%s", "registered_sphere_light");
+    light.kind = RUNTIME_LIGHT_SOURCE_3D_KIND_SPHERE;
+    light.origin = RUNTIME_LIGHT_SOURCE_3D_ORIGIN_AUTHORED_LIGHT;
+    light.enabled = true;
+    light.position = vec3(0.0, 0.0, 0.0);
+    light.radius = 0.75;
+    light.intensity = 8.0;
+    light.falloffDistance = 8.0;
+    light.falloffMode = FORWARD_FALLOFF_MODE_NONE;
+    assert_true("runtime_light_emitter_3d_light_set_append",
+                RuntimeLightSet3D_Append(&scene.lightSet, &light, NULL));
+    scene.hasLight = false;
+    ray = RuntimeRay3D_Make(vec3(0.0, 0.0, 3.0), vec3(0.0, 0.0, -1.0));
+
+    ok = RuntimeLightEmitter3D_IntersectRay(&scene, &ray, 0.001, 10.0, &result);
+    assert_true("runtime_light_emitter_3d_light_set_hit_ok", ok);
+    assert_true("runtime_light_emitter_3d_light_set_hit_flag", result.hit);
+    assert_close("runtime_light_emitter_3d_light_set_hit_t", result.t, 2.25, 1e-6);
+    assert_close("runtime_light_emitter_3d_light_set_hit_radiance", result.radiance, 8.0, 1e-6);
+
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
 static int test_runtime_light_emitter_3d_trace_geometry_tie_wins_contract(void) {
     RuntimeScene3D scene;
     Ray3D ray = {0};
@@ -588,6 +621,8 @@ int run_test_runtime_scene_3d_geometry_trace_suite(void) {
     test_runtime_ray_3d_offset_contract();
     test_runtime_scene_3d_geometry_trace("test_runtime_light_emitter_3d_center_hit_contract");
     test_runtime_light_emitter_3d_center_hit_contract();
+    test_runtime_scene_3d_geometry_trace("test_runtime_light_emitter_3d_light_set_sphere_hit_contract");
+    test_runtime_light_emitter_3d_light_set_sphere_hit_contract();
     test_runtime_scene_3d_geometry_trace("test_runtime_light_emitter_3d_trace_geometry_tie_wins_contract");
     test_runtime_light_emitter_3d_trace_geometry_tie_wins_contract();
     test_runtime_scene_3d_geometry_trace("test_runtime_light_emitter_3d_trace_emitter_wins_contract");

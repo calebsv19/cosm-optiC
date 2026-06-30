@@ -192,6 +192,12 @@ RuntimeVolume3DScatterResult runtime_native_3d_render_primary_scatter(
     }
 
     primary_ray = RuntimeCameraProjector3D_MakePrimaryRay(projector, pixel_x, pixel_y);
+    if (scene->volume.debugOverlayEnabled) {
+        return RuntimeVolume3D_AccumulateDensityDebugAlongRayRGB(scene,
+                                                                 &primary_ray,
+                                                                 projector->nearPlane,
+                                                                 t_max);
+    }
     return RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(scene,
                                                               &primary_ray,
                                                               projector->nearPlane,

@@ -113,6 +113,16 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
         dst->emissiveAreaRecursiveTriangleCap = src->emissiveAreaRecursiveTriangleCap;
     }
     dst->emissiveAreaFullScanFallbackCount += src->emissiveAreaFullScanFallbackCount;
+    if (src->causticSidecarEnabled > dst->causticSidecarEnabled) {
+        dst->causticSidecarEnabled = src->causticSidecarEnabled;
+    }
+    dst->causticSidecarSampleCount += src->causticSidecarSampleCount;
+    dst->causticSidecarContributingSampleCount +=
+        src->causticSidecarContributingSampleCount;
+    if (src->maxCausticSidecarRadiance > dst->maxCausticSidecarRadiance) {
+        dst->maxCausticSidecarRadiance = src->maxCausticSidecarRadiance;
+    }
+    dst->totalCausticSidecarRadiance += src->totalCausticSidecarRadiance;
     dst->mirrorDominantPixelCount += src->mirrorDominantPixelCount;
     dst->mirrorBaseAttenuatedPixelCount += src->mirrorBaseAttenuatedPixelCount;
     dst->mirrorReflectionHitPixelCount += src->mirrorReflectionHitPixelCount;

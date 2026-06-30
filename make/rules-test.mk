@@ -127,6 +127,8 @@ RUNTIME_MESH_ASSET_BUILDER_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_scene_3d.c \
 	$(SRC_DIR)/render/runtime_emissive_light_set_3d.c \
 	$(SRC_DIR)/render/runtime_environment_3d.c \
+	$(SRC_DIR)/render/runtime_mesh_blas_cache_3d.c \
+	$(SRC_DIR)/render/runtime_scene_accel_3d.c \
 	$(SRC_DIR)/render/runtime_scene_3d_builder.c \
 	$(SRC_DIR)/render/runtime_triangle_bvh_3d.c \
 	$(SRC_DIR)/render/runtime_volume_3d.c \
@@ -163,6 +165,8 @@ RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_scene_3d.c \
 	$(SRC_DIR)/render/runtime_emissive_light_set_3d.c \
 	$(SRC_DIR)/render/runtime_environment_3d.c \
+	$(SRC_DIR)/render/runtime_mesh_blas_cache_3d.c \
+	$(SRC_DIR)/render/runtime_scene_accel_3d.c \
 	$(SRC_DIR)/render/runtime_scene_3d_builder.c \
 	$(SRC_DIR)/render/runtime_triangle_bvh_3d.c \
 	$(SRC_DIR)/render/runtime_volume_3d.c \
@@ -210,6 +214,12 @@ test-ray-tracing-repo-doc-redaction:
 
 test-ray-tracing-linux-worker-package-validator:
 	python3 tests/integration/run_ray_tracing_linux_worker_package_validator.py
+
+test-ray-tracing-caustic-probe-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_caustic_probe_matrix.py
+
+test-ray-tracing-emissive-light-preview-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_emissive_light_preview_matrix.py
 
 test-ray-tracing-release-contract-redaction:
 	tests/integration/run_ray_tracing_release_contract_redaction.sh

@@ -36,6 +36,8 @@
 #define MATERIAL_EDITOR_RECIPE_MENU_MAX_ITEMS 8
 #define MATERIAL_EDITOR_KNOB_HEIGHT 58
 #define MATERIAL_EDITOR_SUBPANE_COUNT 6
+#define MATERIAL_EDITOR_RESPONSE_ACTION_COUNT 2
+#define MATERIAL_EDITOR_GLASS_OVERLAY_ACTION_COUNT 5
 #define MATERIAL_EDITOR_COMPACT_HEADER_HEIGHT 24
 #define MATERIAL_EDITOR_COMPACT_TAB_HEIGHT 20
 #define MATERIAL_EDITOR_COMPACT_MIN_TAB_WIDTH 42
@@ -127,10 +129,15 @@ typedef struct MaterialEditorProofReadback {
     char source_material[128];
     char expected_behavior[160];
     char deferred_status[160];
+    char glass_proof_case[96];
+    char glass_proof_package[128];
+    char glass_proof_coverage[192];
+    char glass_missing_proof[192];
     char destination_label[64];
     char panel_group_label[64];
     bool m4_request_compatible;
     bool launch_deferred;
+    bool glass_proof_readback;
 } MaterialEditorProofReadback;
 
 typedef struct MaterialEditorGraphReadback {
@@ -203,11 +210,15 @@ typedef struct MaterialEditorTextureChannelReadback {
     char future_channels[128];
     char deferred_channels[128];
     char procedural_source[160];
+    char glass_authored_mapping[320];
+    char glass_procedural_mapping[192];
+    char glass_deferred_mapping[192];
     int visual_count;
     int physical_count;
     int future_count;
     bool has_authored_channels;
     bool has_procedural_source;
+    bool has_glass_mapping;
 } MaterialEditorTextureChannelReadback;
 
 typedef struct MaterialEditorFaceRegionReadback {
@@ -241,6 +252,7 @@ typedef enum MaterialEditorResponseFieldState {
 } MaterialEditorResponseFieldState;
 
 typedef struct MaterialEditorResponseRow {
+    MaterialEditorResponseField field;
     char label[24];
     char value[48];
     char note[80];
@@ -308,6 +320,13 @@ extern int s_layer_total_count;
 extern SDL_Rect s_graph_action_rects[MATERIAL_EDITOR_GRAPH_ACTION_COUNT];
 extern SDL_Rect s_recipe_action_rects[MATERIAL_EDITOR_RECIPE_ACTION_COUNT];
 extern SDL_Rect s_recipe_menu_item_rects[MATERIAL_EDITOR_RECIPE_MENU_MAX_ITEMS];
+extern SDL_Rect s_response_action_rects[MATERIAL_EDITOR_RESPONSE_MAX_ROWS]
+                                      [MATERIAL_EDITOR_RESPONSE_ACTION_COUNT];
+extern MaterialEditorResponseField
+    s_response_action_fields[MATERIAL_EDITOR_RESPONSE_MAX_ROWS];
+extern SDL_Rect s_glass_overlay_action_rects[MATERIAL_EDITOR_GLASS_OVERLAY_ACTION_COUNT];
+extern RuntimeMaterialTextureLayerKind
+    s_glass_overlay_action_kinds[MATERIAL_EDITOR_GLASS_OVERLAY_ACTION_COUNT];
 extern int s_material_editor_param_drag_start_y;
 extern double s_material_editor_param_drag_start_value;
 extern MaterialEditorProofReadback s_material_editor_proof_readback;
@@ -412,6 +431,7 @@ bool MaterialEditorBuildFaceRegionReadback(MaterialEditorFaceRegionReadback* out
 bool MaterialEditorBuildResponseReadback(MaterialEditorResponseReadback* out_readback);
 const char* MaterialEditorResponseFamilyLabel(MaterialEditorResponseFamily family);
 const char* MaterialEditorResponseFieldStateLabel(MaterialEditorResponseFieldState state);
+const char* MaterialEditorResponseFieldLabel(MaterialEditorResponseField field);
 
 void MaterialEditorResetGroupListLayout(void);
 void MaterialEditorResetLayerListLayout(void);

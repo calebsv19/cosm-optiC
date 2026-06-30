@@ -273,6 +273,23 @@ void SaveSceneConfig(void) {
         json_object_object_add(jsonObj, "textureColorDepth", json_object_new_double(obj->textureColorDepth));
         json_object_object_add(jsonObj, "textureSurfaceDamage", json_object_new_double(obj->textureSurfaceDamage));
         json_object_object_add(jsonObj, "textureSeed", json_object_new_int(obj->textureSeed));
+        if (obj->hasGlassTransportOverride) {
+            json_object_object_add(jsonObj,
+                                   "glassTransportOverride",
+                                   json_object_new_boolean(obj->hasGlassTransportOverride));
+            json_object_object_add(jsonObj,
+                                   "glassTransmission",
+                                   json_object_new_double(obj->glassTransmission));
+            json_object_object_add(jsonObj,
+                                   "glassIor",
+                                   json_object_new_double(obj->glassIor));
+            json_object_object_add(jsonObj,
+                                   "glassAbsorptionDistance",
+                                   json_object_new_double(obj->glassAbsorptionDistance));
+            json_object_object_add(jsonObj,
+                                   "glassThinWalled",
+                                   json_object_new_boolean(obj->glassThinWalled));
+        }
         {
             struct json_object* materialTextureStack = ConfigSaveMaterialTextureStackForObject(i);
             struct json_object* materialGraph = ConfigSaveMaterialGraphForObject(i);
@@ -412,7 +429,8 @@ void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
         *emissiveStrength, *textureId, *textureOffsetU, *textureOffsetV, *textureScale,
         *textureStrength, *texturePatternMode, *textureCoverage, *textureGrain, *textureEdgeSoftness,
         *textureContrast, *textureFlow, *textureColorDepth, *textureSurfaceDamage, *textureSeed,
-        *materialId;
+        *materialId, *glassTransportOverride, *glassTransmission, *glassIor,
+        *glassAbsorptionDistance, *glassThinWalled;
 
     // Load texture path
     if (json_object_object_get_ex(obj, "texture", &texture)) {
@@ -563,6 +581,23 @@ void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
         sceneObject->material_id = json_object_get_int(materialId);
     } else {
         sceneObject->material_id = MaterialManagerDefaultId();
+    }
+    SceneObjectClearGlassTransportOverride(sceneObject);
+    if (json_object_object_get_ex(obj, "glassTransportOverride", &glassTransportOverride) &&
+        json_object_get_boolean(glassTransportOverride)) {
+        SceneObjectSeedGlassTransportOverrideFromMaterial(sceneObject);
+        if (json_object_object_get_ex(obj, "glassTransmission", &glassTransmission)) {
+            sceneObject->glassTransmission = json_object_get_double(glassTransmission);
+        }
+        if (json_object_object_get_ex(obj, "glassIor", &glassIor)) {
+            sceneObject->glassIor = json_object_get_double(glassIor);
+        }
+        if (json_object_object_get_ex(obj, "glassAbsorptionDistance", &glassAbsorptionDistance)) {
+            sceneObject->glassAbsorptionDistance = json_object_get_double(glassAbsorptionDistance);
+        }
+        if (json_object_object_get_ex(obj, "glassThinWalled", &glassThinWalled)) {
+            sceneObject->glassThinWalled = json_object_get_boolean(glassThinWalled);
+        }
     }
 }
 

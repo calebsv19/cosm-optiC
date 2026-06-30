@@ -18,7 +18,9 @@
 #include "render/ray_tracing_mode_backend.h"
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_native_3d_render.h"
+#include "render/runtime_disney_v2_caustic_sidecar_3d.h"
 #include "render/runtime_volume_3d_debug.h"
+#include "render/runtime_volume_3d_integrate.h"
 #include "render/runtime_volume_3d_scatter.h"
 #include "tools/make_video.h"
 #include "tools/ray_tracing_render_headless_internal.h"
@@ -373,6 +375,8 @@ static bool ray_tracing_headless_inspect_volume_frame(
     if (out_loaded_frame_index) {
         *out_loaded_frame_index = attachment.grid.frameIndex;
     }
+    attachment.affectsLighting = request->volume_affects_lighting;
+    attachment.debugOverlayEnabled = request->volume_debug_overlay;
     if (out_summary) {
         ok = RuntimeVolumeDebugSummary3D_Build(&attachment, out_summary);
         if (!ok) {
@@ -546,6 +550,8 @@ static void ray_tracing_headless_copy_water_surface_first_frame(
         preflight->water_surface_absorption_r = frame->material.absorption_rgb[0];
         preflight->water_surface_absorption_g = frame->material.absorption_rgb[1];
         preflight->water_surface_absorption_b = frame->material.absorption_rgb[2];
+        preflight->water_surface_material_reflectivity = frame->material.reflectivity;
+        preflight->water_surface_material_roughness = frame->material.roughness;
     }
 }
 
@@ -656,9 +662,72 @@ static void ray_tracing_headless_note_water_surface_mesh(
             preflight->water_surface_payload_absorption_distance_m =
                 payload.absorptionDistance;
             preflight->water_surface_payload_transparency = payload.transparency;
+            preflight->water_surface_payload_reflectivity = payload.bsdf.reflectivity;
+            preflight->water_surface_payload_roughness = payload.bsdf.roughness;
             preflight->water_surface_payload_tint_r = payload.baseColorR;
             preflight->water_surface_payload_tint_g = payload.baseColorG;
             preflight->water_surface_payload_tint_b = payload.baseColorB;
+        }
+    }
+}
+
+static void ray_tracing_headless_note_registered_lights(
+    RayTracingHeadlessPreflight *preflight,
+    const RuntimeNative3DPreparedFrame *frame) {
+    if (!preflight || !frame) return;
+    preflight->registered_light_count = frame->scene.lightSet.lightCount;
+    preflight->registered_enabled_light_count = frame->scene.lightSet.enabledCount;
+    for (int i = 0; i < frame->scene.lightSet.lightCount; ++i) {
+        const RuntimeLightSource3D* source = &frame->scene.lightSet.lights[i];
+        if (i == 0) {
+            preflight->registered_light_first_color_r = source->color.x;
+            preflight->registered_light_first_color_g = source->color.y;
+            preflight->registered_light_first_color_b = source->color.z;
+        }
+        switch (source->kind) {
+            case RUNTIME_LIGHT_SOURCE_3D_KIND_SPHERE:
+                preflight->registered_light_sphere_count += 1;
+                break;
+            case RUNTIME_LIGHT_SOURCE_3D_KIND_DISK:
+                preflight->registered_light_disk_count += 1;
+                break;
+            case RUNTIME_LIGHT_SOURCE_3D_KIND_RECT:
+                preflight->registered_light_rect_count += 1;
+                break;
+            case RUNTIME_LIGHT_SOURCE_3D_KIND_MESH_EMISSIVE:
+                preflight->registered_light_mesh_emissive_count += 1;
+                break;
+            case RUNTIME_LIGHT_SOURCE_3D_KIND_POINT:
+            default:
+                preflight->registered_light_point_count += 1;
+                break;
+        }
+        switch (source->origin) {
+            case RUNTIME_LIGHT_SOURCE_3D_ORIGIN_COMPAT_SCENE_LIGHT:
+                preflight->registered_light_compatibility_count += 1;
+                break;
+            case RUNTIME_LIGHT_SOURCE_3D_ORIGIN_MATERIAL_EMITTER:
+                preflight->registered_light_material_emitter_count += 1;
+                if (source->enabled) {
+                    preflight->registered_light_material_emitter_enabled_count += 1;
+                }
+                break;
+            case RUNTIME_LIGHT_SOURCE_3D_ORIGIN_AUTHORED_LIGHT:
+            default:
+                preflight->registered_light_authored_count += 1;
+                break;
+        }
+        if (source->meshAreaSamplerOnly) {
+            preflight->registered_light_mesh_area_sampler_only_count += 1;
+        }
+        preflight->registered_light_emissive_candidate_count +=
+            source->emissiveCandidateCount;
+        preflight->registered_light_emissive_area += source->emissiveArea;
+        preflight->registered_light_emissive_weight += source->emissiveWeight;
+        if (source->emissiveProxyRadius >
+            preflight->registered_light_emissive_proxy_radius_max) {
+            preflight->registered_light_emissive_proxy_radius_max =
+                source->emissiveProxyRadius;
         }
     }
 }
@@ -668,6 +737,7 @@ static void apply_inspection_overrides(const RayTracingAgentRenderRequest *reque
 
     RuntimeNative3DRender_ResetInspectionCameraOverrides();
     RuntimeVolume3DScatter_ResetTuning();
+    RuntimeVolume3DMaterial_ResetTuning();
     if (request->has_camera_zoom_override) {
         sceneSettings.camera.zoom = request->camera_zoom_override;
     }
@@ -725,6 +795,18 @@ static void apply_inspection_overrides(const RayTracingAgentRenderRequest *reque
     if (request->has_volume_scatter_gain_override) {
         RuntimeVolume3DScatter_SetStrengthGain(request->volume_scatter_gain_override);
     }
+    if (request->has_volume_density_scale_override) {
+        RuntimeVolume3DMaterial_SetDensityScale(request->volume_density_scale_override);
+    }
+    if (request->has_volume_density_gamma_override) {
+        RuntimeVolume3DMaterial_SetDensityGamma(request->volume_density_gamma_override);
+    }
+    if (request->has_volume_absorption_gain_override) {
+        RuntimeVolume3DMaterial_SetAbsorptionGain(request->volume_absorption_gain_override);
+    }
+    if (request->has_volume_opacity_clamp_override) {
+        RuntimeVolume3DMaterial_SetOpacityClamp(request->volume_opacity_clamp_override);
+    }
     if (request->has_volume_step_scale_override) {
         RuntimeVolume3DScatter_SetStepScale(request->volume_step_scale_override);
     }
@@ -734,10 +816,21 @@ static void apply_inspection_overrides(const RayTracingAgentRenderRequest *reque
     if (request->has_transmission_samples_3d_override) {
         animSettings.transmissionSamples3D = request->transmission_samples_3d_override;
     }
+    RuntimeDisneyV2_3D_SetCausticMode(
+        request->integrator_3d == RAY_TRACING_3D_INTEGRATOR_DISNEY_V2
+            ? request->caustic_mode
+            : RUNTIME_DISNEY_V2_CAUSTIC_MODE_OFF,
+        request->has_caustic_sidecar_strength_override ? request->caustic_sidecar_strength
+                                                       : 1.0);
     if (request->has_volume_tint_override) {
         RuntimeVolume3DScatter_SetTint(request->volume_tint_r,
                                        request->volume_tint_g,
                                        request->volume_tint_b);
+    }
+    if (request->has_volume_albedo_override) {
+        RuntimeVolume3DScatter_SetTint(request->volume_albedo_r,
+                                       request->volume_albedo_g,
+                                       request->volume_albedo_b);
     }
 }
 
@@ -1060,9 +1153,12 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                                                 light_point.y);
     preflight.native_prepare_frame_ms = ray_tracing_elapsed_ms_since(&stage_started_at);
     RuntimeScene3DBuilder_TimingSnapshot(&preflight.scene_builder_timing_stats);
+    RuntimeMeshBLASCache3D_SnapshotDiagnostics(&preflight.scene_acceleration_stats);
+    RuntimeSceneAcceleration3D_AppendTLASDiagnostics(&preflight.scene_acceleration_stats);
     if (preflight.prepared_frame) {
         preflight.environment_summary = frame.scene.environment;
         preflight.environment_summary_built = true;
+        ray_tracing_headless_note_registered_lights(&preflight, &frame);
         RuntimeTriangleMesh3D_BVHBuildStats(&frame.scene.triangleMesh,
                                             &preflight.bvh_build_stats);
         if (!preflight.bvh_build_stats.ready ||
@@ -1692,6 +1788,8 @@ static int run_render(const RayTracingAgentRenderRequest *request,
     free(pixels);
     RuntimeTriangleBVH3D_SnapshotTraceStats(&preflight.bvh_trace_stats);
     RuntimeNative3DPreparedSceneCacheStatsSnapshot(&preflight.prepared_scene_cache_stats);
+    RuntimeMeshBLASCache3D_SnapshotDiagnostics(&preflight.scene_acceleration_stats);
+    RuntimeSceneAcceleration3D_AppendTLASDiagnostics(&preflight.scene_acceleration_stats);
     preflight.rendered_frames = preflight.frames_rendered == request->frame_count;
     if (preflight.rendered_frames && request->video_enabled) {
         int video_code = 0;

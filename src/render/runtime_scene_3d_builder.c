@@ -1,4 +1,6 @@
 #include "render/runtime_scene_3d_builder.h"
+#include "render/runtime_mesh_blas_cache_3d.h"
+#include "render/runtime_scene_accel_3d.h"
 #include "render/runtime_triangle_bvh_3d.h"
 #include "render/runtime_scene_3d_samples.h"
 
@@ -94,11 +96,14 @@ static Vec3 runtime_scene_3d_builder_rotate_instance(Vec3 p,
 
 static Vec3 runtime_scene_3d_builder_transform_mesh_vertex(
     const CoreMeshAssetRuntimeVertex* vertex,
-    const RayTracingRuntimeMeshAssetInstance* instance) {
+    const RayTracingRuntimeMeshAssetInstance* instance,
+    Vec3 pivot) {
     Vec3 p = vec3(vertex->position.x * instance->scale_x,
                   vertex->position.y * instance->scale_y,
                   vertex->position.z * instance->scale_z);
+    p = vec3_sub(p, pivot);
     p = runtime_scene_3d_builder_rotate_instance(p, instance);
+    p = vec3_add(p, pivot);
     return vec3_add(p,
                     vec3(instance->position_x,
                          instance->position_y,
@@ -111,6 +116,46 @@ typedef struct {
     Vec3 extent;
     bool valid;
 } RuntimeScene3DBuilderMeshBounds;
+
+static Vec3 runtime_scene_3d_builder_mesh_rotation_pivot(
+    const CoreMeshAssetRuntimeDocument* document,
+    const RayTracingRuntimeMeshAssetInstance* instance) {
+    CoreObjectVec3 min = {0};
+    CoreObjectVec3 max = {0};
+    if (!document || !instance) {
+        return vec3(0.0, 0.0, 0.0);
+    }
+    if (instance->rotation_pivot_policy ==
+        RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_CUSTOM) {
+        return vec3(instance->rotation_pivot_x * instance->scale_x,
+                    instance->rotation_pivot_y * instance->scale_y,
+                    instance->rotation_pivot_z * instance->scale_z);
+    }
+    if (document->vertex_count == 0u || !document->vertices ||
+        instance->rotation_pivot_policy !=
+            RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_BOUNDS_CENTER) {
+        return vec3(0.0, 0.0, 0.0);
+    }
+    min = document->contract.local_bounds.min;
+    max = document->contract.local_bounds.max;
+    if (min.x == 0.0 && min.y == 0.0 && min.z == 0.0 &&
+        max.x == 0.0 && max.y == 0.0 && max.z == 0.0) {
+        min = document->vertices[0].position;
+        max = document->vertices[0].position;
+        for (size_t i = 1u; i < document->vertex_count; ++i) {
+            const CoreObjectVec3 p = document->vertices[i].position;
+            if (p.x < min.x) min.x = p.x;
+            if (p.y < min.y) min.y = p.y;
+            if (p.z < min.z) min.z = p.z;
+            if (p.x > max.x) max.x = p.x;
+            if (p.y > max.y) max.y = p.y;
+            if (p.z > max.z) max.z = p.z;
+        }
+    }
+    return vec3(((min.x + max.x) * 0.5) * instance->scale_x,
+                ((min.y + max.y) * 0.5) * instance->scale_y,
+                ((min.z + max.z) * 0.5) * instance->scale_z);
+}
 
 static bool runtime_scene_3d_builder_rebuild_bvh(RuntimeScene3D* scene) {
     struct timespec stage_start = {0};
@@ -140,15 +185,32 @@ static bool runtime_scene_3d_builder_rebuild_bvh(RuntimeScene3D* scene) {
     return true;
 }
 
+static bool runtime_scene_3d_builder_rebuild_tlas(RuntimeScene3D* scene) {
+    if (!RuntimeSceneAcceleration3D_RebuildTLASFromScene(scene)) {
+        char diag[2048];
+        snprintf(diag,
+                 sizeof(diag),
+                 "TLAS rebuild failed: %s",
+                 RuntimeSceneAcceleration3D_LastDiagnostics());
+        runtime_scene_3d_builder_set_diag(diag);
+        return false;
+    }
+    return true;
+}
+
 static RuntimeScene3DBuilderMeshBounds runtime_scene_3d_builder_mesh_bounds(
     const CoreMeshAssetRuntimeDocument* document,
     const RayTracingRuntimeMeshAssetInstance* instance) {
     RuntimeScene3DBuilderMeshBounds bounds = {0};
+    Vec3 pivot = runtime_scene_3d_builder_mesh_rotation_pivot(document, instance);
     if (!document || !instance || document->vertex_count == 0u) {
         return bounds;
     }
     for (size_t i = 0; i < document->vertex_count; ++i) {
-        Vec3 p = runtime_scene_3d_builder_transform_mesh_vertex(&document->vertices[i], instance);
+        Vec3 p =
+            runtime_scene_3d_builder_transform_mesh_vertex(&document->vertices[i],
+                                                          instance,
+                                                          pivot);
         if (i == 0u) {
             bounds.min = p;
             bounds.max = p;
@@ -737,6 +799,15 @@ static bool runtime_scene_3d_builder_append_mesh_asset_set(
         return false;
     }
     if (mesh_assets->instance_count <= 0) return true;
+    if (!RuntimeMeshBLASCache3D_PrepareAssetSet(mesh_assets)) {
+        char diag[2048];
+        snprintf(diag,
+                 sizeof(diag),
+                 "append mesh assets failed: BLAS cache prepare failed: %s",
+                 RuntimeMeshBLASCache3D_LastDiagnostics());
+        runtime_scene_3d_builder_set_diag(diag);
+        return false;
+    }
 
     gRuntimeScene3DBuilderTiming.mesh_append_assets += mesh_assets->asset_count;
     gRuntimeScene3DBuilderTiming.mesh_append_instances += mesh_assets->instance_count;
@@ -780,6 +851,7 @@ static bool runtime_scene_3d_builder_append_mesh_asset_set(
             runtime_scene_3d_builder_resolve_mesh_scene_object_index(instance);
         RuntimeScene3DBuilderMeshBounds bounds =
             runtime_scene_3d_builder_mesh_bounds(document, instance);
+        Vec3 pivot = runtime_scene_3d_builder_mesh_rotation_pivot(document, instance);
         int appended_triangle_count = 0;
 
         memset(primitive, 0, sizeof(*primitive));
@@ -795,13 +867,16 @@ static bool runtime_scene_3d_builder_append_mesh_asset_set(
             const CoreMeshAssetRuntimeTriangle* src = &document->triangles[j];
             Vec3 p0 = runtime_scene_3d_builder_transform_mesh_vertex(
                 &document->vertices[src->a],
-                instance);
+                instance,
+                pivot);
             Vec3 p1 = runtime_scene_3d_builder_transform_mesh_vertex(
                 &document->vertices[src->b],
-                instance);
+                instance,
+                pivot);
             Vec3 p2 = runtime_scene_3d_builder_transform_mesh_vertex(
                 &document->vertices[src->c],
-                instance);
+                instance,
+                pivot);
             Vec3 tex0 = runtime_scene_3d_builder_object_texture_coord(p0, &bounds);
             Vec3 tex1 = runtime_scene_3d_builder_object_texture_coord(p1, &bounds);
             Vec3 tex2 = runtime_scene_3d_builder_object_texture_coord(p2, &bounds);
@@ -836,9 +911,12 @@ static bool runtime_scene_3d_builder_append_mesh_asset_set(
     gRuntimeScene3DBuilderTiming.mesh_append_expand_ms +=
         runtime_scene_3d_builder_elapsed_ms_since(&stage_start);
     scene->scope.triangleMeshEnabled = true;
-    if (require_ready_bvh && !runtime_scene_3d_builder_rebuild_bvh(scene)) {
-        RuntimeScene3D_Reset(scene);
-        return false;
+    if (require_ready_bvh) {
+        if (!runtime_scene_3d_builder_rebuild_tlas(scene) ||
+            !runtime_scene_3d_builder_rebuild_bvh(scene)) {
+            RuntimeScene3D_Reset(scene);
+            return false;
+        }
     }
     gRuntimeScene3DBuilderTiming.mesh_append_total_ms +=
         runtime_scene_3d_builder_elapsed_ms_since(&total_start);
@@ -894,22 +972,105 @@ static void runtime_scene_3d_builder_fill_primitive(RuntimePrimitive3D* primitiv
     }
 }
 
-static void runtime_scene_3d_builder_apply_authored_samples(RuntimeScene3D* scene,
+static RuntimeLight3D runtime_scene_3d_builder_compat_light_from_source(
+    const RuntimeLightSource3D* source) {
+    RuntimeLight3D light = {0};
+    if (!source) return light;
+    light.position = source->position;
+    light.radius = source->radius;
+    if (light.radius <= 0.0) {
+        if (source->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_DISK && source->width > 0.0) {
+            light.radius = source->width * 0.5;
+        } else if (source->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_RECT &&
+                   (source->width > 0.0 || source->height > 0.0)) {
+            light.radius = 0.5 * sqrt(source->width * source->width +
+                                      source->height * source->height);
+        }
+    }
+    light.intensity = source->intensity;
+    light.falloffDistance = source->falloffDistance;
+    light.falloffMode = source->falloffMode;
+    return light;
+}
+
+static RuntimeLightSource3D runtime_scene_3d_builder_normalized_light_source(
+    const RuntimeLightSource3D* source) {
+    RuntimeLightSource3D normalized = {0};
+    double authored_radius = animSettings.lightRadius;
+
+    if (!source) return normalized;
+    normalized = *source;
+    if (normalized.radius <= 0.0 &&
+        (normalized.kind == RUNTIME_LIGHT_SOURCE_3D_KIND_POINT ||
+         normalized.kind == RUNTIME_LIGHT_SOURCE_3D_KIND_SPHERE) &&
+        authored_radius > 0.0) {
+        normalized.radius = authored_radius;
+        normalized.kind = RUNTIME_LIGHT_SOURCE_3D_KIND_SPHERE;
+    }
+    normalized.falloffMode = animSettings.forwardFalloffMode;
+    return normalized;
+}
+
+static bool runtime_scene_3d_builder_apply_light_seed_state(RuntimeScene3D* scene) {
+    RuntimeSceneBridge3DLightSeedState light_state = {0};
+    if (!scene) return false;
+    runtime_scene_bridge_get_last_3d_light_seed_state(&light_state);
+    if (!light_state.valid || light_state.light_count <= 0) {
+        return true;
+    }
+    RuntimeLightSet3D_Reset(&scene->lightSet);
+    for (int i = 0; i < light_state.light_count; ++i) {
+        RuntimeLightSource3D source =
+            runtime_scene_3d_builder_normalized_light_source(&light_state.lights[i]);
+        if (!RuntimeLightSet3D_Append(&scene->lightSet, &source, NULL)) {
+            runtime_scene_3d_builder_set_diag("authored light seed build failed: append failed");
+            return false;
+        }
+    }
+    if (scene->lightSet.lightCount > 0) {
+        const RuntimeLightSource3D* first_enabled =
+            RuntimeLightSet3D_GetEnabled(&scene->lightSet, 0);
+        if (!first_enabled) first_enabled = &scene->lightSet.lights[0];
+        scene->light = runtime_scene_3d_builder_compat_light_from_source(first_enabled);
+        scene->hasLight = first_enabled->enabled;
+    }
+    return true;
+}
+
+static bool runtime_scene_3d_builder_apply_authored_samples(RuntimeScene3D* scene,
                                                             double normalized_t) {
     RuntimeLight3D light = {0};
     RuntimeCamera3D camera = {0};
-    if (!scene) return;
+    RuntimeSceneBridge3DScaffoldState scaffold = {0};
+    if (!scene) return false;
 
     RuntimeEnvironment3D_ResolveFromAnimationConfig(&scene->environment, &animSettings);
 
-    if (RuntimeScene3DSampleAuthoredLight(normalized_t, &light)) {
+    if (!runtime_scene_3d_builder_apply_light_seed_state(scene)) {
+        return false;
+    }
+    runtime_scene_bridge_get_last_3d_scaffold_state(&scaffold);
+    if (scaffold.has_light_path && RuntimeScene3DSampleAuthoredLight(normalized_t, &light)) {
         scene->light = light;
         scene->hasLight = true;
+        if (scene->lightSet.lightCount > 0) {
+            if (!RuntimeLightSet3D_UpdateFirstEnabledFromCompatibilityLight(&scene->lightSet,
+                                                                            &scene->light)) {
+                runtime_scene_3d_builder_set_diag("authored light seed motion update failed");
+                return false;
+            }
+        } else if (!RuntimeLightSet3D_BuildFromCompatibilityLight(&scene->lightSet,
+                                                                  &scene->light,
+                                                                  scene->hasLight)) {
+            runtime_scene_3d_builder_set_diag("compat light seed build failed");
+            return false;
+        }
     }
     if (RuntimeScene3DSampleAuthoredCamera(normalized_t, &camera)) {
         scene->camera = camera;
         scene->hasCamera = true;
     }
+    return true;
 }
 
 static bool runtime_scene_3d_builder_build_from_primitive_seed_state_at_t(
@@ -928,7 +1089,9 @@ static bool runtime_scene_3d_builder_build_from_primitive_seed_state_at_t(
     }
 
     RuntimeScene3D_Reset(scene);
-    runtime_scene_3d_builder_apply_authored_samples(scene, normalized_t);
+    if (!runtime_scene_3d_builder_apply_authored_samples(scene, normalized_t)) {
+        return false;
+    }
     retained_primitive_count = seed_state->primitive_count;
     for (int i = 0; i < seed_state->primitive_count; ++i) {
         RuntimePrimitive3DKind kind =
@@ -963,9 +1126,12 @@ static bool runtime_scene_3d_builder_build_from_primitive_seed_state_at_t(
         scene->primitiveCount += 1;
     }
 
-    if (require_ready_bvh && !runtime_scene_3d_builder_rebuild_bvh(scene)) {
-        RuntimeScene3D_Reset(scene);
-        return false;
+    if (require_ready_bvh) {
+        if (!runtime_scene_3d_builder_rebuild_tlas(scene) ||
+            !runtime_scene_3d_builder_rebuild_bvh(scene)) {
+            RuntimeScene3D_Reset(scene);
+            return false;
+        }
     }
     gRuntimeScene3DBuilderTiming.primitive_seed_ms +=
         runtime_scene_3d_builder_elapsed_ms_since(&stage_start);
@@ -1048,6 +1214,25 @@ bool RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(RuntimeScene3D* scene, double
                  seed_state.excluded_primitive_count,
                  mesh_instance_count,
                  mesh_asset_count);
+        runtime_scene_3d_builder_set_diag(diag);
+        return false;
+    }
+    if (!runtime_scene_3d_builder_rebuild_tlas(scene)) {
+        char diag[4096];
+        const char* lower_diag = RuntimeScene3DBuilder_LastDiagnostics();
+        snprintf(diag,
+                 sizeof(diag),
+                 "bridge TLAS rebuild failed: seed_valid=%s seed_primitive_count=%d seed_plane_count=%d seed_rect_prism_count=%d seed_excluded_count=%d mesh_instance_count=%d mesh_asset_count=%d primitive_count=%d triangle_count=%d lower=%s",
+                 seed_state.valid ? "true" : "false",
+                 seed_state.primitive_count,
+                 seed_state.plane_primitive_count,
+                 seed_state.rect_prism_primitive_count,
+                 seed_state.excluded_primitive_count,
+                 mesh_instance_count,
+                 mesh_asset_count,
+                 scene ? scene->primitiveCount : -1,
+                 scene ? scene->triangleMesh.triangleCount : -1,
+                 lower_diag ? lower_diag : "unknown");
         runtime_scene_3d_builder_set_diag(diag);
         return false;
     }

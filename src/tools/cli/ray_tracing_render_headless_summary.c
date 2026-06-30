@@ -1,6 +1,7 @@
 #include "tools/ray_tracing_render_headless_internal.h"
 
 #include "app/ray_tracing_request_utils.h"
+#include "render/runtime_disney_v2_caustic_sidecar_3d.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -175,6 +176,22 @@ void ray_tracing_render_headless_write_summary(
             request->has_volume_scatter_gain_override ? "true" : "false");
     fprintf(file, "    \"volume_scatter_gain\": %.9f,\n",
             request->volume_scatter_gain_override);
+    fprintf(file, "    \"has_volume_density_scale_override\": %s,\n",
+            request->has_volume_density_scale_override ? "true" : "false");
+    fprintf(file, "    \"volume_density_scale\": %.9f,\n",
+            request->volume_density_scale_override);
+    fprintf(file, "    \"has_volume_density_gamma_override\": %s,\n",
+            request->has_volume_density_gamma_override ? "true" : "false");
+    fprintf(file, "    \"volume_density_gamma\": %.9f,\n",
+            request->volume_density_gamma_override);
+    fprintf(file, "    \"has_volume_absorption_gain_override\": %s,\n",
+            request->has_volume_absorption_gain_override ? "true" : "false");
+    fprintf(file, "    \"volume_absorption_gain\": %.9f,\n",
+            request->volume_absorption_gain_override);
+    fprintf(file, "    \"has_volume_opacity_clamp_override\": %s,\n",
+            request->has_volume_opacity_clamp_override ? "true" : "false");
+    fprintf(file, "    \"volume_opacity_clamp\": %.9f,\n",
+            request->volume_opacity_clamp_override);
     fprintf(file, "    \"has_volume_step_scale_override\": %s,\n",
             request->has_volume_step_scale_override ? "true" : "false");
     fprintf(file, "    \"volume_step_scale\": %.9f,\n",
@@ -187,12 +204,30 @@ void ray_tracing_render_headless_write_summary(
             request->has_transmission_samples_3d_override ? "true" : "false");
     fprintf(file, "    \"transmission_samples_3d\": %d,\n",
             request->transmission_samples_3d_override);
+    fprintf(file, "    \"has_caustic_mode_override\": %s,\n",
+            request->has_caustic_mode_override ? "true" : "false");
+    fprintf(file, "    \"caustic_mode\": \"%s\",\n",
+            RuntimeDisneyV2_3D_CausticModeLabel(request->caustic_mode));
+    fprintf(file, "    \"has_caustic_sidecar_enabled_override\": %s,\n",
+            request->has_caustic_sidecar_enabled_override ? "true" : "false");
+    fprintf(file, "    \"caustic_sidecar_enabled\": %s,\n",
+            request->caustic_sidecar_enabled ? "true" : "false");
+    fprintf(file, "    \"has_caustic_sidecar_strength_override\": %s,\n",
+            request->has_caustic_sidecar_strength_override ? "true" : "false");
+    fprintf(file, "    \"caustic_sidecar_strength\": %.9f,\n",
+            request->caustic_sidecar_strength);
     fprintf(file, "    \"has_volume_tint_override\": %s,\n",
             request->has_volume_tint_override ? "true" : "false");
-    fprintf(file, "    \"volume_tint\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f }\n",
+    fprintf(file, "    \"volume_tint\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
             request->volume_tint_r,
             request->volume_tint_g,
             request->volume_tint_b);
+    fprintf(file, "    \"has_volume_albedo_override\": %s,\n",
+            request->has_volume_albedo_override ? "true" : "false");
+    fprintf(file, "    \"volume_albedo\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f }\n",
+            request->volume_albedo_r,
+            request->volume_albedo_g,
+            request->volume_albedo_b);
     fprintf(file, "  },\n");
     {
         const RuntimeEnvironment3D *environment = &preflight->environment_summary;
@@ -257,6 +292,36 @@ void ray_tracing_render_headless_write_summary(
                 preflight->scene_summary.light_count);
         fprintf(file, "  },\n");
     }
+    fprintf(file, "  \"registered_lights\": {\n");
+    fprintf(file, "    \"light_count\": %d,\n", preflight->registered_light_count);
+    fprintf(file, "    \"enabled_count\": %d,\n", preflight->registered_enabled_light_count);
+    fprintf(file, "    \"shape_counts\": { \"point\": %d, \"sphere\": %d, \"disk\": %d, \"rect\": %d, \"mesh_emissive\": %d },\n",
+            preflight->registered_light_point_count,
+            preflight->registered_light_sphere_count,
+            preflight->registered_light_disk_count,
+            preflight->registered_light_rect_count,
+            preflight->registered_light_mesh_emissive_count);
+    fprintf(file, "    \"source_counts\": { \"authored\": %d, \"compatibility\": %d, \"material_emitter\": %d },\n",
+            preflight->registered_light_authored_count,
+            preflight->registered_light_compatibility_count,
+            preflight->registered_light_material_emitter_count);
+    fprintf(file, "    \"material_emitter_enabled_count\": %d,\n",
+            preflight->registered_light_material_emitter_enabled_count);
+    fprintf(file, "    \"mesh_area_sampler_only_count\": %d,\n",
+            preflight->registered_light_mesh_area_sampler_only_count);
+    fprintf(file, "    \"emissive_candidate_count\": %d,\n",
+            preflight->registered_light_emissive_candidate_count);
+    fprintf(file, "    \"emissive_area\": %.9f,\n",
+            preflight->registered_light_emissive_area);
+    fprintf(file, "    \"emissive_weight\": %.9f,\n",
+            preflight->registered_light_emissive_weight);
+    fprintf(file, "    \"emissive_proxy_radius_max\": %.9f,\n",
+            preflight->registered_light_emissive_proxy_radius_max);
+    fprintf(file, "    \"first_color\": [%.9f, %.9f, %.9f]\n",
+            preflight->registered_light_first_color_r,
+            preflight->registered_light_first_color_g,
+            preflight->registered_light_first_color_b);
+    fprintf(file, "  },\n");
     fprintf(file, "  \"object_audit_summary\": {\n");
     fprintf(file, "    \"enabled\": %s,\n", preflight->object_audit_enabled ? "true" : "false");
     fprintf(file, "    \"requested_max_dimension\": %d,\n", request->object_audit_max_dimension);
@@ -305,6 +370,8 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "  },\n");
     fprintf(file, "  \"volume_summary\": {\n");
     fprintf(file, "    \"enabled\": %s,\n", preflight->volume_summary.enabled ? "true" : "false");
+    fprintf(file, "    \"debug_overlay_enabled\": %s,\n",
+            preflight->volume_summary.debugOverlayEnabled ? "true" : "false");
     fprintf(file, "    \"has_data\": %s,\n", preflight->volume_summary.hasData ? "true" : "false");
     fprintf(file, "    \"layout_valid\": %s,\n",
             preflight->volume_summary.layoutValid ? "true" : "false");
@@ -397,10 +464,14 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "      \"ior\": %.9f,\n", preflight->water_surface_material_ior);
     fprintf(file, "      \"absorption_distance_m\": %.9f,\n",
             preflight->water_surface_absorption_distance_m);
-    fprintf(file, "      \"absorption_rgb\": [%.9f, %.9f, %.9f]\n",
+    fprintf(file, "      \"absorption_rgb\": [%.9f, %.9f, %.9f],\n",
             preflight->water_surface_absorption_r,
             preflight->water_surface_absorption_g,
             preflight->water_surface_absorption_b);
+    fprintf(file, "      \"reflectivity\": %.9f,\n",
+            preflight->water_surface_material_reflectivity);
+    fprintf(file, "      \"roughness\": %.9f\n",
+            preflight->water_surface_material_roughness);
     fprintf(file, "    },\n");
     fprintf(file, "    \"payload\": {\n");
     fprintf(file, "      \"applied\": %s,\n",
@@ -410,6 +481,10 @@ void ray_tracing_render_headless_write_summary(
             preflight->water_surface_payload_absorption_distance_m);
     fprintf(file, "      \"transparency\": %.9f,\n",
             preflight->water_surface_payload_transparency);
+    fprintf(file, "      \"reflectivity\": %.9f,\n",
+            preflight->water_surface_payload_reflectivity);
+    fprintf(file, "      \"roughness\": %.9f,\n",
+            preflight->water_surface_payload_roughness);
     fprintf(file, "      \"tint_rgb\": [%.9f, %.9f, %.9f]\n",
             preflight->water_surface_payload_tint_r,
             preflight->water_surface_payload_tint_g,
@@ -443,6 +518,16 @@ void ray_tracing_render_headless_write_summary(
             preflight->stats.emissiveAreaRecursiveTriangleCap);
     fprintf(file, "    \"emissive_area_full_scan_fallbacks\": %d,\n",
             preflight->stats.emissiveAreaFullScanFallbackCount);
+    fprintf(file, "    \"caustic_sidecar_enabled\": %s,\n",
+            preflight->stats.causticSidecarEnabled > 0 ? "true" : "false");
+    fprintf(file, "    \"caustic_sidecar_samples\": %d,\n",
+            preflight->stats.causticSidecarSampleCount);
+    fprintf(file, "    \"caustic_sidecar_contributing_samples\": %d,\n",
+            preflight->stats.causticSidecarContributingSampleCount);
+    fprintf(file, "    \"max_caustic_sidecar_radiance\": %.9f,\n",
+            preflight->stats.maxCausticSidecarRadiance);
+    fprintf(file, "    \"total_caustic_sidecar_radiance\": %.9f,\n",
+            preflight->stats.totalCausticSidecarRadiance);
     fprintf(file, "    \"mirror_dominant_pixels\": %d,\n",
             preflight->stats.mirrorDominantPixelCount);
     fprintf(file, "    \"mirror_base_attenuated_pixels\": %d,\n",
@@ -627,6 +712,8 @@ void ray_tracing_render_headless_write_summary(
         RuntimeSceneAcceleration3DReuseStatusLabel(
             preflight->scene_acceleration_stats.reuseStatus));
     fprintf(file, ",\n");
+    fprintf(file, "    \"blas_prepare_calls\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_stats.blasPrepareCalls);
     fprintf(file, "    \"blas_cache_hits\": %llu,\n",
             (unsigned long long)preflight->scene_acceleration_stats.blasCacheHits);
     fprintf(file, "    \"blas_cache_misses\": %llu,\n",

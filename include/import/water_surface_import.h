@@ -11,6 +11,8 @@ typedef struct RuntimeWaterSurfaceMaterial {
     double ior;
     double absorption_distance_m;
     double absorption_rgb[3];
+    double reflectivity;
+    double roughness;
 } RuntimeWaterSurfaceMaterial;
 
 typedef struct RuntimeWaterSurfaceFrame {

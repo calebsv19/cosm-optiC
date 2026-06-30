@@ -28,6 +28,7 @@
 RuntimeSceneBridge3DScaffoldState g_last_3d_scaffold = {0};
 RuntimeSceneBridge3DDigestState g_last_3d_digest = {0};
 RuntimeSceneBridge3DPrimitiveSeedState g_last_3d_primitive_seeds = {0};
+RuntimeSceneBridge3DLightSeedState g_last_3d_light_seeds = {0};
 char g_last_runtime_object_ids[MAX_OBJECTS][64] = {{0}};
 int g_last_runtime_object_id_count = 0;
 
@@ -60,6 +61,7 @@ static void scaffold_state_reset(void) {
     memset(&g_last_3d_scaffold, 0, sizeof(g_last_3d_scaffold));
     memset(&g_last_3d_digest, 0, sizeof(g_last_3d_digest));
     memset(&g_last_3d_primitive_seeds, 0, sizeof(g_last_3d_primitive_seeds));
+    memset(&g_last_3d_light_seeds, 0, sizeof(g_last_3d_light_seeds));
 }
 
 static double runtime_scene_bridge_scale_scene_length(
@@ -249,8 +251,7 @@ static void digest_append_primitive(json_object *object_obj,
         has_depth = runtime_scene_bridge_parse_double_field(primitive_obj, "depth", &depth);
     }
 
-    if ((!origin_source || !json_object_is_type(origin_source, json_type_object)) &&
-        transform_obj && json_object_is_type(transform_obj, json_type_object) &&
+    if (transform_obj && json_object_is_type(transform_obj, json_type_object) &&
         json_object_object_get_ex(transform_obj, "position", &position_source) &&
         json_object_is_type(position_source, json_type_object)) {
         json_object *jx = NULL;
@@ -297,6 +298,77 @@ static void primitive_seed_reset_basis(RuntimeSceneBridgePrimitiveSeed *entry) {
     entry->normal_x = 0.0;
     entry->normal_y = 0.0;
     entry->normal_z = 1.0;
+}
+
+static void primitive_seed_rotate_basis_vector(double *x,
+                                               double *y,
+                                               double *z,
+                                               double rx,
+                                               double ry,
+                                               double rz) {
+    double cx = cos(rx);
+    double sx = sin(rx);
+    double cy = cos(ry);
+    double sy = sin(ry);
+    double cz = cos(rz);
+    double sz = sin(rz);
+    double vx = x ? *x : 0.0;
+    double vy = y ? *y : 0.0;
+    double vz = z ? *z : 0.0;
+    double ny = vy * cx - vz * sx;
+    double nz = vy * sx + vz * cx;
+    double nx = vx * cy + nz * sy;
+    double nz2 = -vx * sy + nz * cy;
+    double nx2 = nx * cz - ny * sz;
+    double ny2 = nx * sz + ny * cz;
+    if (x) *x = nx2;
+    if (y) *y = ny2;
+    if (z) *z = nz2;
+}
+
+static bool primitive_seed_parse_transform_rotation_radians(json_object *transform_obj,
+                                                            double *out_x,
+                                                            double *out_y,
+                                                            double *out_z) {
+    static const double kDegreesToRadians = 0.017453292519943295769;
+    json_object *rotation = NULL;
+    json_object *jx = NULL;
+    json_object *jy = NULL;
+    json_object *jz = NULL;
+    double rx = 0.0;
+    double ry = 0.0;
+    double rz = 0.0;
+    if (out_x) *out_x = 0.0;
+    if (out_y) *out_y = 0.0;
+    if (out_z) *out_z = 0.0;
+    if (!transform_obj || !json_object_is_type(transform_obj, json_type_object)) {
+        return false;
+    }
+    if (!json_object_object_get_ex(transform_obj, "rotation", &rotation) ||
+        !json_object_is_type(rotation, json_type_object)) {
+        return false;
+    }
+    if (json_object_object_get_ex(rotation, "x", &jx)) rx = json_object_get_double(jx);
+    if (json_object_object_get_ex(rotation, "y", &jy)) ry = json_object_get_double(jy);
+    if (json_object_object_get_ex(rotation, "z", &jz)) rz = json_object_get_double(jz);
+    if (out_x) *out_x = rx * kDegreesToRadians;
+    if (out_y) *out_y = ry * kDegreesToRadians;
+    if (out_z) *out_z = rz * kDegreesToRadians;
+    return true;
+}
+
+static void primitive_seed_apply_transform_rotation(RuntimeSceneBridgePrimitiveSeed *entry,
+                                                    json_object *transform_obj) {
+    double rx = 0.0;
+    double ry = 0.0;
+    double rz = 0.0;
+    if (!entry) return;
+    if (!primitive_seed_parse_transform_rotation_radians(transform_obj, &rx, &ry, &rz)) {
+        return;
+    }
+    primitive_seed_rotate_basis_vector(&entry->axis_u_x, &entry->axis_u_y, &entry->axis_u_z, rx, ry, rz);
+    primitive_seed_rotate_basis_vector(&entry->axis_v_x, &entry->axis_v_y, &entry->axis_v_z, rx, ry, rz);
+    primitive_seed_rotate_basis_vector(&entry->normal_x, &entry->normal_y, &entry->normal_z, rx, ry, rz);
 }
 
 static void primitive_seed_append(json_object *object_obj,
@@ -394,9 +466,11 @@ static void primitive_seed_append(json_object *object_obj,
         if (json_object_object_get_ex(primitive_obj, "frame", &frame) &&
             json_object_is_type(frame, json_type_object)) {
             if (runtime_scene_bridge_parse_vec3(frame, "origin", &ox, &oy, &oz)) {
-                entry->origin_x = runtime_scene_bridge_scale_scene_length(ox, world_scale);
-                entry->origin_y = runtime_scene_bridge_scale_scene_length(oy, world_scale);
-                entry->origin_z = runtime_scene_bridge_scale_scene_length(oz, world_scale);
+                if (!position_source || !json_object_is_type(position_source, json_type_object)) {
+                    entry->origin_x = runtime_scene_bridge_scale_scene_length(ox, world_scale);
+                    entry->origin_y = runtime_scene_bridge_scale_scene_length(oy, world_scale);
+                    entry->origin_z = runtime_scene_bridge_scale_scene_length(oz, world_scale);
+                }
             }
             if (runtime_scene_bridge_parse_vec3(frame, "axis_u", &ax, &ay, &az)) {
                 entry->axis_u_x = ax;
@@ -417,6 +491,11 @@ static void primitive_seed_append(json_object *object_obj,
         has_width = runtime_scene_bridge_parse_double_field(primitive_obj, "width", &width);
         has_height = runtime_scene_bridge_parse_double_field(primitive_obj, "height", &height);
         has_depth = runtime_scene_bridge_parse_double_field(primitive_obj, "depth", &depth);
+    }
+
+    if (kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_RECT_PRISM ||
+        kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE) {
+        primitive_seed_apply_transform_rotation(entry, transform_obj);
     }
 
     entry->has_dimensions = has_width || has_height || has_depth;
@@ -979,6 +1058,12 @@ void runtime_scene_bridge_get_last_3d_primitive_seed_state(
     RuntimeSceneBridge3DPrimitiveSeedState *out_state) {
     if (!out_state) return;
     *out_state = g_last_3d_primitive_seeds;
+}
+
+void runtime_scene_bridge_get_last_3d_light_seed_state(
+    RuntimeSceneBridge3DLightSeedState *out_state) {
+    if (!out_state) return;
+    *out_state = g_last_3d_light_seeds;
 }
 
 bool runtime_scene_bridge_get_last_object_id_for_scene_index(int scene_index,

@@ -10,6 +10,12 @@
 #define RAY_TRACING_RUNTIME_MESH_ASSET_MAX_INSTANCES 64
 #define RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX 4096
 
+typedef enum RayTracingRuntimeMeshRotationPivotPolicy {
+    RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_AUTHORED_ORIGIN = 0,
+    RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_BOUNDS_CENTER = 1,
+    RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_CUSTOM = 2
+} RayTracingRuntimeMeshRotationPivotPolicy;
+
 typedef struct RayTracingRuntimeMeshPreviewInfo {
     bool preview_path_resolved;
     bool preview_file_exists;
@@ -41,6 +47,10 @@ typedef struct RayTracingRuntimeMeshAssetInstance {
     double scale_x;
     double scale_y;
     double scale_z;
+    RayTracingRuntimeMeshRotationPivotPolicy rotation_pivot_policy;
+    double rotation_pivot_x;
+    double rotation_pivot_y;
+    double rotation_pivot_z;
 } RayTracingRuntimeMeshAssetInstance;
 
 typedef struct RayTracingRuntimeMeshAssetSkippedInstance {

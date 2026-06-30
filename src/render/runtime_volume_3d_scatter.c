@@ -271,9 +271,10 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(
             0.5 * (t + next_t);
         const Vec3 sample_position =
             vec3_add(ray->origin, vec3_scale(ray->direction, sample_t));
-        const double density =
-            fmax((double)RuntimeVolume3D_SampleDensityAtPosition(&scene->volume, sample_position),
-                 0.0);
+        const double raw_density =
+            (double)RuntimeVolume3D_SampleDensityAtPosition(&scene->volume, sample_position);
+        const double density = RuntimeVolume3DMaterial_RemapDensity(raw_density);
+        const double extinction_density = RuntimeVolume3DMaterial_ExtinctionDensity(raw_density);
 
         if (density > 0.0) {
             const Vec3 light_position =
@@ -316,13 +317,78 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(
                 result.sampleCount += 1;
             }
 
-            camera_transmittance *= exp(-density * segment_length);
+            camera_transmittance *= exp(-extinction_density * segment_length);
             if (!(camera_transmittance > 1e-9)) {
                 break;
             }
         }
     }
 
+    result.radiance = runtime_volume_3d_scatter_peak(result.radianceR,
+                                                     result.radianceG,
+                                                     result.radianceB);
+    result.active = result.radiance > 0.0;
+    return result;
+}
+
+RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateDensityDebugAlongRayRGB(
+    const RuntimeScene3D* scene,
+    const Ray3D* ray,
+    double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]]) {
+    RuntimeVolume3DScatterResult result = {0};
+    double t_enter [[fisics::dim(length)]] [[fisics::unit(meter)]] = t_min;
+    double t_exit [[fisics::dim(length)]] [[fisics::unit(meter)]] = t_max;
+    double step [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        runtime_volume_3d_scatter_zero_length();
+    double density_integral = 0.0;
+    double zero_length = runtime_volume_3d_scatter_zero_length();
+
+    if (!scene || !ray || !RuntimeVolume3D_HasActiveExtinction(&scene->volume)) {
+        return result;
+    }
+    if (!RuntimeVolume3D_ClipRayToBounds(&scene->volume,
+                                         ray,
+                                         t_min,
+                                         t_max,
+                                         &t_enter,
+                                         &t_exit)) {
+        return result;
+    }
+
+    step = runtime_volume_3d_scatter_clamp(scene->volume.grid.voxelSize * 0.5 *
+                                               gRuntimeVolume3DScatterStepScale,
+                                           runtime_volume_3d_scatter_minimum_step(),
+                                           t_exit - t_enter);
+    if (!(step > zero_length)) {
+        step = runtime_volume_3d_scatter_unit_length();
+    }
+
+    for (double t [[fisics::dim(length)]] [[fisics::unit(meter)]] = t_enter;
+         t < t_exit;
+         t += step) {
+        const double next_t [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+            fmin(t + step, t_exit);
+        const double segment_length [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+            next_t - t;
+        const double sample_t [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+            0.5 * (t + next_t);
+        const Vec3 sample_position =
+            vec3_add(ray->origin, vec3_scale(ray->direction, sample_t));
+        const double raw_density =
+            (double)RuntimeVolume3D_SampleDensityAtPosition(&scene->volume, sample_position);
+        const double density = RuntimeVolume3DMaterial_RemapDensity(raw_density);
+
+        if (density > 0.0) {
+            density_integral += density * segment_length;
+            result.sampleCount += 1;
+        }
+    }
+
+    result.radiance = 1.0 - exp(-density_integral * gRuntimeVolume3DScatterStrengthGain);
+    result.radianceR = result.radiance * gRuntimeVolume3DScatterTintR;
+    result.radianceG = result.radiance * gRuntimeVolume3DScatterTintG;
+    result.radianceB = result.radiance * gRuntimeVolume3DScatterTintB;
     result.radiance = runtime_volume_3d_scatter_peak(result.radianceR,
                                                      result.radianceG,
                                                      result.radianceB);

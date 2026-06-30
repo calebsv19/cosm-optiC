@@ -14,6 +14,7 @@
 #include "ui/menu_batch_panel.h"
 #include "ui/menu_layout.h"
 #include "ui/menu_panel_chrome.h"
+#include "ui/menu_scene_project_summary.h"
 #include "ui/scene_source_catalog.h"
 #include "ui/scene_source_ui_labels.h"
 #include "ui/sdl_menu_render.h"
@@ -119,6 +120,111 @@ static int test_menu_batch_panel_clear_button_updates_frame_count(void) {
     animSettings.frameDir[sizeof(animSettings.frameDir) - 1] = '\0';
     strncpy(animSettings.videoOutputRoot, original_video_root, sizeof(animSettings.videoOutputRoot) - 1);
     animSettings.videoOutputRoot[sizeof(animSettings.videoOutputRoot) - 1] = '\0';
+    rmdir(tmp_root);
+    return 0;
+}
+
+static int test_menu_scene_project_summary_detects_project_files(void) {
+    char tmp_template[] = "/tmp/ray_tracing_scene_project_summary_XXXXXX";
+    char *tmp_root = mkdtemp(tmp_template);
+    char runtime_path[PATH_MAX];
+    char path[PATH_MAX];
+    RayTracingMenuSceneProjectSummary summary;
+
+    assert_true("scene_project_summary_tmpdir_created", tmp_root != NULL);
+    if (!tmp_root) return 0;
+
+    snprintf(runtime_path, sizeof(runtime_path), "%s/scene_runtime.json", tmp_root);
+    snprintf(path, sizeof(path), "%s/scene_project.json", tmp_root);
+    assert_true("scene_project_summary_write_project", write_text_file(path, "{}"));
+    assert_true("scene_project_summary_write_runtime", write_text_file(runtime_path, "{}"));
+    snprintf(path, sizeof(path), "%s/scene_authoring.json", tmp_root);
+    assert_true("scene_project_summary_write_authoring", write_text_file(path, "{}"));
+    snprintf(path, sizeof(path), "%s/assets", tmp_root);
+    assert_true("scene_project_summary_mkdir_assets", mkdir(path, 0700) == 0);
+    snprintf(path, sizeof(path), "%s/assets/mesh_assets", tmp_root);
+    assert_true("scene_project_summary_mkdir_mesh", mkdir(path, 0700) == 0);
+    snprintf(path, sizeof(path), "%s/assets/mesh_assets/test.runtime.json", tmp_root);
+    assert_true("scene_project_summary_write_mesh", write_text_file(path, "{}"));
+    snprintf(path, sizeof(path), "%s/assets/physics", tmp_root);
+    assert_true("scene_project_summary_mkdir_physics", mkdir(path, 0700) == 0);
+    snprintf(path, sizeof(path), "%s/assets/physics/active", tmp_root);
+    assert_true("scene_project_summary_mkdir_physics_active", mkdir(path, 0700) == 0);
+    snprintf(path, sizeof(path), "%s/assets/physics/active/scene_bundle.json", tmp_root);
+    assert_true("scene_project_summary_write_bundle", write_text_file(path, "{}"));
+    snprintf(path, sizeof(path), "%s/physics_sim", tmp_root);
+    assert_true("scene_project_summary_mkdir_physics_sim", mkdir(path, 0700) == 0);
+    snprintf(path, sizeof(path), "%s/physics_sim/cache_manifest.json", tmp_root);
+    assert_true("scene_project_summary_write_cache", write_text_file(path, "{}"));
+    snprintf(path, sizeof(path), "%s/ray_tracing", tmp_root);
+    assert_true("scene_project_summary_mkdir_ray", mkdir(path, 0700) == 0);
+    snprintf(path, sizeof(path), "%s/ray_tracing/render_request.json", tmp_root);
+    assert_true("scene_project_summary_write_request", write_text_file(path, "{}"));
+
+    memset(&summary, 0, sizeof(summary));
+    assert_true("scene_project_summary_detects_project",
+                ray_tracing_menu_scene_project_summary_for_runtime_scene(runtime_path, &summary));
+    assert_true("scene_project_summary_project_detected", summary.project_detected);
+    assert_true("scene_project_summary_runtime_present", summary.has_scene_runtime);
+    assert_true("scene_project_summary_authoring_present", summary.has_scene_authoring);
+    assert_true("scene_project_summary_mesh_present", summary.has_mesh_assets);
+    assert_true("scene_project_summary_mesh_count", summary.mesh_asset_count == 1);
+    assert_true("scene_project_summary_cache_present", summary.has_physics_cache_manifest);
+    assert_true("scene_project_summary_bundle_present", summary.has_physics_scene_bundle);
+    assert_true("scene_project_summary_request_present", summary.has_render_request);
+    assert_true("scene_project_summary_label", strstr(summary.label, "Scene Project:") != NULL);
+    assert_true("scene_project_summary_detail", strstr(summary.detail, "cache:ok") != NULL);
+
+    snprintf(path, sizeof(path), "%s/ray_tracing/render_request.json", tmp_root);
+    unlink(path);
+    snprintf(path, sizeof(path), "%s/ray_tracing", tmp_root);
+    rmdir(path);
+    snprintf(path, sizeof(path), "%s/physics_sim/cache_manifest.json", tmp_root);
+    unlink(path);
+    snprintf(path, sizeof(path), "%s/physics_sim", tmp_root);
+    rmdir(path);
+    snprintf(path, sizeof(path), "%s/assets/physics/active/scene_bundle.json", tmp_root);
+    unlink(path);
+    snprintf(path, sizeof(path), "%s/assets/physics/active", tmp_root);
+    rmdir(path);
+    snprintf(path, sizeof(path), "%s/assets/physics", tmp_root);
+    rmdir(path);
+    snprintf(path, sizeof(path), "%s/assets/mesh_assets/test.runtime.json", tmp_root);
+    unlink(path);
+    snprintf(path, sizeof(path), "%s/assets/mesh_assets", tmp_root);
+    rmdir(path);
+    snprintf(path, sizeof(path), "%s/assets", tmp_root);
+    rmdir(path);
+    snprintf(path, sizeof(path), "%s/scene_authoring.json", tmp_root);
+    unlink(path);
+    snprintf(path, sizeof(path), "%s/scene_runtime.json", tmp_root);
+    unlink(path);
+    snprintf(path, sizeof(path), "%s/scene_project.json", tmp_root);
+    unlink(path);
+    rmdir(tmp_root);
+    return 0;
+}
+
+static int test_menu_scene_project_summary_keeps_loose_runtime_scene_separate(void) {
+    char tmp_template[] = "/tmp/ray_tracing_loose_runtime_summary_XXXXXX";
+    char *tmp_root = mkdtemp(tmp_template);
+    char runtime_path[PATH_MAX];
+    RayTracingMenuSceneProjectSummary summary;
+
+    assert_true("loose_runtime_summary_tmpdir_created", tmp_root != NULL);
+    if (!tmp_root) return 0;
+    snprintf(runtime_path, sizeof(runtime_path), "%s/scene_runtime.json", tmp_root);
+    assert_true("loose_runtime_summary_write_runtime", write_text_file(runtime_path, "{}"));
+
+    memset(&summary, 0, sizeof(summary));
+    assert_true("loose_runtime_summary_returns_false",
+                !ray_tracing_menu_scene_project_summary_for_runtime_scene(runtime_path, &summary));
+    assert_true("loose_runtime_summary_selected", summary.selected_runtime_scene);
+    assert_true("loose_runtime_summary_not_project", !summary.project_detected);
+    assert_true("loose_runtime_summary_label",
+                strcmp(summary.label, "Loose runtime scene") == 0);
+
+    unlink(runtime_path);
     rmdir(tmp_root);
     return 0;
 }
@@ -326,6 +432,10 @@ static int test_menu_batch_panel_header_does_not_overlap_route_rows(void) {
                 batch.frameDirValueRect.y >= batch.headerDividerRect.y + batch.headerDividerRect.h + 6);
     assert_true("menu_batch_video_row_below_frame_row",
                 batch.videoRootValueRect.y >= batch.frameDirValueRect.y + batch.frameDirValueRect.h + 8);
+    assert_true("menu_batch_scene_project_row_below_video_row",
+                batch.sceneProjectValueRect.y >= batch.videoRootValueRect.y + batch.videoRootValueRect.h + 8);
+    assert_true("menu_batch_worker_row_below_scene_project_row",
+                batch.workerPackageValueRect.y >= batch.sceneProjectValueRect.y + batch.sceneProjectValueRect.h + 8);
 
     animSettings = saved_anim;
     return 0;
@@ -1207,6 +1317,8 @@ int run_test_ui_menu_contract_tests(void) {
 
     test_menu_batch_panel_click_starts_frame_dir_edit();
     test_menu_batch_panel_clear_button_updates_frame_count();
+    test_menu_scene_project_summary_detects_project_files();
+    test_menu_scene_project_summary_keeps_loose_runtime_scene_separate();
     test_menu_layout_builds_non_overlapping_primary_zones();
     test_menu_layout_keeps_manifest_list_inside_left_panel();
     test_menu_button_layout_respects_owned_screen_zones();

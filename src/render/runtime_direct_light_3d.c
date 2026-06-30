@@ -8,6 +8,7 @@
 #endif
 
 #include "config/config_manager.h"
+#include "render/runtime_light_set_3d.h"
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_native_3d_sampling.h"
 #include "render/runtime_volume_3d_integrate.h"
@@ -276,6 +277,85 @@ static Vec3 runtime_direct_light_3d_sample_light_position(const RuntimeLight3D* 
                              vec3_scale(bitangent, sample.y * radius)));
 }
 
+static Vec3 runtime_direct_light_3d_safe_axis(Vec3 axis, Vec3 fallback) {
+    if (vec3_length(axis) > 1e-9) {
+        return vec3_normalize(axis);
+    }
+    if (vec3_length(fallback) > 1e-9) {
+        return vec3_normalize(fallback);
+    }
+    return vec3(1.0, 0.0, 0.0);
+}
+
+static Vec3 runtime_direct_light_3d_sample_rect_source_position(
+    const RuntimeLightSource3D* source,
+    const RuntimeLight3D* light,
+    const HitInfo3D* hit,
+    int sample_index,
+    const RuntimeNative3DSamplingContext* sampling) {
+    Vec3 axis_u = vec3(1.0, 0.0, 0.0);
+    Vec3 axis_v = vec3(0.0, 0.0, 1.0);
+    int population_index = 0;
+    double offset_u = 0.0;
+    double offset_v = 0.0;
+
+    if (!source || !light || source->width <= 0.0 || source->height <= 0.0) {
+        return light ? light->position : vec3(0.0, 0.0, 0.0);
+    }
+
+    axis_u = runtime_direct_light_3d_safe_axis(source->axisU, vec3(1.0, 0.0, 0.0));
+    axis_v = runtime_direct_light_3d_safe_axis(source->axisV, vec3(0.0, 0.0, 1.0));
+    population_index = runtime_direct_light_3d_select_area_light_population_index(light,
+                                                                                  hit,
+                                                                                  sample_index,
+                                                                                  sampling);
+    if (sampling) {
+        const uint32_t base_seed = runtime_direct_light_3d_seed_from_light_hit(light, hit);
+        double u = 0.5;
+        double v = 0.5;
+
+        RuntimeNative3DSampling_Stratified2D(sampling,
+                                             base_seed,
+                                             RUNTIME_DIRECT_LIGHT_3D_AREA_LIGHT_POPULATION_COUNT,
+                                             population_index,
+                                             (uint32_t)(population_index + 31),
+                                             &u,
+                                             &v);
+        offset_u = (u - 0.5) * source->width;
+        offset_v = (v - 0.5) * source->height;
+    } else {
+        const RuntimeDirectLight3DDiskSample sample =
+            kRuntimeDirectLight3DAreaLightSamples[population_index];
+        offset_u = sample.x * source->width * 0.5;
+        offset_v = sample.y * source->height * 0.5;
+    }
+
+    return vec3_add(source->position,
+                    vec3_add(vec3_scale(axis_u, offset_u),
+                             vec3_scale(axis_v, offset_v)));
+}
+
+static Vec3 runtime_direct_light_3d_sample_light_source_position(
+    const RuntimeLightSource3D* source,
+    const RuntimeLight3D* light,
+    Vec3 center_dir,
+    const HitInfo3D* hit,
+    int sample_index,
+    const RuntimeNative3DSamplingContext* sampling) {
+    if (source && source->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_RECT) {
+        return runtime_direct_light_3d_sample_rect_source_position(source,
+                                                                  light,
+                                                                  hit,
+                                                                  sample_index,
+                                                                  sampling);
+    }
+    return runtime_direct_light_3d_sample_light_position(light,
+                                                        center_dir,
+                                                        hit,
+                                                        sample_index,
+                                                        sampling);
+}
+
 static void runtime_direct_light_3d_apply_transmittance(
     const RuntimeVisibility3DTransmittance* transmittance,
     RuntimeDirectLight3DResult* io_result) {
@@ -341,6 +421,222 @@ static void runtime_direct_light_3d_resolve_hit_tint(const HitInfo3D* hit,
     if (out_b) *out_b = b;
 }
 
+static double runtime_direct_light_3d_light_source_radius(
+    const RuntimeLightSource3D* source) {
+    if (!source) return 0.0;
+    if (source->radius > 0.0) return source->radius;
+    switch (source->kind) {
+        case RUNTIME_LIGHT_SOURCE_3D_KIND_DISK:
+            return source->width > 0.0 ? source->width * 0.5 : 0.0;
+        case RUNTIME_LIGHT_SOURCE_3D_KIND_RECT:
+            if (source->width > 0.0 && source->height > 0.0) {
+                return 0.5 * sqrt(source->width * source->width +
+                                  source->height * source->height);
+            }
+            return 0.0;
+        case RUNTIME_LIGHT_SOURCE_3D_KIND_POINT:
+        case RUNTIME_LIGHT_SOURCE_3D_KIND_SPHERE:
+        case RUNTIME_LIGHT_SOURCE_3D_KIND_MESH_EMISSIVE:
+        default:
+            return 0.0;
+    }
+}
+
+static RuntimeLight3D runtime_direct_light_3d_compat_light_from_source(
+    const RuntimeLightSource3D* source) {
+    RuntimeLight3D light = {0};
+    if (!source) return light;
+    light.position = source->position;
+    light.radius = runtime_direct_light_3d_light_source_radius(source);
+    light.intensity = source->intensity;
+    light.falloffDistance = source->falloffDistance;
+    light.falloffMode = source->falloffMode;
+    return light;
+}
+
+static void runtime_direct_light_3d_accumulate_source(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeLightSource3D* source,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeDirectLight3DResult* io_result,
+    double* io_light_r,
+    double* io_light_g,
+    double* io_light_b,
+    bool* io_any_light_sample_visible) {
+    RuntimeLight3D light = {0};
+    Vec3 to_light = vec3(0.0, 0.0, 0.0);
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double light_distance = 0.0;
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon = 1e-9;
+    double attenuation = 0.0;
+    double ndotl = 0.0;
+    double source_r = 0.0;
+    double source_g = 0.0;
+    double source_b = 0.0;
+    double source_peak = 0.0;
+    bool source_visible = false;
+    int light_sample_count = 0;
+    int light_sample_decision_count = 0;
+    int light_sample_evaluated_count = 0;
+    int clear_visible_sample_count = 0;
+    int clear_blocked_sample_count = 0;
+
+    if (!scene || !hit || !source || !source->enabled || !io_result ||
+        !io_light_r || !io_light_g || !io_light_b || !io_any_light_sample_visible) {
+        return;
+    }
+
+    light = runtime_direct_light_3d_compat_light_from_source(source);
+    io_result->evaluatedLightCount += 1;
+    to_light = vec3_sub(light.position, hit->position);
+    light_distance = vec3_length(to_light);
+    if (io_result->evaluatedLightCount == 1) {
+        io_result->lightDistance = light_distance;
+    }
+    if (light_distance <= length_epsilon) {
+        source_r = light.intensity * source->color.x;
+        source_g = light.intensity * source->color.y;
+        source_b = light.intensity * source->color.z;
+        source_peak = runtime_direct_light_3d_peak(source_r, source_g, source_b);
+        *io_light_r += source_r;
+        *io_light_g += source_g;
+        *io_light_b += source_b;
+        io_result->visible = true;
+        io_result->ndotl = 1.0;
+        io_result->attenuation = 1.0;
+        io_result->lightDistance = light_distance;
+        if (source_peak > kRuntimeDirectLight3DContributionEpsilon) {
+            io_result->contributingLightCount += 1;
+            if (source_peak > io_result->peakLightContribution) {
+                io_result->peakLightContribution = source_peak;
+            }
+        }
+        return;
+    }
+
+    to_light = vec3_scale(to_light, 1.0 / light_distance);
+    ndotl = fmax(0.0, vec3_dot(hit->normal, to_light));
+    attenuation = runtime_direct_light_3d_attenuation(&light, light_distance);
+    if (io_result->evaluatedLightCount == 1) {
+        io_result->ndotl = ndotl;
+        io_result->attenuation = attenuation;
+    }
+
+    light_sample_count = runtime_direct_light_3d_area_light_sample_count(&light);
+    light_sample_decision_count = runtime_direct_light_3d_area_light_decision_count(&light);
+    if (ndotl > 0.0 && light_sample_count > 0) {
+        for (int i = 0; i < light_sample_count; ++i) {
+            RuntimeVisibility3DTransmittance transmittance = {0};
+            Vec3 sample_position = runtime_direct_light_3d_sample_light_source_position(source,
+                                                                                       &light,
+                                                                                       to_light,
+                                                                                       hit,
+                                                                                       i,
+                                                                                       sampling);
+            Vec3 sample_to_light = vec3_sub(sample_position, hit->position);
+            [[fisics::dim(length)]] [[fisics::unit(meter)]] double sample_distance =
+                vec3_length(sample_to_light);
+            double sample_attenuation = 0.0;
+            double sample_ndotl = 0.0;
+            Vec3 sample_dir = vec3(0.0, 0.0, 0.0);
+
+            light_sample_evaluated_count += 1;
+            if (!(sample_distance > length_epsilon)) {
+                clear_blocked_sample_count += 1;
+                if (runtime_direct_light_3d_area_light_can_stop_adaptive(
+                        light_sample_evaluated_count,
+                        light_sample_decision_count,
+                        light_sample_count,
+                        clear_visible_sample_count,
+                        clear_blocked_sample_count)) {
+                    break;
+                }
+                continue;
+            }
+            sample_dir = vec3_scale(sample_to_light, 1.0 / sample_distance);
+            sample_ndotl = fmax(0.0, vec3_dot(hit->normal, sample_dir));
+            if (!(sample_ndotl > 0.0)) {
+                clear_blocked_sample_count += 1;
+                if (runtime_direct_light_3d_area_light_can_stop_adaptive(
+                        light_sample_evaluated_count,
+                        light_sample_decision_count,
+                        light_sample_count,
+                        clear_visible_sample_count,
+                        clear_blocked_sample_count)) {
+                    break;
+                }
+                continue;
+            }
+
+            sample_attenuation = runtime_direct_light_3d_attenuation(&light, sample_distance);
+            if (!runtime_direct_light_3d_sample_contributes(light.intensity,
+                                                            sample_attenuation,
+                                                            sample_ndotl)) {
+                clear_blocked_sample_count += 1;
+                if (runtime_direct_light_3d_area_light_can_stop_adaptive(
+                        light_sample_evaluated_count,
+                        light_sample_decision_count,
+                        light_sample_count,
+                        clear_visible_sample_count,
+                        clear_blocked_sample_count)) {
+                    break;
+                }
+                continue;
+            }
+
+            io_result->visibilityRayCount += 1;
+            transmittance = RuntimeVisibility3D_TransmittanceFromHitToPointRGB(scene,
+                                                                                hit,
+                                                                                sample_position,
+                                                                                -1,
+                                                                                -1);
+            if (transmittance.luma > 1e-6) {
+                source_visible = true;
+                *io_any_light_sample_visible = true;
+            }
+            if (transmittance.luma > 0.999) {
+                clear_visible_sample_count += 1;
+            } else if (!(transmittance.luma > 1e-6)) {
+                clear_blocked_sample_count += 1;
+            }
+            source_r += light.intensity * sample_attenuation * sample_ndotl *
+                        transmittance.r * source->color.x;
+            source_g += light.intensity * sample_attenuation * sample_ndotl *
+                        transmittance.g * source->color.y;
+            source_b += light.intensity * sample_attenuation * sample_ndotl *
+                        transmittance.b * source->color.z;
+            if (runtime_direct_light_3d_area_light_can_stop_adaptive(
+                    light_sample_evaluated_count,
+                    light_sample_decision_count,
+                    light_sample_count,
+                    clear_visible_sample_count,
+                    clear_blocked_sample_count)) {
+                break;
+            }
+        }
+        if (light_sample_evaluated_count <= 0) {
+            light_sample_evaluated_count = light_sample_count;
+        }
+        source_r /= (double)light_sample_evaluated_count;
+        source_g /= (double)light_sample_evaluated_count;
+        source_b /= (double)light_sample_evaluated_count;
+    }
+
+    source_peak = runtime_direct_light_3d_peak(source_r, source_g, source_b);
+    *io_light_r += source_r;
+    *io_light_g += source_g;
+    *io_light_b += source_b;
+    if (source_visible && source_peak > kRuntimeDirectLight3DContributionEpsilon) {
+        io_result->contributingLightCount += 1;
+    }
+    if (source_peak > io_result->peakLightContribution) {
+        io_result->peakLightContribution = source_peak;
+        io_result->lightDistance = light_distance;
+        io_result->ndotl = ndotl;
+        io_result->attenuation = attenuation;
+    }
+}
+
 bool RuntimeDirectLight3D_TracePrimaryHit(const RuntimeScene3D* scene,
                                           const RuntimeCameraProjector3D* projector,
                                           double pixel_x,
@@ -383,13 +679,59 @@ bool RuntimeDirectLight3D_ShadeHitWithPayload(const RuntimeScene3D* scene,
                                               const RuntimeMaterialPayload3D* payload,
                                               const RuntimeNative3DSamplingContext* sampling,
                                               RuntimeDirectLight3DResult* out_result) {
+    RuntimeLightSet3D light_set;
+    const RuntimeLightSet3D* active_light_set = NULL;
+    bool ok = false;
+
+    if (!scene || !hit || !out_result) return false;
+    if (!scene->hasLight && scene->lightSet.lightCount <= 0) return false;
+
+    if (scene->lightSet.lightCount > 0) {
+        active_light_set = &scene->lightSet;
+        ok = true;
+    } else {
+        RuntimeLightSet3D_Init(&light_set);
+        ok = RuntimeLightSet3D_BuildFromCompatibilityLight(&light_set,
+                                                           &scene->light,
+                                                           scene->hasLight);
+        active_light_set = &light_set;
+    }
+    if (ok) {
+        ok = RuntimeDirectLight3D_ShadeHitWithLightSetAndPayload(scene,
+                                                                 hit,
+                                                                 active_light_set,
+                                                                 payload,
+                                                                 sampling,
+                                                                 out_result);
+    }
+    if (active_light_set == &light_set) {
+        RuntimeLightSet3D_Free(&light_set);
+    }
+    return ok;
+}
+
+bool RuntimeDirectLight3D_ShadeHitWithLightSet(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeLightSet3D* light_set,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeDirectLight3DResult* out_result) {
+    return RuntimeDirectLight3D_ShadeHitWithLightSetAndPayload(scene,
+                                                               hit,
+                                                               light_set,
+                                                               NULL,
+                                                               sampling,
+                                                               out_result);
+}
+
+bool RuntimeDirectLight3D_ShadeHitWithLightSetAndPayload(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeLightSet3D* light_set,
+    const RuntimeMaterialPayload3D* payload,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeDirectLight3DResult* out_result) {
     RuntimeDirectLight3DResult result = {0};
-    Vec3 to_light = vec3(0.0, 0.0, 0.0);
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double light_distance =
-        0.0;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon = 1e-9;
-    double attenuation = 0.0;
-    RuntimeVisibility3DTransmittance transmittance = {0};
     double tint_r = 1.0;
     double tint_g = 1.0;
     double tint_b = 1.0;
@@ -398,132 +740,27 @@ bool RuntimeDirectLight3D_ShadeHitWithPayload(const RuntimeScene3D* scene,
     double light_b = 0.0;
     double top_fill = 0.0;
     bool any_light_sample_visible = false;
-    int light_sample_count = 0;
-    int light_sample_decision_count = 0;
-    int light_sample_evaluated_count = 0;
-    int clear_visible_sample_count = 0;
-    int clear_blocked_sample_count = 0;
 
     if (!scene || !hit || !out_result) return false;
-    if (!scene->hasLight) return false;
+    if (!light_set) return false;
     if (hit->triangleIndex < 0) return false;
 
     result.hit = true;
     result.hitInfo = *hit;
     runtime_direct_light_3d_resolve_hit_tint(hit, payload, &tint_r, &tint_g, &tint_b);
     top_fill = runtime_direct_light_3d_top_fill_radiance(scene, hit);
-    to_light = vec3_sub(scene->light.position, hit->position);
-    light_distance = vec3_length(to_light);
-    result.lightDistance = light_distance;
-    if (light_distance <= length_epsilon) {
-        result.visible = true;
-        result.ndotl = 1.0;
-        result.attenuation = 1.0;
-        result.radiance = scene->light.intensity;
-        result.radianceR = result.radiance * tint_r;
-        result.radianceG = result.radiance * tint_g;
-        result.radianceB = result.radiance * tint_b;
-        *out_result = result;
-        return true;
-    }
 
-    to_light = vec3_scale(to_light, 1.0 / light_distance);
-    result.ndotl = fmax(0.0, vec3_dot(hit->normal, to_light));
-    attenuation = runtime_direct_light_3d_attenuation(&scene->light, light_distance);
-    result.attenuation = attenuation;
-    light_sample_count = runtime_direct_light_3d_area_light_sample_count(&scene->light);
-    light_sample_decision_count =
-        runtime_direct_light_3d_area_light_decision_count(&scene->light);
-    if (result.ndotl > 0.0 && light_sample_count > 0) {
-        for (int i = 0; i < light_sample_count; ++i) {
-            Vec3 sample_position = runtime_direct_light_3d_sample_light_position(&scene->light,
-                                                                                 to_light,
-                                                                                 hit,
-                                                                                 i,
-                                                                                 sampling);
-            Vec3 sample_to_light = vec3_sub(sample_position, hit->position);
-            [[fisics::dim(length)]] [[fisics::unit(meter)]] double sample_distance =
-                vec3_length(sample_to_light);
-            double sample_attenuation = 0.0;
-            double sample_ndotl = 0.0;
-            Vec3 sample_dir = vec3(0.0, 0.0, 0.0);
-
-            light_sample_evaluated_count += 1;
-            if (!(sample_distance > length_epsilon)) {
-                clear_blocked_sample_count += 1;
-                if (runtime_direct_light_3d_area_light_can_stop_adaptive(
-                        light_sample_evaluated_count,
-                        light_sample_decision_count,
-                        light_sample_count,
-                        clear_visible_sample_count,
-                        clear_blocked_sample_count)) {
-                    break;
-                }
-                continue;
-            }
-            sample_dir = vec3_scale(sample_to_light, 1.0 / sample_distance);
-            sample_ndotl = fmax(0.0, vec3_dot(hit->normal, sample_dir));
-            if (!(sample_ndotl > 0.0)) {
-                clear_blocked_sample_count += 1;
-                if (runtime_direct_light_3d_area_light_can_stop_adaptive(
-                        light_sample_evaluated_count,
-                        light_sample_decision_count,
-                        light_sample_count,
-                        clear_visible_sample_count,
-                        clear_blocked_sample_count)) {
-                    break;
-                }
-                continue;
-            }
-
-            sample_attenuation =
-                runtime_direct_light_3d_attenuation(&scene->light, sample_distance);
-            if (!runtime_direct_light_3d_sample_contributes(scene->light.intensity,
-                                                            sample_attenuation,
-                                                            sample_ndotl)) {
-                clear_blocked_sample_count += 1;
-                if (runtime_direct_light_3d_area_light_can_stop_adaptive(
-                        light_sample_evaluated_count,
-                        light_sample_decision_count,
-                        light_sample_count,
-                        clear_visible_sample_count,
-                        clear_blocked_sample_count)) {
-                    break;
-                }
-                continue;
-            }
-
-            transmittance = RuntimeVisibility3D_TransmittanceFromHitToPointRGB(scene,
-                                                                                hit,
-                                                                                sample_position,
-                                                                                -1,
-                                                                                -1);
-            if (transmittance.luma > 1e-6) {
-                any_light_sample_visible = true;
-            }
-            if (transmittance.luma > 0.999) {
-                clear_visible_sample_count += 1;
-            } else if (!(transmittance.luma > 1e-6)) {
-                clear_blocked_sample_count += 1;
-            }
-            light_r += scene->light.intensity * sample_attenuation * sample_ndotl * transmittance.r;
-            light_g += scene->light.intensity * sample_attenuation * sample_ndotl * transmittance.g;
-            light_b += scene->light.intensity * sample_attenuation * sample_ndotl * transmittance.b;
-            if (runtime_direct_light_3d_area_light_can_stop_adaptive(
-                    light_sample_evaluated_count,
-                    light_sample_decision_count,
-                    light_sample_count,
-                    clear_visible_sample_count,
-                    clear_blocked_sample_count)) {
-                break;
-            }
-        }
-        if (light_sample_evaluated_count <= 0) {
-            light_sample_evaluated_count = light_sample_count;
-        }
-        light_r /= (double)light_sample_evaluated_count;
-        light_g /= (double)light_sample_evaluated_count;
-        light_b /= (double)light_sample_evaluated_count;
+    for (int i = 0; i < RuntimeLightSet3D_EnabledCount(light_set); ++i) {
+        const RuntimeLightSource3D* source = RuntimeLightSet3D_GetEnabled(light_set, i);
+        runtime_direct_light_3d_accumulate_source(scene,
+                                                  hit,
+                                                  source,
+                                                  sampling,
+                                                  &result,
+                                                  &light_r,
+                                                  &light_g,
+                                                  &light_b,
+                                                  &any_light_sample_visible);
     }
     result.visible = any_light_sample_visible || top_fill > 1e-6;
     result.radianceR = (light_r + top_fill) * tint_r;

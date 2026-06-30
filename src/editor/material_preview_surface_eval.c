@@ -38,6 +38,13 @@ static RuntimeMaterialSurfaceEval material_preview_surface_eval_base(
     material = MaterialManagerGet(object->material_id);
     transparency =
         material_preview_surface_eval_legacy_alpha_transparency_bridge(material, object->alpha);
+    if (object->material_id == MATERIAL_PRESET_TRANSPARENT) {
+        double glass_transmission = transparency;
+        if (SceneObjectResolveGlassTransport(object, &glass_transmission, NULL, NULL, NULL)) {
+            transparency =
+                material_preview_surface_eval_clamp01(glass_transmission * object->alpha);
+        }
+    }
     return RuntimeMaterialSurfaceEvalMakeBase(bsdf.baseColorR,
                                               bsdf.baseColorG,
                                               bsdf.baseColorB,

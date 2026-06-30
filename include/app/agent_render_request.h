@@ -7,6 +7,7 @@
 
 #include "config/config_manager.h"
 #include "render/ray_tracing_integrator_catalog.h"
+#include "render/runtime_disney_v2_caustic_sidecar_3d.h"
 
 #define RAY_TRACING_AGENT_RENDER_REQUEST_SCHEMA "ray_tracing_agent_render_request_v1"
 
@@ -78,16 +79,34 @@ typedef struct RayTracingAgentRenderRequest {
     double forward_decay_override;
     bool has_volume_scatter_gain_override;
     double volume_scatter_gain_override;
+    bool has_volume_density_scale_override;
+    double volume_density_scale_override;
+    bool has_volume_density_gamma_override;
+    double volume_density_gamma_override;
+    bool has_volume_absorption_gain_override;
+    double volume_absorption_gain_override;
+    bool has_volume_opacity_clamp_override;
+    double volume_opacity_clamp_override;
     bool has_volume_step_scale_override;
     double volume_step_scale_override;
     bool has_secondary_diffuse_samples_3d_override;
     int secondary_diffuse_samples_3d_override;
     bool has_transmission_samples_3d_override;
     int transmission_samples_3d_override;
+    bool has_caustic_mode_override;
+    RuntimeDisneyV2CausticMode3D caustic_mode;
+    bool has_caustic_sidecar_enabled_override;
+    bool caustic_sidecar_enabled;
+    bool has_caustic_sidecar_strength_override;
+    double caustic_sidecar_strength;
     bool has_volume_tint_override;
     double volume_tint_r;
     double volume_tint_g;
     double volume_tint_b;
+    bool has_volume_albedo_override;
+    double volume_albedo_r;
+    double volume_albedo_g;
+    double volume_albedo_b;
     bool object_audit_enabled;
     int object_audit_max_dimension;
     bool overwrite;

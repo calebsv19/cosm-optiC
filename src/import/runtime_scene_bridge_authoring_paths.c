@@ -4,6 +4,8 @@
 #include "import/runtime_scene_bridge_authoring_internal.h"
 #include "import/runtime_scene_bridge_json_utils.h"
 
+#include <string.h>
+
 double runtime_scene_bridge_authoring_zero_length(void) {
     double zero [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
     return zero;
@@ -176,6 +178,168 @@ void runtime_scene_bridge_apply_light_seed_scaled(json_object *lights_array,
             runtime_scene_bridge_authoring_scale_scene_length(lz, world_scale);
         if (sceneSettings.bezierPath3D.point_z[0] > zero_length) {
             animSettings.lightHeight = sceneSettings.bezierPath3D.point_z[0];
+        }
+    }
+
+    g_last_3d_light_seeds.valid = true;
+    g_last_3d_light_seeds.light_count = 0;
+    g_last_3d_light_seeds.enabled_count = 0;
+    g_last_3d_light_seeds.point_count = 0;
+    g_last_3d_light_seeds.sphere_count = 0;
+    g_last_3d_light_seeds.disk_count = 0;
+    g_last_3d_light_seeds.rect_count = 0;
+    g_last_3d_light_seeds.mesh_emissive_count = 0;
+    g_last_3d_light_seeds.authored_count = 0;
+    g_last_3d_light_seeds.material_emitter_count = 0;
+    g_last_3d_light_seeds.compatibility_count = 0;
+    g_last_3d_light_seeds.moving_count = 0;
+    g_last_3d_light_seeds.static_count = 0;
+    for (size_t i = 0u; i < json_object_array_length(lights_array) &&
+                       g_last_3d_light_seeds.light_count < RUNTIME_SCENE_BRIDGE_MAX_LIGHT_SEEDS;
+         ++i) {
+        json_object *light_obj = json_object_array_get_idx(lights_array, i);
+        RuntimeLightSource3D source;
+        double x [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+        double y [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+        double z [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+        double authored_radius = 0.0;
+        double r = 1.0;
+        double g = 1.0;
+        double b = 1.0;
+        bool has_explicit_radius = false;
+        bool moving = false;
+        const char *id = NULL;
+        const char *kind = NULL;
+        if (!light_obj || !json_object_is_type(light_obj, json_type_object)) continue;
+        if (!runtime_scene_bridge_parse_position_or_transform_position(light_obj, &x, &y, &z)) {
+            continue;
+        }
+
+        RuntimeLightSource3D_Init(&source);
+        id = runtime_scene_bridge_json_string_field_or_null(light_obj, "id");
+        if (!id || !id[0]) id = runtime_scene_bridge_json_string_field_or_null(light_obj, "light_id");
+        if (!id || !id[0]) id = runtime_scene_bridge_json_string_field_or_null(light_obj, "object_id");
+        if (id && id[0]) {
+            snprintf(source.id, sizeof(source.id), "%s", id);
+        } else {
+            snprintf(source.id, sizeof(source.id), "authored_light_%d",
+                     g_last_3d_light_seeds.light_count);
+        }
+
+        kind = runtime_scene_bridge_json_string_field_or_null(light_obj, "kind");
+        if (!kind || !kind[0]) {
+            kind = runtime_scene_bridge_json_string_field_or_null(light_obj, "type");
+        }
+        if (!kind || !kind[0]) {
+            kind = runtime_scene_bridge_json_string_field_or_null(light_obj, "light_type");
+        }
+        if (kind) {
+            if (strcmp(kind, "sphere") == 0) {
+                source.kind = RUNTIME_LIGHT_SOURCE_3D_KIND_SPHERE;
+            } else if (strcmp(kind, "disk") == 0) {
+                source.kind = RUNTIME_LIGHT_SOURCE_3D_KIND_DISK;
+            } else if (strcmp(kind, "rect") == 0 || strcmp(kind, "rectangle") == 0 ||
+                       strcmp(kind, "panel") == 0) {
+                source.kind = RUNTIME_LIGHT_SOURCE_3D_KIND_RECT;
+            } else if (strcmp(kind, "mesh_emissive") == 0) {
+                source.kind = RUNTIME_LIGHT_SOURCE_3D_KIND_MESH_EMISSIVE;
+            } else {
+                source.kind = RUNTIME_LIGHT_SOURCE_3D_KIND_POINT;
+            }
+        }
+        source.origin = RUNTIME_LIGHT_SOURCE_3D_ORIGIN_AUTHORED_LIGHT;
+        source.position = vec3(runtime_scene_bridge_authoring_scale_scene_length(x, world_scale),
+                               runtime_scene_bridge_authoring_scale_scene_length(y, world_scale),
+                               runtime_scene_bridge_authoring_scale_scene_length(z, world_scale));
+        if (runtime_scene_bridge_parse_vec3(light_obj, "axis_u", &x, &y, &z)) {
+            source.axisU = vec3(x, y, z);
+        }
+        if (runtime_scene_bridge_parse_vec3(light_obj, "axis_v", &x, &y, &z)) {
+            source.axisV = vec3(x, y, z);
+        }
+        if (runtime_scene_bridge_parse_vec3(light_obj, "normal", &x, &y, &z)) {
+            source.normal = vec3(x, y, z);
+        }
+        if (runtime_scene_bridge_parse_double_field(light_obj, "radius", &x)) {
+            source.radius = runtime_scene_bridge_authoring_scale_scene_length(x, world_scale);
+            has_explicit_radius = true;
+            if (source.radius > 0.0 && source.kind == RUNTIME_LIGHT_SOURCE_3D_KIND_POINT) {
+                source.kind = RUNTIME_LIGHT_SOURCE_3D_KIND_SPHERE;
+            }
+        }
+        if (runtime_scene_bridge_parse_double_field(light_obj, "width", &x)) {
+            source.width = runtime_scene_bridge_authoring_scale_scene_length(x, world_scale);
+        }
+        if (runtime_scene_bridge_parse_double_field(light_obj, "height", &x)) {
+            source.height = runtime_scene_bridge_authoring_scale_scene_length(x, world_scale);
+        }
+        if (runtime_scene_bridge_parse_vec3(light_obj, "color", &r, &g, &b) ||
+            runtime_scene_bridge_parse_vec3(light_obj, "tint", &r, &g, &b)) {
+            source.color = vec3(r, g, b);
+        } else {
+            json_object *color = NULL;
+            if (json_object_object_get_ex(light_obj, "color", &color) &&
+                json_object_is_type(color, json_type_object)) {
+                json_object *jr = NULL;
+                json_object *jg = NULL;
+                json_object *jb = NULL;
+                if (json_object_object_get_ex(color, "r", &jr)) r = json_object_get_double(jr);
+                if (json_object_object_get_ex(color, "g", &jg)) g = json_object_get_double(jg);
+                if (json_object_object_get_ex(color, "b", &jb)) b = json_object_get_double(jb);
+                source.color = vec3(r, g, b);
+            }
+        }
+        if (runtime_scene_bridge_parse_double_field(light_obj, "intensity", &x) ||
+            runtime_scene_bridge_parse_double_field(light_obj, "brightness", &x)) {
+            source.intensity = x;
+        }
+        if (runtime_scene_bridge_parse_double_field(light_obj, "falloff_distance", &x) ||
+            runtime_scene_bridge_parse_double_field(light_obj, "falloffDistance", &x)) {
+            source.falloffDistance = x;
+        } else {
+            source.falloffDistance = animSettings.forwardDecay;
+        }
+        (void)runtime_scene_bridge_parse_bool_field(light_obj, "enabled", &source.enabled);
+        (void)runtime_scene_bridge_parse_bool_field(light_obj, "moving", &moving);
+        if (!has_explicit_radius &&
+            (source.kind == RUNTIME_LIGHT_SOURCE_3D_KIND_POINT ||
+             source.kind == RUNTIME_LIGHT_SOURCE_3D_KIND_SPHERE)) {
+            authored_radius = runtime_scene_bridge_authoring_scale_scene_length(
+                animSettings.lightRadius,
+                world_scale);
+            if (authored_radius > 0.0) {
+                source.radius = authored_radius;
+                source.kind = RUNTIME_LIGHT_SOURCE_3D_KIND_SPHERE;
+            }
+        }
+        source.falloffMode = animSettings.forwardFalloffMode;
+
+        g_last_3d_light_seeds.lights[g_last_3d_light_seeds.light_count] = source;
+        g_last_3d_light_seeds.light_count += 1;
+        if (source.enabled) g_last_3d_light_seeds.enabled_count += 1;
+        g_last_3d_light_seeds.authored_count += 1;
+        if (moving) {
+            g_last_3d_light_seeds.moving_count += 1;
+        } else {
+            g_last_3d_light_seeds.static_count += 1;
+        }
+        switch (source.kind) {
+            case RUNTIME_LIGHT_SOURCE_3D_KIND_SPHERE:
+                g_last_3d_light_seeds.sphere_count += 1;
+                break;
+            case RUNTIME_LIGHT_SOURCE_3D_KIND_DISK:
+                g_last_3d_light_seeds.disk_count += 1;
+                break;
+            case RUNTIME_LIGHT_SOURCE_3D_KIND_RECT:
+                g_last_3d_light_seeds.rect_count += 1;
+                break;
+            case RUNTIME_LIGHT_SOURCE_3D_KIND_MESH_EMISSIVE:
+                g_last_3d_light_seeds.mesh_emissive_count += 1;
+                break;
+            case RUNTIME_LIGHT_SOURCE_3D_KIND_POINT:
+            default:
+                g_last_3d_light_seeds.point_count += 1;
+                break;
         }
     }
 }

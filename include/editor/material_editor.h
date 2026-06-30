@@ -34,6 +34,18 @@ typedef enum MaterialEditorTextureParamKind {
     MATERIAL_EDITOR_TEXTURE_PARAM_SURFACE_DAMAGE
 } MaterialEditorTextureParamKind;
 
+typedef enum MaterialEditorResponseField {
+    MATERIAL_EDITOR_RESPONSE_FIELD_NONE = 0,
+    MATERIAL_EDITOR_RESPONSE_FIELD_TRANSMISSION,
+    MATERIAL_EDITOR_RESPONSE_FIELD_ROUGHNESS,
+    MATERIAL_EDITOR_RESPONSE_FIELD_IOR,
+    MATERIAL_EDITOR_RESPONSE_FIELD_REFLECTIVITY,
+    MATERIAL_EDITOR_RESPONSE_FIELD_SPECULAR,
+    MATERIAL_EDITOR_RESPONSE_FIELD_TINT,
+    MATERIAL_EDITOR_RESPONSE_FIELD_ABSORPTION,
+    MATERIAL_EDITOR_RESPONSE_FIELD_THIN_WALLED
+} MaterialEditorResponseField;
+
 typedef enum MaterialEditorViewMode {
     MATERIAL_EDITOR_VIEW_FOCUSED_ORIGIN = 0,
     MATERIAL_EDITOR_VIEW_SCENE_PLACEMENT
@@ -88,6 +100,10 @@ bool MaterialEditorApplyTextureKindToFocused(int texture_id);
 bool MaterialEditorApplySliderValueToFocused(MaterialEditorSliderKind kind, double value);
 bool MaterialEditorApplyTexturePatternToFocused(int pattern_mode);
 bool MaterialEditorApplyTextureParamValueToFocused(MaterialEditorTextureParamKind kind, double value);
+bool MaterialEditorApplyResponseValueToFocused(MaterialEditorResponseField field, double value);
+bool MaterialEditorApplyResponseStepToFocused(MaterialEditorResponseField field, double delta);
+bool MaterialEditorApplyResponseTintToFocused(int packed_color);
+bool MaterialEditorApplyGlassOverlayForFocused(RuntimeMaterialTextureLayerKind kind);
 bool MaterialEditorResetActiveFacePlacement(void);
 bool MaterialEditorCopyActiveFacePlacementToSelected(void);
 bool MaterialEditorBindAuthoredTextureManifestForFocused(const char* manifest_path);

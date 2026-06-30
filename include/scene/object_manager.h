@@ -48,6 +48,11 @@ typedef struct {
     double textureSurfaceDamage; // Procedural BSDF damage intensity
     int textureSeed;        // Durable procedural variation seed
     int material_id;       // Material preset reference
+    bool hasGlassTransportOverride; // Object-local glass transport edit.
+    double glassTransmission;       // 0..1 transmission override.
+    double glassIor;                // Bounded dielectric IOR override.
+    double glassAbsorptionDistance; // Positive absorption distance override.
+    bool glassThinWalled;           // Thin sheet versus solid glass override.
 
     bool dirty;            // Needs update?
     bool guideOnly;        // Authoring helper visible in editor/preview, excluded from render geometry
@@ -96,6 +101,13 @@ Uint8 SceneObjectColorG(const SceneObject* obj);
 Uint8 SceneObjectColorB(const SceneObject* obj);
 Uint8 SceneObjectAlphaByte(const SceneObject* obj);
 double SceneObjectAlphaFromByte(Uint8 alpha);
+void SceneObjectClearGlassTransportOverride(SceneObject* obj);
+void SceneObjectSeedGlassTransportOverrideFromMaterial(SceneObject* obj);
+bool SceneObjectResolveGlassTransport(const SceneObject* obj,
+                                      double* out_transmission,
+                                      double* out_ior,
+                                      double* out_absorption_distance,
+                                      bool* out_thin_walled);
 
 void SegmentPathInit(SegmentPath* path);
 void SegmentPathFree(SegmentPath* path);

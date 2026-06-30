@@ -525,6 +525,24 @@ static bool runtime_material_payload_3d_resolve(int scene_object_index,
         material ? runtime_material_payload_3d_clamp_positive(material->absorption_distance, 1.0)
                  : 1.0;
     payload.thinWalled = material ? material->thin_walled : false;
+    if (object_copy.material_id == MATERIAL_PRESET_TRANSPARENT) {
+        double glass_transmission = payload.transparency;
+        double glass_ior = payload.opticalIor;
+        double glass_absorption_distance = payload.absorptionDistance;
+        bool glass_thin_walled = payload.thinWalled;
+        if (SceneObjectResolveGlassTransport(&object_copy,
+                                             &glass_transmission,
+                                             &glass_ior,
+                                             &glass_absorption_distance,
+                                             &glass_thin_walled)) {
+            payload.transparency =
+                runtime_material_payload_3d_clamp01(glass_transmission * object_copy.alpha);
+            payload.opticalIor = glass_ior;
+            payload.absorptionDistance =
+                runtime_material_payload_3d_clamp_positive(glass_absorption_distance, 1.0);
+            payload.thinWalled = glass_thin_walled;
+        }
+    }
     payload.valid = true;
     runtime_material_payload_3d_apply_texture(&object_copy, hit, &payload);
     RuntimeWaterMaterial3D_ApplyToPayload(scene_object_index, &payload);

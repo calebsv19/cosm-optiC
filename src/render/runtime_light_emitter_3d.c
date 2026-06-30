@@ -3,6 +3,8 @@
 #include <math.h>
 #include <string.h>
 
+#include "render/runtime_light_set_3d.h"
+
 static double runtime_light_emitter_3d_zero_length(void) {
     double zero [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
     return zero;
@@ -51,11 +53,12 @@ static double runtime_light_emitter_3d_attenuation(const RuntimeLight3D* light,
     }
 }
 
-bool RuntimeLightEmitter3D_IntersectRay(const RuntimeScene3D* scene,
-                                        const Ray3D* ray,
-                                        double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
-                                        double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
-                                        RuntimeLightEmitterHit3DResult* out_result) {
+static bool runtime_light_emitter_3d_intersect_light(
+    const RuntimeLight3D* light,
+    const Ray3D* ray,
+    double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    RuntimeLightEmitterHit3DResult* out_result) {
     RuntimeLightEmitterHit3DResult result = {0};
     Vec3 sphere_offset = vec3(0.0, 0.0, 0.0);
     double radius [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
@@ -69,16 +72,15 @@ bool RuntimeLightEmitter3D_IntersectRay(const RuntimeScene3D* scene,
     double zero_length = runtime_light_emitter_3d_zero_length();
     double epsilon = runtime_light_emitter_3d_length_epsilon();
 
-    if (!scene || !ray || !out_result) return false;
+    if (!light || !ray || !out_result) return false;
     *out_result = result;
-    if (!scene->hasLight) return false;
 
-    radius = scene->light.radius;
+    radius = light->radius;
     if (!(radius > epsilon)) {
         return false;
     }
 
-    sphere_offset = vec3_sub(ray->origin, scene->light.position);
+    sphere_offset = vec3_sub(ray->origin, light->position);
     b = 2.0 * vec3_dot(sphere_offset, ray->direction);
     c = vec3_dot(sphere_offset, sphere_offset) - (radius * radius);
     discriminant = (b * b) - (4.0 * c);
@@ -104,17 +106,77 @@ bool RuntimeLightEmitter3D_IntersectRay(const RuntimeScene3D* scene,
     result.hit = true;
     result.t = hit_t;
     result.position = vec3_add(ray->origin, vec3_scale(ray->direction, hit_t));
-    result.normal = vec3_normalize(vec3_sub(result.position, scene->light.position));
+    result.normal = vec3_normalize(vec3_sub(result.position, light->position));
     if (vec3_length(result.normal) <= epsilon) {
         result.normal = vec3_scale(ray->direction, -1.0);
     }
     view_facing = vec3_scale(ray->direction, -1.0);
     result.radialFalloff =
         runtime_light_emitter_3d_clamp(vec3_dot(result.normal, view_facing), 0.0, 1.0);
-    result.attenuation = runtime_light_emitter_3d_attenuation(&scene->light, hit_t);
-    result.radiance = scene->light.intensity * result.attenuation * result.radialFalloff;
+    result.attenuation = runtime_light_emitter_3d_attenuation(light, hit_t);
+    result.radiance = light->intensity * result.attenuation * result.radialFalloff;
     *out_result = result;
     return true;
+}
+
+static RuntimeLight3D runtime_light_emitter_3d_light_from_source(
+    const RuntimeLightSource3D* source) {
+    RuntimeLight3D light = {0};
+    if (!source) return light;
+    light.position = source->position;
+    light.radius = source->radius;
+    light.intensity = source->intensity;
+    light.falloffDistance = source->falloffDistance;
+    light.falloffMode = source->falloffMode;
+    return light;
+}
+
+bool RuntimeLightEmitter3D_IntersectRay(const RuntimeScene3D* scene,
+                                        const Ray3D* ray,
+                                        double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                        double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                        RuntimeLightEmitterHit3DResult* out_result) {
+    RuntimeLightEmitterHit3DResult best = {0};
+    bool found = false;
+
+    if (!scene || !ray || !out_result) return false;
+    *out_result = best;
+
+    for (int i = 0; i < scene->lightSet.lightCount; ++i) {
+        const RuntimeLightSource3D* source = &scene->lightSet.lights[i];
+        RuntimeLightEmitterHit3DResult candidate = {0};
+        RuntimeLight3D light = {0};
+        if (!source->enabled) continue;
+        if (source->kind != RUNTIME_LIGHT_SOURCE_3D_KIND_SPHERE &&
+            source->kind != RUNTIME_LIGHT_SOURCE_3D_KIND_POINT) {
+            continue;
+        }
+        light = runtime_light_emitter_3d_light_from_source(source);
+        if (!runtime_light_emitter_3d_intersect_light(&light,
+                                                      ray,
+                                                      t_min,
+                                                      t_max,
+                                                      &candidate)) {
+            continue;
+        }
+        if (!found || candidate.t < best.t) {
+            best = candidate;
+            found = true;
+        }
+    }
+
+    if (!found && scene->hasLight) {
+        found = runtime_light_emitter_3d_intersect_light(&scene->light,
+                                                        ray,
+                                                        t_min,
+                                                        t_max,
+                                                        &best);
+    }
+
+    if (found) {
+        *out_result = best;
+    }
+    return found;
 }
 
 bool RuntimeLightEmitter3D_ResolveFirstHit(const RuntimeScene3D* scene,

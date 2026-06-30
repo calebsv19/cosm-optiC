@@ -28,6 +28,7 @@
 #include "editor/scene_editor_viewport_render.h"
 #include "import/runtime_mesh_asset_loader.h"
 #include "import/runtime_scene_bridge.h"
+#include "material/material_manager.h"
 #include "render/runtime_material_authored_texture_3d.h"
 #include "render/runtime_material_graph_3d.h"
 #include "render/runtime_material_payload_3d.h"
@@ -317,6 +318,78 @@ static bool test_scene_editor_write_channel_authored_texture_manifest(
         return false;
     }
     for (int i = 0; i < 3; ++i) {
+        json_object* channel = json_object_new_object();
+        if (!channel) {
+            json_object_put(root);
+            return false;
+        }
+        json_object_object_add(channel, "channel", json_object_new_string(channel_names[i]));
+        json_object_object_add(channel, "source", json_object_new_string(channel_sources[i]));
+        json_object_object_add(channel, "file_name", json_object_new_string(file_name));
+        json_object_array_add(channels, channel);
+    }
+    json_object_object_add(base_surface, "material_channels", channels);
+    json_object_array_add(base_surfaces, base_surface);
+    json_object_object_add(root, "base_surfaces", base_surfaces);
+    write_ok = json_object_to_file_ext(manifest_path, root, JSON_C_TO_STRING_PRETTY);
+    json_object_put(root);
+    return write_ok == 0;
+}
+
+static bool test_scene_editor_write_glass_channel_authored_texture_manifest(
+    const char* manifest_path,
+    const char* object_id,
+    const char* file_name) {
+    json_object* root = NULL;
+    json_object* base_surfaces = NULL;
+    json_object* base_surface = NULL;
+    json_object* channels = NULL;
+    const char* channel_names[] = {
+        "base_color.rgb",
+        "roughness.scalar",
+        "opacity.coverage",
+        "transmission.weight",
+        "bump.height"
+    };
+    const char* channel_sources[] = {
+        "rgba",
+        "luminance",
+        "alpha",
+        "red",
+        "green"
+    };
+    int write_ok = 0;
+    if (!manifest_path || !object_id || !file_name) return false;
+    root = json_object_new_object();
+    base_surfaces = json_object_new_array();
+    base_surface = json_object_new_object();
+    channels = json_object_new_array();
+    if (!root || !base_surfaces || !base_surface || !channels) {
+        if (root) json_object_put(root);
+        if (base_surfaces) json_object_put(base_surfaces);
+        if (base_surface) json_object_put(base_surface);
+        if (channels) json_object_put(channels);
+        return false;
+    }
+    json_object_object_add(root, "schema_version", json_object_new_int(5));
+    json_object_object_add(root,
+                           "export_binding_kind",
+                           json_object_new_string("SEPARATE_FACES"));
+    json_object_object_add(root,
+                           "emitted_output_kind",
+                           json_object_new_string("FLATTENED_ONLY"));
+    json_object_object_add(root, "primitive_kind", json_object_new_string("PLANE"));
+    json_object_object_add(root, "source_scene_id", json_object_new_string("scene_glass_channel_test"));
+    json_object_object_add(root, "source_object_id", json_object_new_string(object_id));
+    json_object_object_add(root, "base_surface_count", json_object_new_int(1));
+    json_object_object_add(base_surface, "surface_id", json_object_new_int(1));
+    json_object_object_add(base_surface, "face_role", json_object_new_string("FRONT"));
+    json_object_object_add(base_surface, "file_name", json_object_new_string(file_name));
+    if (!test_scene_editor_add_surface_semantic_fields(base_surface, "PLANE", "FRONT")) {
+        json_object_put(root);
+        return false;
+    }
+    for (int i = 0; i < 5; ++i) {
         json_object* channel = json_object_new_object();
         if (!channel) {
             json_object_put(root);
@@ -2783,6 +2856,7 @@ static int test_material_editor_recipe_dropdown_options_apply_exact_choices(void
     int option_count = 0;
     int glass_index = -1;
     int metal_index = -1;
+    int glass_oil_index = -1;
     int brushed_index = -1;
     int rust_index = -1;
 
@@ -2816,6 +2890,15 @@ static int test_material_editor_recipe_dropdown_options_apply_exact_choices(void
     assert_true("material_editor_recipe_glass_surface_is_compact",
                 option_count == 1 &&
                     options[0].layer_kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID);
+    option_count = MaterialEditorBuildRecipeOptions(MATERIAL_EDITOR_RECIPE_AXIS_FINISH,
+                                                    options,
+                                                    MATERIAL_EDITOR_RECIPE_MENU_MAX_ITEMS);
+    for (int i = 0; i < option_count; ++i) {
+        if (options[i].layer_kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL) {
+            glass_oil_index = i;
+        }
+    }
+    assert_true("material_editor_recipe_glass_finish_has_oil", glass_oil_index >= 0);
     assert_true("material_editor_recipe_dropdown_apply_metal",
                 MaterialEditorApplyRecipeOptionForFocused(MATERIAL_EDITOR_RECIPE_AXIS_FAMILY,
                                                           metal_index) &&
@@ -2852,6 +2935,527 @@ static int test_material_editor_recipe_dropdown_options_apply_exact_choices(void
                     stack.layers[1].kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_RUST &&
                     MaterialEditorBuildRecipeReadback(&recipe) &&
                     strcmp(recipe.finish_label, "Rust") == 0);
+
+    SceneEditorMaterialGraphResetAll();
+    SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static const MaterialEditorResponseRow* test_material_editor_response_row(
+    const MaterialEditorResponseReadback* readback,
+    const char* label) {
+    if (!readback || !label) return NULL;
+    for (int i = 0; i < readback->row_count; ++i) {
+        if (strcmp(readback->rows[i].label, label) == 0) {
+            return &readback->rows[i];
+        }
+    }
+    return NULL;
+}
+
+static int test_material_editor_response_readback_uses_family_matrix_for_glass(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    MaterialEditorResponseReadback readback = {0};
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    const MaterialEditorResponseRow* trans = NULL;
+    const MaterialEditorResponseRow* rough = NULL;
+    const MaterialEditorResponseRow* ior = NULL;
+    const MaterialEditorResponseRow* absorb = NULL;
+    const MaterialEditorResponseRow* thin = NULL;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 5.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
+    sceneSettings.sceneObjects[0].alpha = 0.8;
+    sceneSettings.sceneObjects[0].color = SceneObjectPackRGBBytes(180u, 220u, 255u);
+    stack.layerCount = 1;
+    stack.layers[0] =
+        RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID);
+    stack.layers[0].roughnessInfluence = 0.32;
+    stack.layers[0].reflectivityInfluence = 0.12;
+    stack.layers[0].specularInfluence = 0.44;
+    assert_true("material_editor_response_glass_set_stack",
+                SceneEditorMaterialStackSetObjectStack(0, &stack));
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+    assert_true("material_editor_response_glass_select_base",
+                MaterialEditorSetActiveLayerIndex(0));
+
+    assert_true("material_editor_response_glass_build",
+                MaterialEditorBuildResponseReadback(&readback));
+    trans = test_material_editor_response_row(&readback, "Trans");
+    rough = test_material_editor_response_row(&readback, "Rough");
+    ior = test_material_editor_response_row(&readback, "IOR");
+    absorb = test_material_editor_response_row(&readback, "Absorb");
+    thin = test_material_editor_response_row(&readback, "Thin");
+    assert_true("material_editor_response_glass_family",
+                readback.family == MATERIAL_EDITOR_RESPONSE_FAMILY_GLASS &&
+                    readback.family_specific &&
+                    !readback.has_guarded_fields &&
+                    strcmp(readback.title, "Glass Response") == 0 &&
+                    strstr(readback.route_label, "glass family matrix") != NULL);
+    assert_true("material_editor_response_glass_rows_present",
+                trans && rough && ior && absorb && thin && readback.row_count == 8);
+    assert_true("material_editor_response_glass_trans_editable",
+                strcmp(trans->value, "0.75") == 0 &&
+                    trans->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE &&
+                    strstr(trans->note, "preset transport") != NULL);
+    assert_true("material_editor_response_glass_layer_roughness",
+                strcmp(rough->value, "0.32") == 0 &&
+                    rough->field == MATERIAL_EDITOR_RESPONSE_FIELD_ROUGHNESS &&
+                    rough->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE);
+    assert_true("material_editor_response_glass_ior_absorb_thin_editable",
+                strcmp(ior->value, "1.45") == 0 &&
+                    strcmp(absorb->value, "2.00") == 0 &&
+                    strcmp(thin->value, "on") == 0 &&
+                    ior->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE &&
+                    absorb->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE &&
+                    thin->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE);
+
+    SceneEditorMaterialGraphResetAll();
+    SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_glass_response_mutation_routes_to_composite_helpers(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    MaterialEditorResponseReadback readback = {0};
+    RuntimeMaterialPayload3D payload = {0};
+    const Material* glass_preset = NULL;
+    const MaterialEditorResponseRow* trans = NULL;
+    const MaterialEditorResponseRow* ior = NULL;
+    const MaterialEditorResponseRow* absorb = NULL;
+    const MaterialEditorResponseRow* thin = NULL;
+    const MaterialEditorResponseRow* reflect = NULL;
+    const MaterialEditorResponseRow* spec = NULL;
+    const MaterialEditorResponseRow* tint = NULL;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 5.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
+    sceneSettings.sceneObjects[0].color = SceneObjectPackRGBBytes(180u, 220u, 255u);
+    stack.layerCount = 1;
+    stack.layers[0] =
+        RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID);
+    assert_true("material_editor_glass_response_mutation_seed_stack",
+                SceneEditorMaterialStackSetObjectStack(0, &stack));
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+    assert_true("material_editor_glass_response_mutation_select_base",
+                MaterialEditorSetActiveLayerIndex(0));
+
+    assert_true("material_editor_glass_response_roughness_route",
+                MaterialEditorApplyResponseValueToFocused(
+                    MATERIAL_EDITOR_RESPONSE_FIELD_ROUGHNESS,
+                    0.61));
+    assert_true("material_editor_glass_response_reflect_route",
+                MaterialEditorApplyResponseValueToFocused(
+                    MATERIAL_EDITOR_RESPONSE_FIELD_REFLECTIVITY,
+                    0.27));
+    assert_true("material_editor_glass_response_spec_route",
+                MaterialEditorApplyResponseValueToFocused(
+                    MATERIAL_EDITOR_RESPONSE_FIELD_SPECULAR,
+                    0.73));
+    assert_true("material_editor_glass_response_tint_route",
+                MaterialEditorApplyResponseTintToFocused(
+                    SceneObjectPackRGBBytes(90u, 150u, 220u)));
+    assert_true("material_editor_glass_response_trans_route",
+                MaterialEditorApplyResponseValueToFocused(
+                    MATERIAL_EDITOR_RESPONSE_FIELD_TRANSMISSION,
+                    0.58));
+    assert_true("material_editor_glass_response_ior_route",
+                MaterialEditorApplyResponseValueToFocused(
+                    MATERIAL_EDITOR_RESPONSE_FIELD_IOR,
+                    1.62));
+    assert_true("material_editor_glass_response_absorb_route",
+                MaterialEditorApplyResponseValueToFocused(
+                    MATERIAL_EDITOR_RESPONSE_FIELD_ABSORPTION,
+                    3.25));
+    assert_true("material_editor_glass_response_thin_route",
+                MaterialEditorApplyResponseValueToFocused(
+                    MATERIAL_EDITOR_RESPONSE_FIELD_THIN_WALLED,
+                    0.0));
+    assert_true("material_editor_glass_response_stack_written",
+                SceneEditorMaterialStackGetObjectStack(0, &stack));
+    assert_close("material_editor_glass_response_roughness_value",
+                 stack.layers[0].roughnessInfluence,
+                 0.61,
+                 1e-9);
+    assert_close("material_editor_glass_response_reflect_value",
+                 stack.layers[0].reflectivityInfluence,
+                 0.27,
+                 1e-9);
+    assert_close("material_editor_glass_response_spec_value",
+                 stack.layers[0].specularInfluence,
+                 0.73,
+                 1e-9);
+    assert_true("material_editor_glass_response_tint_object_color",
+                SceneObjectColorR(&sceneSettings.sceneObjects[0]) == 90u &&
+                    SceneObjectColorG(&sceneSettings.sceneObjects[0]) == 150u &&
+                    SceneObjectColorB(&sceneSettings.sceneObjects[0]) == 220u);
+    assert_true("material_editor_glass_response_transport_override_written",
+                sceneSettings.sceneObjects[0].hasGlassTransportOverride &&
+                    sceneSettings.sceneObjects[0].glassTransmission == 0.58 &&
+                    sceneSettings.sceneObjects[0].glassIor == 1.62 &&
+                    sceneSettings.sceneObjects[0].glassAbsorptionDistance == 3.25 &&
+                    !sceneSettings.sceneObjects[0].glassThinWalled);
+    glass_preset = MaterialManagerGet(MATERIAL_PRESET_TRANSPARENT);
+    assert_true("material_editor_glass_response_preset_preserved",
+                glass_preset &&
+                    glass_preset->transparency == 0.75f &&
+                    glass_preset->ior == 1.45f &&
+                    glass_preset->absorption_distance == 2.0f &&
+                    glass_preset->thin_walled);
+    assert_true("material_editor_glass_response_payload_uses_override",
+                RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(0, &payload));
+    assert_close("material_editor_glass_response_payload_trans",
+                 payload.transparency,
+                 0.58,
+                 1e-9);
+    assert_close("material_editor_glass_response_payload_ior",
+                 payload.opticalIor,
+                 1.62,
+                 1e-9);
+    assert_close("material_editor_glass_response_payload_absorb",
+                 payload.absorptionDistance,
+                 3.25,
+                 1e-9);
+    assert_true("material_editor_glass_response_payload_thin",
+                !payload.thinWalled);
+    assert_true("material_editor_glass_response_step_routes",
+                MaterialEditorApplyResponseStepToFocused(
+                    MATERIAL_EDITOR_RESPONSE_FIELD_ROUGHNESS,
+                    0.05));
+    assert_true("material_editor_glass_response_transport_step_routes",
+                MaterialEditorApplyResponseStepToFocused(
+                    MATERIAL_EDITOR_RESPONSE_FIELD_IOR,
+                    0.05));
+    assert_true("material_editor_glass_response_thin_step_toggles",
+                MaterialEditorApplyResponseStepToFocused(
+                    MATERIAL_EDITOR_RESPONSE_FIELD_THIN_WALLED,
+                    0.05) &&
+                    sceneSettings.sceneObjects[0].glassThinWalled);
+    assert_true("material_editor_glass_response_step_stack_written",
+                SceneEditorMaterialStackGetObjectStack(0, &stack));
+    assert_close("material_editor_glass_response_step_value",
+                 stack.layers[0].roughnessInfluence,
+                 0.66,
+                 1e-9);
+    assert_true("material_editor_glass_response_marks_dirty",
+                sceneSettings.sceneObjects[0].dirty);
+
+    assert_true("material_editor_glass_response_readback_after_mutation",
+                MaterialEditorBuildResponseReadback(&readback));
+    trans = test_material_editor_response_row(&readback, "Trans");
+    ior = test_material_editor_response_row(&readback, "IOR");
+    absorb = test_material_editor_response_row(&readback, "Absorb");
+    thin = test_material_editor_response_row(&readback, "Thin");
+    reflect = test_material_editor_response_row(&readback, "Reflect");
+    spec = test_material_editor_response_row(&readback, "Spec");
+    tint = test_material_editor_response_row(&readback, "Tint");
+    assert_true("material_editor_glass_response_readback_editable_fields",
+                trans && ior && absorb && thin && reflect && spec && tint &&
+                    trans->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE &&
+                    ior->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE &&
+                    absorb->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE &&
+                    thin->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE &&
+                    strcmp(trans->value, "0.58") == 0 &&
+                    strcmp(ior->value, "1.67") == 0 &&
+                    strcmp(absorb->value, "3.25") == 0 &&
+                    strcmp(thin->value, "on") == 0 &&
+                    reflect->field == MATERIAL_EDITOR_RESPONSE_FIELD_REFLECTIVITY &&
+                    spec->field == MATERIAL_EDITOR_RESPONSE_FIELD_SPECULAR &&
+                    tint->field == MATERIAL_EDITOR_RESPONSE_FIELD_TINT &&
+                    reflect->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE &&
+                    spec->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE &&
+                    tint->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE);
+
+    SceneEditorMaterialGraphResetAll();
+    SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_glass_transport_override_is_object_local_and_loaded(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeMaterialPayload3D payload_a = {0};
+    RuntimeMaterialPayload3D payload_b = {0};
+    SceneObject loaded;
+    struct json_object* obj = json_object_new_object();
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    memset(&loaded, 0, sizeof(loaded));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+
+    sceneSettings.objectCount = 2;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 5.0, 0.0, NULL, 0);
+    InitObject(&sceneSettings.sceneObjects[1], OBJECT_CIRCLE, 8.0, 0.0, 5.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
+    sceneSettings.sceneObjects[1].material_id = MATERIAL_PRESET_TRANSPARENT;
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+
+    assert_true("material_editor_glass_transport_object_a_override",
+                MaterialEditorApplyResponseValueToFocused(
+                    MATERIAL_EDITOR_RESPONSE_FIELD_TRANSMISSION,
+                    0.42) &&
+                    MaterialEditorApplyResponseValueToFocused(
+                        MATERIAL_EDITOR_RESPONSE_FIELD_IOR,
+                        1.75) &&
+                    MaterialEditorApplyResponseValueToFocused(
+                        MATERIAL_EDITOR_RESPONSE_FIELD_ABSORPTION,
+                        4.5) &&
+                    MaterialEditorApplyResponseValueToFocused(
+                        MATERIAL_EDITOR_RESPONSE_FIELD_THIN_WALLED,
+                        0.0));
+    assert_true("material_editor_glass_transport_payload_a",
+                RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(0, &payload_a));
+    assert_true("material_editor_glass_transport_payload_b",
+                RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(1, &payload_b));
+    assert_close("material_editor_glass_transport_a_trans",
+                 payload_a.transparency,
+                 0.42,
+                 1e-9);
+    assert_close("material_editor_glass_transport_a_ior",
+                 payload_a.opticalIor,
+                 1.75,
+                 1e-9);
+    assert_close("material_editor_glass_transport_a_absorb",
+                 payload_a.absorptionDistance,
+                 4.5,
+                 1e-9);
+    assert_true("material_editor_glass_transport_a_thin", !payload_a.thinWalled);
+    assert_close("material_editor_glass_transport_b_trans_preset",
+                 payload_b.transparency,
+                 0.75,
+                 1e-9);
+    assert_close("material_editor_glass_transport_b_ior_preset",
+                 payload_b.opticalIor,
+                 1.45,
+                 1e-6);
+    assert_close("material_editor_glass_transport_b_absorb_preset",
+                 payload_b.absorptionDistance,
+                 2.0,
+                 1e-9);
+    assert_true("material_editor_glass_transport_b_thin_preset", payload_b.thinWalled);
+
+    ObjectEditorObjectAssignMaterial(&sceneSettings.sceneObjects[0], MATERIAL_PRESET_ROUGH_METAL);
+    assert_true("material_editor_glass_transport_override_reset_on_material_change",
+                !sceneSettings.sceneObjects[0].hasGlassTransportOverride);
+
+    json_object_object_add(obj, "texture", json_object_new_string(""));
+    json_object_object_add(obj, "color", json_object_new_int(0xFFFFFF));
+    json_object_object_add(obj, "materialId", json_object_new_int(MATERIAL_PRESET_TRANSPARENT));
+    json_object_object_add(obj, "glassTransportOverride", json_object_new_boolean(true));
+    json_object_object_add(obj, "glassTransmission", json_object_new_double(0.36));
+    json_object_object_add(obj, "glassIor", json_object_new_double(1.58));
+    json_object_object_add(obj, "glassAbsorptionDistance", json_object_new_double(2.75));
+    json_object_object_add(obj, "glassThinWalled", json_object_new_boolean(false));
+    LoadObjectProperties(obj, &loaded);
+    assert_true("material_editor_glass_transport_load_override",
+                loaded.hasGlassTransportOverride &&
+                    loaded.material_id == MATERIAL_PRESET_TRANSPARENT &&
+                    loaded.glassTransmission == 0.36 &&
+                    loaded.glassIor == 1.58 &&
+                    loaded.glassAbsorptionDistance == 2.75 &&
+                    !loaded.glassThinWalled);
+    json_object_put(obj);
+
+    SceneEditorMaterialGraphResetAll();
+    SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_response_mutation_rejects_non_glass_family(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 5.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_ROUGH_METAL;
+    stack.layerCount = 1;
+    stack.layers[0] =
+        RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID);
+    assert_true("material_editor_non_glass_response_mutation_seed_stack",
+                SceneEditorMaterialStackSetObjectStack(0, &stack));
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+
+    assert_true("material_editor_non_glass_response_mutation_rejected",
+                !MaterialEditorApplyResponseValueToFocused(
+                    MATERIAL_EDITOR_RESPONSE_FIELD_ROUGHNESS,
+                    0.91));
+    assert_true("material_editor_non_glass_response_tint_rejected",
+                !MaterialEditorApplyResponseTintToFocused(
+                    SceneObjectPackRGBBytes(120u, 120u, 120u)));
+    assert_true("material_editor_non_glass_response_stack_unchanged",
+                SceneEditorMaterialStackGetObjectStack(0, &stack) &&
+                    stack.layers[0].roughnessInfluence == 0.0);
+
+    SceneEditorMaterialGraphResetAll();
+    SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_glass_overlay_affordances_add_select_and_readback(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    MaterialEditorResponseReadback readback = {0};
+    const MaterialEditorResponseRow* reflect = NULL;
+    const MaterialEditorResponseRow* spec = NULL;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 5.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+
+    assert_true("material_editor_glass_overlay_add_fog",
+                MaterialEditorApplyGlassOverlayForFocused(
+                    RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_FOG));
+    assert_true("material_editor_glass_overlay_fog_stack",
+                SceneEditorMaterialStackGetObjectStack(0, &stack) &&
+                    stack.layerCount == 2 &&
+                    stack.layers[1].kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_FOG &&
+                    MaterialEditorGetActiveLayerIndex() == 1);
+    assert_true("material_editor_glass_overlay_fog_readback",
+                MaterialEditorBuildResponseReadback(&readback) &&
+                    (reflect = test_material_editor_response_row(&readback, "Reflect")) != NULL &&
+                    strcmp(reflect->value, "0.00") == 0 &&
+                    strstr(readback.route_label, "selected layer") != NULL);
+
+    assert_true("material_editor_glass_overlay_add_oil",
+                MaterialEditorApplyGlassOverlayForFocused(
+                    RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL));
+    assert_true("material_editor_glass_overlay_oil_stack",
+                SceneEditorMaterialStackGetObjectStack(0, &stack) &&
+                    stack.layerCount == 3 &&
+                    stack.layers[2].kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL &&
+                    MaterialEditorGetActiveLayerIndex() == 2);
+    assert_true("material_editor_glass_overlay_oil_readback",
+                MaterialEditorBuildResponseReadback(&readback));
+    reflect = test_material_editor_response_row(&readback, "Reflect");
+    spec = test_material_editor_response_row(&readback, "Spec");
+    assert_true("material_editor_glass_overlay_oil_response_values",
+                reflect && spec &&
+                    strcmp(reflect->value, "0.35") == 0 &&
+                    strcmp(spec->value, "0.55") == 0 &&
+                    reflect->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE &&
+                    spec->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE);
+
+    assert_true("material_editor_glass_overlay_reselect_fog",
+                MaterialEditorApplyGlassOverlayForFocused(
+                    RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_FOG));
+    assert_true("material_editor_glass_overlay_reselect_no_duplicate",
+                SceneEditorMaterialStackGetObjectStack(0, &stack) &&
+                    stack.layerCount == 3 &&
+                    MaterialEditorGetActiveLayerIndex() == 1);
+    assert_true("material_editor_glass_overlay_clear_selects_base",
+                MaterialEditorApplyGlassOverlayForFocused(
+                    RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE) &&
+                    MaterialEditorGetActiveLayerIndex() == 0 &&
+                    SceneEditorMaterialStackGetObjectStack(0, &stack) &&
+                    stack.layerCount == 3);
+    assert_true("material_editor_glass_overlay_marks_dirty",
+                sceneSettings.sceneObjects[0].dirty);
+
+    SceneEditorMaterialGraphResetAll();
+    SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_glass_overlay_affordances_reject_non_glass(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 5.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_ROUGH_METAL;
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+
+    assert_true("material_editor_non_glass_overlay_shortcut_rejected",
+                !MaterialEditorApplyGlassOverlayForFocused(
+                    RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_FOG));
+    assert_true("material_editor_non_glass_overlay_no_stack",
+                !SceneEditorMaterialStackGetObjectStack(0, &stack));
+
+    SceneEditorMaterialGraphResetAll();
+    SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_response_readback_keeps_non_glass_on_generic_matrix(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    MaterialEditorResponseReadback readback = {0};
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 5.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_ROUGH_METAL;
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+
+    assert_true("material_editor_response_metal_build",
+                MaterialEditorBuildResponseReadback(&readback));
+    assert_true("material_editor_response_metal_generic_matrix",
+                readback.family == MATERIAL_EDITOR_RESPONSE_FAMILY_METAL &&
+                    !readback.family_specific &&
+                    strcmp(readback.title, "Metal Response") == 0 &&
+                    strstr(readback.subtitle, "Generic selected-layer response") != NULL &&
+                    test_material_editor_response_row(&readback, "Reflect") != NULL);
 
     SceneEditorMaterialGraphResetAll();
     SceneEditorMaterialStackResetAll();
@@ -2923,8 +3527,164 @@ static int test_material_editor_texture_channel_readback_groups_ownership(void) 
                 readback.has_procedural_source &&
                     strstr(readback.procedural_source, "Rust Channel") != NULL &&
                     strstr(readback.procedural_source, "placement") != NULL);
+    assert_true("material_editor_channel_readback_non_glass_has_no_mapping",
+                !readback.has_glass_mapping);
 
     RuntimeMaterialAuthoredTextureResetAll();
+    SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_glass_channel_mapping_labels_authored_and_overlay_intent(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char* texture_dir = "/tmp/ray_tracing_material_editor_s4_glass_channels";
+    const char* texture_png = "/tmp/ray_tracing_material_editor_s4_glass_channels/glass_channel.png";
+    const char* texture_manifest =
+        "/tmp/ray_tracing_material_editor_s4_glass_channels/glass_channel_manifest.json";
+    unsigned char texture_rgba[] = {90u, 160u, 220u, 180u};
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    MaterialEditorTextureChannelReadback readback = {0};
+
+    (void)mkdir(texture_dir, 0775);
+    assert_true("material_editor_glass_channel_png_write",
+                test_scene_editor_write_png_rgba(texture_png, texture_rgba, 1u, 1u));
+    assert_true("material_editor_glass_channel_manifest_write",
+                test_scene_editor_write_glass_channel_authored_texture_manifest(texture_manifest,
+                                                                                "glass_channel",
+                                                                                "glass_channel.png"));
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_POLYGON, 0.0, 0.0, 1.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+
+    stack.layerCount = 2;
+    stack.layers[0] =
+        RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID);
+    stack.layers[1] =
+        RuntimeMaterialTextureLayerMakeOverlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SCRATCHES);
+    snprintf(stack.layers[1].displayName, sizeof(stack.layers[1].displayName), "%s", "Scratch Channel");
+    assert_true("material_editor_glass_channel_stack_set",
+                SceneEditorMaterialStackSetObjectStack(0, &stack));
+    assert_true("material_editor_glass_channel_layer_select",
+                MaterialEditorSetActiveLayerIndex(1));
+    assert_true("material_editor_glass_channel_bind_manifest",
+                RuntimeMaterialAuthoredTextureBindManifestForObject(0,
+                                                                    "glass_channel",
+                                                                    texture_manifest,
+                                                                    "override"));
+    assert_true("material_editor_glass_channel_readback_build",
+                MaterialEditorBuildTextureChannelReadback(0, &readback));
+    assert_true("material_editor_glass_channel_mapping_present",
+                readback.has_glass_mapping &&
+                    strstr(readback.glass_authored_mapping, "base_color.rgb -> glass tint") != NULL &&
+                    strstr(readback.glass_authored_mapping, "roughness.scalar -> clarity/frost") != NULL &&
+                    strstr(readback.glass_authored_mapping, "alpha/coverage -> physical coverage only") != NULL &&
+                    strstr(readback.glass_authored_mapping, "transmission.weight -> guarded transmission intent") != NULL &&
+                    strstr(readback.glass_authored_mapping, "normal/bump -> future scratch/frost detail") != NULL);
+    assert_true("material_editor_glass_channel_overlay_intent",
+                strstr(readback.glass_procedural_mapping, "Scratches") != NULL &&
+                    strstr(readback.glass_procedural_mapping, "roughness/spec") != NULL);
+    assert_true("material_editor_glass_channel_deferred_boundary",
+                strstr(readback.glass_deferred_mapping, "transmission.weight") != NULL &&
+                    strstr(readback.glass_deferred_mapping, "readback intent") != NULL);
+
+    RuntimeMaterialAuthoredTextureResetAll();
+    SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_glass_proof_readback_maps_current_state_to_m4_coverage(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    MaterialEditorProofReadback proof = {0};
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 5.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
+    sceneSettings.sceneObjects[0].color = SceneObjectPackRGBBytes(255u, 255u, 255u);
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+
+    stack.layerCount = 1;
+    stack.layers[0] =
+        RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID);
+    assert_true("material_editor_glass_proof_clear_stack_set",
+                SceneEditorMaterialStackSetObjectStack(0, &stack));
+    assert_true("material_editor_glass_proof_clear_build",
+                MaterialEditorBuildFocusedProofReadback(&proof));
+    assert_true("material_editor_glass_proof_clear_m4_s1",
+                proof.glass_proof_readback &&
+                    strcmp(proof.glass_proof_case, "clear glass") == 0 &&
+                    strcmp(proof.glass_proof_package,
+                           "m4_s1_glass_roughness_transmission_matrix") == 0 &&
+                    strstr(proof.glass_proof_coverage, "clear/smooth") != NULL &&
+                    strstr(proof.glass_missing_proof, "caustics") != NULL &&
+                    proof.launch_deferred);
+
+    stack.layers[0].roughnessInfluence = 0.62;
+    assert_true("material_editor_glass_proof_frosted_stack_set",
+                SceneEditorMaterialStackSetObjectStack(0, &stack));
+    assert_true("material_editor_glass_proof_frosted_build",
+                MaterialEditorBuildFocusedProofReadback(&proof));
+    assert_true("material_editor_glass_proof_frosted_m4_s1",
+                strcmp(proof.glass_proof_case, "frosted glass") == 0 &&
+                    strcmp(proof.glass_proof_package,
+                           "m4_s1_glass_roughness_transmission_matrix") == 0 &&
+                    strstr(proof.glass_proof_coverage, "smooth-to-frosted") != NULL);
+
+    stack.layers[0].roughnessInfluence = 0.08;
+    sceneSettings.sceneObjects[0].color = SceneObjectPackRGBBytes(120u, 170u, 230u);
+    assert_true("material_editor_glass_proof_tinted_stack_set",
+                SceneEditorMaterialStackSetObjectStack(0, &stack));
+    assert_true("material_editor_glass_proof_tinted_build",
+                MaterialEditorBuildFocusedProofReadback(&proof));
+    assert_true("material_editor_glass_proof_tinted_partial",
+                strcmp(proof.glass_proof_case, "tinted glass") == 0 &&
+                    strcmp(proof.glass_proof_package,
+                           "m4_s1_glass_roughness_transmission_matrix") == 0 &&
+                    strstr(proof.glass_proof_coverage, "partial") != NULL &&
+                    strstr(proof.glass_missing_proof, "tinted glass") != NULL);
+
+    stack.layerCount = 2;
+    stack.layers[1] =
+        RuntimeMaterialTextureLayerMakeOverlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME);
+    assert_true("material_editor_glass_proof_dirty_stack_set",
+                SceneEditorMaterialStackSetObjectStack(0, &stack));
+    assert_true("material_editor_glass_proof_dirty_select_overlay",
+                MaterialEditorSetActiveLayerIndex(1));
+    assert_true("material_editor_glass_proof_dirty_build",
+                MaterialEditorBuildFocusedProofReadback(&proof));
+    assert_true("material_editor_glass_proof_dirty_m4_s3",
+                strcmp(proof.glass_proof_case, "Grime glass overlay") == 0 &&
+                    strcmp(proof.glass_proof_package,
+                           "m4_s3_overlay_stack_response_matrix") == 0 &&
+                    strstr(proof.glass_proof_coverage, "fog/scratches/oil/grime") != NULL &&
+                    strstr(proof.glass_missing_proof, "combined tinted dirty glass") != NULL);
+
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_ROUGH_METAL;
+    assert_true("material_editor_non_glass_proof_has_no_glass_mapping",
+                MaterialEditorBuildFocusedProofReadback(&proof) &&
+                    !proof.glass_proof_readback);
+
+    SceneEditorMaterialGraphResetAll();
     SceneEditorMaterialStackResetAll();
     sceneSettings = saved_scene;
     animSettings = saved_anim;
@@ -4997,7 +5757,16 @@ int run_test_runtime_scene_editor_tests(void) {
     test_material_editor_material_readback_reports_preset_custom_and_graph();
     test_material_editor_recipe_readback_and_cycles_family_surface_finish();
     test_material_editor_recipe_dropdown_options_apply_exact_choices();
+    test_material_editor_response_readback_uses_family_matrix_for_glass();
+    test_material_editor_glass_response_mutation_routes_to_composite_helpers();
+    test_material_editor_glass_transport_override_is_object_local_and_loaded();
+    test_material_editor_response_mutation_rejects_non_glass_family();
+    test_material_editor_glass_overlay_affordances_add_select_and_readback();
+    test_material_editor_glass_overlay_affordances_reject_non_glass();
+    test_material_editor_response_readback_keeps_non_glass_on_generic_matrix();
     test_material_editor_texture_channel_readback_groups_ownership();
+    test_material_editor_glass_channel_mapping_labels_authored_and_overlay_intent();
+    test_material_editor_glass_proof_readback_maps_current_state_to_m4_coverage();
     test_material_editor_object_scope_clears_face_overrides_and_applies_all_faces();
     test_material_editor_layer_list_routes_object_stack_controls();
     test_material_editor_object_projector_centers_focused_object();

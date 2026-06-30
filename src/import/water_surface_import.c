@@ -305,6 +305,12 @@ static bool water_surface_import_parse_material(const cJSON* root,
                                      false)) {
         return false;
     }
+    if (!water_surface_import_number(material, "reflectivity", &out_material->reflectivity, false)) {
+        return false;
+    }
+    if (!water_surface_import_number(material, "roughness", &out_material->roughness, false)) {
+        return false;
+    }
     absorption = cJSON_GetObjectItem(material, "absorption_rgb");
     if (cJSON_IsArray(absorption)) {
         if (cJSON_GetArraySize(absorption) != 3) return false;

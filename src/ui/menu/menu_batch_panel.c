@@ -8,6 +8,7 @@
 #include "app/animation.h"
 #include "config/config_manager.h"
 #include "ui/menu_panel_chrome.h"
+#include "ui/menu_scene_project_summary.h"
 #include "ui/menu_worker_export.h"
 #include "ui/sdl_menu_render.h"
 #include "ui/shared_theme_font_adapter.h"
@@ -233,6 +234,12 @@ void menu_batch_panel_build_layout(TTF_Font* font,
                                            BATCH_PANEL_ROW_HEIGHT};
 
     row_y += BATCH_PANEL_ROW_HEIGHT + BATCH_PANEL_ROW_GAP;
+    layout.sceneProjectValueRect = (SDL_Rect){layout.panelRect.x + BATCH_PANEL_INSET,
+                                              row_y,
+                                              layout.panelRect.w - BATCH_PANEL_INSET * 2,
+                                              BATCH_PANEL_ROW_HEIGHT};
+
+    row_y += BATCH_PANEL_ROW_HEIGHT + BATCH_PANEL_ROW_GAP;
     layout.workerPackageValueRect = (SDL_Rect){layout.panelRect.x + BATCH_PANEL_INSET,
                                                row_y,
                                                layout.panelRect.w - BATCH_PANEL_INSET * 2 - BATCH_PANEL_ACTION_W - 8,
@@ -448,6 +455,7 @@ void menu_batch_panel_render(SDL_Renderer* renderer,
     char frame_count[64];
     char fps_label[32];
     char video_file[80];
+    RayTracingMenuSceneProjectSummary scene_project_summary;
     SDL_Rect divider;
     SDL_Color info_color;
     if (!renderer || !font || !state || !layout) return;
@@ -501,6 +509,15 @@ void menu_batch_panel_render(SDL_Renderer* renderer,
     menu_render_draw_button_rect(renderer, font, &layout->videoRootEditRect, "Edit", state->editingVideoOutputRoot);
     menu_render_draw_button_rect(renderer, font, &layout->videoRootFolderRect, "Folder", false);
     menu_render_draw_button_rect(renderer, font, &layout->videoRootApplyRect, "Apply", false);
+
+    memset(&scene_project_summary, 0, sizeof(scene_project_summary));
+    (void)ray_tracing_menu_scene_project_summary_current(&scene_project_summary);
+    menu_render_draw_root_row(renderer,
+                              font,
+                              &layout->sceneProjectValueRect,
+                              scene_project_summary.label[0] ? scene_project_summary.label : "Scene Project",
+                              scene_project_summary.detail[0] ? scene_project_summary.detail : "No scene project",
+                              false);
 
     menu_render_draw_root_row(renderer,
                               font,

@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 
+#include "editor/material_editor.h"
 #include "render/runtime_material_texture_stack_3d.h"
 #include "scene/object_manager.h"
 
@@ -44,5 +45,9 @@ bool MaterialEditorLayerModelApplyParamValue(const SceneObject* object,
                                              int scene_object_index,
                                              int param_kind,
                                              double normalized_value);
+bool MaterialEditorLayerModelApplyResponseValue(const SceneObject* object,
+                                                int scene_object_index,
+                                                MaterialEditorResponseField field,
+                                                double normalized_value);
 
 #endif

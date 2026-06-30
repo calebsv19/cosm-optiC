@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #include "render/runtime_camera_3d_rays.h"
+#include "render/runtime_light_set_3d.h"
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_native_3d_sampling.h"
 #include "render/runtime_visibility_3d.h"
@@ -27,6 +28,10 @@ typedef struct {
     double radianceR;
     double radianceG;
     double radianceB;
+    int evaluatedLightCount;
+    int contributingLightCount;
+    int visibilityRayCount;
+    double peakLightContribution;
 } RuntimeDirectLight3DResult;
 
 bool RuntimeDirectLight3D_TracePrimaryHit(const RuntimeScene3D* scene,
@@ -45,6 +50,21 @@ bool RuntimeDirectLight3D_ShadeHitWithPayload(const RuntimeScene3D* scene,
                                               const RuntimeMaterialPayload3D* payload,
                                               const RuntimeNative3DSamplingContext* sampling,
                                               RuntimeDirectLight3DResult* out_result);
+
+bool RuntimeDirectLight3D_ShadeHitWithLightSet(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeLightSet3D* light_set,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeDirectLight3DResult* out_result);
+
+bool RuntimeDirectLight3D_ShadeHitWithLightSetAndPayload(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeLightSet3D* light_set,
+    const RuntimeMaterialPayload3D* payload,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeDirectLight3DResult* out_result);
 
 bool RuntimeDirectLight3D_ShadePrimaryHit(const RuntimeScene3D* scene,
                                           const RuntimePrimaryHit3DResult* primary_hit,

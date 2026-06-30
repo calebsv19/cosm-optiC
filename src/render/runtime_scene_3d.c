@@ -91,6 +91,7 @@ void RuntimeScene3D_Init(RuntimeScene3D* scene) {
     scene->camera.zoom = 1.0;
     scene->camera.nearPlane = 0.1;
 
+    RuntimeLightSet3D_Init(&scene->lightSet);
     RuntimeTriangleMesh3D_Init(&scene->triangleMesh);
     RuntimeEmissiveLightSet3D_Init(&scene->emissiveLightSet);
     RuntimeVolumeAttachment3D_Init(&scene->volume);
@@ -117,6 +118,7 @@ void RuntimeScene3D_Free(RuntimeScene3D* scene) {
     scene->primitiveCapacity = 0;
     RuntimeTriangleMesh3D_Free(&scene->triangleMesh);
     RuntimeEmissiveLightSet3D_Free(&scene->emissiveLightSet);
+    RuntimeLightSet3D_Free(&scene->lightSet);
     RuntimeVolumeAttachment3D_Free(&scene->volume);
     scene->hasLight = false;
     scene->hasCamera = false;
@@ -132,6 +134,11 @@ bool RuntimeScene3D_CopyGeometryFrom(RuntimeScene3D* dst, const RuntimeScene3D* 
     dst->environment = src->environment;
     dst->light = src->light;
     dst->hasLight = src->hasLight;
+    if (!RuntimeLightSet3D_CopyFrom(&dst->lightSet, &src->lightSet)) {
+        RuntimeScene3D_Free(dst);
+        RuntimeScene3D_Init(dst);
+        return false;
+    }
     dst->camera = src->camera;
     dst->hasCamera = src->hasCamera;
     dst->materialFlags = src->materialFlags;

@@ -24,6 +24,10 @@
 static const double kRuntimeNative3DWaterSurfaceReflectivity = 0.12;
 static const double kRuntimeNative3DWaterSurfaceRoughness = 0.02;
 
+static double runtime_native_3d_water_material_or_default(double value, double fallback) {
+    return isfinite(value) && value >= 0.0 ? value : fallback;
+}
+
 static bool gRuntimeNative3DInspectionCameraPositionEnabled = false;
 static bool gRuntimeNative3DInspectionCameraLookAtEnabled = false;
 static Vec3 gRuntimeNative3DInspectionCameraPosition = {0};
@@ -333,6 +337,37 @@ static void runtime_native_3d_render_apply_live_light(RuntimeScene3D* scene,
     bool has_authored_light = false;
     if (!scene) return;
 
+    if (scene->lightSet.lightCount > 0) {
+        RuntimeSceneBridge3DScaffoldState scaffold = {0};
+        runtime_scene_bridge_get_last_3d_scaffold_state(&scaffold);
+        if (runtime_native_3d_render_should_sample_authored_motion() &&
+            scaffold.has_light_path &&
+            RuntimeScene3DSampleAuthoredLight(normalized_t, &sampled_light)) {
+            sampled_light.radius =
+                (sampled_light.radius > 0.0)
+                    ? sampled_light.radius
+                    : runtime_native_3d_render_resolve_default_light_radius(scene);
+            sampled_light.intensity = animSettings.lightIntensity;
+            sampled_light.falloffDistance = animSettings.forwardDecay;
+            sampled_light.falloffMode = animSettings.forwardFalloffMode;
+            scene->light = sampled_light;
+            scene->hasLight = true;
+            (void)RuntimeLightSet3D_UpdateFirstEnabledFromCompatibilityLight(&scene->lightSet,
+                                                                             &scene->light);
+            return;
+        }
+        const RuntimeLightSource3D* first_enabled =
+            RuntimeLightSet3D_GetEnabled(&scene->lightSet, 0);
+        if (!first_enabled) first_enabled = &scene->lightSet.lights[0];
+        scene->light.position = first_enabled->position;
+        scene->light.radius = first_enabled->radius;
+        scene->light.intensity = first_enabled->intensity;
+        scene->light.falloffDistance = first_enabled->falloffDistance;
+        scene->light.falloffMode = first_enabled->falloffMode;
+        scene->hasLight = first_enabled->enabled;
+        return;
+    }
+
     if (runtime_native_3d_render_should_sample_authored_motion() &&
         RuntimeScene3DSampleAuthoredLight(normalized_t, &sampled_light)) {
         light = sampled_light;
@@ -351,6 +386,9 @@ static void runtime_native_3d_render_apply_live_light(RuntimeScene3D* scene,
     light.falloffMode = animSettings.forwardFalloffMode;
     scene->light = light;
     scene->hasLight = true;
+    (void)RuntimeLightSet3D_BuildFromCompatibilityLight(&scene->lightSet,
+                                                        &scene->light,
+                                                        scene->hasLight);
 }
 
 static void runtime_native_3d_render_apply_live_camera(RuntimeScene3D* scene,
@@ -540,8 +578,12 @@ static void runtime_native_3d_render_configure_water_surface_object(
     object->color = SceneObjectPackRGBBytes(r, g, b);
     object->opacity = 1.0;
     object->alpha = 1.0;
-    object->reflectivity = kRuntimeNative3DWaterSurfaceReflectivity;
-    object->roughness = kRuntimeNative3DWaterSurfaceRoughness;
+    object->reflectivity = runtime_native_3d_water_material_or_default(
+        water->material.reflectivity,
+        kRuntimeNative3DWaterSurfaceReflectivity);
+    object->roughness = runtime_native_3d_water_material_or_default(
+        water->material.roughness,
+        kRuntimeNative3DWaterSurfaceRoughness);
     object->material_id = MATERIAL_PRESET_TRANSPARENT;
     object->dirty = false;
     object->guideOnly = false;
@@ -588,8 +630,12 @@ static bool runtime_native_3d_render_apply_water_surface_material(
     override.absorptionB = water->material.valid ? water->material.absorption_rgb[2]
                                                  : 0.015;
     override.transparency = 0.92;
-    override.reflectivity = kRuntimeNative3DWaterSurfaceReflectivity;
-    override.roughness = kRuntimeNative3DWaterSurfaceRoughness;
+    override.reflectivity = runtime_native_3d_water_material_or_default(
+        water->material.reflectivity,
+        kRuntimeNative3DWaterSurfaceReflectivity);
+    override.roughness = runtime_native_3d_water_material_or_default(
+        water->material.roughness,
+        kRuntimeNative3DWaterSurfaceRoughness);
     return RuntimeWaterMaterial3D_Set(scene_object_index, &override);
 }
 

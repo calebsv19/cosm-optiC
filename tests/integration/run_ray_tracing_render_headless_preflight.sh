@@ -34,6 +34,11 @@ grep -q '"mode": "ambient"' "$SUMMARY"
 grep -q '"preset": "sky"' "$SUMMARY"
 grep -q '"background_brightness_source": "background_brightness"' "$SUMMARY"
 grep -q '"background_miss_contributes": true' "$SUMMARY"
+grep -q '"registered_lights": {' "$SUMMARY"
+grep -q '"light_count": 2' "$SUMMARY"
+grep -q '"enabled_count": 2' "$SUMMARY"
+grep -q '"shape_counts": { "point": 0, "sphere": 1, "disk": 0, "rect": 1, "mesh_emissive": 0 }' "$SUMMARY"
+grep -q '"source_counts": { "authored": 0, "compatibility": 1, "material_emitter": 1 }' "$SUMMARY"
 
 expect_preflight_reject() {
   local label="$1"

@@ -4,7 +4,9 @@ Auxiliary helpers that support the main runtime.
 
 - `make_video.c` – Renumbers explicit frame directories and shells out to FFmpeg using explicit `frames dir + output path + fps` arguments.
 - `cli/` – Command-line and headless tools:
-  - `ray_tracing_render_headless` validates and runs detached render requests.
+  - `ray_tracing_render_headless` validates and runs detached render requests,
+    including registered-light readback for material-emitter enabled counts,
+    sampler-only mesh-emitter counts, and aggregate emissive area/weight stats.
   - `ray_tracing_job_runner` runs local worker-style render bundles.
   - `ray_tracing_material_preview_headless` renders material preview proofs
     without opening the desktop UI.

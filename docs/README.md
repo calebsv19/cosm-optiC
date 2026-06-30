@@ -33,6 +33,7 @@ Current public focus:
   recursive mirror/glossy reflection, ordinary emissive-material endpoint hits,
   primary and recursive emissive-area sampling, cached emissive-light
   candidates, Disney-v2-specific edge-safe denoise/temporal reconstruction,
+  default analytic caustic sidecar contribution for the glass-sphere probe,
   and SU4 plane/prism/runtime-mesh mirror surface-unification visual proof;
   remaining promotion blockers are recursive emissive-area policy for larger
   emitter sets, BRDF-evaluated direct-light estimator quality, and repeated
@@ -131,6 +132,10 @@ Current verification contract:
 - `make -C ray_tracing release-bundle-audit`
 - Linux worker packaging now follows the Linux build-host architecture by
   default (`linux-x86_64` or `linux-aarch64`)
+- Linux PC worker refreshes must use a package whose manifest reports
+  `platform=linux-x86_64`; do not treat an Apple Silicon Mac as limited to
+  `linux-aarch64` worker artifacts when the x86_64 package/toolchain lane is
+  selected
 
 ## Public Runtime Docs
 - `README.md` (repo root): product/runtime overview and build/run flow.

@@ -955,6 +955,7 @@ void runtime_scene_bridge_apply_ray_authoring_paths(json_object *root,
                                                          &sceneSettings.bezierPath,
                                                          world_scale,
                                                          true)) {
+        g_last_3d_scaffold.has_light_path = true;
         if (json_object_object_get_ex(authoring, "light_path_depth", &light_path_depth) &&
             CameraPath3D_LoadFromJsonObject(light_path_depth,
                                             &sceneSettings.bezierPath3D,

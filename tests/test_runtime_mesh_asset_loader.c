@@ -340,6 +340,279 @@ static int test_runtime_mesh_asset_loader_converts_line_drawing_mesh_rotation_de
     return 0;
 }
 
+static int test_runtime_mesh_asset_loader_converts_plain_mesh_rotation_degrees(void) {
+    const char* dir = "/private/tmp/ray_tracing_mrt2_plain_mesh_rotation";
+    const char* scene_path = "/private/tmp/ray_tracing_mrt2_plain_mesh_rotation/scene_runtime.json";
+    const char* mesh_root = "tests/fixtures/mesh_asset_runtime_spheres/assets/mesh_assets";
+    const char* saved_root = getenv("RAY_TRACING_MESH_ASSET_ROOT");
+    char saved_root_copy[PATH_MAX] = {0};
+    char scene_json[1024];
+    RayTracingRuntimeMeshAssetSet set;
+    char diagnostics[256] = {0};
+    bool ok = false;
+
+    if (saved_root && saved_root[0]) {
+        strncpy(saved_root_copy, saved_root, sizeof(saved_root_copy) - 1);
+        saved_root_copy[sizeof(saved_root_copy) - 1] = '\0';
+    }
+
+    snprintf(scene_json,
+             sizeof(scene_json),
+             "{"
+             "\"world_scale\":1.0,"
+             "\"objects\":[{"
+             "\"object_id\":\"obj_plain_rotated_mesh\","
+             "\"object_type\":\"mesh_asset_instance\","
+             "\"transform\":{"
+             "\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+             "\"rotation\":{\"x\":0.0,\"y\":45.0,\"z\":90.0},"
+             "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+             "},"
+             "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_sphere_8x4\"}"
+             "}]"
+             "}");
+
+    mkdir(dir, 0777);
+    assert_true("mrt2_plain_mesh_rotation_write_scene", write_text_file(scene_path, scene_json));
+    setenv("RAY_TRACING_MESH_ASSET_ROOT", mesh_root, 1);
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    ok = ray_tracing_runtime_mesh_assets_load_scene_file(scene_path,
+                                                        &set,
+                                                        diagnostics,
+                                                        sizeof(diagnostics));
+    assert_true("mrt2_plain_mesh_rotation_loads", ok);
+    if (ok) {
+        const double kPi = 3.14159265358979323846;
+        assert_true("mrt2_plain_mesh_rotation_instance_count", set.instance_count == 1);
+        assert_near("mrt2_plain_mesh_rotation_x",
+                    set.instances[0].rotation_x,
+                    0.0,
+                    1e-9);
+        assert_near("mrt2_plain_mesh_rotation_y",
+                    set.instances[0].rotation_y,
+                    kPi / 4.0,
+                    1e-9);
+        assert_near("mrt2_plain_mesh_rotation_z",
+                    set.instances[0].rotation_z,
+                    kPi / 2.0,
+                    1e-9);
+        assert_true("mrt2_plain_mesh_rotation_default_pivot",
+                    set.instances[0].rotation_pivot_policy ==
+                        RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_AUTHORED_ORIGIN);
+    }
+    ray_tracing_runtime_mesh_asset_set_free(&set);
+    if (saved_root_copy[0]) {
+        setenv("RAY_TRACING_MESH_ASSET_ROOT", saved_root_copy, 1);
+    } else {
+        unsetenv("RAY_TRACING_MESH_ASSET_ROOT");
+    }
+    remove(scene_path);
+    rmdir(dir);
+    return 0;
+}
+
+static int test_runtime_mesh_asset_loader_reads_bounds_center_rotation_pivot(void) {
+    const char* dir = "/private/tmp/ray_tracing_mrt2_mesh_rotation_pivot";
+    const char* scene_path = "/private/tmp/ray_tracing_mrt2_mesh_rotation_pivot/scene_runtime.json";
+    const char* mesh_root = "tests/fixtures/mesh_asset_runtime_spheres/assets/mesh_assets";
+    const char* saved_root = getenv("RAY_TRACING_MESH_ASSET_ROOT");
+    char saved_root_copy[PATH_MAX] = {0};
+    const char* scene_json =
+        "{"
+        "\"world_scale\":1.0,"
+        "\"objects\":[{"
+        "\"object_id\":\"obj_bounds_center_rotated_mesh\","
+        "\"object_type\":\"mesh_asset_instance\","
+        "\"transform\":{"
+        "\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+        "\"rotation\":{\"x\":0.0,\"y\":0.0,\"z\":90.0},"
+        "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0},"
+        "\"pivot_policy\":\"bounds_center\""
+        "},"
+        "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_sphere_8x4\"}"
+        "}]"
+        "}";
+    RayTracingRuntimeMeshAssetSet set;
+    char diagnostics[256] = {0};
+    bool ok = false;
+
+    if (saved_root && saved_root[0]) {
+        strncpy(saved_root_copy, saved_root, sizeof(saved_root_copy) - 1);
+        saved_root_copy[sizeof(saved_root_copy) - 1] = '\0';
+    }
+
+    mkdir(dir, 0777);
+    assert_true("mrt2_mesh_rotation_pivot_write_scene",
+                write_text_file(scene_path, scene_json));
+    setenv("RAY_TRACING_MESH_ASSET_ROOT", mesh_root, 1);
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    ok = ray_tracing_runtime_mesh_assets_load_scene_file(scene_path,
+                                                        &set,
+                                                        diagnostics,
+                                                        sizeof(diagnostics));
+    assert_true("mrt2_mesh_rotation_pivot_loads", ok);
+    if (ok) {
+        assert_true("mrt2_mesh_rotation_pivot_instance_count", set.instance_count == 1);
+        assert_true("mrt2_mesh_rotation_pivot_policy",
+                    set.instances[0].rotation_pivot_policy ==
+                        RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_BOUNDS_CENTER);
+    }
+    ray_tracing_runtime_mesh_asset_set_free(&set);
+    if (saved_root_copy[0]) {
+        setenv("RAY_TRACING_MESH_ASSET_ROOT", saved_root_copy, 1);
+    } else {
+        unsetenv("RAY_TRACING_MESH_ASSET_ROOT");
+    }
+    remove(scene_path);
+    rmdir(dir);
+    return 0;
+}
+
+static int test_runtime_mesh_asset_loader_reads_custom_rotation_pivot(void) {
+    const char* dir = "/private/tmp/ray_tracing_mrt2_mesh_custom_rotation_pivot";
+    const char* scene_path =
+        "/private/tmp/ray_tracing_mrt2_mesh_custom_rotation_pivot/scene_runtime.json";
+    const char* mesh_root = "tests/fixtures/mesh_asset_runtime_spheres/assets/mesh_assets";
+    const char* saved_root = getenv("RAY_TRACING_MESH_ASSET_ROOT");
+    char saved_root_copy[PATH_MAX] = {0};
+    const char* scene_json =
+        "{"
+        "\"world_scale\":1.0,"
+        "\"objects\":[{"
+        "\"object_id\":\"obj_custom_pivot_mesh\","
+        "\"object_type\":\"mesh_asset_instance\","
+        "\"transform\":{"
+        "\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+        "\"rotation\":{\"x\":0.0,\"y\":0.0,\"z\":90.0},"
+        "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0},"
+        "\"pivot_policy\":\"custom\","
+        "\"pivot\":{\"x\":1.25,\"y\":-2.5,\"z\":0.75}"
+        "},"
+        "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_sphere_8x4\"}"
+        "}]"
+        "}";
+    RayTracingRuntimeMeshAssetSet set;
+    char diagnostics[256] = {0};
+    bool ok = false;
+
+    if (saved_root && saved_root[0]) {
+        strncpy(saved_root_copy, saved_root, sizeof(saved_root_copy) - 1);
+        saved_root_copy[sizeof(saved_root_copy) - 1] = '\0';
+    }
+
+    mkdir(dir, 0777);
+    assert_true("mrt2_mesh_custom_rotation_pivot_write_scene",
+                write_text_file(scene_path, scene_json));
+    setenv("RAY_TRACING_MESH_ASSET_ROOT", mesh_root, 1);
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    ok = ray_tracing_runtime_mesh_assets_load_scene_file(scene_path,
+                                                        &set,
+                                                        diagnostics,
+                                                        sizeof(diagnostics));
+    assert_true("mrt2_mesh_custom_rotation_pivot_loads", ok);
+    if (ok) {
+        assert_true("mrt2_mesh_custom_rotation_pivot_instance_count",
+                    set.instance_count == 1);
+        assert_true("mrt2_mesh_custom_rotation_pivot_policy",
+                    set.instances[0].rotation_pivot_policy ==
+                        RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_CUSTOM);
+        assert_near("mrt2_mesh_custom_rotation_pivot_x",
+                    set.instances[0].rotation_pivot_x,
+                    1.25,
+                    1e-9);
+        assert_near("mrt2_mesh_custom_rotation_pivot_y",
+                    set.instances[0].rotation_pivot_y,
+                    -2.5,
+                    1e-9);
+        assert_near("mrt2_mesh_custom_rotation_pivot_z",
+                    set.instances[0].rotation_pivot_z,
+                    0.75,
+                    1e-9);
+    }
+    ray_tracing_runtime_mesh_asset_set_free(&set);
+    if (saved_root_copy[0]) {
+        setenv("RAY_TRACING_MESH_ASSET_ROOT", saved_root_copy, 1);
+    } else {
+        unsetenv("RAY_TRACING_MESH_ASSET_ROOT");
+    }
+    remove(scene_path);
+    rmdir(dir);
+    return 0;
+}
+
+static int test_runtime_mesh_asset_loader_reuses_asset_for_cloned_mesh_instance(void) {
+    const char* dir = "/private/tmp/ray_tracing_mrt2_mesh_clone_instances";
+    const char* scene_path =
+        "/private/tmp/ray_tracing_mrt2_mesh_clone_instances/scene_runtime.json";
+    const char* mesh_root = "tests/fixtures/mesh_asset_runtime_spheres/assets/mesh_assets";
+    const char* saved_root = getenv("RAY_TRACING_MESH_ASSET_ROOT");
+    char saved_root_copy[PATH_MAX] = {0};
+    const char* scene_json =
+        "{"
+        "\"world_scale\":1.0,"
+        "\"objects\":["
+        "{"
+        "\"object_id\":\"obj_mesh_a\","
+        "\"object_type\":\"mesh_asset_instance\","
+        "\"transform\":{"
+        "\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+        "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+        "},"
+        "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_sphere_8x4\"}"
+        "},"
+        "{"
+        "\"object_id\":\"obj_mesh_b\","
+        "\"object_type\":\"mesh_asset_instance\","
+        "\"transform\":{"
+        "\"position\":{\"x\":2.0,\"y\":0.0,\"z\":0.0},"
+        "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+        "},"
+        "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_sphere_8x4\"}"
+        "}"
+        "]"
+        "}";
+    RayTracingRuntimeMeshAssetSet set;
+    char diagnostics[256] = {0};
+    bool ok = false;
+
+    if (saved_root && saved_root[0]) {
+        strncpy(saved_root_copy, saved_root, sizeof(saved_root_copy) - 1);
+        saved_root_copy[sizeof(saved_root_copy) - 1] = '\0';
+    }
+
+    mkdir(dir, 0777);
+    assert_true("mrt2_mesh_clone_instances_write_scene",
+                write_text_file(scene_path, scene_json));
+    setenv("RAY_TRACING_MESH_ASSET_ROOT", mesh_root, 1);
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    ok = ray_tracing_runtime_mesh_assets_load_scene_file(scene_path,
+                                                        &set,
+                                                        diagnostics,
+                                                        sizeof(diagnostics));
+    assert_true("mrt2_mesh_clone_instances_loads", ok);
+    if (ok) {
+        assert_true("mrt2_mesh_clone_instances_one_asset", set.asset_count == 1);
+        assert_true("mrt2_mesh_clone_instances_two_instances", set.instance_count == 2);
+        assert_true("mrt2_mesh_clone_instances_same_asset_index_a",
+                    set.instances[0].asset_index == 0);
+        assert_true("mrt2_mesh_clone_instances_same_asset_index_b",
+                    set.instances[1].asset_index == 0);
+        assert_true("mrt2_mesh_clone_instances_object_a",
+                    strcmp(set.instances[0].object_id, "obj_mesh_a") == 0);
+        assert_true("mrt2_mesh_clone_instances_object_b",
+                    strcmp(set.instances[1].object_id, "obj_mesh_b") == 0);
+    }
+    ray_tracing_runtime_mesh_asset_set_free(&set);
+    if (saved_root_copy[0]) {
+        setenv("RAY_TRACING_MESH_ASSET_ROOT", saved_root_copy, 1);
+    } else {
+        unsetenv("RAY_TRACING_MESH_ASSET_ROOT");
+    }
+    remove(scene_path);
+    rmdir(dir);
+    return 0;
+}
+
 static int test_runtime_mesh_asset_loader_falls_back_from_stale_line_drawing_hint_to_asset_root(void) {
     const char* dir = "/private/tmp/ray_tracing_mrt2_stale_external_hint";
     const char* mesh_root = "/private/tmp/ray_tracing_mrt2_stale_external_hint/curated";
@@ -760,6 +1033,10 @@ int run_test_runtime_mesh_asset_loader_tests(void) {
     test_runtime_mesh_asset_loader_reports_malformed_asset();
     test_runtime_mesh_asset_loader_uses_line_drawing_runtime_path_hint();
     test_runtime_mesh_asset_loader_converts_line_drawing_mesh_rotation_degrees();
+    test_runtime_mesh_asset_loader_converts_plain_mesh_rotation_degrees();
+    test_runtime_mesh_asset_loader_reads_bounds_center_rotation_pivot();
+    test_runtime_mesh_asset_loader_reads_custom_rotation_pivot();
+    test_runtime_mesh_asset_loader_reuses_asset_for_cloned_mesh_instance();
     test_runtime_mesh_asset_loader_falls_back_from_stale_line_drawing_hint_to_asset_root();
     test_runtime_mesh_asset_loader_uses_config_mesh_asset_root();
     test_runtime_mesh_asset_loader_attaches_preview_metadata();

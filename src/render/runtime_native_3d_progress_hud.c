@@ -593,7 +593,7 @@ void RuntimeNative3DProgressHUD_Draw(SDL_Renderer* renderer) {
     char elapsed_value[32] = {0};
     char frame_estimate_value[32] = {0};
     char batch_estimate_value[32] = {0};
-    char elapsed_line[40] = {0};
+    char elapsed_line[64] = {0};
     char estimate_line[64] = {0};
     int title_w = 0;
     int title_h = 0;
@@ -685,7 +685,7 @@ void RuntimeNative3DProgressHUD_Draw(SDL_Renderer* renderer) {
     }
     (void)snprintf(subpass_line,
                    sizeof(subpass_line),
-                   "subpass %d/%d",
+                   "pass %d/%d",
                    state->startedSubpasses > 0 ? state->startedSubpasses : 1,
                    state->totalSubpasses > 0 ? state->totalSubpasses : 1);
     if (state->totalTilesInSubpass > 0u && state->startedSubpasses > state->completedSubpasses) {
@@ -699,19 +699,15 @@ void RuntimeNative3DProgressHUD_Draw(SDL_Renderer* renderer) {
     } else {
         (void)snprintf(tile_line, sizeof(tile_line), "starting");
     }
-    (void)snprintf(elapsed_line, sizeof(elapsed_line), "T=%s", elapsed_value);
-    if (state->pathFrameCount > 1) {
-        (void)snprintf(estimate_line,
-                       sizeof(estimate_line),
-                       "f=%s b=%s",
-                       frame_estimate_value,
-                       batch_estimate_value);
-    } else {
-        (void)snprintf(estimate_line,
-                       sizeof(estimate_line),
-                       "f=%s",
-                       frame_estimate_value);
-    }
+    (void)snprintf(elapsed_line,
+                   sizeof(elapsed_line),
+                   "T=%s L=%s",
+                   elapsed_value,
+                   frame_estimate_value);
+    (void)snprintf(estimate_line,
+                   sizeof(estimate_line),
+                   "run=%s",
+                   batch_estimate_value);
 
     if (!runtime_native_3d_progress_hud_measure_line(renderer, font, title, &title_w, &title_h) ||
         (frame_line[0] != '\0' &&

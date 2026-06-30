@@ -36,6 +36,9 @@ typedef struct {
     int emissiveAreaRecursiveCandidateCap;
     int emissiveAreaRecursiveTriangleCap;
     int emissiveAreaFullScanFallbackCount;
+    int causticSidecarEnabled;
+    int causticSidecarSampleCount;
+    int causticSidecarContributingSampleCount;
     int mirrorDominantPixelCount;
     int mirrorBaseAttenuatedPixelCount;
     int mirrorReflectionHitPixelCount;
@@ -70,6 +73,8 @@ typedef struct {
     double maxMirrorBaseRadianceBeforeAttenuation;
     double maxMirrorBaseRadianceAfterAttenuation;
     double totalBounceRadiance;
+    double maxCausticSidecarRadiance;
+    double totalCausticSidecarRadiance;
     double totalMirrorSpecularReflectionRadiance;
     double totalMirrorBaseRadianceBeforeAttenuation;
     double totalMirrorBaseRadianceAfterAttenuation;

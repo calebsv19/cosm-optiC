@@ -136,24 +136,6 @@ static const char* runtime_mesh_asset_object_runtime_path(json_object* object) {
     return (path && path[0]) ? path : NULL;
 }
 
-static bool runtime_mesh_asset_object_is_line_drawing_mesh_instance(json_object* object) {
-    json_object* extensions = NULL;
-    json_object* line_drawing = NULL;
-    const char* geometry_source = NULL;
-    if (!object || !json_object_is_type(object, json_type_object)) return false;
-    if (!json_object_object_get_ex(object, "extensions", &extensions) ||
-        !json_object_is_type(extensions, json_type_object)) {
-        return false;
-    }
-    if (!json_object_object_get_ex(extensions, "line_drawing", &line_drawing) ||
-        !json_object_is_type(line_drawing, json_type_object)) {
-        return false;
-    }
-    geometry_source = runtime_mesh_asset_string_field(line_drawing, "geometry_source");
-    if (geometry_source && strcmp(geometry_source, "mesh_asset_instance") == 0) return true;
-    return runtime_mesh_asset_object_runtime_path(object) != NULL;
-}
-
 static bool runtime_mesh_asset_try_asset_root(const char* root,
                                               const char* asset_id,
                                               char* out_path,
@@ -265,6 +247,8 @@ static void runtime_mesh_asset_read_transform(json_object* object,
     json_object* position = NULL;
     json_object* rotation = NULL;
     json_object* scale = NULL;
+    json_object* pivot_policy = NULL;
+    json_object* pivot = NULL;
     double px = 0.0;
     double py = 0.0;
     double pz = 0.0;
@@ -282,10 +266,42 @@ static void runtime_mesh_asset_read_transform(json_object* object,
     instance->scale_x = world_scale;
     instance->scale_y = world_scale;
     instance->scale_z = world_scale;
+    instance->rotation_pivot_policy =
+        RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_AUTHORED_ORIGIN;
+    instance->rotation_pivot_x = 0.0;
+    instance->rotation_pivot_y = 0.0;
+    instance->rotation_pivot_z = 0.0;
 
     if (!json_object_object_get_ex(object, "transform", &transform) ||
         !json_object_is_type(transform, json_type_object)) {
         return;
+    }
+
+    if (json_object_object_get_ex(transform, "pivot_policy", &pivot_policy) &&
+        json_object_is_type(pivot_policy, json_type_string)) {
+        const char* policy = json_object_get_string(pivot_policy);
+        if (policy && strcmp(policy, "bounds_center") == 0) {
+            instance->rotation_pivot_policy =
+                RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_BOUNDS_CENTER;
+        } else if (policy && strcmp(policy, "custom") == 0) {
+            instance->rotation_pivot_policy =
+                RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_CUSTOM;
+        } else {
+            instance->rotation_pivot_policy =
+                RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_AUTHORED_ORIGIN;
+        }
+    }
+    if (instance->rotation_pivot_policy ==
+            RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_CUSTOM &&
+        json_object_object_get_ex(transform, "pivot", &pivot) &&
+        json_object_is_type(pivot, json_type_object)) {
+        runtime_mesh_asset_read_vec3_or(pivot,
+                                        0.0,
+                                        0.0,
+                                        0.0,
+                                        &instance->rotation_pivot_x,
+                                        &instance->rotation_pivot_y,
+                                        &instance->rotation_pivot_z);
     }
 
     if (json_object_object_get_ex(transform, "position", &position) &&
@@ -301,11 +317,9 @@ static void runtime_mesh_asset_read_transform(json_object* object,
                                         &instance->rotation_x,
                                         &instance->rotation_y,
                                         &instance->rotation_z);
-        if (runtime_mesh_asset_object_is_line_drawing_mesh_instance(object)) {
-            instance->rotation_x *= kDegreesToRadians;
-            instance->rotation_y *= kDegreesToRadians;
-            instance->rotation_z *= kDegreesToRadians;
-        }
+        instance->rotation_x *= kDegreesToRadians;
+        instance->rotation_y *= kDegreesToRadians;
+        instance->rotation_z *= kDegreesToRadians;
     }
     if (json_object_object_get_ex(transform, "scale", &scale) &&
         json_object_is_type(scale, json_type_object)) {

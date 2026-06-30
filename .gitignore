@@ -24,6 +24,7 @@ data/snapshots/
 tmp/
 captures/
 visual_artifacts/
+_private_workspace_artifacts/
 /dist/
 tools/packaging/macos/local_app_icon/
 

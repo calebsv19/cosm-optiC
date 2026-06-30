@@ -21,6 +21,7 @@ typedef struct {
     SDL_Rect videoRootEditRect;
     SDL_Rect videoRootFolderRect;
     SDL_Rect videoRootApplyRect;
+    SDL_Rect sceneProjectValueRect;
     SDL_Rect workerPackageValueRect;
     SDL_Rect workerExportRect;
     SDL_Rect frameCountValueRect;

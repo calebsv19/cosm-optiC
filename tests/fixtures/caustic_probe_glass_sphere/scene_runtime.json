@@ -1,0 +1,124 @@
+{
+  "schema_family": "codework_scene",
+  "schema_variant": "scene_runtime_v1",
+  "schema_version": 1,
+  "scene_id": "caustic_probe_glass_sphere_l4",
+  "space_mode_default": "3d",
+  "unit_system": "meters",
+  "world_scale": 1.0,
+  "objects": [
+    {
+      "object_id": "receiver_floor",
+      "object_type": "plane_primitive",
+      "space_mode_intent": "2d",
+      "dimensional_mode": "plane_locked",
+      "locked_plane": "xy",
+      "transform": {
+        "position": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+      },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 6.0,
+        "height": 5.0,
+        "frame": {
+          "origin": { "x": 0.0, "y": 0.0, "z": 0.0 },
+          "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+          "axis_v": { "x": 0.0, "y": 1.0, "z": 0.0 },
+          "normal": { "x": 0.0, "y": 0.0, "z": 1.0 }
+        }
+      },
+      "flags": { "visible": true, "locked": false, "selectable": true }
+    },
+    {
+      "object_id": "glass_sphere",
+      "object_type": "mesh_asset_instance",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": {
+        "position": { "x": 0.0, "y": 0.0, "z": 0.72 },
+        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "scale": { "x": 0.72, "y": 0.72, "z": 0.72 }
+      },
+      "geometry_ref": {
+        "kind": "mesh_asset",
+        "id": "asset_sphere_256x128",
+        "variant": "runtime_default"
+      },
+      "extensions": {
+        "line_drawing": {
+          "runtime_mesh_path": "../mesh_asset_runtime_spheres/assets/mesh_assets/asset_sphere_256x128.runtime.json"
+        }
+      },
+      "flags": { "visible": true, "locked": false, "selectable": true }
+    }
+  ],
+  "materials": [
+    {
+      "material_id": "mat_receiver_floor",
+      "kind": "lambert",
+      "albedo": [0.64, 0.63, 0.58]
+    },
+    {
+      "material_id": "mat_glass_sphere",
+      "kind": "dielectric",
+      "albedo": [0.92, 0.97, 1.0]
+    }
+  ],
+  "lights": [
+    {
+      "light_id": "overhead_probe_light",
+      "kind": "sphere",
+      "position": { "x": 0.0, "y": 0.0, "z": 3.4 },
+      "radius": 0.10,
+      "intensity": 7.5,
+      "falloff_distance": 8.0,
+      "color": { "r": 1.0, "g": 0.96, "b": 0.88 },
+      "enabled": true,
+      "moving": false
+    }
+  ],
+  "cameras": [
+    {
+      "camera_id": "caustic_probe_camera",
+      "kind": "perspective",
+      "position": { "x": 0.0, "y": -4.8, "z": 2.05 },
+      "target": { "x": 0.0, "y": 0.0, "z": 0.62 },
+      "yaw": 0.0,
+      "look_pitch": -0.16
+    }
+  ],
+  "constraints": [],
+  "hierarchy": [],
+  "extensions": {
+    "ray_tracing": {
+      "authoring": {
+        "camera_focus_target": { "x": 0.0, "y": 0.0, "z": 0.62 },
+        "environment": {
+          "light_mode": 1,
+          "ambient_strength": 0.06,
+          "top_fill_strength": 0.0
+        },
+        "object_materials": [
+          {
+            "object_id": "receiver_floor",
+            "material_id": 0,
+            "object_color": 10592673,
+            "roughness": 0.82,
+            "reflectivity": 0.02,
+            "alpha": 1.0
+          },
+          {
+            "object_id": "glass_sphere",
+            "material_id": 5,
+            "object_color": 15137535,
+            "alpha": 0.42,
+            "roughness": 0.02,
+            "reflectivity": 0.04
+          }
+        ]
+      }
+    }
+  }
+}

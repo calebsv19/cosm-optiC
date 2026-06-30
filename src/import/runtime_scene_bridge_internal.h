@@ -8,6 +8,7 @@
 extern RuntimeSceneBridge3DScaffoldState g_last_3d_scaffold;
 extern RuntimeSceneBridge3DDigestState g_last_3d_digest;
 extern RuntimeSceneBridge3DPrimitiveSeedState g_last_3d_primitive_seeds;
+extern RuntimeSceneBridge3DLightSeedState g_last_3d_light_seeds;
 extern char g_last_runtime_object_ids[MAX_OBJECTS][64];
 extern int g_last_runtime_object_id_count;
 

@@ -11,6 +11,7 @@
 #endif
 
 static void InitDefaultMaterial(SceneObject* obj) {
+    const Material* default_material = MaterialManagerGet(MaterialManagerDefaultId());
     obj->texture[0] = '\0';
     obj->color = 0xFFFFFF;
     obj->opacity = 1.0;
@@ -33,6 +34,12 @@ static void InitDefaultMaterial(SceneObject* obj) {
     obj->textureSurfaceDamage = 0.5;
     obj->textureSeed = 0;
     obj->material_id = MaterialManagerDefaultId();
+    obj->hasGlassTransportOverride = false;
+    obj->glassTransmission = default_material ? default_material->transparency : 0.0;
+    obj->glassIor = default_material ? default_material->ior : 1.0;
+    obj->glassAbsorptionDistance =
+        default_material ? default_material->absorption_distance : 1.0;
+    obj->glassThinWalled = default_material ? default_material->thin_walled : false;
     obj->guideOnly = false;
 }
 
@@ -255,6 +262,74 @@ Uint8 SceneObjectAlphaByte(const SceneObject* obj) {
 
 double SceneObjectAlphaFromByte(Uint8 alpha) {
     return (double)alpha / 255.0;
+}
+
+static double scene_object_clamp(double value, double min_value, double max_value) {
+    if (value < min_value) return min_value;
+    if (value > max_value) return max_value;
+    return value;
+}
+
+void SceneObjectClearGlassTransportOverride(SceneObject* obj) {
+    const Material* material = NULL;
+    if (!obj) return;
+    material = MaterialManagerGet(obj->material_id);
+    obj->hasGlassTransportOverride = false;
+    obj->glassTransmission = material ? material->transparency : 0.0;
+    obj->glassIor = material ? material->ior : 1.0;
+    obj->glassAbsorptionDistance = material ? material->absorption_distance : 1.0;
+    obj->glassThinWalled = material ? material->thin_walled : false;
+}
+
+void SceneObjectSeedGlassTransportOverrideFromMaterial(SceneObject* obj) {
+    const Material* material = NULL;
+    if (!obj) return;
+    if (obj->hasGlassTransportOverride) return;
+    material = MaterialManagerGet(obj->material_id);
+    obj->hasGlassTransportOverride = true;
+    obj->glassTransmission = scene_object_clamp(material ? material->transparency : 0.0,
+                                                0.0,
+                                                1.0);
+    obj->glassIor = scene_object_clamp(material ? material->ior : 1.45, 1.0, 2.5);
+    obj->glassAbsorptionDistance =
+        scene_object_clamp(material ? material->absorption_distance : 2.0, 0.25, 8.0);
+    obj->glassThinWalled = material ? material->thin_walled : true;
+}
+
+bool SceneObjectResolveGlassTransport(const SceneObject* obj,
+                                      double* out_transmission,
+                                      double* out_ior,
+                                      double* out_absorption_distance,
+                                      bool* out_thin_walled) {
+    const Material* material = NULL;
+    if (!obj) return false;
+    material = MaterialManagerGet(obj->material_id);
+    if (out_transmission) {
+        *out_transmission = obj->hasGlassTransportOverride
+                                ? scene_object_clamp(obj->glassTransmission, 0.0, 1.0)
+                                : scene_object_clamp(material ? material->transparency : 0.0,
+                                                     0.0,
+                                                     1.0);
+    }
+    if (out_ior) {
+        *out_ior = obj->hasGlassTransportOverride
+                       ? scene_object_clamp(obj->glassIor, 1.0, 2.5)
+                       : scene_object_clamp(material ? material->ior : 1.0, 1.0, 2.5);
+    }
+    if (out_absorption_distance) {
+        *out_absorption_distance =
+            obj->hasGlassTransportOverride
+                ? scene_object_clamp(obj->glassAbsorptionDistance, 0.25, 8.0)
+                : scene_object_clamp(material ? material->absorption_distance : 1.0,
+                                     0.25,
+                                     8.0);
+    }
+    if (out_thin_walled) {
+        *out_thin_walled = obj->hasGlassTransportOverride
+                               ? obj->glassThinWalled
+                               : (material ? material->thin_walled : false);
+    }
+    return true;
 }
 
 void SegmentPathInit(SegmentPath* path) {

@@ -69,6 +69,12 @@ int s_layer_total_count = 0;
 SDL_Rect s_graph_action_rects[MATERIAL_EDITOR_GRAPH_ACTION_COUNT];
 SDL_Rect s_recipe_action_rects[MATERIAL_EDITOR_RECIPE_ACTION_COUNT];
 SDL_Rect s_recipe_menu_item_rects[MATERIAL_EDITOR_RECIPE_MENU_MAX_ITEMS];
+SDL_Rect s_response_action_rects[MATERIAL_EDITOR_RESPONSE_MAX_ROWS]
+                                [MATERIAL_EDITOR_RESPONSE_ACTION_COUNT];
+MaterialEditorResponseField s_response_action_fields[MATERIAL_EDITOR_RESPONSE_MAX_ROWS];
+SDL_Rect s_glass_overlay_action_rects[MATERIAL_EDITOR_GLASS_OVERLAY_ACTION_COUNT];
+RuntimeMaterialTextureLayerKind
+    s_glass_overlay_action_kinds[MATERIAL_EDITOR_GLASS_OVERLAY_ACTION_COUNT];
 int s_material_editor_param_drag_start_y = 0;
 double s_material_editor_param_drag_start_value = 0.0;
 MaterialEditorProofReadback s_material_editor_proof_readback;

@@ -60,16 +60,16 @@ assert cache["cached_bvh_node_count"] == bvh["node_count"], cache
 assert cache["cached_bvh_leaf_count"] == bvh["leaf_count"], cache
 
 accel = summary["prepared_acceleration"]
-assert accel["enabled"] is False, accel
-assert accel["prepared_accel_reuse_status"] == "disabled", accel
-assert accel["blas_cache_hits"] == 0, accel
-assert accel["blas_cache_misses"] == 0, accel
+assert accel["enabled"] is True, accel
+assert accel["prepared_accel_reuse_status"] in ("rebuilt", "reused"), accel
+assert accel["blas_prepare_calls"] >= 1, accel
+assert accel["blas_cache_misses"] == 1, accel
 assert accel["blas_cache_invalidations"] == 0, accel
-assert accel["blas_full_rebuilds"] == 0, accel
-assert accel["blas_cached_asset_count"] == 0, accel
-assert accel["tlas_node_count"] == 0, accel
-assert accel["tlas_instance_count"] == 0, accel
-assert accel["tlas_rebuilds"] == 0, accel
+assert accel["blas_full_rebuilds"] == 1, accel
+assert accel["blas_cached_asset_count"] == 1, accel
+assert accel["tlas_node_count"] == 7, accel
+assert accel["tlas_instance_count"] == 4, accel
+assert accel["tlas_rebuilds"] >= 1, accel
 assert accel["tlas_refits"] == 0, accel
 
 audit = {entry["object_id"]: entry for entry in summary["object_audit"]}

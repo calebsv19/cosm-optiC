@@ -10,7 +10,8 @@ not own native `3D` shading policy or worker orchestration policy.
 ## Ownership
 
 - `runtime_scene_bridge*.c`: runtime-scene bridge and authoring adapters for
-  retained scene data, light/camera seeds, and writeback paths.
+  retained scene data, authored `lights[]` light-list seeds, compatibility
+  moving-light/camera seeds, and writeback paths.
 - `runtime_mesh_asset_*`: mesh asset loading, packing, and staging helpers used
   by imported/runtime mesh scenes. `runtime_mesh_asset_loader.c` owns runtime
   sidecar path resolution, stable `asset_id` validation, parsed-document cache

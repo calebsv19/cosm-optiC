@@ -4,6 +4,7 @@
 #include "editor/material_editor_layer_model.h"
 #include "editor/scene_editor_material_face_placement.h"
 #include "editor/scene_editor_material_stack.h"
+#include "material/material.h"
 
 #include <stdio.h>
 
@@ -67,6 +68,36 @@ static bool material_editor_seed_face_override_from_active_layer(const SceneObje
     placement.rotation = layer.placement.rotation;
     placement.params = layer.params;
     return SceneEditorMaterialFacePlacementSetOverride(&placement);
+}
+
+static bool material_editor_focused_material_is_glass(const SceneObject* obj) {
+    return obj && obj->material_id == MATERIAL_PRESET_TRANSPARENT;
+}
+
+static double material_editor_clamp_ior(double value) {
+    if (value < 1.0) return 1.0;
+    if (value > 2.0) return 2.0;
+    return value;
+}
+
+static double material_editor_clamp_absorption_distance(double value) {
+    if (value < 0.5) return 0.5;
+    if (value > 5.0) return 5.0;
+    return value;
+}
+
+static int material_editor_response_tint_step_color(const SceneObject* obj, double delta) {
+    int step = (int)(delta * 255.0);
+    int r = (int)SceneObjectColorR(obj) + step;
+    int g = (int)SceneObjectColorG(obj) + step;
+    int b = (int)SceneObjectColorB(obj) + step;
+    if (r < 0) r = 0;
+    if (r > 255) r = 255;
+    if (g < 0) g = 0;
+    if (g > 255) g = 255;
+    if (b < 0) b = 0;
+    if (b > 255) b = 255;
+    return SceneObjectPackRGBBytes((Uint8)r, (Uint8)g, (Uint8)b);
 }
 
 static void material_editor_assign_object_params(SceneObject* obj,
@@ -428,6 +459,161 @@ bool MaterialEditorApplyTextureParamValueToFocused(MaterialEditorTextureParamKin
         return false;
     }
     material_editor_assign_object_params(obj, params);
+    material_editor_apply_object_scope_to_all_faces(focused_object_index);
+    MarkObjectDirty(obj);
+    MaterialEditorFacePreviewInvalidate();
+    return true;
+}
+
+bool MaterialEditorApplyResponseValueToFocused(MaterialEditorResponseField field, double value) {
+    SceneObject* obj = material_editor_focused_object();
+    int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
+    if (!obj || focused_object_index < 0) return false;
+    if (!material_editor_focused_material_is_glass(obj)) return false;
+    if (field == MATERIAL_EDITOR_RESPONSE_FIELD_ROUGHNESS ||
+        field == MATERIAL_EDITOR_RESPONSE_FIELD_REFLECTIVITY ||
+        field == MATERIAL_EDITOR_RESPONSE_FIELD_SPECULAR) {
+        value = material_editor_clamp01(value);
+        if (!MaterialEditorLayerModelApplyResponseValue(obj,
+                                                        focused_object_index,
+                                                        field,
+                                                        value)) {
+            return false;
+        }
+        material_editor_apply_object_scope_to_all_faces(focused_object_index);
+        MarkObjectDirty(obj);
+        MaterialEditorFacePreviewInvalidate();
+        return true;
+    }
+    if (field == MATERIAL_EDITOR_RESPONSE_FIELD_TRANSMISSION ||
+        field == MATERIAL_EDITOR_RESPONSE_FIELD_IOR ||
+        field == MATERIAL_EDITOR_RESPONSE_FIELD_ABSORPTION ||
+        field == MATERIAL_EDITOR_RESPONSE_FIELD_THIN_WALLED) {
+        SceneObjectSeedGlassTransportOverrideFromMaterial(obj);
+        if (field == MATERIAL_EDITOR_RESPONSE_FIELD_TRANSMISSION) {
+            obj->glassTransmission = material_editor_clamp01(value);
+        } else if (field == MATERIAL_EDITOR_RESPONSE_FIELD_IOR) {
+            obj->glassIor = material_editor_clamp_ior(value);
+        } else if (field == MATERIAL_EDITOR_RESPONSE_FIELD_ABSORPTION) {
+            obj->glassAbsorptionDistance =
+                material_editor_clamp_absorption_distance(value);
+        } else if (field == MATERIAL_EDITOR_RESPONSE_FIELD_THIN_WALLED) {
+            obj->glassThinWalled = value >= 0.5;
+        }
+        material_editor_apply_object_scope_to_all_faces(focused_object_index);
+        MarkObjectDirty(obj);
+        MaterialEditorFacePreviewInvalidate();
+        return true;
+    }
+    return false;
+}
+
+bool MaterialEditorApplyResponseTintToFocused(int packed_color) {
+    SceneObject* obj = material_editor_focused_object();
+    int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
+    if (!obj || focused_object_index < 0) return false;
+    if (!material_editor_focused_material_is_glass(obj)) return false;
+    obj->color = packed_color & 0xFFFFFF;
+    material_editor_apply_object_scope_to_all_faces(focused_object_index);
+    MarkObjectDirty(obj);
+    MaterialEditorFacePreviewInvalidate();
+    return true;
+}
+
+bool MaterialEditorApplyResponseStepToFocused(MaterialEditorResponseField field, double delta) {
+    SceneObject* obj = material_editor_focused_object();
+    RuntimeMaterialTextureLayer layer = {0};
+    double current = 0.0;
+    if (!obj) return false;
+    if (field == MATERIAL_EDITOR_RESPONSE_FIELD_TINT) {
+        return MaterialEditorApplyResponseTintToFocused(
+            material_editor_response_tint_step_color(obj, delta));
+    }
+    if (field == MATERIAL_EDITOR_RESPONSE_FIELD_TRANSMISSION ||
+        field == MATERIAL_EDITOR_RESPONSE_FIELD_IOR ||
+        field == MATERIAL_EDITOR_RESPONSE_FIELD_ABSORPTION ||
+        field == MATERIAL_EDITOR_RESPONSE_FIELD_THIN_WALLED) {
+        double transmission = 0.0;
+        double ior = 1.0;
+        double absorption_distance = 1.0;
+        bool thin_walled = false;
+        if (!material_editor_focused_material_is_glass(obj)) return false;
+        SceneObjectResolveGlassTransport(obj,
+                                         &transmission,
+                                         &ior,
+                                         &absorption_distance,
+                                         &thin_walled);
+        if (field == MATERIAL_EDITOR_RESPONSE_FIELD_TRANSMISSION) {
+            current = transmission + delta;
+        } else if (field == MATERIAL_EDITOR_RESPONSE_FIELD_IOR) {
+            current = ior + delta;
+        } else if (field == MATERIAL_EDITOR_RESPONSE_FIELD_ABSORPTION) {
+            current = absorption_distance + delta;
+        } else {
+            current = thin_walled ? 0.0 : 1.0;
+        }
+        return MaterialEditorApplyResponseValueToFocused(field, current);
+    }
+    if (!material_editor_get_active_layer(obj, NULL, &layer, NULL)) return false;
+    if (field == MATERIAL_EDITOR_RESPONSE_FIELD_ROUGHNESS) {
+        current = layer.roughnessInfluence;
+    } else if (field == MATERIAL_EDITOR_RESPONSE_FIELD_REFLECTIVITY) {
+        current = layer.reflectivityInfluence;
+    } else if (field == MATERIAL_EDITOR_RESPONSE_FIELD_SPECULAR) {
+        current = layer.specularInfluence;
+    } else {
+        return false;
+    }
+    return MaterialEditorApplyResponseValueToFocused(field,
+                                                     material_editor_clamp01(current + delta));
+}
+
+bool MaterialEditorApplyGlassOverlayForFocused(RuntimeMaterialTextureLayerKind kind) {
+    SceneObject* obj = material_editor_focused_object();
+    int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    if (!obj || focused_object_index < 0) return false;
+    if (!material_editor_focused_material_is_glass(obj)) return false;
+    if (kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE ||
+        kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID) {
+        if (!MaterialEditorLayerModelEnsureEditableStack(obj, focused_object_index, &stack)) {
+            return false;
+        }
+        if (!MaterialEditorLayerModelSetActiveIndex(obj, focused_object_index, 0)) {
+            return false;
+        }
+        MarkObjectDirty(obj);
+        MaterialEditorFacePreviewInvalidate();
+        return true;
+    }
+    if (kind != RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_FOG &&
+        kind != RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SCRATCHES &&
+        kind != RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL &&
+        kind != RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME) {
+        return false;
+    }
+    if (!MaterialEditorLayerModelEnsureEditableStack(obj, focused_object_index, &stack)) {
+        return false;
+    }
+    for (int i = 1; i < stack.layerCount; ++i) {
+        if (stack.layers[i].kind == kind) {
+            if (!MaterialEditorLayerModelSetActiveIndex(obj, focused_object_index, i)) {
+                return false;
+            }
+            MarkObjectDirty(obj);
+            MaterialEditorFacePreviewInvalidate();
+            return true;
+        }
+    }
+    if (stack.layerCount >= RUNTIME_MATERIAL_TEXTURE_STACK_MAX_LAYERS) return false;
+    stack.layers[stack.layerCount] = RuntimeMaterialTextureLayerMakeOverlay(kind);
+    stack.layerCount += 1;
+    if (!MaterialEditorLayerModelSetStack(focused_object_index, &stack)) return false;
+    if (!MaterialEditorLayerModelSetActiveIndex(obj,
+                                                focused_object_index,
+                                                stack.layerCount - 1)) {
+        return false;
+    }
     material_editor_apply_object_scope_to_all_faces(focused_object_index);
     MarkObjectDirty(obj);
     MaterialEditorFacePreviewInvalidate();

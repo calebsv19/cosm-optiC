@@ -76,9 +76,14 @@ cat > "$REQUEST" <<JSON
     "light_intensity": 2.6,
     "light_radius": 0.10,
     "forward_decay": 220.0,
+    "volume_density_scale": 0.35,
+    "volume_density_gamma": 0.65,
     "volume_scatter_gain": 3.0,
+    "volume_absorption_gain": 0.15,
+    "volume_opacity_clamp": 0.70,
     "volume_step_scale": 1.0,
-    "volume_tint": { "r": 0.35, "g": 0.65, "b": 1.80 }
+    "volume_tint": { "r": 0.35, "g": 0.65, "b": 1.80 },
+    "volume_albedo": { "r": 0.92, "g": 0.91, "b": 0.88 }
   },
   "output": {
     "root": "$RAY_OUT",
@@ -107,6 +112,11 @@ grep -Eq '"visible_pixels": [1-9][0-9]*' "$SUMMARY"
 grep -Eq '"nonzero_pixels": [1-9][0-9]*' "$SUMMARY"
 grep -Eq '"max_radiance": 0\.[2-9][0-9]*|\"max_radiance\": [1-9][0-9]*\.[0-9]+' "$SUMMARY"
 grep -q '"has_volume_tint_override": true' "$SUMMARY"
+grep -q '"has_volume_density_scale_override": true' "$SUMMARY"
+grep -q '"has_volume_density_gamma_override": true' "$SUMMARY"
+grep -q '"has_volume_absorption_gain_override": true' "$SUMMARY"
+grep -q '"has_volume_opacity_clamp_override": true' "$SUMMARY"
+grep -q '"has_volume_albedo_override": true' "$SUMMARY"
 grep -q '"has_volume_step_scale_override": true' "$SUMMARY"
 grep -Eq '"max_rgb": \[[6-9][0-9], [6-9][0-9], [6-9][0-9]\]|\"max_rgb\": \[[1-9][0-9]{2}, [1-9][0-9]{2}, [1-9][0-9]{2}\]' "$SUMMARY"
 

@@ -152,6 +152,7 @@ static bool material_editor_recipe_finish_compatible(int material_id,
         case MATERIAL_PRESET_TRANSPARENT:
             return kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_FOG ||
                    kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME ||
+                   kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL ||
                    kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SCRATCHES;
         case MATERIAL_PRESET_MIRROR:
             return kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME ||

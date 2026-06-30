@@ -316,6 +316,21 @@ The D2.18b fixture manifests use `render.denoise_enabled=false` and `true`
 with the same `temporal_frames=12` budget so the resulting diff is the
 Disney-v2 edge-safe final resolve only, not a temporal-sample-count change.
 
+For caustic-readiness work, use the glass-sphere probe:
+
+```bash
+make -C ray_tracing test-ray-tracing-caustic-probe-matrix
+```
+
+The fixture lives under
+`ray_tracing/tests/fixtures/caustic_probe_glass_sphere/`. Its Disney v2 request
+uses the high-fidelity `asset_sphere_256x128` glass mesh and runs the Disney v2
+caustic policy with `inspection.caustic_mode = "analytic"`. The summary
+readback records the request mode, sidecar strength, sidecar sample count,
+contributing sample count, and sidecar radiance totals. Direct-light and
+emission-transparency requests remain baseline measurements and do not enable
+the Disney v2 caustic path.
+
 Optional `inspection` fields are headless-only tuning overrides. They do not
 change the persisted runtime scene:
 
@@ -332,7 +347,11 @@ change the persisted runtime scene:
 - `light_intensity`
 - `light_radius`
 - `forward_decay`
+- `volume_density_scale` (`density_scale` alias)
+- `volume_density_gamma` (`density_gamma` alias)
 - `volume_scatter_gain`
+- `volume_absorption_gain` (`absorption_gain` alias)
+- `volume_opacity_clamp` (`opacity_clamp` alias)
 - `volume_step_scale`
 - `preset`
 - `secondary_diffuse_samples_3d`
@@ -340,6 +359,7 @@ change the persisted runtime scene:
 - `object_audit_enabled`
 - `object_audit_max_dimension`
 - `volume_tint`
+- `volume_albedo` / `volume_albedo_tint`
 
 Preferred environment-light override contract:
 - `environment_light_mode = "off"` disables the extra environment fill lane
@@ -519,6 +539,10 @@ frames. The summary reports:
 - `inspection.preset`
 - `inspection.secondary_diffuse_samples_3d`
 - `inspection.transmission_samples_3d`
+- `inspection.caustic_mode` (`disney_v2` only; `analytic` default, `off`,
+  `transport` reserved)
+- `inspection.caustic_sidecar_enabled` (`disney_v2` legacy alias)
+- `inspection.caustic_sidecar_strength` (`disney_v2` only)
 - `inspection.volume_tint`
 
 For transparent/glass preview work, `emission_transparency` now supports
@@ -858,6 +882,31 @@ Volume density reconstruction is now trilinear instead of nearest-cell, and
 `inspection.volume_step_scale` can tighten or loosen the single-scatter march
 step relative to the default `voxelSize * 0.5` step. Values below `1.0`
 produce finer sampling at higher cost.
+
+`volume.debug_overlay=true` renders direct in-scene density contribution for
+diagnosis. It uses the request camera, volume source, surface clipping, density
+remap, step scale, and albedo/tint controls, but bypasses light-dependent
+single scattering so sparse volume structure is visible even when production
+lighting washes it out. Summaries read back this request state as
+`volume_summary.debug_overlay_enabled`.
+
+The volume material remap controls are request/readback-only inspection
+overrides for reinterpreting the same VF3D scalar cache without regenerating
+the simulation:
+
+- `volume_density_scale` multiplies sampled scalar density before scatter.
+- `volume_density_gamma` applies the post-scale density curve; values below
+  `1.0` lift low-density smoke while values above `1.0` concentrate it.
+- `volume_scatter_gain` scales single-scatter brightness.
+- `volume_absorption_gain` scales extinction independently from scatter.
+- `volume_opacity_clamp` caps the remapped density before scatter/extinction.
+- `volume_albedo` / `volume_albedo_tint` accepts `{ "r": ..., "g": ..., "b": ... }`
+  or `[r, g, b]` and takes precedence over legacy `volume_tint` when both are
+  present.
+
+Defaults preserve the previous direct-density behavior: density scale `1.0`,
+density gamma `1.0`, scatter gain `1.0`, absorption gain `1.0`, and an
+effectively unbounded opacity clamp.
 
 ## Detached Runner
 

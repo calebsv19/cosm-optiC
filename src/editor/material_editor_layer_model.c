@@ -399,3 +399,31 @@ bool MaterialEditorLayerModelApplyParamValue(const SceneObject* object,
     stack.layers[index] = RuntimeMaterialTextureLayerNormalize(layer);
     return MaterialEditorLayerModelSetStack(scene_object_index, &stack);
 }
+
+bool MaterialEditorLayerModelApplyResponseValue(const SceneObject* object,
+                                                int scene_object_index,
+                                                MaterialEditorResponseField field,
+                                                double normalized_value) {
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    RuntimeMaterialTextureLayer layer;
+    int index = 0;
+    normalized_value = material_editor_layer_model_clamp01(normalized_value);
+    if (!material_editor_layer_model_update_active_layer(object,
+                                                         scene_object_index,
+                                                         &layer,
+                                                         &stack,
+                                                         &index)) {
+        return false;
+    }
+    if (field == MATERIAL_EDITOR_RESPONSE_FIELD_ROUGHNESS) {
+        layer.roughnessInfluence = normalized_value;
+    } else if (field == MATERIAL_EDITOR_RESPONSE_FIELD_REFLECTIVITY) {
+        layer.reflectivityInfluence = normalized_value;
+    } else if (field == MATERIAL_EDITOR_RESPONSE_FIELD_SPECULAR) {
+        layer.specularInfluence = normalized_value;
+    } else {
+        return false;
+    }
+    stack.layers[index] = RuntimeMaterialTextureLayerNormalize(layer);
+    return MaterialEditorLayerModelSetStack(scene_object_index, &stack);
+}

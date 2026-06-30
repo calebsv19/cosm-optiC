@@ -92,13 +92,15 @@ typedef struct {
     bool bvhDirty;
 } RuntimeTriangleMesh3D;
 
-typedef struct {
+typedef struct RuntimeLight3D {
     Vec3 position;
     double radius;
     double intensity;
     double falloffDistance;
     ForwardFalloffMode falloffMode;
 } RuntimeLight3D;
+
+#include "render/runtime_light_set_3d.h"
 
 typedef struct {
     EnvironmentLightMode lightMode;
@@ -159,6 +161,7 @@ typedef struct RuntimeScene3D {
     RuntimeEnvironment3D environment;
     RuntimeLight3D light;
     bool hasLight;
+    RuntimeLightSet3D lightSet;
     RuntimeCamera3D camera;
     bool hasCamera;
     RuntimeScene3DMaterialFlags materialFlags;

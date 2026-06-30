@@ -64,7 +64,26 @@ Headless request/render/material lanes:
 make -C ray_tracing test-ray-tracing-render-headless-preflight
 make -C ray_tracing test-ray-tracing-render-headless-image-export
 make -C ray_tracing test-ray-tracing-material-preview-headless
+make -C ray_tracing test-ray-tracing-caustic-probe-matrix
+make -C ray_tracing test-ray-tracing-emissive-light-preview-matrix
 ```
+
+`test-ray-tracing-caustic-probe-matrix` is the local L4 caustic-readiness proof
+target. It renders the canonical overhead-light, glass-sphere, matte-receiver
+fixture and writes baseline receiver metrics under `_private_workspace_artifacts/`.
+The original L4 baseline proved the old no-solver state. The current Disney v2
+request now runs the L5 analytic caustic policy by default, while direct-light
+and emission-transparency cells remain baseline comparisons.
+
+`test-ray-tracing-emissive-light-preview-matrix` is the local emitter-light
+preview proof target. It renders flat wall-panel, complex emissive prism, and
+dual-panel room variants, plus flush/diffuse-bounce, offset/tilted-panel, and
+thin light-box wall-halo variants, while parking the first authored/moving
+light far away at negligible intensity. The proof writes a contact sheet plus
+`emitter_preview_report.json` under `_private_workspace_artifacts/` and checks
+registered-light counts, rect versus mesh-emissive policy, sampler-only complex
+mesh readback, emissive-area candidate stats, receiver ROI luma, and wall ROI
+luma.
 
 R6 demo proof:
 

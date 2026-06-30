@@ -3,12 +3,65 @@
 #include <string.h>
 
 #include "app/animation.h"
+#include "import/runtime_mesh_asset_loader.h"
 #include "import/runtime_scene_bridge.h"
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_scene_3d_builder.h"
 #include "render/runtime_volume_3d.h"
 #include "test_runtime_scene_3d_geometry_internal.h"
 #include "test_support.h"
+
+static void test_runtime_scene_3d_builder_init_asymmetric_mesh_set(
+    RayTracingRuntimeMeshAssetSet* set,
+    RayTracingRuntimeMeshAssetInstance* instance,
+    CoreMeshAssetRuntimeVertex* vertices,
+    CoreMeshAssetRuntimeTriangle* triangles) {
+    ray_tracing_runtime_mesh_asset_set_init(set);
+    set->asset_count = 1;
+    set->instance_count = 1;
+    snprintf(set->assets[0].asset_id, sizeof(set->assets[0].asset_id), "asset_asym_pivot");
+    snprintf(set->assets[0].path, sizeof(set->assets[0].path), "/private/tmp/asset_asym_pivot.runtime.json");
+    set->assets[0].document.vertex_count = 3u;
+    set->assets[0].document.vertices = vertices;
+    set->assets[0].document.triangle_count = 1u;
+    set->assets[0].document.triangles = triangles;
+    set->assets[0].document.contract.local_bounds.min = (CoreObjectVec3){0.0, 0.0, 0.0};
+    set->assets[0].document.contract.local_bounds.max = (CoreObjectVec3){2.0, 2.0, 0.0};
+    vertices[0].position = (CoreObjectVec3){0.0, 0.0, 0.0};
+    vertices[1].position = (CoreObjectVec3){2.0, 0.0, 0.0};
+    vertices[2].position = (CoreObjectVec3){0.0, 2.0, 0.0};
+    triangles[0].a = 0u;
+    triangles[0].b = 1u;
+    triangles[0].c = 2u;
+    *instance = set->instances[0];
+    snprintf(instance->object_id, sizeof(instance->object_id), "obj_asym_pivot");
+    snprintf(instance->asset_id, sizeof(instance->asset_id), "asset_asym_pivot");
+    instance->asset_index = 0;
+    instance->scene_object_index = -1;
+    instance->scale_x = 1.0;
+    instance->scale_y = 1.0;
+    instance->scale_z = 1.0;
+    instance->rotation_z = 3.14159265358979323846 / 2.0;
+    set->instances[0] = *instance;
+}
+
+static void test_runtime_scene_3d_builder_mesh_xy_bounds(
+    const RuntimeScene3D* scene,
+    double* out_min_x,
+    double* out_max_x,
+    double* out_min_y,
+    double* out_max_y) {
+    const RuntimeTriangle3D* tri = &scene->triangleMesh.triangles[0];
+    Vec3 points[3] = {tri->p0, tri->p1, tri->p2};
+    *out_min_x = *out_max_x = points[0].x;
+    *out_min_y = *out_max_y = points[0].y;
+    for (int i = 1; i < 3; ++i) {
+        if (points[i].x < *out_min_x) *out_min_x = points[i].x;
+        if (points[i].x > *out_max_x) *out_max_x = points[i].x;
+        if (points[i].y < *out_min_y) *out_min_y = points[i].y;
+        if (points[i].y > *out_max_y) *out_max_y = points[i].y;
+    }
+}
 
 static int test_runtime_scene_3d_builder_uses_retained_seed_scope(void) {
     const char *runtime_json_primitives =
@@ -78,6 +131,396 @@ static int test_runtime_scene_3d_builder_uses_retained_seed_scope(void) {
                  1e-9);
 
     RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
+static int test_runtime_scene_3d_builder_mesh_bounds_center_rotation_keeps_center_stable(void) {
+    RayTracingRuntimeMeshAssetSet set;
+    RayTracingRuntimeMeshAssetInstance instance;
+    CoreMeshAssetRuntimeVertex vertices[3];
+    CoreMeshAssetRuntimeTriangle triangles[1];
+    RuntimeScene3D scene;
+    double min_x = 0.0;
+    double max_x = 0.0;
+    double min_y = 0.0;
+    double max_y = 0.0;
+    bool ok = false;
+
+    test_runtime_scene_3d_builder_init_asymmetric_mesh_set(&set,
+                                                          &instance,
+                                                          vertices,
+                                                          triangles);
+    set.instances[0].rotation_pivot_policy =
+        RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_BOUNDS_CENTER;
+    RuntimeScene3D_Init(&scene);
+    ok = RuntimeScene3DBuilder_AppendMeshAssetSet(&scene, &set);
+    assert_true("runtime_scene_3d_builder_mesh_bounds_center_append_ok", ok);
+    assert_true("runtime_scene_3d_builder_mesh_bounds_center_triangle_count",
+                scene.triangleMesh.triangleCount == 1);
+    test_runtime_scene_3d_builder_mesh_xy_bounds(&scene, &min_x, &max_x, &min_y, &max_y);
+    assert_close("runtime_scene_3d_builder_mesh_bounds_center_center_x",
+                 (min_x + max_x) * 0.5,
+                 1.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_mesh_bounds_center_center_y",
+                 (min_y + max_y) * 0.5,
+                 1.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_mesh_bounds_center_source_vertex_x",
+                 vertices[1].position.x,
+                 2.0,
+                 1e-9);
+    assert_true("runtime_scene_3d_builder_mesh_bounds_center_source_index",
+                triangles[0].b == 1u);
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
+static int test_runtime_scene_3d_builder_mesh_authored_origin_rotation_remains_compatible(void) {
+    RayTracingRuntimeMeshAssetSet set;
+    RayTracingRuntimeMeshAssetInstance instance;
+    CoreMeshAssetRuntimeVertex vertices[3];
+    CoreMeshAssetRuntimeTriangle triangles[1];
+    RuntimeScene3D scene;
+    double min_x = 0.0;
+    double max_x = 0.0;
+    double min_y = 0.0;
+    double max_y = 0.0;
+    bool ok = false;
+
+    test_runtime_scene_3d_builder_init_asymmetric_mesh_set(&set,
+                                                          &instance,
+                                                          vertices,
+                                                          triangles);
+    set.instances[0].rotation_pivot_policy =
+        RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_AUTHORED_ORIGIN;
+    RuntimeScene3D_Init(&scene);
+    ok = RuntimeScene3DBuilder_AppendMeshAssetSet(&scene, &set);
+    assert_true("runtime_scene_3d_builder_mesh_authored_origin_append_ok", ok);
+    assert_true("runtime_scene_3d_builder_mesh_authored_origin_triangle_count",
+                scene.triangleMesh.triangleCount == 1);
+    test_runtime_scene_3d_builder_mesh_xy_bounds(&scene, &min_x, &max_x, &min_y, &max_y);
+    assert_close("runtime_scene_3d_builder_mesh_authored_origin_center_x",
+                 (min_x + max_x) * 0.5,
+                 -1.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_mesh_authored_origin_center_y",
+                 (min_y + max_y) * 0.5,
+                 1.0,
+                 1e-9);
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
+static int test_runtime_scene_3d_builder_mesh_custom_rotation_pivot(void) {
+    RayTracingRuntimeMeshAssetSet set;
+    RayTracingRuntimeMeshAssetInstance instance;
+    CoreMeshAssetRuntimeVertex vertices[3];
+    CoreMeshAssetRuntimeTriangle triangles[1];
+    RuntimeScene3D scene;
+    double min_x = 0.0;
+    double max_x = 0.0;
+    double min_y = 0.0;
+    double max_y = 0.0;
+    bool ok = false;
+
+    test_runtime_scene_3d_builder_init_asymmetric_mesh_set(&set,
+                                                          &instance,
+                                                          vertices,
+                                                          triangles);
+    set.instances[0].rotation_pivot_policy =
+        RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_CUSTOM;
+    set.instances[0].rotation_pivot_x = 2.0;
+    set.instances[0].rotation_pivot_y = 0.0;
+    set.instances[0].rotation_pivot_z = 0.0;
+    RuntimeScene3D_Init(&scene);
+    ok = RuntimeScene3DBuilder_AppendMeshAssetSet(&scene, &set);
+    assert_true("runtime_scene_3d_builder_mesh_custom_pivot_append_ok", ok);
+    assert_true("runtime_scene_3d_builder_mesh_custom_pivot_triangle_count",
+                scene.triangleMesh.triangleCount == 1);
+    test_runtime_scene_3d_builder_mesh_xy_bounds(&scene, &min_x, &max_x, &min_y, &max_y);
+    assert_close("runtime_scene_3d_builder_mesh_custom_pivot_min_x",
+                 min_x,
+                 0.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_mesh_custom_pivot_max_x",
+                 max_x,
+                 2.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_mesh_custom_pivot_min_y",
+                 min_y,
+                 -2.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_mesh_custom_pivot_max_y",
+                 max_y,
+                 0.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_mesh_custom_pivot_source_vertex_x",
+                 vertices[1].position.x,
+                 2.0,
+                 1e-9);
+    assert_true("runtime_scene_3d_builder_mesh_custom_pivot_source_index",
+                triangles[0].b == 1u);
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
+static int test_runtime_scene_3d_builder_plane_position_owns_frame_origin(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_3d_builder_plane_position_owner\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"moved_floor\","
+            "\"object_type\":\"plane_primitive\","
+            "\"primitive\":{\"kind\":\"plane_primitive\",\"width\":5.0,\"height\":4.0,"
+            "\"frame\":{\"origin\":{\"x\":9.0,\"y\":8.0,\"z\":7.0},"
+            "\"axis_u\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+            "\"axis_v\":{\"x\":0.0,\"y\":1.0,\"z\":0.0},"
+            "\"normal\":{\"x\":0.0,\"y\":0.0,\"z\":1.0}}},"
+            "\"transform\":{"
+              "\"position\":{\"x\":1.0,\"y\":2.0,\"z\":-0.58},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+            "}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary;
+    RuntimeScene3D scene;
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_scene_3d_builder_plane_position_owner_apply_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        return 0;
+    }
+
+    ok = RuntimeScene3DBuilder_BuildFromBridgeSeeds(&scene);
+    assert_true("runtime_scene_3d_builder_plane_position_owner_build_ok", ok);
+    assert_true("runtime_scene_3d_builder_plane_position_owner_primitive_count", scene.primitiveCount == 1);
+    assert_true("runtime_scene_3d_builder_plane_position_owner_kind",
+                scene.primitives[0].kind == RUNTIME_PRIMITIVE_3D_KIND_PLANE);
+    assert_close("runtime_scene_3d_builder_plane_position_owner_origin_x",
+                 scene.primitives[0].shape.plane.origin.x,
+                 1.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_plane_position_owner_origin_y",
+                 scene.primitives[0].shape.plane.origin.y,
+                 2.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_plane_position_owner_origin_z",
+                 scene.primitives[0].shape.plane.origin.z,
+                 -0.58,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_plane_position_owner_width",
+                 scene.primitives[0].shape.plane.width,
+                 5.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_plane_position_owner_height",
+                 scene.primitives[0].shape.plane.height,
+                 4.0,
+                 1e-9);
+
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
+static int test_runtime_scene_3d_builder_plane_scale_rotation_owns_seed_dimensions_and_basis(void) {
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_3d_builder_plane_scale_rotation_owner\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"scaled_rotated_floor\","
+            "\"object_type\":\"plane_primitive\","
+            "\"primitive\":{\"kind\":\"plane_primitive\",\"width\":5.0,\"height\":4.0,"
+            "\"frame\":{\"origin\":{\"x\":9.0,\"y\":8.0,\"z\":7.0},"
+            "\"axis_u\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+            "\"axis_v\":{\"x\":0.0,\"y\":1.0,\"z\":0.0},"
+            "\"normal\":{\"x\":0.0,\"y\":0.0,\"z\":1.0}}},"
+            "\"transform\":{"
+              "\"position\":{\"x\":1.0,\"y\":2.0,\"z\":-0.58},"
+              "\"scale\":{\"x\":1.5,\"y\":0.5,\"z\":3.0},"
+              "\"rotation\":{\"x\":0.0,\"y\":0.0,\"z\":90.0}"
+            "}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary;
+    RuntimeScene3D scene;
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_scene_3d_builder_plane_scale_rotation_owner_apply_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        return 0;
+    }
+
+    ok = RuntimeScene3DBuilder_BuildFromBridgeSeeds(&scene);
+    assert_true("runtime_scene_3d_builder_plane_scale_rotation_owner_build_ok", ok);
+    assert_true("runtime_scene_3d_builder_plane_scale_rotation_owner_primitive_count", scene.primitiveCount == 1);
+    assert_true("runtime_scene_3d_builder_plane_scale_rotation_owner_kind",
+                scene.primitives[0].kind == RUNTIME_PRIMITIVE_3D_KIND_PLANE);
+    assert_close("runtime_scene_3d_builder_plane_scale_rotation_owner_origin_x",
+                 scene.primitives[0].shape.plane.origin.x,
+                 1.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_plane_scale_rotation_owner_origin_y",
+                 scene.primitives[0].shape.plane.origin.y,
+                 2.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_plane_scale_rotation_owner_origin_z",
+                 scene.primitives[0].shape.plane.origin.z,
+                 -0.58,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_plane_scale_rotation_owner_width",
+                 scene.primitives[0].shape.plane.width,
+                 7.5,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_plane_scale_rotation_owner_height",
+                 scene.primitives[0].shape.plane.height,
+                 2.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_plane_scale_rotation_owner_axis_u_x",
+                 scene.primitives[0].shape.plane.axisU.x,
+                 0.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_plane_scale_rotation_owner_axis_u_y",
+                 scene.primitives[0].shape.plane.axisU.y,
+                 1.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_plane_scale_rotation_owner_axis_v_x",
+                 scene.primitives[0].shape.plane.axisV.x,
+                 -1.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_plane_scale_rotation_owner_axis_v_y",
+                 scene.primitives[0].shape.plane.axisV.y,
+                 0.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_plane_scale_rotation_owner_normal_z",
+                 scene.primitives[0].shape.plane.normal.z,
+                 1.0,
+                 1e-9);
+
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
+static int test_runtime_scene_3d_builder_rotates_rect_prism_seed_basis(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_3d_builder_rect_prism_rotation\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"rotated_block\","
+            "\"object_type\":\"rect_prism_primitive\","
+            "\"primitive\":{\"kind\":\"rect_prism_primitive\",\"width\":2.0,\"height\":4.0,\"depth\":6.0},"
+            "\"transform\":{"
+              "\"position\":{\"x\":1.0,\"y\":2.0,\"z\":3.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0},"
+              "\"rotation\":{\"x\":0.0,\"y\":0.0,\"z\":90.0}"
+            "}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary;
+    RuntimeScene3D scene;
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_scene_3d_builder_rect_prism_rotation_apply_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    ok = RuntimeScene3DBuilder_BuildFromBridgeSeeds(&scene);
+    assert_true("runtime_scene_3d_builder_rect_prism_rotation_build_ok", ok);
+    assert_true("runtime_scene_3d_builder_rect_prism_rotation_primitive_count", scene.primitiveCount == 1);
+    assert_true("runtime_scene_3d_builder_rect_prism_rotation_kind",
+                scene.primitives[0].kind == RUNTIME_PRIMITIVE_3D_KIND_RECT_PRISM);
+    assert_close("runtime_scene_3d_builder_rect_prism_rotation_origin_x",
+                 scene.primitives[0].shape.rectPrism.origin.x,
+                 1.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_rect_prism_rotation_width",
+                 scene.primitives[0].shape.rectPrism.width,
+                 2.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_rect_prism_rotation_height",
+                 scene.primitives[0].shape.rectPrism.height,
+                 4.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_rect_prism_rotation_depth",
+                 scene.primitives[0].shape.rectPrism.depth,
+                 6.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_rect_prism_rotation_axis_u_x",
+                 scene.primitives[0].shape.rectPrism.axisU.x,
+                 0.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_rect_prism_rotation_axis_u_y",
+                 scene.primitives[0].shape.rectPrism.axisU.y,
+                 1.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_rect_prism_rotation_axis_v_x",
+                 scene.primitives[0].shape.rectPrism.axisV.x,
+                 -1.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_rect_prism_rotation_axis_v_y",
+                 scene.primitives[0].shape.rectPrism.axisV.y,
+                 0.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_rect_prism_rotation_normal_z",
+                 scene.primitives[0].shape.rectPrism.normal.z,
+                 1.0,
+                 1e-9);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
     return 0;
 }
 
@@ -214,9 +657,21 @@ static int test_runtime_scene_3d_builder_promotes_authored_light_camera_samples(
         "\"unit_system\":\"meters\","
         "\"world_scale\":1.0,"
         "\"space_mode_default\":\"3d\","
-        "\"objects\":[],"
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"motion_floor\","
+            "\"object_type\":\"plane_primitive\","
+            "\"primitive\":{\"kind\":\"plane_primitive\",\"width\":4.0,\"height\":4.0,"
+            "\"frame\":{\"origin\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+            "\"axis_u\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+            "\"axis_v\":{\"x\":0.0,\"y\":1.0,\"z\":0.0},"
+            "\"normal\":{\"x\":0.0,\"y\":0.0,\"z\":1.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
         "\"materials\":[],"
-        "\"lights\":[{\"position\":{\"x\":1.0,\"y\":2.0,\"z\":3.0}}],"
+        "\"lights\":[],"
         "\"cameras\":[{\"position\":{\"x\":4.0,\"y\":5.0,\"z\":6.0}}],"
         "\"constraints\":[],"
         "\"extensions\":{"
@@ -402,6 +857,245 @@ static int test_runtime_scene_3d_builder_promotes_authored_light_camera_samples(
     return 0;
 }
 
+static int test_runtime_scene_3d_builder_imports_authored_light_set(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_3d_builder_light_set\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":2.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":["
+          "{"
+            "\"id\":\"key_red\","
+            "\"kind\":\"sphere\","
+            "\"position\":{\"x\":1.0,\"y\":2.0,\"z\":3.0},"
+            "\"radius\":0.5,"
+            "\"color\":{\"r\":1.0,\"g\":0.0,\"b\":0.0},"
+            "\"intensity\":4.0,"
+            "\"falloff_distance\":9.0,"
+            "\"enabled\":true"
+          "},"
+          "{"
+            "\"id\":\"panel_blue\","
+            "\"kind\":\"rect\","
+            "\"position\":{\"x\":-1.0,\"y\":2.5,\"z\":4.0},"
+            "\"width\":2.0,"
+            "\"height\":1.0,"
+            "\"color\":{\"x\":0.0,\"y\":0.0,\"z\":0.5},"
+            "\"intensity\":1.5,"
+            "\"enabled\":true"
+          "},"
+          "{"
+            "\"id\":\"disabled_disk\","
+            "\"kind\":\"disk\","
+            "\"position\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"width\":3.0,"
+            "\"intensity\":8.0,"
+            "\"enabled\":false"
+          "}"
+        "],"
+        "\"cameras\":[{\"position\":{\"x\":4.0,\"y\":5.0,\"z\":6.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeSceneBridge3DLightSeedState light_state = {0};
+    RuntimeScene3D scene;
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    animSettings.forwardDecay = 7.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_scene_3d_builder_light_set_apply_ok", ok);
+    assert_true("runtime_scene_3d_builder_light_set_preflight_count", summary.light_count == 3);
+    runtime_scene_bridge_get_last_3d_light_seed_state(&light_state);
+    assert_true("runtime_scene_3d_builder_light_set_seed_valid", light_state.valid);
+    assert_true("runtime_scene_3d_builder_light_set_seed_count", light_state.light_count == 3);
+    assert_true("runtime_scene_3d_builder_light_set_seed_enabled", light_state.enabled_count == 2);
+    assert_true("runtime_scene_3d_builder_light_set_seed_sphere", light_state.sphere_count == 1);
+    assert_true("runtime_scene_3d_builder_light_set_seed_rect", light_state.rect_count == 1);
+    assert_true("runtime_scene_3d_builder_light_set_seed_disk", light_state.disk_count == 1);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    ok = RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(&scene, 0.25);
+    assert_true("runtime_scene_3d_builder_light_set_build_ok", ok);
+    assert_true("runtime_scene_3d_builder_light_set_scene_has_light", scene.hasLight);
+    assert_true("runtime_scene_3d_builder_light_set_scene_count", scene.lightSet.lightCount == 3);
+    assert_true("runtime_scene_3d_builder_light_set_scene_enabled", scene.lightSet.enabledCount == 2);
+    assert_true("runtime_scene_3d_builder_light_set_compat_first",
+                strcmp(scene.lightSet.lights[0].id, "key_red") == 0);
+    assert_close("runtime_scene_3d_builder_light_set_first_x",
+                 scene.light.position.x,
+                 2.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_light_set_first_z",
+                 scene.light.position.z,
+                 6.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_light_set_first_radius",
+                 scene.light.radius,
+                 1.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_light_set_first_intensity",
+                 scene.light.intensity,
+                 4.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_light_set_rect_width",
+                 scene.lightSet.lights[1].width,
+                 4.0,
+                 1e-9);
+    assert_close("runtime_scene_3d_builder_light_set_rect_blue",
+                 scene.lightSet.lights[1].color.z,
+                 0.5,
+                 1e-9);
+    assert_true("runtime_scene_3d_builder_light_set_disabled_kept",
+                !scene.lightSet.lights[2].enabled);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_scene_3d_builder_moves_first_registered_light_from_path(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_3d_builder_light_set_motion\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[],"
+        "\"materials\":[],"
+        "\"lights\":["
+          "{"
+            "\"id\":\"key_moving\","
+            "\"kind\":\"sphere\","
+            "\"position\":{\"x\":100.0,\"y\":100.0,\"z\":20.0},"
+            "\"radius\":0.5,"
+            "\"intensity\":2.0,"
+            "\"enabled\":true"
+          "},"
+          "{"
+            "\"id\":\"fill_static\","
+            "\"kind\":\"sphere\","
+            "\"position\":{\"x\":-4.0,\"y\":5.0,\"z\":6.0},"
+            "\"radius\":0.75,"
+            "\"intensity\":1.0,"
+            "\"enabled\":true"
+          "}"
+        "],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{"
+          "\"ray_tracing\":{"
+            "\"authoring\":{"
+              "\"light_path\":{"
+                "\"mode\":\"BEZIER_CUBIC\","
+                "\"points\":["
+                  "{\"x\":0.0,\"y\":0.0,\"rotation\":0.0,\"handleLink\":false,"
+                  "\"velocity1\":{\"vx\":2.0,\"vy\":0.0}},"
+                  "{\"x\":10.0,\"y\":4.0,\"rotation\":0.0,\"handleLink\":false,"
+                  "\"velocity2\":{\"vx\":-2.0,\"vy\":0.0}}"
+                "]"
+              "},"
+              "\"light_path_depth\":{"
+                "\"points\":["
+                  "{\"z\":2.0,\"velocity1\":{\"vz\":1.0}},"
+                  "{\"z\":8.0,\"velocity2\":{\"vz\":-1.0}}"
+                "]"
+              "}"
+            "}"
+          "}"
+        "}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeSceneBridge3DPrimitiveSeedState seed_state = {0};
+    RuntimeScene3D scene;
+    Point expected_light_xy = {0.0, 0.0};
+    double expected_light_z = 0.0;
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_scene_3d_builder_light_set_motion_apply_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    animSettings.lightRadius = 1.25;
+    animSettings.lightIntensity = 9.0;
+    animSettings.forwardDecay = 12.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    expected_light_xy = GetPositionAlongPathNormalized(&sceneSettings.bezierPath, 0.5);
+    expected_light_z =
+        CameraPath3D_GetPositionZNormalized(&sceneSettings.bezierPath,
+                                            &sceneSettings.bezierPath3D,
+                                            0.5);
+
+    runtime_scene_bridge_get_last_3d_primitive_seed_state(&seed_state);
+    ok = RuntimeScene3DBuilder_BuildFromPrimitiveSeedStateAtT(&scene, &seed_state, 0.5);
+    assert_true("runtime_scene_3d_builder_light_set_motion_build_ok", ok);
+    assert_true("runtime_scene_3d_builder_light_set_motion_count", scene.lightSet.lightCount == 2);
+    assert_close("runtime_scene_3d_builder_light_set_motion_first_x",
+                 scene.lightSet.lights[0].position.x,
+                 expected_light_xy.x,
+                 1e-6);
+    assert_close("runtime_scene_3d_builder_light_set_motion_first_y",
+                 scene.lightSet.lights[0].position.y,
+                 expected_light_xy.y,
+                 1e-6);
+    assert_close("runtime_scene_3d_builder_light_set_motion_first_z",
+                 scene.lightSet.lights[0].position.z,
+                 expected_light_z,
+                 1e-6);
+    assert_close("runtime_scene_3d_builder_light_set_motion_first_radius",
+                 scene.lightSet.lights[0].radius,
+                 1.25,
+                 1e-6);
+    assert_close("runtime_scene_3d_builder_light_set_motion_first_intensity",
+                 scene.lightSet.lights[0].intensity,
+                 9.0,
+                 1e-6);
+    assert_close("runtime_scene_3d_builder_light_set_motion_static_x",
+                 scene.lightSet.lights[1].position.x,
+                 -4.0,
+                 1e-6);
+    assert_close("runtime_scene_3d_builder_light_set_motion_static_y",
+                 scene.lightSet.lights[1].position.y,
+                 5.0,
+                 1e-6);
+    assert_close("runtime_scene_3d_builder_light_set_motion_compat_x",
+                 scene.light.position.x,
+                 scene.lightSet.lights[0].position.x,
+                 1e-6);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 static int test_runtime_scene_3d_builder_falls_back_to_seeded_camera_state(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -416,7 +1110,8 @@ static int test_runtime_scene_3d_builder_falls_back_to_seeded_camera_state(void)
         "\"space_mode_default\":\"3d\","
         "\"objects\":[],"
         "\"materials\":[],"
-        "\"lights\":[{\"position\":{\"x\":-2.0,\"y\":3.0,\"z\":4.0}}],"
+        "\"lights\":[{\"light_id\":\"legacy_directional_key\",\"light_type\":\"directional\","
+        "\"position\":{\"x\":-2.0,\"y\":3.0,\"z\":4.0}}],"
         "\"cameras\":[{\"position\":{\"x\":7.0,\"y\":8.0,\"z\":9.0}}],"
         "\"constraints\":[],"
         "\"extensions\":{}"
@@ -446,6 +1141,14 @@ static int test_runtime_scene_3d_builder_falls_back_to_seeded_camera_state(void)
     assert_true("runtime_scene_3d_builder_camera_fallback_build_ok", ok);
     assert_true("runtime_scene_3d_builder_camera_fallback_has_light", scene.hasLight);
     assert_true("runtime_scene_3d_builder_camera_fallback_has_camera", scene.hasCamera);
+    assert_true("runtime_scene_3d_builder_camera_fallback_light_set_count",
+                scene.lightSet.lightCount == 1);
+    assert_true("runtime_scene_3d_builder_camera_fallback_light_set_sphere",
+                scene.lightSet.lights[0].kind == RUNTIME_LIGHT_SOURCE_3D_KIND_SPHERE);
+    assert_close("runtime_scene_3d_builder_camera_fallback_light_set_radius",
+                 scene.lightSet.lights[0].radius,
+                 1.5,
+                 1e-6);
     assert_close("runtime_scene_3d_builder_camera_fallback_light_x",
                  scene.light.position.x,
                  -2.0,
@@ -613,13 +1316,29 @@ int run_test_runtime_scene_3d_geometry_builder_suite(void) {
     test_runtime_scene_3d_volume_contract_defaults();
     test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_builder_uses_retained_seed_scope");
     test_runtime_scene_3d_builder_uses_retained_seed_scope();
+    test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_builder_mesh_bounds_center_rotation_keeps_center_stable");
+    test_runtime_scene_3d_builder_mesh_bounds_center_rotation_keeps_center_stable();
+    test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_builder_mesh_authored_origin_rotation_remains_compatible");
+    test_runtime_scene_3d_builder_mesh_authored_origin_rotation_remains_compatible();
+    test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_builder_mesh_custom_rotation_pivot");
+    test_runtime_scene_3d_builder_mesh_custom_rotation_pivot();
+    test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_builder_plane_position_owns_frame_origin");
+    test_runtime_scene_3d_builder_plane_position_owns_frame_origin();
+    test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_builder_plane_scale_rotation_owns_seed_dimensions_and_basis");
+    test_runtime_scene_3d_builder_plane_scale_rotation_owns_seed_dimensions_and_basis();
     test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_builder_builds_ps4d_triangle_scene");
     test_runtime_scene_3d_builder_builds_ps4d_triangle_scene();
     test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_builder_promotes_authored_light_camera_samples");
     test_runtime_scene_3d_builder_promotes_authored_light_camera_samples();
+    test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_builder_imports_authored_light_set");
+    test_runtime_scene_3d_builder_imports_authored_light_set();
+    test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_builder_moves_first_registered_light_from_path");
+    test_runtime_scene_3d_builder_moves_first_registered_light_from_path();
     test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_builder_falls_back_to_seeded_camera_state");
     test_runtime_scene_3d_builder_falls_back_to_seeded_camera_state();
     test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_builder_applies_authored_camera_focus_target");
     test_runtime_scene_3d_builder_applies_authored_camera_focus_target();
+    test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_builder_rotates_rect_prism_seed_basis");
+    test_runtime_scene_3d_builder_rotates_rect_prism_seed_basis();
     return test_support_failures() - before;
 }

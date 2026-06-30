@@ -272,7 +272,6 @@ bool RayTracingJsonGetDouble(json_object *owner, const char *key, double *out_va
 
 bool RayTracingJsonGetBool(json_object *owner, const char *key, bool *out_value) {
     json_object *obj = NULL;
-    if (out_value) *out_value = false;
     if (!owner || !key || !json_object_object_get_ex(owner, key, &obj) ||
         !json_object_is_type(obj, json_type_boolean)) {
         return false;
