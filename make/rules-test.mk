@@ -16,6 +16,7 @@ STABLE_TEST_TARGETS := \
 	test-ray-tracing-render-headless-mesh-asset-sphere-pressure-mrt8 \
 	test-ray-tracing-render-headless-mesh-asset-sphere-pressure-mrt10 \
 	test-ray-tracing-render-headless-mesh-asset-sphere-pressure-mrt12-static-cache \
+	test-ray-tracing-render-headless-tlas-blas-repeated-instance-stress \
 	test-ray-tracing-material-preview-headless \
 	test-ray-tracing-job-runner-smoke \
 	test-ray-tracing-job-runner-bundle-smoke \
@@ -127,6 +128,8 @@ RUNTIME_MESH_ASSET_BUILDER_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_scene_3d.c \
 	$(SRC_DIR)/render/runtime_emissive_light_set_3d.c \
 	$(SRC_DIR)/render/runtime_environment_3d.c \
+	$(SRC_DIR)/render/runtime_light_set_3d.c \
+	$(SRC_DIR)/render/runtime_dynamic_geometry_accel_3d.c \
 	$(SRC_DIR)/render/runtime_mesh_blas_cache_3d.c \
 	$(SRC_DIR)/render/runtime_scene_accel_3d.c \
 	$(SRC_DIR)/render/runtime_scene_3d_builder.c \
@@ -165,6 +168,8 @@ RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_scene_3d.c \
 	$(SRC_DIR)/render/runtime_emissive_light_set_3d.c \
 	$(SRC_DIR)/render/runtime_environment_3d.c \
+	$(SRC_DIR)/render/runtime_light_set_3d.c \
+	$(SRC_DIR)/render/runtime_dynamic_geometry_accel_3d.c \
 	$(SRC_DIR)/render/runtime_mesh_blas_cache_3d.c \
 	$(SRC_DIR)/render/runtime_scene_accel_3d.c \
 	$(SRC_DIR)/render/runtime_scene_3d_builder.c \
@@ -218,6 +223,27 @@ test-ray-tracing-linux-worker-package-validator:
 test-ray-tracing-caustic-probe-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/run_ray_tracing_caustic_probe_matrix.py
 
+test-ray-tracing-spatial-caustic-phase4-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_phase4_matrix.py
+
+test-ray-tracing-spatial-caustic-phase6-surface-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_phase6_surface_matrix.py
+
+test-ray-tracing-spatial-caustic-phase7-calibration-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_phase7_calibration_matrix.py
+
+test-ray-tracing-spatial-caustic-phase8-receiver-policy-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_phase8_receiver_policy_matrix.py
+
+test-ray-tracing-spatial-caustic-phase9-transmitted-receiver-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_phase9_transmitted_receiver_matrix.py
+
+test-ray-tracing-spatial-caustic-phase10-tangent-receiver-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_phase10_tangent_receiver_matrix.py
+
+test-ray-tracing-spatial-caustic-visual-sphere-mist-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_visual_sphere_mist_matrix.py
+
 test-ray-tracing-emissive-light-preview-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/run_ray_tracing_emissive_light_preview_matrix.py
 
@@ -231,6 +257,7 @@ RUNTIME_TRIANGLE_BVH_3D_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_ray_3d.c \
 	$(SRC_DIR)/render/runtime_scene_3d.c \
 	$(SRC_DIR)/render/runtime_emissive_light_set_3d.c \
+	$(SRC_DIR)/render/runtime_light_set_3d.c \
 	$(SRC_DIR)/render/runtime_environment_3d.c \
 	$(SRC_DIR)/render/runtime_triangle_bvh_3d.c \
 	$(SRC_DIR)/render/runtime_volume_3d.c
@@ -358,6 +385,12 @@ test-ray-tracing-render-headless-mesh-asset-sphere-pressure-mrt10: $(RAY_TRACING
 
 test-ray-tracing-render-headless-mesh-asset-sphere-pressure-mrt12-static-cache: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	tests/integration/run_ray_tracing_render_headless_mesh_asset_sphere_pressure_mrt12_static_cache.sh
+
+test-ray-tracing-render-headless-tlas-blas-repeated-instance-stress: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tools/run_tlas_blas_repeated_instance_stress.py --output-root build/agent_runs/ray_tracing --run-id tlas_blas_repeated_instance_stress
+
+test-ray-tracing-tile-adaptive-t5-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_tile_adaptive_visual_metric_matrix.py --keep-going
 
 test-ray-tracing-render-headless-line-drawing-mesh-asset: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	tests/integration/run_ray_tracing_render_headless_line_drawing_mesh_asset.sh

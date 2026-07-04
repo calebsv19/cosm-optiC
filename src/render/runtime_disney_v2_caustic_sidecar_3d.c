@@ -2,13 +2,16 @@
 
 #include <math.h>
 #include <float.h>
+#include <string.h>
 
 #include "render/runtime_light_set_3d.h"
 #include "render/runtime_material_payload_3d.h"
+#include "scene/object_manager.h"
 
 static RuntimeDisneyV2CausticMode3D g_caustic_mode =
     RUNTIME_DISNEY_V2_CAUSTIC_MODE_ANALYTIC;
 static double g_caustic_sidecar_strength = 1.0;
+static RuntimeDisneyV2CausticSidecarDiagnostics3D g_caustic_sidecar_diagnostics = {0};
 
 static double caustic_sidecar_clamp(double value, double min_value, double max_value) {
     if (value < min_value) return min_value;
@@ -58,12 +61,49 @@ double RuntimeDisneyV2_3D_CausticSidecarStrength(void) {
     return g_caustic_sidecar_strength;
 }
 
+void RuntimeDisneyV2_3D_ResetCausticSidecarDiagnostics(void) {
+    memset(&g_caustic_sidecar_diagnostics, 0, sizeof(g_caustic_sidecar_diagnostics));
+}
+
+void RuntimeDisneyV2_3D_SnapshotCausticSidecarDiagnostics(
+    RuntimeDisneyV2CausticSidecarDiagnostics3D* out_diagnostics) {
+    if (!out_diagnostics) return;
+    *out_diagnostics = g_caustic_sidecar_diagnostics;
+}
+
 static bool caustic_sidecar_scene_object_is_transmissive(int scene_object_index) {
     RuntimeMaterialPayload3D payload = {0};
+    g_caustic_sidecar_diagnostics.materialResolveCount += 1u;
     if (!RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(scene_object_index, &payload)) {
         return false;
     }
     return payload.valid && payload.transparency > 0.01;
+}
+
+static bool caustic_sidecar_scene_object_is_transmissive_cached(
+    const RuntimeScene3D* scene,
+    int scene_object_index,
+    signed char transmissive_cache[MAX_OBJECTS]) {
+    if (scene_object_index < 0 || scene_object_index >= MAX_OBJECTS) {
+        return false;
+    }
+    if (transmissive_cache[scene_object_index] < 0) {
+        g_caustic_sidecar_diagnostics.objectTransmissiveLookupCount += 1u;
+        if (scene &&
+            scene->objectMaterialSummariesValid &&
+            scene->objectMaterialSummaries[scene_object_index].seen &&
+            scene->objectMaterialSummaries[scene_object_index].resolved) {
+            transmissive_cache[scene_object_index] =
+                (scene->objectMaterialSummaries[scene_object_index].valid &&
+                 scene->objectMaterialSummaries[scene_object_index].transparency > 0.01)
+                    ? 1
+                    : 0;
+        } else {
+            transmissive_cache[scene_object_index] =
+                caustic_sidecar_scene_object_is_transmissive(scene_object_index) ? 1 : 0;
+        }
+    }
+    return transmissive_cache[scene_object_index] > 0;
 }
 
 static bool caustic_sidecar_resolve_light(const RuntimeScene3D* scene,
@@ -86,18 +126,22 @@ static bool caustic_sidecar_resolve_light(const RuntimeScene3D* scene,
     return false;
 }
 
-bool RuntimeDisneyV2_3D_BuildCausticSidecarProbe(
+static bool runtime_disney_v2_3d_build_caustic_sidecar_probe(
     const RuntimeScene3D* scene,
-    RuntimeDisneyV2CausticSidecarProbe3D* out_probe) {
+    RuntimeDisneyV2CausticSidecarProbe3D* out_probe,
+    bool require_analytic_mode) {
     RuntimeDisneyV2CausticSidecarProbe3D probe = {0};
     Vec3 min_bound = vec3(DBL_MAX, DBL_MAX, DBL_MAX);
     Vec3 max_bound = vec3(-DBL_MAX, -DBL_MAX, -DBL_MAX);
     int selected_scene_object = -1;
     int selected_triangle_count = 0;
+    signed char transmissive_cache[MAX_OBJECTS];
 
     if (!out_probe) return false;
     *out_probe = probe;
-    if (g_caustic_mode != RUNTIME_DISNEY_V2_CAUSTIC_MODE_ANALYTIC || !scene ||
+    g_caustic_sidecar_diagnostics.probeBuildCount += 1u;
+    if ((require_analytic_mode && g_caustic_mode != RUNTIME_DISNEY_V2_CAUSTIC_MODE_ANALYTIC) ||
+        !scene ||
         !scene->capabilities.hasTransmissionSurfaces ||
         scene->triangleMesh.triangleCount <= 0 || !scene->triangleMesh.triangles) {
         return false;
@@ -106,15 +150,19 @@ bool RuntimeDisneyV2_3D_BuildCausticSidecarProbe(
         return false;
     }
 
+    memset(transmissive_cache, -1, sizeof(transmissive_cache));
     for (int i = 0; i < scene->triangleMesh.triangleCount; ++i) {
         const RuntimeTriangle3D* triangle = &scene->triangleMesh.triangles[i];
         const int scene_object_index = triangle->sceneObjectIndex;
         const Vec3 points[3] = {triangle->p0, triangle->p1, triangle->p2};
+        g_caustic_sidecar_diagnostics.triangleScanCount += 1u;
         if (scene_object_index < 0) continue;
         if (selected_scene_object >= 0 && scene_object_index != selected_scene_object) {
             continue;
         }
-        if (!caustic_sidecar_scene_object_is_transmissive(scene_object_index)) {
+        if (!caustic_sidecar_scene_object_is_transmissive_cached(scene,
+                                                                 scene_object_index,
+                                                                 transmissive_cache)) {
             continue;
         }
         if (selected_scene_object < 0) {
@@ -145,6 +193,18 @@ bool RuntimeDisneyV2_3D_BuildCausticSidecarProbe(
     probe.valid = probe.radius > 1.0e-6;
     *out_probe = probe;
     return probe.valid;
+}
+
+bool RuntimeDisneyV2_3D_BuildCausticSidecarProbe(
+    const RuntimeScene3D* scene,
+    RuntimeDisneyV2CausticSidecarProbe3D* out_probe) {
+    return runtime_disney_v2_3d_build_caustic_sidecar_probe(scene, out_probe, true);
+}
+
+bool RuntimeDisneyV2_3D_BuildCausticSidecarProbeForSpatialCache(
+    const RuntimeScene3D* scene,
+    RuntimeDisneyV2CausticSidecarProbe3D* out_probe) {
+    return runtime_disney_v2_3d_build_caustic_sidecar_probe(scene, out_probe, false);
 }
 
 bool RuntimeDisneyV2_3D_EvaluateCausticSidecar(

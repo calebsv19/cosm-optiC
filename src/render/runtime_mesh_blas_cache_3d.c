@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 
 typedef struct RuntimeMeshBLASCache3DEntry {
     bool valid;
@@ -26,6 +27,17 @@ static RuntimeMeshBLASCache3DEntry
     gRuntimeMeshBLASCache3D[RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS];
 static RuntimeSceneAcceleration3DDiagnostics gRuntimeMeshBLASCache3DDiagnostics;
 static char gRuntimeMeshBLASCache3DLastDiagnostics[1024] = "ok";
+
+static double runtime_mesh_blas_cache_3d_elapsed_ms_since(
+    const struct timespec* start_time) {
+    struct timespec now = {0};
+    double elapsed = 0.0;
+    if (!start_time) return 0.0;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return 0.0;
+    elapsed = (double)(now.tv_sec - start_time->tv_sec) * 1000.0;
+    elapsed += (double)(now.tv_nsec - start_time->tv_nsec) / 1000000.0;
+    return elapsed < 0.0 ? 0.0 : elapsed;
+}
 
 static void runtime_mesh_blas_cache_3d_set_diag(const char* message) {
     snprintf(gRuntimeMeshBLASCache3DLastDiagnostics,
@@ -230,6 +242,7 @@ bool RuntimeMeshBLASCache3D_PrepareAssetSet(
         int slot = -1;
         RuntimeMeshBLASCache3DEntry* entry = NULL;
         RuntimeTriangleMesh3D local_mesh;
+        struct timespec build_start = {0};
 
         runtime_mesh_blas_cache_3d_stamp_path(asset->path,
                                               &mtime_sec,
@@ -253,9 +266,14 @@ bool RuntimeMeshBLASCache3D_PrepareAssetSet(
             return false;
         }
         memset(&local_mesh, 0, sizeof(local_mesh));
+        (void)clock_gettime(CLOCK_MONOTONIC, &build_start);
         if (!runtime_mesh_blas_cache_3d_build_local_mesh(asset, &local_mesh)) {
+            gRuntimeMeshBLASCache3DDiagnostics.blasBuildMs +=
+                runtime_mesh_blas_cache_3d_elapsed_ms_since(&build_start);
             return false;
         }
+        gRuntimeMeshBLASCache3DDiagnostics.blasBuildMs +=
+            runtime_mesh_blas_cache_3d_elapsed_ms_since(&build_start);
 
         entry = &gRuntimeMeshBLASCache3D[slot];
         RuntimeTriangleMesh3D_Free(&entry->local_mesh);
@@ -286,6 +304,43 @@ bool RuntimeMeshBLASCache3D_PrepareAssetSet(
             RUNTIME_SCENE_ACCEL_3D_REUSE_DISABLED;
     }
     return true;
+}
+
+bool RuntimeMeshBLASCache3D_FindAsset(const RayTracingRuntimeMeshAsset* asset,
+                                      RuntimeMeshBLASCache3DView* out_view) {
+    long long mtime_sec = 0;
+    long long mtime_nsec = 0;
+    long long file_size = 0;
+    int cached_index = -1;
+    RuntimeMeshBLASCache3DEntry* entry = NULL;
+
+    if (out_view) memset(out_view, 0, sizeof(*out_view));
+    if (!asset || !out_view) return false;
+
+    runtime_mesh_blas_cache_3d_stamp_path(asset->path,
+                                          &mtime_sec,
+                                          &mtime_nsec,
+                                          &file_size);
+    cached_index = runtime_mesh_blas_cache_3d_find(asset,
+                                                   mtime_sec,
+                                                   mtime_nsec,
+                                                   file_size);
+    if (cached_index < 0) {
+        runtime_mesh_blas_cache_3d_set_diag("BLAS lookup failed: asset not cached");
+        return false;
+    }
+
+    entry = &gRuntimeMeshBLASCache3D[cached_index];
+    out_view->ready = RuntimeTriangleMesh3D_HasReadyBVH(&entry->local_mesh);
+    snprintf(out_view->assetId, sizeof(out_view->assetId), "%s", entry->asset_id);
+    snprintf(out_view->path, sizeof(out_view->path), "%s", entry->path);
+    out_view->mtimeSec = entry->mtime_sec;
+    out_view->mtimeNsec = entry->mtime_nsec;
+    out_view->fileSize = entry->file_size;
+    out_view->vertexCount = entry->vertex_count;
+    out_view->sourceTriangleCount = entry->source_triangle_count;
+    out_view->localMesh = &entry->local_mesh;
+    return out_view->ready;
 }
 
 void RuntimeMeshBLASCache3D_SnapshotDiagnostics(

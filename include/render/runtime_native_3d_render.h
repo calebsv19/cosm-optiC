@@ -6,6 +6,11 @@
 #include <stdint.h>
 
 #include "render/runtime_camera_3d_rays.h"
+#include "render/runtime_caustic_bootstrap_3d.h"
+#include "render/runtime_caustic_surface_cache_3d.h"
+#include "render/runtime_caustic_transport_3d.h"
+#include "render/runtime_caustic_volume_cache_3d.h"
+#include "render/runtime_disney_v2_caustic_sidecar_3d.h"
 #include "render/runtime_native_3d_prepare_cache.h"
 #include "render/runtime_native_3d_sampling.h"
 #include "render/runtime_native_3d_temporal_accum.h"
@@ -39,6 +44,40 @@ typedef struct {
     int causticSidecarEnabled;
     int causticSidecarSampleCount;
     int causticSidecarContributingSampleCount;
+    int causticBootstrapTemporaryBridgeActive;
+    int causticTransportPathEmissionActive;
+    int causticVolumeCacheSuppressedNoSampleableVolume;
+    int causticTransportLightCount;
+    int causticTransportEvaluatedPathCount;
+    int causticTransportEmittedPathCount;
+    int causticTransportTransparentHitCount;
+    int causticTransportSpecularEventCount;
+    int causticTransportVolumeSegmentCount;
+    int causticTransportSurfaceReceiverTraceMissCount;
+    int causticTransportSurfaceReceiverDepthRejectCount;
+    int causticTransportSurfaceReceiverHitCount;
+    int causticTransportSurfaceReceiverFallbackCount;
+    int causticVolumeCacheBound;
+    int causticVolumeCacheAllocated;
+    int causticVolumeCacheCellCount;
+    int causticVolumeCacheNonZeroCellCount;
+    int causticVolumeCacheDepositAttemptCount;
+    int causticVolumeCacheDepositAcceptedCount;
+    int causticVolumeCacheDepositRejectedCount;
+    int causticVolumeCacheSampleLookupCount;
+    int causticVolumeCacheSampleContributingCount;
+    int causticSurfaceCacheBound;
+    int causticSurfaceCacheAllocated;
+    int causticSurfaceCacheRecordCapacity;
+    int causticSurfaceCacheRecordCount;
+    int causticSurfaceCacheDepositAttemptCount;
+    int causticSurfaceCacheDepositAcceptedCount;
+    int causticSurfaceCacheDepositRejectedCount;
+    int causticSurfaceCacheSampleLookupCount;
+    int causticSurfaceCacheSampleContributingCount;
+    int volumeScatterDirectSampleCount;
+    int causticVolumeScatterSampleCount;
+    int causticVolumeScatterContributingSampleCount;
     int mirrorDominantPixelCount;
     int mirrorBaseAttenuatedPixelCount;
     int mirrorReflectionHitPixelCount;
@@ -50,6 +89,29 @@ typedef struct {
     int temporalActivePixelCount;
     int temporalActiveTileCount;
     int temporalInactiveTileCount;
+    int temporalPlannedParentTileCount;
+    int temporalEmittedTileJobCount;
+    int temporalOccupancySkippedTileCount;
+    int temporalDispatchedTileJobCount;
+    int temporalCompletedTileJobCount;
+    int temporalProgressDirtyBatchCount;
+    int temporalProgressDirtyTileCount;
+    int temporalDirtyPreviewPresentCount;
+    int temporalConservativeFirstFrameTileRender;
+    int temporalFinalFullResolveCount;
+    int temporalHostFullResolveCount;
+    int temporalFinalPreviewPresentCount;
+    int temporalHistoryPromoteCount;
+    int temporalAdaptiveStateMeasuredPixels;
+    int temporalAdaptiveStateStablePixels;
+    int temporalAdaptiveStateActivePixels;
+    int temporalAdaptiveStateProbePixels;
+    int temporalAdaptiveStateHighRiskPixels;
+    int temporalAdaptiveStateStableTiles;
+    int temporalAdaptiveStateActiveTiles;
+    int temporalAdaptiveStateProbeTiles;
+    int temporalAdaptiveStateHighRiskTiles;
+    int temporalAdaptiveStateMinSampleFloor;
     int temporalMeasuredTileJobs;
     int temporalAdaptiveSplitParentCount;
     int temporalAdaptiveChildTileCount;
@@ -75,6 +137,39 @@ typedef struct {
     double totalBounceRadiance;
     double maxCausticSidecarRadiance;
     double totalCausticSidecarRadiance;
+    double maxCausticVolumeCacheRadiance;
+    double causticVolumeCacheNonZeroCellRatio;
+    double causticVolumeCacheSampleHitRatio;
+    double causticVolumeScatterToCacheRadianceRatio;
+    double causticVolumeCacheRadianceCentroidX;
+    double causticVolumeCacheRadianceCentroidY;
+    double causticVolumeCacheRadianceCentroidZ;
+    double causticVolumeCacheNonZeroBoundsMinX;
+    double causticVolumeCacheNonZeroBoundsMinY;
+    double causticVolumeCacheNonZeroBoundsMinZ;
+    double causticVolumeCacheNonZeroBoundsMaxX;
+    double causticVolumeCacheNonZeroBoundsMaxY;
+    double causticVolumeCacheNonZeroBoundsMaxZ;
+    double totalCausticVolumeCacheRadianceR;
+    double totalCausticVolumeCacheRadianceG;
+    double totalCausticVolumeCacheRadianceB;
+    double maxCausticSurfaceCacheRadiance;
+    double causticSurfaceCacheNearestSampleDistance;
+    double causticSurfaceCacheNearestSampleRadius;
+    double causticSurfaceCacheNearestSampleNormalDot;
+    double causticSurfaceCacheNearestSampleCandidateCount;
+    double totalCausticSurfaceCacheRadianceR;
+    double totalCausticSurfaceCacheRadianceG;
+    double totalCausticSurfaceCacheRadianceB;
+    double totalCausticSurfaceRadianceR;
+    double totalCausticSurfaceRadianceG;
+    double totalCausticSurfaceRadianceB;
+    double totalDirectVolumeScatterRadianceR;
+    double totalDirectVolumeScatterRadianceG;
+    double totalDirectVolumeScatterRadianceB;
+    double totalCausticVolumeScatterRadianceR;
+    double totalCausticVolumeScatterRadianceG;
+    double totalCausticVolumeScatterRadianceB;
     double totalMirrorSpecularReflectionRadiance;
     double totalMirrorBaseRadianceBeforeAttenuation;
     double totalMirrorBaseRadianceAfterAttenuation;
@@ -88,11 +183,21 @@ typedef struct {
 
 typedef struct {
     RuntimeScene3D scene;
+    /* Stable scene backing for shallow per-subpass frame copies. */
+    const RuntimeScene3D* traceScene;
     RuntimeCameraProjector3D projector;
     RuntimeNative3DTileOccupancy tileOccupancy;
     RuntimeNative3DSamplingContext sampling;
+    RuntimeCausticVolumeCache3D causticVolumeCache;
+    RuntimeCausticSurfaceCache3D causticSurfaceCache;
+    RuntimeDisneyV2CausticSidecarProbe3D causticSidecarProbe;
+    RuntimeCausticBootstrap3DDiagnostics causticBootstrapDiagnostics;
+    RuntimeCausticTransport3DDiagnostics causticTransportDiagnostics;
+    double causticCachePrepMs;
     int width;
     int height;
+    bool tileOccupancyConservativeAllTiles;
+    bool causticSidecarProbeValid;
     bool valid;
 } RuntimeNative3DPreparedFrame;
 
@@ -280,5 +385,10 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudge
     RuntimeNative3DRenderStats* out_stats);
 uint8_t RuntimeNative3DResolveEnvironmentByte(void);
 void RuntimeNative3DFillPixelBufferEnvironment(uint8_t* pixel_buffer, size_t pixel_count);
+void RuntimeNative3DFillPixelBufferBackground(uint8_t* pixel_buffer,
+                                              int width,
+                                              int height,
+                                              const RuntimeScene3D* scene,
+                                              const RuntimeCameraProjector3D* projector);
 
 #endif

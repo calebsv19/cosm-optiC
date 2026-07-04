@@ -4,6 +4,7 @@
 
 #include <math.h>
 #include <pthread.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -14,6 +15,8 @@
 #include "render/timer_hud_adapter.h"
 #include "render/runtime_native_3d_resolution.h"
 #include "render/runtime_native_3d_render_unit.h"
+#include "render/runtime_volume_3d.h"
+#include "render/runtime_volume_3d_integrate.h"
 
 typedef struct RuntimeNative3DTileSchedulerJob {
     RuntimeNative3DRenderUnit renderUnit;
@@ -29,6 +32,7 @@ typedef struct RuntimeNative3DTileSchedulerJob {
     size_t parentMetricIndex;
     bool dispatched;
     bool ok;
+    bool occupancyLikely;
 } RuntimeNative3DTileSchedulerJob;
 
 typedef struct RuntimeNative3DTileSchedulerParentMetric {
@@ -49,6 +53,13 @@ typedef struct RuntimeNative3DTileScheduler {
     size_t jobCount;
     size_t parentMetricCount;
     size_t completionCount;
+    int plannedParentTileCount;
+    int occupancySkippedTileCount;
+    int dispatchedTileJobCount;
+    int completedTileJobCount;
+    int progressDirtyTileBatchCount;
+    int progressDirtyTileCount;
+    bool firstFrameConservativeTileRender;
     RuntimeNative3DRenderStats stats;
     int committedSubpasses;
     int activePixelCount;
@@ -58,7 +69,13 @@ typedef struct RuntimeNative3DTileScheduler {
 
 enum {
     kRuntimeNative3DTileSchedulerMaxWorkers = 4,
-    kRuntimeNative3DTileSchedulerPreviewBatchDirtyTiles = 4,
+    /*
+     * Dirty progress presents upload the bounding host rect of each reported
+     * dirty set. After priority scheduling, adjacent completions are not
+     * guaranteed to be spatially adjacent, so batching can upload unresolved
+     * pixels between completed tiles as black.
+     */
+    kRuntimeNative3DTileSchedulerPreviewBatchDirtyTiles = 1,
     kRuntimeNative3DTileSchedulerAdaptiveMaxSplitParents = 4,
     kRuntimeNative3DTileSchedulerAdaptiveEligibleCapacity = 64,
     kRuntimeNative3DTileSchedulerAdaptiveMinChildTileSize = 8
@@ -83,6 +100,158 @@ typedef struct RuntimeNative3DAdaptiveTilePlan {
 } RuntimeNative3DAdaptiveTilePlan;
 
 static RuntimeNative3DAdaptiveTilePlan s_runtime_native_3d_adaptive_tile_plan = {0};
+static int s_runtime_native_3d_black_pixel_diag_progress_initial_count = 0;
+static int s_runtime_native_3d_black_pixel_diag_progress_later_count = 0;
+static int s_runtime_native_3d_black_pixel_diag_final_count = 0;
+
+static FILE* runtime_native_3d_tile_scheduler_open_black_pixel_diag(void) {
+    const char* env_path = getenv("RAY_TRACING_NATIVE3D_BLACK_PIXEL_CAPTURE_PATH");
+    const char* home = getenv("HOME");
+    char default_path[1024];
+
+    if (env_path && env_path[0]) {
+        return fopen(env_path, "a");
+    }
+    if (!home || !home[0]) {
+        return NULL;
+    }
+    snprintf(default_path,
+             sizeof(default_path),
+             "%s/Library/Logs/RayTracing/native3d_black_pixel_diag.jsonl",
+             home);
+    return fopen(default_path, "a");
+}
+
+static bool runtime_native_3d_tile_scheduler_capture_black_hit_pixels(
+    const RuntimeNative3DTileSchedulerJob* job,
+    const uint8_t* pixel_buffer,
+    int pixel_width,
+    int subpass_index,
+    const char* phase) {
+    enum {
+        kBlackPixelDiagProgressInitialLimit = 128,
+        kBlackPixelDiagProgressLaterLimit = 1024,
+        kBlackPixelDiagFinalLimit = 1024
+    };
+    FILE* f = NULL;
+    int* counter = NULL;
+    int limit = 0;
+    bool found_black_geometry_hit = false;
+
+    if (!job || !pixel_buffer || pixel_width <= 0 || !phase) {
+        return false;
+    }
+    if (strcmp(phase, "final_resolve") == 0) {
+        counter = &s_runtime_native_3d_black_pixel_diag_final_count;
+        limit = kBlackPixelDiagFinalLimit;
+    } else if (subpass_index <= 0) {
+        counter = &s_runtime_native_3d_black_pixel_diag_progress_initial_count;
+        limit = kBlackPixelDiagProgressInitialLimit;
+    } else {
+        counter = &s_runtime_native_3d_black_pixel_diag_progress_later_count;
+        limit = kBlackPixelDiagProgressLaterLimit;
+    }
+    if (!counter) {
+        return false;
+    }
+    if (!job->renderUnit.accumulation.sampleCountBuffer ||
+        !job->renderUnit.featureBuffer.hitMaskBuffer ||
+        !job->renderUnit.featureBuffer.triangleIndexBuffer ||
+        !job->renderUnit.featureBuffer.sceneObjectIndexBuffer ||
+        !job->renderUnit.featureBuffer.depthBuffer ||
+        !job->renderUnit.featureBuffer.normalBuffer) {
+        return false;
+    }
+
+    for (int local_y = 0; local_y < job->tile.height; ++local_y) {
+        for (int local_x = 0; local_x < job->tile.width; ++local_x) {
+            const int pixel_x = job->tile.originX + local_x;
+            const int pixel_y = job->tile.originY + local_y;
+            const size_t local_index =
+                (size_t)local_y * (size_t)job->tile.width + (size_t)local_x;
+            const size_t pixel_base =
+                ((size_t)pixel_y * (size_t)pixel_width + (size_t)pixel_x) *
+                (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+            const size_t normal_base = local_index * 3u;
+            const bool black_pixel =
+                pixel_buffer[pixel_base] == 0u &&
+                pixel_buffer[pixel_base + 1u] == 0u &&
+                pixel_buffer[pixel_base + 2u] == 0u;
+
+            if (!black_pixel || !job->renderUnit.featureBuffer.hitMaskBuffer[local_index]) {
+                continue;
+            }
+            found_black_geometry_hit = true;
+            if (*counter >= limit) {
+                return true;
+            }
+            if (!f) {
+                f = runtime_native_3d_tile_scheduler_open_black_pixel_diag();
+                if (!f) {
+                    return true;
+                }
+            }
+            fprintf(f,
+                    "{\"phase\":\"%s\",\"subpass\":%d,"
+                    "\"tile\":{\"x\":%d,\"y\":%d,\"w\":%d,\"h\":%d},"
+                    "\"pixel\":{\"x\":%d,\"y\":%d,\"local_x\":%d,\"local_y\":%d},"
+                    "\"sample_count\":%u,\"active_pixels\":%d,\"active_tiles\":%d,"
+                    "\"adaptive_state\":{\"flags\":%u,\"mean_luma\":%.9g,"
+                    "\"radiance_delta\":%.9g,\"risk\":%.9g},"
+                    "\"feature\":{\"triangle\":%d,\"object\":%d,\"depth\":%.9g,"
+                    "\"normal\":[%.9g,%.9g,%.9g]},"
+                    "\"rgba\":[%u,%u,%u,%u],\"committed_subpasses\":%d,"
+                    "\"use_adaptive\":%s,\"use_denoise\":%s}\n",
+                    phase,
+                    subpass_index,
+                    job->tile.originX,
+                    job->tile.originY,
+                    job->tile.width,
+                    job->tile.height,
+                    pixel_x,
+                    pixel_y,
+                    local_x,
+                    local_y,
+                    (unsigned int)job->renderUnit.accumulation.sampleCountBuffer[local_index],
+                    job->activePixelCount,
+                    job->activeTileCount,
+                    job->renderUnit.adaptivePixelState.pixels
+                        ? (unsigned int)job->renderUnit.adaptivePixelState.pixels[local_index].flags
+                        : 0u,
+                    job->renderUnit.adaptivePixelState.pixels
+                        ? (double)job->renderUnit.adaptivePixelState.pixels[local_index].meanLuma
+                        : 0.0,
+                    job->renderUnit.adaptivePixelState.pixels
+                        ? (double)job->renderUnit.adaptivePixelState.pixels[local_index].radianceDelta
+                        : 0.0,
+                    job->renderUnit.adaptivePixelState.pixels
+                        ? (double)job->renderUnit.adaptivePixelState.pixels[local_index].risk
+                        : 0.0,
+                    job->renderUnit.featureBuffer.triangleIndexBuffer[local_index],
+                    job->renderUnit.featureBuffer.sceneObjectIndexBuffer[local_index],
+                    (double)job->renderUnit.featureBuffer.depthBuffer[local_index],
+                    (double)job->renderUnit.featureBuffer.normalBuffer[normal_base],
+                    (double)job->renderUnit.featureBuffer.normalBuffer[normal_base + 1u],
+                    (double)job->renderUnit.featureBuffer.normalBuffer[normal_base + 2u],
+                    (unsigned int)pixel_buffer[pixel_base],
+                    (unsigned int)pixel_buffer[pixel_base + 1u],
+                    (unsigned int)pixel_buffer[pixel_base + 2u],
+                    (unsigned int)pixel_buffer[pixel_base + 3u],
+                    job->renderUnit.committedSubpasses,
+                    job->renderUnit.useAdaptiveSampling ? "true" : "false",
+                    job->renderUnit.useDenoise ? "true" : "false");
+            *counter += 1;
+            if (*counter >= limit) {
+                fclose(f);
+                return true;
+            }
+        }
+    }
+    if (f) {
+        fclose(f);
+    }
+    return found_black_geometry_hit;
+}
 
 static double runtime_native_3d_tile_scheduler_ticks_to_ms(uint64_t ticks) {
     const uint64_t frequency = (uint64_t)SDL_GetPerformanceFrequency();
@@ -295,6 +464,58 @@ static bool runtime_native_3d_tile_scheduler_parent_tile_matches(const Integrato
            a->height == b->height;
 }
 
+static int runtime_native_3d_tile_scheduler_compare_dispatch_priority(const void* lhs,
+                                                                      const void* rhs) {
+    const RuntimeNative3DTileSchedulerJob* a = (const RuntimeNative3DTileSchedulerJob*)lhs;
+    const RuntimeNative3DTileSchedulerJob* b = (const RuntimeNative3DTileSchedulerJob*)rhs;
+    int diff = 0;
+
+    if (!a || !b) {
+        return 0;
+    }
+    diff = b->activePixelCount - a->activePixelCount;
+    if (diff != 0) {
+        return diff;
+    }
+    diff = b->activeTileCount - a->activeTileCount;
+    if (diff != 0) {
+        return diff;
+    }
+    diff = b->tile.height * b->tile.width - a->tile.height * a->tile.width;
+    if (diff != 0) {
+        return diff;
+    }
+    diff = a->tile.originY - b->tile.originY;
+    if (diff != 0) {
+        return diff;
+    }
+    return a->tile.originX - b->tile.originX;
+}
+
+static int runtime_native_3d_tile_scheduler_compare_first_subpass_priority(const void* lhs,
+                                                                           const void* rhs) {
+    const RuntimeNative3DTileSchedulerJob* a = (const RuntimeNative3DTileSchedulerJob*)lhs;
+    const RuntimeNative3DTileSchedulerJob* b = (const RuntimeNative3DTileSchedulerJob*)rhs;
+    int diff = 0;
+
+    if (!a || !b) {
+        return 0;
+    }
+    diff = (int)b->occupancyLikely - (int)a->occupancyLikely;
+    if (diff != 0) {
+        return diff;
+    }
+    diff = b->tile.height * b->tile.width - a->tile.height * a->tile.width;
+    if (diff != 0) {
+        return diff;
+    }
+    diff = a->tile.originY - b->tile.originY;
+    if (diff != 0) {
+        return diff;
+    }
+    return a->tile.originX - b->tile.originX;
+}
+
 static bool runtime_native_3d_tile_scheduler_parent_tile_should_split(
     const RuntimeNative3DAdaptiveTilePlan* plan,
     const IntegratorTile* parent_tile) {
@@ -339,6 +560,13 @@ static bool runtime_native_3d_tile_scheduler_emit_job(RuntimeNative3DTileSchedul
     job->tile.width = end_x - start_x;
     job->tile.height = end_y - start_y;
     job->tile.energy = NULL;
+    job->occupancyLikely =
+        RuntimeVolume3D_HasActiveExtinction(&frame->scene.volume) ||
+        RuntimeNative3DTileOccupancy_RegionMayContainGeometry(&frame->tileOccupancy,
+                                                               start_x,
+                                                               start_y,
+                                                               end_x,
+                                                               end_y);
     job->parentTile = *parent_tile;
     job->parentMetricIndex = parent_metric_index;
     RuntimeNative3DRenderUnit_Init(&job->renderUnit);
@@ -411,11 +639,13 @@ static bool runtime_native_3d_tile_scheduler_build_jobs(RuntimeNative3DTileSched
                     .height = end_y - start_y,
                     .energy = NULL});
 
+            scheduler->plannedParentTileCount += 1;
             if (!RuntimeNative3DPreparedRegionMayContainGeometry(frame,
                                                                  start_x,
                                                                  start_y,
                                                                  end_x,
                                                                  end_y)) {
+                scheduler->occupancySkippedTileCount += 1;
                 continue;
             }
 
@@ -492,6 +722,7 @@ static void* runtime_native_3d_tile_scheduler_run_job(void* task_ctx) {
 }
 
 static bool runtime_native_3d_tile_scheduler_flush_progress_tiles(
+    RuntimeNative3DTileScheduler* scheduler,
     const IntegratorTile* dirty_tiles,
     size_t dirty_count,
     int subpass_index,
@@ -505,14 +736,52 @@ static bool runtime_native_3d_tile_scheduler_flush_progress_tiles(
     if (!tile_progress_callback || !dirty_tiles || dirty_count == 0u) {
         return true;
     }
+    if (scheduler) {
+        scheduler->progressDirtyTileBatchCount += 1;
+        scheduler->progressDirtyTileCount += (int)dirty_count;
+    }
     progress.dirtyTiles = dirty_tiles;
     progress.dirtyTileCount = dirty_count;
     progress.startedSubpasses = subpass_index + 1;
-    progress.completedSubpasses = subpass_index;
+    progress.completedSubpasses =
+        (completed_tiles_in_subpass >= total_tiles_in_subpass)
+            ? subpass_index + 1
+            : subpass_index;
     progress.totalSubpasses = temporal_frames;
     progress.completedTilesInSubpass = completed_tiles_in_subpass;
     progress.totalTilesInSubpass = total_tiles_in_subpass;
     return tile_progress_callback(&progress, tile_progress_user_data);
+}
+
+static bool runtime_native_3d_tile_scheduler_complete_minimum_progress_samples(
+    RuntimeNative3DTileScheduler* scheduler,
+    RuntimeNative3DTileSchedulerJob* job,
+    uint8_t* pixel_buffer,
+    int pixel_width,
+    int temporal_frames) {
+    if (!scheduler || !job || !pixel_buffer || pixel_width <= 0 || temporal_frames <= 0) {
+        return false;
+    }
+
+    while (job->renderUnit.committedSubpasses < RUNTIME_NATIVE_3D_ADAPTIVE_MIN_SUBPASSES &&
+           job->renderUnit.committedSubpasses < temporal_frames) {
+        RuntimeNative3DRenderStats extra_stats = {0};
+        const int next_subpass = job->renderUnit.committedSubpasses;
+        if (!RuntimeNative3DRenderUnit_RenderSubpass(&job->renderUnit,
+                                                     next_subpass,
+                                                     &extra_stats)) {
+            return false;
+        }
+        RuntimeNative3DRenderStats_Accumulate(&scheduler->stats, &extra_stats);
+    }
+
+    RuntimeNative3DRenderUnit_GetActivityCounts(&job->renderUnit,
+                                                &job->activePixelCount,
+                                                &job->activeTileCount,
+                                                &job->inactiveTileCount);
+    return RuntimeNative3DRenderUnit_ResolveCurrentRawToPixels(&job->renderUnit,
+                                                               pixel_buffer,
+                                                               pixel_width);
 }
 
 static bool runtime_native_3d_tile_scheduler_wait_for_subpass(
@@ -547,14 +816,44 @@ static bool runtime_native_3d_tile_scheduler_wait_for_subpass(
         RuntimeNative3DRenderStats_Accumulate(&scheduler->stats, &job->subpassStats);
         if (tile_progress_callback && pixel_buffer && pixel_width > 0) {
             const size_t completed_tiles_in_subpass = completions + 1u;
-            if (!RuntimeNative3DRenderUnit_ResolveCurrentToPixels(&job->renderUnit,
-                                                                  pixel_buffer,
-                                                                  pixel_width)) {
+            bool black_geometry_hit_tile = false;
+            bool hold_underconverged_adaptive_progress = false;
+            const bool may_hold_underconverged_adaptive_progress =
+                job->renderUnit.useAdaptiveSampling &&
+                subpass_index + 1 < RUNTIME_NATIVE_3D_ADAPTIVE_MIN_SUBPASSES;
+            if (!RuntimeNative3DRenderUnit_ResolveCurrentRawToPixels(&job->renderUnit,
+                                                                     pixel_buffer,
+                                                                     pixel_width)) {
                 return false;
+            }
+            black_geometry_hit_tile =
+                runtime_native_3d_tile_scheduler_capture_black_hit_pixels(job,
+                                                                          pixel_buffer,
+                                                                          pixel_width,
+                                                                          subpass_index,
+                                                                          "progress_raw_resolve");
+            hold_underconverged_adaptive_progress =
+                may_hold_underconverged_adaptive_progress && black_geometry_hit_tile;
+            if (hold_underconverged_adaptive_progress) {
+                if (!runtime_native_3d_tile_scheduler_complete_minimum_progress_samples(
+                        scheduler,
+                        job,
+                        pixel_buffer,
+                        pixel_width,
+                        temporal_frames)) {
+                    return false;
+                }
+                runtime_native_3d_tile_scheduler_capture_black_hit_pixels(job,
+                                                                          pixel_buffer,
+                                                                          pixel_width,
+                                                                          job->renderUnit
+                                                                              .committedSubpasses,
+                                                                          "progress_min_resolve");
             }
             scheduler->progressTiles[dirty_count++] = job->tile;
             if (dirty_count >= kRuntimeNative3DTileSchedulerPreviewBatchDirtyTiles) {
                 if (!runtime_native_3d_tile_scheduler_flush_progress_tiles(
+                        scheduler,
                         scheduler->progressTiles,
                         dirty_count,
                         subpass_index,
@@ -571,7 +870,8 @@ static bool runtime_native_3d_tile_scheduler_wait_for_subpass(
         completions += 1u;
     }
     if (dirty_count > 0u) {
-        if (!runtime_native_3d_tile_scheduler_flush_progress_tiles(scheduler->progressTiles,
+        if (!runtime_native_3d_tile_scheduler_flush_progress_tiles(scheduler,
+                                                                   scheduler->progressTiles,
                                                                    dirty_count,
                                                                    subpass_index,
                                                                    temporal_frames,
@@ -583,6 +883,7 @@ static bool runtime_native_3d_tile_scheduler_wait_for_subpass(
         }
     }
     scheduler->completionCount += completions;
+    scheduler->completedTileJobCount += (int)completions;
     return true;
 }
 
@@ -601,6 +902,15 @@ static bool runtime_native_3d_tile_scheduler_dispatch_subpass(
     size_t dispatched = 0u;
     uint64_t subpass_wait_start_ticks = 0u;
 
+    if (scheduler->jobCount > 1u) {
+        qsort(scheduler->jobs,
+              scheduler->jobCount,
+              sizeof(*scheduler->jobs),
+              subpass_index == 0
+                  ? runtime_native_3d_tile_scheduler_compare_first_subpass_priority
+                  : runtime_native_3d_tile_scheduler_compare_dispatch_priority);
+    }
+
     for (size_t i = 0; i < scheduler->jobCount; ++i) {
         RuntimeNative3DTileSchedulerJob* job = &scheduler->jobs[i];
         job->dispatched = RuntimeNative3DRenderUnit_ShouldRenderSubpass(&job->renderUnit,
@@ -612,6 +922,7 @@ static bool runtime_native_3d_tile_scheduler_dispatch_subpass(
         job->ok = false;
         dispatched += 1u;
     }
+    scheduler->dispatchedTileJobCount += (int)dispatched;
 
     if (dispatched == 0u) {
         return true;
@@ -672,6 +983,9 @@ static bool runtime_native_3d_tile_scheduler_dispatch_subpass(
 
 static void runtime_native_3d_tile_scheduler_collect_activity(
     RuntimeNative3DTileScheduler* scheduler) {
+    if (!scheduler) {
+        return;
+    }
     for (size_t i = 0; i < scheduler->jobCount; ++i) {
         RuntimeNative3DTileSchedulerJob* job = &scheduler->jobs[i];
         RuntimeNative3DTileSchedulerParentMetric* parent_metric = NULL;
@@ -686,6 +1000,39 @@ static void runtime_native_3d_tile_scheduler_collect_activity(
         parent_metric->activePixelCount += job->activePixelCount;
         parent_metric->activeTileCount += job->activeTileCount;
         parent_metric->inactiveTileCount += job->inactiveTileCount;
+    }
+}
+
+static void runtime_native_3d_tile_scheduler_record_adaptive_state_summary(
+    RuntimeNative3DRenderStats* stats,
+    const RuntimeNative3DAdaptivePixelStateSummary* summary) {
+    if (!stats || !summary) return;
+    stats->temporalAdaptiveStateMeasuredPixels += summary->measuredPixelCount;
+    stats->temporalAdaptiveStateStablePixels += summary->stablePixelCount;
+    stats->temporalAdaptiveStateActivePixels += summary->activePixelCount;
+    stats->temporalAdaptiveStateProbePixels += summary->probePixelCount;
+    stats->temporalAdaptiveStateHighRiskPixels += summary->highRiskPixelCount;
+    stats->temporalAdaptiveStateStableTiles += summary->stableTileCount;
+    stats->temporalAdaptiveStateActiveTiles += summary->activeTileCount;
+    stats->temporalAdaptiveStateProbeTiles += summary->probeTileCount;
+    stats->temporalAdaptiveStateHighRiskTiles += summary->highRiskTileCount;
+    if (summary->minSampleFloor > stats->temporalAdaptiveStateMinSampleFloor) {
+        stats->temporalAdaptiveStateMinSampleFloor = summary->minSampleFloor;
+    }
+}
+
+static void runtime_native_3d_tile_scheduler_collect_adaptive_state(
+    RuntimeNative3DTileScheduler* scheduler) {
+    if (!scheduler) {
+        return;
+    }
+
+    for (size_t i = 0; i < scheduler->jobCount; ++i) {
+        RuntimeNative3DAdaptivePixelStateSummary summary = {0};
+        RuntimeNative3DRenderUnit_GetAdaptiveStateSummary(&scheduler->jobs[i].renderUnit,
+                                                          &summary);
+        runtime_native_3d_tile_scheduler_record_adaptive_state_summary(&scheduler->stats,
+                                                                       &summary);
     }
 }
 
@@ -906,6 +1253,7 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressAndBudget(
     (void)occupancy_ok;
 
     runtime_native_3d_tile_scheduler_reset(&scheduler);
+    scheduler.firstFrameConservativeTileRender = frame->tileOccupancyConservativeAllTiles;
     if (!runtime_native_3d_tile_scheduler_build_jobs(&scheduler,
                                                      frame,
                                                      integrator_id,
@@ -979,13 +1327,22 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressAndBudget(
             ok = false;
             break;
         }
+        runtime_native_3d_tile_scheduler_capture_black_hit_pixels(&scheduler.jobs[i],
+                                                                  pixel_buffer,
+                                                                  frame->width,
+                                                                  scheduler.jobs[i]
+                                                                      .renderUnit
+                                                                      .committedSubpasses,
+                                                                  "final_resolve");
         RuntimeNative3DRenderStats_Accumulate(&scheduler.stats, &resolve_stats);
     }
     if (!ok) {
         goto finalize;
     }
+    scheduler.stats.temporalFinalFullResolveCount += 1;
 
     runtime_native_3d_tile_scheduler_collect_activity(&scheduler);
+    runtime_native_3d_tile_scheduler_collect_adaptive_state(&scheduler);
     runtime_native_3d_tile_scheduler_collect_metrics(&scheduler);
 
 finalize:
@@ -999,6 +1356,15 @@ finalize:
         out_stats->temporalActivePixelCount = scheduler.activePixelCount;
         out_stats->temporalActiveTileCount = scheduler.activeTileCount;
         out_stats->temporalInactiveTileCount = scheduler.inactiveTileCount;
+        out_stats->temporalPlannedParentTileCount = scheduler.plannedParentTileCount;
+        out_stats->temporalEmittedTileJobCount = (int)scheduler.jobCount;
+        out_stats->temporalOccupancySkippedTileCount = scheduler.occupancySkippedTileCount;
+        out_stats->temporalDispatchedTileJobCount = scheduler.dispatchedTileJobCount;
+        out_stats->temporalCompletedTileJobCount = scheduler.completedTileJobCount;
+        out_stats->temporalProgressDirtyBatchCount = scheduler.progressDirtyTileBatchCount;
+        out_stats->temporalProgressDirtyTileCount = scheduler.progressDirtyTileCount;
+        out_stats->temporalConservativeFirstFrameTileRender =
+            scheduler.firstFrameConservativeTileRender ? 1 : 0;
     }
     if (ok) {
         runtime_native_3d_tile_scheduler_update_adaptive_plan(&scheduler,

@@ -8,6 +8,7 @@
 #include "import/runtime_scene_bridge.h"
 #include "import/runtime_mesh_asset_loader.h"
 #include "render/ray_tracing_mode_backend.h"
+#include "render/runtime_dynamic_geometry_accel_3d.h"
 #include "render/runtime_mesh_blas_cache_3d.h"
 #include "render/runtime_native_3d_render.h"
 #include "render/runtime_scene_accel_3d.h"
@@ -81,6 +82,9 @@ typedef struct RayTracingHeadlessPreflight {
     int registered_light_compatibility_count;
     int registered_light_material_emitter_enabled_count;
     int registered_light_mesh_area_sampler_only_count;
+    int registered_light_emission_omni_count;
+    int registered_light_emission_one_sided_count;
+    int registered_light_emission_two_sided_count;
     int registered_light_emissive_candidate_count;
     double registered_light_emissive_area;
     double registered_light_emissive_weight;
@@ -113,6 +117,9 @@ typedef struct RayTracingHeadlessPreflight {
     uint32_t water_surface_grid_w;
     uint32_t water_surface_grid_d;
     uint64_t water_surface_sample_count;
+    uint32_t water_surface_last_grid_w;
+    uint32_t water_surface_last_grid_d;
+    uint64_t water_surface_last_sample_count;
     uint32_t water_surface_wet_columns;
     uint32_t water_surface_dry_columns;
     uint32_t water_surface_solid_columns;
@@ -141,12 +148,15 @@ typedef struct RayTracingHeadlessPreflight {
     int water_surface_triangle_count;
     RuntimeNative3DRenderStats stats;
     RuntimeNative3DPreparedSceneCacheStats prepared_scene_cache_stats;
+    RuntimeDynamicGeometryWaterCacheDiagnostics3D dynamic_water_cache_stats;
     RuntimeSceneAcceleration3DDiagnostics scene_acceleration_stats;
+    RuntimeRay3DRouteStats ray_trace_route_stats;
     RayTracingRuntimeMeshAssetTimingStats mesh_asset_timing_stats;
     RuntimeScene3DBuilderTimingStats scene_builder_timing_stats;
     double runtime_scene_apply_ms;
     double runtime_scene_preflight_ms;
     double native_prepare_frame_ms;
+    double caustic_cache_prep_ms;
     double object_audit_ms;
     double render_frames_ms;
     double render_trace_ms;

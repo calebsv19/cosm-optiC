@@ -53,6 +53,11 @@ typedef struct {
     double glassIor;                // Bounded dielectric IOR override.
     double glassAbsorptionDistance; // Positive absorption distance override.
     bool glassThinWalled;           // Thin sheet versus solid glass override.
+    bool hasMirrorResponseOverride; // Object-local mirror response edit.
+    double mirrorReflectivity;      // 0..1 mirror reflection strength override.
+    double mirrorRoughness;         // 0..1 mirror sharpness/roughness override.
+    double mirrorSpecular;          // 0..1 mirror specular lobe strength override.
+    int mirrorTint;                 // Packed RGB mirror tint override.
 
     bool dirty;            // Needs update?
     bool guideOnly;        // Authoring helper visible in editor/preview, excluded from render geometry
@@ -108,6 +113,13 @@ bool SceneObjectResolveGlassTransport(const SceneObject* obj,
                                       double* out_ior,
                                       double* out_absorption_distance,
                                       bool* out_thin_walled);
+void SceneObjectClearMirrorResponseOverride(SceneObject* obj);
+void SceneObjectSeedMirrorResponseOverrideFromMaterial(SceneObject* obj);
+bool SceneObjectResolveMirrorResponse(const SceneObject* obj,
+                                      double* out_reflectivity,
+                                      double* out_roughness,
+                                      double* out_specular,
+                                      int* out_tint);
 
 void SegmentPathInit(SegmentPath* path);
 void SegmentPathFree(SegmentPath* path);

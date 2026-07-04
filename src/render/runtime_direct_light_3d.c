@@ -442,6 +442,48 @@ static double runtime_direct_light_3d_light_source_radius(
     }
 }
 
+static double runtime_direct_light_3d_source_facing(
+    const RuntimeLightSource3D* source,
+    Vec3 sample_dir_from_hit) {
+    Vec3 normal = vec3(0.0, 0.0, 0.0);
+    if (!source || source->kind != RUNTIME_LIGHT_SOURCE_3D_KIND_RECT) {
+        return 1.0;
+    }
+    normal = source->normal;
+    if (vec3_length(normal) <= 1e-9) {
+        return 1.0;
+    }
+    normal = vec3_normalize(normal);
+    return fmax(0.0, vec3_dot(normal, vec3_scale(sample_dir_from_hit, -1.0)));
+}
+
+static double runtime_direct_light_3d_emission_profile_weight(
+    const RuntimeLightSource3D* source,
+    Vec3 sample_dir_from_hit) {
+    Vec3 normal = vec3(0.0, 0.0, 0.0);
+    double facing = 1.0;
+
+    if (!source || source->kind != RUNTIME_LIGHT_SOURCE_3D_KIND_RECT) {
+        return 1.0;
+    }
+    normal = source->normal;
+    if (vec3_length(normal) <= 1e-9) {
+        return 1.0;
+    }
+    normal = vec3_normalize(normal);
+    facing = vec3_dot(normal, vec3_scale(sample_dir_from_hit, -1.0));
+
+    switch (source->emissionProfile) {
+        case RUNTIME_LIGHT_SOURCE_3D_EMISSION_ONE_SIDED:
+            return fmax(0.0, facing);
+        case RUNTIME_LIGHT_SOURCE_3D_EMISSION_TWO_SIDED:
+            return fabs(facing);
+        case RUNTIME_LIGHT_SOURCE_3D_EMISSION_OMNI:
+        default:
+            return 1.0;
+    }
+}
+
 static RuntimeLight3D runtime_direct_light_3d_compat_light_from_source(
     const RuntimeLightSource3D* source) {
     RuntimeLight3D light = {0};
@@ -515,7 +557,7 @@ static void runtime_direct_light_3d_accumulate_source(
     }
 
     to_light = vec3_scale(to_light, 1.0 / light_distance);
-    ndotl = fmax(0.0, vec3_dot(hit->normal, to_light));
+    ndotl = fabs(vec3_dot(hit->normal, to_light));
     attenuation = runtime_direct_light_3d_attenuation(&light, light_distance);
     if (io_result->evaluatedLightCount == 1) {
         io_result->ndotl = ndotl;
@@ -527,6 +569,8 @@ static void runtime_direct_light_3d_accumulate_source(
     if (ndotl > 0.0 && light_sample_count > 0) {
         for (int i = 0; i < light_sample_count; ++i) {
             RuntimeVisibility3DTransmittance transmittance = {0};
+            int target_scene_object_index = -1;
+            int target_triangle_index = -1;
             Vec3 sample_position = runtime_direct_light_3d_sample_light_source_position(source,
                                                                                        &light,
                                                                                        to_light,
@@ -538,6 +582,8 @@ static void runtime_direct_light_3d_accumulate_source(
                 vec3_length(sample_to_light);
             double sample_attenuation = 0.0;
             double sample_ndotl = 0.0;
+            double sample_source_facing = 1.0;
+            double sample_emission_weight = 1.0;
             Vec3 sample_dir = vec3(0.0, 0.0, 0.0);
 
             light_sample_evaluated_count += 1;
@@ -554,8 +600,32 @@ static void runtime_direct_light_3d_accumulate_source(
                 continue;
             }
             sample_dir = vec3_scale(sample_to_light, 1.0 / sample_distance);
-            sample_ndotl = fmax(0.0, vec3_dot(hit->normal, sample_dir));
+            sample_ndotl = fabs(vec3_dot(hit->normal, sample_dir));
+            sample_source_facing =
+                runtime_direct_light_3d_source_facing(source, sample_dir);
+            sample_emission_weight =
+                runtime_direct_light_3d_emission_profile_weight(source, sample_dir);
+            if (source->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_RECT) {
+                io_result->rectSampleCount += 1;
+                io_result->rectReceiverCosSum += sample_ndotl;
+                io_result->rectEmitterCosSum += sample_source_facing;
+                if (!(sample_source_facing > 0.0)) {
+                    io_result->rectBackfaceSampleCount += 1;
+                }
+            }
             if (!(sample_ndotl > 0.0)) {
+                clear_blocked_sample_count += 1;
+                if (runtime_direct_light_3d_area_light_can_stop_adaptive(
+                        light_sample_evaluated_count,
+                        light_sample_decision_count,
+                        light_sample_count,
+                        clear_visible_sample_count,
+                        clear_blocked_sample_count)) {
+                    break;
+                }
+                continue;
+            }
+            if (!(sample_emission_weight > 0.0)) {
                 clear_blocked_sample_count += 1;
                 if (runtime_direct_light_3d_area_light_can_stop_adaptive(
                         light_sample_evaluated_count,
@@ -569,7 +639,7 @@ static void runtime_direct_light_3d_accumulate_source(
             }
 
             sample_attenuation = runtime_direct_light_3d_attenuation(&light, sample_distance);
-            if (!runtime_direct_light_3d_sample_contributes(light.intensity,
+            if (!runtime_direct_light_3d_sample_contributes(light.intensity * sample_emission_weight,
                                                             sample_attenuation,
                                                             sample_ndotl)) {
                 clear_blocked_sample_count += 1;
@@ -585,14 +655,22 @@ static void runtime_direct_light_3d_accumulate_source(
             }
 
             io_result->visibilityRayCount += 1;
+            if (source->origin == RUNTIME_LIGHT_SOURCE_3D_ORIGIN_MATERIAL_EMITTER &&
+                source->sourceSceneObjectIndex >= 0) {
+                target_scene_object_index = source->sourceSceneObjectIndex;
+                target_triangle_index = source->sourceTriangleIndex;
+            }
             transmittance = RuntimeVisibility3D_TransmittanceFromHitToPointRGB(scene,
                                                                                 hit,
                                                                                 sample_position,
-                                                                                -1,
-                                                                                -1);
+                                                                                target_scene_object_index,
+                                                                                target_triangle_index);
             if (transmittance.luma > 1e-6) {
                 source_visible = true;
                 *io_any_light_sample_visible = true;
+                if (source->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_RECT) {
+                    io_result->rectVisibleSampleCount += 1;
+                }
             }
             if (transmittance.luma > 0.999) {
                 clear_visible_sample_count += 1;
@@ -600,11 +678,11 @@ static void runtime_direct_light_3d_accumulate_source(
                 clear_blocked_sample_count += 1;
             }
             source_r += light.intensity * sample_attenuation * sample_ndotl *
-                        transmittance.r * source->color.x;
+                        sample_emission_weight * transmittance.r * source->color.x;
             source_g += light.intensity * sample_attenuation * sample_ndotl *
-                        transmittance.g * source->color.y;
+                        sample_emission_weight * transmittance.g * source->color.y;
             source_b += light.intensity * sample_attenuation * sample_ndotl *
-                        transmittance.b * source->color.z;
+                        sample_emission_weight * transmittance.b * source->color.z;
             if (runtime_direct_light_3d_area_light_can_stop_adaptive(
                     light_sample_evaluated_count,
                     light_sample_decision_count,
@@ -761,6 +839,12 @@ bool RuntimeDirectLight3D_ShadeHitWithLightSetAndPayload(
                                                   &light_g,
                                                   &light_b,
                                                   &any_light_sample_visible);
+    }
+    if (result.rectSampleCount > 0) {
+        result.rectReceiverCosAvg =
+            result.rectReceiverCosSum / (double)result.rectSampleCount;
+        result.rectEmitterCosAvg =
+            result.rectEmitterCosSum / (double)result.rectSampleCount;
     }
     result.visible = any_light_sample_visible || top_fill > 1e-6;
     result.radianceR = (light_r + top_fill) * tint_r;

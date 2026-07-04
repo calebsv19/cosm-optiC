@@ -13,6 +13,10 @@
 #include "render_metrics_dataset_test.h"
 #include "test_runtime_diffuse_temporal.h"
 #include "test_runtime_emission_transparency.h"
+#include "test_runtime_caustic_bootstrap_3d.h"
+#include "test_runtime_caustic_surface_cache_3d.h"
+#include "test_runtime_caustic_transport_3d.h"
+#include "test_runtime_caustic_volume_cache_3d.h"
 #include "test_runtime_native_3d_denoise.h"
 #include "test_runtime_native_3d_render.h"
 #include "test_runtime_native_3d_render_internal.h"
@@ -102,6 +106,10 @@ int test_runner_main(int argc, char** argv) {
         {"runtime_scene_bridge_writeback", run_test_runtime_scene_bridge_writeback_tests},
         {"runtime_scene_3d_geometry", run_test_runtime_scene_3d_geometry_tests},
         {"runtime_volume_3d", run_test_runtime_volume_3d_tests},
+        {"runtime_caustic_bootstrap_3d", run_test_runtime_caustic_bootstrap_3d_tests},
+        {"runtime_caustic_surface_cache_3d", run_test_runtime_caustic_surface_cache_3d_tests},
+        {"runtime_caustic_transport_3d", run_test_runtime_caustic_transport_3d_tests},
+        {"runtime_caustic_volume_cache_3d", run_test_runtime_caustic_volume_cache_3d_tests},
         {"water_surface_runtime", run_test_water_surface_runtime_tests},
         {"runtime_lighting_materials_payload", run_test_runtime_lighting_materials_payload_tests},
         {"runtime_lighting_materials_direct_light", run_test_runtime_lighting_materials_direct_light_suite},

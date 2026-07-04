@@ -222,6 +222,7 @@ static void runtime_disney_3d_apply_combiner(
     double direct_scale = 1.0;
     double diffuse_scale = 1.0;
     double specular_scale = 1.0;
+    double direct_specular_scale = 1.0;
     double direct_total_r = 0.0;
     double direct_total_g = 0.0;
     double direct_total_b = 0.0;
@@ -304,6 +305,11 @@ static void runtime_disney_3d_apply_combiner(
         out_result->roughnessWeight *
         out_result->fresnelWeight *
         bsdf_signal;
+    direct_specular_scale = specular_scale;
+    if (material_result->mirrorDominance > 0.05) {
+        direct_specular_scale *=
+            runtime_disney_3d_clamp(1.0 - material_result->mirrorDominance, 0.0, 1.0);
+    }
 
     out_result->baseRadiance =
         material_result->directRadiance * direct_scale;
@@ -324,12 +330,12 @@ static void runtime_disney_3d_apply_combiner(
                                 &out_result->diffuseRadianceG,
                                 &out_result->diffuseRadianceB);
     out_result->specularRadiance =
-        (material_result->directRadiance * specular_scale) +
+        (material_result->directRadiance * direct_specular_scale) +
         material_result->specularRadiance;
     runtime_disney_3d_scale_rgb(material_result->directRadianceR,
                                 material_result->directRadianceG,
                                 material_result->directRadianceB,
-                                specular_scale,
+                                direct_specular_scale,
                                 &out_result->specularRadianceR,
                                 &out_result->specularRadianceG,
                                 &out_result->specularRadianceB);

@@ -1,5 +1,6 @@
 #include <string.h>
 
+#include "render/runtime_caustic_volume_cache_3d.h"
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_volume_3d.h"
 #include "render/runtime_volume_3d_debug.h"
@@ -411,6 +412,142 @@ static int test_runtime_volume_3d_single_scatter_prefers_forward_light_path(void
     return 0;
 }
 
+static int test_runtime_volume_3d_caustic_cache_null_matches_existing_scatter(void) {
+    RuntimeScene3D scene;
+    RuntimeVolume3DScatterResult existing = {0};
+    RuntimeVolume3DScatterResult with_null_cache = {0};
+    const uint32_t channel_mask =
+        RUNTIME_VOLUME_3D_CHANNEL_DENSITY | RUNTIME_VOLUME_3D_CHANNEL_SOLID_MASK;
+    Ray3D ray = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    scene.hasLight = true;
+    scene.light.position = vec3(1.5, -4.0, 0.5);
+    scene.light.radius = 0.25;
+    scene.light.intensity = 14.0;
+    scene.light.falloffDistance = 10.0;
+    scene.light.falloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    scene.volume.enabled = true;
+    scene.volume.affectsLighting = true;
+    ok = RuntimeVolumeGrid3D_Configure(&scene.volume.grid,
+                                       1u,
+                                       2u,
+                                       8u,
+                                       2u,
+                                       0.0,
+                                       0u,
+                                       0.02,
+                                       vec3(-0.5, -4.0, -0.5),
+                                       0.5,
+                                       vec3(0.0, 0.0, 1.0),
+                                       0u);
+    assert_true("runtime_volume_3d_caustic_null_layout_ok", ok);
+    ok = RuntimeVolumeAttachment3D_AllocateOwnedChannels(&scene.volume, channel_mask);
+    assert_true("runtime_volume_3d_caustic_null_alloc_ok", ok);
+    for (uint64_t i = 0; i < scene.volume.grid.cellCount; ++i) {
+        scene.volume.channels.density[i] = 1.0f;
+        scene.volume.channels.solidMask[i] = 0u;
+    }
+    ray.origin = vec3(0.0, 0.0, 0.0);
+    ray.direction = vec3(0.0, -1.0, 0.0);
+
+    existing = RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene, &ray, 0.0, 5.0, NULL);
+    with_null_cache = RuntimeVolume3D_AccumulateSingleScatterAlongRayWithCausticCacheRGB(
+        &scene, &ray, 0.0, 5.0, NULL, NULL);
+    assert_true("runtime_volume_3d_caustic_null_active_match",
+                existing.active == with_null_cache.active);
+    assert_true("runtime_volume_3d_caustic_null_samples_match",
+                existing.sampleCount == with_null_cache.sampleCount);
+    assert_close("runtime_volume_3d_caustic_null_r_match",
+                 existing.radianceR,
+                 with_null_cache.radianceR,
+                 1e-12);
+    assert_close("runtime_volume_3d_caustic_null_g_match",
+                 existing.radianceG,
+                 with_null_cache.radianceG,
+                 1e-12);
+    assert_close("runtime_volume_3d_caustic_null_b_match",
+                 existing.radianceB,
+                 with_null_cache.radianceB,
+                 1e-12);
+    assert_true("runtime_volume_3d_caustic_null_no_caustic_samples",
+                with_null_cache.causticSampleCount == 0);
+    assert_close("runtime_volume_3d_caustic_null_no_caustic_radiance",
+                 with_null_cache.causticRadiance,
+                 0.0,
+                 1e-12);
+
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
+static int test_runtime_volume_3d_caustic_cache_lifts_density_without_direct_light(void) {
+    RuntimeScene3D scene;
+    RuntimeCausticVolumeCache3D cache;
+    RuntimeCausticVolumeCacheDiagnostics3D diagnostics;
+    RuntimeVolume3DScatterResult scatter = {0};
+    const uint32_t channel_mask =
+        RUNTIME_VOLUME_3D_CHANNEL_DENSITY | RUNTIME_VOLUME_3D_CHANNEL_SOLID_MASK;
+    Ray3D ray = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    RuntimeCausticVolumeCache3D_Init(&cache);
+    scene.hasLight = false;
+    scene.volume.enabled = true;
+    scene.volume.affectsLighting = true;
+    ok = RuntimeVolumeGrid3D_Configure(&scene.volume.grid,
+                                       1u,
+                                       2u,
+                                       8u,
+                                       2u,
+                                       0.0,
+                                       0u,
+                                       0.02,
+                                       vec3(-0.5, -4.0, -0.5),
+                                       0.5,
+                                       vec3(0.0, 0.0, 1.0),
+                                       0u);
+    assert_true("runtime_volume_3d_caustic_cache_layout_ok", ok);
+    ok = RuntimeVolumeAttachment3D_AllocateOwnedChannels(&scene.volume, channel_mask);
+    assert_true("runtime_volume_3d_caustic_cache_alloc_ok", ok);
+    for (uint64_t i = 0; i < scene.volume.grid.cellCount; ++i) {
+        scene.volume.channels.density[i] = 1.0f;
+        scene.volume.channels.solidMask[i] = 0u;
+    }
+    assert_true("runtime_volume_3d_caustic_cache_allocate",
+                RuntimeCausticVolumeCache3D_AllocateFromVolume(&cache, &scene.volume));
+    assert_true("runtime_volume_3d_caustic_cache_deposit",
+                RuntimeCausticVolumeCache3D_DepositAtPosition(
+                    &cache, vec3(0.0, -2.0, 0.0), 40.0, 10.0, 4.0));
+
+    ray.origin = vec3(0.0, 0.0, 0.0);
+    ray.direction = vec3(0.0, -1.0, 0.0);
+    scatter = RuntimeVolume3D_AccumulateSingleScatterAlongRayWithCausticCacheRGB(
+        &scene, &ray, 0.0, 5.0, NULL, &cache);
+    assert_true("runtime_volume_3d_caustic_cache_scatter_active", scatter.active);
+    assert_true("runtime_volume_3d_caustic_cache_samples",
+                scatter.causticSampleCount > 0);
+    assert_true("runtime_volume_3d_caustic_cache_contributing",
+                scatter.causticContributingSampleCount > 0);
+    assert_true("runtime_volume_3d_caustic_cache_radiance",
+                scatter.causticRadiance > 0.0);
+    assert_close("runtime_volume_3d_caustic_cache_direct_r",
+                 scatter.radianceR,
+                 scatter.causticRadianceR,
+                 1e-12);
+    RuntimeCausticVolumeCache3D_SnapshotDiagnostics(&cache, &diagnostics);
+    assert_true("runtime_volume_3d_caustic_cache_sampled_state",
+                diagnostics.state == RUNTIME_CAUSTIC_CACHE_STATE_SAMPLED);
+    assert_true("runtime_volume_3d_caustic_cache_lookup_count",
+                diagnostics.sampleLookupCount > 0u);
+
+    RuntimeCausticVolumeCache3D_Free(&cache);
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
 int run_test_runtime_volume_3d_tests(void) {
     int before = test_support_failures();
 
@@ -424,5 +561,7 @@ int run_test_runtime_volume_3d_tests(void) {
     test_runtime_volume_3d_transmittance_drops_through_dense_segment();
     test_runtime_volume_3d_single_scatter_accumulates_lit_density();
     test_runtime_volume_3d_single_scatter_prefers_forward_light_path();
+    test_runtime_volume_3d_caustic_cache_null_matches_existing_scatter();
+    test_runtime_volume_3d_caustic_cache_lifts_density_without_direct_light();
     return test_support_failures() - before;
 }

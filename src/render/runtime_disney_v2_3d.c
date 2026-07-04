@@ -1161,7 +1161,8 @@ static bool runtime_disney_v2_3d_shade_hit_with_payload(
     result.specularHalfPdf =
         RuntimePrincipledBSDF3D_GGXHalfVectorPdf(&result.principled, cos_theta_h, dot_i_h);
 
-    if (RuntimeDirectLight3D_ShadeHitWithPayload(scene, hit, &result.payload, sampling, &direct)) {
+    if (scene->hasLight &&
+        RuntimeDirectLight3D_ShadeHitWithPayload(scene, hit, &result.payload, sampling, &direct)) {
         result.directSampleCount = scene->hasLight ? 1 : 0;
         result.directRadianceR = direct.radianceR;
         result.directRadianceG = direct.radianceG;

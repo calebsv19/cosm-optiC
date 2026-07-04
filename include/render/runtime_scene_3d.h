@@ -132,6 +132,16 @@ typedef struct {
 } RuntimeScene3DMaterialFlags;
 
 typedef struct {
+    bool seen;
+    bool resolved;
+    bool valid;
+    double transparency;
+    double emissive;
+    double specWeight;
+    double reflectivity;
+} RuntimeScene3DObjectMaterialSummary;
+
+typedef struct {
     bool valid;
     bool hasTransparentSurfaces;
     bool hasEmissiveSurfaces;
@@ -166,6 +176,8 @@ typedef struct RuntimeScene3D {
     bool hasCamera;
     RuntimeScene3DMaterialFlags materialFlags;
     RuntimeScene3DCapabilities capabilities;
+    bool objectMaterialSummariesValid;
+    RuntimeScene3DObjectMaterialSummary objectMaterialSummaries[MAX_OBJECTS];
 } RuntimeScene3D;
 
 const char* RuntimePrimitive3DKindLabel(RuntimePrimitive3DKind kind);

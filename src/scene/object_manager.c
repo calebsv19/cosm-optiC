@@ -10,6 +10,12 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+static double scene_object_clamp(double value, double min_value, double max_value) {
+    if (value < min_value) return min_value;
+    if (value > max_value) return max_value;
+    return value;
+}
+
 static void InitDefaultMaterial(SceneObject* obj) {
     const Material* default_material = MaterialManagerGet(MaterialManagerDefaultId());
     obj->texture[0] = '\0';
@@ -40,6 +46,15 @@ static void InitDefaultMaterial(SceneObject* obj) {
     obj->glassAbsorptionDistance =
         default_material ? default_material->absorption_distance : 1.0;
     obj->glassThinWalled = default_material ? default_material->thin_walled : false;
+    obj->hasMirrorResponseOverride = false;
+    obj->mirrorReflectivity = obj->reflectivity;
+    obj->mirrorRoughness = obj->roughness;
+    obj->mirrorSpecular =
+        scene_object_clamp((default_material ? default_material->specular : 0.0) +
+                               obj->reflectivity,
+                           0.0,
+                           1.0);
+    obj->mirrorTint = obj->color & 0xFFFFFF;
     obj->guideOnly = false;
 }
 
@@ -264,12 +279,6 @@ double SceneObjectAlphaFromByte(Uint8 alpha) {
     return (double)alpha / 255.0;
 }
 
-static double scene_object_clamp(double value, double min_value, double max_value) {
-    if (value < min_value) return min_value;
-    if (value > max_value) return max_value;
-    return value;
-}
-
 void SceneObjectClearGlassTransportOverride(SceneObject* obj) {
     const Material* material = NULL;
     if (!obj) return;
@@ -328,6 +337,72 @@ bool SceneObjectResolveGlassTransport(const SceneObject* obj,
         *out_thin_walled = obj->hasGlassTransportOverride
                                ? obj->glassThinWalled
                                : (material ? material->thin_walled : false);
+    }
+    return true;
+}
+
+static double scene_object_mirror_default_specular(const SceneObject* obj,
+                                                   const Material* material,
+                                                   double reflectivity) {
+    (void)obj;
+    return scene_object_clamp((material ? material->specular : 0.0) + reflectivity,
+                              0.0,
+                              1.0);
+}
+
+void SceneObjectClearMirrorResponseOverride(SceneObject* obj) {
+    const Material* material = NULL;
+    if (!obj) return;
+    material = MaterialManagerGet(obj->material_id);
+    obj->hasMirrorResponseOverride = false;
+    obj->mirrorReflectivity = scene_object_clamp(obj->reflectivity, 0.0, 1.0);
+    obj->mirrorRoughness = scene_object_clamp(obj->roughness, 0.0, 1.0);
+    obj->mirrorSpecular =
+        scene_object_mirror_default_specular(obj, material, obj->mirrorReflectivity);
+    obj->mirrorTint = obj->color & 0xFFFFFF;
+}
+
+void SceneObjectSeedMirrorResponseOverrideFromMaterial(SceneObject* obj) {
+    const Material* material = NULL;
+    if (!obj) return;
+    if (obj->hasMirrorResponseOverride) return;
+    material = MaterialManagerGet(obj->material_id);
+    obj->hasMirrorResponseOverride = true;
+    obj->mirrorReflectivity = scene_object_clamp(obj->reflectivity, 0.0, 1.0);
+    obj->mirrorRoughness = scene_object_clamp(obj->roughness, 0.0, 1.0);
+    obj->mirrorSpecular =
+        scene_object_mirror_default_specular(obj, material, obj->mirrorReflectivity);
+    obj->mirrorTint = obj->color & 0xFFFFFF;
+}
+
+bool SceneObjectResolveMirrorResponse(const SceneObject* obj,
+                                      double* out_reflectivity,
+                                      double* out_roughness,
+                                      double* out_specular,
+                                      int* out_tint) {
+    const Material* material = NULL;
+    double reflectivity = 0.0;
+    if (!obj) return false;
+    material = MaterialManagerGet(obj->material_id);
+    reflectivity = obj->hasMirrorResponseOverride
+                       ? scene_object_clamp(obj->mirrorReflectivity, 0.0, 1.0)
+                       : scene_object_clamp(obj->reflectivity, 0.0, 1.0);
+    if (out_reflectivity) {
+        *out_reflectivity = reflectivity;
+    }
+    if (out_roughness) {
+        *out_roughness = obj->hasMirrorResponseOverride
+                             ? scene_object_clamp(obj->mirrorRoughness, 0.0, 1.0)
+                             : scene_object_clamp(obj->roughness, 0.0, 1.0);
+    }
+    if (out_specular) {
+        *out_specular = obj->hasMirrorResponseOverride
+                            ? scene_object_clamp(obj->mirrorSpecular, 0.0, 1.0)
+                            : scene_object_mirror_default_specular(obj, material, reflectivity);
+    }
+    if (out_tint) {
+        *out_tint = obj->hasMirrorResponseOverride ? (obj->mirrorTint & 0xFFFFFF)
+                                                   : (obj->color & 0xFFFFFF);
     }
     return true;
 }

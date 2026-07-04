@@ -341,13 +341,13 @@ double RuntimeDisneyV2_3D_EstimateDirectBsdfPdf(const RuntimePrincipledBSDF3D* p
                                                       &specular_probability,
                                                       &transmission_probability);
 
-    if (cos_o > 1e-9 && diffuse_probability > 0.0) {
-        pdf += diffuse_probability * cos_o / M_PI;
+    if (fabs(cos_o) > 1e-9 && diffuse_probability > 0.0) {
+        pdf += diffuse_probability * fabs(cos_o) / M_PI;
     }
-    if (cos_o > 1e-9 && specular_probability > 0.0) {
+    if (fabs(cos_o) > 1e-9 && specular_probability > 0.0) {
         Vec3 half_vector = vec3_normalize(vec3_add(wi, wo));
         const double cos_theta_h = runtime_disney_v2_estimator_3d_clamp(
-            vec3_dot(normal, half_vector),
+            fabs(vec3_dot(normal, half_vector)),
             0.0,
             1.0);
         const double dot_i_h = runtime_disney_v2_estimator_3d_clamp(

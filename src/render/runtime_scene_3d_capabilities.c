@@ -1,5 +1,7 @@
 #include "render/runtime_scene_3d.h"
 
+#include <string.h>
+
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_volume_3d_integrate.h"
 
@@ -10,11 +12,14 @@ void RuntimeScene3D_RefreshCapabilities(RuntimeScene3D* scene) {
 
     if (!scene) return;
 
+    memset(scene->objectMaterialSummaries, 0, sizeof(scene->objectMaterialSummaries));
+    scene->objectMaterialSummariesValid = false;
     capabilities.valid = true;
     for (int i = 0; i < scene->primitiveCount; ++i) {
         int scene_object_index = scene->primitives[i].source.sceneObjectIndex;
         if (scene_object_index >= 0 && scene_object_index < MAX_OBJECTS) {
             seen[scene_object_index] = true;
+            scene->objectMaterialSummaries[scene_object_index].seen = true;
         } else {
             capabilities.hasUnresolvedSurfaces = true;
         }
@@ -23,6 +28,7 @@ void RuntimeScene3D_RefreshCapabilities(RuntimeScene3D* scene) {
         int scene_object_index = scene->triangleMesh.triangles[i].sceneObjectIndex;
         if (scene_object_index >= 0 && scene_object_index < MAX_OBJECTS) {
             seen[scene_object_index] = true;
+            scene->objectMaterialSummaries[scene_object_index].seen = true;
         } else {
             capabilities.hasUnresolvedSurfaces = true;
         }
@@ -33,9 +39,17 @@ void RuntimeScene3D_RefreshCapabilities(RuntimeScene3D* scene) {
         if (!seen[i]) continue;
         if (!RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(i, &payload) ||
             !payload.valid) {
+            scene->objectMaterialSummaries[i].resolved = false;
+            scene->objectMaterialSummaries[i].valid = false;
             capabilities.hasUnresolvedSurfaces = true;
             continue;
         }
+        scene->objectMaterialSummaries[i].resolved = true;
+        scene->objectMaterialSummaries[i].valid = payload.valid;
+        scene->objectMaterialSummaries[i].transparency = payload.transparency;
+        scene->objectMaterialSummaries[i].emissive = payload.emissive;
+        scene->objectMaterialSummaries[i].specWeight = payload.bsdf.specWeight;
+        scene->objectMaterialSummaries[i].reflectivity = payload.bsdf.reflectivity;
         if (payload.transparency > 1e-6) {
             capabilities.hasTransparentSurfaces = true;
         }
@@ -91,6 +105,7 @@ void RuntimeScene3D_RefreshCapabilities(RuntimeScene3D* scene) {
     }
     scene->capabilities = capabilities;
     scene->materialFlags = flags;
+    scene->objectMaterialSummariesValid = true;
 }
 
 void RuntimeScene3D_RefreshMaterialFlags(RuntimeScene3D* scene) {

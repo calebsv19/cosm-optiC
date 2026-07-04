@@ -177,7 +177,8 @@ RuntimeVolume3DScatterResult runtime_native_3d_render_primary_scatter(
     double pixel_x,
     double pixel_y,
     double t_max,
-    const RuntimeNative3DSamplingContext* sampling) {
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeCausticVolumeCache3D* caustic_cache) {
     Ray3D primary_ray = {0};
 
     if (!scene || !projector) {
@@ -198,11 +199,29 @@ RuntimeVolume3DScatterResult runtime_native_3d_render_primary_scatter(
                                                                  projector->nearPlane,
                                                                  t_max);
     }
-    return RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(scene,
-                                                              &primary_ray,
-                                                              projector->nearPlane,
-                                                              t_max,
-                                                              sampling);
+    return RuntimeVolume3D_AccumulateSingleScatterAlongRayWithCausticCacheRGB(
+        scene,
+        &primary_ray,
+        projector->nearPlane,
+        t_max,
+        sampling,
+        caustic_cache);
+}
+
+void runtime_native_3d_render_record_scatter_stats(
+    RuntimeNative3DRenderStats* io_stats,
+    const RuntimeVolume3DScatterResult* scatter) {
+    if (!io_stats || !scatter) return;
+    io_stats->volumeScatterDirectSampleCount += scatter->directSampleCount;
+    io_stats->totalDirectVolumeScatterRadianceR += scatter->directRadianceR;
+    io_stats->totalDirectVolumeScatterRadianceG += scatter->directRadianceG;
+    io_stats->totalDirectVolumeScatterRadianceB += scatter->directRadianceB;
+    io_stats->causticVolumeScatterSampleCount += scatter->causticSampleCount;
+    io_stats->causticVolumeScatterContributingSampleCount +=
+        scatter->causticContributingSampleCount;
+    io_stats->totalCausticVolumeScatterRadianceR += scatter->causticRadianceR;
+    io_stats->totalCausticVolumeScatterRadianceG += scatter->causticRadianceG;
+    io_stats->totalCausticVolumeScatterRadianceB += scatter->causticRadianceB;
 }
 
 void runtime_native_3d_render_apply_scatter_rgb(
@@ -283,12 +302,14 @@ void runtime_native_3d_render_write_emitter_radiance_with_scatter(
     double pixel_y,
     const RuntimeLightEmitterHit3DResult* hit,
     const RuntimeNative3DSamplingContext* sampling,
+    RuntimeCausticVolumeCache3D* caustic_cache,
     RuntimeNative3DRenderStats* io_stats) {
     RuntimeVolume3DScatterResult scatter = {0};
     double radiance_r = 0.0;
     double radiance_g = 0.0;
     double radiance_b = 0.0;
     double peak = 0.0;
+    double background_floor = 0.0;
 
     if (!radiance_buffer || !scene || !projector || !hit || !io_stats) return;
 
@@ -297,7 +318,9 @@ void runtime_native_3d_render_write_emitter_radiance_with_scatter(
                                                        pixel_x,
                                                        pixel_y,
                                                        hit->t,
-                                                       sampling);
+                                                       sampling,
+                                                       caustic_cache);
+    runtime_native_3d_render_record_scatter_stats(io_stats, &scatter);
     radiance_r = hit->radiance;
     radiance_g = hit->radiance;
     radiance_b = hit->radiance;
@@ -313,10 +336,12 @@ void runtime_native_3d_render_write_emitter_radiance_with_scatter(
     if (peak > io_stats->maxRadiance) {
         io_stats->maxRadiance = peak;
     }
+    background_floor = RuntimeEnvironment3D_BackgroundBrightness(&scene->environment);
+    background_floor = runtime_native_3d_render_clamp01(background_floor);
     runtime_native_3d_render_write_radiance_rgb(radiance_buffer,
                                                 pixel_index,
                                                 radiance_r,
                                                 radiance_g,
                                                 radiance_b,
-                                                0.0);
+                                                background_floor);
 }

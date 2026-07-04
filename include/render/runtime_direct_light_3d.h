@@ -32,6 +32,13 @@ typedef struct {
     int contributingLightCount;
     int visibilityRayCount;
     double peakLightContribution;
+    int rectSampleCount;
+    int rectVisibleSampleCount;
+    int rectBackfaceSampleCount;
+    double rectReceiverCosSum;
+    double rectEmitterCosSum;
+    double rectReceiverCosAvg;
+    double rectEmitterCosAvg;
 } RuntimeDirectLight3DResult;
 
 bool RuntimeDirectLight3D_TracePrimaryHit(const RuntimeScene3D* scene,

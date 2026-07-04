@@ -2,10 +2,27 @@
 #include "render/runtime_triangle_bvh_3d.h"
 
 #include <float.h>
+#include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 static const double kRuntimeRay3DDeterminantEpsilon = 1e-9;
 static const double kRuntimeRay3DMinimumOffsetEpsilon = 1e-9;
+static const RuntimeRay3DTraceRoute kRuntimeRay3DDefaultTraceRoute =
+    RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS;
+static RuntimeRay3DTraceRoute gRuntimeRay3DTraceRoute =
+    RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS;
+static RuntimeRay3DRouteStats gRuntimeRay3DRouteStats;
+static RuntimeRay3DSceneAccelerationTraceFirstHitFn
+    gRuntimeRay3DSceneAccelerationTraceFirstHit;
+
+typedef enum RuntimeSceneAcceleration3DTraceStatusForRayRoute {
+    RUNTIME_RAY_3D_ACCEL_TRACE_UNREADY = 0,
+    RUNTIME_RAY_3D_ACCEL_TRACE_MISS = 1,
+    RUNTIME_RAY_3D_ACCEL_TRACE_HIT = 2,
+    RUNTIME_RAY_3D_ACCEL_TRACE_UNSUPPORTED = 3,
+    RUNTIME_RAY_3D_ACCEL_TRACE_ERROR = 4
+} RuntimeSceneAcceleration3DTraceStatusForRayRoute;
 
 static Vec3 runtime_ray_3d_triangle_normal(const RuntimeTriangle3D* triangle) {
     Vec3 edge1;
@@ -153,6 +170,58 @@ static void runtime_ray_3d_apply_source_ref(const RuntimeScene3D* scene, HitInfo
     }
 }
 
+const char* RuntimeRay3DTraceRouteLabel(RuntimeRay3DTraceRoute route) {
+    switch (route) {
+        case RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS_PARITY:
+            return "tlas_blas_parity";
+        case RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS:
+            return "tlas_blas";
+        case RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH:
+        default:
+            return "flattened_bvh";
+    }
+}
+
+RuntimeRay3DTraceRoute RuntimeRay3D_DefaultTraceRoute(void) {
+    return kRuntimeRay3DDefaultTraceRoute;
+}
+
+void RuntimeRay3D_SetSceneAccelerationTraceFirstHit(
+    RuntimeRay3DSceneAccelerationTraceFirstHitFn trace_first_hit) {
+    gRuntimeRay3DSceneAccelerationTraceFirstHit = trace_first_hit;
+}
+
+void RuntimeRay3D_SetTraceRoute(RuntimeRay3DTraceRoute route) {
+    if (route < RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH ||
+        route > RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS) {
+        route = RuntimeRay3D_DefaultTraceRoute();
+    }
+    gRuntimeRay3DTraceRoute = route;
+    gRuntimeRay3DRouteStats.requestedRoute = route;
+    gRuntimeRay3DRouteStats.activeRoute = route;
+}
+
+void RuntimeRay3D_SetTraceRouteForTests(RuntimeRay3DTraceRoute route) {
+    RuntimeRay3D_SetTraceRoute(route);
+}
+
+void RuntimeRay3D_ResetTraceRouteForTests(void) {
+    RuntimeRay3D_SetTraceRoute(RuntimeRay3D_DefaultTraceRoute());
+}
+
+void RuntimeRay3D_ResetRouteStats(void) {
+    RuntimeRay3DTraceRoute route = gRuntimeRay3DTraceRoute;
+    memset(&gRuntimeRay3DRouteStats, 0, sizeof(gRuntimeRay3DRouteStats));
+    gRuntimeRay3DRouteStats.requestedRoute = route;
+    gRuntimeRay3DRouteStats.activeRoute = route;
+}
+
+void RuntimeRay3D_SnapshotRouteStats(RuntimeRay3DRouteStats* out_stats) {
+    if (!out_stats) return;
+    *out_stats = gRuntimeRay3DRouteStats;
+    out_stats->requestedRoute = gRuntimeRay3DTraceRoute;
+}
+
 static bool runtime_ray_3d_trace_scene_first_hit_flat(
     const RuntimeScene3D* scene,
     const Ray3D* ray,
@@ -188,12 +257,12 @@ static bool runtime_ray_3d_trace_scene_first_hit_flat(
     return true;
 }
 
-bool RuntimeRay3D_TraceSceneFirstHit(const RuntimeScene3D* scene,
-                                     const Ray3D* ray,
-                                     [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
-                                     [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
-                                     HitInfo3D* out_hit) {
-    if (!scene || !ray || !out_hit) return false;
+static bool runtime_ray_3d_trace_scene_first_hit_flattened(
+    const RuntimeScene3D* scene,
+    const Ray3D* ray,
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
+    HitInfo3D* out_hit) {
     if (RuntimeTriangleMesh3D_HasReadyBVH(&scene->triangleMesh)) {
         HitInfo3D hit = {0};
         RuntimeTriangleBVH3DTraceResult trace_result =
@@ -209,11 +278,209 @@ bool RuntimeRay3D_TraceSceneFirstHit(const RuntimeScene3D* scene,
         }
         if (trace_result == RUNTIME_TRIANGLE_BVH_3D_TRACE_OVERFLOW) {
             RuntimeTriangleBVH3D_RecordFlatFallback(true);
-            return runtime_ray_3d_trace_scene_first_hit_flat(scene, ray, t_min, t_max, out_hit);
+            return runtime_ray_3d_trace_scene_first_hit_flat(scene,
+                                                             ray,
+                                                             t_min,
+                                                             t_max,
+                                                             out_hit);
         }
         HitInfo3D_Reset(out_hit);
         return false;
     }
     RuntimeTriangleBVH3D_RecordFlatFallback(false);
     return runtime_ray_3d_trace_scene_first_hit_flat(scene, ray, t_min, t_max, out_hit);
+}
+
+static void runtime_ray_3d_record_tlas_status(
+    RuntimeSceneAcceleration3DTraceStatusForRayRoute status) {
+    gRuntimeRay3DRouteStats.tlasTraceCalls += 1u;
+    switch (status) {
+        case RUNTIME_RAY_3D_ACCEL_TRACE_HIT:
+            gRuntimeRay3DRouteStats.tlasTraceHits += 1u;
+            break;
+        case RUNTIME_RAY_3D_ACCEL_TRACE_MISS:
+            gRuntimeRay3DRouteStats.tlasTraceMisses += 1u;
+            break;
+        case RUNTIME_RAY_3D_ACCEL_TRACE_UNREADY:
+            gRuntimeRay3DRouteStats.tlasTraceUnready += 1u;
+            break;
+        case RUNTIME_RAY_3D_ACCEL_TRACE_UNSUPPORTED:
+            gRuntimeRay3DRouteStats.tlasTraceUnsupported += 1u;
+            break;
+        case RUNTIME_RAY_3D_ACCEL_TRACE_ERROR:
+        default:
+            gRuntimeRay3DRouteStats.tlasTraceErrors += 1u;
+            break;
+    }
+}
+
+static void runtime_ray_3d_set_parity_mismatch(const char* reason) {
+    snprintf(gRuntimeRay3DRouteStats.lastParityMismatchReason,
+             sizeof(gRuntimeRay3DRouteStats.lastParityMismatchReason),
+             "%s",
+             (reason && reason[0]) ? reason : "unknown");
+}
+
+static bool runtime_ray_3d_hits_match(const HitInfo3D* expected,
+                                      const HitInfo3D* actual,
+                                      char* reason,
+                                      size_t reason_size) {
+    if (!expected || !actual) {
+        snprintf(reason, reason_size, "missing_hit");
+        return false;
+    }
+    if (expected->triangleIndex != actual->triangleIndex) {
+        snprintf(reason, reason_size, "triangle_index");
+        return false;
+    }
+    if (expected->localTriangleIndex != actual->localTriangleIndex) {
+        snprintf(reason, reason_size, "local_triangle_index");
+        return false;
+    }
+    if (expected->primitiveIndex != actual->primitiveIndex) {
+        snprintf(reason, reason_size, "primitive_index");
+        return false;
+    }
+    if (expected->sceneObjectIndex != actual->sceneObjectIndex) {
+        snprintf(reason, reason_size, "scene_object_index");
+        return false;
+    }
+    if (strcmp(expected->source.objectId, actual->source.objectId) != 0) {
+        snprintf(reason, reason_size, "source_object_id");
+        return false;
+    }
+    if (fabs(expected->t - actual->t) > 1e-7) {
+        snprintf(reason, reason_size, "hit_t");
+        return false;
+    }
+    if (fabs(expected->baryU - actual->baryU) > 1e-7 ||
+        fabs(expected->baryV - actual->baryV) > 1e-7 ||
+        fabs(expected->baryW - actual->baryW) > 1e-7) {
+        snprintf(reason, reason_size, "barycentric");
+        return false;
+    }
+    if (expected->hasObjectTextureCoord != actual->hasObjectTextureCoord) {
+        snprintf(reason, reason_size, "object_texture_presence");
+        return false;
+    }
+    return true;
+}
+
+static bool runtime_ray_3d_trace_scene_first_hit_parity(
+    const RuntimeScene3D* scene,
+    const Ray3D* ray,
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
+    HitInfo3D* out_hit) {
+    HitInfo3D flattened_hit = {0};
+    HitInfo3D tlas_hit = {0};
+    bool flattened_found = false;
+    RuntimeSceneAcceleration3DTraceStatusForRayRoute tlas_status;
+    bool tlas_found = false;
+    char reason[128] = {0};
+
+    if (gRuntimeRay3DSceneAccelerationTraceFirstHit) {
+        tlas_status = (RuntimeSceneAcceleration3DTraceStatusForRayRoute)
+            gRuntimeRay3DSceneAccelerationTraceFirstHit(scene,
+                                                        ray,
+                                                        t_min,
+                                                        t_max,
+                                                        &tlas_hit);
+    } else {
+        HitInfo3D_Reset(&tlas_hit);
+        tlas_status = RUNTIME_RAY_3D_ACCEL_TRACE_UNREADY;
+    }
+    runtime_ray_3d_record_tlas_status(tlas_status);
+    tlas_found = tlas_status == RUNTIME_RAY_3D_ACCEL_TRACE_HIT;
+
+    gRuntimeRay3DRouteStats.flattenedTraceCalls += 1u;
+    flattened_found = runtime_ray_3d_trace_scene_first_hit_flattened(scene,
+                                                                     ray,
+                                                                     t_min,
+                                                                     t_max,
+                                                                     &flattened_hit);
+    gRuntimeRay3DRouteStats.parityCheckedRays += 1u;
+    if (flattened_found != tlas_found) {
+        gRuntimeRay3DRouteStats.parityMismatches += 1u;
+        runtime_ray_3d_set_parity_mismatch(flattened_found ? "tlas_miss_flattened_hit"
+                                                           : "tlas_hit_flattened_miss");
+    } else if (flattened_found &&
+               !runtime_ray_3d_hits_match(&flattened_hit,
+                                           &tlas_hit,
+                                           reason,
+                                           sizeof(reason))) {
+        gRuntimeRay3DRouteStats.parityMismatches += 1u;
+        runtime_ray_3d_set_parity_mismatch(reason);
+    }
+
+    if (flattened_found) {
+        *out_hit = flattened_hit;
+        return true;
+    }
+    HitInfo3D_Reset(out_hit);
+    return false;
+}
+
+static bool runtime_ray_3d_trace_scene_first_hit_tlas_blas(
+    const RuntimeScene3D* scene,
+    const Ray3D* ray,
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
+    [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
+    HitInfo3D* out_hit) {
+    RuntimeSceneAcceleration3DTraceStatusForRayRoute tlas_status;
+    if (gRuntimeRay3DSceneAccelerationTraceFirstHit) {
+        tlas_status = (RuntimeSceneAcceleration3DTraceStatusForRayRoute)
+            gRuntimeRay3DSceneAccelerationTraceFirstHit(scene,
+                                                        ray,
+                                                        t_min,
+                                                        t_max,
+                                                        out_hit);
+    } else {
+        HitInfo3D_Reset(out_hit);
+        tlas_status = RUNTIME_RAY_3D_ACCEL_TRACE_UNREADY;
+    }
+    runtime_ray_3d_record_tlas_status(tlas_status);
+    if (tlas_status == RUNTIME_RAY_3D_ACCEL_TRACE_HIT) {
+        return true;
+    }
+    if (tlas_status == RUNTIME_RAY_3D_ACCEL_TRACE_MISS) {
+        HitInfo3D_Reset(out_hit);
+        return false;
+    }
+    gRuntimeRay3DRouteStats.flattenedFallbackCalls += 1u;
+    gRuntimeRay3DRouteStats.flattenedTraceCalls += 1u;
+    return runtime_ray_3d_trace_scene_first_hit_flattened(scene,
+                                                         ray,
+                                                         t_min,
+                                                         t_max,
+                                                         out_hit);
+}
+
+bool RuntimeRay3D_TraceSceneFirstHit(const RuntimeScene3D* scene,
+                                     const Ray3D* ray,
+                                     [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
+                                     [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
+                                     HitInfo3D* out_hit) {
+    if (!scene || !ray || !out_hit) return false;
+    gRuntimeRay3DRouteStats.traceCalls += 1u;
+    gRuntimeRay3DRouteStats.requestedRoute = gRuntimeRay3DTraceRoute;
+    gRuntimeRay3DRouteStats.activeRoute = gRuntimeRay3DTraceRoute;
+
+    if (gRuntimeRay3DTraceRoute == RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS_PARITY) {
+        return runtime_ray_3d_trace_scene_first_hit_parity(scene,
+                                                           ray,
+                                                           t_min,
+                                                           t_max,
+                                                           out_hit);
+    }
+    if (gRuntimeRay3DTraceRoute == RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS) {
+        return runtime_ray_3d_trace_scene_first_hit_tlas_blas(scene,
+                                                              ray,
+                                                              t_min,
+                                                              t_max,
+                                                              out_hit);
+    }
+
+    gRuntimeRay3DRouteStats.flattenedTraceCalls += 1u;
+    return runtime_ray_3d_trace_scene_first_hit_flattened(scene, ray, t_min, t_max, out_hit);
 }

@@ -609,6 +609,7 @@ static bool runtime_mesh_asset_load_unique_asset(const char* runtime_scene_path,
     RayTracingRuntimeMeshAsset* asset = NULL;
     char resolved_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
     int existing = runtime_mesh_asset_find_asset_index(set, asset_id);
+    struct timespec resolve_start = {0};
 
     if (out_asset_index) *out_asset_index = -1;
     if (out_skipped) *out_skipped = false;
@@ -626,6 +627,7 @@ static bool runtime_mesh_asset_load_unique_asset(const char* runtime_scene_path,
         runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size, "too many mesh assets");
         return false;
     }
+    (void)clock_gettime(CLOCK_MONOTONIC, &resolve_start);
     if (!ray_tracing_runtime_mesh_asset_resolve_path_with_hint(runtime_scene_path,
                                                                asset_id,
                                                                explicit_runtime_path,
@@ -633,8 +635,12 @@ static bool runtime_mesh_asset_load_unique_asset(const char* runtime_scene_path,
                                                                sizeof(resolved_path),
                                                                out_diagnostics,
                                                                out_diagnostics_size)) {
+        g_runtime_mesh_asset_timing.sidecar_path_resolution_ms +=
+            runtime_mesh_asset_elapsed_ms_since(&resolve_start);
         return false;
     }
+    g_runtime_mesh_asset_timing.sidecar_path_resolution_ms +=
+        runtime_mesh_asset_elapsed_ms_since(&resolve_start);
     if (max_asset_file_bytes > 0u) {
         struct stat st;
         if (stat(resolved_path, &st) != 0) {

@@ -77,6 +77,7 @@ typedef struct RayTracingRuntimeMeshAssetTimingStats {
     double total_ms;
     double scene_read_ms;
     double scene_parse_ms;
+    double sidecar_path_resolution_ms;
     double asset_load_total_ms;
     double asset_runtime_document_load_ms;
     double asset_document_copy_ms;

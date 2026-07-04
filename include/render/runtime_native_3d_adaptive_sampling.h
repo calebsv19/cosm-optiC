@@ -13,6 +13,7 @@
 #define RUNTIME_NATIVE_3D_ADAPTIVE_MIN_SUBPASSES 2
 
 bool RuntimeNative3DAdaptiveSampling_RuntimeEnabled(void);
+void RuntimeNative3DAdaptiveSampling_SetRuntimeOverride(bool has_override, bool enabled);
 
 typedef struct {
     uint8_t* stableEmitterMask;
@@ -30,12 +31,64 @@ typedef struct {
     int inactiveTileCount;
 } RuntimeNative3DAdaptiveSamplingMask;
 
+enum {
+    RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_STABLE = 1u << 0,
+    RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_ACTIVE = 1u << 1,
+    RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_PROBE = 1u << 2,
+    RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_HIGH_RISK = 1u << 3
+};
+
+typedef struct {
+    uint16_t sampleCount;
+    uint16_t probeCountdown;
+    float meanLuma;
+    float radianceDelta;
+    float risk;
+    uint8_t flags;
+} RuntimeNative3DAdaptivePixelState;
+
+typedef struct {
+    int stablePixelCount;
+    int activePixelCount;
+    int probePixelCount;
+    int highRiskPixelCount;
+    int stableTileCount;
+    int activeTileCount;
+    int probeTileCount;
+    int highRiskTileCount;
+    int measuredPixelCount;
+    int minSampleFloor;
+} RuntimeNative3DAdaptivePixelStateSummary;
+
+typedef struct {
+    RuntimeNative3DAdaptivePixelState* pixels;
+    RuntimeNative3DAdaptivePixelStateSummary summary;
+    int width;
+    int height;
+    int tileSize;
+    int tilesX;
+    int tilesY;
+} RuntimeNative3DAdaptivePixelStateBuffer;
+
 void RuntimeNative3DAdaptiveSamplingMask_Init(RuntimeNative3DAdaptiveSamplingMask* mask);
 void RuntimeNative3DAdaptiveSamplingMask_Free(RuntimeNative3DAdaptiveSamplingMask* mask);
 bool RuntimeNative3DAdaptiveSamplingMask_Ensure(RuntimeNative3DAdaptiveSamplingMask* mask,
                                                 int width,
                                                 int height);
 void RuntimeNative3DAdaptiveSamplingMask_Clear(RuntimeNative3DAdaptiveSamplingMask* mask);
+void RuntimeNative3DAdaptivePixelStateBuffer_Init(RuntimeNative3DAdaptivePixelStateBuffer* state);
+void RuntimeNative3DAdaptivePixelStateBuffer_Free(RuntimeNative3DAdaptivePixelStateBuffer* state);
+bool RuntimeNative3DAdaptivePixelStateBuffer_Ensure(RuntimeNative3DAdaptivePixelStateBuffer* state,
+                                                    int width,
+                                                    int height);
+void RuntimeNative3DAdaptivePixelStateBuffer_Clear(RuntimeNative3DAdaptivePixelStateBuffer* state);
+bool RuntimeNative3DAdaptiveSampling_MeasurePixelState(
+    RuntimeNative3DAdaptivePixelStateBuffer* state,
+    const RuntimeNative3DTemporalAccumulation* accumulation,
+    const RuntimeNative3DFeatureBuffer* features,
+    int tile_size,
+    int min_sample_floor,
+    int probe_period);
 bool RuntimeNative3DAdaptiveSampling_ShouldUse(RayTracing3DIntegratorId integrator_id,
                                                int temporal_frames);
 bool RuntimeNative3DAdaptiveSampling_BuildStableEmitterMask(
@@ -56,6 +109,10 @@ bool RuntimeNative3DAdaptiveSampling_RefreshTemporalActivityMask(
     RuntimeNative3DAdaptiveSamplingMask* mask,
     const RuntimeNative3DTemporalAccumulation* accumulation,
     const RuntimeNative3DFeatureBuffer* features);
+bool RuntimeNative3DAdaptiveSampling_RefreshActivityMaskFromPixelState(
+    RuntimeNative3DAdaptiveSamplingMask* mask,
+    const RuntimeNative3DAdaptivePixelStateBuffer* state,
+    int tile_size);
 bool RuntimeNative3DAdaptiveSampling_HasActiveSamples(
     const RuntimeNative3DAdaptiveSamplingMask* mask);
 bool RuntimeNative3DAdaptiveSampling_RenderPreparedRegionRadianceRGBMasked(

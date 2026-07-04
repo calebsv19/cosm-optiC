@@ -46,6 +46,43 @@ void RuntimeNative3DFillPixelBufferEnvironment(uint8_t* pixel_buffer, size_t pix
     }
 }
 
+void RuntimeNative3DFillPixelBufferBackground(uint8_t* pixel_buffer,
+                                              int width,
+                                              int height,
+                                              const RuntimeScene3D* scene,
+                                              const RuntimeCameraProjector3D* projector) {
+    if (!pixel_buffer || width <= 0 || height <= 0) return;
+    if (!scene || !projector) {
+        RuntimeNative3DFillPixelBufferEnvironment(pixel_buffer, (size_t)width * (size_t)height);
+        return;
+    }
+
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const double pixel_x = (double)x;
+            const double pixel_y = (double)y;
+            const Ray3D primary_ray =
+                RuntimeCameraProjector3D_MakePrimaryRay(projector, pixel_x, pixel_y);
+            double radiance_r = 0.0;
+            double radiance_g = 0.0;
+            double radiance_b = 0.0;
+            const size_t base =
+                ((size_t)y * (size_t)width + (size_t)x) *
+                (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+
+            runtime_native_3d_render_background_rgb(scene,
+                                                    &primary_ray,
+                                                    &radiance_r,
+                                                    &radiance_g,
+                                                    &radiance_b);
+            pixel_buffer[base] = TonemapCurveToByteWithFloor((float)radiance_r, 0u);
+            pixel_buffer[base + 1u] = TonemapCurveToByteWithFloor((float)radiance_g, 0u);
+            pixel_buffer[base + 2u] = TonemapCurveToByteWithFloor((float)radiance_b, 0u);
+            pixel_buffer[base + 3u] = 0xFFu;
+        }
+    }
+}
+
 void RuntimeNative3DResolveRadianceRegionToPixels(
     uint8_t* pixel_buffer,
     int pixel_width,
@@ -119,10 +156,206 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
     dst->causticSidecarSampleCount += src->causticSidecarSampleCount;
     dst->causticSidecarContributingSampleCount +=
         src->causticSidecarContributingSampleCount;
+    if (src->causticBootstrapTemporaryBridgeActive >
+        dst->causticBootstrapTemporaryBridgeActive) {
+        dst->causticBootstrapTemporaryBridgeActive =
+            src->causticBootstrapTemporaryBridgeActive;
+    }
+    if (src->causticTransportPathEmissionActive >
+        dst->causticTransportPathEmissionActive) {
+        dst->causticTransportPathEmissionActive =
+            src->causticTransportPathEmissionActive;
+    }
+    if (src->causticVolumeCacheSuppressedNoSampleableVolume >
+        dst->causticVolumeCacheSuppressedNoSampleableVolume) {
+        dst->causticVolumeCacheSuppressedNoSampleableVolume =
+            src->causticVolumeCacheSuppressedNoSampleableVolume;
+    }
+    if (src->causticTransportLightCount > dst->causticTransportLightCount) {
+        dst->causticTransportLightCount = src->causticTransportLightCount;
+    }
+    if (src->causticTransportEvaluatedPathCount >
+        dst->causticTransportEvaluatedPathCount) {
+        dst->causticTransportEvaluatedPathCount =
+            src->causticTransportEvaluatedPathCount;
+    }
+    if (src->causticTransportEmittedPathCount >
+        dst->causticTransportEmittedPathCount) {
+        dst->causticTransportEmittedPathCount =
+            src->causticTransportEmittedPathCount;
+    }
+    if (src->causticTransportTransparentHitCount >
+        dst->causticTransportTransparentHitCount) {
+        dst->causticTransportTransparentHitCount =
+            src->causticTransportTransparentHitCount;
+    }
+    if (src->causticTransportSpecularEventCount >
+        dst->causticTransportSpecularEventCount) {
+        dst->causticTransportSpecularEventCount =
+            src->causticTransportSpecularEventCount;
+    }
+    if (src->causticTransportVolumeSegmentCount >
+        dst->causticTransportVolumeSegmentCount) {
+        dst->causticTransportVolumeSegmentCount =
+            src->causticTransportVolumeSegmentCount;
+    }
+    if (src->causticTransportSurfaceReceiverTraceMissCount >
+        dst->causticTransportSurfaceReceiverTraceMissCount) {
+        dst->causticTransportSurfaceReceiverTraceMissCount =
+            src->causticTransportSurfaceReceiverTraceMissCount;
+    }
+    if (src->causticTransportSurfaceReceiverDepthRejectCount >
+        dst->causticTransportSurfaceReceiverDepthRejectCount) {
+        dst->causticTransportSurfaceReceiverDepthRejectCount =
+            src->causticTransportSurfaceReceiverDepthRejectCount;
+    }
+    if (src->causticTransportSurfaceReceiverHitCount >
+        dst->causticTransportSurfaceReceiverHitCount) {
+        dst->causticTransportSurfaceReceiverHitCount =
+            src->causticTransportSurfaceReceiverHitCount;
+    }
+    if (src->causticTransportSurfaceReceiverFallbackCount >
+        dst->causticTransportSurfaceReceiverFallbackCount) {
+        dst->causticTransportSurfaceReceiverFallbackCount =
+            src->causticTransportSurfaceReceiverFallbackCount;
+    }
+    if (src->causticVolumeCacheBound > dst->causticVolumeCacheBound) {
+        dst->causticVolumeCacheBound = src->causticVolumeCacheBound;
+    }
+    if (src->causticVolumeCacheAllocated > dst->causticVolumeCacheAllocated) {
+        dst->causticVolumeCacheAllocated = src->causticVolumeCacheAllocated;
+    }
+    if (src->causticVolumeCacheCellCount > dst->causticVolumeCacheCellCount) {
+        dst->causticVolumeCacheCellCount = src->causticVolumeCacheCellCount;
+    }
+    if (src->causticVolumeCacheNonZeroCellCount > dst->causticVolumeCacheNonZeroCellCount) {
+        dst->causticVolumeCacheNonZeroCellCount = src->causticVolumeCacheNonZeroCellCount;
+    }
+    if (src->causticVolumeCacheDepositAttemptCount >
+        dst->causticVolumeCacheDepositAttemptCount) {
+        dst->causticVolumeCacheDepositAttemptCount =
+            src->causticVolumeCacheDepositAttemptCount;
+    }
+    if (src->causticVolumeCacheDepositAcceptedCount >
+        dst->causticVolumeCacheDepositAcceptedCount) {
+        dst->causticVolumeCacheDepositAcceptedCount =
+            src->causticVolumeCacheDepositAcceptedCount;
+    }
+    if (src->causticVolumeCacheDepositRejectedCount >
+        dst->causticVolumeCacheDepositRejectedCount) {
+        dst->causticVolumeCacheDepositRejectedCount =
+            src->causticVolumeCacheDepositRejectedCount;
+    }
+    dst->causticVolumeCacheSampleLookupCount += src->causticVolumeCacheSampleLookupCount;
+    dst->causticVolumeCacheSampleContributingCount +=
+        src->causticVolumeCacheSampleContributingCount;
+    if (src->causticSurfaceCacheBound > dst->causticSurfaceCacheBound) {
+        dst->causticSurfaceCacheBound = src->causticSurfaceCacheBound;
+    }
+    if (src->causticSurfaceCacheAllocated > dst->causticSurfaceCacheAllocated) {
+        dst->causticSurfaceCacheAllocated = src->causticSurfaceCacheAllocated;
+    }
+    if (src->causticSurfaceCacheRecordCapacity >
+        dst->causticSurfaceCacheRecordCapacity) {
+        dst->causticSurfaceCacheRecordCapacity =
+            src->causticSurfaceCacheRecordCapacity;
+    }
+    if (src->causticSurfaceCacheRecordCount > dst->causticSurfaceCacheRecordCount) {
+        dst->causticSurfaceCacheRecordCount = src->causticSurfaceCacheRecordCount;
+    }
+    if (src->causticSurfaceCacheDepositAttemptCount >
+        dst->causticSurfaceCacheDepositAttemptCount) {
+        dst->causticSurfaceCacheDepositAttemptCount =
+            src->causticSurfaceCacheDepositAttemptCount;
+    }
+    if (src->causticSurfaceCacheDepositAcceptedCount >
+        dst->causticSurfaceCacheDepositAcceptedCount) {
+        dst->causticSurfaceCacheDepositAcceptedCount =
+            src->causticSurfaceCacheDepositAcceptedCount;
+    }
+    if (src->causticSurfaceCacheDepositRejectedCount >
+        dst->causticSurfaceCacheDepositRejectedCount) {
+        dst->causticSurfaceCacheDepositRejectedCount =
+            src->causticSurfaceCacheDepositRejectedCount;
+    }
+    dst->causticSurfaceCacheSampleLookupCount +=
+        src->causticSurfaceCacheSampleLookupCount;
+    dst->causticSurfaceCacheSampleContributingCount +=
+        src->causticSurfaceCacheSampleContributingCount;
+    if (src->causticSurfaceCacheNearestSampleCandidateCount > 0.0 &&
+        (dst->causticSurfaceCacheNearestSampleCandidateCount <= 0.0 ||
+         src->causticSurfaceCacheNearestSampleDistance <
+             dst->causticSurfaceCacheNearestSampleDistance)) {
+        dst->causticSurfaceCacheNearestSampleDistance =
+            src->causticSurfaceCacheNearestSampleDistance;
+        dst->causticSurfaceCacheNearestSampleRadius =
+            src->causticSurfaceCacheNearestSampleRadius;
+        dst->causticSurfaceCacheNearestSampleNormalDot =
+            src->causticSurfaceCacheNearestSampleNormalDot;
+    }
+    dst->causticSurfaceCacheNearestSampleCandidateCount +=
+        src->causticSurfaceCacheNearestSampleCandidateCount;
+    dst->causticVolumeScatterSampleCount += src->causticVolumeScatterSampleCount;
+    dst->causticVolumeScatterContributingSampleCount +=
+        src->causticVolumeScatterContributingSampleCount;
     if (src->maxCausticSidecarRadiance > dst->maxCausticSidecarRadiance) {
         dst->maxCausticSidecarRadiance = src->maxCausticSidecarRadiance;
     }
     dst->totalCausticSidecarRadiance += src->totalCausticSidecarRadiance;
+    if (src->maxCausticVolumeCacheRadiance > dst->maxCausticVolumeCacheRadiance) {
+        dst->maxCausticVolumeCacheRadiance = src->maxCausticVolumeCacheRadiance;
+    }
+    if (src->causticVolumeCacheNonZeroCellRatio >
+        dst->causticVolumeCacheNonZeroCellRatio) {
+        dst->causticVolumeCacheNonZeroCellRatio =
+            src->causticVolumeCacheNonZeroCellRatio;
+    }
+    if (src->causticVolumeCacheSampleHitRatio >
+        dst->causticVolumeCacheSampleHitRatio) {
+        dst->causticVolumeCacheSampleHitRatio =
+            src->causticVolumeCacheSampleHitRatio;
+    }
+    if (src->causticVolumeCacheNonZeroCellCount > 0 &&
+        (dst->causticVolumeCacheNonZeroCellCount == src->causticVolumeCacheNonZeroCellCount ||
+         dst->causticVolumeCacheRadianceCentroidX == 0.0)) {
+        dst->causticVolumeCacheRadianceCentroidX =
+            src->causticVolumeCacheRadianceCentroidX;
+        dst->causticVolumeCacheRadianceCentroidY =
+            src->causticVolumeCacheRadianceCentroidY;
+        dst->causticVolumeCacheRadianceCentroidZ =
+            src->causticVolumeCacheRadianceCentroidZ;
+        dst->causticVolumeCacheNonZeroBoundsMinX =
+            src->causticVolumeCacheNonZeroBoundsMinX;
+        dst->causticVolumeCacheNonZeroBoundsMinY =
+            src->causticVolumeCacheNonZeroBoundsMinY;
+        dst->causticVolumeCacheNonZeroBoundsMinZ =
+            src->causticVolumeCacheNonZeroBoundsMinZ;
+        dst->causticVolumeCacheNonZeroBoundsMaxX =
+            src->causticVolumeCacheNonZeroBoundsMaxX;
+        dst->causticVolumeCacheNonZeroBoundsMaxY =
+            src->causticVolumeCacheNonZeroBoundsMaxY;
+        dst->causticVolumeCacheNonZeroBoundsMaxZ =
+            src->causticVolumeCacheNonZeroBoundsMaxZ;
+    }
+    dst->totalCausticVolumeCacheRadianceR += src->totalCausticVolumeCacheRadianceR;
+    dst->totalCausticVolumeCacheRadianceG += src->totalCausticVolumeCacheRadianceG;
+    dst->totalCausticVolumeCacheRadianceB += src->totalCausticVolumeCacheRadianceB;
+    if (src->maxCausticSurfaceCacheRadiance > dst->maxCausticSurfaceCacheRadiance) {
+        dst->maxCausticSurfaceCacheRadiance = src->maxCausticSurfaceCacheRadiance;
+    }
+    dst->totalCausticSurfaceCacheRadianceR += src->totalCausticSurfaceCacheRadianceR;
+    dst->totalCausticSurfaceCacheRadianceG += src->totalCausticSurfaceCacheRadianceG;
+    dst->totalCausticSurfaceCacheRadianceB += src->totalCausticSurfaceCacheRadianceB;
+    dst->totalCausticSurfaceRadianceR += src->totalCausticSurfaceRadianceR;
+    dst->totalCausticSurfaceRadianceG += src->totalCausticSurfaceRadianceG;
+    dst->totalCausticSurfaceRadianceB += src->totalCausticSurfaceRadianceB;
+    dst->volumeScatterDirectSampleCount += src->volumeScatterDirectSampleCount;
+    dst->totalDirectVolumeScatterRadianceR += src->totalDirectVolumeScatterRadianceR;
+    dst->totalDirectVolumeScatterRadianceG += src->totalDirectVolumeScatterRadianceG;
+    dst->totalDirectVolumeScatterRadianceB += src->totalDirectVolumeScatterRadianceB;
+    dst->totalCausticVolumeScatterRadianceR += src->totalCausticVolumeScatterRadianceR;
+    dst->totalCausticVolumeScatterRadianceG += src->totalCausticVolumeScatterRadianceG;
+    dst->totalCausticVolumeScatterRadianceB += src->totalCausticVolumeScatterRadianceB;
     dst->mirrorDominantPixelCount += src->mirrorDominantPixelCount;
     dst->mirrorBaseAttenuatedPixelCount += src->mirrorBaseAttenuatedPixelCount;
     dst->mirrorReflectionHitPixelCount += src->mirrorReflectionHitPixelCount;
@@ -134,6 +367,37 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
     dst->temporalActivePixelCount += src->temporalActivePixelCount;
     dst->temporalActiveTileCount += src->temporalActiveTileCount;
     dst->temporalInactiveTileCount += src->temporalInactiveTileCount;
+    dst->temporalPlannedParentTileCount += src->temporalPlannedParentTileCount;
+    dst->temporalEmittedTileJobCount += src->temporalEmittedTileJobCount;
+    dst->temporalOccupancySkippedTileCount += src->temporalOccupancySkippedTileCount;
+    dst->temporalDispatchedTileJobCount += src->temporalDispatchedTileJobCount;
+    dst->temporalCompletedTileJobCount += src->temporalCompletedTileJobCount;
+    dst->temporalProgressDirtyBatchCount += src->temporalProgressDirtyBatchCount;
+    dst->temporalProgressDirtyTileCount += src->temporalProgressDirtyTileCount;
+    dst->temporalDirtyPreviewPresentCount += src->temporalDirtyPreviewPresentCount;
+    if (src->temporalConservativeFirstFrameTileRender >
+        dst->temporalConservativeFirstFrameTileRender) {
+        dst->temporalConservativeFirstFrameTileRender =
+            src->temporalConservativeFirstFrameTileRender;
+    }
+    dst->temporalFinalFullResolveCount += src->temporalFinalFullResolveCount;
+    dst->temporalHostFullResolveCount += src->temporalHostFullResolveCount;
+    dst->temporalFinalPreviewPresentCount += src->temporalFinalPreviewPresentCount;
+    dst->temporalHistoryPromoteCount += src->temporalHistoryPromoteCount;
+    dst->temporalAdaptiveStateMeasuredPixels += src->temporalAdaptiveStateMeasuredPixels;
+    dst->temporalAdaptiveStateStablePixels += src->temporalAdaptiveStateStablePixels;
+    dst->temporalAdaptiveStateActivePixels += src->temporalAdaptiveStateActivePixels;
+    dst->temporalAdaptiveStateProbePixels += src->temporalAdaptiveStateProbePixels;
+    dst->temporalAdaptiveStateHighRiskPixels += src->temporalAdaptiveStateHighRiskPixels;
+    dst->temporalAdaptiveStateStableTiles += src->temporalAdaptiveStateStableTiles;
+    dst->temporalAdaptiveStateActiveTiles += src->temporalAdaptiveStateActiveTiles;
+    dst->temporalAdaptiveStateProbeTiles += src->temporalAdaptiveStateProbeTiles;
+    dst->temporalAdaptiveStateHighRiskTiles += src->temporalAdaptiveStateHighRiskTiles;
+    if (src->temporalAdaptiveStateMinSampleFloor >
+        dst->temporalAdaptiveStateMinSampleFloor) {
+        dst->temporalAdaptiveStateMinSampleFloor =
+            src->temporalAdaptiveStateMinSampleFloor;
+    }
     dst->temporalMeasuredTileJobs += src->temporalMeasuredTileJobs;
     dst->temporalAdaptiveSplitParentCount += src->temporalAdaptiveSplitParentCount;
     dst->temporalAdaptiveChildTileCount += src->temporalAdaptiveChildTileCount;
@@ -228,9 +492,56 @@ static void runtime_native_3d_render_stats_normalize_temporal(
     stats->mirrorGeometryReflectionPixelCount = runtime_native_3d_render_stats_round_divide(
         stats->mirrorGeometryReflectionPixelCount, committed_subpasses);
     stats->totalBounceRadiance /= (double)committed_subpasses;
+    stats->causticVolumeCacheSampleLookupCount = runtime_native_3d_render_stats_round_divide(
+        stats->causticVolumeCacheSampleLookupCount, committed_subpasses);
+    stats->causticVolumeCacheSampleContributingCount =
+        runtime_native_3d_render_stats_round_divide(
+            stats->causticVolumeCacheSampleContributingCount,
+            committed_subpasses);
+    stats->causticSurfaceCacheSampleLookupCount = runtime_native_3d_render_stats_round_divide(
+        stats->causticSurfaceCacheSampleLookupCount, committed_subpasses);
+    stats->causticSurfaceCacheSampleContributingCount =
+        runtime_native_3d_render_stats_round_divide(
+            stats->causticSurfaceCacheSampleContributingCount,
+            committed_subpasses);
+    stats->causticVolumeScatterSampleCount = runtime_native_3d_render_stats_round_divide(
+        stats->causticVolumeScatterSampleCount, committed_subpasses);
+    stats->causticVolumeScatterContributingSampleCount =
+        runtime_native_3d_render_stats_round_divide(
+            stats->causticVolumeScatterContributingSampleCount,
+            committed_subpasses);
+    stats->volumeScatterDirectSampleCount = runtime_native_3d_render_stats_round_divide(
+        stats->volumeScatterDirectSampleCount, committed_subpasses);
+    stats->totalDirectVolumeScatterRadianceR /= (double)committed_subpasses;
+    stats->totalDirectVolumeScatterRadianceG /= (double)committed_subpasses;
+    stats->totalDirectVolumeScatterRadianceB /= (double)committed_subpasses;
+    stats->totalCausticVolumeScatterRadianceR /= (double)committed_subpasses;
+    stats->totalCausticVolumeScatterRadianceG /= (double)committed_subpasses;
+    stats->totalCausticVolumeScatterRadianceB /= (double)committed_subpasses;
+    stats->totalCausticSurfaceRadianceR /= (double)committed_subpasses;
+    stats->totalCausticSurfaceRadianceG /= (double)committed_subpasses;
+    stats->totalCausticSurfaceRadianceB /= (double)committed_subpasses;
     stats->totalMirrorSpecularReflectionRadiance /= (double)committed_subpasses;
     stats->totalMirrorBaseRadianceBeforeAttenuation /= (double)committed_subpasses;
     stats->totalMirrorBaseRadianceAfterAttenuation /= (double)committed_subpasses;
+}
+
+static void runtime_native_3d_render_stats_record_adaptive_state_summary(
+    RuntimeNative3DRenderStats* stats,
+    const RuntimeNative3DAdaptivePixelStateSummary* summary) {
+    if (!stats || !summary) return;
+    stats->temporalAdaptiveStateMeasuredPixels += summary->measuredPixelCount;
+    stats->temporalAdaptiveStateStablePixels += summary->stablePixelCount;
+    stats->temporalAdaptiveStateActivePixels += summary->activePixelCount;
+    stats->temporalAdaptiveStateProbePixels += summary->probePixelCount;
+    stats->temporalAdaptiveStateHighRiskPixels += summary->highRiskPixelCount;
+    stats->temporalAdaptiveStateStableTiles += summary->stableTileCount;
+    stats->temporalAdaptiveStateActiveTiles += summary->activeTileCount;
+    stats->temporalAdaptiveStateProbeTiles += summary->probeTileCount;
+    stats->temporalAdaptiveStateHighRiskTiles += summary->highRiskTileCount;
+    if (summary->minSampleFloor > stats->temporalAdaptiveStateMinSampleFloor) {
+        stats->temporalAdaptiveStateMinSampleFloor = summary->minSampleFloor;
+    }
 }
 
 static bool runtime_native_3d_render_prepared_frame_serial(
@@ -298,12 +609,16 @@ static bool runtime_native_3d_render_prepared_frame_serial(
         }
     }
     if (ok && out_stats) {
+        RuntimeNative3DAdaptivePixelStateSummary adaptive_summary = {0};
         out_stats->temporalCommittedSubpasses =
             RuntimeNative3DRenderUnit_CommittedSubpasses(&render_unit);
         RuntimeNative3DRenderUnit_GetActivityCounts(&render_unit,
                                                     &out_stats->temporalActivePixelCount,
                                                     &out_stats->temporalActiveTileCount,
                                                     &out_stats->temporalInactiveTileCount);
+        RuntimeNative3DRenderUnit_GetAdaptiveStateSummary(&render_unit, &adaptive_summary);
+        runtime_native_3d_render_stats_record_adaptive_state_summary(out_stats,
+                                                                     &adaptive_summary);
     }
 
     RuntimeNative3DRenderUnit_Free(&render_unit);
@@ -324,6 +639,8 @@ static bool runtime_native_3d_render_should_use_tile_scheduler(int width, int he
 void RuntimeNative3DPreparedFrame_Free(RuntimeNative3DPreparedFrame* frame) {
     if (!frame) return;
     RuntimeNative3DTileOccupancy_Free(&frame->tileOccupancy);
+    RuntimeCausticVolumeCache3D_Free(&frame->causticVolumeCache);
+    RuntimeCausticSurfaceCache3D_Free(&frame->causticSurfaceCache);
     RuntimeScene3D_Free(&frame->scene);
     memset(frame, 0, sizeof(*frame));
 }
@@ -459,6 +776,7 @@ bool RuntimeNative3DPreparedRegionMayContainGeometry(const RuntimeNative3DPrepar
                                                      int end_x,
                                                      int end_y) {
     if (!frame || !frame->valid) return true;
+    if (frame->tileOccupancyConservativeAllTiles) return true;
     if (RuntimeVolume3D_HasActiveExtinction(&frame->scene.volume)) {
         return true;
     }
@@ -682,7 +1000,6 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudge
         memset(out_stats, 0, sizeof(*out_stats));
     }
 
-    RuntimeNative3DFillPixelBufferEnvironment(pixel_buffer, (size_t)width * (size_t)height);
     ok = RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(&frame,
                                                              width,
                                                              height,
@@ -692,8 +1009,14 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudge
                                                              live_light_y,
                                                              sampling);
     if (!ok) {
+        RuntimeNative3DFillPixelBufferEnvironment(pixel_buffer, (size_t)width * (size_t)height);
         return false;
     }
+    RuntimeNative3DFillPixelBufferBackground(pixel_buffer,
+                                             width,
+                                             height,
+                                             &frame.scene,
+                                             &frame.projector);
     if (runtime_native_3d_render_should_use_tile_scheduler(width, height)) {
         if (tile_progress_callback) {
             tile_progress_adapter.callback = tile_progress_callback;

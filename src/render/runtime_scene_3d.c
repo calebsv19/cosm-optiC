@@ -143,6 +143,10 @@ bool RuntimeScene3D_CopyGeometryFrom(RuntimeScene3D* dst, const RuntimeScene3D* 
     dst->hasCamera = src->hasCamera;
     dst->materialFlags = src->materialFlags;
     dst->capabilities = src->capabilities;
+    dst->objectMaterialSummariesValid = src->objectMaterialSummariesValid;
+    memcpy(dst->objectMaterialSummaries,
+           src->objectMaterialSummaries,
+           sizeof(dst->objectMaterialSummaries));
 
     if (src->primitiveCount > 0) {
         dst->primitives = (RuntimePrimitive3D*)malloc(sizeof(*dst->primitives) *

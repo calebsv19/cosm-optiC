@@ -24,10 +24,17 @@ typedef enum {
     RUNTIME_LIGHT_SOURCE_3D_ORIGIN_MATERIAL_EMITTER = 2
 } RuntimeLightSource3DOrigin;
 
+typedef enum {
+    RUNTIME_LIGHT_SOURCE_3D_EMISSION_OMNI = 0,
+    RUNTIME_LIGHT_SOURCE_3D_EMISSION_ONE_SIDED = 1,
+    RUNTIME_LIGHT_SOURCE_3D_EMISSION_TWO_SIDED = 2
+} RuntimeLightSource3DEmissionProfile;
+
 typedef struct {
     char id[RUNTIME_LIGHT_SOURCE_3D_MAX_ID];
     RuntimeLightSource3DKind kind;
     RuntimeLightSource3DOrigin origin;
+    RuntimeLightSource3DEmissionProfile emissionProfile;
     bool enabled;
     Vec3 position;
     Vec3 axisU;
@@ -47,6 +54,9 @@ typedef struct {
     Vec3 emissiveAverageNormal;
     double emissiveProxyRadius;
     bool meshAreaSamplerOnly;
+    int sourceSceneObjectIndex;
+    int sourcePrimitiveIndex;
+    int sourceTriangleIndex;
 } RuntimeLightSource3D;
 
 typedef struct {

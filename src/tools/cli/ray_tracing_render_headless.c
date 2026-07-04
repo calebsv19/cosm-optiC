@@ -14,11 +14,15 @@
 #include "import/fluid_volume_import_3d.h"
 #include "import/runtime_scene_bridge.h"
 #include "import/water_surface_import.h"
+#include "render/integrators/integrator_common.h"
 #include "render/pipeline/ray_tracing2_native3d_overlay.h"
 #include "render/ray_tracing_mode_backend.h"
 #include "render/runtime_material_payload_3d.h"
+#include "render/runtime_native_3d_adaptive_sampling.h"
 #include "render/runtime_native_3d_render.h"
 #include "render/runtime_disney_v2_caustic_sidecar_3d.h"
+#include "render/runtime_caustic_bootstrap_3d.h"
+#include "render/runtime_caustic_transport_3d.h"
 #include "render/runtime_volume_3d_debug.h"
 #include "render/runtime_volume_3d_integrate.h"
 #include "render/runtime_volume_3d_scatter.h"
@@ -534,6 +538,9 @@ static void ray_tracing_headless_copy_water_surface_first_frame(
     preflight->water_surface_grid_w = frame->grid_w;
     preflight->water_surface_grid_d = frame->grid_d;
     preflight->water_surface_sample_count = frame->sample_count;
+    preflight->water_surface_last_grid_w = frame->grid_w;
+    preflight->water_surface_last_grid_d = frame->grid_d;
+    preflight->water_surface_last_sample_count = frame->sample_count;
     preflight->water_surface_wet_columns = frame->wet_columns;
     preflight->water_surface_dry_columns = frame->dry_columns;
     preflight->water_surface_solid_columns = frame->solid_columns;
@@ -598,6 +605,10 @@ static bool ray_tracing_headless_populate_water_surface_frame_selection(
                  preflight->water_surface_selected_first_frame_path);
         preflight->water_surface_loaded_last_frame_index =
             preflight->water_surface_loaded_first_frame_index;
+        preflight->water_surface_last_grid_w = preflight->water_surface_grid_w;
+        preflight->water_surface_last_grid_d = preflight->water_surface_grid_d;
+        preflight->water_surface_last_sample_count =
+            preflight->water_surface_sample_count;
     } else {
         bool last_found = false;
         if (!ray_tracing_headless_inspect_water_surface_frame(request,
@@ -620,6 +631,9 @@ static bool ray_tracing_headless_populate_water_surface_frame_selection(
                  sizeof(preflight->water_surface_selected_last_frame_path),
                  "%s",
                  last.frame_path);
+        preflight->water_surface_last_grid_w = last.grid_w;
+        preflight->water_surface_last_grid_d = last.grid_d;
+        preflight->water_surface_last_sample_count = last.sample_count;
     }
 
     preflight->water_surface_frame_selection_dynamic =
@@ -717,6 +731,18 @@ static void ray_tracing_headless_note_registered_lights(
                 preflight->registered_light_authored_count += 1;
                 break;
         }
+        switch (source->emissionProfile) {
+            case RUNTIME_LIGHT_SOURCE_3D_EMISSION_ONE_SIDED:
+                preflight->registered_light_emission_one_sided_count += 1;
+                break;
+            case RUNTIME_LIGHT_SOURCE_3D_EMISSION_TWO_SIDED:
+                preflight->registered_light_emission_two_sided_count += 1;
+                break;
+            case RUNTIME_LIGHT_SOURCE_3D_EMISSION_OMNI:
+            default:
+                preflight->registered_light_emission_omni_count += 1;
+                break;
+        }
         if (source->meshAreaSamplerOnly) {
             preflight->registered_light_mesh_area_sampler_only_count += 1;
         }
@@ -738,6 +764,7 @@ static void apply_inspection_overrides(const RayTracingAgentRenderRequest *reque
     RuntimeNative3DRender_ResetInspectionCameraOverrides();
     RuntimeVolume3DScatter_ResetTuning();
     RuntimeVolume3DMaterial_ResetTuning();
+    RuntimeRay3D_SetTraceRoute(request->trace_route);
     if (request->has_camera_zoom_override) {
         sceneSettings.camera.zoom = request->camera_zoom_override;
     }
@@ -795,6 +822,10 @@ static void apply_inspection_overrides(const RayTracingAgentRenderRequest *reque
     if (request->has_volume_scatter_gain_override) {
         RuntimeVolume3DScatter_SetStrengthGain(request->volume_scatter_gain_override);
     }
+    if (request->has_caustic_volume_scatter_gain_override) {
+        RuntimeVolume3DScatter_SetCausticStrengthGain(
+            request->caustic_volume_scatter_gain_override);
+    }
     if (request->has_volume_density_scale_override) {
         RuntimeVolume3DMaterial_SetDensityScale(request->volume_density_scale_override);
     }
@@ -822,6 +853,8 @@ static void apply_inspection_overrides(const RayTracingAgentRenderRequest *reque
             : RUNTIME_DISNEY_V2_CAUSTIC_MODE_OFF,
         request->has_caustic_sidecar_strength_override ? request->caustic_sidecar_strength
                                                        : 1.0);
+    RuntimeCausticBootstrap3D_SetRequestState(&request->caustic_settings);
+    RuntimeCausticTransport3D_SetRequestState(&request->caustic_settings);
     if (request->has_volume_tint_override) {
         RuntimeVolume3DScatter_SetTint(request->volume_tint_r,
                                        request->volume_tint_g,
@@ -850,6 +883,7 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
     (void)clock_gettime(CLOCK_MONOTONIC, &preflight_started_at);
     ray_tracing_runtime_mesh_assets_timing_reset();
     RuntimeScene3DBuilder_TimingReset();
+    RuntimeDynamicGeometryAcceleration3D_ResetWaterCacheLifecycle();
     preflight.scene_acceleration_stats =
         RuntimeSceneAcceleration3DDiagnostics_Disabled();
     preflight.request_loaded = true;
@@ -879,6 +913,14 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
     animSettings.interactiveMode = false;
     animSettings.integratorMode3D = (int)request->integrator_3d;
     animSettings.temporalFrames3D = request->temporal_frames;
+    if (request->has_tiled_renderer_override) {
+        animSettings.useTiledRenderer = request->tiled_renderer_override;
+    }
+    if (request->has_tile_size_override) {
+        animSettings.tileSize = ClampTileSize(request->tile_size_override);
+    }
+    RuntimeNative3DAdaptiveSampling_SetRuntimeOverride(request->has_adaptive_sampling_override,
+                                                       request->adaptive_sampling_enabled_override);
     if (request->has_denoise_enabled_override) {
         animSettings.disneyDenoiseEnabled = request->denoise_enabled_override;
     }
@@ -1155,6 +1197,10 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
     RuntimeScene3DBuilder_TimingSnapshot(&preflight.scene_builder_timing_stats);
     RuntimeMeshBLASCache3D_SnapshotDiagnostics(&preflight.scene_acceleration_stats);
     RuntimeSceneAcceleration3D_AppendTLASDiagnostics(&preflight.scene_acceleration_stats);
+    RuntimeRay3D_SnapshotRouteStats(&preflight.ray_trace_route_stats);
+    RuntimeDynamicGeometryAcceleration3D_SnapshotWaterCacheDiagnostics(
+        &preflight.dynamic_water_cache_stats);
+    preflight.caustic_cache_prep_ms = frame.causticCachePrepMs;
     if (preflight.prepared_frame) {
         preflight.environment_summary = frame.scene.environment;
         preflight.environment_summary_built = true;
@@ -1532,6 +1578,7 @@ static int run_render(const RayTracingAgentRenderRequest *request,
         light_point = sceneSettings.bezierPath.points[0];
     }
     RuntimeTriangleBVH3D_ResetTraceStats();
+    RuntimeRay3D_ResetRouteStats();
 
     for (int i = 0; i < request->frame_count; ++i) {
         char frame_path[PATH_MAX];
@@ -1787,7 +1834,10 @@ static int run_render(const RayTracingAgentRenderRequest *request,
 
     free(pixels);
     RuntimeTriangleBVH3D_SnapshotTraceStats(&preflight.bvh_trace_stats);
+    RuntimeRay3D_SnapshotRouteStats(&preflight.ray_trace_route_stats);
     RuntimeNative3DPreparedSceneCacheStatsSnapshot(&preflight.prepared_scene_cache_stats);
+    RuntimeDynamicGeometryAcceleration3D_SnapshotWaterCacheDiagnostics(
+        &preflight.dynamic_water_cache_stats);
     RuntimeMeshBLASCache3D_SnapshotDiagnostics(&preflight.scene_acceleration_stats);
     RuntimeSceneAcceleration3D_AppendTLASDiagnostics(&preflight.scene_acceleration_stats);
     preflight.rendered_frames = preflight.frames_rendered == request->frame_count;
@@ -1880,6 +1930,9 @@ int main(int argc, char **argv) {
 
     preflight.scene_acceleration_stats =
         RuntimeSceneAcceleration3DDiagnostics_Disabled();
+    RuntimeRay3D_ResetTraceRouteForTests();
+    RuntimeRay3D_ResetRouteStats();
+    RuntimeRay3D_SnapshotRouteStats(&preflight.ray_trace_route_stats);
 
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "--request") == 0 && i + 1 < argc) {

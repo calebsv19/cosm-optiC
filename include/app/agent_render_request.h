@@ -7,7 +7,9 @@
 
 #include "config/config_manager.h"
 #include "render/ray_tracing_integrator_catalog.h"
+#include "render/runtime_caustic_settings_3d.h"
 #include "render/runtime_disney_v2_caustic_sidecar_3d.h"
+#include "render/runtime_ray_3d.h"
 
 #define RAY_TRACING_AGENT_RENDER_REQUEST_SCHEMA "ray_tracing_agent_render_request_v1"
 
@@ -33,6 +35,12 @@ typedef struct RayTracingAgentRenderRequest {
     int height;
     double normalized_t;
     int temporal_frames;
+    bool has_tiled_renderer_override;
+    bool tiled_renderer_override;
+    bool has_tile_size_override;
+    int tile_size_override;
+    bool has_adaptive_sampling_override;
+    bool adaptive_sampling_enabled_override;
     bool has_denoise_enabled_override;
     bool denoise_enabled_override;
     bool has_sampling_window;
@@ -79,6 +87,8 @@ typedef struct RayTracingAgentRenderRequest {
     double forward_decay_override;
     bool has_volume_scatter_gain_override;
     double volume_scatter_gain_override;
+    bool has_caustic_volume_scatter_gain_override;
+    double caustic_volume_scatter_gain_override;
     bool has_volume_density_scale_override;
     double volume_density_scale_override;
     bool has_volume_density_gamma_override;
@@ -93,8 +103,11 @@ typedef struct RayTracingAgentRenderRequest {
     int secondary_diffuse_samples_3d_override;
     bool has_transmission_samples_3d_override;
     int transmission_samples_3d_override;
+    bool has_trace_route_override;
+    RuntimeRay3DTraceRoute trace_route;
     bool has_caustic_mode_override;
     RuntimeDisneyV2CausticMode3D caustic_mode;
+    RuntimeCausticSettings3D caustic_settings;
     bool has_caustic_sidecar_enabled_override;
     bool caustic_sidecar_enabled;
     bool has_caustic_sidecar_strength_override;

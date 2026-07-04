@@ -4,6 +4,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -14,11 +15,13 @@
 #include "import/runtime_scene_bridge.h"
 #include "import/water_surface_import.h"
 #include "material/material.h"
+#include "render/runtime_dynamic_geometry_accel_3d.h"
 #include "render/runtime_scene_3d_builder.h"
 #include "render/runtime_scene_3d_samples.h"
 #include "render/runtime_triangle_bvh_3d.h"
 #include "render/runtime_water_material_3d.h"
 #include "render/runtime_native_3d_prepare_diagnostics.h"
+#include "render/runtime_scene_accel_3d.h"
 #include "scene/object_manager.h"
 
 static const double kRuntimeNative3DWaterSurfaceReflectivity = 0.12;
@@ -45,6 +48,16 @@ static uint64_t gRuntimeNative3DPreparedSceneCacheMisses = 0u;
 static uint64_t gRuntimeNative3DPreparedSceneCacheStores = 0u;
 static uint64_t gRuntimeNative3DPreparedSceneCacheInvalidations = 0u;
 static uint64_t gRuntimeNative3DPreparedSceneCacheTimeIndependentHits = 0u;
+
+static double runtime_native_3d_prepare_elapsed_ms_since(const struct timespec* start_time) {
+    struct timespec now = {0};
+    double elapsed = 0.0;
+    if (!start_time) return 0.0;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return 0.0;
+    elapsed = (double)(now.tv_sec - start_time->tv_sec) * 1000.0;
+    elapsed += (double)(now.tv_nsec - start_time->tv_nsec) / 1000000.0;
+    return elapsed < 0.0 ? 0.0 : elapsed;
+}
 
 void runtime_native_3d_prepare_frame_set_diag(const char* message) {
     RuntimeNative3DPrepareDiagnostics_Set(message);
@@ -360,11 +373,17 @@ static void runtime_native_3d_render_apply_live_light(RuntimeScene3D* scene,
             RuntimeLightSet3D_GetEnabled(&scene->lightSet, 0);
         if (!first_enabled) first_enabled = &scene->lightSet.lights[0];
         scene->light.position = first_enabled->position;
-        scene->light.radius = first_enabled->radius;
+        scene->light.radius = (first_enabled->radius > 0.0)
+                                  ? first_enabled->radius
+                                  : runtime_native_3d_render_resolve_default_light_radius(scene);
         scene->light.intensity = first_enabled->intensity;
         scene->light.falloffDistance = first_enabled->falloffDistance;
         scene->light.falloffMode = first_enabled->falloffMode;
         scene->hasLight = first_enabled->enabled;
+        if (scene->hasLight) {
+            (void)RuntimeLightSet3D_UpdateFirstEnabledFromCompatibilityLight(&scene->lightSet,
+                                                                             &scene->light);
+        }
         return;
     }
 
@@ -456,6 +475,7 @@ static bool runtime_native_3d_render_build_live_scene(RuntimeScene3D* scene,
                                              &gRuntimeNative3DPreparedSceneCache)) {
             return false;
         }
+        RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(scene);
         RuntimeScene3D_RefreshMaterialFlags(scene);
     } else {
         RuntimeScene3D built_scene = {0};
@@ -478,6 +498,7 @@ static bool runtime_native_3d_render_build_live_scene(RuntimeScene3D* scene,
                                              &gRuntimeNative3DPreparedSceneCache)) {
             return false;
         }
+        RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(scene);
         RuntimeScene3D_RefreshMaterialFlags(scene);
     }
 
@@ -639,6 +660,41 @@ static bool runtime_native_3d_render_apply_water_surface_material(
     return RuntimeWaterMaterial3D_Set(scene_object_index, &override);
 }
 
+static void runtime_native_3d_record_water_surface_accel_lifecycle(
+    const RuntimeWaterSurfaceFrame* water,
+    const RuntimeScene3D* scene,
+    int first_triangle_index,
+    int appended_triangle_count) {
+    RuntimeDynamicGeometryAcceleration3DInput input = {0};
+    RuntimeDynamicGeometryAcceleration3DClassification classification = {0};
+
+    if (!water) return;
+    input.water_surface_source_found = true;
+    input.water_surface_loaded = water->valid;
+    input.water_surface_frame_selection_built = true;
+    input.water_surface_frame_selection_dynamic = false;
+    input.water_surface_mesh_attached = appended_triangle_count > 0;
+    input.water_surface_first_frame_index = water->frame_index;
+    input.water_surface_last_frame_index = water->frame_index;
+    input.water_surface_first_grid_w = water->grid_w;
+    input.water_surface_first_grid_d = water->grid_d;
+    input.water_surface_first_sample_count = water->sample_count;
+    input.water_surface_last_grid_w = water->grid_w;
+    input.water_surface_last_grid_d = water->grid_d;
+    input.water_surface_last_sample_count = water->sample_count;
+    input.water_surface_triangle_count = appended_triangle_count;
+
+    RuntimeDynamicGeometryAcceleration3D_Classify(&input, &classification);
+    (void)RuntimeDynamicGeometryAcceleration3D_RecordWaterSurfaceFrame(
+        &classification,
+        water->frame_index,
+        appended_triangle_count);
+    (void)RuntimeDynamicGeometryAcceleration3D_StoreWaterSurfaceMeshFromScene(
+        scene,
+        first_triangle_index,
+        appended_triangle_count);
+}
+
 static bool runtime_native_3d_render_attach_configured_water_surface(RuntimeScene3D* scene,
                                                                      int frame_index) {
     RuntimeWaterSurfaceFrame water = {0};
@@ -646,6 +702,7 @@ static bool runtime_native_3d_render_attach_configured_water_surface(RuntimeScen
     bool found = false;
     char diagnostics[1024] = {0};
     int scene_object_index = -1;
+    int first_water_triangle_index = 0;
     int appended_triangle_count = 0;
 
     if (!scene) return false;
@@ -698,6 +755,7 @@ static bool runtime_native_3d_render_attach_configured_water_surface(RuntimeScen
     desc.two_sided = true;
     desc.map_y_height_to_scene_z = true;
 
+    first_water_triangle_index = scene->triangleMesh.triangleCount;
     if (!RuntimeScene3DBuilder_AppendHeightfieldSurface(scene,
                                                         &desc,
                                                         &appended_triangle_count)) {
@@ -705,6 +763,10 @@ static bool runtime_native_3d_render_attach_configured_water_surface(RuntimeScen
         RuntimeWaterSurfaceFrame_Free(&water);
         return false;
     }
+    runtime_native_3d_record_water_surface_accel_lifecycle(&water,
+                                                           scene,
+                                                           first_water_triangle_index,
+                                                           appended_triangle_count);
 
     RuntimeWaterSurfaceFrame_Free(&water);
     return true;
@@ -794,6 +856,7 @@ bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
     double live_light_y,
     const RuntimeNative3DSamplingContext* sampling) {
     RuntimeNative3DPreparedFrame frame = {0};
+    struct timespec caustic_prep_started_at = {0};
 
     runtime_native_3d_prepare_frame_set_diag("ok");
     if (!out_frame || width <= 0 || height <= 0) return false;
@@ -801,6 +864,8 @@ bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
 
     RuntimeNative3DTileOccupancy_Init(&frame.tileOccupancy);
     RuntimeScene3D_Init(&frame.scene);
+    RuntimeCausticVolumeCache3D_Init(&frame.causticVolumeCache);
+    RuntimeCausticSurfaceCache3D_Init(&frame.causticSurfaceCache);
     if (!runtime_native_3d_render_build_live_scene(&frame.scene,
                                                    width,
                                                    height,
@@ -854,6 +919,21 @@ bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
         return false;
     }
     RuntimeScene3D_RefreshCapabilities(&frame.scene);
+    (void)clock_gettime(CLOCK_MONOTONIC, &caustic_prep_started_at);
+    frame.causticSidecarProbeValid =
+        RuntimeDisneyV2_3D_BuildCausticSidecarProbe(&frame.scene,
+                                                    &frame.causticSidecarProbe);
+    if (!RuntimeCausticTransport3D_PopulateCaches(&frame.scene,
+                                                  &frame.causticVolumeCache,
+                                                  &frame.causticSurfaceCache,
+                                                  &frame.causticTransportDiagnostics)) {
+        (void)RuntimeCausticBootstrap3D_PopulateAnalyticVolumeCache(
+            &frame.scene,
+            &frame.causticVolumeCache,
+            &frame.causticBootstrapDiagnostics);
+    }
+    frame.causticCachePrepMs =
+        runtime_native_3d_prepare_elapsed_ms_since(&caustic_prep_started_at);
 
     if (!RuntimeCameraProjector3D_Build(&frame.scene.camera, width, height, &frame.projector)) {
         runtime_native_3d_prepare_frame_set_diagf(
@@ -867,6 +947,8 @@ bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
             frame.scene.camera.nearPlane,
             width,
             height);
+        RuntimeCausticVolumeCache3D_Free(&frame.causticVolumeCache);
+        RuntimeCausticSurfaceCache3D_Free(&frame.causticSurfaceCache);
         RuntimeScene3D_Free(&frame.scene);
         return false;
     }
@@ -878,5 +960,6 @@ bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
     }
     frame.valid = true;
     *out_frame = frame;
+    RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(&out_frame->scene);
     return true;
 }

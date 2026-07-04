@@ -135,6 +135,95 @@ static void runtime_native_3d_render_record_disney_v2_mirror_stats(
         result->mirrorBaseRadianceAfterAttenuation;
 }
 
+static void runtime_native_3d_render_apply_surface_caustic_cache(
+    RuntimeCausticSurfaceCache3D* surface_cache,
+    const HitInfo3D* hit,
+    double* io_r,
+    double* io_g,
+    double* io_b,
+    double* io_luma,
+    bool* io_visible,
+    RuntimeNative3DRenderStats* stats) {
+    Vec3 radiance = vec3(0.0, 0.0, 0.0);
+    double luma = 0.0;
+
+    if (!surface_cache || !hit || !io_r || !io_g || !io_b || !io_luma || !stats) {
+        return;
+    }
+    stats->causticSurfaceCacheSampleLookupCount += 1;
+    if (!RuntimeCausticSurfaceCache3D_SampleAtHit(surface_cache, hit, &radiance)) {
+        return;
+    }
+    luma = fmax(fmax(radiance.x, radiance.y), radiance.z);
+    if (!(luma > 0.0)) return;
+    *io_r += radiance.x;
+    *io_g += radiance.y;
+    *io_b += radiance.z;
+    *io_luma = fmax(fmax(*io_r, *io_g), *io_b);
+    if (io_visible) *io_visible = true;
+    stats->causticSurfaceCacheSampleContributingCount += 1;
+    stats->totalCausticSurfaceRadianceR += radiance.x;
+    stats->totalCausticSurfaceRadianceG += radiance.y;
+    stats->totalCausticSurfaceRadianceB += radiance.z;
+    if (luma > stats->maxCausticSurfaceCacheRadiance) {
+        stats->maxCausticSurfaceCacheRadiance = luma;
+    }
+}
+
+static void runtime_native_3d_render_apply_transmitted_surface_caustic_cache(
+    RuntimeCausticSurfaceCache3D* surface_cache,
+    const RuntimeDisneyV2_3DResult* result,
+    double* io_r,
+    double* io_g,
+    double* io_b,
+    double* io_luma,
+    bool* io_visible,
+    RuntimeNative3DRenderStats* stats) {
+    Vec3 radiance = vec3(0.0, 0.0, 0.0);
+    double throughput_r = 0.0;
+    double throughput_g = 0.0;
+    double throughput_b = 0.0;
+    double luma = 0.0;
+
+    if (!surface_cache || !result || !io_r || !io_g || !io_b || !io_luma || !stats) {
+        return;
+    }
+    if (!result->primaryTransmissionContinued ||
+        !result->primaryTransmissionPathState.valid ||
+        !result->primaryTransmissionPathState.hit) {
+        return;
+    }
+    stats->causticSurfaceCacheSampleLookupCount += 1;
+    if (!RuntimeCausticSurfaceCache3D_SampleAtHit(surface_cache,
+                                                  &result->primaryTransmissionPathState.hitInfo,
+                                                  &radiance)) {
+        return;
+    }
+    throughput_r = fmax(result->primaryTransmissionCameraThroughputR,
+                        result->primaryTransmissionPathState.throughputR);
+    throughput_g = fmax(result->primaryTransmissionCameraThroughputG,
+                        result->primaryTransmissionPathState.throughputG);
+    throughput_b = fmax(result->primaryTransmissionCameraThroughputB,
+                        result->primaryTransmissionPathState.throughputB);
+    radiance.x *= fmin(fmax(throughput_r, 0.0), 1.0);
+    radiance.y *= fmin(fmax(throughput_g, 0.0), 1.0);
+    radiance.z *= fmin(fmax(throughput_b, 0.0), 1.0);
+    luma = fmax(fmax(radiance.x, radiance.y), radiance.z);
+    if (!(luma > 0.0)) return;
+    *io_r += radiance.x;
+    *io_g += radiance.y;
+    *io_b += radiance.z;
+    *io_luma = fmax(fmax(*io_r, *io_g), *io_b);
+    if (io_visible) *io_visible = true;
+    stats->causticSurfaceCacheSampleContributingCount += 1;
+    stats->totalCausticSurfaceRadianceR += radiance.x;
+    stats->totalCausticSurfaceRadianceG += radiance.y;
+    stats->totalCausticSurfaceRadianceB += radiance.z;
+    if (luma > stats->maxCausticSurfaceCacheRadiance) {
+        stats->maxCausticSurfaceCacheRadiance = luma;
+    }
+}
+
 static bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
                                                         int radiance_stride,
                                                         int width,
@@ -146,6 +235,7 @@ static bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
                                                         const RuntimeScene3D* scene,
                                                         const RuntimeCameraProjector3D* projector,
                                                         const RuntimeNative3DSamplingContext* sampling,
+                                                        RuntimeCausticVolumeCache3D* caustic_cache,
                                                         RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DRenderStats stats = {0};
 
@@ -184,6 +274,7 @@ static bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
                                                                              (double)y,
                                                                              &primary_trace.emitterHit,
                                                                              sampling,
+                                                                             caustic_cache,
                                                                              &stats);
                 continue;
             }
@@ -198,7 +289,9 @@ static bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
                                                                    (double)x,
                                                                    (double)y,
                                                                    HUGE_VAL,
-                                                                   sampling);
+                                                                   sampling,
+                                                                   caustic_cache);
+                runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
                 runtime_native_3d_render_write_background_radiance(radiance_buffer,
                                                                    idx,
                                                                    scene,
@@ -215,7 +308,9 @@ static bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
                                                                (double)x,
                                                                (double)y,
                                                                result.hitInfo.t,
-                                                               sampling);
+                                                               sampling,
+                                                               caustic_cache);
+            runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
             stats.hitPixelCount += 1;
             if (result.visible || scatter.active) {
                 stats.visiblePixelCount += 1;
@@ -262,6 +357,7 @@ static bool runtime_native_3d_render_shade_diffuse_bounce(float* radiance_buffer
                                                           const RuntimeScene3D* scene,
                                                           const RuntimeCameraProjector3D* projector,
                                                           const RuntimeNative3DSamplingContext* sampling,
+                                                          RuntimeCausticVolumeCache3D* caustic_cache,
                                                           RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DRenderStats stats = {0};
 
@@ -301,6 +397,7 @@ static bool runtime_native_3d_render_shade_diffuse_bounce(float* radiance_buffer
                                                                              (double)y,
                                                                              &primary_trace.emitterHit,
                                                                              sampling,
+                                                                             caustic_cache,
                                                                              &stats);
                 continue;
             }
@@ -315,7 +412,9 @@ static bool runtime_native_3d_render_shade_diffuse_bounce(float* radiance_buffer
                                                                    (double)x,
                                                                    (double)y,
                                                                    HUGE_VAL,
-                                                                   sampling);
+                                                                   sampling,
+                                                                   caustic_cache);
+                runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
                 runtime_native_3d_render_write_background_radiance(radiance_buffer,
                                                                    idx,
                                                                    scene,
@@ -332,7 +431,9 @@ static bool runtime_native_3d_render_shade_diffuse_bounce(float* radiance_buffer
                                                                (double)x,
                                                                (double)y,
                                                                result.hitInfo.t,
-                                                               sampling);
+                                                               sampling,
+                                                               caustic_cache);
+            runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
             stats.hitPixelCount += 1;
             runtime_native_3d_render_apply_scatter_rgb(&result.radianceR,
                                                        &result.radianceG,
@@ -389,6 +490,7 @@ static bool runtime_native_3d_render_shade_material(float* radiance_buffer,
                                                     const RuntimeScene3D* scene,
                                                     const RuntimeCameraProjector3D* projector,
                                                     const RuntimeNative3DSamplingContext* sampling,
+                                                    RuntimeCausticVolumeCache3D* caustic_cache,
                                                     RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DRenderStats stats = {0};
 
@@ -427,6 +529,7 @@ static bool runtime_native_3d_render_shade_material(float* radiance_buffer,
                                                                              (double)y,
                                                                              &primary_trace.emitterHit,
                                                                              sampling,
+                                                                             caustic_cache,
                                                                              &stats);
                 continue;
             }
@@ -441,7 +544,9 @@ static bool runtime_native_3d_render_shade_material(float* radiance_buffer,
                                                                    (double)x,
                                                                    (double)y,
                                                                    HUGE_VAL,
-                                                                   sampling);
+                                                                   sampling,
+                                                                   caustic_cache);
+                runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
                 runtime_native_3d_render_write_background_radiance(radiance_buffer,
                                                                    idx,
                                                                    scene,
@@ -458,7 +563,9 @@ static bool runtime_native_3d_render_shade_material(float* radiance_buffer,
                                                                (double)x,
                                                                (double)y,
                                                                result.hitInfo.t,
-                                                               sampling);
+                                                               sampling,
+                                                               caustic_cache);
+            runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
             stats.hitPixelCount += 1;
             runtime_native_3d_render_apply_scatter_rgb(&result.radianceR,
                                                        &result.radianceG,
@@ -516,6 +623,7 @@ static bool runtime_native_3d_render_shade_emission_transparency(
     const RuntimeScene3D* scene,
     const RuntimeCameraProjector3D* projector,
     const RuntimeNative3DSamplingContext* sampling,
+    RuntimeCausticVolumeCache3D* caustic_cache,
     RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DRenderStats stats = {0};
 
@@ -554,6 +662,7 @@ static bool runtime_native_3d_render_shade_emission_transparency(
                                                                              (double)y,
                                                                              &primary_trace.emitterHit,
                                                                              sampling,
+                                                                             caustic_cache,
                                                                              &stats);
                 continue;
             }
@@ -568,7 +677,9 @@ static bool runtime_native_3d_render_shade_emission_transparency(
                                                                    (double)x,
                                                                    (double)y,
                                                                    HUGE_VAL,
-                                                                   sampling);
+                                                                   sampling,
+                                                                   caustic_cache);
+                runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
                 runtime_native_3d_render_write_background_radiance(radiance_buffer,
                                                                    idx,
                                                                    scene,
@@ -585,7 +696,9 @@ static bool runtime_native_3d_render_shade_emission_transparency(
                                                                (double)x,
                                                                (double)y,
                                                                result.hitInfo.t,
-                                                               sampling);
+                                                               sampling,
+                                                               caustic_cache);
+            runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
             stats.hitPixelCount += 1;
             runtime_native_3d_render_apply_scatter_rgb(&result.radianceR,
                                                        &result.radianceG,
@@ -600,7 +713,7 @@ static bool runtime_native_3d_render_shade_emission_transparency(
                                                                 &result.radianceB,
                                                                 &result.radiance,
                                                                 &result.visible);
-            if (result.visible) {
+            if (result.visible || result.radiance > 1e-9) {
                 stats.visiblePixelCount += 1;
             }
             if (result.bounceRadiance > 0.0) {
@@ -642,6 +755,7 @@ static bool runtime_native_3d_render_shade_disney(float* radiance_buffer,
                                                   const RuntimeScene3D* scene,
                                                   const RuntimeCameraProjector3D* projector,
                                                   const RuntimeNative3DSamplingContext* sampling,
+                                                  RuntimeCausticVolumeCache3D* caustic_cache,
                                                   RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DRenderStats stats = {0};
 
@@ -680,6 +794,7 @@ static bool runtime_native_3d_render_shade_disney(float* radiance_buffer,
                                                                              (double)y,
                                                                              &primary_trace.emitterHit,
                                                                              sampling,
+                                                                             caustic_cache,
                                                                              &stats);
                 continue;
             }
@@ -694,7 +809,9 @@ static bool runtime_native_3d_render_shade_disney(float* radiance_buffer,
                                                                    (double)x,
                                                                    (double)y,
                                                                    HUGE_VAL,
-                                                                   sampling);
+                                                                   sampling,
+                                                                   caustic_cache);
+                runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
                 runtime_native_3d_render_write_background_radiance(radiance_buffer,
                                                                    idx,
                                                                    scene,
@@ -711,7 +828,9 @@ static bool runtime_native_3d_render_shade_disney(float* radiance_buffer,
                                                                (double)x,
                                                                (double)y,
                                                                result.hitInfo.t,
-                                                               sampling);
+                                                               sampling,
+                                                               caustic_cache);
+            runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
             stats.hitPixelCount += 1;
             runtime_native_3d_render_apply_scatter_rgb(&result.radianceR,
                                                        &result.radianceG,
@@ -768,11 +887,13 @@ static bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
                                                      const RuntimeScene3D* scene,
                                                      const RuntimeCameraProjector3D* projector,
                                                      const RuntimeNative3DSamplingContext* sampling,
+                                                     RuntimeCausticVolumeCache3D* caustic_cache,
+                                                     RuntimeCausticSurfaceCache3D* surface_cache,
+                                                     const RuntimeDisneyV2CausticSidecarProbe3D*
+                                                         caustic_probe,
                                                      RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DRenderStats stats = {0};
-    RuntimeDisneyV2CausticSidecarProbe3D caustic_probe = {0};
-    const bool caustic_sidecar_active =
-        RuntimeDisneyV2_3D_BuildCausticSidecarProbe(scene, &caustic_probe);
+    const bool caustic_sidecar_active = caustic_probe && caustic_probe->valid;
 
     if (!radiance_buffer || radiance_stride <= 0 || width <= 0 || height <= 0 || !scene ||
         !projector) {
@@ -816,6 +937,7 @@ static bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
                                                                              (double)y,
                                                                              &primary_trace.emitterHit,
                                                                              sampling,
+                                                                             caustic_cache,
                                                                              &stats);
                 continue;
             }
@@ -830,7 +952,9 @@ static bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
                                                                    (double)x,
                                                                    (double)y,
                                                                    HUGE_VAL,
-                                                                   sampling);
+                                                                   sampling,
+                                                                   caustic_cache);
+                runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
                 runtime_native_3d_render_write_background_radiance(radiance_buffer,
                                                                    idx,
                                                                    scene,
@@ -847,7 +971,9 @@ static bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
                                                                (double)x,
                                                                (double)y,
                                                                result.hitInfo.t,
-                                                               sampling);
+                                                               sampling,
+                                                               caustic_cache);
+            runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
             stats.hitPixelCount += 1;
             runtime_native_3d_render_apply_scatter_rgb(&result.radianceR,
                                                        &result.radianceG,
@@ -862,10 +988,27 @@ static bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
                                                                 &result.radianceB,
                                                                 &result.radiance,
                                                                 &result.visible);
+            runtime_native_3d_render_apply_surface_caustic_cache(surface_cache,
+                                                                 &result.hitInfo,
+                                                                 &result.radianceR,
+                                                                 &result.radianceG,
+                                                                 &result.radianceB,
+                                                                 &result.radiance,
+                                                                 &result.visible,
+                                                                 &stats);
+            runtime_native_3d_render_apply_transmitted_surface_caustic_cache(
+                surface_cache,
+                &result,
+                &result.radianceR,
+                &result.radianceG,
+                &result.radianceB,
+                &result.radiance,
+                &result.visible,
+                &stats);
             if (caustic_sidecar_active) {
                 RuntimeDisneyV2CausticSidecarContribution3D caustic = {0};
                 stats.causticSidecarSampleCount += 1;
-                if (RuntimeDisneyV2_3D_EvaluateCausticSidecar(&caustic_probe,
+                if (RuntimeDisneyV2_3D_EvaluateCausticSidecar(caustic_probe,
                                                                &result.hitInfo,
                                                                &caustic)) {
                     result.radianceR += caustic.r;
@@ -915,15 +1058,39 @@ bool runtime_native_3d_render_dispatch_integrator(float* radiance_buffer,
                                                   int end_x,
                                                   int end_y,
                                                   RuntimeNative3DRenderStats* out_stats) {
+    RuntimeCausticVolumeCache3D* caustic_cache = NULL;
+    RuntimeCausticSurfaceCache3D* surface_cache = NULL;
+    RuntimeCausticVolumeCacheDiagnostics3D cache_diagnostics = {0};
+    RuntimeCausticSurfaceCacheDiagnostics3D surface_diagnostics = {0};
+    const RuntimeScene3D* scene = NULL;
+    bool ok = false;
     if (!frame || !frame->valid) {
         return false;
     }
+    scene = frame->traceScene ? frame->traceScene : &frame->scene;
+    caustic_cache = (RuntimeCausticVolumeCache3D*)&frame->causticVolumeCache;
+    surface_cache = (RuntimeCausticSurfaceCache3D*)&frame->causticSurfaceCache;
 
     /* Keep the native renderer dispatch explicit so later 3D tiers can add
      * focused shader paths without overloading the entrypoint itself. */
     switch (integrator_id) {
         case RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT:
-            return runtime_native_3d_render_shade_direct_light(radiance_buffer,
+            ok = runtime_native_3d_render_shade_direct_light(radiance_buffer,
+                                                             radiance_stride,
+                                                             frame->width,
+                                                             frame->height,
+                                                             start_x,
+                                                             start_y,
+                                                             end_x,
+                                                             end_y,
+                                                             scene,
+                                                             &frame->projector,
+                                                             &frame->sampling,
+                                                             caustic_cache,
+                                                             out_stats);
+            break;
+        case RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE:
+            ok = runtime_native_3d_render_shade_diffuse_bounce(radiance_buffer,
                                                                radiance_stride,
                                                                frame->width,
                                                                frame->height,
@@ -931,51 +1098,14 @@ bool runtime_native_3d_render_dispatch_integrator(float* radiance_buffer,
                                                                start_y,
                                                                end_x,
                                                                end_y,
-                                                               &frame->scene,
+                                                               scene,
                                                                &frame->projector,
                                                                &frame->sampling,
+                                                               caustic_cache,
                                                                out_stats);
-        case RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE:
-            return runtime_native_3d_render_shade_diffuse_bounce(radiance_buffer,
-                                                                 radiance_stride,
-                                                                 frame->width,
-                                                                 frame->height,
-                                                                 start_x,
-                                                                 start_y,
-                                                                 end_x,
-                                                                 end_y,
-                                                                 &frame->scene,
-                                                                 &frame->projector,
-                                                                 &frame->sampling,
-                                                                 out_stats);
+            break;
         case RAY_TRACING_3D_INTEGRATOR_MATERIAL:
-            return runtime_native_3d_render_shade_material(radiance_buffer,
-                                                           radiance_stride,
-                                                           frame->width,
-                                                           frame->height,
-                                                           start_x,
-                                                           start_y,
-                                                           end_x,
-                                                           end_y,
-                                                           &frame->scene,
-                                                           &frame->projector,
-                                                           &frame->sampling,
-                                                           out_stats);
-        case RAY_TRACING_3D_INTEGRATOR_EMISSION_TRANSPARENCY:
-            return runtime_native_3d_render_shade_emission_transparency(radiance_buffer,
-                                                                        radiance_stride,
-                                                                        frame->width,
-                                                                        frame->height,
-                                                                        start_x,
-                                                                        start_y,
-                                                                        end_x,
-                                                                        end_y,
-                                                                        &frame->scene,
-                                                                        &frame->projector,
-                                                                        &frame->sampling,
-                                                                        out_stats);
-        case RAY_TRACING_3D_INTEGRATOR_DISNEY:
-            return runtime_native_3d_render_shade_disney(radiance_buffer,
+            ok = runtime_native_3d_render_shade_material(radiance_buffer,
                                                          radiance_stride,
                                                          frame->width,
                                                          frame->height,
@@ -983,24 +1113,173 @@ bool runtime_native_3d_render_dispatch_integrator(float* radiance_buffer,
                                                          start_y,
                                                          end_x,
                                                          end_y,
-                                                         &frame->scene,
+                                                         scene,
                                                          &frame->projector,
                                                          &frame->sampling,
+                                                         caustic_cache,
                                                          out_stats);
+            break;
+        case RAY_TRACING_3D_INTEGRATOR_EMISSION_TRANSPARENCY:
+            ok = runtime_native_3d_render_shade_emission_transparency(radiance_buffer,
+                                                                      radiance_stride,
+                                                                      frame->width,
+                                                                      frame->height,
+                                                                      start_x,
+                                                                      start_y,
+                                                                      end_x,
+                                                                      end_y,
+                                                                      scene,
+                                                                      &frame->projector,
+                                                                      &frame->sampling,
+                                                                      caustic_cache,
+                                                                      out_stats);
+            break;
+        case RAY_TRACING_3D_INTEGRATOR_DISNEY:
+            ok = runtime_native_3d_render_shade_disney(radiance_buffer,
+                                                       radiance_stride,
+                                                       frame->width,
+                                                       frame->height,
+                                                       start_x,
+                                                       start_y,
+                                                       end_x,
+                                                       end_y,
+                                                       scene,
+                                                       &frame->projector,
+                                                       &frame->sampling,
+                                                       caustic_cache,
+                                                       out_stats);
+            break;
         case RAY_TRACING_3D_INTEGRATOR_DISNEY_V2:
-            return runtime_native_3d_render_shade_disney_v2(radiance_buffer,
-                                                            radiance_stride,
-                                                            frame->width,
-                                                            frame->height,
-                                                            start_x,
-                                                            start_y,
-                                                            end_x,
-                                                            end_y,
-                                                            &frame->scene,
-                                                            &frame->projector,
-                                                            &frame->sampling,
-                                                            out_stats);
+            ok = runtime_native_3d_render_shade_disney_v2(radiance_buffer,
+                                                          radiance_stride,
+                                                          frame->width,
+                                                          frame->height,
+                                                          start_x,
+                                                          start_y,
+                                                          end_x,
+                                                          end_y,
+                                                          scene,
+                                                          &frame->projector,
+                                                          &frame->sampling,
+                                                          caustic_cache,
+                                                          surface_cache,
+                                                          frame->causticSidecarProbeValid
+                                                              ? &frame->causticSidecarProbe
+                                                              : NULL,
+                                                          out_stats);
+            break;
         default:
             return false;
     }
+    if (ok && out_stats) {
+        RuntimeCausticVolumeCache3D_SnapshotDiagnostics(caustic_cache, &cache_diagnostics);
+        RuntimeCausticSurfaceCache3D_SnapshotDiagnostics(surface_cache, &surface_diagnostics);
+        out_stats->causticBootstrapTemporaryBridgeActive =
+            frame->causticBootstrapDiagnostics.temporaryAnalyticBridge ? 1 : 0;
+        out_stats->causticTransportPathEmissionActive =
+            frame->causticTransportDiagnostics.active ? 1 : 0;
+        out_stats->causticVolumeCacheSuppressedNoSampleableVolume =
+            frame->causticTransportDiagnostics.volumeCacheSuppressedNoSampleableVolume ? 1 : 0;
+        out_stats->causticTransportLightCount =
+            (int)frame->causticTransportDiagnostics.lightCount;
+        out_stats->causticTransportEvaluatedPathCount =
+            (int)frame->causticTransportDiagnostics.evaluatedPathCount;
+        out_stats->causticTransportEmittedPathCount =
+            (int)frame->causticTransportDiagnostics.emittedPathCount;
+        out_stats->causticTransportTransparentHitCount =
+            (int)frame->causticTransportDiagnostics.transparentHitCount;
+        out_stats->causticTransportSpecularEventCount =
+            (int)frame->causticTransportDiagnostics.specularEventCount;
+        out_stats->causticTransportVolumeSegmentCount =
+            (int)frame->causticTransportDiagnostics.volumeSegmentCount;
+        out_stats->causticTransportSurfaceReceiverTraceMissCount =
+            (int)frame->causticTransportDiagnostics.surfaceReceiverTraceMissCount;
+        out_stats->causticTransportSurfaceReceiverDepthRejectCount =
+            (int)frame->causticTransportDiagnostics.surfaceReceiverDepthRejectCount;
+        out_stats->causticTransportSurfaceReceiverHitCount =
+            (int)frame->causticTransportDiagnostics.surfaceReceiverHitCount;
+        out_stats->causticTransportSurfaceReceiverFallbackCount =
+            (int)frame->causticTransportDiagnostics.surfaceReceiverFallbackCount;
+        out_stats->causticVolumeCacheBound =
+            RuntimeCausticVolumeCache3D_IsAllocated(caustic_cache) ? 1 : 0;
+        out_stats->causticVolumeCacheAllocated = cache_diagnostics.allocated ? 1 : 0;
+        out_stats->causticVolumeCacheCellCount = (int)cache_diagnostics.cellCount;
+        out_stats->causticVolumeCacheNonZeroCellCount =
+            (int)cache_diagnostics.nonZeroCellCount;
+        out_stats->causticVolumeCacheDepositAttemptCount =
+            (int)cache_diagnostics.depositAttemptCount;
+        out_stats->causticVolumeCacheDepositAcceptedCount =
+            (int)cache_diagnostics.depositAcceptedCount;
+        out_stats->causticVolumeCacheDepositRejectedCount =
+            (int)cache_diagnostics.depositRejectedCount;
+        out_stats->causticVolumeCacheSampleLookupCount =
+            (int)cache_diagnostics.sampleLookupCount;
+        out_stats->causticVolumeCacheSampleContributingCount =
+            (int)cache_diagnostics.sampleContributingCount;
+        out_stats->totalCausticVolumeCacheRadianceR = cache_diagnostics.totalRadianceR;
+        out_stats->totalCausticVolumeCacheRadianceG = cache_diagnostics.totalRadianceG;
+        out_stats->totalCausticVolumeCacheRadianceB = cache_diagnostics.totalRadianceB;
+        out_stats->maxCausticVolumeCacheRadiance = cache_diagnostics.maxCellRadiance;
+        out_stats->causticVolumeCacheNonZeroCellRatio =
+            cache_diagnostics.cellCount > 0u
+                ? (double)cache_diagnostics.nonZeroCellCount /
+                      (double)cache_diagnostics.cellCount
+                : 0.0;
+        out_stats->causticVolumeCacheSampleHitRatio =
+            cache_diagnostics.sampleLookupCount > 0u
+                ? (double)cache_diagnostics.sampleContributingCount /
+                      (double)cache_diagnostics.sampleLookupCount
+                : 0.0;
+        out_stats->causticVolumeCacheRadianceCentroidX =
+            cache_diagnostics.radianceCentroid.x;
+        out_stats->causticVolumeCacheRadianceCentroidY =
+            cache_diagnostics.radianceCentroid.y;
+        out_stats->causticVolumeCacheRadianceCentroidZ =
+            cache_diagnostics.radianceCentroid.z;
+        if (cache_diagnostics.hasNonZeroBounds) {
+            out_stats->causticVolumeCacheNonZeroBoundsMinX =
+                cache_diagnostics.nonZeroBoundsMin.x;
+            out_stats->causticVolumeCacheNonZeroBoundsMinY =
+                cache_diagnostics.nonZeroBoundsMin.y;
+            out_stats->causticVolumeCacheNonZeroBoundsMinZ =
+                cache_diagnostics.nonZeroBoundsMin.z;
+            out_stats->causticVolumeCacheNonZeroBoundsMaxX =
+                cache_diagnostics.nonZeroBoundsMax.x;
+            out_stats->causticVolumeCacheNonZeroBoundsMaxY =
+                cache_diagnostics.nonZeroBoundsMax.y;
+            out_stats->causticVolumeCacheNonZeroBoundsMaxZ =
+                cache_diagnostics.nonZeroBoundsMax.z;
+        }
+        out_stats->causticSurfaceCacheBound =
+            RuntimeCausticSurfaceCache3D_IsAllocated(surface_cache) ? 1 : 0;
+        out_stats->causticSurfaceCacheAllocated = surface_diagnostics.allocated ? 1 : 0;
+        out_stats->causticSurfaceCacheRecordCapacity =
+            (int)surface_diagnostics.recordCapacity;
+        out_stats->causticSurfaceCacheRecordCount = (int)surface_diagnostics.recordCount;
+        out_stats->causticSurfaceCacheDepositAttemptCount =
+            (int)surface_diagnostics.depositAttemptCount;
+        out_stats->causticSurfaceCacheDepositAcceptedCount =
+            (int)surface_diagnostics.depositAcceptedCount;
+        out_stats->causticSurfaceCacheDepositRejectedCount =
+            (int)surface_diagnostics.depositRejectedCount;
+        out_stats->causticSurfaceCacheSampleLookupCount =
+            (int)surface_diagnostics.sampleLookupCount;
+        out_stats->causticSurfaceCacheSampleContributingCount =
+            (int)surface_diagnostics.sampleContributingCount;
+        out_stats->causticSurfaceCacheNearestSampleDistance =
+            surface_diagnostics.nearestSampleDistance;
+        out_stats->causticSurfaceCacheNearestSampleRadius =
+            surface_diagnostics.nearestSampleRadius;
+        out_stats->causticSurfaceCacheNearestSampleNormalDot =
+            surface_diagnostics.nearestSampleNormalDot;
+        out_stats->causticSurfaceCacheNearestSampleCandidateCount =
+            (double)surface_diagnostics.nearestSampleCandidateCount;
+        out_stats->totalCausticSurfaceCacheRadianceR = surface_diagnostics.totalRadianceR;
+        out_stats->totalCausticSurfaceCacheRadianceG = surface_diagnostics.totalRadianceG;
+        out_stats->totalCausticSurfaceCacheRadianceB = surface_diagnostics.totalRadianceB;
+        if (surface_diagnostics.maxRecordRadiance > out_stats->maxCausticSurfaceCacheRadiance) {
+            out_stats->maxCausticSurfaceCacheRadiance = surface_diagnostics.maxRecordRadiance;
+        }
+    }
+    return ok;
 }

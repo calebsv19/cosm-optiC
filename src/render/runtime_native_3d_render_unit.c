@@ -33,6 +33,7 @@ void RuntimeNative3DRenderUnit_Init(RuntimeNative3DRenderUnit* unit) {
     memset(unit, 0, sizeof(*unit));
     RuntimeNative3DTemporalAccumulation_Init(&unit->accumulation);
     RuntimeNative3DAdaptiveSamplingMask_Init(&unit->adaptiveMask);
+    RuntimeNative3DAdaptivePixelStateBuffer_Init(&unit->adaptivePixelState);
     RuntimeNative3DFeatureBuffer_Init(&unit->featureBuffer);
 }
 
@@ -42,46 +43,46 @@ void RuntimeNative3DRenderUnit_Free(RuntimeNative3DRenderUnit* unit) {
     free(unit->resolvedRadiance);
     RuntimeNative3DTemporalAccumulation_Free(&unit->accumulation);
     RuntimeNative3DAdaptiveSamplingMask_Free(&unit->adaptiveMask);
+    RuntimeNative3DAdaptivePixelStateBuffer_Free(&unit->adaptivePixelState);
     RuntimeNative3DFeatureBuffer_Free(&unit->featureBuffer);
     memset(unit, 0, sizeof(*unit));
 }
 
-static bool runtime_native_3d_render_unit_prepare_features(RuntimeNative3DRenderUnit* unit) {
+static bool runtime_native_3d_render_unit_ensure_features(RuntimeNative3DRenderUnit* unit) {
     if (!unit || !unit->frame) return false;
-    if (!(unit->useDenoise || unit->useDisneyTemporalPruning)) {
+    if (unit->featuresPrepared) {
         return true;
     }
-    return RuntimeNative3DFeatureBuffer_Ensure(&unit->featureBuffer, unit->width, unit->height) &&
-           RuntimeNative3DFeatureBuffer_RenderRegion(&unit->featureBuffer,
-                                                     &unit->frame->scene,
-                                                     &unit->frame->projector,
-                                                     unit->startX,
-                                                     unit->startY,
-                                                     unit->endX,
-                                                     unit->endY);
+    if (!(unit->useDenoise || unit->useDisneyTemporalPruning || unit->measureAdaptiveState)) {
+        unit->featuresPrepared = true;
+        return true;
+    }
+    if (!RuntimeNative3DFeatureBuffer_Ensure(&unit->featureBuffer, unit->width, unit->height) ||
+        !RuntimeNative3DFeatureBuffer_RenderRegion(&unit->featureBuffer,
+                                                   &unit->frame->scene,
+                                                   &unit->frame->projector,
+                                                   unit->startX,
+                                                   unit->startY,
+                                                   unit->endX,
+                                                   unit->endY)) {
+        return false;
+    }
+    unit->featuresPrepared = true;
+    return true;
 }
 
-static bool runtime_native_3d_render_unit_prepare_adaptive_mask(RuntimeNative3DRenderUnit* unit) {
+static bool runtime_native_3d_render_unit_prepare_initial_adaptive_mask(
+    RuntimeNative3DRenderUnit* unit) {
     if (!unit || !unit->frame) return false;
     if (!unit->useAdaptiveSampling) {
         return true;
     }
-    if (unit->useDisneyTemporalPruning) {
-        return RuntimeNative3DAdaptiveSampling_BeginTemporalActivityMask(
-            &unit->adaptiveMask,
-            unit->width,
-            unit->height,
-            RUNTIME_NATIVE_3D_ADAPTIVE_TILE_SIZE,
-            RUNTIME_NATIVE_3D_ADAPTIVE_MIN_SUBPASSES);
-    }
-    return RuntimeNative3DAdaptiveSamplingMask_Ensure(&unit->adaptiveMask, unit->width, unit->height) &&
-           RuntimeNative3DAdaptiveSampling_BuildStableEmitterMask(&unit->adaptiveMask,
-                                                                  &unit->frame->scene,
-                                                                  &unit->frame->projector,
-                                                                  unit->startX,
-                                                                  unit->startY,
-                                                                  unit->endX,
-                                                                  unit->endY);
+    return RuntimeNative3DAdaptiveSampling_BeginTemporalActivityMask(
+        &unit->adaptiveMask,
+        unit->width,
+        unit->height,
+        RUNTIME_NATIVE_3D_ADAPTIVE_TILE_SIZE,
+        RUNTIME_NATIVE_3D_ADAPTIVE_MIN_SUBPASSES);
 }
 
 bool RuntimeNative3DRenderUnit_Setup(RuntimeNative3DRenderUnit* unit,
@@ -120,12 +121,15 @@ bool RuntimeNative3DRenderUnit_Setup(RuntimeNative3DRenderUnit* unit,
         RuntimeNative3DDenoise_ShouldApply(integrator_id,
                                            unit->temporalFrames,
                                            disney_denoise_enabled);
+    unit->measureAdaptiveState = unit->temporalFrames > 1;
+    unit->featuresPrepared = false;
 
     if (!RuntimeNative3DTemporalAccumulation_Ensure(&unit->accumulation, unit->width, unit->height)) {
         return false;
     }
     RuntimeNative3DTemporalAccumulation_Clear(&unit->accumulation);
     RuntimeNative3DAdaptiveSamplingMask_Clear(&unit->adaptiveMask);
+    RuntimeNative3DAdaptivePixelStateBuffer_Clear(&unit->adaptivePixelState);
 
     pixel_count = (size_t)unit->width * (size_t)unit->height *
                   (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
@@ -151,8 +155,7 @@ bool RuntimeNative3DRenderUnit_Setup(RuntimeNative3DRenderUnit* unit,
         return false;
     }
 
-    if (!runtime_native_3d_render_unit_prepare_features(unit) ||
-        !runtime_native_3d_render_unit_prepare_adaptive_mask(unit)) {
+    if (!runtime_native_3d_render_unit_prepare_initial_adaptive_mask(unit)) {
         return false;
     }
 
@@ -162,6 +165,9 @@ bool RuntimeNative3DRenderUnit_Setup(RuntimeNative3DRenderUnit* unit,
 bool RuntimeNative3DRenderUnit_ShouldRenderSubpass(const RuntimeNative3DRenderUnit* unit,
                                                    int subpass_index) {
     if (!unit || subpass_index < 0 || subpass_index >= unit->temporalFrames) {
+        return false;
+    }
+    if (unit->committedSubpasses > subpass_index) {
         return false;
     }
     if (!unit->useAdaptiveSampling || subpass_index == 0) {
@@ -174,6 +180,7 @@ bool RuntimeNative3DRenderUnit_RenderSubpass(RuntimeNative3DRenderUnit* unit,
                                              int subpass_index,
                                              RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DPreparedFrame subpass_frame = {0};
+    RuntimeNative3DSamplingContext subpass_sampling = {0};
     RuntimeNative3DRenderStats stats = {0};
     const uint8_t* active_mask = NULL;
     int active_mask_stride = 0;
@@ -203,10 +210,12 @@ bool RuntimeNative3DRenderUnit_RenderSubpass(RuntimeNative3DRenderUnit* unit,
     memset(unit->subpassRadiance, 0, pixel_count * sizeof(*unit->subpassRadiance));
 
     subpass_frame = *unit->frame;
-    subpass_frame.sampling = runtime_native_3d_render_unit_resolve_subpass_sampling(
+    subpass_sampling = runtime_native_3d_render_unit_resolve_subpass_sampling(
         &unit->baseSampling,
         (uint32_t)subpass_index,
         unit->temporalFrames);
+    subpass_frame.sampling = subpass_sampling;
+    subpass_frame.traceScene = &unit->frame->scene;
 
     if (!RuntimeNative3DAdaptiveSampling_RenderPreparedRegionRadianceRGBMasked(
             unit->subpassRadiance,
@@ -235,10 +244,24 @@ bool RuntimeNative3DRenderUnit_RenderSubpass(RuntimeNative3DRenderUnit* unit,
     stats.temporalPixelsRendered = active_pixels;
     stats.temporalPixelsSkipped = (unit->width * unit->height) - active_pixels;
     RuntimeNative3DTemporalAccumulation_CommitSubpass(&unit->accumulation);
-    if (unit->useDisneyTemporalPruning &&
-        !RuntimeNative3DAdaptiveSampling_RefreshTemporalActivityMask(&unit->adaptiveMask,
-                                                                     &unit->accumulation,
-                                                                     &unit->featureBuffer)) {
+    if ((unit->measureAdaptiveState || unit->useDenoise) &&
+        !runtime_native_3d_render_unit_ensure_features(unit)) {
+        return false;
+    }
+    if (unit->measureAdaptiveState &&
+        !RuntimeNative3DAdaptiveSampling_MeasurePixelState(&unit->adaptivePixelState,
+                                                           &unit->accumulation,
+                                                           &unit->featureBuffer,
+                                                           RUNTIME_NATIVE_3D_ADAPTIVE_TILE_SIZE,
+                                                           RUNTIME_NATIVE_3D_ADAPTIVE_MIN_SUBPASSES,
+                                                           4)) {
+        return false;
+    }
+    if (unit->useAdaptiveSampling &&
+        !RuntimeNative3DAdaptiveSampling_RefreshActivityMaskFromPixelState(
+            &unit->adaptiveMask,
+            &unit->adaptivePixelState,
+            RUNTIME_NATIVE_3D_ADAPTIVE_TILE_SIZE)) {
         return false;
     }
 
@@ -329,6 +352,20 @@ bool RuntimeNative3DRenderUnit_ResolveCurrentToPixelsWithStats(
     return true;
 }
 
+bool RuntimeNative3DRenderUnit_ResolveCurrentRawToPixels(const RuntimeNative3DRenderUnit* unit,
+                                                         uint8_t* pixel_buffer,
+                                                         int pixel_width) {
+    if (!unit || !pixel_buffer || pixel_width <= 0 || unit->width <= 0 || unit->height <= 0) {
+        return false;
+    }
+    RuntimeNative3DTemporalAccumulation_ResolveToPixelBufferAtOffset(&unit->accumulation,
+                                                                     pixel_buffer,
+                                                                     pixel_width,
+                                                                     unit->startX,
+                                                                     unit->startY);
+    return true;
+}
+
 bool RuntimeNative3DRenderUnit_ResolveCurrentToPixels(const RuntimeNative3DRenderUnit* unit,
                                                       uint8_t* pixel_buffer,
                                                       int pixel_width) {
@@ -354,4 +391,13 @@ void RuntimeNative3DRenderUnit_GetActivityCounts(const RuntimeNative3DRenderUnit
     if (out_active_pixels) *out_active_pixels = unit->adaptiveMask.activePixelCount;
     if (out_active_tiles) *out_active_tiles = unit->adaptiveMask.activeTileCount;
     if (out_inactive_tiles) *out_inactive_tiles = unit->adaptiveMask.inactiveTileCount;
+}
+
+void RuntimeNative3DRenderUnit_GetAdaptiveStateSummary(
+    const RuntimeNative3DRenderUnit* unit,
+    RuntimeNative3DAdaptivePixelStateSummary* out_summary) {
+    if (!out_summary) return;
+    memset(out_summary, 0, sizeof(*out_summary));
+    if (!unit || !unit->measureAdaptiveState) return;
+    *out_summary = unit->adaptivePixelState.summary;
 }

@@ -18,6 +18,11 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_specular_reflection_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_bootstrap_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_settings_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_surface_cache_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_transport_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_volume_cache_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_caustic_sidecar_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_estimator_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_transport_3d.o \
@@ -57,6 +62,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_native_3d_temporal_accum.o \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_occupancy.o \
 	$(BUILD_DIR)/render/runtime_mesh_blas_cache_3d.o \
+	$(BUILD_DIR)/render/runtime_dynamic_geometry_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \
@@ -167,6 +173,10 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_mesh_asset_loader.o \
 	$(BUILD_DIR)/tests/test_water_surface_runtime.o \
 	$(BUILD_DIR)/tests/test_runtime_volume_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_bootstrap_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_surface_cache_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_transport_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_volume_cache_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials.o \
 	$(BUILD_DIR)/tests/test_runtime_light_set_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_material_authored_texture_validation_suite.o \
@@ -230,6 +240,11 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_specular_reflection_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_bootstrap_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_settings_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_surface_cache_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_transport_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_volume_cache_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_caustic_sidecar_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_estimator_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_transport_3d.o \
@@ -260,6 +275,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_native_3d_temporal_accum.o \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_occupancy.o \
 	$(BUILD_DIR)/render/runtime_mesh_blas_cache_3d.o \
+	$(BUILD_DIR)/render/runtime_dynamic_geometry_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \

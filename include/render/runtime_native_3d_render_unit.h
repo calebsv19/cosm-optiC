@@ -17,6 +17,7 @@ typedef struct {
     RuntimeNative3DSamplingContext baseSampling;
     RuntimeNative3DTemporalAccumulation accumulation;
     RuntimeNative3DAdaptiveSamplingMask adaptiveMask;
+    RuntimeNative3DAdaptivePixelStateBuffer adaptivePixelState;
     RuntimeNative3DFeatureBuffer featureBuffer;
     float* subpassRadiance;
     float* resolvedRadiance;
@@ -33,6 +34,8 @@ typedef struct {
     bool useAdaptiveSampling;
     bool useDisneyTemporalPruning;
     bool useDenoise;
+    bool measureAdaptiveState;
+    bool featuresPrepared;
 } RuntimeNative3DRenderUnit;
 
 void RuntimeNative3DRenderUnit_Init(RuntimeNative3DRenderUnit* unit);
@@ -55,6 +58,9 @@ bool RuntimeNative3DRenderUnit_RenderSubpass(RuntimeNative3DRenderUnit* unit,
 bool RuntimeNative3DRenderUnit_ResolveCurrentToPixels(const RuntimeNative3DRenderUnit* unit,
                                                       uint8_t* pixel_buffer,
                                                       int pixel_width);
+bool RuntimeNative3DRenderUnit_ResolveCurrentRawToPixels(const RuntimeNative3DRenderUnit* unit,
+                                                         uint8_t* pixel_buffer,
+                                                         int pixel_width);
 bool RuntimeNative3DRenderUnit_ResolveCurrentToPixelsWithStats(
     const RuntimeNative3DRenderUnit* unit,
     uint8_t* pixel_buffer,
@@ -65,5 +71,8 @@ void RuntimeNative3DRenderUnit_GetActivityCounts(const RuntimeNative3DRenderUnit
                                                  int* out_active_pixels,
                                                  int* out_active_tiles,
                                                  int* out_inactive_tiles);
+void RuntimeNative3DRenderUnit_GetAdaptiveStateSummary(
+    const RuntimeNative3DRenderUnit* unit,
+    RuntimeNative3DAdaptivePixelStateSummary* out_summary);
 
 #endif

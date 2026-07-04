@@ -14,8 +14,10 @@
 static const double kRuntimeVolume3DScatterMinimumStep = 1e-4;
 static const double kRuntimeVolume3DScatterPhaseIsotropic = 0.07957747154594767; /* 1 / (4*pi) */
 static const double kRuntimeVolume3DScatterStrength = 0.12;
+static const double kRuntimeVolume3DCausticScatterStrength = 0.12;
 static const double kRuntimeVolume3DScatterAnisotropy = 0.55;
 static double gRuntimeVolume3DScatterStrengthGain = 1.0;
+static double gRuntimeVolume3DCausticScatterStrengthGain = 1.0;
 static double gRuntimeVolume3DScatterStepScale = 1.0;
 static double gRuntimeVolume3DScatterTintR = 1.0;
 static double gRuntimeVolume3DScatterTintG = 1.0;
@@ -151,6 +153,7 @@ static Vec3 runtime_volume_3d_scatter_resolve_light_position(
 
 void RuntimeVolume3DScatter_ResetTuning(void) {
     gRuntimeVolume3DScatterStrengthGain = 1.0;
+    gRuntimeVolume3DCausticScatterStrengthGain = 1.0;
     gRuntimeVolume3DScatterStepScale = 1.0;
     gRuntimeVolume3DScatterTintR = 1.0;
     gRuntimeVolume3DScatterTintG = 1.0;
@@ -163,6 +166,14 @@ void RuntimeVolume3DScatter_SetStrengthGain(double gain) {
         return;
     }
     gRuntimeVolume3DScatterStrengthGain = gain;
+}
+
+void RuntimeVolume3DScatter_SetCausticStrengthGain(double gain) {
+    if (!(gain > 0.0) || !isfinite(gain)) {
+        gRuntimeVolume3DCausticScatterStrengthGain = 1.0;
+        return;
+    }
+    gRuntimeVolume3DCausticScatterStrengthGain = gain;
 }
 
 void RuntimeVolume3DScatter_SetStepScale(double step_scale) {
@@ -228,6 +239,17 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(
     double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
     double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
     const RuntimeNative3DSamplingContext* sampling) {
+    return RuntimeVolume3D_AccumulateSingleScatterAlongRayWithCausticCacheRGB(
+        scene, ray, t_min, t_max, sampling, NULL);
+}
+
+RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWithCausticCacheRGB(
+    const RuntimeScene3D* scene,
+    const Ray3D* ray,
+    double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeCausticVolumeCache3D* caustic_cache) {
     RuntimeVolume3DScatterResult result = {0};
     double t_enter [[fisics::dim(length)]] [[fisics::unit(meter)]] = t_min;
     double t_exit [[fisics::dim(length)]] [[fisics::unit(meter)]] = t_max;
@@ -236,12 +258,17 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(
     double camera_transmittance = 1.0;
     double zero_length = runtime_volume_3d_scatter_zero_length();
     double epsilon = runtime_volume_3d_scatter_length_epsilon();
+    const bool has_caustic_cache =
+        RuntimeCausticVolumeCache3D_IsAllocated(caustic_cache);
 
-    if (!scene || !ray || !scene->hasLight) {
+    if (!scene || !ray) {
         return result;
     }
-    if (!(scene->light.intensity > 0.0) ||
-        !RuntimeVolume3D_HasActiveExtinction(&scene->volume)) {
+    if (!RuntimeVolume3D_HasActiveExtinction(&scene->volume)) {
+        return result;
+    }
+    if (!has_caustic_cache &&
+        (!scene->hasLight || !(scene->light.intensity > 0.0))) {
         return result;
     }
     if (!RuntimeVolume3D_ClipRayToBounds(&scene->volume,
@@ -277,44 +304,89 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(
         const double extinction_density = RuntimeVolume3DMaterial_ExtinctionDensity(raw_density);
 
         if (density > 0.0) {
-            const Vec3 light_position =
-                runtime_volume_3d_scatter_resolve_light_position(&scene->light,
-                                                                 &sample_position,
-                                                                 sampling);
-            Vec3 to_light = vec3_sub(light_position, sample_position);
-            const double light_distance [[fisics::dim(length)]] [[fisics::unit(meter)]] =
-                vec3_length(to_light);
-            const double attenuation =
-                runtime_volume_3d_scatter_light_attenuation(&scene->light, light_distance);
-            RuntimeVisibility3DTransmittance light_transmittance =
-                RuntimeVisibility3D_UnitTransmittance();
-            double source_term = 0.0;
+            const double scatter_probability = 1.0 - exp(-density * segment_length);
+            if (scene->hasLight && scene->light.intensity > 0.0) {
+                const Vec3 light_position =
+                    runtime_volume_3d_scatter_resolve_light_position(&scene->light,
+                                                                     &sample_position,
+                                                                     sampling);
+                Vec3 to_light = vec3_sub(light_position, sample_position);
+                const double light_distance [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+                    vec3_length(to_light);
+                const double attenuation =
+                    runtime_volume_3d_scatter_light_attenuation(&scene->light, light_distance);
+                RuntimeVisibility3DTransmittance light_transmittance =
+                    RuntimeVisibility3D_UnitTransmittance();
+                double source_term = 0.0;
 
-            if (light_distance > epsilon) {
-                const Vec3 to_light_dir = vec3_scale(to_light, 1.0 / light_distance);
-                const Vec3 view_to_camera_dir = vec3_scale(ray->direction, -1.0);
-                const Vec3 incoming_light_dir = vec3_scale(to_light_dir, -1.0);
-                const double scatter_probability = 1.0 - exp(-density * segment_length);
-                const double phase =
-                    runtime_volume_3d_scatter_phase_henyey_greenstein(
-                        vec3_dot(view_to_camera_dir, incoming_light_dir),
-                        kRuntimeVolume3DScatterAnisotropy);
+                if (light_distance > epsilon) {
+                    const Vec3 to_light_dir = vec3_scale(to_light, 1.0 / light_distance);
+                    const Vec3 view_to_camera_dir = vec3_scale(ray->direction, -1.0);
+                    const Vec3 incoming_light_dir = vec3_scale(to_light_dir, -1.0);
+                    const double phase =
+                        runtime_volume_3d_scatter_phase_henyey_greenstein(
+                            vec3_dot(view_to_camera_dir, incoming_light_dir),
+                            kRuntimeVolume3DScatterAnisotropy);
 
-                source_term = scatter_probability * scene->light.intensity * attenuation *
-                              kRuntimeVolume3DScatterStrength * gRuntimeVolume3DScatterStrengthGain *
-                              phase;
-                light_transmittance = RuntimeVisibility3D_TransmittanceToLightRGB(
-                    scene, sample_position, to_light_dir, light_position);
+                    source_term = scatter_probability * scene->light.intensity * attenuation *
+                                  kRuntimeVolume3DScatterStrength *
+                                  gRuntimeVolume3DScatterStrengthGain * phase;
+                    light_transmittance = RuntimeVisibility3D_TransmittanceToLightRGB(
+                        scene, sample_position, to_light_dir, light_position);
+                }
+
+                if (source_term > 0.0 && light_transmittance.luma > 1e-9) {
+                    const double direct_r =
+                        camera_transmittance * light_transmittance.r * source_term *
+                        gRuntimeVolume3DScatterTintR;
+                    const double direct_g =
+                        camera_transmittance * light_transmittance.g * source_term *
+                        gRuntimeVolume3DScatterTintG;
+                    const double direct_b =
+                        camera_transmittance * light_transmittance.b * source_term *
+                        gRuntimeVolume3DScatterTintB;
+                    result.radianceR += direct_r;
+                    result.radianceG += direct_g;
+                    result.radianceB += direct_b;
+                    result.directRadianceR += direct_r;
+                    result.directRadianceG += direct_g;
+                    result.directRadianceB += direct_b;
+                    result.directSampleCount += 1;
+                    result.sampleCount += 1;
+                }
             }
 
-            if (source_term > 0.0 && light_transmittance.luma > 1e-9) {
-                result.radianceR += camera_transmittance * light_transmittance.r * source_term *
-                                    gRuntimeVolume3DScatterTintR;
-                result.radianceG += camera_transmittance * light_transmittance.g * source_term *
-                                    gRuntimeVolume3DScatterTintG;
-                result.radianceB += camera_transmittance * light_transmittance.b * source_term *
-                                    gRuntimeVolume3DScatterTintB;
-                result.sampleCount += 1;
+            if (has_caustic_cache) {
+                Vec3 caustic_radiance = vec3(0.0, 0.0, 0.0);
+                if (RuntimeCausticVolumeCache3D_SampleAtPosition(
+                        caustic_cache, sample_position, &caustic_radiance)) {
+                    const double caustic_peak =
+                        runtime_volume_3d_scatter_peak(caustic_radiance.x,
+                                                       caustic_radiance.y,
+                                                       caustic_radiance.z);
+                    result.causticSampleCount += 1;
+                    if (caustic_peak > 0.0) {
+                        const double caustic_term =
+                            camera_transmittance * scatter_probability *
+                            kRuntimeVolume3DCausticScatterStrength *
+                            gRuntimeVolume3DCausticScatterStrengthGain *
+                            kRuntimeVolume3DScatterPhaseIsotropic;
+                        const double caustic_r = caustic_radiance.x * caustic_term *
+                                                 gRuntimeVolume3DScatterTintR;
+                        const double caustic_g = caustic_radiance.y * caustic_term *
+                                                 gRuntimeVolume3DScatterTintG;
+                        const double caustic_b = caustic_radiance.z * caustic_term *
+                                                 gRuntimeVolume3DScatterTintB;
+                        result.radianceR += caustic_r;
+                        result.radianceG += caustic_g;
+                        result.radianceB += caustic_b;
+                        result.causticRadianceR += caustic_r;
+                        result.causticRadianceG += caustic_g;
+                        result.causticRadianceB += caustic_b;
+                        result.causticContributingSampleCount += 1;
+                        result.sampleCount += 1;
+                    }
+                }
             }
 
             camera_transmittance *= exp(-extinction_density * segment_length);
@@ -327,6 +399,14 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(
     result.radiance = runtime_volume_3d_scatter_peak(result.radianceR,
                                                      result.radianceG,
                                                      result.radianceB);
+    result.causticRadiance =
+        runtime_volume_3d_scatter_peak(result.causticRadianceR,
+                                       result.causticRadianceG,
+                                       result.causticRadianceB);
+    result.directRadiance =
+        runtime_volume_3d_scatter_peak(result.directRadianceR,
+                                       result.directRadianceG,
+                                       result.directRadianceB);
     result.active = result.radiance > 0.0;
     return result;
 }

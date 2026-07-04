@@ -543,6 +543,25 @@ static bool runtime_material_payload_3d_resolve(int scene_object_index,
             payload.thinWalled = glass_thin_walled;
         }
     }
+    if (object_copy.material_id == MATERIAL_PRESET_MIRROR) {
+        double mirror_reflectivity = payload.bsdf.reflectivity;
+        double mirror_roughness = payload.bsdf.roughness;
+        double mirror_specular = payload.bsdf.specWeight;
+        int mirror_tint = object_copy.color & 0xFFFFFF;
+        if (SceneObjectResolveMirrorResponse(&object_copy,
+                                             &mirror_reflectivity,
+                                             &mirror_roughness,
+                                             &mirror_specular,
+                                             &mirror_tint)) {
+            payload.bsdf.reflectivity = mirror_reflectivity;
+            payload.bsdf.roughness = mirror_roughness;
+            payload.bsdf.specWeight = mirror_specular;
+            payload.baseColorR = (double)((mirror_tint >> 16) & 0xFF) / 255.0;
+            payload.baseColorG = (double)((mirror_tint >> 8) & 0xFF) / 255.0;
+            payload.baseColorB = (double)(mirror_tint & 0xFF) / 255.0;
+            runtime_material_payload_3d_refresh_derived(&payload);
+        }
+    }
     payload.valid = true;
     runtime_material_payload_3d_apply_texture(&object_copy, hit, &payload);
     RuntimeWaterMaterial3D_ApplyToPayload(scene_object_index, &payload);

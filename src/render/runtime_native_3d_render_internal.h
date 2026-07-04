@@ -57,7 +57,11 @@ RuntimeVolume3DScatterResult runtime_native_3d_render_primary_scatter(
     double pixel_x,
     double pixel_y,
     double t_max,
-    const RuntimeNative3DSamplingContext* sampling);
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeCausticVolumeCache3D* caustic_cache);
+void runtime_native_3d_render_record_scatter_stats(
+    RuntimeNative3DRenderStats* io_stats,
+    const RuntimeVolume3DScatterResult* scatter);
 void runtime_native_3d_render_apply_scatter_rgb(
     double* io_radiance_r,
     double* io_radiance_g,
@@ -80,6 +84,7 @@ void runtime_native_3d_render_write_emitter_radiance_with_scatter(
     double pixel_y,
     const RuntimeLightEmitterHit3DResult* hit,
     const RuntimeNative3DSamplingContext* sampling,
+    RuntimeCausticVolumeCache3D* caustic_cache,
     RuntimeNative3DRenderStats* io_stats);
 
 #endif

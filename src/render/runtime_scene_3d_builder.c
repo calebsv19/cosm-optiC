@@ -198,6 +198,22 @@ static bool runtime_scene_3d_builder_rebuild_tlas(RuntimeScene3D* scene) {
     return true;
 }
 
+static bool runtime_scene_3d_builder_rebuild_prepared_accel(
+    RuntimeScene3D* scene,
+    const RayTracingRuntimeMeshAssetSet* mesh_assets) {
+    if (!RuntimeSceneAcceleration3D_RebuildPreparedFromSceneAndMeshAssets(scene,
+                                                                          mesh_assets)) {
+        char diag[2048];
+        snprintf(diag,
+                 sizeof(diag),
+                 "prepared acceleration rebuild failed: %s",
+                 RuntimeSceneAcceleration3D_LastDiagnostics());
+        runtime_scene_3d_builder_set_diag(diag);
+        return false;
+    }
+    return true;
+}
+
 static RuntimeScene3DBuilderMeshBounds runtime_scene_3d_builder_mesh_bounds(
     const CoreMeshAssetRuntimeDocument* document,
     const RayTracingRuntimeMeshAssetInstance* instance) {
@@ -912,7 +928,7 @@ static bool runtime_scene_3d_builder_append_mesh_asset_set(
         runtime_scene_3d_builder_elapsed_ms_since(&stage_start);
     scene->scope.triangleMeshEnabled = true;
     if (require_ready_bvh) {
-        if (!runtime_scene_3d_builder_rebuild_tlas(scene) ||
+        if (!runtime_scene_3d_builder_rebuild_prepared_accel(scene, mesh_assets) ||
             !runtime_scene_3d_builder_rebuild_bvh(scene)) {
             RuntimeScene3D_Reset(scene);
             return false;
@@ -1217,7 +1233,7 @@ bool RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(RuntimeScene3D* scene, double
         runtime_scene_3d_builder_set_diag(diag);
         return false;
     }
-    if (!runtime_scene_3d_builder_rebuild_tlas(scene)) {
+    if (!runtime_scene_3d_builder_rebuild_prepared_accel(scene, mesh_assets)) {
         char diag[4096];
         const char* lower_diag = RuntimeScene3DBuilder_LastDiagnostics();
         snprintf(diag,

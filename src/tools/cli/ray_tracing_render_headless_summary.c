@@ -1,6 +1,7 @@
 #include "tools/ray_tracing_render_headless_internal.h"
 
 #include "app/ray_tracing_request_utils.h"
+#include "render/runtime_dynamic_geometry_accel_3d.h"
 #include "render/runtime_disney_v2_caustic_sidecar_3d.h"
 
 #include <errno.h>
@@ -35,6 +36,387 @@ static const char *environment_light_mode_label(EnvironmentLightMode mode) {
         default:
             return "off";
     }
+}
+
+static double ray_tracing_headless_rgb_sum(double r, double g, double b) {
+    return r + g + b;
+}
+
+static double ray_tracing_headless_safe_ratio(double numerator, double denominator) {
+    return denominator > 0.0 ? numerator / denominator : 0.0;
+}
+
+static double ray_tracing_headless_nonnegative(double value) {
+    return value > 0.0 ? value : 0.0;
+}
+
+static double ray_tracing_headless_percent_of(double value, double total) {
+    return total > 0.0 ? (ray_tracing_headless_nonnegative(value) * 100.0) / total : 0.0;
+}
+
+static void ray_tracing_headless_write_startup_timing_stage(FILE* file,
+                                                            const char* name,
+                                                            double ms,
+                                                            double total_ms,
+                                                            bool comma) {
+    if (!file || !name) return;
+    fprintf(file,
+            "      { \"stage\": ");
+    RayTracingJsonWriteString(file, name);
+    fprintf(file,
+            ", \"ms\": %.6f, \"percent_of_total\": %.6f }%s\n",
+            ray_tracing_headless_nonnegative(ms),
+            ray_tracing_headless_percent_of(ms, total_ms),
+            comma ? "," : "");
+}
+
+static void ray_tracing_headless_write_startup_load_timing_matrix(
+    FILE* file,
+    const RayTracingHeadlessPreflight* preflight) {
+    double total_reference_ms = 0.0;
+    double flattened_triangle_append_ms = 0.0;
+    double unaccounted_prepare_ms = 0.0;
+    if (!file || !preflight) return;
+
+    total_reference_ms = preflight->native_prepare_frame_ms > 0.0
+                             ? preflight->native_prepare_frame_ms
+                             : preflight->total_run_ms;
+    flattened_triangle_append_ms =
+        preflight->scene_builder_timing_stats.mesh_append_total_ms -
+        preflight->scene_builder_timing_stats.mesh_append_reserve_ms;
+    unaccounted_prepare_ms =
+        total_reference_ms -
+        (preflight->mesh_asset_timing_stats.total_ms +
+         preflight->scene_builder_timing_stats.total_ms +
+         preflight->scene_acceleration_stats.blasBuildMs +
+         preflight->scene_acceleration_stats.tlasBuildMs +
+         preflight->scene_acceleration_stats.tlasBindMs +
+         preflight->dynamic_water_cache_stats.geometryStoreMs);
+
+    fprintf(file, "  \"startup_load_timing_matrix\": {\n");
+    fprintf(file, "    \"total_reference_ms\": %.6f,\n",
+            ray_tracing_headless_nonnegative(total_reference_ms));
+    fprintf(file, "    \"total_reference_source\": ");
+    RayTracingJsonWriteString(file,
+                              preflight->native_prepare_frame_ms > 0.0
+                                  ? "native_prepare_frame_ms"
+                                  : "total_run_ms");
+    fprintf(file, ",\n");
+    fprintf(file, "    \"stages\": [\n");
+    ray_tracing_headless_write_startup_timing_stage(
+        file,
+        "sidecar_path_resolution",
+        preflight->mesh_asset_timing_stats.sidecar_path_resolution_ms,
+        total_reference_ms,
+        true);
+    ray_tracing_headless_write_startup_timing_stage(
+        file,
+        "runtime_mesh_scene_read",
+        preflight->mesh_asset_timing_stats.scene_read_ms,
+        total_reference_ms,
+        true);
+    ray_tracing_headless_write_startup_timing_stage(
+        file,
+        "runtime_mesh_scene_parse",
+        preflight->mesh_asset_timing_stats.scene_parse_ms,
+        total_reference_ms,
+        true);
+    ray_tracing_headless_write_startup_timing_stage(
+        file,
+        "runtime_mesh_document_load_parse",
+        preflight->mesh_asset_timing_stats.asset_runtime_document_load_ms,
+        total_reference_ms,
+        true);
+    ray_tracing_headless_write_startup_timing_stage(
+        file,
+        "mesh_asset_document_copy",
+        preflight->mesh_asset_timing_stats.asset_document_copy_ms,
+        total_reference_ms,
+        true);
+    ray_tracing_headless_write_startup_timing_stage(
+        file,
+        "mesh_instance_expansion",
+        preflight->scene_builder_timing_stats.mesh_append_expand_ms,
+        total_reference_ms,
+        true);
+    ray_tracing_headless_write_startup_timing_stage(
+        file,
+        "flattened_triangle_append",
+        flattened_triangle_append_ms,
+        total_reference_ms,
+        true);
+    ray_tracing_headless_write_startup_timing_stage(
+        file,
+        "flattened_bvh_build",
+        preflight->scene_builder_timing_stats.bvh_rebuild_wall_ms,
+        total_reference_ms,
+        true);
+    ray_tracing_headless_write_startup_timing_stage(
+        file,
+        "mesh_local_blas_build",
+        preflight->scene_acceleration_stats.blasBuildMs,
+        total_reference_ms,
+        true);
+    ray_tracing_headless_write_startup_timing_stage(
+        file,
+        "tlas_build",
+        preflight->scene_acceleration_stats.tlasBuildMs,
+        total_reference_ms,
+        true);
+    ray_tracing_headless_write_startup_timing_stage(
+        file,
+        "tlas_bind",
+        preflight->scene_acceleration_stats.tlasBindMs,
+        total_reference_ms,
+        true);
+    ray_tracing_headless_write_startup_timing_stage(
+        file,
+        "dynamic_water_cache_store",
+        preflight->dynamic_water_cache_stats.geometryStoreMs,
+        total_reference_ms,
+        true);
+    ray_tracing_headless_write_startup_timing_stage(
+        file,
+        "dynamic_water_bvh_build",
+        preflight->dynamic_water_cache_stats.geometryBVHBuildMs,
+        total_reference_ms,
+        true);
+    ray_tracing_headless_write_startup_timing_stage(
+        file,
+        "caustic_cache_prep",
+        preflight->caustic_cache_prep_ms,
+        total_reference_ms,
+        true);
+    ray_tracing_headless_write_startup_timing_stage(
+        file,
+        "unaccounted_prepare_or_runtime_init",
+        unaccounted_prepare_ms,
+        total_reference_ms,
+        false);
+    fprintf(file, "    ],\n");
+    fprintf(file, "    \"cache_counts\": {\n");
+    fprintf(file, "      \"runtime_mesh_document_cache_hits\": %d,\n",
+            preflight->mesh_asset_timing_stats.asset_cache_hits);
+    fprintf(file, "      \"runtime_mesh_document_cache_misses\": %d,\n",
+            preflight->mesh_asset_timing_stats.asset_cache_misses);
+    fprintf(file, "      \"blas_cache_hits\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_stats.blasCacheHits);
+    fprintf(file, "      \"blas_cache_misses\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_stats.blasCacheMisses);
+    fprintf(file, "      \"blas_cache_invalidations\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_stats.blasCacheInvalidations);
+    fprintf(file, "      \"dynamic_water_geometry_stores\": %llu,\n",
+            (unsigned long long)preflight->dynamic_water_cache_stats.geometryStores);
+    fprintf(file, "      \"dynamic_water_geometry_store_failures\": %llu\n",
+            (unsigned long long)preflight->dynamic_water_cache_stats.geometryStoreFailures);
+    fprintf(file, "    },\n");
+    fprintf(file, "    \"notes\": ");
+    RayTracingJsonWriteString(
+        file,
+        "caustic_cache_prep measures prepared-frame sidecar probe and caustic cache population");
+    fprintf(file, "\n");
+    fprintf(file, "  },\n");
+}
+
+static void ray_tracing_headless_write_dynamic_geometry_acceleration_summary(
+    FILE *file,
+    const RayTracingHeadlessPreflight *preflight) {
+    RuntimeDynamicGeometryAcceleration3DInput input = {0};
+    RuntimeDynamicGeometryAcceleration3DClassification classification = {0};
+    if (!file || !preflight) return;
+
+    input.static_mesh_loaded_assets = preflight->mesh_asset_timing_stats.loaded_assets;
+    input.static_mesh_loaded_instances =
+        preflight->mesh_asset_timing_stats.loaded_instances;
+    input.static_mesh_loaded_triangles =
+        preflight->mesh_asset_timing_stats.loaded_triangles;
+    input.static_blas_cached_asset_count =
+        preflight->scene_acceleration_stats.blasCachedAssetCount;
+    input.static_tlas_instance_count =
+        preflight->scene_acceleration_stats.tlasInstanceCount;
+    input.water_surface_source_found = preflight->water_surface_source_found;
+    input.water_surface_loaded = preflight->water_surface_loaded;
+    input.water_surface_frame_selection_built =
+        preflight->water_surface_frame_selection_built;
+    input.water_surface_frame_selection_dynamic =
+        preflight->water_surface_frame_selection_dynamic;
+    input.water_surface_mesh_attached = preflight->water_surface_mesh_attached;
+    input.water_surface_first_frame_index =
+        preflight->water_surface_loaded_first_frame_index;
+    input.water_surface_last_frame_index =
+        preflight->water_surface_loaded_last_frame_index;
+    input.water_surface_first_grid_w = preflight->water_surface_grid_w;
+    input.water_surface_first_grid_d = preflight->water_surface_grid_d;
+    input.water_surface_first_sample_count = preflight->water_surface_sample_count;
+    input.water_surface_last_grid_w = preflight->water_surface_last_grid_w;
+    input.water_surface_last_grid_d = preflight->water_surface_last_grid_d;
+    input.water_surface_last_sample_count =
+        preflight->water_surface_last_sample_count;
+    input.water_surface_triangle_count = preflight->water_surface_triangle_count;
+    input.mesh_emissive_light_count =
+        preflight->registered_light_mesh_emissive_count;
+    input.mesh_area_sampler_only_count =
+        preflight->registered_light_mesh_area_sampler_only_count;
+
+    RuntimeDynamicGeometryAcceleration3D_Classify(&input, &classification);
+
+    fprintf(file, "  \"dynamic_geometry_acceleration\": {\n");
+    fprintf(file, "    \"static_mesh_asset_policy\": ");
+    RayTracingJsonWriteString(
+        file,
+        RuntimeDynamicGeometryAcceleration3D_StaticMeshPolicyLabel(&classification));
+    fprintf(file, ",\n");
+    fprintf(file, "    \"static_mesh_asset_present\": %s,\n",
+            classification.static_mesh_asset_present ? "true" : "false");
+    fprintf(file, "    \"static_mesh_asset_blas_active\": %s,\n",
+            classification.static_mesh_asset_blas_active ? "true" : "false");
+    fprintf(file, "    \"static_mesh_asset_loaded_assets\": %d,\n",
+            classification.static_mesh_asset_loaded_assets);
+    fprintf(file, "    \"static_mesh_asset_loaded_instances\": %d,\n",
+            classification.static_mesh_asset_loaded_instances);
+    fprintf(file, "    \"static_mesh_asset_loaded_triangles\": %llu,\n",
+            (unsigned long long)classification.static_mesh_asset_loaded_triangles);
+    fprintf(file, "    \"water_surface_policy\": ");
+    RayTracingJsonWriteString(
+        file,
+        RuntimeDynamicGeometryAcceleration3D_WaterSurfacePolicyLabel(
+            classification.water_surface_decision));
+    fprintf(file, ",\n");
+    fprintf(file, "    \"water_surface_accel_action\": ");
+    RayTracingJsonWriteString(
+        file,
+        RuntimeDynamicGeometryAcceleration3D_WaterSurfaceActionLabel(
+            classification.water_surface_decision));
+    fprintf(file, ",\n");
+    fprintf(file, "    \"water_surface_present\": %s,\n",
+            classification.water_surface_present ? "true" : "false");
+    fprintf(file, "    \"water_surface_mesh_attached\": %s,\n",
+            classification.water_surface_mesh_attached ? "true" : "false");
+    fprintf(file, "    \"water_surface_frame_selection_dynamic\": %s,\n",
+            classification.water_surface_frame_selection_dynamic ? "true" : "false");
+    fprintf(file, "    \"water_surface_frame_stamp_changed\": %s,\n",
+            classification.water_surface_frame_stamp_changed ? "true" : "false");
+    fprintf(file, "    \"water_surface_topology_comparable\": %s,\n",
+            classification.water_surface_topology_comparable ? "true" : "false");
+    fprintf(file, "    \"water_surface_topology_stable\": %s,\n",
+            classification.water_surface_topology_stable ? "true" : "false");
+    fprintf(file, "    \"water_surface_first_grid_w\": %u,\n",
+            classification.water_surface_first_grid_w);
+    fprintf(file, "    \"water_surface_first_grid_d\": %u,\n",
+            classification.water_surface_first_grid_d);
+    fprintf(file, "    \"water_surface_first_sample_count\": %llu,\n",
+            (unsigned long long)classification.water_surface_first_sample_count);
+    fprintf(file, "    \"water_surface_last_grid_w\": %u,\n",
+            classification.water_surface_last_grid_w);
+    fprintf(file, "    \"water_surface_last_grid_d\": %u,\n",
+            classification.water_surface_last_grid_d);
+    fprintf(file, "    \"water_surface_last_sample_count\": %llu,\n",
+            (unsigned long long)classification.water_surface_last_sample_count);
+    fprintf(file, "    \"water_surface_triangle_count\": %d,\n",
+            classification.water_surface_triangle_count);
+    fprintf(file, "    \"mesh_emissive_policy\": ");
+    RayTracingJsonWriteString(
+        file,
+        RuntimeDynamicGeometryAcceleration3D_MeshEmissivePolicyLabel(&classification));
+    fprintf(file, ",\n");
+    fprintf(file, "    \"mesh_emissive_internal_present\": %s,\n",
+            classification.mesh_emissive_internal_present ? "true" : "false");
+    fprintf(file, "    \"mesh_emissive_light_count\": %d,\n",
+            classification.mesh_emissive_light_count);
+    fprintf(file, "    \"mesh_area_sampler_only_count\": %d,\n",
+            classification.mesh_area_sampler_only_count);
+    fprintf(file, "    \"generated_runtime_mesh_policy\": ");
+    RayTracingJsonWriteString(
+        file,
+        RuntimeDynamicGeometryAcceleration3D_GeneratedRuntimeMeshPolicyLabel());
+    fprintf(file, ",\n");
+    fprintf(file, "    \"deforming_mesh_policy\": ");
+    RayTracingJsonWriteString(
+        file,
+        RuntimeDynamicGeometryAcceleration3D_DeformingMeshPolicyLabel());
+    fprintf(file, ",\n");
+    fprintf(file, "    \"next_dynamic_accel_contract\": ");
+    RayTracingJsonWriteString(
+        file,
+        RuntimeDynamicGeometryAcceleration3D_NextContractLabel());
+    fprintf(file, "\n");
+    fprintf(file, "  },\n");
+}
+
+static void ray_tracing_headless_write_dynamic_water_acceleration_cache_summary(
+    FILE *file,
+    const RayTracingHeadlessPreflight *preflight) {
+    if (!file || !preflight) return;
+    fprintf(file, "  \"dynamic_water_acceleration_cache\": {\n");
+    fprintf(file, "    \"valid\": %s,\n",
+            preflight->dynamic_water_cache_stats.valid ? "true" : "false");
+    fprintf(file, "    \"cache_ready\": %s,\n",
+            preflight->dynamic_water_cache_stats.cacheReady ? "true" : "false");
+    fprintf(file, "    \"last_status\": ");
+    RayTracingJsonWriteString(
+        file,
+        RuntimeDynamicGeometryAcceleration3D_WaterCacheStatusLabel(
+            preflight->dynamic_water_cache_stats.lastStatus));
+    fprintf(file, ",\n");
+    fprintf(file, "    \"last_policy\": ");
+    RayTracingJsonWriteString(
+        file,
+        RuntimeDynamicGeometryAcceleration3D_WaterSurfacePolicyLabel(
+            preflight->dynamic_water_cache_stats.lastDecision));
+    fprintf(file, ",\n");
+    fprintf(file, "    \"observed_frames\": %llu,\n",
+            (unsigned long long)preflight->dynamic_water_cache_stats.observedFrames);
+    fprintf(file, "    \"rebuilds\": %llu,\n",
+            (unsigned long long)preflight->dynamic_water_cache_stats.rebuilds);
+    fprintf(file, "    \"reuses\": %llu,\n",
+            (unsigned long long)preflight->dynamic_water_cache_stats.reuses);
+    fprintf(file, "    \"refits\": %llu,\n",
+            (unsigned long long)preflight->dynamic_water_cache_stats.refits);
+    fprintf(file, "    \"fallbacks\": %llu,\n",
+            (unsigned long long)preflight->dynamic_water_cache_stats.fallbacks);
+    fprintf(file, "    \"last_frame_index\": %llu,\n",
+            (unsigned long long)preflight->dynamic_water_cache_stats.lastFrameIndex);
+    fprintf(file, "    \"cached_grid_w\": %u,\n",
+            preflight->dynamic_water_cache_stats.cachedGridW);
+    fprintf(file, "    \"cached_grid_d\": %u,\n",
+            preflight->dynamic_water_cache_stats.cachedGridD);
+    fprintf(file, "    \"cached_sample_count\": %llu,\n",
+            (unsigned long long)preflight->dynamic_water_cache_stats.cachedSampleCount);
+    fprintf(file, "    \"cached_triangle_count\": %d,\n",
+            preflight->dynamic_water_cache_stats.cachedTriangleCount);
+    fprintf(file, "    \"geometry_cache_ready\": %s,\n",
+            preflight->dynamic_water_cache_stats.geometryCacheReady ? "true" : "false");
+    fprintf(file, "    \"geometry_bvh_ready\": %s,\n",
+            preflight->dynamic_water_cache_stats.geometryBVHReady ? "true" : "false");
+    fprintf(file, "    \"geometry_stores\": %llu,\n",
+            (unsigned long long)preflight->dynamic_water_cache_stats.geometryStores);
+    fprintf(file, "    \"geometry_rebuild_stores\": %llu,\n",
+            (unsigned long long)preflight->dynamic_water_cache_stats.geometryRebuildStores);
+    fprintf(file, "    \"geometry_refit_stores\": %llu,\n",
+            (unsigned long long)preflight->dynamic_water_cache_stats.geometryRefitStores);
+    fprintf(file, "    \"geometry_reuse_stores\": %llu,\n",
+            (unsigned long long)preflight->dynamic_water_cache_stats.geometryReuseStores);
+    fprintf(file, "    \"geometry_store_failures\": %llu,\n",
+            (unsigned long long)preflight->dynamic_water_cache_stats.geometryStoreFailures);
+    fprintf(file, "    \"geometry_bvh_node_count\": %d,\n",
+            preflight->dynamic_water_cache_stats.geometryBVHNodeCount);
+    fprintf(file, "    \"geometry_bvh_leaf_count\": %d,\n",
+            preflight->dynamic_water_cache_stats.geometryBVHLeafCount);
+    fprintf(file, "    \"geometry_store_ms\": %.6f,\n",
+            preflight->dynamic_water_cache_stats.geometryStoreMs);
+    fprintf(file, "    \"geometry_bvh_build_ms\": %.6f,\n",
+            preflight->dynamic_water_cache_stats.geometryBVHBuildMs);
+    fprintf(file, "    \"route_trace_calls\": %llu,\n",
+            (unsigned long long)preflight->dynamic_water_cache_stats.routeTraceCalls);
+    fprintf(file, "    \"route_trace_hits\": %llu,\n",
+            (unsigned long long)preflight->dynamic_water_cache_stats.routeTraceHits);
+    fprintf(file, "    \"route_trace_misses\": %llu,\n",
+            (unsigned long long)preflight->dynamic_water_cache_stats.routeTraceMisses);
+    fprintf(file, "    \"route_trace_errors\": %llu,\n",
+            (unsigned long long)preflight->dynamic_water_cache_stats.routeTraceErrors);
+    fprintf(file, "    \"route_trace_unavailable\": %llu\n",
+            (unsigned long long)preflight->dynamic_water_cache_stats.routeTraceUnavailable);
+    fprintf(file, "  },\n");
 }
 
 void ray_tracing_render_headless_write_summary(
@@ -176,6 +558,10 @@ void ray_tracing_render_headless_write_summary(
             request->has_volume_scatter_gain_override ? "true" : "false");
     fprintf(file, "    \"volume_scatter_gain\": %.9f,\n",
             request->volume_scatter_gain_override);
+    fprintf(file, "    \"has_caustic_volume_scatter_gain_override\": %s,\n",
+            request->has_caustic_volume_scatter_gain_override ? "true" : "false");
+    fprintf(file, "    \"caustic_volume_scatter_gain\": %.9f,\n",
+            request->caustic_volume_scatter_gain_override);
     fprintf(file, "    \"has_volume_density_scale_override\": %s,\n",
             request->has_volume_density_scale_override ? "true" : "false");
     fprintf(file, "    \"volume_density_scale\": %.9f,\n",
@@ -204,10 +590,204 @@ void ray_tracing_render_headless_write_summary(
             request->has_transmission_samples_3d_override ? "true" : "false");
     fprintf(file, "    \"transmission_samples_3d\": %d,\n",
             request->transmission_samples_3d_override);
+    fprintf(file, "    \"has_trace_route_override\": %s,\n",
+            request->has_trace_route_override ? "true" : "false");
+    fprintf(file, "    \"trace_route\": ");
+    RayTracingJsonWriteString(file, RuntimeRay3DTraceRouteLabel(request->trace_route));
+    fprintf(file, ",\n");
     fprintf(file, "    \"has_caustic_mode_override\": %s,\n",
             request->has_caustic_mode_override ? "true" : "false");
     fprintf(file, "    \"caustic_mode\": \"%s\",\n",
             RuntimeDisneyV2_3D_CausticModeLabel(request->caustic_mode));
+    {
+        RuntimeCausticReadback3D caustic_readback =
+            RuntimeCausticSettings3D_Phase0Readback(&request->caustic_settings,
+                                                    request->caustic_sidecar_enabled);
+        fprintf(file, "    \"caustic_state\": {\n");
+        fprintf(file, "      \"mode\": \"%s\",\n",
+                RuntimeCausticMode3D_Label(caustic_readback.mode));
+        fprintf(file, "      \"analytic_sidecar_requested\": %s,\n",
+                caustic_readback.analyticSidecarRequested ? "true" : "false");
+        fprintf(file, "      \"volume_cache_requested\": %s,\n",
+                caustic_readback.volumeCacheRequested ? "true" : "false");
+        fprintf(file, "      \"surface_cache_requested\": %s,\n",
+                caustic_readback.surfaceCacheRequested ? "true" : "false");
+        fprintf(file, "      \"cache_grid_mode\": \"%s\",\n",
+                RuntimeCausticCacheGridMode3D_Label(request->caustic_settings.cacheGridMode));
+        fprintf(file, "      \"surface_radiance_scale\": %.9f,\n",
+                request->caustic_settings.surfaceRadianceScale);
+        fprintf(file, "      \"surface_footprint_scale\": %.9f,\n",
+                request->caustic_settings.surfaceFootprintScale);
+        fprintf(file, "      \"surface_receiver_fallback_enabled\": %s,\n",
+                request->caustic_settings.surfaceReceiverFallbackEnabled ? "true" : "false");
+        fprintf(file, "      \"volume_cache_state\": \"%s\",\n",
+                RuntimeCausticCacheState3D_Label(caustic_readback.volumeCacheState));
+        fprintf(file, "      \"surface_cache_state\": \"%s\",\n",
+                RuntimeCausticCacheState3D_Label(caustic_readback.surfaceCacheState));
+        fprintf(file, "      \"path_emission_active\": %s,\n",
+                caustic_readback.pathEmissionActive ? "true" : "false");
+        fprintf(file, "      \"transport_reserved\": %s,\n",
+                caustic_readback.transportReserved ? "true" : "false");
+        fprintf(file, "      \"temporary_analytic_bridge\": %s,\n",
+                preflight->stats.causticBootstrapTemporaryBridgeActive > 0 ? "true" : "false");
+        fprintf(file, "      \"transport_path_emission_active\": %s,\n",
+                preflight->stats.causticTransportPathEmissionActive > 0 ? "true" : "false");
+        fprintf(file, "      \"volume_cache_suppressed_no_sampleable_volume\": %s,\n",
+                preflight->stats.causticVolumeCacheSuppressedNoSampleableVolume > 0 ? "true" : "false");
+        fprintf(file, "      \"transport_light_count\": %d,\n",
+                preflight->stats.causticTransportLightCount);
+        fprintf(file, "      \"transport_evaluated_path_count\": %d,\n",
+                preflight->stats.causticTransportEvaluatedPathCount);
+        fprintf(file, "      \"transport_emitted_path_count\": %d,\n",
+                preflight->stats.causticTransportEmittedPathCount);
+        fprintf(file, "      \"transport_transparent_hit_count\": %d,\n",
+                preflight->stats.causticTransportTransparentHitCount);
+        fprintf(file, "      \"transport_specular_event_count\": %d,\n",
+                preflight->stats.causticTransportSpecularEventCount);
+        fprintf(file, "      \"transport_volume_segment_count\": %d,\n",
+                preflight->stats.causticTransportVolumeSegmentCount);
+        fprintf(file, "      \"transport_surface_receiver_trace_miss_count\": %d,\n",
+                preflight->stats.causticTransportSurfaceReceiverTraceMissCount);
+        fprintf(file, "      \"transport_surface_receiver_depth_reject_count\": %d,\n",
+                preflight->stats.causticTransportSurfaceReceiverDepthRejectCount);
+        fprintf(file, "      \"transport_surface_receiver_hit_count\": %d,\n",
+                preflight->stats.causticTransportSurfaceReceiverHitCount);
+        fprintf(file, "      \"transport_surface_receiver_fallback_count\": %d,\n",
+                preflight->stats.causticTransportSurfaceReceiverFallbackCount);
+        fprintf(file, "      \"volume_cache_bound\": %s,\n",
+                preflight->stats.causticVolumeCacheBound > 0 ? "true" : "false");
+        fprintf(file, "      \"volume_cache_allocated\": %s,\n",
+                preflight->stats.causticVolumeCacheAllocated > 0 ? "true" : "false");
+        fprintf(file, "      \"volume_cache_cell_count\": %d,\n",
+                preflight->stats.causticVolumeCacheCellCount);
+        fprintf(file, "      \"volume_cache_nonzero_cell_count\": %d,\n",
+                preflight->stats.causticVolumeCacheNonZeroCellCount);
+        fprintf(file, "      \"volume_cache_deposit_attempt_count\": %d,\n",
+                preflight->stats.causticVolumeCacheDepositAttemptCount);
+        fprintf(file, "      \"volume_cache_deposit_accepted_count\": %d,\n",
+                preflight->stats.causticVolumeCacheDepositAcceptedCount);
+        fprintf(file, "      \"volume_cache_deposit_rejected_count\": %d,\n",
+                preflight->stats.causticVolumeCacheDepositRejectedCount);
+        fprintf(file, "      \"volume_cache_sample_lookup_count\": %d,\n",
+                preflight->stats.causticVolumeCacheSampleLookupCount);
+        fprintf(file, "      \"volume_cache_sample_contributing_count\": %d,\n",
+                preflight->stats.causticVolumeCacheSampleContributingCount);
+        fprintf(file,
+                "      \"volume_cache_total_radiance\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
+                preflight->stats.totalCausticVolumeCacheRadianceR,
+                preflight->stats.totalCausticVolumeCacheRadianceG,
+                preflight->stats.totalCausticVolumeCacheRadianceB);
+        fprintf(file, "      \"volume_cache_max_cell_radiance\": %.9f,\n",
+                preflight->stats.maxCausticVolumeCacheRadiance);
+        fprintf(file, "      \"volume_cache_nonzero_cell_ratio\": %.9f,\n",
+                preflight->stats.causticVolumeCacheNonZeroCellRatio);
+        fprintf(file, "      \"volume_cache_sample_hit_ratio\": %.9f,\n",
+                preflight->stats.causticVolumeCacheSampleHitRatio);
+        fprintf(file,
+                "      \"volume_cache_radiance_centroid\": { \"x\": %.9f, \"y\": %.9f, \"z\": %.9f },\n",
+                preflight->stats.causticVolumeCacheRadianceCentroidX,
+                preflight->stats.causticVolumeCacheRadianceCentroidY,
+                preflight->stats.causticVolumeCacheRadianceCentroidZ);
+        fprintf(file,
+                "      \"volume_cache_nonzero_bounds_min\": { \"x\": %.9f, \"y\": %.9f, \"z\": %.9f },\n",
+                preflight->stats.causticVolumeCacheNonZeroBoundsMinX,
+                preflight->stats.causticVolumeCacheNonZeroBoundsMinY,
+                preflight->stats.causticVolumeCacheNonZeroBoundsMinZ);
+        fprintf(file,
+                "      \"volume_cache_nonzero_bounds_max\": { \"x\": %.9f, \"y\": %.9f, \"z\": %.9f },\n",
+                preflight->stats.causticVolumeCacheNonZeroBoundsMaxX,
+                preflight->stats.causticVolumeCacheNonZeroBoundsMaxY,
+                preflight->stats.causticVolumeCacheNonZeroBoundsMaxZ);
+        fprintf(file, "      \"surface_cache_bound\": %s,\n",
+                preflight->stats.causticSurfaceCacheBound > 0 ? "true" : "false");
+        fprintf(file, "      \"surface_cache_allocated\": %s,\n",
+                preflight->stats.causticSurfaceCacheAllocated > 0 ? "true" : "false");
+        fprintf(file, "      \"surface_cache_record_capacity\": %d,\n",
+                preflight->stats.causticSurfaceCacheRecordCapacity);
+        fprintf(file, "      \"surface_cache_record_count\": %d,\n",
+                preflight->stats.causticSurfaceCacheRecordCount);
+        fprintf(file, "      \"surface_cache_deposit_attempt_count\": %d,\n",
+                preflight->stats.causticSurfaceCacheDepositAttemptCount);
+        fprintf(file, "      \"surface_cache_deposit_accepted_count\": %d,\n",
+                preflight->stats.causticSurfaceCacheDepositAcceptedCount);
+        fprintf(file, "      \"surface_cache_deposit_rejected_count\": %d,\n",
+                preflight->stats.causticSurfaceCacheDepositRejectedCount);
+        fprintf(file, "      \"surface_cache_sample_lookup_count\": %d,\n",
+                preflight->stats.causticSurfaceCacheSampleLookupCount);
+        fprintf(file, "      \"surface_cache_sample_contributing_count\": %d,\n",
+                preflight->stats.causticSurfaceCacheSampleContributingCount);
+        fprintf(file, "      \"surface_cache_nearest_sample_distance\": %.9f,\n",
+                preflight->stats.causticSurfaceCacheNearestSampleDistance);
+        fprintf(file, "      \"surface_cache_nearest_sample_radius\": %.9f,\n",
+                preflight->stats.causticSurfaceCacheNearestSampleRadius);
+        fprintf(file, "      \"surface_cache_nearest_sample_normal_dot\": %.9f,\n",
+                preflight->stats.causticSurfaceCacheNearestSampleNormalDot);
+        fprintf(file, "      \"surface_cache_nearest_sample_candidate_count\": %.0f,\n",
+                preflight->stats.causticSurfaceCacheNearestSampleCandidateCount);
+        fprintf(file,
+                "      \"surface_cache_total_radiance\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
+                preflight->stats.totalCausticSurfaceCacheRadianceR,
+                preflight->stats.totalCausticSurfaceCacheRadianceG,
+                preflight->stats.totalCausticSurfaceCacheRadianceB);
+        fprintf(file, "      \"surface_cache_max_record_radiance\": %.9f,\n",
+                preflight->stats.maxCausticSurfaceCacheRadiance);
+        fprintf(file,
+                "      \"surface_caustic_sampled_radiance\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
+                preflight->stats.totalCausticSurfaceRadianceR,
+                preflight->stats.totalCausticSurfaceRadianceG,
+                preflight->stats.totalCausticSurfaceRadianceB);
+        fprintf(file, "      \"volume_scatter_direct_sample_count\": %d,\n",
+                preflight->stats.volumeScatterDirectSampleCount);
+        fprintf(file,
+                "      \"volume_scatter_direct_radiance\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
+                preflight->stats.totalDirectVolumeScatterRadianceR,
+                preflight->stats.totalDirectVolumeScatterRadianceG,
+                preflight->stats.totalDirectVolumeScatterRadianceB);
+        fprintf(file, "      \"volume_scatter_caustic_sampling_bound\": %s,\n",
+                preflight->stats.causticVolumeScatterSampleCount > 0 ? "true" : "false");
+        fprintf(file, "      \"volume_scatter_caustic_sample_count\": %d,\n",
+                preflight->stats.causticVolumeScatterSampleCount);
+        fprintf(file, "      \"volume_scatter_caustic_contributing_sample_count\": %d,\n",
+                preflight->stats.causticVolumeScatterContributingSampleCount);
+        fprintf(file,
+                "      \"volume_scatter_caustic_radiance\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
+                preflight->stats.totalCausticVolumeScatterRadianceR,
+                preflight->stats.totalCausticVolumeScatterRadianceG,
+                preflight->stats.totalCausticVolumeScatterRadianceB);
+        {
+            const double cache_sum = ray_tracing_headless_rgb_sum(
+                preflight->stats.totalCausticVolumeCacheRadianceR,
+                preflight->stats.totalCausticVolumeCacheRadianceG,
+                preflight->stats.totalCausticVolumeCacheRadianceB);
+            const double scatter_sum = ray_tracing_headless_rgb_sum(
+                preflight->stats.totalCausticVolumeScatterRadianceR,
+                preflight->stats.totalCausticVolumeScatterRadianceG,
+                preflight->stats.totalCausticVolumeScatterRadianceB);
+            const double direct_sum = ray_tracing_headless_rgb_sum(
+                preflight->stats.totalDirectVolumeScatterRadianceR,
+                preflight->stats.totalDirectVolumeScatterRadianceG,
+                preflight->stats.totalDirectVolumeScatterRadianceB);
+            fprintf(file, "      \"volume_cache_total_radiance_sum\": %.9f,\n",
+                    cache_sum);
+            fprintf(file, "      \"volume_scatter_caustic_radiance_sum\": %.9f,\n",
+                    scatter_sum);
+            fprintf(file, "      \"volume_scatter_direct_radiance_sum\": %.9f,\n",
+                    direct_sum);
+            fprintf(file,
+                    "      \"volume_scatter_caustic_to_cache_radiance_ratio\": %.9f,\n",
+                    ray_tracing_headless_safe_ratio(scatter_sum, cache_sum));
+            fprintf(file,
+                    "      \"volume_scatter_caustic_to_direct_radiance_ratio\": %.9f,\n",
+                    ray_tracing_headless_safe_ratio(scatter_sum, direct_sum));
+        }
+        fprintf(file, "      \"sample_budget\": %d,\n",
+                request->caustic_settings.sampleBudget);
+        fprintf(file, "      \"max_path_depth\": %d,\n",
+                request->caustic_settings.maxPathDepth);
+        fprintf(file, "      \"debug_summary_enabled\": %s\n",
+                request->caustic_settings.debugSummaryEnabled ? "true" : "false");
+        fprintf(file, "    },\n");
+    }
     fprintf(file, "    \"has_caustic_sidecar_enabled_override\": %s,\n",
             request->has_caustic_sidecar_enabled_override ? "true" : "false");
     fprintf(file, "    \"caustic_sidecar_enabled\": %s,\n",
@@ -309,6 +889,10 @@ void ray_tracing_render_headless_write_summary(
             preflight->registered_light_material_emitter_enabled_count);
     fprintf(file, "    \"mesh_area_sampler_only_count\": %d,\n",
             preflight->registered_light_mesh_area_sampler_only_count);
+    fprintf(file, "    \"emission_profile_counts\": { \"omni\": %d, \"one_sided\": %d, \"two_sided\": %d },\n",
+            preflight->registered_light_emission_omni_count,
+            preflight->registered_light_emission_one_sided_count,
+            preflight->registered_light_emission_two_sided_count);
     fprintf(file, "    \"emissive_candidate_count\": %d,\n",
             preflight->registered_light_emissive_candidate_count);
     fprintf(file, "    \"emissive_area\": %.9f,\n",
@@ -528,6 +1112,114 @@ void ray_tracing_render_headless_write_summary(
             preflight->stats.maxCausticSidecarRadiance);
     fprintf(file, "    \"total_caustic_sidecar_radiance\": %.9f,\n",
             preflight->stats.totalCausticSidecarRadiance);
+    fprintf(file, "    \"caustic_bootstrap_temporary_bridge_active\": %s,\n",
+            preflight->stats.causticBootstrapTemporaryBridgeActive > 0 ? "true" : "false");
+    fprintf(file, "    \"caustic_transport_path_emission_active\": %s,\n",
+            preflight->stats.causticTransportPathEmissionActive > 0 ? "true" : "false");
+    fprintf(file, "    \"caustic_transport_light_count\": %d,\n",
+            preflight->stats.causticTransportLightCount);
+    fprintf(file, "    \"caustic_transport_evaluated_path_count\": %d,\n",
+            preflight->stats.causticTransportEvaluatedPathCount);
+    fprintf(file, "    \"caustic_transport_emitted_path_count\": %d,\n",
+            preflight->stats.causticTransportEmittedPathCount);
+    fprintf(file, "    \"caustic_transport_transparent_hit_count\": %d,\n",
+            preflight->stats.causticTransportTransparentHitCount);
+    fprintf(file, "    \"caustic_transport_specular_event_count\": %d,\n",
+            preflight->stats.causticTransportSpecularEventCount);
+    fprintf(file, "    \"caustic_transport_volume_segment_count\": %d,\n",
+            preflight->stats.causticTransportVolumeSegmentCount);
+    fprintf(file, "    \"caustic_transport_surface_receiver_trace_miss_count\": %d,\n",
+            preflight->stats.causticTransportSurfaceReceiverTraceMissCount);
+    fprintf(file, "    \"caustic_transport_surface_receiver_depth_reject_count\": %d,\n",
+            preflight->stats.causticTransportSurfaceReceiverDepthRejectCount);
+    fprintf(file, "    \"caustic_transport_surface_receiver_hit_count\": %d,\n",
+            preflight->stats.causticTransportSurfaceReceiverHitCount);
+    fprintf(file, "    \"caustic_transport_surface_receiver_fallback_count\": %d,\n",
+            preflight->stats.causticTransportSurfaceReceiverFallbackCount);
+    fprintf(file, "    \"caustic_volume_cache_bound\": %s,\n",
+            preflight->stats.causticVolumeCacheBound > 0 ? "true" : "false");
+    fprintf(file, "    \"caustic_volume_cache_allocated\": %s,\n",
+            preflight->stats.causticVolumeCacheAllocated > 0 ? "true" : "false");
+    fprintf(file, "    \"caustic_volume_cache_cell_count\": %d,\n",
+            preflight->stats.causticVolumeCacheCellCount);
+    fprintf(file, "    \"caustic_volume_cache_nonzero_cell_count\": %d,\n",
+            preflight->stats.causticVolumeCacheNonZeroCellCount);
+    fprintf(file, "    \"caustic_volume_cache_deposit_attempt_count\": %d,\n",
+            preflight->stats.causticVolumeCacheDepositAttemptCount);
+    fprintf(file, "    \"caustic_volume_cache_deposit_accepted_count\": %d,\n",
+            preflight->stats.causticVolumeCacheDepositAcceptedCount);
+    fprintf(file, "    \"caustic_volume_cache_sample_lookup_count\": %d,\n",
+            preflight->stats.causticVolumeCacheSampleLookupCount);
+    fprintf(file, "    \"caustic_volume_cache_sample_contributing_count\": %d,\n",
+            preflight->stats.causticVolumeCacheSampleContributingCount);
+    fprintf(file, "    \"max_caustic_volume_cache_radiance\": %.9f,\n",
+            preflight->stats.maxCausticVolumeCacheRadiance);
+    fprintf(file,
+            "    \"total_caustic_volume_cache_radiance\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
+            preflight->stats.totalCausticVolumeCacheRadianceR,
+            preflight->stats.totalCausticVolumeCacheRadianceG,
+            preflight->stats.totalCausticVolumeCacheRadianceB);
+    fprintf(file, "    \"caustic_volume_cache_nonzero_cell_ratio\": %.9f,\n",
+            preflight->stats.causticVolumeCacheNonZeroCellRatio);
+    fprintf(file, "    \"caustic_volume_cache_sample_hit_ratio\": %.9f,\n",
+            preflight->stats.causticVolumeCacheSampleHitRatio);
+    fprintf(file,
+            "    \"caustic_volume_cache_radiance_centroid\": { \"x\": %.9f, \"y\": %.9f, \"z\": %.9f },\n",
+            preflight->stats.causticVolumeCacheRadianceCentroidX,
+            preflight->stats.causticVolumeCacheRadianceCentroidY,
+            preflight->stats.causticVolumeCacheRadianceCentroidZ);
+    fprintf(file,
+            "    \"caustic_volume_cache_nonzero_bounds_min\": { \"x\": %.9f, \"y\": %.9f, \"z\": %.9f },\n",
+            preflight->stats.causticVolumeCacheNonZeroBoundsMinX,
+            preflight->stats.causticVolumeCacheNonZeroBoundsMinY,
+            preflight->stats.causticVolumeCacheNonZeroBoundsMinZ);
+    fprintf(file,
+            "    \"caustic_volume_cache_nonzero_bounds_max\": { \"x\": %.9f, \"y\": %.9f, \"z\": %.9f },\n",
+            preflight->stats.causticVolumeCacheNonZeroBoundsMaxX,
+            preflight->stats.causticVolumeCacheNonZeroBoundsMaxY,
+            preflight->stats.causticVolumeCacheNonZeroBoundsMaxZ);
+    fprintf(file, "    \"direct_volume_scatter_samples\": %d,\n",
+            preflight->stats.volumeScatterDirectSampleCount);
+    fprintf(file,
+            "    \"total_direct_volume_scatter_radiance\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
+            preflight->stats.totalDirectVolumeScatterRadianceR,
+            preflight->stats.totalDirectVolumeScatterRadianceG,
+            preflight->stats.totalDirectVolumeScatterRadianceB);
+    fprintf(file, "    \"caustic_volume_scatter_samples\": %d,\n",
+            preflight->stats.causticVolumeScatterSampleCount);
+    fprintf(file, "    \"caustic_volume_scatter_contributing_samples\": %d,\n",
+            preflight->stats.causticVolumeScatterContributingSampleCount);
+    fprintf(file,
+            "    \"total_caustic_volume_scatter_radiance\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
+            preflight->stats.totalCausticVolumeScatterRadianceR,
+            preflight->stats.totalCausticVolumeScatterRadianceG,
+            preflight->stats.totalCausticVolumeScatterRadianceB);
+    {
+        const double cache_sum = ray_tracing_headless_rgb_sum(
+            preflight->stats.totalCausticVolumeCacheRadianceR,
+            preflight->stats.totalCausticVolumeCacheRadianceG,
+            preflight->stats.totalCausticVolumeCacheRadianceB);
+        const double scatter_sum = ray_tracing_headless_rgb_sum(
+            preflight->stats.totalCausticVolumeScatterRadianceR,
+            preflight->stats.totalCausticVolumeScatterRadianceG,
+            preflight->stats.totalCausticVolumeScatterRadianceB);
+        const double direct_sum = ray_tracing_headless_rgb_sum(
+            preflight->stats.totalDirectVolumeScatterRadianceR,
+            preflight->stats.totalDirectVolumeScatterRadianceG,
+            preflight->stats.totalDirectVolumeScatterRadianceB);
+        fprintf(file, "    \"caustic_volume_cache_total_radiance_sum\": %.9f,\n",
+                cache_sum);
+        fprintf(file, "    \"caustic_volume_scatter_radiance_sum\": %.9f,\n",
+                scatter_sum);
+        fprintf(file, "    \"direct_volume_scatter_radiance_sum\": %.9f,\n",
+                direct_sum);
+        fprintf(file,
+                "    \"caustic_volume_scatter_to_cache_radiance_ratio\": %.9f,\n",
+                ray_tracing_headless_safe_ratio(scatter_sum, cache_sum));
+        fprintf(file,
+                "    \"caustic_volume_scatter_to_direct_radiance_ratio\": %.9f,\n",
+                ray_tracing_headless_safe_ratio(scatter_sum, direct_sum));
+    }
     fprintf(file, "    \"mirror_dominant_pixels\": %d,\n",
             preflight->stats.mirrorDominantPixelCount);
     fprintf(file, "    \"mirror_base_attenuated_pixels\": %d,\n",
@@ -564,6 +1256,52 @@ void ray_tracing_render_headless_write_summary(
             preflight->stats.temporalActiveTileCount);
     fprintf(file, "    \"temporal_inactive_tiles\": %d,\n",
             preflight->stats.temporalInactiveTileCount);
+    fprintf(file, "    \"temporal_planned_parent_tiles\": %d,\n",
+            preflight->stats.temporalPlannedParentTileCount);
+    fprintf(file, "    \"temporal_emitted_tile_jobs\": %d,\n",
+            preflight->stats.temporalEmittedTileJobCount);
+    fprintf(file, "    \"temporal_occupancy_skipped_tiles\": %d,\n",
+            preflight->stats.temporalOccupancySkippedTileCount);
+    fprintf(file, "    \"temporal_dispatched_tile_jobs\": %d,\n",
+            preflight->stats.temporalDispatchedTileJobCount);
+    fprintf(file, "    \"temporal_completed_tile_jobs\": %d,\n",
+            preflight->stats.temporalCompletedTileJobCount);
+    fprintf(file, "    \"temporal_progress_dirty_tile_batches\": %d,\n",
+            preflight->stats.temporalProgressDirtyBatchCount);
+    fprintf(file, "    \"temporal_progress_dirty_tiles\": %d,\n",
+            preflight->stats.temporalProgressDirtyTileCount);
+    fprintf(file, "    \"temporal_dirty_preview_presents\": %d,\n",
+            preflight->stats.temporalDirtyPreviewPresentCount);
+    fprintf(file, "    \"temporal_conservative_first_frame_tile_render\": %d,\n",
+            preflight->stats.temporalConservativeFirstFrameTileRender);
+    fprintf(file, "    \"temporal_final_full_resolve_count\": %d,\n",
+            preflight->stats.temporalFinalFullResolveCount);
+    fprintf(file, "    \"temporal_host_full_resolve_count\": %d,\n",
+            preflight->stats.temporalHostFullResolveCount);
+    fprintf(file, "    \"temporal_final_preview_presents\": %d,\n",
+            preflight->stats.temporalFinalPreviewPresentCount);
+    fprintf(file, "    \"temporal_history_promotes\": %d,\n",
+            preflight->stats.temporalHistoryPromoteCount);
+    fprintf(file, "    \"temporal_adaptive_state_measured_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveStateMeasuredPixels);
+    fprintf(file, "    \"temporal_adaptive_state_stable_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveStateStablePixels);
+    fprintf(file, "    \"temporal_adaptive_state_active_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveStateActivePixels);
+    fprintf(file, "    \"temporal_adaptive_state_probe_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveStateProbePixels);
+    fprintf(file, "    \"temporal_adaptive_state_high_risk_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveStateHighRiskPixels);
+    fprintf(file, "    \"temporal_adaptive_state_stable_tiles\": %d,\n",
+            preflight->stats.temporalAdaptiveStateStableTiles);
+    fprintf(file, "    \"temporal_adaptive_state_active_tiles\": %d,\n",
+            preflight->stats.temporalAdaptiveStateActiveTiles);
+    fprintf(file, "    \"temporal_adaptive_state_probe_tiles\": %d,\n",
+            preflight->stats.temporalAdaptiveStateProbeTiles);
+    fprintf(file, "    \"temporal_adaptive_state_high_risk_tiles\": %d,\n",
+            preflight->stats.temporalAdaptiveStateHighRiskTiles);
+    fprintf(file, "    \"temporal_adaptive_state_min_sample_floor\": %d,\n",
+            preflight->stats.temporalAdaptiveStateMinSampleFloor);
     fprintf(file, "    \"denoise_temporal_frame_count\": %d,\n",
             preflight->stats.denoiseTemporalFrameCount);
     fprintf(file, "    \"denoise_raw_pixel_count\": %d,\n",
@@ -622,6 +1360,8 @@ void ray_tracing_render_headless_write_summary(
             preflight->mesh_asset_timing_stats.scene_read_ms);
     fprintf(file, "      \"scene_parse_ms\": %.6f,\n",
             preflight->mesh_asset_timing_stats.scene_parse_ms);
+    fprintf(file, "      \"sidecar_path_resolution_ms\": %.6f,\n",
+            preflight->mesh_asset_timing_stats.sidecar_path_resolution_ms);
     fprintf(file, "      \"asset_load_total_ms\": %.6f,\n",
             preflight->mesh_asset_timing_stats.asset_load_total_ms);
     fprintf(file, "      \"asset_runtime_document_load_ms\": %.6f,\n",
@@ -670,6 +1410,7 @@ void ray_tracing_render_headless_write_summary(
             preflight->scene_builder_timing_stats.mesh_append_triangles_appended);
     fprintf(file, "    }\n");
     fprintf(file, "  },\n");
+    ray_tracing_headless_write_startup_load_timing_matrix(file, preflight);
     fprintf(file, "  \"prepared_scene_cache\": {\n");
     fprintf(file, "    \"valid\": %s,\n",
             preflight->prepared_scene_cache_stats.valid ? "true" : "false");
@@ -724,15 +1465,60 @@ void ray_tracing_render_headless_write_summary(
             (unsigned long long)preflight->scene_acceleration_stats.blasFullRebuilds);
     fprintf(file, "    \"blas_cached_asset_count\": %llu,\n",
             (unsigned long long)preflight->scene_acceleration_stats.blasCachedAssetCount);
+    fprintf(file, "    \"blas_build_ms\": %.6f,\n",
+            preflight->scene_acceleration_stats.blasBuildMs);
     fprintf(file, "    \"tlas_node_count\": %llu,\n",
             (unsigned long long)preflight->scene_acceleration_stats.tlasNodeCount);
     fprintf(file, "    \"tlas_instance_count\": %llu,\n",
             (unsigned long long)preflight->scene_acceleration_stats.tlasInstanceCount);
     fprintf(file, "    \"tlas_rebuilds\": %llu,\n",
             (unsigned long long)preflight->scene_acceleration_stats.tlasRebuilds);
-    fprintf(file, "    \"tlas_refits\": %llu\n",
+    fprintf(file, "    \"tlas_refits\": %llu,\n",
             (unsigned long long)preflight->scene_acceleration_stats.tlasRefits);
+    fprintf(file, "    \"tlas_build_ms\": %.6f,\n",
+            preflight->scene_acceleration_stats.tlasBuildMs);
+    fprintf(file, "    \"tlas_bind_ms\": %.6f,\n",
+            preflight->scene_acceleration_stats.tlasBindMs);
+    fprintf(file, "    \"active_trace_route\": ");
+    RayTracingJsonWriteString(
+        file,
+        RuntimeRay3DTraceRouteLabel(preflight->ray_trace_route_stats.activeRoute));
+    fprintf(file, ",\n");
+    fprintf(file, "    \"requested_trace_route\": ");
+    RayTracingJsonWriteString(
+        file,
+        RuntimeRay3DTraceRouteLabel(preflight->ray_trace_route_stats.requestedRoute));
+    fprintf(file, ",\n");
+    fprintf(file, "    \"route_trace_calls\": %llu,\n",
+            (unsigned long long)preflight->ray_trace_route_stats.traceCalls);
+    fprintf(file, "    \"route_flattened_trace_calls\": %llu,\n",
+            (unsigned long long)preflight->ray_trace_route_stats.flattenedTraceCalls);
+    fprintf(file, "    \"route_tlas_trace_calls\": %llu,\n",
+            (unsigned long long)preflight->ray_trace_route_stats.tlasTraceCalls);
+    fprintf(file, "    \"route_tlas_trace_hits\": %llu,\n",
+            (unsigned long long)preflight->ray_trace_route_stats.tlasTraceHits);
+    fprintf(file, "    \"route_tlas_trace_misses\": %llu,\n",
+            (unsigned long long)preflight->ray_trace_route_stats.tlasTraceMisses);
+    fprintf(file, "    \"route_tlas_trace_unready\": %llu,\n",
+            (unsigned long long)preflight->ray_trace_route_stats.tlasTraceUnready);
+    fprintf(file, "    \"route_tlas_trace_unsupported\": %llu,\n",
+            (unsigned long long)preflight->ray_trace_route_stats.tlasTraceUnsupported);
+    fprintf(file, "    \"route_tlas_trace_errors\": %llu,\n",
+            (unsigned long long)preflight->ray_trace_route_stats.tlasTraceErrors);
+    fprintf(file, "    \"route_flattened_fallback_calls\": %llu,\n",
+            (unsigned long long)preflight->ray_trace_route_stats.flattenedFallbackCalls);
+    fprintf(file, "    \"route_parity_checked_rays\": %llu,\n",
+            (unsigned long long)preflight->ray_trace_route_stats.parityCheckedRays);
+    fprintf(file, "    \"route_parity_mismatches\": %llu,\n",
+            (unsigned long long)preflight->ray_trace_route_stats.parityMismatches);
+    fprintf(file, "    \"last_parity_mismatch_reason\": ");
+    RayTracingJsonWriteString(
+        file,
+        preflight->ray_trace_route_stats.lastParityMismatchReason);
+    fprintf(file, "\n");
     fprintf(file, "  },\n");
+    ray_tracing_headless_write_dynamic_geometry_acceleration_summary(file, preflight);
+    ray_tracing_headless_write_dynamic_water_acceleration_cache_summary(file, preflight);
     fprintf(file, "  \"bvh_summary\": {\n");
     fprintf(file, "    \"ready\": %s,\n",
             preflight->bvh_build_stats.ready ? "true" : "false");

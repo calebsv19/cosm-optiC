@@ -117,18 +117,41 @@ static int parse_inspection_preset(const char *label) {
     return RAY_TRACING_AGENT_RENDER_PRESET_NONE;
 }
 
-static RuntimeDisneyV2CausticMode3D parse_caustic_mode(const char *label) {
-    if (!label || !label[0] || strcmp(label, "analytic") == 0 ||
-        strcmp(label, "sidecar") == 0 || strcmp(label, "on") == 0) {
-        return RUNTIME_DISNEY_V2_CAUSTIC_MODE_ANALYTIC;
+static bool parse_trace_route(const char* label, RuntimeRay3DTraceRoute* out_route) {
+    if (!label || !label[0] || !out_route) return false;
+    if (strcmp(label, "flattened_bvh") == 0 ||
+        strcmp(label, "flattened") == 0 ||
+        strcmp(label, "bvh") == 0) {
+        *out_route = RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH;
+        return true;
     }
-    if (strcmp(label, "off") == 0 || strcmp(label, "none") == 0) {
-        return RUNTIME_DISNEY_V2_CAUSTIC_MODE_OFF;
+    if (strcmp(label, "tlas_blas_parity") == 0 ||
+        strcmp(label, "parity") == 0 ||
+        strcmp(label, "blas_tlas_parity") == 0) {
+        *out_route = RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS_PARITY;
+        return true;
     }
-    if (strcmp(label, "transport") == 0 || strcmp(label, "physical") == 0) {
-        return RUNTIME_DISNEY_V2_CAUSTIC_MODE_TRANSPORT;
+    if (strcmp(label, "tlas_blas") == 0 ||
+        strcmp(label, "blas_tlas") == 0 ||
+        strcmp(label, "accelerated") == 0) {
+        *out_route = RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS;
+        return true;
     }
-    return RUNTIME_DISNEY_V2_CAUSTIC_MODE_ANALYTIC;
+    return false;
+}
+
+static RuntimeDisneyV2CausticMode3D caustic_mode_to_disney_v2_mode(
+    RuntimeCausticMode3D mode) {
+    switch (mode) {
+        case RUNTIME_CAUSTIC_MODE_ANALYTIC:
+            return RUNTIME_DISNEY_V2_CAUSTIC_MODE_ANALYTIC;
+        case RUNTIME_CAUSTIC_MODE_TRANSPORT:
+            return RUNTIME_DISNEY_V2_CAUSTIC_MODE_TRANSPORT;
+        case RUNTIME_CAUSTIC_MODE_OFF:
+        case RUNTIME_CAUSTIC_MODE_SPATIAL_CACHE:
+        default:
+            return RUNTIME_DISNEY_V2_CAUSTIC_MODE_OFF;
+    }
 }
 
 static int parse_environment_light_mode(const char *label) {
@@ -238,6 +261,7 @@ void ray_tracing_agent_render_request_defaults(RayTracingAgentRenderRequest *req
     request->light_radius_override = 0.0;
     request->forward_decay_override = 0.0;
     request->volume_scatter_gain_override = 1.0;
+    request->caustic_volume_scatter_gain_override = 1.0;
     request->volume_density_scale_override = 1.0;
     request->volume_density_gamma_override = 1.0;
     request->volume_absorption_gain_override = 1.0;
@@ -245,8 +269,11 @@ void ray_tracing_agent_render_request_defaults(RayTracingAgentRenderRequest *req
     request->volume_step_scale_override = 1.0;
     request->secondary_diffuse_samples_3d_override = RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT;
     request->transmission_samples_3d_override = RUNTIME_3D_TRANSMISSION_SAMPLES_DEFAULT;
+    request->has_trace_route_override = false;
+    request->trace_route = RuntimeRay3D_DefaultTraceRoute();
     request->has_caustic_mode_override = false;
     request->caustic_mode = RUNTIME_DISNEY_V2_CAUSTIC_MODE_ANALYTIC;
+    RuntimeCausticSettings3D_Default(&request->caustic_settings);
     request->has_caustic_sidecar_enabled_override = false;
     request->caustic_sidecar_enabled = true;
     request->has_caustic_sidecar_strength_override = false;
@@ -401,6 +428,20 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
         }
         if (RayTracingJsonGetInt(render, "temporal_frames", &int_value)) {
             request.temporal_frames = int_value;
+        }
+        if (RayTracingJsonGetBool(render, "use_tiled_renderer", &bool_value) ||
+            RayTracingJsonGetBool(render, "tiled_renderer", &bool_value)) {
+            request.has_tiled_renderer_override = true;
+            request.tiled_renderer_override = bool_value;
+        }
+        if (RayTracingJsonGetInt(render, "tile_size", &int_value)) {
+            request.has_tile_size_override = true;
+            request.tile_size_override = int_value;
+        }
+        if (RayTracingJsonGetBool(render, "adaptive_sampling_enabled", &bool_value) ||
+            RayTracingJsonGetBool(render, "adaptive_runtime_enabled", &bool_value)) {
+            request.has_adaptive_sampling_override = true;
+            request.adaptive_sampling_enabled_override = bool_value;
         }
         if (RayTracingJsonGetBool(render, "denoise_enabled", &bool_value)) {
             request.has_denoise_enabled_override = true;
@@ -621,6 +662,15 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             request.has_volume_scatter_gain_override = true;
             request.volume_scatter_gain_override = double_value;
         }
+        if (RayTracingJsonGetDouble(inspection,
+                                    "caustic_volume_scatter_gain",
+                                    &double_value) ||
+            RayTracingJsonGetDouble(inspection,
+                                    "volume_caustic_scatter_gain",
+                                    &double_value)) {
+            request.has_caustic_volume_scatter_gain_override = true;
+            request.caustic_volume_scatter_gain_override = double_value;
+        }
         if (RayTracingJsonGetDouble(inspection, "volume_density_scale", &double_value) ||
             RayTracingJsonGetDouble(inspection, "density_scale", &double_value)) {
             request.has_volume_density_scale_override = true;
@@ -653,12 +703,64 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             request.has_transmission_samples_3d_override = true;
             request.transmission_samples_3d_override = int_value;
         }
+        if (RayTracingJsonGetString(inspection, "trace_route", &value) ||
+            RayTracingJsonGetString(inspection, "acceleration_route", &value) ||
+            RayTracingJsonGetString(inspection, "prepared_acceleration_route", &value)) {
+            request.has_trace_route_override = true;
+            if (!parse_trace_route(value, &request.trace_route)) {
+                json_object_put(root);
+                set_request_diagf(out_diagnostics,
+                                  out_diagnostics_size,
+                                  "request=%s field=inspection.trace_route invalid value=%s",
+                                  request_path,
+                                  value);
+                return false;
+            }
+        }
         if (RayTracingJsonGetString(inspection, "caustic_mode", &value) ||
             RayTracingJsonGetString(inspection, "disney_v2_caustic_mode", &value)) {
             request.has_caustic_mode_override = true;
-            request.caustic_mode = parse_caustic_mode(value);
+            request.caustic_settings.mode = RuntimeCausticMode3D_FromLabel(value);
+            request.caustic_mode =
+                caustic_mode_to_disney_v2_mode(request.caustic_settings.mode);
             request.caustic_sidecar_enabled =
-                request.caustic_mode != RUNTIME_DISNEY_V2_CAUSTIC_MODE_OFF;
+                request.caustic_settings.mode == RUNTIME_CAUSTIC_MODE_ANALYTIC;
+        }
+        if (RayTracingJsonGetBool(inspection, "caustic_volume_enabled", &bool_value) ||
+            RayTracingJsonGetBool(inspection, "caustic_volume_cache_enabled", &bool_value)) {
+            request.caustic_settings.volumeCacheEnabled = bool_value;
+        }
+        if (RayTracingJsonGetBool(inspection, "caustic_surface_enabled", &bool_value) ||
+            RayTracingJsonGetBool(inspection, "caustic_surface_cache_enabled", &bool_value)) {
+            request.caustic_settings.surfaceCacheEnabled = bool_value;
+        }
+        if (RayTracingJsonGetInt(inspection, "caustic_sample_budget", &int_value) ||
+            RayTracingJsonGetInt(inspection, "caustic_path_count", &int_value)) {
+            request.caustic_settings.sampleBudget = int_value;
+        }
+        if (RayTracingJsonGetInt(inspection, "caustic_max_path_depth", &int_value) ||
+            RayTracingJsonGetInt(inspection, "caustic_path_depth", &int_value)) {
+            request.caustic_settings.maxPathDepth = int_value;
+        }
+        if (RayTracingJsonGetDouble(inspection, "caustic_surface_radiance_scale", &double_value) ||
+            RayTracingJsonGetDouble(inspection, "caustic_surface_energy_scale", &double_value) ||
+            RayTracingJsonGetDouble(inspection, "caustic_receiver_energy_scale", &double_value)) {
+            request.caustic_settings.surfaceRadianceScale = double_value;
+        }
+        if (RayTracingJsonGetDouble(inspection, "caustic_surface_footprint_scale", &double_value) ||
+            RayTracingJsonGetDouble(inspection, "caustic_receiver_footprint_scale", &double_value)) {
+            request.caustic_settings.surfaceFootprintScale = double_value;
+        }
+        if (RayTracingJsonGetBool(inspection,
+                                  "caustic_surface_receiver_fallback_enabled",
+                                  &bool_value) ||
+            RayTracingJsonGetBool(inspection,
+                                  "caustic_receiver_fallback_enabled",
+                                  &bool_value)) {
+            request.caustic_settings.surfaceReceiverFallbackEnabled = bool_value;
+        }
+        if (RayTracingJsonGetBool(inspection, "caustic_debug_summary", &bool_value)) {
+            request.caustic_settings.debugSummaryEnabled = bool_value;
         }
         if (RayTracingJsonGetBool(inspection, "caustic_sidecar_enabled", &bool_value) ||
             RayTracingJsonGetBool(inspection,
@@ -669,6 +771,9 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             if (!request.has_caustic_mode_override) {
                 request.caustic_mode = bool_value ? RUNTIME_DISNEY_V2_CAUSTIC_MODE_ANALYTIC
                                                   : RUNTIME_DISNEY_V2_CAUSTIC_MODE_OFF;
+                request.caustic_settings.mode =
+                    bool_value ? RUNTIME_CAUSTIC_MODE_ANALYTIC
+                               : RUNTIME_CAUSTIC_MODE_OFF;
             }
         }
         if (RayTracingJsonGetDouble(inspection, "caustic_sidecar_strength", &double_value) ||
@@ -742,6 +847,15 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
                           request.width,
                           request.height,
                           request.temporal_frames);
+        return false;
+    }
+    if (request.has_tile_size_override && request.tile_size_override <= 0) {
+        json_object_put(root);
+        set_request_diagf(out_diagnostics,
+                          out_diagnostics_size,
+                          "request=%s field=render.tile_size out of range tile_size=%d",
+                          request_path,
+                          request.tile_size_override);
         return false;
     }
     if (request.has_resource_budget) {
@@ -879,6 +993,20 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             request.volume_scatter_gain_override = 64.0;
         }
     }
+    if (request.has_caustic_volume_scatter_gain_override) {
+        if (request.caustic_volume_scatter_gain_override <= 0.0) {
+            json_object_put(root);
+            set_request_diagf(out_diagnostics,
+                              out_diagnostics_size,
+                              "request=%s field=inspection.caustic_volume_scatter_gain out of range value=%.6f",
+                              request_path,
+                              request.caustic_volume_scatter_gain_override);
+            return false;
+        }
+        if (request.caustic_volume_scatter_gain_override > 64.0) {
+            request.caustic_volume_scatter_gain_override = 64.0;
+        }
+    }
     if (request.has_volume_density_scale_override) {
         if (request.volume_density_scale_override < 0.0) {
             json_object_put(root);
@@ -969,17 +1097,20 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
         !request.has_caustic_mode_override &&
         !request.has_caustic_sidecar_enabled_override) {
         request.caustic_mode = RUNTIME_DISNEY_V2_CAUSTIC_MODE_OFF;
+        request.caustic_settings.mode = RUNTIME_CAUSTIC_MODE_OFF;
         request.caustic_sidecar_enabled = false;
     }
-    if (request.caustic_mode == RUNTIME_DISNEY_V2_CAUSTIC_MODE_TRANSPORT) {
+    if (request.caustic_settings.mode == RUNTIME_CAUSTIC_MODE_TRANSPORT &&
+        !request.caustic_settings.volumeCacheEnabled &&
+        !request.caustic_settings.surfaceCacheEnabled) {
         json_object_put(root);
         set_request_diagf(out_diagnostics,
                           out_diagnostics_size,
-                          "request=%s field=inspection.caustic_mode transport is reserved until Disney v2 transport caustics are implemented",
+                          "request=%s field=inspection.caustic_mode transport requires inspection.caustic_volume_enabled=true or inspection.caustic_surface_enabled=true for bounded path emission",
                           request_path);
         return false;
     }
-    if (request.caustic_mode != RUNTIME_DISNEY_V2_CAUSTIC_MODE_OFF &&
+    if (request.caustic_settings.mode == RUNTIME_CAUSTIC_MODE_ANALYTIC &&
         request.integrator_3d != RAY_TRACING_3D_INTEGRATOR_DISNEY_V2) {
         json_object_put(root);
         set_request_diagf(out_diagnostics,
@@ -987,6 +1118,50 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
                           "request=%s field=inspection.caustic_mode requires render.integrator_3d=disney_v2",
                           request_path);
         return false;
+    }
+    if (request.caustic_settings.mode == RUNTIME_CAUSTIC_MODE_SPATIAL_CACHE) {
+        if (request.has_caustic_sidecar_enabled_override &&
+            request.caustic_sidecar_enabled &&
+            request.integrator_3d == RAY_TRACING_3D_INTEGRATOR_DISNEY_V2) {
+            request.caustic_mode = RUNTIME_DISNEY_V2_CAUSTIC_MODE_ANALYTIC;
+        } else {
+            request.caustic_mode = RUNTIME_DISNEY_V2_CAUSTIC_MODE_OFF;
+            request.caustic_sidecar_enabled = false;
+        }
+    }
+    if (request.caustic_settings.mode == RUNTIME_CAUSTIC_MODE_TRANSPORT) {
+        if (request.has_caustic_sidecar_enabled_override &&
+            request.caustic_sidecar_enabled &&
+            request.integrator_3d == RAY_TRACING_3D_INTEGRATOR_DISNEY_V2) {
+            request.caustic_mode = RUNTIME_DISNEY_V2_CAUSTIC_MODE_ANALYTIC;
+        } else {
+            request.caustic_mode = RUNTIME_DISNEY_V2_CAUSTIC_MODE_OFF;
+            request.caustic_sidecar_enabled = false;
+        }
+    }
+    if (request.caustic_settings.sampleBudget < 0) {
+        request.caustic_settings.sampleBudget = 0;
+    }
+    if (request.caustic_settings.sampleBudget > 1000000) {
+        request.caustic_settings.sampleBudget = 1000000;
+    }
+    if (request.caustic_settings.maxPathDepth < 0) {
+        request.caustic_settings.maxPathDepth = 0;
+    }
+    if (request.caustic_settings.maxPathDepth > 16) {
+        request.caustic_settings.maxPathDepth = 16;
+    }
+    if (request.caustic_settings.surfaceRadianceScale < 0.0) {
+        request.caustic_settings.surfaceRadianceScale = 0.0;
+    }
+    if (request.caustic_settings.surfaceRadianceScale > 128.0) {
+        request.caustic_settings.surfaceRadianceScale = 128.0;
+    }
+    if (request.caustic_settings.surfaceFootprintScale < 0.1) {
+        request.caustic_settings.surfaceFootprintScale = 0.1;
+    }
+    if (request.caustic_settings.surfaceFootprintScale > 16.0) {
+        request.caustic_settings.surfaceFootprintScale = 16.0;
     }
     if (request.has_caustic_sidecar_strength_override) {
         if (request.caustic_sidecar_strength < 0.0) request.caustic_sidecar_strength = 0.0;

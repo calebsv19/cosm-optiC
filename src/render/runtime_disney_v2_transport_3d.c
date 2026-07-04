@@ -152,11 +152,15 @@ static void runtime_disney_v2_transport_3d_record_bsdf_sample_contribution(
     io_result->bsdfSampleContributionTotalG += g;
     io_result->bsdfSampleContributionTotalB += b;
     if (emitter_kind != RUNTIME_DISNEY_V2_3D_EMITTER_NONE) {
+        const RuntimeDisneyV2_3DEmitterKind previous_emitter_kind =
+            io_result->misVertexEmitterKind[vertex_index];
         io_result->misVertexEmitterKind[vertex_index] = emitter_kind;
-        if (emitter_kind == RUNTIME_DISNEY_V2_3D_EMITTER_FINITE_LIGHT) {
-            io_result->finiteLightEmitterHitCount += 1;
-        } else if (emitter_kind == RUNTIME_DISNEY_V2_3D_EMITTER_EMISSIVE_MATERIAL) {
-            io_result->emissiveMaterialHitCount += 1;
+        if (previous_emitter_kind != emitter_kind) {
+            if (emitter_kind == RUNTIME_DISNEY_V2_3D_EMITTER_FINITE_LIGHT) {
+                io_result->finiteLightEmitterHitCount += 1;
+            } else if (emitter_kind == RUNTIME_DISNEY_V2_3D_EMITTER_EMISSIVE_MATERIAL) {
+                io_result->emissiveMaterialHitCount += 1;
+            }
         }
     }
     if (runtime_disney_v2_transport_3d_luma(r, g, b) > 1e-9) {
@@ -729,10 +733,10 @@ static bool runtime_disney_v2_transport_3d_sample_vertex(
                                                                                     depth,
                                                                                     &sample.pdf,
                                                                                     &sample.cosTheta);
-        if (scene && scene->hasLight && vec3_dot(light_dir, normal) > 1e-6) {
+        if (scene && scene->hasLight && fabs(vec3_dot(light_dir, normal)) > 1e-6) {
             sample.direction = light_dir;
             sample.cosTheta =
-                runtime_disney_v2_transport_3d_clamp01(vec3_dot(normal, sample.direction));
+                runtime_disney_v2_transport_3d_clamp01(fabs(vec3_dot(normal, sample.direction)));
         }
         sample.pdf = fmax(sample.pdf, 1e-6);
         sample.throughputR = runtime_disney_v2_transport_3d_clamp(
@@ -761,10 +765,10 @@ static bool runtime_disney_v2_transport_3d_sample_vertex(
                                                                                    depth,
                                                                                    &sample.pdf,
                                                                                    &sample.cosTheta);
-        if (scene && scene->hasLight && vec3_dot(light_dir, normal) > 1e-6) {
+        if (scene && scene->hasLight && fabs(vec3_dot(light_dir, normal)) > 1e-6) {
             sample.direction = light_dir;
             sample.cosTheta =
-                runtime_disney_v2_transport_3d_clamp01(vec3_dot(normal, sample.direction));
+                runtime_disney_v2_transport_3d_clamp01(fabs(vec3_dot(normal, sample.direction)));
             sample.pdf = fmax(sample.cosTheta / M_PI, 1e-9);
         }
         sample.throughputR = runtime_disney_v2_transport_3d_clamp(
@@ -918,6 +922,17 @@ bool RuntimeDisneyV2_3D_ApplyRecursivePathLoopFromDirection(
     }
     if (!(vec3_length(incoming_dir) > 1e-9)) {
         incoming_dir = vec3(0.0, 1.0, 0.0);
+    }
+    if (io_result->pathState.valid &&
+        io_result->pathState.sampledLobe != RUNTIME_DISNEY_V2_3D_LOBE_NONE &&
+        !RuntimePathDepthPolicy3D_AllowsDepth(
+            &io_result->pathPolicy,
+            runtime_disney_v2_transport_3d_policy_lobe(io_result->pathState.sampledLobe),
+            depth)) {
+        runtime_disney_v2_transport_3d_note_termination(
+            io_result,
+            RUNTIME_DISNEY_V2_3D_LOOP_TERMINATION_MAX_DEPTH);
+        return false;
     }
 
     while (depth < start_depth + RUNTIME_DISNEY_V2_3D_RECURSIVE_LOOP_STATE_CAPACITY) {
@@ -1397,8 +1412,20 @@ static void runtime_disney_v2_transport_3d_merge_reflection_loop(
     io_result->bsdfSampleContributionTotalG += loop_result->bsdfSampleContributionTotalG;
     io_result->bsdfSampleContributionTotalB += loop_result->bsdfSampleContributionTotalB;
     io_result->bsdfSampleContributionCount += loop_result->bsdfSampleContributionCount;
-    io_result->finiteLightEmitterHitCount += loop_result->finiteLightEmitterHitCount;
-    io_result->emissiveMaterialHitCount += loop_result->emissiveMaterialHitCount;
+    for (i = 0; i < RUNTIME_DISNEY_V2_3D_RECURSIVE_LOOP_STATE_CAPACITY; ++i) {
+        const RuntimeDisneyV2_3DEmitterKind emitter_kind =
+            loop_result->misVertexEmitterKind[i];
+        if (emitter_kind == RUNTIME_DISNEY_V2_3D_EMITTER_NONE ||
+            io_result->misVertexEmitterKind[i] == emitter_kind) {
+            continue;
+        }
+        io_result->misVertexEmitterKind[i] = emitter_kind;
+        if (emitter_kind == RUNTIME_DISNEY_V2_3D_EMITTER_FINITE_LIGHT) {
+            io_result->finiteLightEmitterHitCount += 1;
+        } else if (emitter_kind == RUNTIME_DISNEY_V2_3D_EMITTER_EMISSIVE_MATERIAL) {
+            io_result->emissiveMaterialHitCount += 1;
+        }
+    }
 
     if (rough_sample_used) {
         io_result->specularReflectionRoughContributionR += loop_result->recursiveBsdfRadianceR;
@@ -1434,6 +1461,7 @@ static bool runtime_disney_v2_transport_3d_apply_reflection_loop(
     loop_result.pathPolicy = io_result->pathPolicy;
     loop_result.pathPolicyResolved = io_result->pathPolicyResolved;
     loop_result.pathState.valid = true;
+    loop_result.pathState.sampledLobe = RUNTIME_DISNEY_V2_3D_LOBE_SPECULAR;
     loop_result.pathState.ray = selected->ray;
     (void)RuntimeDisneyV2_3D_ApplyRecursivePathLoopFromDirection(scene,
                                                                   &selected->hitInfo,

@@ -34,6 +34,7 @@ void RuntimeLightSource3D_Init(RuntimeLightSource3D* light) {
     memset(light, 0, sizeof(*light));
     light->kind = RUNTIME_LIGHT_SOURCE_3D_KIND_POINT;
     light->origin = RUNTIME_LIGHT_SOURCE_3D_ORIGIN_AUTHORED_LIGHT;
+    light->emissionProfile = RUNTIME_LIGHT_SOURCE_3D_EMISSION_OMNI;
     light->enabled = true;
     light->axisU = vec3(1.0, 0.0, 0.0);
     light->axisV = vec3(0.0, 0.0, 1.0);
@@ -43,6 +44,9 @@ void RuntimeLightSource3D_Init(RuntimeLightSource3D* light) {
     light->falloffDistance = 1.0;
     light->falloffMode = FORWARD_FALLOFF_MODE_QUADRATIC;
     light->emissiveAverageNormal = vec3(0.0, 1.0, 0.0);
+    light->sourceSceneObjectIndex = -1;
+    light->sourcePrimitiveIndex = -1;
+    light->sourceTriangleIndex = -1;
 }
 
 void RuntimeLightSet3D_Init(RuntimeLightSet3D* set) {
@@ -103,11 +107,19 @@ bool RuntimeLightSet3D_Append(RuntimeLightSet3D* set,
     stored.intensity = runtime_light_set_3d_nonnegative(stored.intensity);
     stored.falloffDistance = runtime_light_set_3d_nonnegative(stored.falloffDistance);
     stored.color = runtime_light_set_3d_default_color(stored.color);
+    if (stored.emissionProfile < RUNTIME_LIGHT_SOURCE_3D_EMISSION_OMNI ||
+        stored.emissionProfile > RUNTIME_LIGHT_SOURCE_3D_EMISSION_TWO_SIDED) {
+        stored.emissionProfile = RUNTIME_LIGHT_SOURCE_3D_EMISSION_OMNI;
+    }
     if (stored.emissiveCandidateCount < 0) stored.emissiveCandidateCount = 0;
     stored.emissiveArea = runtime_light_set_3d_nonnegative(stored.emissiveArea);
     stored.emissiveWeight = runtime_light_set_3d_nonnegative(stored.emissiveWeight);
     stored.emissiveProxyRadius =
         runtime_light_set_3d_nonnegative(stored.emissiveProxyRadius);
+    if (stored.sourceSceneObjectIndex < 0) {
+        stored.sourcePrimitiveIndex = -1;
+        stored.sourceTriangleIndex = -1;
+    }
 
     set->lights[set->lightCount] = stored;
     if (out_index) *out_index = set->lightCount;
