@@ -571,6 +571,8 @@ def caustic_digest(summary: dict) -> dict:
     cache_sum = float(state.get("volume_cache_total_radiance_sum", rgb_sum(cache_radiance)))
     scatter_sum = float(state.get("volume_scatter_caustic_radiance_sum", rgb_sum(scatter_radiance)))
     direct_sum = float(state.get("volume_scatter_direct_radiance_sum", rgb_sum(direct_scatter)))
+    footprint_input_sum = float(state.get("volume_cache_footprint_input_radiance_sum", 0.0))
+    footprint_deposited_sum = float(state.get("volume_cache_footprint_deposited_radiance_sum", 0.0))
     return {
         "mode": state.get("mode", "unknown"),
         "analytic_sidecar_requested": bool(state.get("analytic_sidecar_requested", False)),
@@ -597,6 +599,19 @@ def caustic_digest(summary: dict) -> dict:
         "volume_cache_total_radiance": cache_radiance,
         "volume_cache_total_radiance_sum": cache_sum,
         "volume_cache_max_radiance": float(state.get("volume_cache_max_cell_radiance", 0.0)),
+        "volume_cache_footprint_deposit_count": int(state.get("volume_cache_footprint_deposit_count", 0)),
+        "volume_cache_footprint_cell_contribution_count": int(
+            state.get("volume_cache_footprint_cell_contribution_count", 0)
+        ),
+        "volume_cache_average_footprint_radius_voxels": float(
+            state.get("volume_cache_average_footprint_radius_voxels", 0.0)
+        ),
+        "volume_cache_footprint_input_radiance_sum": footprint_input_sum,
+        "volume_cache_footprint_deposited_radiance_sum": footprint_deposited_sum,
+        "volume_cache_footprint_deposited_to_input_ratio": float(
+            state.get("volume_cache_footprint_deposited_to_input_ratio",
+                      safe_ratio(footprint_deposited_sum, footprint_input_sum))
+        ),
         "volume_cache_radiance_centroid": state.get("volume_cache_radiance_centroid", {}),
         "volume_cache_nonzero_bounds_min": state.get("volume_cache_nonzero_bounds_min", {}),
         "volume_cache_nonzero_bounds_max": state.get("volume_cache_nonzero_bounds_max", {}),
@@ -667,6 +682,12 @@ def validate_cell(cell_id: str, digest: dict) -> list[str]:
             failures.append("combined cell did not report caustic volume cache radiance sum")
         if digest["volume_scatter_to_cache_radiance_ratio"] <= 0.0:
             failures.append("combined cell did not report cache-to-scatter conversion ratio")
+        if digest["volume_cache_footprint_deposit_count"] <= 0:
+            failures.append("combined cell did not report volume-cache footprint deposits")
+        if digest["volume_cache_footprint_cell_contribution_count"] <= digest["volume_cache_footprint_deposit_count"]:
+            failures.append("combined cell did not expand volume-cache deposits across footprint cells")
+        if not 0.99 <= digest["volume_cache_footprint_deposited_to_input_ratio"] <= 1.01:
+            failures.append("combined cell footprint deposit energy is not normalized")
     return failures
 
 
@@ -753,6 +774,10 @@ def write_index(path: Path, report: dict) -> None:
             f"volume cells `{digest['volume_cache_nonzero_cells']}`, "
             f"volume occupancy `{digest['volume_cache_nonzero_cell_ratio']:.6f}`, "
             f"volume hit ratio `{digest['volume_cache_sample_hit_ratio']:.6f}`, "
+            f"footprints `{digest['volume_cache_footprint_deposit_count']}`, "
+            f"footprint cells `{digest['volume_cache_footprint_cell_contribution_count']}`, "
+            f"footprint radius `{digest['volume_cache_average_footprint_radius_voxels']:.3f} vox`, "
+            f"footprint energy ratio `{digest['volume_cache_footprint_deposited_to_input_ratio']:.6f}`, "
             f"volume scatter contrib `{digest['volume_scatter_contributing_samples']}`, "
             f"volume radiance `{digest['volume_scatter_radiance_sum']:.4f}`, "
             f"scatter/cache `{digest['volume_scatter_to_cache_radiance_ratio']:.9f}`, "

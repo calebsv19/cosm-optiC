@@ -210,7 +210,9 @@ RuntimeVolume3DScatterResult runtime_native_3d_render_primary_scatter(
 
 void runtime_native_3d_render_record_scatter_stats(
     RuntimeNative3DRenderStats* io_stats,
-    const RuntimeVolume3DScatterResult* scatter) {
+    const RuntimeVolume3DScatterResult* scatter,
+    int pixel_x,
+    int pixel_y) {
     if (!io_stats || !scatter) return;
     io_stats->volumeScatterDirectSampleCount += scatter->directSampleCount;
     io_stats->totalDirectVolumeScatterRadianceR += scatter->directRadianceR;
@@ -222,6 +224,74 @@ void runtime_native_3d_render_record_scatter_stats(
     io_stats->totalCausticVolumeScatterRadianceR += scatter->causticRadianceR;
     io_stats->totalCausticVolumeScatterRadianceG += scatter->causticRadianceG;
     io_stats->totalCausticVolumeScatterRadianceB += scatter->causticRadianceB;
+    io_stats->totalCausticVolumeScatterSampledCacheRadiance +=
+        scatter->causticSampledCacheRadianceSum;
+    if (scatter->causticSampledCacheRadianceMax >
+        io_stats->maxCausticVolumeScatterSampledCacheRadiance) {
+        io_stats->maxCausticVolumeScatterSampledCacheRadiance =
+            scatter->causticSampledCacheRadianceMax;
+    }
+    io_stats->totalCausticVolumeScatterSampledRawDensity +=
+        scatter->causticSampledRawDensitySum;
+    if (scatter->causticSampledRawDensityMax >
+        io_stats->maxCausticVolumeScatterSampledRawDensity) {
+        io_stats->maxCausticVolumeScatterSampledRawDensity =
+            scatter->causticSampledRawDensityMax;
+    }
+    io_stats->totalCausticVolumeScatterSampledDensity +=
+        scatter->causticSampledDensitySum;
+    if (scatter->causticSampledDensityMax >
+        io_stats->maxCausticVolumeScatterSampledDensity) {
+        io_stats->maxCausticVolumeScatterSampledDensity =
+            scatter->causticSampledDensityMax;
+    }
+    io_stats->totalCausticVolumeScatterProbability +=
+        scatter->causticScatterProbabilitySum;
+    if (scatter->causticScatterProbabilityMax >
+        io_stats->maxCausticVolumeScatterProbability) {
+        io_stats->maxCausticVolumeScatterProbability =
+            scatter->causticScatterProbabilityMax;
+    }
+    io_stats->totalCausticVolumeScatterCameraTransmittance +=
+        scatter->causticCameraTransmittanceSum;
+    if (scatter->causticContributingSampleCount > 0 &&
+        (io_stats->minCausticVolumeScatterCameraTransmittance <= 0.0 ||
+         scatter->causticCameraTransmittanceMin <
+             io_stats->minCausticVolumeScatterCameraTransmittance)) {
+        io_stats->minCausticVolumeScatterCameraTransmittance =
+            scatter->causticCameraTransmittanceMin;
+    }
+    if (scatter->causticCameraTransmittanceMax >
+        io_stats->maxCausticVolumeScatterCameraTransmittance) {
+        io_stats->maxCausticVolumeScatterCameraTransmittance =
+            scatter->causticCameraTransmittanceMax;
+    }
+    io_stats->totalCausticVolumeScatterVisibilityTerm +=
+        scatter->causticVisibilityTermSum;
+    if (scatter->causticVisibilityTermMax >
+        io_stats->maxCausticVolumeScatterVisibilityTerm) {
+        io_stats->maxCausticVolumeScatterVisibilityTerm =
+            scatter->causticVisibilityTermMax;
+    }
+    if (scatter->causticContributingSampleCount > 0) {
+        io_stats->causticVolumeScatterContributingPixelCount += 1;
+        io_stats->totalCausticVolumeScatterPixelX += (double)pixel_x;
+        io_stats->totalCausticVolumeScatterPixelY += (double)pixel_y;
+        if (io_stats->causticVolumeScatterContributingPixelCount == 1 ||
+            pixel_x < io_stats->causticVolumeScatterPixelMinX) {
+            io_stats->causticVolumeScatterPixelMinX = pixel_x;
+        }
+        if (io_stats->causticVolumeScatterContributingPixelCount == 1 ||
+            pixel_y < io_stats->causticVolumeScatterPixelMinY) {
+            io_stats->causticVolumeScatterPixelMinY = pixel_y;
+        }
+        if (pixel_x > io_stats->causticVolumeScatterPixelMaxX) {
+            io_stats->causticVolumeScatterPixelMaxX = pixel_x;
+        }
+        if (pixel_y > io_stats->causticVolumeScatterPixelMaxY) {
+            io_stats->causticVolumeScatterPixelMaxY = pixel_y;
+        }
+    }
 }
 
 void runtime_native_3d_render_apply_scatter_rgb(
@@ -320,7 +390,7 @@ void runtime_native_3d_render_write_emitter_radiance_with_scatter(
                                                        hit->t,
                                                        sampling,
                                                        caustic_cache);
-    runtime_native_3d_render_record_scatter_stats(io_stats, &scatter);
+    runtime_native_3d_render_record_scatter_stats(io_stats, &scatter, pixel_x, pixel_y);
     radiance_r = hit->radiance;
     radiance_g = hit->radiance;
     radiance_b = hit->radiance;

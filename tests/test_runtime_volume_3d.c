@@ -548,6 +548,90 @@ static int test_runtime_volume_3d_caustic_cache_lifts_density_without_direct_lig
     return 0;
 }
 
+static int test_runtime_volume_3d_caustic_gain_is_separate_from_direct_gain(void) {
+    RuntimeScene3D scene;
+    RuntimeCausticVolumeCache3D cache;
+    RuntimeVolume3DScatterResult base = {0};
+    RuntimeVolume3DScatterResult direct_boosted = {0};
+    RuntimeVolume3DScatterResult caustic_boosted = {0};
+    const uint32_t channel_mask =
+        RUNTIME_VOLUME_3D_CHANNEL_DENSITY | RUNTIME_VOLUME_3D_CHANNEL_SOLID_MASK;
+    Ray3D ray = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    RuntimeCausticVolumeCache3D_Init(&cache);
+    RuntimeVolume3DScatter_ResetTuning();
+    scene.hasLight = true;
+    scene.light.position = vec3(1.5, -4.0, 0.5);
+    scene.light.radius = 0.25;
+    scene.light.intensity = 14.0;
+    scene.light.falloffDistance = 10.0;
+    scene.light.falloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    scene.volume.enabled = true;
+    scene.volume.affectsLighting = true;
+    ok = RuntimeVolumeGrid3D_Configure(&scene.volume.grid,
+                                       1u,
+                                       2u,
+                                       8u,
+                                       2u,
+                                       0.0,
+                                       0u,
+                                       0.02,
+                                       vec3(-0.5, -4.0, -0.5),
+                                       0.5,
+                                       vec3(0.0, 0.0, 1.0),
+                                       0u);
+    assert_true("runtime_volume_3d_caustic_gain_layout_ok", ok);
+    ok = RuntimeVolumeAttachment3D_AllocateOwnedChannels(&scene.volume, channel_mask);
+    assert_true("runtime_volume_3d_caustic_gain_alloc_ok", ok);
+    for (uint64_t i = 0; i < scene.volume.grid.cellCount; ++i) {
+        scene.volume.channels.density[i] = 1.0f;
+        scene.volume.channels.solidMask[i] = 0u;
+    }
+    assert_true("runtime_volume_3d_caustic_gain_cache_allocate",
+                RuntimeCausticVolumeCache3D_AllocateFromVolume(&cache, &scene.volume));
+    assert_true("runtime_volume_3d_caustic_gain_cache_deposit",
+                RuntimeCausticVolumeCache3D_DepositAtPosition(
+                    &cache, vec3(0.0, -2.0, 0.0), 40.0, 10.0, 4.0));
+
+    ray.origin = vec3(0.0, 0.0, 0.0);
+    ray.direction = vec3(0.0, -1.0, 0.0);
+
+    base = RuntimeVolume3D_AccumulateSingleScatterAlongRayWithCausticCacheRGB(
+        &scene, &ray, 0.0, 5.0, NULL, &cache);
+    assert_true("runtime_volume_3d_caustic_gain_base_direct",
+                base.directRadiance > 0.0);
+    assert_true("runtime_volume_3d_caustic_gain_base_caustic",
+                base.causticRadiance > 0.0);
+
+    RuntimeVolume3DScatter_SetStrengthGain(4.0);
+    direct_boosted = RuntimeVolume3D_AccumulateSingleScatterAlongRayWithCausticCacheRGB(
+        &scene, &ray, 0.0, 5.0, NULL, &cache);
+    assert_true("runtime_volume_3d_caustic_gain_direct_boosted",
+                direct_boosted.directRadiance > base.directRadiance * 3.5);
+    assert_close("runtime_volume_3d_caustic_gain_direct_keeps_caustic",
+                 direct_boosted.causticRadiance,
+                 base.causticRadiance,
+                 1e-12);
+
+    RuntimeVolume3DScatter_ResetTuning();
+    RuntimeVolume3DScatter_SetCausticStrengthGain(4.0);
+    caustic_boosted = RuntimeVolume3D_AccumulateSingleScatterAlongRayWithCausticCacheRGB(
+        &scene, &ray, 0.0, 5.0, NULL, &cache);
+    assert_close("runtime_volume_3d_caustic_gain_caustic_keeps_direct",
+                 caustic_boosted.directRadiance,
+                 base.directRadiance,
+                 1e-12);
+    assert_true("runtime_volume_3d_caustic_gain_caustic_boosted",
+                caustic_boosted.causticRadiance > base.causticRadiance * 3.5);
+
+    RuntimeVolume3DScatter_ResetTuning();
+    RuntimeCausticVolumeCache3D_Free(&cache);
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
 int run_test_runtime_volume_3d_tests(void) {
     int before = test_support_failures();
 
@@ -563,5 +647,6 @@ int run_test_runtime_volume_3d_tests(void) {
     test_runtime_volume_3d_single_scatter_prefers_forward_light_path();
     test_runtime_volume_3d_caustic_cache_null_matches_existing_scatter();
     test_runtime_volume_3d_caustic_cache_lifts_density_without_direct_light();
+    test_runtime_volume_3d_caustic_gain_is_separate_from_direct_gain();
     return test_support_failures() - before;
 }

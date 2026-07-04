@@ -385,6 +385,34 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
                         result.causticRadianceB += caustic_b;
                         result.causticContributingSampleCount += 1;
                         result.sampleCount += 1;
+                        result.causticSampledCacheRadianceSum += caustic_peak;
+                        if (caustic_peak > result.causticSampledCacheRadianceMax) {
+                            result.causticSampledCacheRadianceMax = caustic_peak;
+                        }
+                        result.causticSampledRawDensitySum += raw_density;
+                        if (raw_density > result.causticSampledRawDensityMax) {
+                            result.causticSampledRawDensityMax = raw_density;
+                        }
+                        result.causticSampledDensitySum += density;
+                        if (density > result.causticSampledDensityMax) {
+                            result.causticSampledDensityMax = density;
+                        }
+                        result.causticScatterProbabilitySum += scatter_probability;
+                        if (scatter_probability > result.causticScatterProbabilityMax) {
+                            result.causticScatterProbabilityMax = scatter_probability;
+                        }
+                        result.causticCameraTransmittanceSum += camera_transmittance;
+                        if (result.causticContributingSampleCount == 1 ||
+                            camera_transmittance < result.causticCameraTransmittanceMin) {
+                            result.causticCameraTransmittanceMin = camera_transmittance;
+                        }
+                        if (camera_transmittance > result.causticCameraTransmittanceMax) {
+                            result.causticCameraTransmittanceMax = camera_transmittance;
+                        }
+                        result.causticVisibilityTermSum += caustic_term;
+                        if (caustic_term > result.causticVisibilityTermMax) {
+                            result.causticVisibilityTermMax = caustic_term;
+                        }
                     }
                 }
             }

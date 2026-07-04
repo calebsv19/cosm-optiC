@@ -26,6 +26,19 @@ typedef struct {
     double causticRadianceR;
     double causticRadianceG;
     double causticRadianceB;
+    double causticSampledCacheRadianceSum;
+    double causticSampledCacheRadianceMax;
+    double causticSampledRawDensitySum;
+    double causticSampledRawDensityMax;
+    double causticSampledDensitySum;
+    double causticSampledDensityMax;
+    double causticScatterProbabilitySum;
+    double causticScatterProbabilityMax;
+    double causticCameraTransmittanceSum;
+    double causticCameraTransmittanceMin;
+    double causticCameraTransmittanceMax;
+    double causticVisibilityTermSum;
+    double causticVisibilityTermMax;
 } RuntimeVolume3DScatterResult;
 
 RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(

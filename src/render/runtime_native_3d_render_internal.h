@@ -61,7 +61,9 @@ RuntimeVolume3DScatterResult runtime_native_3d_render_primary_scatter(
     RuntimeCausticVolumeCache3D* caustic_cache);
 void runtime_native_3d_render_record_scatter_stats(
     RuntimeNative3DRenderStats* io_stats,
-    const RuntimeVolume3DScatterResult* scatter);
+    const RuntimeVolume3DScatterResult* scatter,
+    int pixel_x,
+    int pixel_y);
 void runtime_native_3d_render_apply_scatter_rgb(
     double* io_radiance_r,
     double* io_radiance_g,

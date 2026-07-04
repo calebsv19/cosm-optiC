@@ -291,7 +291,7 @@ static bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
                                                                    HUGE_VAL,
                                                                    sampling,
                                                                    caustic_cache);
-                runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
+                runtime_native_3d_render_record_scatter_stats(&stats, &scatter, x, y);
                 runtime_native_3d_render_write_background_radiance(radiance_buffer,
                                                                    idx,
                                                                    scene,
@@ -310,7 +310,7 @@ static bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
                                                                result.hitInfo.t,
                                                                sampling,
                                                                caustic_cache);
-            runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
+            runtime_native_3d_render_record_scatter_stats(&stats, &scatter, x, y);
             stats.hitPixelCount += 1;
             if (result.visible || scatter.active) {
                 stats.visiblePixelCount += 1;
@@ -414,7 +414,7 @@ static bool runtime_native_3d_render_shade_diffuse_bounce(float* radiance_buffer
                                                                    HUGE_VAL,
                                                                    sampling,
                                                                    caustic_cache);
-                runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
+                runtime_native_3d_render_record_scatter_stats(&stats, &scatter, x, y);
                 runtime_native_3d_render_write_background_radiance(radiance_buffer,
                                                                    idx,
                                                                    scene,
@@ -433,7 +433,7 @@ static bool runtime_native_3d_render_shade_diffuse_bounce(float* radiance_buffer
                                                                result.hitInfo.t,
                                                                sampling,
                                                                caustic_cache);
-            runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
+            runtime_native_3d_render_record_scatter_stats(&stats, &scatter, x, y);
             stats.hitPixelCount += 1;
             runtime_native_3d_render_apply_scatter_rgb(&result.radianceR,
                                                        &result.radianceG,
@@ -546,7 +546,7 @@ static bool runtime_native_3d_render_shade_material(float* radiance_buffer,
                                                                    HUGE_VAL,
                                                                    sampling,
                                                                    caustic_cache);
-                runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
+                runtime_native_3d_render_record_scatter_stats(&stats, &scatter, x, y);
                 runtime_native_3d_render_write_background_radiance(radiance_buffer,
                                                                    idx,
                                                                    scene,
@@ -565,7 +565,7 @@ static bool runtime_native_3d_render_shade_material(float* radiance_buffer,
                                                                result.hitInfo.t,
                                                                sampling,
                                                                caustic_cache);
-            runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
+            runtime_native_3d_render_record_scatter_stats(&stats, &scatter, x, y);
             stats.hitPixelCount += 1;
             runtime_native_3d_render_apply_scatter_rgb(&result.radianceR,
                                                        &result.radianceG,
@@ -679,7 +679,7 @@ static bool runtime_native_3d_render_shade_emission_transparency(
                                                                    HUGE_VAL,
                                                                    sampling,
                                                                    caustic_cache);
-                runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
+                runtime_native_3d_render_record_scatter_stats(&stats, &scatter, x, y);
                 runtime_native_3d_render_write_background_radiance(radiance_buffer,
                                                                    idx,
                                                                    scene,
@@ -698,7 +698,7 @@ static bool runtime_native_3d_render_shade_emission_transparency(
                                                                result.hitInfo.t,
                                                                sampling,
                                                                caustic_cache);
-            runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
+            runtime_native_3d_render_record_scatter_stats(&stats, &scatter, x, y);
             stats.hitPixelCount += 1;
             runtime_native_3d_render_apply_scatter_rgb(&result.radianceR,
                                                        &result.radianceG,
@@ -811,7 +811,7 @@ static bool runtime_native_3d_render_shade_disney(float* radiance_buffer,
                                                                    HUGE_VAL,
                                                                    sampling,
                                                                    caustic_cache);
-                runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
+                runtime_native_3d_render_record_scatter_stats(&stats, &scatter, x, y);
                 runtime_native_3d_render_write_background_radiance(radiance_buffer,
                                                                    idx,
                                                                    scene,
@@ -830,7 +830,7 @@ static bool runtime_native_3d_render_shade_disney(float* radiance_buffer,
                                                                result.hitInfo.t,
                                                                sampling,
                                                                caustic_cache);
-            runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
+            runtime_native_3d_render_record_scatter_stats(&stats, &scatter, x, y);
             stats.hitPixelCount += 1;
             runtime_native_3d_render_apply_scatter_rgb(&result.radianceR,
                                                        &result.radianceG,
@@ -954,7 +954,7 @@ static bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
                                                                    HUGE_VAL,
                                                                    sampling,
                                                                    caustic_cache);
-                runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
+                runtime_native_3d_render_record_scatter_stats(&stats, &scatter, x, y);
                 runtime_native_3d_render_write_background_radiance(radiance_buffer,
                                                                    idx,
                                                                    scene,
@@ -973,7 +973,7 @@ static bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
                                                                result.hitInfo.t,
                                                                sampling,
                                                                caustic_cache);
-            runtime_native_3d_render_record_scatter_stats(&stats, &scatter);
+            runtime_native_3d_render_record_scatter_stats(&stats, &scatter, x, y);
             stats.hitPixelCount += 1;
             runtime_native_3d_render_apply_scatter_rgb(&result.radianceR,
                                                        &result.radianceG,

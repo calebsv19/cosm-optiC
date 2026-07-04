@@ -308,6 +308,28 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
     dst->causticVolumeScatterSampleCount += src->causticVolumeScatterSampleCount;
     dst->causticVolumeScatterContributingSampleCount +=
         src->causticVolumeScatterContributingSampleCount;
+    dst->causticVolumeScatterContributingPixelCount +=
+        src->causticVolumeScatterContributingPixelCount;
+    dst->totalCausticVolumeScatterPixelX += src->totalCausticVolumeScatterPixelX;
+    dst->totalCausticVolumeScatterPixelY += src->totalCausticVolumeScatterPixelY;
+    if (src->causticVolumeScatterContributingPixelCount > 0) {
+        if (dst->causticVolumeScatterContributingPixelCount ==
+                src->causticVolumeScatterContributingPixelCount ||
+            src->causticVolumeScatterPixelMinX < dst->causticVolumeScatterPixelMinX) {
+            dst->causticVolumeScatterPixelMinX = src->causticVolumeScatterPixelMinX;
+        }
+        if (dst->causticVolumeScatterContributingPixelCount ==
+                src->causticVolumeScatterContributingPixelCount ||
+            src->causticVolumeScatterPixelMinY < dst->causticVolumeScatterPixelMinY) {
+            dst->causticVolumeScatterPixelMinY = src->causticVolumeScatterPixelMinY;
+        }
+        if (src->causticVolumeScatterPixelMaxX > dst->causticVolumeScatterPixelMaxX) {
+            dst->causticVolumeScatterPixelMaxX = src->causticVolumeScatterPixelMaxX;
+        }
+        if (src->causticVolumeScatterPixelMaxY > dst->causticVolumeScatterPixelMaxY) {
+            dst->causticVolumeScatterPixelMaxY = src->causticVolumeScatterPixelMaxY;
+        }
+    }
     if (src->maxCausticSidecarRadiance > dst->maxCausticSidecarRadiance) {
         dst->maxCausticSidecarRadiance = src->maxCausticSidecarRadiance;
     }
@@ -389,6 +411,55 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
     dst->totalCausticVolumeScatterRadianceR += src->totalCausticVolumeScatterRadianceR;
     dst->totalCausticVolumeScatterRadianceG += src->totalCausticVolumeScatterRadianceG;
     dst->totalCausticVolumeScatterRadianceB += src->totalCausticVolumeScatterRadianceB;
+    dst->totalCausticVolumeScatterSampledCacheRadiance +=
+        src->totalCausticVolumeScatterSampledCacheRadiance;
+    if (src->maxCausticVolumeScatterSampledCacheRadiance >
+        dst->maxCausticVolumeScatterSampledCacheRadiance) {
+        dst->maxCausticVolumeScatterSampledCacheRadiance =
+            src->maxCausticVolumeScatterSampledCacheRadiance;
+    }
+    dst->totalCausticVolumeScatterSampledRawDensity +=
+        src->totalCausticVolumeScatterSampledRawDensity;
+    if (src->maxCausticVolumeScatterSampledRawDensity >
+        dst->maxCausticVolumeScatterSampledRawDensity) {
+        dst->maxCausticVolumeScatterSampledRawDensity =
+            src->maxCausticVolumeScatterSampledRawDensity;
+    }
+    dst->totalCausticVolumeScatterSampledDensity +=
+        src->totalCausticVolumeScatterSampledDensity;
+    if (src->maxCausticVolumeScatterSampledDensity >
+        dst->maxCausticVolumeScatterSampledDensity) {
+        dst->maxCausticVolumeScatterSampledDensity =
+            src->maxCausticVolumeScatterSampledDensity;
+    }
+    dst->totalCausticVolumeScatterProbability +=
+        src->totalCausticVolumeScatterProbability;
+    if (src->maxCausticVolumeScatterProbability >
+        dst->maxCausticVolumeScatterProbability) {
+        dst->maxCausticVolumeScatterProbability =
+            src->maxCausticVolumeScatterProbability;
+    }
+    dst->totalCausticVolumeScatterCameraTransmittance +=
+        src->totalCausticVolumeScatterCameraTransmittance;
+    if (src->causticVolumeScatterContributingSampleCount > 0 &&
+        (dst->minCausticVolumeScatterCameraTransmittance <= 0.0 ||
+         src->minCausticVolumeScatterCameraTransmittance <
+             dst->minCausticVolumeScatterCameraTransmittance)) {
+        dst->minCausticVolumeScatterCameraTransmittance =
+            src->minCausticVolumeScatterCameraTransmittance;
+    }
+    if (src->maxCausticVolumeScatterCameraTransmittance >
+        dst->maxCausticVolumeScatterCameraTransmittance) {
+        dst->maxCausticVolumeScatterCameraTransmittance =
+            src->maxCausticVolumeScatterCameraTransmittance;
+    }
+    dst->totalCausticVolumeScatterVisibilityTerm +=
+        src->totalCausticVolumeScatterVisibilityTerm;
+    if (src->maxCausticVolumeScatterVisibilityTerm >
+        dst->maxCausticVolumeScatterVisibilityTerm) {
+        dst->maxCausticVolumeScatterVisibilityTerm =
+            src->maxCausticVolumeScatterVisibilityTerm;
+    }
     dst->mirrorDominantPixelCount += src->mirrorDominantPixelCount;
     dst->mirrorBaseAttenuatedPixelCount += src->mirrorBaseAttenuatedPixelCount;
     dst->mirrorReflectionHitPixelCount += src->mirrorReflectionHitPixelCount;
@@ -543,6 +614,10 @@ static void runtime_native_3d_render_stats_normalize_temporal(
         runtime_native_3d_render_stats_round_divide(
             stats->causticVolumeScatterContributingSampleCount,
             committed_subpasses);
+    stats->causticVolumeScatterContributingPixelCount =
+        runtime_native_3d_render_stats_round_divide(
+            stats->causticVolumeScatterContributingPixelCount,
+            committed_subpasses);
     stats->volumeScatterDirectSampleCount = runtime_native_3d_render_stats_round_divide(
         stats->volumeScatterDirectSampleCount, committed_subpasses);
     stats->totalDirectVolumeScatterRadianceR /= (double)committed_subpasses;
@@ -551,6 +626,14 @@ static void runtime_native_3d_render_stats_normalize_temporal(
     stats->totalCausticVolumeScatterRadianceR /= (double)committed_subpasses;
     stats->totalCausticVolumeScatterRadianceG /= (double)committed_subpasses;
     stats->totalCausticVolumeScatterRadianceB /= (double)committed_subpasses;
+    stats->totalCausticVolumeScatterSampledCacheRadiance /= (double)committed_subpasses;
+    stats->totalCausticVolumeScatterSampledRawDensity /= (double)committed_subpasses;
+    stats->totalCausticVolumeScatterSampledDensity /= (double)committed_subpasses;
+    stats->totalCausticVolumeScatterProbability /= (double)committed_subpasses;
+    stats->totalCausticVolumeScatterCameraTransmittance /= (double)committed_subpasses;
+    stats->totalCausticVolumeScatterVisibilityTerm /= (double)committed_subpasses;
+    stats->totalCausticVolumeScatterPixelX /= (double)committed_subpasses;
+    stats->totalCausticVolumeScatterPixelY /= (double)committed_subpasses;
     stats->totalCausticSurfaceRadianceR /= (double)committed_subpasses;
     stats->totalCausticSurfaceRadianceG /= (double)committed_subpasses;
     stats->totalCausticSurfaceRadianceB /= (double)committed_subpasses;
