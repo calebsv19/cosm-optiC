@@ -6,17 +6,42 @@
 #include <unistd.h>
 
 #include "app/animation.h"
+#include "import/runtime_scene_bridge.h"
 #include "material/material.h"
 #include "material/material_manager.h"
 #include "render/integrators/integrator_common.h"
 #include "render/ray_tracing2_preview.h"
+#include "render/pipeline/ray_tracing2_preview_present.h"
 #include "render/runtime_camera_3d_rays.h"
+#include "render/runtime_native_3d_adaptive_sampling.h"
+#include "render/runtime_native_3d_feature_buffer.h"
 #include "render/runtime_native_3d_preview_reconstruction.h"
 #include "render/runtime_native_3d_render.h"
+#include "render/runtime_native_3d_render_unit.h"
+#include "render/runtime_native_3d_tile_scheduler.h"
+#include "render/runtime_native_3d_temporal_accum.h"
+#include "render/runtime_scene_accel_3d.h"
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_triangle_bvh_3d.h"
 #include "test_runtime_native_3d_render_prepared_suite_internal.h"
 #include "test_support.h"
+
+typedef struct RuntimeNative3DTileProgressProbe {
+    int callback_count;
+    size_t dirty_tile_count;
+} RuntimeNative3DTileProgressProbe;
+
+static bool runtime_native_3d_tile_progress_probe(
+    const RuntimeNative3DTileSchedulerProgress* progress,
+    void* user_data) {
+    RuntimeNative3DTileProgressProbe* probe = (RuntimeNative3DTileProgressProbe*)user_data;
+    if (!progress || !probe) {
+        return false;
+    }
+    probe->callback_count += 1;
+    probe->dirty_tile_count += progress->dirtyTileCount;
+    return true;
+}
 
 static int test_runtime_native_3d_background_volume_single_scatter_lifts_black_miss(void) {
     AnimationConfig saved_anim = animSettings;
@@ -619,6 +644,804 @@ static int test_runtime_native_3d_preview_reconstruction_dirty_tile_parity(void)
     return 0;
 }
 
+static int test_runtime_native_3d_preview_final_truth_reconstruct_counters(void) {
+    enum { kRenderWidth = 6, kRenderHeight = 4, kHostWidth = 19, kHostHeight = 13 };
+    Uint8 render_buffer[kRenderWidth * kRenderHeight * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    Uint8 expected_host[kHostWidth * kHostHeight * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    Uint8 truth_host[kHostWidth * kHostHeight * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    const Runtime3DUpscaleMode modes[] = {
+        RUNTIME_3D_UPSCALE_MODE_NEAREST,
+        RUNTIME_3D_UPSCALE_MODE_BILINEAR,
+    };
+    bool ok = false;
+    char label[96];
+
+    for (int y = 0; y < kRenderHeight; ++y) {
+        for (int x = 0; x < kRenderWidth; ++x) {
+            const size_t base =
+                ((size_t)y * (size_t)kRenderWidth + (size_t)x) *
+                (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+            render_buffer[base] = (Uint8)(11 + x * 29 + y * 5);
+            render_buffer[base + 1u] = (Uint8)(17 + x * 7 + y * 31);
+            render_buffer[base + 2u] = (Uint8)(23 + x * 13 + y * 19);
+            render_buffer[base + 3u] = 0xFFu;
+        }
+    }
+
+    for (size_t mode_index = 0; mode_index < sizeof(modes) / sizeof(modes[0]); ++mode_index) {
+        RuntimeNative3DRenderStats stats = {0};
+        memset(expected_host, 0, sizeof(expected_host));
+        memset(truth_host, 0x5A, sizeof(truth_host));
+
+        ok = RuntimeNative3DPreviewReconstructABGRWithMode(render_buffer,
+                                                           kRenderWidth,
+                                                           kRenderHeight,
+                                                           expected_host,
+                                                           kHostWidth,
+                                                           kHostHeight,
+                                                           modes[mode_index]);
+        snprintf(label, sizeof(label),
+                 "runtime_native_3d_preview_t2_expected_truth_ok_%zu", mode_index);
+        assert_true(label, ok);
+
+        ok = RayTracing2PreviewPresent_ReconstructNative3DHostTruth(render_buffer,
+                                                                    kRenderWidth,
+                                                                    kRenderHeight,
+                                                                    truth_host,
+                                                                    kHostWidth,
+                                                                    kHostHeight,
+                                                                    modes[mode_index],
+                                                                    &stats);
+        snprintf(label, sizeof(label),
+                 "runtime_native_3d_preview_t2_truth_reconstruct_ok_%zu", mode_index);
+        assert_true(label, ok);
+        snprintf(label, sizeof(label),
+                 "runtime_native_3d_preview_t2_truth_reconstruct_match_%zu", mode_index);
+        assert_true(label, memcmp(expected_host, truth_host, sizeof(expected_host)) == 0);
+        assert_true("runtime_native_3d_preview_t2_host_resolve_counter",
+                    stats.temporalHostFullResolveCount == 1);
+        assert_true("runtime_native_3d_preview_t2_no_dirty_present_counter",
+                    stats.temporalDirtyPreviewPresentCount == 0);
+        assert_true("runtime_native_3d_preview_t2_no_final_present_counter",
+                    stats.temporalFinalPreviewPresentCount == 0);
+        assert_true("runtime_native_3d_preview_t2_no_history_promote_counter",
+                    stats.temporalHistoryPromoteCount == 0);
+    }
+    return 0;
+}
+
+static int test_runtime_native_3d_tiled_presenter_final_truth_without_progress(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_native_3d_t2_presenter_truth\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"floor\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":4.0,\"height\":4.0,"
+            "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-4.0,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+            "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-4.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":0.0,\"y\":-2.0,\"z\":1.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeNative3DRenderStats stats = {0};
+    TileGrid grid = {0};
+    Uint8 render_buffer[16 * 16 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    Uint8 host_buffer[32 * 32 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    bool ok = false;
+
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_native_3d_preview_t2_presenter_apply_ok", ok);
+    if (!ok) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    memset(render_buffer, 0, sizeof(render_buffer));
+    memset(host_buffer, 0, sizeof(host_buffer));
+    animSettings.tileSize = 8;
+    animSettings.renderScale3D = 1;
+    animSettings.upscaleMode3D = RUNTIME_3D_UPSCALE_MODE_NEAREST;
+    animSettings.disneyDenoiseEnabled = false;
+    RuntimeNative3DTileSchedulerResetAdaptivePlan();
+    TileGridEnsure(&grid, 16, 16, 8);
+
+    ok = RayTracing2PreviewPresent_RenderNative3DTilesPreview(
+        NULL,
+        host_buffer,
+        32,
+        32,
+        render_buffer,
+        16,
+        16,
+        &grid,
+        RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT,
+        0.0,
+        0.0,
+        -2.0,
+        NULL,
+        1,
+        false,
+        false,
+        &stats);
+    assert_true("runtime_native_3d_preview_t2_presenter_truth_ok", ok);
+    assert_true("runtime_native_3d_preview_t2_presenter_host_resolve",
+                stats.temporalHostFullResolveCount == 1);
+    assert_true("runtime_native_3d_preview_t2_presenter_history_promote",
+                stats.temporalHistoryPromoteCount == 1);
+    assert_true("runtime_native_3d_preview_t2_presenter_no_dirty_present",
+                stats.temporalDirtyPreviewPresentCount == 0);
+    assert_true("runtime_native_3d_preview_t2_presenter_no_final_present_without_renderer",
+                stats.temporalFinalPreviewPresentCount == 0);
+    assert_true("runtime_native_3d_preview_t2_presenter_scheduler_final_resolve",
+                stats.temporalFinalFullResolveCount == 1);
+
+    TileGridFree(&grid);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    RuntimeNative3DTileSchedulerResetAdaptivePlan();
+    return 0;
+}
+
+static int test_runtime_native_3d_tiled_presenter_t6_capture_replay_without_renderer(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_native_3d_t6_presenter_capture\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"floor\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":4.0,\"height\":4.0,"
+            "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-4.0,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+            "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-4.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":0.0,\"y\":-2.0,\"z\":1.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeNative3DRenderStats stats = {0};
+    RayTracing2Native3DPresentationCapture capture;
+    TileGrid grid = {0};
+    Uint8 render_buffer[16 * 16 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    Uint8 host_buffer[32 * 32 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    bool ok = false;
+    int dirty_event_index = -1;
+
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_native_3d_preview_t6_capture_apply_ok", ok);
+    if (!ok) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    memset(render_buffer, 0, sizeof(render_buffer));
+    memset(host_buffer, 0, sizeof(host_buffer));
+    memset(&capture, 0, sizeof(capture));
+    RayTracing2PreviewPresent_ResetNative3DPresentationCapture(&capture);
+    RayTracing2PreviewPresent_SetNative3DPresentationCapture(&capture);
+    animSettings.tileSize = 8;
+    animSettings.renderScale3D = 1;
+    animSettings.upscaleMode3D = RUNTIME_3D_UPSCALE_MODE_NEAREST;
+    animSettings.disneyDenoiseEnabled = false;
+    RuntimeNative3DTileSchedulerResetAdaptivePlan();
+    TileGridEnsure(&grid, 16, 16, 8);
+
+    ok = RayTracing2PreviewPresent_RenderNative3DTilesPreview(
+        NULL,
+        host_buffer,
+        32,
+        32,
+        render_buffer,
+        16,
+        16,
+        &grid,
+        RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT,
+        0.0,
+        0.0,
+        -2.0,
+        NULL,
+        1,
+        false,
+        true,
+        &stats);
+    RayTracing2PreviewPresent_SetNative3DPresentationCapture(NULL);
+
+    assert_true("runtime_native_3d_preview_t6_capture_presenter_ok", ok);
+    assert_true("runtime_native_3d_preview_t6_capture_events_recorded",
+                capture.eventCount >= 4);
+    assert_true("runtime_native_3d_preview_t6_capture_no_drops",
+                capture.droppedEventCount == 0);
+    assert_true("runtime_native_3d_preview_t6_capture_history_seed",
+                capture.historySeedCount == 1);
+    assert_true("runtime_native_3d_preview_t6_capture_dirty_progress",
+                capture.dirtyProgressCount > 0);
+    for (int i = 0; i < capture.eventCount; ++i) {
+        if (capture.events[i].kind == RAY_TRACING2_NATIVE3D_PRESENT_EVENT_DIRTY_PROGRESS) {
+            assert_true("runtime_native_3d_preview_t6_dirty_progress_single_tile",
+                        capture.events[i].dirtyTileCount == 1);
+            dirty_event_index = i;
+            break;
+        }
+    }
+    assert_true("runtime_native_3d_preview_t6_capture_dirty_event_found",
+                dirty_event_index >= 0);
+    if (dirty_event_index >= 0) {
+        const RayTracing2Native3DPresentationEvent* dirty =
+            &capture.events[dirty_event_index];
+        assert_true("runtime_native_3d_preview_t6_capture_dirty_progress_subpass",
+                    dirty->startedSubpasses == 1 &&
+                    dirty->completedSubpasses >= 0 &&
+                    dirty->totalSubpasses == 1 &&
+                    dirty->completedTilesInSubpass > 0 &&
+                    dirty->totalTilesInSubpass > 0);
+        assert_true("runtime_native_3d_preview_t6_capture_dirty_tile_bounds",
+                    dirty->dirtyTileBoundsValid != 0 &&
+                    dirty->dirtyTileMinX >= 0 &&
+                    dirty->dirtyTileMinY >= 0 &&
+                    dirty->dirtyTileMaxX <= 16 &&
+                    dirty->dirtyTileMaxY <= 16 &&
+                    dirty->dirtyTileMaxX > dirty->dirtyTileMinX &&
+                    dirty->dirtyTileMaxY > dirty->dirtyTileMinY);
+    }
+    assert_true("runtime_native_3d_preview_t6_capture_final_resolve",
+                capture.finalResolveCount == 1);
+    assert_true("runtime_native_3d_preview_t6_capture_no_renderer_final_present",
+                capture.finalPresentCount == 0);
+    assert_true("runtime_native_3d_preview_t6_capture_no_renderer_presents",
+                capture.rendererPresentCount == 0);
+    assert_true("runtime_native_3d_preview_t6_capture_history_promote",
+                capture.historyPromoteCount == 1);
+    assert_true("runtime_native_3d_preview_t6_capture_no_dirty_after_final",
+                capture.dirtyAfterFinalResolveCount == 0);
+    assert_true("runtime_native_3d_preview_t6_capture_dirty_before_final",
+                capture.finalResolveBeforeDirtyCount == 0);
+    assert_true("runtime_native_3d_preview_t6_capture_final_rect",
+                capture.finalHostRect.x == 0 &&
+                capture.finalHostRect.y == 0 &&
+                capture.finalHostRect.w == 32 &&
+                capture.finalHostRect.h == 32);
+    assert_true("runtime_native_3d_preview_t6_capture_dirty_rect_valid",
+                capture.lastDirtyHostRect.w > 0 &&
+                capture.lastDirtyHostRect.h > 0 &&
+                capture.lastDirtyHostRect.x >= 0 &&
+                capture.lastDirtyHostRect.y >= 0 &&
+                capture.lastDirtyHostRect.x + capture.lastDirtyHostRect.w <= 32 &&
+                capture.lastDirtyHostRect.y + capture.lastDirtyHostRect.h <= 32);
+    assert_true("runtime_native_3d_preview_t6_capture_stats_dirty_present_no_renderer",
+                stats.temporalDirtyPreviewPresentCount == 0);
+    assert_true("runtime_native_3d_preview_t6_capture_stats_final_present_no_renderer",
+                stats.temporalFinalPreviewPresentCount == 0);
+    assert_true("runtime_native_3d_preview_t6_capture_stats_final_resolve",
+                stats.temporalHostFullResolveCount == 1);
+    assert_true("runtime_native_3d_preview_t6_capture_stats_history_promote",
+                stats.temporalHistoryPromoteCount == 1);
+
+    TileGridFree(&grid);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    RuntimeNative3DTileSchedulerResetAdaptivePlan();
+    return 0;
+}
+
+static int test_runtime_native_3d_adaptive_pixel_state_t3_measurement_contract(void) {
+    RuntimeNative3DTemporalAccumulation accumulation = {0};
+    RuntimeNative3DFeatureBuffer features = {0};
+    RuntimeNative3DAdaptivePixelStateBuffer state = {0};
+    float samples[8 * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS] = {0};
+    const int width = 4;
+    const int height = 2;
+    const size_t pixel_count = (size_t)width * (size_t)height;
+    bool ok = false;
+
+    RuntimeNative3DTemporalAccumulation_Init(&accumulation);
+    RuntimeNative3DFeatureBuffer_Init(&features);
+    RuntimeNative3DAdaptivePixelStateBuffer_Init(&state);
+
+    ok = RuntimeNative3DTemporalAccumulation_Ensure(&accumulation, width, height) &&
+         RuntimeNative3DFeatureBuffer_Ensure(&features, width, height);
+    assert_true("runtime_native_3d_adaptive_state_t3_scatter_setup_ok", ok);
+    if (!ok) {
+        RuntimeNative3DAdaptivePixelStateBuffer_Free(&state);
+        RuntimeNative3DFeatureBuffer_Free(&features);
+        RuntimeNative3DTemporalAccumulation_Free(&accumulation);
+        return 0;
+    }
+
+    for (size_t i = 0; i < pixel_count; ++i) {
+        const size_t normal_base = i * 3u;
+        features.hitMaskBuffer[i] = 1u;
+        features.normalBuffer[normal_base] = 0.0f;
+        features.normalBuffer[normal_base + 1u] = 1.0f;
+        features.normalBuffer[normal_base + 2u] = 0.0f;
+        features.depthBuffer[i] = 4.0f;
+    }
+    features.reflectivityBuffer[0] = 1.0f;
+    features.roughnessBuffer[0] = 0.0f;
+
+    for (int pass = 0; pass < 4; ++pass) {
+        ok = RuntimeNative3DTemporalAccumulation_AddRegion(&accumulation,
+                                                           samples,
+                                                           width,
+                                                           0,
+                                                           0,
+                                                           width,
+                                                           height);
+        assert_true("runtime_native_3d_adaptive_state_t3_scatter_add_ok", ok);
+        RuntimeNative3DTemporalAccumulation_CommitSubpass(&accumulation);
+    }
+
+    ok = RuntimeNative3DAdaptiveSampling_MeasurePixelState(&state,
+                                                           &accumulation,
+                                                           &features,
+                                                           width,
+                                                           2,
+                                                           4);
+    assert_true("runtime_native_3d_adaptive_state_t3_scatter_measure_ok", ok);
+    assert_true("runtime_native_3d_adaptive_state_t3_scatter_measured_pixels",
+                state.summary.measuredPixelCount == (int)pixel_count);
+    assert_true("runtime_native_3d_adaptive_state_t3_scatter_high_risk_pixel",
+                state.summary.highRiskPixelCount == 1);
+    assert_true("runtime_native_3d_adaptive_state_t3_scatter_stable_pixels",
+                state.summary.stablePixelCount == (int)pixel_count - 1);
+    assert_true("runtime_native_3d_adaptive_state_t3_scatter_probe_pixels",
+                state.summary.probePixelCount == (int)pixel_count - 1);
+    assert_true("runtime_native_3d_adaptive_state_t3_scatter_active_pixels_are_measurement",
+                state.summary.activePixelCount == (int)pixel_count);
+    assert_true("runtime_native_3d_adaptive_state_t3_scatter_tile_summary",
+                state.summary.activeTileCount == 1 &&
+                    state.summary.stableTileCount == 1 &&
+                    state.summary.probeTileCount == 1 &&
+                    state.summary.highRiskTileCount == 1);
+    assert_true("runtime_native_3d_adaptive_state_t3_scatter_pixel_flags",
+                (state.pixels[0].flags & RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_HIGH_RISK) != 0u &&
+                    (state.pixels[1].flags & RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_STABLE) != 0u &&
+                    (state.pixels[1].flags & RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_PROBE) != 0u);
+
+    RuntimeNative3DAdaptivePixelStateBuffer_Free(&state);
+    RuntimeNative3DFeatureBuffer_Free(&features);
+    RuntimeNative3DTemporalAccumulation_Free(&accumulation);
+    return 0;
+}
+
+static int test_runtime_native_3d_adaptive_pixel_state_t4_activity_mask_contract(void) {
+    RuntimeNative3DTemporalAccumulation accumulation = {0};
+    RuntimeNative3DFeatureBuffer features = {0};
+    RuntimeNative3DAdaptivePixelStateBuffer state = {0};
+    RuntimeNative3DAdaptiveSamplingMask mask = {0};
+    float samples[8 * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS] = {0};
+    const int width = 4;
+    const int height = 2;
+    const size_t pixel_count = (size_t)width * (size_t)height;
+    const size_t far_pixel = 3u;
+    bool ok = false;
+
+    RuntimeNative3DTemporalAccumulation_Init(&accumulation);
+    RuntimeNative3DFeatureBuffer_Init(&features);
+    RuntimeNative3DAdaptivePixelStateBuffer_Init(&state);
+    RuntimeNative3DAdaptiveSamplingMask_Init(&mask);
+
+    ok = RuntimeNative3DTemporalAccumulation_Ensure(&accumulation, width, height) &&
+         RuntimeNative3DFeatureBuffer_Ensure(&features, width, height);
+    assert_true("runtime_native_3d_adaptive_state_t4_setup_ok", ok);
+    if (!ok) {
+        RuntimeNative3DAdaptiveSamplingMask_Free(&mask);
+        RuntimeNative3DAdaptivePixelStateBuffer_Free(&state);
+        RuntimeNative3DFeatureBuffer_Free(&features);
+        RuntimeNative3DTemporalAccumulation_Free(&accumulation);
+        return 0;
+    }
+
+    for (size_t i = 0; i < pixel_count; ++i) {
+        const size_t normal_base = i * 3u;
+        features.hitMaskBuffer[i] = 1u;
+        features.normalBuffer[normal_base] = 0.0f;
+        features.normalBuffer[normal_base + 1u] = 1.0f;
+        features.normalBuffer[normal_base + 2u] = 0.0f;
+        features.depthBuffer[i] = 4.0f;
+    }
+    features.reflectivityBuffer[0] = 1.0f;
+    features.roughnessBuffer[0] = 0.0f;
+
+    for (int pass = 0; pass < 3; ++pass) {
+        ok = RuntimeNative3DTemporalAccumulation_AddRegion(&accumulation,
+                                                           samples,
+                                                           width,
+                                                           0,
+                                                           0,
+                                                           width,
+                                                           height);
+        assert_true("runtime_native_3d_adaptive_state_t4_add_ok", ok);
+        RuntimeNative3DTemporalAccumulation_CommitSubpass(&accumulation);
+    }
+
+    ok = RuntimeNative3DAdaptiveSampling_MeasurePixelState(&state,
+                                                           &accumulation,
+                                                           &features,
+                                                           width,
+                                                           2,
+                                                           4) &&
+         RuntimeNative3DAdaptiveSampling_RefreshActivityMaskFromPixelState(&mask,
+                                                                           &state,
+                                                                           width);
+    assert_true("runtime_native_3d_adaptive_state_t4_mask_ok", ok);
+    assert_true("runtime_native_3d_adaptive_state_t4_runtime_enabled",
+                RuntimeNative3DAdaptiveSampling_RuntimeEnabled());
+    assert_true("runtime_native_3d_adaptive_state_t4_state_has_stable_pixels",
+                state.summary.stablePixelCount == (int)pixel_count - 1 &&
+                    state.summary.probePixelCount == 0 &&
+                    state.summary.highRiskPixelCount == 1);
+    assert_true("runtime_native_3d_adaptive_state_t4_mask_reduces_work",
+                mask.activePixelCount > 0 && mask.activePixelCount < (int)pixel_count);
+    assert_true("runtime_native_3d_adaptive_state_t4_high_risk_seed_active",
+                mask.activeSampleMask[0] != 0u);
+    assert_true("runtime_native_3d_adaptive_state_t4_padding_holds_neighbor",
+                mask.activeSampleMask[1] != 0u);
+    assert_true("runtime_native_3d_adaptive_state_t4_far_stable_pixel_skipped",
+                mask.activeSampleMask[far_pixel] == 0u);
+    assert_true("runtime_native_3d_adaptive_state_t4_tile_summary_active",
+                mask.activeTileCount == 1 && mask.inactiveTileCount == 0);
+
+    RuntimeNative3DAdaptiveSamplingMask_Free(&mask);
+    RuntimeNative3DAdaptivePixelStateBuffer_Free(&state);
+    RuntimeNative3DFeatureBuffer_Free(&features);
+    RuntimeNative3DTemporalAccumulation_Free(&accumulation);
+    return 0;
+}
+
+static int test_runtime_native_3d_render_unit_setup_defers_feature_prepass(void) {
+    RuntimeNative3DPreparedFrame frame = {0};
+    RuntimeNative3DRenderUnit unit;
+    RuntimeNative3DSamplingContext sampling = {0};
+    RuntimeScene3D scene;
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    RuntimeNative3DRenderUnit_Init(&unit);
+    RuntimeNative3DTileOccupancy_Init(&frame.tileOccupancy);
+
+    scene.hasCamera = true;
+    scene.camera.position = vec3(0.0, -4.0, 1.5);
+    scene.camera.rotation = 0.0;
+    scene.camera.lookPitch = -0.1;
+    scene.camera.zoom = 1.0;
+    scene.camera.nearPlane = 0.1;
+    scene.hasLight = true;
+    scene.light.position = vec3(0.0, -2.0, 3.0);
+    scene.light.radius = 0.2;
+    scene.light.intensity = 1.0;
+
+    ok = RuntimeCameraProjector3D_Build(&scene.camera, 8, 8, &frame.projector);
+    assert_true("runtime_native_3d_unit_s1_projector_ok", ok);
+    if (!ok) {
+        RuntimeNative3DRenderUnit_Free(&unit);
+        RuntimeNative3DPreparedFrame_Free(&frame);
+        return 0;
+    }
+
+    frame.scene = scene;
+    frame.width = 8;
+    frame.height = 8;
+    frame.valid = true;
+
+    ok = RuntimeNative3DRenderUnit_Setup(&unit,
+                                         RAY_TRACING_3D_INTEGRATOR_DISNEY_V2,
+                                         &frame,
+                                         0,
+                                         0,
+                                         8,
+                                         8,
+                                         &sampling,
+                                         4,
+                                         true);
+    assert_true("runtime_native_3d_unit_s1_setup_ok", ok);
+    assert_true("runtime_native_3d_unit_s1_feature_buffer_deferred",
+                unit.featureBuffer.hitMaskBuffer == NULL && !unit.featuresPrepared);
+    assert_true("runtime_native_3d_unit_s1_initial_adaptive_active",
+                unit.adaptiveMask.activeSampleMask != NULL &&
+                    unit.adaptiveMask.activePixelCount == 64);
+    assert_true("runtime_native_3d_unit_s1_later_subpass_not_skipped",
+                RuntimeNative3DRenderUnit_ShouldRenderSubpass(&unit, 1));
+
+    RuntimeNative3DRenderUnit_Free(&unit);
+    RuntimeNative3DPreparedFrame_Free(&frame);
+    return 0;
+}
+
+static int test_runtime_native_3d_render_unit_preserves_prepared_tlas_binding(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_native_3d_unit_tlas_binding\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"floor\","
+            "\"object_type\":\"plane\","
+            "\"primitive\":{\"kind\":\"plane\",\"width\":4.0,\"height\":4.0,"
+            "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-3.0,\"z\":0.0},"
+            "\"axis_u\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+            "\"axis_v\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":-3.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[{\"position\":{\"x\":0.0,\"y\":-1.0,\"z\":2.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.5}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeNative3DPreparedFrame frame = {0};
+    RuntimeNative3DRenderUnit unit;
+    RuntimeNative3DSamplingContext sampling = {0};
+    RuntimeNative3DRenderStats stats = {0};
+    Ray3D ray = RuntimeRay3D_Make(vec3(0.0, 0.0, 0.0), vec3(0.0, -1.0, 0.0));
+    HitInfo3D hit = {0};
+    RuntimeSceneAcceleration3DTraceStatus trace_status;
+    bool ok = false;
+
+    RuntimeNative3DRenderUnit_Init(&unit);
+
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_native_3d_unit_tlas_binding_apply_ok", ok);
+    if (!ok) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT;
+    animSettings.interactiveMode = false;
+    animSettings.disneyDenoiseEnabled = false;
+    animSettings.environmentBrightness = 0.0;
+    animSettings.lightIntensity = 4.0;
+    animSettings.forwardDecay = 8.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+
+    ok = RuntimeNative3DPrepareFrameWithSampling(&frame,
+                                                 16,
+                                                 16,
+                                                 0.0,
+                                                 0.0,
+                                                 -1.0,
+                                                 &sampling);
+    assert_true("runtime_native_3d_unit_tlas_binding_prepare_ok", ok);
+    if (!ok) {
+        RuntimeNative3DRenderUnit_Free(&unit);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    RuntimeSceneAcceleration3D_ResetTraceStats();
+    trace_status = RuntimeSceneAcceleration3D_TraceFirstHit(&frame.scene,
+                                                            &ray,
+                                                            0.001,
+                                                            10.0,
+                                                            &hit);
+    assert_true("runtime_native_3d_unit_tlas_binding_initial_trace_bound",
+                trace_status != RUNTIME_SCENE_ACCEL_3D_TRACE_UNREADY);
+
+    ok = RuntimeNative3DRenderUnit_Setup(&unit,
+                                         RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT,
+                                         &frame,
+                                         0,
+                                         0,
+                                         16,
+                                         16,
+                                         &sampling,
+                                         2,
+                                         false);
+    assert_true("runtime_native_3d_unit_tlas_binding_setup_ok", ok);
+    if (ok) {
+        ok = RuntimeNative3DRenderUnit_RenderSubpass(&unit, 0, &stats);
+        assert_true("runtime_native_3d_unit_tlas_binding_subpass_ok", ok);
+    }
+
+    HitInfo3D_Reset(&hit);
+    trace_status = RuntimeSceneAcceleration3D_TraceFirstHit(&frame.scene,
+                                                            &ray,
+                                                            0.001,
+                                                            10.0,
+                                                            &hit);
+    assert_true("runtime_native_3d_unit_tlas_binding_after_subpass_trace_bound",
+                trace_status != RUNTIME_SCENE_ACCEL_3D_TRACE_UNREADY);
+
+    RuntimeNative3DRenderUnit_Free(&unit);
+    RuntimeNative3DPreparedFrame_Free(&frame);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_runtime_native_3d_render_unit_raw_progress_resolve_bypasses_denoise(void) {
+    RuntimeNative3DRenderUnit unit;
+    float samples[4 * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS] = {0};
+    uint8_t raw_pixels[2 * 2 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES] = {0};
+    uint8_t denoised_pixels[2 * 2 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES] = {0};
+    bool ok = false;
+
+    RuntimeNative3DRenderUnit_Init(&unit);
+    unit.width = 2;
+    unit.height = 2;
+    unit.startX = 0;
+    unit.startY = 0;
+    unit.endX = 2;
+    unit.endY = 2;
+    unit.integratorId = RAY_TRACING_3D_INTEGRATOR_DISNEY_V2;
+    unit.committedSubpasses = 2;
+    unit.useDenoise = true;
+    unit.radianceCapacity = 4u * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
+    unit.resolvedRadiance = (float*)calloc(unit.radianceCapacity, sizeof(*unit.resolvedRadiance));
+    assert_true("runtime_native_3d_unit_raw_progress_resolved_buffer_ok",
+                unit.resolvedRadiance != NULL);
+    if (!unit.resolvedRadiance) {
+        RuntimeNative3DRenderUnit_Free(&unit);
+        return 0;
+    }
+    ok = RuntimeNative3DTemporalAccumulation_Ensure(&unit.accumulation, 2, 2);
+    assert_true("runtime_native_3d_unit_raw_progress_setup_ok", ok);
+    if (!ok) {
+        RuntimeNative3DRenderUnit_Free(&unit);
+        return 0;
+    }
+
+    for (size_t i = 0; i < 4u; ++i) {
+        const size_t base = i * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
+        samples[base] = 0.35f;
+        samples[base + 1u] = 0.45f;
+        samples[base + 2u] = 0.55f;
+        samples[base + RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL] = 0.08f;
+    }
+
+    ok = RuntimeNative3DTemporalAccumulation_AddRegion(&unit.accumulation,
+                                                       samples,
+                                                       2,
+                                                       0,
+                                                       0,
+                                                       2,
+                                                       2);
+    assert_true("runtime_native_3d_unit_raw_progress_accumulate_ok", ok);
+    RuntimeNative3DTemporalAccumulation_CommitSubpass(&unit.accumulation);
+
+    ok = RuntimeNative3DRenderUnit_ResolveCurrentRawToPixels(&unit, raw_pixels, 2);
+    assert_true("runtime_native_3d_unit_raw_progress_resolve_ok", ok);
+    assert_true("runtime_native_3d_unit_raw_progress_resolve_lit",
+                raw_pixels[0] > 0u || raw_pixels[1] > 0u || raw_pixels[2] > 0u);
+    ok = RuntimeNative3DRenderUnit_ResolveCurrentToPixels(&unit, denoised_pixels, 2);
+    assert_true("runtime_native_3d_unit_raw_progress_denoise_still_requires_features", !ok);
+
+    RuntimeNative3DRenderUnit_Free(&unit);
+    return 0;
+}
+
+static int test_runtime_native_3d_tiled_first_frame_occupancy_culls_empty_tiles(void) {
+    AnimationConfig saved_anim = animSettings;
+    RuntimeNative3DPreparedFrame frame = {0};
+    RuntimeScene3D scene;
+    RuntimeNative3DRenderStats stats = {0};
+    RuntimeNative3DTileProgressProbe probe = {0};
+    uint8_t pixel_buffer[32 * 32 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    RuntimeNative3DTileOccupancy_Init(&frame.tileOccupancy);
+    memset(pixel_buffer, 0x5a, sizeof(pixel_buffer));
+    animSettings.tileSize = 16;
+    animSettings.renderScale3D = 1;
+    animSettings.disneyDenoiseEnabled = false;
+    RuntimeNative3DTileSchedulerResetAdaptivePlan();
+
+    scene.hasCamera = true;
+    scene.camera.position = vec3(0.0, -4.0, 1.5);
+    scene.camera.rotation = 0.0;
+    scene.camera.lookPitch = -0.1;
+    scene.camera.zoom = 1.0;
+    scene.camera.nearPlane = 0.1;
+    scene.hasLight = true;
+    scene.light.position = vec3(0.0, -2.0, 3.0);
+    scene.light.radius = 0.2;
+    scene.light.intensity = 1.0;
+
+    ok = RuntimeCameraProjector3D_Build(&scene.camera, 32, 32, &frame.projector);
+    assert_true("runtime_native_3d_tiled_t1_projector_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    frame.scene = scene;
+    frame.width = 32;
+    frame.height = 32;
+    frame.valid = true;
+
+    ok = RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgress(
+        pixel_buffer,
+        RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT,
+        &frame,
+        1,
+        NULL,
+        NULL,
+        runtime_native_3d_tile_progress_probe,
+        &probe,
+        &stats);
+    assert_true("runtime_native_3d_tiled_t1_render_ok", ok);
+    assert_true("runtime_native_3d_tiled_t1_occupancy_not_forced_conservative",
+                stats.temporalConservativeFirstFrameTileRender == 0);
+    assert_true("runtime_native_3d_tiled_t1_planned_tiles",
+                stats.temporalPlannedParentTileCount == 4);
+    assert_true("runtime_native_3d_tiled_t1_emitted_jobs",
+                stats.temporalEmittedTileJobCount == 0);
+    assert_true("runtime_native_3d_tiled_t1_occupancy_skips_empty_tiles",
+                stats.temporalOccupancySkippedTileCount == 4);
+    assert_true("runtime_native_3d_tiled_t1_dispatched_jobs",
+                stats.temporalDispatchedTileJobCount == 0);
+    assert_true("runtime_native_3d_tiled_t1_completed_jobs",
+                stats.temporalCompletedTileJobCount == 0);
+    assert_true("runtime_native_3d_tiled_t1_no_final_resolve_without_jobs",
+                stats.temporalFinalFullResolveCount == 0);
+    assert_true("runtime_native_3d_tiled_t1_no_progress_batches",
+                stats.temporalProgressDirtyBatchCount == 0);
+    assert_true("runtime_native_3d_tiled_t1_no_progress_tiles",
+                stats.temporalProgressDirtyTileCount == 0);
+    assert_true("runtime_native_3d_tiled_t1_probe_not_called", probe.callback_count == 0);
+    assert_true("runtime_native_3d_tiled_t1_probe_tiles", probe.dirty_tile_count == 0u);
+    assert_true("runtime_native_3d_tiled_t1_buffer_untouched",
+                pixel_buffer[0] == 0x5au &&
+                    pixel_buffer[sizeof(pixel_buffer) - 1u] == 0x5au);
+
+    RuntimeNative3DPreparedFrame_Free(&frame);
+    animSettings = saved_anim;
+    RuntimeNative3DTileSchedulerResetAdaptivePlan();
+    return 0;
+}
+
 int run_test_runtime_native_3d_render_prepared_scatter_preview_suite(void) {
     int before = test_support_failures();
 
@@ -628,5 +1451,14 @@ int run_test_runtime_native_3d_render_prepared_scatter_preview_suite(void) {
     test_runtime_native_3d_dirty_rect_preview_base_parity();
     test_runtime_native_3d_preview_reconstruction_rect_parity();
     test_runtime_native_3d_preview_reconstruction_dirty_tile_parity();
+    test_runtime_native_3d_preview_final_truth_reconstruct_counters();
+    test_runtime_native_3d_tiled_presenter_final_truth_without_progress();
+    test_runtime_native_3d_tiled_presenter_t6_capture_replay_without_renderer();
+    test_runtime_native_3d_adaptive_pixel_state_t3_measurement_contract();
+    test_runtime_native_3d_adaptive_pixel_state_t4_activity_mask_contract();
+    test_runtime_native_3d_render_unit_setup_defers_feature_prepass();
+    test_runtime_native_3d_render_unit_preserves_prepared_tlas_binding();
+    test_runtime_native_3d_render_unit_raw_progress_resolve_bypasses_denoise();
+    test_runtime_native_3d_tiled_first_frame_occupancy_culls_empty_tiles();
     return test_support_failures() - before;
 }

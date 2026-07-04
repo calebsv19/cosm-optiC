@@ -19,6 +19,51 @@
 #include "test_runtime_native_3d_render_prepared_suite_internal.h"
 #include "test_support.h"
 
+static int test_runtime_native_3d_background_fill_uses_resolved_rgb(void) {
+    RuntimeScene3D scene = {0};
+    RuntimeCameraProjector3D projector = {0};
+    uint8_t pixels[5 * 5 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    const size_t top_base = ((size_t)0 * 5u + 2u) * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+    const size_t bottom_base = ((size_t)4 * 5u + 2u) * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    RuntimeEnvironment3D_Init(&scene.environment);
+    scene.environment.lightMode = ENVIRONMENT_LIGHT_MODE_AMBIENT;
+    scene.environment.preset = ENVIRONMENT_PRESET_SKY;
+    scene.environment.ambientIntensity = 0.35;
+    scene.environment.backgroundIntensity = 0.35;
+    scene.environment.backgroundIntensityDerivedFromAmbient = true;
+    scene.environment.backgroundColor = vec3(1.0, 1.0, 1.0);
+    RuntimeEnvironment3D_ApplyPreset(&scene.environment);
+    scene.camera.position = vec3(0.0, 0.0, 0.0);
+    scene.camera.rotation = 0.0;
+    scene.camera.lookPitch = 0.0;
+    scene.camera.zoom = 1.0;
+    scene.camera.nearPlane = 0.1;
+
+    ok = RuntimeCameraProjector3D_Build(&scene.camera, 5, 5, &projector);
+    assert_true("runtime_native_3d_background_fill_projector_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        return 0;
+    }
+
+    memset(pixels, 0, sizeof(pixels));
+    RuntimeNative3DFillPixelBufferBackground(pixels, 5, 5, &scene, &projector);
+
+    assert_true("runtime_native_3d_background_fill_uses_color_channels",
+                pixels[top_base] != pixels[top_base + 1u] ||
+                    pixels[top_base + 1u] != pixels[top_base + 2u]);
+    assert_true("runtime_native_3d_background_fill_uses_ray_gradient",
+                pixels[top_base] != pixels[bottom_base] ||
+                    pixels[top_base + 1u] != pixels[bottom_base + 1u] ||
+                    pixels[top_base + 2u] != pixels[bottom_base + 2u]);
+
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
 static int test_runtime_native_3d_render_prepared_region_parity(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -835,6 +880,7 @@ static int test_runtime_native_3d_background_volume_transmittance_dims_environme
 int run_test_runtime_native_3d_render_prepared_parity_volume_suite(void) {
     int before = test_support_failures();
 
+    test_runtime_native_3d_background_fill_uses_resolved_rgb();
     test_runtime_native_3d_render_prepared_region_parity();
     test_runtime_native_3d_render_visible_emitter_tile_parity();
     test_runtime_native_3d_tile_occupancy_contract();

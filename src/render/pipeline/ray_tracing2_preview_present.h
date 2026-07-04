@@ -9,6 +9,69 @@
 #include "render/integrators/hybrid/camera_path_integrator.h"
 #include "render/runtime_native_3d_render.h"
 
+typedef enum RayTracing2Native3DPresentationEventKind {
+    RAY_TRACING2_NATIVE3D_PRESENT_EVENT_NONE = 0,
+    RAY_TRACING2_NATIVE3D_PRESENT_EVENT_HISTORY_SEED = 1,
+    RAY_TRACING2_NATIVE3D_PRESENT_EVENT_DIRTY_PROGRESS = 2,
+    RAY_TRACING2_NATIVE3D_PRESENT_EVENT_FINAL_RESOLVE = 3,
+    RAY_TRACING2_NATIVE3D_PRESENT_EVENT_FINAL_PRESENT = 4,
+    RAY_TRACING2_NATIVE3D_PRESENT_EVENT_HISTORY_PROMOTE = 5
+} RayTracing2Native3DPresentationEventKind;
+
+typedef struct RayTracing2Native3DPresentationEvent {
+    RayTracing2Native3DPresentationEventKind kind;
+    int sequence;
+    int rendererAvailable;
+    int renderWidth;
+    int renderHeight;
+    int hostWidth;
+    int hostHeight;
+    int dirtyTileCount;
+    int startedSubpasses;
+    int completedSubpasses;
+    int totalSubpasses;
+    int completedTilesInSubpass;
+    int totalTilesInSubpass;
+    int dirtyTileBoundsValid;
+    int dirtyTileMinX;
+    int dirtyTileMinY;
+    int dirtyTileMaxX;
+    int dirtyTileMaxY;
+    int x;
+    int y;
+    int width;
+    int height;
+    int resetDirtyPreview;
+    int success;
+} RayTracing2Native3DPresentationEvent;
+
+#define RAY_TRACING2_NATIVE3D_PRESENTATION_CAPTURE_MAX_EVENTS 128
+
+typedef struct RayTracing2Native3DPresentationCapture {
+    RayTracing2Native3DPresentationEvent events[RAY_TRACING2_NATIVE3D_PRESENTATION_CAPTURE_MAX_EVENTS];
+    int eventCount;
+    int droppedEventCount;
+    int nextSequence;
+    int historySeedCount;
+    int dirtyProgressCount;
+    int finalResolveCount;
+    int finalPresentCount;
+    int historyPromoteCount;
+    int rendererPresentCount;
+    int dirtyAfterFinalResolveCount;
+    int finalResolveBeforeDirtyCount;
+    int lastDirtyTileCount;
+    SDL_Rect lastDirtyHostRect;
+    SDL_Rect finalHostRect;
+} RayTracing2Native3DPresentationCapture;
+
+void RayTracing2PreviewPresent_ResetNative3DPresentationCapture(
+    RayTracing2Native3DPresentationCapture* capture);
+void RayTracing2PreviewPresent_SetNative3DPresentationCapture(
+    RayTracing2Native3DPresentationCapture* capture);
+const RayTracing2Native3DPresentationCapture*
+RayTracing2PreviewPresent_GetNative3DPresentationCapture(void);
+
 void RayTracing2PreviewPresent_DrawLuminanceBuffer(SDL_Renderer* renderer,
                                                    const Uint8* buffer,
                                                    int width,
@@ -33,6 +96,15 @@ void RayTracing2PreviewPresent_DimCopyABGR(const Uint8* src,
                                            size_t pixel_count,
                                            unsigned int numerator,
                                            unsigned int denominator);
+bool RayTracing2PreviewPresent_ReconstructNative3DHostTruth(
+    const Uint8* render_buffer,
+    int render_width,
+    int render_height,
+    Uint8* host_buffer,
+    int host_width,
+    int host_height,
+    Runtime3DUpscaleMode upscale_mode,
+    RuntimeNative3DRenderStats* stats);
 bool RayTracing2PreviewPresent_LoadNative3DPreviewHistoryFromBMP(const char* path);
 bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
     SDL_Renderer* renderer,
