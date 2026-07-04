@@ -63,6 +63,20 @@ void runtime_scene_bridge_get_last_3d_primitive_seed_state(
     out_state->valid = true;
 }
 
+void runtime_scene_bridge_get_last_3d_scaffold_state(
+    RuntimeSceneBridge3DScaffoldState* out_state) {
+    if (!out_state) return;
+    memset(out_state, 0, sizeof(*out_state));
+    out_state->valid = true;
+}
+
+void runtime_scene_bridge_get_last_3d_light_seed_state(
+    RuntimeSceneBridge3DLightSeedState* out_state) {
+    if (!out_state) return;
+    memset(out_state, 0, sizeof(*out_state));
+    out_state->valid = true;
+}
+
 bool runtime_scene_bridge_get_last_object_id_for_scene_index(int scene_index,
                                                              char* out_object_id,
                                                              size_t out_object_id_size) {

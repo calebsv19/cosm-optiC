@@ -8,6 +8,8 @@
 #include "import/runtime_mesh_asset_loader.h"
 #include "import/runtime_scene_bridge.h"
 #include "render/runtime_mesh_blas_cache_3d.h"
+#include "render/runtime_ray_3d.h"
+#include "render/runtime_scene_accel_3d.h"
 #include "render/runtime_scene_3d_builder.h"
 
 static const char* kMrt0ScenePath =
@@ -54,6 +56,20 @@ bool RuntimeScene3DSampleAuthoredCamera(double normalized_t, RuntimeCamera3D* ou
 
 void runtime_scene_bridge_get_last_3d_primitive_seed_state(
     RuntimeSceneBridge3DPrimitiveSeedState* out_state) {
+    if (!out_state) return;
+    memset(out_state, 0, sizeof(*out_state));
+    out_state->valid = true;
+}
+
+void runtime_scene_bridge_get_last_3d_scaffold_state(
+    RuntimeSceneBridge3DScaffoldState* out_state) {
+    if (!out_state) return;
+    memset(out_state, 0, sizeof(*out_state));
+    out_state->valid = true;
+}
+
+void runtime_scene_bridge_get_last_3d_light_seed_state(
+    RuntimeSceneBridge3DLightSeedState* out_state) {
     if (!out_state) return;
     memset(out_state, 0, sizeof(*out_state));
     out_state->valid = true;
@@ -136,6 +152,30 @@ static void assert_low_sphere_object_texture_coords(const RuntimeScene3D* scene)
     assert_near("mrt3_low_sphere_object_texture_max_y", max_y, 1.0, 1e-9);
     assert_near("mrt3_low_sphere_object_texture_min_z", min_z, 0.0, 1e-9);
     assert_near("mrt3_low_sphere_object_texture_max_z", max_z, 1.0, 1e-9);
+}
+
+static void assert_hit_identity_matches(const char* prefix,
+                                        const HitInfo3D* expected,
+                                        const HitInfo3D* actual) {
+    char label[128];
+    snprintf(label, sizeof(label), "%s_triangle", prefix);
+    assert_true(label, expected->triangleIndex == actual->triangleIndex);
+    snprintf(label, sizeof(label), "%s_local_triangle", prefix);
+    assert_true(label, expected->localTriangleIndex == actual->localTriangleIndex);
+    snprintf(label, sizeof(label), "%s_primitive", prefix);
+    assert_true(label, expected->primitiveIndex == actual->primitiveIndex);
+    snprintf(label, sizeof(label), "%s_scene_object", prefix);
+    assert_true(label, expected->sceneObjectIndex == actual->sceneObjectIndex);
+    snprintf(label, sizeof(label), "%s_source_object", prefix);
+    assert_true(label, strcmp(expected->source.objectId, actual->source.objectId) == 0);
+    snprintf(label, sizeof(label), "%s_t", prefix);
+    assert_near(label, actual->t, expected->t, 1e-8);
+    snprintf(label, sizeof(label), "%s_bary_u", prefix);
+    assert_near(label, actual->baryU, expected->baryU, 1e-8);
+    snprintf(label, sizeof(label), "%s_bary_v", prefix);
+    assert_near(label, actual->baryV, expected->baryV, 1e-8);
+    snprintf(label, sizeof(label), "%s_bary_w", prefix);
+    assert_near(label, actual->baryW, expected->baryW, 1e-8);
 }
 
 static int test_append_mesh_asset_set_preserves_scene_object_lookup(void) {
@@ -252,6 +292,7 @@ static int test_mesh_blas_cache_builds_once_for_repeated_instances(void) {
     RuntimeScene3D scene;
     CoreMeshAssetRuntimeDocument* document = NULL;
     RuntimeSceneAcceleration3DDiagnostics stats;
+    RuntimeSceneAcceleration3DTraceStats trace_stats;
     bool ok = false;
 
     ray_tracing_runtime_mesh_asset_set_init(&set);
@@ -313,6 +354,321 @@ static int test_mesh_blas_cache_builds_once_for_repeated_instances(void) {
     assert_true("mrt3_tlas_repeated_instances_nodes", stats.tlasNodeCount == 3u);
     assert_true("mrt3_tlas_repeated_instances_rebuild", stats.tlasRebuilds == 1u);
     assert_true("mrt3_tlas_repeated_instances_refits", stats.tlasRefits == 0u);
+    {
+        RuntimeMeshBLASCache3DView blas_view;
+        HitInfo3D flat_hit = {0};
+        HitInfo3D accel_hit = {0};
+        HitInfo3D route_hit = {0};
+        Ray3D ray = RuntimeRay3D_Make(vec3(1.25, 0.25, -1.0),
+                                      vec3(0.0, 0.0, 1.0));
+        RuntimeSceneAcceleration3DTraceStatus trace_status;
+        RuntimeRay3DRouteStats route_stats;
+        bool flat_found = false;
+        bool route_found = false;
+
+        assert_true("mrt3_blas_lookup_repeated_asset",
+                    RuntimeMeshBLASCache3D_FindAsset(&set.assets[0], &blas_view));
+        assert_true("mrt3_blas_lookup_repeated_ready", blas_view.ready);
+        assert_true("mrt3_blas_lookup_repeated_triangle_count",
+                    blas_view.localMesh && blas_view.localMesh->triangleCount == 1);
+
+        RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH);
+        flat_found = RuntimeRay3D_TraceSceneFirstHit(&scene,
+                                                     &ray,
+                                                     0.001,
+                                                     10.0,
+                                                     &flat_hit);
+        RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS);
+        RuntimeRay3D_ResetRouteStats();
+        RuntimeSceneAcceleration3D_ResetTraceStats();
+        trace_status = RuntimeSceneAcceleration3D_TraceFirstHit(&scene,
+                                                                &ray,
+                                                                0.001,
+                                                                10.0,
+                                                                &accel_hit);
+        assert_true("mrt3_accel_repeated_flat_hit", flat_found);
+        assert_true("mrt3_accel_repeated_trace_hit",
+                    trace_status == RUNTIME_SCENE_ACCEL_3D_TRACE_HIT);
+        if (flat_found && trace_status == RUNTIME_SCENE_ACCEL_3D_TRACE_HIT) {
+            assert_hit_identity_matches("mrt3_accel_repeated_identity",
+                                        &flat_hit,
+                                        &accel_hit);
+            assert_true("mrt3_accel_repeated_second_object",
+                        accel_hit.sceneObjectIndex == 21);
+        }
+        RuntimeSceneAcceleration3D_SnapshotTraceStats(&trace_stats);
+        assert_true("mrt3_accel_repeated_trace_calls", trace_stats.traceCalls == 1u);
+        assert_true("mrt3_accel_repeated_trace_hits", trace_stats.traceHits == 1u);
+        assert_true("mrt3_accel_repeated_blas_calls", trace_stats.blasTraceCalls > 0u);
+        assert_true("mrt3_accel_repeated_blas_hits", trace_stats.blasTraceHits == 1u);
+        assert_true("mrt3_accel_repeated_remap_map_hit",
+                    trace_stats.identityRemapMapHits == 1u);
+        assert_true("mrt3_accel_repeated_no_remap_scan",
+                    trace_stats.identityRemapFallbackScans == 0u);
+        assert_true("mrt3_accel_repeated_remap_ok",
+                    trace_stats.identityRemapFailures == 0u);
+
+        RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS_PARITY);
+        RuntimeRay3D_ResetRouteStats();
+        route_found = RuntimeRay3D_TraceSceneFirstHit(&scene,
+                                                      &ray,
+                                                      0.001,
+                                                      10.0,
+                                                      &route_hit);
+        assert_true("mrt3_route_parity_hit", route_found);
+        if (route_found && flat_found) {
+            assert_hit_identity_matches("mrt3_route_parity_identity",
+                                        &flat_hit,
+                                        &route_hit);
+        }
+        RuntimeRay3D_SnapshotRouteStats(&route_stats);
+        assert_true("mrt3_route_parity_active",
+                    route_stats.activeRoute ==
+                        RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS_PARITY);
+        assert_true("mrt3_route_parity_checked", route_stats.parityCheckedRays == 1u);
+        assert_true("mrt3_route_parity_no_mismatch", route_stats.parityMismatches == 0u);
+        assert_true("mrt3_route_parity_tlas_call", route_stats.tlasTraceCalls == 1u);
+        assert_true("mrt3_route_parity_flattened_call",
+                    route_stats.flattenedTraceCalls == 1u);
+
+        HitInfo3D_Reset(&route_hit);
+        RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS);
+        RuntimeRay3D_ResetRouteStats();
+        route_found = RuntimeRay3D_TraceSceneFirstHit(&scene,
+                                                      &ray,
+                                                      0.001,
+                                                      10.0,
+                                                      &route_hit);
+        assert_true("mrt3_route_tlas_hit", route_found);
+        if (route_found && flat_found) {
+            assert_hit_identity_matches("mrt3_route_tlas_identity",
+                                        &flat_hit,
+                                        &route_hit);
+        }
+        RuntimeRay3D_SnapshotRouteStats(&route_stats);
+        assert_true("mrt3_route_tlas_active",
+                    route_stats.activeRoute == RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS);
+        assert_true("mrt3_route_tlas_trace_call", route_stats.tlasTraceCalls == 1u);
+        assert_true("mrt3_route_tlas_hit_count", route_stats.tlasTraceHits == 1u);
+        assert_true("mrt3_route_tlas_no_fallback",
+                    route_stats.flattenedFallbackCalls == 0u);
+        RuntimeRay3D_ResetTraceRouteForTests();
+        RuntimeRay3D_ResetRouteStats();
+    }
+
+    RuntimeScene3D_Free(&scene);
+    ray_tracing_runtime_mesh_asset_set_free(&set);
+    RuntimeMeshBLASCache3D_ResetForTests();
+    RuntimeSceneAcceleration3D_ResetTLASForTests();
+    return 0;
+}
+
+static int test_tlas_route_traces_mixed_supported_and_primitive_instances(void) {
+    RayTracingRuntimeMeshAssetSet set;
+    RuntimeScene3D scene;
+    CoreMeshAssetRuntimeDocument* document = NULL;
+    RuntimePrimitive3D* primitives = NULL;
+    RuntimeTriangle3D* triangles = NULL;
+    RuntimeSceneAcceleration3DTraceStatus trace_status;
+    RuntimeRay3DRouteStats route_stats;
+    HitInfo3D accel_hit = {0};
+    HitInfo3D route_hit = {0};
+    Ray3D ray = RuntimeRay3D_Make(vec3(0.75, 0.75, -1.0), vec3(0.0, 0.0, 1.0));
+    Ray3D closer_primitive_ray =
+        RuntimeRay3D_Make(vec3(0.25, 0.25, -1.0), vec3(0.0, 0.0, 1.0));
+    const int primitive_plane_index = 1;
+    const int primitive_triangle_index = 1;
+    bool ok = false;
+    bool route_found = false;
+
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    RuntimeScene3D_Init(&scene);
+    RuntimeMeshBLASCache3D_ResetForTests();
+    RuntimeSceneAcceleration3D_ResetTLASForTests();
+
+    set.asset_count = 1;
+    snprintf(set.assets[0].asset_id, sizeof(set.assets[0].asset_id), "asset_mixed_triangle");
+    document = &set.assets[0].document;
+    core_mesh_asset_runtime_document_set_vertex_count(document, 3u);
+    core_mesh_asset_runtime_document_set_triangle_count(document, 1u);
+    document->vertices[0].position.x = 0.0;
+    document->vertices[0].position.y = 0.0;
+    document->vertices[0].position.z = 0.0;
+    document->vertices[1].position.x = 1.0;
+    document->vertices[1].position.y = 0.0;
+    document->vertices[1].position.z = 0.0;
+    document->vertices[2].position.x = 0.0;
+    document->vertices[2].position.y = 1.0;
+    document->vertices[2].position.z = 0.0;
+    document->triangles[0].a = 0u;
+    document->triangles[0].b = 1u;
+    document->triangles[0].c = 2u;
+
+    set.instance_count = 1;
+    snprintf(set.instances[0].object_id,
+             sizeof(set.instances[0].object_id),
+             "obj_mixed_supported_triangle");
+    snprintf(set.instances[0].asset_id,
+             sizeof(set.instances[0].asset_id),
+             "asset_mixed_triangle");
+    set.instances[0].asset_index = 0;
+    set.instances[0].scene_object_index = 30;
+    set.instances[0].scale_x = 1.0;
+    set.instances[0].scale_y = 1.0;
+    set.instances[0].scale_z = 1.0;
+
+    ok = RuntimeScene3DBuilder_AppendMeshAssetSet(&scene, &set);
+    assert_true("mrt3_mixed_tlas_append_supported_mesh", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        ray_tracing_runtime_mesh_asset_set_free(&set);
+        RuntimeMeshBLASCache3D_ResetForTests();
+        RuntimeSceneAcceleration3D_ResetTLASForTests();
+        return 0;
+    }
+
+    primitives = (RuntimePrimitive3D*)realloc(
+        scene.primitives,
+        (size_t)(scene.primitiveCount + 1) * sizeof(*scene.primitives));
+    assert_true("mrt3_mixed_tlas_realloc_primitives", primitives != NULL);
+    if (!primitives) {
+        RuntimeScene3D_Free(&scene);
+        ray_tracing_runtime_mesh_asset_set_free(&set);
+        RuntimeMeshBLASCache3D_ResetForTests();
+        RuntimeSceneAcceleration3D_ResetTLASForTests();
+        return 0;
+    }
+    scene.primitives = primitives;
+    triangles = (RuntimeTriangle3D*)realloc(
+        scene.triangleMesh.triangles,
+        (size_t)(scene.triangleMesh.triangleCount + 1) *
+            sizeof(*scene.triangleMesh.triangles));
+    assert_true("mrt3_mixed_tlas_realloc_triangles", triangles != NULL);
+    if (!triangles) {
+        RuntimeScene3D_Free(&scene);
+        ray_tracing_runtime_mesh_asset_set_free(&set);
+        RuntimeMeshBLASCache3D_ResetForTests();
+        RuntimeSceneAcceleration3D_ResetTLASForTests();
+        return 0;
+    }
+    scene.triangleMesh.triangles = triangles;
+    scene.primitiveCapacity = scene.primitiveCount + 1;
+    scene.triangleMesh.triangleCapacity = scene.triangleMesh.triangleCount + 1;
+
+    memset(&scene.primitives[primitive_plane_index],
+           0,
+           sizeof(scene.primitives[primitive_plane_index]));
+    scene.primitives[primitive_plane_index].kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene.primitives[primitive_plane_index].source.kind =
+        RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene.primitives[primitive_plane_index].source.sceneObjectIndex = 77;
+    snprintf(scene.primitives[primitive_plane_index].source.objectId,
+             sizeof(scene.primitives[primitive_plane_index].source.objectId),
+             "obj_mixed_primitive_plane");
+
+    memset(&scene.triangleMesh.triangles[primitive_triangle_index],
+           0,
+           sizeof(scene.triangleMesh.triangles[primitive_triangle_index]));
+    scene.triangleMesh.triangles[primitive_triangle_index].p0 = vec3(0.0, 0.0, -0.5);
+    scene.triangleMesh.triangles[primitive_triangle_index].p1 = vec3(1.5, 0.0, -0.5);
+    scene.triangleMesh.triangles[primitive_triangle_index].p2 = vec3(0.0, 1.5, -0.5);
+    scene.triangleMesh.triangles[primitive_triangle_index].normal = vec3(0.0, 0.0, 1.0);
+    scene.triangleMesh.triangles[primitive_triangle_index].primitiveIndex =
+        primitive_plane_index;
+    scene.triangleMesh.triangles[primitive_triangle_index].sceneObjectIndex = 77;
+    scene.triangleMesh.triangles[primitive_triangle_index].localTriangleIndex = 0;
+    scene.primitiveCount += 1;
+    scene.triangleMesh.triangleCount += 1;
+    scene.triangleMesh.bvhDirty = true;
+
+    ok = RuntimeSceneAcceleration3D_RebuildPreparedFromSceneAndMeshAssets(&scene, &set);
+    assert_true("mrt3_mixed_tlas_rebuild_prepared", ok);
+    if (ok) {
+        RuntimeSceneAcceleration3D_ResetTraceStats();
+        trace_status = RuntimeSceneAcceleration3D_TraceFirstHit(&scene,
+                                                                &ray,
+                                                                0.001,
+                                                                10.0,
+                                                                &accel_hit);
+        assert_true("mrt3_mixed_tlas_traces_primitive_for_incomplete_miss",
+                    trace_status == RUNTIME_SCENE_ACCEL_3D_TRACE_HIT);
+        if (trace_status == RUNTIME_SCENE_ACCEL_3D_TRACE_HIT) {
+            assert_true("mrt3_mixed_tlas_primitive_object",
+                        accel_hit.sceneObjectIndex == 77);
+            assert_true("mrt3_mixed_tlas_primitive_index",
+                        accel_hit.primitiveIndex == primitive_plane_index);
+        }
+
+        RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS);
+        RuntimeRay3D_ResetRouteStats();
+        route_found = RuntimeRay3D_TraceSceneFirstHit(&scene,
+                                                      &ray,
+                                                      0.001,
+                                                      10.0,
+                                                      &route_hit);
+        assert_true("mrt3_mixed_tlas_route_primitive_hit", route_found);
+        if (route_found) {
+            assert_true("mrt3_mixed_tlas_route_primitive_object",
+                        route_hit.sceneObjectIndex == 77);
+            assert_true("mrt3_mixed_tlas_route_primitive_index",
+                        route_hit.primitiveIndex == primitive_plane_index);
+        }
+        RuntimeRay3D_SnapshotRouteStats(&route_stats);
+        assert_true("mrt3_mixed_tlas_route_no_unsupported",
+                    route_stats.tlasTraceUnsupported == 0u);
+        assert_true("mrt3_mixed_tlas_route_no_fallback",
+                    route_stats.flattenedFallbackCalls == 0u);
+        assert_true("mrt3_mixed_tlas_route_no_flattened",
+                    route_stats.flattenedTraceCalls == 0u);
+        RuntimeRay3D_ResetTraceRouteForTests();
+        RuntimeRay3D_ResetRouteStats();
+
+        HitInfo3D_Reset(&accel_hit);
+        HitInfo3D_Reset(&route_hit);
+        RuntimeSceneAcceleration3D_ResetTraceStats();
+        trace_status =
+            RuntimeSceneAcceleration3D_TraceFirstHit(&scene,
+                                                    &closer_primitive_ray,
+                                                    0.001,
+                                                    10.0,
+                                                    &accel_hit);
+        assert_true("mrt3_mixed_tlas_traces_primitive_before_far_blas_hit",
+                    trace_status == RUNTIME_SCENE_ACCEL_3D_TRACE_HIT);
+        if (trace_status == RUNTIME_SCENE_ACCEL_3D_TRACE_HIT) {
+            assert_true("mrt3_mixed_tlas_closer_primitive_object",
+                        accel_hit.sceneObjectIndex == 77);
+            assert_true("mrt3_mixed_tlas_closer_primitive_index",
+                        accel_hit.primitiveIndex == primitive_plane_index);
+            assert_true("mrt3_mixed_tlas_closer_primitive_before_supported",
+                        accel_hit.t < 1.0);
+        }
+
+        RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS);
+        RuntimeRay3D_ResetRouteStats();
+        route_found = RuntimeRay3D_TraceSceneFirstHit(&scene,
+                                                      &closer_primitive_ray,
+                                                      0.001,
+                                                      10.0,
+                                                      &route_hit);
+        assert_true("mrt3_mixed_tlas_route_closer_primitive_hit", route_found);
+        if (route_found) {
+            assert_true("mrt3_mixed_tlas_route_closer_primitive_object",
+                        route_hit.sceneObjectIndex == 77);
+            assert_true("mrt3_mixed_tlas_route_closer_primitive_index",
+                        route_hit.primitiveIndex == primitive_plane_index);
+            assert_true("mrt3_mixed_tlas_route_closer_primitive_before_supported",
+                        route_hit.t < 1.0);
+        }
+        RuntimeRay3D_SnapshotRouteStats(&route_stats);
+        assert_true("mrt3_mixed_tlas_route_closer_no_unsupported",
+                    route_stats.tlasTraceUnsupported == 0u);
+        assert_true("mrt3_mixed_tlas_route_closer_no_fallback",
+                    route_stats.flattenedFallbackCalls == 0u);
+        assert_true("mrt3_mixed_tlas_route_closer_no_flattened",
+                    route_stats.flattenedTraceCalls == 0u);
+        RuntimeRay3D_ResetTraceRouteForTests();
+        RuntimeRay3D_ResetRouteStats();
+    }
 
     RuntimeScene3D_Free(&scene);
     ray_tracing_runtime_mesh_asset_set_free(&set);
@@ -325,10 +681,13 @@ static int test_append_mesh_asset_set_skips_degenerate_triangles(void) {
     RayTracingRuntimeMeshAssetSet set;
     RuntimeScene3D scene;
     CoreMeshAssetRuntimeDocument* document = NULL;
+    RuntimeSceneAcceleration3DTraceStats trace_stats;
     bool ok = false;
 
     ray_tracing_runtime_mesh_asset_set_init(&set);
     RuntimeScene3D_Init(&scene);
+    RuntimeMeshBLASCache3D_ResetForTests();
+    RuntimeSceneAcceleration3D_ResetTLASForTests();
 
     set.asset_count = 1;
     snprintf(set.assets[0].asset_id, sizeof(set.assets[0].asset_id), "asset_degenerate_mix");
@@ -371,14 +730,43 @@ static int test_append_mesh_asset_set_skips_degenerate_triangles(void) {
     assert_true("mrt3_append_degenerate_mix_triangle_count",
                 scene.triangleMesh.triangleCount == 1);
     if (scene.triangleMesh.triangleCount == 1) {
+        HitInfo3D accel_hit = {0};
+        Ray3D ray = RuntimeRay3D_Make(vec3(0.25, 0.25, -1.0),
+                                      vec3(0.0, 0.0, 1.0));
+        RuntimeSceneAcceleration3DTraceStatus trace_status;
+
         assert_true("mrt3_append_degenerate_mix_local_triangle_index",
                     scene.triangleMesh.triangles[0].localTriangleIndex == 1);
         assert_true("mrt3_append_degenerate_mix_scene_object_index",
                     scene.triangleMesh.triangles[0].sceneObjectIndex == 7);
+
+        RuntimeSceneAcceleration3D_ResetTraceStats();
+        trace_status = RuntimeSceneAcceleration3D_TraceFirstHit(&scene,
+                                                                &ray,
+                                                                0.001,
+                                                                10.0,
+                                                                &accel_hit);
+        assert_true("mrt3_append_degenerate_mix_tlas_hit",
+                    trace_status == RUNTIME_SCENE_ACCEL_3D_TRACE_HIT);
+        if (trace_status == RUNTIME_SCENE_ACCEL_3D_TRACE_HIT) {
+            assert_true("mrt3_append_degenerate_mix_hit_triangle",
+                        accel_hit.triangleIndex == 0);
+            assert_true("mrt3_append_degenerate_mix_hit_local_triangle",
+                        accel_hit.localTriangleIndex == 1);
+        }
+        RuntimeSceneAcceleration3D_SnapshotTraceStats(&trace_stats);
+        assert_true("mrt3_append_degenerate_mix_remap_map_hit",
+                    trace_stats.identityRemapMapHits == 1u);
+        assert_true("mrt3_append_degenerate_mix_no_remap_scan",
+                    trace_stats.identityRemapFallbackScans == 0u);
+        assert_true("mrt3_append_degenerate_mix_no_remap_failure",
+                    trace_stats.identityRemapFailures == 0u);
     }
 
     RuntimeScene3D_Free(&scene);
     ray_tracing_runtime_mesh_asset_set_free(&set);
+    RuntimeMeshBLASCache3D_ResetForTests();
+    RuntimeSceneAcceleration3D_ResetTLASForTests();
     return 0;
 }
 
@@ -411,6 +799,7 @@ int main(void) {
     test_append_mesh_asset_set_preserves_scene_object_lookup();
     test_mesh_blas_cache_reuses_loaded_assets();
     test_mesh_blas_cache_builds_once_for_repeated_instances();
+    test_tlas_route_traces_mixed_supported_and_primitive_instances();
     test_append_mesh_asset_set_skips_degenerate_triangles();
     test_bridge_builder_consumes_retained_mesh_assets();
     return g_failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;

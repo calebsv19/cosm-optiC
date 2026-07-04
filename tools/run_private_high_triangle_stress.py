@@ -175,6 +175,7 @@ def build_report(
     frame_path = run_root / "frames/frame_0000.bmp"
     summary = load_json(summary_path) if summary_path.exists() else {}
     bvh = summary.get("bvh_summary", {}) if isinstance(summary, dict) else {}
+    accel = summary.get("prepared_acceleration", {}) if isinstance(summary, dict) else {}
     asset_id = str(import_summary.get("asset_id", runtime_asset.get("asset_id", "")))
     primary_hits, audit_triangles, audit_object_id = first_object_hit(summary, asset_id)
 
@@ -183,6 +184,13 @@ def build_report(
     trace_overflows = int(bvh.get("trace_overflows", 0) or 0)
     overflow_fallbacks = int(bvh.get("overflow_fallback_calls", 0) or 0)
     flat_fallbacks = int(bvh.get("flat_fallback_calls", 0) or 0)
+    active_trace_route = str(accel.get("active_trace_route", ""))
+    requested_trace_route = str(accel.get("requested_trace_route", ""))
+    route_trace_calls = int(accel.get("route_trace_calls", 0) or 0)
+    route_tlas_trace_calls = int(accel.get("route_tlas_trace_calls", 0) or 0)
+    route_tlas_trace_hits = int(accel.get("route_tlas_trace_hits", 0) or 0)
+    route_flattened_fallback_calls = int(accel.get("route_flattened_fallback_calls", 0) or 0)
+    route_parity_mismatches = int(accel.get("route_parity_mismatches", 0) or 0)
     frame_valid = frame_path.exists() and has_bmp_header(frame_path)
     pass_status = bool(
         returncode == 0
@@ -194,6 +202,12 @@ def build_report(
         and trace_overflows == 0
         and overflow_fallbacks == 0
         and flat_fallbacks == 0
+        and active_trace_route == "tlas_blas"
+        and requested_trace_route == "tlas_blas"
+        and route_trace_calls > 0
+        and route_tlas_trace_calls == route_trace_calls
+        and route_tlas_trace_hits > 0
+        and route_parity_mismatches == 0
         and primary_hits > 0
         and frame_valid
     )
@@ -244,6 +258,23 @@ def build_report(
             "flat_fallback_calls": flat_fallbacks,
             "overflow_fallback_calls": overflow_fallbacks,
             "triangle_tests": bvh.get("triangle_tests", 0),
+            "prepared_acceleration_enabled": accel.get("enabled", False),
+            "prepared_accel_reuse_status": accel.get("prepared_accel_reuse_status", ""),
+            "blas_prepare_calls": accel.get("blas_prepare_calls", 0),
+            "blas_cache_hits": accel.get("blas_cache_hits", 0),
+            "blas_cache_misses": accel.get("blas_cache_misses", 0),
+            "blas_full_rebuilds": accel.get("blas_full_rebuilds", 0),
+            "blas_cached_asset_count": accel.get("blas_cached_asset_count", 0),
+            "tlas_node_count": accel.get("tlas_node_count", 0),
+            "tlas_instance_count": accel.get("tlas_instance_count", 0),
+            "tlas_rebuilds": accel.get("tlas_rebuilds", 0),
+            "active_trace_route": active_trace_route,
+            "requested_trace_route": requested_trace_route,
+            "route_trace_calls": route_trace_calls,
+            "route_tlas_trace_calls": route_tlas_trace_calls,
+            "route_tlas_trace_hits": route_tlas_trace_hits,
+            "route_flattened_fallback_calls": route_flattened_fallback_calls,
+            "route_parity_mismatches": route_parity_mismatches,
             "primary_hit_pixels": primary_hits,
             "object_audit_triangle_count": audit_triangles,
             "object_audit_object_id": audit_object_id,

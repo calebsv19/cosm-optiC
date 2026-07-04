@@ -39,6 +39,10 @@ grep -q '"light_count": 2' "$SUMMARY"
 grep -q '"enabled_count": 2' "$SUMMARY"
 grep -q '"shape_counts": { "point": 0, "sphere": 1, "disk": 0, "rect": 1, "mesh_emissive": 0 }' "$SUMMARY"
 grep -q '"source_counts": { "authored": 0, "compatibility": 1, "material_emitter": 1 }' "$SUMMARY"
+grep -q '"active_trace_route": "tlas_blas"' "$SUMMARY"
+grep -q '"requested_trace_route": "tlas_blas"' "$SUMMARY"
+grep -q '"route_trace_calls": 0' "$SUMMARY"
+grep -q '"route_parity_mismatches": 0' "$SUMMARY"
 
 expect_preflight_reject() {
   local label="$1"

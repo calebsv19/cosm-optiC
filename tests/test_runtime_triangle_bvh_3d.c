@@ -319,10 +319,38 @@ static void test_bvh_reports_nonfinite_centroid(void) {
     RuntimeScene3D_Free(&scene);
 }
 
+static void test_parity_route_reports_unready_accel_mismatch(void) {
+    RuntimeScene3D scene;
+    Ray3D ray;
+    HitInfo3D hit = {0};
+    RuntimeRay3DRouteStats route_stats = {0};
+    bool found = false;
+
+    RuntimeScene3D_Init(&scene);
+    assert_true("route_parity_unready_build_scene", build_test_scene(&scene));
+    ray = RuntimeRay3D_Make(vec3(-0.5, 0.0, 1.0), vec3(0.0, 1.0, 0.0));
+
+    RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS_PARITY);
+    RuntimeRay3D_ResetRouteStats();
+    found = RuntimeRay3D_TraceSceneFirstHit(&scene, &ray, 0.001, 100.0, &hit);
+    assert_true("route_parity_unready_returns_flattened_hit", found);
+    RuntimeRay3D_SnapshotRouteStats(&route_stats);
+    assert_true("route_parity_unready_checked", route_stats.parityCheckedRays == 1u);
+    assert_true("route_parity_unready_mismatch", route_stats.parityMismatches == 1u);
+    assert_true("route_parity_unready_tlas_unready", route_stats.tlasTraceUnready == 1u);
+    assert_true("route_parity_unready_reason",
+                strcmp(route_stats.lastParityMismatchReason,
+                       "tlas_miss_flattened_hit") == 0);
+    RuntimeRay3D_ResetTraceRouteForTests();
+    RuntimeRay3D_ResetRouteStats();
+    RuntimeScene3D_Free(&scene);
+}
+
 int main(void) {
     test_bvh_matches_flat_trace();
     test_bvh_copy_preserves_trace_results();
     test_bvh_overflow_falls_back_to_flat_trace();
     test_bvh_reports_nonfinite_centroid();
+    test_parity_route_reports_unready_accel_mismatch();
     return g_failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
