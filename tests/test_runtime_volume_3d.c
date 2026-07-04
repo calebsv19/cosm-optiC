@@ -533,6 +533,20 @@ static int test_runtime_volume_3d_caustic_cache_lifts_density_without_direct_lig
                 scatter.causticContributingSampleCount > 0);
     assert_true("runtime_volume_3d_caustic_cache_radiance",
                 scatter.causticRadiance > 0.0);
+    assert_true("runtime_volume_3d_caustic_cache_sampled_radiance_sum",
+                scatter.causticSampledCacheRadianceSum > 0.0);
+    assert_true("runtime_volume_3d_caustic_cache_sampled_radiance_max",
+                scatter.causticSampledCacheRadianceMax > 0.0);
+    assert_true("runtime_volume_3d_caustic_cache_density_avg_source",
+                scatter.causticSampledRawDensitySum > 0.0);
+    assert_true("runtime_volume_3d_caustic_cache_density_avg_remap",
+                scatter.causticSampledDensitySum > 0.0);
+    assert_true("runtime_volume_3d_caustic_cache_probability",
+                scatter.causticScatterProbabilitySum > 0.0);
+    assert_true("runtime_volume_3d_caustic_cache_transmittance",
+                scatter.causticCameraTransmittanceSum > 0.0);
+    assert_true("runtime_volume_3d_caustic_cache_term",
+                scatter.causticVisibilityTermSum > 0.0);
     assert_close("runtime_volume_3d_caustic_cache_direct_r",
                  scatter.radianceR,
                  scatter.causticRadianceR,

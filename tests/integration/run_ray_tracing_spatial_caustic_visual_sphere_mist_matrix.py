@@ -631,6 +631,51 @@ def caustic_digest(summary: dict) -> dict:
             state.get("volume_scatter_caustic_to_direct_radiance_ratio",
                       safe_ratio(scatter_sum, direct_sum))
         ),
+        "volume_scatter_sampled_cache_radiance_avg": float(
+            state.get("volume_scatter_caustic_sampled_cache_radiance_avg", 0.0)
+        ),
+        "volume_scatter_sampled_cache_radiance_max": float(
+            state.get("volume_scatter_caustic_sampled_cache_radiance_max", 0.0)
+        ),
+        "volume_scatter_raw_density_avg": float(
+            state.get("volume_scatter_caustic_raw_density_avg", 0.0)
+        ),
+        "volume_scatter_density_avg": float(
+            state.get("volume_scatter_caustic_density_avg", 0.0)
+        ),
+        "volume_scatter_probability_avg": float(
+            state.get("volume_scatter_caustic_probability_avg", 0.0)
+        ),
+        "volume_scatter_probability_max": float(
+            state.get("volume_scatter_caustic_probability_max", 0.0)
+        ),
+        "volume_scatter_camera_transmittance_avg": float(
+            state.get("volume_scatter_caustic_camera_transmittance_avg", 0.0)
+        ),
+        "volume_scatter_camera_transmittance_min": float(
+            state.get("volume_scatter_caustic_camera_transmittance_min", 0.0)
+        ),
+        "volume_scatter_camera_transmittance_max": float(
+            state.get("volume_scatter_caustic_camera_transmittance_max", 0.0)
+        ),
+        "volume_scatter_visibility_term_avg": float(
+            state.get("volume_scatter_caustic_visibility_term_avg", 0.0)
+        ),
+        "volume_scatter_visibility_term_max": float(
+            state.get("volume_scatter_caustic_visibility_term_max", 0.0)
+        ),
+        "volume_scatter_contributing_pixel_count": int(
+            state.get("volume_scatter_caustic_contributing_pixel_count", 0)
+        ),
+        "volume_scatter_contributing_pixel_centroid": state.get(
+            "volume_scatter_caustic_contributing_pixel_centroid", {}
+        ),
+        "volume_scatter_contributing_pixel_bounds_min": state.get(
+            "volume_scatter_caustic_contributing_pixel_bounds_min", {}
+        ),
+        "volume_scatter_contributing_pixel_bounds_max": state.get(
+            "volume_scatter_caustic_contributing_pixel_bounds_max", {}
+        ),
         "surface_cache_requested": bool(state.get("surface_cache_requested", False)),
         "surface_receiver_fallback_enabled": bool(state.get("surface_receiver_fallback_enabled", True)),
         "surface_receiver_fallback_count": int(state.get("transport_surface_receiver_fallback_count", 0)),
@@ -688,6 +733,19 @@ def validate_cell(cell_id: str, digest: dict) -> list[str]:
             failures.append("combined cell did not expand volume-cache deposits across footprint cells")
         if not 0.99 <= digest["volume_cache_footprint_deposited_to_input_ratio"] <= 1.01:
             failures.append("combined cell footprint deposit energy is not normalized")
+        if digest["volume_scatter_contributing_samples"] > 0:
+            if digest["volume_scatter_sampled_cache_radiance_avg"] <= 0.0:
+                failures.append("combined cell did not report sampled cache radiance diagnostics")
+            if digest["volume_scatter_density_avg"] <= 0.0:
+                failures.append("combined cell did not report density diagnostics for caustic scatter")
+            if digest["volume_scatter_probability_avg"] <= 0.0:
+                failures.append("combined cell did not report scatter probability diagnostics")
+            if digest["volume_scatter_camera_transmittance_avg"] <= 0.0:
+                failures.append("combined cell did not report camera transmittance diagnostics")
+            if digest["volume_scatter_visibility_term_avg"] <= 0.0:
+                failures.append("combined cell did not report final visibility-term diagnostics")
+            if digest["volume_scatter_contributing_pixel_count"] <= 0:
+                failures.append("combined cell did not report contributing screen-space pixels")
     return failures
 
 
@@ -781,6 +839,11 @@ def write_index(path: Path, report: dict) -> None:
             f"volume scatter contrib `{digest['volume_scatter_contributing_samples']}`, "
             f"volume radiance `{digest['volume_scatter_radiance_sum']:.4f}`, "
             f"scatter/cache `{digest['volume_scatter_to_cache_radiance_ratio']:.9f}`, "
+            f"sampled cache avg `{digest['volume_scatter_sampled_cache_radiance_avg']:.6f}`, "
+            f"density avg `{digest['volume_scatter_density_avg']:.6f}`, "
+            f"prob avg `{digest['volume_scatter_probability_avg']:.9f}`, "
+            f"term avg `{digest['volume_scatter_visibility_term_avg']:.9f}`, "
+            f"scatter pixels `{digest['volume_scatter_contributing_pixel_count']}`, "
             f"fallback `{digest['surface_receiver_fallback_enabled']}`/"
             f"`{digest['surface_receiver_fallback_count']}`, PNG `{png_text}`"
         )

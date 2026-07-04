@@ -771,6 +771,10 @@ void ray_tracing_render_headless_write_summary(
                 preflight->stats.totalCausticVolumeScatterRadianceG,
                 preflight->stats.totalCausticVolumeScatterRadianceB);
         {
+            const double caustic_samples =
+                (double)preflight->stats.causticVolumeScatterContributingSampleCount;
+            const double caustic_pixels =
+                (double)preflight->stats.causticVolumeScatterContributingPixelCount;
             const double cache_sum = ray_tracing_headless_rgb_sum(
                 preflight->stats.totalCausticVolumeCacheRadianceR,
                 preflight->stats.totalCausticVolumeCacheRadianceG,
@@ -811,6 +815,64 @@ void ray_tracing_render_headless_write_summary(
             fprintf(file,
                     "      \"volume_scatter_caustic_to_direct_radiance_ratio\": %.9f,\n",
                     ray_tracing_headless_safe_ratio(scatter_sum, direct_sum));
+            fprintf(file, "      \"volume_scatter_caustic_sampled_cache_radiance_sum\": %.9f,\n",
+                    preflight->stats.totalCausticVolumeScatterSampledCacheRadiance);
+            fprintf(file, "      \"volume_scatter_caustic_sampled_cache_radiance_avg\": %.9f,\n",
+                    ray_tracing_headless_safe_ratio(
+                        preflight->stats.totalCausticVolumeScatterSampledCacheRadiance,
+                        caustic_samples));
+            fprintf(file, "      \"volume_scatter_caustic_sampled_cache_radiance_max\": %.9f,\n",
+                    preflight->stats.maxCausticVolumeScatterSampledCacheRadiance);
+            fprintf(file, "      \"volume_scatter_caustic_raw_density_avg\": %.9f,\n",
+                    ray_tracing_headless_safe_ratio(
+                        preflight->stats.totalCausticVolumeScatterSampledRawDensity,
+                        caustic_samples));
+            fprintf(file, "      \"volume_scatter_caustic_raw_density_max\": %.9f,\n",
+                    preflight->stats.maxCausticVolumeScatterSampledRawDensity);
+            fprintf(file, "      \"volume_scatter_caustic_density_avg\": %.9f,\n",
+                    ray_tracing_headless_safe_ratio(
+                        preflight->stats.totalCausticVolumeScatterSampledDensity,
+                        caustic_samples));
+            fprintf(file, "      \"volume_scatter_caustic_density_max\": %.9f,\n",
+                    preflight->stats.maxCausticVolumeScatterSampledDensity);
+            fprintf(file, "      \"volume_scatter_caustic_probability_avg\": %.9f,\n",
+                    ray_tracing_headless_safe_ratio(
+                        preflight->stats.totalCausticVolumeScatterProbability,
+                        caustic_samples));
+            fprintf(file, "      \"volume_scatter_caustic_probability_max\": %.9f,\n",
+                    preflight->stats.maxCausticVolumeScatterProbability);
+            fprintf(file, "      \"volume_scatter_caustic_camera_transmittance_avg\": %.9f,\n",
+                    ray_tracing_headless_safe_ratio(
+                        preflight->stats.totalCausticVolumeScatterCameraTransmittance,
+                        caustic_samples));
+            fprintf(file, "      \"volume_scatter_caustic_camera_transmittance_min\": %.9f,\n",
+                    preflight->stats.minCausticVolumeScatterCameraTransmittance);
+            fprintf(file, "      \"volume_scatter_caustic_camera_transmittance_max\": %.9f,\n",
+                    preflight->stats.maxCausticVolumeScatterCameraTransmittance);
+            fprintf(file, "      \"volume_scatter_caustic_visibility_term_avg\": %.9f,\n",
+                    ray_tracing_headless_safe_ratio(
+                        preflight->stats.totalCausticVolumeScatterVisibilityTerm,
+                        caustic_samples));
+            fprintf(file, "      \"volume_scatter_caustic_visibility_term_max\": %.9f,\n",
+                    preflight->stats.maxCausticVolumeScatterVisibilityTerm);
+            fprintf(file, "      \"volume_scatter_caustic_contributing_pixel_count\": %d,\n",
+                    preflight->stats.causticVolumeScatterContributingPixelCount);
+            fprintf(file,
+                    "      \"volume_scatter_caustic_contributing_pixel_centroid\": { \"x\": %.9f, \"y\": %.9f },\n",
+                    ray_tracing_headless_safe_ratio(
+                        preflight->stats.totalCausticVolumeScatterPixelX,
+                        caustic_pixels),
+                    ray_tracing_headless_safe_ratio(
+                        preflight->stats.totalCausticVolumeScatterPixelY,
+                        caustic_pixels));
+            fprintf(file,
+                    "      \"volume_scatter_caustic_contributing_pixel_bounds_min\": { \"x\": %d, \"y\": %d },\n",
+                    preflight->stats.causticVolumeScatterPixelMinX,
+                    preflight->stats.causticVolumeScatterPixelMinY);
+            fprintf(file,
+                    "      \"volume_scatter_caustic_contributing_pixel_bounds_max\": { \"x\": %d, \"y\": %d },\n",
+                    preflight->stats.causticVolumeScatterPixelMaxX,
+                    preflight->stats.causticVolumeScatterPixelMaxY);
         }
         fprintf(file, "      \"sample_budget\": %d,\n",
                 request->caustic_settings.sampleBudget);
@@ -1243,6 +1305,10 @@ void ray_tracing_render_headless_write_summary(
             preflight->stats.totalCausticVolumeScatterRadianceG,
             preflight->stats.totalCausticVolumeScatterRadianceB);
     {
+        const double caustic_samples =
+            (double)preflight->stats.causticVolumeScatterContributingSampleCount;
+        const double caustic_pixels =
+            (double)preflight->stats.causticVolumeScatterContributingPixelCount;
         const double cache_sum = ray_tracing_headless_rgb_sum(
             preflight->stats.totalCausticVolumeCacheRadianceR,
             preflight->stats.totalCausticVolumeCacheRadianceG,
@@ -1283,6 +1349,64 @@ void ray_tracing_render_headless_write_summary(
         fprintf(file,
                 "    \"caustic_volume_scatter_to_direct_radiance_ratio\": %.9f,\n",
                 ray_tracing_headless_safe_ratio(scatter_sum, direct_sum));
+        fprintf(file, "    \"caustic_volume_scatter_sampled_cache_radiance_sum\": %.9f,\n",
+                preflight->stats.totalCausticVolumeScatterSampledCacheRadiance);
+        fprintf(file, "    \"caustic_volume_scatter_sampled_cache_radiance_avg\": %.9f,\n",
+                ray_tracing_headless_safe_ratio(
+                    preflight->stats.totalCausticVolumeScatterSampledCacheRadiance,
+                    caustic_samples));
+        fprintf(file, "    \"caustic_volume_scatter_sampled_cache_radiance_max\": %.9f,\n",
+                preflight->stats.maxCausticVolumeScatterSampledCacheRadiance);
+        fprintf(file, "    \"caustic_volume_scatter_raw_density_avg\": %.9f,\n",
+                ray_tracing_headless_safe_ratio(
+                    preflight->stats.totalCausticVolumeScatterSampledRawDensity,
+                    caustic_samples));
+        fprintf(file, "    \"caustic_volume_scatter_raw_density_max\": %.9f,\n",
+                preflight->stats.maxCausticVolumeScatterSampledRawDensity);
+        fprintf(file, "    \"caustic_volume_scatter_density_avg\": %.9f,\n",
+                ray_tracing_headless_safe_ratio(
+                    preflight->stats.totalCausticVolumeScatterSampledDensity,
+                    caustic_samples));
+        fprintf(file, "    \"caustic_volume_scatter_density_max\": %.9f,\n",
+                preflight->stats.maxCausticVolumeScatterSampledDensity);
+        fprintf(file, "    \"caustic_volume_scatter_probability_avg\": %.9f,\n",
+                ray_tracing_headless_safe_ratio(
+                    preflight->stats.totalCausticVolumeScatterProbability,
+                    caustic_samples));
+        fprintf(file, "    \"caustic_volume_scatter_probability_max\": %.9f,\n",
+                preflight->stats.maxCausticVolumeScatterProbability);
+        fprintf(file, "    \"caustic_volume_scatter_camera_transmittance_avg\": %.9f,\n",
+                ray_tracing_headless_safe_ratio(
+                    preflight->stats.totalCausticVolumeScatterCameraTransmittance,
+                    caustic_samples));
+        fprintf(file, "    \"caustic_volume_scatter_camera_transmittance_min\": %.9f,\n",
+                preflight->stats.minCausticVolumeScatterCameraTransmittance);
+        fprintf(file, "    \"caustic_volume_scatter_camera_transmittance_max\": %.9f,\n",
+                preflight->stats.maxCausticVolumeScatterCameraTransmittance);
+        fprintf(file, "    \"caustic_volume_scatter_visibility_term_avg\": %.9f,\n",
+                ray_tracing_headless_safe_ratio(
+                    preflight->stats.totalCausticVolumeScatterVisibilityTerm,
+                    caustic_samples));
+        fprintf(file, "    \"caustic_volume_scatter_visibility_term_max\": %.9f,\n",
+                preflight->stats.maxCausticVolumeScatterVisibilityTerm);
+        fprintf(file, "    \"caustic_volume_scatter_contributing_pixel_count\": %d,\n",
+                preflight->stats.causticVolumeScatterContributingPixelCount);
+        fprintf(file,
+                "    \"caustic_volume_scatter_contributing_pixel_centroid\": { \"x\": %.9f, \"y\": %.9f },\n",
+                ray_tracing_headless_safe_ratio(
+                    preflight->stats.totalCausticVolumeScatterPixelX,
+                    caustic_pixels),
+                ray_tracing_headless_safe_ratio(
+                    preflight->stats.totalCausticVolumeScatterPixelY,
+                    caustic_pixels));
+        fprintf(file,
+                "    \"caustic_volume_scatter_contributing_pixel_bounds_min\": { \"x\": %d, \"y\": %d },\n",
+                preflight->stats.causticVolumeScatterPixelMinX,
+                preflight->stats.causticVolumeScatterPixelMinY);
+        fprintf(file,
+                "    \"caustic_volume_scatter_contributing_pixel_bounds_max\": { \"x\": %d, \"y\": %d },\n",
+                preflight->stats.causticVolumeScatterPixelMaxX,
+                preflight->stats.causticVolumeScatterPixelMaxY);
     }
     fprintf(file, "    \"mirror_dominant_pixels\": %d,\n",
             preflight->stats.mirrorDominantPixelCount);
