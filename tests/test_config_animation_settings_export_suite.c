@@ -205,6 +205,117 @@ static int test_agent_render_request_disney_v2_caustic_mode_off_roundtrip(void) 
     return 0;
 }
 
+static int test_agent_render_request_spatial_caustic_cache_phase0_contract(void) {
+    char request_path[PATH_MAX];
+    char diagnostics[256];
+    RayTracingAgentRenderRequest request;
+    RuntimeCausticReadback3D readback;
+    const char* json_text =
+        "{\n"
+        "  \"schema_version\": \"ray_tracing_agent_render_request_v1\",\n"
+        "  \"run_id\": \"spatial_caustic_cache_phase0_test\",\n"
+        "  \"scene\": {\"runtime_scene_path\": \"scene_runtime.json\"},\n"
+        "  \"render\": {\"integrator_3d\": \"direct_light\"},\n"
+        "  \"inspection\": {\n"
+        "    \"caustic_mode\": \"spatial_cache\",\n"
+        "    \"caustic_volume_enabled\": true,\n"
+        "    \"caustic_surface_enabled\": true,\n"
+        "    \"caustic_sample_budget\": 4096,\n"
+        "    \"caustic_max_path_depth\": 5,\n"
+        "    \"caustic_debug_summary\": true\n"
+        "  }\n"
+        "}\n";
+
+    snprintf(request_path,
+             sizeof(request_path),
+             "%s",
+             "/tmp/ray_tracing_agent_render_spatial_caustic_cache_phase0_request.json");
+    assert_true("agent_render_spatial_caustic_phase0_request_write",
+                write_text_file(request_path, json_text));
+    assert_true("agent_render_spatial_caustic_phase0_request_load",
+                ray_tracing_agent_render_request_load_file(request_path,
+                                                           &request,
+                                                           diagnostics,
+                                                           sizeof(diagnostics)));
+    assert_true("agent_render_spatial_caustic_phase0_mode",
+                request.caustic_settings.mode == RUNTIME_CAUSTIC_MODE_SPATIAL_CACHE);
+    assert_true("agent_render_spatial_caustic_phase0_disney_sidecar_off",
+                request.caustic_mode == RUNTIME_DISNEY_V2_CAUSTIC_MODE_OFF);
+    assert_true("agent_render_spatial_caustic_phase0_sidecar_disabled",
+                !request.caustic_sidecar_enabled);
+    assert_true("agent_render_spatial_caustic_phase0_volume_requested",
+                request.caustic_settings.volumeCacheEnabled);
+    assert_true("agent_render_spatial_caustic_phase0_surface_requested",
+                request.caustic_settings.surfaceCacheEnabled);
+    assert_true("agent_render_spatial_caustic_phase0_sample_budget",
+                request.caustic_settings.sampleBudget == 4096);
+    assert_true("agent_render_spatial_caustic_phase0_path_depth",
+                request.caustic_settings.maxPathDepth == 5);
+    assert_true("agent_render_spatial_caustic_phase0_debug",
+                request.caustic_settings.debugSummaryEnabled);
+    readback = RuntimeCausticSettings3D_Phase0Readback(&request.caustic_settings,
+                                                       request.caustic_sidecar_enabled);
+    assert_true("agent_render_spatial_caustic_phase0_readback_volume",
+                readback.volumeCacheState ==
+                    RUNTIME_CAUSTIC_CACHE_STATE_REQUESTED_NOT_ALLOCATED);
+    assert_true("agent_render_spatial_caustic_phase0_readback_surface",
+                readback.surfaceCacheState ==
+                    RUNTIME_CAUSTIC_CACHE_STATE_REQUESTED_NOT_ALLOCATED);
+    assert_true("agent_render_spatial_caustic_phase0_readback_no_path",
+                !readback.pathEmissionActive);
+    unlink(request_path);
+    return 0;
+}
+
+static int test_agent_render_request_spatial_caustic_cache_phase3_combined_sidecar(void) {
+    char request_path[PATH_MAX];
+    char diagnostics[256];
+    RayTracingAgentRenderRequest request;
+    RuntimeCausticReadback3D readback;
+    const char* json_text =
+        "{\n"
+        "  \"schema_version\": \"ray_tracing_agent_render_request_v1\",\n"
+        "  \"run_id\": \"spatial_caustic_cache_phase3_combined_test\",\n"
+        "  \"scene\": {\"runtime_scene_path\": \"scene_runtime.json\"},\n"
+        "  \"render\": {\"integrator_3d\": \"disney_v2\"},\n"
+        "  \"inspection\": {\n"
+        "    \"caustic_mode\": \"spatial_cache\",\n"
+        "    \"caustic_volume_enabled\": true,\n"
+        "    \"caustic_sidecar_enabled\": true,\n"
+        "    \"caustic_sidecar_strength\": 2.0\n"
+        "  }\n"
+        "}\n";
+
+    snprintf(request_path,
+             sizeof(request_path),
+             "%s",
+             "/tmp/ray_tracing_agent_render_spatial_caustic_cache_phase3_combined_request.json");
+    assert_true("agent_render_spatial_caustic_phase3_combined_request_write",
+                write_text_file(request_path, json_text));
+    assert_true("agent_render_spatial_caustic_phase3_combined_request_load",
+                ray_tracing_agent_render_request_load_file(request_path,
+                                                           &request,
+                                                           diagnostics,
+                                                           sizeof(diagnostics)));
+    assert_true("agent_render_spatial_caustic_phase3_combined_mode",
+                request.caustic_settings.mode == RUNTIME_CAUSTIC_MODE_SPATIAL_CACHE);
+    assert_true("agent_render_spatial_caustic_phase3_combined_volume",
+                request.caustic_settings.volumeCacheEnabled);
+    assert_true("agent_render_spatial_caustic_phase3_combined_sidecar",
+                request.caustic_sidecar_enabled);
+    assert_true("agent_render_spatial_caustic_phase3_combined_disney_mode",
+                request.caustic_mode == RUNTIME_DISNEY_V2_CAUSTIC_MODE_ANALYTIC);
+    readback = RuntimeCausticSettings3D_Phase0Readback(&request.caustic_settings,
+                                                       request.caustic_sidecar_enabled);
+    assert_true("agent_render_spatial_caustic_phase3_combined_readback_sidecar",
+                readback.analyticSidecarRequested);
+    assert_true("agent_render_spatial_caustic_phase3_combined_readback_volume",
+                readback.volumeCacheState ==
+                    RUNTIME_CAUSTIC_CACHE_STATE_REQUESTED_NOT_ALLOCATED);
+    unlink(request_path);
+    return 0;
+}
+
 static int test_agent_render_request_disney_v2_caustic_transport_reserved(void) {
     char request_path[PATH_MAX];
     char diagnostics[256];
@@ -230,7 +341,204 @@ static int test_agent_render_request_disney_v2_caustic_transport_reserved(void) 
                                                             diagnostics,
                                                             sizeof(diagnostics)));
     assert_true("agent_render_caustic_transport_diag",
-                strstr(diagnostics, "transport is reserved") != NULL);
+                strstr(diagnostics, "caustic_volume_enabled=true") != NULL);
+    unlink(request_path);
+    return 0;
+}
+
+static int test_agent_render_request_trace_route_roundtrip_and_validation(void) {
+    char request_path[PATH_MAX];
+    char default_request_path[PATH_MAX];
+    char invalid_request_path[PATH_MAX];
+    char diagnostics[256];
+    RayTracingAgentRenderRequest request;
+    const char* json_text =
+        "{\n"
+        "  \"schema_version\": \"ray_tracing_agent_render_request_v1\",\n"
+        "  \"run_id\": \"trace_route_parity_test\",\n"
+        "  \"scene\": {\"runtime_scene_path\": \"scene_runtime.json\"},\n"
+        "  \"inspection\": {\"trace_route\": \"tlas_blas_parity\"}\n"
+        "}\n";
+    const char* default_json_text =
+        "{\n"
+        "  \"schema_version\": \"ray_tracing_agent_render_request_v1\",\n"
+        "  \"run_id\": \"trace_route_default_test\",\n"
+        "  \"scene\": {\"runtime_scene_path\": \"scene_runtime.json\"}\n"
+        "}\n";
+    const char* invalid_json_text =
+        "{\n"
+        "  \"schema_version\": \"ray_tracing_agent_render_request_v1\",\n"
+        "  \"run_id\": \"trace_route_invalid_test\",\n"
+        "  \"scene\": {\"runtime_scene_path\": \"scene_runtime.json\"},\n"
+        "  \"inspection\": {\"trace_route\": \"unknown_route\"}\n"
+        "}\n";
+
+    snprintf(request_path,
+             sizeof(request_path),
+             "%s",
+             "/tmp/ray_tracing_agent_render_trace_route_request.json");
+    snprintf(default_request_path,
+             sizeof(default_request_path),
+             "%s",
+             "/tmp/ray_tracing_agent_render_trace_route_default_request.json");
+    snprintf(invalid_request_path,
+             sizeof(invalid_request_path),
+             "%s",
+             "/tmp/ray_tracing_agent_render_trace_route_invalid_request.json");
+    assert_true("agent_render_trace_route_request_write",
+                write_text_file(request_path, json_text));
+    assert_true("agent_render_trace_route_request_load",
+                ray_tracing_agent_render_request_load_file(request_path,
+                                                           &request,
+                                                           diagnostics,
+                                                           sizeof(diagnostics)));
+    assert_true("agent_render_trace_route_has_override",
+                request.has_trace_route_override);
+    assert_true("agent_render_trace_route_parity",
+                request.trace_route == RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS_PARITY);
+
+    assert_true("agent_render_trace_route_default_request_write",
+                write_text_file(default_request_path, default_json_text));
+    assert_true("agent_render_trace_route_default_request_load",
+                ray_tracing_agent_render_request_load_file(default_request_path,
+                                                           &request,
+                                                           diagnostics,
+                                                           sizeof(diagnostics)));
+    assert_true("agent_render_trace_route_default_no_override",
+                !request.has_trace_route_override);
+    assert_true("agent_render_trace_route_default_tlas",
+                request.trace_route == RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS);
+
+    assert_true("agent_render_trace_route_invalid_request_write",
+                write_text_file(invalid_request_path, invalid_json_text));
+    assert_true("agent_render_trace_route_invalid_rejected",
+                !ray_tracing_agent_render_request_load_file(invalid_request_path,
+                                                            &request,
+                                                            diagnostics,
+                                                            sizeof(diagnostics)));
+    assert_true("agent_render_trace_route_invalid_diag",
+                strstr(diagnostics, "inspection.trace_route") != NULL);
+
+    unlink(request_path);
+    unlink(default_request_path);
+    unlink(invalid_request_path);
+    return 0;
+}
+
+static int test_agent_render_request_caustic_transport_volume_phase4_contract(void) {
+    char request_path[PATH_MAX];
+    char diagnostics[256];
+    RayTracingAgentRenderRequest request;
+    RuntimeCausticReadback3D readback;
+    const char* json_text =
+        "{\n"
+        "  \"schema_version\": \"ray_tracing_agent_render_request_v1\",\n"
+        "  \"run_id\": \"caustic_transport_volume_phase4_test\",\n"
+        "  \"scene\": {\"runtime_scene_path\": \"scene_runtime.json\"},\n"
+        "  \"render\": {\"integrator_3d\": \"direct_light\"},\n"
+        "  \"inspection\": {\n"
+        "    \"caustic_mode\": \"transport\",\n"
+        "    \"caustic_volume_enabled\": true,\n"
+        "    \"caustic_sample_budget\": 128,\n"
+        "    \"caustic_max_path_depth\": 2\n"
+        "  }\n"
+        "}\n";
+
+    snprintf(request_path,
+             sizeof(request_path),
+             "%s",
+             "/tmp/ray_tracing_agent_render_caustic_transport_volume_phase4_request.json");
+    assert_true("agent_render_caustic_transport_phase4_request_write",
+                write_text_file(request_path, json_text));
+    assert_true("agent_render_caustic_transport_phase4_request_load",
+                ray_tracing_agent_render_request_load_file(request_path,
+                                                           &request,
+                                                           diagnostics,
+                                                           sizeof(diagnostics)));
+    assert_true("agent_render_caustic_transport_phase4_mode",
+                request.caustic_settings.mode == RUNTIME_CAUSTIC_MODE_TRANSPORT);
+    assert_true("agent_render_caustic_transport_phase4_volume",
+                request.caustic_settings.volumeCacheEnabled);
+    assert_true("agent_render_caustic_transport_phase4_sidecar_off",
+                !request.caustic_sidecar_enabled);
+    assert_true("agent_render_caustic_transport_phase4_disney_mode",
+                request.caustic_mode == RUNTIME_DISNEY_V2_CAUSTIC_MODE_OFF);
+    assert_true("agent_render_caustic_transport_phase4_budget",
+                request.caustic_settings.sampleBudget == 128);
+    assert_true("agent_render_caustic_transport_phase4_depth",
+                request.caustic_settings.maxPathDepth == 2);
+    readback = RuntimeCausticSettings3D_Phase0Readback(&request.caustic_settings,
+                                                       request.caustic_sidecar_enabled);
+    assert_true("agent_render_caustic_transport_phase4_path_active",
+                readback.pathEmissionActive);
+    assert_true("agent_render_caustic_transport_phase4_not_reserved",
+                !readback.transportReserved);
+    assert_true("agent_render_caustic_transport_phase4_volume_state",
+                readback.volumeCacheState ==
+                    RUNTIME_CAUSTIC_CACHE_STATE_REQUESTED_NOT_ALLOCATED);
+    unlink(request_path);
+    return 0;
+}
+
+static int test_agent_render_request_caustic_transport_surface_sidecar_combined_contract(void) {
+    char request_path[PATH_MAX];
+    char diagnostics[256];
+    RayTracingAgentRenderRequest request;
+    RuntimeCausticReadback3D readback;
+    const char* json_text =
+        "{\n"
+        "  \"schema_version\": \"ray_tracing_agent_render_request_v1\",\n"
+        "  \"run_id\": \"caustic_transport_surface_sidecar_phase6_test\",\n"
+        "  \"scene\": {\"runtime_scene_path\": \"scene_runtime.json\"},\n"
+        "  \"render\": {\"integrator_3d\": \"disney_v2\"},\n"
+        "  \"inspection\": {\n"
+        "    \"caustic_mode\": \"transport\",\n"
+        "    \"caustic_surface_enabled\": true,\n"
+        "    \"caustic_sidecar_enabled\": true,\n"
+        "    \"caustic_sample_budget\": 256,\n"
+        "    \"caustic_max_path_depth\": 2,\n"
+        "    \"caustic_surface_energy_scale\": 12.5,\n"
+        "    \"caustic_surface_footprint_scale\": 3.25,\n"
+        "    \"caustic_surface_receiver_fallback_enabled\": false\n"
+        "  }\n"
+        "}\n";
+
+    snprintf(request_path,
+             sizeof(request_path),
+             "%s",
+             "/tmp/ray_tracing_agent_render_caustic_transport_surface_sidecar_phase6_request.json");
+    assert_true("agent_render_caustic_transport_sidecar_request_write",
+                write_text_file(request_path, json_text));
+    assert_true("agent_render_caustic_transport_sidecar_request_load",
+                ray_tracing_agent_render_request_load_file(request_path,
+                                                           &request,
+                                                           diagnostics,
+                                                           sizeof(diagnostics)));
+    assert_true("agent_render_caustic_transport_sidecar_transport_mode",
+                request.caustic_settings.mode == RUNTIME_CAUSTIC_MODE_TRANSPORT);
+    assert_true("agent_render_caustic_transport_sidecar_surface",
+                request.caustic_settings.surfaceCacheEnabled);
+    assert_true("agent_render_caustic_transport_sidecar_enabled",
+                request.caustic_sidecar_enabled);
+    assert_true("agent_render_caustic_transport_sidecar_disney_mode",
+                request.caustic_mode == RUNTIME_DISNEY_V2_CAUSTIC_MODE_ANALYTIC);
+    assert_true("agent_render_caustic_transport_sidecar_energy_scale",
+                request.caustic_settings.surfaceRadianceScale > 12.49 &&
+                    request.caustic_settings.surfaceRadianceScale < 12.51);
+    assert_true("agent_render_caustic_transport_sidecar_footprint_scale",
+                request.caustic_settings.surfaceFootprintScale > 3.24 &&
+                    request.caustic_settings.surfaceFootprintScale < 3.26);
+    assert_true("agent_render_caustic_transport_sidecar_receiver_fallback_disabled",
+                !request.caustic_settings.surfaceReceiverFallbackEnabled);
+    readback = RuntimeCausticSettings3D_Phase0Readback(&request.caustic_settings,
+                                                       request.caustic_sidecar_enabled);
+    assert_true("agent_render_caustic_transport_sidecar_path_active",
+                readback.pathEmissionActive);
+    assert_true("agent_render_caustic_transport_sidecar_surface_state",
+                readback.surfaceCacheState ==
+                    RUNTIME_CAUSTIC_CACHE_STATE_REQUESTED_NOT_ALLOCATED);
+    assert_true("agent_render_caustic_transport_sidecar_readback_sidecar",
+                readback.analyticSidecarRequested);
     unlink(request_path);
     return 0;
 }
@@ -1323,7 +1631,12 @@ int run_test_config_animation_settings_export_suite(void) {
     test_agent_render_request_denoise_override_roundtrip();
     test_agent_render_request_disney_v2_caustic_sidecar_roundtrip();
     test_agent_render_request_disney_v2_caustic_mode_off_roundtrip();
+    test_agent_render_request_spatial_caustic_cache_phase0_contract();
+    test_agent_render_request_spatial_caustic_cache_phase3_combined_sidecar();
     test_agent_render_request_disney_v2_caustic_transport_reserved();
+    test_agent_render_request_trace_route_roundtrip_and_validation();
+    test_agent_render_request_caustic_transport_volume_phase4_contract();
+    test_agent_render_request_caustic_transport_surface_sidecar_combined_contract();
     test_agent_render_request_caustic_sidecar_rejects_non_disney_v2();
     test_agent_render_request_volume_visible_roundtrip();
     test_agent_render_request_volume_material_remap_roundtrip();
