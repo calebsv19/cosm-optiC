@@ -1,6 +1,6 @@
 # optiC Current Truth
 
-Last updated: 2026-06-29
+Last updated: 2026-07-04
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -116,9 +116,19 @@ Last updated: 2026-06-29
   exposes raw-versus-reconstructed/preserved/skipped diagnostics through native
   render stats. Disney v2 also defaults to an analytic caustic sidecar policy
   for focused glass caustic contribution. Headless requests can set
-  `inspection.caustic_mode = "off"` for comparison renders; `transport` /
-  `physical` are reserved and rejected until a true physical caustic transport
-  pass exists. Headless `ray_tracing_render_headless` requests can override
+  `inspection.caustic_mode = "off"` for comparison renders; explicit
+  `transport` / `physical` requests can populate bounded physical caustic
+  volume and/or surface caches when the matching cache flags are enabled.
+  Volume-cache transport requires a sampleable VF3D attachment; without one,
+  the volume cache is suppressed and reported while surface-cache transport can
+  still run. Volume-cache deposits use normalized beam footprints that spread
+  each segment deposit over valid neighboring VF3D-aligned cache cells while
+  preserving deposited/input energy accounting in summaries. Caustic-volume
+  scatter summaries also report sampled cache radiance, density/remap,
+  scatter probability, camera transmittance, final visibility term, and
+  contributing screen-space concentration for final visibility diagnostics.
+  Headless
+  `ray_tracing_render_headless` requests can override
   `render.denoise_enabled` per detached run. The D2.18b visual matrix runner
   now renders comparable Disney-v2 proof cells, copies summaries/requests,
   emits PNG frames, contact sheets, amplified diffs, and `diff_metrics.json`
@@ -179,6 +189,25 @@ Last updated: 2026-06-29
   cases. Samples whose maximum direct contribution is below the radiance epsilon
   skip shadow visibility entirely, so softness tracks authored `light.radius`
   without stable five-point bands or paying the full sample cost everywhere.
+- Native `3D` direct lighting now routes through a scene-owned
+  `RuntimeLightSet3D` registry instead of relying on only the legacy single
+  light mirror. Authored runtime-scene `lights[]` entries import into that
+  registry, headless summaries expose `registered_lights`, and finite direct
+  lighting iterates enabled registry entries. The first authored/compatibility
+  light remains the only Bezier/motion-driven light until a future per-light
+  motion contract exists; later registered lights are static by policy.
+- Material-authored emitters bridge into that registry without replacing the
+  mesh-emissive area-sampling cache. Simple single-candidate material emitters
+  become enabled static sphere proxy lights. Flat same-plane material emitters
+  become enabled static `rect` proxy lights with `origin=material_emitter`,
+  direct-light area samples across the panel axes, and default `one_sided`
+  emission profile energy. Complex arbitrary mesh emitters stay disabled
+  `mesh_emissive` diagnostics marked `meshAreaSamplerOnly`; their physical-ish
+  route remains the cached `RuntimeEmissiveLightSet3D` area sampler used by
+  Disney v2 / mesh-emissive paths. The authoring implication is intentional:
+  a flush flat panel is directional outward, while visible wall halo or side
+  spill should be authored as offset/tilted panel geometry or a thin 3D
+  lightbox fixture until a later mesh-light MIS lane exists.
 - Native `3D` scenes now derive runtime capabilities from geometry, resolved
   material payloads, and attached volume state; legacy material flags are
   mirrored from the same refresh for compatibility. Hit-to-light visibility uses
@@ -258,6 +287,10 @@ Last updated: 2026-06-29
     opaque specular scene ray
   - `Emission / Transparency` and `Disney` inherit the Material-tier specular
     reflection signal in their composed radiance
+  - shipped `Disney` now attenuates only its added direct-light specular lobe
+    for mirror-dominant payloads, so directly illuminated default Mirror
+    objects keep traced reflected geometry dominant instead of washing out into
+    the light color
 - Native `3D` material payloads also support the first v2 layered material texture stack:
   - bounded ordered stacks carry durable layer ids, base/overlay roles, blend modes, placement, procedural parameters, enabled state, opacity, and material influence fields
   - base layer kinds include solid, brushed metal, wood, brick, concrete, and stone in the stack/evaluator contract
@@ -418,6 +451,16 @@ Last updated: 2026-06-29
     IOR, absorption distance, and thin-walled behavior through the compact
     `Resp` pane; those overrides persist with the scene object and feed both
     Material preview and native `3D` material payload resolution
+  - keeps the global Mirror material preset as the Mirror default seed while
+    allowing object-local Mirror response overrides for reflectivity,
+    roughness/sharpness, specular strength, and tint through the compact
+    `Resp` pane; Mirror dominance/base attenuation are read back from the
+    resolved payload, and override values feed both Material preview and native
+    `3D` material payload resolution
+  - the compact Material editor `Proof` pane now labels Mirror proof/readback
+    state for default, tinted, rough, and illuminated Mirror objects; this is a
+    request/readback affordance that names current coverage and missing proof
+    packages, not a proof-generation launcher
   - shows an object-only focused viewport layer in 2D and retained native `3D` digest lanes
   - defaults native `3D` Material mode to an object-centered projector so the focused object orbits around its own center rather than its scene placement
   - retains the old scene-placement object-only projector path as an internal view mode for a later UI toggle
@@ -602,7 +645,7 @@ Last updated: 2026-06-29
   - authored moving-camera scenes now also accept `extensions.ray_tracing.authoring.camera_focus_target = { x, y, z }`; when present, headless runtime-scene sampling preserves authored camera-path translation/depth motion but recomputes yaw/pitch toward that focus target each sample, which is safer than hand-authoring moving camera orientation curves
   - render summaries now also report render-visibility truth through `render_stats.hit_pixels`, `render_stats.visible_pixels`, `render_stats.nonzero_pixels`, `render_stats.max_radiance`, and `render_stats.max_rgb`
   - render summaries now also expose `object_audit`, which reports per-object runtime-slot presence, built primitive/triangle counts, and primary camera-ray hit pixels for headless diagnosis
-  - headless requests now accept additive inspection-only render tuning fields: `preset`, `camera_zoom`, `camera_position`, `camera_look_at`, `environment_light_mode`, `ambient_strength`, `top_fill_strength`, `environment_brightness`, `light_intensity`, `light_radius`, `forward_decay`, `volume_density_scale`, `volume_density_gamma`, `volume_scatter_gain`, `volume_absorption_gain`, `volume_opacity_clamp`, `volume_step_scale`, `secondary_diffuse_samples_3d`, `transmission_samples_3d`, `volume_tint`, and `volume_albedo`
+  - headless requests now accept additive inspection-only render tuning fields: `preset`, `camera_zoom`, `camera_position`, `camera_look_at`, `environment_light_mode`, `ambient_strength`, `top_fill_strength`, `environment_brightness`, `light_intensity`, `light_radius`, `forward_decay`, `volume_density_scale`, `volume_density_gamma`, `volume_scatter_gain`, `caustic_volume_scatter_gain`, `volume_caustic_scatter_gain`, `volume_absorption_gain`, `volume_opacity_clamp`, `volume_step_scale`, `secondary_diffuse_samples_3d`, `transmission_samples_3d`, `volume_tint`, and `volume_albedo`
   - headless `volume.debug_overlay=true` now renders direct scene-camera density contribution instead of only carrying a summary flag; it uses the same volume source, camera, surface clipping, density remap, step scale, and albedo/tint path, but bypasses light-dependent single scattering so sparse smoke structure can be diagnosed in-scene
   - preferred environment-light headless contract is:
     - `environment_light_mode = off|top_fill|ambient`
@@ -635,11 +678,51 @@ Last updated: 2026-06-29
       object-wide authoring lane for imported mesh color/material overrides;
       the concrete `SceneObject` color, reflectivity, and roughness values are
       authoritative after preset assignment
+    - default native `3D` first-hit tracing uses the prepared `tlas_blas`
+      route for suitable static runtime mesh assets, while explicit
+      `flattened_bvh` remains available as a compatibility/debug route
+    - `make -C ray_tracing
+      test-ray-tracing-render-headless-tlas-blas-repeated-instance-stress`
+      verifies repeated static mesh instances through the default `tlas_blas`
+      route and writes routine reports under
+      `ray_tracing/build/agent_runs/ray_tracing/tlas_blas_repeated_instance_stress/`
+    - dynamic water surfaces, deforming meshes, generated runtime geometry, and
+      mesh-emissive internal sampling are not treated as static BLAS cache
+      entries; they require a separate acceleration policy for frame/topology
+      invalidation, refit, rebuild, and flattened fallback behavior
   - runtime mesh acceleration is active for this path:
-    - native `3D` first-hit tracing uses a median-split triangle BVH when ready
-    - BVH build/traversal metrics are emitted in render summaries
-    - flat triangle traversal remains the fallback for no-BVH or stack-overflow
-      cases
+    - native `3D` first-hit tracing defaults to prepared TLAS/BLAS for suitable
+      static runtime mesh assets
+    - flattened median-split scene BVH remains the explicit compatibility route
+      and fallback for unsupported, unready, no-BVH, or stack-overflow cases
+    - BLAS/TLAS route counters and flattened BVH build/traversal metrics are
+      emitted in render summaries
+    - headless summaries include `startup_load_timing_matrix`, which breaks
+      native prepare/startup cost into named stages such as sidecar path
+      resolution, runtime mesh document load/parse, mesh document copy, mesh
+      instance expansion, flattened triangle append/BVH build, mesh-local BLAS
+      build, TLAS build/bind, dynamic water cache store/BVH build, and
+      unaccounted prepare/runtime init
+    - headless summaries also expose `dynamic_geometry_acceleration`, which
+      classifies geometry into the current acceleration policy: static runtime
+      mesh assets use `static_blas_tlas`; PhysicsSim water surfaces are
+      classified by frame-stamp changes and first/last topology stability into
+      static flattened, `dynamic_flattened_refit_candidate_per_frame`,
+      `dynamic_flattened_rebuild_per_frame`, or flattened fallback policy;
+      mesh-emissive internals use `sampler_cache_not_blas_tlas` when present;
+      generated runtime meshes are static only after resolving as file-backed
+      runtime sidecars; deforming meshes remain pending a dynamic acceleration
+      contract
+    - headless summaries also expose `dynamic_water_acceleration_cache`, which
+      records the current water lifecycle owner diagnostics: observed frames,
+      rebuild/reuse/refit/fallback counts, last status, and cached topology
+      stamps. The owner also stores cached water triangle geometry plus a
+      water-local BVH and reports geometry-cache readiness, store counts, store
+      failures, and BVH node/leaf counts. The central scene acceleration
+      callback now tests that cached water-local BVH for first-hit tracing and
+      reports water route calls, hits, misses, errors, and unavailable states.
+      Static TLAS fallback cleanup for copied dynamic scenes remains a separate
+      follow-up from water-cache functionality.
     - prepared static runtime mesh geometry/BVH can be reused across
       multi-frame renders when the mesh scene is unchanged
   - deterministic runtime mesh proof assets currently include sphere fixtures

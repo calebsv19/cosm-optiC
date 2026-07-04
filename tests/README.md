@@ -63,8 +63,16 @@ Headless request/render/material lanes:
 ```bash
 make -C ray_tracing test-ray-tracing-render-headless-preflight
 make -C ray_tracing test-ray-tracing-render-headless-image-export
+make -C ray_tracing test-ray-tracing-render-headless-tlas-blas-repeated-instance-stress
 make -C ray_tracing test-ray-tracing-material-preview-headless
 make -C ray_tracing test-ray-tracing-caustic-probe-matrix
+make -C ray_tracing test-ray-tracing-spatial-caustic-phase4-matrix
+make -C ray_tracing test-ray-tracing-spatial-caustic-phase6-surface-matrix
+make -C ray_tracing test-ray-tracing-spatial-caustic-phase7-calibration-matrix
+make -C ray_tracing test-ray-tracing-spatial-caustic-phase8-receiver-policy-matrix
+make -C ray_tracing test-ray-tracing-spatial-caustic-phase9-transmitted-receiver-matrix
+make -C ray_tracing test-ray-tracing-spatial-caustic-phase10-tangent-receiver-matrix
+make -C ray_tracing test-ray-tracing-spatial-caustic-visual-sphere-mist-matrix
 make -C ray_tracing test-ray-tracing-emissive-light-preview-matrix
 ```
 
@@ -75,6 +83,67 @@ The original L4 baseline proved the old no-solver state. The current Disney v2
 request now runs the L5 analytic caustic policy by default, while direct-light
 and emission-transparency cells remain baseline comparisons.
 
+`test-ray-tracing-spatial-caustic-phase4-matrix` is the local spatial-caustic
+Phase 4 proof target. It generates a compact uniform raw VF3D fog field under
+`_private_workspace_artifacts/`, renders off/bootstrap/transport/combined
+reference cells, and validates that physical transport populates and scatters
+from the caustic volume cache without falling back to the Phase 3 temporary
+bootstrap bridge.
+
+Phase 5 surface-cache replacement is covered by focused runner groups:
+`TEST_RUNNER_GROUP=runtime_caustic_surface_cache_3d make -C ray_tracing test`
+proves receiver-cache lifecycle/deposit/sample behavior, and
+`TEST_RUNNER_GROUP=runtime_caustic_transport_3d make -C ray_tracing test` proves
+transport can populate a surface cache and Disney v2 can sample it with the
+analytic caustic sidecar disabled.
+
+`test-ray-tracing-spatial-caustic-phase6-surface-matrix` is the local Phase 6
+surface-calibration proof target. It renders off, analytic-only,
+transport-surface-cache-only, and combined transport+analytic cells on the
+glass-sphere receiver fixture with a receiver-facing calibration camera, records
+receiver ROI metrics, and validates that the transport surface cache and
+analytic sidecar are independently measurable. This proves receiver-cache
+deposit/sample plumbing; visual energy calibration and transmitted receiver
+sampling remain later boundaries.
+
+`test-ray-tracing-spatial-caustic-phase7-calibration-matrix` is the local Phase
+7 visual calibration proof target. It compares off, default physical
+surface-cache transport, calibrated physical surface-cache transport, and
+calibrated transport plus analytic sidecar. The proof records full-frame luma
+deltas versus off and requires the calibrated physical-cache cell to broaden and
+increase visible positive frame deltas without relying on the analytic sidecar.
+
+`test-ray-tracing-spatial-caustic-phase8-receiver-policy-matrix` is the local
+Phase 8 receiver-policy proof target. It generates raised-sphere variants of
+the glass-sphere receiver fixture so the receiver is no longer tangent to the
+glass, disables the Phase 7 receiver fallback, and validates that physical
+surface-cache-only transport still records, samples, and visibly changes the
+receiver versus paired off baselines.
+
+`test-ray-tracing-spatial-caustic-phase9-transmitted-receiver-matrix` is the
+local Phase 9 transmitted-receiver proof target. It uses the canonical
+glass-sphere receiver camera path, keeps the analytic sidecar off, binds the
+physical surface cache, and validates that caustic receiver records can be
+sampled through Disney v2 primary transmission instead of only at direct
+primary receiver hits.
+
+`test-ray-tracing-spatial-caustic-phase10-tangent-receiver-matrix` is the
+local Phase 10 tangent-receiver proof target. It keeps the canonical tangent
+glass-sphere/floor fixture, disables the legacy receiver fallback, and requires
+the transport-backed surface cache to find real receiver geometry, accept
+records, produce rendered surface-cache samples, and report zero fallback use.
+
+`test-ray-tracing-spatial-caustic-visual-sphere-mist-matrix` is the local
+scene-iteration visual proof target after Phase 10. It generates a high-quality
+glass-sphere room with colored matte floor/walls plus low-density raw VF3D
+mist, then renders no-caustic, physical surface-cache-only, and physical
+surface+volume-cache cells. The surface-only cell is a deposit/no-fallback
+diagnostic for this beauty camera; the surface+volume cell is the visible
+funnel proof and must brighten versus the no-caustic mist baseline. The proof
+writes PNG frames, a contact sheet, and a diagnostic report under
+`_private_workspace_artifacts/` and requires physical transport without
+analytic sidecar or tangent receiver fallback.
+
 `test-ray-tracing-emissive-light-preview-matrix` is the local emitter-light
 preview proof target. It renders flat wall-panel, complex emissive prism, and
 dual-panel room variants, plus flush/diffuse-bounce, offset/tilted-panel, and
@@ -83,7 +152,12 @@ light far away at negligible intensity. The proof writes a contact sheet plus
 `emitter_preview_report.json` under `_private_workspace_artifacts/` and checks
 registered-light counts, rect versus mesh-emissive policy, sampler-only complex
 mesh readback, emissive-area candidate stats, receiver ROI luma, and wall ROI
-luma.
+luma. Flat rect panel cells also assert one-sided emission-profile readback so
+scene requests can distinguish directional wall panels from thin lightbox or
+wall-washer geometry. The focused
+`runtime_lighting_materials_direct_light` C group owns the R1 energy policy
+proof that one-sided rect panels light their front side and produce zero finite
+direct-light contribution from the back side.
 
 R6 demo proof:
 
@@ -120,6 +194,12 @@ make -C ray_tracing test-legacy
 
 `run-headless-smoke` currently routes through `test-stable`. `test-legacy` is
 empty unless a future compatibility lane is added.
+
+The TLAS/BLAS repeated-instance stress target is part of `test-stable`; it
+generates routine reports under
+`ray_tracing/build/agent_runs/ray_tracing/tlas_blas_repeated_instance_stress/`
+and verifies static runtime mesh repeats use one cached BLAS asset while TLAS
+instance counts scale with repeated objects.
 
 Operator-invoked visual/review lanes are intentionally outside routine stable
 smokes unless they are listed in `STABLE_TEST_TARGETS`. Examples include the
