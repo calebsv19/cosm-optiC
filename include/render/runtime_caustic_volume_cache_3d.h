@@ -23,6 +23,8 @@ typedef struct {
     uint64_t depositAttemptCount;
     uint64_t depositAcceptedCount;
     uint64_t depositRejectedCount;
+    uint64_t footprintDepositCount;
+    uint64_t footprintCellContributionCount;
     uint64_t sampleLookupCount;
     uint64_t sampleContributingCount;
     bool hasNonZeroBounds;
@@ -32,6 +34,13 @@ typedef struct {
     double totalRadianceR;
     double totalRadianceG;
     double totalRadianceB;
+    double footprintInputRadianceR;
+    double footprintInputRadianceG;
+    double footprintInputRadianceB;
+    double footprintDepositedRadianceR;
+    double footprintDepositedRadianceG;
+    double footprintDepositedRadianceB;
+    double averageFootprintRadiusVoxels;
     double maxCellRadiance;
     RuntimeCausticCacheState3D state;
 } RuntimeCausticVolumeCacheDiagnostics3D;
@@ -44,8 +53,17 @@ typedef struct {
     uint64_t depositAttemptCount;
     uint64_t depositAcceptedCount;
     uint64_t depositRejectedCount;
+    uint64_t footprintDepositCount;
+    uint64_t footprintCellContributionCount;
     uint64_t sampleLookupCount;
     uint64_t sampleContributingCount;
+    double footprintRadiusVoxelSum;
+    double footprintInputRadianceR;
+    double footprintInputRadianceG;
+    double footprintInputRadianceB;
+    double footprintDepositedRadianceR;
+    double footprintDepositedRadianceG;
+    double footprintDepositedRadianceB;
     bool ownsBuffers;
 } RuntimeCausticVolumeCache3D;
 
@@ -63,6 +81,13 @@ bool RuntimeCausticVolumeCache3D_DepositAtPosition(RuntimeCausticVolumeCache3D* 
                                                    double radiance_r,
                                                    double radiance_g,
                                                    double radiance_b);
+bool RuntimeCausticVolumeCache3D_DepositFootprintAtPosition(
+    RuntimeCausticVolumeCache3D* cache,
+    Vec3 position,
+    double radius_world,
+    double radiance_r,
+    double radiance_g,
+    double radiance_b);
 bool RuntimeCausticVolumeCache3D_SampleAtPosition(RuntimeCausticVolumeCache3D* cache,
                                                   Vec3 position,
                                                   Vec3* out_radiance);

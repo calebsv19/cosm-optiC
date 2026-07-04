@@ -12,6 +12,7 @@
 #include "render/runtime_caustic_transport_3d.h"
 #include "render/runtime_native_3d_render.h"
 #include "render/runtime_scene_3d.h"
+#include "render/runtime_volume_3d.h"
 #include "test_runtime_native_3d_render_prepared_suite_internal.h"
 #include "test_support.h"
 
@@ -187,6 +188,17 @@ static int test_runtime_caustic_transport_populates_volume_cache(void) {
                 diagnostics.cache.nonZeroCellCount > 0u);
     assert_true("runtime_caustic_transport_radiance",
                 diagnostics.cache.totalRadianceR > 0.0);
+    assert_true("runtime_caustic_transport_footprints",
+                diagnostics.cache.footprintDepositCount > 0u);
+    assert_true("runtime_caustic_transport_footprint_cells",
+                diagnostics.cache.footprintCellContributionCount >
+                    diagnostics.cache.footprintDepositCount);
+    assert_true("runtime_caustic_transport_footprint_radius",
+                diagnostics.cache.averageFootprintRadiusVoxels > 0.0);
+    assert_close("runtime_caustic_transport_footprint_energy_r",
+                 diagnostics.cache.footprintDepositedRadianceR,
+                 diagnostics.cache.footprintInputRadianceR,
+                 1e-4);
 
     RuntimeCausticVolumeCache3D_Free(&cache);
     RuntimeScene3D_Free(&scene);
@@ -253,6 +265,51 @@ static int test_runtime_caustic_transport_populates_surface_cache(void) {
                 diagnostics.surfaceCache.depositAcceptedCount > 0u);
     assert_true("runtime_caustic_transport_surface_no_volume",
                 !RuntimeCausticVolumeCache3D_IsAllocated(&volume_cache));
+
+    RuntimeCausticSurfaceCache3D_Free(&surface_cache);
+    RuntimeCausticVolumeCache3D_Free(&volume_cache);
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    RuntimeCausticTransport3D_ResetRequestState();
+    return 0;
+}
+
+static int test_runtime_caustic_transport_suppresses_volume_without_vf3d(void) {
+    SceneConfig saved_scene = sceneSettings;
+    RuntimeScene3D scene;
+    RuntimeCausticVolumeCache3D volume_cache;
+    RuntimeCausticSurfaceCache3D surface_cache;
+    RuntimeCausticTransport3DDiagnostics diagnostics;
+    bool ok = false;
+
+    test_caustic_transport_seed_material_state();
+    RuntimeCausticVolumeCache3D_Init(&volume_cache);
+    RuntimeCausticSurfaceCache3D_Init(&surface_cache);
+    assert_true("runtime_caustic_transport_no_vf3d_scene",
+                test_caustic_transport_make_scene(&scene));
+    RuntimeVolumeAttachment3D_Reset(&scene.volume);
+    RuntimeScene3D_RefreshCapabilities(&scene);
+    test_caustic_transport_enable_transport_with_flags(8, true, true);
+
+    ok = RuntimeCausticTransport3D_PopulateCaches(&scene,
+                                                  &volume_cache,
+                                                  &surface_cache,
+                                                  &diagnostics);
+    assert_true("runtime_caustic_transport_no_vf3d_surface_ok", ok);
+    assert_true("runtime_caustic_transport_no_vf3d_suppressed",
+                diagnostics.volumeCacheSuppressedNoSampleableVolume);
+    assert_true("runtime_caustic_transport_no_vf3d_no_volume_alloc",
+                !RuntimeCausticVolumeCache3D_IsAllocated(&volume_cache));
+    assert_true("runtime_caustic_transport_no_vf3d_no_volume_deposits",
+                diagnostics.cache.nonZeroCellCount == 0u);
+    assert_true("runtime_caustic_transport_no_vf3d_no_volume_segments",
+                diagnostics.volumeSegmentCount == 0u);
+    assert_true("runtime_caustic_transport_no_vf3d_surface_allocated",
+                diagnostics.surfaceCacheAllocated);
+    assert_true("runtime_caustic_transport_no_vf3d_surface_records",
+                diagnostics.surfaceCache.recordCount > 0u);
+    assert_true("runtime_caustic_transport_no_vf3d_surface_deposits",
+                diagnostics.surfaceCache.depositAcceptedCount > 0u);
 
     RuntimeCausticSurfaceCache3D_Free(&surface_cache);
     RuntimeCausticVolumeCache3D_Free(&volume_cache);
@@ -552,6 +609,7 @@ int run_test_runtime_caustic_transport_3d_tests(void) {
     test_runtime_caustic_transport_populates_volume_cache();
     test_runtime_caustic_transport_respects_sample_budget();
     test_runtime_caustic_transport_populates_surface_cache();
+    test_runtime_caustic_transport_suppresses_volume_without_vf3d();
     test_runtime_caustic_transport_surface_calibration_scales_records();
     test_runtime_caustic_transport_surface_without_receiver_fallback();
     test_runtime_caustic_transport_render_samples_volume_cache();

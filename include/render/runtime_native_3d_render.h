@@ -64,6 +64,8 @@ typedef struct {
     int causticVolumeCacheDepositAttemptCount;
     int causticVolumeCacheDepositAcceptedCount;
     int causticVolumeCacheDepositRejectedCount;
+    int causticVolumeCacheFootprintDepositCount;
+    int causticVolumeCacheFootprintCellContributionCount;
     int causticVolumeCacheSampleLookupCount;
     int causticVolumeCacheSampleContributingCount;
     int causticSurfaceCacheBound;
@@ -141,6 +143,7 @@ typedef struct {
     double causticVolumeCacheNonZeroCellRatio;
     double causticVolumeCacheSampleHitRatio;
     double causticVolumeScatterToCacheRadianceRatio;
+    double causticVolumeCacheAverageFootprintRadiusVoxels;
     double causticVolumeCacheRadianceCentroidX;
     double causticVolumeCacheRadianceCentroidY;
     double causticVolumeCacheRadianceCentroidZ;
@@ -153,6 +156,12 @@ typedef struct {
     double totalCausticVolumeCacheRadianceR;
     double totalCausticVolumeCacheRadianceG;
     double totalCausticVolumeCacheRadianceB;
+    double totalCausticVolumeCacheFootprintInputRadianceR;
+    double totalCausticVolumeCacheFootprintInputRadianceG;
+    double totalCausticVolumeCacheFootprintInputRadianceB;
+    double totalCausticVolumeCacheFootprintDepositedRadianceR;
+    double totalCausticVolumeCacheFootprintDepositedRadianceG;
+    double totalCausticVolumeCacheFootprintDepositedRadianceB;
     double maxCausticSurfaceCacheRadiance;
     double causticSurfaceCacheNearestSampleDistance;
     double causticSurfaceCacheNearestSampleRadius;

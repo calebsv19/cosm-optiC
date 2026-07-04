@@ -246,6 +246,16 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
         dst->causticVolumeCacheDepositRejectedCount =
             src->causticVolumeCacheDepositRejectedCount;
     }
+    if (src->causticVolumeCacheFootprintDepositCount >
+        dst->causticVolumeCacheFootprintDepositCount) {
+        dst->causticVolumeCacheFootprintDepositCount =
+            src->causticVolumeCacheFootprintDepositCount;
+    }
+    if (src->causticVolumeCacheFootprintCellContributionCount >
+        dst->causticVolumeCacheFootprintCellContributionCount) {
+        dst->causticVolumeCacheFootprintCellContributionCount =
+            src->causticVolumeCacheFootprintCellContributionCount;
+    }
     dst->causticVolumeCacheSampleLookupCount += src->causticVolumeCacheSampleLookupCount;
     dst->causticVolumeCacheSampleContributingCount +=
         src->causticVolumeCacheSampleContributingCount;
@@ -315,6 +325,11 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
         dst->causticVolumeCacheSampleHitRatio =
             src->causticVolumeCacheSampleHitRatio;
     }
+    if (src->causticVolumeCacheAverageFootprintRadiusVoxels >
+        dst->causticVolumeCacheAverageFootprintRadiusVoxels) {
+        dst->causticVolumeCacheAverageFootprintRadiusVoxels =
+            src->causticVolumeCacheAverageFootprintRadiusVoxels;
+    }
     if (src->causticVolumeCacheNonZeroCellCount > 0 &&
         (dst->causticVolumeCacheNonZeroCellCount == src->causticVolumeCacheNonZeroCellCount ||
          dst->causticVolumeCacheRadianceCentroidX == 0.0)) {
@@ -340,6 +355,24 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
     dst->totalCausticVolumeCacheRadianceR += src->totalCausticVolumeCacheRadianceR;
     dst->totalCausticVolumeCacheRadianceG += src->totalCausticVolumeCacheRadianceG;
     dst->totalCausticVolumeCacheRadianceB += src->totalCausticVolumeCacheRadianceB;
+    if (src->totalCausticVolumeCacheFootprintInputRadianceR >
+        dst->totalCausticVolumeCacheFootprintInputRadianceR) {
+        dst->totalCausticVolumeCacheFootprintInputRadianceR =
+            src->totalCausticVolumeCacheFootprintInputRadianceR;
+        dst->totalCausticVolumeCacheFootprintInputRadianceG =
+            src->totalCausticVolumeCacheFootprintInputRadianceG;
+        dst->totalCausticVolumeCacheFootprintInputRadianceB =
+            src->totalCausticVolumeCacheFootprintInputRadianceB;
+    }
+    if (src->totalCausticVolumeCacheFootprintDepositedRadianceR >
+        dst->totalCausticVolumeCacheFootprintDepositedRadianceR) {
+        dst->totalCausticVolumeCacheFootprintDepositedRadianceR =
+            src->totalCausticVolumeCacheFootprintDepositedRadianceR;
+        dst->totalCausticVolumeCacheFootprintDepositedRadianceG =
+            src->totalCausticVolumeCacheFootprintDepositedRadianceG;
+        dst->totalCausticVolumeCacheFootprintDepositedRadianceB =
+            src->totalCausticVolumeCacheFootprintDepositedRadianceB;
+    }
     if (src->maxCausticSurfaceCacheRadiance > dst->maxCausticSurfaceCacheRadiance) {
         dst->maxCausticSurfaceCacheRadiance = src->maxCausticSurfaceCacheRadiance;
     }

@@ -395,6 +395,7 @@ static bool runtime_caustic_transport_deposit_segment(
     RuntimeCausticVolumeCache3D* cache,
     const Ray3D* ray,
     Vec3 radiance,
+    double base_footprint_radius,
     RuntimeCausticTransport3DDiagnostics* diagnostics) {
     double t_enter = 0.0;
     double t_exit = 0.0;
@@ -416,13 +417,18 @@ static bool runtime_caustic_transport_deposit_segment(
     for (t = t_enter + step * 0.5; t <= t_exit; t += step) {
         Vec3 p = vec3_add(ray->origin, vec3_scale(ray->direction, t));
         double attenuation = 1.0 / (1.0 + 0.10 * fmax(t - t_enter, 0.0));
+        double radius = runtime_caustic_transport_clamp(
+            base_footprint_radius + (fmax(t - t_enter, 0.0) * 0.025) + (step * 0.5),
+            scene->volume.grid.voxelSize * 0.75,
+            scene->volume.grid.voxelSize * 3.50);
         Vec3 deposit = vec3_scale(radiance, attenuation * step * 0.020);
         diagnostics->depositAttemptCount += 1u;
-        if (RuntimeCausticVolumeCache3D_DepositAtPosition(cache,
-                                                          p,
-                                                          deposit.x,
-                                                          deposit.y,
-                                                          deposit.z)) {
+        if (RuntimeCausticVolumeCache3D_DepositFootprintAtPosition(cache,
+                                                                   p,
+                                                                   radius,
+                                                                   deposit.x,
+                                                                   deposit.y,
+                                                                   deposit.z)) {
             double luma = runtime_caustic_transport_luma(deposit);
             diagnostics->depositAcceptedCount += 1u;
             diagnostics->totalRadianceR += deposit.x;
@@ -639,6 +645,7 @@ static bool runtime_caustic_transport_emit_to_triangle_target(
     Ray3D outgoing = {0};
     double target_distance = 0.0;
     double light_energy = 0.0;
+    double volume_footprint_radius = 0.0;
     bool inside_specular_object = false;
     bool emitted = false;
     Vec3 first_surface_normal = vec3(0.0, 0.0, 0.0);
@@ -681,6 +688,10 @@ static bool runtime_caustic_transport_emit_to_triangle_target(
     sample_weight = runtime_caustic_transport_clamp(sample_weight, 0.0, 1.0);
     light_energy = runtime_caustic_transport_light_attenuation(light, target_distance) *
                    sample_weight;
+    volume_footprint_radius = runtime_caustic_transport_clamp(
+        fmax(light->radius, 0.0) * 0.85 + target_distance * 0.010,
+        0.0,
+        0.35);
     radiance = vec3(light->color.x * light_energy * throughput.x,
                     light->color.y * light_energy * throughput.y,
                     light->color.z * light_energy * throughput.z);
@@ -695,6 +706,7 @@ static bool runtime_caustic_transport_emit_to_triangle_target(
                                                             cache,
                                                             &outgoing,
                                                             radiance,
+                                                            volume_footprint_radius,
                                                             diagnostics) ||
                   emitted;
     }

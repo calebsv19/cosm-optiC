@@ -119,8 +119,17 @@ void RuntimeCausticVolumeCache3D_Clear(RuntimeCausticVolumeCache3D* cache) {
     cache->depositAttemptCount = 0u;
     cache->depositAcceptedCount = 0u;
     cache->depositRejectedCount = 0u;
+    cache->footprintDepositCount = 0u;
+    cache->footprintCellContributionCount = 0u;
     cache->sampleLookupCount = 0u;
     cache->sampleContributingCount = 0u;
+    cache->footprintRadiusVoxelSum = 0.0;
+    cache->footprintInputRadianceR = 0.0;
+    cache->footprintInputRadianceG = 0.0;
+    cache->footprintInputRadianceB = 0.0;
+    cache->footprintDepositedRadianceR = 0.0;
+    cache->footprintDepositedRadianceG = 0.0;
+    cache->footprintDepositedRadianceB = 0.0;
 }
 
 void RuntimeCausticVolumeCache3D_Free(RuntimeCausticVolumeCache3D* cache) {
@@ -166,6 +175,140 @@ bool RuntimeCausticVolumeCache3D_DepositAtPosition(RuntimeCausticVolumeCache3D* 
     cache->radianceG[index] += (float)radiance_g;
     cache->radianceB[index] += (float)radiance_b;
     cache->depositAcceptedCount += 1u;
+    return true;
+}
+
+bool RuntimeCausticVolumeCache3D_DepositFootprintAtPosition(
+    RuntimeCausticVolumeCache3D* cache,
+    Vec3 position,
+    double radius_world,
+    double radiance_r,
+    double radiance_g,
+    double radiance_b) {
+    double local_x = 0.0;
+    double local_y = 0.0;
+    double local_z = 0.0;
+    double radius_voxels = 0.0;
+    int min_x = 0;
+    int min_y = 0;
+    int min_z = 0;
+    int max_x = 0;
+    int max_y = 0;
+    int max_z = 0;
+    double weight_sum = 0.0;
+    uint64_t cell_count = 0u;
+    double deposited_r = 0.0;
+    double deposited_g = 0.0;
+    double deposited_b = 0.0;
+
+    if (!cache) return false;
+    cache->depositAttemptCount += 1u;
+    if (!runtime_caustic_volume_cache_position_to_local(
+            cache, position, &local_x, &local_y, &local_z)) {
+        cache->depositRejectedCount += 1u;
+        return false;
+    }
+    if (radiance_r < 0.0) radiance_r = 0.0;
+    if (radiance_g < 0.0) radiance_g = 0.0;
+    if (radiance_b < 0.0) radiance_b = 0.0;
+    if (!(radius_world > 0.0) || !isfinite(radius_world)) {
+        radius_world = cache->grid.voxelSize * 0.5;
+    }
+    radius_voxels = radius_world / cache->grid.voxelSize;
+    if (!(radius_voxels > 0.0) || !isfinite(radius_voxels)) {
+        radius_voxels = 0.5;
+    }
+    if (radius_voxels < 0.5) radius_voxels = 0.5;
+
+    min_x = (int)floor(local_x - radius_voxels - 0.5);
+    min_y = (int)floor(local_y - radius_voxels - 0.5);
+    min_z = (int)floor(local_z - radius_voxels - 0.5);
+    max_x = (int)ceil(local_x + radius_voxels + 0.5);
+    max_y = (int)ceil(local_y + radius_voxels + 0.5);
+    max_z = (int)ceil(local_z + radius_voxels + 0.5);
+    if (min_x < 0) min_x = 0;
+    if (min_y < 0) min_y = 0;
+    if (min_z < 0) min_z = 0;
+    if (max_x >= (int)cache->grid.gridW) max_x = (int)cache->grid.gridW - 1;
+    if (max_y >= (int)cache->grid.gridH) max_y = (int)cache->grid.gridH - 1;
+    if (max_z >= (int)cache->grid.gridD) max_z = (int)cache->grid.gridD - 1;
+
+    for (int z = min_z; z <= max_z; ++z) {
+        for (int y = min_y; y <= max_y; ++y) {
+            for (int x = min_x; x <= max_x; ++x) {
+                const double center_x = (double)x + 0.5;
+                const double center_y = (double)y + 0.5;
+                const double center_z = (double)z + 0.5;
+                const double dx = center_x - local_x;
+                const double dy = center_y - local_y;
+                const double dz = center_z - local_z;
+                const double distance = sqrt((dx * dx) + (dy * dy) + (dz * dz));
+                double weight = 0.0;
+                if (distance <= radius_voxels) {
+                    weight = 1.0 - (distance / fmax(radius_voxels, 1.0e-9));
+                }
+                if (weight <= 0.0 && distance <= 0.5) {
+                    weight = 1.0;
+                }
+                if (weight > 0.0) {
+                    weight_sum += weight;
+                    cell_count += 1u;
+                }
+            }
+        }
+    }
+    if (!(weight_sum > 0.0) || cell_count == 0u) {
+        cache->depositRejectedCount += 1u;
+        return false;
+    }
+
+    for (int z = min_z; z <= max_z; ++z) {
+        for (int y = min_y; y <= max_y; ++y) {
+            for (int x = min_x; x <= max_x; ++x) {
+                const double center_x = (double)x + 0.5;
+                const double center_y = (double)y + 0.5;
+                const double center_z = (double)z + 0.5;
+                const double dx = center_x - local_x;
+                const double dy = center_y - local_y;
+                const double dz = center_z - local_z;
+                const double distance = sqrt((dx * dx) + (dy * dy) + (dz * dz));
+                double weight = 0.0;
+                if (distance <= radius_voxels) {
+                    weight = 1.0 - (distance / fmax(radius_voxels, 1.0e-9));
+                }
+                if (weight <= 0.0 && distance <= 0.5) {
+                    weight = 1.0;
+                }
+                if (weight > 0.0) {
+                    const double normalized = weight / weight_sum;
+                    const double add_r = radiance_r * normalized;
+                    const double add_g = radiance_g * normalized;
+                    const double add_b = radiance_b * normalized;
+                    const uint64_t index = runtime_caustic_volume_cache_cell_index(
+                        &cache->grid, (uint32_t)x, (uint32_t)y, (uint32_t)z);
+                    if (index < cache->grid.cellCount) {
+                        cache->radianceR[index] += (float)add_r;
+                        cache->radianceG[index] += (float)add_g;
+                        cache->radianceB[index] += (float)add_b;
+                        deposited_r += add_r;
+                        deposited_g += add_g;
+                        deposited_b += add_b;
+                    }
+                }
+            }
+        }
+    }
+
+    cache->depositAcceptedCount += 1u;
+    cache->footprintDepositCount += 1u;
+    cache->footprintCellContributionCount += cell_count;
+    cache->footprintRadiusVoxelSum += radius_voxels;
+    cache->footprintInputRadianceR += radiance_r;
+    cache->footprintInputRadianceG += radiance_g;
+    cache->footprintInputRadianceB += radiance_b;
+    cache->footprintDepositedRadianceR += deposited_r;
+    cache->footprintDepositedRadianceG += deposited_g;
+    cache->footprintDepositedRadianceB += deposited_b;
     return true;
 }
 
@@ -269,8 +412,20 @@ void RuntimeCausticVolumeCache3D_SnapshotDiagnostics(
     diagnostics.depositAttemptCount = cache->depositAttemptCount;
     diagnostics.depositAcceptedCount = cache->depositAcceptedCount;
     diagnostics.depositRejectedCount = cache->depositRejectedCount;
+    diagnostics.footprintDepositCount = cache->footprintDepositCount;
+    diagnostics.footprintCellContributionCount = cache->footprintCellContributionCount;
     diagnostics.sampleLookupCount = cache->sampleLookupCount;
     diagnostics.sampleContributingCount = cache->sampleContributingCount;
+    diagnostics.footprintInputRadianceR = cache->footprintInputRadianceR;
+    diagnostics.footprintInputRadianceG = cache->footprintInputRadianceG;
+    diagnostics.footprintInputRadianceB = cache->footprintInputRadianceB;
+    diagnostics.footprintDepositedRadianceR = cache->footprintDepositedRadianceR;
+    diagnostics.footprintDepositedRadianceG = cache->footprintDepositedRadianceG;
+    diagnostics.footprintDepositedRadianceB = cache->footprintDepositedRadianceB;
+    diagnostics.averageFootprintRadiusVoxels =
+        cache->footprintDepositCount > 0u
+            ? cache->footprintRadiusVoxelSum / (double)cache->footprintDepositCount
+            : 0.0;
 
     for (i = 0u; i < cache->grid.cellCount; ++i) {
         const double r = cache->radianceR[i];

@@ -668,6 +668,12 @@ void ray_tracing_render_headless_write_summary(
                 preflight->stats.causticVolumeCacheDepositAcceptedCount);
         fprintf(file, "      \"volume_cache_deposit_rejected_count\": %d,\n",
                 preflight->stats.causticVolumeCacheDepositRejectedCount);
+        fprintf(file, "      \"volume_cache_footprint_deposit_count\": %d,\n",
+                preflight->stats.causticVolumeCacheFootprintDepositCount);
+        fprintf(file, "      \"volume_cache_footprint_cell_contribution_count\": %d,\n",
+                preflight->stats.causticVolumeCacheFootprintCellContributionCount);
+        fprintf(file, "      \"volume_cache_average_footprint_radius_voxels\": %.9f,\n",
+                preflight->stats.causticVolumeCacheAverageFootprintRadiusVoxels);
         fprintf(file, "      \"volume_cache_sample_lookup_count\": %d,\n",
                 preflight->stats.causticVolumeCacheSampleLookupCount);
         fprintf(file, "      \"volume_cache_sample_contributing_count\": %d,\n",
@@ -677,6 +683,16 @@ void ray_tracing_render_headless_write_summary(
                 preflight->stats.totalCausticVolumeCacheRadianceR,
                 preflight->stats.totalCausticVolumeCacheRadianceG,
                 preflight->stats.totalCausticVolumeCacheRadianceB);
+        fprintf(file,
+                "      \"volume_cache_footprint_input_radiance\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
+                preflight->stats.totalCausticVolumeCacheFootprintInputRadianceR,
+                preflight->stats.totalCausticVolumeCacheFootprintInputRadianceG,
+                preflight->stats.totalCausticVolumeCacheFootprintInputRadianceB);
+        fprintf(file,
+                "      \"volume_cache_footprint_deposited_radiance\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
+                preflight->stats.totalCausticVolumeCacheFootprintDepositedRadianceR,
+                preflight->stats.totalCausticVolumeCacheFootprintDepositedRadianceG,
+                preflight->stats.totalCausticVolumeCacheFootprintDepositedRadianceB);
         fprintf(file, "      \"volume_cache_max_cell_radiance\": %.9f,\n",
                 preflight->stats.maxCausticVolumeCacheRadiance);
         fprintf(file, "      \"volume_cache_nonzero_cell_ratio\": %.9f,\n",
@@ -767,8 +783,24 @@ void ray_tracing_render_headless_write_summary(
                 preflight->stats.totalDirectVolumeScatterRadianceR,
                 preflight->stats.totalDirectVolumeScatterRadianceG,
                 preflight->stats.totalDirectVolumeScatterRadianceB);
+            const double footprint_input_sum = ray_tracing_headless_rgb_sum(
+                preflight->stats.totalCausticVolumeCacheFootprintInputRadianceR,
+                preflight->stats.totalCausticVolumeCacheFootprintInputRadianceG,
+                preflight->stats.totalCausticVolumeCacheFootprintInputRadianceB);
+            const double footprint_deposited_sum = ray_tracing_headless_rgb_sum(
+                preflight->stats.totalCausticVolumeCacheFootprintDepositedRadianceR,
+                preflight->stats.totalCausticVolumeCacheFootprintDepositedRadianceG,
+                preflight->stats.totalCausticVolumeCacheFootprintDepositedRadianceB);
             fprintf(file, "      \"volume_cache_total_radiance_sum\": %.9f,\n",
                     cache_sum);
+            fprintf(file, "      \"volume_cache_footprint_input_radiance_sum\": %.9f,\n",
+                    footprint_input_sum);
+            fprintf(file, "      \"volume_cache_footprint_deposited_radiance_sum\": %.9f,\n",
+                    footprint_deposited_sum);
+            fprintf(file,
+                    "      \"volume_cache_footprint_deposited_to_input_ratio\": %.9f,\n",
+                    ray_tracing_headless_safe_ratio(footprint_deposited_sum,
+                                                    footprint_input_sum));
             fprintf(file, "      \"volume_scatter_caustic_radiance_sum\": %.9f,\n",
                     scatter_sum);
             fprintf(file, "      \"volume_scatter_direct_radiance_sum\": %.9f,\n",
@@ -1148,6 +1180,12 @@ void ray_tracing_render_headless_write_summary(
             preflight->stats.causticVolumeCacheDepositAttemptCount);
     fprintf(file, "    \"caustic_volume_cache_deposit_accepted_count\": %d,\n",
             preflight->stats.causticVolumeCacheDepositAcceptedCount);
+    fprintf(file, "    \"caustic_volume_cache_footprint_deposit_count\": %d,\n",
+            preflight->stats.causticVolumeCacheFootprintDepositCount);
+    fprintf(file, "    \"caustic_volume_cache_footprint_cell_contribution_count\": %d,\n",
+            preflight->stats.causticVolumeCacheFootprintCellContributionCount);
+    fprintf(file, "    \"caustic_volume_cache_average_footprint_radius_voxels\": %.9f,\n",
+            preflight->stats.causticVolumeCacheAverageFootprintRadiusVoxels);
     fprintf(file, "    \"caustic_volume_cache_sample_lookup_count\": %d,\n",
             preflight->stats.causticVolumeCacheSampleLookupCount);
     fprintf(file, "    \"caustic_volume_cache_sample_contributing_count\": %d,\n",
@@ -1159,6 +1197,16 @@ void ray_tracing_render_headless_write_summary(
             preflight->stats.totalCausticVolumeCacheRadianceR,
             preflight->stats.totalCausticVolumeCacheRadianceG,
             preflight->stats.totalCausticVolumeCacheRadianceB);
+    fprintf(file,
+            "    \"total_caustic_volume_cache_footprint_input_radiance\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
+            preflight->stats.totalCausticVolumeCacheFootprintInputRadianceR,
+            preflight->stats.totalCausticVolumeCacheFootprintInputRadianceG,
+            preflight->stats.totalCausticVolumeCacheFootprintInputRadianceB);
+    fprintf(file,
+            "    \"total_caustic_volume_cache_footprint_deposited_radiance\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
+            preflight->stats.totalCausticVolumeCacheFootprintDepositedRadianceR,
+            preflight->stats.totalCausticVolumeCacheFootprintDepositedRadianceG,
+            preflight->stats.totalCausticVolumeCacheFootprintDepositedRadianceB);
     fprintf(file, "    \"caustic_volume_cache_nonzero_cell_ratio\": %.9f,\n",
             preflight->stats.causticVolumeCacheNonZeroCellRatio);
     fprintf(file, "    \"caustic_volume_cache_sample_hit_ratio\": %.9f,\n",
@@ -1207,8 +1255,24 @@ void ray_tracing_render_headless_write_summary(
             preflight->stats.totalDirectVolumeScatterRadianceR,
             preflight->stats.totalDirectVolumeScatterRadianceG,
             preflight->stats.totalDirectVolumeScatterRadianceB);
+        const double footprint_input_sum = ray_tracing_headless_rgb_sum(
+            preflight->stats.totalCausticVolumeCacheFootprintInputRadianceR,
+            preflight->stats.totalCausticVolumeCacheFootprintInputRadianceG,
+            preflight->stats.totalCausticVolumeCacheFootprintInputRadianceB);
+        const double footprint_deposited_sum = ray_tracing_headless_rgb_sum(
+            preflight->stats.totalCausticVolumeCacheFootprintDepositedRadianceR,
+            preflight->stats.totalCausticVolumeCacheFootprintDepositedRadianceG,
+            preflight->stats.totalCausticVolumeCacheFootprintDepositedRadianceB);
         fprintf(file, "    \"caustic_volume_cache_total_radiance_sum\": %.9f,\n",
                 cache_sum);
+        fprintf(file, "    \"caustic_volume_cache_footprint_input_radiance_sum\": %.9f,\n",
+                footprint_input_sum);
+        fprintf(file, "    \"caustic_volume_cache_footprint_deposited_radiance_sum\": %.9f,\n",
+                footprint_deposited_sum);
+        fprintf(file,
+                "    \"caustic_volume_cache_footprint_deposited_to_input_ratio\": %.9f,\n",
+                ray_tracing_headless_safe_ratio(footprint_deposited_sum,
+                                                footprint_input_sum));
         fprintf(file, "    \"caustic_volume_scatter_radiance_sum\": %.9f,\n",
                 scatter_sum);
         fprintf(file, "    \"direct_volume_scatter_radiance_sum\": %.9f,\n",

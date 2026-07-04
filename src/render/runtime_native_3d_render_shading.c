@@ -1212,6 +1212,10 @@ bool runtime_native_3d_render_dispatch_integrator(float* radiance_buffer,
             (int)cache_diagnostics.depositAcceptedCount;
         out_stats->causticVolumeCacheDepositRejectedCount =
             (int)cache_diagnostics.depositRejectedCount;
+        out_stats->causticVolumeCacheFootprintDepositCount =
+            (int)cache_diagnostics.footprintDepositCount;
+        out_stats->causticVolumeCacheFootprintCellContributionCount =
+            (int)cache_diagnostics.footprintCellContributionCount;
         out_stats->causticVolumeCacheSampleLookupCount =
             (int)cache_diagnostics.sampleLookupCount;
         out_stats->causticVolumeCacheSampleContributingCount =
@@ -1220,6 +1224,20 @@ bool runtime_native_3d_render_dispatch_integrator(float* radiance_buffer,
         out_stats->totalCausticVolumeCacheRadianceG = cache_diagnostics.totalRadianceG;
         out_stats->totalCausticVolumeCacheRadianceB = cache_diagnostics.totalRadianceB;
         out_stats->maxCausticVolumeCacheRadiance = cache_diagnostics.maxCellRadiance;
+        out_stats->causticVolumeCacheAverageFootprintRadiusVoxels =
+            cache_diagnostics.averageFootprintRadiusVoxels;
+        out_stats->totalCausticVolumeCacheFootprintInputRadianceR =
+            cache_diagnostics.footprintInputRadianceR;
+        out_stats->totalCausticVolumeCacheFootprintInputRadianceG =
+            cache_diagnostics.footprintInputRadianceG;
+        out_stats->totalCausticVolumeCacheFootprintInputRadianceB =
+            cache_diagnostics.footprintInputRadianceB;
+        out_stats->totalCausticVolumeCacheFootprintDepositedRadianceR =
+            cache_diagnostics.footprintDepositedRadianceR;
+        out_stats->totalCausticVolumeCacheFootprintDepositedRadianceG =
+            cache_diagnostics.footprintDepositedRadianceG;
+        out_stats->totalCausticVolumeCacheFootprintDepositedRadianceB =
+            cache_diagnostics.footprintDepositedRadianceB;
         out_stats->causticVolumeCacheNonZeroCellRatio =
             cache_diagnostics.cellCount > 0u
                 ? (double)cache_diagnostics.nonZeroCellCount /
