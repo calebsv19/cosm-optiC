@@ -165,6 +165,61 @@ grep -Eq '"tint_rgb": \[0\.67[0-9]*, 0\.86[0-9]*, 0\.94[0-9]*\]' "$SUMMARY"
 grep -Eq '"visible_pixels": [1-9][0-9]*' "$SUMMARY"
 grep -Eq '"nonzero_pixels": [1-9][0-9]*' "$SUMMARY"
 
+python3 - "$SUMMARY" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as f:
+    summary = json.load(f)
+
+dynamic_accel = summary["dynamic_geometry_acceleration"]
+assert dynamic_accel["static_mesh_asset_policy"] == "static_blas_tlas", dynamic_accel
+assert dynamic_accel["static_mesh_asset_present"] is False, dynamic_accel
+assert dynamic_accel["static_mesh_asset_blas_active"] is False, dynamic_accel
+assert dynamic_accel["water_surface_policy"] == "dynamic_flattened_refit_candidate_per_frame", dynamic_accel
+assert dynamic_accel["water_surface_accel_action"] == "refit_candidate_when_dynamic_accel_cache_exists", dynamic_accel
+assert dynamic_accel["water_surface_present"] is True, dynamic_accel
+assert dynamic_accel["water_surface_mesh_attached"] is True, dynamic_accel
+assert dynamic_accel["water_surface_frame_selection_dynamic"] is True, dynamic_accel
+assert dynamic_accel["water_surface_frame_stamp_changed"] is True, dynamic_accel
+assert dynamic_accel["water_surface_topology_comparable"] is True, dynamic_accel
+assert dynamic_accel["water_surface_topology_stable"] is True, dynamic_accel
+assert dynamic_accel["water_surface_first_grid_w"] == dynamic_accel["water_surface_last_grid_w"], dynamic_accel
+assert dynamic_accel["water_surface_first_grid_d"] == dynamic_accel["water_surface_last_grid_d"], dynamic_accel
+assert dynamic_accel["water_surface_first_sample_count"] == dynamic_accel["water_surface_last_sample_count"], dynamic_accel
+assert dynamic_accel["water_surface_triangle_count"] > 0, dynamic_accel
+assert dynamic_accel["mesh_emissive_policy"] == "not_present", dynamic_accel
+assert dynamic_accel["deforming_mesh_policy"] == "not_present_pending_dynamic_accel_contract", dynamic_accel
+assert dynamic_accel["next_dynamic_accel_contract"] == "classify_frame_stamp_topology_refit_rebuild_or_flattened_fallback", dynamic_accel
+
+water_cache = summary["dynamic_water_acceleration_cache"]
+assert water_cache["valid"] is True, water_cache
+assert water_cache["cache_ready"] is True, water_cache
+assert water_cache["last_status"] == "refit", water_cache
+assert water_cache["observed_frames"] >= 3, water_cache
+assert water_cache["rebuilds"] >= 1, water_cache
+assert water_cache["reuses"] >= 1, water_cache
+assert water_cache["refits"] >= 1, water_cache
+assert water_cache["fallbacks"] == 0, water_cache
+assert water_cache["last_frame_index"] == 1, water_cache
+assert water_cache["cached_grid_w"] == 8, water_cache
+assert water_cache["cached_grid_d"] == 8, water_cache
+assert water_cache["cached_sample_count"] == 64, water_cache
+assert water_cache["cached_triangle_count"] == dynamic_accel["water_surface_triangle_count"], water_cache
+assert water_cache["geometry_cache_ready"] is True, water_cache
+assert water_cache["geometry_bvh_ready"] is True, water_cache
+assert water_cache["geometry_stores"] >= water_cache["observed_frames"], water_cache
+assert water_cache["geometry_rebuild_stores"] >= 1, water_cache
+assert water_cache["geometry_refit_stores"] >= 1, water_cache
+assert water_cache["geometry_store_failures"] == 0, water_cache
+assert water_cache["geometry_bvh_node_count"] > 0, water_cache
+assert water_cache["geometry_bvh_leaf_count"] > 0, water_cache
+assert water_cache["route_trace_calls"] > 0, water_cache
+assert water_cache["route_trace_hits"] > 0, water_cache
+assert water_cache["route_trace_errors"] == 0, water_cache
+assert water_cache["route_trace_unavailable"] == 0, water_cache
+PY
+
 test -s "$RAY_OUT/frames/frame_0000.bmp"
 test -s "$RAY_OUT/frames/frame_0001.bmp"
 test "$(dd if="$RAY_OUT/frames/frame_0000.bmp" bs=1 count=2 2>/dev/null)" = "BM"

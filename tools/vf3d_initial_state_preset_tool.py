@@ -309,6 +309,22 @@ def default_spec(run_id: str, preset_type: str, seed: int, output_root: Path) ->
                     "layer_extent": [2.1, 1.58],
                 }
             )
+        if run_id == "room_haze_v1":
+            parameters.update(
+                {
+                    "height": 0.38,
+                    "thickness": 0.88,
+                    "falloff": 0.82,
+                    "density_scale": 0.46,
+                    "turbulence_strength": 0.24,
+                    "domain_warp_strength": 0.16,
+                    "height_warp_strength": 0.08,
+                    "edge_erosion_strength": 0.10,
+                    "wisp_density_scale": 0.08,
+                    "horizontal_wind": [0.045, 0.012, 0.0],
+                    "layer_extent": [2.45, 1.82],
+                }
+            )
     elif preset_type == "cloud_bank":
         parameters = {
             "lobes": [
@@ -317,22 +333,22 @@ def default_spec(run_id: str, preset_type: str, seed: int, output_root: Path) ->
                 {"center": [0.54, -0.04, 0.56], "extent_xyz": [0.92, 0.55, 0.48], "weight": 0.68},
                 {"center": [0.03, 0.20, 0.42], "extent_xyz": [1.16, 0.42, 0.34], "weight": 0.48},
             ],
-            "density_scale": 1.58,
-            "edge_softness": 0.54,
+            "density_scale": 4.20,
+            "edge_softness": 0.72,
             "surface_breakup": 0.82,
             "domain_warp_strength": 0.22,
             "boundary_noise_strength": 0.34,
-            "wisp_density_scale": 0.32,
-            "edge_erosion_strength": 0.36,
+            "wisp_density_scale": 0.62,
+            "edge_erosion_strength": 0.20,
             "wind": [0.12, 0.035, 0.012],
             "curl_strength": 0.18,
         }
     elif preset_type == "rolling_fog_layer":
         parameters = {
-            "height": -0.16,
-            "thickness": 0.38,
-            "falloff": 0.72,
-            "density_scale": 1.18,
+            "height": 0.24,
+            "thickness": 0.54,
+            "falloff": 0.82,
+            "density_scale": 2.05,
             "layer_extent": [2.25, 1.62],
             "ridge_strength": 0.68,
             "clump_strength": 0.52,
@@ -342,6 +358,23 @@ def default_spec(run_id: str, preset_type: str, seed: int, output_root: Path) ->
             "wind": [0.18, 0.055, 0.0],
             "roll_strength": 0.16,
         }
+        if run_id == "low_floor_fog_v1":
+            parameters.update(
+                {
+                    "height": 0.18,
+                    "thickness": 0.42,
+                    "falloff": 0.95,
+                    "density_scale": 3.10,
+                    "layer_extent": [2.38, 1.70],
+                    "ridge_strength": 0.48,
+                    "clump_strength": 0.42,
+                    "domain_warp_strength": 0.18,
+                    "height_warp_strength": 0.10,
+                    "edge_erosion_strength": 0.18,
+                    "wind": [0.075, 0.018, 0.0],
+                    "roll_strength": 0.06,
+                }
+            )
     elif preset_type == "mist_patch":
         parameters = {
             "center": [0.12, -0.08, 0.30],
@@ -431,6 +464,15 @@ def default_spec(run_id: str, preset_type: str, seed: int, output_root: Path) ->
     else:
         raise PresetError(f"unsupported preset type: {preset_type}")
 
+    grid_origin = [-2.3, -1.725, -0.65]
+    if run_id in {
+        "cloud_bank_v1",
+        "rolling_fog_layer_v1",
+        "room_haze_v1",
+        "low_floor_fog_v1",
+    }:
+        grid_origin[2] = 0.0
+
     return {
         "schema_version": "vf3d_initial_state_preset_v1",
         "run_id": run_id,
@@ -438,7 +480,7 @@ def default_spec(run_id: str, preset_type: str, seed: int, output_root: Path) ->
             "w": 128,
             "h": 96,
             "d": 64,
-            "origin": [-2.3, -1.725, -0.65],
+            "origin": grid_origin,
             "voxel_size": 0.0359375,
             "scene_up": [0.0, 0.0, 1.0],
             "author_window_w": 772,
@@ -1831,6 +1873,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "all-v2",
             "cloud_bank_v1",
             "rolling_fog_layer_v1",
+            "room_haze_v1",
+            "low_floor_fog_v1",
             "mist_patch_v1",
             "plume_column_v1",
             "plume_column_v2",
@@ -1894,6 +1938,10 @@ def spec_for_name(name: str, seed: int, output_root: Path) -> dict[str, Any]:
         return default_spec(name, "cloud_bank", seed, output_root)
     if name == "rolling_fog_layer_v1":
         return default_spec(name, "rolling_fog_layer", seed, output_root)
+    if name == "room_haze_v1":
+        return default_spec(name, "atmospheric_layer", seed, output_root)
+    if name == "low_floor_fog_v1":
+        return default_spec(name, "rolling_fog_layer", seed, output_root)
     if name == "mist_patch_v1":
         return default_spec(name, "mist_patch", seed, output_root)
     if name in ("plume_column_v1", "plume_column_v2", "plume_column_v3"):
@@ -1915,7 +1963,14 @@ def main() -> int:
             for name in ("single_turbulent_cloud_v2", "atmospheric_layer_v2"):
                 summaries.append(generate_preset(apply_cli_warmup(spec_for_name(name, args.seed, args.output_root), args), render=args.render))
         elif args.preset == "all-family-expansion-v1":
-            for name in ("cloud_bank_v1", "rolling_fog_layer_v1", "mist_patch_v1", "plume_column_v3"):
+            for name in (
+                "cloud_bank_v1",
+                "rolling_fog_layer_v1",
+                "room_haze_v1",
+                "low_floor_fog_v1",
+                "mist_patch_v1",
+                "plume_column_v3",
+            ):
                 summaries.append(generate_preset(apply_cli_warmup(spec_for_name(name, args.seed, args.output_root), args), render=args.render))
         else:
             summaries.append(generate_preset(apply_cli_warmup(spec_for_name(args.preset, args.seed, args.output_root), args), render=args.render))
