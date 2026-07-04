@@ -1886,6 +1886,11 @@ static int test_runtime_direct_light_3d_flat_panel_material_emitter_registers_re
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
     RuntimeScene3D scene;
+    HitInfo3D front_hit = {0};
+    HitInfo3D back_hit = {0};
+    RuntimeDirectLight3DResult front_result = {0};
+    RuntimeDirectLight3DResult back_result = {0};
+    bool ok = false;
 
     RuntimeScene3D_Init(&scene);
     runtime_lighting_materials_direct_reset_authoring_state();
@@ -1962,7 +1967,54 @@ static int test_runtime_direct_light_3d_flat_panel_material_emitter_registers_re
                      scene.lightSet.lights[0].position.y,
                      -3.0,
                      1e-9);
+        assert_true("runtime_direct_light_3d_panel_emitter_one_sided_profile",
+                    scene.lightSet.lights[0].emissionProfile ==
+                        RUNTIME_LIGHT_SOURCE_3D_EMISSION_ONE_SIDED);
     }
+
+    front_hit.position = vec3(0.0, 0.0, 0.0);
+    front_hit.normal = vec3(0.0, -1.0, 0.0);
+    front_hit.triangleIndex = 0;
+    front_hit.primitiveIndex = 0;
+    front_hit.sceneObjectIndex = 2;
+    ok = RuntimeDirectLight3D_ShadeHit(&scene, &front_hit, NULL, &front_result);
+    assert_true("runtime_direct_light_3d_panel_front_shade_ok", ok);
+    assert_true("runtime_direct_light_3d_panel_front_rect_samples",
+                front_result.rectSampleCount > 0);
+    assert_true("runtime_direct_light_3d_panel_front_receiver_facing",
+                front_result.rectReceiverCosAvg > 0.9);
+    assert_true("runtime_direct_light_3d_panel_front_emitter_facing",
+                front_result.rectEmitterCosAvg > 0.9);
+    assert_true("runtime_direct_light_3d_panel_front_no_backfaces",
+                front_result.rectBackfaceSampleCount == 0);
+    assert_true("runtime_direct_light_3d_panel_front_radiance_positive",
+                front_result.radiance > 0.0);
+    assert_true("runtime_direct_light_3d_panel_front_contributes",
+                front_result.contributingLightCount == 1);
+
+    back_hit.position = vec3(0.0, -6.0, 0.0);
+    back_hit.normal = vec3(0.0, 1.0, 0.0);
+    back_hit.triangleIndex = 0;
+    back_hit.primitiveIndex = 0;
+    back_hit.sceneObjectIndex = 3;
+    ok = RuntimeDirectLight3D_ShadeHit(&scene, &back_hit, NULL, &back_result);
+    assert_true("runtime_direct_light_3d_panel_back_shade_ok", ok);
+    assert_true("runtime_direct_light_3d_panel_back_rect_samples",
+                back_result.rectSampleCount > 0);
+    assert_true("runtime_direct_light_3d_panel_back_receiver_facing",
+                back_result.rectReceiverCosAvg > 0.9);
+    assert_close("runtime_direct_light_3d_panel_back_emitter_facing_zero",
+                 back_result.rectEmitterCosAvg,
+                 0.0,
+                 1e-9);
+    assert_true("runtime_direct_light_3d_panel_back_backface_samples",
+                back_result.rectBackfaceSampleCount == back_result.rectSampleCount);
+    assert_close("runtime_direct_light_3d_panel_back_one_sided_radiance_zero",
+                 back_result.radiance,
+                 0.0,
+                 1e-9);
+    assert_true("runtime_direct_light_3d_panel_back_no_contribution",
+                back_result.contributingLightCount == 0);
 
     RuntimeScene3D_Free(&scene);
     sceneSettings = saved_scene;

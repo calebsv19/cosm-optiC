@@ -121,6 +121,7 @@ def write_index(report_path: Path, report: dict) -> None:
             f"rect `{metrics['rect_lights']}`, mesh `{metrics['mesh_emissive_lights']}`, "
             f"material emitters `{metrics['material_emitters']}`, "
             f"sampler-only `{metrics['mesh_area_sampler_only']}`, "
+            f"one-sided `{metrics['one_sided_lights']}`, "
             f"emissive candidates `{metrics['emissive_candidates']}`, "
             f"area candidates `{metrics['emissive_area_candidates']}`, "
             f"ROI mean `{metrics['roi_luma_mean']:.3f}`, "
@@ -168,6 +169,7 @@ def main() -> int:
         render_stats = summary.get("render_stats", {})
         shape_counts = registered.get("shape_counts", {})
         source_counts = registered.get("source_counts", {})
+        emission_profile_counts = registered.get("emission_profile_counts", {})
         luma_metrics = roi_luma(Path(run["frame_path"]), roi)
         if wall_roi:
             wall_metrics = roi_luma(Path(run["frame_path"]), wall_roi, "wall")
@@ -189,6 +191,9 @@ def main() -> int:
             "mesh_area_sampler_only": int(
                 registered.get("mesh_area_sampler_only_count", 0)
             ),
+            "one_sided_lights": int(emission_profile_counts.get("one_sided", 0)),
+            "two_sided_lights": int(emission_profile_counts.get("two_sided", 0)),
+            "omni_lights": int(emission_profile_counts.get("omni", 0)),
             "emissive_candidates": int(registered.get("emissive_candidate_count", 0)),
             "emissive_area": float(registered.get("emissive_area", 0.0)),
             "emissive_weight": float(registered.get("emissive_weight", 0.0)),
@@ -236,6 +241,9 @@ def main() -> int:
             expected,
             "min_mesh_area_sampler_only",
         )
+        min_check(errors, metrics, "one_sided_lights", expected, "min_one_sided_lights")
+        min_check(errors, metrics, "two_sided_lights", expected, "min_two_sided_lights")
+        min_check(errors, metrics, "omni_lights", expected, "min_omni_lights")
         max_check(
             errors,
             metrics,

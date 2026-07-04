@@ -9,6 +9,7 @@
     "notes": [
       "The authored parked Bezier surrogate remains far away and nearly powerless so material-emitter behavior is readable.",
       "Flat material panels should register as enabled rect lights.",
+      "Flat material panels should report one-sided emission profiles for directional wall-panel authoring.",
       "Complex prism emitters should remain mesh-area-sampler-only diagnostics and not finite direct-light proxies.",
       "Wall ROI metrics focus on the rear wall band around the panel area so halo/spill changes are visible in the report."
     ],
@@ -30,6 +31,7 @@
         "min_rect_lights": 1,
         "min_material_emitters": 1,
         "min_material_emitter_enabled": 1,
+        "min_one_sided_lights": 1,
         "max_mesh_area_sampler_only": 0,
         "min_roi_mean_luma": 1.0
       },
@@ -38,6 +40,7 @@
         "min_rect_lights": 1,
         "min_material_emitters": 1,
         "min_material_emitter_enabled": 1,
+        "min_one_sided_lights": 1,
         "max_mesh_area_sampler_only": 0,
         "min_roi_mean_luma": 1.0
       },
@@ -46,6 +49,7 @@
         "min_rect_lights": 1,
         "min_material_emitters": 1,
         "min_material_emitter_enabled": 1,
+        "min_one_sided_lights": 1,
         "max_mesh_area_sampler_only": 0,
         "min_roi_mean_luma": 1.0
       },
@@ -73,6 +77,7 @@
         "min_rect_lights": 2,
         "min_material_emitters": 2,
         "min_material_emitter_enabled": 2,
+        "min_one_sided_lights": 2,
         "max_mesh_area_sampler_only": 0,
         "min_roi_mean_luma": 1.0
       }

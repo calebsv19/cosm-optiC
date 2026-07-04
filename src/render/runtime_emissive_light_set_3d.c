@@ -266,7 +266,12 @@ static Vec3 runtime_emissive_light_set_3d_rect_normal(
     if (!candidate) return normal;
     normal = vec3_cross(candidate->primitiveAxisU, candidate->primitiveAxisV);
     if (vec3_length(normal) > 1e-9) {
-        return vec3_normalize(normal);
+        normal = vec3_normalize(normal);
+        if (vec3_length(candidate->normal) > 1e-9 &&
+            vec3_dot(normal, candidate->normal) < 0.0) {
+            normal = vec3_scale(normal, -1.0);
+        }
+        return normal;
     }
     return candidate->normal;
 }
@@ -316,6 +321,9 @@ bool RuntimeEmissiveLightSet3D_AppendRegistryEntries(
                       : enable_simple_proxy ? RUNTIME_LIGHT_SOURCE_3D_KIND_SPHERE
                                             : RUNTIME_LIGHT_SOURCE_3D_KIND_MESH_EMISSIVE;
         source.origin = RUNTIME_LIGHT_SOURCE_3D_ORIGIN_MATERIAL_EMITTER;
+        source.emissionProfile = enable_rect_proxy
+                                     ? RUNTIME_LIGHT_SOURCE_3D_EMISSION_ONE_SIDED
+                                     : RUNTIME_LIGHT_SOURCE_3D_EMISSION_OMNI;
         source.enabled = enable_simple_proxy || enable_rect_proxy;
         source.position = enable_rect_proxy ? candidate->primitiveOrigin : summary.centroid;
         source.normal = summary.averageNormal;
@@ -338,6 +346,9 @@ bool RuntimeEmissiveLightSet3D_AppendRegistryEntries(
         source.emissiveCentroid = summary.centroid;
         source.emissiveAverageNormal = summary.averageNormal;
         source.emissiveProxyRadius = summary.proxyRadius;
+        source.sourceSceneObjectIndex = object_index;
+        source.sourcePrimitiveIndex = candidate->primitiveIndex;
+        source.sourceTriangleIndex = enable_rect_proxy ? -1 : candidate->triangleIndex;
         source.meshAreaSamplerOnly =
             source.kind == RUNTIME_LIGHT_SOURCE_3D_KIND_MESH_EMISSIVE &&
             !source.enabled;
