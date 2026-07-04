@@ -127,6 +127,88 @@ static void material_editor_proof_describe_glass(
                     : "Missing: full physical glass transport, caustics, absorption color/density proof.");
 }
 
+static void material_editor_proof_describe_mirror(
+    const SceneObject* obj,
+    MaterialEditorProofReadback* out_readback) {
+    double reflectivity = 0.0;
+    double roughness = 0.0;
+    double specular = 0.0;
+    int tint = 0xFFFFFF;
+    bool tinted = false;
+    bool illuminated = animSettings.lightIntensity > 0.0;
+
+    if (!obj || !out_readback || obj->material_id != MATERIAL_PRESET_MIRROR) return;
+    if (!SceneObjectResolveMirrorResponse(obj, &reflectivity, &roughness, &specular, &tint)) {
+        return;
+    }
+    (void)reflectivity;
+    (void)specular;
+    out_readback->mirror_proof_readback = true;
+    snprintf(out_readback->material_family, sizeof(out_readback->material_family), "Mirror");
+
+    if (roughness >= 0.18) {
+        snprintf(out_readback->mirror_proof_case,
+                 sizeof(out_readback->mirror_proof_case),
+                 "rough mirror");
+        snprintf(out_readback->mirror_proof_package,
+                 sizeof(out_readback->mirror_proof_package),
+                 "disney_v2_mirror_glossy_preservation_matrix");
+        snprintf(out_readback->mirror_proof_coverage,
+                 sizeof(out_readback->mirror_proof_coverage),
+                 "Existing mirror/glossy preservation coverage tracks rough reflection diagnostics and denoise preservation.");
+        snprintf(out_readback->mirror_missing_proof,
+                 sizeof(out_readback->mirror_missing_proof),
+                 "Missing: full user-facing rough mirror visual package tied to compact Proof pane state.");
+        return;
+    }
+
+    tinted = (tint & 0x00FFFFFF) != 0x00FFFFFF || material_editor_proof_object_has_tint(obj);
+    if (tinted) {
+        snprintf(out_readback->mirror_proof_case,
+                 sizeof(out_readback->mirror_proof_case),
+                 "tinted mirror");
+        snprintf(out_readback->mirror_proof_package,
+                 sizeof(out_readback->mirror_proof_package),
+                 "su4_mirror_surface_unification_matrix");
+        snprintf(out_readback->mirror_proof_coverage,
+                 sizeof(out_readback->mirror_proof_coverage),
+                 "SU4 mirror surface-unification coverage proves reflected geometry parity; tint readback is editor/payload-backed.");
+        snprintf(out_readback->mirror_missing_proof,
+                 sizeof(out_readback->mirror_missing_proof),
+                 "Missing: dedicated tinted mirror color-proof package across direct/material/Disney routes.");
+        return;
+    }
+
+    if (illuminated) {
+        snprintf(out_readback->mirror_proof_case,
+                 sizeof(out_readback->mirror_proof_case),
+                 "illuminated mirror dominance");
+        snprintf(out_readback->mirror_proof_package,
+                 sizeof(out_readback->mirror_proof_package),
+                 "m10_s4_illuminated_mirror_dominance_regression");
+        snprintf(out_readback->mirror_proof_coverage,
+                 sizeof(out_readback->mirror_proof_coverage),
+                 "M10-S4 source proof keeps reflected geometry dominant under bright direct light.");
+        snprintf(out_readback->mirror_missing_proof,
+                 sizeof(out_readback->mirror_missing_proof),
+                 "Missing: packaged visual matrix for illuminated default Mirror after the Disney combiner repair.");
+        return;
+    }
+
+    snprintf(out_readback->mirror_proof_case,
+             sizeof(out_readback->mirror_proof_case),
+             "default mirror");
+    snprintf(out_readback->mirror_proof_package,
+             sizeof(out_readback->mirror_proof_package),
+             "su4_mirror_surface_unification_matrix");
+    snprintf(out_readback->mirror_proof_coverage,
+             sizeof(out_readback->mirror_proof_coverage),
+             "SU4 plane/prism/runtime-mesh matrix covers default mirror dominance and reflected geometry parity.");
+    snprintf(out_readback->mirror_missing_proof,
+             sizeof(out_readback->mirror_missing_proof),
+             "Missing: compact editor-launched Mirror proof package; current Proof pane is readback-only.");
+}
+
 void MaterialEditorFormatProofReadbackStatus(const MaterialEditorProofReadback* readback,
                                              char* out,
                                              size_t out_size) {
@@ -212,6 +294,7 @@ bool MaterialEditorBuildFocusedProofReadback(MaterialEditorProofReadback* out_re
                                                    out_readback->source_material,
                                                    sizeof(out_readback->source_material));
     material_editor_proof_describe_glass(obj, layer_kind, &active_layer, out_readback);
+    material_editor_proof_describe_mirror(obj, out_readback);
     snprintf(out_readback->expected_behavior,
              sizeof(out_readback->expected_behavior),
              "Editor emits M4-compatible proof request/readback labels only; no render launch");

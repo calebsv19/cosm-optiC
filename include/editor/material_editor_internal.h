@@ -133,11 +133,16 @@ typedef struct MaterialEditorProofReadback {
     char glass_proof_package[128];
     char glass_proof_coverage[192];
     char glass_missing_proof[192];
+    char mirror_proof_case[96];
+    char mirror_proof_package[128];
+    char mirror_proof_coverage[192];
+    char mirror_missing_proof[192];
     char destination_label[64];
     char panel_group_label[64];
     bool m4_request_compatible;
     bool launch_deferred;
     bool glass_proof_readback;
+    bool mirror_proof_readback;
 } MaterialEditorProofReadback;
 
 typedef struct MaterialEditorGraphReadback {
@@ -241,6 +246,7 @@ typedef struct MaterialEditorFaceRegionReadback {
 typedef enum MaterialEditorResponseFamily {
     MATERIAL_EDITOR_RESPONSE_FAMILY_GENERIC = 0,
     MATERIAL_EDITOR_RESPONSE_FAMILY_GLASS,
+    MATERIAL_EDITOR_RESPONSE_FAMILY_MIRROR,
     MATERIAL_EDITOR_RESPONSE_FAMILY_METAL,
     MATERIAL_EDITOR_RESPONSE_FAMILY_EMISSIVE
 } MaterialEditorResponseFamily;

@@ -74,6 +74,10 @@ static bool material_editor_focused_material_is_glass(const SceneObject* obj) {
     return obj && obj->material_id == MATERIAL_PRESET_TRANSPARENT;
 }
 
+static bool material_editor_focused_material_is_mirror(const SceneObject* obj) {
+    return obj && obj->material_id == MATERIAL_PRESET_MIRROR;
+}
+
 static double material_editor_clamp_ior(double value) {
     if (value < 1.0) return 1.0;
     if (value > 2.0) return 2.0;
@@ -469,6 +473,26 @@ bool MaterialEditorApplyResponseValueToFocused(MaterialEditorResponseField field
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
     if (!obj || focused_object_index < 0) return false;
+    if (material_editor_focused_material_is_mirror(obj) &&
+        (field == MATERIAL_EDITOR_RESPONSE_FIELD_ROUGHNESS ||
+         field == MATERIAL_EDITOR_RESPONSE_FIELD_REFLECTIVITY ||
+         field == MATERIAL_EDITOR_RESPONSE_FIELD_SPECULAR)) {
+        SceneObjectSeedMirrorResponseOverrideFromMaterial(obj);
+        value = material_editor_clamp01(value);
+        if (field == MATERIAL_EDITOR_RESPONSE_FIELD_ROUGHNESS) {
+            obj->mirrorRoughness = value;
+            obj->roughness = value;
+        } else if (field == MATERIAL_EDITOR_RESPONSE_FIELD_REFLECTIVITY) {
+            obj->mirrorReflectivity = value;
+            obj->reflectivity = value;
+        } else if (field == MATERIAL_EDITOR_RESPONSE_FIELD_SPECULAR) {
+            obj->mirrorSpecular = value;
+        }
+        material_editor_apply_object_scope_to_all_faces(focused_object_index);
+        MarkObjectDirty(obj);
+        MaterialEditorFacePreviewInvalidate();
+        return true;
+    }
     if (!material_editor_focused_material_is_glass(obj)) return false;
     if (field == MATERIAL_EDITOR_RESPONSE_FIELD_ROUGHNESS ||
         field == MATERIAL_EDITOR_RESPONSE_FIELD_REFLECTIVITY ||
@@ -512,6 +536,15 @@ bool MaterialEditorApplyResponseTintToFocused(int packed_color) {
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
     if (!obj || focused_object_index < 0) return false;
+    if (material_editor_focused_material_is_mirror(obj)) {
+        SceneObjectSeedMirrorResponseOverrideFromMaterial(obj);
+        obj->mirrorTint = packed_color & 0xFFFFFF;
+        obj->color = obj->mirrorTint;
+        material_editor_apply_object_scope_to_all_faces(focused_object_index);
+        MarkObjectDirty(obj);
+        MaterialEditorFacePreviewInvalidate();
+        return true;
+    }
     if (!material_editor_focused_material_is_glass(obj)) return false;
     obj->color = packed_color & 0xFFFFFF;
     material_editor_apply_object_scope_to_all_faces(focused_object_index);
@@ -553,6 +586,24 @@ bool MaterialEditorApplyResponseStepToFocused(MaterialEditorResponseField field,
             current = thin_walled ? 0.0 : 1.0;
         }
         return MaterialEditorApplyResponseValueToFocused(field, current);
+    }
+    if (material_editor_focused_material_is_mirror(obj) &&
+        (field == MATERIAL_EDITOR_RESPONSE_FIELD_ROUGHNESS ||
+         field == MATERIAL_EDITOR_RESPONSE_FIELD_REFLECTIVITY ||
+         field == MATERIAL_EDITOR_RESPONSE_FIELD_SPECULAR)) {
+        double reflectivity = 0.0;
+        double roughness = 0.0;
+        double specular = 0.0;
+        SceneObjectResolveMirrorResponse(obj, &reflectivity, &roughness, &specular, NULL);
+        if (field == MATERIAL_EDITOR_RESPONSE_FIELD_ROUGHNESS) {
+            current = roughness;
+        } else if (field == MATERIAL_EDITOR_RESPONSE_FIELD_REFLECTIVITY) {
+            current = reflectivity;
+        } else {
+            current = specular;
+        }
+        return MaterialEditorApplyResponseValueToFocused(field,
+                                                         material_editor_clamp01(current + delta));
     }
     if (!material_editor_get_active_layer(obj, NULL, &layer, NULL)) return false;
     if (field == MATERIAL_EDITOR_RESPONSE_FIELD_ROUGHNESS) {

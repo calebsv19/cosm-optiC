@@ -290,6 +290,23 @@ void SaveSceneConfig(void) {
                                    "glassThinWalled",
                                    json_object_new_boolean(obj->glassThinWalled));
         }
+        if (obj->hasMirrorResponseOverride) {
+            json_object_object_add(jsonObj,
+                                   "mirrorResponseOverride",
+                                   json_object_new_boolean(obj->hasMirrorResponseOverride));
+            json_object_object_add(jsonObj,
+                                   "mirrorReflectivity",
+                                   json_object_new_double(obj->mirrorReflectivity));
+            json_object_object_add(jsonObj,
+                                   "mirrorRoughness",
+                                   json_object_new_double(obj->mirrorRoughness));
+            json_object_object_add(jsonObj,
+                                   "mirrorSpecular",
+                                   json_object_new_double(obj->mirrorSpecular));
+            json_object_object_add(jsonObj,
+                                   "mirrorTint",
+                                   json_object_new_int(obj->mirrorTint & 0xFFFFFF));
+        }
         {
             struct json_object* materialTextureStack = ConfigSaveMaterialTextureStackForObject(i);
             struct json_object* materialGraph = ConfigSaveMaterialGraphForObject(i);
@@ -430,7 +447,8 @@ void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
         *textureStrength, *texturePatternMode, *textureCoverage, *textureGrain, *textureEdgeSoftness,
         *textureContrast, *textureFlow, *textureColorDepth, *textureSurfaceDamage, *textureSeed,
         *materialId, *glassTransportOverride, *glassTransmission, *glassIor,
-        *glassAbsorptionDistance, *glassThinWalled;
+        *glassAbsorptionDistance, *glassThinWalled, *mirrorResponseOverride,
+        *mirrorReflectivity, *mirrorRoughness, *mirrorSpecular, *mirrorTint;
 
     // Load texture path
     if (json_object_object_get_ex(obj, "texture", &texture)) {
@@ -583,6 +601,7 @@ void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
         sceneObject->material_id = MaterialManagerDefaultId();
     }
     SceneObjectClearGlassTransportOverride(sceneObject);
+    SceneObjectClearMirrorResponseOverride(sceneObject);
     if (json_object_object_get_ex(obj, "glassTransportOverride", &glassTransportOverride) &&
         json_object_get_boolean(glassTransportOverride)) {
         SceneObjectSeedGlassTransportOverrideFromMaterial(sceneObject);
@@ -597,6 +616,22 @@ void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
         }
         if (json_object_object_get_ex(obj, "glassThinWalled", &glassThinWalled)) {
             sceneObject->glassThinWalled = json_object_get_boolean(glassThinWalled);
+        }
+    }
+    if (json_object_object_get_ex(obj, "mirrorResponseOverride", &mirrorResponseOverride) &&
+        json_object_get_boolean(mirrorResponseOverride)) {
+        SceneObjectSeedMirrorResponseOverrideFromMaterial(sceneObject);
+        if (json_object_object_get_ex(obj, "mirrorReflectivity", &mirrorReflectivity)) {
+            sceneObject->mirrorReflectivity = json_object_get_double(mirrorReflectivity);
+        }
+        if (json_object_object_get_ex(obj, "mirrorRoughness", &mirrorRoughness)) {
+            sceneObject->mirrorRoughness = json_object_get_double(mirrorRoughness);
+        }
+        if (json_object_object_get_ex(obj, "mirrorSpecular", &mirrorSpecular)) {
+            sceneObject->mirrorSpecular = json_object_get_double(mirrorSpecular);
+        }
+        if (json_object_object_get_ex(obj, "mirrorTint", &mirrorTint)) {
+            sceneObject->mirrorTint = json_object_get_int(mirrorTint) & 0xFFFFFF;
         }
     }
 }

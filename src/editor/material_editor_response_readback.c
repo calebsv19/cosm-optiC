@@ -6,6 +6,8 @@
 #include "editor/material_editor_layer_model.h"
 #include "material/material.h"
 #include "material/material_manager.h"
+#include "render/runtime_material_payload_3d.h"
+#include "render/runtime_mirror_composition_3d.h"
 
 static double material_editor_response_clamp01(double value) {
     if (value < 0.0) return 0.0;
@@ -18,8 +20,10 @@ static MaterialEditorResponseFamily material_editor_response_family_from_materia
     if (material_id == MATERIAL_PRESET_TRANSPARENT) {
         return MATERIAL_EDITOR_RESPONSE_FAMILY_GLASS;
     }
-    if (material_id == MATERIAL_PRESET_ROUGH_METAL ||
-        material_id == MATERIAL_PRESET_MIRROR) {
+    if (material_id == MATERIAL_PRESET_MIRROR) {
+        return MATERIAL_EDITOR_RESPONSE_FAMILY_MIRROR;
+    }
+    if (material_id == MATERIAL_PRESET_ROUGH_METAL) {
         return MATERIAL_EDITOR_RESPONSE_FAMILY_METAL;
     }
     if (material_id == MATERIAL_PRESET_EMISSIVE) {
@@ -136,6 +140,21 @@ static void material_editor_response_tint_value(const SceneObject* obj,
              material_editor_response_clamp01(b));
 }
 
+static void material_editor_response_tint_value_from_packed(int packed,
+                                                            char* out,
+                                                            size_t out_size) {
+    double r = (double)((packed >> 16) & 0xFF) / 255.0;
+    double g = (double)((packed >> 8) & 0xFF) / 255.0;
+    double b = (double)(packed & 0xFF) / 255.0;
+    if (!out || out_size == 0u) return;
+    snprintf(out,
+             out_size,
+             "%.2f %.2f %.2f",
+             material_editor_response_clamp01(r),
+             material_editor_response_clamp01(g),
+             material_editor_response_clamp01(b));
+}
+
 static bool material_editor_build_glass_response(MaterialEditorResponseReadback* readback,
                                                  const SceneObject* obj,
                                                  const Material* material) {
@@ -233,6 +252,89 @@ static bool material_editor_build_glass_response(MaterialEditorResponseReadback*
     return true;
 }
 
+static bool material_editor_build_mirror_response(MaterialEditorResponseReadback* readback,
+                                                  const SceneObject* obj,
+                                                  const Material* material) {
+    RuntimeMaterialPayload3D payload = {0};
+    RuntimeMirrorComposition3DPolicy policy = {0};
+    double reflectivity = 0.0;
+    double roughness = 0.0;
+    double specular = 0.0;
+    int tint_packed = 0xFFFFFF;
+    int focused_index = MaterialEditorResolveFocusedObjectIndex();
+    char tint[48];
+    if (!readback || !obj) return false;
+    (void)material;
+    SceneObjectResolveMirrorResponse(obj,
+                                     &reflectivity,
+                                     &roughness,
+                                     &specular,
+                                     &tint_packed);
+    if (focused_index >= 0 &&
+        RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(focused_index, &payload)) {
+        policy = RuntimeMirrorComposition3D_Evaluate(&payload);
+    } else {
+        payload.valid = true;
+        payload.transparency = 0.0;
+        payload.bsdf.reflectivity = reflectivity;
+        payload.bsdf.roughness = roughness < 0.02 ? 0.02 : roughness;
+        payload.bsdf.specWeight = specular;
+        policy = RuntimeMirrorComposition3D_Evaluate(&payload);
+    }
+    material_editor_response_tint_value_from_packed(tint_packed, tint, sizeof(tint));
+    readback->family = MATERIAL_EDITOR_RESPONSE_FAMILY_MIRROR;
+    readback->family_specific = true;
+    snprintf(readback->title, sizeof(readback->title), "Mirror Response");
+    snprintf(readback->subtitle,
+             sizeof(readback->subtitle),
+             "Object mirror response with dominance readback");
+    snprintf(readback->route_label,
+             sizeof(readback->route_label),
+             "%s | mirror family matrix",
+             obj->hasMirrorResponseOverride ? "object override" : "preset/object seed");
+    material_editor_response_add_numeric_row(readback,
+                                             MATERIAL_EDITOR_RESPONSE_FIELD_REFLECTIVITY,
+                                             "Reflect",
+                                             reflectivity,
+                                             obj->hasMirrorResponseOverride ? "object mirror"
+                                                                            : "mirror seed",
+                                             MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE);
+    material_editor_response_add_numeric_row(readback,
+                                             MATERIAL_EDITOR_RESPONSE_FIELD_ROUGHNESS,
+                                             "Rough",
+                                             roughness,
+                                             obj->hasMirrorResponseOverride ? "object sharpness"
+                                                                            : "mirror sharpness",
+                                             MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE);
+    material_editor_response_add_numeric_row(readback,
+                                             MATERIAL_EDITOR_RESPONSE_FIELD_SPECULAR,
+                                             "Spec",
+                                             specular,
+                                             obj->hasMirrorResponseOverride ? "object lobe"
+                                                                            : "mirror lobe",
+                                             MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE);
+    material_editor_response_add_row(readback,
+                                     MATERIAL_EDITOR_RESPONSE_FIELD_TINT,
+                                     "Tint",
+                                     tint,
+                                     obj->hasMirrorResponseOverride ? "object mirror tint"
+                                                                    : "object color bridge",
+                                     MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE);
+    material_editor_response_add_numeric_row(readback,
+                                             MATERIAL_EDITOR_RESPONSE_FIELD_MIRROR_DOMINANCE,
+                                             "Domin",
+                                             policy.dominance,
+                                             "composition readback",
+                                             MATERIAL_EDITOR_RESPONSE_FIELD_READBACK);
+    material_editor_response_add_numeric_row(readback,
+                                             MATERIAL_EDITOR_RESPONSE_FIELD_MIRROR_BASE,
+                                             "Base",
+                                             policy.baseAttenuation,
+                                             "base attenuation",
+                                             MATERIAL_EDITOR_RESPONSE_FIELD_READBACK);
+    return true;
+}
+
 static bool material_editor_build_generic_response(MaterialEditorResponseReadback* readback,
                                                    const SceneObject* obj,
                                                    const Material* material,
@@ -296,6 +398,7 @@ static bool material_editor_build_generic_response(MaterialEditorResponseReadbac
 
 const char* MaterialEditorResponseFamilyLabel(MaterialEditorResponseFamily family) {
     if (family == MATERIAL_EDITOR_RESPONSE_FAMILY_GLASS) return "Glass";
+    if (family == MATERIAL_EDITOR_RESPONSE_FAMILY_MIRROR) return "Mirror";
     if (family == MATERIAL_EDITOR_RESPONSE_FAMILY_METAL) return "Metal";
     if (family == MATERIAL_EDITOR_RESPONSE_FAMILY_EMISSIVE) return "Emissive";
     return "Material";
@@ -316,6 +419,8 @@ const char* MaterialEditorResponseFieldLabel(MaterialEditorResponseField field) 
     if (field == MATERIAL_EDITOR_RESPONSE_FIELD_TINT) return "tint";
     if (field == MATERIAL_EDITOR_RESPONSE_FIELD_ABSORPTION) return "absorption";
     if (field == MATERIAL_EDITOR_RESPONSE_FIELD_THIN_WALLED) return "thin_walled";
+    if (field == MATERIAL_EDITOR_RESPONSE_FIELD_MIRROR_DOMINANCE) return "mirror_dominance";
+    if (field == MATERIAL_EDITOR_RESPONSE_FIELD_MIRROR_BASE) return "mirror_base";
     return "none";
 }
 
@@ -336,6 +441,9 @@ bool MaterialEditorBuildResponseReadback(MaterialEditorResponseReadback* out_rea
     family = material_editor_response_family_from_material_id(obj->material_id);
     if (family == MATERIAL_EDITOR_RESPONSE_FAMILY_GLASS) {
         return material_editor_build_glass_response(out_readback, obj, material);
+    }
+    if (family == MATERIAL_EDITOR_RESPONSE_FAMILY_MIRROR) {
+        return material_editor_build_mirror_response(out_readback, obj, material);
     }
     return material_editor_build_generic_response(out_readback, obj, material, family);
 }

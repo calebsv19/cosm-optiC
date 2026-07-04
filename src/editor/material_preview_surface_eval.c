@@ -45,6 +45,25 @@ static RuntimeMaterialSurfaceEval material_preview_surface_eval_base(
                 material_preview_surface_eval_clamp01(glass_transmission * object->alpha);
         }
     }
+    if (object->material_id == MATERIAL_PRESET_MIRROR) {
+        double mirror_reflectivity = bsdf.reflectivity;
+        double mirror_roughness = bsdf.roughness;
+        double mirror_specular = bsdf.specWeight;
+        int mirror_tint = object->color & 0xFFFFFF;
+        if (SceneObjectResolveMirrorResponse(object,
+                                             &mirror_reflectivity,
+                                             &mirror_roughness,
+                                             &mirror_specular,
+                                             &mirror_tint)) {
+            bsdf.reflectivity = material_preview_surface_eval_clamp01(mirror_reflectivity);
+            bsdf.roughness = material_preview_surface_eval_clamp01(mirror_roughness);
+            if (bsdf.roughness < 0.02) bsdf.roughness = 0.02;
+            bsdf.specWeight = material_preview_surface_eval_clamp01(mirror_specular);
+            bsdf.baseColorR = (double)((mirror_tint >> 16) & 0xFF) / 255.0;
+            bsdf.baseColorG = (double)((mirror_tint >> 8) & 0xFF) / 255.0;
+            bsdf.baseColorB = (double)(mirror_tint & 0xFF) / 255.0;
+        }
+    }
     return RuntimeMaterialSurfaceEvalMakeBase(bsdf.baseColorR,
                                               bsdf.baseColorG,
                                               bsdf.baseColorB,

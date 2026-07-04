@@ -26,6 +26,7 @@ void ObjectEditorObjectAssignMaterial(SceneObject* obj, int material_id) {
                 ? 1.0
                 : 0.0;
     }
+    SceneObjectClearMirrorResponseOverride(obj);
     MarkObjectDirty(obj);
 }
 

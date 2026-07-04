@@ -712,25 +712,36 @@ static int material_editor_draw_proof_controls(SDL_Renderer* renderer,
             cursor_y += 20;
         }
         if (s_material_editor_proof_readback_valid &&
-            s_material_editor_proof_readback.glass_proof_readback &&
+            (s_material_editor_proof_readback.glass_proof_readback ||
+             s_material_editor_proof_readback.mirror_proof_readback) &&
             material_editor_has_room_for_optional_control(cursor_y, 54, bottom_y)) {
+            const char* coverage = s_material_editor_proof_readback.glass_proof_readback
+                                       ? s_material_editor_proof_readback.glass_proof_coverage
+                                       : s_material_editor_proof_readback.mirror_proof_coverage;
+            const char* proof_package = s_material_editor_proof_readback.glass_proof_readback
+                                            ? s_material_editor_proof_readback.glass_proof_package
+                                            : s_material_editor_proof_readback.mirror_proof_package;
             RenderLabelTextWrappedLeft(renderer,
                                        (SDL_Rect){bounds.x, cursor_y, bounds.w, 34},
-                                       s_material_editor_proof_readback.glass_proof_coverage,
+                                       coverage,
                                        palette.text_primary);
             cursor_y += 36;
             RenderLabelTextLeft(renderer,
                                 (SDL_Rect){bounds.x, cursor_y, bounds.w, 16},
-                                s_material_editor_proof_readback.glass_proof_package,
+                                proof_package,
                                 palette.text_muted);
             cursor_y += 18;
         }
         if (s_material_editor_proof_readback_valid &&
-            s_material_editor_proof_readback.glass_proof_readback &&
+            (s_material_editor_proof_readback.glass_proof_readback ||
+             s_material_editor_proof_readback.mirror_proof_readback) &&
             material_editor_has_room_for_optional_control(cursor_y, 34, bottom_y)) {
+            const char* missing = s_material_editor_proof_readback.glass_proof_readback
+                                      ? s_material_editor_proof_readback.glass_missing_proof
+                                      : s_material_editor_proof_readback.mirror_missing_proof;
             RenderLabelTextWrappedLeft(renderer,
                                        (SDL_Rect){bounds.x, cursor_y, bounds.w, 34},
-                                       s_material_editor_proof_readback.glass_missing_proof,
+                                       missing,
                                        palette.text_muted);
             cursor_y += 36;
         }

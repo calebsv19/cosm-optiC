@@ -769,6 +769,141 @@ static int test_runtime_material_response_3d_mirror_dominance_reflects_light_emi
     return 0;
 }
 
+static int test_runtime_disney_3d_illuminated_mirror_preserves_reflected_geometry(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    HitInfo3D hit = {0};
+    RuntimeMaterialResponse3DResult material_result = {0};
+    RuntimeDisney3DResult disney_result = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    MaterialManagerResetDefaults();
+
+    sceneSettings.objectCount = 2;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_MIRROR;
+    sceneSettings.sceneObjects[0].color = 0xFFFFFF;
+    sceneSettings.sceneObjects[0].alpha = 1.0;
+    sceneSettings.sceneObjects[0].opacity = 1.0;
+    sceneSettings.sceneObjects[0].reflectivity = 0.95;
+    sceneSettings.sceneObjects[0].roughness = 0.02;
+    sceneSettings.sceneObjects[1].material_id = MATERIAL_PRESET_DEFAULT;
+    sceneSettings.sceneObjects[1].color = 0xFF0000;
+    sceneSettings.sceneObjects[1].alpha = 1.0;
+    sceneSettings.sceneObjects[1].opacity = 1.0;
+    sceneSettings.sceneObjects[1].reflectivity = 0.0;
+    sceneSettings.sceneObjects[1].roughness = 0.6;
+    animSettings.lightIntensity = 80.0;
+    animSettings.forwardDecay = 10.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    animSettings.secondaryDiffuseSamples3D = 0;
+    animSettings.transmissionSamples3D = 0;
+    animSettings.bounceDepth3D = 1;
+    animSettings.specularDepth3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
+
+    scene.hasLight = true;
+    scene.light.position = vec3(0.0, 1.5, 2.0);
+    scene.light.radius = 0.0;
+    scene.light.intensity = 80.0;
+    scene.light.falloffDistance = 10.0;
+    scene.light.falloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    scene.primitiveCapacity = 2;
+    scene.triangleMesh.triangleCapacity = 2;
+    scene.primitives = (RuntimePrimitive3D*)calloc((size_t)scene.primitiveCapacity,
+                                                   sizeof(*scene.primitives));
+    scene.triangleMesh.triangles =
+        (RuntimeTriangle3D*)calloc((size_t)scene.triangleMesh.triangleCapacity,
+                                   sizeof(*scene.triangleMesh.triangles));
+    assert_true("runtime_disney_illuminated_mirror_alloc",
+                scene.primitives != NULL && scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    scene.primitiveCount = 2;
+    scene.triangleMesh.triangleCount = 2;
+    scene.primitives[0].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene.primitives[0].source.sceneObjectIndex = 0;
+    scene.primitives[1].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene.primitives[1].source.sceneObjectIndex = 1;
+
+    scene.triangleMesh.triangles[0].p0 = vec3(-2.0, 0.0, -2.0);
+    scene.triangleMesh.triangles[0].p1 = vec3(2.0, 0.0, -2.0);
+    scene.triangleMesh.triangles[0].p2 = vec3(0.0, 0.0, 2.0);
+    scene.triangleMesh.triangles[0].normal = vec3(0.0, 1.0, 0.0);
+    scene.triangleMesh.triangles[0].primitiveIndex = 0;
+    scene.triangleMesh.triangles[0].sceneObjectIndex = 0;
+
+    scene.triangleMesh.triangles[1].p0 = vec3(-2.0, 3.0, -2.0);
+    scene.triangleMesh.triangles[1].p1 = vec3(0.0, 3.0, 2.0);
+    scene.triangleMesh.triangles[1].p2 = vec3(2.0, 3.0, -2.0);
+    scene.triangleMesh.triangles[1].normal = vec3(0.0, -1.0, 0.0);
+    scene.triangleMesh.triangles[1].primitiveIndex = 1;
+    scene.triangleMesh.triangles[1].sceneObjectIndex = 1;
+
+    ok = RuntimeTriangleMesh3D_BuildBVH(&scene.triangleMesh);
+    assert_true("runtime_disney_illuminated_mirror_bvh", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    hit.t = 1.0;
+    hit.position = vec3(0.0, 0.0, 0.0);
+    hit.normal = vec3(0.0, 1.0, 0.0);
+    hit.triangleIndex = 0;
+    hit.primitiveIndex = 0;
+    hit.sceneObjectIndex = 0;
+    hit.source = scene.primitives[0].source;
+    hit.baryU = 0.333333333333;
+    hit.baryV = 0.333333333333;
+    hit.baryW = 0.333333333334;
+
+    ok = RuntimeMaterialResponse3D_ShadeHit(&scene, &hit, NULL, &material_result);
+    assert_true("runtime_disney_illuminated_mirror_material_ok", ok);
+    ok = RuntimeDisney3D_ShadeHit(&scene, &hit, NULL, &disney_result);
+    assert_true("runtime_disney_illuminated_mirror_disney_ok", ok);
+
+    assert_true("runtime_disney_illuminated_mirror_dominant",
+                material_result.mirrorDominance > 0.90 &&
+                material_result.mirrorBaseAttenuation < 0.10);
+    assert_true("runtime_disney_illuminated_mirror_base_attenuated",
+                material_result.mirrorBaseRadianceAfterAttenuation <
+                    material_result.mirrorBaseRadianceBeforeAttenuation * 0.12);
+    assert_true("runtime_disney_illuminated_mirror_material_reflection_red",
+                material_result.specularRadianceR >
+                    material_result.specularRadianceG + 1e-6 &&
+                material_result.specularRadianceR >
+                    material_result.specularRadianceB + 1e-6);
+    assert_true("runtime_disney_illuminated_mirror_disney_reflection_red",
+                disney_result.specularRadianceR >
+                    disney_result.specularRadianceG + 1e-6 &&
+                disney_result.specularRadianceR >
+                    disney_result.specularRadianceB + 1e-6);
+    assert_true("runtime_disney_illuminated_mirror_specular_over_base",
+                disney_result.specularRadiance >
+                    disney_result.baseRadiance * 2.0);
+    assert_true("runtime_disney_illuminated_mirror_total_keeps_reflection",
+                disney_result.radianceR >
+                    disney_result.radianceG + 1e-6 &&
+                disney_result.radianceR >
+                    disney_result.radianceB + 1e-6);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 static int test_runtime_disney_3d_lower_tier_separation_contract(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -4146,6 +4281,7 @@ int run_test_runtime_lighting_materials_transport_suite(void) {
     test_runtime_material_response_3d_mirror_reflects_opaque_chroma();
     test_runtime_material_response_3d_mirror_surface_kind_parity();
     test_runtime_material_response_3d_mirror_dominance_reflects_light_emitter();
+    test_runtime_disney_3d_illuminated_mirror_preserves_reflected_geometry();
     test_runtime_disney_3d_lower_tier_separation_contract();
     test_runtime_disney_3d_opaque_receiver_preserves_transport_support();
     test_runtime_disney_v2_3d_direct_light_pdf_estimator();

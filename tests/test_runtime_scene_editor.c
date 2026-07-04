@@ -3289,6 +3289,210 @@ static int test_material_editor_glass_transport_override_is_object_local_and_loa
     return 0;
 }
 
+static int test_material_editor_mirror_response_readback_gets_family_matrix(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    MaterialEditorResponseReadback readback = {0};
+    const MaterialEditorResponseRow* reflect = NULL;
+    const MaterialEditorResponseRow* rough = NULL;
+    const MaterialEditorResponseRow* spec = NULL;
+    const MaterialEditorResponseRow* tint = NULL;
+    const MaterialEditorResponseRow* dominance = NULL;
+    const MaterialEditorResponseRow* base = NULL;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 5.0, 0.0, NULL, 0);
+    ObjectEditorObjectAssignMaterial(&sceneSettings.sceneObjects[0], MATERIAL_PRESET_MIRROR);
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+
+    assert_true("material_editor_mirror_response_build",
+                MaterialEditorBuildResponseReadback(&readback));
+    reflect = test_material_editor_response_row(&readback, "Reflect");
+    rough = test_material_editor_response_row(&readback, "Rough");
+    spec = test_material_editor_response_row(&readback, "Spec");
+    tint = test_material_editor_response_row(&readback, "Tint");
+    dominance = test_material_editor_response_row(&readback, "Domin");
+    base = test_material_editor_response_row(&readback, "Base");
+    assert_true("material_editor_mirror_response_family",
+                readback.family == MATERIAL_EDITOR_RESPONSE_FAMILY_MIRROR &&
+                    readback.family_specific &&
+                    !readback.has_guarded_fields &&
+                    strcmp(readback.title, "Mirror Response") == 0 &&
+                    strstr(readback.route_label, "mirror family matrix") != NULL);
+    assert_true("material_editor_mirror_response_rows",
+                reflect && rough && spec && tint && dominance && base &&
+                    readback.row_count == 6);
+    assert_true("material_editor_mirror_response_editable_core",
+                strcmp(reflect->value, "0.95") == 0 &&
+                    strcmp(rough->value, "0.00") == 0 &&
+                    strcmp(spec->value, "1.00") == 0 &&
+                    strcmp(tint->value, "1.00 1.00 1.00") == 0 &&
+                    reflect->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE &&
+                    rough->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE &&
+                    spec->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE &&
+                    tint->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE);
+    assert_true("material_editor_mirror_response_dominance_readback",
+                strcmp(dominance->value, "0.95") == 0 &&
+                    strcmp(base->value, "0.05") == 0 &&
+                    dominance->field == MATERIAL_EDITOR_RESPONSE_FIELD_MIRROR_DOMINANCE &&
+                    base->field == MATERIAL_EDITOR_RESPONSE_FIELD_MIRROR_BASE &&
+                    dominance->state == MATERIAL_EDITOR_RESPONSE_FIELD_READBACK &&
+                    base->state == MATERIAL_EDITOR_RESPONSE_FIELD_READBACK);
+
+    SceneEditorMaterialGraphResetAll();
+    SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_mirror_response_override_is_object_local_and_loaded(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeMaterialPayload3D payload_a = {0};
+    RuntimeMaterialPayload3D payload_b = {0};
+    MaterialEditorResponseReadback readback = {0};
+    const MaterialEditorResponseRow* reflect = NULL;
+    const MaterialEditorResponseRow* rough = NULL;
+    const MaterialEditorResponseRow* spec = NULL;
+    const MaterialEditorResponseRow* tint = NULL;
+    const Material* mirror_preset = NULL;
+    SceneObject loaded;
+    struct json_object* obj = json_object_new_object();
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    memset(&loaded, 0, sizeof(loaded));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+
+    sceneSettings.objectCount = 2;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 5.0, 0.0, NULL, 0);
+    InitObject(&sceneSettings.sceneObjects[1], OBJECT_CIRCLE, 8.0, 0.0, 5.0, 0.0, NULL, 0);
+    ObjectEditorObjectAssignMaterial(&sceneSettings.sceneObjects[0], MATERIAL_PRESET_MIRROR);
+    ObjectEditorObjectAssignMaterial(&sceneSettings.sceneObjects[1], MATERIAL_PRESET_MIRROR);
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+
+    assert_true("material_editor_mirror_response_reflect_route",
+                MaterialEditorApplyResponseValueToFocused(
+                    MATERIAL_EDITOR_RESPONSE_FIELD_REFLECTIVITY,
+                    0.82));
+    assert_true("material_editor_mirror_response_rough_route",
+                MaterialEditorApplyResponseValueToFocused(
+                    MATERIAL_EDITOR_RESPONSE_FIELD_ROUGHNESS,
+                    0.12));
+    assert_true("material_editor_mirror_response_spec_route",
+                MaterialEditorApplyResponseValueToFocused(
+                    MATERIAL_EDITOR_RESPONSE_FIELD_SPECULAR,
+                    0.64));
+    assert_true("material_editor_mirror_response_tint_route",
+                MaterialEditorApplyResponseTintToFocused(
+                    SceneObjectPackRGBBytes(190u, 210u, 230u)));
+    assert_true("material_editor_mirror_response_override_written",
+                sceneSettings.sceneObjects[0].hasMirrorResponseOverride &&
+                    sceneSettings.sceneObjects[0].mirrorReflectivity == 0.82 &&
+                    sceneSettings.sceneObjects[0].mirrorRoughness == 0.12 &&
+                    sceneSettings.sceneObjects[0].mirrorSpecular == 0.64 &&
+                    sceneSettings.sceneObjects[0].mirrorTint ==
+                        SceneObjectPackRGBBytes(190u, 210u, 230u) &&
+                    sceneSettings.sceneObjects[0].reflectivity == 0.82 &&
+                    sceneSettings.sceneObjects[0].roughness == 0.12);
+    mirror_preset = MaterialManagerGet(MATERIAL_PRESET_MIRROR);
+    assert_true("material_editor_mirror_response_preset_preserved",
+                mirror_preset &&
+                    mirror_preset->reflectivity == 0.95f &&
+                    mirror_preset->roughness == 0.0f &&
+                    mirror_preset->specular == 0.1f);
+    assert_true("material_editor_mirror_response_payload_a",
+                RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(0, &payload_a));
+    assert_close("material_editor_mirror_response_payload_reflect",
+                 payload_a.bsdf.reflectivity,
+                 0.82,
+                 1e-9);
+    assert_close("material_editor_mirror_response_payload_rough",
+                 payload_a.bsdf.roughness,
+                 0.12,
+                 1e-9);
+    assert_close("material_editor_mirror_response_payload_spec",
+                 payload_a.bsdf.specWeight,
+                 0.64,
+                 1e-9);
+    assert_close("material_editor_mirror_response_payload_tint_r",
+                 payload_a.baseColorR,
+                 190.0 / 255.0,
+                 1e-9);
+    assert_true("material_editor_mirror_response_payload_b",
+                RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(1, &payload_b));
+    assert_close("material_editor_mirror_response_payload_b_reflect_preset",
+                 payload_b.bsdf.reflectivity,
+                 0.95,
+                 1e-6);
+    assert_close("material_editor_mirror_response_payload_b_rough_floor",
+                 payload_b.bsdf.roughness,
+                 0.02,
+                 1e-9);
+
+    assert_true("material_editor_mirror_response_step_routes",
+                MaterialEditorApplyResponseStepToFocused(
+                    MATERIAL_EDITOR_RESPONSE_FIELD_ROUGHNESS,
+                    0.05));
+    assert_close("material_editor_mirror_response_step_value",
+                 sceneSettings.sceneObjects[0].mirrorRoughness,
+                 0.17,
+                 1e-9);
+    assert_true("material_editor_mirror_response_readback_after_mutation",
+                MaterialEditorBuildResponseReadback(&readback));
+    reflect = test_material_editor_response_row(&readback, "Reflect");
+    rough = test_material_editor_response_row(&readback, "Rough");
+    spec = test_material_editor_response_row(&readback, "Spec");
+    tint = test_material_editor_response_row(&readback, "Tint");
+    assert_true("material_editor_mirror_response_readback_override",
+                reflect && rough && spec && tint &&
+                    strcmp(reflect->value, "0.82") == 0 &&
+                    strcmp(rough->value, "0.17") == 0 &&
+                    strcmp(spec->value, "0.64") == 0 &&
+                    strcmp(tint->value, "0.75 0.82 0.90") == 0 &&
+                    reflect->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE &&
+                    rough->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE &&
+                    spec->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE &&
+                    tint->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE);
+
+    ObjectEditorObjectAssignMaterial(&sceneSettings.sceneObjects[0], MATERIAL_PRESET_ROUGH_METAL);
+    assert_true("material_editor_mirror_response_override_reset_on_material_change",
+                !sceneSettings.sceneObjects[0].hasMirrorResponseOverride);
+
+    json_object_object_add(obj, "texture", json_object_new_string(""));
+    json_object_object_add(obj, "color", json_object_new_int(0xFFFFFF));
+    json_object_object_add(obj, "materialId", json_object_new_int(MATERIAL_PRESET_MIRROR));
+    json_object_object_add(obj, "mirrorResponseOverride", json_object_new_boolean(true));
+    json_object_object_add(obj, "mirrorReflectivity", json_object_new_double(0.71));
+    json_object_object_add(obj, "mirrorRoughness", json_object_new_double(0.08));
+    json_object_object_add(obj, "mirrorSpecular", json_object_new_double(0.92));
+    json_object_object_add(obj, "mirrorTint", json_object_new_int(0xA0B0C0));
+    LoadObjectProperties(obj, &loaded);
+    assert_true("material_editor_mirror_response_load_override",
+                loaded.hasMirrorResponseOverride &&
+                    loaded.material_id == MATERIAL_PRESET_MIRROR &&
+                    loaded.mirrorReflectivity == 0.71 &&
+                    loaded.mirrorRoughness == 0.08 &&
+                    loaded.mirrorSpecular == 0.92 &&
+                    loaded.mirrorTint == 0xA0B0C0);
+    json_object_put(obj);
+
+    SceneEditorMaterialGraphResetAll();
+    SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 static int test_material_editor_response_mutation_rejects_non_glass_family(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -3683,6 +3887,80 @@ static int test_material_editor_glass_proof_readback_maps_current_state_to_m4_co
     assert_true("material_editor_non_glass_proof_has_no_glass_mapping",
                 MaterialEditorBuildFocusedProofReadback(&proof) &&
                     !proof.glass_proof_readback);
+
+    SceneEditorMaterialGraphResetAll();
+    SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_material_editor_mirror_proof_readback_maps_current_state_to_coverage(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    MaterialEditorProofReadback proof = {0};
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 5.0, 0.0, NULL, 0);
+    ObjectEditorObjectAssignMaterial(&sceneSettings.sceneObjects[0], MATERIAL_PRESET_MIRROR);
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+
+    assert_true("material_editor_mirror_proof_default_build",
+                MaterialEditorBuildFocusedProofReadback(&proof));
+    assert_true("material_editor_mirror_proof_default_su4",
+                proof.mirror_proof_readback &&
+                    !proof.glass_proof_readback &&
+                    strcmp(proof.mirror_proof_case, "default mirror") == 0 &&
+                    strcmp(proof.mirror_proof_package,
+                           "su4_mirror_surface_unification_matrix") == 0 &&
+                    strstr(proof.mirror_proof_coverage, "default mirror dominance") != NULL &&
+                    strstr(proof.mirror_missing_proof, "readback-only") != NULL);
+
+    sceneSettings.sceneObjects[0].color = SceneObjectPackRGBBytes(180u, 210u, 240u);
+    assert_true("material_editor_mirror_proof_tinted_build",
+                MaterialEditorBuildFocusedProofReadback(&proof));
+    assert_true("material_editor_mirror_proof_tinted_su4",
+                strcmp(proof.mirror_proof_case, "tinted mirror") == 0 &&
+                    strcmp(proof.mirror_proof_package,
+                           "su4_mirror_surface_unification_matrix") == 0 &&
+                    strstr(proof.mirror_proof_coverage, "tint readback") != NULL &&
+                    strstr(proof.mirror_missing_proof, "tinted mirror") != NULL);
+
+    assert_true("material_editor_mirror_proof_rough_route",
+                MaterialEditorApplyResponseValueToFocused(
+                    MATERIAL_EDITOR_RESPONSE_FIELD_ROUGHNESS,
+                    0.32));
+    assert_true("material_editor_mirror_proof_rough_build",
+                MaterialEditorBuildFocusedProofReadback(&proof));
+    assert_true("material_editor_mirror_proof_rough_glossy",
+                strcmp(proof.mirror_proof_case, "rough mirror") == 0 &&
+                    strcmp(proof.mirror_proof_package,
+                           "disney_v2_mirror_glossy_preservation_matrix") == 0 &&
+                    strstr(proof.mirror_proof_coverage, "rough reflection") != NULL &&
+                    strstr(proof.mirror_missing_proof, "rough mirror visual") != NULL);
+
+    ObjectEditorObjectAssignMaterial(&sceneSettings.sceneObjects[0], MATERIAL_PRESET_MIRROR);
+    sceneSettings.sceneObjects[0].color = SceneObjectPackRGBBytes(255u, 255u, 255u);
+    animSettings.lightIntensity = 80.0;
+    assert_true("material_editor_mirror_proof_illuminated_build",
+                MaterialEditorBuildFocusedProofReadback(&proof));
+    assert_true("material_editor_mirror_proof_illuminated_m10_s4",
+                strcmp(proof.mirror_proof_case, "illuminated mirror dominance") == 0 &&
+                    strcmp(proof.mirror_proof_package,
+                           "m10_s4_illuminated_mirror_dominance_regression") == 0 &&
+                    strstr(proof.mirror_proof_coverage, "bright direct light") != NULL &&
+                    strstr(proof.mirror_missing_proof, "packaged visual matrix") != NULL);
+
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_ROUGH_METAL;
+    assert_true("material_editor_non_mirror_proof_has_no_mirror_mapping",
+                MaterialEditorBuildFocusedProofReadback(&proof) &&
+                    !proof.mirror_proof_readback);
 
     SceneEditorMaterialGraphResetAll();
     SceneEditorMaterialStackResetAll();
@@ -5760,6 +6038,8 @@ int run_test_runtime_scene_editor_tests(void) {
     test_material_editor_response_readback_uses_family_matrix_for_glass();
     test_material_editor_glass_response_mutation_routes_to_composite_helpers();
     test_material_editor_glass_transport_override_is_object_local_and_loaded();
+    test_material_editor_mirror_response_readback_gets_family_matrix();
+    test_material_editor_mirror_response_override_is_object_local_and_loaded();
     test_material_editor_response_mutation_rejects_non_glass_family();
     test_material_editor_glass_overlay_affordances_add_select_and_readback();
     test_material_editor_glass_overlay_affordances_reject_non_glass();
@@ -5767,6 +6047,7 @@ int run_test_runtime_scene_editor_tests(void) {
     test_material_editor_texture_channel_readback_groups_ownership();
     test_material_editor_glass_channel_mapping_labels_authored_and_overlay_intent();
     test_material_editor_glass_proof_readback_maps_current_state_to_m4_coverage();
+    test_material_editor_mirror_proof_readback_maps_current_state_to_coverage();
     test_material_editor_object_scope_clears_face_overrides_and_applies_all_faces();
     test_material_editor_layer_list_routes_object_stack_controls();
     test_material_editor_object_projector_centers_focused_object();
