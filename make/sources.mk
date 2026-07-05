@@ -23,6 +23,7 @@ CORE_TIME_SRCS += $(CORE_TIME_DIR)/src/core_time_posix.c
 endif
 CORE_SIM_SRCS := $(CORE_SIM_DIR)/src/core_sim.c
 CORE_SCENE_SRCS := $(CORE_SCENE_DIR)/src/core_scene.c
+CORE_SCENE_VIEW_SRCS := $(CORE_SCENE_VIEW_DIR)/src/core_scene_view.c
 CORE_AUTHORED_TEXTURE_SRCS := $(CORE_AUTHORED_TEXTURE_DIR)/src/core_authored_texture.c
 CORE_SCENE_COMPILE_SRCS := $(CORE_SCENE_COMPILE_DIR)/src/core_scene_compile.c
 CORE_MESH_ASSET_SRCS := \

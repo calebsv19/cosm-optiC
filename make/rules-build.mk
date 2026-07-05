@@ -165,6 +165,10 @@ $(BUILD_DIR)/core_scene/%.o: $(CORE_SCENE_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
+$(BUILD_DIR)/core_scene_view/%.o: $(CORE_SCENE_VIEW_DIR)/src/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
 $(BUILD_DIR)/core_authored_texture/%.o: $(CORE_AUTHORED_TEXTURE_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@

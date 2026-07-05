@@ -23,6 +23,7 @@
 #include "editor/scene_editor_material_preview.h"
 #include "editor/scene_editor_material_stack.h"
 #include "editor/scene_editor_runtime_scene_persistence.h"
+#include "editor/scene_editor_scene_view_packet.h"
 #include "editor/scene_editor_tool_state.h"
 #include "editor/scene_editor_viewport_nav.h"
 #include "editor/scene_editor_viewport_render.h"
@@ -4667,6 +4668,127 @@ static int test_material_editor_preview_resolves_focused_triangle_substrate(void
     return 0;
 }
 
+static int test_scene_editor_scene_view_packet_exports_focused_object(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_view_packet_fixture\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{"
+            "\"object_id\":\"packet_prism\","
+            "\"object_type\":\"rect_prism_primitive\","
+            "\"transform\":{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+              "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}},"
+            "\"primitive\":{\"kind\":\"rect_prism_primitive\","
+              "\"width\":4.0,\"height\":3.0,\"depth\":2.0}"
+          "}"
+        "],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":4.0,\"z\":18.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeSceneBridge3DDigestState digest = {0};
+    SceneEditorDigestOverlayNavState nav_state = {0};
+    SceneEditorDigestOverlayProjector projector = {0};
+    SDL_Rect viewport = {0, 0, 900, 650};
+    SceneEditorSceneViewPacket packet = {0};
+    SceneEditorSceneViewPacketReadback readback = {0};
+    char packet_json[65536];
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.integratorMode = 1;
+
+    assert_true("scene_view_packet_runtime_apply_ok",
+                runtime_scene_bridge_apply_json(runtime_json, &summary));
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
+    sceneSettings.sceneObjects[0].alpha = 0.40;
+    sceneSettings.sceneObjects[0].opacity = 1.0;
+    sceneSettings.sceneObjects[0].color = SceneObjectPackRGBBytes(32, 144, 220);
+    runtime_scene_bridge_get_last_3d_digest_state(&digest);
+    nav_state.overlay_zoom = 0.08;
+    assert_true("scene_view_packet_projector",
+                SceneEditorDigestOverlayBuildObjectProjector(&digest,
+                                                             &viewport,
+                                                             &nav_state,
+                                                             0,
+                                                             true,
+                                                             &projector));
+    assert_true("scene_view_packet_build",
+                SceneEditorSceneViewPacketBuildFocusedObject(
+                    0,
+                    SCENE_EDITOR_SCENE_VIEW_PREVIEW_MATERIAL,
+                    &projector,
+                    &packet));
+    assert_true("scene_view_packet_triangle_count", packet.triangleCount == 12);
+    assert_true("scene_view_packet_face_group_count", packet.faceGroupCount == 6);
+    assert_true("scene_view_packet_projected", packet.projected);
+    assert_true("scene_view_packet_complete", packet.complete);
+    assert_true("scene_view_packet_not_degraded",
+                packet.degradedReason == SCENE_EDITOR_SCENE_VIEW_DEGRADED_NONE);
+    assert_true("scene_view_packet_pick_object",
+                packet.triangles[0].pickId.sceneObjectIndex == 0);
+    assert_true("scene_view_packet_first_face_group",
+                packet.triangles[0].pickId.faceGroupIndex == 0);
+    assert_true("scene_view_packet_last_face_group",
+                packet.triangles[11].pickId.faceGroupIndex == 5);
+    assert_true("scene_view_packet_alpha_hint",
+                packet.triangles[0].rgba[3] < 255);
+    assert_true("scene_view_packet_transparent_flag",
+                (packet.triangles[0].displayFlags &
+                 SCENE_EDITOR_SCENE_VIEW_DISPLAY_TRANSPARENT) != 0u);
+    assert_true("scene_view_packet_screen_projection",
+                packet.triangles[0].screen0[0] != 0 || packet.triangles[0].screen0[1] != 0);
+    memset(packet_json, 0, sizeof(packet_json));
+    assert_true("scene_view_packet_json_export",
+                SceneEditorSceneViewPacketToJsonString(&packet,
+                                                       packet_json,
+                                                       sizeof(packet_json)));
+    assert_true("scene_view_packet_json_has_schema",
+                strstr(packet_json, SCENE_EDITOR_SCENE_VIEW_PACKET_SCHEMA_VARIANT) != NULL);
+    assert_true("scene_view_packet_json_has_material_quality",
+                strstr(packet_json, "\"preview_quality\":\"material_preview\"") != NULL);
+    assert_true("scene_view_packet_json_readback",
+                SceneEditorSceneViewPacketReadbackFromJsonString(packet_json, &readback));
+    assert_true("scene_view_packet_readback_valid", readback.valid);
+    assert_true("scene_view_packet_readback_counts",
+                readback.triangleCount == packet.triangleCount &&
+                    readback.faceGroupCount == packet.faceGroupCount);
+    assert_true("scene_view_packet_readback_pick_span",
+                readback.firstPickId.faceGroupIndex == 0 &&
+                    readback.lastPickId.faceGroupIndex == 5);
+    assert_true("scene_view_packet_readback_alpha",
+                readback.firstAlpha == packet.triangles[0].rgba[3]);
+    assert_true("scene_view_packet_readback_flags",
+                (readback.firstDisplayFlags &
+                 SCENE_EDITOR_SCENE_VIEW_DISPLAY_TRANSPARENT) != 0u);
+
+    memset(&packet, 0, sizeof(packet));
+    assert_true("scene_view_packet_missing_object_rejected",
+                !SceneEditorSceneViewPacketBuildFocusedObject(
+                    9,
+                    SCENE_EDITOR_SCENE_VIEW_PREVIEW_MATERIAL,
+                    &projector,
+                    &packet));
+    assert_true("scene_view_packet_missing_object_degraded",
+                packet.degradedReason == SCENE_EDITOR_SCENE_VIEW_DEGRADED_OBJECT_NOT_FOUND);
+
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 static int test_material_editor_face_metrics_ground_uv_scales_with_dimensions(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -6340,6 +6462,7 @@ int run_test_runtime_scene_editor_tests(void) {
     test_material_editor_object_projector_centers_focused_object();
     test_material_editor_focused_zoom_accumulates_around_object_fit();
     test_material_editor_preview_resolves_focused_triangle_substrate();
+    test_scene_editor_scene_view_packet_exports_focused_object();
     test_material_editor_face_metrics_ground_uv_scales_with_dimensions();
     test_material_editor_face_indices_are_local_to_primitive();
     test_material_editor_face_metrics_orients_vertical_faces_to_world_up();
