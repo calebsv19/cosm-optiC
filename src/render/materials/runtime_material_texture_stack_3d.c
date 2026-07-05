@@ -615,6 +615,58 @@ static void runtime_material_surface_eval_apply_stack_overlay(
     }
 }
 
+static double runtime_material_texture_stack_apply_influence(double current,
+                                                             double influence,
+                                                             double amount) {
+    amount = runtime_material_texture_stack_clamp01(amount);
+    if (amount <= 1e-9 || fabs(influence) <= 1e-9) {
+        return current;
+    }
+    if (influence > 0.0) {
+        return runtime_material_texture_stack_lerp(current,
+                                                   runtime_material_texture_stack_clamp01(influence),
+                                                   amount);
+    }
+    return runtime_material_texture_stack_lerp(current,
+                                               0.0,
+                                               runtime_material_texture_stack_clamp01(-influence) *
+                                                   amount);
+}
+
+static void runtime_material_surface_eval_apply_layer_influences(
+    RuntimeMaterialSurfaceEval* eval,
+    const RuntimeMaterialTextureLayer* layer,
+    double amount) {
+    if (!eval || !layer) return;
+    amount = runtime_material_texture_stack_clamp01(amount);
+    if (amount <= 1e-9) return;
+    if (fabs(layer->roughnessInfluence) <= 1e-9 &&
+        fabs(layer->reflectivityInfluence) <= 1e-9 &&
+        fabs(layer->specularInfluence) <= 1e-9 &&
+        fabs(layer->diffuseInfluence) <= 1e-9 &&
+        fabs(layer->transparencyInfluence) <= 1e-9) {
+        return;
+    }
+    eval->active = true;
+    eval->roughness = runtime_material_texture_stack_apply_influence(eval->roughness,
+                                                                     layer->roughnessInfluence,
+                                                                     amount);
+    eval->reflectivity = runtime_material_texture_stack_apply_influence(
+        eval->reflectivity,
+        layer->reflectivityInfluence,
+        amount);
+    eval->specWeight = runtime_material_texture_stack_apply_influence(eval->specWeight,
+                                                                      layer->specularInfluence,
+                                                                      amount);
+    eval->diffuseWeight = runtime_material_texture_stack_apply_influence(eval->diffuseWeight,
+                                                                         layer->diffuseInfluence,
+                                                                         amount);
+    eval->transparency = runtime_material_texture_stack_apply_influence(
+        eval->transparency,
+        layer->transparencyInfluence,
+        amount);
+}
+
 static bool runtime_material_texture_stack_evaluate_placed_uv_internal(
     const RuntimeMaterialTextureStack* stack,
     const SceneObject* object,
@@ -664,6 +716,7 @@ static bool runtime_material_texture_stack_evaluate_placed_uv_internal(
                                                                 amount,
                                                                 i);
             }
+            runtime_material_surface_eval_apply_layer_influences(&eval, layer, amount);
             continue;
         }
         if (layer->role != RUNTIME_MATERIAL_TEXTURE_LAYER_ROLE_OVERLAY) continue;
@@ -677,6 +730,9 @@ static bool runtime_material_texture_stack_evaluate_placed_uv_internal(
                 eval.layerMasks[i] =
                     runtime_material_texture_stack_clamp01(sample.mask * layer->opacity);
                 runtime_material_surface_eval_apply_stack_overlay(&eval, layer, &sample);
+                runtime_material_surface_eval_apply_layer_influences(&eval,
+                                                                     layer,
+                                                                     eval.layerMasks[i]);
                 if (eval.transparency > transparency_before) {
                     eval.transparency = transparency_before;
                 }
@@ -691,6 +747,9 @@ static bool runtime_material_texture_stack_evaluate_placed_uv_internal(
                                                     &sample)) {
             eval.layerMasks[i] = runtime_material_texture_stack_clamp01(sample.mask * layer->opacity);
             runtime_material_surface_eval_apply_sample(&eval, &sample, layer->opacity);
+            runtime_material_surface_eval_apply_layer_influences(&eval,
+                                                                 layer,
+                                                                 eval.layerMasks[i]);
             if (eval.transparency > transparency_before) {
                 eval.transparency = transparency_before;
             }

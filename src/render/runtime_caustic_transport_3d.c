@@ -6,7 +6,9 @@
 #include "material/material.h"
 #include "render/runtime_dielectric_transport_3d.h"
 #include "render/runtime_material_payload_3d.h"
+#include "render/runtime_caustic_transport_debug_3d.h"
 #include "render/runtime_ray_3d.h"
+#include "render/runtime_render_trace_cost_ledger_3d.h"
 #include "render/runtime_volume_3d_sampling.h"
 
 enum {
@@ -82,6 +84,24 @@ static bool runtime_caustic_transport_payload_is_eligible(
     if (payload->transparency > 1.0e-6) return true;
     if (payload->opticalIor > 1.0001 || payload->bsdf.ior > 1.0001) return true;
     return payload->bsdf.reflectivity > 0.10 && payload->bsdf.roughness <= 0.35;
+}
+
+static const char* runtime_caustic_transport_light_kind_label(
+    RuntimeLightSource3DKind kind) {
+    switch (kind) {
+        case RUNTIME_LIGHT_SOURCE_3D_KIND_POINT:
+            return "point";
+        case RUNTIME_LIGHT_SOURCE_3D_KIND_SPHERE:
+            return "sphere";
+        case RUNTIME_LIGHT_SOURCE_3D_KIND_DISK:
+            return "disk";
+        case RUNTIME_LIGHT_SOURCE_3D_KIND_RECT:
+            return "rect";
+        case RUNTIME_LIGHT_SOURCE_3D_KIND_MESH_EMISSIVE:
+            return "mesh_emissive";
+        default:
+            return "unknown";
+    }
 }
 
 static void runtime_caustic_transport_prepare_surface_receiver_fallback(
@@ -347,7 +367,8 @@ static bool runtime_caustic_transport_select_direction_with_normal(
     Vec3 surface_normal,
     Vec3 incident_dir,
     Vec3* out_direction,
-    Vec3* out_throughput) {
+    Vec3* out_throughput,
+    bool* out_is_refraction) {
     RuntimeDielectricTransport3D dielectric = {0};
     double transmission_weight = 0.0;
     double reflection_weight = 0.0;
@@ -371,11 +392,13 @@ static bool runtime_caustic_transport_select_direction_with_normal(
     reflection_weight = runtime_caustic_transport_clamp(payload->bsdf.reflectivity, 0.0, 1.0) *
                         runtime_caustic_transport_clamp(1.0 - payload->bsdf.roughness, 0.0, 1.0);
 
+    if (out_is_refraction) *out_is_refraction = false;
     if (dielectric.hasRefraction && transmission_weight >= reflection_weight * 0.75) {
         direction = dielectric.refractionDir;
         throughput = vec3(payload->baseColorR * transmission_weight,
                           payload->baseColorG * transmission_weight,
                           payload->baseColorB * transmission_weight);
+        if (out_is_refraction) *out_is_refraction = true;
     } else {
         direction = dielectric.reflectionDir;
         throughput = vec3(payload->baseColorR * fmax(reflection_weight, dielectric.fresnel),
@@ -396,7 +419,8 @@ static bool runtime_caustic_transport_deposit_segment(
     const Ray3D* ray,
     Vec3 radiance,
     double base_footprint_radius,
-    RuntimeCausticTransport3DDiagnostics* diagnostics) {
+    RuntimeCausticTransport3DDiagnostics* diagnostics,
+    RuntimeCausticTransportDebugPath3D* debug_path) {
     double t_enter = 0.0;
     double t_exit = 0.0;
     double step = 0.0;
@@ -410,7 +434,15 @@ static bool runtime_caustic_transport_deposit_segment(
                                          1.0e6,
                                          &t_enter,
                                          &t_exit)) {
+        if (debug_path) {
+            debug_path->volumeClipHit = false;
+        }
         return false;
+    }
+    if (debug_path) {
+        debug_path->volumeClipHit = true;
+        debug_path->volumeTEnter = t_enter;
+        debug_path->volumeTExit = t_exit;
     }
     step = fmax(scene->volume.grid.voxelSize * 0.75, 1.0e-4);
     diagnostics->volumeSegmentCount += 1u;
@@ -418,10 +450,26 @@ static bool runtime_caustic_transport_deposit_segment(
         Vec3 p = vec3_add(ray->origin, vec3_scale(ray->direction, t));
         double attenuation = 1.0 / (1.0 + 0.10 * fmax(t - t_enter, 0.0));
         double radius = runtime_caustic_transport_clamp(
-            base_footprint_radius + (fmax(t - t_enter, 0.0) * 0.025) + (step * 0.5),
-            scene->volume.grid.voxelSize * 0.75,
-            scene->volume.grid.voxelSize * 3.50);
+            base_footprint_radius + (fmax(t - t_enter, 0.0) * 0.060) + (step * 0.75),
+            scene->volume.grid.voxelSize * 1.50,
+            scene->volume.grid.voxelSize * 4.25);
         Vec3 deposit = vec3_scale(radiance, attenuation * step * 0.020);
+        if (debug_path) {
+            if (debug_path->volumeStepCount == 0) {
+                debug_path->volumeFirstDepositPosition = p;
+                debug_path->footprintRadiusMin = radius;
+                debug_path->footprintRadiusMax = radius;
+            } else {
+                if (radius < debug_path->footprintRadiusMin) {
+                    debug_path->footprintRadiusMin = radius;
+                }
+                if (radius > debug_path->footprintRadiusMax) {
+                    debug_path->footprintRadiusMax = radius;
+                }
+            }
+            debug_path->volumeLastDepositPosition = p;
+            debug_path->volumeStepCount += 1;
+        }
         diagnostics->depositAttemptCount += 1u;
         if (RuntimeCausticVolumeCache3D_DepositFootprintAtPosition(cache,
                                                                    p,
@@ -435,12 +483,106 @@ static bool runtime_caustic_transport_deposit_segment(
             diagnostics->totalRadianceG += deposit.y;
             diagnostics->totalRadianceB += deposit.z;
             if (luma > diagnostics->maxRadiance) diagnostics->maxRadiance = luma;
+            if (debug_path) {
+                debug_path->volumeDepositAcceptedCount += 1u;
+                debug_path->volumeDepositedRadiance =
+                    vec3_add(debug_path->volumeDepositedRadiance, deposit);
+            }
             deposited = true;
         } else {
             diagnostics->depositRejectedCount += 1u;
+            if (debug_path) {
+                debug_path->volumeDepositRejectedCount += 1u;
+            }
         }
     }
     return deposited;
+}
+
+static bool runtime_caustic_transport_continue_to_outside_medium(
+    const RuntimeScene3D* scene,
+    Ray3D* io_ray,
+    Vec3* io_radiance,
+    bool inside_specular_object,
+    int current_specular_object_index,
+    RuntimeCausticTransport3DDiagnostics* diagnostics,
+    RuntimeCausticTransportDebugPath3D* debug_path) {
+    int remaining_specular_depth = 0;
+
+    if (!scene || !io_ray || !io_radiance || !diagnostics) return false;
+    if (!inside_specular_object) return true;
+
+    remaining_specular_depth = g_caustic_transport_state.maxPathDepth > 1
+                                   ? g_caustic_transport_state.maxPathDepth - 1
+                                   : 0;
+    while (inside_specular_object && remaining_specular_depth > 0) {
+        HitInfo3D exit_hit = {0};
+        RuntimeMaterialPayload3D exit_payload = {0};
+        Vec3 geometric_normal = vec3(0.0, 0.0, 0.0);
+        Vec3 surface_normal = vec3(0.0, 0.0, 0.0);
+        Vec3 next_direction = vec3(0.0, 0.0, 0.0);
+        Vec3 next_throughput = vec3(0.0, 0.0, 0.0);
+        bool is_refraction = false;
+
+        RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(RUNTIME_RENDER_TRACE_COST_RAY_CAUSTIC,
+                                                        1);
+        if (!RuntimeRay3D_TraceSceneFirstHit(scene, io_ray, 1.0e-4, 1.0e6, &exit_hit)) {
+            return true;
+        }
+        RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(&exit_hit);
+        if (exit_hit.sceneObjectIndex != current_specular_object_index) {
+            return true;
+        }
+        if (!RuntimeMaterialPayload3D_ResolveFromHit(&exit_hit, &exit_payload) ||
+            !runtime_caustic_transport_payload_is_eligible(&exit_payload)) {
+            return false;
+        }
+
+        geometric_normal = runtime_caustic_transport_hit_geometric_normal(scene, &exit_hit);
+        surface_normal = runtime_caustic_transport_orient_specular_normal(
+            geometric_normal,
+            io_ray->direction,
+            inside_specular_object);
+        if (!runtime_caustic_transport_select_direction_with_normal(&exit_payload,
+                                                                    surface_normal,
+                                                                    io_ray->direction,
+                                                                    &next_direction,
+                                                                    &next_throughput,
+                                                                    &is_refraction)) {
+            return false;
+        }
+
+        diagnostics->transparentHitCount += 1u;
+        diagnostics->specularEventCount += 1u;
+        io_radiance->x *= next_throughput.x;
+        io_radiance->y *= next_throughput.y;
+        io_radiance->z *= next_throughput.z;
+        if (!(runtime_caustic_transport_luma(*io_radiance) > 1.0e-9)) {
+            return false;
+        }
+
+        inside_specular_object = vec3_dot(next_direction, surface_normal) < 0.0;
+        current_specular_object_index = exit_hit.sceneObjectIndex;
+        *io_ray = RuntimeRay3D_MakeOffset(exit_hit.position,
+                                          surface_normal,
+                                          next_direction,
+                                          1.0e-4);
+        remaining_specular_depth -= 1;
+
+        if (debug_path) {
+            debug_path->continuationEventCount += 1u;
+            debug_path->mediumExitSceneObjectIndex = exit_hit.sceneObjectIndex;
+            debug_path->mediumExitPosition = exit_hit.position;
+            debug_path->mediumExitDirection = next_direction;
+            debug_path->exitedSpecularObjectBeforeVolumeDeposit =
+                !inside_specular_object && is_refraction;
+        }
+        if (!inside_specular_object) {
+            return true;
+        }
+    }
+
+    return !inside_specular_object;
 }
 
 static bool runtime_caustic_transport_deposit_surface(
@@ -468,6 +610,8 @@ static bool runtime_caustic_transport_deposit_surface(
                                    : 0;
 
     for (;;) {
+        RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(RUNTIME_RENDER_TRACE_COST_RAY_CAUSTIC,
+                                                        1);
         if (!RuntimeRay3D_TraceSceneFirstHit(scene, &current_ray, 1.0e-4, 1.0e6, &receiver)) {
             if (!inside_specular_object) {
                 Ray3D reverse_ray =
@@ -479,6 +623,9 @@ static bool runtime_caustic_transport_deposit_surface(
                      ++tangent_skip) {
                     HitInfo3D tangent_receiver = {0};
                     RuntimeMaterialPayload3D tangent_payload = {0};
+                    RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
+                        RUNTIME_RENDER_TRACE_COST_RAY_CAUSTIC,
+                        tangent_skip + 1);
                     if (!RuntimeRay3D_TraceSceneFirstHit(scene,
                                                          &reverse_ray,
                                                          1.0e-7,
@@ -486,6 +633,7 @@ static bool runtime_caustic_transport_deposit_surface(
                                                          &tangent_receiver)) {
                         break;
                     }
+                    RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(&tangent_receiver);
                     if (!RuntimeMaterialPayload3D_ResolveFromHit(&tangent_receiver,
                                                                  &tangent_payload) ||
                         !runtime_caustic_transport_payload_is_eligible(&tangent_payload)) {
@@ -509,6 +657,9 @@ static bool runtime_caustic_transport_deposit_surface(
                          ++receiver_probe_skip) {
                         HitInfo3D projected_receiver = {0};
                         RuntimeMaterialPayload3D projected_payload = {0};
+                        RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
+                            RUNTIME_RENDER_TRACE_COST_RAY_CAUSTIC,
+                            receiver_probe_skip + 1);
                         if (!RuntimeRay3D_TraceSceneFirstHit(scene,
                                                              &receiver_probe,
                                                              1.0e-6,
@@ -516,6 +667,8 @@ static bool runtime_caustic_transport_deposit_surface(
                                                              &projected_receiver)) {
                             break;
                         }
+                        RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(
+                            &projected_receiver);
                         if (!RuntimeMaterialPayload3D_ResolveFromHit(&projected_receiver,
                                                                      &projected_payload) ||
                             !runtime_caustic_transport_payload_is_eligible(&projected_payload)) {
@@ -549,6 +702,7 @@ static bool runtime_caustic_transport_deposit_surface(
             diagnostics->surfaceReceiverTraceMissCount += 1u;
             return false;
         }
+        RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(&receiver);
         if (RuntimeMaterialPayload3D_ResolveFromHit(&receiver, &receiver_payload) &&
             runtime_caustic_transport_payload_is_eligible(&receiver_payload)) {
             Vec3 geometric_normal = runtime_caustic_transport_hit_geometric_normal(scene,
@@ -577,7 +731,8 @@ static bool runtime_caustic_transport_deposit_surface(
                                                                         surface_normal,
                                                                         current_ray.direction,
                                                                         &next_direction,
-                                                                        &next_throughput)) {
+                                                                        &next_throughput,
+                                                                        NULL)) {
                 return false;
             }
             diagnostics->transparentHitCount += 1u;
@@ -629,7 +784,9 @@ runtime_caustic_transport_surface_receiver_ready:
 static bool runtime_caustic_transport_emit_to_triangle_target(
     const RuntimeScene3D* scene,
     const RuntimeLightSource3D* light,
+    int light_index,
     int triangle_index,
+    int sample_index,
     Vec3 target,
     double sample_weight,
     RuntimeCausticVolumeCache3D* cache,
@@ -649,6 +806,10 @@ static bool runtime_caustic_transport_emit_to_triangle_target(
     bool inside_specular_object = false;
     bool emitted = false;
     Vec3 first_surface_normal = vec3(0.0, 0.0, 0.0);
+    Vec3 first_geometric_normal = vec3(0.0, 0.0, 0.0);
+    bool event_is_refraction = false;
+    RuntimeCausticTransportDebugPath3D debug_path = {0};
+    bool debug_enabled = RuntimeCausticTransportDebug3D_IsEnabled();
 
     if (!scene || !light || !diagnostics) return false;
     if (triangle_index < 0 || triangle_index >= scene->triangleMesh.triangleCount) return false;
@@ -658,6 +819,8 @@ static bool runtime_caustic_transport_emit_to_triangle_target(
 
     ray = RuntimeRay3D_Make(light->position, to_target);
     diagnostics->evaluatedPathCount += 1u;
+    RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(RUNTIME_RENDER_TRACE_COST_RAY_CAUSTIC,
+                                                    1);
     if (!RuntimeRay3D_TraceSceneFirstHit(scene,
                                          &ray,
                                          1.0e-4,
@@ -665,21 +828,24 @@ static bool runtime_caustic_transport_emit_to_triangle_target(
                                          &hit)) {
         return false;
     }
+    RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(&hit);
     if (hit.triangleIndex != triangle_index) {
         return false;
     }
     if (!RuntimeMaterialPayload3D_ResolveFromHit(&hit, &payload) || !payload.valid) {
         return false;
     }
+    first_geometric_normal = runtime_caustic_transport_hit_geometric_normal(scene, &hit);
     first_surface_normal = runtime_caustic_transport_orient_specular_normal(
-        runtime_caustic_transport_hit_geometric_normal(scene, &hit),
+        first_geometric_normal,
         ray.direction,
         false);
     if (!runtime_caustic_transport_select_direction_with_normal(&payload,
                                                                 first_surface_normal,
                                                                 ray.direction,
                                                                 &path_dir,
-                                                                &throughput)) {
+                                                                &throughput,
+                                                                &event_is_refraction)) {
         return false;
     }
 
@@ -701,14 +867,68 @@ static bool runtime_caustic_transport_emit_to_triangle_target(
         inside_specular_object = vec3_dot(path_dir, first_surface_normal) < 0.0;
         outgoing = RuntimeRay3D_MakeOffset(hit.position, first_surface_normal, path_dir, 1.0e-4);
     }
+    if (debug_enabled) {
+        const RuntimeTriangle3D* triangle = &scene->triangleMesh.triangles[triangle_index];
+        debug_path.pathId = diagnostics->evaluatedPathCount;
+        debug_path.lightIndex = light_index;
+        snprintf(debug_path.lightId,
+                 sizeof(debug_path.lightId),
+                 "%s",
+                 light->id[0] ? light->id : "compat_light");
+        snprintf(debug_path.lightKind,
+                 sizeof(debug_path.lightKind),
+                 "%s",
+                 runtime_caustic_transport_light_kind_label(light->kind));
+        debug_path.lightPosition = light->position;
+        debug_path.lightRadius = light->radius;
+        debug_path.lightIntensity = light->intensity;
+        debug_path.lightColor = light->color;
+        debug_path.targetTriangleIndex = triangle_index;
+        debug_path.targetPrimitiveIndex = triangle->primitiveIndex;
+        debug_path.targetSceneObjectIndex = triangle->sceneObjectIndex;
+        debug_path.targetSampleIndex = sample_index;
+        debug_path.targetPosition = target;
+        debug_path.targetDistance = target_distance;
+        debug_path.firstHitPosition = hit.position;
+        debug_path.firstHitGeometricNormal = first_geometric_normal;
+        debug_path.firstHitOrientedNormal = first_surface_normal;
+        debug_path.materialId = payload.materialId;
+        debug_path.transparency = payload.transparency;
+        debug_path.opticalIor = payload.opticalIor;
+        debug_path.bsdfIor = payload.bsdf.ior;
+        debug_path.roughness = payload.bsdf.roughness;
+        debug_path.reflectivity = payload.bsdf.reflectivity;
+        debug_path.eligible = runtime_caustic_transport_payload_is_eligible(&payload);
+        snprintf(debug_path.eventType,
+                 sizeof(debug_path.eventType),
+                 "%s",
+                 event_is_refraction ? "refraction" : "reflection");
+        debug_path.outgoingDirection = path_dir;
+        debug_path.throughput = throughput;
+        debug_path.initialRadiance = radiance;
+        debug_path.insideSpecularObjectAfterEvent = inside_specular_object;
+        debug_path.mediumExitSceneObjectIndex = -1;
+    }
     if (cache) {
-        emitted = runtime_caustic_transport_deposit_segment(scene,
-                                                            cache,
-                                                            &outgoing,
-                                                            radiance,
-                                                            volume_footprint_radius,
-                                                            diagnostics) ||
-                  emitted;
+        Ray3D volume_ray = outgoing;
+        Vec3 volume_radiance = radiance;
+        if (runtime_caustic_transport_continue_to_outside_medium(
+                scene,
+                &volume_ray,
+                &volume_radiance,
+                inside_specular_object,
+                hit.sceneObjectIndex,
+                diagnostics,
+                debug_enabled ? &debug_path : NULL)) {
+            emitted = runtime_caustic_transport_deposit_segment(scene,
+                                                                cache,
+                                                                &volume_ray,
+                                                                volume_radiance,
+                                                                volume_footprint_radius,
+                                                                diagnostics,
+                                                                debug_enabled ? &debug_path : NULL) ||
+                      emitted;
+        }
     }
     if (surface_cache &&
         runtime_caustic_transport_deposit_surface(scene,
@@ -722,6 +942,9 @@ static bool runtime_caustic_transport_emit_to_triangle_target(
     }
     if (emitted) {
         diagnostics->emittedPathCount += 1u;
+        if (debug_enabled) {
+            RuntimeCausticTransportDebug3D_RecordPath(&debug_path);
+        }
         return true;
     }
     return false;
@@ -730,6 +953,7 @@ static bool runtime_caustic_transport_emit_to_triangle_target(
 static void runtime_caustic_transport_emit_to_triangle(
     const RuntimeScene3D* scene,
     const RuntimeLightSource3D* light,
+    int light_index,
     int triangle_index,
     int path_budget,
     RuntimeCausticVolumeCache3D* cache,
@@ -745,7 +969,9 @@ static void runtime_caustic_transport_emit_to_triangle(
         Vec3 target = runtime_caustic_transport_triangle_sample_point(triangle, sample_i);
         (void)runtime_caustic_transport_emit_to_triangle_target(scene,
                                                                 light,
+                                                                light_index,
                                                                 triangle_index,
+                                                                sample_i,
                                                                 target,
                                                                 sample_weight,
                                                                 cache,
@@ -760,6 +986,7 @@ void RuntimeCausticTransport3D_ResetRequestState(void) {
     g_caustic_transport_state.surfaceRadianceScale = 1.0;
     g_caustic_transport_state.surfaceFootprintScale = 1.0;
     g_caustic_transport_state.surfaceReceiverFallbackEnabled = true;
+    RuntimeCausticTransportDebug3D_Reset();
 }
 
 void RuntimeCausticTransport3D_SetRequestState(const RuntimeCausticSettings3D* settings) {
@@ -781,6 +1008,9 @@ void RuntimeCausticTransport3D_SetRequestState(const RuntimeCausticSettings3D* s
         runtime_caustic_transport_clamp(src->surfaceFootprintScale, 0.1, 16.0);
     g_caustic_transport_state.surfaceReceiverFallbackEnabled =
         src->surfaceReceiverFallbackEnabled;
+    g_caustic_transport_state.debugExportEnabled = src->debugExportEnabled;
+    RuntimeCausticTransportDebug3D_SetEnabled(src->debugExportEnabled);
+    RuntimeCausticTransportDebug3D_BeginFrame();
     g_caustic_transport_state.enabled =
         src->mode == RUNTIME_CAUSTIC_MODE_TRANSPORT &&
         (src->volumeCacheEnabled || src->surfaceCacheEnabled);
@@ -815,6 +1045,7 @@ bool RuntimeCausticTransport3D_PopulateCaches(
         if (out_diagnostics) *out_diagnostics = diagnostics;
         return false;
     }
+    RuntimeCausticTransportDebug3D_BeginFrame();
     volume_cache_active = g_caustic_transport_state.volumeCacheRequested &&
                           cache &&
                           RuntimeVolume3D_HasSampleableDensity(&scene->volume);
@@ -873,6 +1104,7 @@ bool RuntimeCausticTransport3D_PopulateCaches(
                 if ((int)diagnostics.evaluatedPathCount >= path_budget) break;
                 runtime_caustic_transport_emit_to_triangle(scene,
                                                            light,
+                                                           light_i,
                                                            tri_i,
                                                            path_budget,
                                                            volume_cache_active ? cache : NULL,
@@ -894,6 +1126,7 @@ bool RuntimeCausticTransport3D_PopulateCaches(
             if ((int)diagnostics.evaluatedPathCount >= path_budget) break;
             runtime_caustic_transport_emit_to_triangle(scene,
                                                        &compat_light,
+                                                       0,
                                                        tri_i,
                                                        path_budget,
                                                        volume_cache_active ? cache : NULL,
@@ -904,6 +1137,8 @@ bool RuntimeCausticTransport3D_PopulateCaches(
 
     RuntimeCausticVolumeCache3D_SnapshotDiagnostics(cache, &diagnostics.cache);
     RuntimeCausticSurfaceCache3D_SnapshotDiagnostics(surface_cache, &diagnostics.surfaceCache);
+    (void)RuntimeCausticTransportDebug3D_WriteArtifacts(&g_caustic_transport_state,
+                                                        &diagnostics);
     if (out_diagnostics) *out_diagnostics = diagnostics;
     return diagnostics.emittedPathCount > 0u &&
            (!volume_cache_active ||

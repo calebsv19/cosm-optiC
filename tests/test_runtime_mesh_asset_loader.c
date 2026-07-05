@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include "import/runtime_mesh_asset_loader.h"
+#include "import/runtime_mesh_asset_pack.h"
 #include "config/config_manager.h"
 
 AnimationConfig animSettings;
@@ -929,6 +930,262 @@ static int test_runtime_mesh_asset_loader_reuses_cache_and_invalidates(void) {
     return 0;
 }
 
+static int test_runtime_mesh_asset_loader_uses_persistent_pack_cache_after_reset(void) {
+    const char* dir = "/private/tmp/ray_tracing_mrt_persistent_cache";
+    const char* assets_dir = "/private/tmp/ray_tracing_mrt_persistent_cache/assets";
+    const char* mesh_dir = "/private/tmp/ray_tracing_mrt_persistent_cache/assets/mesh_assets";
+    const char* cache_root = "/private/tmp/ray_tracing_mrt_persistent_cache/cache_root";
+    const char* cache_dir =
+        "/private/tmp/ray_tracing_mrt_persistent_cache/cache_root/ray_tracing_runtime_mesh_asset_pack_cache";
+    const char* scene_path = "/private/tmp/ray_tracing_mrt_persistent_cache/scene_runtime.json";
+    const char* asset_path =
+        "/private/tmp/ray_tracing_mrt_persistent_cache/assets/mesh_assets/asset_sphere_8x4.runtime.json";
+    const char* source_asset_path =
+        "tests/fixtures/mesh_asset_runtime_spheres/assets/mesh_assets/asset_sphere_8x4.runtime.json";
+    const char* scene_json =
+        "{"
+        "\"objects\":[{"
+        "\"object_id\":\"obj_persistent_cached_mesh\","
+        "\"object_type\":\"mesh_asset_instance\","
+        "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_sphere_8x4\"}"
+        "}]"
+        "}";
+    const char* saved_cache_root = getenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_ROOT");
+    const char* saved_cache_mode = getenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE");
+    char saved_cache_root_copy[PATH_MAX] = {0};
+    char saved_cache_mode_copy[64] = {0};
+    RayTracingRuntimeMeshAssetSet set;
+    RayTracingRuntimeMeshAssetTimingStats timing;
+    char diagnostics[256] = {0};
+    char cache_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+    char* asset_text = NULL;
+    bool ok = false;
+
+    if (saved_cache_root && saved_cache_root[0]) {
+        strncpy(saved_cache_root_copy, saved_cache_root, sizeof(saved_cache_root_copy) - 1);
+        saved_cache_root_copy[sizeof(saved_cache_root_copy) - 1] = '\0';
+    }
+    if (saved_cache_mode && saved_cache_mode[0]) {
+        strncpy(saved_cache_mode_copy, saved_cache_mode, sizeof(saved_cache_mode_copy) - 1);
+        saved_cache_mode_copy[sizeof(saved_cache_mode_copy) - 1] = '\0';
+    }
+
+    mkdir(dir, 0777);
+    mkdir(assets_dir, 0777);
+    mkdir(mesh_dir, 0777);
+    mkdir(cache_root, 0777);
+    asset_text = read_text_file_alloc(source_asset_path);
+    assert_true("mrt_pack_cache_read_source_asset", asset_text != NULL);
+    assert_true("mrt_pack_cache_write_scene", write_text_file(scene_path, scene_json));
+    assert_true("mrt_pack_cache_write_asset", asset_text && write_text_file(asset_path, asset_text));
+    setenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_ROOT", cache_root, 1);
+    setenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE", "read_write", 1);
+
+    ray_tracing_runtime_mesh_assets_reset_cache();
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    ok = ray_tracing_runtime_mesh_assets_load_scene_file(scene_path,
+                                                        &set,
+                                                        diagnostics,
+                                                        sizeof(diagnostics));
+    assert_true("mrt_pack_cache_first_load", ok);
+    if (ok) {
+        assert_true("mrt_pack_cache_path_for_source",
+                    ray_tracing_runtime_mesh_asset_pack_cache_path_for_source(cache_dir,
+                                                                             set.assets[0].path,
+                                                                             cache_path,
+                                                                             sizeof(cache_path)));
+    }
+    ray_tracing_runtime_mesh_asset_set_free(&set);
+    ray_tracing_runtime_mesh_assets_timing_snapshot(&timing);
+    assert_true("mrt_pack_cache_first_mode_read_write",
+                timing.asset_persistent_cache_mode ==
+                    RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_READ_WRITE);
+    assert_true("mrt_pack_cache_first_json_miss", timing.asset_persistent_cache_misses == 1);
+    assert_true("mrt_pack_cache_first_write", timing.asset_persistent_cache_writes == 1);
+    assert_true("mrt_pack_cache_file_written", cache_path[0] && access(cache_path, F_OK) == 0);
+
+    ray_tracing_runtime_mesh_assets_reset_cache();
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    ok = ray_tracing_runtime_mesh_assets_load_scene_file(scene_path,
+                                                        &set,
+                                                        diagnostics,
+                                                        sizeof(diagnostics));
+    assert_true("mrt_pack_cache_second_load", ok);
+    ray_tracing_runtime_mesh_asset_set_free(&set);
+    ray_tracing_runtime_mesh_assets_timing_snapshot(&timing);
+    assert_true("mrt_pack_cache_second_pack_hit", timing.asset_persistent_cache_hits == 1);
+    assert_true("mrt_pack_cache_second_no_json_parse",
+                timing.asset_runtime_document_load_ms < 0.001);
+
+    if (cache_path[0]) {
+        assert_true("mrt_pack_cache_corrupt_pack", write_text_file(cache_path, "bad-cache"));
+        ray_tracing_runtime_mesh_assets_reset_cache();
+        ray_tracing_runtime_mesh_asset_set_init(&set);
+        ok = ray_tracing_runtime_mesh_assets_load_scene_file(scene_path,
+                                                            &set,
+                                                            diagnostics,
+                                                            sizeof(diagnostics));
+        assert_true("mrt_pack_cache_corrupt_falls_back", ok);
+        ray_tracing_runtime_mesh_asset_set_free(&set);
+        ray_tracing_runtime_mesh_assets_timing_snapshot(&timing);
+        assert_true("mrt_pack_cache_corrupt_invalidates",
+                    timing.asset_persistent_cache_invalidations == 1);
+        assert_true("mrt_pack_cache_corrupt_rewrites",
+                    timing.asset_persistent_cache_writes == 1);
+    }
+
+    if (cache_path[0]) {
+        assert_true("mrt_pack_cache_read_only_corrupt_pack",
+                    write_text_file(cache_path, "bad-cache-read-only"));
+        setenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE", "read_only", 1);
+        ray_tracing_runtime_mesh_assets_reset_cache();
+        ray_tracing_runtime_mesh_asset_set_init(&set);
+        ok = ray_tracing_runtime_mesh_assets_load_scene_file(scene_path,
+                                                            &set,
+                                                            diagnostics,
+                                                            sizeof(diagnostics));
+        assert_true("mrt_pack_cache_read_only_falls_back", ok);
+        ray_tracing_runtime_mesh_asset_set_free(&set);
+        ray_tracing_runtime_mesh_assets_timing_snapshot(&timing);
+        assert_true("mrt_pack_cache_read_only_mode",
+                    timing.asset_persistent_cache_mode ==
+                        RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_READ_ONLY);
+        assert_true("mrt_pack_cache_read_only_invalidates",
+                    timing.asset_persistent_cache_invalidations == 1);
+        assert_true("mrt_pack_cache_read_only_no_rewrite",
+                    timing.asset_persistent_cache_writes == 0);
+
+        setenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE", "refresh", 1);
+        ray_tracing_runtime_mesh_assets_reset_cache();
+        ray_tracing_runtime_mesh_asset_set_init(&set);
+        ok = ray_tracing_runtime_mesh_assets_load_scene_file(scene_path,
+                                                            &set,
+                                                            diagnostics,
+                                                            sizeof(diagnostics));
+        assert_true("mrt_pack_cache_refresh_load", ok);
+        ray_tracing_runtime_mesh_asset_set_free(&set);
+        ray_tracing_runtime_mesh_assets_timing_snapshot(&timing);
+        assert_true("mrt_pack_cache_refresh_mode",
+                    timing.asset_persistent_cache_mode ==
+                        RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_REFRESH);
+        assert_true("mrt_pack_cache_refresh_skips_read",
+                    timing.asset_persistent_cache_hits == 0);
+        assert_true("mrt_pack_cache_refresh_counted",
+                    timing.asset_persistent_cache_refreshes == 1);
+        assert_true("mrt_pack_cache_refresh_rewrites",
+                    timing.asset_persistent_cache_writes == 1);
+
+        remove(cache_path);
+        setenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE", "off", 1);
+        ray_tracing_runtime_mesh_assets_reset_cache();
+        ray_tracing_runtime_mesh_asset_set_init(&set);
+        ok = ray_tracing_runtime_mesh_assets_load_scene_file(scene_path,
+                                                            &set,
+                                                            diagnostics,
+                                                            sizeof(diagnostics));
+        assert_true("mrt_pack_cache_disabled_load", ok);
+        ray_tracing_runtime_mesh_asset_set_free(&set);
+        ray_tracing_runtime_mesh_assets_timing_snapshot(&timing);
+        assert_true("mrt_pack_cache_disabled_mode",
+                    timing.asset_persistent_cache_mode ==
+                        RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_DISABLED);
+        assert_true("mrt_pack_cache_disabled_no_counters",
+                    timing.asset_persistent_cache_hits == 0 &&
+                    timing.asset_persistent_cache_misses == 0 &&
+                    timing.asset_persistent_cache_writes == 0 &&
+                    timing.asset_persistent_cache_invalidations == 0);
+        assert_true("mrt_pack_cache_disabled_no_file",
+                    access(cache_path, F_OK) != 0);
+    }
+
+    ray_tracing_runtime_mesh_assets_reset_cache();
+    if (saved_cache_root_copy[0]) {
+        setenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_ROOT", saved_cache_root_copy, 1);
+    } else {
+        unsetenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_ROOT");
+    }
+    if (saved_cache_mode_copy[0]) {
+        setenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE", saved_cache_mode_copy, 1);
+    } else {
+        unsetenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE");
+    }
+    free(asset_text);
+    if (cache_path[0]) remove(cache_path);
+    remove(asset_path);
+    remove(scene_path);
+    rmdir(cache_dir);
+    rmdir(cache_root);
+    rmdir(mesh_dir);
+    rmdir(assets_dir);
+    rmdir(dir);
+    return 0;
+}
+
+static int test_runtime_mesh_asset_loader_last_scene_stamp_tracks_asset_changes(void) {
+    const char* dir = "/private/tmp/ray_tracing_mrt_last_stamp";
+    const char* assets_dir = "/private/tmp/ray_tracing_mrt_last_stamp/assets";
+    const char* mesh_dir = "/private/tmp/ray_tracing_mrt_last_stamp/assets/mesh_assets";
+    const char* scene_path = "/private/tmp/ray_tracing_mrt_last_stamp/scene_runtime.json";
+    const char* asset_path =
+        "/private/tmp/ray_tracing_mrt_last_stamp/assets/mesh_assets/asset_sphere_8x4.runtime.json";
+    const char* source_asset_path =
+        "tests/fixtures/mesh_asset_runtime_spheres/assets/mesh_assets/asset_sphere_8x4.runtime.json";
+    const char* scene_json =
+        "{"
+        "\"objects\":[{"
+        "\"object_id\":\"obj_last_stamp_mesh\","
+        "\"object_type\":\"mesh_asset_instance\","
+        "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_sphere_8x4\"}"
+        "}]"
+        "}";
+    char diagnostics[256] = {0};
+    char* asset_text = NULL;
+    char* mutated_asset_text = NULL;
+    bool ok = false;
+
+    mkdir(dir, 0777);
+    mkdir(assets_dir, 0777);
+    mkdir(mesh_dir, 0777);
+    asset_text = read_text_file_alloc(source_asset_path);
+    assert_true("mrt_last_stamp_read_source_asset", asset_text != NULL);
+    assert_true("mrt_last_stamp_write_scene", write_text_file(scene_path, scene_json));
+    if (asset_text) {
+        size_t len = strlen(asset_text);
+        mutated_asset_text = (char*)malloc(len + 2u);
+        if (mutated_asset_text) {
+            memcpy(mutated_asset_text, asset_text, len);
+            mutated_asset_text[len] = '\n';
+            mutated_asset_text[len + 1u] = '\0';
+        }
+    }
+    assert_true("mrt_last_stamp_write_asset", asset_text && write_text_file(asset_path, asset_text));
+
+    ok = ray_tracing_runtime_mesh_assets_load_scene_file_to_last(scene_path,
+                                                                diagnostics,
+                                                                sizeof(diagnostics));
+    assert_true("mrt_last_stamp_load_to_last", ok);
+    assert_true("mrt_last_stamp_matches_after_load",
+                ray_tracing_runtime_mesh_assets_last_matches_scene_file(scene_path));
+
+    assert_true("mrt_last_stamp_mutated_asset_ready", mutated_asset_text != NULL);
+    if (mutated_asset_text) {
+        assert_true("mrt_last_stamp_rewrite_asset",
+                    write_text_file(asset_path, mutated_asset_text));
+        assert_true("mrt_last_stamp_rejects_changed_asset",
+                    !ray_tracing_runtime_mesh_assets_last_matches_scene_file(scene_path));
+    }
+
+    ray_tracing_runtime_mesh_assets_reset_last();
+    free(asset_text);
+    free(mutated_asset_text);
+    remove(asset_path);
+    remove(scene_path);
+    rmdir(mesh_dir);
+    rmdir(assets_dir);
+    rmdir(dir);
+    return 0;
+}
+
 static int test_runtime_mesh_asset_loader_preview_limited_skips_oversized_asset(void) {
     RayTracingRuntimeMeshAssetSet set;
     char diag[256] = {0};
@@ -1041,6 +1298,8 @@ int run_test_runtime_mesh_asset_loader_tests(void) {
     test_runtime_mesh_asset_loader_uses_config_mesh_asset_root();
     test_runtime_mesh_asset_loader_attaches_preview_metadata();
     test_runtime_mesh_asset_loader_reuses_cache_and_invalidates();
+    test_runtime_mesh_asset_loader_uses_persistent_pack_cache_after_reset();
+    test_runtime_mesh_asset_loader_last_scene_stamp_tracks_asset_changes();
     test_runtime_mesh_asset_loader_preview_limited_skips_oversized_asset();
     test_runtime_mesh_asset_loader_preview_limited_keeps_sidecar_metadata();
 

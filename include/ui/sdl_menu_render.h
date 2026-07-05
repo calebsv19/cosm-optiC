@@ -72,9 +72,6 @@ typedef struct MenuButtonLayout {
     SDL_Rect environmentBackgroundModeRect;
     SDL_Rect upscaleModeRect;
     SDL_Rect lightHeightRect;
-    SDL_Rect resumeFramesRect;
-    SDL_Rect startFrameRect;
-    SDL_Rect nextFrameRect;
     SDL_Rect sceneEditorRect;
     SDL_Rect sceneModeRect;
     SDL_Rect spaceModeRect;

@@ -8,6 +8,7 @@
 #include "material/material.h"
 #include "render/runtime_direct_light_3d.h"
 #include "render/runtime_ray_3d.h"
+#include "render/runtime_render_trace_cost_ledger_3d.h"
 
 enum {
     RUNTIME_DISNEY_V2_3D_PRIMARY_TRANSMISSION_SKIP_CAP = 4,
@@ -442,6 +443,9 @@ static bool runtime_disney_v2_3d_trace_transmission_next_hit(
          ++skip_count) {
         HitInfo3D_Reset(&hit);
         ray_count += 1;
+        RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
+            RUNTIME_RENDER_TRACE_COST_RAY_TRANSMISSION,
+            skip_count + 1);
         if (!RuntimeRay3D_TraceSceneFirstHit(scene,
                                              &ray,
                                              kRuntimeDisneyV2_3DPrimaryTransmissionEpsilon,
@@ -451,6 +455,7 @@ static bool runtime_disney_v2_3d_trace_transmission_next_hit(
             *out_ray = ray;
             return false;
         }
+        RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(&hit);
         if (hit.sceneObjectIndex != source_hit->sceneObjectIndex ||
             hit.triangleIndex != source_hit->triangleIndex) {
             *out_hit = hit;

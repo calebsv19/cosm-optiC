@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 #include <sys/stat.h>
 
 #include <json-c/json.h>
@@ -11,8 +12,14 @@
 #include "config/config_manager.h"
 #include "core_io.h"
 #include "core_scene.h"
+#include "import/runtime_mesh_asset_pack.h"
 
 static RayTracingRuntimeMeshAssetSet g_last_runtime_mesh_assets;
+static bool g_last_runtime_mesh_asset_scene_stamp_valid = false;
+static char g_last_runtime_mesh_asset_scene_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+static long long g_last_runtime_mesh_asset_scene_mtime_sec = 0;
+static long long g_last_runtime_mesh_asset_scene_mtime_nsec = 0;
+static long long g_last_runtime_mesh_asset_scene_file_size = 0;
 
 typedef struct RuntimeMeshAssetCacheEntry {
     bool valid;
@@ -363,6 +370,160 @@ static void runtime_mesh_asset_file_stamp(const struct stat* st,
     if (out_file_size) *out_file_size = (long long)st->st_size;
 }
 
+static bool runtime_mesh_asset_stat_path(const char* path,
+                                         long long* out_mtime_sec,
+                                         long long* out_mtime_nsec,
+                                         long long* out_file_size) {
+    struct stat st;
+    if (!path || !path[0]) return false;
+    if (stat(path, &st) != 0) return false;
+    runtime_mesh_asset_file_stamp(&st, out_mtime_sec, out_mtime_nsec, out_file_size);
+    return true;
+}
+
+static bool runtime_mesh_asset_stamp_matches_path(const char* path,
+                                                  long long expected_mtime_sec,
+                                                  long long expected_mtime_nsec,
+                                                  long long expected_file_size) {
+    long long mtime_sec = 0;
+    long long mtime_nsec = 0;
+    long long file_size = 0;
+    if (!runtime_mesh_asset_stat_path(path, &mtime_sec, &mtime_nsec, &file_size)) {
+        return false;
+    }
+    return mtime_sec == expected_mtime_sec &&
+           mtime_nsec == expected_mtime_nsec &&
+           file_size == expected_file_size;
+}
+
+static RayTracingRuntimeMeshAssetPersistentCacheMode runtime_mesh_asset_pack_cache_mode(void) {
+    const char* mode = getenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE");
+    if (!mode || !mode[0]) {
+        return RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_READ_WRITE;
+    }
+    if (strcmp(mode, "0") == 0 ||
+        strcmp(mode, "off") == 0 ||
+        strcmp(mode, "disabled") == 0 ||
+        strcmp(mode, "disable") == 0) {
+        return RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_DISABLED;
+    }
+    if (strcmp(mode, "read_only") == 0 ||
+        strcmp(mode, "readonly") == 0 ||
+        strcmp(mode, "ro") == 0) {
+        return RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_READ_ONLY;
+    }
+    if (strcmp(mode, "refresh") == 0 ||
+        strcmp(mode, "rebuild") == 0 ||
+        strcmp(mode, "force") == 0) {
+        return RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_REFRESH;
+    }
+    return RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_READ_WRITE;
+}
+
+static bool runtime_mesh_asset_pack_cache_reads_enabled(
+    RayTracingRuntimeMeshAssetPersistentCacheMode mode) {
+    return mode == RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_READ_WRITE ||
+           mode == RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_READ_ONLY;
+}
+
+static bool runtime_mesh_asset_pack_cache_writes_enabled(
+    RayTracingRuntimeMeshAssetPersistentCacheMode mode) {
+    return mode == RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_READ_WRITE ||
+           mode == RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_REFRESH;
+}
+
+static const char* runtime_mesh_asset_pack_cache_root(void) {
+    const char* root = getenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_ROOT");
+    if (root && root[0]) return root;
+    root = getenv("TMPDIR");
+    if (root && root[0]) return root;
+    return "/private/tmp";
+}
+
+static bool runtime_mesh_asset_pack_cache_dir(char* out_dir, size_t out_dir_size) {
+    const char* root = runtime_mesh_asset_pack_cache_root();
+    if (!out_dir || out_dir_size == 0u || !root || !root[0]) return false;
+    if (snprintf(out_dir,
+                 out_dir_size,
+                 "%s/ray_tracing_runtime_mesh_asset_pack_cache",
+                 root) >= (int)out_dir_size) {
+        out_dir[0] = '\0';
+        return false;
+    }
+    if (mkdir(out_dir, 0777) != 0) {
+        struct stat st;
+        if (stat(out_dir, &st) != 0 || !S_ISDIR(st.st_mode)) {
+            out_dir[0] = '\0';
+            return false;
+        }
+    }
+    return true;
+}
+
+static void runtime_mesh_asset_pack_source_key(const char* resolved_path,
+                                               long long mtime_sec,
+                                               long long mtime_nsec,
+                                               long long file_size,
+                                               unsigned long long checksum,
+                                               RayTracingRuntimeMeshAssetPackSourceKey* out_key) {
+    if (!out_key) return;
+    memset(out_key, 0, sizeof(*out_key));
+    if (resolved_path) {
+        snprintf(out_key->source_path, sizeof(out_key->source_path), "%s", resolved_path);
+    }
+    out_key->source_mtime_sec = (int64_t)mtime_sec;
+    out_key->source_mtime_nsec = (int64_t)mtime_nsec;
+    out_key->source_size_bytes = (int64_t)file_size;
+    out_key->source_checksum = (uint64_t)checksum;
+    out_key->core_mesh_asset_schema_version = CORE_MESH_ASSET_SCHEMA_VERSION_1;
+    out_key->ray_tracing_cache_schema_version = 1u;
+    out_key->pointer_size_bytes = (uint32_t)sizeof(void*);
+}
+
+static bool runtime_mesh_asset_pack_cache_path(const char* resolved_path,
+                                               char* out_path,
+                                               size_t out_path_size) {
+    char cache_dir[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+    if (out_path && out_path_size > 0u) out_path[0] = '\0';
+    if (!resolved_path || !resolved_path[0] || !out_path || out_path_size == 0u) {
+        return false;
+    }
+    if (!runtime_mesh_asset_pack_cache_dir(cache_dir, sizeof(cache_dir))) {
+        return false;
+    }
+    return ray_tracing_runtime_mesh_asset_pack_cache_path_for_source(cache_dir,
+                                                                     resolved_path,
+                                                                     out_path,
+                                                                     out_path_size);
+}
+
+static void runtime_mesh_asset_clear_last_scene_stamp(void) {
+    g_last_runtime_mesh_asset_scene_stamp_valid = false;
+    g_last_runtime_mesh_asset_scene_path[0] = '\0';
+    g_last_runtime_mesh_asset_scene_mtime_sec = 0;
+    g_last_runtime_mesh_asset_scene_mtime_nsec = 0;
+    g_last_runtime_mesh_asset_scene_file_size = 0;
+}
+
+static void runtime_mesh_asset_capture_last_scene_stamp(const char* runtime_scene_path) {
+    long long mtime_sec = 0;
+    long long mtime_nsec = 0;
+    long long file_size = 0;
+    runtime_mesh_asset_clear_last_scene_stamp();
+    if (!runtime_scene_path || !runtime_scene_path[0]) return;
+    if (!runtime_mesh_asset_stat_path(runtime_scene_path, &mtime_sec, &mtime_nsec, &file_size)) {
+        return;
+    }
+    snprintf(g_last_runtime_mesh_asset_scene_path,
+             sizeof(g_last_runtime_mesh_asset_scene_path),
+             "%s",
+             runtime_scene_path);
+    g_last_runtime_mesh_asset_scene_mtime_sec = mtime_sec;
+    g_last_runtime_mesh_asset_scene_mtime_nsec = mtime_nsec;
+    g_last_runtime_mesh_asset_scene_file_size = file_size;
+    g_last_runtime_mesh_asset_scene_stamp_valid = true;
+}
+
 static bool runtime_mesh_asset_document_copy(const CoreMeshAssetRuntimeDocument* src,
                                              CoreMeshAssetRuntimeDocument* dst,
                                              char* out_diagnostics,
@@ -471,6 +632,13 @@ static bool runtime_mesh_asset_load_document_cached(const char* resolved_path,
     struct timespec load_start = {0};
     struct timespec copy_start = {0};
     bool copy_ok = false;
+    char pack_cache_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+    bool pack_cache_path_ok = false;
+    RayTracingRuntimeMeshAssetPersistentCacheMode pack_cache_mode =
+        (RayTracingRuntimeMeshAssetPersistentCacheMode)
+            g_runtime_mesh_asset_timing.asset_persistent_cache_mode;
+    bool pack_cache_can_read = runtime_mesh_asset_pack_cache_reads_enabled(pack_cache_mode);
+    bool pack_cache_can_write = runtime_mesh_asset_pack_cache_writes_enabled(pack_cache_mode);
 
     (void)clock_gettime(CLOCK_MONOTONIC, &load_start);
     g_runtime_mesh_asset_timing.asset_load_calls += 1;
@@ -515,10 +683,48 @@ static bool runtime_mesh_asset_load_document_cached(const char* resolved_path,
     entry = &g_runtime_mesh_asset_cache[cache_slot];
     memset(entry, 0, sizeof(*entry));
     core_mesh_asset_runtime_document_init(&entry->document);
+
+    if (pack_cache_mode == RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_REFRESH) {
+        g_runtime_mesh_asset_timing.asset_persistent_cache_refreshes += 1;
+    }
+    if (pack_cache_can_read || pack_cache_can_write) {
+        pack_cache_path_ok = runtime_mesh_asset_pack_cache_path(resolved_path,
+                                                                pack_cache_path,
+                                                                sizeof(pack_cache_path));
+    }
+    if (pack_cache_can_read && pack_cache_path_ok && core_io_path_exists(pack_cache_path)) {
+        RayTracingRuntimeMeshAssetPackSourceKey source_key;
+        char pack_diagnostics[256] = {0};
+        struct timespec pack_read_start = {0};
+        runtime_mesh_asset_pack_source_key(resolved_path,
+                                           mtime_sec,
+                                           mtime_nsec,
+                                           file_size,
+                                           0u,
+                                           &source_key);
+        (void)clock_gettime(CLOCK_MONOTONIC, &pack_read_start);
+        if (ray_tracing_runtime_mesh_asset_pack_read_cache_file(pack_cache_path,
+                                                               &source_key,
+                                                               &entry->document,
+                                                               pack_diagnostics,
+                                                               sizeof(pack_diagnostics))) {
+            g_runtime_mesh_asset_timing.asset_persistent_cache_hits += 1;
+            g_runtime_mesh_asset_timing.asset_persistent_cache_read_ms +=
+                runtime_mesh_asset_elapsed_ms_since(&pack_read_start);
+            goto document_loaded;
+        }
+        g_runtime_mesh_asset_timing.asset_persistent_cache_invalidations += 1;
+        g_runtime_mesh_asset_timing.asset_persistent_cache_read_ms +=
+            runtime_mesh_asset_elapsed_ms_since(&pack_read_start);
+    }
+    if (pack_cache_path_ok && (pack_cache_can_read || pack_cache_can_write)) {
+        g_runtime_mesh_asset_timing.asset_persistent_cache_misses += 1;
+    }
+
     {
         struct timespec document_load_start = {0};
         (void)clock_gettime(CLOCK_MONOTONIC, &document_load_start);
-    load_result = core_mesh_asset_runtime_document_load_file(resolved_path, &entry->document);
+        load_result = core_mesh_asset_runtime_document_load_file(resolved_path, &entry->document);
         g_runtime_mesh_asset_timing.asset_runtime_document_load_ms +=
             runtime_mesh_asset_elapsed_ms_since(&document_load_start);
     }
@@ -530,7 +736,31 @@ static bool runtime_mesh_asset_load_document_cached(const char* resolved_path,
         memset(entry, 0, sizeof(*entry));
         return false;
     }
+    if (pack_cache_can_write && pack_cache_path_ok) {
+        RayTracingRuntimeMeshAssetPackSourceKey source_key;
+        uint64_t checksum = 0u;
+        char pack_diagnostics[256] = {0};
+        struct timespec pack_write_start = {0};
+        (void)ray_tracing_runtime_mesh_asset_pack_checksum_file(resolved_path, &checksum);
+        runtime_mesh_asset_pack_source_key(resolved_path,
+                                           mtime_sec,
+                                           mtime_nsec,
+                                           file_size,
+                                           checksum,
+                                           &source_key);
+        (void)clock_gettime(CLOCK_MONOTONIC, &pack_write_start);
+        if (ray_tracing_runtime_mesh_asset_pack_write_cache_file(pack_cache_path,
+                                                                &source_key,
+                                                                &entry->document,
+                                                                pack_diagnostics,
+                                                                sizeof(pack_diagnostics))) {
+            g_runtime_mesh_asset_timing.asset_persistent_cache_writes += 1;
+        }
+        g_runtime_mesh_asset_timing.asset_persistent_cache_write_ms +=
+            runtime_mesh_asset_elapsed_ms_since(&pack_write_start);
+    }
 
+document_loaded:
     snprintf(entry->asset_id, sizeof(entry->asset_id), "%s", asset_id);
     snprintf(entry->path, sizeof(entry->path), "%s", resolved_path);
     entry->mtime_sec = mtime_sec;
@@ -675,6 +905,11 @@ static bool runtime_mesh_asset_load_unique_asset(const char* runtime_scene_path,
         return false;
     }
     snprintf(asset->path, sizeof(asset->path), "%s", resolved_path);
+    asset->file_stamp_valid =
+        runtime_mesh_asset_stat_path(resolved_path,
+                                     &asset->file_mtime_sec,
+                                     &asset->file_mtime_nsec,
+                                     &asset->file_size_bytes);
     runtime_mesh_asset_probe_preview(resolved_path, &asset->preview);
     if (!runtime_mesh_asset_load_document_cached(resolved_path,
                                                 asset_id,
@@ -847,6 +1082,8 @@ static bool ray_tracing_runtime_mesh_assets_load_scene_file_with_options(
     struct timespec stage_start = {0};
 
     ray_tracing_runtime_mesh_assets_timing_reset();
+    g_runtime_mesh_asset_timing.asset_persistent_cache_mode =
+        runtime_mesh_asset_pack_cache_mode();
     (void)clock_gettime(CLOCK_MONOTONIC, &total_start);
     if (!out_set) {
         runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size, "mesh asset output missing");
@@ -1050,13 +1287,43 @@ bool ray_tracing_runtime_mesh_assets_load_scene_file_preview_limited(
 
 void ray_tracing_runtime_mesh_assets_reset_last(void) {
     ray_tracing_runtime_mesh_asset_set_free(&g_last_runtime_mesh_assets);
+    runtime_mesh_asset_clear_last_scene_stamp();
 }
 
 void ray_tracing_runtime_mesh_assets_take_last(RayTracingRuntimeMeshAssetSet* loaded) {
+    ray_tracing_runtime_mesh_assets_take_last_for_scene(NULL, loaded);
+}
+
+void ray_tracing_runtime_mesh_assets_take_last_for_scene(const char* runtime_scene_path,
+                                                        RayTracingRuntimeMeshAssetSet* loaded) {
     ray_tracing_runtime_mesh_assets_reset_last();
     if (!loaded) return;
     g_last_runtime_mesh_assets = *loaded;
     memset(loaded, 0, sizeof(*loaded));
+    runtime_mesh_asset_capture_last_scene_stamp(runtime_scene_path);
+}
+
+bool ray_tracing_runtime_mesh_assets_last_matches_scene_file(const char* runtime_scene_path) {
+    if (!runtime_scene_path || !runtime_scene_path[0]) return false;
+    if (!g_last_runtime_mesh_asset_scene_stamp_valid) return false;
+    if (strcmp(g_last_runtime_mesh_asset_scene_path, runtime_scene_path) != 0) return false;
+    if (!runtime_mesh_asset_stamp_matches_path(runtime_scene_path,
+                                              g_last_runtime_mesh_asset_scene_mtime_sec,
+                                              g_last_runtime_mesh_asset_scene_mtime_nsec,
+                                              g_last_runtime_mesh_asset_scene_file_size)) {
+        return false;
+    }
+    for (int i = 0; i < g_last_runtime_mesh_assets.asset_count; ++i) {
+        const RayTracingRuntimeMeshAsset* asset = &g_last_runtime_mesh_assets.assets[i];
+        if (!asset->file_stamp_valid) return false;
+        if (!runtime_mesh_asset_stamp_matches_path(asset->path,
+                                                  asset->file_mtime_sec,
+                                                  asset->file_mtime_nsec,
+                                                  asset->file_size_bytes)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool ray_tracing_runtime_mesh_assets_load_scene_file_to_last(const char* runtime_scene_path,
@@ -1070,7 +1337,7 @@ bool ray_tracing_runtime_mesh_assets_load_scene_file_to_last(const char* runtime
                                                         out_diagnostics_size)) {
         return false;
     }
-    ray_tracing_runtime_mesh_assets_take_last(&loaded);
+    ray_tracing_runtime_mesh_assets_take_last_for_scene(runtime_scene_path, &loaded);
     return true;
 }
 

@@ -1,15 +1,27 @@
 #include "render/runtime_mesh_blas_cache_3d.h"
 
+#include "core_io.h"
+#include "import/runtime_mesh_asset_pack.h"
 #include "math/vec3.h"
+#include "render/runtime_mesh_accel_pack_3d.h"
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_triangle_bvh_3d.h"
 
 #include <limits.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <time.h>
+
+#define RUNTIME_MESH_BLAS_CACHE_3D_ACCEL_SCHEMA_VERSION 1u
+#define RUNTIME_MESH_BLAS_CACHE_3D_BLAS_BUILDER_VERSION 1u
+#define RUNTIME_MESH_BLAS_CACHE_3D_TRIANGLE_LAYOUT_VERSION 1u
+#define RUNTIME_MESH_BLAS_CACHE_3D_BVH_LAYOUT_VERSION 1u
+#define RUNTIME_MESH_BLAS_CACHE_3D_BVH_BUILDER_POLICY_VERSION 1u
+#define RUNTIME_MESH_BLAS_CACHE_3D_ACCEL_POLICY_STATIC_TLAS_BLAS 1u
 
 typedef struct RuntimeMeshBLASCache3DEntry {
     bool valid;
@@ -46,6 +58,117 @@ static void runtime_mesh_blas_cache_3d_set_diag(const char* message) {
              (message && message[0]) ? message : "ok");
 }
 
+static RayTracingRuntimeMeshAssetPersistentCacheMode
+runtime_mesh_blas_cache_3d_persistent_mode(void) {
+    const char* mode = getenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE");
+    if (!mode || !mode[0]) {
+        return RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_READ_WRITE;
+    }
+    if (strcmp(mode, "0") == 0 ||
+        strcmp(mode, "off") == 0 ||
+        strcmp(mode, "disabled") == 0 ||
+        strcmp(mode, "disable") == 0) {
+        return RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_DISABLED;
+    }
+    if (strcmp(mode, "read_only") == 0 ||
+        strcmp(mode, "readonly") == 0 ||
+        strcmp(mode, "ro") == 0) {
+        return RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_READ_ONLY;
+    }
+    if (strcmp(mode, "refresh") == 0 ||
+        strcmp(mode, "rebuild") == 0 ||
+        strcmp(mode, "force") == 0) {
+        return RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_REFRESH;
+    }
+    return RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_READ_WRITE;
+}
+
+static bool runtime_mesh_blas_cache_3d_persistent_reads_enabled(
+    RayTracingRuntimeMeshAssetPersistentCacheMode mode) {
+    return mode == RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_READ_WRITE ||
+           mode == RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_READ_ONLY;
+}
+
+static bool runtime_mesh_blas_cache_3d_persistent_writes_enabled(
+    RayTracingRuntimeMeshAssetPersistentCacheMode mode) {
+    return mode == RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_READ_WRITE ||
+           mode == RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_REFRESH;
+}
+
+static const char* runtime_mesh_blas_cache_3d_cache_root(void) {
+    const char* root = getenv("RAY_TRACING_RUNTIME_MESH_ASSET_CACHE_ROOT");
+    if (root && root[0]) return root;
+    root = getenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_ROOT");
+    if (root && root[0]) return root;
+    root = getenv("TMPDIR");
+    if (root && root[0]) return root;
+    return "/private/tmp";
+}
+
+static bool runtime_mesh_blas_cache_3d_ensure_directory(const char* path) {
+    char tmp[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX];
+    size_t len = 0u;
+
+    if (!path || !path[0]) return false;
+    if (snprintf(tmp, sizeof(tmp), "%s", path) >= (int)sizeof(tmp)) return false;
+    len = strlen(tmp);
+    while (len > 1u && tmp[len - 1u] == '/') {
+        tmp[len - 1u] = '\0';
+        --len;
+    }
+
+    for (char* p = tmp + 1; *p; ++p) {
+        if (*p != '/') continue;
+        *p = '\0';
+        if (tmp[0] != '\0' && mkdir(tmp, 0777) != 0 && errno != EEXIST) {
+            *p = '/';
+            return false;
+        }
+        *p = '/';
+    }
+
+    if (mkdir(tmp, 0777) != 0 && errno != EEXIST) return false;
+    return true;
+}
+
+static bool runtime_mesh_blas_cache_3d_accel_cache_dir(char* out_dir,
+                                                       size_t out_dir_size) {
+    const char* root = runtime_mesh_blas_cache_3d_cache_root();
+    if (!out_dir || out_dir_size == 0u || !root || !root[0]) return false;
+    if (snprintf(out_dir,
+                 out_dir_size,
+                 "%s/ray_tracing_runtime_mesh_asset_accel_cache",
+                 root) >= (int)out_dir_size) {
+        out_dir[0] = '\0';
+        return false;
+    }
+    if (!runtime_mesh_blas_cache_3d_ensure_directory(out_dir)) {
+        struct stat st;
+        if (stat(out_dir, &st) != 0 || !S_ISDIR(st.st_mode)) {
+            out_dir[0] = '\0';
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool runtime_mesh_blas_cache_3d_accel_cache_path(const char* source_path,
+                                                        char* out_path,
+                                                        size_t out_path_size) {
+    char cache_dir[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+    if (out_path && out_path_size > 0u) out_path[0] = '\0';
+    if (!source_path || !source_path[0] || !out_path || out_path_size == 0u) {
+        return false;
+    }
+    if (!runtime_mesh_blas_cache_3d_accel_cache_dir(cache_dir, sizeof(cache_dir))) {
+        return false;
+    }
+    return RuntimeMeshAccelPack3D_CachePathForSource(cache_dir,
+                                                     source_path,
+                                                     out_path,
+                                                     out_path_size);
+}
+
 static void runtime_mesh_blas_cache_3d_stamp_path(const char* path,
                                                   long long* out_mtime_sec,
                                                   long long* out_mtime_nsec,
@@ -64,6 +187,43 @@ static void runtime_mesh_blas_cache_3d_stamp_path(const char* path,
     if (out_mtime_nsec) *out_mtime_nsec = 0;
 #endif
     if (out_file_size) *out_file_size = (long long)st.st_size;
+}
+
+static void runtime_mesh_blas_cache_3d_accel_key(
+    const RayTracingRuntimeMeshAsset* asset,
+    long long mtime_sec,
+    long long mtime_nsec,
+    long long file_size,
+    uint64_t checksum,
+    RuntimeMeshAccelPack3DKey* out_key) {
+    if (!out_key) return;
+    memset(out_key, 0, sizeof(*out_key));
+    if (asset && asset->path[0]) {
+        snprintf(out_key->source_key.source_path,
+                 sizeof(out_key->source_key.source_path),
+                 "%s",
+                 asset->path);
+    }
+    out_key->source_key.source_mtime_sec = (int64_t)mtime_sec;
+    out_key->source_key.source_mtime_nsec = (int64_t)mtime_nsec;
+    out_key->source_key.source_size_bytes = (int64_t)file_size;
+    out_key->source_key.source_checksum = checksum;
+    out_key->source_key.core_mesh_asset_schema_version = CORE_MESH_ASSET_SCHEMA_VERSION_1;
+    out_key->source_key.ray_tracing_cache_schema_version =
+        RUNTIME_MESH_BLAS_CACHE_3D_ACCEL_SCHEMA_VERSION;
+    out_key->source_key.pointer_size_bytes = (uint32_t)sizeof(void*);
+    out_key->accel_cache_schema_version =
+        RUNTIME_MESH_BLAS_CACHE_3D_ACCEL_SCHEMA_VERSION;
+    out_key->blas_builder_version = RUNTIME_MESH_BLAS_CACHE_3D_BLAS_BUILDER_VERSION;
+    out_key->triangle_layout_version = RUNTIME_MESH_BLAS_CACHE_3D_TRIANGLE_LAYOUT_VERSION;
+    out_key->bvh_layout_version = RUNTIME_MESH_BLAS_CACHE_3D_BVH_LAYOUT_VERSION;
+    out_key->bvh_builder_policy_version =
+        RUNTIME_MESH_BLAS_CACHE_3D_BVH_BUILDER_POLICY_VERSION;
+    out_key->acceleration_policy =
+        RUNTIME_MESH_BLAS_CACHE_3D_ACCEL_POLICY_STATIC_TLAS_BLAS;
+    out_key->pointer_size_bytes = (uint32_t)sizeof(void*);
+    out_key->source_triangle_count =
+        asset ? (uint32_t)asset->document.triangle_count : 0u;
 }
 
 static bool runtime_mesh_blas_cache_3d_entry_matches(
@@ -220,6 +380,12 @@ bool RuntimeMeshBLASCache3D_PrepareAssetSet(
     uint64_t call_hits = 0u;
     uint64_t call_misses = 0u;
     bool had_assets = false;
+    RayTracingRuntimeMeshAssetPersistentCacheMode persistent_mode =
+        runtime_mesh_blas_cache_3d_persistent_mode();
+    bool persistent_can_read =
+        runtime_mesh_blas_cache_3d_persistent_reads_enabled(persistent_mode);
+    bool persistent_can_write =
+        runtime_mesh_blas_cache_3d_persistent_writes_enabled(persistent_mode);
 
     runtime_mesh_blas_cache_3d_set_diag("ok");
     gRuntimeMeshBLASCache3DDiagnostics.blasPrepareCalls += 1u;
@@ -243,6 +409,11 @@ bool RuntimeMeshBLASCache3D_PrepareAssetSet(
         RuntimeMeshBLASCache3DEntry* entry = NULL;
         RuntimeTriangleMesh3D local_mesh;
         struct timespec build_start = {0};
+        char accel_cache_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+        bool accel_cache_path_ok = false;
+        RuntimeMeshAccelPack3DKey accel_key;
+        uint64_t source_checksum = 0u;
+        bool loaded_persistent = false;
 
         runtime_mesh_blas_cache_3d_stamp_path(asset->path,
                                               &mtime_sec,
@@ -266,14 +437,75 @@ bool RuntimeMeshBLASCache3D_PrepareAssetSet(
             return false;
         }
         memset(&local_mesh, 0, sizeof(local_mesh));
-        (void)clock_gettime(CLOCK_MONOTONIC, &build_start);
-        if (!runtime_mesh_blas_cache_3d_build_local_mesh(asset, &local_mesh)) {
+        if (persistent_mode == RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_REFRESH) {
+            gRuntimeMeshBLASCache3DDiagnostics.blasPersistentCacheRefreshes += 1u;
+        }
+        if (asset->path[0] &&
+            asset->document.triangle_count > 0u &&
+            asset->document.triangle_count <= (size_t)UINT32_MAX &&
+            (persistent_can_read || persistent_can_write)) {
+            (void)ray_tracing_runtime_mesh_asset_pack_checksum_file(asset->path,
+                                                                    &source_checksum);
+            runtime_mesh_blas_cache_3d_accel_key(asset,
+                                                 mtime_sec,
+                                                 mtime_nsec,
+                                                 file_size,
+                                                 source_checksum,
+                                                 &accel_key);
+            accel_cache_path_ok =
+                runtime_mesh_blas_cache_3d_accel_cache_path(asset->path,
+                                                            accel_cache_path,
+                                                            sizeof(accel_cache_path));
+        }
+        if (persistent_can_read && accel_cache_path_ok &&
+            core_io_path_exists(accel_cache_path)) {
+            char pack_diag[256] = {0};
+            struct timespec read_start = {0};
+            (void)clock_gettime(CLOCK_MONOTONIC, &read_start);
+            loaded_persistent =
+                RuntimeMeshAccelPack3D_ReadCacheFile(accel_cache_path,
+                                                     &accel_key,
+                                                     &local_mesh,
+                                                     pack_diag,
+                                                     sizeof(pack_diag));
+            gRuntimeMeshBLASCache3DDiagnostics.blasPersistentCacheReadMs +=
+                runtime_mesh_blas_cache_3d_elapsed_ms_since(&read_start);
+            if (loaded_persistent) {
+                gRuntimeMeshBLASCache3DDiagnostics.blasPersistentCacheHits += 1u;
+            } else {
+                gRuntimeMeshBLASCache3DDiagnostics.blasPersistentCacheInvalidations += 1u;
+            }
+        }
+        if (!loaded_persistent && accel_cache_path_ok &&
+            (persistent_can_read || persistent_can_write)) {
+            gRuntimeMeshBLASCache3DDiagnostics.blasPersistentCacheMisses += 1u;
+        }
+        if (!loaded_persistent) {
+            (void)clock_gettime(CLOCK_MONOTONIC, &build_start);
+            if (!runtime_mesh_blas_cache_3d_build_local_mesh(asset, &local_mesh)) {
+                gRuntimeMeshBLASCache3DDiagnostics.blasBuildMs +=
+                    runtime_mesh_blas_cache_3d_elapsed_ms_since(&build_start);
+                return false;
+            }
             gRuntimeMeshBLASCache3DDiagnostics.blasBuildMs +=
                 runtime_mesh_blas_cache_3d_elapsed_ms_since(&build_start);
-            return false;
+            if (persistent_can_write && accel_cache_path_ok &&
+                RuntimeTriangleMesh3D_HasReadyBVH(&local_mesh)) {
+                char pack_diag[256] = {0};
+                struct timespec write_start = {0};
+                (void)clock_gettime(CLOCK_MONOTONIC, &write_start);
+                if (RuntimeMeshAccelPack3D_WriteCacheFile(accel_cache_path,
+                                                          &accel_key,
+                                                          &local_mesh,
+                                                          pack_diag,
+                                                          sizeof(pack_diag))) {
+                    gRuntimeMeshBLASCache3DDiagnostics.blasPersistentCacheWrites += 1u;
+                }
+                gRuntimeMeshBLASCache3DDiagnostics.blasPersistentCacheWriteMs +=
+                    runtime_mesh_blas_cache_3d_elapsed_ms_since(&write_start);
+            }
+            gRuntimeMeshBLASCache3DDiagnostics.blasFullRebuilds += 1u;
         }
-        gRuntimeMeshBLASCache3DDiagnostics.blasBuildMs +=
-            runtime_mesh_blas_cache_3d_elapsed_ms_since(&build_start);
 
         entry = &gRuntimeMeshBLASCache3D[slot];
         RuntimeTriangleMesh3D_Free(&entry->local_mesh);
@@ -287,7 +519,6 @@ bool RuntimeMeshBLASCache3D_PrepareAssetSet(
         entry->vertex_count = asset->document.vertex_count;
         entry->source_triangle_count = asset->document.triangle_count;
         entry->local_mesh = local_mesh;
-        gRuntimeMeshBLASCache3DDiagnostics.blasFullRebuilds += 1u;
     }
 
     gRuntimeMeshBLASCache3DDiagnostics.enabled = had_assets;

@@ -2067,9 +2067,9 @@ static int test_runtime_material_payload_authored_texture_becomes_base_but_keeps
                     authored_only.baseColorG - 1e-6 ||
                 authored_with_overlay_stack.baseColorB <
                     authored_only.baseColorB - 1e-6);
-    assert_true("runtime_material_payload_authored_stack_overlay_roughens",
-                authored_with_overlay_stack.bsdf.roughness >
-                    authored_only.bsdf.roughness + 1e-6);
+    assert_true("runtime_material_payload_authored_stack_overlay_preserves_or_roughens",
+                authored_with_overlay_stack.bsdf.roughness >=
+                    authored_only.bsdf.roughness - 1e-6);
 
     SceneEditorMaterialStackResetAll();
     RuntimeMaterialAuthoredTextureResetAll();

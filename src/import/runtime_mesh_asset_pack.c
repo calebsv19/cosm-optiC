@@ -1,14 +1,20 @@
 #include "import/runtime_mesh_asset_pack.h"
 
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 static const unsigned char kRuntimeMeshAssetPackMagic[8] = {
     'R', 'T', 'M', 'P', 'K', '1', '3', '\0'
 };
 static const uint32_t kRuntimeMeshAssetPackVersion = 1u;
+static const uint32_t kRuntimeMeshAssetPackCacheVersion = 2u;
+static const uint32_t kRuntimeMeshAssetPackCacheSchemaVersion = 1u;
 static const uint32_t kRuntimeMeshAssetPackEndianMarker = 0x01020304u;
+static const uint64_t kRuntimeMeshAssetPackFnvOffset = 1469598103934665603ull;
+static const uint64_t kRuntimeMeshAssetPackFnvPrime = 1099511628211ull;
 
 static void runtime_mesh_asset_pack_diag(char* out_diagnostics,
                                          size_t out_diagnostics_size,
@@ -33,6 +39,22 @@ static bool runtime_mesh_asset_pack_read_u32(FILE* f, uint32_t* out_value) {
     return runtime_mesh_asset_pack_read_exact(f, out_value, sizeof(*out_value));
 }
 
+static bool runtime_mesh_asset_pack_write_u64(FILE* f, uint64_t value) {
+    return runtime_mesh_asset_pack_write_exact(f, &value, sizeof(value));
+}
+
+static bool runtime_mesh_asset_pack_read_u64(FILE* f, uint64_t* out_value) {
+    return runtime_mesh_asset_pack_read_exact(f, out_value, sizeof(*out_value));
+}
+
+static bool runtime_mesh_asset_pack_write_i64(FILE* f, int64_t value) {
+    return runtime_mesh_asset_pack_write_exact(f, &value, sizeof(value));
+}
+
+static bool runtime_mesh_asset_pack_read_i64(FILE* f, int64_t* out_value) {
+    return runtime_mesh_asset_pack_read_exact(f, out_value, sizeof(*out_value));
+}
+
 static bool runtime_mesh_asset_pack_write_double(FILE* f, double value) {
     return runtime_mesh_asset_pack_write_exact(f, &value, sizeof(value));
 }
@@ -52,6 +74,20 @@ static bool runtime_mesh_asset_pack_write_string64(FILE* f, const char text[64])
 static bool runtime_mesh_asset_pack_read_string64(FILE* f, char text[64]) {
     if (!runtime_mesh_asset_pack_read_exact(f, text, 64u)) return false;
     text[63] = '\0';
+    return true;
+}
+
+static bool runtime_mesh_asset_pack_write_path(FILE* f, const char* text) {
+    char buffer[4096] = {0};
+    if (text) {
+        snprintf(buffer, sizeof(buffer), "%s", text);
+    }
+    return runtime_mesh_asset_pack_write_exact(f, buffer, sizeof(buffer));
+}
+
+static bool runtime_mesh_asset_pack_read_path(FILE* f, char text[4096]) {
+    if (!runtime_mesh_asset_pack_read_exact(f, text, 4096u)) return false;
+    text[4095] = '\0';
     return true;
 }
 
@@ -95,12 +131,30 @@ static int runtime_mesh_asset_pack_find_surface_group(
     return -1;
 }
 
-bool ray_tracing_runtime_mesh_asset_pack_write_file(
+static uint64_t runtime_mesh_asset_pack_hash_bytes(uint64_t hash,
+                                                   const void* data,
+                                                   size_t size) {
+    const unsigned char* bytes = (const unsigned char*)data;
+    if (!bytes) return hash;
+    for (size_t i = 0u; i < size; ++i) {
+        hash ^= (uint64_t)bytes[i];
+        hash *= kRuntimeMeshAssetPackFnvPrime;
+    }
+    return hash;
+}
+
+static bool runtime_mesh_asset_pack_write_document_file(
     const char* path,
+    const RayTracingRuntimeMeshAssetPackSourceKey* source_key,
     const CoreMeshAssetRuntimeDocument* document,
     char* out_diagnostics,
-    size_t out_diagnostics_size) {
+    size_t out_diagnostics_size,
+    bool atomic_write) {
     FILE* f = NULL;
+    char temp_path[4096] = {0};
+    const char* write_path = path;
+    uint32_t format_version = source_key ? kRuntimeMeshAssetPackCacheVersion
+                                         : kRuntimeMeshAssetPackVersion;
     uint32_t vertex_count = 0u;
     uint32_t triangle_count = 0u;
     uint32_t surface_group_count = 0u;
@@ -116,6 +170,18 @@ bool ray_tracing_runtime_mesh_asset_pack_write_file(
                                      out_diagnostics_size,
                                      "mesh asset pack v1 requires little-endian host");
         return false;
+    }
+    if (source_key) {
+        if (!source_key->source_path[0] ||
+            source_key->core_mesh_asset_schema_version != CORE_MESH_ASSET_SCHEMA_VERSION_1 ||
+            source_key->ray_tracing_cache_schema_version !=
+                kRuntimeMeshAssetPackCacheSchemaVersion ||
+            source_key->pointer_size_bytes != (uint32_t)sizeof(void*)) {
+            runtime_mesh_asset_pack_diag(out_diagnostics,
+                                         out_diagnostics_size,
+                                         "mesh asset cache source key invalid");
+            return false;
+        }
     }
     validate_result = core_mesh_asset_runtime_document_validate(document);
     if (validate_result.code != CORE_OK) {
@@ -139,7 +205,21 @@ bool ray_tracing_runtime_mesh_asset_pack_write_file(
         return false;
     }
 
-    f = fopen(path, "wb");
+    if (atomic_write) {
+        if (snprintf(temp_path,
+                     sizeof(temp_path),
+                     "%s.tmp.%ld",
+                     path,
+                     (long)getpid()) >= (int)sizeof(temp_path)) {
+            runtime_mesh_asset_pack_diag(out_diagnostics,
+                                         out_diagnostics_size,
+                                         "mesh asset pack temp path too long");
+            return false;
+        }
+        write_path = temp_path;
+    }
+
+    f = fopen(write_path, "wb");
     if (!f) {
         runtime_mesh_asset_pack_diag(out_diagnostics, out_diagnostics_size, "mesh asset pack open failed");
         return false;
@@ -148,9 +228,28 @@ bool ray_tracing_runtime_mesh_asset_pack_write_file(
     if (!runtime_mesh_asset_pack_write_exact(f,
                                              kRuntimeMeshAssetPackMagic,
                                              sizeof(kRuntimeMeshAssetPackMagic)) ||
-        !runtime_mesh_asset_pack_write_u32(f, kRuntimeMeshAssetPackVersion) ||
-        !runtime_mesh_asset_pack_write_u32(f, kRuntimeMeshAssetPackEndianMarker) ||
-        !runtime_mesh_asset_pack_write_u32(f, vertex_count) ||
+        !runtime_mesh_asset_pack_write_u32(f, format_version) ||
+        !runtime_mesh_asset_pack_write_u32(f, kRuntimeMeshAssetPackEndianMarker)) {
+        fclose(f);
+        if (atomic_write) unlink(write_path);
+        runtime_mesh_asset_pack_diag(out_diagnostics, out_diagnostics_size, "mesh asset pack write failed");
+        return false;
+    }
+    if (source_key &&
+        (!runtime_mesh_asset_pack_write_u32(f, source_key->core_mesh_asset_schema_version) ||
+         !runtime_mesh_asset_pack_write_u32(f, source_key->ray_tracing_cache_schema_version) ||
+         !runtime_mesh_asset_pack_write_u32(f, source_key->pointer_size_bytes) ||
+         !runtime_mesh_asset_pack_write_i64(f, source_key->source_mtime_sec) ||
+         !runtime_mesh_asset_pack_write_i64(f, source_key->source_mtime_nsec) ||
+         !runtime_mesh_asset_pack_write_i64(f, source_key->source_size_bytes) ||
+         !runtime_mesh_asset_pack_write_u64(f, source_key->source_checksum) ||
+         !runtime_mesh_asset_pack_write_path(f, source_key->source_path))) {
+        fclose(f);
+        if (atomic_write) unlink(write_path);
+        runtime_mesh_asset_pack_diag(out_diagnostics, out_diagnostics_size, "mesh asset cache key write failed");
+        return false;
+    }
+    if (!runtime_mesh_asset_pack_write_u32(f, vertex_count) ||
         !runtime_mesh_asset_pack_write_u32(f, triangle_count) ||
         !runtime_mesh_asset_pack_write_u32(f, surface_group_count) ||
         !runtime_mesh_asset_pack_write_string64(f, document->contract.asset_id) ||
@@ -166,6 +265,7 @@ bool ray_tracing_runtime_mesh_asset_pack_write_file(
         !runtime_mesh_asset_pack_write_vec3(f, document->contract.pivot.axis_v) ||
         !runtime_mesh_asset_pack_write_vec3(f, document->contract.pivot.normal)) {
         fclose(f);
+        if (atomic_write) unlink(write_path);
         runtime_mesh_asset_pack_diag(out_diagnostics, out_diagnostics_size, "mesh asset pack write failed");
         return false;
     }
@@ -186,6 +286,7 @@ bool ray_tracing_runtime_mesh_asset_pack_write_file(
             !runtime_mesh_asset_pack_write_u32(f, triangle_start) ||
             !runtime_mesh_asset_pack_write_u32(f, group_triangle_count)) {
             fclose(f);
+            if (atomic_write) unlink(write_path);
             runtime_mesh_asset_pack_diag(out_diagnostics, out_diagnostics_size, "mesh asset pack group write failed");
             return false;
         }
@@ -194,6 +295,7 @@ bool ray_tracing_runtime_mesh_asset_pack_write_file(
     for (size_t i = 0u; i < document->vertex_count; ++i) {
         if (!runtime_mesh_asset_pack_write_vec3(f, document->vertices[i].position)) {
             fclose(f);
+            if (atomic_write) unlink(write_path);
             runtime_mesh_asset_pack_diag(out_diagnostics, out_diagnostics_size, "mesh asset pack vertex write failed");
             return false;
         }
@@ -224,6 +326,7 @@ bool ray_tracing_runtime_mesh_asset_pack_write_file(
             !runtime_mesh_asset_pack_write_u32(f, c) ||
             !runtime_mesh_asset_pack_write_u32(f, (uint32_t)group_index)) {
             fclose(f);
+            if (atomic_write) unlink(write_path);
             runtime_mesh_asset_pack_diag(out_diagnostics,
                                          out_diagnostics_size,
                                          "mesh asset pack triangle write failed");
@@ -232,17 +335,42 @@ bool ray_tracing_runtime_mesh_asset_pack_write_file(
     }
 
     if (fclose(f) != 0) {
+        if (atomic_write) unlink(write_path);
         runtime_mesh_asset_pack_diag(out_diagnostics, out_diagnostics_size, "mesh asset pack close failed");
+        return false;
+    }
+    if (atomic_write && rename(write_path, path) != 0) {
+        unlink(write_path);
+        runtime_mesh_asset_pack_diag(out_diagnostics,
+                                     out_diagnostics_size,
+                                     "mesh asset pack rename failed");
         return false;
     }
     return true;
 }
 
-bool ray_tracing_runtime_mesh_asset_pack_read_file(
+static bool runtime_mesh_asset_pack_source_key_matches(
+    const RayTracingRuntimeMeshAssetPackSourceKey* actual,
+    const RayTracingRuntimeMeshAssetPackSourceKey* expected) {
+    if (!actual || !expected) return false;
+    return strcmp(actual->source_path, expected->source_path) == 0 &&
+           actual->source_mtime_sec == expected->source_mtime_sec &&
+           actual->source_mtime_nsec == expected->source_mtime_nsec &&
+           actual->source_size_bytes == expected->source_size_bytes &&
+           (expected->source_checksum == 0u ||
+            actual->source_checksum == expected->source_checksum) &&
+           actual->core_mesh_asset_schema_version == expected->core_mesh_asset_schema_version &&
+           actual->ray_tracing_cache_schema_version == expected->ray_tracing_cache_schema_version &&
+           actual->pointer_size_bytes == expected->pointer_size_bytes;
+}
+
+static bool runtime_mesh_asset_pack_read_document_file(
     const char* path,
+    const RayTracingRuntimeMeshAssetPackSourceKey* expected_source_key,
     CoreMeshAssetRuntimeDocument* out_document,
     char* out_diagnostics,
-    size_t out_diagnostics_size) {
+    size_t out_diagnostics_size,
+    bool require_cache_key) {
     FILE* f = NULL;
     unsigned char magic[8] = {0};
     uint32_t version = 0u;
@@ -253,6 +381,7 @@ bool ray_tracing_runtime_mesh_asset_pack_read_file(
     uint32_t asset_type = 0u;
     uint32_t topology_closed_volume = 0u;
     uint32_t topology_manifold_expected = 0u;
+    RayTracingRuntimeMeshAssetPackSourceKey actual_source_key;
     CoreResult result = core_result_ok();
     CoreMeshAssetRuntimeDocument document;
 
@@ -277,8 +406,40 @@ bool ray_tracing_runtime_mesh_asset_pack_read_file(
         memcmp(magic, kRuntimeMeshAssetPackMagic, sizeof(magic)) != 0 ||
         !runtime_mesh_asset_pack_read_u32(f, &version) ||
         !runtime_mesh_asset_pack_read_u32(f, &endian_marker) ||
-        version != kRuntimeMeshAssetPackVersion ||
+        (version != kRuntimeMeshAssetPackVersion &&
+         version != kRuntimeMeshAssetPackCacheVersion) ||
         endian_marker != kRuntimeMeshAssetPackEndianMarker ||
+        (require_cache_key && version != kRuntimeMeshAssetPackCacheVersion)) {
+        fclose(f);
+        runtime_mesh_asset_pack_diag(out_diagnostics, out_diagnostics_size, "mesh asset pack header invalid");
+        return false;
+    }
+    memset(&actual_source_key, 0, sizeof(actual_source_key));
+    if (version == kRuntimeMeshAssetPackCacheVersion) {
+        if (!runtime_mesh_asset_pack_read_u32(f, &actual_source_key.core_mesh_asset_schema_version) ||
+            !runtime_mesh_asset_pack_read_u32(f, &actual_source_key.ray_tracing_cache_schema_version) ||
+            !runtime_mesh_asset_pack_read_u32(f, &actual_source_key.pointer_size_bytes) ||
+            !runtime_mesh_asset_pack_read_i64(f, &actual_source_key.source_mtime_sec) ||
+            !runtime_mesh_asset_pack_read_i64(f, &actual_source_key.source_mtime_nsec) ||
+            !runtime_mesh_asset_pack_read_i64(f, &actual_source_key.source_size_bytes) ||
+            !runtime_mesh_asset_pack_read_u64(f, &actual_source_key.source_checksum) ||
+            !runtime_mesh_asset_pack_read_path(f, actual_source_key.source_path)) {
+            fclose(f);
+            runtime_mesh_asset_pack_diag(out_diagnostics, out_diagnostics_size, "mesh asset cache key invalid");
+            return false;
+        }
+        if (expected_source_key &&
+            !runtime_mesh_asset_pack_source_key_matches(&actual_source_key, expected_source_key)) {
+            fclose(f);
+            runtime_mesh_asset_pack_diag(out_diagnostics, out_diagnostics_size, "mesh asset cache stale");
+            return false;
+        }
+    } else if (require_cache_key) {
+        fclose(f);
+        runtime_mesh_asset_pack_diag(out_diagnostics, out_diagnostics_size, "mesh asset cache key missing");
+        return false;
+    }
+    if (
         !runtime_mesh_asset_pack_read_u32(f, &vertex_count) ||
         !runtime_mesh_asset_pack_read_u32(f, &triangle_count) ||
         !runtime_mesh_asset_pack_read_u32(f, &surface_group_count)) {
@@ -381,4 +542,99 @@ fail_closed:
                                  result.message ? result.message : "mesh asset pack read failed");
     core_mesh_asset_runtime_document_free(&document);
     return false;
+}
+
+bool ray_tracing_runtime_mesh_asset_pack_write_file(
+    const char* path,
+    const CoreMeshAssetRuntimeDocument* document,
+    char* out_diagnostics,
+    size_t out_diagnostics_size) {
+    return runtime_mesh_asset_pack_write_document_file(path,
+                                                       NULL,
+                                                       document,
+                                                       out_diagnostics,
+                                                       out_diagnostics_size,
+                                                       false);
+}
+
+bool ray_tracing_runtime_mesh_asset_pack_read_file(
+    const char* path,
+    CoreMeshAssetRuntimeDocument* out_document,
+    char* out_diagnostics,
+    size_t out_diagnostics_size) {
+    return runtime_mesh_asset_pack_read_document_file(path,
+                                                      NULL,
+                                                      out_document,
+                                                      out_diagnostics,
+                                                      out_diagnostics_size,
+                                                      false);
+}
+
+bool ray_tracing_runtime_mesh_asset_pack_cache_path_for_source(
+    const char* cache_root,
+    const char* source_path,
+    char* out_path,
+    size_t out_path_size) {
+    uint64_t hash = kRuntimeMeshAssetPackFnvOffset;
+    if (out_path && out_path_size > 0u) out_path[0] = '\0';
+    if (!cache_root || !cache_root[0] || !source_path || !source_path[0] ||
+        !out_path || out_path_size == 0u) {
+        return false;
+    }
+    hash = runtime_mesh_asset_pack_hash_bytes(hash, source_path, strlen(source_path));
+    return snprintf(out_path,
+                    out_path_size,
+                    "%s/%016llx.rtmeshpack",
+                    cache_root,
+                    (unsigned long long)hash) > 0;
+}
+
+bool ray_tracing_runtime_mesh_asset_pack_checksum_file(const char* path,
+                                                       uint64_t* out_checksum) {
+    FILE* f = NULL;
+    uint64_t hash = kRuntimeMeshAssetPackFnvOffset;
+    unsigned char buffer[65536];
+    size_t nread = 0u;
+    if (out_checksum) *out_checksum = 0u;
+    if (!path || !path[0] || !out_checksum) return false;
+    f = fopen(path, "rb");
+    if (!f) return false;
+    while ((nread = fread(buffer, 1u, sizeof(buffer), f)) > 0u) {
+        hash = runtime_mesh_asset_pack_hash_bytes(hash, buffer, nread);
+    }
+    if (ferror(f)) {
+        fclose(f);
+        return false;
+    }
+    fclose(f);
+    *out_checksum = hash;
+    return true;
+}
+
+bool ray_tracing_runtime_mesh_asset_pack_write_cache_file(
+    const char* path,
+    const RayTracingRuntimeMeshAssetPackSourceKey* source_key,
+    const CoreMeshAssetRuntimeDocument* document,
+    char* out_diagnostics,
+    size_t out_diagnostics_size) {
+    return runtime_mesh_asset_pack_write_document_file(path,
+                                                       source_key,
+                                                       document,
+                                                       out_diagnostics,
+                                                       out_diagnostics_size,
+                                                       true);
+}
+
+bool ray_tracing_runtime_mesh_asset_pack_read_cache_file(
+    const char* path,
+    const RayTracingRuntimeMeshAssetPackSourceKey* expected_source_key,
+    CoreMeshAssetRuntimeDocument* out_document,
+    char* out_diagnostics,
+    size_t out_diagnostics_size) {
+    return runtime_mesh_asset_pack_read_document_file(path,
+                                                      expected_source_key,
+                                                      out_document,
+                                                      out_diagnostics,
+                                                      out_diagnostics_size,
+                                                      true);
 }

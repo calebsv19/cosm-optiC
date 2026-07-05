@@ -1,5 +1,6 @@
 #include "render/runtime_scene_3d_builder.h"
 #include "render/runtime_mesh_blas_cache_3d.h"
+#include "render/runtime_ray_3d.h"
 #include "render/runtime_scene_accel_3d.h"
 #include "render/runtime_triangle_bvh_3d.h"
 #include "render/runtime_scene_3d_samples.h"
@@ -212,6 +213,11 @@ static bool runtime_scene_3d_builder_rebuild_prepared_accel(
         return false;
     }
     return true;
+}
+
+static bool runtime_scene_3d_builder_should_build_flattened_bvh(void) {
+    RuntimeRay3DTraceRoute route = RuntimeRay3D_CurrentTraceRoute();
+    return route != RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS;
 }
 
 static RuntimeScene3DBuilderMeshBounds runtime_scene_3d_builder_mesh_bounds(
@@ -1218,7 +1224,17 @@ bool RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(RuntimeScene3D* scene, double
         runtime_scene_3d_builder_set_diag(diag);
         return false;
     }
-    if (!scene || scene->primitiveCount <= 0 || scene->triangleMesh.triangleCount <= 0) {
+    if (!scene) {
+        runtime_scene_3d_builder_set_diag("bridge scene build failed: null scene");
+        return false;
+    }
+    if (scene->primitiveCount <= 0 || scene->triangleMesh.triangleCount <= 0) {
+        if (scene->hasLight || scene->hasCamera || scene->lightSet.lightCount > 0) {
+            runtime_scene_3d_builder_set_diag("ok");
+            gRuntimeScene3DBuilderTiming.total_ms +=
+                runtime_scene_3d_builder_elapsed_ms_since(&total_start);
+            return true;
+        }
         char diag[2048];
         snprintf(diag,
                  sizeof(diag),
@@ -1252,7 +1268,8 @@ bool RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(RuntimeScene3D* scene, double
         runtime_scene_3d_builder_set_diag(diag);
         return false;
     }
-    if (!runtime_scene_3d_builder_rebuild_bvh(scene)) {
+    if (runtime_scene_3d_builder_should_build_flattened_bvh() &&
+        !runtime_scene_3d_builder_rebuild_bvh(scene)) {
         char diag[4096];
         const char* lower_diag = RuntimeScene3DBuilder_LastDiagnostics();
         snprintf(diag,

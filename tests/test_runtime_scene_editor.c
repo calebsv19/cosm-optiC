@@ -2742,6 +2742,12 @@ static int test_material_editor_material_readback_reports_preset_custom_and_grap
     snprintf(stack.layers[1].layerId, sizeof(stack.layers[1].layerId), "%s", "rust_detail");
     snprintf(stack.layers[1].displayName, sizeof(stack.layers[1].displayName), "%s", "Rust Detail");
     stack.layers[1].placement.strength = 0.37;
+    stack.layers[1].opacity = 0.41;
+    stack.layers[1].roughnessInfluence = 0.62;
+    stack.layers[1].reflectivityInfluence = -0.20;
+    stack.layers[1].specularInfluence = 0.36;
+    stack.layers[1].diffuseInfluence = 0.18;
+    stack.layers[1].transparencyInfluence = -0.15;
     assert_true("material_editor_material_readback_set_stack",
                 SceneEditorMaterialStackSetObjectStack(0, &stack));
     assert_true("material_editor_material_readback_select_layer",
@@ -2758,9 +2764,78 @@ static int test_material_editor_material_readback_reports_preset_custom_and_grap
                     layer.active_index == 1 &&
                     layer.layer_count == 2 &&
                     !layer.base_layer &&
+                    layer.persisted_stack &&
+                    strcmp(layer.role_label, "Overlay") == 0 &&
+                    strcmp(layer.kind_label, "Rust") == 0 &&
+                    strcmp(layer.source_label, "object stack") == 0 &&
+                    strcmp(layer.edit_owner_label, "material_stack") == 0 &&
                     strstr(layer.title, "Overlay 2/2") != NULL &&
                     strstr(layer.detail, "Rust Detail") != NULL &&
-                    strstr(layer.detail, "rust_detail") != NULL);
+                    strstr(layer.detail, "rust_detail") != NULL &&
+                    strstr(layer.detail, "object stack -> material_stack") != NULL &&
+                    strstr(layer.state_label, "enabled") != NULL &&
+                    strstr(layer.state_label, "opacity 0.41") != NULL &&
+                    strstr(layer.state_label, "strength 0.37") != NULL &&
+                    strstr(layer.response_summary, "R +0.62") != NULL &&
+                    strstr(layer.response_summary, "Refl -0.20") != NULL &&
+                    strstr(layer.response_summary, "Spec +0.36") != NULL &&
+                    strstr(layer.response_summary, "Diff +0.18") != NULL &&
+                    strstr(layer.response_summary, "Trans -0.15") != NULL);
+    assert_true("material_editor_layer_influence_rough_signed",
+                MaterialEditorApplyLayerInfluenceValueToFocused(
+                    MATERIAL_EDITOR_LAYER_INFLUENCE_ROUGHNESS,
+                    -0.30));
+    assert_true("material_editor_layer_influence_reflect_signed",
+                MaterialEditorApplyLayerInfluenceValueToFocused(
+                    MATERIAL_EDITOR_LAYER_INFLUENCE_REFLECTIVITY,
+                    0.45));
+    assert_true("material_editor_layer_influence_spec_step",
+                MaterialEditorApplyLayerInfluenceStepToFocused(
+                    MATERIAL_EDITOR_LAYER_INFLUENCE_SPECULAR,
+                    -0.41));
+    assert_true("material_editor_layer_influence_diffuse_signed",
+                MaterialEditorApplyLayerInfluenceValueToFocused(
+                    MATERIAL_EDITOR_LAYER_INFLUENCE_DIFFUSE,
+                    -1.25));
+    assert_true("material_editor_layer_influence_trans_signed",
+                MaterialEditorApplyLayerInfluenceValueToFocused(
+                    MATERIAL_EDITOR_LAYER_INFLUENCE_TRANSPARENCY,
+                    1.20));
+    assert_true("material_editor_layer_influence_invalid_rejected",
+                !MaterialEditorApplyLayerInfluenceValueToFocused(
+                    MATERIAL_EDITOR_LAYER_INFLUENCE_NONE,
+                    0.25));
+    assert_true("material_editor_layer_influence_stack_written",
+                SceneEditorMaterialStackGetObjectStack(0, &stack));
+    assert_close("material_editor_layer_influence_rough_value",
+                 stack.layers[1].roughnessInfluence,
+                 -0.30,
+                 1e-9);
+    assert_close("material_editor_layer_influence_reflect_value",
+                 stack.layers[1].reflectivityInfluence,
+                 0.45,
+                 1e-9);
+    assert_close("material_editor_layer_influence_spec_step_value",
+                 stack.layers[1].specularInfluence,
+                 -0.05,
+                 1e-9);
+    assert_close("material_editor_layer_influence_diffuse_clamped",
+                 stack.layers[1].diffuseInfluence,
+                 -1.0,
+                 1e-9);
+    assert_close("material_editor_layer_influence_trans_clamped",
+                 stack.layers[1].transparencyInfluence,
+                 1.0,
+                 1e-9);
+    assert_true("material_editor_layer_influence_dirty",
+                sceneSettings.sceneObjects[0].dirty);
+    assert_true("material_editor_layer_influence_readback_updated",
+                MaterialEditorBuildActiveLayerReadback(&layer) &&
+                    strstr(layer.response_summary, "R -0.30") != NULL &&
+                    strstr(layer.response_summary, "Refl +0.45") != NULL &&
+                    strstr(layer.response_summary, "Spec -0.05") != NULL &&
+                    strstr(layer.response_summary, "Diff -1.00") != NULL &&
+                    strstr(layer.response_summary, "Trans +1.00") != NULL);
 
     snprintf(base.layerId, sizeof(base.layerId), "%s", "graph_base_wood");
     snprintf(oil.layerId, sizeof(oil.layerId), "%s", "graph_oil_overlay");
@@ -3493,6 +3568,217 @@ static int test_material_editor_mirror_response_override_is_object_local_and_loa
     return 0;
 }
 
+static int test_material_editor_metal_response_routes_stack_preview_payload_and_proof(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    MaterialEditorResponseReadback readback = {0};
+    MaterialEditorProofReadback proof = {0};
+    RuntimeMaterialSurfaceEval preview_eval = {0};
+    RuntimeMaterialPayload3D payload = {0};
+    HitInfo3D hit = {0};
+    const MaterialEditorResponseRow* rough = NULL;
+    const MaterialEditorResponseRow* reflect = NULL;
+    const MaterialEditorResponseRow* spec = NULL;
+    const MaterialEditorResponseRow* tint = NULL;
+    const MaterialEditorResponseRow* metal = NULL;
+    const MaterialEditorResponseRow* base = NULL;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 5.0, 0.0, NULL, 0);
+    ObjectEditorObjectAssignMaterial(&sceneSettings.sceneObjects[0], MATERIAL_PRESET_ROUGH_METAL);
+    stack.layerCount = 1;
+    stack.layers[0] =
+        RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID);
+    assert_true("material_editor_metal_response_seed_stack",
+                SceneEditorMaterialStackSetObjectStack(0, &stack));
+    ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
+    InitializeMaterialEditor();
+    assert_true("material_editor_metal_response_select_base",
+                MaterialEditorSetActiveLayerIndex(0));
+
+    assert_true("material_editor_metal_response_default_build",
+                MaterialEditorBuildResponseReadback(&readback));
+    rough = test_material_editor_response_row(&readback, "Rough");
+    reflect = test_material_editor_response_row(&readback, "Reflect");
+    spec = test_material_editor_response_row(&readback, "Spec");
+    tint = test_material_editor_response_row(&readback, "Tint");
+    metal = test_material_editor_response_row(&readback, "Metal");
+    base = test_material_editor_response_row(&readback, "Base");
+    assert_true("material_editor_metal_response_family",
+                readback.family == MATERIAL_EDITOR_RESPONSE_FAMILY_METAL &&
+                    readback.family_specific &&
+                    readback.has_guarded_fields &&
+                    strcmp(readback.title, "Metal Response") == 0 &&
+                    strstr(readback.subtitle, "Rough conductor") != NULL &&
+                    strstr(readback.route_label, "metal family matrix") != NULL);
+    assert_true("material_editor_metal_response_rows",
+                rough && reflect && spec && tint && metal && base &&
+                    rough->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE &&
+                    reflect->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE &&
+                    spec->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE &&
+                    tint->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE &&
+                    metal->field == MATERIAL_EDITOR_RESPONSE_FIELD_METALLIC &&
+                    metal->state == MATERIAL_EDITOR_RESPONSE_FIELD_GUARDED &&
+                    strcmp(metal->value, "1.00") == 0 &&
+                    base->field == MATERIAL_EDITOR_RESPONSE_FIELD_DIFFUSE_BASE &&
+                    base->state == MATERIAL_EDITOR_RESPONSE_FIELD_READBACK);
+
+    assert_true("material_editor_metal_proof_default_build",
+                MaterialEditorBuildFocusedProofReadback(&proof));
+    assert_true("material_editor_metal_proof_default",
+                proof.metal_proof_readback &&
+                    !proof.glass_proof_readback &&
+                    !proof.mirror_proof_readback &&
+                    strcmp(proof.metal_proof_case, "default rough metal") == 0 &&
+                    strcmp(proof.metal_proof_package,
+                           "m11_s5_material_family_preview_grid") == 0 &&
+                    strstr(proof.metal_proof_coverage, "rough Metal contrast") != NULL);
+
+    assert_true("material_editor_metal_response_rough_route",
+                MaterialEditorApplyResponseValueToFocused(
+                    MATERIAL_EDITOR_RESPONSE_FIELD_ROUGHNESS,
+                    0.41));
+    assert_true("material_editor_metal_response_reflect_route",
+                MaterialEditorApplyResponseValueToFocused(
+                    MATERIAL_EDITOR_RESPONSE_FIELD_REFLECTIVITY,
+                    0.63));
+    assert_true("material_editor_metal_response_spec_route",
+                MaterialEditorApplyResponseValueToFocused(
+                    MATERIAL_EDITOR_RESPONSE_FIELD_SPECULAR,
+                    0.78));
+    assert_true("material_editor_metal_response_tint_route",
+                MaterialEditorApplyResponseTintToFocused(
+                    SceneObjectPackRGBBytes(170u, 187u, 204u)));
+    assert_true("material_editor_metal_response_stack_written",
+                SceneEditorMaterialStackGetObjectStack(0, &stack));
+    assert_close("material_editor_metal_response_stack_rough",
+                 stack.layers[0].roughnessInfluence,
+                 0.41,
+                 1e-9);
+    assert_close("material_editor_metal_response_stack_reflect",
+                 stack.layers[0].reflectivityInfluence,
+                 0.63,
+                 1e-9);
+    assert_close("material_editor_metal_response_stack_spec",
+                 stack.layers[0].specularInfluence,
+                 0.78,
+                 1e-9);
+    assert_true("material_editor_metal_response_tint_object_color",
+                SceneObjectColorR(&sceneSettings.sceneObjects[0]) == 170u &&
+                    SceneObjectColorG(&sceneSettings.sceneObjects[0]) == 187u &&
+                    SceneObjectColorB(&sceneSettings.sceneObjects[0]) == 204u &&
+                    !sceneSettings.sceneObjects[0].hasMirrorResponseOverride &&
+                    !sceneSettings.sceneObjects[0].hasGlassTransportOverride);
+    assert_true("material_editor_metal_response_step_routes",
+                MaterialEditorApplyResponseStepToFocused(
+                    MATERIAL_EDITOR_RESPONSE_FIELD_ROUGHNESS,
+                    0.05));
+    assert_true("material_editor_metal_response_step_stack_written",
+                SceneEditorMaterialStackGetObjectStack(0, &stack));
+    assert_close("material_editor_metal_response_step_rough",
+                 stack.layers[0].roughnessInfluence,
+                 0.46,
+                 1e-9);
+
+    assert_true("material_editor_metal_response_readback_after_mutation",
+                MaterialEditorBuildResponseReadback(&readback));
+    rough = test_material_editor_response_row(&readback, "Rough");
+    reflect = test_material_editor_response_row(&readback, "Reflect");
+    spec = test_material_editor_response_row(&readback, "Spec");
+    tint = test_material_editor_response_row(&readback, "Tint");
+    metal = test_material_editor_response_row(&readback, "Metal");
+    assert_true("material_editor_metal_response_readback_values",
+                rough && reflect && spec && tint && metal &&
+                    strcmp(rough->value, "0.46") == 0 &&
+                    strcmp(reflect->value, "0.63") == 0 &&
+                    strcmp(spec->value, "0.78") == 0 &&
+                    strcmp(tint->value, "0.67 0.73 0.80") == 0 &&
+                    strcmp(metal->value, "1.00") == 0 &&
+                    metal->state == MATERIAL_EDITOR_RESPONSE_FIELD_GUARDED);
+
+    assert_true("material_editor_metal_preview_eval",
+                MaterialPreviewSurfaceEvaluateObject(&sceneSettings.sceneObjects[0],
+                                                     0,
+                                                     NULL,
+                                                     0.25,
+                                                     0.5,
+                                                     &preview_eval));
+    assert_close("material_editor_metal_preview_rough",
+                 preview_eval.roughness,
+                 0.46,
+                 1e-9);
+    assert_close("material_editor_metal_preview_reflect",
+                 preview_eval.reflectivity,
+                 0.63,
+                 1e-9);
+    assert_close("material_editor_metal_preview_spec",
+                 preview_eval.specWeight,
+                 0.78,
+                 1e-9);
+    HitInfo3D_Reset(&hit);
+    hit.sceneObjectIndex = 0;
+    hit.triangleIndex = 0;
+    hit.localTriangleIndex = -1;
+    hit.primitiveIndex = 0;
+    hit.hasObjectTextureCoord = true;
+    hit.objectTextureCoord.x = 0.25;
+    hit.objectTextureCoord.y = 0.5;
+    hit.normal.z = 1.0;
+    assert_true("material_editor_metal_payload_eval",
+                RuntimeMaterialPayload3D_ResolveFromHit(&hit, &payload));
+    assert_close("material_editor_metal_payload_rough",
+                 payload.bsdf.roughness,
+                 preview_eval.roughness,
+                 1e-9);
+    assert_close("material_editor_metal_payload_reflect",
+                 payload.bsdf.reflectivity,
+                 preview_eval.reflectivity,
+                 1e-9);
+    assert_close("material_editor_metal_payload_spec",
+                 payload.bsdf.specWeight,
+                 preview_eval.specWeight,
+                 1e-9);
+
+    assert_true("material_editor_metal_proof_tinted_build",
+                MaterialEditorBuildFocusedProofReadback(&proof));
+    assert_true("material_editor_metal_proof_tinted",
+                strcmp(proof.metal_proof_case, "tinted rough metal") == 0 &&
+                    strcmp(proof.metal_proof_package,
+                           "m11_s5_material_family_preview_grid") == 0 &&
+                    strstr(proof.metal_missing_proof, "metallic remains guarded") != NULL);
+
+    stack.layerCount = 2;
+    stack.layers[1] =
+        RuntimeMaterialTextureLayerMakeOverlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_RUST);
+    stack.layers[1].roughnessInfluence = 0.82;
+    stack.layers[1].reflectivityInfluence = 0.28;
+    stack.layers[1].specularInfluence = 0.36;
+    assert_true("material_editor_metal_response_rust_stack_set",
+                SceneEditorMaterialStackSetObjectStack(0, &stack));
+    assert_true("material_editor_metal_response_select_rust",
+                MaterialEditorSetActiveLayerIndex(1));
+    assert_true("material_editor_metal_proof_rust_build",
+                MaterialEditorBuildFocusedProofReadback(&proof));
+    assert_true("material_editor_metal_proof_rust_overlay",
+                strcmp(proof.metal_proof_case, "Rust metal overlay") == 0 &&
+                    strcmp(proof.metal_proof_package,
+                           "m11_s5_material_family_preview_grid") == 0 &&
+                    strstr(proof.metal_proof_coverage, "damaged Metal overlays") != NULL &&
+                    strstr(proof.metal_missing_proof, "metallic still guarded") != NULL);
+
+    SceneEditorMaterialGraphResetAll();
+    SceneEditorMaterialStackResetAll();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 static int test_material_editor_response_mutation_rejects_non_glass_family(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -3505,7 +3791,7 @@ static int test_material_editor_response_mutation_rejects_non_glass_family(void)
 
     sceneSettings.objectCount = 1;
     InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 5.0, 0.0, NULL, 0);
-    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_ROUGH_METAL;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_GLOSSY;
     stack.layerCount = 1;
     stack.layers[0] =
         RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID);
@@ -3648,16 +3934,16 @@ static int test_material_editor_response_readback_keeps_non_glass_on_generic_mat
 
     sceneSettings.objectCount = 1;
     InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 5.0, 0.0, NULL, 0);
-    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_ROUGH_METAL;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_GLOSSY;
     ObjectEditorSelectionTrackerSetCurrent(0, sceneSettings.objectCount);
     InitializeMaterialEditor();
 
-    assert_true("material_editor_response_metal_build",
+    assert_true("material_editor_response_glossy_build",
                 MaterialEditorBuildResponseReadback(&readback));
-    assert_true("material_editor_response_metal_generic_matrix",
-                readback.family == MATERIAL_EDITOR_RESPONSE_FAMILY_METAL &&
+    assert_true("material_editor_response_glossy_generic_matrix",
+                readback.family == MATERIAL_EDITOR_RESPONSE_FAMILY_GENERIC &&
                     !readback.family_specific &&
-                    strcmp(readback.title, "Metal Response") == 0 &&
+                    strcmp(readback.title, "Material Response") == 0 &&
                     strstr(readback.subtitle, "Generic selected-layer response") != NULL &&
                     test_material_editor_response_row(&readback, "Reflect") != NULL);
 
@@ -6040,6 +6326,7 @@ int run_test_runtime_scene_editor_tests(void) {
     test_material_editor_glass_transport_override_is_object_local_and_loaded();
     test_material_editor_mirror_response_readback_gets_family_matrix();
     test_material_editor_mirror_response_override_is_object_local_and_loaded();
+    test_material_editor_metal_response_routes_stack_preview_payload_and_proof();
     test_material_editor_response_mutation_rejects_non_glass_family();
     test_material_editor_glass_overlay_affordances_add_select_and_readback();
     test_material_editor_glass_overlay_affordances_reject_non_glass();

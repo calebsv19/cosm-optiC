@@ -45,6 +45,10 @@ bool MaterialEditorLayerModelApplyParamValue(const SceneObject* object,
                                              int scene_object_index,
                                              int param_kind,
                                              double normalized_value);
+bool MaterialEditorLayerModelApplyInfluenceValue(const SceneObject* object,
+                                                 int scene_object_index,
+                                                 MaterialEditorLayerInfluenceKind kind,
+                                                 double signed_value);
 bool MaterialEditorLayerModelApplyResponseValue(const SceneObject* object,
                                                 int scene_object_index,
                                                 MaterialEditorResponseField field,

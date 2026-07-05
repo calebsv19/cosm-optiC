@@ -3,6 +3,8 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
+#include <stdio.h>
 
 #include "render/runtime_ray_3d.h"
 
@@ -67,6 +69,13 @@ bool RuntimeTriangleMesh3D_BuildBVH(RuntimeTriangleMesh3D* mesh);
 const char* RuntimeTriangleMesh3D_BVHLastDiagnostics(void);
 bool RuntimeTriangleMesh3D_CopyBVH(RuntimeTriangleMesh3D* dst,
                                    const RuntimeTriangleMesh3D* src);
+bool RuntimeTriangleMesh3D_WriteBVHCachePayload(FILE* file,
+                                                const RuntimeTriangleMesh3D* mesh);
+bool RuntimeTriangleMesh3D_ReadBVHCachePayload(FILE* file,
+                                               RuntimeTriangleMesh3D* mesh,
+                                               int expected_triangle_count,
+                                               char* out_diagnostics,
+                                               size_t out_diagnostics_size);
 bool RuntimeTriangleMesh3D_HasReadyBVH(const RuntimeTriangleMesh3D* mesh);
 int RuntimeTriangleMesh3D_BVHNodeCount(const RuntimeTriangleMesh3D* mesh);
 int RuntimeTriangleMesh3D_BVHLeafCount(const RuntimeTriangleMesh3D* mesh);

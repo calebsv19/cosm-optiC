@@ -22,6 +22,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_caustic_settings_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_surface_cache_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_transport_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_transport_debug_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_volume_cache_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_caustic_sidecar_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_estimator_3d.o \
@@ -61,10 +62,12 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_native_3d_resolution.o \
 	$(BUILD_DIR)/render/runtime_native_3d_temporal_accum.o \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_occupancy.o \
+	$(BUILD_DIR)/render/runtime_mesh_accel_pack_3d.o \
 	$(BUILD_DIR)/render/runtime_mesh_blas_cache_3d.o \
 	$(BUILD_DIR)/render/runtime_dynamic_geometry_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
+	$(BUILD_DIR)/render/runtime_render_trace_cost_ledger_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \
 	$(BUILD_DIR)/render/runtime_environment_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_capabilities.o \
@@ -93,6 +96,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/import/runtime_scene_bridge_authoring.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_authoring_paths.o \
 	$(BUILD_DIR)/import/runtime_scene_volume_defaults.o \
+	$(BUILD_DIR)/import/runtime_mesh_asset_pack.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge.o \
 	$(BUILD_DIR)/path/path_system.o \
@@ -156,7 +160,6 @@ RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_DEPS = \
 	$(BUILD_DIR)/app/material_preview_headless.o \
 	$(BUILD_DIR)/render/adapters/timer_hud_headless_stub.o \
 	$(BUILD_DIR)/editor/material_preview_surface_eval.o \
-	$(BUILD_DIR)/editor/scene_editor_material_face_metrics.o \
 	$(NATIVE3D_AUDIT_DEPS)
 
 
@@ -244,6 +247,7 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_caustic_settings_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_surface_cache_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_transport_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_transport_debug_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_volume_cache_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_caustic_sidecar_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_estimator_3d.o \
@@ -273,11 +277,13 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_native_3d_preview_reconstruction.o \
 	$(BUILD_DIR)/render/runtime_native_3d_resolution.o \
 	$(BUILD_DIR)/render/runtime_native_3d_temporal_accum.o \
-	$(BUILD_DIR)/render/runtime_native_3d_tile_occupancy.o \
-	$(BUILD_DIR)/render/runtime_mesh_blas_cache_3d.o \
+		$(BUILD_DIR)/render/runtime_native_3d_tile_occupancy.o \
+		$(BUILD_DIR)/render/runtime_mesh_accel_pack_3d.o \
+		$(BUILD_DIR)/render/runtime_mesh_blas_cache_3d.o \
 	$(BUILD_DIR)/render/runtime_dynamic_geometry_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
+	$(BUILD_DIR)/render/runtime_render_trace_cost_ledger_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \
 	$(BUILD_DIR)/render/runtime_environment_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_capabilities.o \
@@ -373,6 +379,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/import/runtime_scene_bridge_json_utils.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_authoring.o \
 	$(BUILD_DIR)/import/runtime_scene_volume_defaults.o \
+	$(BUILD_DIR)/import/runtime_mesh_asset_pack.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_render.o \
@@ -383,6 +390,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/ui/menu/menu_layout.o \
 	$(BUILD_DIR)/ui/menu/menu_panel_chrome.o \
 	$(BUILD_DIR)/ui/menu/menu_batch_panel.o \
+	$(BUILD_DIR)/ui/menu/menu_resume_panel.o \
 	$(BUILD_DIR)/ui/menu/menu_scene_project_summary.o \
 	$(BUILD_DIR)/ui/menu/menu_worker_export.o \
 	$(BUILD_DIR)/ui/menu/scene_source_catalog.o \

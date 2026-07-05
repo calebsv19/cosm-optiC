@@ -13,6 +13,7 @@ typedef struct {
     SDL_Rect leftPanelRect;
     SDL_Rect centerControlsRect;
     SDL_Rect centerBatchRect;
+    SDL_Rect centerResumeRect;
     SDL_Rect sliderPanelRect;
     SDL_Rect routeStackRect;
     SDL_Rect bottomActionRowRect;

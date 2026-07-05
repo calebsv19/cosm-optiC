@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "render/runtime_ray_3d.h"
+#include "render/runtime_render_trace_cost_ledger_3d.h"
 
 static const double kRuntimeSpecularReflection3DEpsilon = 1e-4;
 static const double kRuntimeSpecularReflection3DMaxDistance = 32.0;
@@ -101,6 +102,9 @@ bool RuntimeSpecularReflection3D_Trace(const RuntimeScene3D* scene,
                                          reflection_dir,
                                          kRuntimeSpecularReflection3DEpsilon);
     result.traced = true;
+    RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
+        RUNTIME_RENDER_TRACE_COST_RAY_REFLECTION_SPECULAR,
+        1);
     if (!RuntimeLightEmitter3D_ResolveFirstHit(scene,
                                                &result.ray,
                                                kRuntimeSpecularReflection3DEpsilon,
@@ -108,6 +112,9 @@ bool RuntimeSpecularReflection3D_Trace(const RuntimeScene3D* scene,
                                                &trace)) {
         *out_result = result;
         return true;
+    }
+    if (trace.geometryHit) {
+        RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(&trace.geometryHitInfo);
     }
 
     result.geometryHit = trace.geometryHit;

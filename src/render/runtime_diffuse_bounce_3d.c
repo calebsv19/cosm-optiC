@@ -9,6 +9,7 @@
 
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_native_3d_sampling.h"
+#include "render/runtime_render_trace_cost_ledger_3d.h"
 
 static const double kRuntimeDiffuseBounce3DEpsilon = 1e-4;
 static const double kRuntimeDiffuseBounce3DMaxDistance = 8.0;
@@ -319,6 +320,9 @@ static void runtime_diffuse_bounce_3d_trace_path(
                                              sample_dir,
                                              kRuntimeDiffuseBounce3DEpsilon);
         io_result->secondaryRayCount += 1;
+        RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
+            RUNTIME_RENDER_TRACE_COST_RAY_DIFFUSE_SECONDARY,
+            depth);
         if (!RuntimeRay3D_TraceSceneFirstHit(scene,
                                              &bounce_ray,
                                              kRuntimeDiffuseBounce3DEpsilon,
@@ -326,6 +330,7 @@ static void runtime_diffuse_bounce_3d_trace_path(
                                              &next_hit)) {
             break;
         }
+        RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(&next_hit);
 
         io_result->secondaryHitCount += 1;
         if (next_hit.triangleIndex == current_hit.triangleIndex) {

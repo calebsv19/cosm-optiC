@@ -21,6 +21,8 @@ static void material_editor_reset_compact_control_rects(void) {
     memset(s_recipe_menu_item_rects, 0, sizeof(s_recipe_menu_item_rects));
     memset(s_response_action_rects, 0, sizeof(s_response_action_rects));
     memset(s_response_action_fields, 0, sizeof(s_response_action_fields));
+    memset(s_layer_influence_action_rects, 0, sizeof(s_layer_influence_action_rects));
+    memset(s_layer_influence_action_fields, 0, sizeof(s_layer_influence_action_fields));
     memset(s_glass_overlay_action_rects, 0, sizeof(s_glass_overlay_action_rects));
     memset(s_glass_overlay_action_kinds, 0, sizeof(s_glass_overlay_action_kinds));
     MaterialEditorResetLayerListLayout();
@@ -496,6 +498,86 @@ static int material_editor_draw_response_readback_grid(SDL_Renderer* renderer,
     return cursor_y + MATERIAL_EDITOR_BUTTON_GAP;
 }
 
+static double material_editor_layer_influence_value(
+    const MaterialEditorActiveLayerReadback* layer,
+    MaterialEditorLayerInfluenceKind kind) {
+    if (!layer) return 0.0;
+    if (kind == MATERIAL_EDITOR_LAYER_INFLUENCE_ROUGHNESS) {
+        return layer->roughness_influence;
+    }
+    if (kind == MATERIAL_EDITOR_LAYER_INFLUENCE_REFLECTIVITY) {
+        return layer->reflectivity_influence;
+    }
+    if (kind == MATERIAL_EDITOR_LAYER_INFLUENCE_SPECULAR) {
+        return layer->specular_influence;
+    }
+    if (kind == MATERIAL_EDITOR_LAYER_INFLUENCE_DIFFUSE) {
+        return layer->diffuse_influence;
+    }
+    if (kind == MATERIAL_EDITOR_LAYER_INFLUENCE_TRANSPARENCY) {
+        return layer->transparency_influence;
+    }
+    return 0.0;
+}
+
+static int material_editor_draw_layer_influence_controls(SDL_Renderer* renderer,
+                                                         SDL_Rect bounds,
+                                                         int cursor_y,
+                                                         int bottom_y,
+                                                         RayTracingThemePalette palette) {
+    static const MaterialEditorLayerInfluenceKind kinds[MATERIAL_EDITOR_LAYER_INFLUENCE_CONTROL_COUNT] = {
+        MATERIAL_EDITOR_LAYER_INFLUENCE_ROUGHNESS,
+        MATERIAL_EDITOR_LAYER_INFLUENCE_REFLECTIVITY,
+        MATERIAL_EDITOR_LAYER_INFLUENCE_SPECULAR,
+        MATERIAL_EDITOR_LAYER_INFLUENCE_DIFFUSE,
+        MATERIAL_EDITOR_LAYER_INFLUENCE_TRANSPARENCY
+    };
+    static const char* labels[MATERIAL_EDITOR_LAYER_INFLUENCE_CONTROL_COUNT] = {
+        "Rough", "Reflect", "Spec", "Diffuse", "Trans"
+    };
+    MaterialEditorActiveLayerReadback layer = {0};
+    char line[128];
+    int row_h = 24;
+    int action_w = 20;
+    if (!renderer) return cursor_y;
+    if (!MaterialEditorBuildActiveLayerReadback(&layer)) return cursor_y;
+    if (!material_editor_has_room_for_optional_control(
+            cursor_y,
+            15 + row_h * MATERIAL_EDITOR_LAYER_INFLUENCE_CONTROL_COUNT,
+            bottom_y)) {
+        return cursor_y;
+    }
+    MATERIAL_EDITOR_SECTION_LABEL(renderer, bounds, cursor_y, "Layer Influence", palette);
+    cursor_y += 15;
+    for (int i = 0; i < MATERIAL_EDITOR_LAYER_INFLUENCE_CONTROL_COUNT; ++i) {
+        int y = cursor_y + i * row_h;
+        double value = material_editor_layer_influence_value(&layer, kinds[i]);
+        if (y + row_h > bottom_y) break;
+        s_layer_influence_action_fields[i] = kinds[i];
+        snprintf(line, sizeof(line), "%s %+0.2f", labels[i], value);
+        RenderLabelTextLeft(renderer,
+                            (SDL_Rect){bounds.x, y + 2, bounds.w - 2 * action_w - 8, 16},
+                            line,
+                            palette.text_primary);
+        s_layer_influence_action_rects[i][0] =
+            (SDL_Rect){bounds.x + bounds.w - 2 * action_w - 2, y, action_w, 18};
+        s_layer_influence_action_rects[i][1] =
+            (SDL_Rect){bounds.x + bounds.w - action_w, y, action_w, 18};
+        MaterialEditorDrawButton(renderer,
+                                 s_layer_influence_action_rects[i][0],
+                                 "-",
+                                 false,
+                                 palette);
+        MaterialEditorDrawButton(renderer,
+                                 s_layer_influence_action_rects[i][1],
+                                 "+",
+                                 false,
+                                 palette);
+    }
+    return cursor_y + row_h * MATERIAL_EDITOR_LAYER_INFLUENCE_CONTROL_COUNT +
+           MATERIAL_EDITOR_BUTTON_GAP;
+}
+
 static int material_editor_draw_glass_overlay_shortcuts(SDL_Renderer* renderer,
                                                         SDL_Rect bounds,
                                                         int cursor_y,
@@ -567,7 +649,7 @@ static int material_editor_draw_active_layer_context(SDL_Renderer* renderer,
                                                      RayTracingThemePalette palette) {
     MaterialEditorActiveLayerReadback layer = {0};
     if (!renderer) return cursor_y;
-    if (!material_editor_has_room_for_optional_control(cursor_y, 38, bottom_y)) {
+    if (!material_editor_has_room_for_optional_control(cursor_y, 74, bottom_y)) {
         return cursor_y;
     }
     if (!MaterialEditorBuildActiveLayerReadback(&layer)) {
@@ -585,6 +667,16 @@ static int material_editor_draw_active_layer_context(SDL_Renderer* renderer,
     RenderLabelTextLeft(renderer,
                         (SDL_Rect){bounds.x, cursor_y, bounds.w, 16},
                         layer.detail,
+                        palette.text_muted);
+    cursor_y += 18;
+    RenderLabelTextLeft(renderer,
+                        (SDL_Rect){bounds.x, cursor_y, bounds.w, 16},
+                        layer.state_label,
+                        layer.enabled ? palette.text_primary : palette.text_muted);
+    cursor_y += 18;
+    RenderLabelTextLeft(renderer,
+                        (SDL_Rect){bounds.x, cursor_y, bounds.w, 16},
+                        layer.response_summary,
                         palette.text_muted);
     return cursor_y + 20;
 }
@@ -713,14 +805,19 @@ static int material_editor_draw_proof_controls(SDL_Renderer* renderer,
         }
         if (s_material_editor_proof_readback_valid &&
             (s_material_editor_proof_readback.glass_proof_readback ||
-             s_material_editor_proof_readback.mirror_proof_readback) &&
+             s_material_editor_proof_readback.mirror_proof_readback ||
+             s_material_editor_proof_readback.metal_proof_readback) &&
             material_editor_has_room_for_optional_control(cursor_y, 54, bottom_y)) {
             const char* coverage = s_material_editor_proof_readback.glass_proof_readback
                                        ? s_material_editor_proof_readback.glass_proof_coverage
-                                       : s_material_editor_proof_readback.mirror_proof_coverage;
+                                       : s_material_editor_proof_readback.mirror_proof_readback
+                                             ? s_material_editor_proof_readback.mirror_proof_coverage
+                                             : s_material_editor_proof_readback.metal_proof_coverage;
             const char* proof_package = s_material_editor_proof_readback.glass_proof_readback
                                             ? s_material_editor_proof_readback.glass_proof_package
-                                            : s_material_editor_proof_readback.mirror_proof_package;
+                                            : s_material_editor_proof_readback.mirror_proof_readback
+                                                  ? s_material_editor_proof_readback.mirror_proof_package
+                                                  : s_material_editor_proof_readback.metal_proof_package;
             RenderLabelTextWrappedLeft(renderer,
                                        (SDL_Rect){bounds.x, cursor_y, bounds.w, 34},
                                        coverage,
@@ -734,11 +831,14 @@ static int material_editor_draw_proof_controls(SDL_Renderer* renderer,
         }
         if (s_material_editor_proof_readback_valid &&
             (s_material_editor_proof_readback.glass_proof_readback ||
-             s_material_editor_proof_readback.mirror_proof_readback) &&
+             s_material_editor_proof_readback.mirror_proof_readback ||
+             s_material_editor_proof_readback.metal_proof_readback) &&
             material_editor_has_room_for_optional_control(cursor_y, 34, bottom_y)) {
             const char* missing = s_material_editor_proof_readback.glass_proof_readback
                                       ? s_material_editor_proof_readback.glass_missing_proof
-                                      : s_material_editor_proof_readback.mirror_missing_proof;
+                                      : s_material_editor_proof_readback.mirror_proof_readback
+                                            ? s_material_editor_proof_readback.mirror_missing_proof
+                                            : s_material_editor_proof_readback.metal_missing_proof;
             RenderLabelTextWrappedLeft(renderer,
                                        (SDL_Rect){bounds.x, cursor_y, bounds.w, 34},
                                        missing,
@@ -1020,6 +1120,11 @@ int MaterialEditorRenderCompactPaneControls(SDL_Renderer* renderer,
                                                                 pane_bottom,
                                                                 obj,
                                                                 palette);
+        cursor_y = material_editor_draw_layer_influence_controls(renderer,
+                                                                 pane_bounds,
+                                                                 cursor_y,
+                                                                 pane_bottom,
+                                                                 palette);
         cursor_y = material_editor_draw_response_readback_grid(renderer,
                                                                pane_bounds,
                                                                cursor_y,

@@ -14,7 +14,7 @@
 static const double kRuntimeVolume3DScatterMinimumStep = 1e-4;
 static const double kRuntimeVolume3DScatterPhaseIsotropic = 0.07957747154594767; /* 1 / (4*pi) */
 static const double kRuntimeVolume3DScatterStrength = 0.12;
-static const double kRuntimeVolume3DCausticScatterStrength = 0.12;
+static const double kRuntimeVolume3DCausticScatterStrength = 1.0;
 static const double kRuntimeVolume3DScatterAnisotropy = 0.55;
 static double gRuntimeVolume3DScatterStrengthGain = 1.0;
 static double gRuntimeVolume3DCausticScatterStrengthGain = 1.0;
@@ -358,19 +358,26 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
 
             if (has_caustic_cache) {
                 Vec3 caustic_radiance = vec3(0.0, 0.0, 0.0);
-                if (RuntimeCausticVolumeCache3D_SampleAtPosition(
-                        caustic_cache, sample_position, &caustic_radiance)) {
+                if (RuntimeCausticVolumeCache3D_SampleFilteredAtPosition(
+                        caustic_cache,
+                        sample_position,
+                        scene->volume.grid.voxelSize * 1.5,
+                        &caustic_radiance)) {
                     const double caustic_peak =
                         runtime_volume_3d_scatter_peak(caustic_radiance.x,
                                                        caustic_radiance.y,
                                                        caustic_radiance.z);
                     result.causticSampleCount += 1;
                     if (caustic_peak > 0.0) {
+                        /*
+                         * The caustic cache stores transport-deposited beam energy, not an
+                         * ordinary unshaped light sample.  Keep density/transmittance gating,
+                         * but do not apply the direct-light isotropic phase attenuation again.
+                         */
                         const double caustic_term =
                             camera_transmittance * scatter_probability *
                             kRuntimeVolume3DCausticScatterStrength *
-                            gRuntimeVolume3DCausticScatterStrengthGain *
-                            kRuntimeVolume3DScatterPhaseIsotropic;
+                            gRuntimeVolume3DCausticScatterStrengthGain;
                         const double caustic_r = caustic_radiance.x * caustic_term *
                                                  gRuntimeVolume3DScatterTintR;
                         const double caustic_g = caustic_radiance.y * caustic_term *

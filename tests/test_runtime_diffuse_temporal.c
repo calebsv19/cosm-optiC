@@ -381,7 +381,7 @@ static int test_runtime_diffuse_bounce_3d_recursive_depth_contract(void) {
         "}";
     RuntimeSceneBridgePreflight summary = {0};
     RuntimeScene3D scene;
-    RuntimeCameraProjector3D projector = {0};
+    HitInfo3D floor_hit = {0};
     RuntimeDiffuseBounce3DResult depth_one = {0};
     RuntimeDiffuseBounce3DResult depth_three = {0};
     bool ok = false;
@@ -408,21 +408,24 @@ static int test_runtime_diffuse_bounce_3d_recursive_depth_contract(void) {
 
     ok = RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(&scene, 0.0);
     assert_true("runtime_diffuse_bounce_recursive_build_ok", ok);
-    ok = RuntimeCameraProjector3D_Build(&scene.camera, 101, 101, &projector);
-    assert_true("runtime_diffuse_bounce_recursive_projector_ok", ok);
-    if (!ok) {
-        RuntimeScene3D_Free(&scene);
-        sceneSettings = saved_scene;
-        animSettings = saved_anim;
-        return 0;
-    }
 
-    ok = RuntimeDiffuseBounce3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &depth_one);
+    HitInfo3D_Reset(&floor_hit);
+    floor_hit.position = vec3(0.0, -5.0, 0.0);
+    floor_hit.normal = vec3(0.0, 1.0, 0.0);
+    floor_hit.triangleIndex = 0;
+    floor_hit.localTriangleIndex = 0;
+    floor_hit.primitiveIndex = 0;
+    floor_hit.sceneObjectIndex = 0;
+    floor_hit.baryU = 0.33;
+    floor_hit.baryV = 0.33;
+    floor_hit.baryW = 0.34;
+
+    ok = RuntimeDiffuseBounce3D_ShadeHit(&scene, &floor_hit, NULL, &depth_one);
     assert_true("runtime_diffuse_bounce_recursive_depth_one_ok", ok);
     assert_true("runtime_diffuse_bounce_recursive_depth_one_hit", depth_one.hit);
 
     animSettings.bounceDepth3D = 3;
-    ok = RuntimeDiffuseBounce3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &depth_three);
+    ok = RuntimeDiffuseBounce3D_ShadeHit(&scene, &floor_hit, NULL, &depth_three);
     assert_true("runtime_diffuse_bounce_recursive_depth_three_ok", ok);
     assert_true("runtime_diffuse_bounce_recursive_depth_three_hit", depth_three.hit);
     assert_true("runtime_diffuse_bounce_recursive_depth_more_secondary_rays",

@@ -45,6 +45,7 @@ static RuntimeSceneAcceleration3DInstanceBounds* gRuntimeSceneAcceleration3DInst
 static const RuntimeScene3D* gRuntimeSceneAcceleration3DPreparedScene;
 static int gRuntimeSceneAcceleration3DPreparedPrimitiveCount;
 static int gRuntimeSceneAcceleration3DPreparedTriangleCount;
+static uint64_t gRuntimeSceneAcceleration3DPreparedGeometrySignature;
 static int gRuntimeSceneAcceleration3DInstanceCount;
 static int* gRuntimeSceneAcceleration3DInstanceOrder;
 static RuntimeSceneAcceleration3DTLASNode* gRuntimeSceneAcceleration3DTLASNodes;
@@ -242,6 +243,7 @@ static void runtime_scene_accel_3d_free_tlas(void) {
     gRuntimeSceneAcceleration3DPreparedScene = NULL;
     gRuntimeSceneAcceleration3DPreparedPrimitiveCount = 0;
     gRuntimeSceneAcceleration3DPreparedTriangleCount = 0;
+    gRuntimeSceneAcceleration3DPreparedGeometrySignature = 0u;
     runtime_scene_accel_3d_free_instance_identity_maps(
         gRuntimeSceneAcceleration3DInstances,
         gRuntimeSceneAcceleration3DInstanceCount);
@@ -254,6 +256,92 @@ static void runtime_scene_accel_3d_free_tlas(void) {
     gRuntimeSceneAcceleration3DTLASNodes = NULL;
     gRuntimeSceneAcceleration3DTLASNodeCount = 0;
     gRuntimeSceneAcceleration3DTLASNodeCapacity = 0;
+}
+
+static uint64_t runtime_scene_accel_3d_hash_bytes(uint64_t hash,
+                                                  const void* data,
+                                                  size_t size) {
+    const unsigned char* bytes = (const unsigned char*)data;
+    if (!bytes && size > 0u) return hash;
+    for (size_t i = 0u; i < size; ++i) {
+        hash ^= (uint64_t)bytes[i];
+        hash *= 1099511628211ull;
+    }
+    return hash;
+}
+
+static uint64_t runtime_scene_accel_3d_hash_int(uint64_t hash, int value) {
+    return runtime_scene_accel_3d_hash_bytes(hash, &value, sizeof(value));
+}
+
+static uint64_t runtime_scene_accel_3d_hash_bool(uint64_t hash, bool value) {
+    const unsigned char byte = value ? 1u : 0u;
+    return runtime_scene_accel_3d_hash_bytes(hash, &byte, sizeof(byte));
+}
+
+static uint64_t runtime_scene_accel_3d_hash_double(uint64_t hash, double value) {
+    uint64_t bits = 0u;
+    memcpy(&bits, &value, sizeof(bits));
+    return runtime_scene_accel_3d_hash_bytes(hash, &bits, sizeof(bits));
+}
+
+static uint64_t runtime_scene_accel_3d_hash_vec3(uint64_t hash, Vec3 value) {
+    hash = runtime_scene_accel_3d_hash_double(hash, value.x);
+    hash = runtime_scene_accel_3d_hash_double(hash, value.y);
+    return runtime_scene_accel_3d_hash_double(hash, value.z);
+}
+
+static uint64_t runtime_scene_accel_3d_geometry_signature(const RuntimeScene3D* scene) {
+    uint64_t hash = 1469598103934665603ull;
+    const int sample_budget = 64;
+    int triangle_count = 0;
+    int last_sampled = -1;
+    if (!scene) return 0u;
+    hash = runtime_scene_accel_3d_hash_int(hash, scene->primitiveCount);
+    hash = runtime_scene_accel_3d_hash_int(hash, scene->triangleMesh.triangleCount);
+    for (int i = 0; i < scene->primitiveCount; ++i) {
+        const RuntimePrimitive3D* primitive = &scene->primitives[i];
+        hash = runtime_scene_accel_3d_hash_int(hash, (int)primitive->kind);
+        hash = runtime_scene_accel_3d_hash_int(hash, (int)primitive->source.kind);
+        hash = runtime_scene_accel_3d_hash_int(hash, primitive->source.sceneObjectIndex);
+        hash = runtime_scene_accel_3d_hash_bytes(hash,
+                                                 primitive->source.objectId,
+                                                 strnlen(primitive->source.objectId,
+                                                         sizeof(primitive->source.objectId)));
+    }
+
+    triangle_count = scene->triangleMesh.triangleCount;
+    for (int sample = 0; sample < sample_budget && sample < triangle_count; ++sample) {
+        int i = 0;
+        const RuntimeTriangle3D* triangle = NULL;
+        if (sample_budget >= triangle_count) {
+            i = sample;
+        } else if (sample == 0) {
+            i = 0;
+        } else if (sample == sample_budget - 1) {
+            i = triangle_count - 1;
+        } else {
+            i = (int)(((long long)sample * (long long)(triangle_count - 1)) /
+                      (long long)(sample_budget - 1));
+        }
+        if (i == last_sampled) continue;
+        last_sampled = i;
+        triangle = &scene->triangleMesh.triangles[i];
+        hash = runtime_scene_accel_3d_hash_int(hash, i);
+        hash = runtime_scene_accel_3d_hash_vec3(hash, triangle->p0);
+        hash = runtime_scene_accel_3d_hash_vec3(hash, triangle->p1);
+        hash = runtime_scene_accel_3d_hash_vec3(hash, triangle->p2);
+        hash = runtime_scene_accel_3d_hash_vec3(hash, triangle->normal);
+        hash = runtime_scene_accel_3d_hash_bool(hash, triangle->twoSided);
+        hash = runtime_scene_accel_3d_hash_bool(hash, triangle->hasObjectTextureCoords);
+        hash = runtime_scene_accel_3d_hash_vec3(hash, triangle->objectTexture0);
+        hash = runtime_scene_accel_3d_hash_vec3(hash, triangle->objectTexture1);
+        hash = runtime_scene_accel_3d_hash_vec3(hash, triangle->objectTexture2);
+        hash = runtime_scene_accel_3d_hash_int(hash, triangle->primitiveIndex);
+        hash = runtime_scene_accel_3d_hash_int(hash, triangle->sceneObjectIndex);
+        hash = runtime_scene_accel_3d_hash_int(hash, triangle->localTriangleIndex);
+    }
+    return hash;
 }
 
 static bool runtime_scene_accel_3d_capture_instance_bounds(const RuntimeScene3D* scene) {
@@ -607,6 +695,8 @@ bool RuntimeSceneAcceleration3D_RebuildTLASFromScene(const RuntimeScene3D* scene
     gRuntimeSceneAcceleration3DPreparedScene = scene;
     gRuntimeSceneAcceleration3DPreparedPrimitiveCount = scene->primitiveCount;
     gRuntimeSceneAcceleration3DPreparedTriangleCount = scene->triangleMesh.triangleCount;
+    gRuntimeSceneAcceleration3DPreparedGeometrySignature =
+        runtime_scene_accel_3d_geometry_signature(scene);
     RuntimeRay3D_SetSceneAccelerationTraceFirstHit(
         (RuntimeRay3DSceneAccelerationTraceFirstHitFn)
             RuntimeSceneAcceleration3D_TraceFirstHit);
@@ -650,6 +740,14 @@ bool RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(const RuntimeScene3D
             gRuntimeSceneAcceleration3DPreparedTriangleCount) {
         runtime_scene_accel_3d_set_diag(
             "TLAS bind skipped: prepared scene geometry counts differ");
+        gRuntimeSceneAcceleration3DTLASDiagnostics.tlasBindMs +=
+            runtime_scene_accel_3d_elapsed_ms_since(&bind_start);
+        return false;
+    }
+    if (runtime_scene_accel_3d_geometry_signature(scene) !=
+        gRuntimeSceneAcceleration3DPreparedGeometrySignature) {
+        runtime_scene_accel_3d_set_diag(
+            "TLAS bind skipped: prepared scene geometry signature differs");
         gRuntimeSceneAcceleration3DTLASDiagnostics.tlasBindMs +=
             runtime_scene_accel_3d_elapsed_ms_since(&bind_start);
         return false;

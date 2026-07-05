@@ -11,6 +11,7 @@
 #include "render/runtime_dynamic_geometry_accel_3d.h"
 #include "render/runtime_mesh_blas_cache_3d.h"
 #include "render/runtime_native_3d_render.h"
+#include "render/runtime_render_trace_cost_ledger_3d.h"
 #include "render/runtime_scene_accel_3d.h"
 #include "render/runtime_scene_3d_builder.h"
 #include "render/runtime_triangle_bvh_3d.h"
@@ -151,6 +152,7 @@ typedef struct RayTracingHeadlessPreflight {
     RuntimeDynamicGeometryWaterCacheDiagnostics3D dynamic_water_cache_stats;
     RuntimeSceneAcceleration3DDiagnostics scene_acceleration_stats;
     RuntimeRay3DRouteStats ray_trace_route_stats;
+    RuntimeRenderTraceCostLedger3D render_trace_cost_ledger;
     RayTracingRuntimeMeshAssetTimingStats mesh_asset_timing_stats;
     RuntimeScene3DBuilderTimingStats scene_builder_timing_stats;
     double runtime_scene_apply_ms;

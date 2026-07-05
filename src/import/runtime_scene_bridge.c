@@ -813,12 +813,15 @@ bool runtime_scene_bridge_preflight_file(const char *runtime_scene_path,
     free(json_text);
     if (ok) {
         RayTracingRuntimeMeshAssetSet mesh_assets;
-        ray_tracing_runtime_mesh_asset_set_init(&mesh_assets);
-        ok = ray_tracing_runtime_mesh_assets_load_scene_file(runtime_scene_path,
-                                                            &mesh_assets,
-                                                            out_preflight->diagnostics,
-                                                            sizeof(out_preflight->diagnostics));
-        ray_tracing_runtime_mesh_asset_set_free(&mesh_assets);
+        if (!ray_tracing_runtime_mesh_assets_last_matches_scene_file(runtime_scene_path)) {
+            ray_tracing_runtime_mesh_asset_set_init(&mesh_assets);
+            ok = ray_tracing_runtime_mesh_assets_load_scene_file(
+                runtime_scene_path,
+                &mesh_assets,
+                out_preflight->diagnostics,
+                sizeof(out_preflight->diagnostics));
+            ray_tracing_runtime_mesh_asset_set_free(&mesh_assets);
+        }
     }
     return ok;
 }
@@ -946,7 +949,7 @@ static bool runtime_scene_bridge_apply_file_with_options(const char *runtime_sce
              runtime_scene_path_copy);
     ok = runtime_scene_bridge_apply_json(json_text, out_summary);
     if (ok) {
-        ray_tracing_runtime_mesh_assets_take_last(&mesh_assets);
+        ray_tracing_runtime_mesh_assets_take_last_for_scene(runtime_scene_path_copy, &mesh_assets);
     }
     if (ok) {
         runtime_scene_volume_defaults_apply_transition(&animSettings,

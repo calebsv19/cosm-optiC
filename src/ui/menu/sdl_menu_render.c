@@ -15,6 +15,7 @@
 #include "render/text_draw.h"
 #include "render/text_upload_policy.h"
 #include "ui/menu_batch_panel.h"
+#include "ui/menu_resume_panel.h"
 #include "ui/menu_panel_chrome.h"
 #include "ui/menu/workspace_authoring/ray_tracing_workspace_authoring_overlay.h"
 #include "ui/shared_theme_font_adapter.h"
@@ -146,6 +147,7 @@ void menu_render_frame(SDL_Renderer* renderer,
     MenuScreenLayout screenLayout;
     SliderLayout sliderLayout;
     MenuBatchPanelLayout batchPanel;
+    MenuResumePanelLayout resumePanel;
     RayTracingRuntimeRoute route;
     RayTracingSceneDigestStatus digestStatus;
     RenderContext* render_ctx = NULL;
@@ -162,6 +164,7 @@ void menu_render_frame(SDL_Renderer* renderer,
     menu_layout_finalize_with_buttons(&screenLayout, &buttons, state);
     menu_render_build_slider_layout(font, state, &screenLayout, &sliderLayout);
     menu_batch_panel_build_layout(font, state, &screenLayout, &batchPanel);
+    menu_resume_panel_build_layout(font, state, &screenLayout, &resumePanel);
     route = RayTracingModeBackend_ResolveRoute();
     digestStatus = RayTracingModeBackend_BuildSceneDigestStatus(&route);
 
@@ -182,8 +185,20 @@ void menu_render_frame(SDL_Renderer* renderer,
     menu_panel_chrome_draw(renderer, font, &screenLayout.bottomActionRowRect, NULL, false);
 
     menu_render_draw_button_rect(renderer, font, &buttons.interactiveRect, "Interactive Mode", animSettings.interactiveMode);
-    menu_render_draw_button_rect(renderer, font, &buttons.deepRenderRect, "Deep Render", animSettings.deepRenderMode);
-    menu_render_draw_button_rect(renderer, font, &buttons.bounceRect, "Bounce Mode", animSettings.bounceMode);
+    menu_render_draw_button_rect(renderer,
+                                 font,
+                                 &buttons.deepRenderRect,
+                                 animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D
+                                     ? "3D Render"
+                                     : "Deep Render",
+                                 animSettings.deepRenderMode);
+    menu_render_draw_button_rect(renderer,
+                                 font,
+                                 &buttons.bounceRect,
+                                 animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D
+                                     ? "Bounce"
+                                     : "Bounce Mode",
+                                 animSettings.bounceMode);
     menu_render_draw_button_rect(renderer, font, &buttons.autoMp4Rect, "Auto MP4", animSettings.autoMP4);
 
     const RayTracingIntegratorMenuState integrator_menu =
@@ -352,48 +367,9 @@ void menu_render_frame(SDL_Renderer* renderer,
                                   &buttons.rendererControlSliders,
                                   NULL);
 
-    if (buttons.resumeFramesRect.w > 0 && buttons.resumeFramesRect.h > 0) {
-        char resumeLabel[64];
-        char startFrameLabel[64];
-        char nextFrameLabel[64];
-        snprintf(resumeLabel,
-                 sizeof(resumeLabel),
-                 "Resume Existing: %s",
-                 animSettings.resumeFromExistingFrames ? "ON" : "OFF");
-        if (state->editingStartFrame && state->inputBuffer[0] != '\0') {
-            snprintf(startFrameLabel,
-                     sizeof(startFrameLabel),
-                     "Start Frame: %s",
-                     state->inputBuffer);
-        } else {
-            snprintf(startFrameLabel,
-                     sizeof(startFrameLabel),
-                     "Start Frame: %d",
-                     animSettings.startFrameIndex);
-        }
-        snprintf(nextFrameLabel,
-                 sizeof(nextFrameLabel),
-                 "Next Existing: %d",
-                 state->exportBatchStatus.next_frame_index);
-        menu_render_draw_button_rect(renderer,
-                                     font,
-                                     &buttons.resumeFramesRect,
-                                     resumeLabel,
-                                     animSettings.resumeFromExistingFrames);
-        menu_render_draw_button_rect(renderer,
-                                     font,
-                                     &buttons.startFrameRect,
-                                     startFrameLabel,
-                                     state->editingStartFrame || !animSettings.resumeFromExistingFrames);
-        menu_render_draw_button_rect(renderer,
-                                     font,
-                                     &buttons.nextFrameRect,
-                                     nextFrameLabel,
-                                     false);
-    }
-
     menu_render_draw_sliders(renderer, font, state, &sliderLayout);
     menu_batch_panel_render(renderer, font, state, &batchPanel);
+    menu_resume_panel_render(renderer, font, state, &resumePanel);
 
     menu_render_draw_button_rect(renderer, font, &buttons.sceneEditorRect, "Scene Editor", false);
     int currentEditorMode = EditorModeRouter_ClampEditorMode(animSettings.editorMode,

@@ -10,6 +10,7 @@
 #include "render/runtime_material_response_3d.h"
 #include "render/runtime_path_depth_policy_3d.h"
 #include "render/runtime_ray_3d.h"
+#include "render/runtime_render_trace_cost_ledger_3d.h"
 #include "render/runtime_visibility_3d.h"
 
 static bool runtime_emission_transparency_3d_shade_hit_recursive(
@@ -143,6 +144,9 @@ static double runtime_emission_transparency_3d_secondary_emissive(
         double tint_g = 1.0;
         double tint_b = 1.0;
 
+        RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
+            RUNTIME_RENDER_TRACE_COST_RAY_EMISSIVE_AREA,
+            1);
         if (!RuntimeRay3D_TraceSceneFirstHit(scene,
                                              &bounce_ray,
                                              kRuntimeEmissionTransparency3DEpsilon,
@@ -150,6 +154,7 @@ static double runtime_emission_transparency_3d_secondary_emissive(
                                              &secondary_hit)) {
             continue;
         }
+        RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(&secondary_hit);
         io_result->secondaryHitCount += 1;
         if (secondary_hit.triangleIndex == hit->triangleIndex) {
             continue;
@@ -212,6 +217,9 @@ static bool runtime_emission_transparency_3d_trace_support(
                                           kRuntimeEmissionTransparency3DEpsilon);
     while (skip_count < kRuntimeEmissionTransparency3DMaxTransmissionSurfaceSkips &&
            remaining_distance > kRuntimeEmissionTransparency3DEpsilon) {
+        RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
+            RUNTIME_RENDER_TRACE_COST_RAY_TRANSMISSION,
+            path_state.transmissionDepth + path_state.specularDepth + skip_count + 1);
         if (!RuntimeRay3D_TraceSceneFirstHit(scene,
                                              &support_ray,
                                              kRuntimeEmissionTransparency3DEpsilon,
@@ -219,6 +227,7 @@ static bool runtime_emission_transparency_3d_trace_support(
                                              &transmitted_hit)) {
             break;
         }
+        RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(&transmitted_hit);
         if (transmitted_hit.sceneObjectIndex != hit->sceneObjectIndex &&
             transmitted_hit.triangleIndex != hit->triangleIndex) {
             break;

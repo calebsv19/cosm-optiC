@@ -252,6 +252,43 @@ static int test_runtime_caustic_volume_cache_world_position_sampling(void) {
     return 0;
 }
 
+static int test_runtime_caustic_volume_cache_filtered_sampling_expands_coverage(void) {
+    RuntimeVolumeGrid3D grid;
+    RuntimeCausticVolumeCache3D cache;
+    RuntimeCausticVolumeCacheDiagnostics3D diagnostics;
+    Vec3 point_sample = {0};
+    Vec3 filtered_sample = {0};
+
+    RuntimeCausticVolumeCache3D_Init(&cache);
+    assert_true("runtime_caustic_volume_cache_filtered_grid",
+                test_caustic_cache_make_grid(&grid));
+    assert_true("runtime_caustic_volume_cache_filtered_allocate",
+                RuntimeCausticVolumeCache3D_Allocate(&cache, &grid));
+    assert_true("runtime_caustic_volume_cache_filtered_deposit",
+                RuntimeCausticVolumeCache3D_DepositAtPosition(
+                    &cache, vec3(-0.75, -0.75, 0.25), 8.0, 4.0, 2.0));
+    assert_true("runtime_caustic_volume_cache_filtered_point_lookup",
+                RuntimeCausticVolumeCache3D_SampleAtPosition(
+                    &cache, vec3(-0.25, -0.25, 0.75), &point_sample));
+    assert_close("runtime_caustic_volume_cache_filtered_point_miss",
+                 point_sample.x,
+                 0.0,
+                 1e-9);
+    assert_true("runtime_caustic_volume_cache_filtered_lookup",
+                RuntimeCausticVolumeCache3D_SampleFilteredAtPosition(
+                    &cache, vec3(-0.25, -0.25, 0.75), 1.0, &filtered_sample));
+    assert_true("runtime_caustic_volume_cache_filtered_positive",
+                filtered_sample.x > 0.0 && filtered_sample.y > 0.0 &&
+                    filtered_sample.z > 0.0);
+
+    RuntimeCausticVolumeCache3D_SnapshotDiagnostics(&cache, &diagnostics);
+    assert_true("runtime_caustic_volume_cache_filtered_contrib_count",
+                diagnostics.sampleContributingCount == 1u);
+
+    RuntimeCausticVolumeCache3D_Free(&cache);
+    return 0;
+}
+
 static int test_runtime_caustic_volume_cache_clear_reset(void) {
     RuntimeVolumeGrid3D grid;
     RuntimeCausticVolumeCache3D cache;
@@ -293,6 +330,7 @@ int run_test_runtime_caustic_volume_cache_3d_tests(void) {
     test_runtime_caustic_volume_cache_footprint_normalizes_energy();
     test_runtime_caustic_volume_cache_rejects_out_of_bounds();
     test_runtime_caustic_volume_cache_world_position_sampling();
+    test_runtime_caustic_volume_cache_filtered_sampling_expands_coverage();
     test_runtime_caustic_volume_cache_clear_reset();
 
     return test_support_failures() - before;

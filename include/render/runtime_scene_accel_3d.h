@@ -24,11 +24,18 @@ typedef struct RuntimeSceneAcceleration3DDiagnostics {
     uint64_t blasCacheInvalidations;
     uint64_t blasFullRebuilds;
     uint64_t blasCachedAssetCount;
+    uint64_t blasPersistentCacheHits;
+    uint64_t blasPersistentCacheMisses;
+    uint64_t blasPersistentCacheWrites;
+    uint64_t blasPersistentCacheInvalidations;
+    uint64_t blasPersistentCacheRefreshes;
     uint64_t tlasNodeCount;
     uint64_t tlasInstanceCount;
     uint64_t tlasRebuilds;
     uint64_t tlasRefits;
     double blasBuildMs;
+    double blasPersistentCacheReadMs;
+    double blasPersistentCacheWriteMs;
     double tlasBuildMs;
     double tlasBindMs;
 } RuntimeSceneAcceleration3DDiagnostics;

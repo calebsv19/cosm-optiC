@@ -762,6 +762,14 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
         if (RayTracingJsonGetBool(inspection, "caustic_debug_summary", &bool_value)) {
             request.caustic_settings.debugSummaryEnabled = bool_value;
         }
+        if (RayTracingJsonGetBool(inspection,
+                                  "caustic_transport_debug_export_enabled",
+                                  &bool_value) ||
+            RayTracingJsonGetBool(inspection,
+                                  "caustic_debug_export_enabled",
+                                  &bool_value)) {
+            request.caustic_settings.debugExportEnabled = bool_value;
+        }
         if (RayTracingJsonGetBool(inspection, "caustic_sidecar_enabled", &bool_value) ||
             RayTracingJsonGetBool(inspection,
                                   "disney_v2_caustic_sidecar_enabled",

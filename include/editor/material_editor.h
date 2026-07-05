@@ -45,8 +45,19 @@ typedef enum MaterialEditorResponseField {
     MATERIAL_EDITOR_RESPONSE_FIELD_ABSORPTION,
     MATERIAL_EDITOR_RESPONSE_FIELD_THIN_WALLED,
     MATERIAL_EDITOR_RESPONSE_FIELD_MIRROR_DOMINANCE,
-    MATERIAL_EDITOR_RESPONSE_FIELD_MIRROR_BASE
+    MATERIAL_EDITOR_RESPONSE_FIELD_MIRROR_BASE,
+    MATERIAL_EDITOR_RESPONSE_FIELD_METALLIC,
+    MATERIAL_EDITOR_RESPONSE_FIELD_DIFFUSE_BASE
 } MaterialEditorResponseField;
+
+typedef enum MaterialEditorLayerInfluenceKind {
+    MATERIAL_EDITOR_LAYER_INFLUENCE_NONE = 0,
+    MATERIAL_EDITOR_LAYER_INFLUENCE_ROUGHNESS,
+    MATERIAL_EDITOR_LAYER_INFLUENCE_REFLECTIVITY,
+    MATERIAL_EDITOR_LAYER_INFLUENCE_SPECULAR,
+    MATERIAL_EDITOR_LAYER_INFLUENCE_DIFFUSE,
+    MATERIAL_EDITOR_LAYER_INFLUENCE_TRANSPARENCY
+} MaterialEditorLayerInfluenceKind;
 
 typedef enum MaterialEditorViewMode {
     MATERIAL_EDITOR_VIEW_FOCUSED_ORIGIN = 0,
@@ -102,6 +113,10 @@ bool MaterialEditorApplyTextureKindToFocused(int texture_id);
 bool MaterialEditorApplySliderValueToFocused(MaterialEditorSliderKind kind, double value);
 bool MaterialEditorApplyTexturePatternToFocused(int pattern_mode);
 bool MaterialEditorApplyTextureParamValueToFocused(MaterialEditorTextureParamKind kind, double value);
+bool MaterialEditorApplyLayerInfluenceValueToFocused(MaterialEditorLayerInfluenceKind kind,
+                                                     double value);
+bool MaterialEditorApplyLayerInfluenceStepToFocused(MaterialEditorLayerInfluenceKind kind,
+                                                    double delta);
 bool MaterialEditorApplyResponseValueToFocused(MaterialEditorResponseField field, double value);
 bool MaterialEditorApplyResponseStepToFocused(MaterialEditorResponseField field, double delta);
 bool MaterialEditorApplyResponseTintToFocused(int packed_color);

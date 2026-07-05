@@ -384,6 +384,92 @@ bool RuntimeCausticVolumeCache3D_SampleAtPosition(RuntimeCausticVolumeCache3D* c
     return true;
 }
 
+bool RuntimeCausticVolumeCache3D_SampleFilteredAtPosition(
+    RuntimeCausticVolumeCache3D* cache,
+    Vec3 position,
+    double radius_world,
+    Vec3* out_radiance) {
+    double local_x = 0.0;
+    double local_y = 0.0;
+    double local_z = 0.0;
+    double radius_voxels = 0.0;
+    int min_x = 0;
+    int min_y = 0;
+    int min_z = 0;
+    int max_x = 0;
+    int max_y = 0;
+    int max_z = 0;
+    double weight_sum = 0.0;
+    Vec3 radiance_sum = vec3(0.0, 0.0, 0.0);
+
+    if (out_radiance) *out_radiance = vec3(0.0, 0.0, 0.0);
+    if (!cache || !out_radiance) return false;
+    cache->sampleLookupCount += 1u;
+    if (!runtime_caustic_volume_cache_position_to_local(
+            cache, position, &local_x, &local_y, &local_z)) {
+        return false;
+    }
+    if (!(radius_world > 0.0) || !isfinite(radius_world)) {
+        radius_world = cache->grid.voxelSize;
+    }
+    radius_voxels = radius_world / cache->grid.voxelSize;
+    if (!(radius_voxels > 0.0) || !isfinite(radius_voxels)) {
+        radius_voxels = 1.0;
+    }
+    if (radius_voxels < 0.5) radius_voxels = 0.5;
+    if (radius_voxels > 3.0) radius_voxels = 3.0;
+
+    min_x = (int)floor(local_x - radius_voxels - 0.5);
+    min_y = (int)floor(local_y - radius_voxels - 0.5);
+    min_z = (int)floor(local_z - radius_voxels - 0.5);
+    max_x = (int)ceil(local_x + radius_voxels + 0.5);
+    max_y = (int)ceil(local_y + radius_voxels + 0.5);
+    max_z = (int)ceil(local_z + radius_voxels + 0.5);
+    if (min_x < 0) min_x = 0;
+    if (min_y < 0) min_y = 0;
+    if (min_z < 0) min_z = 0;
+    if (max_x >= (int)cache->grid.gridW) max_x = (int)cache->grid.gridW - 1;
+    if (max_y >= (int)cache->grid.gridH) max_y = (int)cache->grid.gridH - 1;
+    if (max_z >= (int)cache->grid.gridD) max_z = (int)cache->grid.gridD - 1;
+
+    for (int z = min_z; z <= max_z; ++z) {
+        for (int y = min_y; y <= max_y; ++y) {
+            for (int x = min_x; x <= max_x; ++x) {
+                const double center_x = (double)x + 0.5;
+                const double center_y = (double)y + 0.5;
+                const double center_z = (double)z + 0.5;
+                const double dx = center_x - local_x;
+                const double dy = center_y - local_y;
+                const double dz = center_z - local_z;
+                const double distance = sqrt((dx * dx) + (dy * dy) + (dz * dz));
+                double weight = 0.0;
+                if (distance <= radius_voxels) {
+                    weight = 1.0 - (distance / fmax(radius_voxels, 1.0e-9));
+                }
+                if (weight <= 0.0 && distance <= 0.5) {
+                    weight = 1.0;
+                }
+                if (weight > 0.0) {
+                    const Vec3 cell = runtime_caustic_volume_cache_cell_radiance(
+                        cache, (uint32_t)x, (uint32_t)y, (uint32_t)z);
+                    if (cell.x > 0.0 || cell.y > 0.0 || cell.z > 0.0) {
+                        radiance_sum = vec3_add(radiance_sum, vec3_scale(cell, weight));
+                        weight_sum += weight;
+                    }
+                }
+            }
+        }
+    }
+
+    if (weight_sum > 0.0) {
+        *out_radiance = vec3_scale(radiance_sum, 1.0 / weight_sum);
+        cache->sampleContributingCount += 1u;
+        return true;
+    }
+
+    return true;
+}
+
 void RuntimeCausticVolumeCache3D_SnapshotDiagnostics(
     const RuntimeCausticVolumeCache3D* cache,
     RuntimeCausticVolumeCacheDiagnostics3D* out_diagnostics) {

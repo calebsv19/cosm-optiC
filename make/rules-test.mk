@@ -69,6 +69,7 @@ RUNTIME_MESH_ASSET_LOADER_TEST_BIN := $(BUILD_DIR)/tests/runtime_mesh_asset_load
 RUNTIME_MESH_ASSET_LOADER_TEST_SRCS := \
 	$(TEST_DIR)/test_runtime_mesh_asset_loader.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_loader.c \
+	$(SRC_DIR)/import/runtime_mesh_asset_pack.c \
 	$(CORE_MESH_PREVIEW_DIR)/src/core_mesh_preview.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
@@ -123,6 +124,7 @@ RUNTIME_MESH_ASSET_BUILDER_TEST_SRCS := \
 	$(TEST_DIR)/test_runtime_mesh_asset_builder.c \
 	$(TEST_DIR)/test_runtime_material_payload_stub.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_loader.c \
+	$(SRC_DIR)/import/runtime_mesh_asset_pack.c \
 	$(CORE_MESH_PREVIEW_DIR)/src/core_mesh_preview.c \
 	$(SRC_DIR)/render/runtime_ray_3d.c \
 	$(SRC_DIR)/render/runtime_scene_3d.c \
@@ -130,6 +132,7 @@ RUNTIME_MESH_ASSET_BUILDER_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_environment_3d.c \
 	$(SRC_DIR)/render/runtime_light_set_3d.c \
 	$(SRC_DIR)/render/runtime_dynamic_geometry_accel_3d.c \
+	$(SRC_DIR)/render/runtime_mesh_accel_pack_3d.c \
 	$(SRC_DIR)/render/runtime_mesh_blas_cache_3d.c \
 	$(SRC_DIR)/render/runtime_scene_accel_3d.c \
 	$(SRC_DIR)/render/runtime_scene_3d_builder.c \
@@ -162,6 +165,7 @@ RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_SRCS := \
 	$(TEST_DIR)/test_runtime_mesh_asset_headless_audit.c \
 	$(TEST_DIR)/test_runtime_material_payload_stub.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_loader.c \
+	$(SRC_DIR)/import/runtime_mesh_asset_pack.c \
 	$(CORE_MESH_PREVIEW_DIR)/src/core_mesh_preview.c \
 	$(SRC_DIR)/render/runtime_camera_3d_rays.c \
 	$(SRC_DIR)/render/runtime_ray_3d.c \
@@ -170,6 +174,7 @@ RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_environment_3d.c \
 	$(SRC_DIR)/render/runtime_light_set_3d.c \
 	$(SRC_DIR)/render/runtime_dynamic_geometry_accel_3d.c \
+	$(SRC_DIR)/render/runtime_mesh_accel_pack_3d.c \
 	$(SRC_DIR)/render/runtime_mesh_blas_cache_3d.c \
 	$(SRC_DIR)/render/runtime_scene_accel_3d.c \
 	$(SRC_DIR)/render/runtime_scene_3d_builder.c \
@@ -243,6 +248,9 @@ test-ray-tracing-spatial-caustic-phase10-tangent-receiver-matrix: $(RAY_TRACING_
 
 test-ray-tracing-spatial-caustic-visual-sphere-mist-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/run_ray_tracing_spatial_caustic_visual_sphere_mist_matrix.py
+
+test-ray-tracing-spatial-caustic-authored-validation-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_authored_validation_matrix.py
 
 test-ray-tracing-emissive-light-preview-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/run_ray_tracing_emissive_light_preview_matrix.py
@@ -436,6 +444,9 @@ test-ray-tracing-wtr66-preview-matrix-local-job-runner: $(RAY_TRACING_RENDER_HEA
 
 test-ray-tracing-material-preview-headless: $(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_BIN)
 	tests/integration/run_ray_tracing_material_preview_headless.sh
+
+test-ray-tracing-material-family-preview-grid: $(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_material_family_preview_grid.py
 
 test-manifest-to-trace-export: ray_trace_tool
 	tests/integration/run_manifest_to_trace_export.sh

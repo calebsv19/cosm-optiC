@@ -107,11 +107,16 @@ bool MaterialEditorBuildActiveLayerReadback(MaterialEditorActiveLayerReadback* o
     RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
     RuntimeMaterialTextureLayer layer;
     int index = 0;
+    int focused_index = MaterialEditorResolveFocusedObjectIndex();
+    MaterialEditorMutationDestination destination =
+        MaterialEditorMutationDestinationForFocusedTextureControls();
     const char* role = "Layer";
     const char* kind = "None";
     if (!out_readback) return false;
     memset(out_readback, 0, sizeof(*out_readback));
     out_readback->active_index = -1;
+    snprintf(out_readback->source_label, sizeof(out_readback->source_label), "none");
+    snprintf(out_readback->edit_owner_label, sizeof(out_readback->edit_owner_label), "none");
     if (!material_editor_get_active_layer(obj, &stack, &layer, &index)) {
         snprintf(out_readback->title, sizeof(out_readback->title), "No active layer");
         snprintf(out_readback->detail,
@@ -123,13 +128,50 @@ bool MaterialEditorBuildActiveLayerReadback(MaterialEditorActiveLayerReadback* o
     out_readback->active_index = index;
     out_readback->layer_count = stack.layerCount;
     out_readback->enabled = layer.enabled;
+    out_readback->persisted_stack = SceneEditorMaterialStackHasObjectStack(focused_index);
     out_readback->base_layer = RuntimeMaterialTextureLayerKindIsBase(layer.kind);
+    out_readback->opacity = layer.opacity;
+    out_readback->strength = layer.placement.strength;
+    out_readback->roughness_influence = layer.roughnessInfluence;
+    out_readback->reflectivity_influence = layer.reflectivityInfluence;
+    out_readback->specular_influence = layer.specularInfluence;
+    out_readback->diffuse_influence = layer.diffuseInfluence;
+    out_readback->transparency_influence = layer.transparencyInfluence;
     role = out_readback->base_layer ? "Base" : "Overlay";
     kind = RuntimeMaterialTextureLayerKindDisplayName(layer.kind);
+    snprintf(out_readback->role_label, sizeof(out_readback->role_label), "%s", role);
+    snprintf(out_readback->kind_label, sizeof(out_readback->kind_label), "%s", kind);
     snprintf(out_readback->layer_id,
              sizeof(out_readback->layer_id),
              "%s",
              layer.layerId[0] ? layer.layerId : "layer");
+    if (focused_index >= 0 && s_material_editor_active_face_group_index >= 0) {
+        snprintf(out_readback->source_label, sizeof(out_readback->source_label), "face selection");
+    } else if (out_readback->persisted_stack) {
+        snprintf(out_readback->source_label, sizeof(out_readback->source_label), "object stack");
+    } else if (focused_index >= 0 && SceneEditorMaterialGraphHasObjectGraph(focused_index)) {
+        snprintf(out_readback->source_label, sizeof(out_readback->source_label), "graph compiled stack");
+    } else {
+        snprintf(out_readback->source_label, sizeof(out_readback->source_label), "effective fallback");
+    }
+    snprintf(out_readback->edit_owner_label,
+             sizeof(out_readback->edit_owner_label),
+             "%s",
+             MaterialEditorMutationDestinationLabel(destination));
+    snprintf(out_readback->state_label,
+             sizeof(out_readback->state_label),
+             "%s | opacity %.2f | strength %.2f",
+             layer.enabled ? "enabled" : "muted",
+             out_readback->opacity,
+             out_readback->strength);
+    snprintf(out_readback->response_summary,
+             sizeof(out_readback->response_summary),
+             "R %+0.2f Refl %+0.2f Spec %+0.2f Diff %+0.2f Trans %+0.2f",
+             out_readback->roughness_influence,
+             out_readback->reflectivity_influence,
+             out_readback->specular_influence,
+             out_readback->diffuse_influence,
+             out_readback->transparency_influence);
     snprintf(out_readback->title,
              sizeof(out_readback->title),
              "Editing %s %d/%d",
@@ -138,10 +180,10 @@ bool MaterialEditorBuildActiveLayerReadback(MaterialEditorActiveLayerReadback* o
              stack.layerCount);
     snprintf(out_readback->detail,
              sizeof(out_readback->detail),
-             "%s | %s | strength %.2f | %s",
+             "%s | %s | %s -> %s",
              layer.displayName[0] ? layer.displayName : kind,
              out_readback->layer_id,
-             layer.placement.strength,
-             layer.enabled ? "enabled" : "muted");
+             out_readback->source_label,
+             out_readback->edit_owner_label);
     return true;
 }

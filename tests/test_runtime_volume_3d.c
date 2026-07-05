@@ -547,6 +547,9 @@ static int test_runtime_volume_3d_caustic_cache_lifts_density_without_direct_lig
                 scatter.causticCameraTransmittanceSum > 0.0);
     assert_true("runtime_volume_3d_caustic_cache_term",
                 scatter.causticVisibilityTermSum > 0.0);
+    assert_true("runtime_volume_3d_caustic_cache_term_not_isotropic_phase_attenuated",
+                scatter.causticVisibilityTermSum >
+                    scatter.causticScatterProbabilitySum * 0.05);
     assert_close("runtime_volume_3d_caustic_cache_direct_r",
                  scatter.radianceR,
                  scatter.causticRadianceR,

@@ -238,6 +238,8 @@ def build_case_report(
     expected_total_triangles = expected_mesh_triangles + 6
     route_trace_calls = int(accel.get("route_trace_calls", 0) or 0)
     route_tlas_trace_calls = int(accel.get("route_tlas_trace_calls", 0) or 0)
+    blas_full_rebuilds = int(accel.get("blas_full_rebuilds", 0) or 0)
+    blas_persistent_cache_hits = int(accel.get("blas_persistent_cache_hits", 0) or 0)
     frame_valid = frame_path.exists() and has_bmp_header(frame_path)
 
     pass_status = bool(
@@ -257,7 +259,7 @@ def build_case_report(
         and int(accel.get("route_tlas_trace_hits", 0) or 0) > 0
         and int(accel.get("route_parity_mismatches", 0) or 0) == 0
         and int(accel.get("blas_cached_asset_count", 0) or 0) == 1
-        and int(accel.get("blas_full_rebuilds", 0) or 0) == 1
+        and (blas_full_rebuilds == 1 or blas_persistent_cache_hits >= 1)
         and int(accel.get("tlas_instance_count", 0) or 0) == case.repeat_count + 3
         and mesh_seen == case.repeat_count
         and mesh_triangles == expected_mesh_triangles
@@ -295,7 +297,8 @@ def build_case_report(
             "blas_prepare_calls": int(accel.get("blas_prepare_calls", 0) or 0),
             "blas_cache_hits": int(accel.get("blas_cache_hits", 0) or 0),
             "blas_cache_misses": int(accel.get("blas_cache_misses", 0) or 0),
-            "blas_full_rebuilds": int(accel.get("blas_full_rebuilds", 0) or 0),
+            "blas_full_rebuilds": blas_full_rebuilds,
+            "blas_persistent_cache_hits": blas_persistent_cache_hits,
             "blas_cached_asset_count": int(accel.get("blas_cached_asset_count", 0) or 0),
             "tlas_node_count": int(accel.get("tlas_node_count", 0) or 0),
             "tlas_instance_count": int(accel.get("tlas_instance_count", 0) or 0),

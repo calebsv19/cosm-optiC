@@ -3,6 +3,7 @@
 #include <math.h>
 
 #include "render/runtime_material_payload_3d.h"
+#include "render/runtime_render_trace_cost_ledger_3d.h"
 #include "render/runtime_volume_3d_integrate.h"
 
 static const double kRuntimeVisibility3DEpsilon = 1e-4;
@@ -161,6 +162,9 @@ static RuntimeVisibility3DTransmittance runtime_visibility_3d_trace_opaque_fast_
     while (skip_count < kRuntimeVisibility3DMaxTransparentSurfaceSkips &&
            remaining_distance > length_epsilon) {
         HitInfo3D blocker_hit = {0};
+        RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
+            RUNTIME_RENDER_TRACE_COST_RAY_DIRECT_LIGHT_VISIBILITY,
+            skip_count);
         if (!RuntimeRay3D_TraceSceneFirstHit(scene,
                                              &current_ray,
                                              length_epsilon,
@@ -168,6 +172,7 @@ static RuntimeVisibility3DTransmittance runtime_visibility_3d_trace_opaque_fast_
                                              &blocker_hit)) {
             return RuntimeVisibility3D_UnitTransmittance();
         }
+        RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(&blocker_hit);
         if (source_hit && runtime_visibility_3d_hit_matches_source(&blocker_hit, source_hit)) {
             remaining_distance -= blocker_hit.t;
             current_ray = RuntimeRay3D_MakeOffset(blocker_hit.position,
@@ -245,6 +250,9 @@ static RuntimeVisibility3DTransmittance runtime_visibility_3d_trace_transmittanc
         [[fisics::dim(length)]] [[fisics::unit(meter)]] double segment_distance =
             0.0;
 
+        RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
+            RUNTIME_RENDER_TRACE_COST_RAY_DIRECT_LIGHT_VISIBILITY,
+            skip_count);
         if (!RuntimeRay3D_TraceSceneFirstHit(scene,
                                              &current_ray,
                                              length_epsilon,
@@ -252,6 +260,7 @@ static RuntimeVisibility3DTransmittance runtime_visibility_3d_trace_transmittanc
                                              &blocker_hit)) {
             return transmittance;
         }
+        RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(&blocker_hit);
         if (source_hit && runtime_visibility_3d_hit_matches_source(&blocker_hit, source_hit)) {
             remaining_distance -= blocker_hit.t;
             current_ray = RuntimeRay3D_MakeOffset(blocker_hit.position,
@@ -290,6 +299,9 @@ static RuntimeVisibility3DTransmittance runtime_visibility_3d_trace_transmittanc
                                                                       &transmittance);
                 return transmittance;
             }
+            RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
+                RUNTIME_RENDER_TRACE_COST_RAY_DIRECT_LIGHT_VISIBILITY,
+                skip_count);
             if (!RuntimeRay3D_TraceSceneFirstHit(scene,
                                                  &current_ray,
                                                  length_epsilon,
@@ -301,6 +313,7 @@ static RuntimeVisibility3DTransmittance runtime_visibility_3d_trace_transmittanc
                                                                       &transmittance);
                 return transmittance;
             }
+            RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(&blocker_hit);
             if (runtime_visibility_3d_hit_matches_target(&blocker_hit,
                                                          target_scene_object_index,
                                                          target_triangle_index)) {
@@ -365,12 +378,18 @@ bool RuntimeVisibility3D_TraceToLight(const RuntimeScene3D* scene,
                                          surface_normal,
                                          to_light,
                                          length_epsilon);
+    RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
+        RUNTIME_RENDER_TRACE_COST_RAY_DIRECT_LIGHT_VISIBILITY,
+        0);
     blocked = RuntimeRay3D_TraceSceneFirstHit(scene,
                                               &shadow_ray,
                                               length_epsilon,
                                               fmax(light_distance - length_epsilon,
                                                    length_epsilon),
                                               &blocker_hit);
+    if (blocked) {
+        RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(&blocker_hit);
+    }
     if (out_blocker_hit) {
         if (blocked) {
             *out_blocker_hit = blocker_hit;

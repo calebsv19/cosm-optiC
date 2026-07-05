@@ -70,6 +70,10 @@ void ray_tracing_font_runtime_detach_renderer(SDL_Renderer* host_renderer) {
     (void)host_renderer;
 }
 
+void MaterialEditorFacePreviewDetachRenderer(SDL_Renderer* host_renderer) {
+    (void)host_renderer;
+}
+
 int initFontSystem(void) {
     return 1;
 }

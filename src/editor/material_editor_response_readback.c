@@ -335,6 +335,86 @@ static bool material_editor_build_mirror_response(MaterialEditorResponseReadback
     return true;
 }
 
+static bool material_editor_build_metal_response(MaterialEditorResponseReadback* readback,
+                                                 const SceneObject* obj,
+                                                 const Material* material) {
+    RuntimeMaterialPayload3D payload = {0};
+    double transmission = 0.0;
+    double roughness = 0.0;
+    double reflectivity = 0.0;
+    double specular = 0.0;
+    double diffuse = material ? material_editor_response_clamp01(material->diffuse) : 0.0;
+    double metallic = material ? material_editor_response_clamp01(material->metallic) : 0.0;
+    bool has_layer = false;
+    char tint[48];
+    int focused_index = MaterialEditorResolveFocusedObjectIndex();
+    if (!readback || !obj) return false;
+    material_editor_response_base_values(obj,
+                                         material,
+                                         &transmission,
+                                         &roughness,
+                                         &reflectivity,
+                                         &specular);
+    material_editor_response_active_layer_values(obj,
+                                                 &roughness,
+                                                 &reflectivity,
+                                                 &specular,
+                                                 &has_layer);
+    if (focused_index >= 0 &&
+        RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(focused_index, &payload)) {
+        diffuse = material_editor_response_clamp01(payload.bsdf.diffuseWeight);
+    }
+    material_editor_response_tint_value(obj, material, tint, sizeof(tint));
+    readback->family = MATERIAL_EDITOR_RESPONSE_FAMILY_METAL;
+    readback->family_specific = true;
+    snprintf(readback->title, sizeof(readback->title), "Metal Response");
+    snprintf(readback->subtitle,
+             sizeof(readback->subtitle),
+             "Rough conductor response through editable stack layers");
+    snprintf(readback->route_label,
+             sizeof(readback->route_label),
+             "%s | metal family matrix",
+             has_layer ? "selected layer" : "editable stack seed");
+    material_editor_response_add_numeric_row(readback,
+                                             MATERIAL_EDITOR_RESPONSE_FIELD_ROUGHNESS,
+                                             "Rough",
+                                             roughness,
+                                             has_layer ? "stack layer" : "rough metal seed",
+                                             MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE);
+    material_editor_response_add_numeric_row(readback,
+                                             MATERIAL_EDITOR_RESPONSE_FIELD_REFLECTIVITY,
+                                             "Reflect",
+                                             reflectivity,
+                                             has_layer ? "compat layer" : "rough metal seed",
+                                             MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE);
+    material_editor_response_add_numeric_row(readback,
+                                             MATERIAL_EDITOR_RESPONSE_FIELD_SPECULAR,
+                                             "Spec",
+                                             specular,
+                                             has_layer ? "lobe layer" : "rough metal seed",
+                                             MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE);
+    material_editor_response_add_row(readback,
+                                     MATERIAL_EDITOR_RESPONSE_FIELD_TINT,
+                                     "Tint",
+                                     tint,
+                                     "object color bridge",
+                                     MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE);
+    material_editor_response_add_numeric_row(readback,
+                                             MATERIAL_EDITOR_RESPONSE_FIELD_METALLIC,
+                                             "Metal",
+                                             metallic,
+                                             "preset readback",
+                                             MATERIAL_EDITOR_RESPONSE_FIELD_GUARDED);
+    material_editor_response_add_numeric_row(readback,
+                                             MATERIAL_EDITOR_RESPONSE_FIELD_DIFFUSE_BASE,
+                                             "Base",
+                                             diffuse,
+                                             "base response readback",
+                                             MATERIAL_EDITOR_RESPONSE_FIELD_READBACK);
+    (void)transmission;
+    return true;
+}
+
 static bool material_editor_build_generic_response(MaterialEditorResponseReadback* readback,
                                                    const SceneObject* obj,
                                                    const Material* material,
@@ -421,6 +501,8 @@ const char* MaterialEditorResponseFieldLabel(MaterialEditorResponseField field) 
     if (field == MATERIAL_EDITOR_RESPONSE_FIELD_THIN_WALLED) return "thin_walled";
     if (field == MATERIAL_EDITOR_RESPONSE_FIELD_MIRROR_DOMINANCE) return "mirror_dominance";
     if (field == MATERIAL_EDITOR_RESPONSE_FIELD_MIRROR_BASE) return "mirror_base";
+    if (field == MATERIAL_EDITOR_RESPONSE_FIELD_METALLIC) return "metallic";
+    if (field == MATERIAL_EDITOR_RESPONSE_FIELD_DIFFUSE_BASE) return "diffuse_base";
     return "none";
 }
 
@@ -444,6 +526,9 @@ bool MaterialEditorBuildResponseReadback(MaterialEditorResponseReadback* out_rea
     }
     if (family == MATERIAL_EDITOR_RESPONSE_FAMILY_MIRROR) {
         return material_editor_build_mirror_response(out_readback, obj, material);
+    }
+    if (family == MATERIAL_EDITOR_RESPONSE_FAMILY_METAL) {
+        return material_editor_build_metal_response(out_readback, obj, material);
     }
     return material_editor_build_generic_response(out_readback, obj, material, family);
 }

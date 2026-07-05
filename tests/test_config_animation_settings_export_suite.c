@@ -440,7 +440,8 @@ static int test_agent_render_request_caustic_transport_volume_phase4_contract(vo
         "    \"caustic_mode\": \"transport\",\n"
         "    \"caustic_volume_enabled\": true,\n"
         "    \"caustic_sample_budget\": 128,\n"
-        "    \"caustic_max_path_depth\": 2\n"
+        "    \"caustic_max_path_depth\": 2,\n"
+        "    \"caustic_transport_debug_export_enabled\": true\n"
         "  }\n"
         "}\n";
 
@@ -467,6 +468,8 @@ static int test_agent_render_request_caustic_transport_volume_phase4_contract(vo
                 request.caustic_settings.sampleBudget == 128);
     assert_true("agent_render_caustic_transport_phase4_depth",
                 request.caustic_settings.maxPathDepth == 2);
+    assert_true("agent_render_caustic_transport_phase4_debug_export",
+                request.caustic_settings.debugExportEnabled);
     readback = RuntimeCausticSettings3D_Phase0Readback(&request.caustic_settings,
                                                        request.caustic_sidecar_enabled);
     assert_true("agent_render_caustic_transport_phase4_path_active",

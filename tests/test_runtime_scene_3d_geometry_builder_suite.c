@@ -766,8 +766,8 @@ static int test_runtime_scene_3d_builder_promotes_authored_light_camera_samples(
 
     ok = RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(&scene, 0.5);
     assert_true("runtime_scene_3d_builder_samples_build_ok", ok);
-    assert_true("runtime_scene_3d_builder_samples_no_primitives", scene.primitiveCount == 0);
-    assert_true("runtime_scene_3d_builder_samples_no_triangles", scene.triangleMesh.triangleCount == 0);
+    assert_true("runtime_scene_3d_builder_samples_retains_primitive", scene.primitiveCount == 1);
+    assert_true("runtime_scene_3d_builder_samples_retains_triangles", scene.triangleMesh.triangleCount == 2);
     assert_true("runtime_scene_3d_builder_samples_has_light", scene.hasLight);
     assert_true("runtime_scene_3d_builder_samples_has_camera", scene.hasCamera);
     assert_close("runtime_scene_3d_builder_samples_light_x",
@@ -1120,6 +1120,10 @@ static int test_runtime_scene_3d_builder_falls_back_to_seeded_camera_state(void)
     RuntimeScene3D scene;
     bool ok = false;
 
+    animSettings.lightIntensity = 11.0;
+    animSettings.lightRadius = 1.5;
+    animSettings.forwardDecay = 9.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_NONE;
     RuntimeScene3D_Init(&scene);
     ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
     assert_true("runtime_scene_3d_builder_camera_fallback_apply_ok", ok);
@@ -1132,10 +1136,6 @@ static int test_runtime_scene_3d_builder_falls_back_to_seeded_camera_state(void)
 
     sceneSettings.camera.rotation = 0.75;
     sceneSettings.camera.zoom = 1.5;
-    animSettings.lightIntensity = 11.0;
-    animSettings.lightRadius = 1.5;
-    animSettings.forwardDecay = 9.0;
-    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_NONE;
 
     ok = RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(&scene, 0.65);
     assert_true("runtime_scene_3d_builder_camera_fallback_build_ok", ok);

@@ -22,8 +22,10 @@
 #define MENU_BOTTOM_ACTION_HEIGHT 64
 #define MENU_CENTER_CONTROLS_MIN_HEIGHT 300
 #define MENU_CENTER_CONTROLS_MAX_HEIGHT 336
+#define MENU_CENTER_RESUME_HEIGHT 150
+#define MENU_CENTER_RESUME_MIN_HEIGHT 126
 #define MENU_MANIFEST_PANEL_MIN_HEIGHT 140
-#define MENU_MANIFEST_PANEL_MAX_HEIGHT 260
+#define MENU_MANIFEST_PANEL_MAX_HEIGHT 340
 #define MENU_MANIFEST_PANEL_GAP 6
 #define MENU_LEFT_PANEL_CONTENT_INSET 18
 #define MENU_PANEL_BOTTOM_GAP 18
@@ -82,6 +84,8 @@ void menu_layout_build_base(TTF_Font* font,
     int center_controls_available_h = 0;
     int center_batch_y = 0;
     int center_batch_h = 0;
+    int center_resume_h = MENU_CENTER_RESUME_HEIGHT;
+    int center_resume_y = 0;
 
     (void)state;
 
@@ -107,7 +111,7 @@ void menu_layout_build_base(TTF_Font* font,
         MENU_MARGIN_X,
         MENU_MARGIN_Y,
         left_panel_w,
-        bottom_row_y - MENU_MARGIN_Y - MENU_PANEL_BOTTOM_GAP
+        menu_height - MENU_MARGIN_Y * 2
     };
     layout.sliderPanelRect = (SDL_Rect){
         slider_x,
@@ -122,9 +126,9 @@ void menu_layout_build_base(TTF_Font* font,
         route_stack_h
     };
     layout.bottomActionRowRect = (SDL_Rect){
-        MENU_MARGIN_X,
+        center_left,
         bottom_row_y,
-        menu_width - MENU_MARGIN_X * 2,
+        menu_width - center_left - MENU_MARGIN_X,
         MENU_BOTTOM_ACTION_HEIGHT
     };
     layout.centerControlsRect = (SDL_Rect){
@@ -134,7 +138,17 @@ void menu_layout_build_base(TTF_Font* font,
         center_controls_h
     };
     center_batch_y = layout.centerControlsRect.y + layout.centerControlsRect.h + MENU_ZONE_GAP;
-    center_batch_h = layout.bottomActionRowRect.y - MENU_PANEL_BOTTOM_GAP - center_batch_y;
+    center_resume_y = layout.bottomActionRowRect.y - MENU_PANEL_BOTTOM_GAP - center_resume_h;
+    if (center_resume_y - MENU_ZONE_GAP - center_batch_y < MENU_BATCH_MIN_HEIGHT) {
+        center_resume_h = max_int(MENU_CENTER_RESUME_MIN_HEIGHT,
+                                  layout.bottomActionRowRect.y - MENU_PANEL_BOTTOM_GAP -
+                                  MENU_ZONE_GAP - center_batch_y - MENU_BATCH_MIN_HEIGHT);
+        if (center_resume_h < MENU_CENTER_RESUME_MIN_HEIGHT) {
+            center_resume_h = MENU_CENTER_RESUME_MIN_HEIGHT;
+        }
+        center_resume_y = layout.bottomActionRowRect.y - MENU_PANEL_BOTTOM_GAP - center_resume_h;
+    }
+    center_batch_h = center_resume_y - MENU_ZONE_GAP - center_batch_y;
     if (center_batch_h < MENU_BATCH_MIN_HEIGHT) {
         center_batch_h = MENU_BATCH_MIN_HEIGHT;
     }
@@ -143,6 +157,12 @@ void menu_layout_build_base(TTF_Font* font,
         center_batch_y,
         center_width,
         center_batch_h
+    };
+    layout.centerResumeRect = (SDL_Rect){
+        center_left,
+        center_resume_y,
+        center_width,
+        center_resume_h
     };
 
     if (out_layout) {
@@ -158,7 +178,7 @@ void menu_layout_finalize_with_buttons(MenuScreenLayout* layout,
     if (!layout || !buttons) return;
 
     batch_top = layout->centerControlsRect.y + layout->centerControlsRect.h + MENU_ZONE_GAP;
-    batch_bottom = layout->bottomActionRowRect.y - MENU_PANEL_BOTTOM_GAP;
+    batch_bottom = layout->centerResumeRect.y - MENU_ZONE_GAP;
 
     if (state && (state->manifestDropdownOpen ||
                   animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D)) {
@@ -202,5 +222,11 @@ void menu_layout_finalize_with_buttons(MenuScreenLayout* layout,
         batch_top,
         layout->centerBatchRect.w,
         batch_bottom - batch_top
+    };
+    layout->centerResumeRect = (SDL_Rect){
+        layout->centerResumeRect.x,
+        layout->centerResumeRect.y,
+        layout->centerResumeRect.w,
+        layout->centerResumeRect.h
     };
 }

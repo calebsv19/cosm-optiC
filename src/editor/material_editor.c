@@ -72,6 +72,10 @@ SDL_Rect s_recipe_menu_item_rects[MATERIAL_EDITOR_RECIPE_MENU_MAX_ITEMS];
 SDL_Rect s_response_action_rects[MATERIAL_EDITOR_RESPONSE_MAX_ROWS]
                                 [MATERIAL_EDITOR_RESPONSE_ACTION_COUNT];
 MaterialEditorResponseField s_response_action_fields[MATERIAL_EDITOR_RESPONSE_MAX_ROWS];
+SDL_Rect s_layer_influence_action_rects[MATERIAL_EDITOR_LAYER_INFLUENCE_CONTROL_COUNT]
+                                       [MATERIAL_EDITOR_RESPONSE_ACTION_COUNT];
+MaterialEditorLayerInfluenceKind
+    s_layer_influence_action_fields[MATERIAL_EDITOR_LAYER_INFLUENCE_CONTROL_COUNT];
 SDL_Rect s_glass_overlay_action_rects[MATERIAL_EDITOR_GLASS_OVERLAY_ACTION_COUNT];
 RuntimeMaterialTextureLayerKind
     s_glass_overlay_action_kinds[MATERIAL_EDITOR_GLASS_OVERLAY_ACTION_COUNT];

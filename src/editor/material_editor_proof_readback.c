@@ -5,6 +5,7 @@
 
 #include "editor/material_editor_layer_model.h"
 #include "material/material.h"
+#include "material/material_manager.h"
 
 static const char* material_editor_proof_texture_family(int texture_id) {
     if (texture_id == RUNTIME_MATERIAL_TEXTURE_3D_RUST) return "rust_procedural";
@@ -209,6 +210,90 @@ static void material_editor_proof_describe_mirror(
              "Missing: compact editor-launched Mirror proof package; current Proof pane is readback-only.");
 }
 
+static void material_editor_proof_describe_metal(
+    const SceneObject* obj,
+    RuntimeMaterialTextureLayerKind layer_kind,
+    const RuntimeMaterialTextureLayer* active_layer,
+    MaterialEditorProofReadback* out_readback) {
+    const Material* material = NULL;
+    double roughness = 0.0;
+    bool tinted = material_editor_proof_object_has_tint(obj);
+    if (!obj || !out_readback || obj->material_id != MATERIAL_PRESET_ROUGH_METAL) return;
+    material = MaterialManagerGet(obj->material_id);
+    roughness = material ? material->roughness : 0.6;
+    if (active_layer && active_layer->roughnessInfluence > 0.0) {
+        roughness = active_layer->roughnessInfluence;
+    }
+    out_readback->metal_proof_readback = true;
+    snprintf(out_readback->material_family, sizeof(out_readback->material_family), "Metal");
+
+    if (layer_kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_RUST ||
+        layer_kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_GRIME ||
+        layer_kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_OIL ||
+        layer_kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SCRATCHES ||
+        layer_kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_EDGE_WEAR) {
+        snprintf(out_readback->metal_proof_case,
+                 sizeof(out_readback->metal_proof_case),
+                 "%s metal overlay",
+                 RuntimeMaterialTextureLayerKindDisplayName(layer_kind));
+        snprintf(out_readback->metal_proof_package,
+                 sizeof(out_readback->metal_proof_package),
+                 "m11_s5_material_family_preview_grid");
+        snprintf(out_readback->metal_proof_coverage,
+                 sizeof(out_readback->metal_proof_coverage),
+                 "M11-S5 visual grid covers damaged Metal overlays, with M4-S3 retaining source-backed overlay semantics.");
+        snprintf(out_readback->metal_missing_proof,
+                 sizeof(out_readback->metal_missing_proof),
+                 "Missing: first-class metallic payload promotion; metallic still guarded.");
+        return;
+    }
+
+    if (roughness <= 0.25) {
+        snprintf(out_readback->metal_proof_case,
+                 sizeof(out_readback->metal_proof_case),
+                 "polished metal");
+        snprintf(out_readback->metal_proof_package,
+                 sizeof(out_readback->metal_proof_package),
+                 "m11_s5_material_family_preview_grid");
+        snprintf(out_readback->metal_proof_coverage,
+                 sizeof(out_readback->metal_proof_coverage),
+                 "M11-S5 visual grid covers polished Metal contrast; Disney v2 diagnostics retain lobe-order evidence.");
+        snprintf(out_readback->metal_missing_proof,
+                 sizeof(out_readback->metal_missing_proof),
+                 "Missing: first-class metallic payload promotion.");
+        return;
+    }
+
+    if (tinted) {
+        snprintf(out_readback->metal_proof_case,
+                 sizeof(out_readback->metal_proof_case),
+                 "tinted rough metal");
+        snprintf(out_readback->metal_proof_package,
+                 sizeof(out_readback->metal_proof_package),
+                 "m11_s5_material_family_preview_grid");
+        snprintf(out_readback->metal_proof_coverage,
+                 sizeof(out_readback->metal_proof_coverage),
+                 "M11-S5 visual grid covers tinted/colored Metal contrast; M4-S2 retains reflect/specular evidence.");
+        snprintf(out_readback->metal_missing_proof,
+                 sizeof(out_readback->metal_missing_proof),
+                 "Missing: first-class metallic payload promotion; metallic remains guarded.");
+        return;
+    }
+
+    snprintf(out_readback->metal_proof_case,
+             sizeof(out_readback->metal_proof_case),
+             "default rough metal");
+    snprintf(out_readback->metal_proof_package,
+             sizeof(out_readback->metal_proof_package),
+             "m11_s5_material_family_preview_grid");
+    snprintf(out_readback->metal_proof_coverage,
+             sizeof(out_readback->metal_proof_coverage),
+             "M11-S5 visual grid covers rough Metal contrast; M4-S2 retains no-accidental-metallic evidence.");
+    snprintf(out_readback->metal_missing_proof,
+             sizeof(out_readback->metal_missing_proof),
+             "Missing: first-class metallic payload promotion.");
+}
+
 void MaterialEditorFormatProofReadbackStatus(const MaterialEditorProofReadback* readback,
                                              char* out,
                                              size_t out_size) {
@@ -295,6 +380,7 @@ bool MaterialEditorBuildFocusedProofReadback(MaterialEditorProofReadback* out_re
                                                    sizeof(out_readback->source_material));
     material_editor_proof_describe_glass(obj, layer_kind, &active_layer, out_readback);
     material_editor_proof_describe_mirror(obj, out_readback);
+    material_editor_proof_describe_metal(obj, layer_kind, &active_layer, out_readback);
     snprintf(out_readback->expected_behavior,
              sizeof(out_readback->expected_behavior),
              "Editor emits M4-compatible proof request/readback labels only; no render launch");

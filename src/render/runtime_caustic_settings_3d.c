@@ -14,6 +14,7 @@ void RuntimeCausticSettings3D_Default(RuntimeCausticSettings3D* settings) {
     settings->surfaceReceiverFallbackEnabled = true;
     settings->cacheGridMode = RUNTIME_CAUSTIC_CACHE_GRID_VF3D_ALIGNED;
     settings->debugSummaryEnabled = false;
+    settings->debugExportEnabled = false;
 }
 
 RuntimeCausticMode3D RuntimeCausticMode3D_FromLabel(const char* label) {

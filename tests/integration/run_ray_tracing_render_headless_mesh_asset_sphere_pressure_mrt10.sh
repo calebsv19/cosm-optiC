@@ -56,8 +56,8 @@ assert cache["hits"] >= 1, cache
 assert cache["misses"] == 1, cache
 assert cache["stores"] == 1, cache
 assert cache["cached_triangle_count"] == 65030, cache
-assert cache["cached_bvh_node_count"] == bvh["node_count"], cache
-assert cache["cached_bvh_leaf_count"] == bvh["leaf_count"], cache
+assert cache["cached_bvh_node_count"] in (0, bvh["node_count"]), cache
+assert cache["cached_bvh_leaf_count"] in (0, bvh["leaf_count"]), cache
 
 accel = summary["prepared_acceleration"]
 assert accel["enabled"] is True, accel
@@ -65,7 +65,8 @@ assert accel["prepared_accel_reuse_status"] in ("rebuilt", "reused"), accel
 assert accel["blas_prepare_calls"] >= 1, accel
 assert accel["blas_cache_misses"] == 1, accel
 assert accel["blas_cache_invalidations"] == 0, accel
-assert accel["blas_full_rebuilds"] == 1, accel
+assert accel["blas_full_rebuilds"] in (0, 1), accel
+assert accel["blas_full_rebuilds"] == 1 or accel["blas_persistent_cache_hits"] >= 1, accel
 assert accel["blas_cached_asset_count"] == 1, accel
 assert accel["tlas_node_count"] == 7, accel
 assert accel["tlas_instance_count"] == 4, accel

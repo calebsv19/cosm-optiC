@@ -14,6 +14,7 @@
 #include "render/runtime_mirror_composition_3d.h"
 #include "render/runtime_path_depth_policy_3d.h"
 #include "render/runtime_ray_3d.h"
+#include "render/runtime_render_trace_cost_ledger_3d.h"
 #include "render/runtime_specular_reflection_3d.h"
 
 static const double kRuntimeDisneyV2_3DEpsilon = 1e-4;
@@ -844,12 +845,18 @@ static void runtime_disney_v2_3d_apply_stochastic_transport(
                                                        sample_dir,
                                                        kRuntimeDisneyV2_3DEpsilon);
     io_result->secondaryRayCount = 1;
+    RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
+        RUNTIME_RENDER_TRACE_COST_RAY_DISNEY_RECURSIVE,
+        1);
     if (!RuntimeLightEmitter3D_ResolveFirstHit(scene,
                                                &io_result->pathState.ray,
                                                kRuntimeDisneyV2_3DEpsilon,
                                                kRuntimeDisneyV2_3DMaxDistance,
                                                &trace)) {
         return;
+    }
+    if (trace.geometryHit) {
+        RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(&trace.geometryHitInfo);
     }
 
     if (trace.geometryHit) {

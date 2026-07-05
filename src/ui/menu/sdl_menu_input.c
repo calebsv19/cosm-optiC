@@ -16,6 +16,7 @@
 #include "render/ray_tracing_integrator_catalog.h"
 #include "import/runtime_scene_bridge.h"
 #include "ui/menu_batch_panel.h"
+#include "ui/menu_resume_panel.h"
 #include "ui/scene_source_ui_labels.h"
 #include "ui/shared_theme_font_adapter.h"
 #include "ui/text_zoom_shortcuts.h"
@@ -162,18 +163,6 @@ static void finish_root_edit(MenuRuntimeState *state, bool apply) {
     state->editingMeshAssetRoot = false;
     state->editingOutputRoot = false;
     state->pathInputBuffer[0] = '\0';
-}
-
-static void begin_start_frame_edit(MenuRuntimeState *state) {
-    if (!state) return;
-    state->editingStartFrame = true;
-    state->editingBounce = false;
-    state->editingFrame = false;
-    state->editingInputRoot = false;
-    state->editingMeshAssetRoot = false;
-    state->editingOutputRoot = false;
-    state->inputBuffer[0] = '\0';
-    snprintf(state->inputBuffer, sizeof(state->inputBuffer), "%d", animSettings.startFrameIndex);
 }
 
 static void finish_start_frame_edit(MenuRuntimeState *state, bool apply) {
@@ -449,6 +438,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     MenuScreenLayout screenLayout;
     SliderLayout layout;
     MenuBatchPanelLayout batchLayout;
+    MenuResumePanelLayout resumeLayout;
     RenderContext* render_ctx = getRenderContext();
     int menu_width = 1200;
     int menu_height = 900;
@@ -460,6 +450,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     menu_layout_finalize_with_buttons(&screenLayout, &buttons, state);
     menu_render_build_slider_layout(*font, state, &screenLayout, &layout);
     menu_batch_panel_build_layout(*font, state, &screenLayout, &batchLayout);
+    menu_resume_panel_build_layout(*font, state, &screenLayout, &resumeLayout);
     if (handle_slider_click(event, &buttons.rendererControlSliders, state)) {
         return;
     }
@@ -617,6 +608,10 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     }
 
     if (menu_batch_panel_handle_click(event, renderer, *font, state, &batchLayout)) {
+        return;
+    }
+
+    if (menu_resume_panel_handle_click(event, state, &resumeLayout)) {
         return;
     }
 
@@ -850,35 +845,6 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     if (point_in_rect(&buttons.integratorRect, x, y)) {
         RayTracingIntegratorCatalog_CycleActiveSelection(&animSettings);
         menu_state_sync_from_anim(state);
-        return;
-    }
-
-    if (buttons.resumeFramesRect.w > 0 && point_in_rect(&buttons.resumeFramesRect, x, y)) {
-        animSettings.resumeFromExistingFrames = !animSettings.resumeFromExistingFrames;
-        state->editingStartFrame = false;
-        state->inputBuffer[0] = '\0';
-        menu_batch_panel_refresh(state);
-        return;
-    }
-
-    if (buttons.startFrameRect.w > 0 && point_in_rect(&buttons.startFrameRect, x, y)) {
-        animSettings.resumeFromExistingFrames = false;
-        begin_start_frame_edit(state);
-        return;
-    }
-
-    if (buttons.nextFrameRect.w > 0 && point_in_rect(&buttons.nextFrameRect, x, y)) {
-        animSettings.resumeFromExistingFrames = false;
-        animSettings.startFrameIndex = state->exportBatchStatus.next_frame_index;
-        state->editingStartFrame = false;
-        state->inputBuffer[0] = '\0';
-        snprintf(state->statusLabel,
-                 sizeof(state->statusLabel),
-                 "Start frame set to %d",
-                 animSettings.startFrameIndex);
-        state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
-        state->statusColor = (SDL_Color){160, 210, 255, 255};
-        state->statusExpireMs = SDL_GetTicks() + 1800;
         return;
     }
 

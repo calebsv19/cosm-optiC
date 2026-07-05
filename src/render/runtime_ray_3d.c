@@ -186,6 +186,10 @@ RuntimeRay3DTraceRoute RuntimeRay3D_DefaultTraceRoute(void) {
     return kRuntimeRay3DDefaultTraceRoute;
 }
 
+RuntimeRay3DTraceRoute RuntimeRay3D_CurrentTraceRoute(void) {
+    return gRuntimeRay3DTraceRoute;
+}
+
 void RuntimeRay3D_SetSceneAccelerationTraceFirstHit(
     RuntimeRay3DSceneAccelerationTraceFirstHitFn trace_first_hit) {
     gRuntimeRay3DSceneAccelerationTraceFirstHit = trace_first_hit;

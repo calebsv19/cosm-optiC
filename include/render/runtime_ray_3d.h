@@ -79,6 +79,7 @@ bool RuntimeRay3D_TraceSceneFirstHit(const RuntimeScene3D* scene,
 
 const char* RuntimeRay3DTraceRouteLabel(RuntimeRay3DTraceRoute route);
 RuntimeRay3DTraceRoute RuntimeRay3D_DefaultTraceRoute(void);
+RuntimeRay3DTraceRoute RuntimeRay3D_CurrentTraceRoute(void);
 void RuntimeRay3D_SetSceneAccelerationTraceFirstHit(
     RuntimeRay3DSceneAccelerationTraceFirstHitFn trace_first_hit);
 void RuntimeRay3D_SetTraceRoute(RuntimeRay3DTraceRoute route);

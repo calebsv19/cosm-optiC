@@ -20,6 +20,7 @@ typedef struct {
     double surfaceRadianceScale;
     double surfaceFootprintScale;
     bool surfaceReceiverFallbackEnabled;
+    bool debugExportEnabled;
 } RuntimeCausticTransport3DRequestState;
 
 typedef struct {

@@ -11,6 +11,7 @@
 #include "render/runtime_light_set_3d.h"
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_native_3d_sampling.h"
+#include "render/runtime_render_trace_cost_ledger_3d.h"
 #include "render/runtime_volume_3d_integrate.h"
 
 static const double kRuntimeDirectLight3DTopFillIntensityScale = 0.08;
@@ -726,6 +727,7 @@ bool RuntimeDirectLight3D_TracePrimaryHit(const RuntimeScene3D* scene,
 
     result.primaryRay = RuntimeCameraProjector3D_MakePrimaryRay(projector, pixel_x, pixel_y);
     result.primaryTransmittance = RuntimeVisibility3D_UnitTransmittance();
+    RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(RUNTIME_RENDER_TRACE_COST_RAY_PRIMARY, 0);
     if (!RuntimeRay3D_TraceSceneFirstHit(scene,
                                          &result.primaryRay,
                                          projector->nearPlane,
@@ -734,6 +736,7 @@ bool RuntimeDirectLight3D_TracePrimaryHit(const RuntimeScene3D* scene,
         *out_result = result;
         return false;
     }
+    RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(&result.hitInfo);
 
     result.hit = true;
     result.primaryTransmittance =

@@ -9,6 +9,7 @@
 #include "render/runtime_light_emitter_3d.h"
 #include "render/runtime_path_depth_policy_3d.h"
 #include "render/runtime_ray_3d.h"
+#include "render/runtime_render_trace_cost_ledger_3d.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -1073,6 +1074,9 @@ bool RuntimeDisneyV2_3D_ApplyRecursivePathLoopFromDirection(
 
         io_result->secondaryRayCount += 1;
         io_result->recursiveLoopRayCount += 1;
+        RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
+            RUNTIME_RENDER_TRACE_COST_RAY_DISNEY_RECURSIVE,
+            depth);
         if (!RuntimeLightEmitter3D_ResolveFirstHit(scene,
                                                    &state.ray,
                                                    kRuntimeDisneyV2Transport3DEpsilon,
@@ -1093,6 +1097,7 @@ bool RuntimeDisneyV2_3D_ApplyRecursivePathLoopFromDirection(
         }
 
         if (trace.geometryHit) {
+            RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(&trace.geometryHitInfo);
             state.hit = true;
             state.hitInfo = trace.geometryHitInfo;
             io_result->secondaryHitCount += 1;
@@ -1523,6 +1528,9 @@ bool RuntimeDisneyV2_3D_ApplySpecularReflectionRecursion(
                 roughness,
                 rough_sample_count,
                 sample_index);
+            RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
+                RUNTIME_RENDER_TRACE_COST_RAY_REFLECTION_SPECULAR,
+                2);
             if (RuntimeLightEmitter3D_ResolveFirstHit(scene,
                                                       &rough_ray,
                                                       kRuntimeDisneyV2Transport3DEpsilon,
@@ -1531,6 +1539,8 @@ bool RuntimeDisneyV2_3D_ApplySpecularReflectionRecursion(
                 rough_trace.geometryHit &&
                 rough_trace.geometryHitInfo.triangleIndex >= 0 &&
                 rough_trace.geometryHitInfo.triangleIndex != source_hit->triangleIndex) {
+                RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(
+                    &rough_trace.geometryHitInfo);
                 selected.ray = rough_ray;
                 selected.geometryHit = true;
                 selected.emitterHit = rough_trace.emitterHit;

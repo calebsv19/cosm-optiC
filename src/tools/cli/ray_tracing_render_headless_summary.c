@@ -54,6 +54,20 @@ static double ray_tracing_headless_percent_of(double value, double total) {
     return total > 0.0 ? (ray_tracing_headless_nonnegative(value) * 100.0) / total : 0.0;
 }
 
+static const char* ray_tracing_headless_mesh_asset_persistent_cache_mode_label(int mode) {
+    switch ((RayTracingRuntimeMeshAssetPersistentCacheMode)mode) {
+        case RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_DISABLED:
+            return "disabled";
+        case RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_READ_ONLY:
+            return "read_only";
+        case RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_REFRESH:
+            return "refresh";
+        case RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_READ_WRITE:
+        default:
+            return "read_write";
+    }
+}
+
 static void ray_tracing_headless_write_startup_timing_stage(FILE* file,
                                                             const char* name,
                                                             double ms,
@@ -89,6 +103,8 @@ static void ray_tracing_headless_write_startup_load_timing_matrix(
         (preflight->mesh_asset_timing_stats.total_ms +
          preflight->scene_builder_timing_stats.total_ms +
          preflight->scene_acceleration_stats.blasBuildMs +
+         preflight->scene_acceleration_stats.blasPersistentCacheReadMs +
+         preflight->scene_acceleration_stats.blasPersistentCacheWriteMs +
          preflight->scene_acceleration_stats.tlasBuildMs +
          preflight->scene_acceleration_stats.tlasBindMs +
          preflight->dynamic_water_cache_stats.geometryStoreMs);
@@ -129,6 +145,18 @@ static void ray_tracing_headless_write_startup_load_timing_matrix(
         true);
     ray_tracing_headless_write_startup_timing_stage(
         file,
+        "runtime_mesh_document_pack_read",
+        preflight->mesh_asset_timing_stats.asset_persistent_cache_read_ms,
+        total_reference_ms,
+        true);
+    ray_tracing_headless_write_startup_timing_stage(
+        file,
+        "runtime_mesh_document_pack_write",
+        preflight->mesh_asset_timing_stats.asset_persistent_cache_write_ms,
+        total_reference_ms,
+        true);
+    ray_tracing_headless_write_startup_timing_stage(
+        file,
         "mesh_asset_document_copy",
         preflight->mesh_asset_timing_stats.asset_document_copy_ms,
         total_reference_ms,
@@ -155,6 +183,18 @@ static void ray_tracing_headless_write_startup_load_timing_matrix(
         file,
         "mesh_local_blas_build",
         preflight->scene_acceleration_stats.blasBuildMs,
+        total_reference_ms,
+        true);
+    ray_tracing_headless_write_startup_timing_stage(
+        file,
+        "mesh_local_blas_persistent_cache_read",
+        preflight->scene_acceleration_stats.blasPersistentCacheReadMs,
+        total_reference_ms,
+        true);
+    ray_tracing_headless_write_startup_timing_stage(
+        file,
+        "mesh_local_blas_persistent_cache_write",
+        preflight->scene_acceleration_stats.blasPersistentCacheWriteMs,
         total_reference_ms,
         true);
     ray_tracing_headless_write_startup_timing_stage(
@@ -215,6 +255,64 @@ static void ray_tracing_headless_write_startup_load_timing_matrix(
         file,
         "caustic_cache_prep measures prepared-frame sidecar probe and caustic cache population");
     fprintf(file, "\n");
+    fprintf(file, "  },\n");
+}
+
+static void ray_tracing_headless_write_render_trace_cost_ledger(
+    FILE* file,
+    const RayTracingHeadlessPreflight* preflight) {
+    const RuntimeRenderTraceCostLedger3D* ledger =
+        preflight ? &preflight->render_trace_cost_ledger : NULL;
+    fprintf(file, "  \"render_trace_cost_ledger\": {\n");
+    fprintf(file, "    \"enabled\": %s,\n",
+            (ledger && ledger->enabled) ? "true" : "false");
+    fprintf(file, "    \"total_rays\": %llu,\n",
+            (unsigned long long)(ledger ? ledger->totalRays : 0u));
+    fprintf(file, "    \"ray_class_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_RAY_CLASS_COUNT; ++i) {
+        fprintf(file,
+                "      \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostRayClass3DLabel((RuntimeRenderTraceCostRayClass3D)i),
+                (unsigned long long)(ledger ? ledger->rayClassCounts[i] : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_RAY_CLASS_COUNT ? "," : "");
+    }
+    fprintf(file, "    },\n");
+    fprintf(file, "    \"path_depth_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DEPTH_BUCKET_COUNT; ++i) {
+        fprintf(file,
+                "      \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostPathDepthBucket3DLabel(
+                    (RuntimeRenderTraceCostPathDepthBucket3D)i),
+                (unsigned long long)(ledger ? ledger->pathDepthCounts[i] : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DEPTH_BUCKET_COUNT ? "," : "");
+    }
+    fprintf(file, "    },\n");
+    fprintf(file, "    \"ray_class_depth_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_RAY_CLASS_COUNT; ++i) {
+        fprintf(file,
+                "      \"%s\": {",
+                RuntimeRenderTraceCostRayClass3DLabel((RuntimeRenderTraceCostRayClass3D)i));
+        for (int j = 0; j < RUNTIME_RENDER_TRACE_COST_DEPTH_BUCKET_COUNT; ++j) {
+            fprintf(file,
+                    " \"%s\": %llu%s",
+                    RuntimeRenderTraceCostPathDepthBucket3DLabel(
+                        (RuntimeRenderTraceCostPathDepthBucket3D)j),
+                    (unsigned long long)(ledger ? ledger->rayClassDepthCounts[i][j] : 0u),
+                    j + 1 < RUNTIME_RENDER_TRACE_COST_DEPTH_BUCKET_COUNT ? "," : "");
+        }
+        fprintf(file, " }%s\n", i + 1 < RUNTIME_RENDER_TRACE_COST_RAY_CLASS_COUNT ? "," : "");
+    }
+    fprintf(file, "    },\n");
+    fprintf(file, "    \"material_family_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_MATERIAL_COUNT; ++i) {
+        fprintf(file,
+                "      \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostMaterialFamily3DLabel(
+                    (RuntimeRenderTraceCostMaterialFamily3D)i),
+                (unsigned long long)(ledger ? ledger->materialFamilyCounts[i] : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_MATERIAL_COUNT ? "," : "");
+    }
+    fprintf(file, "    }\n");
     fprintf(file, "  },\n");
 }
 
@@ -878,8 +976,10 @@ void ray_tracing_render_headless_write_summary(
                 request->caustic_settings.sampleBudget);
         fprintf(file, "      \"max_path_depth\": %d,\n",
                 request->caustic_settings.maxPathDepth);
-        fprintf(file, "      \"debug_summary_enabled\": %s\n",
+        fprintf(file, "      \"debug_summary_enabled\": %s,\n",
                 request->caustic_settings.debugSummaryEnabled ? "true" : "false");
+        fprintf(file, "      \"debug_export_enabled\": %s\n",
+                request->caustic_settings.debugExportEnabled ? "true" : "false");
         fprintf(file, "    },\n");
     }
     fprintf(file, "    \"has_caustic_sidecar_enabled_override\": %s,\n",
@@ -1554,6 +1654,16 @@ void ray_tracing_render_headless_write_summary(
             preflight->mesh_asset_timing_stats.asset_load_total_ms);
     fprintf(file, "      \"asset_runtime_document_load_ms\": %.6f,\n",
             preflight->mesh_asset_timing_stats.asset_runtime_document_load_ms);
+    fprintf(file, "      \"asset_persistent_cache_mode\": ");
+    RayTracingJsonWriteString(
+        file,
+        ray_tracing_headless_mesh_asset_persistent_cache_mode_label(
+            preflight->mesh_asset_timing_stats.asset_persistent_cache_mode));
+    fprintf(file, ",\n");
+    fprintf(file, "      \"asset_persistent_cache_read_ms\": %.6f,\n",
+            preflight->mesh_asset_timing_stats.asset_persistent_cache_read_ms);
+    fprintf(file, "      \"asset_persistent_cache_write_ms\": %.6f,\n",
+            preflight->mesh_asset_timing_stats.asset_persistent_cache_write_ms);
     fprintf(file, "      \"asset_document_copy_ms\": %.6f,\n",
             preflight->mesh_asset_timing_stats.asset_document_copy_ms);
     fprintf(file, "      \"asset_load_calls\": %d,\n",
@@ -1562,6 +1672,16 @@ void ray_tracing_render_headless_write_summary(
             preflight->mesh_asset_timing_stats.asset_cache_hits);
     fprintf(file, "      \"asset_cache_misses\": %d,\n",
             preflight->mesh_asset_timing_stats.asset_cache_misses);
+    fprintf(file, "      \"asset_persistent_cache_hits\": %d,\n",
+            preflight->mesh_asset_timing_stats.asset_persistent_cache_hits);
+    fprintf(file, "      \"asset_persistent_cache_misses\": %d,\n",
+            preflight->mesh_asset_timing_stats.asset_persistent_cache_misses);
+    fprintf(file, "      \"asset_persistent_cache_writes\": %d,\n",
+            preflight->mesh_asset_timing_stats.asset_persistent_cache_writes);
+    fprintf(file, "      \"asset_persistent_cache_invalidations\": %d,\n",
+            preflight->mesh_asset_timing_stats.asset_persistent_cache_invalidations);
+    fprintf(file, "      \"asset_persistent_cache_refreshes\": %d,\n",
+            preflight->mesh_asset_timing_stats.asset_persistent_cache_refreshes);
     fprintf(file, "      \"loaded_assets\": %d,\n",
             preflight->mesh_asset_timing_stats.loaded_assets);
     fprintf(file, "      \"loaded_instances\": %d,\n",
@@ -1653,8 +1773,22 @@ void ray_tracing_render_headless_write_summary(
             (unsigned long long)preflight->scene_acceleration_stats.blasFullRebuilds);
     fprintf(file, "    \"blas_cached_asset_count\": %llu,\n",
             (unsigned long long)preflight->scene_acceleration_stats.blasCachedAssetCount);
+    fprintf(file, "    \"blas_persistent_cache_hits\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_stats.blasPersistentCacheHits);
+    fprintf(file, "    \"blas_persistent_cache_misses\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_stats.blasPersistentCacheMisses);
+    fprintf(file, "    \"blas_persistent_cache_writes\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_stats.blasPersistentCacheWrites);
+    fprintf(file, "    \"blas_persistent_cache_invalidations\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_stats.blasPersistentCacheInvalidations);
+    fprintf(file, "    \"blas_persistent_cache_refreshes\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_stats.blasPersistentCacheRefreshes);
     fprintf(file, "    \"blas_build_ms\": %.6f,\n",
             preflight->scene_acceleration_stats.blasBuildMs);
+    fprintf(file, "    \"blas_persistent_cache_read_ms\": %.6f,\n",
+            preflight->scene_acceleration_stats.blasPersistentCacheReadMs);
+    fprintf(file, "    \"blas_persistent_cache_write_ms\": %.6f,\n",
+            preflight->scene_acceleration_stats.blasPersistentCacheWriteMs);
     fprintf(file, "    \"tlas_node_count\": %llu,\n",
             (unsigned long long)preflight->scene_acceleration_stats.tlasNodeCount);
     fprintf(file, "    \"tlas_instance_count\": %llu,\n",
@@ -1707,6 +1841,7 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "  },\n");
     ray_tracing_headless_write_dynamic_geometry_acceleration_summary(file, preflight);
     ray_tracing_headless_write_dynamic_water_acceleration_cache_summary(file, preflight);
+    ray_tracing_headless_write_render_trace_cost_ledger(file, preflight);
     fprintf(file, "  \"bvh_summary\": {\n");
     fprintf(file, "    \"ready\": %s,\n",
             preflight->bvh_build_stats.ready ? "true" : "false");

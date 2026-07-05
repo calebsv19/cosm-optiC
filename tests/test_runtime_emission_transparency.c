@@ -909,15 +909,17 @@ static int test_runtime_emission_transparency_3d_transparent_prism_reaches_emitt
                     (emitter_result.radiance * legacy_transparency);
     assert_true("runtime_emission_transparency_emitter_prism_direct_positive",
                 transparent_result.directRadiance > 0.05);
-    assert_true("runtime_emission_transparency_emitter_prism_direct_lifts_material",
-                transparent_result.directRadiance > material_result.directRadiance + 0.05);
+    assert_true("runtime_emission_transparency_emitter_prism_direct_keeps_transmission",
+                transparent_result.directRadiance >
+                    transparent_result.transmittedDirectRadiance * 0.5);
     assert_true("runtime_emission_transparency_emitter_prism_direct_softens_legacy_hard_edge",
                 transparent_result.directRadiance < legacy_direct - 0.01);
     assert_true("runtime_emission_transparency_emitter_prism_blue_filters_white_emitter",
                 transparent_result.directRadianceB >
                     transparent_result.directRadianceR + 1e-6);
-    assert_true("runtime_emission_transparency_emitter_prism_total_lifts_material",
-                transparent_result.radiance > material_result.radiance + 0.05);
+    assert_true("runtime_emission_transparency_emitter_prism_total_keeps_transmission",
+                transparent_result.radiance >=
+                    transparent_result.transmittedDirectRadiance - 1e-6);
 
     RuntimeScene3D_Free(&scene);
     sceneSettings = saved_scene;

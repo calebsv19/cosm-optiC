@@ -13,6 +13,12 @@ static double material_editor_layer_model_clamp01(double value) {
     return value;
 }
 
+static double material_editor_layer_model_clamp_signed(double value) {
+    if (value < -1.0) return -1.0;
+    if (value > 1.0) return 1.0;
+    return value;
+}
+
 static int material_editor_layer_model_clamp_index(const RuntimeMaterialTextureStack* stack,
                                                    int layer_index) {
     if (!stack || stack->layerCount <= 0) return 0;
@@ -396,6 +402,38 @@ bool MaterialEditorLayerModelApplyParamValue(const SceneObject* object,
     }
     layer.params = params;
     layer.placement.params = params;
+    stack.layers[index] = RuntimeMaterialTextureLayerNormalize(layer);
+    return MaterialEditorLayerModelSetStack(scene_object_index, &stack);
+}
+
+bool MaterialEditorLayerModelApplyInfluenceValue(const SceneObject* object,
+                                                 int scene_object_index,
+                                                 MaterialEditorLayerInfluenceKind kind,
+                                                 double signed_value) {
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    RuntimeMaterialTextureLayer layer;
+    int index = 0;
+    signed_value = material_editor_layer_model_clamp_signed(signed_value);
+    if (!material_editor_layer_model_update_active_layer(object,
+                                                         scene_object_index,
+                                                         &layer,
+                                                         &stack,
+                                                         &index)) {
+        return false;
+    }
+    if (kind == MATERIAL_EDITOR_LAYER_INFLUENCE_ROUGHNESS) {
+        layer.roughnessInfluence = signed_value;
+    } else if (kind == MATERIAL_EDITOR_LAYER_INFLUENCE_REFLECTIVITY) {
+        layer.reflectivityInfluence = signed_value;
+    } else if (kind == MATERIAL_EDITOR_LAYER_INFLUENCE_SPECULAR) {
+        layer.specularInfluence = signed_value;
+    } else if (kind == MATERIAL_EDITOR_LAYER_INFLUENCE_DIFFUSE) {
+        layer.diffuseInfluence = signed_value;
+    } else if (kind == MATERIAL_EDITOR_LAYER_INFLUENCE_TRANSPARENCY) {
+        layer.transparencyInfluence = signed_value;
+    } else {
+        return false;
+    }
     stack.layers[index] = RuntimeMaterialTextureLayerNormalize(layer);
     return MaterialEditorLayerModelSetStack(scene_object_index, &stack);
 }

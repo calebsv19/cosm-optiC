@@ -14,6 +14,7 @@
 #include "ui/menu_batch_panel.h"
 #include "ui/menu_layout.h"
 #include "ui/menu_panel_chrome.h"
+#include "ui/menu_resume_panel.h"
 #include "ui/menu_scene_project_summary.h"
 #include "ui/scene_source_catalog.h"
 #include "ui/scene_source_ui_labels.h"
@@ -251,6 +252,15 @@ static int test_menu_layout_builds_non_overlapping_primary_zones(void) {
                 screen.centerBatchRect.x + screen.centerBatchRect.w < screen.sliderPanelRect.x);
     assert_true("menu_layout_center_above_footer",
                 screen.centerBatchRect.y + screen.centerBatchRect.h <= screen.bottomActionRowRect.y);
+    assert_true("menu_layout_resume_panel_has_width", screen.centerResumeRect.w >= 300);
+    assert_true("menu_layout_batch_above_resume",
+                screen.centerBatchRect.y + screen.centerBatchRect.h < screen.centerResumeRect.y);
+    assert_true("menu_layout_resume_above_footer",
+                screen.centerResumeRect.y + screen.centerResumeRect.h <= screen.bottomActionRowRect.y);
+    assert_true("menu_layout_footer_starts_after_left_panel",
+                screen.bottomActionRowRect.x > screen.leftPanelRect.x + screen.leftPanelRect.w);
+    assert_true("menu_layout_left_panel_reaches_footer_band",
+                screen.leftPanelRect.y + screen.leftPanelRect.h > screen.bottomActionRowRect.y);
     animSettings = saved_anim;
     return 0;
 }
@@ -275,6 +285,8 @@ static int test_menu_layout_keeps_manifest_list_inside_left_panel(void) {
     menu_layout_finalize_with_buttons(&screen, &buttons, &state);
 
     assert_true("menu_layout_manifest_list_visible", screen.manifestReserveRect.w > 0 && screen.manifestReserveRect.h > 0);
+    assert_true("menu_layout_manifest_list_expanded_for_3d",
+                screen.manifestReserveRect.h > 300);
     assert_true("menu_layout_manifest_list_below_load_scene",
                 screen.manifestReserveRect.y >= buttons.loadSceneRect.y + buttons.loadSceneRect.h);
     assert_true("menu_layout_input_root_below_manifest_list",
@@ -287,8 +299,46 @@ static int test_menu_layout_keeps_manifest_list_inside_left_panel(void) {
                 test_rect_bottom(&screen.manifestReserveRect) <= test_rect_bottom(&screen.leftPanelRect));
     assert_true("menu_layout_batch_y_unchanged_when_manifest_opens",
                 screen.centerBatchRect.y == screen.centerControlsRect.y + screen.centerControlsRect.h + 18);
-    assert_true("menu_layout_batch_above_footer",
-                screen.centerBatchRect.y + screen.centerBatchRect.h <= screen.bottomActionRowRect.y);
+    assert_true("menu_layout_batch_above_resume",
+                screen.centerBatchRect.y + screen.centerBatchRect.h < screen.centerResumeRect.y);
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_menu_button_layout_compacts_scene_mode_controls_in_3d(void) {
+    MenuRuntimeState state;
+    MenuScreenLayout screen;
+    MenuButtonLayout buttons;
+    AnimationConfig saved_anim = animSettings;
+
+    memset(&state, 0, sizeof(state));
+    memset(&screen, 0, sizeof(screen));
+    memset(&buttons, 0, sizeof(buttons));
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.integratorMode = 2;
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.deepRenderMode = true;
+
+    menu_layout_build_base(NULL, &state, TEST_MENU_WIDTH, TEST_MENU_HEIGHT, &screen);
+    menu_render_build_button_layout(NULL, &state, &screen, &buttons);
+    menu_layout_finalize_with_buttons(&screen, &buttons, &state);
+
+    assert_true("menu_scene_mode_interactive_hidden_in_3d",
+                buttons.interactiveRect.w == 0 && buttons.interactiveRect.h == 0);
+    assert_true("menu_scene_mode_deep_render_compact_in_3d",
+                buttons.deepRenderRect.h < 40);
+    assert_true("menu_scene_mode_bounce_auto_same_row",
+                buttons.bounceRect.y == buttons.autoMp4Rect.y &&
+                buttons.bounceRect.x < buttons.autoMp4Rect.x);
+    assert_true("menu_scene_mode_load_scene_moves_up_in_3d",
+                buttons.loadSceneRect.y < 240);
+
+    animSettings.spaceMode = SPACE_MODE_2D;
+    memset(&buttons, 0, sizeof(buttons));
+    menu_render_build_button_layout(NULL, &state, &screen, &buttons);
+    assert_true("menu_scene_mode_interactive_visible_in_2d",
+                buttons.interactiveRect.w > 0 && buttons.interactiveRect.h >= 40);
+
     animSettings = saved_anim;
     return 0;
 }
@@ -322,19 +372,94 @@ static int test_menu_button_layout_respects_owned_screen_zones(void) {
                 buttons.spaceModeRect.y >= screen.routeStackRect.y &&
                 buttons.previewRect.y >= screen.routeStackRect.y &&
                 buttons.previewRect.y < test_rect_bottom(&screen.routeStackRect));
-    assert_true("menu_buttons_frame_resume_controls_inside_route_zone",
-                buttons.resumeFramesRect.x >= screen.routeStackRect.x &&
-                buttons.resumeFramesRect.y >= screen.routeStackRect.y &&
-                buttons.nextFrameRect.y >= screen.routeStackRect.y &&
-                buttons.nextFrameRect.y < test_rect_bottom(&screen.routeStackRect));
-    assert_true("menu_buttons_frame_resume_controls_left_of_start_stack",
-                buttons.resumeFramesRect.x < buttons.startRect.x &&
-                buttons.nextFrameRect.x < buttons.startRect.x);
+    assert_true("menu_buttons_route_actions_use_route_width",
+                buttons.startRect.x >= screen.routeStackRect.x &&
+                test_rect_right(&buttons.startRect) <= test_rect_right(&screen.routeStackRect));
     assert_true("menu_buttons_footer_inside_bottom_row",
+                buttons.exitRect.x >= screen.bottomActionRowRect.x &&
                 buttons.exitRect.y >= screen.bottomActionRowRect.y &&
                 buttons.saveRect.y >= screen.bottomActionRowRect.y &&
                 buttons.exitRect.y < test_rect_bottom(&screen.bottomActionRowRect) &&
                 buttons.saveRect.y < test_rect_bottom(&screen.bottomActionRowRect));
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_menu_resume_panel_layout_owns_frame_resume_controls(void) {
+    MenuRuntimeState state;
+    MenuScreenLayout screen;
+    MenuResumePanelLayout resume;
+    AnimationConfig saved_anim = animSettings;
+
+    memset(&state, 0, sizeof(state));
+    memset(&screen, 0, sizeof(screen));
+    memset(&resume, 0, sizeof(resume));
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.integratorMode = 2;
+    animSettings.spaceMode = SPACE_MODE_3D;
+
+    menu_layout_build_base(NULL, &state, TEST_MENU_WIDTH, TEST_MENU_HEIGHT, &screen);
+    menu_resume_panel_build_layout(NULL, &state, &screen, &resume);
+
+    assert_true("menu_resume_panel_inside_zone_left",
+                resume.panelRect.x >= screen.centerResumeRect.x);
+    assert_true("menu_resume_panel_inside_zone_right",
+                test_rect_right(&resume.panelRect) <= test_rect_right(&screen.centerResumeRect));
+    assert_true("menu_resume_panel_inside_zone_vertical",
+                resume.panelRect.y >= screen.centerResumeRect.y &&
+                test_rect_bottom(&resume.panelRect) <= test_rect_bottom(&screen.centerResumeRect));
+    assert_true("menu_resume_status_above_controls",
+                resume.statusRect.y < resume.resumeToggleRect.y);
+    assert_true("menu_resume_start_next_are_compact",
+                resume.startFrameRect.h < 40 &&
+                resume.nextExistingRect.h < 40);
+
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_menu_resume_panel_clicks_preserve_frame_behavior(void) {
+    MenuRuntimeState state;
+    MenuResumePanelLayout resume;
+    SDL_Event event;
+    AnimationConfig saved_anim = animSettings;
+
+    memset(&state, 0, sizeof(state));
+    memset(&resume, 0, sizeof(resume));
+    memset(&event, 0, sizeof(event));
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.startFrameIndex = 2;
+    animSettings.resumeFromExistingFrames = false;
+    state.exportBatchStatus.next_frame_index = 6;
+
+    resume.panelRect = (SDL_Rect){100, 100, 420, 150};
+    resume.resumeToggleRect = (SDL_Rect){112, 150, 190, 34};
+    resume.startFrameRect = (SDL_Rect){312, 150, 190, 34};
+    resume.nextExistingRect = (SDL_Rect){112, 192, 390, 34};
+
+    event.type = SDL_MOUSEBUTTONDOWN;
+    event.button.x = resume.resumeToggleRect.x + 4;
+    event.button.y = resume.resumeToggleRect.y + 4;
+    assert_true("menu_resume_toggle_click_consumed",
+                menu_resume_panel_handle_click(&event, &state, &resume));
+    assert_true("menu_resume_toggle_sets_resume", animSettings.resumeFromExistingFrames);
+
+    event.button.x = resume.startFrameRect.x + 4;
+    event.button.y = resume.startFrameRect.y + 4;
+    assert_true("menu_resume_start_click_consumed",
+                menu_resume_panel_handle_click(&event, &state, &resume));
+    assert_true("menu_resume_start_disables_resume", !animSettings.resumeFromExistingFrames);
+    assert_true("menu_resume_start_editing", state.editingStartFrame);
+    assert_true("menu_resume_start_buffer", strcmp(state.inputBuffer, "2") == 0);
+
+    state.exportBatchStatus.next_frame_index = 6;
+    event.button.x = resume.nextExistingRect.x + 4;
+    event.button.y = resume.nextExistingRect.y + 4;
+    assert_true("menu_resume_next_click_consumed",
+                menu_resume_panel_handle_click(&event, &state, &resume));
+    assert_true("menu_resume_next_sets_start", animSettings.startFrameIndex == 6);
+    assert_true("menu_resume_next_clears_edit", !state.editingStartFrame);
+
     animSettings = saved_anim;
     return 0;
 }
@@ -1322,6 +1447,9 @@ int run_test_ui_menu_contract_tests(void) {
     test_menu_layout_builds_non_overlapping_primary_zones();
     test_menu_layout_keeps_manifest_list_inside_left_panel();
     test_menu_button_layout_respects_owned_screen_zones();
+    test_menu_button_layout_compacts_scene_mode_controls_in_3d();
+    test_menu_resume_panel_layout_owns_frame_resume_controls();
+    test_menu_resume_panel_clicks_preserve_frame_behavior();
     test_menu_button_layout_exposes_volume_controls_in_3d_only();
     test_menu_batch_panel_layout_centers_inside_batch_zone();
     test_menu_batch_panel_header_does_not_overlap_route_rows();

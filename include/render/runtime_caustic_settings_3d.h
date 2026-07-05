@@ -34,6 +34,7 @@ typedef struct {
     bool surfaceReceiverFallbackEnabled;
     RuntimeCausticCacheGridMode3D cacheGridMode;
     bool debugSummaryEnabled;
+    bool debugExportEnabled;
 } RuntimeCausticSettings3D;
 
 typedef struct {

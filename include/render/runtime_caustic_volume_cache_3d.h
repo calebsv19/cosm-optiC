@@ -91,6 +91,11 @@ bool RuntimeCausticVolumeCache3D_DepositFootprintAtPosition(
 bool RuntimeCausticVolumeCache3D_SampleAtPosition(RuntimeCausticVolumeCache3D* cache,
                                                   Vec3 position,
                                                   Vec3* out_radiance);
+bool RuntimeCausticVolumeCache3D_SampleFilteredAtPosition(
+    RuntimeCausticVolumeCache3D* cache,
+    Vec3 position,
+    double radius_world,
+    Vec3* out_radiance);
 void RuntimeCausticVolumeCache3D_SnapshotDiagnostics(
     const RuntimeCausticVolumeCache3D* cache,
     RuntimeCausticVolumeCacheDiagnostics3D* out_diagnostics);

@@ -38,6 +38,7 @@
 #define MATERIAL_EDITOR_SUBPANE_COUNT 6
 #define MATERIAL_EDITOR_RESPONSE_ACTION_COUNT 2
 #define MATERIAL_EDITOR_GLASS_OVERLAY_ACTION_COUNT 5
+#define MATERIAL_EDITOR_LAYER_INFLUENCE_CONTROL_COUNT 5
 #define MATERIAL_EDITOR_COMPACT_HEADER_HEIGHT 24
 #define MATERIAL_EDITOR_COMPACT_TAB_HEIGHT 20
 #define MATERIAL_EDITOR_COMPACT_MIN_TAB_WIDTH 42
@@ -137,12 +138,17 @@ typedef struct MaterialEditorProofReadback {
     char mirror_proof_package[128];
     char mirror_proof_coverage[192];
     char mirror_missing_proof[192];
+    char metal_proof_case[96];
+    char metal_proof_package[128];
+    char metal_proof_coverage[192];
+    char metal_missing_proof[192];
     char destination_label[64];
     char panel_group_label[64];
     bool m4_request_compatible;
     bool launch_deferred;
     bool glass_proof_readback;
     bool mirror_proof_readback;
+    bool metal_proof_readback;
 } MaterialEditorProofReadback;
 
 typedef struct MaterialEditorGraphReadback {
@@ -202,11 +208,25 @@ typedef struct MaterialEditorActiveLayerReadback {
     char title[96];
     char detail[160];
     char layer_id[48];
+    char role_label[24];
+    char kind_label[64];
+    char source_label[64];
+    char edit_owner_label[64];
+    char state_label[48];
+    char response_summary[128];
     int active_index;
     int layer_count;
+    double opacity;
+    double strength;
+    double roughness_influence;
+    double reflectivity_influence;
+    double specular_influence;
+    double diffuse_influence;
+    double transparency_influence;
     bool has_layer;
     bool enabled;
     bool base_layer;
+    bool persisted_stack;
 } MaterialEditorActiveLayerReadback;
 
 typedef struct MaterialEditorTextureChannelReadback {
@@ -330,6 +350,10 @@ extern SDL_Rect s_response_action_rects[MATERIAL_EDITOR_RESPONSE_MAX_ROWS]
                                       [MATERIAL_EDITOR_RESPONSE_ACTION_COUNT];
 extern MaterialEditorResponseField
     s_response_action_fields[MATERIAL_EDITOR_RESPONSE_MAX_ROWS];
+extern SDL_Rect s_layer_influence_action_rects[MATERIAL_EDITOR_LAYER_INFLUENCE_CONTROL_COUNT]
+                                             [MATERIAL_EDITOR_RESPONSE_ACTION_COUNT];
+extern MaterialEditorLayerInfluenceKind
+    s_layer_influence_action_fields[MATERIAL_EDITOR_LAYER_INFLUENCE_CONTROL_COUNT];
 extern SDL_Rect s_glass_overlay_action_rects[MATERIAL_EDITOR_GLASS_OVERLAY_ACTION_COUNT];
 extern RuntimeMaterialTextureLayerKind
     s_glass_overlay_action_kinds[MATERIAL_EDITOR_GLASS_OVERLAY_ACTION_COUNT];

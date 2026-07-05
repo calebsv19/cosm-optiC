@@ -2,17 +2,19 @@ SDL Menu Guide
 ==============
 
 Layout overview (left → center → right):
-- Left column: mode toggles, bounce/auto, integrator and its sub-toggles.
-- Center column: forward falloff, tile renderer.
-- Right column: scene editor launch + mode toggle above Start; sliders on the far right.
-- Bottom row: Save, Restore Defaults, Preview, Exit w/o Saving, Start.
+- Left pane: mode-aware render controls, integrator/source controls, expanded
+  scene list, scene roots, and volume/atmosphere controls.
+- Center panes: Renderer Controls, Data I/O + Batch, then Frame Resume.
+- Right side: Render Settings sliders plus scene/editor/start/preview route actions.
+- Footer: Exit w/o Saving, Restore Defaults, and Save, starting to the right of the left pane.
 
 Buttons (top to bottom)
 -----------------------
 **Left column**
-- Interactive Mode: enable live interaction (disables Deep Render).
-- Deep Render: enable offline/deep render settings (disables Interactive).
-- Bounce Mode: toggle bounce animation for deep render playback.
+- Interactive Mode: legacy `2D` quick-light sandbox; hidden as a primary
+  control in native/compact `3D`.
+- Deep Render / 3D Render: enable offline/deep render settings.
+- Bounce / Bounce Mode: toggle bounce animation for deep render playback.
 - Auto MP4: auto-generate MP4 after deep render finishes.
 - Integrator: cycles Forward Light ↔ Hybrid (Camera Path) ↔ Direct Light (LOS-only).
 - Roulette: toggle Russian roulette termination (used by forward lighting).
@@ -28,13 +30,17 @@ Buttons (top to bottom)
 - Light Height: cycle the native `3D` light-height preset.
 - Data I/O + Batch: owns render-frame root, video-output root, batch frame/video
   actions, and the scene-only worker queue export action.
+- Frame Resume: owns resume-existing, start-frame editing, next-existing
+  readback, and future frame-inventory diagnostics.
 
 **Right column**
 - Scene Editor: opens the scene editor window.
 - Editor Mode: cycles Path ↔ Scene ↔ Camera for the scene editor default tab.
 - Start: launches the main run (interactive or deep render depending on toggles).
-- Save / Restore Defaults: save current settings or reset to defaults (status toast appears next to Save).
 - Preview: launches the lightweight path/camera preview.
+
+**Footer**
+- Save / Restore Defaults: save current settings or reset to defaults (status toast appears next to Save).
 - Exit w/o Saving: closes the menu without writing settings.
 
 Sliders (right side)

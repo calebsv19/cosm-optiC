@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,6 +14,8 @@ static const char* kMrt13PressureAssetPath =
     "tests/fixtures/mesh_asset_runtime_spheres/assets/mesh_assets/asset_sphere_256x128.runtime.json";
 static const char* kMrt13PackPath =
     "/private/tmp/ray_tracing_mrt13_asset_sphere_256x128.rtmeshpack";
+static const char* kMrt13CachePackPath =
+    "/private/tmp/ray_tracing_mrt13_asset_sphere_256x128.cache.rtmeshpack";
 
 static int g_runtime_mesh_asset_pack_failures = 0;
 
@@ -81,6 +84,28 @@ static double measure_pack_read_ms(const char* path, int repetitions) {
         core_mesh_asset_runtime_document_free(&document);
     }
     return repetitions > 0 ? total_ms / (double)repetitions : 0.0;
+}
+
+static void fill_source_key(const char* path,
+                            RayTracingRuntimeMeshAssetPackSourceKey* out_key) {
+    struct stat st;
+    uint64_t checksum = 0u;
+    memset(out_key, 0, sizeof(*out_key));
+    assert_true("mrt13_cache_stat_source", stat(path, &st) == 0);
+    assert_true("mrt13_cache_checksum_source",
+                ray_tracing_runtime_mesh_asset_pack_checksum_file(path, &checksum));
+    snprintf(out_key->source_path, sizeof(out_key->source_path), "%s", path);
+    out_key->source_mtime_sec = (int64_t)st.st_mtime;
+#if defined(__APPLE__)
+    out_key->source_mtime_nsec = (int64_t)st.st_mtimespec.tv_nsec;
+#else
+    out_key->source_mtime_nsec = 0;
+#endif
+    out_key->source_size_bytes = (int64_t)st.st_size;
+    out_key->source_checksum = checksum;
+    out_key->core_mesh_asset_schema_version = CORE_MESH_ASSET_SCHEMA_VERSION_1;
+    out_key->ray_tracing_cache_schema_version = 1u;
+    out_key->pointer_size_bytes = (uint32_t)sizeof(void*);
 }
 
 static void compare_sample_vertex(const CoreMeshAssetRuntimeDocument* a,
@@ -222,9 +247,61 @@ static int test_runtime_mesh_asset_pack_pressure_fixture(void) {
     return 0;
 }
 
+static int test_runtime_mesh_asset_pack_cache_metadata_rejects_stale_key(void) {
+    CoreMeshAssetRuntimeDocument json_document;
+    CoreMeshAssetRuntimeDocument packed_document;
+    RayTracingRuntimeMeshAssetPackSourceKey source_key;
+    RayTracingRuntimeMeshAssetPackSourceKey stale_key;
+    CoreResult load_result = core_result_ok();
+    char diagnostics[256] = {0};
+    bool ok = false;
+
+    remove(kMrt13CachePackPath);
+    core_mesh_asset_runtime_document_init(&packed_document);
+    load_result = core_mesh_asset_runtime_document_load_file(kMrt13PressureAssetPath,
+                                                            &json_document);
+    assert_true("mrt13_cache_json_load", load_result.code == CORE_OK);
+    if (load_result.code != CORE_OK) {
+        return 0;
+    }
+    fill_source_key(kMrt13PressureAssetPath, &source_key);
+    ok = ray_tracing_runtime_mesh_asset_pack_write_cache_file(kMrt13CachePackPath,
+                                                             &source_key,
+                                                             &json_document,
+                                                             diagnostics,
+                                                             sizeof(diagnostics));
+    assert_true("mrt13_cache_write", ok);
+    ok = ray_tracing_runtime_mesh_asset_pack_read_cache_file(kMrt13CachePackPath,
+                                                            &source_key,
+                                                            &packed_document,
+                                                            diagnostics,
+                                                            sizeof(diagnostics));
+    assert_true("mrt13_cache_read_with_matching_key", ok);
+    if (ok) {
+        assert_true("mrt13_cache_read_vertex_count",
+                    packed_document.vertex_count == json_document.vertex_count);
+        core_mesh_asset_runtime_document_free(&packed_document);
+    }
+
+    stale_key = source_key;
+    stale_key.source_size_bytes += 1;
+    ok = ray_tracing_runtime_mesh_asset_pack_read_cache_file(kMrt13CachePackPath,
+                                                            &stale_key,
+                                                            &packed_document,
+                                                            diagnostics,
+                                                            sizeof(diagnostics));
+    assert_true("mrt13_cache_rejects_stale_key", !ok);
+    assert_true("mrt13_cache_stale_diag", strstr(diagnostics, "stale") != NULL);
+
+    core_mesh_asset_runtime_document_free(&json_document);
+    remove(kMrt13CachePackPath);
+    return 0;
+}
+
 int run_test_runtime_mesh_asset_pack_tests(void) {
     int before = g_runtime_mesh_asset_pack_failures;
     test_runtime_mesh_asset_pack_pressure_fixture();
+    test_runtime_mesh_asset_pack_cache_metadata_rejects_stale_key();
     return g_runtime_mesh_asset_pack_failures - before;
 }
 

@@ -23,6 +23,8 @@
 #include "render/runtime_disney_v2_caustic_sidecar_3d.h"
 #include "render/runtime_caustic_bootstrap_3d.h"
 #include "render/runtime_caustic_transport_3d.h"
+#include "render/runtime_caustic_transport_debug_3d.h"
+#include "render/runtime_render_trace_cost_ledger_3d.h"
 #include "render/runtime_volume_3d_debug.h"
 #include "render/runtime_volume_3d_integrate.h"
 #include "render/runtime_volume_3d_scatter.h"
@@ -855,6 +857,7 @@ static void apply_inspection_overrides(const RayTracingAgentRenderRequest *reque
                                                        : 1.0);
     RuntimeCausticBootstrap3D_SetRequestState(&request->caustic_settings);
     RuntimeCausticTransport3D_SetRequestState(&request->caustic_settings);
+    RuntimeCausticTransportDebug3D_SetOutputRoot(request->output_root);
     if (request->has_volume_tint_override) {
         RuntimeVolume3DScatter_SetTint(request->volume_tint_r,
                                        request->volume_tint_g,
@@ -1202,13 +1205,21 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
         &preflight.dynamic_water_cache_stats);
     preflight.caustic_cache_prep_ms = frame.causticCachePrepMs;
     if (preflight.prepared_frame) {
+        bool flattened_bvh_required =
+            preflight.ray_trace_route_stats.requestedRoute !=
+            RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS;
+        bool prepared_tlas_ready =
+            preflight.scene_acceleration_stats.enabled &&
+            preflight.scene_acceleration_stats.tlasInstanceCount > 0u &&
+            preflight.scene_acceleration_stats.tlasNodeCount > 0u;
         preflight.environment_summary = frame.scene.environment;
         preflight.environment_summary_built = true;
         ray_tracing_headless_note_registered_lights(&preflight, &frame);
         RuntimeTriangleMesh3D_BVHBuildStats(&frame.scene.triangleMesh,
                                             &preflight.bvh_build_stats);
-        if (!preflight.bvh_build_stats.ready ||
-            preflight.bvh_build_stats.nodeCount <= 0) {
+        if (flattened_bvh_required &&
+            (!preflight.bvh_build_stats.ready ||
+             preflight.bvh_build_stats.nodeCount <= 0)) {
             snprintf(preflight.diagnostics,
                      sizeof(preflight.diagnostics),
                      "native 3D BVH unavailable after prepare: triangles=%d nodes=%d",
@@ -1218,6 +1229,34 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
             ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
                                           request,
                                           "bvh_failed",
+                                          request->start_frame,
+                                          0,
+                                          0,
+                                          0,
+                                          request->temporal_frames,
+                                          0u,
+                                          0u,
+                                          ray_tracing_elapsed_seconds_since(&preflight_started_at),
+                                          -1.0,
+                                          "failed",
+                                          preflight.diagnostics,
+                                          job_status_path,
+                                          job_id,
+                                          request_path,
+                                          6);
+            *out_preflight = preflight;
+            return 6;
+        }
+        if (!flattened_bvh_required && !prepared_tlas_ready) {
+            snprintf(preflight.diagnostics,
+                     sizeof(preflight.diagnostics),
+                     "native 3D TLAS unavailable after prepare: instances=%llu nodes=%llu",
+                     (unsigned long long)preflight.scene_acceleration_stats.tlasInstanceCount,
+                     (unsigned long long)preflight.scene_acceleration_stats.tlasNodeCount);
+            RuntimeNative3DPreparedFrame_Free(&frame);
+            ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
+                                          request,
+                                          "tlas_failed",
                                           request->start_frame,
                                           0,
                                           0,
@@ -1579,6 +1618,8 @@ static int run_render(const RayTracingAgentRenderRequest *request,
     }
     RuntimeTriangleBVH3D_ResetTraceStats();
     RuntimeRay3D_ResetRouteStats();
+    RuntimeRenderTraceCostLedger3D_SetEnabledFromEnvironment();
+    RuntimeRenderTraceCostLedger3D_Reset();
 
     for (int i = 0; i < request->frame_count; ++i) {
         char frame_path[PATH_MAX];
@@ -1726,6 +1767,7 @@ static int run_render(const RayTracingAgentRenderRequest *request,
         preflight.render_trace_ms += ray_tracing_elapsed_ms_since(&stage_started_at);
         preflight.render_frames_ms += ray_tracing_elapsed_ms_since(&stage_started_at);
         RuntimeTriangleBVH3D_SnapshotTraceStats(&preflight.bvh_trace_stats);
+        RuntimeRenderTraceCostLedger3D_Snapshot(&preflight.render_trace_cost_ledger);
         if (preflight.bvh_trace_stats.flatFallbackCalls > 0u) {
             snprintf(preflight.diagnostics,
                      sizeof(preflight.diagnostics),
@@ -1757,6 +1799,7 @@ static int run_render(const RayTracingAgentRenderRequest *request,
             return 9;
         }
         RuntimeNative3DRenderStats_Accumulate(&preflight.stats, &stats);
+        RuntimeRenderTraceCostLedger3D_Snapshot(&preflight.render_trace_cost_ledger);
         (void)clock_gettime(CLOCK_MONOTONIC, &stage_started_at);
         frame_nonzero_pixels = count_nonzero_pixels(pixels,
                                                     request->width,
@@ -1841,6 +1884,19 @@ static int run_render(const RayTracingAgentRenderRequest *request,
     RuntimeMeshBLASCache3D_SnapshotDiagnostics(&preflight.scene_acceleration_stats);
     RuntimeSceneAcceleration3D_AppendTLASDiagnostics(&preflight.scene_acceleration_stats);
     preflight.rendered_frames = preflight.frames_rendered == request->frame_count;
+    if (request->caustic_settings.debugExportEnabled) {
+        (void)RuntimeCausticTransportDebug3D_WriteCameraStats(
+            preflight.stats.causticVolumeScatterContributingSampleCount,
+            preflight.stats.causticVolumeScatterContributingPixelCount,
+            preflight.stats.totalCausticVolumeScatterPixelX,
+            preflight.stats.totalCausticVolumeScatterPixelY,
+            preflight.stats.causticVolumeScatterPixelMinX,
+            preflight.stats.causticVolumeScatterPixelMinY,
+            preflight.stats.causticVolumeScatterPixelMaxX,
+            preflight.stats.causticVolumeScatterPixelMaxY,
+            preflight.stats.totalCausticVolumeScatterSampledCacheRadiance,
+            preflight.stats.maxCausticVolumeScatterSampledCacheRadiance);
+    }
     if (preflight.rendered_frames && request->video_enabled) {
         int video_code = 0;
         ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,

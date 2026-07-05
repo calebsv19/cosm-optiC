@@ -3,10 +3,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "config/config_manager.h"
 #include "import/runtime_mesh_asset_loader.h"
 #include "import/runtime_scene_bridge.h"
+#include "render/runtime_mesh_accel_pack_3d.h"
 #include "render/runtime_mesh_blas_cache_3d.h"
 #include "render/runtime_ray_3d.h"
 #include "render/runtime_scene_accel_3d.h"
@@ -227,12 +231,20 @@ static int test_append_mesh_asset_set_preserves_scene_object_lookup(void) {
 }
 
 static int test_mesh_blas_cache_reuses_loaded_assets(void) {
+    const char* saved_mode = getenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE");
+    char saved_mode_copy[64] = {0};
     RayTracingRuntimeMeshAssetSet set;
     RuntimeScene3D first_scene;
     RuntimeScene3D second_scene;
     RuntimeSceneAcceleration3DDiagnostics stats;
     char diagnostics[256] = {0};
     bool ok = false;
+
+    if (saved_mode && saved_mode[0]) {
+        strncpy(saved_mode_copy, saved_mode, sizeof(saved_mode_copy) - 1);
+        saved_mode_copy[sizeof(saved_mode_copy) - 1] = '\0';
+    }
+    setenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE", "off", 1);
 
     ray_tracing_runtime_mesh_asset_set_init(&set);
     RuntimeScene3D_Init(&first_scene);
@@ -284,6 +296,104 @@ static int test_mesh_blas_cache_reuses_loaded_assets(void) {
     ray_tracing_runtime_mesh_asset_set_free(&set);
     RuntimeMeshBLASCache3D_ResetForTests();
     RuntimeSceneAcceleration3D_ResetTLASForTests();
+    if (saved_mode_copy[0]) {
+        setenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE", saved_mode_copy, 1);
+    } else {
+        unsetenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE");
+    }
+    return 0;
+}
+
+static int test_mesh_blas_persistent_cache_reuses_after_reset(void) {
+    const char* cache_root = "/private/tmp/ray_tracing_mrt3_blas_persistent_cache";
+    const char* cache_dir =
+        "/private/tmp/ray_tracing_mrt3_blas_persistent_cache/ray_tracing_runtime_mesh_asset_accel_cache";
+    const char* saved_root = getenv("RAY_TRACING_RUNTIME_MESH_ASSET_CACHE_ROOT");
+    const char* saved_mode = getenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE");
+    char saved_root_copy[PATH_MAX] = {0};
+    char saved_mode_copy[64] = {0};
+    RayTracingRuntimeMeshAssetSet set;
+    RuntimeScene3D first_scene;
+    RuntimeScene3D second_scene;
+    RuntimeSceneAcceleration3DDiagnostics stats;
+    char diagnostics[256] = {0};
+    bool ok = false;
+
+    if (saved_root && saved_root[0]) {
+        strncpy(saved_root_copy, saved_root, sizeof(saved_root_copy) - 1);
+        saved_root_copy[sizeof(saved_root_copy) - 1] = '\0';
+    }
+    if (saved_mode && saved_mode[0]) {
+        strncpy(saved_mode_copy, saved_mode, sizeof(saved_mode_copy) - 1);
+        saved_mode_copy[sizeof(saved_mode_copy) - 1] = '\0';
+    }
+
+    mkdir(cache_root, 0777);
+    setenv("RAY_TRACING_RUNTIME_MESH_ASSET_CACHE_ROOT", cache_root, 1);
+    setenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE", "read_write", 1);
+
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    RuntimeScene3D_Init(&first_scene);
+    RuntimeScene3D_Init(&second_scene);
+    RuntimeMeshBLASCache3D_ResetForTests();
+    RuntimeSceneAcceleration3D_ResetTLASForTests();
+
+    ok = ray_tracing_runtime_mesh_assets_load_scene_file(kMrt0ScenePath,
+                                                        &set,
+                                                        diagnostics,
+                                                        sizeof(diagnostics));
+    assert_true("mrt3_blas_persistent_load_fixture", ok);
+    if (ok) {
+        ok = RuntimeScene3DBuilder_AppendMeshAssetSet(&first_scene, &set);
+        assert_true("mrt3_blas_persistent_first_append", ok);
+        snapshot_accel_stats(&stats);
+        assert_true("mrt3_blas_persistent_first_rebuilds", stats.blasFullRebuilds == 3u);
+        assert_true("mrt3_blas_persistent_first_writes",
+                    stats.blasPersistentCacheWrites == 3u);
+        assert_true("mrt3_blas_persistent_first_no_hits",
+                    stats.blasPersistentCacheHits == 0u);
+
+        RuntimeMeshBLASCache3D_ResetForTests();
+        RuntimeSceneAcceleration3D_ResetTLASForTests();
+        ok = RuntimeScene3DBuilder_AppendMeshAssetSet(&second_scene, &set);
+        assert_true("mrt3_blas_persistent_second_append", ok);
+        snapshot_accel_stats(&stats);
+        assert_true("mrt3_blas_persistent_second_inprocess_misses",
+                    stats.blasCacheMisses == 3u);
+        assert_true("mrt3_blas_persistent_second_hits",
+                    stats.blasPersistentCacheHits == 3u);
+        assert_true("mrt3_blas_persistent_second_no_rebuilds",
+                    stats.blasFullRebuilds == 0u);
+        assert_true("mrt3_blas_persistent_second_cached_assets",
+                    stats.blasCachedAssetCount == 3u);
+    }
+
+    for (int i = 0; i < set.asset_count; ++i) {
+        char cache_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+        if (RuntimeMeshAccelPack3D_CachePathForSource(cache_dir,
+                                                      set.assets[i].path,
+                                                      cache_path,
+                                                      sizeof(cache_path))) {
+            remove(cache_path);
+        }
+    }
+    RuntimeScene3D_Free(&second_scene);
+    RuntimeScene3D_Free(&first_scene);
+    ray_tracing_runtime_mesh_asset_set_free(&set);
+    RuntimeMeshBLASCache3D_ResetForTests();
+    RuntimeSceneAcceleration3D_ResetTLASForTests();
+    rmdir(cache_dir);
+    rmdir(cache_root);
+    if (saved_root_copy[0]) {
+        setenv("RAY_TRACING_RUNTIME_MESH_ASSET_CACHE_ROOT", saved_root_copy, 1);
+    } else {
+        unsetenv("RAY_TRACING_RUNTIME_MESH_ASSET_CACHE_ROOT");
+    }
+    if (saved_mode_copy[0]) {
+        setenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE", saved_mode_copy, 1);
+    } else {
+        unsetenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE");
+    }
     return 0;
 }
 
@@ -770,6 +880,161 @@ static int test_append_mesh_asset_set_skips_degenerate_triangles(void) {
     return 0;
 }
 
+static int test_tlas_bind_accepts_copied_prepared_scene(void) {
+    RayTracingRuntimeMeshAssetSet set;
+    RuntimeScene3D scene;
+    RuntimeScene3D copied_scene;
+    CoreMeshAssetRuntimeDocument* document = NULL;
+    RuntimeRay3DRouteStats route_stats;
+    HitInfo3D route_hit = {0};
+    Ray3D ray = RuntimeRay3D_Make(vec3(0.25, 0.25, -1.0), vec3(0.0, 0.0, 1.0));
+    bool ok = false;
+    bool route_found = false;
+
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    RuntimeScene3D_Init(&scene);
+    RuntimeScene3D_Init(&copied_scene);
+    RuntimeMeshBLASCache3D_ResetForTests();
+    RuntimeSceneAcceleration3D_ResetTLASForTests();
+
+    set.asset_count = 1;
+    snprintf(set.assets[0].asset_id, sizeof(set.assets[0].asset_id), "asset_copy_bind");
+    document = &set.assets[0].document;
+    core_mesh_asset_runtime_document_set_vertex_count(document, 3u);
+    core_mesh_asset_runtime_document_set_triangle_count(document, 1u);
+    document->vertices[0].position.x = 0.0;
+    document->vertices[0].position.y = 0.0;
+    document->vertices[0].position.z = 0.0;
+    document->vertices[1].position.x = 1.0;
+    document->vertices[1].position.y = 0.0;
+    document->vertices[1].position.z = 0.0;
+    document->vertices[2].position.x = 0.0;
+    document->vertices[2].position.y = 1.0;
+    document->vertices[2].position.z = 0.0;
+    document->triangles[0].a = 0u;
+    document->triangles[0].b = 1u;
+    document->triangles[0].c = 2u;
+
+    set.instance_count = 1;
+    snprintf(set.instances[0].object_id,
+             sizeof(set.instances[0].object_id),
+             "obj_copy_bind_triangle");
+    snprintf(set.instances[0].asset_id, sizeof(set.instances[0].asset_id), "asset_copy_bind");
+    set.instances[0].asset_index = 0;
+    set.instances[0].scene_object_index = 41;
+    set.instances[0].scale_x = 1.0;
+    set.instances[0].scale_y = 1.0;
+    set.instances[0].scale_z = 1.0;
+
+    ok = RuntimeScene3DBuilder_AppendMeshAssetSet(&scene, &set);
+    assert_true("mrt3_tlas_bind_copy_append", ok);
+    if (ok) {
+        ok = RuntimeScene3D_CopyGeometryFrom(&copied_scene, &scene);
+        assert_true("mrt3_tlas_bind_copy_geometry", ok);
+    }
+    if (ok) {
+        ok = RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(&copied_scene);
+        assert_true("mrt3_tlas_bind_copy_ok", ok);
+    }
+    if (ok) {
+        RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS);
+        RuntimeRay3D_ResetRouteStats();
+        route_found = RuntimeRay3D_TraceSceneFirstHit(&copied_scene,
+                                                      &ray,
+                                                      0.001,
+                                                      10.0,
+                                                      &route_hit);
+        assert_true("mrt3_tlas_bind_copy_route_hit", route_found);
+        if (route_found) {
+            assert_true("mrt3_tlas_bind_copy_object", route_hit.sceneObjectIndex == 41);
+            assert_true("mrt3_tlas_bind_copy_triangle", route_hit.triangleIndex == 0);
+        }
+        RuntimeRay3D_SnapshotRouteStats(&route_stats);
+        assert_true("mrt3_tlas_bind_copy_no_unready",
+                    route_stats.tlasTraceUnready == 0u);
+        assert_true("mrt3_tlas_bind_copy_no_fallback",
+                    route_stats.flattenedFallbackCalls == 0u);
+        assert_true("mrt3_tlas_bind_copy_no_flattened",
+                    route_stats.flattenedTraceCalls == 0u);
+        RuntimeRay3D_ResetTraceRouteForTests();
+        RuntimeRay3D_ResetRouteStats();
+    }
+
+    RuntimeScene3D_Free(&copied_scene);
+    RuntimeScene3D_Free(&scene);
+    ray_tracing_runtime_mesh_asset_set_free(&set);
+    RuntimeMeshBLASCache3D_ResetForTests();
+    RuntimeSceneAcceleration3D_ResetTLASForTests();
+    return 0;
+}
+
+static int test_tlas_bind_rejects_same_count_geometry_drift(void) {
+    RayTracingRuntimeMeshAssetSet set;
+    RuntimeScene3D scene;
+    RuntimeScene3D copied_scene;
+    CoreMeshAssetRuntimeDocument* document = NULL;
+    bool ok = false;
+
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    RuntimeScene3D_Init(&scene);
+    RuntimeScene3D_Init(&copied_scene);
+    RuntimeMeshBLASCache3D_ResetForTests();
+    RuntimeSceneAcceleration3D_ResetTLASForTests();
+
+    set.asset_count = 1;
+    snprintf(set.assets[0].asset_id, sizeof(set.assets[0].asset_id), "asset_drift_bind");
+    document = &set.assets[0].document;
+    core_mesh_asset_runtime_document_set_vertex_count(document, 3u);
+    core_mesh_asset_runtime_document_set_triangle_count(document, 1u);
+    document->vertices[0].position.x = 0.0;
+    document->vertices[0].position.y = 0.0;
+    document->vertices[0].position.z = 0.0;
+    document->vertices[1].position.x = 1.0;
+    document->vertices[1].position.y = 0.0;
+    document->vertices[1].position.z = 0.0;
+    document->vertices[2].position.x = 0.0;
+    document->vertices[2].position.y = 1.0;
+    document->vertices[2].position.z = 0.0;
+    document->triangles[0].a = 0u;
+    document->triangles[0].b = 1u;
+    document->triangles[0].c = 2u;
+
+    set.instance_count = 1;
+    snprintf(set.instances[0].object_id,
+             sizeof(set.instances[0].object_id),
+             "obj_drift_bind_triangle");
+    snprintf(set.instances[0].asset_id,
+             sizeof(set.instances[0].asset_id),
+             "asset_drift_bind");
+    set.instances[0].asset_index = 0;
+    set.instances[0].scene_object_index = 42;
+    set.instances[0].scale_x = 1.0;
+    set.instances[0].scale_y = 1.0;
+    set.instances[0].scale_z = 1.0;
+
+    ok = RuntimeScene3DBuilder_AppendMeshAssetSet(&scene, &set);
+    assert_true("mrt3_tlas_bind_drift_append", ok);
+    if (ok) {
+        ok = RuntimeScene3D_CopyGeometryFrom(&copied_scene, &scene);
+        assert_true("mrt3_tlas_bind_drift_copy", ok);
+    }
+    if (ok && copied_scene.triangleMesh.triangleCount > 0) {
+        copied_scene.triangleMesh.triangles[0].p0.x += 0.125;
+        ok = RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(&copied_scene);
+        assert_true("mrt3_tlas_bind_drift_rejected", !ok);
+        assert_true("mrt3_tlas_bind_drift_diag",
+                    strstr(RuntimeSceneAcceleration3D_LastDiagnostics(),
+                           "geometry signature differs") != NULL);
+    }
+
+    RuntimeScene3D_Free(&copied_scene);
+    RuntimeScene3D_Free(&scene);
+    ray_tracing_runtime_mesh_asset_set_free(&set);
+    RuntimeMeshBLASCache3D_ResetForTests();
+    RuntimeSceneAcceleration3D_ResetTLASForTests();
+    return 0;
+}
+
 static int test_bridge_builder_consumes_retained_mesh_assets(void) {
     RuntimeScene3D scene;
     char diagnostics[256] = {0};
@@ -798,9 +1063,12 @@ static int test_bridge_builder_consumes_retained_mesh_assets(void) {
 int main(void) {
     test_append_mesh_asset_set_preserves_scene_object_lookup();
     test_mesh_blas_cache_reuses_loaded_assets();
+    test_mesh_blas_persistent_cache_reuses_after_reset();
     test_mesh_blas_cache_builds_once_for_repeated_instances();
     test_tlas_route_traces_mixed_supported_and_primitive_instances();
     test_append_mesh_asset_set_skips_degenerate_triangles();
+    test_tlas_bind_accepts_copied_prepared_scene();
+    test_tlas_bind_rejects_same_count_geometry_drift();
     test_bridge_builder_consumes_retained_mesh_assets();
     return g_failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

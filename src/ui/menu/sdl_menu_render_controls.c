@@ -25,11 +25,13 @@
 #define MENU_MARGIN_Y 30
 #define TOGGLE_BUTTON_WIDTH 200
 #define TOGGLE_BUTTON_HEIGHT 50
+#define COMPACT_TOGGLE_BUTTON_HEIGHT 34
 #define TOGGLE_BUTTON_MARGIN_X MENU_MARGIN_X
 #define TOGGLE_BUTTON_MARGIN_Y MENU_MARGIN_Y
 #define TOGGLE_BUTTON_SPACING 10
 #define SUBSETTING_BUTTON_WIDTH 175
 #define SUBSETTING_BUTTON_HEIGHT 40
+#define COMPACT_SUBSETTING_BUTTON_HEIGHT 30
 #define SUBSETTING_BUTTON_MARGIN_X (MENU_MARGIN_X + 10)
 #define BOTTOM_BUTTON_SPACING 10
 #define BOTTOM_BUTTON_WIDTH_START 200
@@ -384,7 +386,7 @@ static SDL_Rect build_adaptive_button_rect_right(TTF_Font* font,
 }
 
 void menu_render_draw_button_rect(SDL_Renderer *renderer, TTF_Font *font, const SDL_Rect* rect, const char *text, bool active) {
-    if (!rect) return;
+    if (!rect || rect->w <= 0 || rect->h <= 0) return;
     RayTracingThemePalette palette = {0};
     const bool has_shared_palette = ray_tracing_shared_theme_resolve_palette(&palette);
     SDL_Color fill = has_shared_palette
@@ -529,6 +531,8 @@ void menu_render_build_button_layout(TTF_Font* font,
     int leftTopY = TOGGLE_BUTTON_MARGIN_Y;
     int routeTopY = 0;
     int footerButtonY = BOTTOM_BUTTON_MARGIN_Y_EXIT;
+    const bool compact_scene_mode =
+        animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D;
 
     memset(&layout, 0, sizeof(layout));
     layout.showPathToggles = integrator_menu.showPathToggles;
@@ -546,27 +550,61 @@ void menu_render_build_button_layout(TTF_Font* font,
     }
     if (maxLeftWidth < 120) maxLeftWidth = 120;
 
-    layout.interactiveRect = build_adaptive_button_rect(font, leftX, leftTopY,
-                                                        TOGGLE_BUTTON_WIDTH, TOGGLE_BUTTON_HEIGHT,
-                                                        "Interactive Mode", maxLeftWidth);
-    layout.deepRenderRect = build_adaptive_button_rect(font, leftX,
-                                                       layout.interactiveRect.y + layout.interactiveRect.h + TOGGLE_BUTTON_SPACING,
-                                                       TOGGLE_BUTTON_WIDTH, TOGGLE_BUTTON_HEIGHT,
-                                                       "Deep Render", maxLeftWidth);
+    if (compact_scene_mode) {
+        int mode_row_w = (maxLeftWidth - 8) / 2;
+        if (mode_row_w < 120) mode_row_w = 120;
+        layout.interactiveRect = (SDL_Rect){0, 0, 0, 0};
+        layout.deepRenderRect = build_adaptive_button_rect(font,
+                                                           leftX,
+                                                           leftTopY,
+                                                           TOGGLE_BUTTON_WIDTH,
+                                                           COMPACT_TOGGLE_BUTTON_HEIGHT,
+                                                           "3D Render",
+                                                           maxLeftWidth);
+        layout.bounceRect = build_adaptive_button_rect(font,
+                                                       leftX,
+                                                       layout.deepRenderRect.y + layout.deepRenderRect.h + 8,
+                                                       mode_row_w,
+                                                       COMPACT_SUBSETTING_BUTTON_HEIGHT,
+                                                       "Bounce",
+                                                       mode_row_w);
+        layout.autoMp4Rect = build_adaptive_button_rect(font,
+                                                        leftX + maxLeftWidth - mode_row_w,
+                                                        layout.bounceRect.y,
+                                                        mode_row_w,
+                                                        COMPACT_SUBSETTING_BUTTON_HEIGHT,
+                                                        "Auto MP4",
+                                                        mode_row_w);
+        layout.integratorRect = build_adaptive_button_rect(font,
+                                                           leftX,
+                                                           layout.bounceRect.y + layout.bounceRect.h + 8,
+                                                           INTEGRATOR_BUTTON_WIDTH,
+                                                           COMPACT_TOGGLE_BUTTON_HEIGHT,
+                                                           integratorLabel,
+                                                           maxLeftWidth);
+    } else {
+        layout.interactiveRect = build_adaptive_button_rect(font, leftX, leftTopY,
+                                                            TOGGLE_BUTTON_WIDTH, TOGGLE_BUTTON_HEIGHT,
+                                                            "Interactive Mode", maxLeftWidth);
+        layout.deepRenderRect = build_adaptive_button_rect(font, leftX,
+                                                           layout.interactiveRect.y + layout.interactiveRect.h + TOGGLE_BUTTON_SPACING,
+                                                           TOGGLE_BUTTON_WIDTH, TOGGLE_BUTTON_HEIGHT,
+                                                           "Deep Render", maxLeftWidth);
 
-    layout.bounceRect = build_adaptive_button_rect(font, subX,
-                                                   layout.deepRenderRect.y + layout.deepRenderRect.h + 15,
-                                                   SUBSETTING_BUTTON_WIDTH, SUBSETTING_BUTTON_HEIGHT,
-                                                   "Bounce Mode", maxLeftWidth);
-    layout.autoMp4Rect = build_adaptive_button_rect(font, subX,
-                                                    layout.bounceRect.y + layout.bounceRect.h + TOGGLE_BUTTON_SPACING,
-                                                    SUBSETTING_BUTTON_WIDTH, SUBSETTING_BUTTON_HEIGHT,
-                                                    "Auto MP4", maxLeftWidth);
+        layout.bounceRect = build_adaptive_button_rect(font, subX,
+                                                       layout.deepRenderRect.y + layout.deepRenderRect.h + 15,
+                                                       SUBSETTING_BUTTON_WIDTH, SUBSETTING_BUTTON_HEIGHT,
+                                                       "Bounce Mode", maxLeftWidth);
+        layout.autoMp4Rect = build_adaptive_button_rect(font, subX,
+                                                        layout.bounceRect.y + layout.bounceRect.h + TOGGLE_BUTTON_SPACING,
+                                                        SUBSETTING_BUTTON_WIDTH, SUBSETTING_BUTTON_HEIGHT,
+                                                        "Auto MP4", maxLeftWidth);
 
-    layout.integratorRect = build_adaptive_button_rect(font, leftX,
-                                                       layout.autoMp4Rect.y + layout.autoMp4Rect.h + 10,
-                                                       INTEGRATOR_BUTTON_WIDTH, INTEGRATOR_BUTTON_HEIGHT,
-                                                       integratorLabel, maxLeftWidth);
+        layout.integratorRect = build_adaptive_button_rect(font, leftX,
+                                                           layout.autoMp4Rect.y + layout.autoMp4Rect.h + 10,
+                                                           INTEGRATOR_BUTTON_WIDTH, INTEGRATOR_BUTTON_HEIGHT,
+                                                           integratorLabel, maxLeftWidth);
+    }
 
     layout.pathRouletteRect = build_adaptive_button_rect(font, leftX,
                                                          layout.integratorRect.y + layout.integratorRect.h + 10,
@@ -821,57 +859,6 @@ void menu_render_build_button_layout(TTF_Font* font,
                                                             screen_layout ? routeTopY : (layout.sceneModeRect.y - (BOTTOM_BUTTON_HEIGHT_START + 6)),
                                                             BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START,
                                                             menu_space_mode_button_label(), 0);
-    if (screen_layout) {
-        const int stackGap = 12;
-        const int stackWidth = screen_layout->routeStackRect.w - 20;
-        int leftControlWidth = 190;
-        int rightStackWidth = 0;
-        int leftControlX = screen_layout->routeStackRect.x + 10;
-        int rightStackX = 0;
-
-        if (leftControlWidth > stackWidth - stackGap - 120) {
-            leftControlWidth = max_int(120, (stackWidth - stackGap) / 2);
-        }
-        rightStackWidth = stackWidth - leftControlWidth - stackGap;
-        if (rightStackWidth < 120) {
-            rightStackWidth = 120;
-            leftControlWidth = stackWidth - stackGap - rightStackWidth;
-        }
-        rightStackX = leftControlX + leftControlWidth + stackGap;
-
-        layout.resumeFramesRect = build_adaptive_button_rect(font,
-                                                             leftControlX,
-                                                             layout.sceneEditorRect.y,
-                                                             leftControlWidth,
-                                                             BOTTOM_BUTTON_HEIGHT_START,
-                                                             "Resume Existing: OFF",
-                                                             leftControlWidth);
-        layout.startFrameRect = build_adaptive_button_rect(font,
-                                                           leftControlX,
-                                                           layout.startRect.y,
-                                                           leftControlWidth,
-                                                           BOTTOM_BUTTON_HEIGHT_START,
-                                                           "Start Frame: 0",
-                                                           leftControlWidth);
-        layout.nextFrameRect = build_adaptive_button_rect(font,
-                                                          leftControlX,
-                                                          layout.previewRect.y,
-                                                          leftControlWidth,
-                                                          BOTTOM_BUTTON_HEIGHT_START,
-                                                          "Next Existing: 0",
-                                                          leftControlWidth);
-
-        layout.spaceModeRect.x = rightStackX;
-        layout.spaceModeRect.w = rightStackWidth;
-        layout.sceneModeRect.x = rightStackX;
-        layout.sceneModeRect.w = rightStackWidth;
-        layout.sceneEditorRect.x = rightStackX;
-        layout.sceneEditorRect.w = rightStackWidth;
-        layout.startRect.x = rightStackX;
-        layout.startRect.w = rightStackWidth;
-        layout.previewRect.x = rightStackX;
-        layout.previewRect.w = rightStackWidth;
-    }
     layout.exitRect = build_adaptive_button_rect(font,
                                                  screen_layout ? (screen_layout->bottomActionRowRect.x + 14) : BOTTOM_BUTTON_MARGIN_X_EXIT,
                                                  footerButtonY,
