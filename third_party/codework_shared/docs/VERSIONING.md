@@ -24,6 +24,8 @@ Modules covered:
 - `shared/core/core_trace`
 - `shared/core/core_sim_trace`
 - `shared/core/core_math`
+- `shared/core/core_collision2d`
+- `shared/core/core_rigid2d`
 - `shared/core/core_pane`
 - `shared/core/core_pane_module`
 - `shared/core/core_pane_snapshot`

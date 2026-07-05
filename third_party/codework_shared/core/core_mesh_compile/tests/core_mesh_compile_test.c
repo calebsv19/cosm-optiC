@@ -362,7 +362,7 @@ static int test_imported_binary_stl_too_many_triangles_guardrail(void) {
     core_mesh_asset_authoring_document_init(&authoring);
     core_mesh_asset_runtime_document_init(&runtime);
 
-    CHECK(write_binary_repeated_triangle_stl(path, 250001u));
+    CHECK(write_binary_repeated_triangle_stl(path, 3000001u));
     CHECK(core_mesh_asset_authoring_document_load_file(
               "tests/fixtures/mesh_asset_authoring_v1_imported_stl_tetrahedron.json",
               &authoring).code == CORE_OK);
