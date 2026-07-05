@@ -26,3 +26,11 @@ reviewed left-to-right, top-to-bottom without guessing which cell maps to which
 candidate.
 
 These sets are meant to be regenerated and replaced as material tuning changes.
+
+## Current Sets
+
+- [`m11_s5_material_family_preview_grid`](m11_s5_material_family_preview_grid/)
+  - promoted M11 visual proof grid comparing Glass, Mirror, and Rough Metal
+    variants through the headless material preview CLI.
+- [`grime_overlay_sweep_v1`](grime_overlay_sweep_v1/)
+  - earlier grime overlay sweep reference set.

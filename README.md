@@ -84,7 +84,7 @@ is the unattended source-run proof: it renders and validates a first-frame BMP,
 writes validation metrics, and prints:
 
 ```text
-ray_tracing visual artifact ready: /Users/calebsv/Desktop/CodeWork/ray_tracing/visual_artifacts/source_first_frame/frames/frame_0000.bmp
+ray_tracing visual artifact ready: <repo>/ray_tracing/visual_artifacts/source_first_frame/frames/frame_0000.bmp
 ```
 
 Generated visual proof files live under the ignored
@@ -112,6 +112,8 @@ This renumbers captured BMP frames from `data/runtime/frames/default/` by defaul
 ## Docs
 
 - public docs index: `docs/README.md`
+- agent-control guide: `docs/AGENT_CONTROL.md`
+- canonical agent demo pack: `docs/AGENT_DEMO_PACK.md`
 - runtime controls: `docs/KEYBINDS.md`
 - current-state contract: `docs/current_truth.md`
 - near-term direction: `docs/future_intent.md`

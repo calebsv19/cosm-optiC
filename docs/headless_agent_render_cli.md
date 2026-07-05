@@ -47,11 +47,14 @@ parseable and nonblank, writes metrics to
 prints:
 
 ```text
-ray_tracing visual artifact ready: /Users/calebsv/Desktop/CodeWork/ray_tracing/visual_artifacts/source_first_frame/frames/frame_0000.bmp
+ray_tracing visual artifact ready: <repo>/ray_tracing/visual_artifacts/source_first_frame/frames/frame_0000.bmp
 ```
 
 `visual_artifacts/` is ignored and is separate from the `build/agent_runs/`
 test-output roots.
+
+For the canonical RT-R2 agent demo pack, including the richer mesh-asset spheres
+scene and local queue-bundle dry run, see `docs/AGENT_DEMO_PACK.md`.
 
 On non-Darwin builds the binary may be under:
 
@@ -601,6 +604,13 @@ vertices, and triangles. Nested `scene_builder` fields cover primitive seeding,
 mesh append reserve/expansion, BVH rebuild wall time, mesh instance counts, and
 expected/appended triangle counts. Treat these fields as diagnostic timing
 telemetry for local/private performance proofing, not as promotion gates.
+
+For static file-backed runtime mesh startup proofing, prepared acceleration
+summaries also expose persistent BLAS/BVH cache counters:
+`blas_persistent_cache_hits`, misses, writes, invalidations, refreshes, read
+milliseconds, and write milliseconds. The startup timing matrix mirrors those
+as `mesh_local_blas_persistent_cache_read` and
+`mesh_local_blas_persistent_cache_write` stages.
 
 The `bvh_summary` object includes diagnostic build microtiming fields for
 high-triangle capacity work: allocation, centroid build, inclusive tree build,

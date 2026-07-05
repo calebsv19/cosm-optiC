@@ -127,6 +127,37 @@ Last updated: 2026-07-04
   scatter summaries also report sampled cache radiance, density/remap,
   scatter probability, camera transmittance, final visibility term, and
   contributing screen-space concentration for final visibility diagnostics.
+  The caustic-cache scatter path treats cached caustic energy as focused
+  transport beam energy rather than applying ordinary direct-light isotropic
+  phase attenuation a second time; direct volume fog remains on its separate
+  scatter-gain path. Caustic-cache volume scatter now samples that derived
+  cache with a bounded voxel-scale filter so camera-ray VF3D march samples can
+  see nearby narrow beam deposits instead of requiring exact occupied-cell
+  point hits.
+  The local sphere/mist matrix now uses a review-oriented oblique fixture with
+  separate no-caustic, surface-only, volume-only, and combined cells plus
+  contract/overlay sheets; current readback proves a separable but still
+  narrow volume-caustic column rather than a broad readable mist beam. The
+  surface-only review cell has now been calibrated down from the earlier
+  proof-scale settings, so volume-only is the primary VF3D caustic visual
+  proof while the combined cell remains an integration check. Phase 11J
+  calibrated the surface review cells to surface radiance scale `0.5` and
+  footprint scale `1.0`; surface-only is no longer classified as overexposed,
+  and it no longer dominates the combined cell. Phase 11K then widened
+  renderer-side caustic-volume segment footprints without changing direct fog
+  gain or VF3D density. The local sphere/mist matrix now writes
+  `phase11k_readback` and passes: volume-only rises to `83` positive pixels,
+  `263` nonzero cache cells, occupancy `0.008026123`, hit ratio `0.008578998`,
+  `451` contributing scatter pixels, average footprint radius `1.828057509`
+  voxels, `0.562499986 x 0.562499986 x 1.912499949` world-span, and `21 x 50`
+  screen-span; it is no longer classified as a narrow column.
+  A follow-up local authored-validation matrix now exercises the same
+  volume-caustic-only proof across three authored mesh-sphere variants and
+  reports explicit threshold margins for visual area, luma delta, cache
+  occupancy, cache hit ratio, scatter/cache conversion, and lateral spread.
+  The conservative `256x128`, `128x64`, and raised `64x32` authored variants
+  pass locally; this is broader local validation, not remote render,
+  latest-good promotion, or coverage for cylinder/bowl/water-like shapes.
   Headless
   `ray_tracing_render_headless` requests can override
   `render.denoise_enabled` per detached run. The D2.18b visual matrix runner
@@ -541,6 +572,12 @@ Last updated: 2026-07-04
     when an older saved config still carries the legacy `interactiveMode=true`
     bit; deep-render config load treats deep render as the authoritative
     authored-motion mode instead of freezing the light at the interactive seed
+- Main-menu `Scene + Mode` is mode-aware:
+  - legacy `Interactive Mode` remains available in `2D` mode for the quick
+    mouse-driven light sandbox
+  - native/compact `3D` mode hides the oversized interactive primary control,
+    compresses `3D Render`, `Bounce`, `Auto MP4`, and integrator controls, and
+    gives the always-visible runtime scene list more vertical space
 - Export/video workflow state:
   - `frameDir` remains frame export root
   - `videoOutputRoot` remains persisted runtime config state
@@ -557,6 +594,12 @@ Last updated: 2026-07-04
     from `RAY_TRACING_WORKER_RENDER_REQUEST`, `render_request.json`, or
     `ray_tracing_request.json` beside that runtime scene before writing a
     queue-ready item under `visual_artifacts/worker_queue_exports/`
+  - main-menu frame-resume state now lives in a compact `Frame Resume` pane
+    below `Data I/O + Batch`; it owns resume-existing, start-frame editing, and
+    next-existing readback instead of using oversized route-stack buttons
+  - the global persistence footer now starts to the right of the full-height
+    `Scene + Mode` pane, so `Exit w/o Saving`, `Restore Defaults`, and `Save`
+    no longer compete with left-pane scene/volume controls
 - Main-menu Renderer Controls now use a tabbed center panel:
   - `Lighting` owns environment mode, environment preset, background
     brightness auto/manual, ambient brightness, top-fill strength, direct-light
@@ -695,14 +738,58 @@ Last updated: 2026-07-04
       static runtime mesh assets
     - flattened median-split scene BVH remains the explicit compatibility route
       and fallback for unsupported, unready, no-BVH, or stack-overflow cases
+    - pure `tlas_blas` bridge-scene construction skips the flattened scene BVH
+      build; explicit `flattened_bvh`, parity/debug routes, and fallback-capable
+      routes still build the flattened compatibility BVH
+    - retained runtime mesh asset sets record scene and sidecar file stamps, so
+      runtime-scene preflight can reuse the just-loaded mesh documents when all
+      stamps still match and can fall back to normal validation when any file
+      changes
+    - prepared TLAS state records a bounded geometry signature in addition to
+      primitive and triangle counts; copied prepared scenes can rebind and
+      trace through TLAS when their geometry is identical, while sampled
+      same-count geometry drift is rejected with an explicit bind diagnostic
+      instead of silently tracing with stale TLAS identity
+    - runtime mesh asset loading now has a RayTracing-local persistent document
+      pack cache for cold-process startup: cache files are derived from
+      `mesh_asset_runtime_v1` sidecars, keyed by source path/size/mtime plus
+      schema/host metadata, loaded into the same `CoreMeshAssetRuntimeDocument`
+      contract as JSON, and ignored/replaced on stale, corrupt, partial, or
+      incompatible reads. Operators can set
+      `RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE` to `read_write`,
+      `read_only`, `refresh`, or `off`, and can override the temp-root based
+      cache location with `RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_ROOT`.
     - BLAS/TLAS route counters and flattened BVH build/traversal metrics are
       emitted in render summaries
+    - static file-backed runtime mesh BLAS preparation now has a
+      RayTracing-local persistent acceleration cache for cold-process startup:
+      cache files store deterministic local runtime triangles plus mesh-local
+      BVH nodes/indices, are keyed by source sidecar stamp/checksum plus
+      renderer acceleration schema/build/layout/policy metadata, and are loaded
+      only after the same-process BLAS cache misses. TLAS instance arrays,
+      transforms, prepared-scene bind state, dynamic/deforming/generated
+      geometry, mesh-emissive sampler state, and release-packaged prebuilt
+      caches remain excluded.
+    - persistent acceleration cache reads/writes reuse
+      `RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE` (`read_write`,
+      `read_only`, `refresh`, `off`) and use
+      `RAY_TRACING_RUNTIME_MESH_ASSET_CACHE_ROOT` as the preferred cache root,
+      with `RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_ROOT` retained as a
+      compatibility fallback.
     - headless summaries include `startup_load_timing_matrix`, which breaks
       native prepare/startup cost into named stages such as sidecar path
-      resolution, runtime mesh document load/parse, mesh document copy, mesh
-      instance expansion, flattened triangle append/BVH build, mesh-local BLAS
-      build, TLAS build/bind, dynamic water cache store/BVH build, and
-      unaccounted prepare/runtime init
+      resolution, runtime mesh document load/parse, runtime mesh document pack
+      read/write, mesh document copy, mesh instance expansion, flattened
+      triangle append/BVH build, mesh-local BLAS build, mesh-local persistent
+      BLAS/BVH cache read/write, TLAS build/bind, dynamic water cache store/BVH
+      build, and unaccounted prepare/runtime init
+    - headless mesh-asset timing summaries report the selected persistent
+      document-cache mode and refresh count so cache-controlled runs can be
+      compared without guessing process environment
+    - prepared acceleration summaries report
+      `blas_persistent_cache_hits`, misses, writes, invalidations, refreshes,
+      read time, and write time separately from the existing in-process BLAS
+      cache counters.
     - headless summaries also expose `dynamic_geometry_acceleration`, which
       classifies geometry into the current acceleration policy: static runtime
       mesh assets use `static_blas_tlas`; PhysicsSim water surfaces are
@@ -936,6 +1023,8 @@ Last updated: 2026-07-04
   - `src/ui/menu/sdl_menu_render_controls.c` for shared text/button/control rendering helpers
   - `src/ui/menu/menu_batch_panel.c` for the grouped frame/video/export panel
     and its read-only scene-project summary row
+  - `src/ui/menu/menu_resume_panel.c` for the compact frame-resume pane below
+    `Data I/O + Batch`
   - `src/ui/menu/menu_scene_project_summary.c` for scene-project file presence
     detection from the selected runtime-scene path
   - `src/ui/menu/menu_worker_export.c` for the menu-triggered scene-only worker

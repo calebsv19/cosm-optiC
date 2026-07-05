@@ -1,0 +1,53 @@
+{
+  "background_color": 2698549,
+  "columns": 4,
+  "height": 144,
+  "object_id": "rear_blue_panel",
+  "output_path": "<redacted-local-path:metal_preview.bmp>",
+  "runtime_scene_path": "<redacted-local-path:metal_scene_runtime.json>",
+  "schema": "ray_tracing_material_preview_request_v1",
+  "summary_path": "<redacted-local-path:metal_summary.json>",
+  "variants": [
+    {
+      "label": "rough_ref070",
+      "reflectivity": 0.7,
+      "roughness": 0.6
+    },
+    {
+      "label": "polished_ref082",
+      "reflectivity": 0.82,
+      "roughness": 0.18
+    },
+    {
+      "label": "rust_overlay",
+      "preview_overlay": {
+        "color_depth": 0.82,
+        "contrast": 0.72,
+        "coverage": 0.62,
+        "grain": 0.52,
+        "kind": "rust",
+        "opacity": 0.82,
+        "seed": 31,
+        "surface_damage": 0.7
+      },
+      "reflectivity": 0.54,
+      "roughness": 0.74
+    },
+    {
+      "label": "grime_overlay",
+      "preview_overlay": {
+        "contrast": 0.78,
+        "coverage": 0.58,
+        "flow": 0.42,
+        "grain": 0.64,
+        "kind": "grime",
+        "opacity": 0.72,
+        "seed": 43,
+        "surface_damage": 0.68
+      },
+      "reflectivity": 0.58,
+      "roughness": 0.68
+    }
+  ],
+  "width": 144
+}

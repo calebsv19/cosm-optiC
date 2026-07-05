@@ -6,7 +6,7 @@ Public identity:
 - packaged desktop product: `optiC`
 - repository/program key: `ray_tracing`
 
-Last audited: 2026-06-16.
+Last audited: 2026-07-04.
 
 Current public focus:
 - dual-toolchain compiler-units rollout now starts at the runtime-scene import
@@ -72,6 +72,11 @@ Current public focus:
 - post-`I6` renderer-lane selection before VF3D / `physics_sim` ingestion
 
 ## Current State
+- `../AGENTS.md`: repo-local start point for fresh agents.
+- `docs/AGENT_CONTROL.md`: supported local agent workflow, safe commands,
+  failure triage, and forbidden release/registry/remote actions.
+- `docs/AGENT_DEMO_PACK.md`: canonical RT-R2 demo pack with stable fixtures,
+  expected outputs, and the local queue-bundle dry run.
 - `docs/current_truth.md`: current runtime contract and active boundaries.
 - `docs/future_intent.md`: near-term renderer and workflow direction.
 - `docs/headless_agent_render_cli.md`: `ray_tracing_agent_render_request_v1`
@@ -139,6 +144,12 @@ Current verification contract:
 
 ## Public Runtime Docs
 - `README.md` (repo root): product/runtime overview and build/run flow.
+- `AGENTS.md` (repo root): fresh-agent read order, safe local commands, and
+  mutation boundaries.
+- `docs/AGENT_CONTROL.md`: first local headless render workflow and agent
+  operating rules.
+- `docs/AGENT_DEMO_PACK.md`: selected demo scenes, commands, output roots, and
+  worker-bundle dry-run contract.
 - `docs/KEYBINDS.md`: current runtime keybind reference.
 
 Public product-facing docs should treat `optiC` as the primary app name and

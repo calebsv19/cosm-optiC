@@ -1,0 +1,58 @@
+{
+  "families": [
+    {
+      "id": "glass",
+      "material_id": 5,
+      "preview_bmp": "<redacted-local-path:glass_preview.bmp>",
+      "preview_png": "<redacted-local-path:glass_preview.png>",
+      "request_path": "<redacted-local-path:glass_material_preview_request.json>",
+      "scene_path": "<redacted-local-path:glass_scene_runtime.json>",
+      "summary_path": "<redacted-local-path:glass_summary.json>",
+      "title": "Glass",
+      "variant_labels": [
+        "clear_a062",
+        "frosted_a062",
+        "dense_a082",
+        "fog_overlay"
+      ]
+    },
+    {
+      "id": "mirror",
+      "material_id": 1,
+      "preview_bmp": "<redacted-local-path:mirror_preview.bmp>",
+      "preview_png": "<redacted-local-path:mirror_preview.png>",
+      "request_path": "<redacted-local-path:mirror_material_preview_request.json>",
+      "scene_path": "<redacted-local-path:mirror_scene_runtime.json>",
+      "summary_path": "<redacted-local-path:mirror_summary.json>",
+      "title": "Mirror",
+      "variant_labels": [
+        "polished_ref096",
+        "soft_ref088",
+        "rough_ref072",
+        "oil_overlay"
+      ]
+    },
+    {
+      "id": "metal",
+      "material_id": 2,
+      "preview_bmp": "<redacted-local-path:metal_preview.bmp>",
+      "preview_png": "<redacted-local-path:metal_preview.png>",
+      "request_path": "<redacted-local-path:metal_material_preview_request.json>",
+      "scene_path": "<redacted-local-path:metal_scene_runtime.json>",
+      "summary_path": "<redacted-local-path:metal_summary.json>",
+      "title": "Rough Metal",
+      "variant_labels": [
+        "rough_ref070",
+        "polished_ref082",
+        "rust_overlay",
+        "grime_overlay"
+      ]
+    }
+  ],
+  "grid_bmp": "<redacted-local-path:material_family_preview_grid.bmp>",
+  "grid_height": 432,
+  "grid_png": "<redacted-local-path:material_family_preview_grid.png>",
+  "grid_width": 576,
+  "output_root": "<redacted-local-path:material_family_preview_grid>",
+  "schema": "ray_tracing_material_family_preview_grid_summary_v1"
+}

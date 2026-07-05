@@ -150,3 +150,25 @@ That lane writes:
 
 The full request/summary artifacts remain at their source paths. Repo-doc
 copies redact local/private paths before publication.
+
+## Material Family Preview Grid
+
+Use the family-grid integration helper to compare Glass, Mirror, and Rough Metal
+through the same headless preview CLI:
+
+```bash
+make -C ray_tracing test-ray-tracing-material-family-preview-grid
+```
+
+The helper writes generated scenes, per-family preview requests, summaries,
+family contact sheets, and one stitched grid under:
+
+```text
+ray_tracing/build/agent_runs/ray_tracing/material_family_preview_grid/
+```
+
+Rows are ordered Glass, Mirror, Rough Metal. Each row contains four variants:
+clear/rough/default, a stronger roughness or polish comparison, and one or more
+overlay cases. The generated `index.md` and
+`material_family_preview_grid_summary.json` are the readback surfaces for later
+proof review.
