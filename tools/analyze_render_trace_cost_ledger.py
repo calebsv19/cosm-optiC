@@ -79,6 +79,68 @@ def rank_class_depth(ledger: dict[str, Any]) -> list[tuple[str, str, int]]:
     return rows
 
 
+def policy_summary(ledger: dict[str, Any], top: int) -> dict[str, Any]:
+    policy = ledger.get("direct_light_visibility_policy")
+    if not isinstance(policy, dict):
+        return {}
+    source_evaluations = as_int(policy.get("source_evaluations"))
+    visibility_queries = as_int(policy.get("visibility_sample_queries"))
+    evaluated_samples = as_int(policy.get("evaluated_samples"))
+    return {
+        "source_evaluations": source_evaluations,
+        "evaluated_samples": evaluated_samples,
+        "visibility_sample_queries": visibility_queries,
+        "visibility_sample_queries_per_source": (
+            float(visibility_queries) / float(source_evaluations)
+            if source_evaluations > 0 else 0.0
+        ),
+        "evaluated_samples_per_source": (
+            float(evaluated_samples) / float(source_evaluations)
+            if source_evaluations > 0 else 0.0
+        ),
+        "luma_span_avg": float(policy.get("luma_span_avg", 0.0) or 0.0),
+        "luma_span_max": float(policy.get("luma_span_max", 0.0) or 0.0),
+        "callers": [
+            {"name": name, "count": count}
+            for name, count in sorted_counts(policy.get("caller_counts"))[:top]
+        ],
+        "source_kinds": [
+            {"name": name, "count": count}
+            for name, count in sorted_counts(policy.get("source_kind_counts"))[:top]
+        ],
+        "origins": [
+            {"name": name, "count": count}
+            for name, count in sorted_counts(policy.get("source_origin_counts"))[:top]
+        ],
+        "profiles": [
+            {"name": name, "count": count}
+            for name, count in sorted_counts(policy.get("emission_profile_counts"))[:top]
+        ],
+        "outcomes": [
+            {"name": name, "count": count}
+            for name, count in sorted_counts(policy.get("outcome_counts"))[:top]
+        ],
+        "stop_reasons": [
+            {"name": name, "count": count}
+            for name, count in sorted_counts(policy.get("stop_reason_counts"))[:top]
+        ],
+        "sample_buckets": [
+            {"name": name, "count": count}
+            for name, count in sorted_counts(policy.get("sample_bucket_counts"))[:top]
+        ],
+        "distance_buckets": [
+            {"name": name, "count": count}
+            for name, count in sorted_counts(policy.get("distance_bucket_counts"))[:top]
+        ],
+        "importance_buckets": [
+            {"name": name, "count": count}
+            for name, count in sorted_counts(policy.get("importance_bucket_counts"))[:top]
+        ],
+        "material_emitter_rect_policy": policy.get("material_emitter_rect_policy")
+        if isinstance(policy.get("material_emitter_rect_policy"), dict) else {},
+    }
+
+
 def summarize(path: Path, top: int) -> dict[str, Any]:
     summary = load_json(path)
     ledger = ledger_from_summary(summary, path)
@@ -92,6 +154,7 @@ def summarize(path: Path, top: int) -> dict[str, Any]:
         "path": str(path),
         "run_id": str(summary.get("run_id", "")),
         "integrator_3d": str(summary.get("integrator_3d", "")),
+        "top": top,
         "total_rays": total,
         "ray_classes": [
             {"name": name, "count": count, "percent_of_total": percent(count, total)}
@@ -114,6 +177,7 @@ def summarize(path: Path, top: int) -> dict[str, Any]:
             {"name": name, "count": count}
             for name, count in materials[:top]
         ],
+        "direct_light_visibility_policy": policy_summary(ledger, top),
     }
 
 
@@ -148,6 +212,116 @@ def print_text_report(reports: list[dict[str, Any]]) -> None:
         print_section("  Top class/depth pairs", report["class_depth"])
         print_section("  Top depth buckets", report["depths"])
         print_section("  Top material-family hits", report["materials"], total_label="hit records")
+        policy = report.get("direct_light_visibility_policy")
+        if isinstance(policy, dict) and policy:
+            top = as_int(report.get("top"))
+            print("  Direct-light visibility policy:")
+            print(f"    source_evaluations: {format_count(as_int(policy['source_evaluations']))}")
+            print(f"    evaluated_samples: {format_count(as_int(policy['evaluated_samples']))}")
+            print(
+                "    visibility_sample_queries: "
+                f"{format_count(as_int(policy['visibility_sample_queries']))}"
+            )
+            print(
+                "    visibility_sample_queries_per_source: "
+                f"{float(policy['visibility_sample_queries_per_source']):.3f}"
+            )
+            print(
+                "    evaluated_samples_per_source: "
+                f"{float(policy['evaluated_samples_per_source']):.3f}"
+            )
+            print(f"    luma_span_avg: {float(policy['luma_span_avg']):.6f}")
+            print(f"    luma_span_max: {float(policy['luma_span_max']):.6f}")
+            print_section("    Callers", policy["callers"], total_label="source evaluations")
+            print_section("    Source kinds", policy["source_kinds"], total_label="source evaluations")
+            print_section("    Source origins", policy["origins"], total_label="source evaluations")
+            print_section("    Emission profiles", policy["profiles"], total_label="source evaluations")
+            print_section("    Outcomes", policy["outcomes"], total_label="source evaluations")
+            print_section("    Stop reasons", policy["stop_reasons"], total_label="source evaluations")
+            print_section("    Sample buckets", policy["sample_buckets"], total_label="source evaluations")
+            print_section("    Distance buckets", policy["distance_buckets"], total_label="source evaluations")
+            print_section(
+                "    Importance buckets",
+                policy["importance_buckets"],
+                total_label="source evaluations",
+            )
+            rect_policy = policy.get("material_emitter_rect_policy")
+            if isinstance(rect_policy, dict) and rect_policy:
+                rect_sources = as_int(rect_policy.get("source_evaluations"))
+                rect_samples = as_int(rect_policy.get("evaluated_samples"))
+                rect_queries = as_int(rect_policy.get("visibility_sample_queries"))
+                print("    Material-emitter rect policy:")
+                print(f"      source_evaluations: {format_count(rect_sources)}")
+                print(f"      evaluated_samples: {format_count(rect_samples)}")
+                print(f"      visibility_sample_queries: {format_count(rect_queries)}")
+                print(
+                    "      evaluated_samples_per_source: "
+                    f"{(float(rect_samples) / float(rect_sources)) if rect_sources else 0.0:.3f}"
+                )
+                print(
+                    "      visibility_sample_queries_per_source: "
+                    f"{(float(rect_queries) / float(rect_sources)) if rect_sources else 0.0:.3f}"
+                )
+                print_section(
+                    "      Distance buckets",
+                    [
+                        {"name": name, "count": count}
+                        for name, count in sorted_counts(
+                            rect_policy.get("distance_bucket_counts")
+                        )[:top]
+                    ],
+                    total_label="material-emitter rect sources",
+                )
+                print_section(
+                    "      Importance buckets",
+                    [
+                        {"name": name, "count": count}
+                        for name, count in sorted_counts(
+                            rect_policy.get("importance_bucket_counts")
+                        )[:top]
+                    ],
+                    total_label="material-emitter rect sources",
+                )
+                print_section(
+                    "      Evaluated samples by distance",
+                    [
+                        {"name": name, "count": count}
+                        for name, count in sorted_counts(
+                            rect_policy.get("evaluated_samples_by_distance")
+                        )[:top]
+                    ],
+                    total_label="evaluated samples",
+                )
+                print_section(
+                    "      Visibility queries by distance",
+                    [
+                        {"name": name, "count": count}
+                        for name, count in sorted_counts(
+                            rect_policy.get("visibility_sample_queries_by_distance")
+                        )[:top]
+                    ],
+                    total_label="visibility queries",
+                )
+                print_section(
+                    "      Evaluated samples by importance",
+                    [
+                        {"name": name, "count": count}
+                        for name, count in sorted_counts(
+                            rect_policy.get("evaluated_samples_by_importance")
+                        )[:top]
+                    ],
+                    total_label="evaluated samples",
+                )
+                print_section(
+                    "      Visibility queries by importance",
+                    [
+                        {"name": name, "count": count}
+                        for name, count in sorted_counts(
+                            rect_policy.get("visibility_sample_queries_by_importance")
+                        )[:top]
+                    ],
+                    total_label="visibility queries",
+                )
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:

@@ -6,6 +6,8 @@
 #include "material/material.h"
 #include "render/runtime_dielectric_transport_3d.h"
 #include "render/runtime_material_payload_3d.h"
+#include "render/runtime_caustic_lens_transport_3d.h"
+#include "render/runtime_caustic_sphere_lens_3d.h"
 #include "render/runtime_caustic_transport_debug_3d.h"
 #include "render/runtime_ray_3d.h"
 #include "render/runtime_render_trace_cost_ledger_3d.h"
@@ -15,8 +17,31 @@ enum {
     RUNTIME_CAUSTIC_TRANSPORT_DEFAULT_PATH_BUDGET = 256,
     RUNTIME_CAUSTIC_TRANSPORT_MAX_PATH_BUDGET = 4096,
     RUNTIME_CAUSTIC_TRANSPORT_TRIANGLE_SAMPLE_COUNT = 5,
+    RUNTIME_CAUSTIC_TRANSPORT_SPHERE_LENS_SEED_SAMPLE_COUNT = 16,
+    RUNTIME_CAUSTIC_TRANSPORT_SPHERE_LENS_MAX_SAMPLE_COUNT = 512,
     RUNTIME_CAUSTIC_TRANSPORT_RECEIVER_CANDIDATE_CAP = 512
 };
+
+typedef struct {
+    bool valid;
+    int sceneObjectIndex;
+    int primitiveIndex;
+    int triangleCount;
+    RuntimeCausticSphereLens3DDescriptor sphere;
+    RuntimeMaterialPayload3D payload;
+} RuntimeCausticTransportAnalyticSphere3D;
+
+typedef struct {
+    bool valid;
+    int sceneObjectIndex;
+    int primitiveIndex;
+    int triangleCount;
+    RuntimeCausticLensShape3D shape;
+    RuntimeMaterialPayload3D payload;
+} RuntimeCausticTransportAnalyticCylinder3D;
+
+typedef RuntimeCausticTransportAnalyticCylinder3D RuntimeCausticTransportAnalyticPrism3D;
+typedef RuntimeCausticTransportAnalyticCylinder3D RuntimeCausticTransportAnalyticBowl3D;
 
 static RuntimeCausticTransport3DRequestState g_caustic_transport_state = {0};
 static bool g_caustic_transport_has_surface_receiver_fallback = false;
@@ -35,6 +60,23 @@ static double runtime_caustic_transport_clamp(double value,
 
 static double runtime_caustic_transport_luma(Vec3 rgb) {
     return 0.2126 * rgb.x + 0.7152 * rgb.y + 0.0722 * rgb.z;
+}
+
+static double runtime_caustic_transport_analytic_sphere_lens_sample_weight(int path_budget,
+                                                                           int sample_count) {
+    if (path_budget <= 0 || sample_count <= 0) return 0.0;
+    return (double)path_budget /
+           ((double)sample_count * (double)RUNTIME_CAUSTIC_TRANSPORT_TRIANGLE_SAMPLE_COUNT);
+}
+
+static void runtime_caustic_transport_vec3_minmax(Vec3 p, Vec3* io_min, Vec3* io_max) {
+    if (!io_min || !io_max) return;
+    if (p.x < io_min->x) io_min->x = p.x;
+    if (p.y < io_min->y) io_min->y = p.y;
+    if (p.z < io_min->z) io_min->z = p.z;
+    if (p.x > io_max->x) io_max->x = p.x;
+    if (p.y > io_max->y) io_max->y = p.y;
+    if (p.z > io_max->z) io_max->z = p.z;
 }
 
 static Vec3 runtime_caustic_transport_triangle_sample_point(const RuntimeTriangle3D* triangle,
@@ -84,6 +126,553 @@ static bool runtime_caustic_transport_payload_is_eligible(
     if (payload->transparency > 1.0e-6) return true;
     if (payload->opticalIor > 1.0001 || payload->bsdf.ior > 1.0001) return true;
     return payload->bsdf.reflectivity > 0.10 && payload->bsdf.roughness <= 0.35;
+}
+
+static bool runtime_caustic_transport_resolve_analytic_sphere(
+    const RuntimeScene3D* scene,
+    RuntimeCausticTransportAnalyticSphere3D* out_sphere) {
+    typedef struct {
+        bool seen;
+        int sceneObjectIndex;
+        int primitiveIndex;
+        int triangleCount;
+        Vec3 boundsMin;
+        Vec3 boundsMax;
+        RuntimeMaterialPayload3D payload;
+    } Candidate;
+
+    Candidate candidates[MAX_OBJECTS];
+    RuntimeCausticTransportAnalyticSphere3D best;
+    double best_score = -1.0;
+
+    if (out_sphere) memset(out_sphere, 0, sizeof(*out_sphere));
+    if (!scene || !out_sphere) return false;
+    memset(candidates, 0, sizeof(candidates));
+    memset(&best, 0, sizeof(best));
+
+    for (int tri_i = 0; tri_i < scene->triangleMesh.triangleCount; ++tri_i) {
+        const RuntimeTriangle3D* triangle = &scene->triangleMesh.triangles[tri_i];
+        HitInfo3D hit = {0};
+        RuntimeMaterialPayload3D payload = {0};
+        Candidate* candidate = NULL;
+        Vec3 centroid = vec3_scale(vec3_add(vec3_add(triangle->p0, triangle->p1),
+                                            triangle->p2),
+                                   1.0 / 3.0);
+        int object_index = triangle->sceneObjectIndex;
+
+        if (object_index < 0 || object_index >= MAX_OBJECTS) continue;
+        HitInfo3D_Reset(&hit);
+        hit.t = 0.0;
+        hit.position = centroid;
+        hit.normal = triangle->normal;
+        hit.triangleIndex = tri_i;
+        hit.primitiveIndex = triangle->primitiveIndex;
+        hit.sceneObjectIndex = object_index;
+        if (!RuntimeMaterialPayload3D_ResolveFromHit(&hit, &payload) ||
+            !runtime_caustic_transport_payload_is_eligible(&payload)) {
+            continue;
+        }
+
+        candidate = &candidates[object_index];
+        if (!candidate->seen) {
+            candidate->seen = true;
+            candidate->sceneObjectIndex = object_index;
+            candidate->primitiveIndex = triangle->primitiveIndex;
+            candidate->boundsMin = triangle->p0;
+            candidate->boundsMax = triangle->p0;
+            candidate->payload = payload;
+        }
+        candidate->triangleCount += 1;
+        runtime_caustic_transport_vec3_minmax(triangle->p0,
+                                              &candidate->boundsMin,
+                                              &candidate->boundsMax);
+        runtime_caustic_transport_vec3_minmax(triangle->p1,
+                                              &candidate->boundsMin,
+                                              &candidate->boundsMax);
+        runtime_caustic_transport_vec3_minmax(triangle->p2,
+                                              &candidate->boundsMin,
+                                              &candidate->boundsMax);
+    }
+
+    for (int i = 0; i < MAX_OBJECTS; ++i) {
+        Candidate* candidate = &candidates[i];
+        RuntimeCausticTransportAnalyticSphere3D resolved;
+        Vec3 extent = vec3(0.0, 0.0, 0.0);
+        double half_x = 0.0;
+        double half_y = 0.0;
+        double half_z = 0.0;
+        double min_half = 0.0;
+        double max_half = 0.0;
+        double radius = 0.0;
+        double roundness = 0.0;
+        double score = 0.0;
+        if (!candidate->seen || candidate->triangleCount < 6) continue;
+        extent = vec3_sub(candidate->boundsMax, candidate->boundsMin);
+        half_x = extent.x * 0.5;
+        half_y = extent.y * 0.5;
+        half_z = extent.z * 0.5;
+        min_half = fmin(half_x, fmin(half_y, half_z));
+        max_half = fmax(half_x, fmax(half_y, half_z));
+        if (!(min_half > 1.0e-6) || !(max_half > 1.0e-6)) continue;
+        roundness = max_half / min_half;
+        if (roundness > 1.35) continue;
+        radius = (half_x + half_y + half_z) / 3.0;
+        if (!(radius > 1.0e-6)) continue;
+
+        memset(&resolved, 0, sizeof(resolved));
+        resolved.valid = true;
+        resolved.sceneObjectIndex = candidate->sceneObjectIndex;
+        resolved.primitiveIndex = candidate->primitiveIndex;
+        resolved.triangleCount = candidate->triangleCount;
+        RuntimeCausticSphereLens3D_DefaultDescriptor(&resolved.sphere);
+        resolved.sphere.center = vec3_scale(vec3_add(candidate->boundsMin,
+                                                     candidate->boundsMax),
+                                            0.5);
+        resolved.sphere.radius = radius;
+        resolved.sphere.ior =
+            candidate->payload.opticalIor > 1.0001
+                ? candidate->payload.opticalIor
+                : fmax(candidate->payload.bsdf.ior, 1.5);
+        resolved.sphere.tint = vec3(candidate->payload.baseColorR,
+                                    candidate->payload.baseColorG,
+                                    candidate->payload.baseColorB);
+        resolved.sphere.absorptionDistance = candidate->payload.absorptionDistance;
+        resolved.payload = candidate->payload;
+
+        score = (double)candidate->triangleCount / roundness;
+        if (score > best_score) {
+            best_score = score;
+            best = resolved;
+        }
+    }
+
+    if (!best.valid) return false;
+    *out_sphere = best;
+    return true;
+}
+
+static bool runtime_caustic_transport_resolve_analytic_cylinder(
+    const RuntimeScene3D* scene,
+    RuntimeCausticTransportAnalyticCylinder3D* out_cylinder) {
+    typedef struct {
+        bool seen;
+        int sceneObjectIndex;
+        int primitiveIndex;
+        int triangleCount;
+        Vec3 boundsMin;
+        Vec3 boundsMax;
+        RuntimeMaterialPayload3D payload;
+    } Candidate;
+
+    Candidate candidates[MAX_OBJECTS];
+    RuntimeCausticTransportAnalyticCylinder3D best;
+    double best_score = -1.0;
+
+    if (out_cylinder) memset(out_cylinder, 0, sizeof(*out_cylinder));
+    if (!scene || !out_cylinder) return false;
+    memset(candidates, 0, sizeof(candidates));
+    memset(&best, 0, sizeof(best));
+
+    for (int tri_i = 0; tri_i < scene->triangleMesh.triangleCount; ++tri_i) {
+        const RuntimeTriangle3D* triangle = &scene->triangleMesh.triangles[tri_i];
+        HitInfo3D hit = {0};
+        RuntimeMaterialPayload3D payload = {0};
+        Candidate* candidate = NULL;
+        Vec3 centroid = vec3_scale(vec3_add(vec3_add(triangle->p0, triangle->p1),
+                                            triangle->p2),
+                                   1.0 / 3.0);
+        int object_index = triangle->sceneObjectIndex;
+
+        if (object_index < 0 || object_index >= MAX_OBJECTS) continue;
+        HitInfo3D_Reset(&hit);
+        hit.t = 0.0;
+        hit.position = centroid;
+        hit.normal = triangle->normal;
+        hit.triangleIndex = tri_i;
+        hit.primitiveIndex = triangle->primitiveIndex;
+        hit.sceneObjectIndex = object_index;
+        if (!RuntimeMaterialPayload3D_ResolveFromHit(&hit, &payload) ||
+            !runtime_caustic_transport_payload_is_eligible(&payload)) {
+            continue;
+        }
+
+        candidate = &candidates[object_index];
+        if (!candidate->seen) {
+            candidate->seen = true;
+            candidate->sceneObjectIndex = object_index;
+            candidate->primitiveIndex = triangle->primitiveIndex;
+            candidate->boundsMin = triangle->p0;
+            candidate->boundsMax = triangle->p0;
+            candidate->payload = payload;
+        }
+        candidate->triangleCount += 1;
+        runtime_caustic_transport_vec3_minmax(triangle->p0,
+                                              &candidate->boundsMin,
+                                              &candidate->boundsMax);
+        runtime_caustic_transport_vec3_minmax(triangle->p1,
+                                              &candidate->boundsMin,
+                                              &candidate->boundsMax);
+        runtime_caustic_transport_vec3_minmax(triangle->p2,
+                                              &candidate->boundsMin,
+                                              &candidate->boundsMax);
+    }
+
+    for (int i = 0; i < MAX_OBJECTS; ++i) {
+        Candidate* candidate = &candidates[i];
+        RuntimeCausticTransportAnalyticCylinder3D resolved;
+        Vec3 extent = vec3(0.0, 0.0, 0.0);
+        Vec3 axis = vec3(0.0, 0.0, 1.0);
+        double halves[3] = {0.0, 0.0, 0.0};
+        int long_axis = 2;
+        int a = 0;
+        int b = 1;
+        double long_half = 0.0;
+        double r0 = 0.0;
+        double r1 = 0.0;
+        double radial_min = 0.0;
+        double radial_max = 0.0;
+        double radius = 0.0;
+        double radial_roundness = 0.0;
+        double elongation = 0.0;
+        double score = 0.0;
+        if (!candidate->seen || candidate->triangleCount < 6) continue;
+        extent = vec3_sub(candidate->boundsMax, candidate->boundsMin);
+        halves[0] = extent.x * 0.5;
+        halves[1] = extent.y * 0.5;
+        halves[2] = extent.z * 0.5;
+        if (halves[0] > halves[long_axis]) long_axis = 0;
+        if (halves[1] > halves[long_axis]) long_axis = 1;
+        if (long_axis == 0) {
+            a = 1;
+            b = 2;
+            axis = vec3(1.0, 0.0, 0.0);
+        } else if (long_axis == 1) {
+            a = 0;
+            b = 2;
+            axis = vec3(0.0, 1.0, 0.0);
+        }
+        long_half = halves[long_axis];
+        r0 = halves[a];
+        r1 = halves[b];
+        radial_min = fmin(r0, r1);
+        radial_max = fmax(r0, r1);
+        if (!(radial_min > 1.0e-6) || !(long_half > 1.0e-6)) continue;
+        radial_roundness = radial_max / radial_min;
+        elongation = long_half / radial_max;
+        if (radial_roundness > 1.45 || elongation < 1.35) continue;
+        radius = (r0 + r1) * 0.5;
+        if (!(radius > 1.0e-6)) continue;
+
+        memset(&resolved, 0, sizeof(resolved));
+        resolved.valid = true;
+        resolved.sceneObjectIndex = candidate->sceneObjectIndex;
+        resolved.primitiveIndex = candidate->primitiveIndex;
+        resolved.triangleCount = candidate->triangleCount;
+        RuntimeCausticLensTransport3D_DefaultShape(&resolved.shape);
+        resolved.shape.kind = RUNTIME_CAUSTIC_LENS_SHAPE_CYLINDER;
+        resolved.shape.sceneObjectIndex = candidate->sceneObjectIndex;
+        resolved.shape.primitiveIndex = candidate->primitiveIndex;
+        resolved.shape.boundsMin = candidate->boundsMin;
+        resolved.shape.boundsMax = candidate->boundsMax;
+        resolved.shape.center = vec3_scale(vec3_add(candidate->boundsMin,
+                                                    candidate->boundsMax),
+                                           0.5);
+        resolved.shape.axis = axis;
+        resolved.shape.radius = radius;
+        resolved.shape.height = long_half * 2.0;
+        resolved.shape.payload = candidate->payload;
+        resolved.payload = candidate->payload;
+
+        score = (double)candidate->triangleCount * elongation / radial_roundness;
+        if (score > best_score) {
+            best_score = score;
+            best = resolved;
+        }
+    }
+
+    if (!best.valid) return false;
+    *out_cylinder = best;
+    return true;
+}
+
+static bool runtime_caustic_transport_resolve_analytic_prism(
+    const RuntimeScene3D* scene,
+    RuntimeCausticTransportAnalyticPrism3D* out_prism) {
+    typedef struct {
+        bool seen;
+        int sceneObjectIndex;
+        int primitiveIndex;
+        int triangleCount;
+        Vec3 boundsMin;
+        Vec3 boundsMax;
+        RuntimeMaterialPayload3D payload;
+    } Candidate;
+
+    Candidate candidates[MAX_OBJECTS];
+    RuntimeCausticTransportAnalyticPrism3D best;
+    double best_score = -1.0;
+
+    if (out_prism) memset(out_prism, 0, sizeof(*out_prism));
+    if (!scene || !out_prism) return false;
+    memset(candidates, 0, sizeof(candidates));
+    memset(&best, 0, sizeof(best));
+
+    for (int tri_i = 0; tri_i < scene->triangleMesh.triangleCount; ++tri_i) {
+        const RuntimeTriangle3D* triangle = &scene->triangleMesh.triangles[tri_i];
+        HitInfo3D hit = {0};
+        RuntimeMaterialPayload3D payload = {0};
+        Candidate* candidate = NULL;
+        Vec3 centroid = vec3_scale(vec3_add(vec3_add(triangle->p0, triangle->p1),
+                                            triangle->p2),
+                                   1.0 / 3.0);
+        int object_index = triangle->sceneObjectIndex;
+
+        if (object_index < 0 || object_index >= MAX_OBJECTS) continue;
+        HitInfo3D_Reset(&hit);
+        hit.t = 0.0;
+        hit.position = centroid;
+        hit.normal = triangle->normal;
+        hit.triangleIndex = tri_i;
+        hit.primitiveIndex = triangle->primitiveIndex;
+        hit.sceneObjectIndex = object_index;
+        if (!RuntimeMaterialPayload3D_ResolveFromHit(&hit, &payload) ||
+            !runtime_caustic_transport_payload_is_eligible(&payload)) {
+            continue;
+        }
+
+        candidate = &candidates[object_index];
+        if (!candidate->seen) {
+            candidate->seen = true;
+            candidate->sceneObjectIndex = object_index;
+            candidate->primitiveIndex = triangle->primitiveIndex;
+            candidate->boundsMin = triangle->p0;
+            candidate->boundsMax = triangle->p0;
+            candidate->payload = payload;
+        }
+        candidate->triangleCount += 1;
+        runtime_caustic_transport_vec3_minmax(triangle->p0,
+                                              &candidate->boundsMin,
+                                              &candidate->boundsMax);
+        runtime_caustic_transport_vec3_minmax(triangle->p1,
+                                              &candidate->boundsMin,
+                                              &candidate->boundsMax);
+        runtime_caustic_transport_vec3_minmax(triangle->p2,
+                                              &candidate->boundsMin,
+                                              &candidate->boundsMax);
+    }
+
+    for (int i = 0; i < MAX_OBJECTS; ++i) {
+        Candidate* candidate = &candidates[i];
+        RuntimeCausticTransportAnalyticPrism3D resolved;
+        Vec3 extent = vec3(0.0, 0.0, 0.0);
+        Vec3 axis = vec3(0.0, 0.0, 1.0);
+        double halves[3] = {0.0, 0.0, 0.0};
+        int long_axis = 2;
+        int a = 0;
+        int b = 1;
+        double long_half = 0.0;
+        double r0 = 0.0;
+        double r1 = 0.0;
+        double radius = 0.0;
+        double score = 0.0;
+        if (!candidate->seen || candidate->triangleCount < 4) continue;
+        extent = vec3_sub(candidate->boundsMax, candidate->boundsMin);
+        halves[0] = extent.x * 0.5;
+        halves[1] = extent.y * 0.5;
+        halves[2] = extent.z * 0.5;
+        if (halves[0] > halves[long_axis]) long_axis = 0;
+        if (halves[1] > halves[long_axis]) long_axis = 1;
+        if (long_axis == 0) {
+            a = 1;
+            b = 2;
+            axis = vec3(1.0, 0.0, 0.0);
+        } else if (long_axis == 1) {
+            a = 0;
+            b = 2;
+            axis = vec3(0.0, 1.0, 0.0);
+        }
+        long_half = halves[long_axis];
+        r0 = halves[a];
+        r1 = halves[b];
+        radius = fmax(r0, r1);
+        if (!(long_half > 1.0e-6) || !(radius > 1.0e-6)) continue;
+
+        memset(&resolved, 0, sizeof(resolved));
+        resolved.valid = true;
+        resolved.sceneObjectIndex = candidate->sceneObjectIndex;
+        resolved.primitiveIndex = candidate->primitiveIndex;
+        resolved.triangleCount = candidate->triangleCount;
+        RuntimeCausticLensTransport3D_DefaultShape(&resolved.shape);
+        resolved.shape.kind = RUNTIME_CAUSTIC_LENS_SHAPE_PRISM;
+        resolved.shape.sceneObjectIndex = candidate->sceneObjectIndex;
+        resolved.shape.primitiveIndex = candidate->primitiveIndex;
+        resolved.shape.boundsMin = candidate->boundsMin;
+        resolved.shape.boundsMax = candidate->boundsMax;
+        resolved.shape.center = vec3_scale(vec3_add(candidate->boundsMin,
+                                                    candidate->boundsMax),
+                                           0.5);
+        resolved.shape.axis = axis;
+        resolved.shape.radius = radius;
+        resolved.shape.height = long_half * 2.0;
+        resolved.shape.payload = candidate->payload;
+        resolved.payload = candidate->payload;
+
+        score = (double)candidate->triangleCount * fmax(long_half / radius, 0.25);
+        if (score > best_score) {
+            best_score = score;
+            best = resolved;
+        }
+    }
+
+    if (!best.valid) return false;
+    *out_prism = best;
+    return true;
+}
+
+static bool runtime_caustic_transport_resolve_analytic_bowl(
+    const RuntimeScene3D* scene,
+    RuntimeCausticTransportAnalyticBowl3D* out_bowl) {
+    typedef struct {
+        bool seen;
+        int sceneObjectIndex;
+        int primitiveIndex;
+        int triangleCount;
+        Vec3 boundsMin;
+        Vec3 boundsMax;
+        RuntimeMaterialPayload3D payload;
+    } Candidate;
+
+    Candidate candidates[MAX_OBJECTS];
+    RuntimeCausticTransportAnalyticBowl3D best;
+    double best_score = -1.0;
+
+    if (out_bowl) memset(out_bowl, 0, sizeof(*out_bowl));
+    if (!scene || !out_bowl) return false;
+    memset(candidates, 0, sizeof(candidates));
+    memset(&best, 0, sizeof(best));
+
+    for (int tri_i = 0; tri_i < scene->triangleMesh.triangleCount; ++tri_i) {
+        const RuntimeTriangle3D* triangle = &scene->triangleMesh.triangles[tri_i];
+        HitInfo3D hit = {0};
+        RuntimeMaterialPayload3D payload = {0};
+        Candidate* candidate = NULL;
+        Vec3 centroid = vec3_scale(vec3_add(vec3_add(triangle->p0, triangle->p1),
+                                            triangle->p2),
+                                   1.0 / 3.0);
+        int object_index = triangle->sceneObjectIndex;
+
+        if (object_index < 0 || object_index >= MAX_OBJECTS) continue;
+        HitInfo3D_Reset(&hit);
+        hit.t = 0.0;
+        hit.position = centroid;
+        hit.normal = triangle->normal;
+        hit.triangleIndex = tri_i;
+        hit.primitiveIndex = triangle->primitiveIndex;
+        hit.sceneObjectIndex = object_index;
+        if (!RuntimeMaterialPayload3D_ResolveFromHit(&hit, &payload) ||
+            !runtime_caustic_transport_payload_is_eligible(&payload)) {
+            continue;
+        }
+
+        candidate = &candidates[object_index];
+        if (!candidate->seen) {
+            candidate->seen = true;
+            candidate->sceneObjectIndex = object_index;
+            candidate->primitiveIndex = triangle->primitiveIndex;
+            candidate->boundsMin = triangle->p0;
+            candidate->boundsMax = triangle->p0;
+            candidate->payload = payload;
+        }
+        candidate->triangleCount += 1;
+        runtime_caustic_transport_vec3_minmax(triangle->p0,
+                                              &candidate->boundsMin,
+                                              &candidate->boundsMax);
+        runtime_caustic_transport_vec3_minmax(triangle->p1,
+                                              &candidate->boundsMin,
+                                              &candidate->boundsMax);
+        runtime_caustic_transport_vec3_minmax(triangle->p2,
+                                              &candidate->boundsMin,
+                                              &candidate->boundsMax);
+    }
+
+    for (int i = 0; i < MAX_OBJECTS; ++i) {
+        Candidate* candidate = &candidates[i];
+        RuntimeCausticTransportAnalyticBowl3D resolved;
+        Vec3 extent = vec3(0.0, 0.0, 0.0);
+        Vec3 axis = vec3(0.0, 0.0, 1.0);
+        double halves[3] = {0.0, 0.0, 0.0};
+        double min_half = 0.0;
+        double max_half = 0.0;
+        double mid_half = 0.0;
+        double radius = 0.0;
+        double thickness = 0.0;
+        double flatness = 0.0;
+        double roundness = 0.0;
+        double score = 0.0;
+        int thin_axis = 1;
+        if (!candidate->seen || candidate->triangleCount < 6) continue;
+        extent = vec3_sub(candidate->boundsMax, candidate->boundsMin);
+        halves[0] = extent.x * 0.5;
+        halves[1] = extent.y * 0.5;
+        halves[2] = extent.z * 0.5;
+        if (halves[0] < halves[thin_axis]) thin_axis = 0;
+        if (halves[2] < halves[thin_axis]) thin_axis = 2;
+        if (thin_axis == 0) {
+            axis = vec3(1.0, 0.0, 0.0);
+            min_half = halves[0];
+            mid_half = fmin(halves[1], halves[2]);
+            max_half = fmax(halves[1], halves[2]);
+        } else if (thin_axis == 1) {
+            axis = vec3(0.0, 1.0, 0.0);
+            min_half = halves[1];
+            mid_half = fmin(halves[0], halves[2]);
+            max_half = fmax(halves[0], halves[2]);
+        } else {
+            axis = vec3(0.0, 0.0, 1.0);
+            min_half = halves[2];
+            mid_half = fmin(halves[0], halves[1]);
+            max_half = fmax(halves[0], halves[1]);
+        }
+        if (!(min_half > 1.0e-6) || !(mid_half > 1.0e-6) || !(max_half > 1.0e-6)) {
+            continue;
+        }
+        flatness = max_half / min_half;
+        roundness = max_half / mid_half;
+        if (flatness < 1.20 || roundness > 1.65) continue;
+        radius = (mid_half + max_half) * 0.5;
+        thickness = min_half * 2.0;
+        if (!(radius > 1.0e-6) || !(thickness > 1.0e-6)) continue;
+
+        memset(&resolved, 0, sizeof(resolved));
+        resolved.valid = true;
+        resolved.sceneObjectIndex = candidate->sceneObjectIndex;
+        resolved.primitiveIndex = candidate->primitiveIndex;
+        resolved.triangleCount = candidate->triangleCount;
+        RuntimeCausticLensTransport3D_DefaultShape(&resolved.shape);
+        resolved.shape.kind = RUNTIME_CAUSTIC_LENS_SHAPE_BOWL;
+        resolved.shape.sceneObjectIndex = candidate->sceneObjectIndex;
+        resolved.shape.primitiveIndex = candidate->primitiveIndex;
+        resolved.shape.boundsMin = candidate->boundsMin;
+        resolved.shape.boundsMax = candidate->boundsMax;
+        resolved.shape.center = vec3_scale(vec3_add(candidate->boundsMin,
+                                                    candidate->boundsMax),
+                                           0.5);
+        resolved.shape.axis = axis;
+        resolved.shape.radius = radius;
+        resolved.shape.height = thickness;
+        resolved.shape.payload = candidate->payload;
+        resolved.payload = candidate->payload;
+
+        score = (double)candidate->triangleCount * flatness / roundness;
+        if (score > best_score) {
+            best_score = score;
+            best = resolved;
+        }
+    }
+
+    if (!best.valid) return false;
+    *out_bowl = best;
+    return true;
 }
 
 static const char* runtime_caustic_transport_light_kind_label(
@@ -449,34 +1038,42 @@ static bool runtime_caustic_transport_deposit_segment(
     for (t = t_enter + step * 0.5; t <= t_exit; t += step) {
         Vec3 p = vec3_add(ray->origin, vec3_scale(ray->direction, t));
         double attenuation = 1.0 / (1.0 + 0.10 * fmax(t - t_enter, 0.0));
-        double radius = runtime_caustic_transport_clamp(
+        double perpendicular_radius = runtime_caustic_transport_clamp(
             base_footprint_radius + (fmax(t - t_enter, 0.0) * 0.060) + (step * 0.75),
-            scene->volume.grid.voxelSize * 1.50,
-            scene->volume.grid.voxelSize * 4.25);
+            scene->volume.grid.voxelSize * 2.50,
+            scene->volume.grid.voxelSize * 5.00);
+        double axial_radius = runtime_caustic_transport_clamp(
+            perpendicular_radius + (step * 1.35) + (fmax(t - t_enter, 0.0) * 0.11),
+            scene->volume.grid.voxelSize * 3.00,
+            scene->volume.grid.voxelSize * 6.50);
+        double effective_radius = ((2.0 * perpendicular_radius) + axial_radius) / 3.0;
         Vec3 deposit = vec3_scale(radiance, attenuation * step * 0.020);
         if (debug_path) {
             if (debug_path->volumeStepCount == 0) {
                 debug_path->volumeFirstDepositPosition = p;
-                debug_path->footprintRadiusMin = radius;
-                debug_path->footprintRadiusMax = radius;
+                debug_path->footprintRadiusMin = effective_radius;
+                debug_path->footprintRadiusMax = effective_radius;
             } else {
-                if (radius < debug_path->footprintRadiusMin) {
-                    debug_path->footprintRadiusMin = radius;
+                if (effective_radius < debug_path->footprintRadiusMin) {
+                    debug_path->footprintRadiusMin = effective_radius;
                 }
-                if (radius > debug_path->footprintRadiusMax) {
-                    debug_path->footprintRadiusMax = radius;
+                if (effective_radius > debug_path->footprintRadiusMax) {
+                    debug_path->footprintRadiusMax = effective_radius;
                 }
             }
             debug_path->volumeLastDepositPosition = p;
             debug_path->volumeStepCount += 1;
         }
         diagnostics->depositAttemptCount += 1u;
-        if (RuntimeCausticVolumeCache3D_DepositFootprintAtPosition(cache,
-                                                                   p,
-                                                                   radius,
-                                                                   deposit.x,
-                                                                   deposit.y,
-                                                                   deposit.z)) {
+        if (RuntimeCausticVolumeCache3D_DepositDirectionalFootprintAtPosition(
+                cache,
+                p,
+                ray->direction,
+                perpendicular_radius,
+                axial_radius,
+                deposit.x,
+                deposit.y,
+                deposit.z)) {
             double luma = runtime_caustic_transport_luma(deposit);
             diagnostics->depositAcceptedCount += 1u;
             diagnostics->totalRadianceR += deposit.x;
@@ -781,6 +1378,1079 @@ runtime_caustic_transport_surface_receiver_ready:
     return true;
 }
 
+static void runtime_caustic_transport_sphere_lens_sample(int sample_index,
+                                                         int sample_count,
+                                                         double* out_aperture_u,
+                                                         double* out_aperture_v,
+                                                         double* out_lens_u,
+                                                         double* out_lens_v) {
+    static const double samples[RUNTIME_CAUSTIC_TRANSPORT_SPHERE_LENS_SEED_SAMPLE_COUNT][4] = {
+        {0.0, 0.0, 0.0, 0.0},
+        {-0.5, -0.5, -0.55, -0.55},
+        {0.5, -0.5, 0.55, -0.55},
+        {-0.5, 0.5, -0.55, 0.55},
+        {0.5, 0.5, 0.55, 0.55},
+        {-0.25, 0.0, -0.35, 0.0},
+        {0.25, 0.0, 0.35, 0.0},
+        {0.0, -0.25, 0.0, -0.35},
+        {0.0, 0.25, 0.0, 0.35},
+        {-0.75, 0.0, -0.75, 0.0},
+        {0.75, 0.0, 0.75, 0.0},
+        {0.0, -0.75, 0.0, -0.75},
+        {0.0, 0.75, 0.0, 0.75},
+        {-0.35, 0.35, -0.45, 0.45},
+        {0.35, 0.35, 0.45, 0.45},
+        {0.35, -0.35, 0.45, -0.45}
+    };
+    const double* s = samples[0];
+    double t = 0.0;
+    double lens_r = 0.0;
+    double lens_a = 0.0;
+    double aperture_r = 0.0;
+    double aperture_a = 0.0;
+    if (sample_index >= 0 &&
+        sample_index < RUNTIME_CAUSTIC_TRANSPORT_SPHERE_LENS_SEED_SAMPLE_COUNT) {
+        s = samples[sample_index];
+        if (out_aperture_u) *out_aperture_u = s[0];
+        if (out_aperture_v) *out_aperture_v = s[1];
+        if (out_lens_u) *out_lens_u = s[2];
+        if (out_lens_v) *out_lens_v = s[3];
+        return;
+    }
+    if (sample_count <= 0) sample_count = 1;
+    if (sample_index < 0) sample_index = 0;
+    t = ((double)sample_index + 0.5) / (double)sample_count;
+    if (t < 0.0) t = 0.0;
+    if (t > 1.0) t = 1.0;
+    lens_r = sqrt(t) * 0.92;
+    lens_a = (double)sample_index * 2.39996322972865332;
+    aperture_r = sqrt(fmod((double)sample_index * 0.61803398874989485, 1.0)) * 0.85;
+    aperture_a = lens_a + 1.173245;
+    if (out_aperture_u) *out_aperture_u = aperture_r * cos(aperture_a);
+    if (out_aperture_v) *out_aperture_v = aperture_r * sin(aperture_a);
+    if (out_lens_u) *out_lens_u = lens_r * cos(lens_a);
+    if (out_lens_v) *out_lens_v = lens_r * sin(lens_a);
+}
+
+static void runtime_caustic_transport_cylinder_lens_focused_sample(int sample_index,
+                                                                   int sample_count,
+                                                                   double* out_aperture_u,
+                                                                   double* out_aperture_v,
+                                                                   double* out_lens_u,
+                                                                   double* out_lens_v) {
+    double t = 0.5;
+    double radial_phase = 0.0;
+    if (sample_count <= 0) sample_count = 1;
+    if (sample_index < 0) sample_index = 0;
+    t = ((double)sample_index + 0.5) / (double)sample_count;
+    if (t < 0.0) t = 0.0;
+    if (t > 1.0) t = 1.0;
+    radial_phase = (double)sample_index * 2.39996322972865332;
+    if (out_aperture_u) *out_aperture_u = 0.0;
+    if (out_aperture_v) *out_aperture_v = 0.0;
+    if (out_lens_u) *out_lens_u = 0.12 * sin(radial_phase);
+    if (out_lens_v) *out_lens_v = -0.82 + 1.64 * t;
+}
+
+static bool runtime_caustic_transport_emit_analytic_sphere_lens_sample(
+    const RuntimeScene3D* scene,
+    const RuntimeLightSource3D* light,
+    int light_index,
+    const RuntimeCausticTransportAnalyticSphere3D* analytic_sphere,
+    int sample_index,
+    int path_budget,
+    int sample_count,
+    RuntimeCausticVolumeCache3D* cache,
+    RuntimeCausticSurfaceCache3D* surface_cache,
+    RuntimeCausticTransport3DDiagnostics* diagnostics) {
+    RuntimeCausticSphereLens3DLight lens_light;
+    RuntimeCausticSphereLens3DSample sample;
+    RuntimeCausticLensPath3D path;
+    const RuntimeCausticLensInterfaceEvent3D* entry_event = NULL;
+    const RuntimeCausticLensInterfaceEvent3D* exit_event = NULL;
+    Ray3D outgoing = {0};
+    double light_distance = 0.0;
+    double aperture_u = 0.0;
+    double aperture_v = 0.0;
+    double lens_u = 0.0;
+    double lens_v = 0.0;
+    double sample_weight = 0.0;
+    double volume_footprint_radius = 0.0;
+    bool emitted = false;
+    bool debug_enabled = RuntimeCausticTransportDebug3D_IsEnabled();
+    RuntimeCausticTransportDebugPath3D debug_path = {0};
+
+    if (!scene || !light || !analytic_sphere || !analytic_sphere->valid ||
+        !diagnostics || sample_count <= 0) {
+        return false;
+    }
+
+    RuntimeCausticSphereLens3D_DefaultLight(&lens_light);
+    RuntimeCausticSphereLens3D_DefaultSample(&sample);
+    runtime_caustic_transport_sphere_lens_sample(sample_index,
+                                                 sample_count,
+                                                 &aperture_u,
+                                                 &aperture_v,
+                                                 &lens_u,
+                                                 &lens_v);
+    light_distance = vec3_length(vec3_sub(analytic_sphere->sphere.center,
+                                          light->position));
+    lens_light.position = light->position;
+    lens_light.radius = fmax(light->radius, analytic_sphere->sphere.radius * 0.025);
+    lens_light.intensity = runtime_caustic_transport_light_attenuation(light,
+                                                                       light_distance);
+    lens_light.color = light->color;
+    sample_weight = runtime_caustic_transport_analytic_sphere_lens_sample_weight(path_budget,
+                                                                                 sample_count);
+    sample.apertureU = aperture_u;
+    sample.apertureV = aperture_v;
+    sample.lensU = lens_u;
+    sample.lensV = lens_v;
+    sample.sampleWeight = sample_weight;
+    sample.receiverPlaneZ = analytic_sphere->sphere.center.z - analytic_sphere->sphere.radius * 3.0;
+
+    diagnostics->evaluatedPathCount += 1u;
+    diagnostics->analyticSphereLensEvaluatedPathCount += 1u;
+    diagnostics->analyticSphereLensSampleWeight = sample_weight;
+    diagnostics->analyticSphereLensTotalSampleWeight += sample_weight;
+    if (!RuntimeCausticLensTransport3D_SolveSpherePath(&analytic_sphere->sphere,
+                                                       &lens_light,
+                                                       &sample,
+                                                       analytic_sphere->sceneObjectIndex,
+                                                       analytic_sphere->primitiveIndex,
+                                                       &path) ||
+        !path.valid ||
+        !(runtime_caustic_transport_luma(path.throughput) > 1.0e-9)) {
+        return false;
+    }
+    entry_event = path.interfaceEventCount > 0u ? &path.events[0] : NULL;
+    exit_event = path.interfaceEventCount > 1u ? &path.events[1] : NULL;
+
+    diagnostics->transparentHitCount += 2u;
+    diagnostics->specularEventCount += 2u;
+    outgoing = RuntimeRay3D_MakeOffset(path.postExitOrigin,
+                                       exit_event ? exit_event->normal : vec3(0.0, 0.0, 1.0),
+                                       path.postExitDirection,
+                                       1.0e-4);
+    volume_footprint_radius = runtime_caustic_transport_clamp(
+        analytic_sphere->sphere.radius * 0.045 + fmax(light->radius, 0.0) * 0.65,
+        0.0,
+        analytic_sphere->sphere.radius * 0.45);
+
+    if (debug_enabled) {
+        debug_path.pathId = diagnostics->evaluatedPathCount;
+        snprintf(debug_path.emissionPolicy,
+                 sizeof(debug_path.emissionPolicy),
+                 "%s",
+                 RuntimeCausticTransportEmissionPolicy3D_Label(
+                     RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_SPHERE_LENS));
+        debug_path.lightIndex = light_index;
+        snprintf(debug_path.lightId,
+                 sizeof(debug_path.lightId),
+                 "%s",
+                 light->id[0] ? light->id : "compat_light");
+        snprintf(debug_path.lightKind,
+                 sizeof(debug_path.lightKind),
+                 "%s",
+                 runtime_caustic_transport_light_kind_label(light->kind));
+        debug_path.lightPosition = path.lightSamplePosition;
+        debug_path.lightRadius = light->radius;
+        debug_path.lightIntensity = light->intensity;
+        debug_path.lightColor = light->color;
+        debug_path.targetTriangleIndex = -1;
+        debug_path.targetPrimitiveIndex = analytic_sphere->primitiveIndex;
+        debug_path.targetSceneObjectIndex = analytic_sphere->sceneObjectIndex;
+        debug_path.targetSampleIndex = sample_index;
+        debug_path.targetPosition = path.targetPosition;
+        debug_path.targetDistance = entry_event
+                                        ? vec3_length(vec3_sub(entry_event->position,
+                                                               path.lightSamplePosition))
+                                        : 0.0;
+        debug_path.firstHitPosition = entry_event ? entry_event->position : path.targetPosition;
+        debug_path.firstHitGeometricNormal =
+            entry_event ? entry_event->normal : vec3(0.0, 0.0, 1.0);
+        debug_path.firstHitOrientedNormal = debug_path.firstHitGeometricNormal;
+        debug_path.materialId = analytic_sphere->payload.materialId;
+        debug_path.transparency = analytic_sphere->payload.transparency;
+        debug_path.opticalIor = analytic_sphere->payload.opticalIor;
+        debug_path.bsdfIor = analytic_sphere->payload.bsdf.ior;
+        debug_path.roughness = analytic_sphere->payload.bsdf.roughness;
+        debug_path.reflectivity = analytic_sphere->payload.bsdf.reflectivity;
+        debug_path.eligible = true;
+        snprintf(debug_path.eventType,
+                 sizeof(debug_path.eventType),
+                 "%s",
+                 "analytic_sphere_lens");
+        debug_path.outgoingDirection = path.postExitDirection;
+        debug_path.throughput = path.throughput;
+        debug_path.initialRadiance = path.throughput;
+        snprintf(debug_path.lensShapeKind,
+                 sizeof(debug_path.lensShapeKind),
+                 "%s",
+                 RuntimeCausticLensTransport3D_ShapeKindLabel(path.shapeKind));
+        debug_path.lensSceneObjectIndex = path.sceneObjectIndex;
+        debug_path.lensPrimitiveIndex = path.primitiveIndex;
+        debug_path.lensInterfaceEventCount = path.interfaceEventCount;
+        debug_path.lensEntryPosition = entry_event ? entry_event->position : path.targetPosition;
+        debug_path.lensEntryNormal =
+            entry_event ? entry_event->normal : vec3(0.0, 0.0, 1.0);
+        debug_path.lensEntryIncidentDirection =
+            entry_event ? entry_event->incidentDirection : vec3(0.0, 0.0, 0.0);
+        debug_path.lensEntryOutgoingDirection =
+            entry_event ? entry_event->outgoingDirection : vec3(0.0, 0.0, 0.0);
+        debug_path.lensEntryEtaFrom = entry_event ? entry_event->etaFrom : 0.0;
+        debug_path.lensEntryEtaTo = entry_event ? entry_event->etaTo : 0.0;
+        debug_path.lensEntryFresnel = entry_event ? entry_event->fresnel : 0.0;
+        debug_path.lensEntryTotalInternalReflection =
+            entry_event ? entry_event->totalInternalReflection : false;
+        debug_path.lensExitPosition = exit_event ? exit_event->position : path.postExitOrigin;
+        debug_path.lensExitNormal =
+            exit_event ? exit_event->normal : vec3(0.0, 0.0, 1.0);
+        debug_path.lensExitIncidentDirection =
+            exit_event ? exit_event->incidentDirection : vec3(0.0, 0.0, 0.0);
+        debug_path.lensExitOutgoingDirection =
+            exit_event ? exit_event->outgoingDirection : path.postExitDirection;
+        debug_path.lensExitEtaFrom = exit_event ? exit_event->etaFrom : 0.0;
+        debug_path.lensExitEtaTo = exit_event ? exit_event->etaTo : 0.0;
+        debug_path.lensExitFresnel = exit_event ? exit_event->fresnel : 0.0;
+        debug_path.lensExitTotalInternalReflection =
+            exit_event ? exit_event->totalInternalReflection : false;
+        debug_path.lensPostExitOrigin = path.postExitOrigin;
+        debug_path.lensPostExitDirection = path.postExitDirection;
+        debug_path.lensReceiverCrossing = path.receiverCrossing;
+        debug_path.lensInsideDistance = path.insideDistance;
+        debug_path.lensSampleWeight = path.sampleWeight;
+        debug_path.lensPathPdf = path.pathPdf;
+        debug_path.lensTotalInternalReflection =
+            debug_path.lensEntryTotalInternalReflection ||
+            debug_path.lensExitTotalInternalReflection;
+        debug_path.sphereLensEntryPosition =
+            entry_event ? entry_event->position : path.targetPosition;
+        debug_path.sphereLensExitPosition = path.postExitOrigin;
+        debug_path.sphereLensReceiverCrossing = path.receiverCrossing;
+        debug_path.sphereLensInsideDistance = path.insideDistance;
+        debug_path.insideSpecularObjectAfterEvent = false;
+        debug_path.continuationEventCount = 1u;
+        debug_path.exitedSpecularObjectBeforeVolumeDeposit = true;
+        debug_path.mediumExitSceneObjectIndex = analytic_sphere->sceneObjectIndex;
+        debug_path.mediumExitPosition = path.postExitOrigin;
+        debug_path.mediumExitDirection = path.postExitDirection;
+    }
+
+    if (cache) {
+        emitted = runtime_caustic_transport_deposit_segment(scene,
+                                                            cache,
+                                                            &outgoing,
+                                                            path.throughput,
+                                                            volume_footprint_radius,
+                                                            diagnostics,
+                                                            debug_enabled ? &debug_path : NULL) ||
+                  emitted;
+    }
+    if (surface_cache &&
+        runtime_caustic_transport_deposit_surface(scene,
+                                                  surface_cache,
+                                                  &outgoing,
+                                                  path.throughput,
+                                                  false,
+                                                  analytic_sphere->sceneObjectIndex,
+                                                  diagnostics)) {
+        emitted = true;
+    }
+
+    if (emitted) {
+        diagnostics->emittedPathCount += 1u;
+        diagnostics->analyticSphereLensEmittedPathCount += 1u;
+        if (debug_enabled) {
+            RuntimeCausticTransportDebug3D_RecordPath(&debug_path);
+        }
+        return true;
+    }
+    return false;
+}
+
+static void runtime_caustic_transport_emit_analytic_sphere_lens(
+    const RuntimeScene3D* scene,
+    const RuntimeLightSource3D* light,
+    int light_index,
+    const RuntimeCausticTransportAnalyticSphere3D* analytic_sphere,
+    int path_budget,
+    RuntimeCausticVolumeCache3D* cache,
+    RuntimeCausticSurfaceCache3D* surface_cache,
+    RuntimeCausticTransport3DDiagnostics* diagnostics) {
+    int sample_count = path_budget;
+    if (!scene || !light || !analytic_sphere || !diagnostics) return;
+    if (sample_count <= 0) {
+        sample_count = RUNTIME_CAUSTIC_TRANSPORT_SPHERE_LENS_SEED_SAMPLE_COUNT;
+    }
+    if (sample_count > RUNTIME_CAUSTIC_TRANSPORT_SPHERE_LENS_MAX_SAMPLE_COUNT) {
+        sample_count = RUNTIME_CAUSTIC_TRANSPORT_SPHERE_LENS_MAX_SAMPLE_COUNT;
+    }
+    for (int sample_i = 0;
+         sample_i < sample_count && (int)diagnostics->evaluatedPathCount < path_budget;
+         ++sample_i) {
+        (void)runtime_caustic_transport_emit_analytic_sphere_lens_sample(scene,
+                                                                         light,
+                                                                         light_index,
+                                                                         analytic_sphere,
+                                                                         sample_i,
+                                                                         path_budget,
+                                                                         sample_count,
+                                                                         cache,
+                                                                         surface_cache,
+                                                                         diagnostics);
+    }
+}
+
+static bool runtime_caustic_transport_emit_analytic_cylinder_lens_sample(
+    const RuntimeScene3D* scene,
+    const RuntimeLightSource3D* light,
+    int light_index,
+    const RuntimeCausticTransportAnalyticCylinder3D* analytic_cylinder,
+    int sample_index,
+    int path_budget,
+    int sample_count,
+    bool focused_profile,
+    RuntimeCausticVolumeCache3D* cache,
+    RuntimeCausticSurfaceCache3D* surface_cache,
+    RuntimeCausticTransport3DDiagnostics* diagnostics) {
+    RuntimeCausticLensLightSample3D lens_light;
+    RuntimeCausticLensSample3D sample;
+    RuntimeCausticLensPath3D path;
+    const RuntimeCausticLensInterfaceEvent3D* entry_event = NULL;
+    const RuntimeCausticLensInterfaceEvent3D* exit_event = NULL;
+    Ray3D outgoing = {0};
+    double light_distance = 0.0;
+    double aperture_u = 0.0;
+    double aperture_v = 0.0;
+    double lens_u = 0.0;
+    double lens_v = 0.0;
+    double sample_weight = 0.0;
+    double volume_footprint_radius = 0.0;
+    bool emitted = false;
+    bool debug_enabled = RuntimeCausticTransportDebug3D_IsEnabled();
+    RuntimeCausticTransportDebugPath3D debug_path = {0};
+
+    if (!scene || !light || !analytic_cylinder || !analytic_cylinder->valid ||
+        !diagnostics || sample_count <= 0) {
+        return false;
+    }
+
+    RuntimeCausticLensTransport3D_DefaultLightSample(&lens_light);
+    RuntimeCausticLensTransport3D_DefaultSample(&sample);
+    if (focused_profile) {
+        runtime_caustic_transport_cylinder_lens_focused_sample(sample_index,
+                                                               sample_count,
+                                                               &aperture_u,
+                                                               &aperture_v,
+                                                               &lens_u,
+                                                               &lens_v);
+    } else {
+        runtime_caustic_transport_sphere_lens_sample(sample_index,
+                                                     sample_count,
+                                                     &aperture_u,
+                                                     &aperture_v,
+                                                     &lens_u,
+                                                     &lens_v);
+    }
+    light_distance = vec3_length(vec3_sub(analytic_cylinder->shape.center,
+                                          light->position));
+    lens_light.position = light->position;
+    lens_light.radius = fmax(light->radius, analytic_cylinder->shape.radius * 0.025);
+    lens_light.intensity = runtime_caustic_transport_light_attenuation(light,
+                                                                       light_distance);
+    lens_light.color = light->color;
+    lens_light.lightIndex = light_index;
+    sample_weight = runtime_caustic_transport_analytic_sphere_lens_sample_weight(path_budget,
+                                                                                 sample_count);
+    sample.apertureU = aperture_u;
+    sample.apertureV = aperture_v;
+    sample.lensU = lens_u;
+    sample.lensV = lens_v;
+    sample.sampleWeight = sample_weight;
+    sample.receiverDistance = analytic_cylinder->shape.radius * 4.0;
+
+    diagnostics->evaluatedPathCount += 1u;
+    diagnostics->analyticCylinderLensEvaluatedPathCount += 1u;
+    diagnostics->analyticCylinderLensSampleWeight = sample_weight;
+    diagnostics->analyticCylinderLensTotalSampleWeight += sample_weight;
+    if (!RuntimeCausticLensTransport3D_SolveCylinderPath(&analytic_cylinder->shape,
+                                                         &lens_light,
+                                                         &sample,
+                                                         &path) ||
+        !path.valid ||
+        !(runtime_caustic_transport_luma(path.throughput) > 1.0e-9)) {
+        return false;
+    }
+    entry_event = path.interfaceEventCount > 0u ? &path.events[0] : NULL;
+    exit_event = path.interfaceEventCount > 1u ? &path.events[1] : NULL;
+
+    diagnostics->transparentHitCount += 2u;
+    diagnostics->specularEventCount += 2u;
+    outgoing = RuntimeRay3D_MakeOffset(path.postExitOrigin,
+                                       exit_event ? exit_event->normal : vec3(0.0, 0.0, 1.0),
+                                       path.postExitDirection,
+                                       1.0e-4);
+    volume_footprint_radius = runtime_caustic_transport_clamp(
+        analytic_cylinder->shape.radius * 0.045 + fmax(light->radius, 0.0) * 0.65,
+        0.0,
+        analytic_cylinder->shape.radius * 0.45);
+
+    if (debug_enabled) {
+        debug_path.pathId = diagnostics->evaluatedPathCount;
+        snprintf(debug_path.emissionPolicy,
+                 sizeof(debug_path.emissionPolicy),
+                 "%s",
+                 RuntimeCausticTransportEmissionPolicy3D_Label(
+                     focused_profile
+                         ? RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_CYLINDER_LENS_FOCUSED
+                         : RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_CYLINDER_LENS));
+        debug_path.lightIndex = light_index;
+        snprintf(debug_path.lightId,
+                 sizeof(debug_path.lightId),
+                 "%s",
+                 light->id[0] ? light->id : "compat_light");
+        snprintf(debug_path.lightKind,
+                 sizeof(debug_path.lightKind),
+                 "%s",
+                 runtime_caustic_transport_light_kind_label(light->kind));
+        debug_path.lightPosition = path.lightSamplePosition;
+        debug_path.lightRadius = light->radius;
+        debug_path.lightIntensity = light->intensity;
+        debug_path.lightColor = light->color;
+        debug_path.targetTriangleIndex = -1;
+        debug_path.targetPrimitiveIndex = analytic_cylinder->primitiveIndex;
+        debug_path.targetSceneObjectIndex = analytic_cylinder->sceneObjectIndex;
+        debug_path.targetSampleIndex = sample_index;
+        debug_path.targetPosition = path.targetPosition;
+        debug_path.targetDistance = entry_event
+                                        ? vec3_length(vec3_sub(entry_event->position,
+                                                               path.lightSamplePosition))
+                                        : 0.0;
+        debug_path.firstHitPosition = entry_event ? entry_event->position : path.targetPosition;
+        debug_path.firstHitGeometricNormal =
+            entry_event ? entry_event->normal : vec3(0.0, 0.0, 1.0);
+        debug_path.firstHitOrientedNormal = debug_path.firstHitGeometricNormal;
+        debug_path.materialId = analytic_cylinder->payload.materialId;
+        debug_path.transparency = analytic_cylinder->payload.transparency;
+        debug_path.opticalIor = analytic_cylinder->payload.opticalIor;
+        debug_path.bsdfIor = analytic_cylinder->payload.bsdf.ior;
+        debug_path.roughness = analytic_cylinder->payload.bsdf.roughness;
+        debug_path.reflectivity = analytic_cylinder->payload.bsdf.reflectivity;
+        debug_path.eligible = true;
+        snprintf(debug_path.eventType,
+                 sizeof(debug_path.eventType),
+                 "%s",
+                 "analytic_cylinder_lens");
+        debug_path.outgoingDirection = path.postExitDirection;
+        debug_path.throughput = path.throughput;
+        debug_path.initialRadiance = path.throughput;
+        snprintf(debug_path.lensShapeKind,
+                 sizeof(debug_path.lensShapeKind),
+                 "%s",
+                 RuntimeCausticLensTransport3D_ShapeKindLabel(path.shapeKind));
+        debug_path.lensSceneObjectIndex = path.sceneObjectIndex;
+        debug_path.lensPrimitiveIndex = path.primitiveIndex;
+        debug_path.lensInterfaceEventCount = path.interfaceEventCount;
+        debug_path.lensEntryPosition = entry_event ? entry_event->position : path.targetPosition;
+        debug_path.lensEntryNormal =
+            entry_event ? entry_event->normal : vec3(0.0, 0.0, 1.0);
+        debug_path.lensEntryIncidentDirection =
+            entry_event ? entry_event->incidentDirection : vec3(0.0, 0.0, 0.0);
+        debug_path.lensEntryOutgoingDirection =
+            entry_event ? entry_event->outgoingDirection : vec3(0.0, 0.0, 0.0);
+        debug_path.lensEntryEtaFrom = entry_event ? entry_event->etaFrom : 0.0;
+        debug_path.lensEntryEtaTo = entry_event ? entry_event->etaTo : 0.0;
+        debug_path.lensEntryFresnel = entry_event ? entry_event->fresnel : 0.0;
+        debug_path.lensEntryTotalInternalReflection =
+            entry_event ? entry_event->totalInternalReflection : false;
+        debug_path.lensExitPosition = exit_event ? exit_event->position : path.postExitOrigin;
+        debug_path.lensExitNormal =
+            exit_event ? exit_event->normal : vec3(0.0, 0.0, 1.0);
+        debug_path.lensExitIncidentDirection =
+            exit_event ? exit_event->incidentDirection : vec3(0.0, 0.0, 0.0);
+        debug_path.lensExitOutgoingDirection =
+            exit_event ? exit_event->outgoingDirection : path.postExitDirection;
+        debug_path.lensExitEtaFrom = exit_event ? exit_event->etaFrom : 0.0;
+        debug_path.lensExitEtaTo = exit_event ? exit_event->etaTo : 0.0;
+        debug_path.lensExitFresnel = exit_event ? exit_event->fresnel : 0.0;
+        debug_path.lensExitTotalInternalReflection =
+            exit_event ? exit_event->totalInternalReflection : false;
+        debug_path.lensPostExitOrigin = path.postExitOrigin;
+        debug_path.lensPostExitDirection = path.postExitDirection;
+        debug_path.lensReceiverCrossing = path.receiverCrossing;
+        debug_path.lensInsideDistance = path.insideDistance;
+        debug_path.lensSampleWeight = path.sampleWeight;
+        debug_path.lensPathPdf = path.pathPdf;
+        debug_path.lensTotalInternalReflection =
+            debug_path.lensEntryTotalInternalReflection ||
+            debug_path.lensExitTotalInternalReflection;
+        debug_path.insideSpecularObjectAfterEvent = false;
+        debug_path.continuationEventCount = 1u;
+        debug_path.exitedSpecularObjectBeforeVolumeDeposit = true;
+        debug_path.mediumExitSceneObjectIndex = analytic_cylinder->sceneObjectIndex;
+        debug_path.mediumExitPosition = path.postExitOrigin;
+        debug_path.mediumExitDirection = path.postExitDirection;
+    }
+
+    if (cache) {
+        emitted = runtime_caustic_transport_deposit_segment(scene,
+                                                            cache,
+                                                            &outgoing,
+                                                            path.throughput,
+                                                            volume_footprint_radius,
+                                                            diagnostics,
+                                                            debug_enabled ? &debug_path : NULL) ||
+                  emitted;
+    }
+    if (surface_cache &&
+        runtime_caustic_transport_deposit_surface(scene,
+                                                  surface_cache,
+                                                  &outgoing,
+                                                  path.throughput,
+                                                  false,
+                                                  analytic_cylinder->sceneObjectIndex,
+                                                  diagnostics)) {
+        emitted = true;
+    }
+
+    if (emitted) {
+        diagnostics->emittedPathCount += 1u;
+        diagnostics->analyticCylinderLensEmittedPathCount += 1u;
+        if (debug_enabled) {
+            RuntimeCausticTransportDebug3D_RecordPath(&debug_path);
+        }
+        return true;
+    }
+    return false;
+}
+
+static void runtime_caustic_transport_emit_analytic_cylinder_lens(
+    const RuntimeScene3D* scene,
+    const RuntimeLightSource3D* light,
+    int light_index,
+    const RuntimeCausticTransportAnalyticCylinder3D* analytic_cylinder,
+    int path_budget,
+    bool focused_profile,
+    RuntimeCausticVolumeCache3D* cache,
+    RuntimeCausticSurfaceCache3D* surface_cache,
+    RuntimeCausticTransport3DDiagnostics* diagnostics) {
+    int sample_count = path_budget;
+    if (!scene || !light || !analytic_cylinder || !diagnostics) return;
+    if (sample_count <= 0) {
+        sample_count = RUNTIME_CAUSTIC_TRANSPORT_SPHERE_LENS_SEED_SAMPLE_COUNT;
+    }
+    if (sample_count > RUNTIME_CAUSTIC_TRANSPORT_SPHERE_LENS_MAX_SAMPLE_COUNT) {
+        sample_count = RUNTIME_CAUSTIC_TRANSPORT_SPHERE_LENS_MAX_SAMPLE_COUNT;
+    }
+    for (int sample_i = 0;
+         sample_i < sample_count && (int)diagnostics->evaluatedPathCount < path_budget;
+         ++sample_i) {
+        (void)runtime_caustic_transport_emit_analytic_cylinder_lens_sample(
+            scene,
+            light,
+            light_index,
+            analytic_cylinder,
+            sample_i,
+            path_budget,
+            sample_count,
+            focused_profile,
+            cache,
+            surface_cache,
+            diagnostics);
+    }
+}
+
+static bool runtime_caustic_transport_emit_analytic_prism_lens_sample(
+    const RuntimeScene3D* scene,
+    const RuntimeLightSource3D* light,
+    int light_index,
+    const RuntimeCausticTransportAnalyticPrism3D* analytic_prism,
+    int sample_index,
+    int path_budget,
+    int sample_count,
+    RuntimeCausticVolumeCache3D* cache,
+    RuntimeCausticSurfaceCache3D* surface_cache,
+    RuntimeCausticTransport3DDiagnostics* diagnostics) {
+    RuntimeCausticLensLightSample3D lens_light;
+    RuntimeCausticLensSample3D sample;
+    RuntimeCausticLensPath3D path;
+    const RuntimeCausticLensInterfaceEvent3D* entry_event = NULL;
+    const RuntimeCausticLensInterfaceEvent3D* exit_event = NULL;
+    Ray3D outgoing = {0};
+    double light_distance = 0.0;
+    double aperture_u = 0.0;
+    double aperture_v = 0.0;
+    double lens_u = 0.0;
+    double lens_v = 0.0;
+    double sample_weight = 0.0;
+    double volume_footprint_radius = 0.0;
+    bool emitted = false;
+    bool debug_enabled = RuntimeCausticTransportDebug3D_IsEnabled();
+    RuntimeCausticTransportDebugPath3D debug_path = {0};
+
+    if (!scene || !light || !analytic_prism || !analytic_prism->valid ||
+        !diagnostics || sample_count <= 0) {
+        return false;
+    }
+
+    RuntimeCausticLensTransport3D_DefaultLightSample(&lens_light);
+    RuntimeCausticLensTransport3D_DefaultSample(&sample);
+    runtime_caustic_transport_sphere_lens_sample(sample_index,
+                                                 sample_count,
+                                                 &aperture_u,
+                                                 &aperture_v,
+                                                 &lens_u,
+                                                 &lens_v);
+    light_distance = vec3_length(vec3_sub(analytic_prism->shape.center,
+                                          light->position));
+    lens_light.position = light->position;
+    lens_light.radius = fmax(light->radius, analytic_prism->shape.radius * 0.015);
+    lens_light.intensity = runtime_caustic_transport_light_attenuation(light,
+                                                                       light_distance);
+    lens_light.color = light->color;
+    lens_light.lightIndex = light_index;
+    sample_weight = runtime_caustic_transport_analytic_sphere_lens_sample_weight(path_budget,
+                                                                                 sample_count);
+    sample.apertureU = aperture_u * 0.35;
+    sample.apertureV = aperture_v * 0.35;
+    sample.lensU = lens_u * 0.70;
+    sample.lensV = lens_v;
+    sample.sampleWeight = sample_weight;
+    sample.receiverDistance = analytic_prism->shape.radius * 5.0;
+
+    diagnostics->evaluatedPathCount += 1u;
+    diagnostics->analyticPrismLensEvaluatedPathCount += 1u;
+    diagnostics->analyticPrismLensSampleWeight = sample_weight;
+    diagnostics->analyticPrismLensTotalSampleWeight += sample_weight;
+    if (!RuntimeCausticLensTransport3D_SolvePrismPath(&analytic_prism->shape,
+                                                      &lens_light,
+                                                      &sample,
+                                                      &path) ||
+        !path.valid ||
+        !(runtime_caustic_transport_luma(path.throughput) > 1.0e-9)) {
+        return false;
+    }
+    entry_event = path.interfaceEventCount > 0u ? &path.events[0] : NULL;
+    exit_event = path.interfaceEventCount > 1u ? &path.events[1] : NULL;
+
+    diagnostics->transparentHitCount += 2u;
+    diagnostics->specularEventCount += 2u;
+    outgoing = RuntimeRay3D_MakeOffset(path.postExitOrigin,
+                                       exit_event ? exit_event->normal : vec3(0.0, 0.0, 1.0),
+                                       path.postExitDirection,
+                                       1.0e-4);
+    volume_footprint_radius = runtime_caustic_transport_clamp(
+        analytic_prism->shape.radius * 0.035 + fmax(light->radius, 0.0) * 0.45,
+        0.0,
+        analytic_prism->shape.radius * 0.35);
+
+    if (debug_enabled) {
+        debug_path.pathId = diagnostics->evaluatedPathCount;
+        snprintf(debug_path.emissionPolicy,
+                 sizeof(debug_path.emissionPolicy),
+                 "%s",
+                 RuntimeCausticTransportEmissionPolicy3D_Label(
+                     RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_PRISM_LENS));
+        debug_path.lightIndex = light_index;
+        snprintf(debug_path.lightId,
+                 sizeof(debug_path.lightId),
+                 "%s",
+                 light->id[0] ? light->id : "compat_light");
+        snprintf(debug_path.lightKind,
+                 sizeof(debug_path.lightKind),
+                 "%s",
+                 runtime_caustic_transport_light_kind_label(light->kind));
+        debug_path.lightPosition = path.lightSamplePosition;
+        debug_path.lightRadius = light->radius;
+        debug_path.lightIntensity = light->intensity;
+        debug_path.lightColor = light->color;
+        debug_path.targetTriangleIndex = -1;
+        debug_path.targetPrimitiveIndex = analytic_prism->primitiveIndex;
+        debug_path.targetSceneObjectIndex = analytic_prism->sceneObjectIndex;
+        debug_path.targetSampleIndex = sample_index;
+        debug_path.targetPosition = path.targetPosition;
+        debug_path.targetDistance = entry_event
+                                        ? vec3_length(vec3_sub(entry_event->position,
+                                                               path.lightSamplePosition))
+                                        : 0.0;
+        debug_path.firstHitPosition = entry_event ? entry_event->position : path.targetPosition;
+        debug_path.firstHitGeometricNormal =
+            entry_event ? entry_event->normal : vec3(0.0, 0.0, 1.0);
+        debug_path.firstHitOrientedNormal = debug_path.firstHitGeometricNormal;
+        debug_path.materialId = analytic_prism->payload.materialId;
+        debug_path.transparency = analytic_prism->payload.transparency;
+        debug_path.opticalIor = analytic_prism->payload.opticalIor;
+        debug_path.bsdfIor = analytic_prism->payload.bsdf.ior;
+        debug_path.roughness = analytic_prism->payload.bsdf.roughness;
+        debug_path.reflectivity = analytic_prism->payload.bsdf.reflectivity;
+        debug_path.eligible = true;
+        snprintf(debug_path.eventType,
+                 sizeof(debug_path.eventType),
+                 "%s",
+                 "analytic_prism_lens");
+        debug_path.outgoingDirection = path.postExitDirection;
+        debug_path.throughput = path.throughput;
+        debug_path.initialRadiance = path.throughput;
+        snprintf(debug_path.lensShapeKind,
+                 sizeof(debug_path.lensShapeKind),
+                 "%s",
+                 RuntimeCausticLensTransport3D_ShapeKindLabel(path.shapeKind));
+        debug_path.lensSceneObjectIndex = path.sceneObjectIndex;
+        debug_path.lensPrimitiveIndex = path.primitiveIndex;
+        debug_path.lensInterfaceEventCount = path.interfaceEventCount;
+        debug_path.lensEntryPosition = entry_event ? entry_event->position : path.targetPosition;
+        debug_path.lensEntryNormal =
+            entry_event ? entry_event->normal : vec3(0.0, 0.0, 1.0);
+        debug_path.lensEntryIncidentDirection =
+            entry_event ? entry_event->incidentDirection : vec3(0.0, 0.0, 0.0);
+        debug_path.lensEntryOutgoingDirection =
+            entry_event ? entry_event->outgoingDirection : vec3(0.0, 0.0, 0.0);
+        debug_path.lensEntryEtaFrom = entry_event ? entry_event->etaFrom : 0.0;
+        debug_path.lensEntryEtaTo = entry_event ? entry_event->etaTo : 0.0;
+        debug_path.lensEntryFresnel = entry_event ? entry_event->fresnel : 0.0;
+        debug_path.lensEntryTotalInternalReflection =
+            entry_event ? entry_event->totalInternalReflection : false;
+        debug_path.lensExitPosition = exit_event ? exit_event->position : path.postExitOrigin;
+        debug_path.lensExitNormal =
+            exit_event ? exit_event->normal : vec3(0.0, 0.0, 1.0);
+        debug_path.lensExitIncidentDirection =
+            exit_event ? exit_event->incidentDirection : vec3(0.0, 0.0, 0.0);
+        debug_path.lensExitOutgoingDirection =
+            exit_event ? exit_event->outgoingDirection : path.postExitDirection;
+        debug_path.lensExitEtaFrom = exit_event ? exit_event->etaFrom : 0.0;
+        debug_path.lensExitEtaTo = exit_event ? exit_event->etaTo : 0.0;
+        debug_path.lensExitFresnel = exit_event ? exit_event->fresnel : 0.0;
+        debug_path.lensExitTotalInternalReflection =
+            exit_event ? exit_event->totalInternalReflection : false;
+        debug_path.lensPostExitOrigin = path.postExitOrigin;
+        debug_path.lensPostExitDirection = path.postExitDirection;
+        debug_path.lensReceiverCrossing = path.receiverCrossing;
+        debug_path.lensInsideDistance = path.insideDistance;
+        debug_path.lensSampleWeight = path.sampleWeight;
+        debug_path.lensPathPdf = path.pathPdf;
+        debug_path.lensTotalInternalReflection =
+            debug_path.lensEntryTotalInternalReflection ||
+            debug_path.lensExitTotalInternalReflection;
+        debug_path.insideSpecularObjectAfterEvent = false;
+        debug_path.continuationEventCount = 1u;
+        debug_path.exitedSpecularObjectBeforeVolumeDeposit = true;
+        debug_path.mediumExitSceneObjectIndex = analytic_prism->sceneObjectIndex;
+        debug_path.mediumExitPosition = path.postExitOrigin;
+        debug_path.mediumExitDirection = path.postExitDirection;
+    }
+
+    if (cache) {
+        emitted = runtime_caustic_transport_deposit_segment(scene,
+                                                            cache,
+                                                            &outgoing,
+                                                            path.throughput,
+                                                            volume_footprint_radius,
+                                                            diagnostics,
+                                                            debug_enabled ? &debug_path : NULL) ||
+                  emitted;
+    }
+    if (surface_cache &&
+        runtime_caustic_transport_deposit_surface(scene,
+                                                  surface_cache,
+                                                  &outgoing,
+                                                  path.throughput,
+                                                  false,
+                                                  analytic_prism->sceneObjectIndex,
+                                                  diagnostics)) {
+        emitted = true;
+    }
+
+    if (emitted) {
+        diagnostics->emittedPathCount += 1u;
+        diagnostics->analyticPrismLensEmittedPathCount += 1u;
+        if (debug_enabled) {
+            RuntimeCausticTransportDebug3D_RecordPath(&debug_path);
+        }
+        return true;
+    }
+    return false;
+}
+
+static void runtime_caustic_transport_emit_analytic_prism_lens(
+    const RuntimeScene3D* scene,
+    const RuntimeLightSource3D* light,
+    int light_index,
+    const RuntimeCausticTransportAnalyticPrism3D* analytic_prism,
+    int path_budget,
+    RuntimeCausticVolumeCache3D* cache,
+    RuntimeCausticSurfaceCache3D* surface_cache,
+    RuntimeCausticTransport3DDiagnostics* diagnostics) {
+    int sample_count = path_budget;
+    if (!scene || !light || !analytic_prism || !diagnostics) return;
+    if (sample_count <= 0) {
+        sample_count = RUNTIME_CAUSTIC_TRANSPORT_SPHERE_LENS_SEED_SAMPLE_COUNT;
+    }
+    if (sample_count > RUNTIME_CAUSTIC_TRANSPORT_SPHERE_LENS_MAX_SAMPLE_COUNT) {
+        sample_count = RUNTIME_CAUSTIC_TRANSPORT_SPHERE_LENS_MAX_SAMPLE_COUNT;
+    }
+    for (int sample_i = 0;
+         sample_i < sample_count && (int)diagnostics->evaluatedPathCount < path_budget;
+         ++sample_i) {
+        (void)runtime_caustic_transport_emit_analytic_prism_lens_sample(
+            scene,
+            light,
+            light_index,
+            analytic_prism,
+            sample_i,
+            path_budget,
+            sample_count,
+            cache,
+            surface_cache,
+            diagnostics);
+    }
+}
+
+static bool runtime_caustic_transport_emit_analytic_bowl_lens_sample(
+    const RuntimeScene3D* scene,
+    const RuntimeLightSource3D* light,
+    int light_index,
+    const RuntimeCausticTransportAnalyticBowl3D* analytic_bowl,
+    int sample_index,
+    int path_budget,
+    int sample_count,
+    RuntimeCausticVolumeCache3D* cache,
+    RuntimeCausticSurfaceCache3D* surface_cache,
+    RuntimeCausticTransport3DDiagnostics* diagnostics) {
+    RuntimeCausticLensLightSample3D lens_light;
+    RuntimeCausticLensSample3D sample;
+    RuntimeCausticLensPath3D path;
+    const RuntimeCausticLensInterfaceEvent3D* entry_event = NULL;
+    const RuntimeCausticLensInterfaceEvent3D* exit_event = NULL;
+    Ray3D outgoing = {0};
+    double light_distance = 0.0;
+    double aperture_u = 0.0;
+    double aperture_v = 0.0;
+    double lens_u = 0.0;
+    double lens_v = 0.0;
+    double sample_weight = 0.0;
+    double volume_footprint_radius = 0.0;
+    bool emitted = false;
+    bool debug_enabled = RuntimeCausticTransportDebug3D_IsEnabled();
+    RuntimeCausticTransportDebugPath3D debug_path = {0};
+
+    if (!scene || !light || !analytic_bowl || !analytic_bowl->valid ||
+        !diagnostics || sample_count <= 0) {
+        return false;
+    }
+
+    RuntimeCausticLensTransport3D_DefaultLightSample(&lens_light);
+    RuntimeCausticLensTransport3D_DefaultSample(&sample);
+    runtime_caustic_transport_sphere_lens_sample(sample_index,
+                                                 sample_count,
+                                                 &aperture_u,
+                                                 &aperture_v,
+                                                 &lens_u,
+                                                 &lens_v);
+    light_distance = vec3_length(vec3_sub(analytic_bowl->shape.center,
+                                          light->position));
+    lens_light.position = light->position;
+    lens_light.radius = fmax(light->radius, analytic_bowl->shape.radius * 0.018);
+    lens_light.intensity = runtime_caustic_transport_light_attenuation(light,
+                                                                       light_distance);
+    lens_light.color = light->color;
+    lens_light.lightIndex = light_index;
+    sample_weight = runtime_caustic_transport_analytic_sphere_lens_sample_weight(path_budget,
+                                                                                 sample_count);
+    sample.apertureU = aperture_u * 0.42;
+    sample.apertureV = aperture_v * 0.42;
+    sample.lensU = lens_u * 0.82;
+    sample.lensV = lens_v * 0.82;
+    sample.sampleWeight = sample_weight;
+    sample.receiverDistance = analytic_bowl->shape.radius * 5.0;
+
+    diagnostics->evaluatedPathCount += 1u;
+    diagnostics->analyticBowlLensEvaluatedPathCount += 1u;
+    diagnostics->analyticBowlLensSampleWeight = sample_weight;
+    diagnostics->analyticBowlLensTotalSampleWeight += sample_weight;
+    if (!RuntimeCausticLensTransport3D_SolveBowlPath(&analytic_bowl->shape,
+                                                     &lens_light,
+                                                     &sample,
+                                                     &path) ||
+        !path.valid ||
+        !(runtime_caustic_transport_luma(path.throughput) > 1.0e-9)) {
+        return false;
+    }
+    entry_event = path.interfaceEventCount > 0u ? &path.events[0] : NULL;
+    exit_event = path.interfaceEventCount > 1u ? &path.events[1] : NULL;
+
+    diagnostics->transparentHitCount += 2u;
+    diagnostics->specularEventCount += 2u;
+    outgoing = RuntimeRay3D_MakeOffset(path.postExitOrigin,
+                                       exit_event ? exit_event->normal : vec3(0.0, 0.0, 1.0),
+                                       path.postExitDirection,
+                                       1.0e-4);
+    volume_footprint_radius = runtime_caustic_transport_clamp(
+        analytic_bowl->shape.radius * 0.040 + fmax(light->radius, 0.0) * 0.48,
+        0.0,
+        analytic_bowl->shape.radius * 0.35);
+
+    if (debug_enabled) {
+        debug_path.pathId = diagnostics->evaluatedPathCount;
+        snprintf(debug_path.emissionPolicy,
+                 sizeof(debug_path.emissionPolicy),
+                 "%s",
+                 RuntimeCausticTransportEmissionPolicy3D_Label(
+                     RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_BOWL_LENS));
+        debug_path.lightIndex = light_index;
+        snprintf(debug_path.lightId,
+                 sizeof(debug_path.lightId),
+                 "%s",
+                 light->id[0] ? light->id : "compat_light");
+        snprintf(debug_path.lightKind,
+                 sizeof(debug_path.lightKind),
+                 "%s",
+                 runtime_caustic_transport_light_kind_label(light->kind));
+        debug_path.lightPosition = path.lightSamplePosition;
+        debug_path.lightRadius = light->radius;
+        debug_path.lightIntensity = light->intensity;
+        debug_path.lightColor = light->color;
+        debug_path.targetTriangleIndex = -1;
+        debug_path.targetPrimitiveIndex = analytic_bowl->primitiveIndex;
+        debug_path.targetSceneObjectIndex = analytic_bowl->sceneObjectIndex;
+        debug_path.targetSampleIndex = sample_index;
+        debug_path.targetPosition = path.targetPosition;
+        debug_path.targetDistance = entry_event
+                                        ? vec3_length(vec3_sub(entry_event->position,
+                                                               path.lightSamplePosition))
+                                        : 0.0;
+        debug_path.firstHitPosition = entry_event ? entry_event->position : path.targetPosition;
+        debug_path.firstHitGeometricNormal =
+            entry_event ? entry_event->normal : vec3(0.0, 0.0, 1.0);
+        debug_path.firstHitOrientedNormal = debug_path.firstHitGeometricNormal;
+        debug_path.materialId = analytic_bowl->payload.materialId;
+        debug_path.transparency = analytic_bowl->payload.transparency;
+        debug_path.opticalIor = analytic_bowl->payload.opticalIor;
+        debug_path.bsdfIor = analytic_bowl->payload.bsdf.ior;
+        debug_path.roughness = analytic_bowl->payload.bsdf.roughness;
+        debug_path.reflectivity = analytic_bowl->payload.bsdf.reflectivity;
+        debug_path.eligible = true;
+        snprintf(debug_path.eventType,
+                 sizeof(debug_path.eventType),
+                 "%s",
+                 "analytic_bowl_lens");
+        debug_path.outgoingDirection = path.postExitDirection;
+        debug_path.throughput = path.throughput;
+        debug_path.initialRadiance = path.throughput;
+        snprintf(debug_path.lensShapeKind,
+                 sizeof(debug_path.lensShapeKind),
+                 "%s",
+                 RuntimeCausticLensTransport3D_ShapeKindLabel(path.shapeKind));
+        debug_path.lensSceneObjectIndex = path.sceneObjectIndex;
+        debug_path.lensPrimitiveIndex = path.primitiveIndex;
+        debug_path.lensInterfaceEventCount = path.interfaceEventCount;
+        debug_path.lensEntryPosition = entry_event ? entry_event->position : path.targetPosition;
+        debug_path.lensEntryNormal =
+            entry_event ? entry_event->normal : vec3(0.0, 0.0, 1.0);
+        debug_path.lensEntryIncidentDirection =
+            entry_event ? entry_event->incidentDirection : vec3(0.0, 0.0, 0.0);
+        debug_path.lensEntryOutgoingDirection =
+            entry_event ? entry_event->outgoingDirection : vec3(0.0, 0.0, 0.0);
+        debug_path.lensEntryEtaFrom = entry_event ? entry_event->etaFrom : 0.0;
+        debug_path.lensEntryEtaTo = entry_event ? entry_event->etaTo : 0.0;
+        debug_path.lensEntryFresnel = entry_event ? entry_event->fresnel : 0.0;
+        debug_path.lensEntryTotalInternalReflection =
+            entry_event ? entry_event->totalInternalReflection : false;
+        debug_path.lensExitPosition = exit_event ? exit_event->position : path.postExitOrigin;
+        debug_path.lensExitNormal =
+            exit_event ? exit_event->normal : vec3(0.0, 0.0, 1.0);
+        debug_path.lensExitIncidentDirection =
+            exit_event ? exit_event->incidentDirection : vec3(0.0, 0.0, 0.0);
+        debug_path.lensExitOutgoingDirection =
+            exit_event ? exit_event->outgoingDirection : path.postExitDirection;
+        debug_path.lensExitEtaFrom = exit_event ? exit_event->etaFrom : 0.0;
+        debug_path.lensExitEtaTo = exit_event ? exit_event->etaTo : 0.0;
+        debug_path.lensExitFresnel = exit_event ? exit_event->fresnel : 0.0;
+        debug_path.lensExitTotalInternalReflection =
+            exit_event ? exit_event->totalInternalReflection : false;
+        debug_path.lensPostExitOrigin = path.postExitOrigin;
+        debug_path.lensPostExitDirection = path.postExitDirection;
+        debug_path.lensReceiverCrossing = path.receiverCrossing;
+        debug_path.lensInsideDistance = path.insideDistance;
+        debug_path.lensSampleWeight = path.sampleWeight;
+        debug_path.lensPathPdf = path.pathPdf;
+        debug_path.lensTotalInternalReflection =
+            debug_path.lensEntryTotalInternalReflection ||
+            debug_path.lensExitTotalInternalReflection;
+        debug_path.insideSpecularObjectAfterEvent = false;
+        debug_path.continuationEventCount = 1u;
+        debug_path.exitedSpecularObjectBeforeVolumeDeposit = true;
+        debug_path.mediumExitSceneObjectIndex = analytic_bowl->sceneObjectIndex;
+        debug_path.mediumExitPosition = path.postExitOrigin;
+        debug_path.mediumExitDirection = path.postExitDirection;
+    }
+
+    if (cache) {
+        emitted = runtime_caustic_transport_deposit_segment(scene,
+                                                            cache,
+                                                            &outgoing,
+                                                            path.throughput,
+                                                            volume_footprint_radius,
+                                                            diagnostics,
+                                                            debug_enabled ? &debug_path : NULL) ||
+                  emitted;
+    }
+    if (surface_cache &&
+        runtime_caustic_transport_deposit_surface(scene,
+                                                  surface_cache,
+                                                  &outgoing,
+                                                  path.throughput,
+                                                  false,
+                                                  analytic_bowl->sceneObjectIndex,
+                                                  diagnostics)) {
+        emitted = true;
+    }
+
+    if (emitted) {
+        diagnostics->emittedPathCount += 1u;
+        diagnostics->analyticBowlLensEmittedPathCount += 1u;
+        if (debug_enabled) {
+            RuntimeCausticTransportDebug3D_RecordPath(&debug_path);
+        }
+        return true;
+    }
+    return false;
+}
+
+static void runtime_caustic_transport_emit_analytic_bowl_lens(
+    const RuntimeScene3D* scene,
+    const RuntimeLightSource3D* light,
+    int light_index,
+    const RuntimeCausticTransportAnalyticBowl3D* analytic_bowl,
+    int path_budget,
+    RuntimeCausticVolumeCache3D* cache,
+    RuntimeCausticSurfaceCache3D* surface_cache,
+    RuntimeCausticTransport3DDiagnostics* diagnostics) {
+    int sample_count = path_budget;
+    if (!scene || !light || !analytic_bowl || !diagnostics) return;
+    if (sample_count <= 0) {
+        sample_count = RUNTIME_CAUSTIC_TRANSPORT_SPHERE_LENS_SEED_SAMPLE_COUNT;
+    }
+    if (sample_count > RUNTIME_CAUSTIC_TRANSPORT_SPHERE_LENS_MAX_SAMPLE_COUNT) {
+        sample_count = RUNTIME_CAUSTIC_TRANSPORT_SPHERE_LENS_MAX_SAMPLE_COUNT;
+    }
+    for (int sample_i = 0;
+         sample_i < sample_count && (int)diagnostics->evaluatedPathCount < path_budget;
+         ++sample_i) {
+        (void)runtime_caustic_transport_emit_analytic_bowl_lens_sample(
+            scene,
+            light,
+            light_index,
+            analytic_bowl,
+            sample_i,
+            path_budget,
+            sample_count,
+            cache,
+            surface_cache,
+            diagnostics);
+    }
+}
+
 static bool runtime_caustic_transport_emit_to_triangle_target(
     const RuntimeScene3D* scene,
     const RuntimeLightSource3D* light,
@@ -870,6 +2540,11 @@ static bool runtime_caustic_transport_emit_to_triangle_target(
     if (debug_enabled) {
         const RuntimeTriangle3D* triangle = &scene->triangleMesh.triangles[triangle_index];
         debug_path.pathId = diagnostics->evaluatedPathCount;
+        snprintf(debug_path.emissionPolicy,
+                 sizeof(debug_path.emissionPolicy),
+                 "%s",
+                 RuntimeCausticTransportEmissionPolicy3D_Label(
+                     RUNTIME_CAUSTIC_TRANSPORT_EMISSION_TRIANGLE_TARGETS));
         debug_path.lightIndex = light_index;
         snprintf(debug_path.lightId,
                  sizeof(debug_path.lightId),
@@ -1002,6 +2677,7 @@ void RuntimeCausticTransport3D_SetRequestState(const RuntimeCausticSettings3D* s
     g_caustic_transport_state.surfaceCacheRequested = src->surfaceCacheEnabled;
     g_caustic_transport_state.sampleBudget = src->sampleBudget;
     g_caustic_transport_state.maxPathDepth = src->maxPathDepth;
+    g_caustic_transport_state.emissionPolicy = src->emissionPolicy;
     g_caustic_transport_state.surfaceRadianceScale =
         runtime_caustic_transport_clamp(src->surfaceRadianceScale, 0.0, 128.0);
     g_caustic_transport_state.surfaceFootprintScale =
@@ -1037,6 +2713,27 @@ bool RuntimeCausticTransport3D_PopulateCaches(
     int path_budget = RUNTIME_CAUSTIC_TRANSPORT_DEFAULT_PATH_BUDGET;
     bool volume_cache_active = false;
     RuntimeLightSource3D compat_light;
+    RuntimeCausticTransportAnalyticSphere3D analytic_sphere = {0};
+    RuntimeCausticTransportAnalyticCylinder3D analytic_cylinder = {0};
+    RuntimeCausticTransportAnalyticPrism3D analytic_prism = {0};
+    RuntimeCausticTransportAnalyticBowl3D analytic_bowl = {0};
+    bool use_analytic_sphere_lens =
+        g_caustic_transport_state.emissionPolicy ==
+        RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_SPHERE_LENS;
+    bool use_analytic_cylinder_lens =
+        g_caustic_transport_state.emissionPolicy ==
+            RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_CYLINDER_LENS ||
+        g_caustic_transport_state.emissionPolicy ==
+            RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_CYLINDER_LENS_FOCUSED;
+    bool use_focused_cylinder_lens =
+        g_caustic_transport_state.emissionPolicy ==
+        RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_CYLINDER_LENS_FOCUSED;
+    bool use_analytic_prism_lens =
+        g_caustic_transport_state.emissionPolicy ==
+        RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_PRISM_LENS;
+    bool use_analytic_bowl_lens =
+        g_caustic_transport_state.emissionPolicy ==
+        RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_BOWL_LENS;
 
     if (out_diagnostics) *out_diagnostics = diagnostics;
     diagnostics.requested = g_caustic_transport_state.enabled;
@@ -1092,6 +2789,62 @@ bool RuntimeCausticTransport3D_PopulateCaches(
         g_caustic_transport_has_surface_receiver_fallback = false;
         HitInfo3D_Reset(&g_caustic_transport_surface_receiver_fallback);
     }
+    if (use_analytic_sphere_lens) {
+        if (runtime_caustic_transport_resolve_analytic_sphere(scene, &analytic_sphere)) {
+            diagnostics.analyticSphereLensResolvedCount = 1u;
+        } else {
+            diagnostics.analyticSphereLensRejectedCount = 1u;
+            RuntimeCausticVolumeCache3D_SnapshotDiagnostics(cache, &diagnostics.cache);
+            RuntimeCausticSurfaceCache3D_SnapshotDiagnostics(surface_cache,
+                                                             &diagnostics.surfaceCache);
+            (void)RuntimeCausticTransportDebug3D_WriteArtifacts(&g_caustic_transport_state,
+                                                                &diagnostics);
+            if (out_diagnostics) *out_diagnostics = diagnostics;
+            return false;
+        }
+    }
+    if (use_analytic_cylinder_lens) {
+        if (runtime_caustic_transport_resolve_analytic_cylinder(scene, &analytic_cylinder)) {
+            diagnostics.analyticCylinderLensResolvedCount = 1u;
+        } else {
+            diagnostics.analyticCylinderLensRejectedCount = 1u;
+            RuntimeCausticVolumeCache3D_SnapshotDiagnostics(cache, &diagnostics.cache);
+            RuntimeCausticSurfaceCache3D_SnapshotDiagnostics(surface_cache,
+                                                             &diagnostics.surfaceCache);
+            (void)RuntimeCausticTransportDebug3D_WriteArtifacts(&g_caustic_transport_state,
+                                                                &diagnostics);
+            if (out_diagnostics) *out_diagnostics = diagnostics;
+            return false;
+        }
+    }
+    if (use_analytic_prism_lens) {
+        if (runtime_caustic_transport_resolve_analytic_prism(scene, &analytic_prism)) {
+            diagnostics.analyticPrismLensResolvedCount = 1u;
+        } else {
+            diagnostics.analyticPrismLensRejectedCount = 1u;
+            RuntimeCausticVolumeCache3D_SnapshotDiagnostics(cache, &diagnostics.cache);
+            RuntimeCausticSurfaceCache3D_SnapshotDiagnostics(surface_cache,
+                                                             &diagnostics.surfaceCache);
+            (void)RuntimeCausticTransportDebug3D_WriteArtifacts(&g_caustic_transport_state,
+                                                                &diagnostics);
+            if (out_diagnostics) *out_diagnostics = diagnostics;
+            return false;
+        }
+    }
+    if (use_analytic_bowl_lens) {
+        if (runtime_caustic_transport_resolve_analytic_bowl(scene, &analytic_bowl)) {
+            diagnostics.analyticBowlLensResolvedCount = 1u;
+        } else {
+            diagnostics.analyticBowlLensRejectedCount = 1u;
+            RuntimeCausticVolumeCache3D_SnapshotDiagnostics(cache, &diagnostics.cache);
+            RuntimeCausticSurfaceCache3D_SnapshotDiagnostics(surface_cache,
+                                                             &diagnostics.surfaceCache);
+            (void)RuntimeCausticTransportDebug3D_WriteArtifacts(&g_caustic_transport_state,
+                                                                &diagnostics);
+            if (out_diagnostics) *out_diagnostics = diagnostics;
+            return false;
+        }
+    }
 
     enabled_light_count = RuntimeLightSet3D_EnabledCount(&scene->lightSet);
     if (enabled_light_count > 0) {
@@ -1100,16 +2853,59 @@ bool RuntimeCausticTransport3D_PopulateCaches(
                 RuntimeLightSet3D_GetEnabled(&scene->lightSet, light_i);
             if (!light || light->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_MESH_EMISSIVE) continue;
             diagnostics.lightCount += 1u;
-            for (int tri_i = 0; tri_i < scene->triangleMesh.triangleCount; ++tri_i) {
-                if ((int)diagnostics.evaluatedPathCount >= path_budget) break;
-                runtime_caustic_transport_emit_to_triangle(scene,
-                                                           light,
-                                                           light_i,
-                                                           tri_i,
-                                                           path_budget,
-                                                           volume_cache_active ? cache : NULL,
-                                                           g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
-                                                           &diagnostics);
+            if (use_analytic_sphere_lens) {
+                runtime_caustic_transport_emit_analytic_sphere_lens(
+                    scene,
+                    light,
+                    light_i,
+                    &analytic_sphere,
+                    path_budget,
+                    volume_cache_active ? cache : NULL,
+                    g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
+                    &diagnostics);
+            } else if (use_analytic_cylinder_lens) {
+                runtime_caustic_transport_emit_analytic_cylinder_lens(
+                    scene,
+                    light,
+                    light_i,
+                    &analytic_cylinder,
+                    path_budget,
+                    use_focused_cylinder_lens,
+                    volume_cache_active ? cache : NULL,
+                    g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
+                    &diagnostics);
+            } else if (use_analytic_prism_lens) {
+                runtime_caustic_transport_emit_analytic_prism_lens(
+                    scene,
+                    light,
+                    light_i,
+                    &analytic_prism,
+                    path_budget,
+                    volume_cache_active ? cache : NULL,
+                    g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
+                    &diagnostics);
+            } else if (use_analytic_bowl_lens) {
+                runtime_caustic_transport_emit_analytic_bowl_lens(
+                    scene,
+                    light,
+                    light_i,
+                    &analytic_bowl,
+                    path_budget,
+                    volume_cache_active ? cache : NULL,
+                    g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
+                    &diagnostics);
+            } else {
+                for (int tri_i = 0; tri_i < scene->triangleMesh.triangleCount; ++tri_i) {
+                    if ((int)diagnostics.evaluatedPathCount >= path_budget) break;
+                    runtime_caustic_transport_emit_to_triangle(scene,
+                                                               light,
+                                                               light_i,
+                                                               tri_i,
+                                                               path_budget,
+                                                               volume_cache_active ? cache : NULL,
+                                                               g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
+                                                               &diagnostics);
+                }
             }
         }
     } else if (scene->hasLight) {
@@ -1122,16 +2918,59 @@ bool RuntimeCausticTransport3D_PopulateCaches(
         compat_light.falloffDistance = scene->light.falloffDistance;
         compat_light.falloffMode = scene->light.falloffMode;
         diagnostics.lightCount = 1u;
-        for (int tri_i = 0; tri_i < scene->triangleMesh.triangleCount; ++tri_i) {
-            if ((int)diagnostics.evaluatedPathCount >= path_budget) break;
-            runtime_caustic_transport_emit_to_triangle(scene,
-                                                       &compat_light,
-                                                       0,
-                                                       tri_i,
-                                                       path_budget,
-                                                       volume_cache_active ? cache : NULL,
-                                                       g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
-                                                       &diagnostics);
+        if (use_analytic_sphere_lens) {
+            runtime_caustic_transport_emit_analytic_sphere_lens(
+                scene,
+                &compat_light,
+                0,
+                &analytic_sphere,
+                path_budget,
+                volume_cache_active ? cache : NULL,
+                g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
+                &diagnostics);
+        } else if (use_analytic_cylinder_lens) {
+            runtime_caustic_transport_emit_analytic_cylinder_lens(
+                scene,
+                &compat_light,
+                0,
+                &analytic_cylinder,
+                path_budget,
+                use_focused_cylinder_lens,
+                volume_cache_active ? cache : NULL,
+                g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
+                &diagnostics);
+        } else if (use_analytic_prism_lens) {
+            runtime_caustic_transport_emit_analytic_prism_lens(
+                scene,
+                &compat_light,
+                0,
+                &analytic_prism,
+                path_budget,
+                volume_cache_active ? cache : NULL,
+                g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
+                &diagnostics);
+        } else if (use_analytic_bowl_lens) {
+            runtime_caustic_transport_emit_analytic_bowl_lens(
+                scene,
+                &compat_light,
+                0,
+                &analytic_bowl,
+                path_budget,
+                volume_cache_active ? cache : NULL,
+                g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
+                &diagnostics);
+        } else {
+            for (int tri_i = 0; tri_i < scene->triangleMesh.triangleCount; ++tri_i) {
+                if ((int)diagnostics.evaluatedPathCount >= path_budget) break;
+                runtime_caustic_transport_emit_to_triangle(scene,
+                                                           &compat_light,
+                                                           0,
+                                                           tri_i,
+                                                           path_budget,
+                                                           volume_cache_active ? cache : NULL,
+                                                           g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
+                                                           &diagnostics);
+            }
         }
     }
 

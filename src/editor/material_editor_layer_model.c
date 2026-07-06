@@ -333,7 +333,6 @@ bool MaterialEditorLayerModelApplyPlacementValue(const SceneObject* object,
     }
     if (field_kind == 1) {
         layer.placement.strength = normalized_value;
-        layer.opacity = normalized_value;
     } else if (field_kind == 2) {
         layer.placement.scale = 0.25 + normalized_value * 7.75;
     } else if (field_kind == 3) {
@@ -343,6 +342,25 @@ bool MaterialEditorLayerModelApplyPlacementValue(const SceneObject* object,
     } else {
         return false;
     }
+    stack.layers[index] = RuntimeMaterialTextureLayerNormalize(layer);
+    return MaterialEditorLayerModelSetStack(scene_object_index, &stack);
+}
+
+bool MaterialEditorLayerModelApplyOpacityValue(const SceneObject* object,
+                                               int scene_object_index,
+                                               double normalized_value) {
+    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    RuntimeMaterialTextureLayer layer;
+    int index = 0;
+    normalized_value = material_editor_layer_model_clamp01(normalized_value);
+    if (!material_editor_layer_model_update_active_layer(object,
+                                                         scene_object_index,
+                                                         &layer,
+                                                         &stack,
+                                                         &index)) {
+        return false;
+    }
+    layer.opacity = normalized_value;
     stack.layers[index] = RuntimeMaterialTextureLayerNormalize(layer);
     return MaterialEditorLayerModelSetStack(scene_object_index, &stack);
 }

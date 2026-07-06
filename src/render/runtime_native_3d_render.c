@@ -184,6 +184,126 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
         dst->causticTransportEmittedPathCount =
             src->causticTransportEmittedPathCount;
     }
+    if (src->causticTransportAnalyticSphereLensResolvedCount >
+        dst->causticTransportAnalyticSphereLensResolvedCount) {
+        dst->causticTransportAnalyticSphereLensResolvedCount =
+            src->causticTransportAnalyticSphereLensResolvedCount;
+    }
+    if (src->causticTransportAnalyticSphereLensRejectedCount >
+        dst->causticTransportAnalyticSphereLensRejectedCount) {
+        dst->causticTransportAnalyticSphereLensRejectedCount =
+            src->causticTransportAnalyticSphereLensRejectedCount;
+    }
+    if (src->causticTransportAnalyticSphereLensEvaluatedPathCount >
+        dst->causticTransportAnalyticSphereLensEvaluatedPathCount) {
+        dst->causticTransportAnalyticSphereLensEvaluatedPathCount =
+            src->causticTransportAnalyticSphereLensEvaluatedPathCount;
+    }
+    if (src->causticTransportAnalyticSphereLensEmittedPathCount >
+        dst->causticTransportAnalyticSphereLensEmittedPathCount) {
+        dst->causticTransportAnalyticSphereLensEmittedPathCount =
+            src->causticTransportAnalyticSphereLensEmittedPathCount;
+    }
+    if (src->causticTransportAnalyticSphereLensSampleWeight >
+        dst->causticTransportAnalyticSphereLensSampleWeight) {
+        dst->causticTransportAnalyticSphereLensSampleWeight =
+            src->causticTransportAnalyticSphereLensSampleWeight;
+    }
+    if (src->causticTransportAnalyticSphereLensTotalSampleWeight >
+        dst->causticTransportAnalyticSphereLensTotalSampleWeight) {
+        dst->causticTransportAnalyticSphereLensTotalSampleWeight =
+            src->causticTransportAnalyticSphereLensTotalSampleWeight;
+    }
+    if (src->causticTransportAnalyticCylinderLensResolvedCount >
+        dst->causticTransportAnalyticCylinderLensResolvedCount) {
+        dst->causticTransportAnalyticCylinderLensResolvedCount =
+            src->causticTransportAnalyticCylinderLensResolvedCount;
+    }
+    if (src->causticTransportAnalyticCylinderLensRejectedCount >
+        dst->causticTransportAnalyticCylinderLensRejectedCount) {
+        dst->causticTransportAnalyticCylinderLensRejectedCount =
+            src->causticTransportAnalyticCylinderLensRejectedCount;
+    }
+    if (src->causticTransportAnalyticCylinderLensEvaluatedPathCount >
+        dst->causticTransportAnalyticCylinderLensEvaluatedPathCount) {
+        dst->causticTransportAnalyticCylinderLensEvaluatedPathCount =
+            src->causticTransportAnalyticCylinderLensEvaluatedPathCount;
+    }
+    if (src->causticTransportAnalyticCylinderLensEmittedPathCount >
+        dst->causticTransportAnalyticCylinderLensEmittedPathCount) {
+        dst->causticTransportAnalyticCylinderLensEmittedPathCount =
+            src->causticTransportAnalyticCylinderLensEmittedPathCount;
+    }
+    if (src->causticTransportAnalyticCylinderLensSampleWeight >
+        dst->causticTransportAnalyticCylinderLensSampleWeight) {
+        dst->causticTransportAnalyticCylinderLensSampleWeight =
+            src->causticTransportAnalyticCylinderLensSampleWeight;
+    }
+    if (src->causticTransportAnalyticCylinderLensTotalSampleWeight >
+        dst->causticTransportAnalyticCylinderLensTotalSampleWeight) {
+        dst->causticTransportAnalyticCylinderLensTotalSampleWeight =
+            src->causticTransportAnalyticCylinderLensTotalSampleWeight;
+    }
+    if (src->causticTransportAnalyticPrismLensResolvedCount >
+        dst->causticTransportAnalyticPrismLensResolvedCount) {
+        dst->causticTransportAnalyticPrismLensResolvedCount =
+            src->causticTransportAnalyticPrismLensResolvedCount;
+    }
+    if (src->causticTransportAnalyticPrismLensRejectedCount >
+        dst->causticTransportAnalyticPrismLensRejectedCount) {
+        dst->causticTransportAnalyticPrismLensRejectedCount =
+            src->causticTransportAnalyticPrismLensRejectedCount;
+    }
+    if (src->causticTransportAnalyticPrismLensEvaluatedPathCount >
+        dst->causticTransportAnalyticPrismLensEvaluatedPathCount) {
+        dst->causticTransportAnalyticPrismLensEvaluatedPathCount =
+            src->causticTransportAnalyticPrismLensEvaluatedPathCount;
+    }
+    if (src->causticTransportAnalyticPrismLensEmittedPathCount >
+        dst->causticTransportAnalyticPrismLensEmittedPathCount) {
+        dst->causticTransportAnalyticPrismLensEmittedPathCount =
+            src->causticTransportAnalyticPrismLensEmittedPathCount;
+    }
+    if (src->causticTransportAnalyticPrismLensSampleWeight >
+        dst->causticTransportAnalyticPrismLensSampleWeight) {
+        dst->causticTransportAnalyticPrismLensSampleWeight =
+            src->causticTransportAnalyticPrismLensSampleWeight;
+    }
+    if (src->causticTransportAnalyticPrismLensTotalSampleWeight >
+        dst->causticTransportAnalyticPrismLensTotalSampleWeight) {
+        dst->causticTransportAnalyticPrismLensTotalSampleWeight =
+            src->causticTransportAnalyticPrismLensTotalSampleWeight;
+    }
+    if (src->causticTransportAnalyticBowlLensResolvedCount >
+        dst->causticTransportAnalyticBowlLensResolvedCount) {
+        dst->causticTransportAnalyticBowlLensResolvedCount =
+            src->causticTransportAnalyticBowlLensResolvedCount;
+    }
+    if (src->causticTransportAnalyticBowlLensRejectedCount >
+        dst->causticTransportAnalyticBowlLensRejectedCount) {
+        dst->causticTransportAnalyticBowlLensRejectedCount =
+            src->causticTransportAnalyticBowlLensRejectedCount;
+    }
+    if (src->causticTransportAnalyticBowlLensEvaluatedPathCount >
+        dst->causticTransportAnalyticBowlLensEvaluatedPathCount) {
+        dst->causticTransportAnalyticBowlLensEvaluatedPathCount =
+            src->causticTransportAnalyticBowlLensEvaluatedPathCount;
+    }
+    if (src->causticTransportAnalyticBowlLensEmittedPathCount >
+        dst->causticTransportAnalyticBowlLensEmittedPathCount) {
+        dst->causticTransportAnalyticBowlLensEmittedPathCount =
+            src->causticTransportAnalyticBowlLensEmittedPathCount;
+    }
+    if (src->causticTransportAnalyticBowlLensSampleWeight >
+        dst->causticTransportAnalyticBowlLensSampleWeight) {
+        dst->causticTransportAnalyticBowlLensSampleWeight =
+            src->causticTransportAnalyticBowlLensSampleWeight;
+    }
+    if (src->causticTransportAnalyticBowlLensTotalSampleWeight >
+        dst->causticTransportAnalyticBowlLensTotalSampleWeight) {
+        dst->causticTransportAnalyticBowlLensTotalSampleWeight =
+            src->causticTransportAnalyticBowlLensTotalSampleWeight;
+    }
     if (src->causticTransportTransparentHitCount >
         dst->causticTransportTransparentHitCount) {
         dst->causticTransportTransparentHitCount =

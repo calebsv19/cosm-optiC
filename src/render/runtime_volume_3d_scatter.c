@@ -361,7 +361,7 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
                 if (RuntimeCausticVolumeCache3D_SampleFilteredAtPosition(
                         caustic_cache,
                         sample_position,
-                        scene->volume.grid.voxelSize * 1.5,
+                        scene->volume.grid.voxelSize * 3.25,
                         &caustic_radiance)) {
                     const double caustic_peak =
                         runtime_volume_3d_scatter_peak(caustic_radiance.x,

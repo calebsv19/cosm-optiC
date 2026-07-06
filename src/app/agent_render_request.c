@@ -742,6 +742,11 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             RayTracingJsonGetInt(inspection, "caustic_path_depth", &int_value)) {
             request.caustic_settings.maxPathDepth = int_value;
         }
+        if (RayTracingJsonGetString(inspection, "caustic_transport_emission_policy", &value) ||
+            RayTracingJsonGetString(inspection, "caustic_emission_policy", &value)) {
+            request.caustic_settings.emissionPolicy =
+                RuntimeCausticTransportEmissionPolicy3D_FromLabel(value);
+        }
         if (RayTracingJsonGetDouble(inspection, "caustic_surface_radiance_scale", &double_value) ||
             RayTracingJsonGetDouble(inspection, "caustic_surface_energy_scale", &double_value) ||
             RayTracingJsonGetDouble(inspection, "caustic_receiver_energy_scale", &double_value)) {

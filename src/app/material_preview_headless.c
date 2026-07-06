@@ -39,6 +39,8 @@ static void material_preview_apply_variant(SceneObject* object,
     RuntimeMaterialTexture3DParams params;
     if (!object || !variant) return;
     params = RuntimeMaterialTexture3DParamsFromObject(object);
+    if (variant->has_material_id) object->material_id = variant->material_id;
+    if (variant->has_object_color) object->color = variant->object_color;
     if (variant->has_alpha) object->alpha = material_preview_clamp01(variant->alpha);
     if (variant->has_reflectivity) object->reflectivity = material_preview_clamp01(variant->reflectivity);
     if (variant->has_roughness) object->roughness = material_preview_clamp01(variant->roughness);
@@ -129,6 +131,21 @@ static void material_preview_eval_surface(const SceneObject* object,
         overlay.opacity = material_preview_clamp01(variant->preview_overlay_opacity);
         if (variant->has_preview_overlay_scale) overlay.placement.scale = variant->preview_overlay_scale;
         if (variant->has_preview_overlay_strength) overlay.placement.strength = variant->preview_overlay_strength;
+        if (variant->has_preview_overlay_roughness_influence) {
+            overlay.roughnessInfluence = variant->preview_overlay_roughness_influence;
+        }
+        if (variant->has_preview_overlay_reflectivity_influence) {
+            overlay.reflectivityInfluence = variant->preview_overlay_reflectivity_influence;
+        }
+        if (variant->has_preview_overlay_specular_influence) {
+            overlay.specularInfluence = variant->preview_overlay_specular_influence;
+        }
+        if (variant->has_preview_overlay_diffuse_influence) {
+            overlay.diffuseInfluence = variant->preview_overlay_diffuse_influence;
+        }
+        if (variant->has_preview_overlay_transparency_influence) {
+            overlay.transparencyInfluence = variant->preview_overlay_transparency_influence;
+        }
         if (variant->has_preview_overlay_offset_u) overlay.placement.offsetU = variant->preview_overlay_offset_u;
         if (variant->has_preview_overlay_offset_v) overlay.placement.offsetV = variant->preview_overlay_offset_v;
         if (variant->has_preview_overlay_pattern_mode) overlay.params.patternMode = variant->preview_overlay_pattern_mode;
@@ -234,6 +251,8 @@ static bool material_preview_write_summary(const MaterialPreviewRequest* request
         RuntimeMaterialTexture3DParams params = RuntimeMaterialTexture3DParamsFromObject(object);
         json_object* entry = json_object_new_object();
         json_object_object_add(entry, "label", json_object_new_string(variants[i].label[0] ? variants[i].label : "base"));
+        json_object_object_add(entry, "material_id", json_object_new_int(object->material_id));
+        json_object_object_add(entry, "object_color", json_object_new_int(object->color & 0xFFFFFF));
         json_object_object_add(entry, "alpha", json_object_new_double(object->alpha));
         json_object_object_add(entry, "reflectivity", json_object_new_double(object->reflectivity));
         json_object_object_add(entry, "roughness", json_object_new_double(object->roughness));
@@ -262,6 +281,31 @@ static bool material_preview_write_summary(const MaterialPreviewRequest* request
             }
             if (source_variant->has_preview_overlay_strength) {
                 json_object_object_add(overlay, "strength", json_object_new_double(source_variant->preview_overlay_strength));
+            }
+            if (source_variant->has_preview_overlay_roughness_influence) {
+                json_object_object_add(overlay,
+                                       "roughness_influence",
+                                       json_object_new_double(source_variant->preview_overlay_roughness_influence));
+            }
+            if (source_variant->has_preview_overlay_reflectivity_influence) {
+                json_object_object_add(overlay,
+                                       "reflectivity_influence",
+                                       json_object_new_double(source_variant->preview_overlay_reflectivity_influence));
+            }
+            if (source_variant->has_preview_overlay_specular_influence) {
+                json_object_object_add(overlay,
+                                       "specular_influence",
+                                       json_object_new_double(source_variant->preview_overlay_specular_influence));
+            }
+            if (source_variant->has_preview_overlay_diffuse_influence) {
+                json_object_object_add(overlay,
+                                       "diffuse_influence",
+                                       json_object_new_double(source_variant->preview_overlay_diffuse_influence));
+            }
+            if (source_variant->has_preview_overlay_transparency_influence) {
+                json_object_object_add(overlay,
+                                       "transparency_influence",
+                                       json_object_new_double(source_variant->preview_overlay_transparency_influence));
             }
             if (source_variant->has_preview_overlay_pattern_mode) {
                 json_object_object_add(overlay, "pattern_mode", json_object_new_int(source_variant->preview_overlay_pattern_mode));

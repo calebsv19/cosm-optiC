@@ -441,6 +441,7 @@ static int test_agent_render_request_caustic_transport_volume_phase4_contract(vo
         "    \"caustic_volume_enabled\": true,\n"
         "    \"caustic_sample_budget\": 128,\n"
         "    \"caustic_max_path_depth\": 2,\n"
+        "    \"caustic_transport_emission_policy\": \"analytic_sphere_lens\",\n"
         "    \"caustic_transport_debug_export_enabled\": true\n"
         "  }\n"
         "}\n";
@@ -468,6 +469,9 @@ static int test_agent_render_request_caustic_transport_volume_phase4_contract(vo
                 request.caustic_settings.sampleBudget == 128);
     assert_true("agent_render_caustic_transport_phase4_depth",
                 request.caustic_settings.maxPathDepth == 2);
+    assert_true("agent_render_caustic_transport_phase13_emission_policy",
+                request.caustic_settings.emissionPolicy ==
+                    RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_SPHERE_LENS);
     assert_true("agent_render_caustic_transport_phase4_debug_export",
                 request.caustic_settings.debugExportEnabled);
     readback = RuntimeCausticSettings3D_Phase0Readback(&request.caustic_settings,
@@ -476,6 +480,9 @@ static int test_agent_render_request_caustic_transport_volume_phase4_contract(vo
                 readback.pathEmissionActive);
     assert_true("agent_render_caustic_transport_phase4_not_reserved",
                 !readback.transportReserved);
+    assert_true("agent_render_caustic_transport_phase13_readback_emission_policy",
+                readback.emissionPolicy ==
+                    RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_SPHERE_LENS);
     assert_true("agent_render_caustic_transport_phase4_volume_state",
                 readback.volumeCacheState ==
                     RUNTIME_CAUSTIC_CACHE_STATE_REQUESTED_NOT_ALLOCATED);

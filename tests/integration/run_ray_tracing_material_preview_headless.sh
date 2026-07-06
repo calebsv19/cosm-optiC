@@ -45,7 +45,12 @@ cat >"$REQUEST_PATH" <<EOF
         "coverage": 0.68,
         "grain": 0.61,
         "contrast": 0.79,
-        "surface_damage": 0.46
+        "surface_damage": 0.46,
+        "roughness_influence": 0.74,
+        "reflectivity_influence": -0.25,
+        "specular_influence": -0.20,
+        "diffuse_influence": 0.45,
+        "transparency_influence": -0.35
       }
     }
   ]
@@ -60,6 +65,9 @@ rg -q '"variant_count":[[:space:]]*2' "$SUMMARY_PATH"
 rg -q '"object_id":[[:space:]]*"left_screen"' "$SUMMARY_PATH"
 rg -q '"preview_overlay"' "$SUMMARY_PATH"
 rg -q '"kind":[[:space:]]*"grime"' "$SUMMARY_PATH"
+rg -q '"roughness_influence":[[:space:]]*0\.73' "$SUMMARY_PATH"
+rg -q '"reflectivity_influence":[[:space:]]*-0\.25' "$SUMMARY_PATH"
+rg -q '"transparency_influence":[[:space:]]*-0\.34' "$SUMMARY_PATH"
 
 expect_material_reject() {
   local label="$1"

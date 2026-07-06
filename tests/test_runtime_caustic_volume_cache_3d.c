@@ -196,6 +196,63 @@ static int test_runtime_caustic_volume_cache_footprint_normalizes_energy(void) {
     return 0;
 }
 
+static int test_runtime_caustic_volume_cache_directional_footprint_normalizes_energy(void) {
+    RuntimeVolumeGrid3D grid;
+    RuntimeCausticVolumeCache3D cache;
+    RuntimeCausticVolumeCacheDiagnostics3D diagnostics;
+
+    RuntimeCausticVolumeCache3D_Init(&cache);
+    assert_true("runtime_caustic_volume_cache_directional_grid",
+                test_caustic_cache_make_grid(&grid));
+    assert_true("runtime_caustic_volume_cache_directional_allocate",
+                RuntimeCausticVolumeCache3D_Allocate(&cache, &grid));
+    assert_true("runtime_caustic_volume_cache_directional_deposit",
+                RuntimeCausticVolumeCache3D_DepositDirectionalFootprintAtPosition(
+                    &cache,
+                    vec3(-0.5, -0.5, 0.5),
+                    vec3(0.0, 0.0, 1.0),
+                    0.5,
+                    1.0,
+                    6.0,
+                    3.0,
+                    1.5));
+
+    RuntimeCausticVolumeCache3D_SnapshotDiagnostics(&cache, &diagnostics);
+    assert_true("runtime_caustic_volume_cache_directional_multi_cell",
+                diagnostics.nonZeroCellCount > 1u);
+    assert_true("runtime_caustic_volume_cache_directional_count",
+                diagnostics.footprintDepositCount == 1u);
+    assert_true("runtime_caustic_volume_cache_directional_cell_count",
+                diagnostics.footprintCellContributionCount > 1u);
+    assert_close("runtime_caustic_volume_cache_directional_avg_radius",
+                 diagnostics.averageFootprintRadiusVoxels,
+                 4.0 / 3.0,
+                 1e-6);
+    assert_close("runtime_caustic_volume_cache_directional_input_r",
+                 diagnostics.footprintInputRadianceR,
+                 6.0,
+                 1e-9);
+    assert_close("runtime_caustic_volume_cache_directional_deposited_r",
+                 diagnostics.footprintDepositedRadianceR,
+                 6.0,
+                 1e-6);
+    assert_close("runtime_caustic_volume_cache_directional_deposited_g",
+                 diagnostics.footprintDepositedRadianceG,
+                 3.0,
+                 1e-6);
+    assert_close("runtime_caustic_volume_cache_directional_deposited_b",
+                 diagnostics.footprintDepositedRadianceB,
+                 1.5,
+                 1e-6);
+    assert_close("runtime_caustic_volume_cache_directional_total_r",
+                 diagnostics.totalRadianceR,
+                 diagnostics.footprintDepositedRadianceR,
+                 1e-5);
+
+    RuntimeCausticVolumeCache3D_Free(&cache);
+    return 0;
+}
+
 static int test_runtime_caustic_volume_cache_rejects_out_of_bounds(void) {
     RuntimeVolumeGrid3D grid;
     RuntimeCausticVolumeCache3D cache;
@@ -328,6 +385,7 @@ int run_test_runtime_caustic_volume_cache_3d_tests(void) {
     test_runtime_caustic_volume_cache_deposit_one_cell();
     test_runtime_caustic_volume_cache_rgb_accumulates();
     test_runtime_caustic_volume_cache_footprint_normalizes_energy();
+    test_runtime_caustic_volume_cache_directional_footprint_normalizes_energy();
     test_runtime_caustic_volume_cache_rejects_out_of_bounds();
     test_runtime_caustic_volume_cache_world_position_sampling();
     test_runtime_caustic_volume_cache_filtered_sampling_expands_coverage();

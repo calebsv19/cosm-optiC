@@ -2837,6 +2837,38 @@ static int test_material_editor_material_readback_reports_preset_custom_and_grap
                     strstr(layer.response_summary, "Spec -0.05") != NULL &&
                     strstr(layer.response_summary, "Diff -1.00") != NULL &&
                     strstr(layer.response_summary, "Trans +1.00") != NULL);
+    assert_true("material_editor_layer_opacity_value_route",
+                MaterialEditorApplyLayerOpacityValueToFocused(0.25));
+    assert_true("material_editor_layer_opacity_step_clamped",
+                MaterialEditorApplyLayerOpacityStepToFocused(-0.50));
+    assert_true("material_editor_layer_opacity_split_stack_written",
+                SceneEditorMaterialStackGetObjectStack(0, &stack));
+    assert_close("material_editor_layer_opacity_split_value",
+                 stack.layers[1].opacity,
+                 0.0,
+                 1e-9);
+    assert_close("material_editor_layer_opacity_split_preserves_strength",
+                 stack.layers[1].placement.strength,
+                 0.37,
+                 1e-9);
+    assert_true("material_editor_layer_opacity_split_readback_updated",
+                MaterialEditorBuildActiveLayerReadback(&layer) &&
+                    strstr(layer.state_label, "opacity 0.00") != NULL &&
+                    strstr(layer.state_label, "strength 0.37") != NULL);
+    assert_true("material_editor_layer_effective_readback_opacity_route",
+                MaterialEditorApplyLayerOpacityValueToFocused(0.50));
+    assert_true("material_editor_layer_effective_readback",
+                MaterialEditorBuildActiveLayerReadback(&layer) &&
+                    layer.has_effective_readback &&
+                    layer.effective_mask >= 0.0 &&
+                    layer.effective_mask <= 1.0 &&
+                    strstr(layer.effective_summary, "Effective @ center") != NULL &&
+                    strstr(layer.effective_summary, "mask") != NULL &&
+                    strstr(layer.effective_delta_summary, "dR ") != NULL &&
+                    strstr(layer.effective_delta_summary, "dRefl ") != NULL &&
+                    strstr(layer.effective_delta_summary, "dSpec ") != NULL &&
+                    strstr(layer.effective_delta_summary, "dDiff ") != NULL &&
+                    strstr(layer.effective_delta_summary, "dTrans ") != NULL);
 
     snprintf(base.layerId, sizeof(base.layerId), "%s", "graph_base_wood");
     snprintf(oil.layerId, sizeof(oil.layerId), "%s", "graph_oil_overlay");
@@ -4330,10 +4362,15 @@ static int test_material_editor_layer_list_routes_object_stack_controls(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
     RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
+    MaterialEditorLayerStructureReadback layer_readback;
+    char channel_intent[40];
+    SDL_Event layer_event;
 
     memset(&sceneSettings, 0, sizeof(sceneSettings));
     memset(&animSettings, 0, sizeof(animSettings));
+    memset(&layer_readback, 0, sizeof(layer_readback));
     SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
     sceneSettings.objectCount = 1;
     InitObject(&sceneSettings.sceneObjects[0], OBJECT_POLYGON, 0.0, 0.0, 1.0, 0.0, NULL, 0);
     sceneSettings.sceneObjects[0].textureId = RUNTIME_MATERIAL_TEXTURE_3D_RUST;
@@ -4350,6 +4387,37 @@ static int test_material_editor_layer_list_routes_object_stack_controls(void) {
                 MaterialEditorSetActiveLayerIndex(1));
     assert_true("material_editor_layer_select_promotes_v2",
                 SceneEditorMaterialStackHasObjectStack(0));
+    assert_true("material_editor_layer_structure_base_readback",
+                SceneEditorMaterialStackGetObjectStack(0, &stack) &&
+                    MaterialEditorBuildLayerStructureReadback(
+                        &stack,
+                        0,
+                        SceneEditorMaterialStackHasObjectStack(0),
+                        SceneEditorMaterialGraphHasObjectGraph(0),
+                        &layer_readback));
+    assert_true("material_editor_layer_structure_header_count",
+                strstr(layer_readback.header_label, "2/8") != NULL);
+    assert_true("material_editor_layer_structure_header_source",
+                strstr(layer_readback.header_label, "object stack") != NULL);
+    assert_true("material_editor_layer_structure_header_selected",
+                strstr(layer_readback.header_label, "sel #0") != NULL);
+    assert_true("material_editor_layer_structure_base_delete_guard",
+                !layer_readback.can_delete && !layer_readback.can_move_up &&
+                    !layer_readback.can_move_down);
+    assert_true("material_editor_layer_structure_base_guard_label",
+                strstr(layer_readback.guard_label, "Base layer locked") != NULL);
+    assert_true("material_editor_layer_structure_overlay_readback",
+                MaterialEditorBuildLayerStructureReadback(
+                    &stack,
+                    1,
+                    true,
+                    false,
+                    &layer_readback));
+    assert_true("material_editor_layer_structure_overlay_delete_enabled",
+                layer_readback.can_delete && !layer_readback.can_move_up &&
+                    !layer_readback.can_move_down);
+    assert_true("material_editor_layer_structure_overlay_guard_label",
+                strstr(layer_readback.guard_label, "Only overlay") != NULL);
     assert_true("material_editor_layer_strength_routes_to_stack",
                 MaterialEditorApplySliderValueToFocused(MATERIAL_EDITOR_SLIDER_STRENGTH, 0.35));
     assert_true("material_editor_layer_param_routes_to_stack",
@@ -4367,6 +4435,10 @@ static int test_material_editor_layer_list_routes_object_stack_controls(void) {
     assert_close("material_editor_layer_strength_stack_value",
                  stack.layers[1].placement.strength,
                  0.35,
+                 1e-12);
+    assert_close("material_editor_layer_strength_does_not_set_opacity",
+                 stack.layers[1].opacity,
+                 1.0,
                  1e-12);
     assert_close("material_editor_layer_kind_default_coverage",
                  stack.layers[1].params.coverage,
@@ -4387,17 +4459,94 @@ static int test_material_editor_layer_list_routes_object_stack_controls(void) {
                 MaterialEditorMoveActiveLayer(-1));
     assert_true("material_editor_layer_move_active_index",
                 MaterialEditorGetActiveLayerIndex() == 1);
+    MaterialEditorResetLayerListLayout();
+    memset(&layer_event, 0, sizeof(layer_event));
+    layer_event.type = SDL_MOUSEBUTTONDOWN;
+    layer_event.button.button = SDL_BUTTON_LEFT;
+    layer_event.button.x = 5004;
+    layer_event.button.y = 5004;
+    s_layer_row_count = 1;
+    s_layer_row_indices[0] = 1;
+    s_layer_row_action_rects[0][1] = (SDL_Rect){5000, 5000, 24, 18};
+    HandleMaterialEditorEvents(&layer_event);
+    assert_true("material_editor_layer_row_action_down_routes",
+                MaterialEditorGetActiveLayerIndex() == 2);
+    MaterialEditorResetLayerListLayout();
+    s_layer_row_count = 1;
+    s_layer_row_indices[0] = 2;
+    s_layer_row_action_rects[0][0] = (SDL_Rect){5000, 5000, 24, 18};
+    HandleMaterialEditorEvents(&layer_event);
+    assert_true("material_editor_layer_row_action_up_routes",
+                MaterialEditorGetActiveLayerIndex() == 1);
     assert_true("material_editor_layer_toggle_enabled",
                 MaterialEditorToggleActiveLayerEnabled());
     assert_true("material_editor_layer_toggle_readback",
                 SceneEditorMaterialStackGetObjectStack(0, &stack) &&
                     !stack.layers[1].enabled);
-    assert_true("material_editor_layer_delete",
-                MaterialEditorDeleteActiveLayer());
-    assert_true("material_editor_layer_delete_count",
+    assert_true("material_editor_layer_muted_guard_readback",
+                MaterialEditorBuildLayerStructureReadback(
+                    &stack,
+                    1,
+                    true,
+                    false,
+                    &layer_readback) &&
+                    layer_readback.active_muted &&
+                    strstr(layer_readback.guard_label, "skipped in preview/export") != NULL);
+    assert_true("material_editor_layer_opacity_route",
+                MaterialEditorApplyLayerOpacityValueToFocused(0.42));
+    assert_true("material_editor_layer_opacity_step_route",
+                MaterialEditorApplyLayerOpacityStepToFocused(0.10));
+    assert_true("material_editor_layer_opacity_readback",
+                SceneEditorMaterialStackGetObjectStack(0, &stack));
+    assert_close("material_editor_layer_opacity_value",
+                 stack.layers[1].opacity,
+                 0.52,
+                 1e-12);
+    assert_close("material_editor_layer_opacity_preserves_strength",
+                 stack.layers[1].placement.strength,
+                 1.0,
+                 1e-12);
+    MaterialEditorResetLayerListLayout();
+    s_layer_row_count = 1;
+    s_layer_row_indices[0] = 1;
+    s_layer_row_action_rects[0][2] = (SDL_Rect){5000, 5000, 24, 18};
+    HandleMaterialEditorEvents(&layer_event);
+    assert_true("material_editor_layer_row_action_delete_count",
                 MaterialEditorFocusedLayerCount() == 2);
 
+    stack = RuntimeMaterialTextureStackEmpty();
+    stack.layerCount = RUNTIME_MATERIAL_TEXTURE_STACK_MAX_LAYERS;
+    stack.layers[0] =
+        RuntimeMaterialTextureLayerMakeBase(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID);
+    for (int i = 1; i < RUNTIME_MATERIAL_TEXTURE_STACK_MAX_LAYERS; ++i) {
+        stack.layers[i] =
+            RuntimeMaterialTextureLayerMakeOverlay(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_RUST);
+    }
+    stack.layers[2].roughnessInfluence = -0.25;
+    stack.layers[2].reflectivityInfluence = 0.40;
+    stack.layers[2].specularInfluence = 0.0;
+    stack.layers[2].diffuseInfluence = -0.15;
+    stack.layers[2].transparencyInfluence = 0.30;
+    memset(channel_intent, 0, sizeof(channel_intent));
+    MaterialEditorFormatLayerChannelIntent(&stack.layers[2],
+                                           channel_intent,
+                                           sizeof(channel_intent));
+    assert_true("material_editor_layer_channel_intent_signed_nonzero",
+                strcmp(channel_intent, "R/Refl/Diff/Trans") == 0);
+    assert_true("material_editor_layer_structure_full_stack_guard",
+                MaterialEditorBuildLayerStructureReadback(
+                    &stack,
+                    2,
+                    true,
+                    false,
+                    &layer_readback) &&
+                    layer_readback.stack_full && !layer_readback.can_add &&
+                    layer_readback.can_delete && layer_readback.can_move_up &&
+                    layer_readback.can_move_down &&
+                    strstr(layer_readback.guard_label, "Stack full") != NULL);
+
     SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
     sceneSettings = saved_scene;
     animSettings = saved_anim;
     return 0;

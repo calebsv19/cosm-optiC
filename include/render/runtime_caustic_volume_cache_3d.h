@@ -88,6 +88,15 @@ bool RuntimeCausticVolumeCache3D_DepositFootprintAtPosition(
     double radiance_r,
     double radiance_g,
     double radiance_b);
+bool RuntimeCausticVolumeCache3D_DepositDirectionalFootprintAtPosition(
+    RuntimeCausticVolumeCache3D* cache,
+    Vec3 position,
+    Vec3 direction,
+    double perpendicular_radius_world,
+    double axial_radius_world,
+    double radiance_r,
+    double radiance_g,
+    double radiance_b);
 bool RuntimeCausticVolumeCache3D_SampleAtPosition(RuntimeCausticVolumeCache3D* cache,
                                                   Vec3 position,
                                                   Vec3* out_radiance);

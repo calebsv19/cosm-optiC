@@ -14,6 +14,8 @@
 #include "test_runtime_diffuse_temporal.h"
 #include "test_runtime_emission_transparency.h"
 #include "test_runtime_caustic_bootstrap_3d.h"
+#include "test_runtime_caustic_lens_transport_3d.h"
+#include "test_runtime_caustic_sphere_lens_3d.h"
 #include "test_runtime_caustic_surface_cache_3d.h"
 #include "test_runtime_caustic_transport_3d.h"
 #include "test_runtime_caustic_volume_cache_3d.h"
@@ -107,6 +109,8 @@ int test_runner_main(int argc, char** argv) {
         {"runtime_scene_3d_geometry", run_test_runtime_scene_3d_geometry_tests},
         {"runtime_volume_3d", run_test_runtime_volume_3d_tests},
         {"runtime_caustic_bootstrap_3d", run_test_runtime_caustic_bootstrap_3d_tests},
+        {"runtime_caustic_lens_transport_3d", run_test_runtime_caustic_lens_transport_3d_tests},
+        {"runtime_caustic_sphere_lens_3d", run_test_runtime_caustic_sphere_lens_3d_tests},
         {"runtime_caustic_surface_cache_3d", run_test_runtime_caustic_surface_cache_3d_tests},
         {"runtime_caustic_transport_3d", run_test_runtime_caustic_transport_3d_tests},
         {"runtime_caustic_volume_cache_3d", run_test_runtime_caustic_volume_cache_3d_tests},

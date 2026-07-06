@@ -6,7 +6,143 @@
 
 #include "editor/material_editor_knob_control.h"
 #include "editor/material_editor_layer_model.h"
+#include "editor/scene_editor_material_graph.h"
 #include "editor/scene_editor_material_stack.h"
+
+#define MATERIAL_EDITOR_LAYER_INTENT_EPSILON 1.0e-6
+
+static bool material_editor_layer_nonzero(double value) {
+    return fabs(value) > MATERIAL_EDITOR_LAYER_INTENT_EPSILON;
+}
+
+void MaterialEditorFormatLayerChannelIntent(const RuntimeMaterialTextureLayer* layer,
+                                            char* out_label,
+                                            size_t out_label_size) {
+    bool wrote = false;
+    if (!out_label || out_label_size == 0) return;
+    out_label[0] = '\0';
+    if (!layer) return;
+#define MATERIAL_EDITOR_APPEND_LAYER_INTENT(label_text)                                      \
+    do {                                                                                    \
+        size_t used = strlen(out_label);                                                    \
+        if (used + (wrote ? 1u : 0u) + strlen(label_text) + 1u < out_label_size) {          \
+            if (wrote) {                                                                    \
+                out_label[used] = '/';                                                      \
+                out_label[used + 1u] = '\0';                                                \
+                used += 1u;                                                                 \
+            }                                                                               \
+            snprintf(out_label + used, out_label_size - used, "%s", (label_text));         \
+            wrote = true;                                                                   \
+        }                                                                                   \
+    } while (0)
+    if (material_editor_layer_nonzero(layer->roughnessInfluence)) {
+        MATERIAL_EDITOR_APPEND_LAYER_INTENT("R");
+    }
+    if (material_editor_layer_nonzero(layer->reflectivityInfluence)) {
+        MATERIAL_EDITOR_APPEND_LAYER_INTENT("Refl");
+    }
+    if (material_editor_layer_nonzero(layer->specularInfluence)) {
+        MATERIAL_EDITOR_APPEND_LAYER_INTENT("Spec");
+    }
+    if (material_editor_layer_nonzero(layer->diffuseInfluence)) {
+        MATERIAL_EDITOR_APPEND_LAYER_INTENT("Diff");
+    }
+    if (material_editor_layer_nonzero(layer->transparencyInfluence)) {
+        MATERIAL_EDITOR_APPEND_LAYER_INTENT("Trans");
+    }
+#undef MATERIAL_EDITOR_APPEND_LAYER_INTENT
+}
+
+bool MaterialEditorBuildLayerStructureReadback(
+    const RuntimeMaterialTextureStack* stack,
+    int active_index,
+    bool persisted_stack,
+    bool graph_backed,
+    MaterialEditorLayerStructureReadback* out_readback) {
+    const RuntimeMaterialTextureLayer* active_layer = NULL;
+    const char* source_label = "legacy fallback";
+    if (!out_readback) return false;
+    memset(out_readback, 0, sizeof(*out_readback));
+    out_readback->max_layers = RUNTIME_MATERIAL_TEXTURE_STACK_MAX_LAYERS;
+    out_readback->active_index = active_index;
+    out_readback->persisted_stack = persisted_stack;
+    out_readback->graph_backed = graph_backed;
+    if (!stack || stack->layerCount <= 0) {
+        snprintf(out_readback->header_label,
+                 sizeof(out_readback->header_label),
+                 "Layers 0/%d | no stack",
+                 out_readback->max_layers);
+        snprintf(out_readback->guard_label,
+                 sizeof(out_readback->guard_label),
+                 "No material layer stack is available.");
+        return false;
+    }
+    out_readback->layer_count = stack->layerCount;
+    if (active_index >= 0 && active_index < stack->layerCount) {
+        active_layer = &stack->layers[active_index];
+    }
+    out_readback->stack_full =
+        stack->layerCount >= RUNTIME_MATERIAL_TEXTURE_STACK_MAX_LAYERS;
+    out_readback->can_add = !out_readback->stack_full;
+    out_readback->can_toggle = active_layer != NULL;
+    out_readback->active_base =
+        active_layer != NULL && RuntimeMaterialTextureLayerKindIsBase(active_layer->kind);
+    out_readback->active_muted = active_layer != NULL && !active_layer->enabled;
+    out_readback->can_delete =
+        active_layer != NULL && !out_readback->active_base && stack->layerCount > 1;
+    out_readback->can_move_up = active_layer != NULL && !out_readback->active_base &&
+                                active_index > 1;
+    out_readback->can_move_down = active_layer != NULL && !out_readback->active_base &&
+                                  active_index >= 1 && active_index < stack->layerCount - 1;
+    if (persisted_stack) {
+        source_label = "object stack";
+    } else if (graph_backed) {
+        source_label = "graph compiled";
+    }
+    snprintf(out_readback->header_label,
+             sizeof(out_readback->header_label),
+             "Layers %d/%d | %s | sel #%d",
+             out_readback->layer_count,
+             out_readback->max_layers,
+             source_label,
+             active_index);
+    if (!active_layer) {
+        snprintf(out_readback->guard_label,
+                 sizeof(out_readback->guard_label),
+                 "No selected layer: choose a stack row to edit.");
+    } else if (out_readback->active_muted) {
+        snprintf(out_readback->guard_label,
+                 sizeof(out_readback->guard_label),
+                 "Muted layer: skipped in preview/export.");
+    } else if (out_readback->active_base) {
+        snprintf(out_readback->guard_label,
+                 sizeof(out_readback->guard_label),
+                 stack->layerCount <= 1
+                     ? "Base only: move/delete guarded; add creates overlay."
+                     : "Base layer locked: add overlays; move/delete guarded.");
+    } else if (out_readback->stack_full) {
+        snprintf(out_readback->guard_label,
+                 sizeof(out_readback->guard_label),
+                 "Stack full: add guarded; edit/delete selected overlay.");
+    } else if (!out_readback->can_move_up && !out_readback->can_move_down) {
+        snprintf(out_readback->guard_label,
+                 sizeof(out_readback->guard_label),
+                 "Only overlay: move guarded; delete still available.");
+    } else if (!out_readback->can_move_up) {
+        snprintf(out_readback->guard_label,
+                 sizeof(out_readback->guard_label),
+                 "Top overlay selected: Up guarded.");
+    } else if (!out_readback->can_move_down) {
+        snprintf(out_readback->guard_label,
+                 sizeof(out_readback->guard_label),
+                 "Bottom overlay selected: Down guarded.");
+    } else {
+        snprintf(out_readback->guard_label,
+                 sizeof(out_readback->guard_label),
+                 "Structure edits target selected overlay.");
+    }
+    return true;
+}
 
 void MaterialEditorResetGroupListLayout(void) {
     memset(s_group_row_rects, 0, sizeof(s_group_row_rects));
@@ -27,6 +163,7 @@ void MaterialEditorResetGroupListLayout(void) {
 void MaterialEditorResetLayerListLayout(void) {
     memset(s_layer_row_rects, 0, sizeof(s_layer_row_rects));
     memset(s_layer_toggle_rects, 0, sizeof(s_layer_toggle_rects));
+    memset(s_layer_row_action_rects, 0, sizeof(s_layer_row_action_rects));
     memset(s_layer_row_labels, 0, sizeof(s_layer_row_labels));
     memset(s_layer_action_rects, 0, sizeof(s_layer_action_rects));
     for (int i = 0; i < MATERIAL_EDITOR_MAX_LAYER_ROWS; ++i) {
@@ -204,6 +341,7 @@ int MaterialEditorDrawLayerList(SDL_Renderer* renderer,
     int active_index = 0;
     int header_h = 18;
     int action_h = 20;
+    int guard_h = 18;
     int row_stride = MATERIAL_EDITOR_LAYER_ROW_HEIGHT + MATERIAL_EDITOR_LAYER_ROW_GAP;
     int row_capacity = 0;
     int panel_h = 0;
@@ -212,7 +350,7 @@ int MaterialEditorDrawLayerList(SDL_Renderer* renderer,
     const char* action_labels[MATERIAL_EDITOR_LAYER_ACTION_COUNT] = {
         "+", "Mute", "Up", "Down", "Del"
     };
-    char header_text[48];
+    MaterialEditorLayerStructureReadback readback;
     if (!renderer || !obj || content_bounds.w <= 0 || cursor_y >= bottom_y) return cursor_y;
     MaterialEditorResetLayerListLayout();
     if (!MaterialEditorLayerModelGetEffectiveStack(obj, focused_object_index, &stack) ||
@@ -220,11 +358,17 @@ int MaterialEditorDrawLayerList(SDL_Renderer* renderer,
         return cursor_y;
     }
     active_index = MaterialEditorLayerModelGetActiveIndex(obj, focused_object_index);
+    MaterialEditorBuildLayerStructureReadback(
+        &stack,
+        active_index,
+        SceneEditorMaterialStackHasObjectStack(focused_object_index),
+        SceneEditorMaterialGraphHasObjectGraph(focused_object_index),
+        &readback);
     row_capacity = stack.layerCount < MATERIAL_EDITOR_MAX_LAYER_ROWS
                        ? stack.layerCount
                        : MATERIAL_EDITOR_MAX_LAYER_ROWS;
     if (row_capacity < 1) row_capacity = 1;
-    panel_h = header_h + action_h + MATERIAL_EDITOR_BUTTON_GAP +
+    panel_h = header_h + action_h + guard_h + MATERIAL_EDITOR_BUTTON_GAP +
               row_capacity * row_stride;
     if (!material_editor_has_room_for_optional_control(cursor_y, panel_h, bottom_y)) {
         return cursor_y;
@@ -237,15 +381,9 @@ int MaterialEditorDrawLayerList(SDL_Renderer* renderer,
     }
     if (s_layer_scroll_offset < 0) s_layer_scroll_offset = 0;
 
-    snprintf(header_text,
-             sizeof(header_text),
-             "%s %d %s",
-             MaterialEditorPanelGroupLabel(MATERIAL_EDITOR_PANEL_GROUP_BASE_LAYER),
-             stack.layerCount,
-             SceneEditorMaterialStackHasObjectStack(focused_object_index) ? "v2" : "legacy");
     RenderLabelTextLeft(renderer,
                         (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, header_h},
-                        header_text,
+                        readback.header_label,
                         palette.text_primary);
     cursor_y += header_h;
 
@@ -257,13 +395,20 @@ int MaterialEditorDrawLayerList(SDL_Renderer* renderer,
                     ? content_bounds.x + content_bounds.w - x
                     : action_w;
         bool active = false;
+        const char* label = action_labels[i];
         if (i == 1 && active_index >= 0 && active_index < stack.layerCount) {
             active = !stack.layers[active_index].enabled;
+            label = active ? "Unmute" : "Mute";
         }
         s_layer_action_rects[i] = (SDL_Rect){x, cursor_y, w, action_h};
-        MaterialEditorDrawButton(renderer, s_layer_action_rects[i], action_labels[i], active, palette);
+        MaterialEditorDrawButton(renderer, s_layer_action_rects[i], label, active, palette);
     }
     cursor_y += action_h + MATERIAL_EDITOR_BUTTON_GAP;
+    RenderLabelTextLeft(renderer,
+                        (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, guard_h},
+                        readback.guard_label,
+                        palette.text_muted);
+    cursor_y += guard_h;
 
     scrollbar_w = stack.layerCount > row_capacity ? 8 : 0;
     s_layer_list_rect = (SDL_Rect){content_bounds.x,
@@ -273,11 +418,16 @@ int MaterialEditorDrawLayerList(SDL_Renderer* renderer,
     for (int i = 0; i < row_capacity; ++i) {
         int layer_index = i + s_layer_scroll_offset;
         RuntimeMaterialTextureLayer* layer = &stack.layers[layer_index];
+        MaterialEditorLayerStructureReadback row_readback;
         SDL_Rect row = {content_bounds.x,
                         cursor_y + i * row_stride,
                         content_bounds.w - scrollbar_w - 4,
                         MATERIAL_EDITOR_LAYER_ROW_HEIGHT};
         int toggle_w = 38;
+        int row_action_w = 0;
+        int row_action_gap = 3;
+        int row_action_total_w = 0;
+        int row_label_w = 0;
         SDL_Rect toggle = {row.x + row.w - toggle_w - 3,
                            row.y + 3,
                            toggle_w,
@@ -287,18 +437,37 @@ int MaterialEditorDrawLayerList(SDL_Renderer* renderer,
                                     : palette.panel_fill;
         SDL_Color text = row_active ? ray_tracing_theme_choose_button_text(fill, palette)
                                     : layer->enabled ? palette.text_primary : palette.text_muted;
-        const char* role = RuntimeMaterialTextureLayerKindIsBase(layer->kind) ? "Base" : "Layer";
+        const char* role = RuntimeMaterialTextureLayerKindIsBase(layer->kind) ? "B" : "O";
+        const char* state = layer->enabled ? "On" : "Muted";
+        char channel_intent[40];
+        MaterialEditorFormatLayerChannelIntent(layer, channel_intent, sizeof(channel_intent));
+        MaterialEditorBuildLayerStructureReadback(
+            &stack,
+            layer_index,
+            readback.persisted_stack,
+            readback.graph_backed,
+            &row_readback);
+        if (row_active && !row_readback.active_base) {
+            row_action_w = 24;
+            row_action_total_w = row_action_w * MATERIAL_EDITOR_LAYER_ROW_ACTION_COUNT +
+                                 row_action_gap * (MATERIAL_EDITOR_LAYER_ROW_ACTION_COUNT - 1);
+        }
         s_layer_row_rects[i] = row;
         s_layer_toggle_rects[i] = toggle;
         s_layer_row_indices[i] = layer_index;
         snprintf(s_layer_row_labels[i],
                  sizeof(s_layer_row_labels[i]),
-                 "#%d %s %s",
+                 "#%d %s %.28s %s%s%s",
                  layer_index,
                  role,
                  layer->displayName[0] ? layer->displayName
-                                       : RuntimeMaterialTextureLayerKindDisplayName(layer->kind));
+                                       : RuntimeMaterialTextureLayerKindDisplayName(layer->kind),
+                 state,
+                 channel_intent[0] ? " " : "",
+                 channel_intent);
         s_layer_row_count += 1;
+        row_label_w = row.w - toggle_w - row_action_total_w - 24;
+        if (row_label_w < 24) row_label_w = 24;
         SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, row_active ? 255 : 210);
         SDL_RenderFillRect(renderer, &row);
         SDL_SetRenderDrawColor(renderer,
@@ -308,9 +477,40 @@ int MaterialEditorDrawLayerList(SDL_Renderer* renderer,
                                255);
         SDL_RenderDrawRect(renderer, &row);
         RenderLabelTextLeft(renderer,
-                            (SDL_Rect){row.x + 6, row.y + 3, row.w - toggle_w - 18, 16},
+                            (SDL_Rect){row.x + 6,
+                                       row.y + 3,
+                                       row_label_w,
+                                       16},
                             s_layer_row_labels[i],
                             text);
+        if (row_action_total_w > 0) {
+            const char* row_action_labels[MATERIAL_EDITOR_LAYER_ROW_ACTION_COUNT] = {
+                "Up", "Dn", "Del"
+            };
+            bool row_action_enabled[MATERIAL_EDITOR_LAYER_ROW_ACTION_COUNT] = {
+                row_readback.can_move_up,
+                row_readback.can_move_down,
+                row_readback.can_delete
+            };
+            int action_x = toggle.x - row_action_gap - row_action_total_w;
+            for (int action_index = 0;
+                 action_index < MATERIAL_EDITOR_LAYER_ROW_ACTION_COUNT;
+                 ++action_index) {
+                SDL_Rect action_rect = {action_x +
+                                            action_index * (row_action_w + row_action_gap),
+                                        row.y + 3,
+                                        row_action_w,
+                                        row.h - 6};
+                if (row_action_enabled[action_index]) {
+                    s_layer_row_action_rects[i][action_index] = action_rect;
+                }
+                MaterialEditorDrawButton(renderer,
+                                         action_rect,
+                                         row_action_labels[action_index],
+                                         false,
+                                         palette);
+            }
+        }
         MaterialEditorDrawButton(renderer, toggle, layer->enabled ? "On" : "Off", layer->enabled, palette);
     }
     if (scrollbar_w > 0) {

@@ -113,11 +113,11 @@ def write_soft_mist_vf3d(path: Path) -> None:
                 edge_feather = max(0.0, min(1.0, edge_distance / 0.22))
                 center_dx = (nx - 0.5) / 0.50
                 center_dy = (ny - 0.5) / 0.50
-                center_dz = (nz - 0.36) / 0.46
+                center_dz = (nz - 0.38) / 0.50
                 local_radius2 = center_dx * center_dx + center_dy * center_dy + center_dz * center_dz
-                center_falloff = math.exp(-1.35 * local_radius2)
-                floor_lift = max(0.0, min(1.0, (nz - 0.04) / 0.20))
-                density.append(0.082 * edge_feather * center_falloff * floor_lift)
+                center_falloff = math.exp(-1.05 * local_radius2)
+                floor_lift = max(0.0, min(1.0, (nz - 0.03) / 0.16))
+                density.append(0.155 * edge_feather * center_falloff * floor_lift)
     zero_float = [0.0] * cell_count
     solid = bytes(cell_count)
     with path.open("wb") as f:
@@ -223,7 +223,7 @@ def write_visual_scene(review_root: Path) -> Path:
         "world_scale": 1.0,
         "objects": objects,
         "materials": [
-            {"material_id": "mat_warm_floor", "kind": "lambert", "albedo": [0.62, 0.54, 0.45]},
+            {"material_id": "mat_warm_floor", "kind": "lambert", "albedo": [0.15, 0.14, 0.13]},
             {"material_id": "mat_back_wall", "kind": "lambert", "albedo": [0.34, 0.46, 0.58]},
             {"material_id": "mat_left_wall", "kind": "lambert", "albedo": [0.58, 0.32, 0.30]},
             {"material_id": "mat_right_wall", "kind": "lambert", "albedo": [0.28, 0.53, 0.49]},
@@ -246,10 +246,10 @@ def write_visual_scene(review_root: Path) -> Path:
             {
                 "camera_id": "caustic_visual_camera",
                 "kind": "perspective",
-                "position": {"x": 3.15, "y": -4.75, "z": 1.95},
-                "target": {"x": 0.0, "y": 0.0, "z": 1.08},
+                "position": {"x": 0.72, "y": -5.45, "z": 0.82},
+                "target": {"x": 0.0, "y": 0.0, "z": 0.96},
                 "yaw": 0.0,
-                "look_pitch": -0.18,
+                "look_pitch": 0.02,
             }
         ],
         "constraints": [],
@@ -257,17 +257,17 @@ def write_visual_scene(review_root: Path) -> Path:
         "extensions": {
             "ray_tracing": {
                 "authoring": {
-                    "camera_focus_target": {"x": 0.0, "y": 0.0, "z": 1.08},
+                    "camera_focus_target": {"x": 0.0, "y": 0.0, "z": 0.96},
                     "environment": {
                         "light_mode": 1,
-                        "ambient_strength": 0.08,
-                        "top_fill_strength": 0.16,
+                        "ambient_strength": 0.025,
+                        "top_fill_strength": 0.035,
                     },
                     "object_materials": [
                         {
                             "object_id": "matte_receiver_floor",
                             "material_id": 0,
-                            "object_color": rgb_u24(158, 138, 115),
+                            "object_color": rgb_u24(38, 35, 32),
                             "roughness": 0.86,
                             "reflectivity": 0.02,
                             "alpha": 1.0,
@@ -320,23 +320,23 @@ def base_request(run_id: str,
         },
         "inspection": {
             "preset": "glass_review",
-            "camera_position": {"x": 3.15, "y": -4.75, "z": 1.95},
-            "camera_look_at": {"x": 0.0, "y": 0.0, "z": 1.08},
-            "camera_zoom": 0.82,
+            "camera_position": {"x": 0.72, "y": -5.45, "z": 0.82},
+            "camera_look_at": {"x": 0.0, "y": 0.0, "z": 0.96},
+            "camera_zoom": 0.92,
             "environment_light_mode": "ambient",
-            "ambient_strength": 0.06,
-            "top_fill_strength": 0.04,
-            "background_brightness": 0.12,
-            "background_color": {"r": 0.20, "g": 0.22, "b": 0.24},
+            "ambient_strength": 0.025,
+            "top_fill_strength": 0.025,
+            "background_brightness": 0.015,
+            "background_color": {"r": 0.015, "g": 0.017, "b": 0.020},
             "light_intensity": 8.8,
             "light_radius": 0.08,
             "secondary_diffuse_samples_3d": 8,
             "transmission_samples_3d": 8,
-            "volume_density_scale": 0.65,
-            "volume_density_gamma": 1.0,
-            "volume_scatter_gain": 2.4,
-            "volume_absorption_gain": 0.06,
-            "volume_opacity_clamp": 0.55,
+            "volume_density_scale": 1.15,
+            "volume_density_gamma": 0.92,
+            "volume_scatter_gain": 3.2,
+            "volume_absorption_gain": 0.10,
+            "volume_opacity_clamp": 0.78,
             "volume_step_scale": 0.9,
             "volume_tint": {"r": 1.0, "g": 0.98, "b": 0.92},
             "volume_albedo": {"r": 0.92, "g": 0.91, "b": 0.88},
@@ -568,6 +568,24 @@ def caustic_digest(summary: dict) -> dict:
         "transport_active": bool(state.get("transport_path_emission_active", False)),
         "transport_evaluated_paths": int(state.get("transport_evaluated_path_count", 0)),
         "transport_emitted_paths": int(state.get("transport_emitted_path_count", 0)),
+        "transport_analytic_sphere_lens_resolved_count": int(
+            state.get("transport_analytic_sphere_lens_resolved_count", 0)
+        ),
+        "transport_analytic_sphere_lens_rejected_count": int(
+            state.get("transport_analytic_sphere_lens_rejected_count", 0)
+        ),
+        "transport_analytic_sphere_lens_evaluated_paths": int(
+            state.get("transport_analytic_sphere_lens_evaluated_path_count", 0)
+        ),
+        "transport_analytic_sphere_lens_emitted_paths": int(
+            state.get("transport_analytic_sphere_lens_emitted_path_count", 0)
+        ),
+        "transport_analytic_sphere_lens_sample_weight": float(
+            state.get("transport_analytic_sphere_lens_sample_weight", 0.0)
+        ),
+        "transport_analytic_sphere_lens_total_sample_weight": float(
+            state.get("transport_analytic_sphere_lens_total_sample_weight", 0.0)
+        ),
         "transport_volume_segments": int(state.get("transport_volume_segment_count", 0)),
         "volume_cache_requested": bool(state.get("volume_cache_requested", False)),
         "volume_cache_bound": bool(state.get("volume_cache_bound", False)),
@@ -980,7 +998,12 @@ def write_delta_artifacts(review_root: Path, runs_by_cell: dict[str, dict]) -> d
     out_dir = review_root / "diffs"
     out_dir.mkdir(parents=True, exist_ok=True)
     result = {}
-    for cell_id in ("surface_caustic_only", "volume_caustic_only", "surface_and_volume_caustic"):
+    for cell_id in (
+        "surface_caustic_only",
+        "volume_caustic_only",
+        "volume_analytic_sphere_lens",
+        "surface_and_volume_caustic",
+    ):
         run = runs_by_cell.get(cell_id)
         if not run:
             continue

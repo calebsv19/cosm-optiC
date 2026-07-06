@@ -312,6 +312,300 @@ static void ray_tracing_headless_write_render_trace_cost_ledger(
                 (unsigned long long)(ledger ? ledger->materialFamilyCounts[i] : 0u),
                 i + 1 < RUNTIME_RENDER_TRACE_COST_MATERIAL_COUNT ? "," : "");
     }
+    fprintf(file, "    },\n");
+    fprintf(file, "    \"direct_light_visibility_policy\": {\n");
+    fprintf(file, "      \"source_evaluations\": %llu,\n",
+            (unsigned long long)(ledger ? ledger->directLightVisibilityPolicy.sourceEvaluations
+                                        : 0u));
+    fprintf(file, "      \"evaluated_samples\": %llu,\n",
+            (unsigned long long)(ledger ? ledger->directLightVisibilityPolicy.evaluatedSamples
+                                        : 0u));
+    fprintf(file, "      \"visibility_sample_queries\": %llu,\n",
+            (unsigned long long)(ledger ? ledger->directLightVisibilityPolicy.visibilityTraces
+                                        : 0u));
+    fprintf(file, "      \"luma_range_count\": %llu,\n",
+            (unsigned long long)(ledger ? ledger->directLightVisibilityPolicy.lumaRangeCount
+                                        : 0u));
+    fprintf(file, "      \"luma_min_observed\": %.6f,\n",
+            ledger && ledger->directLightVisibilityPolicy.lumaRangeCount > 0u
+                ? ledger->directLightVisibilityPolicy.lumaMinObserved
+                : 0.0);
+    fprintf(file, "      \"luma_max_observed\": %.6f,\n",
+            ledger && ledger->directLightVisibilityPolicy.lumaRangeCount > 0u
+                ? ledger->directLightVisibilityPolicy.lumaMaxObserved
+                : 0.0);
+    fprintf(file, "      \"luma_span_avg\": %.6f,\n",
+            ledger && ledger->directLightVisibilityPolicy.lumaRangeCount > 0u
+                ? ledger->directLightVisibilityPolicy.lumaSpanSum /
+                      (double)ledger->directLightVisibilityPolicy.lumaRangeCount
+                : 0.0);
+    fprintf(file, "      \"luma_span_max\": %.6f,\n",
+            ledger ? ledger->directLightVisibilityPolicy.lumaSpanMax : 0.0);
+    fprintf(file, "      \"caller_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_CALLER_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostDirectLightCaller3DLabel(
+                    (RuntimeRenderTraceCostDirectLightCaller3D)i),
+                (unsigned long long)(ledger ? ledger->directLightVisibilityPolicy.callerCounts[i]
+                                            : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_CALLER_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"source_kind_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_KIND_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostDirectLightSourceKind3DLabel(
+                    (RuntimeRenderTraceCostDirectLightSourceKind3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->directLightVisibilityPolicy.sourceKindCounts[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_KIND_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"source_origin_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_ORIGIN_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostDirectLightSourceOrigin3DLabel(
+                    (RuntimeRenderTraceCostDirectLightSourceOrigin3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->directLightVisibilityPolicy.sourceOriginCounts[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_ORIGIN_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"emission_profile_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_EMISSION_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostDirectLightEmissionProfile3DLabel(
+                    (RuntimeRenderTraceCostDirectLightEmissionProfile3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->directLightVisibilityPolicy
+                                               .emissionProfileCounts[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_EMISSION_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"outcome_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostDirectLightOutcome3DLabel(
+                    (RuntimeRenderTraceCostDirectLightOutcome3D)i),
+                (unsigned long long)(ledger ? ledger->directLightVisibilityPolicy.outcomeCounts[i]
+                                            : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"stop_reason_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostDirectLightStopReason3DLabel(
+                    (RuntimeRenderTraceCostDirectLightStopReason3D)i),
+                (unsigned long long)(ledger ? ledger->directLightVisibilityPolicy.stopReasonCounts[i]
+                                            : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"sample_bucket_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SAMPLES_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostDirectLightSampleBucket3DLabel(
+                    (RuntimeRenderTraceCostDirectLightSampleBucket3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->directLightVisibilityPolicy.sampleBucketCounts[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SAMPLES_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"distance_bucket_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostDirectLightDistanceBucket3DLabel(
+                    (RuntimeRenderTraceCostDirectLightDistanceBucket3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->directLightVisibilityPolicy.distanceBucketCounts[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"importance_bucket_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostDirectLightImportanceBucket3DLabel(
+                    (RuntimeRenderTraceCostDirectLightImportanceBucket3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->directLightVisibilityPolicy
+                                               .importanceBucketCounts[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"material_emitter_rect_policy\": {\n");
+    fprintf(file, "        \"source_evaluations\": %llu,\n",
+            (unsigned long long)(ledger ? ledger->directLightVisibilityPolicy
+                                              .materialEmitterRectEvaluations
+                                        : 0u));
+    fprintf(file, "        \"evaluated_samples\": %llu,\n",
+            (unsigned long long)(ledger ? ledger->directLightVisibilityPolicy
+                                              .materialEmitterRectEvaluatedSamples
+                                        : 0u));
+    fprintf(file, "        \"visibility_sample_queries\": %llu,\n",
+            (unsigned long long)(ledger ? ledger->directLightVisibilityPolicy
+                                              .materialEmitterRectVisibilityTraces
+                                        : 0u));
+    fprintf(file, "        \"distance_bucket_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_COUNT; ++i) {
+        fprintf(file,
+                "          \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostDirectLightDistanceBucket3DLabel(
+                    (RuntimeRenderTraceCostDirectLightDistanceBucket3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->directLightVisibilityPolicy
+                                               .materialEmitterRectDistanceCounts[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_COUNT ? "," : "");
+    }
+    fprintf(file, "        },\n");
+    fprintf(file, "        \"importance_bucket_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_COUNT; ++i) {
+        fprintf(file,
+                "          \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostDirectLightImportanceBucket3DLabel(
+                    (RuntimeRenderTraceCostDirectLightImportanceBucket3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->directLightVisibilityPolicy
+                                               .materialEmitterRectImportanceCounts[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_COUNT ? "," : "");
+    }
+    fprintf(file, "        },\n");
+    fprintf(file, "        \"evaluated_samples_by_distance\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_COUNT; ++i) {
+        fprintf(file,
+                "          \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostDirectLightDistanceBucket3DLabel(
+                    (RuntimeRenderTraceCostDirectLightDistanceBucket3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->directLightVisibilityPolicy
+                                               .materialEmitterRectEvaluatedSamplesByDistance[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_COUNT ? "," : "");
+    }
+    fprintf(file, "        },\n");
+    fprintf(file, "        \"visibility_sample_queries_by_distance\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_COUNT; ++i) {
+        fprintf(file,
+                "          \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostDirectLightDistanceBucket3DLabel(
+                    (RuntimeRenderTraceCostDirectLightDistanceBucket3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->directLightVisibilityPolicy
+                                               .materialEmitterRectVisibilityTracesByDistance[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_COUNT ? "," : "");
+    }
+    fprintf(file, "        },\n");
+    fprintf(file, "        \"evaluated_samples_by_importance\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_COUNT; ++i) {
+        fprintf(file,
+                "          \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostDirectLightImportanceBucket3DLabel(
+                    (RuntimeRenderTraceCostDirectLightImportanceBucket3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->directLightVisibilityPolicy
+                                               .materialEmitterRectEvaluatedSamplesByImportance[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_COUNT ? "," : "");
+    }
+    fprintf(file, "        },\n");
+    fprintf(file, "        \"visibility_sample_queries_by_importance\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_COUNT; ++i) {
+        fprintf(file,
+                "          \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostDirectLightImportanceBucket3DLabel(
+                    (RuntimeRenderTraceCostDirectLightImportanceBucket3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->directLightVisibilityPolicy
+                                               .materialEmitterRectVisibilityTracesByImportance[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_COUNT ? "," : "");
+    }
+    fprintf(file, "        },\n");
+    fprintf(file, "        \"distance_importance_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_COUNT; ++i) {
+        fprintf(file,
+                "          \"%s\": {",
+                RuntimeRenderTraceCostDirectLightDistanceBucket3DLabel(
+                    (RuntimeRenderTraceCostDirectLightDistanceBucket3D)i));
+        for (int j = 0; j < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_COUNT; ++j) {
+            fprintf(file,
+                    " \"%s\": %llu%s",
+                    RuntimeRenderTraceCostDirectLightImportanceBucket3DLabel(
+                        (RuntimeRenderTraceCostDirectLightImportanceBucket3D)j),
+                    (unsigned long long)(ledger
+                                             ? ledger->directLightVisibilityPolicy
+                                                   .materialEmitterRectDistanceImportanceCounts[i][j]
+                                             : 0u),
+                    j + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_COUNT ? "," : "");
+        }
+        fprintf(file,
+                " }%s\n",
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_COUNT ? "," : "");
+    }
+    fprintf(file, "        }\n");
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"source_kind_outcome_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_KIND_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": {",
+                RuntimeRenderTraceCostDirectLightSourceKind3DLabel(
+                    (RuntimeRenderTraceCostDirectLightSourceKind3D)i));
+        for (int j = 0; j < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_COUNT; ++j) {
+            fprintf(file,
+                    " \"%s\": %llu%s",
+                    RuntimeRenderTraceCostDirectLightOutcome3DLabel(
+                        (RuntimeRenderTraceCostDirectLightOutcome3D)j),
+                    (unsigned long long)(ledger
+                                             ? ledger->directLightVisibilityPolicy
+                                                   .sourceKindOutcomeCounts[i][j]
+                                             : 0u),
+                    j + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_COUNT ? "," : "");
+        }
+        fprintf(file,
+                " }%s\n",
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_KIND_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"source_kind_stop_reason_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_KIND_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": {",
+                RuntimeRenderTraceCostDirectLightSourceKind3DLabel(
+                    (RuntimeRenderTraceCostDirectLightSourceKind3D)i));
+        for (int j = 0; j < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_COUNT; ++j) {
+            fprintf(file,
+                    " \"%s\": %llu%s",
+                    RuntimeRenderTraceCostDirectLightStopReason3DLabel(
+                        (RuntimeRenderTraceCostDirectLightStopReason3D)j),
+                    (unsigned long long)(ledger
+                                             ? ledger->directLightVisibilityPolicy
+                                                   .sourceKindStopReasonCounts[i][j]
+                                             : 0u),
+                    j + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_COUNT ? "," : "");
+        }
+        fprintf(file,
+                " }%s\n",
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_KIND_COUNT ? "," : "");
+    }
+    fprintf(file, "      }\n");
     fprintf(file, "    }\n");
     fprintf(file, "  },\n");
 }
@@ -738,6 +1032,54 @@ void ray_tracing_render_headless_write_summary(
                 preflight->stats.causticTransportEvaluatedPathCount);
         fprintf(file, "      \"transport_emitted_path_count\": %d,\n",
                 preflight->stats.causticTransportEmittedPathCount);
+        fprintf(file, "      \"transport_analytic_sphere_lens_resolved_count\": %d,\n",
+                preflight->stats.causticTransportAnalyticSphereLensResolvedCount);
+        fprintf(file, "      \"transport_analytic_sphere_lens_rejected_count\": %d,\n",
+                preflight->stats.causticTransportAnalyticSphereLensRejectedCount);
+        fprintf(file, "      \"transport_analytic_sphere_lens_evaluated_path_count\": %d,\n",
+                preflight->stats.causticTransportAnalyticSphereLensEvaluatedPathCount);
+        fprintf(file, "      \"transport_analytic_sphere_lens_emitted_path_count\": %d,\n",
+                preflight->stats.causticTransportAnalyticSphereLensEmittedPathCount);
+        fprintf(file, "      \"transport_analytic_sphere_lens_sample_weight\": %.9f,\n",
+                preflight->stats.causticTransportAnalyticSphereLensSampleWeight);
+        fprintf(file, "      \"transport_analytic_sphere_lens_total_sample_weight\": %.9f,\n",
+                preflight->stats.causticTransportAnalyticSphereLensTotalSampleWeight);
+        fprintf(file, "      \"transport_analytic_cylinder_lens_resolved_count\": %d,\n",
+                preflight->stats.causticTransportAnalyticCylinderLensResolvedCount);
+        fprintf(file, "      \"transport_analytic_cylinder_lens_rejected_count\": %d,\n",
+                preflight->stats.causticTransportAnalyticCylinderLensRejectedCount);
+        fprintf(file, "      \"transport_analytic_cylinder_lens_evaluated_path_count\": %d,\n",
+                preflight->stats.causticTransportAnalyticCylinderLensEvaluatedPathCount);
+        fprintf(file, "      \"transport_analytic_cylinder_lens_emitted_path_count\": %d,\n",
+                preflight->stats.causticTransportAnalyticCylinderLensEmittedPathCount);
+        fprintf(file, "      \"transport_analytic_cylinder_lens_sample_weight\": %.9f,\n",
+                preflight->stats.causticTransportAnalyticCylinderLensSampleWeight);
+        fprintf(file, "      \"transport_analytic_cylinder_lens_total_sample_weight\": %.9f,\n",
+                preflight->stats.causticTransportAnalyticCylinderLensTotalSampleWeight);
+        fprintf(file, "      \"transport_analytic_prism_lens_resolved_count\": %d,\n",
+                preflight->stats.causticTransportAnalyticPrismLensResolvedCount);
+        fprintf(file, "      \"transport_analytic_prism_lens_rejected_count\": %d,\n",
+                preflight->stats.causticTransportAnalyticPrismLensRejectedCount);
+        fprintf(file, "      \"transport_analytic_prism_lens_evaluated_path_count\": %d,\n",
+                preflight->stats.causticTransportAnalyticPrismLensEvaluatedPathCount);
+        fprintf(file, "      \"transport_analytic_prism_lens_emitted_path_count\": %d,\n",
+                preflight->stats.causticTransportAnalyticPrismLensEmittedPathCount);
+        fprintf(file, "      \"transport_analytic_prism_lens_sample_weight\": %.9f,\n",
+                preflight->stats.causticTransportAnalyticPrismLensSampleWeight);
+        fprintf(file, "      \"transport_analytic_prism_lens_total_sample_weight\": %.9f,\n",
+                preflight->stats.causticTransportAnalyticPrismLensTotalSampleWeight);
+        fprintf(file, "      \"transport_analytic_bowl_lens_resolved_count\": %d,\n",
+                preflight->stats.causticTransportAnalyticBowlLensResolvedCount);
+        fprintf(file, "      \"transport_analytic_bowl_lens_rejected_count\": %d,\n",
+                preflight->stats.causticTransportAnalyticBowlLensRejectedCount);
+        fprintf(file, "      \"transport_analytic_bowl_lens_evaluated_path_count\": %d,\n",
+                preflight->stats.causticTransportAnalyticBowlLensEvaluatedPathCount);
+        fprintf(file, "      \"transport_analytic_bowl_lens_emitted_path_count\": %d,\n",
+                preflight->stats.causticTransportAnalyticBowlLensEmittedPathCount);
+        fprintf(file, "      \"transport_analytic_bowl_lens_sample_weight\": %.9f,\n",
+                preflight->stats.causticTransportAnalyticBowlLensSampleWeight);
+        fprintf(file, "      \"transport_analytic_bowl_lens_total_sample_weight\": %.9f,\n",
+                preflight->stats.causticTransportAnalyticBowlLensTotalSampleWeight);
         fprintf(file, "      \"transport_transparent_hit_count\": %d,\n",
                 preflight->stats.causticTransportTransparentHitCount);
         fprintf(file, "      \"transport_specular_event_count\": %d,\n",
@@ -976,6 +1318,9 @@ void ray_tracing_render_headless_write_summary(
                 request->caustic_settings.sampleBudget);
         fprintf(file, "      \"max_path_depth\": %d,\n",
                 request->caustic_settings.maxPathDepth);
+        fprintf(file, "      \"emission_policy\": \"%s\",\n",
+                RuntimeCausticTransportEmissionPolicy3D_Label(
+                    request->caustic_settings.emissionPolicy));
         fprintf(file, "      \"debug_summary_enabled\": %s,\n",
                 request->caustic_settings.debugSummaryEnabled ? "true" : "false");
         fprintf(file, "      \"debug_export_enabled\": %s\n",
@@ -1316,6 +1661,54 @@ void ray_tracing_render_headless_write_summary(
             preflight->stats.causticTransportEvaluatedPathCount);
     fprintf(file, "    \"caustic_transport_emitted_path_count\": %d,\n",
             preflight->stats.causticTransportEmittedPathCount);
+    fprintf(file, "    \"caustic_transport_analytic_sphere_lens_resolved_count\": %d,\n",
+            preflight->stats.causticTransportAnalyticSphereLensResolvedCount);
+    fprintf(file, "    \"caustic_transport_analytic_sphere_lens_rejected_count\": %d,\n",
+            preflight->stats.causticTransportAnalyticSphereLensRejectedCount);
+    fprintf(file, "    \"caustic_transport_analytic_sphere_lens_evaluated_path_count\": %d,\n",
+            preflight->stats.causticTransportAnalyticSphereLensEvaluatedPathCount);
+    fprintf(file, "    \"caustic_transport_analytic_sphere_lens_emitted_path_count\": %d,\n",
+            preflight->stats.causticTransportAnalyticSphereLensEmittedPathCount);
+    fprintf(file, "    \"caustic_transport_analytic_sphere_lens_sample_weight\": %.9f,\n",
+            preflight->stats.causticTransportAnalyticSphereLensSampleWeight);
+    fprintf(file, "    \"caustic_transport_analytic_sphere_lens_total_sample_weight\": %.9f,\n",
+            preflight->stats.causticTransportAnalyticSphereLensTotalSampleWeight);
+    fprintf(file, "    \"caustic_transport_analytic_cylinder_lens_resolved_count\": %d,\n",
+            preflight->stats.causticTransportAnalyticCylinderLensResolvedCount);
+    fprintf(file, "    \"caustic_transport_analytic_cylinder_lens_rejected_count\": %d,\n",
+            preflight->stats.causticTransportAnalyticCylinderLensRejectedCount);
+    fprintf(file, "    \"caustic_transport_analytic_cylinder_lens_evaluated_path_count\": %d,\n",
+            preflight->stats.causticTransportAnalyticCylinderLensEvaluatedPathCount);
+    fprintf(file, "    \"caustic_transport_analytic_cylinder_lens_emitted_path_count\": %d,\n",
+            preflight->stats.causticTransportAnalyticCylinderLensEmittedPathCount);
+    fprintf(file, "    \"caustic_transport_analytic_cylinder_lens_sample_weight\": %.9f,\n",
+            preflight->stats.causticTransportAnalyticCylinderLensSampleWeight);
+    fprintf(file, "    \"caustic_transport_analytic_cylinder_lens_total_sample_weight\": %.9f,\n",
+            preflight->stats.causticTransportAnalyticCylinderLensTotalSampleWeight);
+    fprintf(file, "    \"caustic_transport_analytic_prism_lens_resolved_count\": %d,\n",
+            preflight->stats.causticTransportAnalyticPrismLensResolvedCount);
+    fprintf(file, "    \"caustic_transport_analytic_prism_lens_rejected_count\": %d,\n",
+            preflight->stats.causticTransportAnalyticPrismLensRejectedCount);
+    fprintf(file, "    \"caustic_transport_analytic_prism_lens_evaluated_path_count\": %d,\n",
+            preflight->stats.causticTransportAnalyticPrismLensEvaluatedPathCount);
+    fprintf(file, "    \"caustic_transport_analytic_prism_lens_emitted_path_count\": %d,\n",
+            preflight->stats.causticTransportAnalyticPrismLensEmittedPathCount);
+    fprintf(file, "    \"caustic_transport_analytic_prism_lens_sample_weight\": %.9f,\n",
+            preflight->stats.causticTransportAnalyticPrismLensSampleWeight);
+    fprintf(file, "    \"caustic_transport_analytic_prism_lens_total_sample_weight\": %.9f,\n",
+            preflight->stats.causticTransportAnalyticPrismLensTotalSampleWeight);
+    fprintf(file, "    \"caustic_transport_analytic_bowl_lens_resolved_count\": %d,\n",
+            preflight->stats.causticTransportAnalyticBowlLensResolvedCount);
+    fprintf(file, "    \"caustic_transport_analytic_bowl_lens_rejected_count\": %d,\n",
+            preflight->stats.causticTransportAnalyticBowlLensRejectedCount);
+    fprintf(file, "    \"caustic_transport_analytic_bowl_lens_evaluated_path_count\": %d,\n",
+            preflight->stats.causticTransportAnalyticBowlLensEvaluatedPathCount);
+    fprintf(file, "    \"caustic_transport_analytic_bowl_lens_emitted_path_count\": %d,\n",
+            preflight->stats.causticTransportAnalyticBowlLensEmittedPathCount);
+    fprintf(file, "    \"caustic_transport_analytic_bowl_lens_sample_weight\": %.9f,\n",
+            preflight->stats.causticTransportAnalyticBowlLensSampleWeight);
+    fprintf(file, "    \"caustic_transport_analytic_bowl_lens_total_sample_weight\": %.9f,\n",
+            preflight->stats.causticTransportAnalyticBowlLensTotalSampleWeight);
     fprintf(file, "    \"caustic_transport_transparent_hit_count\": %d,\n",
             preflight->stats.causticTransportTransparentHitCount);
     fprintf(file, "    \"caustic_transport_specular_event_count\": %d,\n",

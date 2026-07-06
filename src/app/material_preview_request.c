@@ -28,6 +28,10 @@ static void material_preview_request_parse_variant(json_object* variant_obj,
                  "%s",
                  json_object_get_string(label_obj));
     }
+    out_variant->has_material_id =
+        RayTracingJsonGetIntAny(variant_obj, "material_id", "materialId", &out_variant->material_id);
+    out_variant->has_object_color =
+        RayTracingJsonGetIntAny(variant_obj, "object_color", "objectColor", &out_variant->object_color);
     out_variant->has_alpha =
         RayTracingJsonGetDoubleAny(variant_obj, "alpha", "transparency", &out_variant->alpha);
     out_variant->has_reflectivity =
@@ -79,6 +83,31 @@ static void material_preview_request_parse_variant(json_object* variant_obj,
             RayTracingJsonGetDoubleAny(preview_overlay_obj, "scale", NULL, &out_variant->preview_overlay_scale);
         out_variant->has_preview_overlay_strength =
             RayTracingJsonGetDoubleAny(preview_overlay_obj, "strength", NULL, &out_variant->preview_overlay_strength);
+        out_variant->has_preview_overlay_roughness_influence =
+            RayTracingJsonGetDoubleAny(preview_overlay_obj,
+                                       "roughness_influence",
+                                       "roughnessInfluence",
+                                       &out_variant->preview_overlay_roughness_influence);
+        out_variant->has_preview_overlay_reflectivity_influence =
+            RayTracingJsonGetDoubleAny(preview_overlay_obj,
+                                       "reflectivity_influence",
+                                       "reflectivityInfluence",
+                                       &out_variant->preview_overlay_reflectivity_influence);
+        out_variant->has_preview_overlay_specular_influence =
+            RayTracingJsonGetDoubleAny(preview_overlay_obj,
+                                       "specular_influence",
+                                       "specularInfluence",
+                                       &out_variant->preview_overlay_specular_influence);
+        out_variant->has_preview_overlay_diffuse_influence =
+            RayTracingJsonGetDoubleAny(preview_overlay_obj,
+                                       "diffuse_influence",
+                                       "diffuseInfluence",
+                                       &out_variant->preview_overlay_diffuse_influence);
+        out_variant->has_preview_overlay_transparency_influence =
+            RayTracingJsonGetDoubleAny(preview_overlay_obj,
+                                       "transparency_influence",
+                                       "transparencyInfluence",
+                                       &out_variant->preview_overlay_transparency_influence);
         out_variant->has_preview_overlay_offset_u =
             RayTracingJsonGetDoubleAny(preview_overlay_obj, "offset_u", "offsetU", &out_variant->preview_overlay_offset_u);
         out_variant->has_preview_overlay_offset_v =

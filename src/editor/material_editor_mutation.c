@@ -479,6 +479,30 @@ bool MaterialEditorApplyTextureParamValueToFocused(MaterialEditorTextureParamKin
     return true;
 }
 
+bool MaterialEditorApplyLayerOpacityValueToFocused(double value) {
+    SceneObject* obj = material_editor_focused_object();
+    int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
+    if (!obj || focused_object_index < 0) return false;
+    if (!MaterialEditorLayerModelApplyOpacityValue(obj,
+                                                   focused_object_index,
+                                                   material_editor_clamp01(value))) {
+        return false;
+    }
+    material_editor_apply_object_scope_to_all_faces(focused_object_index);
+    MarkObjectDirty(obj);
+    MaterialEditorFacePreviewInvalidate();
+    return true;
+}
+
+bool MaterialEditorApplyLayerOpacityStepToFocused(double delta) {
+    SceneObject* obj = material_editor_focused_object();
+    RuntimeMaterialTextureLayer layer = {0};
+    if (!obj) return false;
+    if (!material_editor_get_active_layer(obj, NULL, &layer, NULL)) return false;
+    return MaterialEditorApplyLayerOpacityValueToFocused(
+        material_editor_clamp01(layer.opacity + delta));
+}
+
 bool MaterialEditorApplyLayerInfluenceValueToFocused(MaterialEditorLayerInfluenceKind kind,
                                                      double value) {
     SceneObject* obj = material_editor_focused_object();

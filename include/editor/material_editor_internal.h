@@ -3,6 +3,7 @@
 
 #include <SDL2/SDL.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 #include "config/config_manager.h"
 #include "editor/material_editor.h"
@@ -30,6 +31,7 @@
 #define MATERIAL_EDITOR_LAYER_ROW_HEIGHT 22
 #define MATERIAL_EDITOR_LAYER_ROW_GAP 2
 #define MATERIAL_EDITOR_LAYER_ACTION_COUNT 5
+#define MATERIAL_EDITOR_LAYER_ROW_ACTION_COUNT 3
 #define MATERIAL_EDITOR_LAYER_KIND_BUTTON_COUNT 4
 #define MATERIAL_EDITOR_GRAPH_ACTION_COUNT 4
 #define MATERIAL_EDITOR_RECIPE_ACTION_COUNT 3
@@ -214,6 +216,8 @@ typedef struct MaterialEditorActiveLayerReadback {
     char edit_owner_label[64];
     char state_label[48];
     char response_summary[128];
+    char effective_summary[160];
+    char effective_delta_summary[160];
     int active_index;
     int layer_count;
     double opacity;
@@ -223,7 +227,15 @@ typedef struct MaterialEditorActiveLayerReadback {
     double specular_influence;
     double diffuse_influence;
     double transparency_influence;
+    double effective_mask;
+    double effective_roughness_delta;
+    double effective_reflectivity_delta;
+    double effective_specular_delta;
+    double effective_diffuse_delta;
+    double effective_transparency_delta;
+    double effective_color_delta;
     bool has_layer;
+    bool has_effective_readback;
     bool enabled;
     bool base_layer;
     bool persisted_stack;
@@ -296,6 +308,24 @@ typedef struct MaterialEditorResponseReadback {
     bool has_guarded_fields;
 } MaterialEditorResponseReadback;
 
+typedef struct MaterialEditorLayerStructureReadback {
+    char header_label[128];
+    char guard_label[160];
+    int layer_count;
+    int max_layers;
+    int active_index;
+    bool persisted_stack;
+    bool graph_backed;
+    bool active_base;
+    bool active_muted;
+    bool stack_full;
+    bool can_add;
+    bool can_delete;
+    bool can_move_up;
+    bool can_move_down;
+    bool can_toggle;
+} MaterialEditorLayerStructureReadback;
+
 extern int s_material_editor_focused_object_index;
 extern MaterialEditorSliderKind s_material_editor_active_slider;
 extern MaterialEditorTextureParamKind s_material_editor_active_param_slider;
@@ -336,8 +366,10 @@ extern SDL_Rect s_layer_panel_rect;
 extern SDL_Rect s_layer_list_rect;
 extern SDL_Rect s_layer_row_rects[MATERIAL_EDITOR_MAX_LAYER_ROWS];
 extern SDL_Rect s_layer_toggle_rects[MATERIAL_EDITOR_MAX_LAYER_ROWS];
+extern SDL_Rect s_layer_row_action_rects[MATERIAL_EDITOR_MAX_LAYER_ROWS]
+                                        [MATERIAL_EDITOR_LAYER_ROW_ACTION_COUNT];
 extern int s_layer_row_indices[MATERIAL_EDITOR_MAX_LAYER_ROWS];
-extern char s_layer_row_labels[MATERIAL_EDITOR_MAX_LAYER_ROWS][72];
+extern char s_layer_row_labels[MATERIAL_EDITOR_MAX_LAYER_ROWS][96];
 extern SDL_Rect s_layer_action_rects[MATERIAL_EDITOR_LAYER_ACTION_COUNT];
 extern int s_layer_row_count;
 extern int s_layer_scroll_offset;
@@ -354,6 +386,7 @@ extern SDL_Rect s_layer_influence_action_rects[MATERIAL_EDITOR_LAYER_INFLUENCE_C
                                              [MATERIAL_EDITOR_RESPONSE_ACTION_COUNT];
 extern MaterialEditorLayerInfluenceKind
     s_layer_influence_action_fields[MATERIAL_EDITOR_LAYER_INFLUENCE_CONTROL_COUNT];
+extern SDL_Rect s_layer_opacity_action_rects[MATERIAL_EDITOR_RESPONSE_ACTION_COUNT];
 extern SDL_Rect s_glass_overlay_action_rects[MATERIAL_EDITOR_GLASS_OVERLAY_ACTION_COUNT];
 extern RuntimeMaterialTextureLayerKind
     s_glass_overlay_action_kinds[MATERIAL_EDITOR_GLASS_OVERLAY_ACTION_COUNT];
@@ -462,6 +495,15 @@ bool MaterialEditorBuildResponseReadback(MaterialEditorResponseReadback* out_rea
 const char* MaterialEditorResponseFamilyLabel(MaterialEditorResponseFamily family);
 const char* MaterialEditorResponseFieldStateLabel(MaterialEditorResponseFieldState state);
 const char* MaterialEditorResponseFieldLabel(MaterialEditorResponseField field);
+void MaterialEditorFormatLayerChannelIntent(const RuntimeMaterialTextureLayer* layer,
+                                            char* out_label,
+                                            size_t out_label_size);
+bool MaterialEditorBuildLayerStructureReadback(
+    const RuntimeMaterialTextureStack* stack,
+    int active_index,
+    bool persisted_stack,
+    bool graph_backed,
+    MaterialEditorLayerStructureReadback* out_readback);
 
 void MaterialEditorResetGroupListLayout(void);
 void MaterialEditorResetLayerListLayout(void);

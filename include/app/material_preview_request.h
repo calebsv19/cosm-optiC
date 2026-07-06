@@ -13,6 +13,10 @@
 
 typedef struct MaterialPreviewVariantOverrides {
     char label[MATERIAL_PREVIEW_MAX_VARIANT_LABEL];
+    bool has_material_id;
+    int material_id;
+    bool has_object_color;
+    int object_color;
     bool has_alpha;
     double alpha;
     bool has_reflectivity;
@@ -56,6 +60,16 @@ typedef struct MaterialPreviewVariantOverrides {
     double preview_overlay_scale;
     bool has_preview_overlay_strength;
     double preview_overlay_strength;
+    bool has_preview_overlay_roughness_influence;
+    double preview_overlay_roughness_influence;
+    bool has_preview_overlay_reflectivity_influence;
+    double preview_overlay_reflectivity_influence;
+    bool has_preview_overlay_specular_influence;
+    double preview_overlay_specular_influence;
+    bool has_preview_overlay_diffuse_influence;
+    double preview_overlay_diffuse_influence;
+    bool has_preview_overlay_transparency_influence;
+    double preview_overlay_transparency_influence;
     bool has_preview_overlay_offset_u;
     double preview_overlay_offset_u;
     bool has_preview_overlay_offset_v;

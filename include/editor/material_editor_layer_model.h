@@ -38,6 +38,9 @@ bool MaterialEditorLayerModelApplyPlacementValue(const SceneObject* object,
                                                  int scene_object_index,
                                                  int field_kind,
                                                  double normalized_value);
+bool MaterialEditorLayerModelApplyOpacityValue(const SceneObject* object,
+                                               int scene_object_index,
+                                               double normalized_value);
 bool MaterialEditorLayerModelApplyPatternMode(const SceneObject* object,
                                               int scene_object_index,
                                               int pattern_mode);

@@ -1,0 +1,53 @@
+{
+  "grid_bmp": "<redacted-local-path:layer_control_preview_grid.bmp>",
+  "grid_height": 432,
+  "grid_png": "<redacted-local-path:layer_control_preview_grid.png>",
+  "grid_width": 576,
+  "output_root": "<redacted-local-path:layer_control_preview_grid>",
+  "proof_id": "m12_s5_layer_control_preview_grid",
+  "rows": [
+    {
+      "id": "metal_opacity",
+      "preview_bmp": "<redacted-local-path:metal_opacity_preview.bmp>",
+      "preview_png": "<redacted-local-path:metal_opacity_preview.png>",
+      "request_path": "<redacted-local-path:metal_opacity_request.json>",
+      "summary_path": "<redacted-local-path:metal_opacity_summary.json>",
+      "title": "Rough Metal - Rust Opacity",
+      "variant_labels": [
+        "base_no_overlay",
+        "rust_op025",
+        "rust_op060",
+        "rust_op095"
+      ]
+    },
+    {
+      "id": "metal_influence",
+      "preview_bmp": "<redacted-local-path:metal_influence_preview.bmp>",
+      "preview_png": "<redacted-local-path:metal_influence_preview.png>",
+      "request_path": "<redacted-local-path:metal_influence_request.json>",
+      "summary_path": "<redacted-local-path:metal_influence_summary.json>",
+      "title": "Rough Metal - Signed Influence",
+      "variant_labels": [
+        "neutral_ref078",
+        "attenuate_refl",
+        "boost_spec",
+        "strength_035"
+      ]
+    },
+    {
+      "id": "family_layer_examples",
+      "preview_bmp": "<redacted-local-path:family_layer_examples_preview.bmp>",
+      "preview_png": "<redacted-local-path:family_layer_examples_preview.png>",
+      "request_path": "<redacted-local-path:family_layer_examples_request.json>",
+      "summary_path": "<redacted-local-path:family_layer_examples_summary.json>",
+      "title": "Family Layer Examples",
+      "variant_labels": [
+        "glass_fog_trans",
+        "mirror_oil_spec",
+        "metal_rust_rough",
+        "metal_grime_mute"
+      ]
+    }
+  ],
+  "schema": "ray_tracing_material_layer_control_preview_grid_summary_v1"
+}

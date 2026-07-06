@@ -1,0 +1,97 @@
+{
+  "background_color": 2698549,
+  "columns": 4,
+  "height": 144,
+  "object_id": "rear_blue_panel",
+  "output_path": "<redacted-local-path:family_layer_examples_preview.bmp>",
+  "runtime_scene_path": "<redacted-local-path:family_layer_examples_scene_runtime.json>",
+  "schema": "ray_tracing_material_preview_request_v1",
+  "summary_path": "<redacted-local-path:family_layer_examples_summary.json>",
+  "variants": [
+    {
+      "alpha": 0.68,
+      "label": "glass_fog_trans",
+      "preview_overlay": {
+        "color_depth": 0.7,
+        "contrast": 0.44,
+        "coverage": 0.56,
+        "grain": 0.36,
+        "kind": "fog",
+        "opacity": 0.74,
+        "roughness_influence": 0.68,
+        "seed": 53,
+        "strength": 0.84,
+        "surface_damage": 0.52,
+        "transparency_influence": -0.3
+      },
+      "reflectivity": 0.04,
+      "roughness": 0.18
+    },
+    {
+      "alpha": 1.0,
+      "label": "mirror_oil_spec",
+      "material_id": 1,
+      "object_color": 14213358,
+      "preview_overlay": {
+        "contrast": 0.7,
+        "coverage": 0.6,
+        "flow": 0.82,
+        "grain": 0.48,
+        "kind": "oil",
+        "opacity": 0.7,
+        "reflectivity_influence": 0.94,
+        "roughness_influence": -0.3,
+        "seed": 67,
+        "specular_influence": 0.92,
+        "strength": 0.82,
+        "surface_damage": 0.72
+      },
+      "reflectivity": 0.92,
+      "roughness": 0.08
+    },
+    {
+      "alpha": 1.0,
+      "label": "metal_rust_rough",
+      "material_id": 2,
+      "object_color": 12093766,
+      "preview_overlay": {
+        "color_depth": 0.82,
+        "contrast": 0.72,
+        "coverage": 0.62,
+        "grain": 0.52,
+        "kind": "rust",
+        "opacity": 0.82,
+        "reflectivity_influence": -0.38,
+        "roughness_influence": 0.82,
+        "seed": 31,
+        "specular_influence": -0.3,
+        "strength": 0.84,
+        "surface_damage": 0.7
+      },
+      "reflectivity": 0.7,
+      "roughness": 0.58
+    },
+    {
+      "alpha": 1.0,
+      "label": "metal_grime_mute",
+      "material_id": 2,
+      "object_color": 12093766,
+      "preview_overlay": {
+        "contrast": 0.78,
+        "coverage": 0.54,
+        "diffuse_influence": 0.25,
+        "grain": 0.64,
+        "kind": "grime",
+        "opacity": 0.55,
+        "reflectivity_influence": -0.52,
+        "roughness_influence": 0.64,
+        "seed": 43,
+        "strength": 0.7,
+        "surface_damage": 0.68
+      },
+      "reflectivity": 0.7,
+      "roughness": 0.58
+    }
+  ],
+  "width": 144
+}

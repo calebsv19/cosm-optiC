@@ -249,6 +249,18 @@ test-ray-tracing-spatial-caustic-phase10-tangent-receiver-matrix: $(RAY_TRACING_
 test-ray-tracing-spatial-caustic-visual-sphere-mist-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/run_ray_tracing_spatial_caustic_visual_sphere_mist_matrix.py
 
+test-ray-tracing-spatial-caustic-funnel-fixture-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_funnel_fixture_matrix.py
+
+test-ray-tracing-spatial-caustic-cylinder-lens-fixture: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_cylinder_lens_fixture.py --debug-export
+
+test-ray-tracing-spatial-caustic-prism-lens-fixture: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_prism_lens_fixture.py --debug-export
+
+test-ray-tracing-spatial-caustic-bowl-lens-fixture: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_bowl_lens_fixture.py --debug-export
+
 test-ray-tracing-spatial-caustic-authored-validation-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/run_ray_tracing_spatial_caustic_authored_validation_matrix.py
 
@@ -447,6 +459,12 @@ test-ray-tracing-material-preview-headless: $(RAY_TRACING_MATERIAL_PREVIEW_HEADL
 
 test-ray-tracing-material-family-preview-grid: $(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_BIN)
 	python3 tests/integration/run_ray_tracing_material_family_preview_grid.py
+
+test-ray-tracing-material-layer-control-preview-grid: $(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_material_layer_control_preview_grid.py --publish-docs
+
+test-ray-tracing-material-stack-structure-proof-grid:
+	python3 tests/integration/run_ray_tracing_material_stack_structure_proof_grid.py --publish-docs
 
 test-manifest-to-trace-export: ray_trace_tool
 	tests/integration/run_manifest_to_trace_export.sh

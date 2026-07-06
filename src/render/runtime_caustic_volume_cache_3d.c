@@ -312,6 +312,176 @@ bool RuntimeCausticVolumeCache3D_DepositFootprintAtPosition(
     return true;
 }
 
+bool RuntimeCausticVolumeCache3D_DepositDirectionalFootprintAtPosition(
+    RuntimeCausticVolumeCache3D* cache,
+    Vec3 position,
+    Vec3 direction,
+    double perpendicular_radius_world,
+    double axial_radius_world,
+    double radiance_r,
+    double radiance_g,
+    double radiance_b) {
+    double local_x = 0.0;
+    double local_y = 0.0;
+    double local_z = 0.0;
+    double perpendicular_radius_voxels = 0.0;
+    double axial_radius_voxels = 0.0;
+    double bounds_radius_voxels = 0.0;
+    Vec3 axis = vec3(0.0, 0.0, 0.0);
+    int min_x = 0;
+    int min_y = 0;
+    int min_z = 0;
+    int max_x = 0;
+    int max_y = 0;
+    int max_z = 0;
+    double weight_sum = 0.0;
+    uint64_t cell_count = 0u;
+    double deposited_r = 0.0;
+    double deposited_g = 0.0;
+    double deposited_b = 0.0;
+
+    if (!cache) return false;
+    if (!(vec3_length(direction) > 1.0e-9) ||
+        !(perpendicular_radius_world > 0.0) ||
+        !(axial_radius_world > 0.0) ||
+        !isfinite(perpendicular_radius_world) ||
+        !isfinite(axial_radius_world)) {
+        return RuntimeCausticVolumeCache3D_DepositFootprintAtPosition(cache,
+                                                                      position,
+                                                                      perpendicular_radius_world,
+                                                                      radiance_r,
+                                                                      radiance_g,
+                                                                      radiance_b);
+    }
+
+    cache->depositAttemptCount += 1u;
+    if (!runtime_caustic_volume_cache_position_to_local(
+            cache, position, &local_x, &local_y, &local_z)) {
+        cache->depositRejectedCount += 1u;
+        return false;
+    }
+    if (radiance_r < 0.0) radiance_r = 0.0;
+    if (radiance_g < 0.0) radiance_g = 0.0;
+    if (radiance_b < 0.0) radiance_b = 0.0;
+
+    axis = vec3_normalize(direction);
+    perpendicular_radius_voxels = perpendicular_radius_world / cache->grid.voxelSize;
+    axial_radius_voxels = axial_radius_world / cache->grid.voxelSize;
+    if (!(perpendicular_radius_voxels > 0.0) || !isfinite(perpendicular_radius_voxels)) {
+        perpendicular_radius_voxels = 0.5;
+    }
+    if (!(axial_radius_voxels > 0.0) || !isfinite(axial_radius_voxels)) {
+        axial_radius_voxels = perpendicular_radius_voxels;
+    }
+    if (perpendicular_radius_voxels < 0.5) perpendicular_radius_voxels = 0.5;
+    if (axial_radius_voxels < 0.5) axial_radius_voxels = 0.5;
+    bounds_radius_voxels = fmax(perpendicular_radius_voxels, axial_radius_voxels);
+
+    min_x = (int)floor(local_x - bounds_radius_voxels - 0.5);
+    min_y = (int)floor(local_y - bounds_radius_voxels - 0.5);
+    min_z = (int)floor(local_z - bounds_radius_voxels - 0.5);
+    max_x = (int)ceil(local_x + bounds_radius_voxels + 0.5);
+    max_y = (int)ceil(local_y + bounds_radius_voxels + 0.5);
+    max_z = (int)ceil(local_z + bounds_radius_voxels + 0.5);
+    if (min_x < 0) min_x = 0;
+    if (min_y < 0) min_y = 0;
+    if (min_z < 0) min_z = 0;
+    if (max_x >= (int)cache->grid.gridW) max_x = (int)cache->grid.gridW - 1;
+    if (max_y >= (int)cache->grid.gridH) max_y = (int)cache->grid.gridH - 1;
+    if (max_z >= (int)cache->grid.gridD) max_z = (int)cache->grid.gridD - 1;
+
+    for (int z = min_z; z <= max_z; ++z) {
+        for (int y = min_y; y <= max_y; ++y) {
+            for (int x = min_x; x <= max_x; ++x) {
+                const double center_x = (double)x + 0.5;
+                const double center_y = (double)y + 0.5;
+                const double center_z = (double)z + 0.5;
+                const double dx = center_x - local_x;
+                const double dy = center_y - local_y;
+                const double dz = center_z - local_z;
+                const double axial = (dx * axis.x) + (dy * axis.y) + (dz * axis.z);
+                const double distance2 = (dx * dx) + (dy * dy) + (dz * dz);
+                const double perp2 = fmax(0.0, distance2 - (axial * axial));
+                const double shaped_distance = sqrt(
+                    (perp2 / fmax(perpendicular_radius_voxels * perpendicular_radius_voxels, 1.0e-9)) +
+                    ((axial * axial) / fmax(axial_radius_voxels * axial_radius_voxels, 1.0e-9)));
+                const double raw_distance = sqrt(distance2);
+                double weight = 0.0;
+                if (shaped_distance <= 1.0) {
+                    weight = 1.0 - shaped_distance;
+                }
+                if (weight <= 0.0 && raw_distance <= 0.5) {
+                    weight = 1.0;
+                }
+                if (weight > 0.0) {
+                    weight_sum += weight;
+                    cell_count += 1u;
+                }
+            }
+        }
+    }
+    if (!(weight_sum > 0.0) || cell_count == 0u) {
+        cache->depositRejectedCount += 1u;
+        return false;
+    }
+
+    for (int z = min_z; z <= max_z; ++z) {
+        for (int y = min_y; y <= max_y; ++y) {
+            for (int x = min_x; x <= max_x; ++x) {
+                const double center_x = (double)x + 0.5;
+                const double center_y = (double)y + 0.5;
+                const double center_z = (double)z + 0.5;
+                const double dx = center_x - local_x;
+                const double dy = center_y - local_y;
+                const double dz = center_z - local_z;
+                const double axial = (dx * axis.x) + (dy * axis.y) + (dz * axis.z);
+                const double distance2 = (dx * dx) + (dy * dy) + (dz * dz);
+                const double perp2 = fmax(0.0, distance2 - (axial * axial));
+                const double shaped_distance = sqrt(
+                    (perp2 / fmax(perpendicular_radius_voxels * perpendicular_radius_voxels, 1.0e-9)) +
+                    ((axial * axial) / fmax(axial_radius_voxels * axial_radius_voxels, 1.0e-9)));
+                const double raw_distance = sqrt(distance2);
+                double weight = 0.0;
+                if (shaped_distance <= 1.0) {
+                    weight = 1.0 - shaped_distance;
+                }
+                if (weight <= 0.0 && raw_distance <= 0.5) {
+                    weight = 1.0;
+                }
+                if (weight > 0.0) {
+                    const double normalized = weight / weight_sum;
+                    const double add_r = radiance_r * normalized;
+                    const double add_g = radiance_g * normalized;
+                    const double add_b = radiance_b * normalized;
+                    const uint64_t index = runtime_caustic_volume_cache_cell_index(
+                        &cache->grid, (uint32_t)x, (uint32_t)y, (uint32_t)z);
+                    if (index < cache->grid.cellCount) {
+                        cache->radianceR[index] += (float)add_r;
+                        cache->radianceG[index] += (float)add_g;
+                        cache->radianceB[index] += (float)add_b;
+                        deposited_r += add_r;
+                        deposited_g += add_g;
+                        deposited_b += add_b;
+                    }
+                }
+            }
+        }
+    }
+
+    cache->depositAcceptedCount += 1u;
+    cache->footprintDepositCount += 1u;
+    cache->footprintCellContributionCount += cell_count;
+    cache->footprintRadiusVoxelSum +=
+        ((2.0 * perpendicular_radius_voxels) + axial_radius_voxels) / 3.0;
+    cache->footprintInputRadianceR += radiance_r;
+    cache->footprintInputRadianceG += radiance_g;
+    cache->footprintInputRadianceB += radiance_b;
+    cache->footprintDepositedRadianceR += deposited_r;
+    cache->footprintDepositedRadianceG += deposited_g;
+    cache->footprintDepositedRadianceB += deposited_b;
+    return true;
+}
+
 bool RuntimeCausticVolumeCache3D_SampleAtPosition(RuntimeCausticVolumeCache3D* cache,
                                                   Vec3 position,
                                                   Vec3* out_radiance) {
@@ -417,7 +587,7 @@ bool RuntimeCausticVolumeCache3D_SampleFilteredAtPosition(
         radius_voxels = 1.0;
     }
     if (radius_voxels < 0.5) radius_voxels = 0.5;
-    if (radius_voxels > 3.0) radius_voxels = 3.0;
+    if (radius_voxels > 3.25) radius_voxels = 3.25;
 
     min_x = (int)floor(local_x - radius_voxels - 0.5);
     min_y = (int)floor(local_y - radius_voxels - 0.5);

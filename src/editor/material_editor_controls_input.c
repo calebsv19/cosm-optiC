@@ -156,6 +156,23 @@ void HandleMaterialEditorEvents(SDL_Event* event) {
             }
         }
         for (int i = 0; i < s_layer_row_count; ++i) {
+            for (int action_index = 0;
+                 action_index < MATERIAL_EDITOR_LAYER_ROW_ACTION_COUNT;
+                 ++action_index) {
+                if (material_editor_point_in_rect(mx,
+                                                  my,
+                                                  &s_layer_row_action_rects[i][action_index])) {
+                    MaterialEditorSetActiveLayerIndex(s_layer_row_indices[i]);
+                    if (action_index == 0) {
+                        MaterialEditorMoveActiveLayer(-1);
+                    } else if (action_index == 1) {
+                        MaterialEditorMoveActiveLayer(1);
+                    } else if (action_index == 2) {
+                        MaterialEditorDeleteActiveLayer();
+                    }
+                    return;
+                }
+            }
             if (material_editor_point_in_rect(mx, my, &s_layer_toggle_rects[i])) {
                 MaterialEditorSetActiveLayerIndex(s_layer_row_indices[i]);
                 MaterialEditorToggleActiveLayerEnabled();
@@ -177,6 +194,14 @@ void HandleMaterialEditorEvents(SDL_Event* event) {
                 MaterialEditorApplyGlassOverlayForFocused(s_glass_overlay_action_kinds[i]);
                 return;
             }
+        }
+        if (material_editor_point_in_rect(mx, my, &s_layer_opacity_action_rects[0])) {
+            MaterialEditorApplyLayerOpacityStepToFocused(-0.05);
+            return;
+        }
+        if (material_editor_point_in_rect(mx, my, &s_layer_opacity_action_rects[1])) {
+            MaterialEditorApplyLayerOpacityStepToFocused(0.05);
+            return;
         }
         for (int i = 0; i < MATERIAL_EDITOR_LAYER_INFLUENCE_CONTROL_COUNT; ++i) {
             if (material_editor_point_in_rect(mx, my, &s_layer_influence_action_rects[i][0])) {
@@ -320,6 +345,15 @@ MaterialEditorHitRegion MaterialEditorHitRegionAtPoint(int mx, int my) {
         }
     }
     for (int i = 0; i < s_layer_row_count; ++i) {
+        for (int action_index = 0;
+             action_index < MATERIAL_EDITOR_LAYER_ROW_ACTION_COUNT;
+             ++action_index) {
+            if (material_editor_point_in_rect(mx,
+                                              my,
+                                              &s_layer_row_action_rects[i][action_index])) {
+                return MATERIAL_EDITOR_HIT_CONTROLS;
+            }
+        }
         if (material_editor_point_in_rect(mx, my, &s_layer_toggle_rects[i])) {
             return MATERIAL_EDITOR_HIT_CONTROLS;
         }
@@ -340,6 +374,10 @@ MaterialEditorHitRegion MaterialEditorHitRegionAtPoint(int mx, int my) {
         if (material_editor_point_in_rect(mx, my, &s_glass_overlay_action_rects[i])) {
             return MATERIAL_EDITOR_HIT_CONTROLS;
         }
+    }
+    if (material_editor_point_in_rect(mx, my, &s_layer_opacity_action_rects[0]) ||
+        material_editor_point_in_rect(mx, my, &s_layer_opacity_action_rects[1])) {
+        return MATERIAL_EDITOR_HIT_CONTROLS;
     }
     for (int i = 0; i < MATERIAL_EDITOR_LAYER_INFLUENCE_CONTROL_COUNT; ++i) {
         if (material_editor_point_in_rect(mx, my, &s_layer_influence_action_rects[i][0]) ||

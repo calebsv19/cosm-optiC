@@ -1186,6 +1186,54 @@ bool runtime_native_3d_render_dispatch_integrator(float* radiance_buffer,
             (int)frame->causticTransportDiagnostics.evaluatedPathCount;
         out_stats->causticTransportEmittedPathCount =
             (int)frame->causticTransportDiagnostics.emittedPathCount;
+        out_stats->causticTransportAnalyticSphereLensResolvedCount =
+            (int)frame->causticTransportDiagnostics.analyticSphereLensResolvedCount;
+        out_stats->causticTransportAnalyticSphereLensRejectedCount =
+            (int)frame->causticTransportDiagnostics.analyticSphereLensRejectedCount;
+        out_stats->causticTransportAnalyticSphereLensEvaluatedPathCount =
+            (int)frame->causticTransportDiagnostics.analyticSphereLensEvaluatedPathCount;
+        out_stats->causticTransportAnalyticSphereLensEmittedPathCount =
+            (int)frame->causticTransportDiagnostics.analyticSphereLensEmittedPathCount;
+        out_stats->causticTransportAnalyticSphereLensSampleWeight =
+            frame->causticTransportDiagnostics.analyticSphereLensSampleWeight;
+        out_stats->causticTransportAnalyticSphereLensTotalSampleWeight =
+            frame->causticTransportDiagnostics.analyticSphereLensTotalSampleWeight;
+        out_stats->causticTransportAnalyticCylinderLensResolvedCount =
+            (int)frame->causticTransportDiagnostics.analyticCylinderLensResolvedCount;
+        out_stats->causticTransportAnalyticCylinderLensRejectedCount =
+            (int)frame->causticTransportDiagnostics.analyticCylinderLensRejectedCount;
+        out_stats->causticTransportAnalyticCylinderLensEvaluatedPathCount =
+            (int)frame->causticTransportDiagnostics.analyticCylinderLensEvaluatedPathCount;
+        out_stats->causticTransportAnalyticCylinderLensEmittedPathCount =
+            (int)frame->causticTransportDiagnostics.analyticCylinderLensEmittedPathCount;
+        out_stats->causticTransportAnalyticCylinderLensSampleWeight =
+            frame->causticTransportDiagnostics.analyticCylinderLensSampleWeight;
+        out_stats->causticTransportAnalyticCylinderLensTotalSampleWeight =
+            frame->causticTransportDiagnostics.analyticCylinderLensTotalSampleWeight;
+        out_stats->causticTransportAnalyticPrismLensResolvedCount =
+            (int)frame->causticTransportDiagnostics.analyticPrismLensResolvedCount;
+        out_stats->causticTransportAnalyticPrismLensRejectedCount =
+            (int)frame->causticTransportDiagnostics.analyticPrismLensRejectedCount;
+        out_stats->causticTransportAnalyticPrismLensEvaluatedPathCount =
+            (int)frame->causticTransportDiagnostics.analyticPrismLensEvaluatedPathCount;
+        out_stats->causticTransportAnalyticPrismLensEmittedPathCount =
+            (int)frame->causticTransportDiagnostics.analyticPrismLensEmittedPathCount;
+        out_stats->causticTransportAnalyticPrismLensSampleWeight =
+            frame->causticTransportDiagnostics.analyticPrismLensSampleWeight;
+        out_stats->causticTransportAnalyticPrismLensTotalSampleWeight =
+            frame->causticTransportDiagnostics.analyticPrismLensTotalSampleWeight;
+        out_stats->causticTransportAnalyticBowlLensResolvedCount =
+            (int)frame->causticTransportDiagnostics.analyticBowlLensResolvedCount;
+        out_stats->causticTransportAnalyticBowlLensRejectedCount =
+            (int)frame->causticTransportDiagnostics.analyticBowlLensRejectedCount;
+        out_stats->causticTransportAnalyticBowlLensEvaluatedPathCount =
+            (int)frame->causticTransportDiagnostics.analyticBowlLensEvaluatedPathCount;
+        out_stats->causticTransportAnalyticBowlLensEmittedPathCount =
+            (int)frame->causticTransportDiagnostics.analyticBowlLensEmittedPathCount;
+        out_stats->causticTransportAnalyticBowlLensSampleWeight =
+            frame->causticTransportDiagnostics.analyticBowlLensSampleWeight;
+        out_stats->causticTransportAnalyticBowlLensTotalSampleWeight =
+            frame->causticTransportDiagnostics.analyticBowlLensTotalSampleWeight;
         out_stats->causticTransportTransparentHitCount =
             (int)frame->causticTransportDiagnostics.transparentHitCount;
         out_stats->causticTransportSpecularEventCount =

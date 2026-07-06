@@ -23,12 +23,22 @@ typedef enum {
     RUNTIME_CAUSTIC_CACHE_STATE_SAMPLED = 4
 } RuntimeCausticCacheState3D;
 
+typedef enum {
+    RUNTIME_CAUSTIC_TRANSPORT_EMISSION_TRIANGLE_TARGETS = 0,
+    RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_SPHERE_LENS = 1,
+    RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_CYLINDER_LENS = 2,
+    RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_CYLINDER_LENS_FOCUSED = 3,
+    RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_PRISM_LENS = 4,
+    RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_BOWL_LENS = 5
+} RuntimeCausticTransportEmissionPolicy3D;
+
 typedef struct {
     RuntimeCausticMode3D mode;
     bool volumeCacheEnabled;
     bool surfaceCacheEnabled;
     int sampleBudget;
     int maxPathDepth;
+    RuntimeCausticTransportEmissionPolicy3D emissionPolicy;
     double surfaceRadianceScale;
     double surfaceFootprintScale;
     bool surfaceReceiverFallbackEnabled;
@@ -44,6 +54,7 @@ typedef struct {
     bool surfaceCacheRequested;
     RuntimeCausticCacheState3D volumeCacheState;
     RuntimeCausticCacheState3D surfaceCacheState;
+    RuntimeCausticTransportEmissionPolicy3D emissionPolicy;
     bool pathEmissionActive;
     bool transportReserved;
 } RuntimeCausticReadback3D;
@@ -51,6 +62,10 @@ typedef struct {
 void RuntimeCausticSettings3D_Default(RuntimeCausticSettings3D* settings);
 RuntimeCausticMode3D RuntimeCausticMode3D_FromLabel(const char* label);
 const char* RuntimeCausticMode3D_Label(RuntimeCausticMode3D mode);
+RuntimeCausticTransportEmissionPolicy3D
+RuntimeCausticTransportEmissionPolicy3D_FromLabel(const char* label);
+const char* RuntimeCausticTransportEmissionPolicy3D_Label(
+    RuntimeCausticTransportEmissionPolicy3D policy);
 const char* RuntimeCausticCacheGridMode3D_Label(RuntimeCausticCacheGridMode3D mode);
 const char* RuntimeCausticCacheState3D_Label(RuntimeCausticCacheState3D state);
 RuntimeCausticReadback3D RuntimeCausticSettings3D_Phase0Readback(

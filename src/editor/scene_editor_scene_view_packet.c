@@ -23,12 +23,12 @@ static unsigned char scene_view_packet_byte_from_unit(double value) {
 
 const char* SceneEditorSceneViewPreviewQualityLabel(
     SceneEditorSceneViewPreviewQuality quality) {
-    return core_scene_view_preview_quality_name((CoreSceneViewPreviewQuality)quality);
+    return core_scene_view_preview_quality_name(quality);
 }
 
 const char* SceneEditorSceneViewDegradedReasonLabel(
     SceneEditorSceneViewDegradedReason reason) {
-    return core_scene_view_degraded_reason_name((CoreSceneViewDegradedReason)reason);
+    return core_scene_view_degraded_reason_name(reason);
 }
 
 static void scene_view_packet_pick_id_from_address(
@@ -293,7 +293,9 @@ bool SceneEditorSceneViewPacketToJsonString(const SceneEditorSceneViewPacket* pa
     triangles = json_object_new_array();
     if (!root || !triangles) goto cleanup;
 
-    json_object_object_add(root, "schema_family", json_object_new_string("codework_scene_view"));
+    json_object_object_add(root,
+                           "schema_family",
+                           json_object_new_string(CORE_SCENE_VIEW_SCHEMA_FAMILY));
     json_object_object_add(root,
                            "schema_variant",
                            json_object_new_string(SCENE_EDITOR_SCENE_VIEW_PACKET_SCHEMA_VARIANT));

@@ -1,6 +1,6 @@
 # Headless Material Preview CLI
 
-Last updated: 2026-05-20
+Last updated: 2026-07-05
 
 `ray_tracing_material_preview_headless` is the non-raytraced material swatch
 lane for authored `ray_tracing` scenes. It evaluates the same object-level
@@ -40,6 +40,8 @@ Optional fields:
 Supported variant override fields:
 
 - `alpha` / `transparency`
+- `material_id`
+- `object_color`
 - `reflectivity`
 - `roughness`
 - `emissive_strength`
@@ -67,6 +69,11 @@ Supported `preview_overlay` fields:
 - `opacity`
 - `scale`
 - `strength`
+- `roughness_influence`
+- `reflectivity_influence`
+- `specular_influence`
+- `diffuse_influence`
+- `transparency_influence`
 - `offset_u`
 - `offset_v`
 - `pattern_mode`
@@ -99,6 +106,8 @@ Supported `preview_overlay` fields:
       "preview_overlay": {
         "kind": "grime",
         "opacity": 0.52,
+        "roughness_influence": 0.74,
+        "reflectivity_influence": -0.25,
         "coverage": 0.46,
         "grain": 0.44,
         "contrast": 0.61,
@@ -172,3 +181,18 @@ clear/rough/default, a stronger roughness or polish comparison, and one or more
 overlay cases. The generated `index.md` and
 `material_family_preview_grid_summary.json` are the readback surfaces for later
 proof review.
+
+## Layer Control Preview Grid
+
+Use the M12 layer-control helper to compare opacity, placement strength, and
+signed response influence changes through the same headless preview CLI:
+
+```bash
+make -C ray_tracing test-ray-tracing-material-layer-control-preview-grid
+```
+
+The helper writes generated scenes, per-row preview requests, summaries, row
+contact sheets, one stitched grid under
+`ray_tracing/build/agent_runs/ray_tracing/layer_control_preview_grid/`, and a
+redacted promoted doc set under
+`ray_tracing/docs/material_preview_sets/m12_s5_layer_control_preview_grid/`.

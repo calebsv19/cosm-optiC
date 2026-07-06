@@ -19,7 +19,9 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_disney_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_bootstrap_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_lens_transport_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_settings_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_sphere_lens_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_surface_cache_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_transport_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_transport_debug_3d.o \
@@ -178,6 +180,8 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_water_surface_runtime.o \
 	$(BUILD_DIR)/tests/test_runtime_volume_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_bootstrap_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_lens_transport_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_sphere_lens_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_surface_cache_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_transport_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_volume_cache_3d.o \
@@ -245,7 +249,9 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_disney_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_bootstrap_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_lens_transport_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_settings_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_sphere_lens_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_surface_cache_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_transport_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_transport_debug_3d.o \

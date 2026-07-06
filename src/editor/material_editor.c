@@ -59,8 +59,10 @@ SDL_Rect s_layer_panel_rect = {0, 0, 0, 0};
 SDL_Rect s_layer_list_rect = {0, 0, 0, 0};
 SDL_Rect s_layer_row_rects[MATERIAL_EDITOR_MAX_LAYER_ROWS];
 SDL_Rect s_layer_toggle_rects[MATERIAL_EDITOR_MAX_LAYER_ROWS];
+SDL_Rect s_layer_row_action_rects[MATERIAL_EDITOR_MAX_LAYER_ROWS]
+                                  [MATERIAL_EDITOR_LAYER_ROW_ACTION_COUNT];
 int s_layer_row_indices[MATERIAL_EDITOR_MAX_LAYER_ROWS];
-char s_layer_row_labels[MATERIAL_EDITOR_MAX_LAYER_ROWS][72];
+char s_layer_row_labels[MATERIAL_EDITOR_MAX_LAYER_ROWS][96];
 SDL_Rect s_layer_action_rects[MATERIAL_EDITOR_LAYER_ACTION_COUNT];
 int s_layer_row_count = 0;
 int s_layer_scroll_offset = 0;
@@ -76,6 +78,7 @@ SDL_Rect s_layer_influence_action_rects[MATERIAL_EDITOR_LAYER_INFLUENCE_CONTROL_
                                        [MATERIAL_EDITOR_RESPONSE_ACTION_COUNT];
 MaterialEditorLayerInfluenceKind
     s_layer_influence_action_fields[MATERIAL_EDITOR_LAYER_INFLUENCE_CONTROL_COUNT];
+SDL_Rect s_layer_opacity_action_rects[MATERIAL_EDITOR_RESPONSE_ACTION_COUNT];
 SDL_Rect s_glass_overlay_action_rects[MATERIAL_EDITOR_GLASS_OVERLAY_ACTION_COUNT];
 RuntimeMaterialTextureLayerKind
     s_glass_overlay_action_kinds[MATERIAL_EDITOR_GLASS_OVERLAY_ACTION_COUNT];

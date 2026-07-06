@@ -769,6 +769,121 @@ static int test_runtime_material_response_3d_mirror_dominance_reflects_light_emi
     return 0;
 }
 
+static int test_runtime_specular_reflection_reaches_far_geometry(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    HitInfo3D hit = {0};
+    RuntimeMaterialPayload3D payload = {0};
+    RuntimeSpecularReflection3DResult reflection = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    MaterialManagerResetDefaults();
+
+    sceneSettings.objectCount = 2;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_MIRROR;
+    sceneSettings.sceneObjects[0].color = 0xFFFFFF;
+    sceneSettings.sceneObjects[0].alpha = 1.0;
+    sceneSettings.sceneObjects[0].opacity = 1.0;
+    sceneSettings.sceneObjects[0].reflectivity = 0.95;
+    sceneSettings.sceneObjects[0].roughness = 0.02;
+    sceneSettings.sceneObjects[1].material_id = MATERIAL_PRESET_DEFAULT;
+    sceneSettings.sceneObjects[1].color = 0xFF0000;
+    sceneSettings.sceneObjects[1].alpha = 1.0;
+    sceneSettings.sceneObjects[1].opacity = 1.0;
+
+    scene.primitiveCapacity = 2;
+    scene.triangleMesh.triangleCapacity = 2;
+    scene.primitives = (RuntimePrimitive3D*)calloc((size_t)scene.primitiveCapacity,
+                                                   sizeof(*scene.primitives));
+    scene.triangleMesh.triangles =
+        (RuntimeTriangle3D*)calloc((size_t)scene.triangleMesh.triangleCapacity,
+                                   sizeof(*scene.triangleMesh.triangles));
+    assert_true("runtime_specular_reflection_far_alloc",
+                scene.primitives != NULL && scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    scene.primitiveCount = 2;
+    scene.triangleMesh.triangleCount = 2;
+    scene.primitives[0].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene.primitives[0].source.sceneObjectIndex = 0;
+    snprintf(scene.primitives[0].source.objectId,
+             sizeof(scene.primitives[0].source.objectId),
+             "far_mirror");
+    scene.primitives[1].source.kind = RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH;
+    scene.primitives[1].source.sceneObjectIndex = 1;
+    snprintf(scene.primitives[1].source.objectId,
+             sizeof(scene.primitives[1].source.objectId),
+             "far_reflected_red");
+
+    scene.triangleMesh.triangles[0].p0 = vec3(-4.0, 0.0, -4.0);
+    scene.triangleMesh.triangles[0].p1 = vec3(4.0, 0.0, -4.0);
+    scene.triangleMesh.triangles[0].p2 = vec3(0.0, 0.0, 4.0);
+    scene.triangleMesh.triangles[0].normal = vec3(0.0, 1.0, 0.0);
+    scene.triangleMesh.triangles[0].twoSided = true;
+    scene.triangleMesh.triangles[0].primitiveIndex = 0;
+    scene.triangleMesh.triangles[0].sceneObjectIndex = 0;
+    scene.triangleMesh.triangles[0].localTriangleIndex = 0;
+
+    scene.triangleMesh.triangles[1].p0 = vec3(-4.0, 64.0, -4.0);
+    scene.triangleMesh.triangles[1].p1 = vec3(0.0, 64.0, 4.0);
+    scene.triangleMesh.triangles[1].p2 = vec3(4.0, 64.0, -4.0);
+    scene.triangleMesh.triangles[1].normal = vec3(0.0, -1.0, 0.0);
+    scene.triangleMesh.triangles[1].twoSided = true;
+    scene.triangleMesh.triangles[1].primitiveIndex = 1;
+    scene.triangleMesh.triangles[1].sceneObjectIndex = 1;
+    scene.triangleMesh.triangles[1].localTriangleIndex = 0;
+
+    ok = RuntimeTriangleMesh3D_BuildBVH(&scene.triangleMesh);
+    assert_true("runtime_specular_reflection_far_bvh", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    hit.t = 1.0;
+    hit.position = vec3(0.0, 0.0, 0.0);
+    hit.normal = vec3(0.0, 1.0, 0.0);
+    hit.triangleIndex = 0;
+    hit.primitiveIndex = 0;
+    hit.sceneObjectIndex = 0;
+    hit.source = scene.primitives[0].source;
+    hit.baryU = 0.333333333333;
+    hit.baryV = 0.333333333333;
+    hit.baryW = 0.333333333334;
+
+    ok = RuntimeMaterialPayload3D_ResolveFromHit(&hit, &payload);
+    assert_true("runtime_specular_reflection_far_payload", ok && payload.valid);
+    ok = RuntimeSpecularReflection3D_Trace(&scene,
+                                           &hit,
+                                           &payload,
+                                           vec3(0.0, 1.0, 0.0),
+                                           NULL,
+                                           &reflection);
+    assert_true("runtime_specular_reflection_far_trace", ok && reflection.traced);
+    assert_true("runtime_specular_reflection_far_geometry_hit",
+                reflection.geometryHit && !reflection.emitterWins);
+    assert_true("runtime_specular_reflection_far_scene_object",
+                reflection.hitInfo.sceneObjectIndex == 1);
+    assert_true("runtime_specular_reflection_far_distance",
+                reflection.hitInfo.t > 63.0 && reflection.hitInfo.t < 65.0);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 static int test_runtime_disney_3d_illuminated_mirror_preserves_reflected_geometry(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -4281,6 +4396,7 @@ int run_test_runtime_lighting_materials_transport_suite(void) {
     test_runtime_material_response_3d_mirror_reflects_opaque_chroma();
     test_runtime_material_response_3d_mirror_surface_kind_parity();
     test_runtime_material_response_3d_mirror_dominance_reflects_light_emitter();
+    test_runtime_specular_reflection_reaches_far_geometry();
     test_runtime_disney_3d_illuminated_mirror_preserves_reflected_geometry();
     test_runtime_disney_3d_lower_tier_separation_contract();
     test_runtime_disney_3d_opaque_receiver_preserves_transport_support();

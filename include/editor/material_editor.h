@@ -113,6 +113,8 @@ bool MaterialEditorApplyTextureKindToFocused(int texture_id);
 bool MaterialEditorApplySliderValueToFocused(MaterialEditorSliderKind kind, double value);
 bool MaterialEditorApplyTexturePatternToFocused(int pattern_mode);
 bool MaterialEditorApplyTextureParamValueToFocused(MaterialEditorTextureParamKind kind, double value);
+bool MaterialEditorApplyLayerOpacityValueToFocused(double value);
+bool MaterialEditorApplyLayerOpacityStepToFocused(double delta);
 bool MaterialEditorApplyLayerInfluenceValueToFocused(MaterialEditorLayerInfluenceKind kind,
                                                      double value);
 bool MaterialEditorApplyLayerInfluenceStepToFocused(MaterialEditorLayerInfluenceKind kind,

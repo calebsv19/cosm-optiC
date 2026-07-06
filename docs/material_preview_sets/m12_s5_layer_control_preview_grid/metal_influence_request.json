@@ -1,0 +1,69 @@
+{
+  "background_color": 2698549,
+  "columns": 4,
+  "height": 144,
+  "object_id": "rear_blue_panel",
+  "output_path": "<redacted-local-path:metal_influence_preview.bmp>",
+  "runtime_scene_path": "<redacted-local-path:metal_influence_scene_runtime.json>",
+  "schema": "ray_tracing_material_preview_request_v1",
+  "summary_path": "<redacted-local-path:metal_influence_summary.json>",
+  "variants": [
+    {
+      "label": "neutral_ref078",
+      "reflectivity": 0.78,
+      "roughness": 0.46
+    },
+    {
+      "label": "attenuate_refl",
+      "preview_overlay": {
+        "contrast": 0.78,
+        "coverage": 0.58,
+        "diffuse_influence": 0.2,
+        "flow": 0.42,
+        "grain": 0.64,
+        "kind": "grime",
+        "opacity": 0.78,
+        "reflectivity_influence": -0.55,
+        "roughness_influence": 0.82,
+        "seed": 43,
+        "specular_influence": -0.45,
+        "strength": 0.86,
+        "surface_damage": 0.68
+      }
+    },
+    {
+      "label": "boost_spec",
+      "preview_overlay": {
+        "contrast": 0.7,
+        "coverage": 0.6,
+        "diffuse_influence": -0.3,
+        "flow": 0.82,
+        "grain": 0.48,
+        "kind": "oil",
+        "opacity": 0.76,
+        "reflectivity_influence": 0.92,
+        "roughness_influence": -0.4,
+        "seed": 67,
+        "specular_influence": 0.88,
+        "strength": 0.86,
+        "surface_damage": 0.72
+      }
+    },
+    {
+      "label": "strength_035",
+      "preview_overlay": {
+        "contrast": 0.72,
+        "coverage": 0.62,
+        "grain": 0.52,
+        "kind": "rust",
+        "opacity": 0.86,
+        "reflectivity_influence": -0.45,
+        "roughness_influence": 0.74,
+        "seed": 31,
+        "strength": 0.35,
+        "surface_damage": 0.7
+      }
+    }
+  ],
+  "width": 144
+}

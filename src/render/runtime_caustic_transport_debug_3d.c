@@ -82,6 +82,7 @@ static void runtime_caustic_transport_debug_write_path(FILE* file,
 #define WRITE_FIELD_PREFIX(name) do { fprintf(file, "%s\"", indent); fputs(name, file); fputs("\": ", file); } while (0)
 #define WRITE_FIELD_COMMA() do { fputs(pretty ? ",\n" : ", ", file); } while (0)
     WRITE_FIELD_PREFIX("path_id"); fprintf(file, "%llu", (unsigned long long)path->pathId); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("emission_policy"); runtime_caustic_transport_debug_write_string(file, path->emissionPolicy); WRITE_FIELD_COMMA();
     WRITE_FIELD_PREFIX("light_index"); fprintf(file, "%d", path->lightIndex); WRITE_FIELD_COMMA();
     WRITE_FIELD_PREFIX("light_id"); runtime_caustic_transport_debug_write_string(file, path->lightId); WRITE_FIELD_COMMA();
     WRITE_FIELD_PREFIX("light_kind"); runtime_caustic_transport_debug_write_string(file, path->lightKind); WRITE_FIELD_COMMA();
@@ -109,6 +110,37 @@ static void runtime_caustic_transport_debug_write_path(FILE* file,
     WRITE_FIELD_PREFIX("outgoing_direction"); runtime_caustic_transport_debug_write_vec3(file, path->outgoingDirection); WRITE_FIELD_COMMA();
     WRITE_FIELD_PREFIX("throughput"); runtime_caustic_transport_debug_write_vec3(file, path->throughput); WRITE_FIELD_COMMA();
     WRITE_FIELD_PREFIX("initial_radiance"); runtime_caustic_transport_debug_write_vec3(file, path->initialRadiance); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_shape_kind"); runtime_caustic_transport_debug_write_string(file, path->lensShapeKind); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_scene_object_index"); fprintf(file, "%d", path->lensSceneObjectIndex); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_primitive_index"); fprintf(file, "%d", path->lensPrimitiveIndex); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_interface_event_count"); fprintf(file, "%u", path->lensInterfaceEventCount); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_entry_position"); runtime_caustic_transport_debug_write_vec3(file, path->lensEntryPosition); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_entry_normal"); runtime_caustic_transport_debug_write_vec3(file, path->lensEntryNormal); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_entry_incident_direction"); runtime_caustic_transport_debug_write_vec3(file, path->lensEntryIncidentDirection); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_entry_outgoing_direction"); runtime_caustic_transport_debug_write_vec3(file, path->lensEntryOutgoingDirection); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_entry_eta_from"); fprintf(file, "%.9f", path->lensEntryEtaFrom); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_entry_eta_to"); fprintf(file, "%.9f", path->lensEntryEtaTo); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_entry_fresnel"); fprintf(file, "%.9f", path->lensEntryFresnel); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_entry_total_internal_reflection"); fprintf(file, "%s", path->lensEntryTotalInternalReflection ? "true" : "false"); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_exit_position"); runtime_caustic_transport_debug_write_vec3(file, path->lensExitPosition); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_exit_normal"); runtime_caustic_transport_debug_write_vec3(file, path->lensExitNormal); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_exit_incident_direction"); runtime_caustic_transport_debug_write_vec3(file, path->lensExitIncidentDirection); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_exit_outgoing_direction"); runtime_caustic_transport_debug_write_vec3(file, path->lensExitOutgoingDirection); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_exit_eta_from"); fprintf(file, "%.9f", path->lensExitEtaFrom); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_exit_eta_to"); fprintf(file, "%.9f", path->lensExitEtaTo); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_exit_fresnel"); fprintf(file, "%.9f", path->lensExitFresnel); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_exit_total_internal_reflection"); fprintf(file, "%s", path->lensExitTotalInternalReflection ? "true" : "false"); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_post_exit_origin"); runtime_caustic_transport_debug_write_vec3(file, path->lensPostExitOrigin); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_post_exit_direction"); runtime_caustic_transport_debug_write_vec3(file, path->lensPostExitDirection); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_receiver_crossing"); runtime_caustic_transport_debug_write_vec3(file, path->lensReceiverCrossing); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_inside_distance"); fprintf(file, "%.9f", path->lensInsideDistance); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_sample_weight"); fprintf(file, "%.9f", path->lensSampleWeight); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_path_pdf"); fprintf(file, "%.9f", path->lensPathPdf); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_total_internal_reflection"); fprintf(file, "%s", path->lensTotalInternalReflection ? "true" : "false"); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("sphere_lens_entry_position"); runtime_caustic_transport_debug_write_vec3(file, path->sphereLensEntryPosition); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("sphere_lens_exit_position"); runtime_caustic_transport_debug_write_vec3(file, path->sphereLensExitPosition); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("sphere_lens_receiver_crossing"); runtime_caustic_transport_debug_write_vec3(file, path->sphereLensReceiverCrossing); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("sphere_lens_inside_distance"); fprintf(file, "%.9f", path->sphereLensInsideDistance); WRITE_FIELD_COMMA();
     WRITE_FIELD_PREFIX("inside_specular_object_after_event"); fprintf(file, "%s", path->insideSpecularObjectAfterEvent ? "true" : "false"); WRITE_FIELD_COMMA();
     WRITE_FIELD_PREFIX("continuation_event_count"); fprintf(file, "%llu", (unsigned long long)path->continuationEventCount); WRITE_FIELD_COMMA();
     WRITE_FIELD_PREFIX("exited_specular_object_before_volume_deposit"); fprintf(file, "%s", path->exitedSpecularObjectBeforeVolumeDeposit ? "true" : "false"); WRITE_FIELD_COMMA();
@@ -252,6 +284,10 @@ bool RuntimeCausticTransportDebug3D_WriteArtifacts(
             request_state->volumeCacheRequested ? "true" : "false");
     fprintf(summary, "    \"surface_cache_requested\": %s,\n",
             request_state->surfaceCacheRequested ? "true" : "false");
+    fprintf(summary, "    \"emission_policy\": ");
+    runtime_caustic_transport_debug_write_string(
+        summary, RuntimeCausticTransportEmissionPolicy3D_Label(request_state->emissionPolicy));
+    fprintf(summary, ",\n");
     fprintf(summary, "    \"sample_budget\": %d,\n", request_state->sampleBudget);
     fprintf(summary, "    \"max_path_depth\": %d,\n", request_state->maxPathDepth);
     fprintf(summary, "    \"surface_receiver_fallback_enabled\": %s\n",
@@ -265,6 +301,42 @@ bool RuntimeCausticTransportDebug3D_WriteArtifacts(
             (unsigned long long)diagnostics->evaluatedPathCount);
     fprintf(summary, "    \"emitted_path_count\": %llu,\n",
             (unsigned long long)diagnostics->emittedPathCount);
+    fprintf(summary, "    \"analytic_sphere_lens_resolved_count\": %llu,\n",
+            (unsigned long long)diagnostics->analyticSphereLensResolvedCount);
+    fprintf(summary, "    \"analytic_sphere_lens_rejected_count\": %llu,\n",
+            (unsigned long long)diagnostics->analyticSphereLensRejectedCount);
+    fprintf(summary, "    \"analytic_sphere_lens_evaluated_path_count\": %llu,\n",
+            (unsigned long long)diagnostics->analyticSphereLensEvaluatedPathCount);
+    fprintf(summary, "    \"analytic_sphere_lens_emitted_path_count\": %llu,\n",
+            (unsigned long long)diagnostics->analyticSphereLensEmittedPathCount);
+    fprintf(summary, "    \"analytic_sphere_lens_sample_weight\": %.9f,\n",
+            diagnostics->analyticSphereLensSampleWeight);
+    fprintf(summary, "    \"analytic_sphere_lens_total_sample_weight\": %.9f,\n",
+            diagnostics->analyticSphereLensTotalSampleWeight);
+    fprintf(summary, "    \"analytic_cylinder_lens_resolved_count\": %llu,\n",
+            (unsigned long long)diagnostics->analyticCylinderLensResolvedCount);
+    fprintf(summary, "    \"analytic_cylinder_lens_rejected_count\": %llu,\n",
+            (unsigned long long)diagnostics->analyticCylinderLensRejectedCount);
+    fprintf(summary, "    \"analytic_cylinder_lens_evaluated_path_count\": %llu,\n",
+            (unsigned long long)diagnostics->analyticCylinderLensEvaluatedPathCount);
+    fprintf(summary, "    \"analytic_cylinder_lens_emitted_path_count\": %llu,\n",
+            (unsigned long long)diagnostics->analyticCylinderLensEmittedPathCount);
+    fprintf(summary, "    \"analytic_cylinder_lens_sample_weight\": %.9f,\n",
+            diagnostics->analyticCylinderLensSampleWeight);
+    fprintf(summary, "    \"analytic_cylinder_lens_total_sample_weight\": %.9f,\n",
+            diagnostics->analyticCylinderLensTotalSampleWeight);
+    fprintf(summary, "    \"analytic_prism_lens_resolved_count\": %llu,\n",
+            (unsigned long long)diagnostics->analyticPrismLensResolvedCount);
+    fprintf(summary, "    \"analytic_prism_lens_rejected_count\": %llu,\n",
+            (unsigned long long)diagnostics->analyticPrismLensRejectedCount);
+    fprintf(summary, "    \"analytic_prism_lens_evaluated_path_count\": %llu,\n",
+            (unsigned long long)diagnostics->analyticPrismLensEvaluatedPathCount);
+    fprintf(summary, "    \"analytic_prism_lens_emitted_path_count\": %llu,\n",
+            (unsigned long long)diagnostics->analyticPrismLensEmittedPathCount);
+    fprintf(summary, "    \"analytic_prism_lens_sample_weight\": %.9f,\n",
+            diagnostics->analyticPrismLensSampleWeight);
+    fprintf(summary, "    \"analytic_prism_lens_total_sample_weight\": %.9f,\n",
+            diagnostics->analyticPrismLensTotalSampleWeight);
     fprintf(summary, "    \"transparent_hit_count\": %llu,\n",
             (unsigned long long)diagnostics->transparentHitCount);
     fprintf(summary, "    \"specular_event_count\": %llu,\n",

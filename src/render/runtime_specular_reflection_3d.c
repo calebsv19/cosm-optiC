@@ -7,7 +7,7 @@
 #include "render/runtime_render_trace_cost_ledger_3d.h"
 
 static const double kRuntimeSpecularReflection3DEpsilon = 1e-4;
-static const double kRuntimeSpecularReflection3DMaxDistance = 32.0;
+static const double kRuntimeSpecularReflection3DMaxDistance = 1.0e6;
 static const double kRuntimeSpecularReflection3DMinWeight = 1e-4;
 
 static double runtime_specular_reflection_3d_clamp(double value,

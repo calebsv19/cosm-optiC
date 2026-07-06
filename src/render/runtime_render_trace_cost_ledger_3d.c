@@ -71,6 +71,152 @@ const char* RuntimeRenderTraceCostPathDepthBucket3DLabel(
     }
 }
 
+const char* RuntimeRenderTraceCostDirectLightCaller3DLabel(
+    RuntimeRenderTraceCostDirectLightCaller3D caller) {
+    switch (caller) {
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_CALLER_PRIMARY_HIT:
+            return "primary_hit";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_CALLER_SHADED_HIT:
+            return "shaded_hit";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_CALLER_LIGHT_SET:
+            return "light_set";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_CALLER_UNKNOWN:
+        default:
+            return "unknown";
+    }
+}
+
+const char* RuntimeRenderTraceCostDirectLightSourceKind3DLabel(
+    RuntimeRenderTraceCostDirectLightSourceKind3D kind) {
+    switch (kind) {
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_POINT:
+            return "point";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_SPHERE:
+            return "sphere";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_DISK:
+            return "disk";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_RECT:
+            return "rect";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_MESH_EMISSIVE:
+            return "mesh_emissive";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_UNKNOWN:
+        default:
+            return "unknown";
+    }
+}
+
+const char* RuntimeRenderTraceCostDirectLightSourceOrigin3DLabel(
+    RuntimeRenderTraceCostDirectLightSourceOrigin3D origin) {
+    switch (origin) {
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_ORIGIN_COMPAT_SCENE_LIGHT:
+            return "compat_scene_light";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_ORIGIN_AUTHORED_LIGHT:
+            return "authored_light";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_ORIGIN_MATERIAL_EMITTER:
+            return "material_emitter";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_ORIGIN_UNKNOWN:
+        default:
+            return "unknown";
+    }
+}
+
+const char* RuntimeRenderTraceCostDirectLightEmissionProfile3DLabel(
+    RuntimeRenderTraceCostDirectLightEmissionProfile3D profile) {
+    switch (profile) {
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_EMISSION_OMNI:
+            return "omni";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_EMISSION_ONE_SIDED:
+            return "one_sided";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_EMISSION_TWO_SIDED:
+            return "two_sided";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_EMISSION_UNKNOWN:
+        default:
+            return "unknown";
+    }
+}
+
+const char* RuntimeRenderTraceCostDirectLightOutcome3DLabel(
+    RuntimeRenderTraceCostDirectLightOutcome3D outcome) {
+    switch (outcome) {
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_NO_VISIBILITY_TRACE:
+            return "no_visibility_trace";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_CLEAR_VISIBLE:
+            return "clear_visible";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_CLEAR_BLOCKED:
+            return "clear_blocked";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_STABLE_PARTIAL:
+            return "stable_partial";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_MIXED_PARTIAL:
+            return "mixed_partial";
+        default:
+            return "unknown";
+    }
+}
+
+const char* RuntimeRenderTraceCostDirectLightStopReason3DLabel(
+    RuntimeRenderTraceCostDirectLightStopReason3D reason) {
+    switch (reason) {
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_FULL_SAMPLE_COUNT:
+            return "full_sample_count";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_ALL_CLEAR:
+            return "all_clear";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_ALL_BLOCKED:
+            return "all_blocked";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_STABLE_PARTIAL:
+            return "stable_partial";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_LOW_IMPORTANCE:
+            return "low_importance";
+        default:
+            return "unknown";
+    }
+}
+
+const char* RuntimeRenderTraceCostDirectLightSampleBucket3DLabel(
+    RuntimeRenderTraceCostDirectLightSampleBucket3D bucket) {
+    switch (bucket) {
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SAMPLES_ZERO:
+            return "zero";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SAMPLES_DECISION:
+            return "decision_count";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SAMPLES_PARTIAL_ESCALATION:
+            return "partial_escalation";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SAMPLES_FULL:
+            return "full_count";
+        default:
+            return "unknown";
+    }
+}
+
+const char* RuntimeRenderTraceCostDirectLightDistanceBucket3DLabel(
+    RuntimeRenderTraceCostDirectLightDistanceBucket3D bucket) {
+    switch (bucket) {
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_NEAR:
+            return "near";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_MID:
+            return "mid";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_FAR:
+            return "far";
+        default:
+            return "unknown";
+    }
+}
+
+const char* RuntimeRenderTraceCostDirectLightImportanceBucket3DLabel(
+    RuntimeRenderTraceCostDirectLightImportanceBucket3D bucket) {
+    switch (bucket) {
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_ZERO:
+            return "zero";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_LOW:
+            return "low";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_MEDIUM:
+            return "medium";
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_HIGH:
+            return "high";
+        default:
+            return "unknown";
+    }
+}
+
 void RuntimeRenderTraceCostLedger3D_SetEnabled(bool enabled) {
     gRuntimeRenderTraceCostLedger3D.enabled = enabled;
 }
@@ -161,6 +307,151 @@ void RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(const HitInfo3D* hit
         family = RUNTIME_RENDER_TRACE_COST_MATERIAL_UNKNOWN;
     }
     gRuntimeRenderTraceCostLedger3D.materialFamilyCounts[family] += 1u;
+}
+
+static RuntimeRenderTraceCostDirectLightSampleBucket3D
+runtime_render_trace_cost_direct_light_sample_bucket(int evaluated_count,
+                                                     int decision_count,
+                                                     int max_count) {
+    if (evaluated_count <= 0) return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SAMPLES_ZERO;
+    if (decision_count > 0 && evaluated_count <= decision_count) {
+        return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SAMPLES_DECISION;
+    }
+    if (max_count > 0 && evaluated_count >= max_count) {
+        return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SAMPLES_FULL;
+    }
+    return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SAMPLES_PARTIAL_ESCALATION;
+}
+
+static RuntimeRenderTraceCostDirectLightDistanceBucket3D
+runtime_render_trace_cost_direct_light_distance_bucket(double light_distance) {
+    if (light_distance <= 2.0) return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_NEAR;
+    if (light_distance <= 8.0) return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_MID;
+    return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_FAR;
+}
+
+static RuntimeRenderTraceCostDirectLightImportanceBucket3D
+runtime_render_trace_cost_direct_light_importance_bucket(double contribution_peak) {
+    if (!(contribution_peak > 1.0e-8)) {
+        return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_ZERO;
+    }
+    if (contribution_peak <= 0.01) {
+        return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_LOW;
+    }
+    if (contribution_peak <= 0.1) {
+        return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_MEDIUM;
+    }
+    return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_HIGH;
+}
+
+void RuntimeRenderTraceCostLedger3D_RecordDirectLightVisibilityPolicy(
+    RuntimeRenderTraceCostDirectLightCaller3D caller,
+    RuntimeRenderTraceCostDirectLightSourceKind3D source_kind,
+    RuntimeRenderTraceCostDirectLightSourceOrigin3D source_origin,
+    RuntimeRenderTraceCostDirectLightEmissionProfile3D emission_profile,
+    RuntimeRenderTraceCostDirectLightOutcome3D outcome,
+    RuntimeRenderTraceCostDirectLightStopReason3D stop_reason,
+    int light_sample_count,
+    int light_sample_decision_count,
+    int light_sample_evaluated_count,
+    int visibility_trace_count,
+    double light_distance,
+    double contribution_peak,
+    double transmittance_luma_min,
+    double transmittance_luma_max) {
+    RuntimeRenderTraceCostDirectLightVisibilityPolicy3D* policy =
+        &gRuntimeRenderTraceCostLedger3D.directLightVisibilityPolicy;
+    RuntimeRenderTraceCostDirectLightSampleBucket3D sample_bucket =
+        runtime_render_trace_cost_direct_light_sample_bucket(light_sample_evaluated_count,
+                                                             light_sample_decision_count,
+                                                             light_sample_count);
+    RuntimeRenderTraceCostDirectLightDistanceBucket3D distance_bucket =
+        runtime_render_trace_cost_direct_light_distance_bucket(light_distance);
+    RuntimeRenderTraceCostDirectLightImportanceBucket3D importance_bucket =
+        runtime_render_trace_cost_direct_light_importance_bucket(contribution_peak);
+    if (!gRuntimeRenderTraceCostLedger3D.enabled) return;
+    if (caller < 0 || caller >= RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_CALLER_COUNT) {
+        caller = RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_CALLER_UNKNOWN;
+    }
+    if (source_kind < 0 ||
+        source_kind >= RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_KIND_COUNT) {
+        source_kind = RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_UNKNOWN;
+    }
+    if (source_origin < 0 ||
+        source_origin >= RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_ORIGIN_COUNT) {
+        source_origin = RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_ORIGIN_UNKNOWN;
+    }
+    if (emission_profile < 0 ||
+        emission_profile >= RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_EMISSION_COUNT) {
+        emission_profile = RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_EMISSION_UNKNOWN;
+    }
+    if (outcome < 0 || outcome >= RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_COUNT) {
+        outcome = RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_NO_VISIBILITY_TRACE;
+    }
+    if (stop_reason < 0 || stop_reason >= RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_COUNT) {
+        stop_reason = RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_FULL_SAMPLE_COUNT;
+    }
+    policy->sourceEvaluations += 1u;
+    policy->evaluatedSamples += light_sample_evaluated_count > 0
+                                    ? (uint64_t)light_sample_evaluated_count
+                                    : 0u;
+    policy->visibilityTraces += visibility_trace_count > 0
+                                    ? (uint64_t)visibility_trace_count
+                                    : 0u;
+    policy->callerCounts[caller] += 1u;
+    policy->sourceKindCounts[source_kind] += 1u;
+    policy->sourceOriginCounts[source_origin] += 1u;
+    policy->emissionProfileCounts[emission_profile] += 1u;
+    policy->outcomeCounts[outcome] += 1u;
+    policy->stopReasonCounts[stop_reason] += 1u;
+    policy->sampleBucketCounts[sample_bucket] += 1u;
+    policy->distanceBucketCounts[distance_bucket] += 1u;
+    policy->importanceBucketCounts[importance_bucket] += 1u;
+    policy->sourceKindOutcomeCounts[source_kind][outcome] += 1u;
+    policy->sourceKindStopReasonCounts[source_kind][stop_reason] += 1u;
+    if (source_kind == RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_RECT &&
+        source_origin == RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_ORIGIN_MATERIAL_EMITTER &&
+        emission_profile == RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_EMISSION_ONE_SIDED) {
+        policy->materialEmitterRectEvaluations += 1u;
+        policy->materialEmitterRectEvaluatedSamples += light_sample_evaluated_count > 0
+                                                           ? (uint64_t)light_sample_evaluated_count
+                                                           : 0u;
+        policy->materialEmitterRectVisibilityTraces += visibility_trace_count > 0
+                                                           ? (uint64_t)visibility_trace_count
+                                                           : 0u;
+        policy->materialEmitterRectDistanceCounts[distance_bucket] += 1u;
+        policy->materialEmitterRectImportanceCounts[importance_bucket] += 1u;
+        policy->materialEmitterRectDistanceImportanceCounts[distance_bucket]
+                                                         [importance_bucket] += 1u;
+        policy->materialEmitterRectEvaluatedSamplesByDistance[distance_bucket] +=
+            light_sample_evaluated_count > 0 ? (uint64_t)light_sample_evaluated_count : 0u;
+        policy->materialEmitterRectVisibilityTracesByDistance[distance_bucket] +=
+            visibility_trace_count > 0 ? (uint64_t)visibility_trace_count : 0u;
+        policy->materialEmitterRectEvaluatedSamplesByImportance[importance_bucket] +=
+            light_sample_evaluated_count > 0 ? (uint64_t)light_sample_evaluated_count : 0u;
+        policy->materialEmitterRectVisibilityTracesByImportance[importance_bucket] +=
+            visibility_trace_count > 0 ? (uint64_t)visibility_trace_count : 0u;
+    }
+    if (visibility_trace_count > 0 &&
+        transmittance_luma_min <= transmittance_luma_max) {
+        const double span = transmittance_luma_max - transmittance_luma_min;
+        if (policy->lumaRangeCount == 0u) {
+            policy->lumaMinObserved = transmittance_luma_min;
+            policy->lumaMaxObserved = transmittance_luma_max;
+        } else {
+            if (transmittance_luma_min < policy->lumaMinObserved) {
+                policy->lumaMinObserved = transmittance_luma_min;
+            }
+            if (transmittance_luma_max > policy->lumaMaxObserved) {
+                policy->lumaMaxObserved = transmittance_luma_max;
+            }
+        }
+        policy->lumaRangeCount += 1u;
+        policy->lumaSpanSum += span;
+        if (span > policy->lumaSpanMax) {
+            policy->lumaSpanMax = span;
+        }
+    }
 }
 
 void RuntimeRenderTraceCostLedger3D_Snapshot(RuntimeRenderTraceCostLedger3D* out_ledger) {

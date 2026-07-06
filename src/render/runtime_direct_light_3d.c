@@ -17,8 +17,13 @@
 static const double kRuntimeDirectLight3DTopFillIntensityScale = 0.08;
 static const double kRuntimeDirectLight3DTopFillIntensityMax = 0.75;
 static const double kRuntimeDirectLight3DContributionEpsilon = 1e-8;
+static const double kRuntimeDirectLight3DVisibilityClearLuma = 0.995;
+static const double kRuntimeDirectLight3DVisibilityBlockedLuma = 0.005;
+static const double kRuntimeDirectLight3DVisibilityStablePartialSpan = 0.02;
+static const double kRuntimeDirectLight3DMaterialEmitterRectLowImportancePeak = 0.01;
 #define RUNTIME_DIRECT_LIGHT_3D_AREA_LIGHT_POPULATION_COUNT 16
 #define RUNTIME_DIRECT_LIGHT_3D_AREA_LIGHT_ACTIVE_COUNT 8
+#define RUNTIME_DIRECT_LIGHT_3D_MATERIAL_EMITTER_RECT_SAMPLE_COUNT 6
 #define RUNTIME_DIRECT_LIGHT_3D_AREA_LIGHT_DECISION_COUNT 4
 
 typedef struct {
@@ -189,23 +194,112 @@ static int runtime_direct_light_3d_area_light_sample_count(const RuntimeLight3D*
     return RUNTIME_DIRECT_LIGHT_3D_AREA_LIGHT_ACTIVE_COUNT;
 }
 
-static int runtime_direct_light_3d_area_light_decision_count(const RuntimeLight3D* light) {
-    int sample_count = runtime_direct_light_3d_area_light_sample_count(light);
+static bool runtime_direct_light_3d_uses_material_emitter_rect_budget(
+    const RuntimeLightSource3D* source) {
+    return source && source->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_RECT &&
+           source->origin == RUNTIME_LIGHT_SOURCE_3D_ORIGIN_MATERIAL_EMITTER &&
+           source->emissionProfile == RUNTIME_LIGHT_SOURCE_3D_EMISSION_ONE_SIDED;
+}
+
+static int runtime_direct_light_3d_source_area_light_sample_count(
+    const RuntimeLightSource3D* source,
+    const RuntimeLight3D* light) {
+    const int base_count = runtime_direct_light_3d_area_light_sample_count(light);
+    if (base_count > RUNTIME_DIRECT_LIGHT_3D_MATERIAL_EMITTER_RECT_SAMPLE_COUNT &&
+        runtime_direct_light_3d_uses_material_emitter_rect_budget(source)) {
+        return RUNTIME_DIRECT_LIGHT_3D_MATERIAL_EMITTER_RECT_SAMPLE_COUNT;
+    }
+    return base_count;
+}
+
+static bool runtime_direct_light_3d_material_emitter_rect_can_stop_low_importance(
+    const RuntimeLightSource3D* source,
+    int evaluated_count,
+    int decision_count,
+    int max_count,
+    double source_r_sum,
+    double source_g_sum,
+    double source_b_sum) {
+    double inv_evaluated = 0.0;
+    double provisional_peak = 0.0;
+    if (!runtime_direct_light_3d_uses_material_emitter_rect_budget(source)) {
+        return false;
+    }
+    if (decision_count <= 0 || evaluated_count != decision_count ||
+        decision_count >= max_count) {
+        return false;
+    }
+    inv_evaluated = 1.0 / (double)evaluated_count;
+    provisional_peak = runtime_direct_light_3d_peak(source_r_sum * inv_evaluated,
+                                                   source_g_sum * inv_evaluated,
+                                                   source_b_sum * inv_evaluated);
+    return provisional_peak <= kRuntimeDirectLight3DMaterialEmitterRectLowImportancePeak;
+}
+
+static int runtime_direct_light_3d_area_light_decision_count_for_samples(int sample_count) {
     if (sample_count < RUNTIME_DIRECT_LIGHT_3D_AREA_LIGHT_DECISION_COUNT) {
         return sample_count;
     }
     return RUNTIME_DIRECT_LIGHT_3D_AREA_LIGHT_DECISION_COUNT;
 }
 
-static bool runtime_direct_light_3d_area_light_can_stop_adaptive(
+static RuntimeRenderTraceCostDirectLightStopReason3D
+runtime_direct_light_3d_area_light_stop_reason(
     int evaluated_count,
     int decision_count,
     int max_count,
     int clear_visible_count,
-    int clear_blocked_count) {
-    if (decision_count <= 0 || decision_count >= max_count) return false;
-    if (evaluated_count != decision_count) return false;
-    return clear_visible_count == decision_count || clear_blocked_count == decision_count;
+    int clear_blocked_count,
+    int visibility_trace_count,
+    double transmittance_luma_min,
+    double transmittance_luma_max) {
+    if (decision_count <= 0 || decision_count >= max_count) {
+        return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_FULL_SAMPLE_COUNT;
+    }
+    if (evaluated_count != decision_count) {
+        return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_FULL_SAMPLE_COUNT;
+    }
+    if (clear_visible_count == decision_count || clear_blocked_count == decision_count) {
+        return clear_visible_count == decision_count
+                   ? RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_ALL_CLEAR
+                   : RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_ALL_BLOCKED;
+    }
+    if (visibility_trace_count == decision_count &&
+        transmittance_luma_min > kRuntimeDirectLight3DVisibilityBlockedLuma &&
+        transmittance_luma_max < kRuntimeDirectLight3DVisibilityClearLuma &&
+        transmittance_luma_max - transmittance_luma_min <=
+            kRuntimeDirectLight3DVisibilityStablePartialSpan) {
+        return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_STABLE_PARTIAL;
+    }
+    return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_FULL_SAMPLE_COUNT;
+}
+
+static bool runtime_direct_light_3d_area_light_update_stop_reason(
+    int evaluated_count,
+    int decision_count,
+    int max_count,
+    int clear_visible_count,
+    int clear_blocked_count,
+    int visibility_trace_count,
+    double transmittance_luma_min,
+    double transmittance_luma_max,
+    RuntimeRenderTraceCostDirectLightStopReason3D* io_stop_reason) {
+    RuntimeRenderTraceCostDirectLightStopReason3D reason =
+        runtime_direct_light_3d_area_light_stop_reason(evaluated_count,
+                                                       decision_count,
+                                                       max_count,
+                                                       clear_visible_count,
+                                                       clear_blocked_count,
+                                                       visibility_trace_count,
+                                                       transmittance_luma_min,
+                                                       transmittance_luma_max);
+    if (reason == RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_FULL_SAMPLE_COUNT) {
+        return false;
+    }
+    if (io_stop_reason) {
+        *io_stop_reason = reason;
+    }
+    return true;
 }
 
 static int runtime_direct_light_3d_select_area_light_population_index(
@@ -497,10 +591,84 @@ static RuntimeLight3D runtime_direct_light_3d_compat_light_from_source(
     return light;
 }
 
+static RuntimeRenderTraceCostDirectLightSourceKind3D
+runtime_direct_light_3d_ledger_source_kind(const RuntimeLightSource3D* source) {
+    if (!source) return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_UNKNOWN;
+    switch (source->kind) {
+        case RUNTIME_LIGHT_SOURCE_3D_KIND_POINT:
+            return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_POINT;
+        case RUNTIME_LIGHT_SOURCE_3D_KIND_SPHERE:
+            return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_SPHERE;
+        case RUNTIME_LIGHT_SOURCE_3D_KIND_DISK:
+            return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_DISK;
+        case RUNTIME_LIGHT_SOURCE_3D_KIND_RECT:
+            return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_RECT;
+        case RUNTIME_LIGHT_SOURCE_3D_KIND_MESH_EMISSIVE:
+            return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_MESH_EMISSIVE;
+        default:
+            return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_UNKNOWN;
+    }
+}
+
+static RuntimeRenderTraceCostDirectLightSourceOrigin3D
+runtime_direct_light_3d_ledger_source_origin(const RuntimeLightSource3D* source) {
+    if (!source) return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_ORIGIN_UNKNOWN;
+    switch (source->origin) {
+        case RUNTIME_LIGHT_SOURCE_3D_ORIGIN_COMPAT_SCENE_LIGHT:
+            return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_ORIGIN_COMPAT_SCENE_LIGHT;
+        case RUNTIME_LIGHT_SOURCE_3D_ORIGIN_AUTHORED_LIGHT:
+            return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_ORIGIN_AUTHORED_LIGHT;
+        case RUNTIME_LIGHT_SOURCE_3D_ORIGIN_MATERIAL_EMITTER:
+            return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_ORIGIN_MATERIAL_EMITTER;
+        default:
+            return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_ORIGIN_UNKNOWN;
+    }
+}
+
+static RuntimeRenderTraceCostDirectLightEmissionProfile3D
+runtime_direct_light_3d_ledger_emission_profile(const RuntimeLightSource3D* source) {
+    if (!source) return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_EMISSION_UNKNOWN;
+    switch (source->emissionProfile) {
+        case RUNTIME_LIGHT_SOURCE_3D_EMISSION_OMNI:
+            return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_EMISSION_OMNI;
+        case RUNTIME_LIGHT_SOURCE_3D_EMISSION_ONE_SIDED:
+            return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_EMISSION_ONE_SIDED;
+        case RUNTIME_LIGHT_SOURCE_3D_EMISSION_TWO_SIDED:
+            return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_EMISSION_TWO_SIDED;
+        default:
+            return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_EMISSION_UNKNOWN;
+    }
+}
+
+static RuntimeRenderTraceCostDirectLightOutcome3D runtime_direct_light_3d_ledger_outcome(
+    int clear_visible_count,
+    int clear_blocked_count,
+    int visibility_trace_count,
+    double transmittance_luma_min,
+    double transmittance_luma_max) {
+    if (visibility_trace_count <= 0) {
+        return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_NO_VISIBILITY_TRACE;
+    }
+    if (clear_visible_count == visibility_trace_count) {
+        return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_CLEAR_VISIBLE;
+    }
+    if (clear_blocked_count == visibility_trace_count) {
+        return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_CLEAR_BLOCKED;
+    }
+    if (transmittance_luma_min > kRuntimeDirectLight3DVisibilityBlockedLuma &&
+        transmittance_luma_max < kRuntimeDirectLight3DVisibilityClearLuma &&
+        transmittance_luma_max - transmittance_luma_min <=
+            kRuntimeDirectLight3DVisibilityStablePartialSpan) {
+        return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_STABLE_PARTIAL;
+    }
+    return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_MIXED_PARTIAL;
+}
+
 static void runtime_direct_light_3d_accumulate_source(
     const RuntimeScene3D* scene,
     const HitInfo3D* hit,
     const RuntimeLightSource3D* source,
+    RuntimeRenderTraceCostDirectLightCaller3D caller,
     const RuntimeNative3DSamplingContext* sampling,
     RuntimeDirectLight3DResult* io_result,
     double* io_light_r,
@@ -523,6 +691,11 @@ static void runtime_direct_light_3d_accumulate_source(
     int light_sample_evaluated_count = 0;
     int clear_visible_sample_count = 0;
     int clear_blocked_sample_count = 0;
+    int visibility_trace_count = 0;
+    double transmittance_luma_min = 1.0e30;
+    double transmittance_luma_max = -1.0e30;
+    RuntimeRenderTraceCostDirectLightStopReason3D stop_reason =
+        RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_FULL_SAMPLE_COUNT;
 
     if (!scene || !hit || !source || !source->enabled || !io_result ||
         !io_light_r || !io_light_g || !io_light_b || !io_any_light_sample_visible) {
@@ -565,8 +738,9 @@ static void runtime_direct_light_3d_accumulate_source(
         io_result->attenuation = attenuation;
     }
 
-    light_sample_count = runtime_direct_light_3d_area_light_sample_count(&light);
-    light_sample_decision_count = runtime_direct_light_3d_area_light_decision_count(&light);
+    light_sample_count = runtime_direct_light_3d_source_area_light_sample_count(source, &light);
+    light_sample_decision_count =
+        runtime_direct_light_3d_area_light_decision_count_for_samples(light_sample_count);
     if (ndotl > 0.0 && light_sample_count > 0) {
         for (int i = 0; i < light_sample_count; ++i) {
             RuntimeVisibility3DTransmittance transmittance = {0};
@@ -590,12 +764,16 @@ static void runtime_direct_light_3d_accumulate_source(
             light_sample_evaluated_count += 1;
             if (!(sample_distance > length_epsilon)) {
                 clear_blocked_sample_count += 1;
-                if (runtime_direct_light_3d_area_light_can_stop_adaptive(
+                if (runtime_direct_light_3d_area_light_update_stop_reason(
                         light_sample_evaluated_count,
                         light_sample_decision_count,
                         light_sample_count,
                         clear_visible_sample_count,
-                        clear_blocked_sample_count)) {
+                        clear_blocked_sample_count,
+                        visibility_trace_count,
+                        transmittance_luma_min,
+                        transmittance_luma_max,
+                        &stop_reason)) {
                     break;
                 }
                 continue;
@@ -616,24 +794,32 @@ static void runtime_direct_light_3d_accumulate_source(
             }
             if (!(sample_ndotl > 0.0)) {
                 clear_blocked_sample_count += 1;
-                if (runtime_direct_light_3d_area_light_can_stop_adaptive(
+                if (runtime_direct_light_3d_area_light_update_stop_reason(
                         light_sample_evaluated_count,
                         light_sample_decision_count,
                         light_sample_count,
                         clear_visible_sample_count,
-                        clear_blocked_sample_count)) {
+                        clear_blocked_sample_count,
+                        visibility_trace_count,
+                        transmittance_luma_min,
+                        transmittance_luma_max,
+                        &stop_reason)) {
                     break;
                 }
                 continue;
             }
             if (!(sample_emission_weight > 0.0)) {
                 clear_blocked_sample_count += 1;
-                if (runtime_direct_light_3d_area_light_can_stop_adaptive(
+                if (runtime_direct_light_3d_area_light_update_stop_reason(
                         light_sample_evaluated_count,
                         light_sample_decision_count,
                         light_sample_count,
                         clear_visible_sample_count,
-                        clear_blocked_sample_count)) {
+                        clear_blocked_sample_count,
+                        visibility_trace_count,
+                        transmittance_luma_min,
+                        transmittance_luma_max,
+                        &stop_reason)) {
                     break;
                 }
                 continue;
@@ -644,12 +830,16 @@ static void runtime_direct_light_3d_accumulate_source(
                                                             sample_attenuation,
                                                             sample_ndotl)) {
                 clear_blocked_sample_count += 1;
-                if (runtime_direct_light_3d_area_light_can_stop_adaptive(
+                if (runtime_direct_light_3d_area_light_update_stop_reason(
                         light_sample_evaluated_count,
                         light_sample_decision_count,
                         light_sample_count,
                         clear_visible_sample_count,
-                        clear_blocked_sample_count)) {
+                        clear_blocked_sample_count,
+                        visibility_trace_count,
+                        transmittance_luma_min,
+                        transmittance_luma_max,
+                        &stop_reason)) {
                     break;
                 }
                 continue;
@@ -666,6 +856,13 @@ static void runtime_direct_light_3d_accumulate_source(
                                                                                 sample_position,
                                                                                 target_scene_object_index,
                                                                                 target_triangle_index);
+            visibility_trace_count += 1;
+            if (transmittance.luma < transmittance_luma_min) {
+                transmittance_luma_min = transmittance.luma;
+            }
+            if (transmittance.luma > transmittance_luma_max) {
+                transmittance_luma_max = transmittance.luma;
+            }
             if (transmittance.luma > 1e-6) {
                 source_visible = true;
                 *io_any_light_sample_visible = true;
@@ -673,9 +870,9 @@ static void runtime_direct_light_3d_accumulate_source(
                     io_result->rectVisibleSampleCount += 1;
                 }
             }
-            if (transmittance.luma > 0.999) {
+            if (transmittance.luma >= kRuntimeDirectLight3DVisibilityClearLuma) {
                 clear_visible_sample_count += 1;
-            } else if (!(transmittance.luma > 1e-6)) {
+            } else if (transmittance.luma <= kRuntimeDirectLight3DVisibilityBlockedLuma) {
                 clear_blocked_sample_count += 1;
             }
             source_r += light.intensity * sample_attenuation * sample_ndotl *
@@ -684,12 +881,27 @@ static void runtime_direct_light_3d_accumulate_source(
                         sample_emission_weight * transmittance.g * source->color.y;
             source_b += light.intensity * sample_attenuation * sample_ndotl *
                         sample_emission_weight * transmittance.b * source->color.z;
-            if (runtime_direct_light_3d_area_light_can_stop_adaptive(
+            if (runtime_direct_light_3d_material_emitter_rect_can_stop_low_importance(
+                    source,
+                    light_sample_evaluated_count,
+                    light_sample_decision_count,
+                    light_sample_count,
+                    source_r,
+                    source_g,
+                    source_b)) {
+                stop_reason = RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_LOW_IMPORTANCE;
+                break;
+            }
+            if (runtime_direct_light_3d_area_light_update_stop_reason(
                     light_sample_evaluated_count,
                     light_sample_decision_count,
                     light_sample_count,
                     clear_visible_sample_count,
-                    clear_blocked_sample_count)) {
+                    clear_blocked_sample_count,
+                    visibility_trace_count,
+                    transmittance_luma_min,
+                    transmittance_luma_max,
+                    &stop_reason)) {
                 break;
             }
         }
@@ -714,7 +926,43 @@ static void runtime_direct_light_3d_accumulate_source(
         io_result->ndotl = ndotl;
         io_result->attenuation = attenuation;
     }
+    RuntimeRenderTraceCostLedger3D_RecordDirectLightVisibilityPolicy(
+        caller,
+        runtime_direct_light_3d_ledger_source_kind(source),
+        runtime_direct_light_3d_ledger_source_origin(source),
+        runtime_direct_light_3d_ledger_emission_profile(source),
+        runtime_direct_light_3d_ledger_outcome(clear_visible_sample_count,
+                                               clear_blocked_sample_count,
+                                               visibility_trace_count,
+                                               transmittance_luma_min,
+                                               transmittance_luma_max),
+        stop_reason,
+        light_sample_count,
+        light_sample_decision_count,
+        light_sample_evaluated_count,
+        visibility_trace_count,
+        light_distance,
+        source_peak,
+        transmittance_luma_min,
+        transmittance_luma_max);
 }
+
+static bool runtime_direct_light_3d_shade_hit_with_payload(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeMaterialPayload3D* payload,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeRenderTraceCostDirectLightCaller3D caller,
+    RuntimeDirectLight3DResult* out_result);
+
+static bool runtime_direct_light_3d_shade_hit_with_light_set_and_payload(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeLightSet3D* light_set,
+    const RuntimeMaterialPayload3D* payload,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeRenderTraceCostDirectLightCaller3D caller,
+    RuntimeDirectLight3DResult* out_result);
 
 bool RuntimeDirectLight3D_TracePrimaryHit(const RuntimeScene3D* scene,
                                           const RuntimeCameraProjector3D* projector,
@@ -760,6 +1008,22 @@ bool RuntimeDirectLight3D_ShadeHitWithPayload(const RuntimeScene3D* scene,
                                               const RuntimeMaterialPayload3D* payload,
                                               const RuntimeNative3DSamplingContext* sampling,
                                               RuntimeDirectLight3DResult* out_result) {
+    return runtime_direct_light_3d_shade_hit_with_payload(
+        scene,
+        hit,
+        payload,
+        sampling,
+        RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_CALLER_SHADED_HIT,
+        out_result);
+}
+
+static bool runtime_direct_light_3d_shade_hit_with_payload(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeMaterialPayload3D* payload,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeRenderTraceCostDirectLightCaller3D caller,
+    RuntimeDirectLight3DResult* out_result) {
     RuntimeLightSet3D light_set;
     const RuntimeLightSet3D* active_light_set = NULL;
     bool ok = false;
@@ -778,12 +1042,13 @@ bool RuntimeDirectLight3D_ShadeHitWithPayload(const RuntimeScene3D* scene,
         active_light_set = &light_set;
     }
     if (ok) {
-        ok = RuntimeDirectLight3D_ShadeHitWithLightSetAndPayload(scene,
-                                                                 hit,
-                                                                 active_light_set,
-                                                                 payload,
-                                                                 sampling,
-                                                                 out_result);
+        ok = runtime_direct_light_3d_shade_hit_with_light_set_and_payload(scene,
+                                                                          hit,
+                                                                          active_light_set,
+                                                                          payload,
+                                                                          sampling,
+                                                                          caller,
+                                                                          out_result);
     }
     if (active_light_set == &light_set) {
         RuntimeLightSet3D_Free(&light_set);
@@ -812,6 +1077,24 @@ bool RuntimeDirectLight3D_ShadeHitWithLightSetAndPayload(
     const RuntimeMaterialPayload3D* payload,
     const RuntimeNative3DSamplingContext* sampling,
     RuntimeDirectLight3DResult* out_result) {
+    return runtime_direct_light_3d_shade_hit_with_light_set_and_payload(
+        scene,
+        hit,
+        light_set,
+        payload,
+        sampling,
+        RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_CALLER_LIGHT_SET,
+        out_result);
+}
+
+static bool runtime_direct_light_3d_shade_hit_with_light_set_and_payload(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeLightSet3D* light_set,
+    const RuntimeMaterialPayload3D* payload,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeRenderTraceCostDirectLightCaller3D caller,
+    RuntimeDirectLight3DResult* out_result) {
     RuntimeDirectLight3DResult result = {0};
     double tint_r = 1.0;
     double tint_g = 1.0;
@@ -836,6 +1119,7 @@ bool RuntimeDirectLight3D_ShadeHitWithLightSetAndPayload(
         runtime_direct_light_3d_accumulate_source(scene,
                                                   hit,
                                                   source,
+                                                  caller,
                                                   sampling,
                                                   &result,
                                                   &light_r,
@@ -912,11 +1196,13 @@ bool RuntimeDirectLight3D_ShadePrimaryHitWithPayload(
         return false;
     }
 
-    if (!RuntimeDirectLight3D_ShadeHitWithPayload(scene,
-                                                  &primary_hit->hitInfo,
-                                                  payload,
-                                                  sampling,
-                                                  &result)) {
+    if (!runtime_direct_light_3d_shade_hit_with_payload(
+            scene,
+            &primary_hit->hitInfo,
+            payload,
+            sampling,
+            RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_CALLER_PRIMARY_HIT,
+            &result)) {
         result.primaryRay = primary_hit->primaryRay;
         *out_result = result;
         return false;
