@@ -69,6 +69,8 @@ RUNTIME_MESH_ASSET_LOADER_TEST_BIN := $(BUILD_DIR)/tests/runtime_mesh_asset_load
 RUNTIME_MESH_ASSET_LOADER_TEST_SRCS := \
 	$(TEST_DIR)/test_runtime_mesh_asset_loader.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_loader.c \
+	$(SRC_DIR)/import/runtime_mesh_asset_loader_cache.c \
+	$(SRC_DIR)/import/runtime_mesh_asset_loader_utils.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_pack.c \
 	$(CORE_MESH_PREVIEW_DIR)/src/core_mesh_preview.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
@@ -124,6 +126,8 @@ RUNTIME_MESH_ASSET_BUILDER_TEST_SRCS := \
 	$(TEST_DIR)/test_runtime_mesh_asset_builder.c \
 	$(TEST_DIR)/test_runtime_material_payload_stub.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_loader.c \
+	$(SRC_DIR)/import/runtime_mesh_asset_loader_cache.c \
+	$(SRC_DIR)/import/runtime_mesh_asset_loader_utils.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_pack.c \
 	$(CORE_MESH_PREVIEW_DIR)/src/core_mesh_preview.c \
 	$(SRC_DIR)/render/runtime_ray_3d.c \
@@ -165,6 +169,8 @@ RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_SRCS := \
 	$(TEST_DIR)/test_runtime_mesh_asset_headless_audit.c \
 	$(TEST_DIR)/test_runtime_material_payload_stub.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_loader.c \
+	$(SRC_DIR)/import/runtime_mesh_asset_loader_cache.c \
+	$(SRC_DIR)/import/runtime_mesh_asset_loader_utils.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_pack.c \
 	$(CORE_MESH_PREVIEW_DIR)/src/core_mesh_preview.c \
 	$(SRC_DIR)/render/runtime_camera_3d_rays.c \

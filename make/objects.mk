@@ -18,17 +18,29 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_specular_reflection_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_3d.o \
+	$(BUILD_DIR)/render/runtime_disney_v2_result_3d.o \
+	$(BUILD_DIR)/render/runtime_disney_v2_stochastic_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_bootstrap_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_lens_transport_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_settings_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_sphere_lens_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_surface_cache_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_transport_analytic_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_transport_analytic_sphere_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_transport_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_transport_debug_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_transport_shapes_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_transport_surface_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_transport_triangle_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_transport_utils_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_transport_volume_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_volume_cache_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_caustic_sidecar_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_estimator_3d.o \
+	$(BUILD_DIR)/render/runtime_disney_v2_transport_emissive_3d.o \
+	$(BUILD_DIR)/render/runtime_disney_v2_transport_sampling_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_transport_3d.o \
+	$(BUILD_DIR)/render/runtime_disney_v2_transport_utils_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_transmission_3d.o \
 	$(BUILD_DIR)/render/runtime_emission_transparency_3d.o \
 	$(BUILD_DIR)/render/runtime_emission_transparency_3d_sampling.o \
@@ -37,6 +49,10 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_native_3d_denoise.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_unit.o \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_scheduler.o \
+	$(BUILD_DIR)/render/runtime_native_3d_tile_scheduler_diag.o \
+	$(BUILD_DIR)/render/runtime_native_3d_tile_scheduler_metrics.o \
+	$(BUILD_DIR)/render/runtime_native_3d_tile_scheduler_policy.o \
+	$(BUILD_DIR)/render/runtime_native_3d_tile_scheduler_utils.o \
 	$(BUILD_DIR)/render/runtime_native_3d_blue_noise.o \
 	$(BUILD_DIR)/render/runtime_native_3d_sampling.o \
 	$(BUILD_DIR)/render/materials/runtime_material_authored_texture_3d.o \
@@ -56,9 +72,14 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/editor/scene_editor_material_stack.o \
 	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render_output.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_prepare.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render_stats.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render_shading_basic.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading_background.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render_shading_disney_v2.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render_shading_shared.o \
 	$(BUILD_DIR)/render/runtime_native_3d_preview_reconstruction.o \
 	$(BUILD_DIR)/render/runtime_native_3d_prepare_diagnostics.o \
 	$(BUILD_DIR)/render/runtime_native_3d_resolution.o \
@@ -74,6 +95,8 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_environment_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_capabilities.o \
 	$(BUILD_DIR)/render/runtime_triangle_bvh_3d.o \
+	$(BUILD_DIR)/render/runtime_triangle_bvh_cache_3d.o \
+	$(BUILD_DIR)/render/runtime_triangle_bvh_trace_3d.o \
 	$(BUILD_DIR)/render/runtime_volume_3d.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_sampling.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_integrate.o \
@@ -81,6 +104,10 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_volume_3d_debug.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_samples.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder.o \
+	$(BUILD_DIR)/render/runtime_scene_3d_builder_geometry.o \
+	$(BUILD_DIR)/render/runtime_scene_3d_builder_heightfield.o \
+	$(BUILD_DIR)/render/runtime_scene_3d_builder_mesh.o \
+	$(BUILD_DIR)/render/runtime_scene_3d_builder_shared.o \
 	$(BUILD_DIR)/render/runtime_visibility_3d.o \
 	$(BUILD_DIR)/scene/object_manager.o \
 	$(BUILD_DIR)/geo/shape_adapter.o \
@@ -100,6 +127,8 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/import/runtime_scene_volume_defaults.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_pack.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader.o \
+	$(BUILD_DIR)/import/runtime_mesh_asset_loader_cache.o \
+	$(BUILD_DIR)/import/runtime_mesh_asset_loader_utils.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge.o \
 	$(BUILD_DIR)/path/path_system.o \
 	$(BUILD_DIR)/path/path_arc_length.o \
@@ -144,9 +173,29 @@ NATIVE3D_AUDIT_DEPS = \
 RAY_TRACING_RENDER_HEADLESS_DEPS = \
 	$(BUILD_DIR)/app/ray_tracing_request_utils.o \
 	$(BUILD_DIR)/app/agent_render_request.o \
+	$(BUILD_DIR)/app/agent_render_request_defaults.o \
+	$(BUILD_DIR)/app/agent_render_request_helpers.o \
+	$(BUILD_DIR)/app/agent_render_request_labels.o \
 	$(BUILD_DIR)/render/adapters/timer_hud_headless_stub.o \
 	$(BUILD_DIR)/tools/make_video.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_caustic_summary.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_dynamic_summary.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_frame_analysis.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_frame_output.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_object_audit_prepare.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_object_audit_summary.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_progress_callbacks.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_progress_status.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_render_budget.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_render_completion.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_render_failures.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_render_setup.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_render_stats_summary.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_startup_summary.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_summary.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_trace_cost_summary.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_usage.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_volume_water_selection.o \
 	$(NATIVE3D_AUDIT_DEPS)
 
 RAY_TRACING_JOB_RUNNER_DEPS = \
@@ -248,17 +297,29 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_specular_reflection_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_3d.o \
+		$(BUILD_DIR)/render/runtime_disney_v2_result_3d.o \
+		$(BUILD_DIR)/render/runtime_disney_v2_stochastic_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_bootstrap_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_lens_transport_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_settings_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_sphere_lens_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_surface_cache_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_transport_analytic_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_transport_analytic_sphere_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_transport_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_transport_debug_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_transport_shapes_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_transport_surface_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_transport_triangle_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_transport_utils_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_transport_volume_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_volume_cache_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_caustic_sidecar_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_estimator_3d.o \
+		$(BUILD_DIR)/render/runtime_disney_v2_transport_emissive_3d.o \
+		$(BUILD_DIR)/render/runtime_disney_v2_transport_sampling_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_transport_3d.o \
+		$(BUILD_DIR)/render/runtime_disney_v2_transport_utils_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_transmission_3d.o \
 		$(BUILD_DIR)/render/runtime_emission_transparency_3d.o \
 		$(BUILD_DIR)/render/runtime_path_depth_policy_3d.o \
@@ -266,6 +327,10 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_native_3d_denoise.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_unit.o \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_scheduler.o \
+	$(BUILD_DIR)/render/runtime_native_3d_tile_scheduler_diag.o \
+	$(BUILD_DIR)/render/runtime_native_3d_tile_scheduler_metrics.o \
+	$(BUILD_DIR)/render/runtime_native_3d_tile_scheduler_policy.o \
+	$(BUILD_DIR)/render/runtime_native_3d_tile_scheduler_utils.o \
 	$(BUILD_DIR)/render/runtime_native_3d_blue_noise.o \
 	$(BUILD_DIR)/render/runtime_native_3d_sampling.o \
 	$(BUILD_DIR)/render/materials/runtime_material_authored_texture_3d.o \
@@ -280,6 +345,11 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render_shading_basic.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render_shading_disney_v2.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render_shading_shared.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render_output.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render_stats.o \
 	$(BUILD_DIR)/render/runtime_native_3d_progress_hud.o \
 	$(BUILD_DIR)/render/runtime_native_3d_preview_reconstruction.o \
 	$(BUILD_DIR)/render/runtime_native_3d_resolution.o \
@@ -294,6 +364,8 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \
 	$(BUILD_DIR)/render/runtime_environment_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_capabilities.o \
+	$(BUILD_DIR)/render/runtime_triangle_bvh_cache_3d.o \
+	$(BUILD_DIR)/render/runtime_triangle_bvh_trace_3d.o \
 	$(BUILD_DIR)/render/runtime_volume_3d.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_sampling.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_integrate.o \
@@ -301,6 +373,10 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_volume_3d_debug.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_samples.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder.o \
+	$(BUILD_DIR)/render/runtime_scene_3d_builder_geometry.o \
+	$(BUILD_DIR)/render/runtime_scene_3d_builder_heightfield.o \
+	$(BUILD_DIR)/render/runtime_scene_3d_builder_mesh.o \
+	$(BUILD_DIR)/render/runtime_scene_3d_builder_shared.o \
 	$(BUILD_DIR)/render/runtime_visibility_3d.o \
 	$(BUILD_DIR)/editor/editor_mode_router.o \
 	$(BUILD_DIR)/editor/material_editor_knob_control.o \
@@ -342,6 +418,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/text_upload_policy.o \
 		$(BUILD_DIR)/render/pipeline/ray_tracing2_native3d_overlay.o \
 		$(BUILD_DIR)/render/pipeline/ray_tracing2_preview.o \
+		$(BUILD_DIR)/render/pipeline/ray_tracing2_preview_present_capture.o \
 		$(BUILD_DIR)/render/pipeline/ray_tracing2_preview_present.o \
 		$(BUILD_DIR)/render/pipeline/ray_tracing2.o \
 	$(BUILD_DIR)/render/fluid/fluid_state.o \
@@ -388,6 +465,8 @@ TEST_DEPS := \
 	$(BUILD_DIR)/import/runtime_scene_volume_defaults.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_pack.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader.o \
+	$(BUILD_DIR)/import/runtime_mesh_asset_loader_cache.o \
+	$(BUILD_DIR)/import/runtime_mesh_asset_loader_utils.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_render.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_render_controls.o \

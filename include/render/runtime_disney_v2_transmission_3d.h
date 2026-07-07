@@ -31,4 +31,14 @@ bool RuntimeDisneyV2_3D_ApplyPrimaryTransmissionContinuation(
     const RuntimeNative3DSamplingContext* sampling,
     RuntimeDisneyV2_3DResult* io_result);
 
+bool RuntimeDisneyV2_3D_ApplyReflectedTransmissionContinuation(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* reflected_hit,
+    Ray3D reflected_ray,
+    const RuntimeNative3DSamplingContext* sampling,
+    double parent_throughput_r,
+    double parent_throughput_g,
+    double parent_throughput_b,
+    RuntimeDisneyV2_3DResult* io_result);
+
 #endif

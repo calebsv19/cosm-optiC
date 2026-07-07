@@ -1,293 +1,4 @@
-#include "app/agent_render_request.h"
-#include "app/ray_tracing_request_utils.h"
-
-#include <json-c/json.h>
-#include <math.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#include "import/fluid_volume_import_3d.h"
-#include "render/runtime_scene_3d.h"
-
-static bool json_get_rgb(json_object *owner,
-                         const char *key,
-                         double *out_r,
-                         double *out_g,
-                         double *out_b) {
-    json_object *obj = NULL;
-    if (out_r) *out_r = 0.0;
-    if (out_g) *out_g = 0.0;
-    if (out_b) *out_b = 0.0;
-    if (!owner || !key || !out_r || !out_g || !out_b ||
-        !json_object_object_get_ex(owner, key, &obj)) {
-        return false;
-    }
-    if (json_object_is_type(obj, json_type_object)) {
-        return RayTracingJsonGetDouble(obj, "r", out_r) &&
-               RayTracingJsonGetDouble(obj, "g", out_g) &&
-               RayTracingJsonGetDouble(obj, "b", out_b);
-    }
-    if (json_object_is_type(obj, json_type_array) &&
-        json_object_array_length(obj) >= 3u) {
-        *out_r = json_object_get_double(json_object_array_get_idx(obj, 0));
-        *out_g = json_object_get_double(json_object_array_get_idx(obj, 1));
-        *out_b = json_object_get_double(json_object_array_get_idx(obj, 2));
-        return true;
-    }
-    return false;
-}
-
-static int volume_kind_from_runtime(RuntimeVolume3DSourceKind kind) {
-    switch (kind) {
-        case RUNTIME_VOLUME_3D_SOURCE_MANIFEST:
-            return VOLUME_SOURCE_MANIFEST;
-        case RUNTIME_VOLUME_3D_SOURCE_RAW_VF3D:
-            return VOLUME_SOURCE_RAW_VF3D;
-        case RUNTIME_VOLUME_3D_SOURCE_PACK:
-            return VOLUME_SOURCE_PACK;
-        case RUNTIME_VOLUME_3D_SOURCE_NONE:
-        default:
-            return VOLUME_SOURCE_NONE;
-    }
-}
-
-static int parse_volume_source_kind(const char *kind_label, const char *path) {
-    RuntimeVolume3DSourceKind runtime_kind = RUNTIME_VOLUME_3D_SOURCE_NONE;
-    if (!kind_label || !kind_label[0] || strcmp(kind_label, "auto") == 0) {
-        if (fluid_volume_import_3d_classify_path(path, &runtime_kind)) {
-            return volume_kind_from_runtime(runtime_kind);
-        }
-        return VOLUME_SOURCE_NONE;
-    }
-    if (strcmp(kind_label, "manifest") == 0 || strcmp(kind_label, "scene_bundle") == 0) {
-        return VOLUME_SOURCE_MANIFEST;
-    }
-    if (strcmp(kind_label, "raw_vf3d") == 0 || strcmp(kind_label, "vf3d") == 0) {
-        return VOLUME_SOURCE_RAW_VF3D;
-    }
-    if (strcmp(kind_label, "pack") == 0) {
-        return VOLUME_SOURCE_PACK;
-    }
-    if (strcmp(kind_label, "none") == 0) {
-        return VOLUME_SOURCE_NONE;
-    }
-    return VOLUME_SOURCE_NONE;
-}
-
-static RayTracing3DIntegratorId parse_integrator_3d(const char *label) {
-    if (!label || !label[0] || strcmp(label, "direct_light") == 0) {
-        return RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT;
-    }
-    if (strcmp(label, "diffuse_bounce") == 0) {
-        return RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE;
-    }
-    if (strcmp(label, "material") == 0) {
-        return RAY_TRACING_3D_INTEGRATOR_MATERIAL;
-    }
-    if (strcmp(label, "emission_transparency") == 0) {
-        return RAY_TRACING_3D_INTEGRATOR_EMISSION_TRANSPARENCY;
-    }
-    if (strcmp(label, "disney") == 0) {
-        return RAY_TRACING_3D_INTEGRATOR_DISNEY;
-    }
-    if (strcmp(label, "disney_v2") == 0) {
-        return RAY_TRACING_3D_INTEGRATOR_DISNEY_V2;
-    }
-    return RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT;
-}
-
-enum {
-    RAY_TRACING_AGENT_RENDER_PRESET_NONE = 0,
-    RAY_TRACING_AGENT_RENDER_PRESET_GLASS_PREVIEW = 1,
-    RAY_TRACING_AGENT_RENDER_PRESET_GLASS_REVIEW = 2
-};
-
-static int parse_inspection_preset(const char *label) {
-    if (!label || !label[0] || strcmp(label, "none") == 0) {
-        return RAY_TRACING_AGENT_RENDER_PRESET_NONE;
-    }
-    if (strcmp(label, "glass_preview") == 0) {
-        return RAY_TRACING_AGENT_RENDER_PRESET_GLASS_PREVIEW;
-    }
-    if (strcmp(label, "glass_review") == 0) {
-        return RAY_TRACING_AGENT_RENDER_PRESET_GLASS_REVIEW;
-    }
-    return RAY_TRACING_AGENT_RENDER_PRESET_NONE;
-}
-
-static bool parse_trace_route(const char* label, RuntimeRay3DTraceRoute* out_route) {
-    if (!label || !label[0] || !out_route) return false;
-    if (strcmp(label, "flattened_bvh") == 0 ||
-        strcmp(label, "flattened") == 0 ||
-        strcmp(label, "bvh") == 0) {
-        *out_route = RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH;
-        return true;
-    }
-    if (strcmp(label, "tlas_blas_parity") == 0 ||
-        strcmp(label, "parity") == 0 ||
-        strcmp(label, "blas_tlas_parity") == 0) {
-        *out_route = RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS_PARITY;
-        return true;
-    }
-    if (strcmp(label, "tlas_blas") == 0 ||
-        strcmp(label, "blas_tlas") == 0 ||
-        strcmp(label, "accelerated") == 0) {
-        *out_route = RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS;
-        return true;
-    }
-    return false;
-}
-
-static RuntimeDisneyV2CausticMode3D caustic_mode_to_disney_v2_mode(
-    RuntimeCausticMode3D mode) {
-    switch (mode) {
-        case RUNTIME_CAUSTIC_MODE_ANALYTIC:
-            return RUNTIME_DISNEY_V2_CAUSTIC_MODE_ANALYTIC;
-        case RUNTIME_CAUSTIC_MODE_TRANSPORT:
-            return RUNTIME_DISNEY_V2_CAUSTIC_MODE_TRANSPORT;
-        case RUNTIME_CAUSTIC_MODE_OFF:
-        case RUNTIME_CAUSTIC_MODE_SPATIAL_CACHE:
-        default:
-            return RUNTIME_DISNEY_V2_CAUSTIC_MODE_OFF;
-    }
-}
-
-static int parse_environment_light_mode(const char *label) {
-    if (!label || !label[0] || strcmp(label, "off") == 0) {
-        return ENVIRONMENT_LIGHT_MODE_OFF;
-    }
-    if (strcmp(label, "top_fill") == 0 || strcmp(label, "top-fill") == 0) {
-        return ENVIRONMENT_LIGHT_MODE_TOP_FILL;
-    }
-    if (strcmp(label, "ambient") == 0) {
-        return ENVIRONMENT_LIGHT_MODE_AMBIENT;
-    }
-    return ENVIRONMENT_LIGHT_MODE_OFF;
-}
-
-static int parse_environment_preset(const char *label) {
-    return RuntimeEnvironment3DPresetFromLabel(label);
-}
-
-static void set_request_diagf(char *out, size_t out_size, const char *format, ...) {
-    va_list args;
-    if (!out || out_size == 0u || !format) return;
-    va_start(args, format);
-    vsnprintf(out, out_size, format, args);
-    va_end(args);
-}
-
-static int clamp_secondary_diffuse_samples_3d_override(int value) {
-    if (value < RUNTIME_3D_SECONDARY_SAMPLES_MIN) {
-        value = RUNTIME_3D_SECONDARY_SAMPLES_MIN;
-    }
-    if (value > RUNTIME_3D_SECONDARY_SAMPLES_MAX) {
-        value = RUNTIME_3D_SECONDARY_SAMPLES_MAX;
-    }
-    value = ((value + (RUNTIME_3D_SECONDARY_SAMPLES_STEP / 2)) /
-             RUNTIME_3D_SECONDARY_SAMPLES_STEP) *
-            RUNTIME_3D_SECONDARY_SAMPLES_STEP;
-    if (value < RUNTIME_3D_SECONDARY_SAMPLES_MIN) {
-        value = RUNTIME_3D_SECONDARY_SAMPLES_MIN;
-    }
-    if (value > RUNTIME_3D_SECONDARY_SAMPLES_MAX) {
-        value = RUNTIME_3D_SECONDARY_SAMPLES_MAX;
-    }
-    return value;
-}
-
-static int clamp_transmission_samples_3d_override(int value) {
-    if (value < RUNTIME_3D_TRANSMISSION_SAMPLES_MIN) {
-        value = RUNTIME_3D_TRANSMISSION_SAMPLES_MIN;
-    }
-    if (value > RUNTIME_3D_TRANSMISSION_SAMPLES_MAX) {
-        value = RUNTIME_3D_TRANSMISSION_SAMPLES_MAX;
-    }
-    return value;
-}
-
-void ray_tracing_agent_render_request_defaults(RayTracingAgentRenderRequest *request) {
-    if (!request) return;
-    memset(request, 0, sizeof(*request));
-    snprintf(request->schema_version,
-             sizeof(request->schema_version),
-             "%s",
-             RAY_TRACING_AGENT_RENDER_REQUEST_SCHEMA);
-    snprintf(request->run_id, sizeof(request->run_id), "ray_tracing_agent_run");
-    request->volume_enabled = false;
-    request->volume_source_kind = VOLUME_SOURCE_NONE;
-    request->volume_visible = true;
-    request->volume_affects_lighting = true;
-    request->volume_debug_overlay = false;
-    request->video_enabled = false;
-    request->video_fps = 30;
-    request->start_frame = 0;
-    request->frame_count = 1;
-    request->width = 640;
-    request->height = 360;
-    request->normalized_t = 0.0;
-    request->temporal_frames = 1;
-    request->has_denoise_enabled_override = false;
-    request->denoise_enabled_override = true;
-    request->has_sampling_window = false;
-    request->sampling_frame_offset = 0;
-    request->sampling_frame_count = 1;
-    request->has_resource_budget = false;
-    request->resource_cpu_percent = 0;
-    request->resource_max_workers = 0;
-    request->resource_reserve_cpu_count = 0;
-    request->integrator_3d = RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT;
-    request->has_integrator_3d_override = false;
-    request->inspection_preset = RAY_TRACING_AGENT_RENDER_PRESET_NONE;
-    request->camera_zoom_override = 1.0;
-    request->camera_position_x = 0.0;
-    request->camera_position_y = 0.0;
-    request->camera_position_z = 0.0;
-    request->camera_look_at_x = 0.0;
-    request->camera_look_at_y = 0.0;
-    request->camera_look_at_z = 0.0;
-    request->environment_brightness_override = 0.0;
-    request->ambient_strength_override = 0.0;
-    request->environment_light_mode_override = ENVIRONMENT_LIGHT_MODE_OFF;
-    request->environment_preset_override = ENVIRONMENT_PRESET_SKY;
-    request->background_brightness_override = 0.0;
-    request->background_color_r = 1.0;
-    request->background_color_g = 1.0;
-    request->background_color_b = 1.0;
-    request->top_fill_strength_override = 1.0;
-    request->light_intensity_override = 0.0;
-    request->light_radius_override = 0.0;
-    request->forward_decay_override = 0.0;
-    request->volume_scatter_gain_override = 1.0;
-    request->caustic_volume_scatter_gain_override = 1.0;
-    request->volume_density_scale_override = 1.0;
-    request->volume_density_gamma_override = 1.0;
-    request->volume_absorption_gain_override = 1.0;
-    request->volume_opacity_clamp_override = 1.0e30;
-    request->volume_step_scale_override = 1.0;
-    request->secondary_diffuse_samples_3d_override = RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT;
-    request->transmission_samples_3d_override = RUNTIME_3D_TRANSMISSION_SAMPLES_DEFAULT;
-    request->has_trace_route_override = false;
-    request->trace_route = RuntimeRay3D_DefaultTraceRoute();
-    request->has_caustic_mode_override = false;
-    request->caustic_mode = RUNTIME_DISNEY_V2_CAUSTIC_MODE_ANALYTIC;
-    RuntimeCausticSettings3D_Default(&request->caustic_settings);
-    request->has_caustic_sidecar_enabled_override = false;
-    request->caustic_sidecar_enabled = true;
-    request->has_caustic_sidecar_strength_override = false;
-    request->caustic_sidecar_strength = 1.0;
-    request->volume_tint_r = 1.0;
-    request->volume_tint_g = 1.0;
-    request->volume_tint_b = 1.0;
-    request->volume_albedo_r = 1.0;
-    request->volume_albedo_g = 1.0;
-    request->volume_albedo_b = 1.0;
-    request->object_audit_enabled = true;
-    request->object_audit_max_dimension = 160;
-    request->overwrite = false;
-}
+#include "app/agent_render_request_internal.h"
 
 bool ray_tracing_agent_render_request_load_file(const char *request_path,
                                                 RayTracingAgentRenderRequest *out_request,
@@ -316,7 +27,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     ray_tracing_agent_render_request_defaults(&request);
     RayTracingDirnameOf(request_path, request_dir, sizeof(request_dir));
     if (!RayTracingReadTextFile(request_path, &text)) {
-        set_request_diagf(out_diagnostics,
+        agent_render_request_set_diagf(out_diagnostics,
                           out_diagnostics_size,
                           "request=%s field=<file> failed to read request file",
                           request_path);
@@ -327,7 +38,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     free(text);
     if (!root || !json_object_is_type(root, json_type_object)) {
         if (root) json_object_put(root);
-        set_request_diagf(out_diagnostics,
+        agent_render_request_set_diagf(out_diagnostics,
                           out_diagnostics_size,
                           "request=%s field=<root> failed to parse request json object",
                           request_path);
@@ -336,7 +47,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
 
     if (!RayTracingJsonGetString(root, "schema_version", &value)) {
         json_object_put(root);
-        set_request_diagf(out_diagnostics,
+        agent_render_request_set_diagf(out_diagnostics,
                           out_diagnostics_size,
                           "request=%s field=schema_version expected=%s actual=<missing-or-non-string>",
                           request_path,
@@ -345,7 +56,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     }
     if (strcmp(value, RAY_TRACING_AGENT_RENDER_REQUEST_SCHEMA) != 0) {
         const char *actual_schema = value;
-        set_request_diagf(out_diagnostics,
+        agent_render_request_set_diagf(out_diagnostics,
                           out_diagnostics_size,
                           "request=%s field=schema_version expected=%s actual=%s",
                           request_path,
@@ -358,7 +69,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     if (RayTracingJsonGetString(root, "run_id", &value) &&
         !RayTracingCopyString(request.run_id, sizeof(request.run_id), value)) {
         json_object_put(root);
-        set_request_diagf(out_diagnostics,
+        agent_render_request_set_diagf(out_diagnostics,
                           out_diagnostics_size,
                           "request=%s field=run_id value too long",
                           request_path);
@@ -372,7 +83,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
                                    request.runtime_scene_path,
                                    sizeof(request.runtime_scene_path))) {
         json_object_put(root);
-        set_request_diagf(out_diagnostics,
+        agent_render_request_set_diagf(out_diagnostics,
                           out_diagnostics_size,
                           "request=%s field=scene.runtime_scene_path missing, non-string, invalid, or path too long",
                           request_path);
@@ -388,7 +99,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
                                            request.volume_source_path,
                                            sizeof(request.volume_source_path))) {
                 json_object_put(root);
-                set_request_diagf(out_diagnostics,
+                agent_render_request_set_diagf(out_diagnostics,
                                   out_diagnostics_size,
                                   "request=%s field=volume.source_path invalid or path too long",
                                   request_path);
@@ -400,7 +111,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             kind_label = value;
         }
         request.volume_source_kind =
-            parse_volume_source_kind(kind_label, request.volume_source_path);
+            agent_render_request_parse_volume_source_kind(kind_label, request.volume_source_path);
         RayTracingJsonGetBool(volume, "visible", &request.volume_visible);
         RayTracingJsonGetBool(volume, "affects_lighting", &request.volume_affects_lighting);
         RayTracingJsonGetBool(volume, "debug_overlay", &request.volume_debug_overlay);
@@ -408,7 +119,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             (request.volume_source_kind == VOLUME_SOURCE_NONE ||
             request.volume_source_path[0] == '\0')) {
             json_object_put(root);
-            set_request_diagf(out_diagnostics,
+            agent_render_request_set_diagf(out_diagnostics,
                               out_diagnostics_size,
                               "request=%s field=volume source_kind=%s source_path=%s unsupported or missing",
                               request_path,
@@ -448,7 +159,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             request.denoise_enabled_override = bool_value;
         }
         if (RayTracingJsonGetString(render, "integrator_3d", &value)) {
-            request.integrator_3d = parse_integrator_3d(value);
+            request.integrator_3d = agent_render_request_parse_integrator_3d(value);
             request.has_integrator_3d_override = true;
         }
     }
@@ -496,7 +207,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
         }
         if (request.has_sampling_window && (!has_offset || !has_count)) {
             json_object_put(root);
-            set_request_diagf(out_diagnostics,
+            agent_render_request_set_diagf(out_diagnostics,
                               out_diagnostics_size,
                               "request=%s field=sampling frame_offset and frame_count required together",
                               request_path);
@@ -512,7 +223,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
                                         request.output_root,
                                         sizeof(request.output_root))) {
             json_object_put(root);
-            set_request_diagf(out_diagnostics,
+            agent_render_request_set_diagf(out_diagnostics,
                               out_diagnostics_size,
                               "request=%s field=output.root invalid or path too long",
                               request_path);
@@ -527,7 +238,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
                                                 request.video_path,
                                                 sizeof(request.video_path))) {
                     json_object_put(root);
-                    set_request_diagf(out_diagnostics,
+                    agent_render_request_set_diagf(out_diagnostics,
                                       out_diagnostics_size,
                                       "request=%s field=output.video.path invalid or path too long",
                                       request_path);
@@ -540,7 +251,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             }
             if (request.video_enabled && !request.video_path[0]) {
                 json_object_put(root);
-                set_request_diagf(out_diagnostics,
+                agent_render_request_set_diagf(out_diagnostics,
                                   out_diagnostics_size,
                                   "request=%s field=output.video.path required when video is enabled",
                                   request_path);
@@ -559,7 +270,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
                                         request.summary_path,
                                         sizeof(request.summary_path))) {
             json_object_put(root);
-            set_request_diagf(out_diagnostics,
+            agent_render_request_set_diagf(out_diagnostics,
                               out_diagnostics_size,
                               "request=%s field=progress.summary_path invalid or path too long",
                               request_path);
@@ -571,7 +282,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
                                         request.progress_path,
                                         sizeof(request.progress_path))) {
             json_object_put(root);
-            set_request_diagf(out_diagnostics,
+            agent_render_request_set_diagf(out_diagnostics,
                               out_diagnostics_size,
                               "request=%s field=progress.progress_path invalid or path too long",
                               request_path);
@@ -581,7 +292,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
 
     if (RayTracingJsonGetObject(root, "inspection", &inspection)) {
         if (RayTracingJsonGetString(inspection, "preset", &value)) {
-            request.inspection_preset = parse_inspection_preset(value);
+            request.inspection_preset = agent_render_request_parse_inspection_preset(value);
         }
         if (RayTracingJsonGetDouble(inspection, "camera_zoom", &double_value)) {
             request.has_camera_zoom_override = true;
@@ -625,17 +336,17 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
         }
         if (RayTracingJsonGetString(inspection, "environment_light_mode", &value)) {
             request.has_environment_light_mode_override = true;
-            request.environment_light_mode_override = parse_environment_light_mode(value);
+            request.environment_light_mode_override = agent_render_request_parse_environment_light_mode(value);
         }
         if (RayTracingJsonGetString(inspection, "environment_preset", &value)) {
             request.has_environment_preset_override = true;
-            request.environment_preset_override = parse_environment_preset(value);
+            request.environment_preset_override = agent_render_request_parse_environment_preset(value);
         }
         if (RayTracingJsonGetDouble(inspection, "background_brightness", &double_value)) {
             request.has_background_brightness_override = true;
             request.background_brightness_override = double_value;
         }
-        if (json_get_rgb(inspection,
+        if (agent_render_request_json_get_rgb(inspection,
                          "background_color",
                          &request.background_color_r,
                          &request.background_color_g,
@@ -707,9 +418,9 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             RayTracingJsonGetString(inspection, "acceleration_route", &value) ||
             RayTracingJsonGetString(inspection, "prepared_acceleration_route", &value)) {
             request.has_trace_route_override = true;
-            if (!parse_trace_route(value, &request.trace_route)) {
+            if (!agent_render_request_parse_trace_route(value, &request.trace_route)) {
                 json_object_put(root);
-                set_request_diagf(out_diagnostics,
+                agent_render_request_set_diagf(out_diagnostics,
                                   out_diagnostics_size,
                                   "request=%s field=inspection.trace_route invalid value=%s",
                                   request_path,
@@ -722,7 +433,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             request.has_caustic_mode_override = true;
             request.caustic_settings.mode = RuntimeCausticMode3D_FromLabel(value);
             request.caustic_mode =
-                caustic_mode_to_disney_v2_mode(request.caustic_settings.mode);
+                agent_render_request_caustic_mode_to_disney_v2_mode(request.caustic_settings.mode);
             request.caustic_sidecar_enabled =
                 request.caustic_settings.mode == RUNTIME_CAUSTIC_MODE_ANALYTIC;
         }
@@ -810,12 +521,12 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
                 request.volume_tint_b = double_value;
             }
         }
-        if (json_get_rgb(inspection,
+        if (agent_render_request_json_get_rgb(inspection,
                          "volume_albedo",
                          &request.volume_albedo_r,
                          &request.volume_albedo_g,
                          &request.volume_albedo_b) ||
-            json_get_rgb(inspection,
+            agent_render_request_json_get_rgb(inspection,
                          "volume_albedo_tint",
                          &request.volume_albedo_r,
                          &request.volume_albedo_g,
@@ -851,7 +562,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
         request.width <= 0 || request.height <= 0 ||
         request.temporal_frames <= 0) {
         json_object_put(root);
-        set_request_diagf(out_diagnostics,
+        agent_render_request_set_diagf(out_diagnostics,
                           out_diagnostics_size,
                           "request=%s field=render numeric fields out of range start_frame=%d frame_count=%d width=%d height=%d temporal_frames=%d",
                           request_path,
@@ -864,7 +575,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     }
     if (request.has_tile_size_override && request.tile_size_override <= 0) {
         json_object_put(root);
-        set_request_diagf(out_diagnostics,
+        agent_render_request_set_diagf(out_diagnostics,
                           out_diagnostics_size,
                           "request=%s field=render.tile_size out of range tile_size=%d",
                           request_path,
@@ -879,7 +590,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             request.resource_reserve_cpu_count < 0 ||
             request.resource_reserve_cpu_count > 64) {
             json_object_put(root);
-            set_request_diagf(out_diagnostics,
+            agent_render_request_set_diagf(out_diagnostics,
                               out_diagnostics_size,
                               "request=%s field=resources budget out of range cpu_percent=%d max_workers=%d reserve_cpu_count=%d",
                               request_path,
@@ -898,7 +609,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     if (request.has_sampling_window) {
         if (request.sampling_frame_offset < 0 || request.sampling_frame_count <= 0) {
             json_object_put(root);
-            set_request_diagf(out_diagnostics,
+            agent_render_request_set_diagf(out_diagnostics,
                               out_diagnostics_size,
                               "request=%s field=sampling window out of range frame_offset=%d frame_count=%d",
                               request_path,
@@ -909,7 +620,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     }
     if (request.has_camera_zoom_override && request.camera_zoom_override <= 0.0) {
         json_object_put(root);
-        set_request_diagf(out_diagnostics,
+        agent_render_request_set_diagf(out_diagnostics,
                           out_diagnostics_size,
                           "request=%s field=inspection.camera_zoom out of range value=%.6f",
                           request_path,
@@ -995,7 +706,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     if (request.has_volume_scatter_gain_override) {
         if (request.volume_scatter_gain_override <= 0.0) {
             json_object_put(root);
-            set_request_diagf(out_diagnostics,
+            agent_render_request_set_diagf(out_diagnostics,
                               out_diagnostics_size,
                               "request=%s field=inspection.volume_scatter_gain out of range value=%.6f",
                               request_path,
@@ -1009,7 +720,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     if (request.has_caustic_volume_scatter_gain_override) {
         if (request.caustic_volume_scatter_gain_override <= 0.0) {
             json_object_put(root);
-            set_request_diagf(out_diagnostics,
+            agent_render_request_set_diagf(out_diagnostics,
                               out_diagnostics_size,
                               "request=%s field=inspection.caustic_volume_scatter_gain out of range value=%.6f",
                               request_path,
@@ -1023,7 +734,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     if (request.has_volume_density_scale_override) {
         if (request.volume_density_scale_override < 0.0) {
             json_object_put(root);
-            set_request_diagf(out_diagnostics,
+            agent_render_request_set_diagf(out_diagnostics,
                               out_diagnostics_size,
                               "request=%s field=inspection.volume_density_scale out of range value=%.6f",
                               request_path,
@@ -1037,7 +748,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     if (request.has_volume_density_gamma_override) {
         if (request.volume_density_gamma_override <= 0.0) {
             json_object_put(root);
-            set_request_diagf(out_diagnostics,
+            agent_render_request_set_diagf(out_diagnostics,
                               out_diagnostics_size,
                               "request=%s field=inspection.volume_density_gamma out of range value=%.6f",
                               request_path,
@@ -1054,7 +765,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     if (request.has_volume_absorption_gain_override) {
         if (request.volume_absorption_gain_override < 0.0) {
             json_object_put(root);
-            set_request_diagf(out_diagnostics,
+            agent_render_request_set_diagf(out_diagnostics,
                               out_diagnostics_size,
                               "request=%s field=inspection.volume_absorption_gain out of range value=%.6f",
                               request_path,
@@ -1068,7 +779,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     if (request.has_volume_opacity_clamp_override) {
         if (request.volume_opacity_clamp_override < 0.0) {
             json_object_put(root);
-            set_request_diagf(out_diagnostics,
+            agent_render_request_set_diagf(out_diagnostics,
                               out_diagnostics_size,
                               "request=%s field=inspection.volume_opacity_clamp out of range value=%.6f",
                               request_path,
@@ -1082,7 +793,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     if (request.has_volume_step_scale_override) {
         if (request.volume_step_scale_override <= 0.0) {
             json_object_put(root);
-            set_request_diagf(out_diagnostics,
+            agent_render_request_set_diagf(out_diagnostics,
                               out_diagnostics_size,
                               "request=%s field=inspection.volume_step_scale out of range value=%.6f",
                               request_path,
@@ -1098,12 +809,12 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     }
     if (request.has_secondary_diffuse_samples_3d_override) {
         request.secondary_diffuse_samples_3d_override =
-            clamp_secondary_diffuse_samples_3d_override(
+            agent_render_request_clamp_secondary_diffuse_samples_3d_override(
                 request.secondary_diffuse_samples_3d_override);
     }
     if (request.has_transmission_samples_3d_override) {
         request.transmission_samples_3d_override =
-            clamp_transmission_samples_3d_override(
+            agent_render_request_clamp_transmission_samples_3d_override(
                 request.transmission_samples_3d_override);
     }
     if (request.integrator_3d != RAY_TRACING_3D_INTEGRATOR_DISNEY_V2 &&
@@ -1117,7 +828,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
         !request.caustic_settings.volumeCacheEnabled &&
         !request.caustic_settings.surfaceCacheEnabled) {
         json_object_put(root);
-        set_request_diagf(out_diagnostics,
+        agent_render_request_set_diagf(out_diagnostics,
                           out_diagnostics_size,
                           "request=%s field=inspection.caustic_mode transport requires inspection.caustic_volume_enabled=true or inspection.caustic_surface_enabled=true for bounded path emission",
                           request_path);
@@ -1126,7 +837,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     if (request.caustic_settings.mode == RUNTIME_CAUSTIC_MODE_ANALYTIC &&
         request.integrator_3d != RAY_TRACING_3D_INTEGRATOR_DISNEY_V2) {
         json_object_put(root);
-        set_request_diagf(out_diagnostics,
+        agent_render_request_set_diagf(out_diagnostics,
                           out_diagnostics_size,
                           "request=%s field=inspection.caustic_mode requires render.integrator_3d=disney_v2",
                           request_path);
@@ -1191,7 +902,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             request.volume_tint_g <= 0.0 &&
             request.volume_tint_b <= 0.0) {
             json_object_put(root);
-            set_request_diagf(out_diagnostics,
+            agent_render_request_set_diagf(out_diagnostics,
                               out_diagnostics_size,
                               "request=%s field=inspection.volume_tint out of range r=%.6f g=%.6f b=%.6f",
                               request_path,
@@ -1212,7 +923,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             request.volume_albedo_g <= 0.0 &&
             request.volume_albedo_b <= 0.0) {
             json_object_put(root);
-            set_request_diagf(out_diagnostics,
+            agent_render_request_set_diagf(out_diagnostics,
                               out_diagnostics_size,
                               "request=%s field=inspection.volume_albedo out of range r=%.6f g=%.6f b=%.6f",
                               request_path,
@@ -1237,48 +948,4 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     *out_request = request;
     RayTracingRequestSetDiag(out_diagnostics, out_diagnostics_size, "ok");
     return true;
-}
-
-const char *ray_tracing_agent_render_request_volume_kind_label(int kind) {
-    switch (animation_config_volume_source_kind_clamp(kind)) {
-        case VOLUME_SOURCE_MANIFEST:
-            return "manifest";
-        case VOLUME_SOURCE_RAW_VF3D:
-            return "raw_vf3d";
-        case VOLUME_SOURCE_PACK:
-            return "pack";
-        case VOLUME_SOURCE_NONE:
-        default:
-            return "none";
-    }
-}
-
-const char *ray_tracing_agent_render_request_integrator_label(RayTracing3DIntegratorId id) {
-    switch (RayTracingIntegratorCatalog_Clamp3DToShipped((int)id)) {
-        case RAY_TRACING_3D_INTEGRATOR_DISNEY_V2:
-            return "disney_v2";
-        case RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE:
-            return "diffuse_bounce";
-        case RAY_TRACING_3D_INTEGRATOR_MATERIAL:
-            return "material";
-        case RAY_TRACING_3D_INTEGRATOR_EMISSION_TRANSPARENCY:
-            return "emission_transparency";
-        case RAY_TRACING_3D_INTEGRATOR_DISNEY:
-            return "disney";
-        case RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT:
-        default:
-            return "direct_light";
-    }
-}
-
-const char *ray_tracing_agent_render_request_inspection_preset_label(int preset) {
-    switch (preset) {
-        case RAY_TRACING_AGENT_RENDER_PRESET_GLASS_REVIEW:
-            return "glass_review";
-        case RAY_TRACING_AGENT_RENDER_PRESET_GLASS_PREVIEW:
-            return "glass_preview";
-        case RAY_TRACING_AGENT_RENDER_PRESET_NONE:
-        default:
-            return "none";
-    }
 }

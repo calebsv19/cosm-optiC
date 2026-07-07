@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <time.h>
 
 #include "app/agent_render_request.h"
 #include "import/runtime_scene_bridge.h"
@@ -188,6 +189,150 @@ typedef struct RayTracingHeadlessPreflight {
     char diagnostics[1024];
 } RayTracingHeadlessPreflight;
 
+typedef struct RayTracingTemporalProgressContext {
+    const RayTracingAgentRenderRequest *request;
+    const char *job_status_path;
+    const char *job_id;
+    const char *request_path;
+    int frame_index;
+    int frames_completed;
+    int started_subpasses;
+    int completed_subpasses;
+    int total_subpasses;
+    size_t completed_tiles_in_subpass;
+    size_t total_tiles_in_subpass;
+    struct timespec frame_started_at;
+} RayTracingTemporalProgressContext;
+
+void ray_tracing_render_headless_usage(const char *argv0);
+void ray_tracing_headless_write_startup_load_timing_matrix(
+    FILE* file,
+    const RayTracingHeadlessPreflight* preflight);
+void ray_tracing_headless_write_caustic_state_summary(
+    FILE *file,
+    const RayTracingAgentRenderRequest *request,
+    const RayTracingHeadlessPreflight *preflight);
+void ray_tracing_headless_write_object_audit(
+    FILE *file,
+    const RayTracingHeadlessPreflight *preflight);
+void ray_tracing_headless_audit_prepared_frame(
+    RayTracingHeadlessPreflight *preflight,
+    const RuntimeNative3DPreparedFrame *frame,
+    const RayTracingAgentRenderRequest *request);
+bool ray_tracing_headless_request_has_volume_source(
+    const RayTracingAgentRenderRequest *request);
+bool ray_tracing_headless_populate_volume_frame_selection(
+    RayTracingHeadlessPreflight *preflight,
+    const RayTracingAgentRenderRequest *request);
+bool ray_tracing_headless_populate_water_surface_frame_selection(
+    RayTracingHeadlessPreflight *preflight,
+    const RayTracingAgentRenderRequest *request);
+void ray_tracing_headless_note_water_surface_mesh(
+    RayTracingHeadlessPreflight *preflight,
+    const RuntimeNative3DPreparedFrame *frame);
+size_t ray_tracing_headless_count_nonzero_pixels(const uint8_t *pixels,
+                                                 int width,
+                                                 int height,
+                                                 uint8_t *out_max_r,
+                                                 uint8_t *out_max_g,
+                                                 uint8_t *out_max_b);
+double ray_tracing_headless_frame_normalized_t(const RayTracingAgentRenderRequest *request,
+                                               int local_frame);
+const RuntimeNative3DResourceBudget *ray_tracing_headless_request_resource_budget(
+    const RayTracingAgentRenderRequest *request,
+    RuntimeNative3DResourceBudget *out_budget);
+double ray_tracing_elapsed_seconds_since(const struct timespec *start_time);
+double ray_tracing_elapsed_ms_since(const struct timespec *start_time);
+void ray_tracing_temporal_progress_callback(int started_subpasses,
+                                            int completed_subpasses,
+                                            int total_subpasses,
+                                            void *user_data);
+void ray_tracing_tile_progress_callback(int started_subpasses,
+                                        int completed_subpasses,
+                                        int total_subpasses,
+                                        size_t completed_tiles_in_subpass,
+                                        size_t total_tiles_in_subpass,
+                                        void *user_data);
+void ray_tracing_headless_finalize_render_diagnostics(
+    RayTracingHeadlessPreflight *preflight,
+    const RayTracingAgentRenderRequest *request);
+int ray_tracing_headless_encode_video_if_requested(
+    const RayTracingAgentRenderRequest *request,
+    RayTracingHeadlessPreflight *preflight,
+    const char *job_status_path,
+    const char *job_id,
+    const char *request_path);
+void ray_tracing_headless_write_completed_progress(
+    const RayTracingAgentRenderRequest *request,
+    const RayTracingHeadlessPreflight *preflight,
+    const char *job_status_path,
+    const char *job_id,
+    const char *request_path);
+int ray_tracing_headless_validate_render_output_root(
+    const RayTracingAgentRenderRequest *request,
+    RayTracingHeadlessPreflight *preflight);
+int ray_tracing_headless_prepare_frame_directory_and_buffer(
+    const RayTracingAgentRenderRequest *request,
+    RayTracingHeadlessPreflight *preflight,
+    uint8_t **out_pixels);
+void ray_tracing_headless_initial_light_point(double *out_x, double *out_y);
+void ray_tracing_headless_reset_render_trace_state(void);
+int ray_tracing_headless_note_render_frame_failed(
+    const RayTracingAgentRenderRequest *request,
+    RayTracingHeadlessPreflight *preflight,
+    RayTracingTemporalProgressContext *temporal_progress,
+    const struct timespec *stage_started_at,
+    int frame_index,
+    const char *job_status_path,
+    const char *job_id,
+    const char *request_path);
+int ray_tracing_headless_note_bvh_flat_fallback_failed(
+    const RayTracingAgentRenderRequest *request,
+    RayTracingHeadlessPreflight *preflight,
+    RayTracingTemporalProgressContext *temporal_progress,
+    int frame_index,
+    const char *job_status_path,
+    const char *job_id,
+    const char *request_path);
+int ray_tracing_headless_prepare_frame_output(
+    char *frame_path,
+    size_t frame_path_size,
+    const RayTracingAgentRenderRequest *request,
+    RayTracingHeadlessPreflight *preflight,
+    int frame_index,
+    const char *job_status_path,
+    const char *job_id,
+    const char *request_path);
+void ray_tracing_headless_note_rendering_frame_started(
+    const RayTracingAgentRenderRequest *request,
+    const RayTracingHeadlessPreflight *preflight,
+    int frame_index,
+    const char *job_status_path,
+    const char *job_id,
+    const char *request_path);
+int ray_tracing_headless_write_rendered_frame_output(
+    const char *frame_path,
+    const uint8_t *pixels,
+    int local_frame,
+    int frame_index,
+    const RayTracingAgentRenderRequest *request,
+    RayTracingHeadlessPreflight *preflight,
+    RayTracingTemporalProgressContext *temporal_progress,
+    const char *job_status_path,
+    const char *job_id,
+    const char *request_path);
+void ray_tracing_headless_write_render_trace_cost_ledger(
+    FILE* file,
+    const RayTracingHeadlessPreflight* preflight);
+void ray_tracing_headless_write_render_stats_summary(
+    FILE *file,
+    const RayTracingHeadlessPreflight *preflight);
+void ray_tracing_headless_write_dynamic_geometry_acceleration_summary(
+    FILE *file,
+    const RayTracingHeadlessPreflight *preflight);
+void ray_tracing_headless_write_dynamic_water_acceleration_cache_summary(
+    FILE *file,
+    const RayTracingHeadlessPreflight *preflight);
 void ray_tracing_render_headless_write_summary(FILE *file,
                                                const RayTracingAgentRenderRequest *request,
                                                const RayTracingHeadlessPreflight *preflight);
@@ -232,5 +377,18 @@ bool ray_tracing_render_headless_write_progress_and_job_status(
     const char *job_id,
     const char *request_path,
     int exit_code);
+void ray_tracing_render_headless_write_process_started_status(
+    const char *job_status_path,
+    const char *job_id,
+    const char *request_path,
+    const RayTracingAgentRenderRequest *request,
+    bool render_mode);
+void ray_tracing_render_headless_write_process_finished_status(
+    const char *job_status_path,
+    const char *job_id,
+    const char *request_path,
+    const RayTracingAgentRenderRequest *request,
+    const RayTracingHeadlessPreflight *preflight,
+    int run_code);
 
 #endif

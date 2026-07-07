@@ -489,7 +489,8 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
     double* out_throughput_g,
     double* out_throughput_b,
     int* out_depth,
-    bool* out_receiver_found) {
+    bool* out_receiver_found,
+    bool allow_recursive_receiver_shade) {
     HitInfo3D source_hit = {0};
     HitInfo3D hit = {0};
     Ray3D ray = {0};
@@ -551,7 +552,8 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
         }
         principled = RuntimePrincipledBSDF3D_FromMaterialPayload(&payload);
         if (!runtime_disney_v2_3d_payload_is_transparent(&payload, &principled)) {
-            if (RuntimeDisneyV2_3D_ShadeHit(scene, &hit, sampling, &receiver_result) &&
+            if (allow_recursive_receiver_shade &&
+                RuntimeDisneyV2_3D_ShadeHit(scene, &hit, sampling, &receiver_result) &&
                 receiver_result.visible) {
                 io_result->primaryTransmissionReceiverShadeCount += 1;
                 io_result->primaryTransmissionReceiverRadianceR += receiver_result.radianceR;
@@ -607,7 +609,8 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
         if (transparent_policy.physicalTransmission) {
             io_result->primaryTransmissionPhysicalSurfaceCount += 1;
         }
-        if (RuntimeDisneyV2_3D_ShadeHit(scene, &hit, sampling, &receiver_result) &&
+        if (allow_recursive_receiver_shade &&
+            RuntimeDisneyV2_3D_ShadeHit(scene, &hit, sampling, &receiver_result) &&
             receiver_result.visible) {
             double layer_r = receiver_result.radianceR *
                              throughput_r * blend_weight * transparent_policy.visibleWeight;
@@ -684,11 +687,12 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
     return true;
 }
 
-bool RuntimeDisneyV2_3D_ApplyPrimaryTransmissionContinuation(
+static bool runtime_disney_v2_3d_apply_transmission_continuation(
     const RuntimeScene3D* scene,
     const RuntimePrimaryHit3DResult* primary_hit,
     const RuntimeNative3DSamplingContext* sampling,
-    RuntimeDisneyV2_3DResult* io_result) {
+    RuntimeDisneyV2_3DResult* io_result,
+    bool allow_recursive_receiver_shade) {
     RuntimeDisneyV2_3DTransmissionSample sample = {0};
     RuntimeDisneyV2_3DTransmissionSample sample_path = {0};
     HitInfo3D continuation_hit = {0};
@@ -798,7 +802,8 @@ bool RuntimeDisneyV2_3D_ApplyPrimaryTransmissionContinuation(
                                                                       &path_throughput_g,
                                                                       &path_throughput_b,
                                                                       &receiver_depth,
-                                                                      &receiver_found)) {
+                                                                      &receiver_found,
+                                                                      allow_recursive_receiver_shade)) {
             continue;
         }
         accum_r += continuation_direct.radianceR;
@@ -908,5 +913,97 @@ bool RuntimeDisneyV2_3D_ApplyPrimaryTransmissionContinuation(
     io_result->primaryTransmissionPathState.throughputG = best_throughput_g;
     io_result->primaryTransmissionPathState.throughputB = best_throughput_b;
     io_result->primaryTransmissionPathState.pdf = sample.pdf;
+    return true;
+}
+
+bool RuntimeDisneyV2_3D_ApplyPrimaryTransmissionContinuation(
+    const RuntimeScene3D* scene,
+    const RuntimePrimaryHit3DResult* primary_hit,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeDisneyV2_3DResult* io_result) {
+    return runtime_disney_v2_3d_apply_transmission_continuation(scene,
+                                                               primary_hit,
+                                                               sampling,
+                                                               io_result,
+                                                               true);
+}
+
+bool RuntimeDisneyV2_3D_ApplyReflectedTransmissionContinuation(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* reflected_hit,
+    Ray3D reflected_ray,
+    const RuntimeNative3DSamplingContext* sampling,
+    double parent_throughput_r,
+    double parent_throughput_g,
+    double parent_throughput_b,
+    RuntimeDisneyV2_3DResult* io_result) {
+    RuntimeDisneyV2_3DResult transmission_result = {0};
+    RuntimePrimaryHit3DResult reflected_primary = {0};
+    RuntimeMaterialPayload3D payload = {0};
+    RuntimePrincipledBSDF3D principled = {0};
+    double contribution_r = 0.0;
+    double contribution_g = 0.0;
+    double contribution_b = 0.0;
+
+    if (!scene || !reflected_hit || !io_result ||
+        !(runtime_disney_v2_transmission_3d_peak(parent_throughput_r,
+                                                parent_throughput_g,
+                                                parent_throughput_b) > 1e-9)) {
+        return false;
+    }
+    if (!RuntimeMaterialPayload3D_ResolveFromHit(reflected_hit, &payload) ||
+        !payload.valid) {
+        return false;
+    }
+    principled = RuntimePrincipledBSDF3D_FromMaterialPayload(&payload);
+    if (!runtime_disney_v2_3d_payload_is_transparent(&payload, &principled)) {
+        return false;
+    }
+
+    transmission_result.payload = payload;
+    transmission_result.payloadResolved = true;
+    transmission_result.principled = principled;
+    transmission_result.transmissionProbability =
+        runtime_disney_v2_transmission_3d_clamp01(principled.transmissionWeight);
+    transmission_result.pathPolicy = io_result->pathPolicy;
+    transmission_result.pathPolicyResolved = io_result->pathPolicyResolved;
+
+    reflected_primary.hit = true;
+    reflected_primary.primaryRay = reflected_ray;
+    reflected_primary.hitInfo = *reflected_hit;
+    if (!runtime_disney_v2_3d_apply_transmission_continuation(scene,
+                                                              &reflected_primary,
+                                                              sampling,
+                                                              &transmission_result,
+                                                              false)) {
+        return false;
+    }
+
+    contribution_r = transmission_result.primaryTransmissionRadianceR * parent_throughput_r;
+    contribution_g = transmission_result.primaryTransmissionRadianceG * parent_throughput_g;
+    contribution_b = transmission_result.primaryTransmissionRadianceB * parent_throughput_b;
+    if (!(runtime_disney_v2_transmission_3d_peak(contribution_r,
+                                                contribution_g,
+                                                contribution_b) > 1e-9)) {
+        return false;
+    }
+
+    io_result->specularReflectionRecursiveRadianceR += contribution_r;
+    io_result->specularReflectionRecursiveRadianceG += contribution_g;
+    io_result->specularReflectionRecursiveRadianceB += contribution_b;
+    io_result->specularReflectionRadianceR += contribution_r;
+    io_result->specularReflectionRadianceG += contribution_g;
+    io_result->specularReflectionRadianceB += contribution_b;
+    io_result->recursiveBsdfRadianceR += contribution_r;
+    io_result->recursiveBsdfRadianceG += contribution_g;
+    io_result->recursiveBsdfRadianceB += contribution_b;
+    io_result->specularReflectionRecursiveRayCount +=
+        transmission_result.primaryTransmissionRayCount;
+    io_result->specularReflectionRecursiveGeometryHitCount +=
+        transmission_result.primaryTransmissionHitCount;
+    io_result->specularReflectionRecursiveContributingHitCount +=
+        transmission_result.primaryTransmissionContributingSampleCount;
+    io_result->specularReflectionRecursivePolicyTerminationCount +=
+        transmission_result.primaryTransmissionDepthLimitCount;
     return true;
 }
