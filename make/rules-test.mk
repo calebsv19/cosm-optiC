@@ -270,6 +270,9 @@ test-ray-tracing-spatial-caustic-bowl-lens-fixture: $(RAY_TRACING_RENDER_HEADLES
 test-ray-tracing-spatial-caustic-mesh-dielectric-lens-fixture: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/run_ray_tracing_spatial_caustic_mesh_dielectric_lens_fixture.py --debug-export
 
+test-ray-tracing-spatial-caustic-imported-lens-wall-preview: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_imported_lens_wall_preview.py --debug-export
+
 test-ray-tracing-spatial-caustic-authored-validation-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/run_ray_tracing_spatial_caustic_authored_validation_matrix.py
 

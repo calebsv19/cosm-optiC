@@ -156,6 +156,17 @@ override, record accepted traversal and zero reject buckets with measured
 inside-distance/entry-cosine/exit-cosine ranges, deposit into the volume cache,
 and brighten the mist versus the no-caustic baseline.
 
+`test-ray-tracing-spatial-caustic-imported-lens-wall-preview` is the local S4V
+imported closed-lens wall-composition preview target. It generates a
+high-segment closed runtime mesh sidecar, audits that sidecar for closed
+manifold topology, renders no-caustic and `mesh_dielectric_lens` surface-cache
+cells with a vivid blue receiver wall, and writes the contact sheet, diff, and
+report under `_private_workspace_artifacts/agent_runs/ray_tracing/`. The
+preview gate currently proves scene composition, mesh import/topology, and
+debug readback only; emitted mesh paths, surface-cache deposits, and visible
+wall whitening are reported as explicit preview warnings until the next
+optical-placement/deposition slice turns this into a true wall-caustic proof.
+
 `test-ray-tracing-emissive-light-preview-matrix` is the local emitter-light
 preview proof target. It renders flat wall-panel, complex emissive prism, and
 dual-panel room variants, plus flush/diffuse-bounce, offset/tilted-panel, and
