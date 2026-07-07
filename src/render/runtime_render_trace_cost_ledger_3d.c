@@ -217,6 +217,77 @@ const char* RuntimeRenderTraceCostDirectLightImportanceBucket3DLabel(
     }
 }
 
+const char* RuntimeRenderTraceCostTransmissionSource3DLabel(
+    RuntimeRenderTraceCostTransmissionSource3D source) {
+    switch (source) {
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_PRIMARY:
+            return "primary";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED:
+            return "reflected";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_UNKNOWN:
+        default:
+            return "unknown";
+    }
+}
+
+const char* RuntimeRenderTraceCostTransmissionSurfaceKind3DLabel(
+    RuntimeRenderTraceCostTransmissionSurfaceKind3D kind) {
+    switch (kind) {
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_ALPHA_ONLY:
+            return "alpha_only";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_THIN_WALLED:
+            return "thin_walled";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_SOLID_PHYSICAL:
+            return "solid_physical";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_SOLID_NONPHYSICAL:
+            return "solid_nonphysical";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_OPAQUE_RECEIVER:
+            return "opaque_receiver";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_UNKNOWN:
+        default:
+            return "unknown";
+    }
+}
+
+const char* RuntimeRenderTraceCostTransmissionTermination3DLabel(
+    RuntimeRenderTraceCostTransmissionTermination3D termination) {
+    switch (termination) {
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_RECEIVER_HIT:
+            return "receiver_hit";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_NO_HIT:
+            return "no_hit";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_DEPTH_LIMIT:
+            return "depth_limit";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_SKIP_LIMIT:
+            return "skip_limit";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_NO_CONTRIBUTION:
+            return "no_contribution";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_POLICY_REJECT:
+            return "policy_reject";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_UNKNOWN:
+        default:
+            return "unknown";
+    }
+}
+
+const char* RuntimeRenderTraceCostThroughputBucket3DLabel(
+    RuntimeRenderTraceCostThroughputBucket3D bucket) {
+    switch (bucket) {
+        case RUNTIME_RENDER_TRACE_COST_THROUGHPUT_ZERO:
+            return "zero";
+        case RUNTIME_RENDER_TRACE_COST_THROUGHPUT_TINY:
+            return "tiny";
+        case RUNTIME_RENDER_TRACE_COST_THROUGHPUT_LOW:
+            return "low";
+        case RUNTIME_RENDER_TRACE_COST_THROUGHPUT_MEDIUM:
+            return "medium";
+        case RUNTIME_RENDER_TRACE_COST_THROUGHPUT_HIGH:
+            return "high";
+        default:
+            return "unknown";
+    }
+}
+
 void RuntimeRenderTraceCostLedger3D_SetEnabled(bool enabled) {
     gRuntimeRenderTraceCostLedger3D.enabled = enabled;
 }
@@ -344,6 +415,15 @@ runtime_render_trace_cost_direct_light_importance_bucket(double contribution_pea
     return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_HIGH;
 }
 
+static RuntimeRenderTraceCostThroughputBucket3D
+runtime_render_trace_cost_throughput_bucket(double peak) {
+    if (!(peak > 1.0e-9)) return RUNTIME_RENDER_TRACE_COST_THROUGHPUT_ZERO;
+    if (peak <= 1.0e-4) return RUNTIME_RENDER_TRACE_COST_THROUGHPUT_TINY;
+    if (peak <= 1.0e-2) return RUNTIME_RENDER_TRACE_COST_THROUGHPUT_LOW;
+    if (peak <= 1.0e-1) return RUNTIME_RENDER_TRACE_COST_THROUGHPUT_MEDIUM;
+    return RUNTIME_RENDER_TRACE_COST_THROUGHPUT_HIGH;
+}
+
 void RuntimeRenderTraceCostLedger3D_RecordDirectLightVisibilityPolicy(
     RuntimeRenderTraceCostDirectLightCaller3D caller,
     RuntimeRenderTraceCostDirectLightSourceKind3D source_kind,
@@ -450,6 +530,123 @@ void RuntimeRenderTraceCostLedger3D_RecordDirectLightVisibilityPolicy(
         policy->lumaSpanSum += span;
         if (span > policy->lumaSpanMax) {
             policy->lumaSpanMax = span;
+        }
+    }
+}
+
+void RuntimeRenderTraceCostLedger3D_RecordTransmissionPathEvaluation(
+    RuntimeRenderTraceCostTransmissionSource3D source,
+    int requested_sample_count) {
+    RuntimeRenderTraceCostTransmissionPathPolicy3D* policy =
+        &gRuntimeRenderTraceCostLedger3D.transmissionPathPolicy;
+    if (!gRuntimeRenderTraceCostLedger3D.enabled) return;
+    if (source < 0 || source >= RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT) {
+        source = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_UNKNOWN;
+    }
+    policy->pathEvaluations += 1u;
+    policy->sourceCounts[source] += 1u;
+    if (requested_sample_count > 0) {
+        policy->requestedSamples += (uint64_t)requested_sample_count;
+        policy->sourceSampleCounts[source] += (uint64_t)requested_sample_count;
+    }
+}
+
+void RuntimeRenderTraceCostLedger3D_RecordTransmissionRayAtDepth(
+    RuntimeRenderTraceCostTransmissionSource3D source,
+    int path_depth) {
+    RuntimeRenderTraceCostTransmissionPathPolicy3D* policy =
+        &gRuntimeRenderTraceCostLedger3D.transmissionPathPolicy;
+    RuntimeRenderTraceCostPathDepthBucket3D depth_bucket =
+        runtime_render_trace_cost_depth_bucket(path_depth);
+    (void)source;
+    RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
+        RUNTIME_RENDER_TRACE_COST_RAY_TRANSMISSION,
+        path_depth);
+    if (!gRuntimeRenderTraceCostLedger3D.enabled) return;
+    policy->rayTraces += 1u;
+    policy->rayDepthCounts[depth_bucket] += 1u;
+}
+
+void RuntimeRenderTraceCostLedger3D_RecordTransmissionSurface(
+    RuntimeRenderTraceCostTransmissionSource3D source,
+    RuntimeRenderTraceCostTransmissionSurfaceKind3D surface_kind,
+    const HitInfo3D* hit) {
+    RuntimeRenderTraceCostTransmissionPathPolicy3D* policy =
+        &gRuntimeRenderTraceCostLedger3D.transmissionPathPolicy;
+    RuntimeMaterialPayload3D payload = {0};
+    RuntimeRenderTraceCostMaterialFamily3D family =
+        RUNTIME_RENDER_TRACE_COST_MATERIAL_UNKNOWN;
+    (void)source;
+    if (!gRuntimeRenderTraceCostLedger3D.enabled) return;
+    if (surface_kind < 0 ||
+        surface_kind >= RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_COUNT) {
+        surface_kind = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_UNKNOWN;
+    }
+    if (RuntimeMaterialPayload3D_ResolveFromHit(hit, &payload)) {
+        family = runtime_render_trace_cost_material_family_from_hit(hit, &payload);
+    }
+    if (family < 0 || family >= RUNTIME_RENDER_TRACE_COST_MATERIAL_COUNT) {
+        family = RUNTIME_RENDER_TRACE_COST_MATERIAL_UNKNOWN;
+    }
+    policy->hitSurfaces += 1u;
+    policy->surfaceKindCounts[surface_kind] += 1u;
+    policy->surfaceKindMaterialCounts[surface_kind][family] += 1u;
+    if (surface_kind == RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_OPAQUE_RECEIVER) {
+        policy->receiverHits += 1u;
+        policy->receiverMaterialCounts[family] += 1u;
+    } else {
+        policy->transparentSurfaceHits += 1u;
+        policy->transparentSurfaceMaterialCounts[family] += 1u;
+    }
+}
+
+void RuntimeRenderTraceCostLedger3D_RecordTransmissionSample(
+    RuntimeRenderTraceCostTransmissionSource3D source,
+    RuntimeRenderTraceCostTransmissionTermination3D termination,
+    int terminal_depth,
+    int ray_trace_count,
+    int transparent_surface_count,
+    bool receiver_found,
+    double throughput_peak,
+    double contribution_peak) {
+    RuntimeRenderTraceCostTransmissionPathPolicy3D* policy =
+        &gRuntimeRenderTraceCostLedger3D.transmissionPathPolicy;
+    RuntimeRenderTraceCostPathDepthBucket3D depth_bucket =
+        runtime_render_trace_cost_depth_bucket(terminal_depth);
+    RuntimeRenderTraceCostThroughputBucket3D throughput_bucket =
+        runtime_render_trace_cost_throughput_bucket(throughput_peak);
+    RuntimeRenderTraceCostThroughputBucket3D contribution_bucket =
+        runtime_render_trace_cost_throughput_bucket(contribution_peak);
+    if (!gRuntimeRenderTraceCostLedger3D.enabled) return;
+    if (source < 0 || source >= RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT) {
+        source = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_UNKNOWN;
+    }
+    if (termination < 0 ||
+        termination >= RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_COUNT) {
+        termination = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_UNKNOWN;
+    }
+    policy->sampleEvaluations += 1u;
+    if (contribution_peak > 1.0e-9) {
+        policy->contributingSamples += 1u;
+    }
+    if (receiver_found) {
+        policy->receiverSamples += 1u;
+    }
+    policy->terminationCounts[termination] += 1u;
+    policy->sourceTerminationCounts[source][termination] += 1u;
+    policy->terminalDepthCounts[depth_bucket] += 1u;
+    policy->throughputBucketCounts[throughput_bucket] += 1u;
+    policy->contributionBucketCounts[contribution_bucket] += 1u;
+    if (ray_trace_count > 0) {
+        policy->totalRayTracesPerSample += (uint64_t)ray_trace_count;
+        if ((uint64_t)ray_trace_count > policy->maxRayTracesInSample) {
+            policy->maxRayTracesInSample = (uint64_t)ray_trace_count;
+        }
+    }
+    if (transparent_surface_count > 0) {
+        policy->totalTransparentSurfacesPerSample += (uint64_t)transparent_surface_count;
+        if ((uint64_t)transparent_surface_count > policy->maxTransparentSurfacesInSample) {
+            policy->maxTransparentSurfacesInSample = (uint64_t)transparent_surface_count;
         }
     }
 }

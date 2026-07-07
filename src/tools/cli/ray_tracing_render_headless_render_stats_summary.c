@@ -108,6 +108,18 @@ void ray_tracing_headless_write_render_stats_summary(
             preflight->stats.causticTransportAnalyticBowlLensSampleWeight);
     fprintf(file, "    \"caustic_transport_analytic_bowl_lens_total_sample_weight\": %.9f,\n",
             preflight->stats.causticTransportAnalyticBowlLensTotalSampleWeight);
+    fprintf(file, "    \"caustic_transport_mesh_dielectric_lens_resolved_count\": %d,\n",
+            preflight->stats.causticTransportMeshDielectricLensResolvedCount);
+    fprintf(file, "    \"caustic_transport_mesh_dielectric_lens_rejected_count\": %d,\n",
+            preflight->stats.causticTransportMeshDielectricLensRejectedCount);
+    fprintf(file, "    \"caustic_transport_mesh_dielectric_lens_evaluated_path_count\": %d,\n",
+            preflight->stats.causticTransportMeshDielectricLensEvaluatedPathCount);
+    fprintf(file, "    \"caustic_transport_mesh_dielectric_lens_emitted_path_count\": %d,\n",
+            preflight->stats.causticTransportMeshDielectricLensEmittedPathCount);
+    fprintf(file, "    \"caustic_transport_mesh_dielectric_lens_sample_weight\": %.9f,\n",
+            preflight->stats.causticTransportMeshDielectricLensSampleWeight);
+    fprintf(file, "    \"caustic_transport_mesh_dielectric_lens_total_sample_weight\": %.9f,\n",
+            preflight->stats.causticTransportMeshDielectricLensTotalSampleWeight);
     fprintf(file, "    \"caustic_transport_transparent_hit_count\": %d,\n",
             preflight->stats.causticTransportTransparentHitCount);
     fprintf(file, "    \"caustic_transport_specular_event_count\": %d,\n",
@@ -382,6 +394,37 @@ void ray_tracing_headless_write_render_stats_summary(
             preflight->stats.temporalAdaptiveStateHighRiskTiles);
     fprintf(file, "    \"temporal_adaptive_state_min_sample_floor\": %d,\n",
             preflight->stats.temporalAdaptiveStateMinSampleFloor);
+    fprintf(file, "    \"temporal_adaptive_state_activity_risk_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveStateActivityRiskPixels);
+    fprintf(file, "    \"temporal_adaptive_state_material_risk_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveStateMaterialRiskPixels);
+    fprintf(file, "    \"temporal_adaptive_state_transparent_risk_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveStateTransparentRiskPixels);
+    fprintf(file, "    \"temporal_adaptive_state_glossy_risk_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveStateGlossyRiskPixels);
+    fprintf(file, "    \"temporal_adaptive_state_geometry_edge_risk_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveStateGeometryEdgeRiskPixels);
+    fprintf(file, "    \"temporal_adaptive_state_direct_light_no_trace_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveStateDirectLightNoTracePixels);
+    fprintf(file, "    \"temporal_adaptive_state_direct_light_clear_visible_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveStateDirectLightClearVisiblePixels);
+    fprintf(file, "    \"temporal_adaptive_state_direct_light_clear_blocked_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveStateDirectLightClearBlockedPixels);
+    fprintf(file, "    \"temporal_adaptive_state_direct_light_stable_partial_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveStateDirectLightStablePartialPixels);
+    fprintf(file, "    \"temporal_adaptive_state_direct_light_mixed_partial_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveStateDirectLightMixedPartialPixels);
+    fprintf(file, "    \"temporal_adaptive_state_direct_light_boundary_risk_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveStateDirectLightBoundaryRiskPixels);
+    fprintf(file, "    \"temporal_adaptive_state_mixed_risk_tiles\": %d,\n",
+            preflight->stats.temporalAdaptiveStateMixedRiskTiles);
+    fprintf(file, "    \"temporal_adaptive_state_risk_avg\": %.9f,\n",
+            preflight->stats.temporalAdaptiveStateMeasuredPixels > 0
+                ? preflight->stats.temporalAdaptiveStateRiskSum /
+                      (double)preflight->stats.temporalAdaptiveStateMeasuredPixels
+                : 0.0);
+    fprintf(file, "    \"temporal_adaptive_state_risk_max\": %.9f,\n",
+            preflight->stats.temporalAdaptiveStateRiskMax);
     fprintf(file, "    \"denoise_temporal_frame_count\": %d,\n",
             preflight->stats.denoiseTemporalFrameCount);
     fprintf(file, "    \"denoise_raw_pixel_count\": %d,\n",

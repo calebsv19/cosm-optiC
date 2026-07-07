@@ -57,6 +57,206 @@ void ray_tracing_headless_write_render_trace_cost_ledger(
                 i + 1 < RUNTIME_RENDER_TRACE_COST_MATERIAL_COUNT ? "," : "");
     }
     fprintf(file, "    },\n");
+    fprintf(file, "    \"transmission_path_policy\": {\n");
+    fprintf(file, "      \"path_evaluations\": %llu,\n",
+            (unsigned long long)(ledger ? ledger->transmissionPathPolicy.pathEvaluations : 0u));
+    fprintf(file, "      \"requested_samples\": %llu,\n",
+            (unsigned long long)(ledger ? ledger->transmissionPathPolicy.requestedSamples : 0u));
+    fprintf(file, "      \"sample_evaluations\": %llu,\n",
+            (unsigned long long)(ledger ? ledger->transmissionPathPolicy.sampleEvaluations : 0u));
+    fprintf(file, "      \"contributing_samples\": %llu,\n",
+            (unsigned long long)(ledger ? ledger->transmissionPathPolicy.contributingSamples : 0u));
+    fprintf(file, "      \"receiver_samples\": %llu,\n",
+            (unsigned long long)(ledger ? ledger->transmissionPathPolicy.receiverSamples : 0u));
+    fprintf(file, "      \"ray_traces\": %llu,\n",
+            (unsigned long long)(ledger ? ledger->transmissionPathPolicy.rayTraces : 0u));
+    fprintf(file, "      \"hit_surfaces\": %llu,\n",
+            (unsigned long long)(ledger ? ledger->transmissionPathPolicy.hitSurfaces : 0u));
+    fprintf(file, "      \"transparent_surface_hits\": %llu,\n",
+            (unsigned long long)(ledger ? ledger->transmissionPathPolicy.transparentSurfaceHits
+                                        : 0u));
+    fprintf(file, "      \"receiver_hits\": %llu,\n",
+            (unsigned long long)(ledger ? ledger->transmissionPathPolicy.receiverHits : 0u));
+    fprintf(file, "      \"avg_ray_traces_per_sample\": %.6f,\n",
+            ledger && ledger->transmissionPathPolicy.sampleEvaluations > 0u
+                ? (double)ledger->transmissionPathPolicy.totalRayTracesPerSample /
+                      (double)ledger->transmissionPathPolicy.sampleEvaluations
+                : 0.0);
+    fprintf(file, "      \"max_ray_traces_in_sample\": %llu,\n",
+            (unsigned long long)(ledger ? ledger->transmissionPathPolicy.maxRayTracesInSample
+                                        : 0u));
+    fprintf(file, "      \"avg_transparent_surfaces_per_sample\": %.6f,\n",
+            ledger && ledger->transmissionPathPolicy.sampleEvaluations > 0u
+                ? (double)ledger->transmissionPathPolicy.totalTransparentSurfacesPerSample /
+                      (double)ledger->transmissionPathPolicy.sampleEvaluations
+                : 0.0);
+    fprintf(file, "      \"max_transparent_surfaces_in_sample\": %llu,\n",
+            (unsigned long long)(ledger ? ledger->transmissionPathPolicy
+                                              .maxTransparentSurfacesInSample
+                                        : 0u));
+    fprintf(file, "      \"source_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostTransmissionSource3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSource3D)i),
+                (unsigned long long)(ledger ? ledger->transmissionPathPolicy.sourceCounts[i]
+                                            : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"source_sample_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostTransmissionSource3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSource3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->transmissionPathPolicy.sourceSampleCounts[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"termination_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostTransmissionTermination3DLabel(
+                    (RuntimeRenderTraceCostTransmissionTermination3D)i),
+                (unsigned long long)(ledger ? ledger->transmissionPathPolicy
+                                                  .terminationCounts[i]
+                                            : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"source_termination_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": {",
+                RuntimeRenderTraceCostTransmissionSource3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSource3D)i));
+        for (int j = 0; j < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_COUNT; ++j) {
+            fprintf(file,
+                    " \"%s\": %llu%s",
+                    RuntimeRenderTraceCostTransmissionTermination3DLabel(
+                        (RuntimeRenderTraceCostTransmissionTermination3D)j),
+                    (unsigned long long)(ledger
+                                             ? ledger->transmissionPathPolicy
+                                                   .sourceTerminationCounts[i][j]
+                                             : 0u),
+                    j + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_COUNT ? "," : "");
+        }
+        fprintf(file,
+                " }%s\n",
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"surface_kind_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostTransmissionSurfaceKind3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSurfaceKind3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->transmissionPathPolicy.surfaceKindCounts[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"transparent_surface_material_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_MATERIAL_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostMaterialFamily3DLabel(
+                    (RuntimeRenderTraceCostMaterialFamily3D)i),
+                (unsigned long long)(ledger ? ledger->transmissionPathPolicy
+                                                  .transparentSurfaceMaterialCounts[i]
+                                            : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_MATERIAL_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"receiver_material_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_MATERIAL_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostMaterialFamily3DLabel(
+                    (RuntimeRenderTraceCostMaterialFamily3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->transmissionPathPolicy.receiverMaterialCounts[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_MATERIAL_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"surface_kind_material_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": {",
+                RuntimeRenderTraceCostTransmissionSurfaceKind3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSurfaceKind3D)i));
+        for (int j = 0; j < RUNTIME_RENDER_TRACE_COST_MATERIAL_COUNT; ++j) {
+            fprintf(file,
+                    " \"%s\": %llu%s",
+                    RuntimeRenderTraceCostMaterialFamily3DLabel(
+                        (RuntimeRenderTraceCostMaterialFamily3D)j),
+                    (unsigned long long)(ledger
+                                             ? ledger->transmissionPathPolicy
+                                                   .surfaceKindMaterialCounts[i][j]
+                                             : 0u),
+                    j + 1 < RUNTIME_RENDER_TRACE_COST_MATERIAL_COUNT ? "," : "");
+        }
+        fprintf(file,
+                " }%s\n",
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"terminal_depth_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DEPTH_BUCKET_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostPathDepthBucket3DLabel(
+                    (RuntimeRenderTraceCostPathDepthBucket3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->transmissionPathPolicy.terminalDepthCounts[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DEPTH_BUCKET_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"ray_depth_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DEPTH_BUCKET_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostPathDepthBucket3DLabel(
+                    (RuntimeRenderTraceCostPathDepthBucket3D)i),
+                (unsigned long long)(ledger ? ledger->transmissionPathPolicy.rayDepthCounts[i]
+                                            : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DEPTH_BUCKET_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"throughput_bucket_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_THROUGHPUT_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostThroughputBucket3DLabel(
+                    (RuntimeRenderTraceCostThroughputBucket3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->transmissionPathPolicy.throughputBucketCounts[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_THROUGHPUT_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"contribution_bucket_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_THROUGHPUT_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostThroughputBucket3DLabel(
+                    (RuntimeRenderTraceCostThroughputBucket3D)i),
+                (unsigned long long)(ledger ? ledger->transmissionPathPolicy
+                                                  .contributionBucketCounts[i]
+                                            : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_THROUGHPUT_COUNT ? "," : "");
+    }
+    fprintf(file, "      }\n");
+    fprintf(file, "    },\n");
     fprintf(file, "    \"direct_light_visibility_policy\": {\n");
     fprintf(file, "      \"source_evaluations\": %llu,\n",
             (unsigned long long)(ledger ? ledger->directLightVisibilityPolicy.sourceEvaluations

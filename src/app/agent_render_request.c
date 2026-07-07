@@ -1,5 +1,122 @@
 #include "app/agent_render_request_internal.h"
 
+static bool agent_render_request_json_get_double_any(json_object* owner,
+                                                     const char* key_a,
+                                                     const char* key_b,
+                                                     double* out_value) {
+    if (RayTracingJsonGetDouble(owner, key_a, out_value)) return true;
+    if (key_b && RayTracingJsonGetDouble(owner, key_b, out_value)) return true;
+    return false;
+}
+
+static bool agent_render_request_parse_caustic_lens_traversal_profile(
+    json_object* owner,
+    const char* key,
+    RuntimeCausticLensTraversalProfile3D* out_profile,
+    char* out_diagnostics,
+    size_t out_diagnostics_size,
+    const char* request_path) {
+    json_object* profile_obj = NULL;
+    const char* preset = NULL;
+    double value = 0.0;
+
+    if (!owner || !key || !out_profile ||
+        !json_object_object_get_ex(owner, key, &profile_obj)) {
+        return false;
+    }
+
+    if (json_object_is_type(profile_obj, json_type_string)) {
+        preset = json_object_get_string(profile_obj);
+        if (!RuntimeCausticLensTransport3D_PresetTraversalProfileFromLabel(preset,
+                                                                           out_profile)) {
+            agent_render_request_set_diagf(out_diagnostics,
+                              out_diagnostics_size,
+                              "request=%s field=inspection.%s invalid preset=%s",
+                              request_path,
+                              key,
+                              preset ? preset : "<null>");
+            return false;
+        }
+        return true;
+    }
+
+    if (!json_object_is_type(profile_obj, json_type_object)) {
+        agent_render_request_set_diagf(out_diagnostics,
+                          out_diagnostics_size,
+                          "request=%s field=inspection.%s expected string or object",
+                          request_path,
+                          key);
+        return false;
+    }
+
+    RuntimeCausticLensTransport3D_DefaultTraversalProfile(out_profile);
+    out_profile->kind = RUNTIME_CAUSTIC_LENS_TRAVERSAL_PROFILE_CUSTOM;
+    if (RayTracingJsonGetString(profile_obj, "preset", &preset)) {
+        if (!RuntimeCausticLensTransport3D_PresetTraversalProfileFromLabel(preset,
+                                                                           out_profile)) {
+            agent_render_request_set_diagf(out_diagnostics,
+                              out_diagnostics_size,
+                              "request=%s field=inspection.%s.preset invalid preset=%s",
+                              request_path,
+                              key,
+                              preset ? preset : "<null>");
+            return false;
+        }
+    }
+
+    if (agent_render_request_json_get_double_any(profile_obj,
+                                                 "outside_ior",
+                                                 "outsideIor",
+                                                 &value)) {
+        out_profile->outsideIor = value;
+    }
+    if (agent_render_request_json_get_double_any(profile_obj,
+                                                 "material_ior",
+                                                 "materialIor",
+                                                 &value) ||
+        RayTracingJsonGetDouble(profile_obj, "ior", &value)) {
+        out_profile->materialIor = value;
+    }
+    if (agent_render_request_json_get_double_any(profile_obj,
+                                                 "fresnel_scale",
+                                                 "fresnelScale",
+                                                 &value)) {
+        out_profile->fresnelScale = value;
+    }
+    if (agent_render_request_json_get_double_any(profile_obj,
+                                                 "transmission_scale",
+                                                 "transmissionScale",
+                                                 &value)) {
+        out_profile->transmissionScale = value;
+    }
+    if (agent_render_request_json_get_rgb(profile_obj, "tint",
+                                          &out_profile->tint.x,
+                                          &out_profile->tint.y,
+                                          &out_profile->tint.z) ||
+        agent_render_request_json_get_rgb(profile_obj, "absorption_tint",
+                                          &out_profile->tint.x,
+                                          &out_profile->tint.y,
+                                          &out_profile->tint.z)) {
+        out_profile->kind = RUNTIME_CAUSTIC_LENS_TRAVERSAL_PROFILE_CUSTOM;
+    }
+    if (agent_render_request_json_get_double_any(profile_obj,
+                                                 "absorption_distance",
+                                                 "absorptionDistance",
+                                                 &value)) {
+        out_profile->absorptionDistance = value;
+    }
+    if (agent_render_request_json_get_double_any(profile_obj,
+                                                 "aperture_radius_scale",
+                                                 "apertureRadiusScale",
+                                                 &value)) {
+        out_profile->apertureRadiusScale = value;
+    }
+
+    RuntimeCausticLensTransport3D_NormalizeTraversalProfile(out_profile);
+    out_profile->kind = RUNTIME_CAUSTIC_LENS_TRAVERSAL_PROFILE_CUSTOM;
+    return true;
+}
+
 bool ray_tracing_agent_render_request_load_file(const char *request_path,
                                                 RayTracingAgentRenderRequest *out_request,
                                                 char *out_diagnostics,
@@ -14,6 +131,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     json_object *output = NULL;
     json_object *progress = NULL;
     json_object *inspection = NULL;
+    json_object *caustic_profile = NULL;
     json_object *sampling = NULL;
     json_object *resources = NULL;
     const char *value = NULL;
@@ -457,6 +575,53 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             RayTracingJsonGetString(inspection, "caustic_emission_policy", &value)) {
             request.caustic_settings.emissionPolicy =
                 RuntimeCausticTransportEmissionPolicy3D_FromLabel(value);
+        }
+        if (json_object_object_get_ex(inspection,
+                                      "caustic_lens_traversal_profile",
+                                      &caustic_profile)) {
+            if (!agent_render_request_parse_caustic_lens_traversal_profile(
+                    inspection,
+                    "caustic_lens_traversal_profile",
+                    &request.caustic_settings.traversalProfileOverride,
+                    out_diagnostics,
+                    out_diagnostics_size,
+                    request_path)) {
+                json_object_put(root);
+                return false;
+            }
+            request.caustic_settings.hasTraversalProfileOverride = true;
+        } else if (json_object_object_get_ex(inspection,
+                                             "caustic_lens_profile",
+                                             &caustic_profile)) {
+            if (!agent_render_request_parse_caustic_lens_traversal_profile(
+                    inspection,
+                    "caustic_lens_profile",
+                    &request.caustic_settings.traversalProfileOverride,
+                    out_diagnostics,
+                    out_diagnostics_size,
+                    request_path)) {
+                json_object_put(root);
+                return false;
+            }
+            request.caustic_settings.hasTraversalProfileOverride = true;
+        } else if (RayTracingJsonGetString(inspection,
+                                           "caustic_lens_traversal_preset",
+                                           &value) ||
+                   RayTracingJsonGetString(inspection,
+                                           "caustic_lens_profile_preset",
+                                           &value)) {
+            if (!RuntimeCausticLensTransport3D_PresetTraversalProfileFromLabel(
+                    value,
+                    &request.caustic_settings.traversalProfileOverride)) {
+                json_object_put(root);
+                agent_render_request_set_diagf(out_diagnostics,
+                                  out_diagnostics_size,
+                                  "request=%s field=inspection.caustic_lens_traversal_preset invalid preset=%s",
+                                  request_path,
+                                  value ? value : "<null>");
+                return false;
+            }
+            request.caustic_settings.hasTraversalProfileOverride = true;
         }
         if (RayTracingJsonGetDouble(inspection, "caustic_surface_radiance_scale", &double_value) ||
             RayTracingJsonGetDouble(inspection, "caustic_surface_energy_scale", &double_value) ||

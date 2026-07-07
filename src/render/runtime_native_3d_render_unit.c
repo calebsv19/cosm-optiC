@@ -209,6 +209,11 @@ bool RuntimeNative3DRenderUnit_RenderSubpass(RuntimeNative3DRenderUnit* unit,
                   (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
     memset(unit->subpassRadiance, 0, pixel_count * sizeof(*unit->subpassRadiance));
 
+    if ((unit->measureAdaptiveState || unit->useDenoise) &&
+        !runtime_native_3d_render_unit_ensure_features(unit)) {
+        return false;
+    }
+
     subpass_frame = *unit->frame;
     subpass_sampling = runtime_native_3d_render_unit_resolve_subpass_sampling(
         &unit->baseSampling,
@@ -216,6 +221,12 @@ bool RuntimeNative3DRenderUnit_RenderSubpass(RuntimeNative3DRenderUnit* unit,
         unit->temporalFrames);
     subpass_frame.sampling = subpass_sampling;
     subpass_frame.traceScene = &unit->frame->scene;
+    if (unit->measureAdaptiveState) {
+        subpass_frame.featureAttributionBuffer = &unit->featureBuffer;
+        subpass_frame.featureAttributionStartX = unit->startX;
+        subpass_frame.featureAttributionStartY = unit->startY;
+        subpass_frame.directLightVisibilityAttributionEnabled = true;
+    }
 
     if (!RuntimeNative3DAdaptiveSampling_RenderPreparedRegionRadianceRGBMasked(
             unit->subpassRadiance,
@@ -244,10 +255,6 @@ bool RuntimeNative3DRenderUnit_RenderSubpass(RuntimeNative3DRenderUnit* unit,
     stats.temporalPixelsRendered = active_pixels;
     stats.temporalPixelsSkipped = (unit->width * unit->height) - active_pixels;
     RuntimeNative3DTemporalAccumulation_CommitSubpass(&unit->accumulation);
-    if ((unit->measureAdaptiveState || unit->useDenoise) &&
-        !runtime_native_3d_render_unit_ensure_features(unit)) {
-        return false;
-    }
     if (unit->measureAdaptiveState &&
         !RuntimeNative3DAdaptiveSampling_MeasurePixelState(&unit->adaptivePixelState,
                                                            &unit->accumulation,
@@ -257,12 +264,20 @@ bool RuntimeNative3DRenderUnit_RenderSubpass(RuntimeNative3DRenderUnit* unit,
                                                            4)) {
         return false;
     }
-    if (unit->useAdaptiveSampling &&
-        !RuntimeNative3DAdaptiveSampling_RefreshActivityMaskFromPixelState(
-            &unit->adaptiveMask,
-            &unit->adaptivePixelState,
-            RUNTIME_NATIVE_3D_ADAPTIVE_TILE_SIZE)) {
-        return false;
+    if (unit->useAdaptiveSampling) {
+        const bool refreshed =
+            RuntimeNative3DAdaptiveSampling_RiskEarlyStopEnabled()
+                ? RuntimeNative3DAdaptiveSampling_RefreshConservativeEarlyStopMaskFromPixelState(
+                      &unit->adaptiveMask,
+                      &unit->adaptivePixelState,
+                      RUNTIME_NATIVE_3D_ADAPTIVE_TILE_SIZE)
+                : RuntimeNative3DAdaptiveSampling_RefreshActivityMaskFromPixelState(
+                      &unit->adaptiveMask,
+                      &unit->adaptivePixelState,
+                      RUNTIME_NATIVE_3D_ADAPTIVE_TILE_SIZE);
+        if (!refreshed) {
+            return false;
+        }
     }
 
     unit->committedSubpasses += 1;

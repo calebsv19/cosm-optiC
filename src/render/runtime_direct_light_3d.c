@@ -664,6 +664,31 @@ static RuntimeRenderTraceCostDirectLightOutcome3D runtime_direct_light_3d_ledger
     return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_MIXED_PARTIAL;
 }
 
+static void runtime_direct_light_3d_record_result_outcome(
+    RuntimeDirectLight3DResult* result,
+    RuntimeRenderTraceCostDirectLightOutcome3D outcome) {
+    if (!result) return;
+    switch (outcome) {
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_NO_VISIBILITY_TRACE:
+            result->visibilityOutcomeNoTraceCount += 1;
+            break;
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_CLEAR_VISIBLE:
+            result->visibilityOutcomeClearVisibleCount += 1;
+            break;
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_CLEAR_BLOCKED:
+            result->visibilityOutcomeClearBlockedCount += 1;
+            break;
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_STABLE_PARTIAL:
+            result->visibilityOutcomeStablePartialCount += 1;
+            break;
+        case RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_MIXED_PARTIAL:
+            result->visibilityOutcomeMixedPartialCount += 1;
+            break;
+        default:
+            break;
+    }
+}
+
 static void runtime_direct_light_3d_accumulate_source(
     const RuntimeScene3D* scene,
     const HitInfo3D* hit,
@@ -926,16 +951,20 @@ static void runtime_direct_light_3d_accumulate_source(
         io_result->ndotl = ndotl;
         io_result->attenuation = attenuation;
     }
-    RuntimeRenderTraceCostLedger3D_RecordDirectLightVisibilityPolicy(
+    {
+        RuntimeRenderTraceCostDirectLightOutcome3D outcome =
+            runtime_direct_light_3d_ledger_outcome(clear_visible_sample_count,
+                                                   clear_blocked_sample_count,
+                                                   visibility_trace_count,
+                                                   transmittance_luma_min,
+                                                   transmittance_luma_max);
+        runtime_direct_light_3d_record_result_outcome(io_result, outcome);
+        RuntimeRenderTraceCostLedger3D_RecordDirectLightVisibilityPolicy(
         caller,
         runtime_direct_light_3d_ledger_source_kind(source),
         runtime_direct_light_3d_ledger_source_origin(source),
         runtime_direct_light_3d_ledger_emission_profile(source),
-        runtime_direct_light_3d_ledger_outcome(clear_visible_sample_count,
-                                               clear_blocked_sample_count,
-                                               visibility_trace_count,
-                                               transmittance_luma_min,
-                                               transmittance_luma_max),
+        outcome,
         stop_reason,
         light_sample_count,
         light_sample_decision_count,
@@ -945,6 +974,7 @@ static void runtime_direct_light_3d_accumulate_source(
         source_peak,
         transmittance_luma_min,
         transmittance_luma_max);
+    }
 }
 
 static bool runtime_direct_light_3d_shade_hit_with_payload(

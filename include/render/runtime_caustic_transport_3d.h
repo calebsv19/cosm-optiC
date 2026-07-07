@@ -22,6 +22,8 @@ typedef struct {
     double surfaceFootprintScale;
     bool surfaceReceiverFallbackEnabled;
     bool debugExportEnabled;
+    bool hasTraversalProfileOverride;
+    RuntimeCausticLensTraversalProfile3D traversalProfileOverride;
 } RuntimeCausticTransport3DRequestState;
 
 typedef struct {
@@ -57,6 +59,32 @@ typedef struct {
     uint64_t analyticBowlLensEmittedPathCount;
     double analyticBowlLensSampleWeight;
     double analyticBowlLensTotalSampleWeight;
+    uint64_t meshDielectricLensResolvedCount;
+    uint64_t meshDielectricLensRejectedCount;
+    uint64_t meshDielectricLensEvaluatedPathCount;
+    uint64_t meshDielectricLensEmittedPathCount;
+    double meshDielectricLensSampleWeight;
+    double meshDielectricLensTotalSampleWeight;
+    uint64_t meshDielectricLensTraversalAcceptedCount;
+    uint64_t meshDielectricLensRejectInvalidProfileCount;
+    uint64_t meshDielectricLensRejectSampleCount;
+    uint64_t meshDielectricLensRejectEntryMissCount;
+    uint64_t meshDielectricLensRejectEntryWrongObjectCount;
+    uint64_t meshDielectricLensRejectEntryRefractionCount;
+    uint64_t meshDielectricLensRejectExitMissCount;
+    uint64_t meshDielectricLensRejectExitWrongObjectCount;
+    uint64_t meshDielectricLensRejectExitRefractionCount;
+    uint64_t meshDielectricLensRejectInsideDistanceCount;
+    uint64_t meshDielectricLensRejectThroughputCount;
+    double meshDielectricLensInsideDistanceMin;
+    double meshDielectricLensInsideDistanceMax;
+    double meshDielectricLensInsideDistanceSum;
+    double meshDielectricLensEntryCosineMin;
+    double meshDielectricLensEntryCosineMax;
+    double meshDielectricLensEntryCosineSum;
+    double meshDielectricLensExitCosineMin;
+    double meshDielectricLensExitCosineMax;
+    double meshDielectricLensExitCosineSum;
     uint64_t transparentHitCount;
     uint64_t specularEventCount;
     uint64_t volumeSegmentCount;

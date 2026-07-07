@@ -41,6 +41,11 @@ bool runtime_native_3d_render_dispatch_integrator(float* radiance_buffer,
                                                              &frame->projector,
                                                              &frame->sampling,
                                                              caustic_cache,
+                                                             frame->directLightVisibilityAttributionEnabled
+                                                                 ? frame->featureAttributionBuffer
+                                                                 : NULL,
+                                                             frame->featureAttributionStartX,
+                                                             frame->featureAttributionStartY,
                                                              out_stats);
             break;
         case RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE:
@@ -120,6 +125,11 @@ bool runtime_native_3d_render_dispatch_integrator(float* radiance_buffer,
                                                           frame->causticSidecarProbeValid
                                                               ? &frame->causticSidecarProbe
                                                               : NULL,
+                                                          frame->directLightVisibilityAttributionEnabled
+                                                              ? frame->featureAttributionBuffer
+                                                              : NULL,
+                                                          frame->featureAttributionStartX,
+                                                          frame->featureAttributionStartY,
                                                           out_stats);
             break;
         default:
@@ -188,6 +198,18 @@ bool runtime_native_3d_render_dispatch_integrator(float* radiance_buffer,
             frame->causticTransportDiagnostics.analyticBowlLensSampleWeight;
         out_stats->causticTransportAnalyticBowlLensTotalSampleWeight =
             frame->causticTransportDiagnostics.analyticBowlLensTotalSampleWeight;
+        out_stats->causticTransportMeshDielectricLensResolvedCount =
+            (int)frame->causticTransportDiagnostics.meshDielectricLensResolvedCount;
+        out_stats->causticTransportMeshDielectricLensRejectedCount =
+            (int)frame->causticTransportDiagnostics.meshDielectricLensRejectedCount;
+        out_stats->causticTransportMeshDielectricLensEvaluatedPathCount =
+            (int)frame->causticTransportDiagnostics.meshDielectricLensEvaluatedPathCount;
+        out_stats->causticTransportMeshDielectricLensEmittedPathCount =
+            (int)frame->causticTransportDiagnostics.meshDielectricLensEmittedPathCount;
+        out_stats->causticTransportMeshDielectricLensSampleWeight =
+            frame->causticTransportDiagnostics.meshDielectricLensSampleWeight;
+        out_stats->causticTransportMeshDielectricLensTotalSampleWeight =
+            frame->causticTransportDiagnostics.meshDielectricLensTotalSampleWeight;
         out_stats->causticTransportTransparentHitCount =
             (int)frame->causticTransportDiagnostics.transparentHitCount;
         out_stats->causticTransportSpecularEventCount =

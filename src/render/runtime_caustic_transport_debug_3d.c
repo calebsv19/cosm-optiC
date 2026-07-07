@@ -137,6 +137,14 @@ static void runtime_caustic_transport_debug_write_path(FILE* file,
     WRITE_FIELD_PREFIX("lens_sample_weight"); fprintf(file, "%.9f", path->lensSampleWeight); WRITE_FIELD_COMMA();
     WRITE_FIELD_PREFIX("lens_path_pdf"); fprintf(file, "%.9f", path->lensPathPdf); WRITE_FIELD_COMMA();
     WRITE_FIELD_PREFIX("lens_total_internal_reflection"); fprintf(file, "%s", path->lensTotalInternalReflection ? "true" : "false"); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_traversal_profile_kind"); fprintf(file, "%d", path->lensTraversalProfileKind); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_outside_ior"); fprintf(file, "%.9f", path->lensOutsideIor); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_material_ior"); fprintf(file, "%.9f", path->lensMaterialIor); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_fresnel_scale"); fprintf(file, "%.9f", path->lensFresnelScale); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_transmission_scale"); fprintf(file, "%.9f", path->lensTransmissionScale); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_tint"); runtime_caustic_transport_debug_write_vec3(file, path->lensTint); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_absorption_distance"); fprintf(file, "%.9f", path->lensAbsorptionDistance); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("lens_aperture_radius_scale"); fprintf(file, "%.9f", path->lensApertureRadiusScale); WRITE_FIELD_COMMA();
     WRITE_FIELD_PREFIX("sphere_lens_entry_position"); runtime_caustic_transport_debug_write_vec3(file, path->sphereLensEntryPosition); WRITE_FIELD_COMMA();
     WRITE_FIELD_PREFIX("sphere_lens_exit_position"); runtime_caustic_transport_debug_write_vec3(file, path->sphereLensExitPosition); WRITE_FIELD_COMMA();
     WRITE_FIELD_PREFIX("sphere_lens_receiver_crossing"); runtime_caustic_transport_debug_write_vec3(file, path->sphereLensReceiverCrossing); WRITE_FIELD_COMMA();
@@ -337,6 +345,79 @@ bool RuntimeCausticTransportDebug3D_WriteArtifacts(
             diagnostics->analyticPrismLensSampleWeight);
     fprintf(summary, "    \"analytic_prism_lens_total_sample_weight\": %.9f,\n",
             diagnostics->analyticPrismLensTotalSampleWeight);
+    fprintf(summary, "    \"analytic_bowl_lens_resolved_count\": %llu,\n",
+            (unsigned long long)diagnostics->analyticBowlLensResolvedCount);
+    fprintf(summary, "    \"analytic_bowl_lens_rejected_count\": %llu,\n",
+            (unsigned long long)diagnostics->analyticBowlLensRejectedCount);
+    fprintf(summary, "    \"analytic_bowl_lens_evaluated_path_count\": %llu,\n",
+            (unsigned long long)diagnostics->analyticBowlLensEvaluatedPathCount);
+    fprintf(summary, "    \"analytic_bowl_lens_emitted_path_count\": %llu,\n",
+            (unsigned long long)diagnostics->analyticBowlLensEmittedPathCount);
+    fprintf(summary, "    \"analytic_bowl_lens_sample_weight\": %.9f,\n",
+            diagnostics->analyticBowlLensSampleWeight);
+    fprintf(summary, "    \"analytic_bowl_lens_total_sample_weight\": %.9f,\n",
+            diagnostics->analyticBowlLensTotalSampleWeight);
+    fprintf(summary, "    \"mesh_dielectric_lens_resolved_count\": %llu,\n",
+            (unsigned long long)diagnostics->meshDielectricLensResolvedCount);
+    fprintf(summary, "    \"mesh_dielectric_lens_rejected_count\": %llu,\n",
+            (unsigned long long)diagnostics->meshDielectricLensRejectedCount);
+    fprintf(summary, "    \"mesh_dielectric_lens_evaluated_path_count\": %llu,\n",
+            (unsigned long long)diagnostics->meshDielectricLensEvaluatedPathCount);
+    fprintf(summary, "    \"mesh_dielectric_lens_emitted_path_count\": %llu,\n",
+            (unsigned long long)diagnostics->meshDielectricLensEmittedPathCount);
+    fprintf(summary, "    \"mesh_dielectric_lens_sample_weight\": %.9f,\n",
+            diagnostics->meshDielectricLensSampleWeight);
+    fprintf(summary, "    \"mesh_dielectric_lens_total_sample_weight\": %.9f,\n",
+            diagnostics->meshDielectricLensTotalSampleWeight);
+    fprintf(summary, "    \"mesh_dielectric_lens_traversal_accepted_count\": %llu,\n",
+            (unsigned long long)diagnostics->meshDielectricLensTraversalAcceptedCount);
+    fprintf(summary, "    \"mesh_dielectric_lens_reject_invalid_profile_count\": %llu,\n",
+            (unsigned long long)diagnostics->meshDielectricLensRejectInvalidProfileCount);
+    fprintf(summary, "    \"mesh_dielectric_lens_reject_sample_count\": %llu,\n",
+            (unsigned long long)diagnostics->meshDielectricLensRejectSampleCount);
+    fprintf(summary, "    \"mesh_dielectric_lens_reject_entry_miss_count\": %llu,\n",
+            (unsigned long long)diagnostics->meshDielectricLensRejectEntryMissCount);
+    fprintf(summary, "    \"mesh_dielectric_lens_reject_entry_wrong_object_count\": %llu,\n",
+            (unsigned long long)diagnostics->meshDielectricLensRejectEntryWrongObjectCount);
+    fprintf(summary, "    \"mesh_dielectric_lens_reject_entry_refraction_count\": %llu,\n",
+            (unsigned long long)diagnostics->meshDielectricLensRejectEntryRefractionCount);
+    fprintf(summary, "    \"mesh_dielectric_lens_reject_exit_miss_count\": %llu,\n",
+            (unsigned long long)diagnostics->meshDielectricLensRejectExitMissCount);
+    fprintf(summary, "    \"mesh_dielectric_lens_reject_exit_wrong_object_count\": %llu,\n",
+            (unsigned long long)diagnostics->meshDielectricLensRejectExitWrongObjectCount);
+    fprintf(summary, "    \"mesh_dielectric_lens_reject_exit_refraction_count\": %llu,\n",
+            (unsigned long long)diagnostics->meshDielectricLensRejectExitRefractionCount);
+    fprintf(summary, "    \"mesh_dielectric_lens_reject_inside_distance_count\": %llu,\n",
+            (unsigned long long)diagnostics->meshDielectricLensRejectInsideDistanceCount);
+    fprintf(summary, "    \"mesh_dielectric_lens_reject_throughput_count\": %llu,\n",
+            (unsigned long long)diagnostics->meshDielectricLensRejectThroughputCount);
+    fprintf(summary, "    \"mesh_dielectric_lens_inside_distance_min\": %.9f,\n",
+            diagnostics->meshDielectricLensInsideDistanceMin);
+    fprintf(summary, "    \"mesh_dielectric_lens_inside_distance_max\": %.9f,\n",
+            diagnostics->meshDielectricLensInsideDistanceMax);
+    fprintf(summary, "    \"mesh_dielectric_lens_inside_distance_avg\": %.9f,\n",
+            diagnostics->meshDielectricLensTraversalAcceptedCount > 0u
+                ? diagnostics->meshDielectricLensInsideDistanceSum /
+                      (double)diagnostics->meshDielectricLensTraversalAcceptedCount
+                : 0.0);
+    fprintf(summary, "    \"mesh_dielectric_lens_entry_cosine_min\": %.9f,\n",
+            diagnostics->meshDielectricLensEntryCosineMin);
+    fprintf(summary, "    \"mesh_dielectric_lens_entry_cosine_max\": %.9f,\n",
+            diagnostics->meshDielectricLensEntryCosineMax);
+    fprintf(summary, "    \"mesh_dielectric_lens_entry_cosine_avg\": %.9f,\n",
+            diagnostics->meshDielectricLensTraversalAcceptedCount > 0u
+                ? diagnostics->meshDielectricLensEntryCosineSum /
+                      (double)diagnostics->meshDielectricLensTraversalAcceptedCount
+                : 0.0);
+    fprintf(summary, "    \"mesh_dielectric_lens_exit_cosine_min\": %.9f,\n",
+            diagnostics->meshDielectricLensExitCosineMin);
+    fprintf(summary, "    \"mesh_dielectric_lens_exit_cosine_max\": %.9f,\n",
+            diagnostics->meshDielectricLensExitCosineMax);
+    fprintf(summary, "    \"mesh_dielectric_lens_exit_cosine_avg\": %.9f,\n",
+            diagnostics->meshDielectricLensTraversalAcceptedCount > 0u
+                ? diagnostics->meshDielectricLensExitCosineSum /
+                      (double)diagnostics->meshDielectricLensTraversalAcceptedCount
+                : 0.0);
     fprintf(summary, "    \"transparent_hit_count\": %llu,\n",
             (unsigned long long)diagnostics->transparentHitCount);
     fprintf(summary, "    \"specular_event_count\": %llu,\n",

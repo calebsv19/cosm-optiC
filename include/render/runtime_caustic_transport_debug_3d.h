@@ -65,6 +65,14 @@ typedef struct {
     double lensSampleWeight;
     double lensPathPdf;
     bool lensTotalInternalReflection;
+    int lensTraversalProfileKind;
+    double lensOutsideIor;
+    double lensMaterialIor;
+    double lensFresnelScale;
+    double lensTransmissionScale;
+    Vec3 lensTint;
+    double lensAbsorptionDistance;
+    double lensApertureRadiusScale;
     Vec3 sphereLensEntryPosition;
     Vec3 sphereLensExitPosition;
     Vec3 sphereLensReceiverCrossing;

@@ -3,6 +3,8 @@
 
 #include <stdbool.h>
 
+#include "render/runtime_caustic_lens_transport_3d.h"
+
 typedef enum {
     RUNTIME_CAUSTIC_MODE_OFF = 0,
     RUNTIME_CAUSTIC_MODE_ANALYTIC = 1,
@@ -29,7 +31,8 @@ typedef enum {
     RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_CYLINDER_LENS = 2,
     RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_CYLINDER_LENS_FOCUSED = 3,
     RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_PRISM_LENS = 4,
-    RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_BOWL_LENS = 5
+    RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_BOWL_LENS = 5,
+    RUNTIME_CAUSTIC_TRANSPORT_EMISSION_MESH_DIELECTRIC_LENS = 6
 } RuntimeCausticTransportEmissionPolicy3D;
 
 typedef struct {
@@ -45,6 +48,8 @@ typedef struct {
     RuntimeCausticCacheGridMode3D cacheGridMode;
     bool debugSummaryEnabled;
     bool debugExportEnabled;
+    bool hasTraversalProfileOverride;
+    RuntimeCausticLensTraversalProfile3D traversalProfileOverride;
 } RuntimeCausticSettings3D;
 
 typedef struct {

@@ -58,9 +58,13 @@ void RuntimeCausticSphereLens3D_DefaultDescriptor(
     memset(descriptor, 0, sizeof(*descriptor));
     descriptor->center = vec3(0.0, 0.0, 0.0);
     descriptor->radius = 1.0;
+    descriptor->outsideIor = 1.0;
     descriptor->ior = 1.5;
+    descriptor->fresnelScale = 1.0;
+    descriptor->transmissionScale = 1.0;
     descriptor->tint = vec3(1.0, 1.0, 1.0);
     descriptor->absorptionDistance = 0.0;
+    descriptor->apertureRadiusScale = 1.0;
 }
 
 void RuntimeCausticSphereLens3D_DefaultLight(RuntimeCausticSphereLens3DLight* light) {
@@ -178,15 +182,31 @@ bool RuntimeCausticSphereLens3D_SolvePath(
     double lens_v = 0.0;
     double absorption = 1.0;
     double sample_weight = 1.0;
+    double outside_ior = 1.0;
+    double material_ior = 1.5;
+    double fresnel_scale = 1.0;
+    double transmission_scale = 1.0;
+    double aperture_scale = 1.0;
+    double entry_transmission = 1.0;
+    double exit_transmission = 1.0;
     bool tir = false;
     const RuntimeCausticSphereLens3DSample* active_sample = sample;
 
     if (out_path) memset(out_path, 0, sizeof(*out_path));
     if (!sphere || !light || !out_path || !(sphere->radius > 1.0e-9) ||
-        !(sphere->ior > 1.0) || !sphere_lens_finite_vec3(sphere->center) ||
+        !sphere_lens_finite_vec3(sphere->center) ||
         !sphere_lens_finite_vec3(light->position)) {
         return false;
     }
+    outside_ior = sphere->outsideIor > 1.0e-6 ? sphere->outsideIor : 1.0;
+    material_ior = sphere->ior > 1.0e-6 ? sphere->ior : 1.5;
+    if (!(material_ior > 1.0e-6) || !(outside_ior > 1.0e-6) ||
+        fabs(material_ior - outside_ior) < 1.0e-9) {
+        return false;
+    }
+    fresnel_scale = sphere_lens_clamp(sphere->fresnelScale, 0.0, 4.0);
+    transmission_scale = sphere_lens_clamp(sphere->transmissionScale, 0.0, 4.0);
+    aperture_scale = sphere_lens_clamp(sphere->apertureRadiusScale, 0.0, 8.0);
     if (!active_sample) {
         RuntimeCausticSphereLens3D_DefaultSample(&default_sample);
         active_sample = &default_sample;
@@ -209,8 +229,8 @@ bool RuntimeCausticSphereLens3D_SolvePath(
 
     ray_origin = vec3_add(
         light->position,
-        vec3_add(vec3_scale(basis_u, aperture_u * fmax(light->radius, 0.0)),
-                 vec3_scale(basis_v, aperture_v * fmax(light->radius, 0.0))));
+        vec3_add(vec3_scale(basis_u, aperture_u * fmax(light->radius, 0.0) * aperture_scale),
+                 vec3_scale(basis_v, aperture_v * fmax(light->radius, 0.0) * aperture_scale)));
     path.lightSamplePosition = ray_origin;
     path.lensTargetPosition = vec3_add(
         sphere->center,
@@ -226,11 +246,12 @@ bool RuntimeCausticSphereLens3D_SolvePath(
     path.entryPosition = vec3_add(ray_origin, vec3_scale(ray_dir, entry_t));
     path.entryNormal = vec3_normalize(vec3_sub(path.entryPosition, sphere->center));
     path.entryDirection = ray_dir;
-    path.entryFresnel = sphere_lens_fresnel_schlick(ray_dir, path.entryNormal, 1.0, sphere->ior);
+    path.entryFresnel =
+        sphere_lens_fresnel_schlick(ray_dir, path.entryNormal, outside_ior, material_ior);
     if (!RuntimeCausticSphereLens3D_Refract(ray_dir,
                                             path.entryNormal,
-                                            1.0,
-                                            sphere->ior,
+                                            outside_ior,
+                                            material_ior,
                                             &path.insideDirection,
                                             &tir)) {
         path.totalInternalReflection = tir;
@@ -250,11 +271,14 @@ bool RuntimeCausticSphereLens3D_SolvePath(
     path.exitPosition = vec3_add(path.entryPosition, vec3_scale(path.insideDirection, exit_t));
     path.exitNormal = vec3_normalize(vec3_sub(path.exitPosition, sphere->center));
     path.exitFresnel =
-        sphere_lens_fresnel_schlick(path.insideDirection, path.exitNormal, sphere->ior, 1.0);
+        sphere_lens_fresnel_schlick(path.insideDirection,
+                                    path.exitNormal,
+                                    material_ior,
+                                    outside_ior);
     if (!RuntimeCausticSphereLens3D_Refract(path.insideDirection,
                                             path.exitNormal,
-                                            sphere->ior,
-                                            1.0,
+                                            material_ior,
+                                            outside_ior,
                                             &path.exitDirection,
                                             &tir)) {
         path.totalInternalReflection = tir;
@@ -266,15 +290,19 @@ bool RuntimeCausticSphereLens3D_SolvePath(
         absorption = exp(-path.insideDistance / sphere->absorptionDistance);
     }
     sample_weight = fmax(active_sample->sampleWeight, 0.0);
+    entry_transmission = (1.0 - sphere_lens_saturate(path.entryFresnel * fresnel_scale)) *
+                         transmission_scale;
+    exit_transmission = (1.0 - sphere_lens_saturate(path.exitFresnel * fresnel_scale)) *
+                        transmission_scale;
     path.throughput =
         vec3(light->color.x * light->intensity * sample_weight *
-                 (1.0 - path.entryFresnel) * (1.0 - path.exitFresnel) *
+                 entry_transmission * exit_transmission *
                  sphere_lens_saturate(sphere->tint.x) * absorption,
              light->color.y * light->intensity * sample_weight *
-                 (1.0 - path.entryFresnel) * (1.0 - path.exitFresnel) *
+                 entry_transmission * exit_transmission *
                  sphere_lens_saturate(sphere->tint.y) * absorption,
              light->color.z * light->intensity * sample_weight *
-                 (1.0 - path.entryFresnel) * (1.0 - path.exitFresnel) *
+                 entry_transmission * exit_transmission *
                  sphere_lens_saturate(sphere->tint.z) * absorption);
 
     if (fabs(path.exitDirection.z) > 1.0e-9) {

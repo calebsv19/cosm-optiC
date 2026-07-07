@@ -957,6 +957,10 @@ static int test_runtime_native_3d_adaptive_pixel_state_measures_without_pruning(
     }
     features.reflectivityBuffer[0] = 1.0f;
     features.roughnessBuffer[0] = 0.0f;
+    features.directLightVisibilityOutcomeBuffer[1] =
+        RUNTIME_NATIVE_3D_DIRECT_LIGHT_VISIBILITY_CLEAR_VISIBLE;
+    features.directLightVisibilityOutcomeBuffer[2] =
+        RUNTIME_NATIVE_3D_DIRECT_LIGHT_VISIBILITY_MIXED_PARTIAL;
 
     for (int pass = 0; pass < 4; ++pass) {
         ok = RuntimeNative3DTemporalAccumulation_AddRegion(&accumulation,
@@ -982,11 +986,21 @@ static int test_runtime_native_3d_adaptive_pixel_state_measures_without_pruning(
     assert_true("runtime_native_3d_adaptive_state_t3_min_floor",
                 state.summary.minSampleFloor == 2);
     assert_true("runtime_native_3d_adaptive_state_t3_high_risk_pixel",
-                state.summary.highRiskPixelCount == 1);
+                state.summary.highRiskPixelCount == 2);
+    assert_true("runtime_native_3d_adaptive_state_t3_material_risk_pixel",
+                state.summary.materialRiskPixelCount == 1 &&
+                    state.summary.glossyRiskPixelCount == 1 &&
+                    state.summary.transparentRiskPixelCount == 0);
+    assert_true("runtime_native_3d_adaptive_state_t3_risk_range",
+                state.summary.riskMax >= 0.99 && state.summary.riskSum >= 1.99);
+    assert_true("runtime_native_3d_adaptive_state_t3_direct_light_counts",
+                state.summary.directLightClearVisiblePixelCount == 1 &&
+                    state.summary.directLightMixedPartialPixelCount == 1 &&
+                    state.summary.directLightBoundaryRiskPixelCount == 1);
     assert_true("runtime_native_3d_adaptive_state_t3_stable_pixels",
-                state.summary.stablePixelCount == (int)pixel_count - 1);
+                state.summary.stablePixelCount == (int)pixel_count - 2);
     assert_true("runtime_native_3d_adaptive_state_t3_probe_pixels",
-                state.summary.probePixelCount == (int)pixel_count - 1);
+                state.summary.probePixelCount == (int)pixel_count - 2);
     assert_true("runtime_native_3d_adaptive_state_t3_active_pixels_are_policy_measurement",
                 state.summary.activePixelCount == (int)pixel_count);
     assert_true("runtime_native_3d_adaptive_state_t3_tile_summary",
@@ -996,6 +1010,10 @@ static int test_runtime_native_3d_adaptive_pixel_state_measures_without_pruning(
                     state.summary.highRiskTileCount == 1);
     assert_true("runtime_native_3d_adaptive_state_t3_pixel_flags",
                 (state.pixels[0].flags & RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_HIGH_RISK) != 0u &&
+                    (state.pixels[0].flags &
+                     RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_MATERIAL_RISK) != 0u &&
+                    (state.pixels[2].flags &
+                     RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_DIRECT_LIGHT_RISK) != 0u &&
                     (state.pixels[1].flags & RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_STABLE) != 0u &&
                     (state.pixels[1].flags & RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_PROBE) != 0u);
 

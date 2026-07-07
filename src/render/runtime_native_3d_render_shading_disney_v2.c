@@ -18,6 +18,9 @@ bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
                                                      RuntimeCausticSurfaceCache3D* surface_cache,
                                                      const RuntimeDisneyV2CausticSidecarProbe3D*
                                                          caustic_probe,
+                                                     RuntimeNative3DFeatureBuffer* feature_buffer,
+                                                     int feature_start_x,
+                                                     int feature_start_y,
                                                      RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DRenderStats stats = {0};
     const bool caustic_sidecar_active = caustic_probe && caustic_probe->valid;
@@ -92,6 +95,18 @@ bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
                     stats.maxRadiance = scatter.radiance;
                 }
                 continue;
+            }
+            if (feature_buffer) {
+                RuntimeNative3DFeatureBuffer_RecordDirectLightVisibilityOutcome(
+                    feature_buffer,
+                    x - feature_start_x,
+                    y - feature_start_y,
+                    RuntimeNative3DFeatureBuffer_ResolveDirectLightVisibilityOutcome(
+                        result.directVisibilityOutcomeNoTraceCount,
+                        result.directVisibilityOutcomeClearVisibleCount,
+                        result.directVisibilityOutcomeClearBlockedCount,
+                        result.directVisibilityOutcomeStablePartialCount,
+                        result.directVisibilityOutcomeMixedPartialCount));
             }
             scatter = runtime_native_3d_render_primary_scatter(scene,
                                                                projector,

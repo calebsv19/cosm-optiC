@@ -1,6 +1,6 @@
 # Ray Tracing Desktop Packaging
 
-Last updated: 2026-06-08
+Last updated: 2026-07-07
 
 ## Bundle Contract
 
@@ -11,8 +11,50 @@ Last updated: 2026-06-08
 - app bundle metadata:
   - bundle id: `com.cosm.optic`
   - product name: `optiC`
-  - version: `0.1.0`
+  - version: generated from `RELEASE_VERSION` during package creation
 - bundled frameworks live under `Contents/Frameworks/`
+
+## Public Package Discovery
+
+The current public desktop package release is `optiC 0.5.0`.
+
+Fresh agents should discover public release downloads through the Ecosystem
+agent manifest:
+
+```text
+https://ecosystem.calebsv.tech/agents/programs/optic.json
+```
+
+The manifest links both macOS desktop architectures:
+
+- `optiC-0.5.0-macOS-arm64-stable.zip`
+- `optiC-0.5.0-macOS-x86_64-stable.zip`
+
+It also provides immutable version URLs, SHA-256 values, and size metadata. A
+public package smoke should verify those values without rebuilding, replacing,
+or republishing the release artifacts.
+
+Known readback caveat for the already-published `0.5.0` package: the public
+metadata and filenames identify `0.5.0`, while the app bundle plist still
+reports `CFBundleShortVersionString=0.1.0`. Treat that as package identity
+hygiene for a future approved package build, not as approval to replace the
+already-published artifacts in place.
+
+Future release-artifact hygiene:
+
+- `release-bundle-audit` now rejects packaged app bundles whose
+  `CFBundleShortVersionString` or `CFBundleVersion` does not equal
+  `RELEASE_VERSION`.
+- `release-artifact` stages the already-notarized app plus a ZIP-root
+  `.manifest.txt` file before creating the release ZIP. The manifest is outside
+  `optiC.app`, so adding it does not mutate the signed/notarized app bundle.
+- the embedded ZIP-root manifest is self-describing but cannot contain the
+  final ZIP digest without creating a circular hash dependency. The adjacent
+  external `.manifest.txt` and `.zip.sha256` sidecars remain authoritative for
+  the final archive digest.
+- checksum sidecars name the ZIP basename, not a local build path, so fresh
+  public agents can validate sidecars without knowing the maintainer's
+  filesystem layout.
 
 ## Make Targets
 
@@ -96,7 +138,7 @@ Local asset note:
   - `make -C ray_tracing release-artifact`
   - `make -C ray_tracing release-distribute APPLE_SIGN_IDENTITY="Developer ID Application: <Name> (<TEAMID>)" APPLE_NOTARY_PROFILE="<profile>"`
   - `make -C ray_tracing release-desktop-refresh`
-  - current 2026-06-08 notarized artifact set:
+  - historical 2026-06-08 notarized artifact set:
     - `build/release/optiC-0.3.0-macOS-arm64-stable.zip`
     - `build/release/optiC-0.3.0-macOS-arm64-stable.zip.sha256`
     - `build/release/optiC-0.3.0-macOS-arm64-stable.manifest.txt`
@@ -115,6 +157,9 @@ Release and worker artifact hygiene:
 - Signing, notarization, upload, and distribution targets remain explicit
   operator actions; the contract and self-test targets do not sign, notarize,
   upload, or publish.
+- Future release ZIPs produced by `release-artifact` include a ZIP-root
+  `.manifest.txt` entry and adjacent `.manifest.txt` / `.zip.sha256` sidecars.
+  Already-published `0.5.0` ZIP contents are unchanged.
 
 ## Launcher Runtime Contract
 

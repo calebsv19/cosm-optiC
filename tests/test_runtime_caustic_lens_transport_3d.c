@@ -15,10 +15,12 @@ static void assert_vec3_close(const char* name, Vec3 actual, Vec3 expected, doub
 
 static int test_runtime_caustic_lens_transport_defaults_are_bounded(void) {
     RuntimeCausticLensShape3D shape;
+    RuntimeCausticLensTraversalProfile3D profile;
     RuntimeCausticLensLightSample3D light;
     RuntimeCausticLensPath3D path;
 
     RuntimeCausticLensTransport3D_DefaultShape(&shape);
+    RuntimeCausticLensTransport3D_DefaultTraversalProfile(&profile);
     RuntimeCausticLensTransport3D_DefaultLightSample(&light);
     RuntimeCausticLensTransport3D_DefaultPath(&path);
 
@@ -39,8 +41,17 @@ static int test_runtime_caustic_lens_transport_defaults_are_bounded(void) {
                       1e-9);
     assert_true("runtime_caustic_lens_transport_default_light",
                 light.intensity == 1.0 && light.radius > 0.0 && light.lightIndex == -1);
+    assert_true("runtime_caustic_lens_transport_default_profile",
+                profile.outsideIor == 1.0 &&
+                    profile.materialIor == 1.5 &&
+                    profile.fresnelScale == 1.0 &&
+                    profile.transmissionScale == 1.0 &&
+                    profile.apertureRadiusScale == 1.0);
     assert_true("runtime_caustic_lens_transport_default_path_weight",
                 path.sampleWeight == 1.0 && path.pathPdf == 1.0);
+    assert_true("runtime_caustic_lens_transport_default_path_profile",
+                path.traversalProfile.outsideIor == 1.0 &&
+                    path.traversalProfile.materialIor == 1.5);
     assert_vec3_close("runtime_caustic_lens_transport_default_path_throughput",
                       path.throughput,
                       vec3(1.0, 1.0, 1.0),
@@ -163,6 +174,121 @@ static int test_runtime_caustic_lens_transport_throughput_helpers(void) {
     return 0;
 }
 
+static int test_runtime_caustic_lens_transport_profile_resolves_payload(void) {
+    RuntimeMaterialPayload3D payload;
+    RuntimeCausticLensTraversalProfile3D profile;
+    Vec3 throughput = vec3(10.0, 10.0, 10.0);
+    Vec3 transmitted;
+    Vec3 absorbed;
+    memset(&payload, 0, sizeof(payload));
+    payload.opticalIor = 1.62;
+    payload.bsdf.ior = 1.40;
+    payload.baseColorR = 0.5;
+    payload.baseColorG = 0.75;
+    payload.baseColorB = 1.0;
+    payload.absorptionDistance = 2.0;
+
+    RuntimeCausticLensTransport3D_ResolveTraversalProfileFromPayload(&payload, &profile);
+    assert_true("runtime_caustic_lens_transport_profile_kind",
+                profile.kind == RUNTIME_CAUSTIC_LENS_TRAVERSAL_PROFILE_PAYLOAD_DEFAULT);
+    assert_close("runtime_caustic_lens_transport_profile_outside_ior",
+                 profile.outsideIor,
+                 1.0,
+                 1e-9);
+    assert_close("runtime_caustic_lens_transport_profile_material_ior",
+                 profile.materialIor,
+                 1.62,
+                 1e-9);
+    assert_vec3_close("runtime_caustic_lens_transport_profile_tint",
+                      profile.tint,
+                      vec3(0.5, 0.75, 1.0),
+                      1e-9);
+    transmitted = RuntimeCausticLensTransport3D_ApplyInterfaceTransmissionProfile(
+        throughput,
+        0.20,
+        &profile);
+    assert_vec3_close("runtime_caustic_lens_transport_profile_transmission",
+                      transmitted,
+                      vec3(8.0, 8.0, 8.0),
+                      1e-9);
+    absorbed = RuntimeCausticLensTransport3D_ApplyAbsorptionTintProfile(transmitted,
+                                                                        2.0,
+                                                                        &profile);
+    assert_vec3_close("runtime_caustic_lens_transport_profile_absorption",
+                      absorbed,
+                      vec3(8.0 * 0.5 * exp(-1.0),
+                           8.0 * 0.75 * exp(-1.0),
+                           8.0 * exp(-1.0)),
+                      1e-9);
+    return 0;
+}
+
+static int test_runtime_caustic_lens_transport_profile_override_solves_path(void) {
+    RuntimeCausticLensShape3D cylinder;
+    RuntimeCausticLensLightSample3D light;
+    RuntimeCausticLensSample3D sample;
+    RuntimeCausticLensPath3D path;
+
+    RuntimeCausticLensTransport3D_DefaultShape(&cylinder);
+    RuntimeCausticLensTransport3D_DefaultLightSample(&light);
+    RuntimeCausticLensTransport3D_DefaultSample(&sample);
+    cylinder.kind = RUNTIME_CAUSTIC_LENS_SHAPE_CYLINDER;
+    cylinder.center = vec3(0.0, 0.0, 0.0);
+    cylinder.axis = vec3(0.0, 0.0, 1.0);
+    cylinder.radius = 0.5;
+    cylinder.height = 1.4;
+    cylinder.payload.opticalIor = 1.45;
+    cylinder.payload.bsdf.ior = 1.45;
+    cylinder.payload.baseColorR = 1.0;
+    cylinder.payload.baseColorG = 1.0;
+    cylinder.payload.baseColorB = 1.0;
+    cylinder.payload.absorptionDistance = 8.0;
+    assert_true("runtime_caustic_lens_transport_override_preset",
+                RuntimeCausticLensTransport3D_PresetTraversalProfileFromLabel(
+                    "dense_glass",
+                    &cylinder.traversalProfileOverride));
+    cylinder.hasTraversalProfileOverride = true;
+    cylinder.traversalProfileOverride.materialIor = 1.72;
+    cylinder.traversalProfileOverride.apertureRadiusScale = 0.35;
+    RuntimeCausticLensTransport3D_NormalizeTraversalProfile(
+        &cylinder.traversalProfileOverride);
+
+    light.position = vec3(0.0, -2.0, 0.0);
+    light.radius = 0.04;
+    light.intensity = 3.0;
+    light.color = vec3(1.0, 0.95, 0.85);
+    sample.apertureU = 0.15;
+    sample.apertureV = -0.10;
+    sample.lensU = 0.35;
+    sample.lensV = 0.20;
+    sample.sampleWeight = 0.75;
+    sample.receiverDistance = 2.5;
+
+    assert_true("runtime_caustic_lens_transport_override_solve",
+                RuntimeCausticLensTransport3D_SolveCylinderPath(&cylinder,
+                                                                &light,
+                                                                &sample,
+                                                                &path));
+    assert_true("runtime_caustic_lens_transport_override_valid", path.valid);
+    assert_close("runtime_caustic_lens_transport_override_material_ior",
+                 path.traversalProfile.materialIor,
+                 1.72,
+                 1e-9);
+    assert_close("runtime_caustic_lens_transport_override_aperture",
+                 path.traversalProfile.apertureRadiusScale,
+                 0.35,
+                 1e-9);
+    assert_vec3_close("runtime_caustic_lens_transport_override_tint",
+                      path.traversalProfile.tint,
+                      vec3(1.0, 0.97, 0.92),
+                      1e-9);
+    assert_close("runtime_caustic_lens_transport_override_entry_ior",
+                 path.events[0].etaTo,
+                 1.72,
+                 1e-9);
+    return 0;
+}
+
 static int test_runtime_caustic_lens_transport_sphere_adapter_matches_solver(void) {
     RuntimeCausticSphereLens3DDescriptor sphere;
     RuntimeCausticSphereLens3DLight light;
@@ -223,6 +349,10 @@ static int test_runtime_caustic_lens_transport_sphere_adapter_matches_solver(voi
                  lens_path.events[1].fresnel,
                  sphere_path.exitFresnel,
                  1e-9);
+    assert_close("runtime_caustic_lens_transport_sphere_adapter_profile_ior",
+                 lens_path.traversalProfile.materialIor,
+                 sphere.ior,
+                 1e-9);
     return 0;
 }
 
@@ -282,6 +412,14 @@ static int test_runtime_caustic_lens_transport_cylinder_provider_solves_path(voi
                 path.events[0].etaFrom == 1.0 && path.events[0].etaTo > 1.0);
     assert_true("runtime_caustic_lens_transport_cylinder_exit_ior",
                 path.events[1].etaFrom > 1.0 && path.events[1].etaTo == 1.0);
+    assert_close("runtime_caustic_lens_transport_cylinder_profile_ior",
+                 path.traversalProfile.materialIor,
+                 1.45,
+                 1e-9);
+    assert_close("runtime_caustic_lens_transport_cylinder_profile_absorption",
+                 path.traversalProfile.absorptionDistance,
+                 8.0,
+                 1e-9);
     assert_true("runtime_caustic_lens_transport_cylinder_fresnel_bounds",
                 path.events[0].fresnel >= 0.0 && path.events[0].fresnel <= 1.0 &&
                     path.events[1].fresnel >= 0.0 && path.events[1].fresnel <= 1.0);
@@ -381,6 +519,10 @@ static int test_runtime_caustic_lens_transport_prism_provider_solves_path(void) 
                 path.events[0].etaFrom == 1.0 && path.events[0].etaTo > 1.0);
     assert_true("runtime_caustic_lens_transport_prism_exit_ior",
                 path.events[1].etaFrom > 1.0 && path.events[1].etaTo == 1.0);
+    assert_close("runtime_caustic_lens_transport_prism_profile_ior",
+                 path.traversalProfile.materialIor,
+                 1.52,
+                 1e-9);
     assert_true("runtime_caustic_lens_transport_prism_deflects",
                 fabs(path.postExitDirection.x) > 0.05);
     assert_true("runtime_caustic_lens_transport_prism_inside_distance",
@@ -471,6 +613,10 @@ static int test_runtime_caustic_lens_transport_bowl_provider_solves_curved_path(
                 path.events[0].etaFrom == 1.0 && path.events[0].etaTo > 1.0);
     assert_true("runtime_caustic_lens_transport_bowl_exit_ior",
                 path.events[1].etaFrom > 1.0 && path.events[1].etaTo == 1.0);
+    assert_close("runtime_caustic_lens_transport_bowl_profile_ior",
+                 path.traversalProfile.materialIor,
+                 1.333,
+                 1e-9);
     entry_tilt = sqrt(path.events[0].normal.x * path.events[0].normal.x +
                       path.events[0].normal.z * path.events[0].normal.z);
     assert_true("runtime_caustic_lens_transport_bowl_curved_entry_normal",
@@ -516,12 +662,96 @@ static int test_runtime_caustic_lens_transport_bowl_rejects_wrong_shape(void) {
     return 0;
 }
 
+static int test_runtime_caustic_lens_transport_mesh_dielectric_provider_solves_path(void) {
+    RuntimeCausticLensShape3D shape;
+    RuntimeTriangle3D triangle = {0};
+    RuntimeCausticLensLightSample3D light;
+    RuntimeCausticLensSample3D sample;
+    RuntimeCausticLensPath3D path;
+
+    RuntimeCausticLensTransport3D_DefaultShape(&shape);
+    RuntimeCausticLensTransport3D_DefaultLightSample(&light);
+    RuntimeCausticLensTransport3D_DefaultSample(&sample);
+    shape.kind = RUNTIME_CAUSTIC_LENS_SHAPE_MESH_DIELECTRIC;
+    shape.center = vec3(0.0, 0.0, 0.0);
+    shape.radius = 0.5;
+    shape.height = 0.12;
+    shape.payload.valid = true;
+    shape.payload.opticalIor = 1.45;
+    shape.payload.baseColorR = 0.85;
+    shape.payload.baseColorG = 0.95;
+    shape.payload.baseColorB = 1.0;
+    shape.hasTraversalProfileOverride = true;
+    RuntimeCausticLensTransport3D_PresetTraversalProfileFromLabel(
+        "dense_glass",
+        &shape.traversalProfileOverride);
+    triangle.p0 = vec3(-0.5, 0.0, -0.5);
+    triangle.p1 = vec3(0.5, 0.0, -0.5);
+    triangle.p2 = vec3(-0.5, 0.0, 0.5);
+    triangle.normal = vec3(0.0, -1.0, 0.0);
+    light.position = vec3(0.0, -1.5, 0.0);
+    light.intensity = 4.0;
+    sample.lensU = 0.1;
+    sample.lensV = -0.1;
+    sample.sampleWeight = 0.25;
+    sample.receiverDistance = 1.0;
+
+    assert_true("runtime_caustic_lens_transport_mesh_dielectric_solve",
+                RuntimeCausticLensTransport3D_SolveMeshDielectricPath(&shape,
+                                                                      &triangle,
+                                                                      &light,
+                                                                      &sample,
+                                                                      &path));
+    assert_true("runtime_caustic_lens_transport_mesh_dielectric_valid", path.valid);
+    assert_true("runtime_caustic_lens_transport_mesh_dielectric_kind",
+                path.shapeKind == RUNTIME_CAUSTIC_LENS_SHAPE_MESH_DIELECTRIC);
+    assert_true("runtime_caustic_lens_transport_mesh_dielectric_events",
+                path.interfaceEventCount == 2u);
+    assert_true("runtime_caustic_lens_transport_mesh_dielectric_profile",
+                path.traversalProfile.kind == RUNTIME_CAUSTIC_LENS_TRAVERSAL_PROFILE_CUSTOM &&
+                    path.traversalProfile.materialIor > 1.6);
+    assert_true("runtime_caustic_lens_transport_mesh_dielectric_inside_distance",
+                path.insideDistance > 0.0);
+    assert_true("runtime_caustic_lens_transport_mesh_dielectric_exit_dir",
+                vec3_length(path.postExitDirection) > 0.99);
+    return 0;
+}
+
+static int test_runtime_caustic_lens_transport_mesh_dielectric_rejects_wrong_shape(void) {
+    RuntimeCausticLensShape3D shape;
+    RuntimeTriangle3D triangle = {0};
+    RuntimeCausticLensLightSample3D light;
+    RuntimeCausticLensSample3D sample;
+    RuntimeCausticLensPath3D path;
+
+    RuntimeCausticLensTransport3D_DefaultShape(&shape);
+    RuntimeCausticLensTransport3D_DefaultLightSample(&light);
+    RuntimeCausticLensTransport3D_DefaultSample(&sample);
+    shape.kind = RUNTIME_CAUSTIC_LENS_SHAPE_PRISM;
+    triangle.p0 = vec3(-0.5, 0.0, -0.5);
+    triangle.p1 = vec3(0.5, 0.0, -0.5);
+    triangle.p2 = vec3(-0.5, 0.0, 0.5);
+    triangle.normal = vec3(0.0, -1.0, 0.0);
+
+    assert_true("runtime_caustic_lens_transport_mesh_dielectric_reject_shape",
+                !RuntimeCausticLensTransport3D_SolveMeshDielectricPath(&shape,
+                                                                       &triangle,
+                                                                       &light,
+                                                                       &sample,
+                                                                       &path));
+    assert_true("runtime_caustic_lens_transport_mesh_dielectric_reject_invalid_path",
+                !path.valid);
+    return 0;
+}
+
 int run_test_runtime_caustic_lens_transport_3d_tests(void) {
     test_runtime_caustic_lens_transport_defaults_are_bounded();
     test_runtime_caustic_lens_transport_refract_and_fresnel();
     test_runtime_caustic_lens_transport_tir_reports_no_direction();
     test_runtime_caustic_lens_transport_records_interface_events();
     test_runtime_caustic_lens_transport_throughput_helpers();
+    test_runtime_caustic_lens_transport_profile_resolves_payload();
+    test_runtime_caustic_lens_transport_profile_override_solves_path();
     test_runtime_caustic_lens_transport_sphere_adapter_matches_solver();
     test_runtime_caustic_lens_transport_cylinder_provider_solves_path();
     test_runtime_caustic_lens_transport_cylinder_rejects_wrong_shape();
@@ -529,5 +759,7 @@ int run_test_runtime_caustic_lens_transport_3d_tests(void) {
     test_runtime_caustic_lens_transport_prism_rejects_wrong_shape();
     test_runtime_caustic_lens_transport_bowl_provider_solves_curved_path();
     test_runtime_caustic_lens_transport_bowl_rejects_wrong_shape();
+    test_runtime_caustic_lens_transport_mesh_dielectric_provider_solves_path();
+    test_runtime_caustic_lens_transport_mesh_dielectric_rejects_wrong_shape();
     return 0;
 }

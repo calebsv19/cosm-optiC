@@ -23,6 +23,8 @@
 #define RUNTIME_NATIVE_3D_RADIANCE_CHANNELS 4
 #define RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES 4
 
+typedef struct RuntimeNative3DFeatureBuffer RuntimeNative3DFeatureBuffer;
+
 typedef struct {
     int hitPixelCount;
     int visiblePixelCount;
@@ -74,6 +76,12 @@ typedef struct {
     int causticTransportAnalyticBowlLensEmittedPathCount;
     double causticTransportAnalyticBowlLensSampleWeight;
     double causticTransportAnalyticBowlLensTotalSampleWeight;
+    int causticTransportMeshDielectricLensResolvedCount;
+    int causticTransportMeshDielectricLensRejectedCount;
+    int causticTransportMeshDielectricLensEvaluatedPathCount;
+    int causticTransportMeshDielectricLensEmittedPathCount;
+    double causticTransportMeshDielectricLensSampleWeight;
+    double causticTransportMeshDielectricLensTotalSampleWeight;
     int causticTransportTransparentHitCount;
     int causticTransportSpecularEventCount;
     int causticTransportVolumeSegmentCount;
@@ -143,6 +151,20 @@ typedef struct {
     int temporalAdaptiveStateProbeTiles;
     int temporalAdaptiveStateHighRiskTiles;
     int temporalAdaptiveStateMinSampleFloor;
+    int temporalAdaptiveStateActivityRiskPixels;
+    int temporalAdaptiveStateMaterialRiskPixels;
+    int temporalAdaptiveStateTransparentRiskPixels;
+    int temporalAdaptiveStateGlossyRiskPixels;
+    int temporalAdaptiveStateGeometryEdgeRiskPixels;
+    int temporalAdaptiveStateDirectLightNoTracePixels;
+    int temporalAdaptiveStateDirectLightClearVisiblePixels;
+    int temporalAdaptiveStateDirectLightClearBlockedPixels;
+    int temporalAdaptiveStateDirectLightStablePartialPixels;
+    int temporalAdaptiveStateDirectLightMixedPartialPixels;
+    int temporalAdaptiveStateDirectLightBoundaryRiskPixels;
+    int temporalAdaptiveStateMixedRiskTiles;
+    double temporalAdaptiveStateRiskSum;
+    double temporalAdaptiveStateRiskMax;
     int temporalMeasuredTileJobs;
     int temporalAdaptiveSplitParentCount;
     int temporalAdaptiveChildTileCount;
@@ -250,6 +272,10 @@ typedef struct {
     int width;
     int height;
     bool tileOccupancyConservativeAllTiles;
+    RuntimeNative3DFeatureBuffer* featureAttributionBuffer;
+    int featureAttributionStartX;
+    int featureAttributionStartY;
+    bool directLightVisibilityAttributionEnabled;
     bool causticSidecarProbeValid;
     bool valid;
 } RuntimeNative3DPreparedFrame;

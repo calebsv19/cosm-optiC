@@ -15,6 +15,9 @@ bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
                                                         const RuntimeCameraProjector3D* projector,
                                                         const RuntimeNative3DSamplingContext* sampling,
                                                         RuntimeCausticVolumeCache3D* caustic_cache,
+                                                        RuntimeNative3DFeatureBuffer* feature_buffer,
+                                                        int feature_start_x,
+                                                        int feature_start_y,
                                                         RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DRenderStats stats = {0};
 
@@ -81,6 +84,18 @@ bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
                     stats.maxRadiance = scatter.radiance;
                 }
                 continue;
+            }
+            if (feature_buffer) {
+                RuntimeNative3DFeatureBuffer_RecordDirectLightVisibilityOutcome(
+                    feature_buffer,
+                    x - feature_start_x,
+                    y - feature_start_y,
+                    RuntimeNative3DFeatureBuffer_ResolveDirectLightVisibilityOutcome(
+                        result.visibilityOutcomeNoTraceCount,
+                        result.visibilityOutcomeClearVisibleCount,
+                        result.visibilityOutcomeClearBlockedCount,
+                        result.visibilityOutcomeStablePartialCount,
+                        result.visibilityOutcomeMixedPartialCount));
             }
             scatter = runtime_native_3d_render_primary_scatter(scene,
                                                                projector,

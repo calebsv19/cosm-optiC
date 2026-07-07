@@ -16,6 +16,8 @@ void RuntimeCausticSettings3D_Default(RuntimeCausticSettings3D* settings) {
     settings->cacheGridMode = RUNTIME_CAUSTIC_CACHE_GRID_VF3D_ALIGNED;
     settings->debugSummaryEnabled = false;
     settings->debugExportEnabled = false;
+    settings->hasTraversalProfileOverride = false;
+    RuntimeCausticLensTransport3D_DefaultTraversalProfile(&settings->traversalProfileOverride);
 }
 
 RuntimeCausticMode3D RuntimeCausticMode3D_FromLabel(const char* label) {
@@ -70,6 +72,12 @@ RuntimeCausticTransportEmissionPolicy3D_FromLabel(const char* label) {
         strcmp(label, "bowl") == 0) {
         return RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_BOWL_LENS;
     }
+    if (strcmp(label, "mesh_dielectric_lens") == 0 ||
+        strcmp(label, "mesh_dielectric") == 0 ||
+        strcmp(label, "dielectric_mesh") == 0 ||
+        strcmp(label, "mesh_lens") == 0) {
+        return RUNTIME_CAUSTIC_TRANSPORT_EMISSION_MESH_DIELECTRIC_LENS;
+    }
     return RUNTIME_CAUSTIC_TRANSPORT_EMISSION_TRIANGLE_TARGETS;
 }
 
@@ -103,6 +111,8 @@ const char* RuntimeCausticTransportEmissionPolicy3D_Label(
             return "analytic_prism_lens";
         case RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_BOWL_LENS:
             return "analytic_bowl_lens";
+        case RUNTIME_CAUSTIC_TRANSPORT_EMISSION_MESH_DIELECTRIC_LENS:
+            return "mesh_dielectric_lens";
         default:
             return "unknown";
     }

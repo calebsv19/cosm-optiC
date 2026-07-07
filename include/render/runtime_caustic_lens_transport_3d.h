@@ -22,6 +22,22 @@ typedef enum {
     RUNTIME_CAUSTIC_LENS_SHAPE_MESH_DIELECTRIC = 6
 } RuntimeCausticLensShape3DKind;
 
+typedef enum {
+    RUNTIME_CAUSTIC_LENS_TRAVERSAL_PROFILE_PAYLOAD_DEFAULT = 0,
+    RUNTIME_CAUSTIC_LENS_TRAVERSAL_PROFILE_CUSTOM = 1
+} RuntimeCausticLensTraversalProfile3DKind;
+
+typedef struct {
+    RuntimeCausticLensTraversalProfile3DKind kind;
+    double outsideIor;
+    double materialIor;
+    double fresnelScale;
+    double transmissionScale;
+    Vec3 tint;
+    double absorptionDistance;
+    double apertureRadiusScale;
+} RuntimeCausticLensTraversalProfile3D;
+
 typedef struct {
     RuntimeCausticLensShape3DKind kind;
     int sceneObjectIndex;
@@ -33,6 +49,8 @@ typedef struct {
     double radius;
     double height;
     RuntimeMaterialPayload3D payload;
+    bool hasTraversalProfileOverride;
+    RuntimeCausticLensTraversalProfile3D traversalProfileOverride;
 } RuntimeCausticLensShape3D;
 
 typedef struct {
@@ -82,12 +100,23 @@ typedef struct {
     double insideDistance;
     double receiverPlaneT;
     Vec3 receiverCrossing;
+    RuntimeCausticLensTraversalProfile3D traversalProfile;
     uint32_t interfaceEventCount;
     RuntimeCausticLensInterfaceEvent3D events[
         RUNTIME_CAUSTIC_LENS_TRANSPORT_MAX_INTERFACE_EVENTS];
 } RuntimeCausticLensPath3D;
 
 void RuntimeCausticLensTransport3D_DefaultShape(RuntimeCausticLensShape3D* shape);
+void RuntimeCausticLensTransport3D_DefaultTraversalProfile(
+    RuntimeCausticLensTraversalProfile3D* profile);
+void RuntimeCausticLensTransport3D_NormalizeTraversalProfile(
+    RuntimeCausticLensTraversalProfile3D* profile);
+bool RuntimeCausticLensTransport3D_PresetTraversalProfileFromLabel(
+    const char* label,
+    RuntimeCausticLensTraversalProfile3D* out_profile);
+void RuntimeCausticLensTransport3D_ResolveTraversalProfileFromPayload(
+    const RuntimeMaterialPayload3D* payload,
+    RuntimeCausticLensTraversalProfile3D* out_profile);
 void RuntimeCausticLensTransport3D_DefaultLightSample(
     RuntimeCausticLensLightSample3D* light);
 void RuntimeCausticLensTransport3D_DefaultSample(RuntimeCausticLensSample3D* sample);
@@ -112,10 +141,18 @@ bool RuntimeCausticLensTransport3D_AppendInterfaceEvent(
     const RuntimeCausticLensInterfaceEvent3D* event);
 Vec3 RuntimeCausticLensTransport3D_ApplyInterfaceTransmission(Vec3 throughput,
                                                               double fresnel);
+Vec3 RuntimeCausticLensTransport3D_ApplyInterfaceTransmissionProfile(
+    Vec3 throughput,
+    double fresnel,
+    const RuntimeCausticLensTraversalProfile3D* profile);
 Vec3 RuntimeCausticLensTransport3D_ApplyAbsorptionTint(Vec3 throughput,
                                                        Vec3 tint,
                                                        double distance_in_medium,
                                                        double absorption_distance);
+Vec3 RuntimeCausticLensTransport3D_ApplyAbsorptionTintProfile(
+    Vec3 throughput,
+    double distance_in_medium,
+    const RuntimeCausticLensTraversalProfile3D* profile);
 bool RuntimeCausticLensTransport3D_SolveSpherePath(
     const RuntimeCausticSphereLens3DDescriptor* sphere,
     const RuntimeCausticSphereLens3DLight* light,
@@ -135,6 +172,12 @@ bool RuntimeCausticLensTransport3D_SolvePrismPath(
     RuntimeCausticLensPath3D* out_path);
 bool RuntimeCausticLensTransport3D_SolveBowlPath(
     const RuntimeCausticLensShape3D* bowl,
+    const RuntimeCausticLensLightSample3D* light,
+    const RuntimeCausticLensSample3D* sample,
+    RuntimeCausticLensPath3D* out_path);
+bool RuntimeCausticLensTransport3D_SolveMeshDielectricPath(
+    const RuntimeCausticLensShape3D* mesh_dielectric,
+    const RuntimeTriangle3D* entry_triangle,
     const RuntimeCausticLensLightSample3D* light,
     const RuntimeCausticLensSample3D* sample,
     RuntimeCausticLensPath3D* out_path);

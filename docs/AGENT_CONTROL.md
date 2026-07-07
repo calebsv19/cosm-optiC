@@ -21,7 +21,17 @@ For the canonical demo pack selected by RT-R2, see `docs/AGENT_DEMO_PACK.md`.
 
 ## Setup Assumptions
 
-Run commands from the workspace parent that contains `ray_tracing/`.
+Run commands from a scratch parent directory that contains the checkout. To use
+the commands below unchanged, clone the public GitHub repo into a `ray_tracing/`
+directory:
+
+```bash
+git clone https://github.com/calebsv19/cosm-optiC ray_tracing
+```
+
+If you use GitHub's default `cosm-optiC/` directory name instead, replace
+`make -C ray_tracing ...` and `ray_tracing/...` paths with
+`make -C cosm-optiC ...` and `cosm-optiC/...`.
 
 Required local dependencies are the same as the repo build:
 
@@ -128,7 +138,10 @@ the optional local queue-bundle dry run.
 ## Worker Bundle Dry Run
 
 The first local worker-package workflow is a dry local queue fixture, not a live
-remote submit:
+remote submit. The export command is repo-local. The queue validation command
+uses the broader CodeWork workspace helper `bin/vps_worker_job_queue.py`; skip
+that validation step in a standalone public clone unless that helper is present
+beside the checkout.
 
 ```bash
 python3 ray_tracing/tools/export_worker_queue_fixture.py \

@@ -62,6 +62,9 @@ bool runtime_native_3d_render_shade_direct_light(
     const RuntimeCameraProjector3D* projector,
     const RuntimeNative3DSamplingContext* sampling,
     RuntimeCausticVolumeCache3D* caustic_cache,
+    RuntimeNative3DFeatureBuffer* feature_buffer,
+    int feature_start_x,
+    int feature_start_y,
     RuntimeNative3DRenderStats* out_stats);
 bool runtime_native_3d_render_shade_diffuse_bounce(
     float* radiance_buffer,
@@ -134,6 +137,9 @@ bool runtime_native_3d_render_shade_disney_v2(
     RuntimeCausticVolumeCache3D* caustic_cache,
     RuntimeCausticSurfaceCache3D* surface_cache,
     const RuntimeDisneyV2CausticSidecarProbe3D* caustic_probe,
+    RuntimeNative3DFeatureBuffer* feature_buffer,
+    int feature_start_x,
+    int feature_start_y,
     RuntimeNative3DRenderStats* out_stats);
 
 #endif

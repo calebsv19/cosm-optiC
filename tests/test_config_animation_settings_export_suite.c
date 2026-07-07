@@ -490,6 +490,74 @@ static int test_agent_render_request_caustic_transport_volume_phase4_contract(vo
     return 0;
 }
 
+static int test_agent_render_request_caustic_lens_traversal_profile_override(void) {
+    char request_path[PATH_MAX];
+    char diagnostics[256];
+    RayTracingAgentRenderRequest request;
+    const char* json_text =
+        "{\n"
+        "  \"schema_version\": \"ray_tracing_agent_render_request_v1\",\n"
+        "  \"run_id\": \"caustic_lens_profile_override_test\",\n"
+        "  \"scene\": {\"runtime_scene_path\": \"scene_runtime.json\"},\n"
+        "  \"render\": {\"integrator_3d\": \"direct_light\"},\n"
+        "  \"inspection\": {\n"
+        "    \"caustic_mode\": \"transport\",\n"
+        "    \"caustic_volume_enabled\": true,\n"
+        "    \"caustic_transport_emission_policy\": \"analytic_prism_lens\",\n"
+        "    \"caustic_lens_traversal_profile\": {\n"
+        "      \"preset\": \"dense_glass\",\n"
+        "      \"material_ior\": 1.72,\n"
+        "      \"fresnel_scale\": 0.75,\n"
+        "      \"transmission_scale\": 1.15,\n"
+        "      \"tint\": [0.80, 0.90, 1.00],\n"
+        "      \"absorption_distance\": 6.5,\n"
+        "      \"aperture_radius_scale\": 0.40\n"
+        "    }\n"
+        "  }\n"
+        "}\n";
+
+    snprintf(request_path,
+             sizeof(request_path),
+             "%s",
+             "/tmp/ray_tracing_agent_render_caustic_lens_profile_request.json");
+    assert_true("agent_render_caustic_lens_profile_request_write",
+                write_text_file(request_path, json_text));
+    assert_true("agent_render_caustic_lens_profile_request_load",
+                ray_tracing_agent_render_request_load_file(request_path,
+                                                           &request,
+                                                           diagnostics,
+                                                           sizeof(diagnostics)));
+    assert_true("agent_render_caustic_lens_profile_override_enabled",
+                request.caustic_settings.hasTraversalProfileOverride);
+    assert_true("agent_render_caustic_lens_profile_policy",
+                request.caustic_settings.emissionPolicy ==
+                    RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_PRISM_LENS);
+    assert_true("agent_render_caustic_lens_profile_kind",
+                request.caustic_settings.traversalProfileOverride.kind ==
+                    RUNTIME_CAUSTIC_LENS_TRAVERSAL_PROFILE_CUSTOM);
+    assert_true("agent_render_caustic_lens_profile_ior",
+                request.caustic_settings.traversalProfileOverride.materialIor > 1.719 &&
+                    request.caustic_settings.traversalProfileOverride.materialIor < 1.721);
+    assert_true("agent_render_caustic_lens_profile_fresnel_scale",
+                request.caustic_settings.traversalProfileOverride.fresnelScale > 0.749 &&
+                    request.caustic_settings.traversalProfileOverride.fresnelScale < 0.751);
+    assert_true("agent_render_caustic_lens_profile_transmission_scale",
+                request.caustic_settings.traversalProfileOverride.transmissionScale > 1.149 &&
+                    request.caustic_settings.traversalProfileOverride.transmissionScale < 1.151);
+    assert_true("agent_render_caustic_lens_profile_tint",
+                request.caustic_settings.traversalProfileOverride.tint.x > 0.799 &&
+                    request.caustic_settings.traversalProfileOverride.tint.y > 0.899 &&
+                    request.caustic_settings.traversalProfileOverride.tint.z > 0.999);
+    assert_true("agent_render_caustic_lens_profile_absorption",
+                request.caustic_settings.traversalProfileOverride.absorptionDistance > 6.49 &&
+                    request.caustic_settings.traversalProfileOverride.absorptionDistance < 6.51);
+    assert_true("agent_render_caustic_lens_profile_aperture",
+                request.caustic_settings.traversalProfileOverride.apertureRadiusScale > 0.399 &&
+                    request.caustic_settings.traversalProfileOverride.apertureRadiusScale < 0.401);
+    unlink(request_path);
+    return 0;
+}
+
 static int test_agent_render_request_caustic_transport_surface_sidecar_combined_contract(void) {
     char request_path[PATH_MAX];
     char diagnostics[256];
@@ -1646,6 +1714,7 @@ int run_test_config_animation_settings_export_suite(void) {
     test_agent_render_request_disney_v2_caustic_transport_reserved();
     test_agent_render_request_trace_route_roundtrip_and_validation();
     test_agent_render_request_caustic_transport_volume_phase4_contract();
+    test_agent_render_request_caustic_lens_traversal_profile_override();
     test_agent_render_request_caustic_transport_surface_sidecar_combined_contract();
     test_agent_render_request_caustic_sidecar_rejects_non_disney_v2();
     test_agent_render_request_volume_visible_roundtrip();

@@ -37,6 +37,28 @@ static void runtime_native_3d_tile_scheduler_record_adaptive_state_summary(
     stats->temporalAdaptiveStateActiveTiles += summary->activeTileCount;
     stats->temporalAdaptiveStateProbeTiles += summary->probeTileCount;
     stats->temporalAdaptiveStateHighRiskTiles += summary->highRiskTileCount;
+    stats->temporalAdaptiveStateActivityRiskPixels += summary->activityRiskPixelCount;
+    stats->temporalAdaptiveStateMaterialRiskPixels += summary->materialRiskPixelCount;
+    stats->temporalAdaptiveStateTransparentRiskPixels += summary->transparentRiskPixelCount;
+    stats->temporalAdaptiveStateGlossyRiskPixels += summary->glossyRiskPixelCount;
+    stats->temporalAdaptiveStateGeometryEdgeRiskPixels += summary->geometryEdgeRiskPixelCount;
+    stats->temporalAdaptiveStateDirectLightNoTracePixels +=
+        summary->directLightNoTracePixelCount;
+    stats->temporalAdaptiveStateDirectLightClearVisiblePixels +=
+        summary->directLightClearVisiblePixelCount;
+    stats->temporalAdaptiveStateDirectLightClearBlockedPixels +=
+        summary->directLightClearBlockedPixelCount;
+    stats->temporalAdaptiveStateDirectLightStablePartialPixels +=
+        summary->directLightStablePartialPixelCount;
+    stats->temporalAdaptiveStateDirectLightMixedPartialPixels +=
+        summary->directLightMixedPartialPixelCount;
+    stats->temporalAdaptiveStateDirectLightBoundaryRiskPixels +=
+        summary->directLightBoundaryRiskPixelCount;
+    stats->temporalAdaptiveStateMixedRiskTiles += summary->mixedRiskTileCount;
+    stats->temporalAdaptiveStateRiskSum += summary->riskSum;
+    if (summary->riskMax > stats->temporalAdaptiveStateRiskMax) {
+        stats->temporalAdaptiveStateRiskMax = summary->riskMax;
+    }
     if (summary->minSampleFloor > stats->temporalAdaptiveStateMinSampleFloor) {
         stats->temporalAdaptiveStateMinSampleFloor = summary->minSampleFloor;
     }

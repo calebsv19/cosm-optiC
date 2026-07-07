@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 #include "render/runtime_native_3d_render.h"
+#include "render/runtime_native_3d_feature_buffer.h"
 #include "render/runtime_light_emitter_3d.h"
 #include "render/runtime_volume_3d_scatter.h"
 

@@ -14,6 +14,8 @@
 
 bool RuntimeNative3DAdaptiveSampling_RuntimeEnabled(void);
 void RuntimeNative3DAdaptiveSampling_SetRuntimeOverride(bool has_override, bool enabled);
+bool RuntimeNative3DAdaptiveSampling_RiskEarlyStopEnabled(void);
+void RuntimeNative3DAdaptiveSampling_SetRiskEarlyStopOverride(bool has_override, bool enabled);
 
 typedef struct {
     uint8_t* stableEmitterMask;
@@ -35,7 +37,12 @@ enum {
     RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_STABLE = 1u << 0,
     RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_ACTIVE = 1u << 1,
     RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_PROBE = 1u << 2,
-    RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_HIGH_RISK = 1u << 3
+    RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_HIGH_RISK = 1u << 3,
+    RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_ACTIVITY_RISK = 1u << 4,
+    RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_MATERIAL_RISK = 1u << 5,
+    RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_TRANSPARENT_RISK = 1u << 6,
+    RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_GEOMETRY_EDGE_RISK = 1u << 7,
+    RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_DIRECT_LIGHT_RISK = 1u << 8
 };
 
 typedef struct {
@@ -44,7 +51,7 @@ typedef struct {
     float meanLuma;
     float radianceDelta;
     float risk;
-    uint8_t flags;
+    uint16_t flags;
 } RuntimeNative3DAdaptivePixelState;
 
 typedef struct {
@@ -57,7 +64,21 @@ typedef struct {
     int probeTileCount;
     int highRiskTileCount;
     int measuredPixelCount;
+    int activityRiskPixelCount;
+    int materialRiskPixelCount;
+    int transparentRiskPixelCount;
+    int glossyRiskPixelCount;
+    int geometryEdgeRiskPixelCount;
+    int directLightNoTracePixelCount;
+    int directLightClearVisiblePixelCount;
+    int directLightClearBlockedPixelCount;
+    int directLightStablePartialPixelCount;
+    int directLightMixedPartialPixelCount;
+    int directLightBoundaryRiskPixelCount;
+    int mixedRiskTileCount;
     int minSampleFloor;
+    double riskSum;
+    double riskMax;
 } RuntimeNative3DAdaptivePixelStateSummary;
 
 typedef struct {
@@ -110,6 +131,10 @@ bool RuntimeNative3DAdaptiveSampling_RefreshTemporalActivityMask(
     const RuntimeNative3DTemporalAccumulation* accumulation,
     const RuntimeNative3DFeatureBuffer* features);
 bool RuntimeNative3DAdaptiveSampling_RefreshActivityMaskFromPixelState(
+    RuntimeNative3DAdaptiveSamplingMask* mask,
+    const RuntimeNative3DAdaptivePixelStateBuffer* state,
+    int tile_size);
+bool RuntimeNative3DAdaptiveSampling_RefreshConservativeEarlyStopMaskFromPixelState(
     RuntimeNative3DAdaptiveSamplingMask* mask,
     const RuntimeNative3DAdaptivePixelStateBuffer* state,
     int tile_size);

@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #include "app/animation.h"
 #include "config/config_manager.h"
@@ -74,6 +75,35 @@ static int runtime_disney_v2_3d_resolve_primary_transmission_sample_count(void) 
     }
     if (value > RUNTIME_3D_TRANSMISSION_SAMPLES_MAX) {
         value = RUNTIME_3D_TRANSMISSION_SAMPLES_MAX;
+    }
+    return value;
+}
+
+static int runtime_disney_v2_3d_resolve_transmission_sample_count(
+    bool allow_recursive_receiver_shade) {
+    int value = runtime_disney_v2_3d_resolve_primary_transmission_sample_count();
+    const char* reflected_cap_text = NULL;
+    char* reflected_cap_end = NULL;
+    long reflected_cap = 0;
+
+    if (allow_recursive_receiver_shade) {
+        return value;
+    }
+
+    reflected_cap_text =
+        getenv("RAY_TRACING_DISNEY_V2_REFLECTED_TRANSMISSION_SAMPLE_CAP");
+    if (!reflected_cap_text || !reflected_cap_text[0]) {
+        return value;
+    }
+    reflected_cap = strtol(reflected_cap_text, &reflected_cap_end, 10);
+    if (reflected_cap_end == reflected_cap_text || reflected_cap <= 0) {
+        return value;
+    }
+    if (reflected_cap < value) {
+        value = (int)reflected_cap;
+    }
+    if (value < 1) {
+        value = 1;
     }
     return value;
 }
@@ -422,15 +452,21 @@ static bool runtime_disney_v2_3d_trace_transmission_next_hit(
     const RuntimeScene3D* scene,
     const HitInfo3D* source_hit,
     Vec3 direction,
+    RuntimeRenderTraceCostTransmissionSource3D ledger_source,
+    int path_depth,
     HitInfo3D* out_hit,
     Ray3D* out_ray,
-    int* out_ray_count) {
+    int* out_ray_count,
+    RuntimeRenderTraceCostTransmissionTermination3D* out_termination) {
     Ray3D ray = {0};
     HitInfo3D hit = {0};
     double remaining_distance = kRuntimeDisneyV2_3DPrimaryTransmissionMaxDistance;
     int ray_count = 0;
 
     if (out_ray_count) *out_ray_count = 0;
+    if (out_termination) {
+        *out_termination = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_UNKNOWN;
+    }
     if (!scene || !source_hit || !out_hit || !out_ray) return false;
     HitInfo3D_Reset(out_hit);
     ray = RuntimeRay3D_MakeOffset(source_hit->position,
@@ -443,15 +479,18 @@ static bool runtime_disney_v2_3d_trace_transmission_next_hit(
          ++skip_count) {
         HitInfo3D_Reset(&hit);
         ray_count += 1;
-        RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
-            RUNTIME_RENDER_TRACE_COST_RAY_TRANSMISSION,
-            skip_count + 1);
+        RuntimeRenderTraceCostLedger3D_RecordTransmissionRayAtDepth(
+            ledger_source,
+            path_depth + skip_count);
         if (!RuntimeRay3D_TraceSceneFirstHit(scene,
                                              &ray,
                                              kRuntimeDisneyV2_3DPrimaryTransmissionEpsilon,
                                              remaining_distance,
                                              &hit)) {
             if (out_ray_count) *out_ray_count = ray_count;
+            if (out_termination) {
+                *out_termination = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_NO_HIT;
+            }
             *out_ray = ray;
             return false;
         }
@@ -470,8 +509,29 @@ static bool runtime_disney_v2_3d_trace_transmission_next_hit(
                                       kRuntimeDisneyV2_3DPrimaryTransmissionEpsilon);
     }
     if (out_ray_count) *out_ray_count = ray_count;
+    if (out_termination) {
+        *out_termination = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_SKIP_LIMIT;
+    }
     *out_ray = ray;
     return false;
+}
+
+static RuntimeRenderTraceCostTransmissionSurfaceKind3D
+runtime_disney_v2_3d_transmission_surface_kind(
+    const RuntimeDisneyV2_3DTransparentPolicy* transparent_policy) {
+    if (!transparent_policy) {
+        return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_UNKNOWN;
+    }
+    if (transparent_policy->alphaOnly) {
+        return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_ALPHA_ONLY;
+    }
+    if (transparent_policy->thinWalled) {
+        return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_THIN_WALLED;
+    }
+    if (transparent_policy->physicalTransmission) {
+        return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_SOLID_PHYSICAL;
+    }
+    return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_SOLID_NONPHYSICAL;
 }
 
 static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
@@ -490,6 +550,7 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
     double* out_throughput_b,
     int* out_depth,
     bool* out_receiver_found,
+    RuntimeRenderTraceCostTransmissionSource3D ledger_source,
     bool allow_recursive_receiver_shade) {
     HitInfo3D source_hit = {0};
     HitInfo3D hit = {0};
@@ -507,6 +568,10 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
     double accum_g = 0.0;
     double accum_b = 0.0;
     int depth = 1;
+    int sample_ray_total = 0;
+    int transparent_surface_count = 0;
+    RuntimeRenderTraceCostTransmissionTermination3D termination =
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_UNKNOWN;
     bool contributed = false;
     bool receiver_found = false;
 
@@ -528,30 +593,55 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
     }
     for (depth = 1; depth <= RUNTIME_DISNEY_V2_3D_PRIMARY_TRANSMISSION_DEPTH_CAP; ++depth) {
         int ray_count = 0;
+        RuntimeRenderTraceCostTransmissionTermination3D trace_termination =
+            RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_UNKNOWN;
 
         if (!RuntimePathDepthPolicy3D_AllowsDepth(&io_result->pathPolicy,
                                                   RUNTIME_PATH_DEPTH_POLICY_3D_LOBE_TRANSMISSION,
                                                   depth)) {
             io_result->primaryTransmissionDepthLimitCount += 1;
+            termination = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_DEPTH_LIMIT;
             break;
         }
         if (!runtime_disney_v2_3d_trace_transmission_next_hit(scene,
                                                               &source_hit,
                                                               direction,
+                                                              ledger_source,
+                                                              depth,
                                                               &hit,
                                                               &ray,
-                                                              &ray_count)) {
+                                                              &ray_count,
+                                                              &trace_termination)) {
             io_result->primaryTransmissionRayCount += ray_count;
+            sample_ray_total += ray_count;
+            termination = trace_termination;
             break;
         }
         io_result->primaryTransmissionRayCount += ray_count;
+        sample_ray_total += ray_count;
         io_result->primaryTransmissionHitCount += 1;
 
         if (!RuntimeMaterialPayload3D_ResolveFromHit(&hit, &payload)) {
+            termination = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_POLICY_REJECT;
+            RuntimeRenderTraceCostLedger3D_RecordTransmissionSample(
+                ledger_source,
+                termination,
+                depth,
+                sample_ray_total,
+                transparent_surface_count,
+                receiver_found,
+                runtime_disney_v2_transmission_3d_peak(throughput_r,
+                                                       throughput_g,
+                                                       throughput_b),
+                runtime_disney_v2_transmission_3d_peak(accum_r, accum_g, accum_b));
             return false;
         }
         principled = RuntimePrincipledBSDF3D_FromMaterialPayload(&payload);
         if (!runtime_disney_v2_3d_payload_is_transparent(&payload, &principled)) {
+            RuntimeRenderTraceCostLedger3D_RecordTransmissionSurface(
+                ledger_source,
+                RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_OPAQUE_RECEIVER,
+                &hit);
             if (allow_recursive_receiver_shade &&
                 RuntimeDisneyV2_3D_ShadeHit(scene, &hit, sampling, &receiver_result) &&
                 receiver_result.visible) {
@@ -584,6 +674,7 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
             *out_throughput_g = throughput_g * blend_weight;
             *out_throughput_b = throughput_b * blend_weight;
             *out_depth = depth;
+            termination = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_RECEIVER_HIT;
             break;
         }
 
@@ -593,6 +684,11 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
             runtime_disney_v2_3d_resolve_transparent_policy(&payload,
                                                             &principled,
                                                             segment_distance);
+        RuntimeRenderTraceCostLedger3D_RecordTransmissionSurface(
+            ledger_source,
+            runtime_disney_v2_3d_transmission_surface_kind(&transparent_policy),
+            &hit);
+        transparent_surface_count += 1;
         if (transparent_policy.alphaOnly) {
             io_result->primaryTransmissionAlphaOnlySurfaceCount += 1;
         } else if (transparent_policy.thinWalled) {
@@ -659,6 +755,7 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
                                                   RUNTIME_PATH_DEPTH_POLICY_3D_LOBE_TRANSMISSION,
                                                   depth + 1)) {
             io_result->primaryTransmissionDepthLimitCount += 1;
+            termination = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_DEPTH_LIMIT;
             break;
         }
         source_hit = hit;
@@ -667,7 +764,19 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
     if (!contributed) {
         if (depth > RUNTIME_DISNEY_V2_3D_PRIMARY_TRANSMISSION_DEPTH_CAP) {
             io_result->primaryTransmissionDepthLimitCount += 1;
+            termination = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_DEPTH_LIMIT;
+        } else if (termination == RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_UNKNOWN) {
+            termination = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_NO_CONTRIBUTION;
         }
+        RuntimeRenderTraceCostLedger3D_RecordTransmissionSample(
+            ledger_source,
+            termination,
+            depth,
+            sample_ray_total,
+            transparent_surface_count,
+            receiver_found,
+            runtime_disney_v2_transmission_3d_peak(throughput_r, throughput_g, throughput_b),
+            runtime_disney_v2_transmission_3d_peak(accum_r, accum_g, accum_b));
         return false;
     }
 
@@ -684,6 +793,20 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
     *out_throughput_b = throughput_b * blend_weight;
     *out_depth = depth;
     *out_receiver_found = receiver_found;
+    if (termination == RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_UNKNOWN) {
+        termination = receiver_found
+                          ? RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_RECEIVER_HIT
+                          : RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_NO_CONTRIBUTION;
+    }
+    RuntimeRenderTraceCostLedger3D_RecordTransmissionSample(
+        ledger_source,
+        termination,
+        depth,
+        sample_ray_total,
+        transparent_surface_count,
+        receiver_found,
+        runtime_disney_v2_transmission_3d_peak(throughput_r, throughput_g, throughput_b),
+        runtime_disney_v2_transmission_3d_peak(accum_r, accum_g, accum_b));
     return true;
 }
 
@@ -764,10 +887,18 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
                                                     (sample.dielectric.fresnel * 0.80),
                                                 0.05,
                                                 0.65);
-    sample_count = runtime_disney_v2_3d_resolve_primary_transmission_sample_count();
+    sample_count =
+        runtime_disney_v2_3d_resolve_transmission_sample_count(
+            allow_recursive_receiver_shade);
     sample_seed = runtime_disney_v2_3d_transmission_seed_from_hit(&primary_hit->hitInfo,
                                                                   sampling);
     io_result->primaryTransmissionSampleCount = sample_count;
+    RuntimeRenderTraceCostTransmissionSource3D ledger_source =
+        allow_recursive_receiver_shade
+            ? RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_PRIMARY
+            : RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED;
+    RuntimeRenderTraceCostLedger3D_RecordTransmissionPathEvaluation(ledger_source,
+                                                                    sample_count);
 
     for (int sample_index = 0; sample_index < sample_count; ++sample_index) {
         Vec3 sample_direction = runtime_disney_v2_3d_roughen_transmission_direction(
@@ -803,6 +934,7 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
                                                                       &path_throughput_b,
                                                                       &receiver_depth,
                                                                       &receiver_found,
+                                                                      ledger_source,
                                                                       allow_recursive_receiver_shade)) {
             continue;
         }

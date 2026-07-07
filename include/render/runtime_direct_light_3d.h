@@ -39,6 +39,11 @@ typedef struct {
     double rectEmitterCosSum;
     double rectReceiverCosAvg;
     double rectEmitterCosAvg;
+    int visibilityOutcomeNoTraceCount;
+    int visibilityOutcomeClearVisibleCount;
+    int visibilityOutcomeClearBlockedCount;
+    int visibilityOutcomeStablePartialCount;
+    int visibilityOutcomeMixedPartialCount;
 } RuntimeDirectLight3DResult;
 
 bool RuntimeDirectLight3D_TracePrimaryHit(const RuntimeScene3D* scene,

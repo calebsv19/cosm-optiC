@@ -8,9 +8,13 @@
 typedef struct {
     Vec3 center;
     double radius;
+    double outsideIor;
     double ior;
+    double fresnelScale;
+    double transmissionScale;
     Vec3 tint;
     double absorptionDistance;
+    double apertureRadiusScale;
 } RuntimeCausticSphereLens3DDescriptor;
 
 typedef struct {

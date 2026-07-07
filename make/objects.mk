@@ -27,8 +27,11 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_caustic_surface_cache_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_transport_analytic_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_transport_analytic_sphere_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_transport_lens_path_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_transport_mesh_dielectric_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_transport_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_transport_debug_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_transport_provider_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_transport_shapes_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_transport_surface_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_transport_triangle_3d.o \
@@ -306,8 +309,10 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_caustic_surface_cache_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_transport_analytic_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_transport_analytic_sphere_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_transport_lens_path_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_transport_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_transport_debug_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_transport_provider_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_transport_shapes_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_transport_surface_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_transport_triangle_3d.o \

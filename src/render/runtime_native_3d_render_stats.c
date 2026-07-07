@@ -185,6 +185,36 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
         dst->causticTransportAnalyticBowlLensTotalSampleWeight =
             src->causticTransportAnalyticBowlLensTotalSampleWeight;
     }
+    if (src->causticTransportMeshDielectricLensResolvedCount >
+        dst->causticTransportMeshDielectricLensResolvedCount) {
+        dst->causticTransportMeshDielectricLensResolvedCount =
+            src->causticTransportMeshDielectricLensResolvedCount;
+    }
+    if (src->causticTransportMeshDielectricLensRejectedCount >
+        dst->causticTransportMeshDielectricLensRejectedCount) {
+        dst->causticTransportMeshDielectricLensRejectedCount =
+            src->causticTransportMeshDielectricLensRejectedCount;
+    }
+    if (src->causticTransportMeshDielectricLensEvaluatedPathCount >
+        dst->causticTransportMeshDielectricLensEvaluatedPathCount) {
+        dst->causticTransportMeshDielectricLensEvaluatedPathCount =
+            src->causticTransportMeshDielectricLensEvaluatedPathCount;
+    }
+    if (src->causticTransportMeshDielectricLensEmittedPathCount >
+        dst->causticTransportMeshDielectricLensEmittedPathCount) {
+        dst->causticTransportMeshDielectricLensEmittedPathCount =
+            src->causticTransportMeshDielectricLensEmittedPathCount;
+    }
+    if (src->causticTransportMeshDielectricLensSampleWeight >
+        dst->causticTransportMeshDielectricLensSampleWeight) {
+        dst->causticTransportMeshDielectricLensSampleWeight =
+            src->causticTransportMeshDielectricLensSampleWeight;
+    }
+    if (src->causticTransportMeshDielectricLensTotalSampleWeight >
+        dst->causticTransportMeshDielectricLensTotalSampleWeight) {
+        dst->causticTransportMeshDielectricLensTotalSampleWeight =
+            src->causticTransportMeshDielectricLensTotalSampleWeight;
+    }
     if (src->causticTransportTransparentHitCount >
         dst->causticTransportTransparentHitCount) {
         dst->causticTransportTransparentHitCount =
@@ -498,6 +528,33 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
     dst->temporalAdaptiveStateActiveTiles += src->temporalAdaptiveStateActiveTiles;
     dst->temporalAdaptiveStateProbeTiles += src->temporalAdaptiveStateProbeTiles;
     dst->temporalAdaptiveStateHighRiskTiles += src->temporalAdaptiveStateHighRiskTiles;
+    dst->temporalAdaptiveStateActivityRiskPixels +=
+        src->temporalAdaptiveStateActivityRiskPixels;
+    dst->temporalAdaptiveStateMaterialRiskPixels +=
+        src->temporalAdaptiveStateMaterialRiskPixels;
+    dst->temporalAdaptiveStateTransparentRiskPixels +=
+        src->temporalAdaptiveStateTransparentRiskPixels;
+    dst->temporalAdaptiveStateGlossyRiskPixels +=
+        src->temporalAdaptiveStateGlossyRiskPixels;
+    dst->temporalAdaptiveStateGeometryEdgeRiskPixels +=
+        src->temporalAdaptiveStateGeometryEdgeRiskPixels;
+    dst->temporalAdaptiveStateDirectLightNoTracePixels +=
+        src->temporalAdaptiveStateDirectLightNoTracePixels;
+    dst->temporalAdaptiveStateDirectLightClearVisiblePixels +=
+        src->temporalAdaptiveStateDirectLightClearVisiblePixels;
+    dst->temporalAdaptiveStateDirectLightClearBlockedPixels +=
+        src->temporalAdaptiveStateDirectLightClearBlockedPixels;
+    dst->temporalAdaptiveStateDirectLightStablePartialPixels +=
+        src->temporalAdaptiveStateDirectLightStablePartialPixels;
+    dst->temporalAdaptiveStateDirectLightMixedPartialPixels +=
+        src->temporalAdaptiveStateDirectLightMixedPartialPixels;
+    dst->temporalAdaptiveStateDirectLightBoundaryRiskPixels +=
+        src->temporalAdaptiveStateDirectLightBoundaryRiskPixels;
+    dst->temporalAdaptiveStateMixedRiskTiles += src->temporalAdaptiveStateMixedRiskTiles;
+    dst->temporalAdaptiveStateRiskSum += src->temporalAdaptiveStateRiskSum;
+    if (src->temporalAdaptiveStateRiskMax > dst->temporalAdaptiveStateRiskMax) {
+        dst->temporalAdaptiveStateRiskMax = src->temporalAdaptiveStateRiskMax;
+    }
     if (src->temporalAdaptiveStateMinSampleFloor >
         dst->temporalAdaptiveStateMinSampleFloor) {
         dst->temporalAdaptiveStateMinSampleFloor =
@@ -656,6 +713,28 @@ void runtime_native_3d_render_stats_record_adaptive_state_summary(
     stats->temporalAdaptiveStateActiveTiles += summary->activeTileCount;
     stats->temporalAdaptiveStateProbeTiles += summary->probeTileCount;
     stats->temporalAdaptiveStateHighRiskTiles += summary->highRiskTileCount;
+    stats->temporalAdaptiveStateActivityRiskPixels += summary->activityRiskPixelCount;
+    stats->temporalAdaptiveStateMaterialRiskPixels += summary->materialRiskPixelCount;
+    stats->temporalAdaptiveStateTransparentRiskPixels += summary->transparentRiskPixelCount;
+    stats->temporalAdaptiveStateGlossyRiskPixels += summary->glossyRiskPixelCount;
+    stats->temporalAdaptiveStateGeometryEdgeRiskPixels += summary->geometryEdgeRiskPixelCount;
+    stats->temporalAdaptiveStateDirectLightNoTracePixels +=
+        summary->directLightNoTracePixelCount;
+    stats->temporalAdaptiveStateDirectLightClearVisiblePixels +=
+        summary->directLightClearVisiblePixelCount;
+    stats->temporalAdaptiveStateDirectLightClearBlockedPixels +=
+        summary->directLightClearBlockedPixelCount;
+    stats->temporalAdaptiveStateDirectLightStablePartialPixels +=
+        summary->directLightStablePartialPixelCount;
+    stats->temporalAdaptiveStateDirectLightMixedPartialPixels +=
+        summary->directLightMixedPartialPixelCount;
+    stats->temporalAdaptiveStateDirectLightBoundaryRiskPixels +=
+        summary->directLightBoundaryRiskPixelCount;
+    stats->temporalAdaptiveStateMixedRiskTiles += summary->mixedRiskTileCount;
+    stats->temporalAdaptiveStateRiskSum += summary->riskSum;
+    if (summary->riskMax > stats->temporalAdaptiveStateRiskMax) {
+        stats->temporalAdaptiveStateRiskMax = summary->riskMax;
+    }
     if (summary->minSampleFloor > stats->temporalAdaptiveStateMinSampleFloor) {
         stats->temporalAdaptiveStateMinSampleFloor = summary->minSampleFloor;
     }

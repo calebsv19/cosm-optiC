@@ -114,6 +114,43 @@ typedef enum RuntimeRenderTraceCostDirectLightImportanceBucket3D {
     RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_COUNT = 4
 } RuntimeRenderTraceCostDirectLightImportanceBucket3D;
 
+typedef enum RuntimeRenderTraceCostTransmissionSource3D {
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_UNKNOWN = 0,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_PRIMARY = 1,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED = 2,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT = 3
+} RuntimeRenderTraceCostTransmissionSource3D;
+
+typedef enum RuntimeRenderTraceCostTransmissionSurfaceKind3D {
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_UNKNOWN = 0,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_ALPHA_ONLY = 1,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_THIN_WALLED = 2,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_SOLID_PHYSICAL = 3,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_SOLID_NONPHYSICAL = 4,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_OPAQUE_RECEIVER = 5,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_COUNT = 6
+} RuntimeRenderTraceCostTransmissionSurfaceKind3D;
+
+typedef enum RuntimeRenderTraceCostTransmissionTermination3D {
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_UNKNOWN = 0,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_RECEIVER_HIT = 1,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_NO_HIT = 2,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_DEPTH_LIMIT = 3,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_SKIP_LIMIT = 4,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_NO_CONTRIBUTION = 5,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_POLICY_REJECT = 6,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_COUNT = 7
+} RuntimeRenderTraceCostTransmissionTermination3D;
+
+typedef enum RuntimeRenderTraceCostThroughputBucket3D {
+    RUNTIME_RENDER_TRACE_COST_THROUGHPUT_ZERO = 0,
+    RUNTIME_RENDER_TRACE_COST_THROUGHPUT_TINY = 1,
+    RUNTIME_RENDER_TRACE_COST_THROUGHPUT_LOW = 2,
+    RUNTIME_RENDER_TRACE_COST_THROUGHPUT_MEDIUM = 3,
+    RUNTIME_RENDER_TRACE_COST_THROUGHPUT_HIGH = 4,
+    RUNTIME_RENDER_TRACE_COST_THROUGHPUT_COUNT = 5
+} RuntimeRenderTraceCostThroughputBucket3D;
+
 typedef struct RuntimeRenderTraceCostDirectLightVisibilityPolicy3D {
     uint64_t sourceEvaluations;
     uint64_t evaluatedSamples;
@@ -156,6 +193,36 @@ typedef struct RuntimeRenderTraceCostDirectLightVisibilityPolicy3D {
                                        [RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_COUNT];
 } RuntimeRenderTraceCostDirectLightVisibilityPolicy3D;
 
+typedef struct RuntimeRenderTraceCostTransmissionPathPolicy3D {
+    uint64_t pathEvaluations;
+    uint64_t requestedSamples;
+    uint64_t sampleEvaluations;
+    uint64_t contributingSamples;
+    uint64_t receiverSamples;
+    uint64_t rayTraces;
+    uint64_t hitSurfaces;
+    uint64_t transparentSurfaceHits;
+    uint64_t receiverHits;
+    uint64_t sourceCounts[RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT];
+    uint64_t sourceSampleCounts[RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT];
+    uint64_t terminationCounts[RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_COUNT];
+    uint64_t sourceTerminationCounts[RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT]
+                                   [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_COUNT];
+    uint64_t surfaceKindCounts[RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_COUNT];
+    uint64_t surfaceKindMaterialCounts[RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_COUNT]
+                                      [RUNTIME_RENDER_TRACE_COST_MATERIAL_COUNT];
+    uint64_t transparentSurfaceMaterialCounts[RUNTIME_RENDER_TRACE_COST_MATERIAL_COUNT];
+    uint64_t receiverMaterialCounts[RUNTIME_RENDER_TRACE_COST_MATERIAL_COUNT];
+    uint64_t terminalDepthCounts[RUNTIME_RENDER_TRACE_COST_DEPTH_BUCKET_COUNT];
+    uint64_t rayDepthCounts[RUNTIME_RENDER_TRACE_COST_DEPTH_BUCKET_COUNT];
+    uint64_t throughputBucketCounts[RUNTIME_RENDER_TRACE_COST_THROUGHPUT_COUNT];
+    uint64_t contributionBucketCounts[RUNTIME_RENDER_TRACE_COST_THROUGHPUT_COUNT];
+    uint64_t totalTransparentSurfacesPerSample;
+    uint64_t maxTransparentSurfacesInSample;
+    uint64_t totalRayTracesPerSample;
+    uint64_t maxRayTracesInSample;
+} RuntimeRenderTraceCostTransmissionPathPolicy3D;
+
 typedef struct RuntimeRenderTraceCostLedger3D {
     bool enabled;
     uint64_t totalRays;
@@ -165,6 +232,7 @@ typedef struct RuntimeRenderTraceCostLedger3D {
                                 [RUNTIME_RENDER_TRACE_COST_DEPTH_BUCKET_COUNT];
     uint64_t materialFamilyCounts[RUNTIME_RENDER_TRACE_COST_MATERIAL_COUNT];
     RuntimeRenderTraceCostDirectLightVisibilityPolicy3D directLightVisibilityPolicy;
+    RuntimeRenderTraceCostTransmissionPathPolicy3D transmissionPathPolicy;
 } RuntimeRenderTraceCostLedger3D;
 
 const char* RuntimeRenderTraceCostRayClass3DLabel(RuntimeRenderTraceCostRayClass3D ray_class);
@@ -190,6 +258,14 @@ const char* RuntimeRenderTraceCostDirectLightDistanceBucket3DLabel(
     RuntimeRenderTraceCostDirectLightDistanceBucket3D bucket);
 const char* RuntimeRenderTraceCostDirectLightImportanceBucket3DLabel(
     RuntimeRenderTraceCostDirectLightImportanceBucket3D bucket);
+const char* RuntimeRenderTraceCostTransmissionSource3DLabel(
+    RuntimeRenderTraceCostTransmissionSource3D source);
+const char* RuntimeRenderTraceCostTransmissionSurfaceKind3DLabel(
+    RuntimeRenderTraceCostTransmissionSurfaceKind3D kind);
+const char* RuntimeRenderTraceCostTransmissionTermination3DLabel(
+    RuntimeRenderTraceCostTransmissionTermination3D termination);
+const char* RuntimeRenderTraceCostThroughputBucket3DLabel(
+    RuntimeRenderTraceCostThroughputBucket3D bucket);
 void RuntimeRenderTraceCostLedger3D_SetEnabled(bool enabled);
 void RuntimeRenderTraceCostLedger3D_SetEnabledFromEnvironment(void);
 bool RuntimeRenderTraceCostLedger3D_IsEnabled(void);
@@ -214,6 +290,25 @@ void RuntimeRenderTraceCostLedger3D_RecordDirectLightVisibilityPolicy(
     double contribution_peak,
     double transmittance_luma_min,
     double transmittance_luma_max);
+void RuntimeRenderTraceCostLedger3D_RecordTransmissionPathEvaluation(
+    RuntimeRenderTraceCostTransmissionSource3D source,
+    int requested_sample_count);
+void RuntimeRenderTraceCostLedger3D_RecordTransmissionRayAtDepth(
+    RuntimeRenderTraceCostTransmissionSource3D source,
+    int path_depth);
+void RuntimeRenderTraceCostLedger3D_RecordTransmissionSurface(
+    RuntimeRenderTraceCostTransmissionSource3D source,
+    RuntimeRenderTraceCostTransmissionSurfaceKind3D surface_kind,
+    const HitInfo3D* hit);
+void RuntimeRenderTraceCostLedger3D_RecordTransmissionSample(
+    RuntimeRenderTraceCostTransmissionSource3D source,
+    RuntimeRenderTraceCostTransmissionTermination3D termination,
+    int terminal_depth,
+    int ray_trace_count,
+    int transparent_surface_count,
+    bool receiver_found,
+    double throughput_peak,
+    double contribution_peak);
 void RuntimeRenderTraceCostLedger3D_Snapshot(RuntimeRenderTraceCostLedger3D* out_ledger);
 
 #endif

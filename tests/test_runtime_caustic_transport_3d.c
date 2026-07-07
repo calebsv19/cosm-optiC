@@ -123,6 +123,100 @@ static bool test_caustic_transport_make_scene(RuntimeScene3D* scene) {
     return true;
 }
 
+static void test_caustic_transport_set_triangle(RuntimeScene3D* scene,
+                                                int triangle_index,
+                                                Vec3 p0,
+                                                Vec3 p1,
+                                                Vec3 p2,
+                                                int primitive_index,
+                                                int scene_object_index) {
+    RuntimeTriangle3D* triangle = &scene->triangleMesh.triangles[triangle_index];
+    triangle->p0 = p0;
+    triangle->p1 = p1;
+    triangle->p2 = p2;
+    triangle->normal =
+        vec3_normalize(vec3_cross(vec3_sub(triangle->p1, triangle->p0),
+                                  vec3_sub(triangle->p2, triangle->p0)));
+    triangle->primitiveIndex = primitive_index;
+    triangle->sceneObjectIndex = scene_object_index;
+    triangle->localTriangleIndex = triangle_index;
+}
+
+static bool test_caustic_transport_make_closed_mesh_dielectric_scene(RuntimeScene3D* scene) {
+    const double x = 0.30;
+    const double y0 = -1.08;
+    const double y1 = -0.92;
+    const double z = 0.30;
+    if (!scene) return false;
+    RuntimeScene3D_Init(scene);
+    scene->hasLight = true;
+    scene->light.position = vec3(0.0, -3.0, 0.0);
+    scene->light.radius = 0.05;
+    scene->light.intensity = 60.0;
+    scene->light.falloffDistance = 6.0;
+    scene->light.falloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    scene->hasCamera = true;
+    scene->camera.position = vec3(0.0, 1.8, 0.0);
+    scene->camera.rotation = 0.0;
+    scene->camera.lookPitch = 0.0;
+    scene->camera.zoom = 1.0;
+    scene->camera.nearPlane = 0.1;
+    scene->primitiveCapacity = 2;
+    scene->triangleMesh.triangleCapacity = 14;
+    scene->primitives = (RuntimePrimitive3D*)calloc((size_t)scene->primitiveCapacity,
+                                                    sizeof(*scene->primitives));
+    scene->triangleMesh.triangles =
+        (RuntimeTriangle3D*)calloc((size_t)scene->triangleMesh.triangleCapacity,
+                                   sizeof(*scene->triangleMesh.triangles));
+    if (!scene->primitives || !scene->triangleMesh.triangles) {
+        RuntimeScene3D_Free(scene);
+        return false;
+    }
+
+    scene->primitiveCount = 2;
+    scene->triangleMesh.triangleCount = 14;
+    scene->primitives[0].source.kind = RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH;
+    scene->primitives[0].source.sceneObjectIndex = 0;
+    snprintf(scene->primitives[0].source.objectId,
+             sizeof(scene->primitives[0].source.objectId),
+             "%s",
+             "transport_closed_mesh_dielectric");
+    scene->primitives[1].source.kind = RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH;
+    scene->primitives[1].source.sceneObjectIndex = 1;
+    snprintf(scene->primitives[1].source.objectId,
+             sizeof(scene->primitives[1].source.objectId),
+             "%s",
+             "transport_receiver");
+
+    test_caustic_transport_set_triangle(scene, 0, vec3(-x, y0, -z), vec3(x, y0, -z), vec3(-x, y0, z), 0, 0);
+    test_caustic_transport_set_triangle(scene, 1, vec3(x, y0, -z), vec3(x, y0, z), vec3(-x, y0, z), 0, 0);
+    test_caustic_transport_set_triangle(scene, 2, vec3(-x, y1, -z), vec3(-x, y1, z), vec3(x, y1, -z), 0, 0);
+    test_caustic_transport_set_triangle(scene, 3, vec3(x, y1, -z), vec3(-x, y1, z), vec3(x, y1, z), 0, 0);
+    test_caustic_transport_set_triangle(scene, 4, vec3(-x, y0, -z), vec3(-x, y1, -z), vec3(x, y0, -z), 0, 0);
+    test_caustic_transport_set_triangle(scene, 5, vec3(x, y0, -z), vec3(-x, y1, -z), vec3(x, y1, -z), 0, 0);
+    test_caustic_transport_set_triangle(scene, 6, vec3(-x, y0, z), vec3(x, y0, z), vec3(-x, y1, z), 0, 0);
+    test_caustic_transport_set_triangle(scene, 7, vec3(x, y0, z), vec3(x, y1, z), vec3(-x, y1, z), 0, 0);
+    test_caustic_transport_set_triangle(scene, 8, vec3(-x, y0, -z), vec3(-x, y0, z), vec3(-x, y1, -z), 0, 0);
+    test_caustic_transport_set_triangle(scene, 9, vec3(-x, y0, z), vec3(-x, y1, z), vec3(-x, y1, -z), 0, 0);
+    test_caustic_transport_set_triangle(scene, 10, vec3(x, y0, -z), vec3(x, y1, -z), vec3(x, y0, z), 0, 0);
+    test_caustic_transport_set_triangle(scene, 11, vec3(x, y0, z), vec3(x, y1, -z), vec3(x, y1, z), 0, 0);
+    test_caustic_transport_set_triangle(scene, 12, vec3(-0.80, 0.35, -0.80), vec3(0.80, 0.35, -0.80), vec3(-0.80, 0.35, 0.80), 1, 1);
+    test_caustic_transport_set_triangle(scene, 13, vec3(0.80, 0.35, -0.80), vec3(0.80, 0.35, 0.80), vec3(-0.80, 0.35, 0.80), 1, 1);
+
+    if (!prepared_suite_attach_dense_volume(&scene->volume,
+                                            vec3(-0.60, -0.85, -0.60),
+                                            6u,
+                                            9u,
+                                            6u,
+                                            0.15,
+                                            1.0f)) {
+        RuntimeScene3D_Free(scene);
+        return false;
+    }
+    RuntimeScene3D_RefreshCapabilities(scene);
+    return true;
+}
+
 static bool test_caustic_transport_make_analytic_sphere_scene(RuntimeScene3D* scene) {
     static const Vec3 unit_vertices[6] = {
         {0.0, 1.0, 0.0},
@@ -556,6 +650,34 @@ static void test_caustic_transport_enable_analytic_bowl_lens(int sample_budget,
     }
 }
 
+static void test_caustic_transport_enable_mesh_dielectric_lens(
+    int sample_budget,
+    bool volume_cache,
+    bool surface_cache,
+    bool debug_export,
+    const char* output_root,
+    const char* traversal_profile_preset) {
+    RuntimeCausticSettings3D settings;
+    RuntimeCausticSettings3D_Default(&settings);
+    settings.mode = RUNTIME_CAUSTIC_MODE_TRANSPORT;
+    settings.volumeCacheEnabled = volume_cache;
+    settings.surfaceCacheEnabled = surface_cache;
+    settings.sampleBudget = sample_budget;
+    settings.maxPathDepth = 2;
+    settings.emissionPolicy = RUNTIME_CAUSTIC_TRANSPORT_EMISSION_MESH_DIELECTRIC_LENS;
+    settings.debugExportEnabled = debug_export;
+    if (traversal_profile_preset) {
+        settings.hasTraversalProfileOverride =
+            RuntimeCausticLensTransport3D_PresetTraversalProfileFromLabel(
+                traversal_profile_preset,
+                &settings.traversalProfileOverride);
+    }
+    RuntimeCausticTransport3D_SetRequestState(&settings);
+    if (output_root) {
+        RuntimeCausticTransportDebug3D_SetOutputRoot(output_root);
+    }
+}
+
 static void test_caustic_transport_enable_transport_with_surface_calibration(
     int sample_budget,
     double radiance_scale,
@@ -803,6 +925,12 @@ static int test_runtime_caustic_transport_analytic_sphere_lens_debug_export_reco
                  1e-9);
     assert_true("runtime_caustic_transport_analytic_debug_lens_sampling",
                 path->lensSampleWeight > 0.0 && path->lensPathPdf > 0.0);
+    assert_true("runtime_caustic_transport_analytic_debug_lens_profile",
+                path->lensOutsideIor == 1.0 &&
+                    path->lensMaterialIor > 1.0 &&
+                    path->lensFresnelScale == 1.0 &&
+                    path->lensTransmissionScale == 1.0 &&
+                    path->lensApertureRadiusScale == 1.0);
     assert_true("runtime_caustic_transport_analytic_debug_lens_no_tir",
                 !path->lensTotalInternalReflection);
     assert_true("runtime_caustic_transport_analytic_debug_outside_before_volume",
@@ -1675,6 +1803,171 @@ static int test_runtime_caustic_transport_analytic_bowl_lens_debug_export_record
     return 0;
 }
 
+static int test_runtime_caustic_transport_mesh_dielectric_lens_populates_volume_cache(void) {
+    SceneConfig saved_scene = sceneSettings;
+    RuntimeScene3D scene;
+    RuntimeCausticVolumeCache3D cache;
+    RuntimeCausticTransport3DDiagnostics diagnostics;
+
+    test_caustic_transport_seed_material_state();
+    RuntimeCausticVolumeCache3D_Init(&cache);
+    assert_true("runtime_caustic_transport_mesh_dielectric_scene",
+                test_caustic_transport_make_closed_mesh_dielectric_scene(&scene));
+    test_caustic_transport_enable_mesh_dielectric_lens(12,
+                                                       true,
+                                                       false,
+                                                       false,
+                                                       NULL,
+                                                       "water");
+
+    assert_true("runtime_caustic_transport_mesh_dielectric_populate",
+                RuntimeCausticTransport3D_PopulateVolumeCache(&scene,
+                                                              &cache,
+                                                              &diagnostics));
+    assert_true("runtime_caustic_transport_mesh_dielectric_resolved",
+                diagnostics.meshDielectricLensResolvedCount == 1u);
+    assert_true("runtime_caustic_transport_mesh_dielectric_no_reject",
+                diagnostics.meshDielectricLensRejectedCount == 0u);
+    assert_true("runtime_caustic_transport_mesh_dielectric_evaluated",
+                diagnostics.meshDielectricLensEvaluatedPathCount > 0u &&
+                    diagnostics.meshDielectricLensEvaluatedPathCount <= 12u);
+    assert_true("runtime_caustic_transport_mesh_dielectric_emit_count",
+                diagnostics.meshDielectricLensEmittedPathCount > 0u);
+    assert_true("runtime_caustic_transport_mesh_dielectric_only",
+                diagnostics.evaluatedPathCount ==
+                    diagnostics.meshDielectricLensEvaluatedPathCount);
+    assert_true("runtime_caustic_transport_mesh_dielectric_cache",
+                diagnostics.cache.nonZeroCellCount > 0u);
+    assert_true("runtime_caustic_transport_mesh_dielectric_deposits",
+                diagnostics.depositAcceptedCount > 0u);
+    assert_true("runtime_caustic_transport_mesh_dielectric_traversal_accepted",
+                diagnostics.meshDielectricLensTraversalAcceptedCount ==
+                    diagnostics.meshDielectricLensEvaluatedPathCount);
+    assert_true("runtime_caustic_transport_mesh_dielectric_inside_range",
+                diagnostics.meshDielectricLensInsideDistanceMin > 0.0 &&
+                    diagnostics.meshDielectricLensInsideDistanceMax >=
+                        diagnostics.meshDielectricLensInsideDistanceMin);
+    assert_true("runtime_caustic_transport_mesh_dielectric_entry_cosine",
+                diagnostics.meshDielectricLensEntryCosineMin > 0.0 &&
+                    diagnostics.meshDielectricLensEntryCosineMax <= 1.0);
+    assert_true("runtime_caustic_transport_mesh_dielectric_exit_cosine",
+                diagnostics.meshDielectricLensExitCosineMin > 0.0 &&
+                    diagnostics.meshDielectricLensExitCosineMax <= 1.0);
+    assert_true("runtime_caustic_transport_mesh_dielectric_no_reject_reasons",
+                diagnostics.meshDielectricLensRejectInvalidProfileCount == 0u &&
+                    diagnostics.meshDielectricLensRejectSampleCount == 0u &&
+                    diagnostics.meshDielectricLensRejectEntryMissCount == 0u &&
+                    diagnostics.meshDielectricLensRejectEntryWrongObjectCount == 0u &&
+                    diagnostics.meshDielectricLensRejectEntryRefractionCount == 0u &&
+                    diagnostics.meshDielectricLensRejectExitMissCount == 0u &&
+                    diagnostics.meshDielectricLensRejectExitWrongObjectCount == 0u &&
+                    diagnostics.meshDielectricLensRejectExitRefractionCount == 0u &&
+                    diagnostics.meshDielectricLensRejectInsideDistanceCount == 0u &&
+                    diagnostics.meshDielectricLensRejectThroughputCount == 0u);
+
+    RuntimeCausticVolumeCache3D_Free(&cache);
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    RuntimeCausticTransport3D_ResetRequestState();
+    return 0;
+}
+
+static int test_runtime_caustic_transport_mesh_dielectric_lens_rejects_open_pane(void) {
+    SceneConfig saved_scene = sceneSettings;
+    RuntimeScene3D scene;
+    RuntimeCausticVolumeCache3D cache;
+    RuntimeCausticTransport3DDiagnostics diagnostics;
+    bool ok = false;
+
+    test_caustic_transport_seed_material_state();
+    RuntimeCausticVolumeCache3D_Init(&cache);
+    assert_true("runtime_caustic_transport_mesh_dielectric_open_scene",
+                test_caustic_transport_make_scene(&scene));
+    test_caustic_transport_enable_mesh_dielectric_lens(4,
+                                                       true,
+                                                       false,
+                                                       false,
+                                                       NULL,
+                                                       "water");
+
+    ok = RuntimeCausticTransport3D_PopulateVolumeCache(&scene, &cache, &diagnostics);
+    assert_true("runtime_caustic_transport_mesh_dielectric_open_reject", !ok);
+    assert_true("runtime_caustic_transport_mesh_dielectric_open_resolved",
+                diagnostics.meshDielectricLensResolvedCount == 1u);
+    assert_true("runtime_caustic_transport_mesh_dielectric_open_evaluated",
+                diagnostics.meshDielectricLensEvaluatedPathCount > 0u);
+    assert_true("runtime_caustic_transport_mesh_dielectric_open_no_accept",
+                diagnostics.meshDielectricLensTraversalAcceptedCount == 0u);
+    assert_true("runtime_caustic_transport_mesh_dielectric_open_exit_wrong_object",
+                diagnostics.meshDielectricLensRejectExitWrongObjectCount > 0u ||
+                    diagnostics.meshDielectricLensRejectExitMissCount > 0u);
+
+    RuntimeCausticVolumeCache3D_Free(&cache);
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    RuntimeCausticTransport3D_ResetRequestState();
+    return 0;
+}
+
+static int test_runtime_caustic_transport_mesh_dielectric_lens_debug_export_records_policy(void) {
+    SceneConfig saved_scene = sceneSettings;
+    RuntimeScene3D scene;
+    RuntimeCausticVolumeCache3D cache;
+    RuntimeCausticTransport3DDiagnostics diagnostics;
+    const RuntimeCausticTransportDebugPath3D* path = NULL;
+    const char* output_root = "/tmp/ray_tracing_caustic_transport_mesh_dielectric_debug_test";
+
+    test_caustic_transport_seed_material_state();
+    RuntimeCausticVolumeCache3D_Init(&cache);
+    assert_true("runtime_caustic_transport_mesh_dielectric_debug_scene",
+                test_caustic_transport_make_closed_mesh_dielectric_scene(&scene));
+    assert_true("runtime_caustic_transport_mesh_dielectric_debug_output_root",
+                config_io_ensure_directory_exists(output_root));
+    test_caustic_transport_enable_mesh_dielectric_lens(12,
+                                                       true,
+                                                       false,
+                                                       true,
+                                                       output_root,
+                                                       "dense_glass");
+
+    assert_true("runtime_caustic_transport_mesh_dielectric_debug_populate",
+                RuntimeCausticTransport3D_PopulateVolumeCache(&scene,
+                                                              &cache,
+                                                              &diagnostics));
+    assert_true("runtime_caustic_transport_mesh_dielectric_debug_records",
+                RuntimeCausticTransportDebug3D_RecordCount() > 0u);
+    path = RuntimeCausticTransportDebug3D_RecordAt(0u);
+    assert_true("runtime_caustic_transport_mesh_dielectric_debug_first_path", path != NULL);
+    assert_true("runtime_caustic_transport_mesh_dielectric_debug_policy",
+                strcmp(path->emissionPolicy, "mesh_dielectric_lens") == 0);
+    assert_true("runtime_caustic_transport_mesh_dielectric_debug_event",
+                strcmp(path->eventType, "mesh_dielectric_lens") == 0);
+    assert_true("runtime_caustic_transport_mesh_dielectric_debug_lens_shape",
+                strcmp(path->lensShapeKind, "mesh_dielectric") == 0);
+    assert_true("runtime_caustic_transport_mesh_dielectric_debug_lens_events",
+                path->lensInterfaceEventCount == 2u);
+    assert_true("runtime_caustic_transport_mesh_dielectric_debug_lens_ior",
+                path->lensEntryEtaFrom == 1.0 && path->lensEntryEtaTo > 1.6 &&
+                    path->lensExitEtaFrom > 1.6 && path->lensExitEtaTo == 1.0);
+    assert_true("runtime_caustic_transport_mesh_dielectric_debug_profile",
+                path->lensTraversalProfileKind ==
+                    (int)RUNTIME_CAUSTIC_LENS_TRAVERSAL_PROFILE_CUSTOM);
+    assert_true("runtime_caustic_transport_mesh_dielectric_debug_volume",
+                path->volumeDepositAcceptedCount > 0u);
+    assert_true("runtime_caustic_transport_mesh_dielectric_debug_traversal",
+                diagnostics.meshDielectricLensTraversalAcceptedCount ==
+                    diagnostics.meshDielectricLensEvaluatedPathCount &&
+                    diagnostics.meshDielectricLensInsideDistanceMax > 0.0 &&
+                    diagnostics.meshDielectricLensEntryCosineMin > 0.0 &&
+                    diagnostics.meshDielectricLensExitCosineMin > 0.0);
+
+    RuntimeCausticVolumeCache3D_Free(&cache);
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    RuntimeCausticTransport3D_ResetRequestState();
+    return 0;
+}
+
 int run_test_runtime_caustic_transport_3d_tests(void) {
     int before = test_support_failures();
 
@@ -1690,6 +1983,9 @@ int run_test_runtime_caustic_transport_3d_tests(void) {
     test_runtime_caustic_transport_analytic_prism_lens_debug_export_records_policy();
     test_runtime_caustic_transport_analytic_bowl_lens_populates_volume_cache();
     test_runtime_caustic_transport_analytic_bowl_lens_debug_export_records_policy();
+    test_runtime_caustic_transport_mesh_dielectric_lens_populates_volume_cache();
+    test_runtime_caustic_transport_mesh_dielectric_lens_rejects_open_pane();
+    test_runtime_caustic_transport_mesh_dielectric_lens_debug_export_records_policy();
     test_runtime_caustic_transport_debug_export_disabled_records_nothing();
     test_runtime_caustic_transport_debug_export_records_path_geometry();
     test_runtime_caustic_transport_populates_surface_cache();

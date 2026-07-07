@@ -109,6 +109,107 @@ void RuntimeCausticLensTransport3D_DefaultShape(RuntimeCausticLensShape3D* shape
     shape->height = 2.0;
 }
 
+void RuntimeCausticLensTransport3D_DefaultTraversalProfile(
+    RuntimeCausticLensTraversalProfile3D* profile) {
+    if (!profile) return;
+    memset(profile, 0, sizeof(*profile));
+    profile->kind = RUNTIME_CAUSTIC_LENS_TRAVERSAL_PROFILE_PAYLOAD_DEFAULT;
+    profile->outsideIor = 1.0;
+    profile->materialIor = 1.5;
+    profile->fresnelScale = 1.0;
+    profile->transmissionScale = 1.0;
+    profile->tint = vec3(1.0, 1.0, 1.0);
+    profile->absorptionDistance = 0.0;
+    profile->apertureRadiusScale = 1.0;
+}
+
+void RuntimeCausticLensTransport3D_NormalizeTraversalProfile(
+    RuntimeCausticLensTraversalProfile3D* profile) {
+    if (!profile) return;
+    if (!(profile->outsideIor > 1.0e-6)) profile->outsideIor = 1.0;
+    if (!(profile->materialIor > 1.0e-6)) profile->materialIor = 1.5;
+    profile->fresnelScale = lens_transport_clamp(profile->fresnelScale, 0.0, 4.0);
+    profile->transmissionScale = lens_transport_clamp(profile->transmissionScale, 0.0, 4.0);
+    profile->tint.x = lens_transport_clamp(profile->tint.x, 0.0, 8.0);
+    profile->tint.y = lens_transport_clamp(profile->tint.y, 0.0, 8.0);
+    profile->tint.z = lens_transport_clamp(profile->tint.z, 0.0, 8.0);
+    if (!(profile->absorptionDistance > 0.0)) profile->absorptionDistance = 0.0;
+    profile->absorptionDistance = lens_transport_clamp(profile->absorptionDistance,
+                                                       0.0,
+                                                       1000000.0);
+    profile->apertureRadiusScale = lens_transport_clamp(profile->apertureRadiusScale,
+                                                        0.0,
+                                                        8.0);
+}
+
+bool RuntimeCausticLensTransport3D_PresetTraversalProfileFromLabel(
+    const char* label,
+    RuntimeCausticLensTraversalProfile3D* out_profile) {
+    RuntimeCausticLensTraversalProfile3D profile;
+    if (!out_profile || !label || !label[0]) return false;
+
+    RuntimeCausticLensTransport3D_DefaultTraversalProfile(&profile);
+    profile.kind = RUNTIME_CAUSTIC_LENS_TRAVERSAL_PROFILE_CUSTOM;
+
+    if (strcmp(label, "clear_glass") == 0 ||
+        strcmp(label, "glass") == 0 ||
+        strcmp(label, "crown_glass") == 0) {
+        profile.materialIor = 1.50;
+        profile.tint = vec3(1.0, 1.0, 1.0);
+    } else if (strcmp(label, "dense_glass") == 0 ||
+               strcmp(label, "flint_glass") == 0 ||
+               strcmp(label, "high_ior_glass") == 0) {
+        profile.materialIor = 1.62;
+        profile.tint = vec3(1.0, 0.97, 0.92);
+        profile.absorptionDistance = 12.0;
+    } else if (strcmp(label, "water") == 0 ||
+               strcmp(label, "water_like") == 0) {
+        profile.materialIor = 1.333;
+        profile.tint = vec3(0.86, 0.95, 1.0);
+        profile.absorptionDistance = 9.0;
+    } else if (strcmp(label, "acrylic") == 0 ||
+               strcmp(label, "plexiglass") == 0) {
+        profile.materialIor = 1.49;
+        profile.tint = vec3(1.0, 0.98, 0.96);
+        profile.absorptionDistance = 18.0;
+    } else if (strcmp(label, "diamond") == 0) {
+        profile.materialIor = 2.417;
+        profile.tint = vec3(1.0, 1.0, 0.98);
+        profile.absorptionDistance = 20.0;
+    } else if (strcmp(label, "air_gap") == 0 ||
+               strcmp(label, "low_ior") == 0 ||
+               strcmp(label, "refraction_reversal") == 0 ||
+               strcmp(label, "reversal") == 0) {
+        profile.materialIor = 1.0003;
+        profile.tint = vec3(1.0, 1.0, 1.0);
+        profile.apertureRadiusScale = 0.65;
+    } else {
+        return false;
+    }
+
+    RuntimeCausticLensTransport3D_NormalizeTraversalProfile(&profile);
+    *out_profile = profile;
+    return true;
+}
+
+void RuntimeCausticLensTransport3D_ResolveTraversalProfileFromPayload(
+    const RuntimeMaterialPayload3D* payload,
+    RuntimeCausticLensTraversalProfile3D* out_profile) {
+    RuntimeCausticLensTraversalProfile3D profile;
+    RuntimeCausticLensTransport3D_DefaultTraversalProfile(&profile);
+    if (payload) {
+        profile.materialIor = payload->opticalIor > 1.0001
+                                  ? payload->opticalIor
+                                  : fmax(payload->bsdf.ior, 1.0);
+        profile.tint = vec3(payload->baseColorR,
+                            payload->baseColorG,
+                            payload->baseColorB);
+        profile.absorptionDistance = payload->absorptionDistance;
+    }
+    RuntimeCausticLensTransport3D_NormalizeTraversalProfile(&profile);
+    if (out_profile) *out_profile = profile;
+}
+
 void RuntimeCausticLensTransport3D_DefaultLightSample(
     RuntimeCausticLensLightSample3D* light) {
     if (!light) return;
@@ -144,6 +245,7 @@ void RuntimeCausticLensTransport3D_DefaultPath(RuntimeCausticLensPath3D* path) {
     path->throughput = vec3(1.0, 1.0, 1.0);
     path->sampleWeight = 1.0;
     path->pathPdf = 1.0;
+    RuntimeCausticLensTransport3D_DefaultTraversalProfile(&path->traversalProfile);
 }
 
 const char* RuntimeCausticLensTransport3D_ShapeKindLabel(
@@ -255,6 +357,27 @@ Vec3 RuntimeCausticLensTransport3D_ApplyInterfaceTransmission(Vec3 throughput,
                 throughput.z * transmission);
 }
 
+Vec3 RuntimeCausticLensTransport3D_ApplyInterfaceTransmissionProfile(
+    Vec3 throughput,
+    double fresnel,
+    const RuntimeCausticLensTraversalProfile3D* profile) {
+    RuntimeCausticLensTraversalProfile3D default_profile;
+    const RuntimeCausticLensTraversalProfile3D* active_profile = profile;
+    double scaled_fresnel = 0.0;
+    double transmission = 0.0;
+    if (!active_profile) {
+        RuntimeCausticLensTransport3D_DefaultTraversalProfile(&default_profile);
+        active_profile = &default_profile;
+    }
+    scaled_fresnel = lens_transport_clamp(fresnel, 0.0, 1.0) *
+                     lens_transport_clamp(active_profile->fresnelScale, 0.0, 8.0);
+    transmission = (1.0 - lens_transport_clamp(scaled_fresnel, 0.0, 1.0)) *
+                   lens_transport_clamp(active_profile->transmissionScale, 0.0, 8.0);
+    return vec3(throughput.x * transmission,
+                throughput.y * transmission,
+                throughput.z * transmission);
+}
+
 Vec3 RuntimeCausticLensTransport3D_ApplyAbsorptionTint(Vec3 throughput,
                                                        Vec3 tint,
                                                        double distance_in_medium,
@@ -268,6 +391,23 @@ Vec3 RuntimeCausticLensTransport3D_ApplyAbsorptionTint(Vec3 throughput,
                 throughput.z * lens_transport_clamp(tint.z, 0.0, 1.0) * absorption);
 }
 
+Vec3 RuntimeCausticLensTransport3D_ApplyAbsorptionTintProfile(
+    Vec3 throughput,
+    double distance_in_medium,
+    const RuntimeCausticLensTraversalProfile3D* profile) {
+    RuntimeCausticLensTraversalProfile3D default_profile;
+    const RuntimeCausticLensTraversalProfile3D* active_profile = profile;
+    if (!active_profile) {
+        RuntimeCausticLensTransport3D_DefaultTraversalProfile(&default_profile);
+        active_profile = &default_profile;
+    }
+    return RuntimeCausticLensTransport3D_ApplyAbsorptionTint(
+        throughput,
+        active_profile->tint,
+        distance_in_medium,
+        active_profile->absorptionDistance);
+}
+
 bool RuntimeCausticLensTransport3D_SolveSpherePath(
     const RuntimeCausticSphereLens3DDescriptor* sphere,
     const RuntimeCausticSphereLens3DLight* light,
@@ -279,6 +419,7 @@ bool RuntimeCausticLensTransport3D_SolveSpherePath(
     RuntimeCausticLensPath3D path;
     RuntimeCausticLensInterfaceEvent3D entry_event;
     RuntimeCausticLensInterfaceEvent3D exit_event;
+    RuntimeCausticLensTraversalProfile3D traversal_profile;
     double sample_weight = 1.0;
 
     if (out_path) RuntimeCausticLensTransport3D_DefaultPath(out_path);
@@ -292,6 +433,16 @@ bool RuntimeCausticLensTransport3D_SolveSpherePath(
     }
 
     RuntimeCausticLensTransport3D_DefaultPath(&path);
+    RuntimeCausticLensTransport3D_DefaultTraversalProfile(&traversal_profile);
+    traversal_profile.kind = RUNTIME_CAUSTIC_LENS_TRAVERSAL_PROFILE_CUSTOM;
+    traversal_profile.outsideIor = sphere->outsideIor;
+    traversal_profile.materialIor = sphere->ior;
+    traversal_profile.fresnelScale = sphere->fresnelScale;
+    traversal_profile.transmissionScale = sphere->transmissionScale;
+    traversal_profile.tint = sphere->tint;
+    traversal_profile.absorptionDistance = sphere->absorptionDistance;
+    traversal_profile.apertureRadiusScale = sphere->apertureRadiusScale;
+    RuntimeCausticLensTransport3D_NormalizeTraversalProfile(&traversal_profile);
     path.valid = true;
     path.shapeKind = RUNTIME_CAUSTIC_LENS_SHAPE_SPHERE;
     path.sceneObjectIndex = scene_object_index;
@@ -305,14 +456,15 @@ bool RuntimeCausticLensTransport3D_SolveSpherePath(
     path.pathPdf = sample_weight > 1.0e-12 ? 1.0 / sample_weight : 0.0;
     path.receiverPlaneT = sphere_path.exitReceiverT;
     path.receiverCrossing = sphere_path.receiverCrossing;
+    path.traversalProfile = traversal_profile;
 
     RuntimeCausticLensTransport3D_DefaultInterfaceEvent(&entry_event);
     entry_event.position = sphere_path.entryPosition;
     entry_event.normal = sphere_path.entryNormal;
     entry_event.incidentDirection = sphere_path.entryDirection;
     entry_event.outgoingDirection = sphere_path.insideDirection;
-    entry_event.etaFrom = 1.0;
-    entry_event.etaTo = sphere->ior;
+    entry_event.etaFrom = traversal_profile.outsideIor;
+    entry_event.etaTo = traversal_profile.materialIor;
     entry_event.fresnel = sphere_path.entryFresnel;
     entry_event.refracted = true;
     if (!RuntimeCausticLensTransport3D_AppendInterfaceEvent(&path, &entry_event)) {
@@ -324,8 +476,8 @@ bool RuntimeCausticLensTransport3D_SolveSpherePath(
     exit_event.normal = sphere_path.exitNormal;
     exit_event.incidentDirection = sphere_path.insideDirection;
     exit_event.outgoingDirection = sphere_path.exitDirection;
-    exit_event.etaFrom = sphere->ior;
-    exit_event.etaTo = 1.0;
+    exit_event.etaFrom = traversal_profile.materialIor;
+    exit_event.etaTo = traversal_profile.outsideIor;
     exit_event.fresnel = sphere_path.exitFresnel;
     exit_event.distanceInMedium = sphere_path.insideDistance;
     exit_event.refracted = true;
@@ -347,6 +499,7 @@ bool RuntimeCausticLensTransport3D_SolveCylinderPath(
     RuntimeCausticLensPath3D path;
     RuntimeCausticLensInterfaceEvent3D entry_event;
     RuntimeCausticLensInterfaceEvent3D exit_event;
+    RuntimeCausticLensTraversalProfile3D traversal_profile;
     Vec3 axis = vec3(0.0, 0.0, 1.0);
     Vec3 optical_axis = vec3(0.0, 1.0, 0.0);
     Vec3 basis_u = vec3(1.0, 0.0, 0.0);
@@ -362,7 +515,6 @@ bool RuntimeCausticLensTransport3D_SolveCylinderPath(
     Vec3 exit_normal = vec3(0.0, 0.0, 0.0);
     Vec3 exit_dir = vec3(0.0, 0.0, 0.0);
     Vec3 throughput = vec3(1.0, 1.0, 1.0);
-    Vec3 tint = vec3(1.0, 1.0, 1.0);
     double radius = 0.0;
     double half_height = 0.0;
     double ior = 1.0;
@@ -391,14 +543,19 @@ bool RuntimeCausticLensTransport3D_SolveCylinderPath(
         RuntimeCausticLensTransport3D_DefaultSample(&default_sample);
         active_sample = &default_sample;
     }
+    RuntimeCausticLensTransport3D_ResolveTraversalProfileFromPayload(&cylinder->payload,
+                                                                     &traversal_profile);
+    if (cylinder->hasTraversalProfileOverride) {
+        traversal_profile = cylinder->traversalProfileOverride;
+        traversal_profile.kind = RUNTIME_CAUSTIC_LENS_TRAVERSAL_PROFILE_CUSTOM;
+        RuntimeCausticLensTransport3D_NormalizeTraversalProfile(&traversal_profile);
+    }
 
     axis = vec3_normalize(cylinder->axis);
     if (!(vec3_length(axis) > 1.0e-9)) return false;
     radius = cylinder->radius;
     half_height = cylinder->height * 0.5;
-    ior = cylinder->payload.opticalIor > 1.0001
-              ? cylinder->payload.opticalIor
-              : fmax(cylinder->payload.bsdf.ior, 1.0);
+    ior = traversal_profile.materialIor;
     if (!(ior > 1.0)) return false;
 
     rel_light = vec3_sub(cylinder->center, light->position);
@@ -420,10 +577,12 @@ bool RuntimeCausticLensTransport3D_SolveCylinderPath(
         light->position,
         vec3_add(vec3_scale(basis_u,
                             lens_transport_clamp(active_sample->apertureU, -1.0, 1.0) *
-                                fmax(light->radius, 0.0)),
+                                fmax(light->radius, 0.0) *
+                                traversal_profile.apertureRadiusScale),
                  vec3_scale(axis,
                             lens_transport_clamp(active_sample->apertureV, -1.0, 1.0) *
-                                fmax(light->radius, 0.0))));
+                                fmax(light->radius, 0.0) *
+                                traversal_profile.apertureRadiusScale)));
     target = vec3_add(cylinder->center,
                       vec3_add(vec3_scale(basis_u, radial_offset),
                                vec3_add(vec3_scale(optical_axis, -front_depth),
@@ -444,11 +603,14 @@ bool RuntimeCausticLensTransport3D_SolveCylinderPath(
         return false;
     }
     entry_fresnel =
-        RuntimeCausticLensTransport3D_FresnelSchlick(ray_dir, entry_normal, 1.0, ior);
+        RuntimeCausticLensTransport3D_FresnelSchlick(ray_dir,
+                                                     entry_normal,
+                                                     traversal_profile.outsideIor,
+                                                     traversal_profile.materialIor);
     if (!RuntimeCausticLensTransport3D_Refract(ray_dir,
                                                entry_normal,
-                                               1.0,
-                                               ior,
+                                               traversal_profile.outsideIor,
+                                               traversal_profile.materialIor,
                                                &inside_dir,
                                                &tir)) {
         return false;
@@ -468,11 +630,14 @@ bool RuntimeCausticLensTransport3D_SolveCylinderPath(
         return false;
     }
     exit_fresnel =
-        RuntimeCausticLensTransport3D_FresnelSchlick(inside_dir, exit_normal, ior, 1.0);
+        RuntimeCausticLensTransport3D_FresnelSchlick(inside_dir,
+                                                     exit_normal,
+                                                     traversal_profile.materialIor,
+                                                     traversal_profile.outsideIor);
     if (!RuntimeCausticLensTransport3D_Refract(inside_dir,
                                                exit_normal,
-                                               ior,
-                                               1.0,
+                                               traversal_profile.materialIor,
+                                               traversal_profile.outsideIor,
                                                &exit_dir,
                                                &tir)) {
         return false;
@@ -483,17 +648,18 @@ bool RuntimeCausticLensTransport3D_SolveCylinderPath(
                             ? active_sample->receiverDistance
                             : radius * 3.0;
     throughput = vec3_scale(light->color, fmax(light->intensity, 0.0) * sample_weight);
-    throughput = RuntimeCausticLensTransport3D_ApplyInterfaceTransmission(throughput,
-                                                                          entry_fresnel);
-    throughput = RuntimeCausticLensTransport3D_ApplyInterfaceTransmission(throughput,
-                                                                          exit_fresnel);
-    tint = vec3(cylinder->payload.baseColorR,
-                cylinder->payload.baseColorG,
-                cylinder->payload.baseColorB);
-    throughput = RuntimeCausticLensTransport3D_ApplyAbsorptionTint(throughput,
-                                                                   tint,
-                                                                   exit_t,
-                                                                   cylinder->payload.absorptionDistance);
+    throughput = RuntimeCausticLensTransport3D_ApplyInterfaceTransmissionProfile(
+        throughput,
+        entry_fresnel,
+        &traversal_profile);
+    throughput = RuntimeCausticLensTransport3D_ApplyInterfaceTransmissionProfile(
+        throughput,
+        exit_fresnel,
+        &traversal_profile);
+    throughput = RuntimeCausticLensTransport3D_ApplyAbsorptionTintProfile(
+        throughput,
+        exit_t,
+        &traversal_profile);
 
     RuntimeCausticLensTransport3D_DefaultPath(&path);
     path.valid = true;
@@ -509,14 +675,15 @@ bool RuntimeCausticLensTransport3D_SolveCylinderPath(
     path.pathPdf = sample_weight > 1.0e-12 ? 1.0 / sample_weight : 0.0;
     path.receiverPlaneT = receiver_distance;
     path.receiverCrossing = vec3_add(exit_position, vec3_scale(exit_dir, receiver_distance));
+    path.traversalProfile = traversal_profile;
 
     RuntimeCausticLensTransport3D_DefaultInterfaceEvent(&entry_event);
     entry_event.position = entry_position;
     entry_event.normal = entry_normal;
     entry_event.incidentDirection = ray_dir;
     entry_event.outgoingDirection = inside_dir;
-    entry_event.etaFrom = 1.0;
-    entry_event.etaTo = ior;
+    entry_event.etaFrom = traversal_profile.outsideIor;
+    entry_event.etaTo = traversal_profile.materialIor;
     entry_event.fresnel = entry_fresnel;
     entry_event.refracted = true;
     if (!RuntimeCausticLensTransport3D_AppendInterfaceEvent(&path, &entry_event)) {
@@ -528,8 +695,8 @@ bool RuntimeCausticLensTransport3D_SolveCylinderPath(
     exit_event.normal = exit_normal;
     exit_event.incidentDirection = inside_dir;
     exit_event.outgoingDirection = exit_dir;
-    exit_event.etaFrom = ior;
-    exit_event.etaTo = 1.0;
+    exit_event.etaFrom = traversal_profile.materialIor;
+    exit_event.etaTo = traversal_profile.outsideIor;
     exit_event.fresnel = exit_fresnel;
     exit_event.distanceInMedium = exit_t;
     exit_event.refracted = true;
@@ -551,6 +718,7 @@ bool RuntimeCausticLensTransport3D_SolvePrismPath(
     RuntimeCausticLensPath3D path;
     RuntimeCausticLensInterfaceEvent3D entry_event;
     RuntimeCausticLensInterfaceEvent3D exit_event;
+    RuntimeCausticLensTraversalProfile3D traversal_profile;
     Vec3 axis = vec3(0.0, 0.0, 1.0);
     Vec3 optical_axis = vec3(0.0, 1.0, 0.0);
     Vec3 basis_u = vec3(1.0, 0.0, 0.0);
@@ -568,7 +736,6 @@ bool RuntimeCausticLensTransport3D_SolvePrismPath(
     Vec3 exit_position = vec3(0.0, 0.0, 0.0);
     Vec3 exit_dir = vec3(0.0, 0.0, 0.0);
     Vec3 throughput = vec3(1.0, 1.0, 1.0);
-    Vec3 tint = vec3(1.0, 1.0, 1.0);
     double radius = 0.0;
     double half_height = 0.0;
     double ior = 1.0;
@@ -597,14 +764,19 @@ bool RuntimeCausticLensTransport3D_SolvePrismPath(
         RuntimeCausticLensTransport3D_DefaultSample(&default_sample);
         active_sample = &default_sample;
     }
+    RuntimeCausticLensTransport3D_ResolveTraversalProfileFromPayload(&prism->payload,
+                                                                     &traversal_profile);
+    if (prism->hasTraversalProfileOverride) {
+        traversal_profile = prism->traversalProfileOverride;
+        traversal_profile.kind = RUNTIME_CAUSTIC_LENS_TRAVERSAL_PROFILE_CUSTOM;
+        RuntimeCausticLensTransport3D_NormalizeTraversalProfile(&traversal_profile);
+    }
 
     axis = vec3_normalize(prism->axis);
     if (!(vec3_length(axis) > 1.0e-9)) return false;
     radius = prism->radius;
     half_height = prism->height * 0.5;
-    ior = prism->payload.opticalIor > 1.0001
-              ? prism->payload.opticalIor
-              : fmax(prism->payload.bsdf.ior, 1.0);
+    ior = traversal_profile.materialIor;
     if (!(ior > 1.0)) return false;
 
     rel_light = vec3_sub(prism->center, light->position);
@@ -624,10 +796,12 @@ bool RuntimeCausticLensTransport3D_SolvePrismPath(
         light->position,
         vec3_add(vec3_scale(basis_u,
                             lens_transport_clamp(active_sample->apertureU, -1.0, 1.0) *
-                                fmax(light->radius, 0.0)),
+                                fmax(light->radius, 0.0) *
+                                traversal_profile.apertureRadiusScale),
                  vec3_scale(axis,
                             lens_transport_clamp(active_sample->apertureV, -1.0, 1.0) *
-                                fmax(light->radius, 0.0))));
+                                fmax(light->radius, 0.0) *
+                                traversal_profile.apertureRadiusScale)));
     entry_plane_point = vec3_add(prism->center, vec3_scale(optical_axis, -radius * 0.45));
     entry_normal = vec3_scale(optical_axis, -1.0);
     exit_plane_point = vec3_add(prism->center,
@@ -651,11 +825,14 @@ bool RuntimeCausticLensTransport3D_SolvePrismPath(
         return false;
     }
     entry_fresnel =
-        RuntimeCausticLensTransport3D_FresnelSchlick(ray_dir, entry_normal, 1.0, ior);
+        RuntimeCausticLensTransport3D_FresnelSchlick(ray_dir,
+                                                     entry_normal,
+                                                     traversal_profile.outsideIor,
+                                                     traversal_profile.materialIor);
     if (!RuntimeCausticLensTransport3D_Refract(ray_dir,
                                                entry_normal,
-                                               1.0,
-                                               ior,
+                                               traversal_profile.outsideIor,
+                                               traversal_profile.materialIor,
                                                &inside_dir,
                                                &tir)) {
         return false;
@@ -677,11 +854,14 @@ bool RuntimeCausticLensTransport3D_SolvePrismPath(
         return false;
     }
     exit_fresnel =
-        RuntimeCausticLensTransport3D_FresnelSchlick(inside_dir, exit_normal, ior, 1.0);
+        RuntimeCausticLensTransport3D_FresnelSchlick(inside_dir,
+                                                     exit_normal,
+                                                     traversal_profile.materialIor,
+                                                     traversal_profile.outsideIor);
     if (!RuntimeCausticLensTransport3D_Refract(inside_dir,
                                                exit_normal,
-                                               ior,
-                                               1.0,
+                                               traversal_profile.materialIor,
+                                               traversal_profile.outsideIor,
                                                &exit_dir,
                                                &tir)) {
         return false;
@@ -692,17 +872,18 @@ bool RuntimeCausticLensTransport3D_SolvePrismPath(
                             ? active_sample->receiverDistance
                             : radius * 4.0;
     throughput = vec3_scale(light->color, fmax(light->intensity, 0.0) * sample_weight);
-    throughput = RuntimeCausticLensTransport3D_ApplyInterfaceTransmission(throughput,
-                                                                          entry_fresnel);
-    throughput = RuntimeCausticLensTransport3D_ApplyInterfaceTransmission(throughput,
-                                                                          exit_fresnel);
-    tint = vec3(prism->payload.baseColorR,
-                prism->payload.baseColorG,
-                prism->payload.baseColorB);
-    throughput = RuntimeCausticLensTransport3D_ApplyAbsorptionTint(throughput,
-                                                                   tint,
-                                                                   exit_t,
-                                                                   prism->payload.absorptionDistance);
+    throughput = RuntimeCausticLensTransport3D_ApplyInterfaceTransmissionProfile(
+        throughput,
+        entry_fresnel,
+        &traversal_profile);
+    throughput = RuntimeCausticLensTransport3D_ApplyInterfaceTransmissionProfile(
+        throughput,
+        exit_fresnel,
+        &traversal_profile);
+    throughput = RuntimeCausticLensTransport3D_ApplyAbsorptionTintProfile(
+        throughput,
+        exit_t,
+        &traversal_profile);
 
     RuntimeCausticLensTransport3D_DefaultPath(&path);
     path.valid = true;
@@ -718,14 +899,15 @@ bool RuntimeCausticLensTransport3D_SolvePrismPath(
     path.pathPdf = sample_weight > 1.0e-12 ? 1.0 / sample_weight : 0.0;
     path.receiverPlaneT = receiver_distance;
     path.receiverCrossing = vec3_add(exit_position, vec3_scale(exit_dir, receiver_distance));
+    path.traversalProfile = traversal_profile;
 
     RuntimeCausticLensTransport3D_DefaultInterfaceEvent(&entry_event);
     entry_event.position = entry_position;
     entry_event.normal = entry_normal;
     entry_event.incidentDirection = ray_dir;
     entry_event.outgoingDirection = inside_dir;
-    entry_event.etaFrom = 1.0;
-    entry_event.etaTo = ior;
+    entry_event.etaFrom = traversal_profile.outsideIor;
+    entry_event.etaTo = traversal_profile.materialIor;
     entry_event.fresnel = entry_fresnel;
     entry_event.refracted = true;
     if (!RuntimeCausticLensTransport3D_AppendInterfaceEvent(&path, &entry_event)) {
@@ -737,8 +919,8 @@ bool RuntimeCausticLensTransport3D_SolvePrismPath(
     exit_event.normal = exit_normal;
     exit_event.incidentDirection = inside_dir;
     exit_event.outgoingDirection = exit_dir;
-    exit_event.etaFrom = ior;
-    exit_event.etaTo = 1.0;
+    exit_event.etaFrom = traversal_profile.materialIor;
+    exit_event.etaTo = traversal_profile.outsideIor;
     exit_event.fresnel = exit_fresnel;
     exit_event.distanceInMedium = exit_t;
     exit_event.refracted = true;
@@ -760,6 +942,7 @@ bool RuntimeCausticLensTransport3D_SolveBowlPath(
     RuntimeCausticLensPath3D path;
     RuntimeCausticLensInterfaceEvent3D entry_event;
     RuntimeCausticLensInterfaceEvent3D exit_event;
+    RuntimeCausticLensTraversalProfile3D traversal_profile;
     Vec3 axis = vec3(0.0, 0.0, 1.0);
     Vec3 optical_axis = vec3(0.0, 1.0, 0.0);
     Vec3 basis_u = vec3(1.0, 0.0, 0.0);
@@ -775,7 +958,6 @@ bool RuntimeCausticLensTransport3D_SolveBowlPath(
     Vec3 exit_position = vec3(0.0, 0.0, 0.0);
     Vec3 exit_dir = vec3(0.0, 0.0, 0.0);
     Vec3 throughput = vec3(1.0, 1.0, 1.0);
-    Vec3 tint = vec3(1.0, 1.0, 1.0);
     double radius = 0.0;
     double thickness = 0.0;
     double half_thickness = 0.0;
@@ -809,6 +991,13 @@ bool RuntimeCausticLensTransport3D_SolveBowlPath(
         RuntimeCausticLensTransport3D_DefaultSample(&default_sample);
         active_sample = &default_sample;
     }
+    RuntimeCausticLensTransport3D_ResolveTraversalProfileFromPayload(&bowl->payload,
+                                                                     &traversal_profile);
+    if (bowl->hasTraversalProfileOverride) {
+        traversal_profile = bowl->traversalProfileOverride;
+        traversal_profile.kind = RUNTIME_CAUSTIC_LENS_TRAVERSAL_PROFILE_CUSTOM;
+        RuntimeCausticLensTransport3D_NormalizeTraversalProfile(&traversal_profile);
+    }
 
     axis = vec3_normalize(bowl->axis);
     if (!(vec3_length(axis) > 1.0e-9)) return false;
@@ -816,9 +1005,7 @@ bool RuntimeCausticLensTransport3D_SolveBowlPath(
     thickness = bowl->height;
     half_thickness = thickness * 0.5;
     bowl_depth = lens_transport_clamp(thickness * 0.42, thickness * 0.08, thickness * 0.70);
-    ior = bowl->payload.opticalIor > 1.0001
-              ? bowl->payload.opticalIor
-              : fmax(bowl->payload.bsdf.ior, 1.0);
+    ior = traversal_profile.materialIor;
     if (!(ior > 1.0)) return false;
 
     rel_light = vec3_sub(bowl->center, light->position);
@@ -848,10 +1035,12 @@ bool RuntimeCausticLensTransport3D_SolveBowlPath(
         light->position,
         vec3_add(vec3_scale(basis_u,
                             lens_transport_clamp(active_sample->apertureU, -1.0, 1.0) *
-                                fmax(light->radius, 0.0)),
+                                fmax(light->radius, 0.0) *
+                                traversal_profile.apertureRadiusScale),
                  vec3_scale(basis_v,
                             lens_transport_clamp(active_sample->apertureV, -1.0, 1.0) *
-                                fmax(light->radius, 0.0))));
+                                fmax(light->radius, 0.0) *
+                                traversal_profile.apertureRadiusScale)));
     entry_position = vec3_add(
         bowl->center,
         vec3_add(vec3_scale(optical_axis, front_rim_offset + sag),
@@ -867,11 +1056,14 @@ bool RuntimeCausticLensTransport3D_SolveBowlPath(
         Vec3 ray_dir = vec3_normalize(vec3_sub(entry_position, ray_origin));
         if (!(vec3_length(ray_dir) > 1.0e-9)) return false;
         entry_fresnel =
-            RuntimeCausticLensTransport3D_FresnelSchlick(ray_dir, entry_normal, 1.0, ior);
+            RuntimeCausticLensTransport3D_FresnelSchlick(ray_dir,
+                                                         entry_normal,
+                                                         traversal_profile.outsideIor,
+                                                         traversal_profile.materialIor);
         if (!RuntimeCausticLensTransport3D_Refract(ray_dir,
                                                    entry_normal,
-                                                   1.0,
-                                                   ior,
+                                                   traversal_profile.outsideIor,
+                                                   traversal_profile.materialIor,
                                                    &inside_dir,
                                                    &tir)) {
             return false;
@@ -881,8 +1073,8 @@ bool RuntimeCausticLensTransport3D_SolveBowlPath(
         entry_event.normal = entry_normal;
         entry_event.incidentDirection = ray_dir;
         entry_event.outgoingDirection = inside_dir;
-        entry_event.etaFrom = 1.0;
-        entry_event.etaTo = ior;
+        entry_event.etaFrom = traversal_profile.outsideIor;
+        entry_event.etaTo = traversal_profile.materialIor;
         entry_event.fresnel = entry_fresnel;
         entry_event.refracted = true;
     }
@@ -906,11 +1098,14 @@ bool RuntimeCausticLensTransport3D_SolveBowlPath(
         return false;
     }
     exit_fresnel =
-        RuntimeCausticLensTransport3D_FresnelSchlick(inside_dir, exit_normal, ior, 1.0);
+        RuntimeCausticLensTransport3D_FresnelSchlick(inside_dir,
+                                                     exit_normal,
+                                                     traversal_profile.materialIor,
+                                                     traversal_profile.outsideIor);
     if (!RuntimeCausticLensTransport3D_Refract(inside_dir,
                                                exit_normal,
-                                               ior,
-                                               1.0,
+                                               traversal_profile.materialIor,
+                                               traversal_profile.outsideIor,
                                                &exit_dir,
                                                &tir)) {
         return false;
@@ -921,17 +1116,18 @@ bool RuntimeCausticLensTransport3D_SolveBowlPath(
                             ? active_sample->receiverDistance
                             : radius * 4.5;
     throughput = vec3_scale(light->color, fmax(light->intensity, 0.0) * sample_weight);
-    throughput = RuntimeCausticLensTransport3D_ApplyInterfaceTransmission(throughput,
-                                                                          entry_fresnel);
-    throughput = RuntimeCausticLensTransport3D_ApplyInterfaceTransmission(throughput,
-                                                                          exit_fresnel);
-    tint = vec3(bowl->payload.baseColorR,
-                bowl->payload.baseColorG,
-                bowl->payload.baseColorB);
-    throughput = RuntimeCausticLensTransport3D_ApplyAbsorptionTint(throughput,
-                                                                   tint,
-                                                                   exit_t,
-                                                                   bowl->payload.absorptionDistance);
+    throughput = RuntimeCausticLensTransport3D_ApplyInterfaceTransmissionProfile(
+        throughput,
+        entry_fresnel,
+        &traversal_profile);
+    throughput = RuntimeCausticLensTransport3D_ApplyInterfaceTransmissionProfile(
+        throughput,
+        exit_fresnel,
+        &traversal_profile);
+    throughput = RuntimeCausticLensTransport3D_ApplyAbsorptionTintProfile(
+        throughput,
+        exit_t,
+        &traversal_profile);
 
     RuntimeCausticLensTransport3D_DefaultPath(&path);
     path.valid = true;
@@ -947,6 +1143,7 @@ bool RuntimeCausticLensTransport3D_SolveBowlPath(
     path.pathPdf = sample_weight > 1.0e-12 ? 1.0 / sample_weight : 0.0;
     path.receiverPlaneT = receiver_distance;
     path.receiverCrossing = vec3_add(exit_position, vec3_scale(exit_dir, receiver_distance));
+    path.traversalProfile = traversal_profile;
 
     if (!RuntimeCausticLensTransport3D_AppendInterfaceEvent(&path, &entry_event)) {
         return false;
@@ -956,8 +1153,225 @@ bool RuntimeCausticLensTransport3D_SolveBowlPath(
     exit_event.normal = exit_normal;
     exit_event.incidentDirection = inside_dir;
     exit_event.outgoingDirection = exit_dir;
-    exit_event.etaFrom = ior;
-    exit_event.etaTo = 1.0;
+    exit_event.etaFrom = traversal_profile.materialIor;
+    exit_event.etaTo = traversal_profile.outsideIor;
+    exit_event.fresnel = exit_fresnel;
+    exit_event.distanceInMedium = exit_t;
+    exit_event.refracted = true;
+    if (!RuntimeCausticLensTransport3D_AppendInterfaceEvent(&path, &exit_event)) {
+        return false;
+    }
+
+    *out_path = path;
+    return true;
+}
+
+bool RuntimeCausticLensTransport3D_SolveMeshDielectricPath(
+    const RuntimeCausticLensShape3D* mesh_dielectric,
+    const RuntimeTriangle3D* entry_triangle,
+    const RuntimeCausticLensLightSample3D* light,
+    const RuntimeCausticLensSample3D* sample,
+    RuntimeCausticLensPath3D* out_path) {
+    RuntimeCausticLensSample3D default_sample;
+    const RuntimeCausticLensSample3D* active_sample = sample;
+    RuntimeCausticLensPath3D path;
+    RuntimeCausticLensInterfaceEvent3D entry_event;
+    RuntimeCausticLensInterfaceEvent3D exit_event;
+    RuntimeCausticLensTraversalProfile3D traversal_profile;
+    Vec3 edge_u = vec3(0.0, 0.0, 0.0);
+    Vec3 edge_v = vec3(0.0, 0.0, 0.0);
+    Vec3 basis_u = vec3(1.0, 0.0, 0.0);
+    Vec3 basis_v = vec3(0.0, 0.0, 1.0);
+    Vec3 plane_normal = vec3(0.0, 1.0, 0.0);
+    Vec3 entry_normal = vec3(0.0, 1.0, 0.0);
+    Vec3 exit_normal = vec3(0.0, -1.0, 0.0);
+    Vec3 centroid = vec3(0.0, 0.0, 0.0);
+    Vec3 ray_origin = vec3(0.0, 0.0, 0.0);
+    Vec3 target = vec3(0.0, 0.0, 0.0);
+    Vec3 ray_dir = vec3(0.0, 0.0, 0.0);
+    Vec3 entry_position = vec3(0.0, 0.0, 0.0);
+    Vec3 inside_dir = vec3(0.0, 0.0, 0.0);
+    Vec3 exit_position = vec3(0.0, 0.0, 0.0);
+    Vec3 exit_dir = vec3(0.0, 0.0, 0.0);
+    Vec3 throughput = vec3(1.0, 1.0, 1.0);
+    double aperture_radius = 0.0;
+    double thickness = 0.0;
+    double entry_t = 0.0;
+    double exit_t = 0.0;
+    double entry_fresnel = 1.0;
+    double exit_fresnel = 1.0;
+    double sample_weight = 1.0;
+    double receiver_distance = 0.0;
+    bool tir = false;
+
+    if (out_path) RuntimeCausticLensTransport3D_DefaultPath(out_path);
+    if (!mesh_dielectric || !entry_triangle || !light || !out_path ||
+        mesh_dielectric->kind != RUNTIME_CAUSTIC_LENS_SHAPE_MESH_DIELECTRIC ||
+        !lens_transport_finite_vec3(entry_triangle->p0) ||
+        !lens_transport_finite_vec3(entry_triangle->p1) ||
+        !lens_transport_finite_vec3(entry_triangle->p2) ||
+        !lens_transport_finite_vec3(light->position)) {
+        return false;
+    }
+    if (!active_sample) {
+        RuntimeCausticLensTransport3D_DefaultSample(&default_sample);
+        active_sample = &default_sample;
+    }
+    RuntimeCausticLensTransport3D_ResolveTraversalProfileFromPayload(
+        &mesh_dielectric->payload,
+        &traversal_profile);
+    if (mesh_dielectric->hasTraversalProfileOverride) {
+        traversal_profile = mesh_dielectric->traversalProfileOverride;
+        traversal_profile.kind = RUNTIME_CAUSTIC_LENS_TRAVERSAL_PROFILE_CUSTOM;
+        RuntimeCausticLensTransport3D_NormalizeTraversalProfile(&traversal_profile);
+    }
+    if (!(traversal_profile.materialIor > 1.0e-6) ||
+        !(traversal_profile.outsideIor > 1.0e-6)) {
+        return false;
+    }
+
+    edge_u = vec3_sub(entry_triangle->p1, entry_triangle->p0);
+    edge_v = vec3_sub(entry_triangle->p2, entry_triangle->p0);
+    plane_normal = vec3_normalize(entry_triangle->normal);
+    if (!(vec3_length(plane_normal) > 1.0e-9)) {
+        plane_normal = vec3_normalize(vec3_cross(edge_u, edge_v));
+    }
+    if (!(vec3_length(edge_u) > 1.0e-9) ||
+        !(vec3_length(edge_v) > 1.0e-9) ||
+        !(vec3_length(plane_normal) > 1.0e-9)) {
+        return false;
+    }
+    basis_u = vec3_normalize(edge_u);
+    basis_v = vec3_normalize(vec3_cross(plane_normal, basis_u));
+    if (!(vec3_length(basis_v) > 1.0e-9)) {
+        lens_transport_build_basis(plane_normal, &basis_u, &basis_v);
+    }
+    centroid = vec3_scale(vec3_add(vec3_add(entry_triangle->p0, entry_triangle->p1),
+                                   entry_triangle->p2),
+                          1.0 / 3.0);
+    aperture_radius = mesh_dielectric->radius > 1.0e-9 ? mesh_dielectric->radius : 0.25;
+    thickness = mesh_dielectric->height > 1.0e-9 ? mesh_dielectric->height : aperture_radius;
+    target = vec3_add(
+        centroid,
+        vec3_add(vec3_scale(basis_u,
+                            lens_transport_clamp(active_sample->lensU, -0.95, 0.95) *
+                                aperture_radius * 0.35 *
+                                traversal_profile.apertureRadiusScale),
+                 vec3_scale(basis_v,
+                            lens_transport_clamp(active_sample->lensV, -0.95, 0.95) *
+                                aperture_radius * 0.35 *
+                                traversal_profile.apertureRadiusScale)));
+    ray_origin = vec3_add(
+        light->position,
+        vec3_add(vec3_scale(basis_u,
+                            lens_transport_clamp(active_sample->apertureU, -1.0, 1.0) *
+                                fmax(light->radius, 0.0) *
+                                traversal_profile.apertureRadiusScale),
+                 vec3_scale(basis_v,
+                            lens_transport_clamp(active_sample->apertureV, -1.0, 1.0) *
+                                fmax(light->radius, 0.0) *
+                                traversal_profile.apertureRadiusScale)));
+    ray_dir = vec3_normalize(vec3_sub(target, ray_origin));
+    if (!(vec3_length(ray_dir) > 1.0e-9)) return false;
+
+    entry_normal = plane_normal;
+    if (vec3_dot(entry_normal, ray_dir) > 0.0) {
+        entry_normal = vec3_scale(entry_normal, -1.0);
+    }
+    if (!lens_transport_intersect_plane(centroid,
+                                        entry_normal,
+                                        ray_origin,
+                                        ray_dir,
+                                        1.0e-6,
+                                        &entry_t,
+                                        &entry_position)) {
+        return false;
+    }
+    entry_fresnel =
+        RuntimeCausticLensTransport3D_FresnelSchlick(ray_dir,
+                                                     entry_normal,
+                                                     traversal_profile.outsideIor,
+                                                     traversal_profile.materialIor);
+    if (!RuntimeCausticLensTransport3D_Refract(ray_dir,
+                                               entry_normal,
+                                               traversal_profile.outsideIor,
+                                               traversal_profile.materialIor,
+                                               &inside_dir,
+                                               &tir)) {
+        return false;
+    }
+    exit_t = thickness / fmax(-vec3_dot(inside_dir, entry_normal), 1.0e-6);
+    if (!(exit_t > 1.0e-6) || !isfinite(exit_t)) return false;
+    exit_position = vec3_add(entry_position, vec3_scale(inside_dir, exit_t));
+    exit_normal = vec3_scale(entry_normal, -1.0);
+    exit_fresnel =
+        RuntimeCausticLensTransport3D_FresnelSchlick(inside_dir,
+                                                     exit_normal,
+                                                     traversal_profile.materialIor,
+                                                     traversal_profile.outsideIor);
+    if (!RuntimeCausticLensTransport3D_Refract(inside_dir,
+                                               exit_normal,
+                                               traversal_profile.materialIor,
+                                               traversal_profile.outsideIor,
+                                               &exit_dir,
+                                               &tir)) {
+        return false;
+    }
+
+    sample_weight = fmax(active_sample->sampleWeight, 0.0);
+    receiver_distance = active_sample->receiverDistance > 1.0e-9
+                            ? active_sample->receiverDistance
+                            : aperture_radius * 4.0;
+    throughput = vec3_scale(light->color, fmax(light->intensity, 0.0) * sample_weight);
+    throughput = RuntimeCausticLensTransport3D_ApplyInterfaceTransmissionProfile(
+        throughput,
+        entry_fresnel,
+        &traversal_profile);
+    throughput = RuntimeCausticLensTransport3D_ApplyInterfaceTransmissionProfile(
+        throughput,
+        exit_fresnel,
+        &traversal_profile);
+    throughput = RuntimeCausticLensTransport3D_ApplyAbsorptionTintProfile(
+        throughput,
+        exit_t,
+        &traversal_profile);
+
+    RuntimeCausticLensTransport3D_DefaultPath(&path);
+    path.valid = true;
+    path.shapeKind = RUNTIME_CAUSTIC_LENS_SHAPE_MESH_DIELECTRIC;
+    path.sceneObjectIndex = mesh_dielectric->sceneObjectIndex;
+    path.primitiveIndex = mesh_dielectric->primitiveIndex;
+    path.lightSamplePosition = ray_origin;
+    path.targetPosition = target;
+    path.postExitOrigin = exit_position;
+    path.postExitDirection = exit_dir;
+    path.throughput = throughput;
+    path.sampleWeight = sample_weight;
+    path.pathPdf = sample_weight > 1.0e-12 ? 1.0 / sample_weight : 0.0;
+    path.receiverPlaneT = receiver_distance;
+    path.receiverCrossing = vec3_add(exit_position, vec3_scale(exit_dir, receiver_distance));
+    path.traversalProfile = traversal_profile;
+
+    RuntimeCausticLensTransport3D_DefaultInterfaceEvent(&entry_event);
+    entry_event.position = entry_position;
+    entry_event.normal = entry_normal;
+    entry_event.incidentDirection = ray_dir;
+    entry_event.outgoingDirection = inside_dir;
+    entry_event.etaFrom = traversal_profile.outsideIor;
+    entry_event.etaTo = traversal_profile.materialIor;
+    entry_event.fresnel = entry_fresnel;
+    entry_event.refracted = true;
+    if (!RuntimeCausticLensTransport3D_AppendInterfaceEvent(&path, &entry_event)) {
+        return false;
+    }
+
+    RuntimeCausticLensTransport3D_DefaultInterfaceEvent(&exit_event);
+    exit_event.position = exit_position;
+    exit_event.normal = exit_normal;
+    exit_event.incidentDirection = inside_dir;
+    exit_event.outgoingDirection = exit_dir;
+    exit_event.etaFrom = traversal_profile.materialIor;
+    exit_event.etaTo = traversal_profile.outsideIor;
     exit_event.fresnel = exit_fresnel;
     exit_event.distanceInMedium = exit_t;
     exit_event.refracted = true;

@@ -42,11 +42,54 @@ typedef RuntimeCausticTransportAnalyticCylinder3D RuntimeCausticTransportAnalyti
 typedef RuntimeCausticTransportAnalyticCylinder3D RuntimeCausticTransportAnalyticBowl3D;
 
 typedef struct {
+    bool valid;
+    int sceneObjectIndex;
+    int primitiveIndex;
+    int triangleIndex;
+    int triangleCount;
+    RuntimeCausticLensShape3D shape;
+    RuntimeTriangle3D entryTriangle;
+    RuntimeMaterialPayload3D payload;
+} RuntimeCausticTransportMeshDielectric3D;
+
+typedef struct {
     bool hasSurfaceReceiverFallback;
     HitInfo3D surfaceReceiverFallback;
     int receiverCandidateIndices[RUNTIME_CAUSTIC_TRANSPORT_RECEIVER_CANDIDATE_CAP];
     int receiverCandidateCount;
 } RuntimeCausticTransportSurfaceReceiverContext3D;
+
+typedef enum {
+    RUNTIME_CAUSTIC_TRANSPORT_PROVIDER_TRIANGLE_TARGETS = 0,
+    RUNTIME_CAUSTIC_TRANSPORT_PROVIDER_ANALYTIC_SPHERE_LENS = 1,
+    RUNTIME_CAUSTIC_TRANSPORT_PROVIDER_ANALYTIC_CYLINDER_LENS = 2,
+    RUNTIME_CAUSTIC_TRANSPORT_PROVIDER_ANALYTIC_PRISM_LENS = 3,
+    RUNTIME_CAUSTIC_TRANSPORT_PROVIDER_ANALYTIC_BOWL_LENS = 4,
+    RUNTIME_CAUSTIC_TRANSPORT_PROVIDER_MESH_DIELECTRIC_LENS = 5
+} RuntimeCausticTransportProviderKind3D;
+
+typedef struct {
+    RuntimeCausticTransportProviderKind3D kind;
+    RuntimeCausticTransportEmissionPolicy3D emissionPolicy;
+    bool focusedProfile;
+    RuntimeCausticTransportAnalyticSphere3D analyticSphere;
+    RuntimeCausticTransportAnalyticCylinder3D analyticCylinder;
+    RuntimeCausticTransportAnalyticPrism3D analyticPrism;
+    RuntimeCausticTransportAnalyticBowl3D analyticBowl;
+    RuntimeCausticTransportMeshDielectric3D meshDielectric;
+} RuntimeCausticTransportProvider3D;
+
+typedef struct {
+    RuntimeCausticTransportEmissionPolicy3D emissionPolicy;
+    const char* eventType;
+    int sceneObjectIndex;
+    int primitiveIndex;
+    int sampleIndex;
+    const RuntimeMaterialPayload3D* payload;
+    bool writeSphereLensCompatibilityFields;
+    double volumeFootprintRadius;
+    uint64_t* emittedCounter;
+} RuntimeCausticTransportLensPathDepositContext3D;
 
 double runtime_caustic_transport_clamp(double value,
                                        double min_value,
@@ -86,6 +129,28 @@ bool runtime_caustic_transport_resolve_analytic_prism(
 bool runtime_caustic_transport_resolve_analytic_bowl(
     const RuntimeScene3D* scene,
     RuntimeCausticTransportAnalyticBowl3D* out_bowl);
+bool runtime_caustic_transport_resolve_mesh_dielectric(
+    const RuntimeScene3D* scene,
+    RuntimeCausticTransportMeshDielectric3D* out_mesh_dielectric);
+bool runtime_caustic_transport_resolve_provider(
+    const RuntimeScene3D* scene,
+    RuntimeCausticTransportEmissionPolicy3D emission_policy,
+    RuntimeCausticTransportProvider3D* out_provider,
+    RuntimeCausticTransport3DDiagnostics* diagnostics);
+void runtime_caustic_transport_emit_provider_for_light(
+    const RuntimeScene3D* scene,
+    const RuntimeLightSource3D* light,
+    int light_index,
+    const RuntimeCausticTransportProvider3D* provider,
+    const RuntimeCausticLensTraversalProfile3D* traversal_profile_override,
+    int path_budget,
+    RuntimeCausticVolumeCache3D* cache,
+    RuntimeCausticSurfaceCache3D* surface_cache,
+    int max_path_depth,
+    double surface_footprint_scale,
+    double surface_radiance_scale,
+    const RuntimeCausticTransportSurfaceReceiverContext3D* receiver_context,
+    RuntimeCausticTransport3DDiagnostics* diagnostics);
 void runtime_caustic_transport_prepare_surface_receiver_fallback(
     RuntimeCausticTransportSurfaceReceiverContext3D* context,
     const RuntimeScene3D* scene);
@@ -132,11 +197,25 @@ bool runtime_caustic_transport_continue_to_outside_medium(
     int max_path_depth,
     RuntimeCausticTransport3DDiagnostics* diagnostics,
     RuntimeCausticTransportDebugPath3D* debug_path);
+bool runtime_caustic_transport_deposit_lens_path(
+    const RuntimeScene3D* scene,
+    const RuntimeLightSource3D* light,
+    int light_index,
+    const RuntimeCausticLensPath3D* path,
+    const RuntimeCausticTransportLensPathDepositContext3D* lens_context,
+    RuntimeCausticVolumeCache3D* cache,
+    RuntimeCausticSurfaceCache3D* surface_cache,
+    int max_path_depth,
+    double surface_footprint_scale,
+    double surface_radiance_scale,
+    const RuntimeCausticTransportSurfaceReceiverContext3D* receiver_context,
+    RuntimeCausticTransport3DDiagnostics* diagnostics);
 void runtime_caustic_transport_emit_analytic_sphere_lens(
     const RuntimeScene3D* scene,
     const RuntimeLightSource3D* light,
     int light_index,
     const RuntimeCausticTransportAnalyticSphere3D* analytic_sphere,
+    const RuntimeCausticLensTraversalProfile3D* traversal_profile_override,
     int path_budget,
     RuntimeCausticVolumeCache3D* cache,
     RuntimeCausticSurfaceCache3D* surface_cache,
@@ -150,6 +229,7 @@ void runtime_caustic_transport_emit_analytic_cylinder_lens(
     const RuntimeLightSource3D* light,
     int light_index,
     const RuntimeCausticTransportAnalyticCylinder3D* analytic_cylinder,
+    const RuntimeCausticLensTraversalProfile3D* traversal_profile_override,
     int path_budget,
     bool focused_profile,
     RuntimeCausticVolumeCache3D* cache,
@@ -164,6 +244,7 @@ void runtime_caustic_transport_emit_analytic_prism_lens(
     const RuntimeLightSource3D* light,
     int light_index,
     const RuntimeCausticTransportAnalyticPrism3D* analytic_prism,
+    const RuntimeCausticLensTraversalProfile3D* traversal_profile_override,
     int path_budget,
     RuntimeCausticVolumeCache3D* cache,
     RuntimeCausticSurfaceCache3D* surface_cache,
@@ -177,6 +258,21 @@ void runtime_caustic_transport_emit_analytic_bowl_lens(
     const RuntimeLightSource3D* light,
     int light_index,
     const RuntimeCausticTransportAnalyticBowl3D* analytic_bowl,
+    const RuntimeCausticLensTraversalProfile3D* traversal_profile_override,
+    int path_budget,
+    RuntimeCausticVolumeCache3D* cache,
+    RuntimeCausticSurfaceCache3D* surface_cache,
+    int max_path_depth,
+    double surface_footprint_scale,
+    double surface_radiance_scale,
+    const RuntimeCausticTransportSurfaceReceiverContext3D* receiver_context,
+    RuntimeCausticTransport3DDiagnostics* diagnostics);
+void runtime_caustic_transport_emit_mesh_dielectric_lens(
+    const RuntimeScene3D* scene,
+    const RuntimeLightSource3D* light,
+    int light_index,
+    const RuntimeCausticTransportMeshDielectric3D* mesh_dielectric,
+    const RuntimeCausticLensTraversalProfile3D* traversal_profile_override,
     int path_budget,
     RuntimeCausticVolumeCache3D* cache,
     RuntimeCausticSurfaceCache3D* surface_cache,

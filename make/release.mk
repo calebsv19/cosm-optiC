@@ -25,6 +25,10 @@ release-bundle-audit: package-desktop-self-test
 	@mkdir -p "$(RELEASE_DIR)"
 	@/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$(PACKAGE_CONTENTS_DIR)/Info.plist" > "$(RELEASE_DIR)/bundle_id.txt"
 	@test "$$(cat "$(RELEASE_DIR)/bundle_id.txt")" = "$(RELEASE_BUNDLE_ID)" || (echo "bundle id mismatch: expected $(RELEASE_BUNDLE_ID), got $$(cat "$(RELEASE_DIR)/bundle_id.txt")"; exit 1)
+	@/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$(PACKAGE_CONTENTS_DIR)/Info.plist" > "$(RELEASE_DIR)/bundle_short_version.txt"
+	@test "$$(cat "$(RELEASE_DIR)/bundle_short_version.txt")" = "$(RELEASE_VERSION)" || (echo "bundle short version mismatch: expected $(RELEASE_VERSION), got $$(cat "$(RELEASE_DIR)/bundle_short_version.txt")"; exit 1)
+	@/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$(PACKAGE_CONTENTS_DIR)/Info.plist" > "$(RELEASE_DIR)/bundle_version.txt"
+	@test "$$(cat "$(RELEASE_DIR)/bundle_version.txt")" = "$(RELEASE_VERSION)" || (echo "bundle version mismatch: expected $(RELEASE_VERSION), got $$(cat "$(RELEASE_DIR)/bundle_version.txt")"; exit 1)
 	@env -i HOME="$(HOME)" PATH="$(PATH)" "$(PACKAGE_MACOS_DIR)/raytracing-launcher" --print-config > "$(RELEASE_DIR)/print_config.txt"
 	@runtime_dir="$$(/usr/bin/grep '^RAY_TRACING_RUNTIME_DIR=' "$(RELEASE_DIR)/print_config.txt" | /usr/bin/cut -d= -f2-)"; \
 	if [ -z "$$runtime_dir" ]; then echo "runtime dir missing from print-config"; exit 1; fi; \
@@ -155,22 +159,52 @@ release-verify-notarized: release-staple
 
 release-artifact: release-verify-notarized
 	@mkdir -p "$(RELEASE_DIR)"
-	@/usr/bin/ditto -c -k --sequesterRsrc --keepParent "$(PACKAGE_APP_DIR)" "$(RELEASE_APP_ZIP)"
-	@shasum -a 256 "$(RELEASE_APP_ZIP)" > "$(RELEASE_APP_ZIP).sha256"
+	@rm -rf "$(RELEASE_ARCHIVE_STAGING)"
+	@mkdir -p "$(RELEASE_ARCHIVE_STAGING)"
+	@/usr/bin/ditto "$(PACKAGE_APP_DIR)" "$(RELEASE_ARCHIVE_STAGING)/$(PACKAGE_APP_NAME)"
 	@{ \
 		echo "product=$(RELEASE_PRODUCT_NAME)"; \
 		echo "program=$(RELEASE_PROGRAM_KEY)"; \
+		echo "host_arch=$$(/usr/bin/uname -m)"; \
+		echo "target_os=$(RELEASE_PLATFORM)"; \
+		echo "target_arch=$(TARGET_ARCH)"; \
+		echo "target_variant=desktop-app"; \
+		echo "target_triple=$(RELEASE_PLATFORM)-$(RELEASE_ARCH)"; \
+		echo "release_platform=$(RELEASE_PLATFORM)"; \
+		echo "release_arch=$(RELEASE_ARCH)"; \
 		echo "bundle_id=$(RELEASE_BUNDLE_ID)"; \
 		echo "version=$(RELEASE_VERSION)"; \
 		echo "channel=$(RELEASE_CHANNEL)"; \
-		echo "platform=$(RELEASE_PLATFORM)"; \
-		echo "arch=$(RELEASE_ARCH)"; \
 		echo "signed=1"; \
 		echo "notarized=1"; \
-		echo "artifact=$(RELEASE_APP_ZIP)"; \
-		echo "sha256_file=$(RELEASE_APP_ZIP).sha256"; \
+		echo "zip=$$(/usr/bin/basename "$(RELEASE_APP_ZIP)")"; \
+		echo "sha256=see external .zip.sha256 sidecar"; \
+	} > "$(RELEASE_ARCHIVE_STAGING)/$$(/usr/bin/basename "$(RELEASE_MANIFEST)")"
+	@/usr/bin/ditto -c -k --sequesterRsrc "$(RELEASE_ARCHIVE_STAGING)" "$(RELEASE_APP_ZIP)"
+	@zip_sha="$$(/usr/bin/shasum -a 256 "$(RELEASE_APP_ZIP)" | /usr/bin/awk '{print $$1}')"; \
+	echo "$$zip_sha  $$(/usr/bin/basename "$(RELEASE_APP_ZIP)")" > "$(RELEASE_APP_ZIP).sha256"
+	@{ \
+		echo "product=$(RELEASE_PRODUCT_NAME)"; \
+		echo "program=$(RELEASE_PROGRAM_KEY)"; \
+		echo "host_arch=$$(/usr/bin/uname -m)"; \
+		echo "target_os=$(RELEASE_PLATFORM)"; \
+		echo "target_arch=$(TARGET_ARCH)"; \
+		echo "target_variant=desktop-app"; \
+		echo "target_triple=$(RELEASE_PLATFORM)-$(RELEASE_ARCH)"; \
+		echo "release_platform=$(RELEASE_PLATFORM)"; \
+		echo "release_arch=$(RELEASE_ARCH)"; \
+		echo "bundle_id=$(RELEASE_BUNDLE_ID)"; \
+		echo "version=$(RELEASE_VERSION)"; \
+		echo "channel=$(RELEASE_CHANNEL)"; \
+		echo "signed=1"; \
+		echo "notarized=1"; \
+		echo "zip=$$(/usr/bin/basename "$(RELEASE_APP_ZIP)")"; \
+		echo "sha256=$$(/usr/bin/awk '{print $$1}' "$(RELEASE_APP_ZIP).sha256")"; \
+		echo "sha256_file=$$(/usr/bin/basename "$(RELEASE_APP_ZIP).sha256")"; \
 		echo "notary_json=$(RELEASE_DIR)/notary_submit.json"; \
 	} > "$(RELEASE_MANIFEST)"
+	@/usr/bin/unzip -Z1 "$(RELEASE_APP_ZIP)" > "$(RELEASE_DIR)/zip_listing.txt"
+	@/usr/bin/grep -Fx "$$(/usr/bin/basename "$(RELEASE_MANIFEST)")" "$(RELEASE_DIR)/zip_listing.txt" >/dev/null || (echo "release manifest missing from ZIP"; exit 1)
 	@echo "release-artifact complete: $(RELEASE_APP_ZIP)"
 
 release-distribute: release-notarize release-staple release-verify-notarized release-artifact

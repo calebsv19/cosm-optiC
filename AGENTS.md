@@ -18,9 +18,36 @@ Private CodeWork planning docs, remote worker lanes, production registry records
 and website publication data are not required for the supported local agent
 workflow.
 
+## Public Package Discovery
+
+For the current public desktop package and AI-agent download metadata, use the
+Ecosystem agent manifest:
+
+```text
+https://ecosystem.calebsv.tech/agents/programs/optic.json
+```
+
+That manifest is the public package-discovery bridge for `optiC 0.5.0`. It
+lists the current macOS `arm64` and `x86_64` ZIPs, immutable version URLs,
+SHA-256 values, size metadata, the public agent guide, and this GitHub
+repository. Treat the manifest as read-only release metadata unless an operator
+explicitly starts a website/release publication lane.
+
 ## Safe Local Commands
 
-Run commands from the workspace parent so `make -C ray_tracing ...` resolves:
+Public GitHub clones default to a `cosm-optiC/` directory, while the historical
+CodeWork program directory is `ray_tracing/`. To run the commands below
+unchanged from a scratch parent directory, clone with an explicit destination:
+
+```bash
+git clone https://github.com/calebsv19/cosm-optiC ray_tracing
+```
+
+If you keep the default `cosm-optiC/` directory name, replace
+`make -C ray_tracing ...` and `ray_tracing/...` paths with
+`make -C cosm-optiC ...` and `cosm-optiC/...`.
+
+Run commands from the parent directory that contains the checkout:
 
 ```bash
 make -C ray_tracing ray-tracing-render-headless
@@ -77,6 +104,9 @@ This repo often has active in-flight work. Before editing, run:
 ```bash
 git -C ray_tracing status --short
 ```
+
+If your checkout directory is named `cosm-optiC`, use
+`git -C cosm-optiC status --short` instead.
 
 Treat unrelated modified or untracked files as user-owned. Do not revert them.
 Keep documentation-only changes separate from renderer/source changes.

@@ -144,6 +144,18 @@ writes PNG frames, a contact sheet, and a diagnostic report under
 `_private_workspace_artifacts/` and requires physical transport without
 analytic sidecar or tangent receiver fallback.
 
+`test-ray-tracing-spatial-caustic-mesh-dielectric-lens-fixture` is the local
+S4Q/S4R/S4T/S4U mesh-dielectric visual/debug proof target. It renders no-caustic,
+triangle-target, and explicit `mesh_dielectric_lens` cells against an authored
+closed mesh-backed lens, audits the referenced runtime mesh sidecar for closed
+manifold topology and consistent shared-edge orientation, and writes an open
+negative sidecar that must fail the same topology audit despite declaring
+closed/manifold metadata. It writes debug JSONL and requires the mesh provider
+to resolve, emit two-interface closed entry/exit paths with a traversal-profile
+override, record accepted traversal and zero reject buckets with measured
+inside-distance/entry-cosine/exit-cosine ranges, deposit into the volume cache,
+and brighten the mist versus the no-caustic baseline.
+
 `test-ray-tracing-emissive-light-preview-matrix` is the local emitter-light
 preview proof target. It renders flat wall-panel, complex emissive prism, and
 dual-panel room variants, plus flush/diffuse-bounce, offset/tilted-panel, and

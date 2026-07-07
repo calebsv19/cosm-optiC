@@ -211,6 +211,15 @@ static bool runtime_disney_v2_3d_shade_hit_with_payload(
     if (scene->hasLight &&
         RuntimeDirectLight3D_ShadeHitWithPayload(scene, hit, &result.payload, sampling, &direct)) {
         result.directSampleCount = scene->hasLight ? 1 : 0;
+        result.directVisibilityOutcomeNoTraceCount = direct.visibilityOutcomeNoTraceCount;
+        result.directVisibilityOutcomeClearVisibleCount =
+            direct.visibilityOutcomeClearVisibleCount;
+        result.directVisibilityOutcomeClearBlockedCount =
+            direct.visibilityOutcomeClearBlockedCount;
+        result.directVisibilityOutcomeStablePartialCount =
+            direct.visibilityOutcomeStablePartialCount;
+        result.directVisibilityOutcomeMixedPartialCount =
+            direct.visibilityOutcomeMixedPartialCount;
         result.directRadianceR = direct.radianceR;
         result.directRadianceG = direct.radianceG;
         result.directRadianceB = direct.radianceB;

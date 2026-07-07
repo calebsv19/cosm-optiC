@@ -21,6 +21,7 @@ void RuntimeNative3DFeatureBuffer_Free(RuntimeNative3DFeatureBuffer* buffer) {
     free(buffer->roughnessBuffer);
     free(buffer->transparencyBuffer);
     free(buffer->hitMaskBuffer);
+    free(buffer->directLightVisibilityOutcomeBuffer);
     free(buffer->triangleIndexBuffer);
     free(buffer->sceneObjectIndexBuffer);
     memset(buffer, 0, sizeof(*buffer));
@@ -46,6 +47,7 @@ bool RuntimeNative3DFeatureBuffer_Ensure(RuntimeNative3DFeatureBuffer* buffer,
     float* roughness = NULL;
     float* transparency = NULL;
     unsigned char* hit_mask = NULL;
+    unsigned char* direct_light_visibility = NULL;
     int* triangle_index = NULL;
     int* scene_object_index = NULL;
     size_t pixel_count = 0;
@@ -56,6 +58,7 @@ bool RuntimeNative3DFeatureBuffer_Ensure(RuntimeNative3DFeatureBuffer* buffer,
         buffer->roughnessBuffer &&
         buffer->transparencyBuffer &&
         buffer->hitMaskBuffer &&
+        buffer->directLightVisibilityOutcomeBuffer &&
         buffer->triangleIndexBuffer &&
         buffer->sceneObjectIndexBuffer &&
         buffer->width == width &&
@@ -70,16 +73,19 @@ bool RuntimeNative3DFeatureBuffer_Ensure(RuntimeNative3DFeatureBuffer* buffer,
     roughness = (float*)calloc(pixel_count, sizeof(*roughness));
     transparency = (float*)calloc(pixel_count, sizeof(*transparency));
     hit_mask = (unsigned char*)calloc(pixel_count, sizeof(*hit_mask));
+    direct_light_visibility =
+        (unsigned char*)calloc(pixel_count, sizeof(*direct_light_visibility));
     triangle_index = (int*)calloc(pixel_count, sizeof(*triangle_index));
     scene_object_index = (int*)calloc(pixel_count, sizeof(*scene_object_index));
     if (!normals || !depths || !reflectivity || !roughness || !transparency || !hit_mask ||
-        !triangle_index || !scene_object_index) {
+        !direct_light_visibility || !triangle_index || !scene_object_index) {
         free(normals);
         free(depths);
         free(reflectivity);
         free(roughness);
         free(transparency);
         free(hit_mask);
+        free(direct_light_visibility);
         free(triangle_index);
         free(scene_object_index);
         return false;
@@ -91,6 +97,7 @@ bool RuntimeNative3DFeatureBuffer_Ensure(RuntimeNative3DFeatureBuffer* buffer,
     free(buffer->roughnessBuffer);
     free(buffer->transparencyBuffer);
     free(buffer->hitMaskBuffer);
+    free(buffer->directLightVisibilityOutcomeBuffer);
     free(buffer->triangleIndexBuffer);
     free(buffer->sceneObjectIndexBuffer);
     buffer->normalBuffer = normals;
@@ -99,6 +106,7 @@ bool RuntimeNative3DFeatureBuffer_Ensure(RuntimeNative3DFeatureBuffer* buffer,
     buffer->roughnessBuffer = roughness;
     buffer->transparencyBuffer = transparency;
     buffer->hitMaskBuffer = hit_mask;
+    buffer->directLightVisibilityOutcomeBuffer = direct_light_visibility;
     buffer->triangleIndexBuffer = triangle_index;
     buffer->sceneObjectIndexBuffer = scene_object_index;
     buffer->width = width;
@@ -112,6 +120,7 @@ void RuntimeNative3DFeatureBuffer_Clear(RuntimeNative3DFeatureBuffer* buffer) {
     if (!buffer || !buffer->normalBuffer || !buffer->depthBuffer ||
         !buffer->reflectivityBuffer || !buffer->roughnessBuffer ||
         !buffer->transparencyBuffer || !buffer->hitMaskBuffer ||
+        !buffer->directLightVisibilityOutcomeBuffer ||
         !buffer->triangleIndexBuffer || !buffer->sceneObjectIndexBuffer ||
         buffer->width <= 0 || buffer->height <= 0) {
         return;
@@ -123,6 +132,9 @@ void RuntimeNative3DFeatureBuffer_Clear(RuntimeNative3DFeatureBuffer* buffer) {
     memset(buffer->roughnessBuffer, 0, pixel_count * sizeof(*buffer->roughnessBuffer));
     memset(buffer->transparencyBuffer, 0, pixel_count * sizeof(*buffer->transparencyBuffer));
     memset(buffer->hitMaskBuffer, 0, pixel_count * sizeof(*buffer->hitMaskBuffer));
+    memset(buffer->directLightVisibilityOutcomeBuffer,
+           0,
+           pixel_count * sizeof(*buffer->directLightVisibilityOutcomeBuffer));
     runtime_native_3d_feature_buffer_clear_identity(buffer, pixel_count);
 }
 
@@ -192,4 +204,47 @@ bool RuntimeNative3DFeatureBuffer_RenderRegion(RuntimeNative3DFeatureBuffer* buf
         }
     }
     return true;
+}
+
+void RuntimeNative3DFeatureBuffer_RecordDirectLightVisibilityOutcome(
+    RuntimeNative3DFeatureBuffer* buffer,
+    int local_x,
+    int local_y,
+    RuntimeNative3DDirectLightVisibilityOutcome outcome) {
+    size_t pixel_index = 0;
+    if (!buffer || !buffer->directLightVisibilityOutcomeBuffer ||
+        local_x < 0 || local_y < 0 ||
+        local_x >= buffer->width || local_y >= buffer->height) {
+        return;
+    }
+    pixel_index = (size_t)local_y * (size_t)buffer->width + (size_t)local_x;
+    buffer->directLightVisibilityOutcomeBuffer[pixel_index] = (unsigned char)outcome;
+}
+
+RuntimeNative3DDirectLightVisibilityOutcome
+RuntimeNative3DFeatureBuffer_ResolveDirectLightVisibilityOutcome(
+    int no_trace_count,
+    int clear_visible_count,
+    int clear_blocked_count,
+    int stable_partial_count,
+    int mixed_partial_count) {
+    if (mixed_partial_count > 0) {
+        return RUNTIME_NATIVE_3D_DIRECT_LIGHT_VISIBILITY_MIXED_PARTIAL;
+    }
+    if (stable_partial_count > 0) {
+        return RUNTIME_NATIVE_3D_DIRECT_LIGHT_VISIBILITY_STABLE_PARTIAL;
+    }
+    if (clear_blocked_count > 0 && clear_visible_count > 0) {
+        return RUNTIME_NATIVE_3D_DIRECT_LIGHT_VISIBILITY_MIXED_PARTIAL;
+    }
+    if (clear_blocked_count > 0) {
+        return RUNTIME_NATIVE_3D_DIRECT_LIGHT_VISIBILITY_CLEAR_BLOCKED;
+    }
+    if (clear_visible_count > 0) {
+        return RUNTIME_NATIVE_3D_DIRECT_LIGHT_VISIBILITY_CLEAR_VISIBLE;
+    }
+    if (no_trace_count > 0) {
+        return RUNTIME_NATIVE_3D_DIRECT_LIGHT_VISIBILITY_NO_TRACE;
+    }
+    return RUNTIME_NATIVE_3D_DIRECT_LIGHT_VISIBILITY_UNKNOWN;
 }

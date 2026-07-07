@@ -570,3 +570,143 @@ bool runtime_caustic_transport_resolve_analytic_bowl(
     *out_bowl = best;
     return true;
 }
+
+bool runtime_caustic_transport_resolve_mesh_dielectric(
+    const RuntimeScene3D* scene,
+    RuntimeCausticTransportMeshDielectric3D* out_mesh_dielectric) {
+    typedef struct {
+        bool seen;
+        int sceneObjectIndex;
+        int primitiveIndex;
+        int triangleIndex;
+        int triangleCount;
+        RuntimeTriangle3D entryTriangle;
+        Vec3 boundsMin;
+        Vec3 boundsMax;
+        RuntimeMaterialPayload3D payload;
+        double areaScore;
+    } Candidate;
+
+    Candidate candidates[MAX_OBJECTS];
+    RuntimeCausticTransportMeshDielectric3D best;
+    double best_score = -1.0;
+
+    if (out_mesh_dielectric) memset(out_mesh_dielectric, 0, sizeof(*out_mesh_dielectric));
+    if (!scene || !out_mesh_dielectric) return false;
+    memset(candidates, 0, sizeof(candidates));
+    memset(&best, 0, sizeof(best));
+
+    for (int tri_i = 0; tri_i < scene->triangleMesh.triangleCount; ++tri_i) {
+        const RuntimeTriangle3D* triangle = &scene->triangleMesh.triangles[tri_i];
+        HitInfo3D hit = {0};
+        RuntimeMaterialPayload3D payload = {0};
+        Candidate* candidate = NULL;
+        Vec3 centroid = vec3_scale(vec3_add(vec3_add(triangle->p0, triangle->p1),
+                                            triangle->p2),
+                                   1.0 / 3.0);
+        Vec3 e0 = vec3_sub(triangle->p1, triangle->p0);
+        Vec3 e1 = vec3_sub(triangle->p2, triangle->p0);
+        double area = vec3_length(vec3_cross(e0, e1)) * 0.5;
+        int object_index = triangle->sceneObjectIndex;
+
+        if (object_index < 0 || object_index >= MAX_OBJECTS) continue;
+        if (!(area > 1.0e-10)) continue;
+        HitInfo3D_Reset(&hit);
+        hit.t = 0.0;
+        hit.position = centroid;
+        hit.normal = triangle->normal;
+        hit.triangleIndex = tri_i;
+        hit.primitiveIndex = triangle->primitiveIndex;
+        hit.sceneObjectIndex = object_index;
+        if (!RuntimeMaterialPayload3D_ResolveFromHit(&hit, &payload) ||
+            !runtime_caustic_transport_payload_is_eligible(&payload)) {
+            continue;
+        }
+
+        candidate = &candidates[object_index];
+        if (!candidate->seen) {
+            candidate->seen = true;
+            candidate->sceneObjectIndex = object_index;
+            candidate->primitiveIndex = triangle->primitiveIndex;
+            candidate->triangleIndex = tri_i;
+            candidate->entryTriangle = *triangle;
+            candidate->boundsMin = triangle->p0;
+            candidate->boundsMax = triangle->p0;
+            candidate->payload = payload;
+            candidate->areaScore = area;
+        } else if (area > candidate->areaScore) {
+            candidate->triangleIndex = tri_i;
+            candidate->entryTriangle = *triangle;
+            candidate->areaScore = area;
+        }
+        candidate->triangleCount += 1;
+        runtime_caustic_transport_vec3_minmax(triangle->p0,
+                                              &candidate->boundsMin,
+                                              &candidate->boundsMax);
+        runtime_caustic_transport_vec3_minmax(triangle->p1,
+                                              &candidate->boundsMin,
+                                              &candidate->boundsMax);
+        runtime_caustic_transport_vec3_minmax(triangle->p2,
+                                              &candidate->boundsMin,
+                                              &candidate->boundsMax);
+    }
+
+    for (int i = 0; i < MAX_OBJECTS; ++i) {
+        Candidate* candidate = &candidates[i];
+        RuntimeCausticTransportMeshDielectric3D resolved;
+        Vec3 extent = vec3(0.0, 0.0, 0.0);
+        double ex = 0.0;
+        double ey = 0.0;
+        double ez = 0.0;
+        double min_extent = 0.0;
+        double max_extent = 0.0;
+        double mid_extent = 0.0;
+        double score = 0.0;
+        if (!candidate->seen) continue;
+        extent = vec3_sub(candidate->boundsMax, candidate->boundsMin);
+        ex = fmax(extent.x, 0.0);
+        ey = fmax(extent.y, 0.0);
+        ez = fmax(extent.z, 0.0);
+        min_extent = fmin(ex, fmin(ey, ez));
+        max_extent = fmax(ex, fmax(ey, ez));
+        mid_extent = ex + ey + ez - min_extent - max_extent;
+        if (!(max_extent > 1.0e-6)) continue;
+        if (!(mid_extent > 1.0e-6)) mid_extent = max_extent;
+        if (!(min_extent > 1.0e-6)) min_extent = max_extent * 0.08;
+
+        memset(&resolved, 0, sizeof(resolved));
+        resolved.valid = true;
+        resolved.sceneObjectIndex = candidate->sceneObjectIndex;
+        resolved.primitiveIndex = candidate->primitiveIndex;
+        resolved.triangleIndex = candidate->triangleIndex;
+        resolved.triangleCount = candidate->triangleCount;
+        resolved.entryTriangle = candidate->entryTriangle;
+        RuntimeCausticLensTransport3D_DefaultShape(&resolved.shape);
+        resolved.shape.kind = RUNTIME_CAUSTIC_LENS_SHAPE_MESH_DIELECTRIC;
+        resolved.shape.sceneObjectIndex = candidate->sceneObjectIndex;
+        resolved.shape.primitiveIndex = candidate->primitiveIndex;
+        resolved.shape.boundsMin = candidate->boundsMin;
+        resolved.shape.boundsMax = candidate->boundsMax;
+        resolved.shape.center = vec3_scale(vec3_add(candidate->boundsMin,
+                                                    candidate->boundsMax),
+                                           0.5);
+        resolved.shape.axis = vec3_normalize(candidate->entryTriangle.normal);
+        if (!(vec3_length(resolved.shape.axis) > 1.0e-9)) {
+            resolved.shape.axis = vec3(0.0, 1.0, 0.0);
+        }
+        resolved.shape.radius = mid_extent * 0.5;
+        resolved.shape.height = min_extent;
+        resolved.shape.payload = candidate->payload;
+        resolved.payload = candidate->payload;
+
+        score = (double)candidate->triangleCount + candidate->areaScore;
+        if (score > best_score) {
+            best_score = score;
+            best = resolved;
+        }
+    }
+
+    if (!best.valid) return false;
+    *out_mesh_dielectric = best;
+    return true;
+}

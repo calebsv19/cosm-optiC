@@ -19,6 +19,8 @@ void RuntimeCausticTransport3D_ResetRequestState(void) {
     g_caustic_transport_state.surfaceRadianceScale = 1.0;
     g_caustic_transport_state.surfaceFootprintScale = 1.0;
     g_caustic_transport_state.surfaceReceiverFallbackEnabled = true;
+    RuntimeCausticLensTransport3D_DefaultTraversalProfile(
+        &g_caustic_transport_state.traversalProfileOverride);
     RuntimeCausticTransportDebug3D_Reset();
 }
 
@@ -43,6 +45,11 @@ void RuntimeCausticTransport3D_SetRequestState(const RuntimeCausticSettings3D* s
     g_caustic_transport_state.surfaceReceiverFallbackEnabled =
         src->surfaceReceiverFallbackEnabled;
     g_caustic_transport_state.debugExportEnabled = src->debugExportEnabled;
+    g_caustic_transport_state.hasTraversalProfileOverride =
+        src->hasTraversalProfileOverride;
+    g_caustic_transport_state.traversalProfileOverride = src->traversalProfileOverride;
+    RuntimeCausticLensTransport3D_NormalizeTraversalProfile(
+        &g_caustic_transport_state.traversalProfileOverride);
     RuntimeCausticTransportDebug3D_SetEnabled(src->debugExportEnabled);
     RuntimeCausticTransportDebug3D_BeginFrame();
     g_caustic_transport_state.enabled =
@@ -71,27 +78,7 @@ bool RuntimeCausticTransport3D_PopulateCaches(
     int path_budget = RUNTIME_CAUSTIC_TRANSPORT_DEFAULT_PATH_BUDGET;
     bool volume_cache_active = false;
     RuntimeLightSource3D compat_light;
-    RuntimeCausticTransportAnalyticSphere3D analytic_sphere = {0};
-    RuntimeCausticTransportAnalyticCylinder3D analytic_cylinder = {0};
-    RuntimeCausticTransportAnalyticPrism3D analytic_prism = {0};
-    RuntimeCausticTransportAnalyticBowl3D analytic_bowl = {0};
-    bool use_analytic_sphere_lens =
-        g_caustic_transport_state.emissionPolicy ==
-        RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_SPHERE_LENS;
-    bool use_analytic_cylinder_lens =
-        g_caustic_transport_state.emissionPolicy ==
-            RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_CYLINDER_LENS ||
-        g_caustic_transport_state.emissionPolicy ==
-            RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_CYLINDER_LENS_FOCUSED;
-    bool use_focused_cylinder_lens =
-        g_caustic_transport_state.emissionPolicy ==
-        RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_CYLINDER_LENS_FOCUSED;
-    bool use_analytic_prism_lens =
-        g_caustic_transport_state.emissionPolicy ==
-        RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_PRISM_LENS;
-    bool use_analytic_bowl_lens =
-        g_caustic_transport_state.emissionPolicy ==
-        RUNTIME_CAUSTIC_TRANSPORT_EMISSION_ANALYTIC_BOWL_LENS;
+    RuntimeCausticTransportProvider3D provider = {0};
 
     if (out_diagnostics) *out_diagnostics = diagnostics;
     diagnostics.requested = g_caustic_transport_state.enabled;
@@ -149,61 +136,17 @@ bool RuntimeCausticTransport3D_PopulateCaches(
         runtime_caustic_transport_disable_surface_receiver_fallback(
             &g_caustic_transport_surface_context);
     }
-    if (use_analytic_sphere_lens) {
-        if (runtime_caustic_transport_resolve_analytic_sphere(scene, &analytic_sphere)) {
-            diagnostics.analyticSphereLensResolvedCount = 1u;
-        } else {
-            diagnostics.analyticSphereLensRejectedCount = 1u;
-            RuntimeCausticVolumeCache3D_SnapshotDiagnostics(cache, &diagnostics.cache);
-            RuntimeCausticSurfaceCache3D_SnapshotDiagnostics(surface_cache,
-                                                             &diagnostics.surfaceCache);
-            (void)RuntimeCausticTransportDebug3D_WriteArtifacts(&g_caustic_transport_state,
-                                                                &diagnostics);
-            if (out_diagnostics) *out_diagnostics = diagnostics;
-            return false;
-        }
-    }
-    if (use_analytic_cylinder_lens) {
-        if (runtime_caustic_transport_resolve_analytic_cylinder(scene, &analytic_cylinder)) {
-            diagnostics.analyticCylinderLensResolvedCount = 1u;
-        } else {
-            diagnostics.analyticCylinderLensRejectedCount = 1u;
-            RuntimeCausticVolumeCache3D_SnapshotDiagnostics(cache, &diagnostics.cache);
-            RuntimeCausticSurfaceCache3D_SnapshotDiagnostics(surface_cache,
-                                                             &diagnostics.surfaceCache);
-            (void)RuntimeCausticTransportDebug3D_WriteArtifacts(&g_caustic_transport_state,
-                                                                &diagnostics);
-            if (out_diagnostics) *out_diagnostics = diagnostics;
-            return false;
-        }
-    }
-    if (use_analytic_prism_lens) {
-        if (runtime_caustic_transport_resolve_analytic_prism(scene, &analytic_prism)) {
-            diagnostics.analyticPrismLensResolvedCount = 1u;
-        } else {
-            diagnostics.analyticPrismLensRejectedCount = 1u;
-            RuntimeCausticVolumeCache3D_SnapshotDiagnostics(cache, &diagnostics.cache);
-            RuntimeCausticSurfaceCache3D_SnapshotDiagnostics(surface_cache,
-                                                             &diagnostics.surfaceCache);
-            (void)RuntimeCausticTransportDebug3D_WriteArtifacts(&g_caustic_transport_state,
-                                                                &diagnostics);
-            if (out_diagnostics) *out_diagnostics = diagnostics;
-            return false;
-        }
-    }
-    if (use_analytic_bowl_lens) {
-        if (runtime_caustic_transport_resolve_analytic_bowl(scene, &analytic_bowl)) {
-            diagnostics.analyticBowlLensResolvedCount = 1u;
-        } else {
-            diagnostics.analyticBowlLensRejectedCount = 1u;
-            RuntimeCausticVolumeCache3D_SnapshotDiagnostics(cache, &diagnostics.cache);
-            RuntimeCausticSurfaceCache3D_SnapshotDiagnostics(surface_cache,
-                                                             &diagnostics.surfaceCache);
-            (void)RuntimeCausticTransportDebug3D_WriteArtifacts(&g_caustic_transport_state,
-                                                                &diagnostics);
-            if (out_diagnostics) *out_diagnostics = diagnostics;
-            return false;
-        }
+    if (!runtime_caustic_transport_resolve_provider(scene,
+                                                    g_caustic_transport_state.emissionPolicy,
+                                                    &provider,
+                                                    &diagnostics)) {
+        RuntimeCausticVolumeCache3D_SnapshotDiagnostics(cache, &diagnostics.cache);
+        RuntimeCausticSurfaceCache3D_SnapshotDiagnostics(surface_cache,
+                                                         &diagnostics.surfaceCache);
+        (void)RuntimeCausticTransportDebug3D_WriteArtifacts(&g_caustic_transport_state,
+                                                            &diagnostics);
+        if (out_diagnostics) *out_diagnostics = diagnostics;
+        return false;
     }
 
     enabled_light_count = RuntimeLightSet3D_EnabledCount(&scene->lightSet);
@@ -213,80 +156,22 @@ bool RuntimeCausticTransport3D_PopulateCaches(
                 RuntimeLightSet3D_GetEnabled(&scene->lightSet, light_i);
             if (!light || light->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_MESH_EMISSIVE) continue;
             diagnostics.lightCount += 1u;
-            if (use_analytic_sphere_lens) {
-                runtime_caustic_transport_emit_analytic_sphere_lens(
-                    scene,
-                    light,
-                    light_i,
-                    &analytic_sphere,
-                    path_budget,
-                    volume_cache_active ? cache : NULL,
-                    g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
-                    g_caustic_transport_state.maxPathDepth,
-                    g_caustic_transport_state.surfaceFootprintScale,
-                    g_caustic_transport_state.surfaceRadianceScale,
-                    &g_caustic_transport_surface_context,
-                    &diagnostics);
-            } else if (use_analytic_cylinder_lens) {
-                runtime_caustic_transport_emit_analytic_cylinder_lens(
-                    scene,
-                    light,
-                    light_i,
-                    &analytic_cylinder,
-                    path_budget,
-                    use_focused_cylinder_lens,
-                    volume_cache_active ? cache : NULL,
-                    g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
-                    g_caustic_transport_state.maxPathDepth,
-                    g_caustic_transport_state.surfaceFootprintScale,
-                    g_caustic_transport_state.surfaceRadianceScale,
-                    &g_caustic_transport_surface_context,
-                    &diagnostics);
-            } else if (use_analytic_prism_lens) {
-                runtime_caustic_transport_emit_analytic_prism_lens(
-                    scene,
-                    light,
-                    light_i,
-                    &analytic_prism,
-                    path_budget,
-                    volume_cache_active ? cache : NULL,
-                    g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
-                    g_caustic_transport_state.maxPathDepth,
-                    g_caustic_transport_state.surfaceFootprintScale,
-                    g_caustic_transport_state.surfaceRadianceScale,
-                    &g_caustic_transport_surface_context,
-                    &diagnostics);
-            } else if (use_analytic_bowl_lens) {
-                runtime_caustic_transport_emit_analytic_bowl_lens(
-                    scene,
-                    light,
-                    light_i,
-                    &analytic_bowl,
-                    path_budget,
-                    volume_cache_active ? cache : NULL,
-                    g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
-                    g_caustic_transport_state.maxPathDepth,
-                    g_caustic_transport_state.surfaceFootprintScale,
-                    g_caustic_transport_state.surfaceRadianceScale,
-                    &g_caustic_transport_surface_context,
-                    &diagnostics);
-            } else {
-                for (int tri_i = 0; tri_i < scene->triangleMesh.triangleCount; ++tri_i) {
-                    if ((int)diagnostics.evaluatedPathCount >= path_budget) break;
-                    runtime_caustic_transport_emit_to_triangle(scene,
-                                                               light,
-                                                               light_i,
-                                                               tri_i,
-                                                               path_budget,
-                                                               volume_cache_active ? cache : NULL,
-                                                               g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
-                                                               g_caustic_transport_state.maxPathDepth,
-                                                               g_caustic_transport_state.surfaceFootprintScale,
-                                                               g_caustic_transport_state.surfaceRadianceScale,
-                                                               &g_caustic_transport_surface_context,
-                                                               &diagnostics);
-                }
-            }
+            runtime_caustic_transport_emit_provider_for_light(
+                scene,
+                light,
+                light_i,
+                &provider,
+                g_caustic_transport_state.hasTraversalProfileOverride
+                    ? &g_caustic_transport_state.traversalProfileOverride
+                    : NULL,
+                path_budget,
+                volume_cache_active ? cache : NULL,
+                g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
+                g_caustic_transport_state.maxPathDepth,
+                g_caustic_transport_state.surfaceFootprintScale,
+                g_caustic_transport_state.surfaceRadianceScale,
+                &g_caustic_transport_surface_context,
+                &diagnostics);
         }
     } else if (scene->hasLight) {
         RuntimeLightSource3D_Init(&compat_light);
@@ -298,80 +183,22 @@ bool RuntimeCausticTransport3D_PopulateCaches(
         compat_light.falloffDistance = scene->light.falloffDistance;
         compat_light.falloffMode = scene->light.falloffMode;
         diagnostics.lightCount = 1u;
-        if (use_analytic_sphere_lens) {
-            runtime_caustic_transport_emit_analytic_sphere_lens(
-                scene,
-                &compat_light,
-                0,
-                &analytic_sphere,
-                path_budget,
-                volume_cache_active ? cache : NULL,
-                g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
-                g_caustic_transport_state.maxPathDepth,
-                g_caustic_transport_state.surfaceFootprintScale,
-                g_caustic_transport_state.surfaceRadianceScale,
-                &g_caustic_transport_surface_context,
-                &diagnostics);
-        } else if (use_analytic_cylinder_lens) {
-            runtime_caustic_transport_emit_analytic_cylinder_lens(
-                scene,
-                &compat_light,
-                0,
-                &analytic_cylinder,
-                path_budget,
-                use_focused_cylinder_lens,
-                volume_cache_active ? cache : NULL,
-                g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
-                g_caustic_transport_state.maxPathDepth,
-                g_caustic_transport_state.surfaceFootprintScale,
-                g_caustic_transport_state.surfaceRadianceScale,
-                &g_caustic_transport_surface_context,
-                &diagnostics);
-        } else if (use_analytic_prism_lens) {
-            runtime_caustic_transport_emit_analytic_prism_lens(
-                scene,
-                &compat_light,
-                0,
-                &analytic_prism,
-                path_budget,
-                volume_cache_active ? cache : NULL,
-                g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
-                g_caustic_transport_state.maxPathDepth,
-                g_caustic_transport_state.surfaceFootprintScale,
-                g_caustic_transport_state.surfaceRadianceScale,
-                &g_caustic_transport_surface_context,
-                &diagnostics);
-        } else if (use_analytic_bowl_lens) {
-            runtime_caustic_transport_emit_analytic_bowl_lens(
-                scene,
-                &compat_light,
-                0,
-                &analytic_bowl,
-                path_budget,
-                volume_cache_active ? cache : NULL,
-                g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
-                g_caustic_transport_state.maxPathDepth,
-                g_caustic_transport_state.surfaceFootprintScale,
-                g_caustic_transport_state.surfaceRadianceScale,
-                &g_caustic_transport_surface_context,
-                &diagnostics);
-        } else {
-            for (int tri_i = 0; tri_i < scene->triangleMesh.triangleCount; ++tri_i) {
-                if ((int)diagnostics.evaluatedPathCount >= path_budget) break;
-                runtime_caustic_transport_emit_to_triangle(scene,
-                                                           &compat_light,
-                                                           0,
-                                                           tri_i,
-                                                           path_budget,
-                                                           volume_cache_active ? cache : NULL,
-                                                           g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
-                                                           g_caustic_transport_state.maxPathDepth,
-                                                           g_caustic_transport_state.surfaceFootprintScale,
-                                                           g_caustic_transport_state.surfaceRadianceScale,
-                                                           &g_caustic_transport_surface_context,
-                                                           &diagnostics);
-            }
-        }
+        runtime_caustic_transport_emit_provider_for_light(
+            scene,
+            &compat_light,
+            0,
+            &provider,
+            g_caustic_transport_state.hasTraversalProfileOverride
+                ? &g_caustic_transport_state.traversalProfileOverride
+                : NULL,
+            path_budget,
+            volume_cache_active ? cache : NULL,
+            g_caustic_transport_state.surfaceCacheRequested ? surface_cache : NULL,
+            g_caustic_transport_state.maxPathDepth,
+            g_caustic_transport_state.surfaceFootprintScale,
+            g_caustic_transport_state.surfaceRadianceScale,
+            &g_caustic_transport_surface_context,
+            &diagnostics);
     }
 
     RuntimeCausticVolumeCache3D_SnapshotDiagnostics(cache, &diagnostics.cache);

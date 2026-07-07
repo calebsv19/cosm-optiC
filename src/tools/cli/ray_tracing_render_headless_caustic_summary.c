@@ -37,6 +37,27 @@ void ray_tracing_headless_write_caustic_state_summary(
                 request->caustic_settings.surfaceFootprintScale);
         fprintf(file, "      \"surface_receiver_fallback_enabled\": %s,\n",
                 request->caustic_settings.surfaceReceiverFallbackEnabled ? "true" : "false");
+        fprintf(file, "      \"lens_traversal_profile_override_enabled\": %s,\n",
+                request->caustic_settings.hasTraversalProfileOverride ? "true" : "false");
+        fprintf(file, "      \"lens_traversal_profile_kind\": %d,\n",
+                (int)request->caustic_settings.traversalProfileOverride.kind);
+        fprintf(file, "      \"lens_outside_ior\": %.9f,\n",
+                request->caustic_settings.traversalProfileOverride.outsideIor);
+        fprintf(file, "      \"lens_material_ior\": %.9f,\n",
+                request->caustic_settings.traversalProfileOverride.materialIor);
+        fprintf(file, "      \"lens_fresnel_scale\": %.9f,\n",
+                request->caustic_settings.traversalProfileOverride.fresnelScale);
+        fprintf(file, "      \"lens_transmission_scale\": %.9f,\n",
+                request->caustic_settings.traversalProfileOverride.transmissionScale);
+        fprintf(file,
+                "      \"lens_tint\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
+                request->caustic_settings.traversalProfileOverride.tint.x,
+                request->caustic_settings.traversalProfileOverride.tint.y,
+                request->caustic_settings.traversalProfileOverride.tint.z);
+        fprintf(file, "      \"lens_absorption_distance\": %.9f,\n",
+                request->caustic_settings.traversalProfileOverride.absorptionDistance);
+        fprintf(file, "      \"lens_aperture_radius_scale\": %.9f,\n",
+                request->caustic_settings.traversalProfileOverride.apertureRadiusScale);
         fprintf(file, "      \"volume_cache_state\": \"%s\",\n",
                 RuntimeCausticCacheState3D_Label(caustic_readback.volumeCacheState));
         fprintf(file, "      \"surface_cache_state\": \"%s\",\n",
@@ -105,6 +126,18 @@ void ray_tracing_headless_write_caustic_state_summary(
                 preflight->stats.causticTransportAnalyticBowlLensSampleWeight);
         fprintf(file, "      \"transport_analytic_bowl_lens_total_sample_weight\": %.9f,\n",
                 preflight->stats.causticTransportAnalyticBowlLensTotalSampleWeight);
+        fprintf(file, "      \"transport_mesh_dielectric_lens_resolved_count\": %d,\n",
+                preflight->stats.causticTransportMeshDielectricLensResolvedCount);
+        fprintf(file, "      \"transport_mesh_dielectric_lens_rejected_count\": %d,\n",
+                preflight->stats.causticTransportMeshDielectricLensRejectedCount);
+        fprintf(file, "      \"transport_mesh_dielectric_lens_evaluated_path_count\": %d,\n",
+                preflight->stats.causticTransportMeshDielectricLensEvaluatedPathCount);
+        fprintf(file, "      \"transport_mesh_dielectric_lens_emitted_path_count\": %d,\n",
+                preflight->stats.causticTransportMeshDielectricLensEmittedPathCount);
+        fprintf(file, "      \"transport_mesh_dielectric_lens_sample_weight\": %.9f,\n",
+                preflight->stats.causticTransportMeshDielectricLensSampleWeight);
+        fprintf(file, "      \"transport_mesh_dielectric_lens_total_sample_weight\": %.9f,\n",
+                preflight->stats.causticTransportMeshDielectricLensTotalSampleWeight);
         fprintf(file, "      \"transport_transparent_hit_count\": %d,\n",
                 preflight->stats.causticTransportTransparentHitCount);
         fprintf(file, "      \"transport_specular_event_count\": %d,\n",

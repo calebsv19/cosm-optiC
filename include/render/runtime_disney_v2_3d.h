@@ -313,6 +313,11 @@ typedef struct {
     int sampledLobeMaxDepth;
     int pathDepth;
     int directSampleCount;
+    int directVisibilityOutcomeNoTraceCount;
+    int directVisibilityOutcomeClearVisibleCount;
+    int directVisibilityOutcomeClearBlockedCount;
+    int directVisibilityOutcomeStablePartialCount;
+    int directVisibilityOutcomeMixedPartialCount;
     int bsdfSampleCount;
     int primaryTransmissionRayCount;
     int primaryTransmissionHitCount;
