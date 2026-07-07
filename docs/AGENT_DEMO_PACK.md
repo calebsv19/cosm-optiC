@@ -5,6 +5,17 @@ repo fixtures and ignored generated output roots; it does not require the
 desktop app, release artifacts, production registry writes, website publishing,
 or remote worker jobs.
 
+Path convention: commands below assume the public GitHub repo was cloned into a
+directory named `ray_tracing`:
+
+```bash
+git clone https://github.com/calebsv19/cosm-optiC ray_tracing
+```
+
+If your checkout directory is `cosm-optiC`, replace `make -C ray_tracing ...`
+and `ray_tracing/...` paths with `make -C cosm-optiC ...` and
+`cosm-optiC/...`.
+
 ## Pack Contents
 
 | Role | Input | Command | Expected Output |
@@ -99,7 +110,10 @@ ray_tracing/docs/material_preview_sets/
 ## Queue Bundle Dry Run
 
 Use this to prove the portable `scene-only` worker bundle shape without live
-remote submission:
+remote submission. The export command is repo-local. The validation command
+uses the broader CodeWork workspace helper `bin/vps_worker_job_queue.py`; skip
+that validation step in a standalone public clone unless that helper is present
+beside the checkout.
 
 ```bash
 python3 ray_tracing/tools/export_worker_queue_fixture.py \
