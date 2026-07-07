@@ -326,7 +326,7 @@ def write_preview_scene(review_root: Path) -> tuple[Path, Path]:
                 "transform": {
                     "position": {"x": 0.0, "y": -2.85, "z": 1.25},
                     "rotation": {"x": 0.0, "y": 0.0, "z": 0.0},
-                    "scale": {"x": 0.070, "y": 0.070, "z": 0.070},
+                    "scale": {"x": 0.090, "y": 0.090, "z": 0.090},
                 },
                 "geometry_ref": {
                     "kind": "mesh_asset",
@@ -344,7 +344,7 @@ def write_preview_scene(review_root: Path) -> tuple[Path, Path]:
         ],
         "materials": [
             {"material_id": "mat_dark_floor", "kind": "lambert", "albedo": [0.06, 0.06, 0.06]},
-            {"material_id": "mat_vivid_wall", "kind": "lambert", "albedo": [0.0, 0.22, 1.0]},
+            {"material_id": "mat_vivid_wall", "kind": "lambert", "albedo": [0.0, 0.42, 1.0]},
             {"material_id": "mat_lens_glass", "kind": "dielectric", "albedo": [0.88, 0.97, 1.0]},
             {"material_id": "mat_light_marker", "kind": "emissive", "albedo": [1.0, 0.93, 0.80]},
         ],
@@ -354,8 +354,8 @@ def write_preview_scene(review_root: Path) -> tuple[Path, Path]:
                 "kind": "sphere",
                 "position": {"x": 0.0, "y": -2.85, "z": 1.25},
                 "radius": 0.070,
-                "intensity": 18.0,
-                "falloff_distance": 4.0,
+                "intensity": 26.0,
+                "falloff_distance": 5.0,
                 "color": {"r": 1.0, "g": 0.96, "b": 0.88},
                 "enabled": True,
                 "moving": False,
@@ -365,8 +365,8 @@ def write_preview_scene(review_root: Path) -> tuple[Path, Path]:
             {
                 "camera_id": "wall_preview_camera",
                 "kind": "perspective",
-                "position": {"x": 1.55, "y": -2.45, "z": 1.46},
-                "target": {"x": 0.0, "y": -0.05, "z": 1.24},
+                "position": {"x": 1.95, "y": -3.25, "z": 1.52},
+                "target": {"x": 0.0, "y": -1.05, "z": 1.24},
                 "yaw": 0.0,
                 "look_pitch": 0.0,
             }
@@ -376,11 +376,11 @@ def write_preview_scene(review_root: Path) -> tuple[Path, Path]:
         "extensions": {
             "ray_tracing": {
                 "authoring": {
-                    "camera_focus_target": {"x": 0.0, "y": -0.05, "z": 1.24},
+                    "camera_focus_target": {"x": 0.0, "y": -1.05, "z": 1.24},
                     "environment": {
                         "light_mode": 1,
-                        "ambient_strength": 0.035,
-                        "top_fill_strength": 0.02,
+                        "ambient_strength": 0.24,
+                        "top_fill_strength": 0.08,
                     },
                     "object_materials": [
                         {
@@ -394,7 +394,7 @@ def write_preview_scene(review_root: Path) -> tuple[Path, Path]:
                         {
                             "object_id": "vivid_receiver_wall",
                             "material_id": 0,
-                            "object_color": sphere_mist.rgb_u24(0, 54, 255),
+                            "object_color": sphere_mist.rgb_u24(0, 104, 255),
                             "roughness": 0.78,
                             "reflectivity": 0.01,
                             "alpha": 1.0,
@@ -413,7 +413,7 @@ def write_preview_scene(review_root: Path) -> tuple[Path, Path]:
                             "object_color": sphere_mist.rgb_u24(255, 238, 205),
                             "roughness": 0.2,
                             "reflectivity": 0.0,
-                            "emissive_strength": 4.0,
+                            "emissive_strength": 7.0,
                             "alpha": 1.0,
                         },
                     ],
@@ -448,16 +448,16 @@ def base_request(run_id: str,
         },
         "inspection": {
             "preset": "glass_review",
-            "camera_position": {"x": 1.55, "y": -2.45, "z": 1.46},
-            "camera_look_at": {"x": 0.0, "y": -0.05, "z": 1.24},
-            "camera_zoom": 0.78,
+            "camera_position": {"x": 1.95, "y": -3.25, "z": 1.52},
+            "camera_look_at": {"x": 0.0, "y": -1.05, "z": 1.24},
+            "camera_zoom": 0.52,
             "environment_light_mode": "ambient",
-            "ambient_strength": 0.035,
-            "top_fill_strength": 0.02,
+            "ambient_strength": 0.24,
+            "top_fill_strength": 0.08,
             "background_brightness": 0.012,
             "background_color": {"r": 0.01, "g": 0.012, "b": 0.016},
             "light_position": {"x": 0.0, "y": -2.85, "z": 1.25},
-            "light_intensity": 18.0,
+            "light_intensity": 26.0,
             "light_radius": 0.070,
             "secondary_diffuse_samples_3d": 6,
             "transmission_samples_3d": 8,
