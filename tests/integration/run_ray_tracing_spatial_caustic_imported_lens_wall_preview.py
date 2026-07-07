@@ -88,25 +88,111 @@ def copy_sphere_marker_asset(mesh_dir: Path) -> None:
 def write_biconvex_lens_asset(mesh_dir: Path) -> Path:
     mesh_dir.mkdir(parents=True, exist_ok=True)
     segments = 96
+    radial_rings = 16
     radius = 1.0
-    half_thickness = 0.16
-    vertices: list[dict] = [{"x": 0.0, "y": -half_thickness, "z": 0.0},
-                            {"x": 0.0, "y": half_thickness, "z": 0.0}]
-    for ring_y in (-half_thickness, half_thickness):
+    rim_half_thickness = 0.08
+    center_bulge = 0.24
+    front_center_y = -rim_half_thickness - center_bulge
+    back_center_y = rim_half_thickness + center_bulge
+    vertices: list[dict] = []
+
+    def surface_y(sign: float, radial_t: float) -> float:
+        return sign * (rim_half_thickness + center_bulge * (1.0 - radial_t * radial_t))
+
+    front_center_index = len(vertices)
+    vertices.append({"x": 0.0, "y": front_center_y, "z": 0.0})
+    front_rings: list[list[int]] = []
+    for ring in range(1, radial_rings + 1):
+        radial_t = float(ring) / float(radial_rings)
+        ring_indices = []
         for i in range(segments):
             theta = (2.0 * math.pi * float(i)) / float(segments)
-            vertices.append({"x": radius * math.cos(theta),
-                             "y": ring_y,
-                             "z": radius * math.sin(theta)})
+            ring_indices.append(len(vertices))
+            vertices.append({
+                "x": radius * radial_t * math.cos(theta),
+                "y": surface_y(-1.0, radial_t),
+                "z": radius * radial_t * math.sin(theta),
+            })
+        front_rings.append(ring_indices)
+
+    back_center_index = len(vertices)
+    vertices.append({"x": 0.0, "y": back_center_y, "z": 0.0})
+    back_rings: list[list[int]] = []
+    for ring in range(1, radial_rings + 1):
+        radial_t = float(ring) / float(radial_rings)
+        ring_indices = []
+        for i in range(segments):
+            theta = (2.0 * math.pi * float(i)) / float(segments)
+            ring_indices.append(len(vertices))
+            vertices.append({
+                "x": radius * radial_t * math.cos(theta),
+                "y": surface_y(1.0, radial_t),
+                "z": radius * radial_t * math.sin(theta),
+            })
+        back_rings.append(ring_indices)
+
     triangles: list[dict] = []
-    front_start = 2
-    back_start = front_start + segments
     for i in range(segments):
         n = (i + 1) % segments
-        triangles.append({"a": 0, "b": front_start + n, "c": front_start + i, "surface_group_id": "lens_front"})
-        triangles.append({"a": 1, "b": back_start + i, "c": back_start + n, "surface_group_id": "lens_back"})
-        triangles.append({"a": front_start + i, "b": front_start + n, "c": back_start + n, "surface_group_id": "lens_rim"})
-        triangles.append({"a": front_start + i, "b": back_start + n, "c": back_start + i, "surface_group_id": "lens_rim"})
+        triangles.append({
+            "a": front_center_index,
+            "b": front_rings[0][i],
+            "c": front_rings[0][n],
+            "surface_group_id": "lens_front",
+        })
+        triangles.append({
+            "a": back_center_index,
+            "b": back_rings[0][n],
+            "c": back_rings[0][i],
+            "surface_group_id": "lens_back",
+        })
+    for ring in range(1, radial_rings):
+        front_inner = front_rings[ring - 1]
+        front_outer = front_rings[ring]
+        back_inner = back_rings[ring - 1]
+        back_outer = back_rings[ring]
+        for i in range(segments):
+            n = (i + 1) % segments
+            triangles.append({
+                "a": front_inner[i],
+                "b": front_outer[i],
+                "c": front_outer[n],
+                "surface_group_id": "lens_front",
+            })
+            triangles.append({
+                "a": front_inner[i],
+                "b": front_outer[n],
+                "c": front_inner[n],
+                "surface_group_id": "lens_front",
+            })
+            triangles.append({
+                "a": back_inner[i],
+                "b": back_outer[n],
+                "c": back_outer[i],
+                "surface_group_id": "lens_back",
+            })
+            triangles.append({
+                "a": back_inner[i],
+                "b": back_inner[n],
+                "c": back_outer[n],
+                "surface_group_id": "lens_back",
+            })
+    front_outer = front_rings[-1]
+    back_outer = back_rings[-1]
+    for i in range(segments):
+        n = (i + 1) % segments
+        triangles.append({
+            "a": front_outer[i],
+            "b": back_outer[n],
+            "c": front_outer[n],
+            "surface_group_id": "lens_rim",
+        })
+        triangles.append({
+            "a": front_outer[i],
+            "b": back_outer[i],
+            "c": back_outer[n],
+            "surface_group_id": "lens_rim",
+        })
 
     asset = {
         "schema_family": "codework_geometry",
@@ -118,14 +204,15 @@ def write_biconvex_lens_asset(mesh_dir: Path) -> Path:
         "compile_meta": {
             "profile": "runtime_default",
             "generator": Path(__file__).name,
-            "shape": "closed_disc_lens",
+            "shape": "closed_biconvex_lens",
             "axis": "y",
             "segments": segments,
+            "radial_rings": radial_rings,
             "fidelity": "high_resolution_preview",
         },
         "local_bounds": {
-            "min": {"x": -radius, "y": -half_thickness, "z": -radius},
-            "max": {"x": radius, "y": half_thickness, "z": radius},
+            "min": {"x": -radius, "y": front_center_y, "z": -radius},
+            "max": {"x": radius, "y": back_center_y, "z": radius},
         },
         "mesh": {
             "vertex_count": len(vertices),
@@ -137,17 +224,17 @@ def write_biconvex_lens_asset(mesh_dir: Path) -> Path:
             {
                 "group_id": "lens_front",
                 "semantic": "incident_convex_surface",
-                "triangle_span": {"start": 0, "count": segments},
+                "triangle_span": {"start": 0, "count": segments + (radial_rings - 1) * segments * 2},
             },
             {
                 "group_id": "lens_back",
                 "semantic": "exit_convex_surface",
-                "triangle_span": {"start": segments, "count": segments},
+                "triangle_span": {"start": segments, "count": segments + (radial_rings - 1) * segments * 2},
             },
             {
                 "group_id": "lens_rim",
                 "semantic": "closed_lens_rim",
-                "triangle_span": {"start": segments * 2, "count": segments * 2},
+                "triangle_span": {"start": segments * radial_rings * 4 - segments * 2, "count": segments * 2},
             },
         ],
         "topology_flags": {
@@ -165,13 +252,13 @@ def wall_plane() -> dict:
     return sphere_mist.plane_object(
         "vivid_receiver_wall",
         {
-            "origin": {"x": 0.0, "y": 0.72, "z": 1.05},
+            "origin": {"x": 0.0, "y": 0.85, "z": 1.25},
             "axis_u": {"x": 1.0, "y": 0.0, "z": 0.0},
             "axis_v": {"x": 0.0, "y": 0.0, "z": 1.0},
             "normal": {"x": 0.0, "y": -1.0, "z": 0.0},
         },
-        3.4,
-        4.2,
+        3.2,
+        2.2,
         "mat_vivid_wall",
     )
 
@@ -180,13 +267,13 @@ def floor_plane() -> dict:
     return sphere_mist.plane_object(
         "matte_floor",
         {
-            "origin": {"x": 0.0, "y": -0.15, "z": -0.02},
+            "origin": {"x": 0.0, "y": -0.95, "z": -0.02},
             "axis_u": {"x": 1.0, "y": 0.0, "z": 0.0},
             "axis_v": {"x": 0.0, "y": 1.0, "z": 0.0},
             "normal": {"x": 0.0, "y": 0.0, "z": 1.0},
         },
-        3.8,
-        3.4,
+        4.2,
+        5.6,
         "mat_dark_floor",
     )
 
@@ -214,9 +301,9 @@ def write_preview_scene(review_root: Path) -> tuple[Path, Path]:
                 "space_mode_intent": "3d",
                 "dimensional_mode": "full_3d",
                 "transform": {
-                    "position": {"x": 0.0, "y": 0.0, "z": 1.38},
+                    "position": {"x": 0.0, "y": -1.05, "z": 1.25},
                     "rotation": {"x": 0.0, "y": 0.0, "z": 0.0},
-                    "scale": {"x": 0.76, "y": 0.34, "z": 0.70},
+                    "scale": {"x": 0.52, "y": 0.52, "z": 0.52},
                 },
                 "geometry_ref": {
                     "kind": "mesh_asset",
@@ -237,9 +324,9 @@ def write_preview_scene(review_root: Path) -> tuple[Path, Path]:
                 "space_mode_intent": "3d",
                 "dimensional_mode": "full_3d",
                 "transform": {
-                    "position": {"x": -0.58, "y": -1.25, "z": 2.25},
+                    "position": {"x": 0.0, "y": -2.85, "z": 1.25},
                     "rotation": {"x": 0.0, "y": 0.0, "z": 0.0},
-                    "scale": {"x": 0.055, "y": 0.055, "z": 0.055},
+                    "scale": {"x": 0.070, "y": 0.070, "z": 0.070},
                 },
                 "geometry_ref": {
                     "kind": "mesh_asset",
@@ -265,9 +352,9 @@ def write_preview_scene(review_root: Path) -> tuple[Path, Path]:
             {
                 "light_id": "lens_preview_light",
                 "kind": "sphere",
-                "position": {"x": 0.0, "y": -1.55, "z": 2.40},
-                "radius": 0.055,
-                "intensity": 13.5,
+                "position": {"x": 0.0, "y": -2.85, "z": 1.25},
+                "radius": 0.070,
+                "intensity": 18.0,
                 "falloff_distance": 4.0,
                 "color": {"r": 1.0, "g": 0.96, "b": 0.88},
                 "enabled": True,
@@ -278,8 +365,8 @@ def write_preview_scene(review_root: Path) -> tuple[Path, Path]:
             {
                 "camera_id": "wall_preview_camera",
                 "kind": "perspective",
-                "position": {"x": 0.72, "y": -2.95, "z": 1.28},
-                "target": {"x": 0.0, "y": 0.50, "z": 1.20},
+                "position": {"x": 1.55, "y": -2.45, "z": 1.46},
+                "target": {"x": 0.0, "y": -0.05, "z": 1.24},
                 "yaw": 0.0,
                 "look_pitch": 0.0,
             }
@@ -289,7 +376,7 @@ def write_preview_scene(review_root: Path) -> tuple[Path, Path]:
         "extensions": {
             "ray_tracing": {
                 "authoring": {
-                    "camera_focus_target": {"x": 0.0, "y": 0.50, "z": 1.20},
+                    "camera_focus_target": {"x": 0.0, "y": -0.05, "z": 1.24},
                     "environment": {
                         "light_mode": 1,
                         "ambient_strength": 0.035,
@@ -315,10 +402,10 @@ def write_preview_scene(review_root: Path) -> tuple[Path, Path]:
                         {
                             "object_id": "imported_biconvex_lens",
                             "material_id": 5,
-                            "object_color": sphere_mist.rgb_u24(224, 246, 255),
-                            "alpha": 0.38,
+                            "object_color": sphere_mist.rgb_u24(126, 228, 255),
+                            "alpha": 0.18,
                             "roughness": 0.006,
-                            "reflectivity": 0.03,
+                            "reflectivity": 0.01,
                         },
                         {
                             "object_id": "visible_light_marker",
@@ -326,7 +413,7 @@ def write_preview_scene(review_root: Path) -> tuple[Path, Path]:
                             "object_color": sphere_mist.rgb_u24(255, 238, 205),
                             "roughness": 0.2,
                             "reflectivity": 0.0,
-                            "emissive_strength": 2.5,
+                            "emissive_strength": 4.0,
                             "alpha": 1.0,
                         },
                     ],
@@ -352,8 +439,8 @@ def base_request(run_id: str,
         "render": {
             "start_frame": 0,
             "frame_count": 1,
-            "width": 192,
-            "height": 128,
+            "width": 256,
+            "height": 160,
             "normalized_t": 0.0,
             "temporal_frames": 1,
             "integrator_3d": "disney_v2",
@@ -361,17 +448,17 @@ def base_request(run_id: str,
         },
         "inspection": {
             "preset": "glass_review",
-            "camera_position": {"x": 0.72, "y": -2.95, "z": 1.28},
-            "camera_look_at": {"x": 0.0, "y": 0.50, "z": 1.20},
-            "camera_zoom": 0.86,
+            "camera_position": {"x": 1.55, "y": -2.45, "z": 1.46},
+            "camera_look_at": {"x": 0.0, "y": -0.05, "z": 1.24},
+            "camera_zoom": 0.78,
             "environment_light_mode": "ambient",
             "ambient_strength": 0.035,
             "top_fill_strength": 0.02,
             "background_brightness": 0.012,
             "background_color": {"r": 0.01, "g": 0.012, "b": 0.016},
-            "light_position": {"x": 0.0, "y": -1.55, "z": 2.40},
-            "light_intensity": 13.5,
-            "light_radius": 0.055,
+            "light_position": {"x": 0.0, "y": -2.85, "z": 1.25},
+            "light_intensity": 18.0,
+            "light_radius": 0.070,
             "secondary_diffuse_samples_3d": 6,
             "transmission_samples_3d": 8,
             "caustic_debug_summary": True,
