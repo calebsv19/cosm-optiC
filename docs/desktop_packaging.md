@@ -67,6 +67,57 @@ Future release-artifact hygiene:
   - `make -C ray_tracing package-desktop-open`
   - `make -C ray_tracing package-desktop-remove`
   - `make -C ray_tracing package-desktop-refresh`
+- private Linux desktop package proof:
+  - `make -C ray_tracing package-linux-desktop-contract`
+  - `make -C ray_tracing package-linux-desktop`
+  - `make -C ray_tracing package-linux-desktop-self-test`
+
+Linux desktop package target:
+
+- status:
+  private proof target only; not a public release target yet
+- package class:
+  `desktop_app_linux`
+- artifact role:
+  `desktop_app`
+- runtime:
+  `linux_gui`
+- expected private artifact name:
+  `optiC-<version>-linux-x86_64-desktop-stable.tar.gz`
+- package root layout:
+
+```text
+optiC-<version>-linux-x86_64-desktop-stable/
+  bin/raytracing-launcher
+  bin/raytracing-bin
+  resources/config/
+  resources/shared/
+  resources/shaders/
+  resources/vk_renderer/
+  resources/data/runtime/
+  manifest.json
+  package_manifest.json
+  README.md
+```
+
+The Linux launcher copies bundled resources into a writable runtime directory,
+then launches `bin/raytracing-bin` from that runtime root. By default it uses
+`${XDG_DATA_HOME:-$HOME/.local/share}/RayTracing/runtime`, but proof helpers can
+override `RAY_TRACING_RUNTIME_DIR` and `XDG_STATE_HOME` so package smoke runs
+stay thread-local.
+
+Before any public Linux desktop release, the package must pass a real-display
+unpacked-package proof on the Linux PC. The minimum proof is:
+
+- build from a named source branch/commit;
+- run `package-linux-desktop-self-test`;
+- extract the tarball to a clean directory;
+- run `bin/raytracing-launcher --self-test` from the unpacked package;
+- launch `bin/raytracing-launcher` in the real KDE/X11 desktop session;
+- capture menu, post-action, and late screenshots;
+- confirm `[Menu] Start pressed` through the package launcher log;
+- keep the artifact role explicit so it cannot be confused with the Linux
+  headless worker tarball.
 
 Optional icon inputs:
 
