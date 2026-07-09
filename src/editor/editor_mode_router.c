@@ -8,11 +8,11 @@ static RayTracingRuntimeRoute ResolveRoute(void) {
 
 int EditorModeRouter_ClampEditorMode(int current_mode, bool lock_object_mode) {
     if (!lock_object_mode) {
-        if (current_mode < 0 || current_mode > 2) return 0;
+        if (current_mode < 0 || current_mode >= EDITOR_MODE_COUNT) return EDITOR_MODE_PATH;
         return current_mode;
     }
-    if (current_mode == 2) return 2;
-    return 0;
+    if (current_mode == EDITOR_MODE_CAMERA) return EDITOR_MODE_CAMERA;
+    return EDITOR_MODE_PATH;
 }
 
 int EditorModeRouter_NextEditorMode(int current_mode, bool reverse, bool lock_object_mode) {
@@ -20,15 +20,15 @@ int EditorModeRouter_NextEditorMode(int current_mode, bool reverse, bool lock_ob
 
     if (!lock_object_mode) {
         if (reverse) {
-            return (current_mode == 0) ? 2 : (current_mode - 1);
+            return (current_mode == EDITOR_MODE_PATH) ? (EDITOR_MODE_COUNT - 1) : (current_mode - 1);
         }
-        return (current_mode + 1) % 3;
+        return (current_mode + 1) % EDITOR_MODE_COUNT;
     }
 
     if (reverse) {
-        return (current_mode == 0) ? 2 : 0;
+        return (current_mode == EDITOR_MODE_PATH) ? EDITOR_MODE_CAMERA : EDITOR_MODE_PATH;
     }
-    return (current_mode == 0) ? 2 : 0;
+    return (current_mode == EDITOR_MODE_PATH) ? EDITOR_MODE_CAMERA : EDITOR_MODE_PATH;
 }
 
 EditorModeCapabilities EditorModeRouter_GetCapabilities(void) {
@@ -51,15 +51,23 @@ bool EditorModeRouter_IsControlled3D(void) {
 }
 
 const char* EditorModeRouter_SpaceButtonLabel(void) {
-    if (EditorModeRouter_IsControlled3D()) {
-        return "Space: 3D (Scaffold)";
+    RayTracingRuntimeRoute route = ResolveRoute();
+    if (RayTracingModeBackend_IsNative3D(&route)) {
+        return "Space: 3D (Native)";
+    }
+    if (RayTracingModeBackend_IsCompat3DFallback(&route)) {
+        return "Space: 3D (Compat Fallback)";
     }
     return "Space: 2D";
 }
 
 const char* EditorModeRouter_RuntimeHintLabel(void) {
-    if (EditorModeRouter_IsControlled3D()) {
-        return "3D scaffold active: editor routes through 2D backend.";
+    RayTracingRuntimeRoute route = ResolveRoute();
+    if (RayTracingModeBackend_IsNative3D(&route)) {
+        return "3D native route active: bounded runtime scene contracts are ready.";
+    }
+    if (RayTracingModeBackend_IsCompat3DFallback(&route)) {
+        return "3D compat fallback active: editor routes through 2D projection/backend.";
     }
     return "2D backend active.";
 }
@@ -68,5 +76,9 @@ SpaceModeViewContext EditorModeRouter_BuildViewContext(const Camera* camera,
                                                        int viewport_width,
                                                        int viewport_height) {
     RayTracingRuntimeRoute route = ResolveRoute();
-    return RayTracingModeBackend_BuildViewContext(camera, viewport_width, viewport_height, &route);
+    RayTracingViewCarrier viewCarrier = RayTracingModeBackend_BuildViewCarrier(camera,
+                                                                               viewport_width,
+                                                                               viewport_height,
+                                                                               &route);
+    return viewCarrier.viewContext;
 }

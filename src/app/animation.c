@@ -4,21 +4,28 @@
 
 #include "ui/sdl_menu.h"
 #include "ui/text_zoom_shortcuts.h"
-#include "tools/make_video.h"
 #include "app/animation.h"
+#include "app/preview_session.h"
 #include "app/animation_input_helpers.h"
 #include "app/animation_output.h"
+#include "app/data_paths.h"
+#include "app/ray_tracing_runtime_host.h"
+#include "app/ray_tracing_core_sim_runtime_frame.h"
+#include "app/render_export_batch.h"
 #include "app/runtime_time.h"
 #include "config/config_manager.h"
 #include "scene/object_manager.h"
 #include "render/ray_tracing2.h"
+#include "render/pipeline/ray_tracing2_preview_present.h"
 #include "editor/bezier_editor.h"
 #include "path/path_system.h"
 #include "render/timer_hud_api.h"
-#include "render/timer_hud_adapter.h"
+#include "render/runtime_native_3d_progress_hud.h"
+#include "render/ray_tracing_mode_backend.h"
 #include "camera/camera.h"
 #include "render/space_mode_adapter.h"
 #include "render/render_helper.h"
+#include "render/text_draw.h"
 #include "engine/Render/render_pipeline.h"
 #include "import/fluid_import.h"
 #include "import/scene_bundle_import.h"
@@ -28,9 +35,9 @@
 #include "geo/shape_asset.h"
 #include "geo/shape_adapter.h"
 #include "ray_tracing/ray_tracing_app_main.h"
-#include "render/vk_shared_device.h"
 #include "kit_runtime_diag.h"
 #include <json-c/json.h>
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -46,10 +53,7 @@ int WINDOW_HEIGHT;
 
 SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL;
-#if USE_VULKAN
-static VkRenderer renderer_storage;
-#endif
-SceneObject sceneObjects[10];  // Define object array storage
+SceneObject sceneObjects[MAX_OBJECTS];  // Define object array storage
 int objectCount = 0;  // Define object count
 
 bool running;
@@ -58,16 +62,100 @@ double currentTime;
 int frameCounter;
 int loopCount;
 static bool quitRequested = false;
+static int s_deepRenderStartFrameIndex = 0;
+static CoreSimLoopState s_runtime_frame_loop;
 
 double t_increment;
 double t_param = 0.0;  // Parameter (0 to 1) for interpolation along the path.
 int direction = 1;      // +1 for forward, -1 for reverse.
-static const double kPreviewBg = 60.0;
-
 static const char* s_fluidManifestOverride = NULL;
 #include "render/fluid/fluid_state.h"
 
 void UpdateSimulation(double* accumulator, double* currentTime, int* loopCount);
+
+static int ClampNonNegativeFrameIndex(int value) {
+    return (value < 0) ? 0 : value;
+}
+
+static int ResolveDeepRenderStartFrameIndex(void) {
+    int configured_start = ClampNonNegativeFrameIndex(animSettings.startFrameIndex);
+    if (!animSettings.resumeFromExistingFrames) {
+        return configured_start;
+    }
+    {
+        RayTracingRenderExportStatus status = {0};
+        if (ray_tracing_render_export_describe_active(&status)) {
+            return ClampNonNegativeFrameIndex(status.next_frame_index);
+        }
+    }
+    return configured_start;
+}
+
+static double AnimationNormalizedTForAbsoluteFrameIndex(int absolute_frame_index) {
+    double span = 1.0;
+    double progress = 0.0;
+    if (absolute_frame_index < 0) absolute_frame_index = 0;
+    if (animSettings.framesForTravel > 0) {
+        span = (double)animSettings.framesForTravel;
+    }
+    progress = (double)absolute_frame_index / span;
+
+    if (animSettings.bounceMode) {
+        double cycle = fmod(progress, 2.0);
+        if (cycle < 0.0) cycle += 2.0;
+        return (cycle <= 1.0) ? cycle : (2.0 - cycle);
+    }
+    if (strcmp(animSettings.loopMode, "loop") == 0) {
+        double wrapped = fmod(progress, 1.0);
+        if (wrapped < 0.0) wrapped += 1.0;
+        return wrapped;
+    }
+    if (progress < 0.0) progress = 0.0;
+    if (progress > 1.0) progress = 1.0;
+    return progress;
+}
+
+static void TryLoadResumePreviewHistory(void) {
+    RayTracingRenderExportStatus status = {0};
+    RayTracingRuntimeRoute route;
+    char last_frame_path[PATH_MAX];
+    int last_frame_index = -1;
+
+    if (!animSettings.deepRenderMode || !animSettings.resumeFromExistingFrames) {
+        return;
+    }
+
+    route = RayTracingModeBackend_ResolveRoute();
+    if (route.routeFamily != RAY_TRACING_ROUTE_NATIVE_3D) {
+        return;
+    }
+    if (!ray_tracing_render_export_describe_active(&status)) {
+        return;
+    }
+    if (status.next_frame_index <= 0 || status.frame_dir[0] == '\0') {
+        return;
+    }
+
+    last_frame_index = status.next_frame_index - 1;
+    if (snprintf(last_frame_path,
+                 sizeof(last_frame_path),
+                 "%s/frame_%04d.bmp",
+                 status.frame_dir,
+                 last_frame_index) >= (int)sizeof(last_frame_path)) {
+        return;
+    }
+
+    if (RayTracing2PreviewPresent_LoadNative3DPreviewHistoryFromBMP(last_frame_path)) {
+        printf("[preview] seeded native 3D preview history from resumed frame: %s\n",
+               last_frame_path);
+    }
+}
+
+static void PrepareDeepRenderFrameStateForLocalIndex(int local_frame_counter) {
+    int absolute_frame_index = s_deepRenderStartFrameIndex + ClampNonNegativeFrameIndex(local_frame_counter);
+    t_param = AnimationNormalizedTForAbsoluteFrameIndex(absolute_frame_index);
+    currentTime = (double)absolute_frame_index * animSettings.frameDuration;
+}
 
 static bool EnvEnabled(const char *name) {
     const char *v = getenv(name);
@@ -84,87 +172,27 @@ int maxLoopCount = 1;  // Default to 1 loop if not set
 int AnimationInit(void) {
     LoadAnimationConfig();
     if (s_fluidManifestOverride && s_fluidManifestOverride[0]) {
-        strncpy(animSettings.fluidManifest, s_fluidManifestOverride, sizeof(animSettings.fluidManifest) - 1);
-        animSettings.fluidManifest[sizeof(animSettings.fluidManifest) - 1] = '\0';
-        animSettings.useFluidScene = true;
+        (void)animation_config_set_scene_source_selection(&animSettings,
+                                                          SCENE_SOURCE_FLUID_MANIFEST,
+                                                          s_fluidManifestOverride);
     }
     LoadSceneConfig();
-    if (animSettings.useFluidScene && animSettings.fluidManifest[0]) {
-        AnimationApplyFluidScene(animSettings.fluidManifest);
-    } else {
-        AnimationClearFluidGrid();
+    ApplyAnimationWindowSizeOverride();
+    if (!AnimationRestoreActiveSceneSource(true)) {
+        fprintf(stderr,
+                "[startup] active scene source could not be applied; selection preserved for editor/menu recovery.\n");
     }
+    ApplyAnimationWindowSizeOverride();
     UpdateObjects();
     WINDOW_WIDTH = sceneSettings.windowWidth;       
     WINDOW_HEIGHT = sceneSettings.windowHeight; 
-    // Initialize SDL
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-        fprintf(stderr, "SDL_Init Error: %s\n", SDL_GetError());
+    if (ray_tracing_runtime_host_init(WINDOW_WIDTH, WINDOW_HEIGHT) != 0) {
         return -1;
     }
 
-    // Create window
-    window = SDL_CreateWindow("Raytracing Animation",
-                              SDL_WINDOWPOS_CENTERED,
-                              SDL_WINDOWPOS_CENTERED,
-                              WINDOW_WIDTH, WINDOW_HEIGHT,
-                              SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
-    if (!window) {
-        fprintf(stderr, "SDL_CreateWindow Error: %s\n", SDL_GetError());
-        SDL_Quit();
-        return -1;
-    }
-
-#if USE_VULKAN
-    VkRendererConfig cfg;
-    vk_renderer_config_set_defaults(&cfg);
-    cfg.enable_validation = SDL_FALSE;
-    cfg.clear_color[0] = 0.0f;
-    cfg.clear_color[1] = 0.0f;
-    cfg.clear_color[2] = 0.0f;
-    cfg.clear_color[3] = 1.0f;
-
-    if (!vk_shared_device_init(window, &cfg)) {
-        fprintf(stderr, "vk_shared_device_init failed.\n");
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return -1;
-    }
-
-    VkRendererDevice* shared_device = vk_shared_device_get();
-    if (!shared_device) {
-        fprintf(stderr, "vk_shared_device_get failed.\n");
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return -1;
-    }
-
-    VkResult init = vk_renderer_init_with_device(&renderer_storage, shared_device, window, &cfg);
-    if (init != VK_SUCCESS) {
-        fprintf(stderr, "vk_renderer_init failed: %d\n", init);
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return -1;
-    }
-    renderer = (SDL_Renderer*)&renderer_storage;
-    vk_renderer_set_logical_size((VkRenderer*)renderer, (float)WINDOW_WIDTH, (float)WINDOW_HEIGHT);
-#else
-    // Create renderer
-    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    if (!renderer) {
-        fprintf(stderr, "SDL_CreateRenderer Error: %s\n", SDL_GetError());
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return -1;
-    }
-#endif
-
-    timer_hud_register_backend();
-    ts_init();
-    setRenderContext(renderer, window, WINDOW_WIDTH, WINDOW_HEIGHT);
-
-    // Validate Bézier path
-    if (sceneSettings.bezierPath.numPoints < 2) {
+    // Native 3D runtime-scene starts may seed a single static light point.
+    // The runtime path already treats 1 point as a valid stationary light.
+    if (sceneSettings.bezierPath.numPoints < 1) {
         fprintf(stderr, "Error: Bézier path is uninitialized or invalid. Check scene_config.json.\n");
         AnimationCleanup();
         return -1;
@@ -179,23 +207,8 @@ int AnimationInit(void) {
 
 
 void AnimationCleanup(void) {   
-    if (renderer) {
-#if USE_VULKAN
-        vk_renderer_wait_idle((VkRenderer*)renderer);
-        vk_renderer_shutdown_surface((VkRenderer*)renderer);
-#else
-        SDL_DestroyRenderer(renderer);
-#endif
-        renderer = NULL;
-    }
-    if (window) {
-        SDL_DestroyWindow(window);
-        window = NULL;
-    }
-#if USE_VULKAN
-    vk_shared_device_shutdown();
-#endif
-    SDL_Quit();
+    CleanupRayTracing();
+    ray_tracing_runtime_host_shutdown();
 }
 
 typedef enum RayTracingInputActionType {
@@ -417,18 +430,50 @@ void UpdateSimulation(double* accumulator, double* currentTime, int* loopCount) 
 }
 
 
+static bool AnimationShouldSampleAuthoredMotion(void) {
+    return !animSettings.interactiveMode || animSettings.deepRenderMode;
+}
+
 void UpdateLightPosition(double* lightX, double* lightY) {
-    if (animSettings.interactiveMode) {
+    if (!AnimationShouldSampleAuthoredMotion()) {
         GetCurrentLightPosition(lightX, lightY);
     } else {
-        Point new_position = GetPositionAlongPathNormalized(&sceneSettings.bezierPath, t_param);
-        *lightX = new_position.x;
-        *lightY = new_position.y;
+        if (sceneSettings.bezierPath.numPoints < 1) {
+            return;
+        }
+        {
+            Point new_position = (sceneSettings.bezierPath.numPoints >= 2)
+                                     ? GetPositionAlongPathNormalized(&sceneSettings.bezierPath, t_param)
+                                     : sceneSettings.bezierPath.points[0];
+            double light_z = (sceneSettings.bezierPath.numPoints >= 2)
+                                 ? CameraPath3D_GetPositionZNormalized(&sceneSettings.bezierPath,
+                                                                       &sceneSettings.bezierPath3D,
+                                                                       t_param)
+                                 : sceneSettings.bezierPath3D.point_z[0];
+            *lightX = new_position.x;
+            *lightY = new_position.y;
+            animSettings.lightHeight = light_z;
+        }
     }
 }
 
+double AnimationCurrentNormalizedT(void) {
+    return t_param;
+}
+
+int AnimationCurrentAbsoluteFrameIndex(void) {
+    if (animSettings.deepRenderMode) {
+        return s_deepRenderStartFrameIndex + ClampNonNegativeFrameIndex(frameCounter);
+    }
+    return ClampNonNegativeFrameIndex(frameCounter);
+}
+
+int AnimationConfiguredPathFrameCount(void) {
+    return (animSettings.framesForTravel > 0) ? animSettings.framesForTravel : 0;
+}
+
 static void UpdateCameraPosition(double t) {
-    if (animSettings.interactiveMode) {
+    if (!AnimationShouldSampleAuthoredMotion()) {
         return;
     }
     if (sceneSettings.cameraPath.numPoints < 1) {
@@ -440,218 +485,93 @@ static void UpdateCameraPosition(double t) {
     double rot = (sceneSettings.cameraPath.numPoints >= 2)
                      ? GetRotationAlongPathNormalized(&sceneSettings.cameraPath, t)
                      : sceneSettings.cameraPath.rotations[0];
+    double cam_z = (sceneSettings.cameraPath.numPoints >= 2)
+                       ? CameraPath3D_GetPositionZNormalized(&sceneSettings.cameraPath,
+                                                             &sceneSettings.cameraPath3D,
+                                                             t)
+                       : sceneSettings.cameraPath3D.point_z[0];
     sceneSettings.camera.x = p.x;
     sceneSettings.camera.y = p.y;
+    sceneSettings.cameraZ = cam_z;
     sceneSettings.camera.rotation = rot;
-}
-
-static void DrawPreviewMarker(SDL_Renderer* r, Point world, SDL_Color col, int radius) {
-    SDL_SetRenderDrawColor(r, col.r, col.g, col.b, col.a);
-    SpaceModeViewContext view_ctx = SpaceModeAdapter_BuildViewContext(&sceneSettings.camera,
-                                                                       sceneSettings.windowWidth,
-                                                                       sceneSettings.windowHeight);
-    CameraPoint s = SpaceModeAdapter_WorldToScreen(&view_ctx, world.x, world.y);
-    for (int dx = -radius; dx <= radius; dx++) {
-        for (int dy = -radius; dy <= radius; dy++) {
-            if (dx * dx + dy * dy <= radius * radius) {
-                SDL_RenderDrawPoint(r, (int)lround(s.x) + dx, (int)lround(s.y) + dy);
-            }
-        }
-    }
-}
-
-static void RunPreviewInternal(bool standalone) {
-    bool didInit = false;
-    if (standalone) {
-        if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-            fprintf(stderr, "SDL_Init Error (preview): %s\n", SDL_GetError());
-            return;
-        }
-        didInit = true;
-    }
-
-    WINDOW_WIDTH = sceneSettings.windowWidth;
-    WINDOW_HEIGHT = sceneSettings.windowHeight;
-
-    SDL_Window* pWindow = SDL_CreateWindow("Preview",
-                                           SDL_WINDOWPOS_CENTERED,
-                                           SDL_WINDOWPOS_CENTERED,
-                                           WINDOW_WIDTH, WINDOW_HEIGHT,
-                                           SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
-    if (!pWindow) {
-        fprintf(stderr, "SDL_CreateWindow Error (preview): %s\n", SDL_GetError());
-        if (didInit) SDL_Quit();
-        return;
-    }
-
-#if USE_VULKAN
-    VkRendererConfig preview_cfg;
-    vk_renderer_config_set_defaults(&preview_cfg);
-    preview_cfg.enable_validation = SDL_FALSE;
-    preview_cfg.clear_color[0] = 0.0f;
-    preview_cfg.clear_color[1] = 0.0f;
-    preview_cfg.clear_color[2] = 0.0f;
-    preview_cfg.clear_color[3] = 1.0f;
-
-    if (!vk_shared_device_init(pWindow, &preview_cfg)) {
-        fprintf(stderr, "vk_shared_device_init failed (preview).\n");
-        SDL_DestroyWindow(pWindow);
-        if (didInit) SDL_Quit();
-        return;
-    }
-
-    VkRendererDevice* shared_device = vk_shared_device_get();
-    if (!shared_device) {
-        fprintf(stderr, "vk_shared_device_get failed (preview).\n");
-        SDL_DestroyWindow(pWindow);
-        if (didInit) SDL_Quit();
-        return;
-    }
-
-    VkRenderer preview_storage;
-    VkResult preview_init = vk_renderer_init_with_device(&preview_storage, shared_device, pWindow, &preview_cfg);
-    if (preview_init != VK_SUCCESS) {
-        fprintf(stderr, "vk_renderer_init failed (preview): %d\n", preview_init);
-        SDL_DestroyWindow(pWindow);
-        if (didInit) SDL_Quit();
-        return;
-    }
-    SDL_Renderer* pRenderer = (SDL_Renderer*)&preview_storage;
-    vk_renderer_set_logical_size((VkRenderer*)pRenderer, (float)WINDOW_WIDTH, (float)WINDOW_HEIGHT);
-#else
-    SDL_Renderer* pRenderer = SDL_CreateRenderer(pWindow, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    if (!pRenderer) {
-        fprintf(stderr, "SDL_CreateRenderer Error (preview): %s\n", SDL_GetError());
-        SDL_DestroyWindow(pWindow);
-        if (didInit) SDL_Quit();
-        return;
-    }
-#endif
-
-    double duration = (animSettings.previewDuration > 0.1) ? animSettings.previewDuration : 5.0;
-    uint64_t prev_ns = runtime_time_now_ns();
-    double elapsed = 0.0;
-    bool runningPreview = true;
-    Camera savedCam = sceneSettings.camera;
-
-    while (runningPreview && !quitRequested) {
-        SDL_Event e;
-        while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_QUIT ||
-                (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE)) {
-                runningPreview = false;
-                quitRequested = true;
-            }
-            if (e.type == SDL_KEYDOWN) {
-                if (animation_handle_text_zoom_shortcut(&e.key)) {
-                    continue;
-                }
-                animation_handle_fluid_overlay_key(e.key.keysym.sym);
-            }
-        }
-
-        uint64_t now_ns = runtime_time_now_ns();
-        double dt = runtime_time_diff_seconds(now_ns, prev_ns);
-        prev_ns = now_ns;
-        elapsed += dt;
-
-        double t = fmod(elapsed, duration) / duration;
-
-        // Update camera + light along paths
-        Point lightP = (sceneSettings.bezierPath.numPoints >= 2)
-                           ? GetPositionAlongPathNormalized(&sceneSettings.bezierPath, t)
-                           : sceneSettings.bezierPath.points[0];
-        Point camP = (sceneSettings.cameraPath.numPoints >= 2)
-                         ? GetPositionAlongPathNormalized(&sceneSettings.cameraPath, t)
-                         : sceneSettings.cameraPath.points[0];
-        double camRot = (sceneSettings.cameraPath.numPoints >= 2)
-                            ? GetRotationAlongPathNormalized(&sceneSettings.cameraPath, t)
-                            : sceneSettings.cameraPath.rotations[0];
-        sceneSettings.camera.x = camP.x;
-        sceneSettings.camera.y = camP.y;
-        sceneSettings.camera.rotation = camRot;
-
-        // Render preview
-        setRenderContext(pRenderer, pWindow, sceneSettings.windowWidth, sceneSettings.windowHeight);
-        render_set_clear_color(pRenderer, (Uint8)kPreviewBg, (Uint8)kPreviewBg, (Uint8)kPreviewBg + 5, 255);
-        if (!render_begin_frame()) {
-            if (render_device_lost()) {
-                runningPreview = false;
-            }
-            SDL_Delay(10);
-            continue;
-        }
-
-        SDL_Color pathColor = {90, 120, 90, 180};
-        SDL_Color camPathColor = {60, 140, 220, 220};
-        SDL_Color selectColor = {255, 255, 160, 255};
-        RenderBezierPathCameraStyled(pRenderer, &sceneSettings.bezierPath, false, &sceneSettings.camera, pathColor, (SDL_Color){0,0,0,0}, -1, selectColor, 3);
-        RenderBezierPathCameraStyled(pRenderer, &sceneSettings.cameraPath, false, &sceneSettings.camera, camPathColor, (SDL_Color){0,0,0,0}, -1, selectColor, 4);
-
-        SDL_SetRenderDrawColor(pRenderer, 220, 220, 220, 255);
-        RenderSceneObjects(pRenderer, !AnimationUseFluidScene());
-
-        DrawPreviewMarker(pRenderer, lightP, (SDL_Color){255, 230, 120, 255}, 6);
-        DrawPreviewMarker(pRenderer, camP, (SDL_Color){120, 200, 255, 255}, 6);
-
-        render_end_frame();
-    }
-
-    sceneSettings.camera = savedCam;
-#if USE_VULKAN
-    vk_renderer_wait_idle((VkRenderer*)pRenderer);
-    vk_renderer_shutdown_surface((VkRenderer*)pRenderer);
-#else
-    SDL_DestroyRenderer(pRenderer);
-#endif
-    SDL_DestroyWindow(pWindow);
-    if (didInit) SDL_Quit();
-}
-
-void RunPreviewMode(void) {
-    RunPreviewInternal(true);
-}
-
-void RunPreviewModeEmbedded(void) {
-    RunPreviewInternal(false);
 }
 
 
 void RenderFrame(double lightX, double lightY, int* frameCounter, bool* running) {
+    TimerHUDSession* timer_hud = timer_hud_session();
     if (quitRequested) {
         *running = false;
         return;
     }
-    ts_frame_start();
+    if (timer_hud) {
+        ts_session_frame_start(timer_hud);
+    }
     setRenderContext(renderer, window, sceneSettings.windowWidth, sceneSettings.windowHeight);
     render_set_clear_color(renderer, 0, 0, 0, 255);
     if (!render_begin_frame()) {
         if (render_device_lost()) {
             *running = false;
         }
-        ts_frame_end();
+        if (timer_hud) {
+            ts_session_frame_end(timer_hud);
+        }
         return;
     }
         
     // Render scene objects
     SetLightPosition(lightX, lightY);
+    if (timer_hud) {
+        ts_session_start_timer(timer_hud, "Render Scene Frame");
+    }
     RenderRayTracingScene(renderer);
+    if (timer_hud) {
+        ts_session_stop_timer(timer_hud, "Render Scene Frame");
+    }
         
+    bool deep_render_frame_requested = false;
+    bool deep_render_save_requested = true;
+    int deep_render_frame_index = -1;
+
     // Handle deep render mode frame saving
     if (animSettings.deepRenderMode) {
-        ts_start_timer("Frame Save");
-        SaveFrame((*frameCounter)++);
-        ts_stop_timer("Frame Save");
-        if (*frameCounter >= animSettings.frameLimit) {
-            printf("Deep render mode complete. Final frame saved.\n");
-            SDL_Delay(500);
-            *running = false;
-        }
+        deep_render_frame_index = s_deepRenderStartFrameIndex + *frameCounter;
+        deep_render_save_requested = SaveFrame(deep_render_frame_index);
+        deep_render_frame_requested = true;
     }
 
-    ts_render();
-    render_end_frame();
-    ts_frame_end();
+    if (timer_hud) {
+        ts_session_render(timer_hud);
+    }
+    RuntimeNative3DProgressHUD_Draw(renderer);
+    bool frame_presented = render_end_frame();
+    if (deep_render_frame_requested) {
+        if (!deep_render_save_requested) {
+            fprintf(stderr,
+                    "Deep render stopped: failed to request frame export for frame_%04d.bmp.\n",
+                    deep_render_frame_index);
+            *running = false;
+        } else if (!frame_presented) {
+            fprintf(stderr,
+                    "Deep render stopped: render frame end failed before frame_%04d.bmp was confirmed.\n",
+                    deep_render_frame_index);
+            *running = false;
+        } else if (!AnimationFrameOutputExists(deep_render_frame_index)) {
+            fprintf(stderr,
+                    "Deep render stopped: frame_%04d.bmp was not written after render present.\n",
+                    deep_render_frame_index);
+            *running = false;
+        } else {
+            (*frameCounter)++;
+            if (*frameCounter >= animSettings.frameLimit) {
+                printf("Deep render mode complete. Final frame saved.\n");
+                SDL_Delay(500);
+                *running = false;
+            }
+        }
+    }
+    if (timer_hud) {
+        ts_session_frame_end(timer_hud);
+    }
 }
 
 typedef struct RayTracingFrameRenderInputs {
@@ -679,6 +599,9 @@ typedef struct RayTracingFrameRouteBridge {
 static void DeriveRenderInputs(RayTracingFrameRenderInputs* out_inputs) {
     if (!out_inputs) {
         return;
+    }
+    if (animSettings.deepRenderMode) {
+        PrepareDeepRenderFrameStateForLocalIndex(frameCounter);
     }
     UpdateLightPosition(&out_inputs->light_x, &out_inputs->light_y);
     UpdateCameraPosition(t_param);
@@ -728,6 +651,12 @@ typedef struct RayTracingRenderSubmitBridge {
     bool *running;
 } RayTracingRenderSubmitBridge;
 
+typedef struct RayTracingLoopConditionsBridge {
+    bool *running;
+    int *loop_count;
+    int *frame_counter;
+} RayTracingLoopConditionsBridge;
+
 static bool SubmitRenderFrameViaBridge(void *user_data) {
     RayTracingRenderSubmitBridge *bridge = (RayTracingRenderSubmitBridge *)user_data;
     if (!bridge || !bridge->inputs || !bridge->frame_counter || !bridge->running) {
@@ -758,13 +687,35 @@ void CheckLoopConditions(bool* running, int loopCount, int frameCounter) {
     }
 }
 
+static bool CheckLoopConditionsViaBridge(void *user_data) {
+    RayTracingLoopConditionsBridge *bridge = (RayTracingLoopConditionsBridge *)user_data;
+    if (!bridge || !bridge->running || !bridge->loop_count || !bridge->frame_counter) {
+        return false;
+    }
+    CheckLoopConditions(bridge->running, *bridge->loop_count, *bridge->frame_counter);
+    return true;
+}
+
+static double RayTracingRuntimeNowSeconds(void *user_data) {
+    (void)user_data;
+    return (double)runtime_time_now_ns() / 1000000000.0;
+}
+
 void RunMainLoop(void) {
     running = true;
     accumulator = 0.0;
     currentTime = 0.0;
     frameCounter = 0;
     loopCount = 0;
-    t_param = 1.0 / animSettings.framesForTravel;
+    s_deepRenderStartFrameIndex = 0;
+    if (animSettings.deepRenderMode) {
+        s_deepRenderStartFrameIndex = ResolveDeepRenderStartFrameIndex();
+        t_param = AnimationNormalizedTForAbsoluteFrameIndex(s_deepRenderStartFrameIndex);
+        currentTime = (double)s_deepRenderStartFrameIndex * animSettings.frameDuration;
+        TryLoadResumePreviewHistory();
+    } else {
+        t_param = 1.0 / animSettings.framesForTravel;
+    }
     
     printf("DEBUG: RunMainLoop started with interactiveMode=%d, deepRenderMode=%d\n",
            animSettings.interactiveMode, animSettings.deepRenderMode);
@@ -772,11 +723,16 @@ void RunMainLoop(void) {
     const bool runtime_diag_enabled = EnvEnabled("RAY_TRACING_RUNTIME_DIAG");
     double runtime_diag_next_log = 0.0;
     KitRuntimeDiagInputTotals input_totals = {0};
+
+    if (!ray_tracing_core_sim_runtime_frame_loop_init(&s_runtime_frame_loop)) {
+        fprintf(stderr, "ray_tracing: failed to initialize core_sim runtime frame loop.\n");
+        running = false;
+    }
     
     while (running && !quitRequested) {
-        const double frame_begin = (double)runtime_time_now_ns() / 1000000000.0;
         KitRuntimeDiagInputFrame input_frame = {0};
         RayTracingInputRoutingResult input_result = {0};
+        RayTracingFrameRenderInputs render_inputs = {0};
         RayTracingFrameEventsBridge events_bridge = {
             .running = &running,
             .input_frame = &input_frame,
@@ -786,33 +742,16 @@ void RunMainLoop(void) {
             .events_fn = HandleFrameEventsViaBridge,
             .user_data = &events_bridge,
         };
-        RayTracingFrameEventsOutcome events_outcome = {0};
-        if (!ray_tracing_app_frame_events(&events_request, &events_outcome) ||
-            !events_outcome.handled) {
-            RunInputRoutingFrame(&running, &input_frame, &input_result);
-        }
-        const double after_events = (double)runtime_time_now_ns() / 1000000000.0;
         RayTracingFrameUpdateBridge update_bridge = {
             .accumulator = &accumulator,
             .current_time = &currentTime,
             .loop_count = &loopCount,
-            .should_update = (!animSettings.interactiveMode || animSettings.deepRenderMode),
+            .should_update = (!animSettings.interactiveMode && !animSettings.deepRenderMode),
         };
         RayTracingFrameUpdateRequest update_request = {
             .update_fn = UpdateFrameViaBridge,
             .user_data = &update_bridge,
         };
-        RayTracingFrameUpdateOutcome update_outcome = {0};
-        if (!ray_tracing_app_frame_update(&update_request, &update_outcome) ||
-            !update_outcome.updated) {
-            if (update_bridge.should_update) {
-                UpdateSimulation(&accumulator, &currentTime, &loopCount);
-            }
-        }
-        const double after_update = (double)runtime_time_now_ns() / 1000000000.0;
-
-        const double after_route = (double)runtime_time_now_ns() / 1000000000.0;
-        RayTracingFrameRenderInputs render_inputs = {0};
         RayTracingFrameRouteBridge route_bridge = {
             .render_inputs = &render_inputs,
         };
@@ -820,13 +759,6 @@ void RunMainLoop(void) {
             .route_fn = RouteFrameViaBridge,
             .user_data = &route_bridge,
         };
-        RayTracingFrameRouteOutcome route_outcome = {0};
-        if (!ray_tracing_app_frame_route(&route_request, &route_outcome) ||
-            !route_outcome.routed) {
-            DeriveRenderInputs(&render_inputs);
-        }
-        const double after_render_derive = (double)runtime_time_now_ns() / 1000000000.0;
-        const double before_present = (double)runtime_time_now_ns() / 1000000000.0;
         RayTracingRenderSubmitBridge submit_bridge = {
             .inputs = &render_inputs,
             .frame_counter = &frameCounter,
@@ -836,30 +768,60 @@ void RunMainLoop(void) {
             .submit_fn = SubmitRenderFrameViaBridge,
             .user_data = &submit_bridge,
         };
-        RayTracingRenderSubmitOutcome submit_outcome = {0};
-        if (!ray_tracing_app_render_submit(&submit_request, &submit_outcome) ||
-            !submit_outcome.submitted) {
-            SubmitRenderFrame(&render_inputs, &frameCounter, &running);
+        RayTracingLoopConditionsBridge loop_conditions_bridge = {
+            .running = &running,
+            .loop_count = &loopCount,
+            .frame_counter = &frameCounter,
+        };
+        RayTracingCoreSimRuntimeFrameRequest runtime_frame_request = {
+            .frame_dt_seconds = s_runtime_frame_loop.policy.fixed_dt_seconds,
+            .now_seconds_fn = RayTracingRuntimeNowSeconds,
+            .now_user_data = NULL,
+            .events_request = events_request,
+            .update_request = update_request,
+            .route_request = route_request,
+            .submit_request = submit_request,
+            .loop_conditions_request = {
+                .check_fn = CheckLoopConditionsViaBridge,
+                .user_data = &loop_conditions_bridge,
+            },
+        };
+        RayTracingCoreSimRuntimeFrameResult runtime_frame_result = {0};
+
+        if (!ray_tracing_core_sim_runtime_frame_step(&s_runtime_frame_loop,
+                                                     &runtime_frame_request,
+                                                     &runtime_frame_result)) {
+            fprintf(stderr,
+                    "ray_tracing: core_sim runtime frame failed status=%s pass=%s message=%s\n",
+                    core_sim_status_name(runtime_frame_result.sim_outcome.status),
+                    runtime_frame_result.sim_outcome.failed_pass_name
+                        ? runtime_frame_result.sim_outcome.failed_pass_name
+                        : "unknown",
+                    runtime_frame_result.sim_outcome.message
+                        ? runtime_frame_result.sim_outcome.message
+                        : "n/a");
+            running = false;
         }
-        const double after_render = (double)runtime_time_now_ns() / 1000000000.0;
-        CheckLoopConditions(&running, loopCount, frameCounter);
         kit_runtime_diag_input_totals_accumulate(&input_totals, &input_frame);
 
         if (runtime_diag_enabled) {
+            const RayTracingCoreSimRuntimeFrameStageMarks *frame_marks =
+                &runtime_frame_result.stage_marks;
             KitRuntimeDiagStageMarks marks = {
-                .frame_begin = frame_begin,
-                .after_events = after_events,
-                .after_update = after_update,
-                .after_queue = after_update,
-                .after_integrate = after_update,
-                .after_route = after_route,
-                .after_render_derive = after_render_derive,
-                .before_present = before_present,
-                .after_render = after_render,
+                .frame_begin = frame_marks->frame_begin,
+                .after_events = frame_marks->after_events,
+                .after_update = frame_marks->after_update,
+                .after_queue = frame_marks->after_update,
+                .after_integrate = frame_marks->after_update,
+                .after_route = frame_marks->after_route,
+                .after_render_derive = frame_marks->after_render_derive,
+                .before_present = frame_marks->before_present,
+                .after_render = frame_marks->after_render,
             };
             KitRuntimeDiagTimings timings = {0};
             kit_runtime_diag_compute_timings(&marks, &timings);
-            if (runtime_diag_next_log <= 0.0 || after_render >= runtime_diag_next_log) {
+            if (runtime_diag_next_log <= 0.0 ||
+                frame_marks->after_render >= runtime_diag_next_log) {
                 printf("[rt_diag] frame=%.1fms events=%.1f update=%.1f route=%.1f derive=%.1f submit=%.1f render=%.1f present=%.1f input(frame_raw=%u frame_actions=%u) input(total_raw=%llu total_actions=%llu)\n",
                        timings.frame_ms,
                        timings.events_ms,
@@ -873,7 +835,7 @@ void RunMainLoop(void) {
                        input_frame.action_count,
                        (unsigned long long)input_totals.raw_event_count,
                        (unsigned long long)input_totals.action_count);
-                runtime_diag_next_log = after_render + 1.0;
+                runtime_diag_next_log = frame_marks->after_render + 1.0;
             }
         }
 
@@ -900,20 +862,11 @@ void RunMainLoop(void) {
     }
     }
     AnimationExportRenderMetricsDatasetIfEnabled();
-    CleanupRayTracing();    
-#if USE_VULKAN
-    vk_renderer_wait_idle((VkRenderer*)renderer);
-    vk_renderer_shutdown_surface((VkRenderer*)renderer);
-#else
-    SDL_DestroyRenderer(renderer);
-#endif
-    SDL_DestroyWindow(window);
-    SDL_Quit();
 }
 
 
 #ifdef MAIN_DRIVER  
-static void ParseArgs(int argc, char* argv[]) {
+void AnimationParseArgs(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i) {
         const char* arg = argv[i];
         if (strcmp(arg, "--fluid-manifest") == 0 && i + 1 < argc) {
@@ -924,15 +877,13 @@ static void ParseArgs(int argc, char* argv[]) {
     }
 }
 
-int ray_tracing_app_main_legacy(int argc, char* argv[]) {
-    ParseArgs(argc, argv);
-    (void)argc;
-    (void)argv;
-    // Load animation settings from config file
+void AnimationLoadRuntimeDefaults(void) {
     LoadAllSettings();
     t_increment = 1.0 / animSettings.framesForTravel;
     printf("Loaded animation config in main.\n");
+}
 
+int AnimationRunAppSession(void) {
     // Menu → run loop, allowing return to menu after each run
     while (!quitRequested) {
         if (!RunMenu()) {
@@ -940,11 +891,9 @@ int ray_tracing_app_main_legacy(int argc, char* argv[]) {
             return 0;
         }
         if (animSettings.previewMode) {
+            fprintf(stderr, "[preview] clearing legacy standalone preview flag.\n");
+            animSettings.previewMode = false;
             SaveAllSettings();
-            RunPreviewMode();
-            animSettings.previewMode = false; // do not persist
-            SaveAllSettings();
-            continue; // back to menu for next choice
         }
 
         // Print selected settings
@@ -953,7 +902,24 @@ int ray_tracing_app_main_legacy(int argc, char* argv[]) {
                animSettings.deepRenderMode ? "Deep Render" :
                animSettings.bounceMode ? "Bounce Animation" : "Standard Animation");
         printf("Auto MP4 after render: %s\n", animSettings.autoMP4 ? "Enabled" : "Disabled");
-        printf("Saving frames in directory: %s\n", animSettings.frameDir);
+        {
+            char frame_dir[PATH_MAX];
+            char video_output_path[PATH_MAX];
+            if (ray_tracing_resolve_frame_output_dir(animSettings.frameDir,
+                                                     frame_dir,
+                                                     sizeof(frame_dir))) {
+                printf("Saving frames in directory: %s\n", frame_dir);
+            } else {
+                printf("Saving frames in directory: <unresolved>\n");
+            }
+            if (ray_tracing_resolve_video_output_path(animSettings.videoOutputRoot,
+                                                      video_output_path,
+                                                      sizeof(video_output_path))) {
+                printf("Auto MP4 output path: %s\n", video_output_path);
+            } else {
+                printf("Auto MP4 output path: <unresolved>\n");
+            }
+        }
 
         // Initialize animation
         if (AnimationInit() != 0) {
@@ -967,8 +933,15 @@ int ray_tracing_app_main_legacy(int argc, char* argv[]) {
         RunMainLoop();
 
         if (animSettings.autoMP4 && animSettings.deepRenderMode) {
+            RayTracingRenderExportStatus export_status;
             printf("Generating MP4 automatically...\n");
-            MakeVideo("output.mp4");
+            if (!ray_tracing_render_export_make_video(&export_status)) {
+                fprintf(stderr, "[export] %s\n", export_status.message);
+            } else {
+                printf("[export] %s: %s\n",
+                       export_status.message,
+                       export_status.video_output_path);
+            }
         }
 
         AnimationCleanup();
@@ -984,7 +957,6 @@ int ray_tracing_app_main_legacy(int argc, char* argv[]) {
 }
 
 int main(int argc, char* argv[]) {
-    ray_tracing_app_set_legacy_entry(ray_tracing_app_main_legacy);
     return ray_tracing_app_main(argc, argv);
 }
 #endif

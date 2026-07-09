@@ -1,0 +1,53 @@
+{
+  "schema_version": "ray_tracing_visual_matrix_v1",
+  "matrix_id": "imported_mesh_pressure_mrt8",
+  "title": "Imported Mesh Pressure MRT8 Disney V2 Matrix",
+  "scene_path": "../../mesh_asset_runtime_spheres/scene_runtime_pressure_mrt8.json",
+  "default_output_root": "../../../../build/agent_runs/ray_tracing/disney_v2_visual_matrix/imported_mesh_pressure_mrt8",
+  "private_workspace_output_root": "../../../../../_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_visual_matrix/imported_mesh_pressure_mrt8",
+  "default_review_root": "../../../../../_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_visual_matrix/imported_mesh_pressure_mrt8/matrix_review",
+  "groups": [
+    {
+      "id": "integrator_layers",
+      "purpose": "Educational route comparison on the same imported runtime mesh scene.",
+      "requests": [
+        "request_direct_light.json",
+        "request_material.json",
+        "request_disney.json",
+        "request_disney_v2.json"
+      ]
+    },
+    {
+      "id": "promotion_route_compare",
+      "purpose": "Promotion-gate route comparison for imported mesh participation and timing.",
+      "requests": [
+        "request_disney.json",
+        "request_disney_v2.json"
+      ]
+    },
+    {
+      "id": "disney_v2_denoise_ablation",
+      "purpose": "Imported-mesh Disney v2 denoise comparison with temporal_frames=12 in both renders.",
+      "requests": [
+        "request_disney_v2_denoise_off_12.json",
+        "request_disney_v2_denoise_on_12.json"
+      ]
+    }
+  ],
+  "comparisons": [
+    {
+      "id": "imported_mesh_disney_vs_disney_v2",
+      "group": "promotion_route_compare",
+      "before": "request_disney.json",
+      "after": "request_disney_v2.json",
+      "purpose": "Compare shipped Disney and experimental Disney v2 on the same imported runtime mesh."
+    },
+    {
+      "id": "imported_mesh_disney_v2_denoise_off_vs_on_12",
+      "group": "disney_v2_denoise_ablation",
+      "before": "request_disney_v2_denoise_off_12.json",
+      "after": "request_disney_v2_denoise_on_12.json",
+      "purpose": "Verify imported-mesh Disney v2 denoise only changes stable same-surface areas."
+    }
+  ]
+}

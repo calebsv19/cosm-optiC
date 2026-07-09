@@ -1,0 +1,138 @@
+{
+  "schema_version": "ray_tracing_visual_matrix_v1",
+  "matrix_id": "emissive_light_preview_matrix",
+  "title": "Emissive Light Preview Matrix",
+  "default_output_root": "../../../build/agent_runs/ray_tracing/emissive_light_preview_matrix",
+  "private_workspace_output_root": "../../../../_private_workspace_artifacts/agent_runs/ray_tracing/emissive_light_preview_matrix",
+  "default_review_root": "../../../../_private_workspace_artifacts/agent_runs/ray_tracing/emissive_light_preview_matrix/matrix_review",
+  "emissive_preview": {
+    "notes": [
+      "The authored parked Bezier surrogate remains far away and nearly powerless so material-emitter behavior is readable.",
+      "Flat material panels should register as enabled rect lights.",
+      "Flat material panels should report one-sided emission profiles for directional wall-panel authoring.",
+      "Complex prism emitters should remain mesh-area-sampler-only diagnostics and not finite direct-light proxies.",
+      "Wall ROI metrics focus on the rear wall band around the panel area so halo/spill changes are visible in the report."
+    ],
+    "roi_normalized": {
+      "x0": 0.20,
+      "y0": 0.18,
+      "x1": 0.82,
+      "y1": 0.86
+    },
+    "wall_roi_normalized": {
+      "x0": 0.28,
+      "y0": 0.15,
+      "x1": 0.80,
+      "y1": 0.50
+    },
+    "expectations": {
+      "wall_panel_direct_light": {
+        "min_enabled_lights": 2,
+        "min_rect_lights": 1,
+        "min_material_emitters": 1,
+        "min_material_emitter_enabled": 1,
+        "min_one_sided_lights": 1,
+        "max_mesh_area_sampler_only": 0,
+        "min_roi_mean_luma": 1.0
+      },
+      "wall_panel_diffuse_bounce": {
+        "min_enabled_lights": 2,
+        "min_rect_lights": 1,
+        "min_material_emitters": 1,
+        "min_material_emitter_enabled": 1,
+        "min_one_sided_lights": 1,
+        "max_mesh_area_sampler_only": 0,
+        "min_roi_mean_luma": 1.0
+      },
+      "wall_panel_offset_tilt_direct_light": {
+        "min_enabled_lights": 2,
+        "min_rect_lights": 1,
+        "min_material_emitters": 1,
+        "min_material_emitter_enabled": 1,
+        "min_one_sided_lights": 1,
+        "max_mesh_area_sampler_only": 0,
+        "min_roi_mean_luma": 1.0
+      },
+      "complex_prism_direct_light": {
+        "min_enabled_lights": 1,
+        "min_mesh_emissive_lights": 1,
+        "min_mesh_area_sampler_only": 1,
+        "max_material_emitter_enabled": 0,
+        "min_emissive_candidates": 1
+      },
+      "complex_prism_disney_v2": {
+        "min_mesh_emissive_lights": 1,
+        "min_mesh_area_sampler_only": 1,
+        "min_emissive_area_candidates": 1,
+        "min_roi_mean_luma": 1.0
+      },
+      "lightbox_prism_disney_v2": {
+        "min_mesh_emissive_lights": 1,
+        "min_mesh_area_sampler_only": 1,
+        "min_emissive_area_candidates": 1,
+        "min_roi_mean_luma": 1.0
+      },
+      "multi_panel_direct_light": {
+        "min_enabled_lights": 3,
+        "min_rect_lights": 2,
+        "min_material_emitters": 2,
+        "min_material_emitter_enabled": 2,
+        "min_one_sided_lights": 2,
+        "max_mesh_area_sampler_only": 0,
+        "min_roi_mean_luma": 1.0
+      }
+    }
+  },
+  "groups": [
+    {
+      "id": "emitter_preview",
+      "purpose": "Preview flat panel, complex mesh/prism, and multi-panel material-emitter light behavior with the first authored light parked far away.",
+      "requests": [
+        "request_wall_panel_direct_light.json",
+        "request_wall_panel_diffuse_bounce.json",
+        "request_wall_panel_offset_tilt_direct_light.json",
+        "request_complex_prism_direct_light.json",
+        "request_complex_prism_disney_v2.json",
+        "request_lightbox_prism_disney_v2.json",
+        "request_multi_panel_direct_light.json"
+      ]
+    }
+  ],
+  "comparisons": [
+    {
+      "id": "complex_prism_direct_vs_disney_v2",
+      "group": "emitter_preview",
+      "before": "request_complex_prism_direct_light.json",
+      "after": "request_complex_prism_disney_v2.json",
+      "purpose": "Show sampler-only complex emitter behavior: direct-light keeps mesh emitters disabled while Disney v2 can use the cached emissive-area path."
+    },
+    {
+      "id": "wall_panel_direct_vs_diffuse_bounce",
+      "group": "emitter_preview",
+      "before": "request_wall_panel_direct_light.json",
+      "after": "request_wall_panel_diffuse_bounce.json",
+      "purpose": "Measure whether the diffuse-bounce tier lifts nearby wall response versus direct-light only."
+    },
+    {
+      "id": "wall_panel_direct_vs_offset_tilt",
+      "group": "emitter_preview",
+      "before": "request_wall_panel_direct_light.json",
+      "after": "request_wall_panel_offset_tilt_direct_light.json",
+      "purpose": "Measure the directionality change from offsetting and tilting the same flat panel."
+    },
+    {
+      "id": "complex_prism_vs_lightbox_prism",
+      "group": "emitter_preview",
+      "before": "request_complex_prism_disney_v2.json",
+      "after": "request_lightbox_prism_disney_v2.json",
+      "purpose": "Compare a freestanding complex prism emitter with a thin wall-mounted 3D light-box prism."
+    },
+    {
+      "id": "wall_panel_vs_multi_panel",
+      "group": "emitter_preview",
+      "before": "request_wall_panel_direct_light.json",
+      "after": "request_multi_panel_direct_light.json",
+      "purpose": "Show single-panel versus multi-panel registered rect light behavior."
+    }
+  ]
+}

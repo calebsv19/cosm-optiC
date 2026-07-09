@@ -30,8 +30,12 @@ typedef enum ObjectEditorHitRegion {
 // Object Editor Functions
 void InitializeObjectEditor(void);
 void RenderObjectEditor(SDL_Renderer* renderer);
+int ObjectEditorRenderPaneControls(SDL_Renderer* renderer, SDL_Rect content_bounds, int top_y, int bottom_y);
 void HandleObjectEditorEvents(SDL_Event* event);
 ObjectEditorHitRegion ObjectEditorHitRegionAtPoint(int mx, int my);
+void ObjectEditorClearObjectListRows(void);
+void ObjectEditorRegisterObjectListRow(int object_index, SDL_Rect rect);
+int ObjectEditorObjectListIndexAtPoint(int mx, int my);
 
 // Sub-functions for event handling
 void HandleObjectEditorMouseClick(SDL_Event* event);
@@ -42,11 +46,22 @@ void HandleObjectEditorKeyPress(SDL_Event* event);
 // Object Manipulation
 void AddObject(int type, int x, int y);
 void RemoveObject(int index);
+bool ObjectEditorAddPlacementAt(double world_x, double world_y);
+bool ObjectEditorDeleteObjectIndex(int index);
 
 // Selection & Interaction
 void SelectObject(int index);
 void DeselectObject(void);
 bool IsInsideHandle(SceneObject* obj, int mx, int my);
 bool CheckObjectClick(double mx, double my);
+int ObjectEditorGetSelectedObjectIndex(void);
+int ObjectEditorGetLastSelectedObjectIndex(void);
+void ObjectEditorSetSelectedObjectIndex(int index);
+int ObjectEditorGetSelectedMaterialIndex(void);
+void ObjectEditorSetSelectedMaterialIndex(int material_id);
+void ObjectEditorAssignMaterialToSelected(int material_id);
+void ObjectEditorAssignColorToSelected(int packed_color);
+void ObjectEditorAssignAlphaToSelected(double alpha);
+void ObjectEditorAssignEmissiveStrengthToSelected(double emissive_strength);
 
 #endif // OBJECT_EDITOR_H

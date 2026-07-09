@@ -18,6 +18,31 @@ static int s_logged_end_failure = 0;
 static int s_logged_device_lost = 0;
 #endif
 
+static void render_context_update_dimensions(RenderContext* ctx,
+                                             int logical_w,
+                                             int logical_h,
+                                             int drawable_w,
+                                             int drawable_h) {
+    if (!ctx) return;
+    if (logical_w <= 0) logical_w = drawable_w;
+    if (logical_h <= 0) logical_h = drawable_h;
+    if (drawable_w <= 0) drawable_w = logical_w;
+    if (drawable_h <= 0) drawable_h = logical_h;
+    if (logical_w <= 0) logical_w = 1;
+    if (logical_h <= 0) logical_h = 1;
+    if (drawable_w <= 0) drawable_w = logical_w;
+    if (drawable_h <= 0) drawable_h = logical_h;
+
+    ctx->logical_width = logical_w;
+    ctx->logical_height = logical_h;
+    ctx->width = drawable_w;
+    ctx->height = drawable_h;
+    ctx->dpi_scale_x = (float)drawable_w / (float)logical_w;
+    ctx->dpi_scale_y = (float)drawable_h / (float)logical_h;
+    if (ctx->dpi_scale_x < 1.0f) ctx->dpi_scale_x = 1.0f;
+    if (ctx->dpi_scale_y < 1.0f) ctx->dpi_scale_y = 1.0f;
+}
+
 RenderContext* getRenderContext(void) {
     if (!globalContext.renderer) {
         return NULL;
@@ -31,8 +56,7 @@ void setRenderContext(SDL_Renderer* renderer,
                       int height) {
     globalContext.renderer = renderer;
     globalContext.window = window;
-    globalContext.width = width;
-    globalContext.height = height;
+    render_context_update_dimensions(&globalContext, width, height, width, height);
 }
 
 void render_set_clear_color(SDL_Renderer* renderer,
@@ -66,7 +90,10 @@ bool render_begin_frame(void) {
 
 #if USE_VULKAN
     SDL_Vulkan_GetDrawableSize(ctx->window, &drawableW, &drawableH);
-    vk_renderer_set_logical_size((VkRenderer*)ctx->renderer, (float)winW, (float)winH);
+    render_context_update_dimensions(ctx, winW, winH, drawableW, drawableH);
+    vk_renderer_set_logical_size((VkRenderer*)ctx->renderer,
+                                 (float)ctx->logical_width,
+                                 (float)ctx->logical_height);
 
     VkRenderer* vk_renderer = (VkRenderer*)ctx->renderer;
     if (vk_renderer && drawableW > 0 && drawableH > 0) {
@@ -91,13 +118,9 @@ bool render_begin_frame(void) {
     }
 #else
     SDL_GL_GetDrawableSize(ctx->window, &drawableW, &drawableH);
-    float scaleX = (float)drawableW / (float)winW;
-    float scaleY = (float)drawableH / (float)winH;
-    SDL_RenderSetScale(ctx->renderer, scaleX, scaleY);
+    render_context_update_dimensions(ctx, winW, winH, drawableW, drawableH);
+    SDL_RenderSetScale(ctx->renderer, ctx->dpi_scale_x, ctx->dpi_scale_y);
 #endif
-
-    ctx->width = drawableW;
-    ctx->height = drawableH;
 
 #if USE_VULKAN
     VkResult frameResult = vk_renderer_begin_frame((VkRenderer*)ctx->renderer,
@@ -140,16 +163,17 @@ bool render_begin_frame(void) {
     return true;
 }
 
-void render_end_frame(void) {
+bool render_end_frame(void) {
     RenderContext* ctx = getRenderContext();
-    if (!ctx || !ctx->renderer) return;
+    if (!ctx || !ctx->renderer) return false;
 #if USE_VULKAN
-    if (s_device_lost) return;
+    if (s_device_lost) return false;
     VkResult endResult =
         vk_renderer_end_frame((VkRenderer*)ctx->renderer, ctx->command_buffer);
     if (endResult == VK_ERROR_OUT_OF_DATE_KHR || endResult == VK_SUBOPTIMAL_KHR) {
         vk_renderer_recreate_swapchain((VkRenderer*)ctx->renderer, ctx->window);
         s_logged_end_failure = 0;
+        return false;
     } else if (endResult == VK_ERROR_DEVICE_LOST) {
         if (!s_logged_device_lost) {
             fprintf(stderr, "[Render] vk_renderer_end_frame failed: device lost.\n");
@@ -157,16 +181,20 @@ void render_end_frame(void) {
         }
         s_device_lost = true;
         vk_shared_device_mark_lost();
+        return false;
     } else if (endResult != VK_SUCCESS) {
         if (!s_logged_end_failure) {
             fprintf(stderr, "[Render] vk_renderer_end_frame failed: %d\n", endResult);
             s_logged_end_failure = 1;
         }
+        return false;
     } else {
         s_logged_end_failure = 0;
     }
+    return true;
 #else
     SDL_RenderPresent(ctx->renderer);
+    return true;
 #endif
 }
 

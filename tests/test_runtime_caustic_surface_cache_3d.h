@@ -1,0 +1,6 @@
+#ifndef TEST_RUNTIME_CAUSTIC_SURFACE_CACHE_3D_H
+#define TEST_RUNTIME_CAUSTIC_SURFACE_CACHE_3D_H
+
+int run_test_runtime_caustic_surface_cache_3d_tests(void);
+
+#endif

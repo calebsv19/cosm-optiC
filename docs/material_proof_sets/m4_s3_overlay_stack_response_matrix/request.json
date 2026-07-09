@@ -1,0 +1,43 @@
+{
+  "schema": "ray_tracing_material_proof_package_request_v1",
+  "proof_id": "m4_s3_overlay_stack_response_matrix",
+  "title": "M4-S3 Overlay Stack Material Response Matrix",
+  "phase": "M4-S3",
+  "route": {
+    "primary": "headless_material_preview",
+    "secondary": "runtime_lighting_materials_payload_tests",
+    "secondary_status": "source_contract_readback",
+    "secondary_policy": "preview shows one overlay at a time; focused payload tests prove evaluated field changes and order sensitivity"
+  },
+  "source": {
+    "runtime_scene_path": "../../../tests/fixtures/disney_v2_visual_matrix/transparent_interior_stack/scene_runtime.json",
+    "object_id": "rear_blue_panel",
+    "base_material": "Default blue panel",
+    "source_contract_tests": [
+      "test_runtime_material_texture_stack_grime_and_oil_overlay_responses",
+      "test_runtime_material_texture_stack_grime_oil_order_changes_result",
+      "test_runtime_material_texture_stack_overlays_do_not_reopen_transparency",
+      "test_runtime_material_payload_3d_rust_texture_is_hit_anchored",
+      "test_runtime_material_payload_3d_fog_texture_roughens_transparency"
+    ]
+  },
+  "artifacts": {
+    "request_path": "request.json",
+    "preview_request_path": "material_preview_request.json",
+    "preview_summary_path": "material_preview_summary.json",
+    "summary_path": "summary.json",
+    "index_path": "index.md",
+    "image_path": "preview.bmp",
+    "image_status": "generated"
+  },
+  "rows": [
+    { "row_id": "base_clean", "label": "clean base panel", "material_family": "overlay_stack", "source_material": { "base": "default blue panel", "overlay": "none" }, "expected_behavior": "baseline color and response for overlay comparison", "deferred_status": { "authored_bitmap_channels": "deferred_to_M6" } },
+    { "row_id": "rust_overlay", "label": "rust overlay", "material_family": "overlay_stack", "source_material": { "base": "default blue panel", "overlay": "rust" }, "expected_behavior": "rust shifts color warm, roughens, reduces reflectivity/specular, and does not reopen transparency", "deferred_status": { "authored_bitmap_channels": "deferred_to_M6" } },
+    { "row_id": "grime_overlay", "label": "grime overlay", "material_family": "overlay_stack", "source_material": { "base": "default blue panel", "overlay": "grime" }, "expected_behavior": "grime darkens, roughens, reduces reflectivity, and reduces specular weight", "deferred_status": { "authored_bitmap_channels": "deferred_to_M6" } },
+    { "row_id": "oil_overlay", "label": "oil overlay", "material_family": "overlay_stack", "source_material": { "base": "default blue panel", "overlay": "oil" }, "expected_behavior": "oil lowers roughness, raises reflectivity/specular, and preserves opaque base coverage", "deferred_status": { "authored_bitmap_channels": "deferred_to_M6" } },
+    { "row_id": "fog_overlay", "label": "fog overlay", "material_family": "overlay_stack", "source_material": { "base": "default blue panel", "overlay": "fog" }, "expected_behavior": "fog lightens/cools color and preserves or increases roughness while reducing transparency only on transmissive bases", "deferred_status": { "authored_bitmap_channels": "deferred_to_M6" } },
+    { "row_id": "scratches_overlay", "label": "scratches overlay", "material_family": "overlay_stack", "source_material": { "base": "default blue panel", "overlay": "scratches" }, "expected_behavior": "scratches produce visible damage mask through current procedural overlay route", "deferred_status": { "authored_bitmap_channels": "deferred_to_M6" } },
+    { "row_id": "edge_wear_overlay", "label": "edge wear overlay", "material_family": "overlay_stack", "source_material": { "base": "default blue panel", "overlay": "edge_wear" }, "expected_behavior": "edge wear produces visible procedural wear mask through current overlay route", "deferred_status": { "authored_bitmap_channels": "deferred_to_M6" } },
+    { "row_id": "grime_oil_order_contract", "label": "grime/oil order contract", "material_family": "overlay_stack", "source_material": { "base": "wood source-backed test", "overlay_order_a": "grime_then_oil", "overlay_order_b": "oil_then_grime" }, "expected_behavior": "focused payload test proves changing grime/oil order changes evaluated color, roughness, or specular weight", "deferred_status": { "visual_order_pair": "not_exposed_by_single_overlay_preview_route", "authored_bitmap_channels": "deferred_to_M6" } }
+  ]
+}

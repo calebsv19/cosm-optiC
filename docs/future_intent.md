@@ -1,202 +1,93 @@
 # Ray Tracing Future Intent
 
-Last updated: 2026-04-10
+Last updated: 2026-06-16
 
-## Scaffold Alignment Intent
-1. Keep the current strong subsystem split while normalizing scaffold contracts.
-2. Introduce locked lifecycle wrapper symbols without breaking runtime behavior.
-3. Normalize verification into explicit scaffold aliases/lane names.
-4. Keep lane naming/runtime-state policy stable after outlier normalization (`config`, `assets`, `data/runtime`, `tmp`).
+## Direction
 
-## Planned Structural Intent
-- `RT-S1` (completed):
-  - added public scaffold docs:
-    - `docs/current_truth.md`
-    - `docs/future_intent.md`
-    - `docs/README.md`
-  - updated root docs pointer in `README.md`
+Keep `ray_tracing` stable as a hybrid editor/runtime while treating the shipped native `3D` RGB ladder as the current product truth, not as a future experiment.
 
-- `RT-S2` (completed):
-  - added explicit scaffold verification aliases:
-    - `run-headless-smoke`
-    - `visual-harness`
-  - normalized test lanes:
-    - `test-stable` (deterministic migration gate)
-    - `test-legacy` (placeholder quarantine lane, currently empty)
+## Near-Term Intent
 
-- `RT-S3` (completed):
-  - introduce canonical wrapper entry API:
-    - `include/ray_tracing/ray_tracing_app_main.h`
-    - `src/app/ray_tracing_app_main.c`
-  - lock lifecycle stage symbols:
-    - `ray_tracing_app_bootstrap`
-    - `ray_tracing_app_config_load`
-    - `ray_tracing_app_state_seed`
-    - `ray_tracing_app_subsystems_init`
-    - `ray_tracing_runtime_start`
-    - `ray_tracing_app_run_loop`
-    - `ray_tracing_app_shutdown`
-  - keep behavior-preserving delegation:
-    - `main()` delegates to `ray_tracing_app_main(...)`
-    - legacy startup/runtime body remains in `ray_tracing_app_main_legacy(...)`
+1. Choose the next post-`I6` renderer lane cleanly.
+   - The shipped native `3D` ladder is already closed through `Disney`.
+   - New work should extend that ladder or its support systems intentionally, not reopen completed `I5`/`I6` slices.
 
-- `RT-S4` (completed):
-  - normalized top-level naming outliers:
-    - `Configs/` -> `config/`
-    - `Animations/` -> `assets/animations/` docs lane + `data/runtime/{frames,videos}` generated lanes
-    - `Other files/` -> `tmp/migration_backups/other_files_legacy/`
-  - locked runtime/temp/generated ignore policy:
-    - `tmp/`
-    - `data/runtime/`
-    - `data/snapshots/`
-    - `*.dSYM/`
-  - locked defaults-vs-runtime state persistence:
-    - runtime-first config load fallback: `data/runtime` -> `config` -> legacy `Configs`
-    - config saves now target `data/runtime/*`
-  - updated build/tool defaults:
-    - `make video` defaults to `data/runtime/frames/default` and `data/runtime/videos/output.mp4`
+2. Preserve deep-render export usability.
+   - Keep absolute start-frame and resume-from-existing controls stable.
+   - Keep frame numbering and path sampling locked to the same absolute-frame contract.
 
-- `RT-S5` (completed):
-  - closeout sync for private/public/global scaffold trackers completed
-  - final verification gates passed (`clean/build`, `run-headless-smoke`, `visual-harness`, `test-stable`)
-  - final scaffold closeout commit recorded:
-    - `f1b666c` (`Project Scaffold Standardization`)
+3. Keep menu/editor/runtime truth aligned.
+   - Preserve current object color/material separation.
+   - Preserve current RGBA object-authoring controls, object-level transparency/emissive multipliers, and the current runtime-scene persistence behavior.
+   - Build on the object-centered Material editor mode instead of overloading the top-level object editor.
+   - Expose the retained scene-placement Material view only when there is a real workflow for comparing object origin framing against in-scene placement.
+   - Preserve the broader object-focused Material zoom range so texture work can be inspected close up and previewed from a distance.
+   - Build on the texture-sampled filled triangle Material preview, all-face-group list, active-face texture kind and placement controls, copy-to-selected placement, generated-face persistence, and the v2 layered material stack by growing toward custom per-triangle/per-plane material texture placement.
+   - Keep the current v2 stack contract as the intermediate representation for later node-graph authoring instead of making the node UI the first runtime format.
+   - Preserve the split between geometry scene selection and optional atmosphere attachment.
+   - Keep menu-render control helpers and scene-digest picking helpers as dedicated seams instead of collapsing them back into monolithic host files.
+   - Preserve the new authored-bitmap texture roundtrip:
+     - keep the object-bound manifest/PNG contract stable
+   - keep authored bitmap binding metadata scene-relative instead of embedding texture bytes into runtime-scene files
+   - build coexistence rules between authored bitmap faces and procedural overlays intentionally instead of letting the two routes drift
+   - Treat imported STL objects as ordinary authored scene objects once they
+     have been converted into `mesh_asset_runtime_v1` sidecars and referenced
+     by `mesh_asset_instance`.
+   - Build the next AI-agent scene-authoring material flow around the existing
+     object `material_texture_stack`: prompts like a skull with a brushed metal
+     base, rough layer, and grime overlay should compile into layered material
+     stack entries rather than one-off STL-specific material fields.
+   - Use `ray_tracing_material_preview_headless` as the bounded preview/tuning
+     loop for imported mesh material presets before running expensive full
+     native `3D` render proofs.
 
-## Post-Scaffold Direction
-- scaffold migration is complete for `ray_tracing`.
-- completed post-scaffold lanes:
-  - font-size standardization (`RT-F0` through `RT-F5`) is complete
-  - wrap-up commit title used:
-    - `Post-Scaffold Font Size Standardization`
-  - completed trio 2D/3D parity propagation with `line_drawing`:
-    - `../../docs/private_program_docs/ray_tracing/2026-03-30_ray_tracing_2d_3d_parity_with_line_drawing_plan.md`
-  - current status:
-    - `RT-U0` complete (baseline freeze and risk map)
-    - `RT-U1` complete (space mode runtime contract + menu selector)
-    - `RT-U2` complete (mode adapter seam for camera/world/ray routing)
-    - `RT-U3` complete (additive scene/object upgrade with optional `z` compatibility)
-    - `RT-U4` complete (backend separation + explicit mode routing)
-    - `RT-U5` complete (UX + editor parity layer)
-    - `RT-U6` complete (verification/docs/memory closeout)
-  - closeout execution log:
-    - `../../docs/private_program_docs/ray_tracing/2026-03-30_rt_u6_verification_docs_memory_closeout.md`
-  - completed trio shared-scene bridge lane (`TP-S3`):
-    - `../../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_pre_deep_readiness.md`
-    - `../../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_deep_runtime_mapping.md`
-    - `../../docs/private_program_docs/ray_tracing/2026-04-01_rt_s3_writeback_guardrails_closeout.md`
+4. Build the next native `3D` lighting pass around an authored lighting model
+   rather than one-off inspection overrides.
+   - Keep `environment_light_mode`, `ambient_strength`, `top_fill_strength`,
+     and `environment_brightness` compatible with existing headless requests.
+   - Add a clearer lighting preset/authoring layer for scene work, including
+     readable ambient contribution and optional sky-tinted background/fill
+     behavior.
+   - Treat background color/brightness and ambient contribution as related but
+     separately inspectable controls so headless summaries can explain why a
+     scene is bright, dark, or sky-tinted.
+   - Preserve the current direct-light, diffuse-bounce, material, emission,
+     Disney, and Disney-v2 route identities while centralizing shared
+     environment-light normalization.
 
-## Trio Interop Next Intent
-- trio rollout milestone status:
-  - `TP-S3` complete in `ray_tracing`
-  - `TP-S4` complete in `physics_sim`
-  - `TP-S5` complete (fixture-driven roundtrip and namespace-preservation interop validation)
+5. Defer VF3D / `physics_sim` ingestion until the next internal renderer boundary is chosen and stabilized.
 
-## Connection Pass Intent
-- completed:
-  - `RT-CP0` baseline routing/ownership map captured
-  - `RT-CP1` wrapper context + guarded stage-transition hardening landed
-  - `RT-CP2` wrapper runtime dispatch seam extraction landed with typed dispatch request/outcome contract and behavior parity
-  - `RT-CP3` wrapper-side dispatch flow split landed (`prepare`/`execute`/`finalize`)
-  - `RT-CP4` deterministic wrapper lifecycle ownership release ordering landed
-  - `RT-CP5` closeout (docs/tracker/memory sync) landed:
-    - `../../docs/private_program_docs/ray_tracing/2026-04-01_ray_tracing_connection_pass_cp0_cp5_execution.md`
-  - `W1` + `W2` wrapper diagnostics standardization landed:
-    - `../../docs/private_program_docs/ray_tracing/2026-04-02_ray_tracing_w1_w2_wrapper_hardening.md`
-- next:
-  - optional `RT-CP6+`: deeper runtime/update/render/shutdown ownership extraction from `animation.c`
+## Structural Intent
 
-## Maintainability Decomposition Status
-- completed in the recent decomposition tranche:
-  - config file I/O helpers extracted to `include/config/config_file_io.h` + `src/config/io/config_file_io.c`
-  - runtime helper slices extracted from `animation.c` into:
-    - `src/app/animation_fluid_scene.c`
-    - `src/app/animation_input_helpers.c`
-    - `src/app/animation_output.c`
-    - `src/app/data_paths.c`
-  - editor/render helper splits landed:
-    - `src/editor/object_editor_panels.c`
-    - `src/render/pipeline/ray_tracing2_preview.c`
-  - menu decomposition moved to focused lanes:
-    - `src/ui/menu/sdl_menu_input.c`
-    - `src/ui/menu/sdl_menu_render.c`
-    - `src/ui/menu/sdl_menu_state.c`
-- next:
-  - keep extracting high-churn helper families out of `src/app/animation.c` while preserving wrapper ownership and existing behavior.
+- Keep native `3D` renderer work seam-driven:
+  - tier docs remain under the active integrator lane
+  - completed sub-slices should archive instead of accumulating under active
+- Keep large host files focused on orchestration:
+  - `src/app/animation.c`
+  - `src/render/pipeline/ray_tracing2.c`
+  - `src/ui/menu/sdl_menu*.c`
+- Keep verification families decomposed when the behavior boundary is already clear:
+  - config persistence/export
+  - prepared native `3D` parity/scatter behavior
+  - runtime scene `3D` geometry builder vs trace contracts
+- Keep support-layer changes shared across the shipped native `3D` ladder when the behavior is truly common:
+  - temporal accumulation
+  - sampling
+  - denoise
+  - preview/update behavior
+- Keep procedural texture work and the authored-bitmap manifest reader app-local until a stable cross-app material graph/schema exists; current layered material stacks and bitmap face bindings are native `3D` renderer behavior, not shared-core contracts.
+- Keep the Material editor's object-wide layer stack as the fallback while custom group topology, durable group controls, and per-layer face overrides catch up to the generated-face placement schema.
+- Keep imported STL mesh material expansion object-wide first. Per-face or
+  semantic-region material authoring should wait until the imported mesh
+  pipeline has stable group/selection metadata beyond raw triangle ordinals.
 
-## RS1 Render Split Intent
-- started:
-  - `RS1-S0`/`RS1-S1` diagnostics-contract adoption landed in `animation.c` via shared `kit_runtime_diag`.
-  - opt-in runtime diagnostics gate is available with `RAY_TRACING_RUNTIME_DIAG=1`.
-- in progress:
-  - `RS1-S2` completed in legacy loop:
-    - explicit frame derive/submit seam extraction (`DeriveRenderInputs` + `SubmitRenderFrame`)
-    - diagnostics timing now reports explicit derive/submit windows
-  - `RS1-S3` completed:
-    - frame submit handoff now routes through wrapper-owned helper (`ray_tracing_app_render_submit`)
-    - wrapper tracks render-submit attempt/success/rejection counters in exit diagnostics
-    - behavior-preserving fallback keeps direct submit path if wrapper handoff is unavailable
-  - `RS1-S4` completed:
-    - frame update/route handoffs now route through wrapper-owned helpers:
-      - `ray_tracing_app_frame_update`
-      - `ray_tracing_app_frame_route`
-    - wrapper exit diagnostics now include frame update/route attempt/success/rejection counters
-    - behavior-preserving fallback keeps direct update/route path if wrapper handoff is unavailable
-  - `RS1-S5` completed:
-    - frame event-intake handoff now routes through wrapper-owned helper:
-      - `ray_tracing_app_frame_events`
-    - wrapper exit diagnostics now include frame event-intake attempt/success/rejection counters
-    - behavior-preserving fallback keeps direct event handling path if wrapper handoff is unavailable
-- next:
-  - `RS1` closeout: verification/docs consolidation and optional maintain-only status for this lane.
+## Non-Goals
 
-## IR1 Input Routing Intent
-- started:
-  - editor-readiness setup landed in `animation.c`:
-    - explicit `InputFrame_Intake -> InputFrame_Normalize -> InputFrame_Route` helpers
-    - explicit raw/normalized frame model (`RayTracingInputFrame`)
-    - explicit invalidation output stage (`InputFrame_Invalidate`) and frame runner (`RunInputRoutingFrame`)
-  - scene editor top-level routing seam landed in `scene_editor.c`:
-    - explicit `system -> chrome -> pane` dispatch staging
-    - explicit routing result + invalidation policy hook for pane-target growth
-  - `IR1-S2` landed in `scene_editor.c`:
-    - explicit normalized input contract (`action_class`, `route_policy`, `target_hint`)
-    - explicit bounded per-event diagnostics contract (`SceneEditorInputDiagFrame`) with opt-in gate:
-      - `RAY_TRACING_EDITOR_INPUT_DIAG=1`
-  - `IR1-S3` landed in `scene_editor.c` + editor panes:
-    - explicit pane hit-region classification before pane dispatch (`controls/list panel/canvas/drag`)
-    - expanded invalidation classes in routed output (`target_ui/target_pane/target_interaction/full_exit`)
-    - editor-local hit-region adapters added for pane-specific routing seams.
-  - `IR1-S4` landed in editor pane handlers:
-    - pane-local canonical action adapter enums/resolvers are now explicit in:
-      - `bezier_editor.c`
-      - `object_editor.c`
-      - `camera_editor.c`
-    - pane handlers now dispatch through local normalized action contracts before deeper mutations.
-  - `IR1-S5` landed in scene editor:
-    - active-pane routing now resolves typed pane commands before pane dispatch:
-      - `SceneEditorPaneCommandKind`
-      - `SceneEditorPaneCommand`
-      - `SceneEditorResolvePaneCommand(...)`
-    - explicit `resolve -> dispatch` pane command seam is now in place while preserving existing behavior.
-  - behavior remains unchanged; this is a routing-seam setup slice.
-- next:
-  - continue IR1 with optional pane command payload enrichment and deeper mutation extraction behind existing command seams (keep behavior-preserving).
+- No reopening of closed grayscale-to-RGB migration slices.
+- No broad rewrite that merges active renderer work with unrelated editor polish.
+- No ingestion-expansion push ahead of the next internal renderer proof boundary.
 
-## Non-Goals During Scaffold Migration
-- no feature-expansion work unrelated to scaffold alignment
-- no shared subtree redesign inside scaffold migration slices
-- no one-pass broad churn that mixes lane normalization with lifecycle refactors
+## Private Planning Reference
 
-## Release Readiness Next Intent
-- next active release lane:
-  - `RT-RL0` through `RT-RL5` execution plan:
-    - `../../docs/private_program_docs/ray_tracing/2026-04-04_ray_tracing_release_readiness_rl0_rl5_execution_plan.md`
-- completed now:
-  - `RT-RL0` release contract freeze
-  - `RT-RL1` bundle audit + Vulkan runtime hardening
-  - `RT-RL2` signing/notary integration
-  - `RT-RL3` release artifact + desktop refresh flow
-  - `RT-RL4` release validation + docs sync
-  - `RT-RL5` release closeout
-- next:
-  - hand off this release-ready pattern to next program lane (`RL0` pilot for next app in queue).
+Detailed execution history and archived support lanes live in:
+- `/Users/calebsv/Desktop/CodeWork/docs/private_program_docs/ray_tracing/`

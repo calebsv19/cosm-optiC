@@ -8,7 +8,7 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 TRACE_PATH="$TMP_DIR/ray_trace_tool_smoke.pack"
 CHECKER_C="$TMP_DIR/check_trace_contract.c"
 CHECKER_BIN="$TMP_DIR/check_trace_contract"
-SOURCE_PATH="$ROOT_DIR/../shared/core/core_pack/tests/fixtures/physics_v1_sample.pack"
+SOURCE_PATH="$ROOT_DIR/third_party/codework_shared/core/core_pack/tests/fixtures/physics_v1_sample.pack"
 
 "$ROOT_DIR/ray_trace_tool" "$SOURCE_PATH" "$TRACE_PATH" 6
 if [[ ! -f "$TRACE_PATH" ]]; then
@@ -87,15 +87,15 @@ int main(int argc, char **argv) {
 C_EOF
 
 cc -std=c11 -Wall -Wextra -Wpedantic -g \
-   -I"$ROOT_DIR/../shared/core/core_trace/include" \
-   -I"$ROOT_DIR/../shared/core/core_pack/include" \
-   -I"$ROOT_DIR/../shared/core/core_io/include" \
-   -I"$ROOT_DIR/../shared/core/core_base/include" \
+   -I"$ROOT_DIR/third_party/codework_shared/core/core_trace/include" \
+   -I"$ROOT_DIR/third_party/codework_shared/core/core_pack/include" \
+   -I"$ROOT_DIR/third_party/codework_shared/core/core_io/include" \
+   -I"$ROOT_DIR/third_party/codework_shared/core/core_base/include" \
    "$CHECKER_C" \
-   "$ROOT_DIR/../shared/core/core_trace/src/core_trace.c" \
-   "$ROOT_DIR/../shared/core/core_pack/src/core_pack.c" \
-   "$ROOT_DIR/../shared/core/core_io/src/core_io.c" \
-   "$ROOT_DIR/../shared/core/core_base/src/core_base.c" \
+   "$ROOT_DIR/third_party/codework_shared/core/core_trace/src/core_trace.c" \
+   "$ROOT_DIR/third_party/codework_shared/core/core_pack/src/core_pack.c" \
+   "$ROOT_DIR/third_party/codework_shared/core/core_io/src/core_io.c" \
+   "$ROOT_DIR/third_party/codework_shared/core/core_base/src/core_base.c" \
    -o "$CHECKER_BIN" -lm
 
 "$CHECKER_BIN" "$TRACE_PATH"

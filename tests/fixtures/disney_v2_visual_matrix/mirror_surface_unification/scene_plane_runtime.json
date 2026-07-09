@@ -1,0 +1,96 @@
+{
+  "schema_family": "codework_scene",
+  "schema_variant": "scene_runtime_v1",
+  "schema_version": 1,
+  "scene_id": "visual_matrix_mirror_surface_unification_plane",
+  "space_mode_default": "3d",
+  "unit_system": "meters",
+  "world_scale": 1.0,
+  "objects": [
+    {
+      "object_id": "matte_floor",
+      "object_type": "plane_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": { "position": { "x": 0.0, "y": -0.35, "z": -0.85 }, "scale": { "x": 1.0, "y": 1.0, "z": 1.0 } },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 4.8,
+        "height": 4.2,
+        "frame": {
+          "origin": { "x": 0.0, "y": -0.35, "z": -0.85 },
+          "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+          "axis_v": { "x": 0.0, "y": 1.0, "z": 0.0 },
+          "normal": { "x": 0.0, "y": 0.0, "z": 1.0 }
+        }
+      }
+    },
+    {
+      "object_id": "mirror_wall_plane",
+      "object_type": "plane_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": { "position": { "x": 0.0, "y": 1.25, "z": 0.10 }, "scale": { "x": 1.0, "y": 1.0, "z": 1.0 } },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 2.4,
+        "height": 1.9,
+        "frame": {
+          "origin": { "x": 0.0, "y": 1.25, "z": 0.10 },
+          "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+          "axis_v": { "x": 0.0, "y": 0.0, "z": 1.0 },
+          "normal": { "x": 0.0, "y": -1.0, "z": 0.0 }
+        }
+      }
+    },
+    {
+      "object_id": "red_reflection_marker",
+      "object_type": "rect_prism_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": { "position": { "x": -0.65, "y": -0.35, "z": -0.45 }, "scale": { "x": 1.0, "y": 1.0, "z": 1.0 } },
+      "primitive": { "kind": "rect_prism_primitive", "width": 0.42, "height": 0.45, "depth": 0.55 }
+    },
+    {
+      "object_id": "blue_reflection_marker",
+      "object_type": "rect_prism_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": { "position": { "x": 0.55, "y": -0.10, "z": -0.35 }, "scale": { "x": 1.0, "y": 1.0, "z": 1.0 } },
+      "primitive": { "kind": "rect_prism_primitive", "width": 0.35, "height": 0.50, "depth": 0.70 }
+    }
+  ],
+  "materials": [],
+  "lights": [
+    {
+      "light_id": "mirror_key_light",
+      "kind": "point",
+      "position": { "x": 0.82, "y": -0.92, "z": 0.34 },
+      "intensity": 9.5,
+      "radius": 0.16
+    }
+  ],
+  "cameras": [
+    {
+      "camera_id": "cam_main",
+      "kind": "perspective",
+      "position": { "x": 0.0, "y": -4.4, "z": 0.62 },
+      "target": { "x": 0.0, "y": 0.55, "z": -0.02 },
+      "yaw": 0.0,
+      "look_pitch": -0.08
+    }
+  ],
+  "extensions": {
+    "ray_tracing": {
+      "authoring": {
+        "environment": { "light_mode": 2, "ambient_strength": 0.16, "top_fill_strength": 0.45 },
+        "object_materials": [
+          { "object_id": "matte_floor", "material_id": 0, "object_color": 11974898, "roughness": 0.78, "reflectivity": 0.03 },
+          { "object_id": "mirror_wall_plane", "material_id": 1, "object_color": 15132390, "roughness": 0.02, "reflectivity": 0.96 },
+          { "object_id": "red_reflection_marker", "material_id": 0, "object_color": 14165032, "roughness": 0.44, "reflectivity": 0.05 },
+          { "object_id": "blue_reflection_marker", "material_id": 0, "object_color": 2892466, "roughness": 0.48, "reflectivity": 0.05 }
+        ]
+      }
+    }
+  }
+}

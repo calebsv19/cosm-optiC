@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 static int fail(const char* msg) {
     fprintf(stderr, "shared_theme_font_adapter_test: %s\n", msg);
@@ -34,6 +35,12 @@ int main(void) {
     if (!ray_tracing_shared_font_resolve_ui_regular(path, sizeof(path), &point_size)) {
         return fail("font should be enabled by default");
     }
+    if (strstr(path, "Lato-Regular.ttf") == NULL) {
+        return fail("default shared font should resolve to the IDE/Lato baseline");
+    }
+    if (point_size != 11) {
+        return fail("default shared font should resolve to the BASIC IDE tier size");
+    }
 
     setenv("RAY_TRACING_USE_SHARED_THEME_FONT", "1", 1);
     setenv("RAY_TRACING_THEME_PRESET", "standard_grey", 1);
@@ -53,6 +60,18 @@ int main(void) {
     }
     if (path[0] == '\0' || point_size <= 0) {
         return fail("font resolution returned invalid path or point size");
+    }
+    if (!ray_tracing_shared_font_set_preset("daw_default")) {
+        return fail("font preset setter should accept shared DAW preset");
+    }
+    if (!ray_tracing_shared_font_current_preset(path, sizeof(path))) {
+        return fail("font preset getter should report current runtime preset");
+    }
+    if (strcmp(path, "daw_default") != 0) {
+        return fail("font preset getter should reflect runtime preset changes");
+    }
+    if (!ray_tracing_shared_font_set_preset("ide")) {
+        return fail("font preset setter should restore IDE preset");
     }
 
     for (i = 0; i < sizeof(theme_presets) / sizeof(theme_presets[0]); ++i) {

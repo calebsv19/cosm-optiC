@@ -1,0 +1,38 @@
+{
+  "schema_version": "ray_tracing_agent_render_request_v1",
+  "run_id": "emissive_preview_lightbox_prism_disney_v2",
+  "scene": { "runtime_scene_path": "scene_lightbox_prism_runtime.json" },
+  "volume": { "enabled": false },
+  "render": {
+    "start_frame": 0,
+    "frame_count": 1,
+    "width": 256,
+    "height": 144,
+    "normalized_t": 0.0,
+    "temporal_frames": 6,
+    "integrator_3d": "disney_v2",
+    "denoise_enabled": false
+  },
+  "inspection": {
+    "preset": "glass_review",
+    "camera_position": { "x": -4.6, "y": -4.8, "z": 2.2 },
+    "camera_look_at": { "x": 0.0, "y": 0.45, "z": 0.7 },
+    "camera_zoom": 1.0,
+    "environment_light_mode": "ambient",
+    "ambient_strength": 0.035,
+    "top_fill_strength": 0.0,
+    "light_intensity": 0.001,
+    "light_radius": 0.1,
+    "secondary_diffuse_samples_3d": 4,
+    "transmission_samples_3d": 2,
+    "object_audit_enabled": false
+  },
+  "output": {
+    "root": "../../../build/agent_runs/ray_tracing/emissive_light_preview_matrix/lightbox_prism_disney_v2",
+    "overwrite": true
+  },
+  "progress": {
+    "summary_path": "../../../build/agent_runs/ray_tracing/emissive_light_preview_matrix/lightbox_prism_disney_v2/render_summary.json",
+    "progress_path": "../../../build/agent_runs/ray_tracing/emissive_light_preview_matrix/lightbox_prism_disney_v2/render_progress.json"
+  }
+}

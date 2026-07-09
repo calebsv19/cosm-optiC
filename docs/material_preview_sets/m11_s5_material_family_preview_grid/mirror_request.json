@@ -1,0 +1,43 @@
+{
+  "background_color": 2698549,
+  "columns": 4,
+  "height": 144,
+  "object_id": "rear_blue_panel",
+  "output_path": "<redacted-local-path:mirror_preview.bmp>",
+  "runtime_scene_path": "<redacted-local-path:mirror_scene_runtime.json>",
+  "schema": "ray_tracing_material_preview_request_v1",
+  "summary_path": "<redacted-local-path:mirror_summary.json>",
+  "variants": [
+    {
+      "label": "polished_ref096",
+      "reflectivity": 0.96,
+      "roughness": 0.02
+    },
+    {
+      "label": "soft_ref088",
+      "reflectivity": 0.88,
+      "roughness": 0.18
+    },
+    {
+      "label": "rough_ref072",
+      "reflectivity": 0.72,
+      "roughness": 0.42
+    },
+    {
+      "label": "oil_overlay",
+      "preview_overlay": {
+        "contrast": 0.7,
+        "coverage": 0.6,
+        "flow": 0.82,
+        "grain": 0.48,
+        "kind": "oil",
+        "opacity": 0.7,
+        "seed": 67,
+        "surface_damage": 0.72
+      },
+      "reflectivity": 0.92,
+      "roughness": 0.08
+    }
+  ],
+  "width": 144
+}

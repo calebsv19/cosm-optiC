@@ -2,17 +2,27 @@
 #include "config/config_manager.h"
 #include "camera/camera.h"
 #include "math/vec2.h"
+#include "render/font_runtime.h"
+#include "render/text_draw.h"
 #include <SDL2/SDL.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "vk_renderer.h"
+#include <string.h>
 
 static double clamp_double(double value, double min_value, double max_value) {
     if (value < min_value) return min_value;
     if (value > max_value) return max_value;
     return value;
+}
+
+static TTF_Font* RenderHelperOpenUIFontAtPointSize(SDL_Renderer* renderer,
+                                                   int logical_point_size,
+                                                   int min_point_size) {
+    return ray_tracing_font_runtime_get_ui_regular(renderer,
+                                                   logical_point_size,
+                                                   min_point_size);
 }
 
 double RenderHelper_DepthScaleForObjectZ(double object_z) {
@@ -24,24 +34,6 @@ double RenderHelper_DepthScaleForObjectZ(double object_z) {
 double RenderHelper_DepthYOffsetPixelsForObjectZ(double object_z, double camera_zoom) {
     if (camera_zoom < 0.01) camera_zoom = 0.01;
     return object_z * 18.0 * camera_zoom;
-}
-
-static void RenderSurface(SDL_Renderer* renderer, SDL_Surface* surface, const SDL_Rect* dst) {
-    if (!renderer || !surface || !dst) return;
-#if USE_VULKAN
-    VkRendererTexture texture;
-    if (vk_renderer_upload_sdl_surface_with_filter((VkRenderer*)renderer, surface, &texture,
-                                                   VK_FILTER_LINEAR) != VK_SUCCESS) {
-        return;
-    }
-    vk_renderer_draw_texture((VkRenderer*)renderer, &texture, NULL, dst);
-    vk_renderer_queue_texture_destroy((VkRenderer*)renderer, &texture);
-#else
-    SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, surface);
-    if (!textTexture) return;
-    SDL_RenderCopy(renderer, textTexture, NULL, dst);
-    SDL_DestroyTexture(textTexture);
-#endif
 }
 
 int CalculateObjectBrightness(SceneObject* obj, double lightX, double lightY) {
@@ -100,6 +92,101 @@ static void BuildScreenShapePoints(SceneObject* obj, int screenPoints[MAX_POINTS
         }
         screenPoints[i][0] = (int)lround(screen.x);
         screenPoints[i][1] = (int)lround(screen.y);
+    }
+}
+
+static void RenderDashedLine(SDL_Renderer* renderer,
+                             int x0,
+                             int y0,
+                             int x1,
+                             int y1,
+                             int dash_len,
+                             int gap_len) {
+    double dx = 0.0;
+    double dy = 0.0;
+    double length = 0.0;
+    double ux = 0.0;
+    double uy = 0.0;
+    double offset = 0.0;
+    if (!renderer) return;
+    if (dash_len <= 0) dash_len = 6;
+    if (gap_len < 0) gap_len = 0;
+    dx = (double)(x1 - x0);
+    dy = (double)(y1 - y0);
+    length = hypot(dx, dy);
+    if (length <= 1.0) {
+        SDL_RenderDrawPoint(renderer, x0, y0);
+        SDL_RenderDrawPoint(renderer, x1, y1);
+        return;
+    }
+    ux = dx / length;
+    uy = dy / length;
+    while (offset < length) {
+        double dash_end = offset + (double)dash_len;
+        int ax = 0;
+        int ay = 0;
+        int bx = 0;
+        int by = 0;
+        if (dash_end > length) dash_end = length;
+        ax = (int)lround((double)x0 + ux * offset);
+        ay = (int)lround((double)y0 + uy * offset);
+        bx = (int)lround((double)x0 + ux * dash_end);
+        by = (int)lround((double)y0 + uy * dash_end);
+        SDL_RenderDrawLine(renderer, ax, ay, bx, by);
+        offset = dash_end + (double)gap_len;
+    }
+}
+
+static void RenderGuideCircle(SDL_Renderer* renderer, int x, int y, int radius) {
+    const double kTau = 6.28318530717958647692;
+    int segments = 0;
+    int i = 0;
+    if (!renderer) return;
+    if (radius < 2) radius = 2;
+    segments = (int)fmax(12.0, floor((double)radius * 1.6));
+    for (i = 0; i < segments; ++i) {
+        if ((i % 2) != 0) continue;
+        {
+            double a0 = ((double)i / (double)segments) * kTau;
+            double a1 = ((double)(i + 1) / (double)segments) * kTau;
+            int x0 = x + (int)lround(cos(a0) * (double)radius);
+            int y0 = y + (int)lround(sin(a0) * (double)radius);
+            int x1 = x + (int)lround(cos(a1) * (double)radius);
+            int y1 = y + (int)lround(sin(a1) * (double)radius);
+            SDL_RenderDrawLine(renderer, x0, y0, x1, y1);
+        }
+    }
+}
+
+static void RenderGuideShape(SDL_Renderer* renderer, SceneObject* obj) {
+    int screenPoints[MAX_POINTS][2];
+    int i = 0;
+    if (!renderer || !obj) return;
+    SDL_SetRenderDrawColor(renderer,
+                           SceneObjectColorR(obj),
+                           SceneObjectColorG(obj),
+                           SceneObjectColorB(obj),
+                           SceneObjectAlphaByte(obj));
+    if (strcmp(obj->type, "circle") == 0) {
+        double depth_scale = (animSettings.spaceMode == SPACE_MODE_3D)
+                                 ? RenderHelper_DepthScaleForObjectZ(obj->z)
+                                 : 1.0;
+        CameraPoint center = ToScreenDepthProjected(obj->x, obj->y, obj->z);
+        int radius = (int)lround(obj->radius * obj->scale * sceneSettings.camera.zoom * depth_scale);
+        RenderGuideCircle(renderer, (int)lround(center.x), (int)lround(center.y), radius);
+        return;
+    }
+    if (obj->numPoints <= 1) return;
+    BuildScreenShapePoints(obj, screenPoints);
+    for (i = 0; i < obj->numPoints; ++i) {
+        int nextIndex = (i + 1) % obj->numPoints;
+        RenderDashedLine(renderer,
+                         screenPoints[i][0],
+                         screenPoints[i][1],
+                         screenPoints[nextIndex][0],
+                         screenPoints[nextIndex][1],
+                         7,
+                         5);
     }
 }
 
@@ -257,62 +344,179 @@ void RenderStaticScene(SDL_Renderer* renderer) {
     RenderSceneObjects(renderer, true);    
 }
 
-static void RenderTextWithColor(SDL_Renderer* renderer, SDL_Rect button, const char* text, SDL_Color textColor, int maxFontSize) {
+static int RenderTextBlockWithColor(SDL_Renderer* renderer,
+                                    SDL_Rect area,
+                                    const char* text,
+                                    SDL_Color textColor,
+                                    int maxFontSize,
+                                    bool wrapped,
+                                    bool center_horizontal,
+                                    bool center_vertical) {
     int minFontSize = 10;  // Minimum readable font size
+    int baseFontSize = 0;
+    int chosenPointSize = 0;
+    TTF_Font* font = NULL;
+    int measured_w = 0;
+    int measured_h = 0;
+    SDL_Rect textRect = {0};
+    int wrap_width = 0;
 
-    int fontSize = animation_config_scale_text_point_size(&animSettings, maxFontSize, minFontSize);
-    if (fontSize < minFontSize) fontSize = minFontSize;
-    while (fontSize > minFontSize) {
-        TTF_Font* tempFont = TTF_OpenFont("/System/Library/Fonts/Supplemental/Arial.ttf", fontSize);
-        if (!tempFont) return;
-
-        SDL_Surface* tempSurface = TTF_RenderText_Solid(tempFont, text, textColor);
-        if (!tempSurface) {
-            TTF_CloseFont(tempFont);
-            return;
+    if (!renderer || !text || !text[0]) return 0;
+    if (area.w <= 0 || area.h <= 0) return 0;
+    baseFontSize = animation_config_scale_text_point_size(&animSettings, maxFontSize, minFontSize);
+    if (baseFontSize < minFontSize) baseFontSize = minFontSize;
+    chosenPointSize = baseFontSize;
+    if (!wrapped) {
+        while (chosenPointSize > minFontSize) {
+            int draw_width = 0;
+            TTF_Font* tempFont = RenderHelperOpenUIFontAtPointSize(renderer, chosenPointSize, minFontSize);
+            if (!tempFont) return 0;
+            if (!ray_tracing_text_measure_utf8(renderer, tempFont, text, &draw_width, NULL)) {
+                return 0;
+            }
+            if (draw_width <= area.w - 10) {
+                break;
+            }
+            chosenPointSize--;
         }
-        int textWidth = tempSurface->w;
-        SDL_FreeSurface(tempSurface);
-        TTF_CloseFont(tempFont);
-
-        if (textWidth <= button.w - 10) {  // Leave a margin of 5 pixels on each side
-            break;
-        }
-        fontSize--;
     }
 
-    TTF_Font* font = TTF_OpenFont("/System/Library/Fonts/Supplemental/Arial.ttf", fontSize);
-    if (!font) return;
+    font = RenderHelperOpenUIFontAtPointSize(renderer, chosenPointSize, minFontSize);
+    if (!font) return 0;
 
-    SDL_Surface* textSurface = TTF_RenderText_Solid(font, text, textColor);
-    if (!textSurface) {
-        TTF_CloseFont(font);
-        return;
+    if (wrapped) {
+        wrap_width = area.w;
+        if (wrap_width < 1) wrap_width = 1;
+    } else {
+        if (!ray_tracing_text_measure_utf8(renderer, font, text, &measured_w, &measured_h)) {
+            return 0;
+        }
     }
+    if (!wrapped) {
+        if (measured_w < 1) measured_w = 1;
+        if (measured_h < 1) measured_h = 1;
+    }
+    if (!wrapped && center_horizontal) {
+        textRect.x = area.x + (area.w - measured_w) / 2;
+    } else {
+        textRect.x = area.x;
+    }
+    if (!wrapped && center_vertical) {
+        textRect.y = area.y + (area.h - measured_h) / 2;
+    } else {
+        textRect.y = area.y;
+    }
+    textRect.w = wrapped ? 0 : measured_w;
+    textRect.h = wrapped ? 0 : measured_h;
+    if (wrapped) {
+        if (!ray_tracing_text_draw_utf8_wrapped(renderer, font, text, wrap_width, textColor, &textRect)) {
+            return 0;
+        }
+        measured_h = textRect.h;
+    } else if (!ray_tracing_text_draw_utf8(renderer, font, text, textColor, &textRect)) {
+        return 0;
+    }
+    return measured_h;
+}
 
-    SDL_Rect textRect = {
-        button.x + (button.w - textSurface->w) / 2,
-        button.y + (button.h - textSurface->h) / 2,
-        textSurface->w, textSurface->h
-    };
-
-    RenderSurface(renderer, textSurface, &textRect);
-    SDL_FreeSurface(textSurface);
-    TTF_CloseFont(font);
+static void RenderTextWithColor(SDL_Renderer* renderer, SDL_Rect button, const char* text, SDL_Color textColor, int maxFontSize) {
+    (void)RenderTextBlockWithColor(renderer,
+                                   button,
+                                   text,
+                                   textColor,
+                                   maxFontSize,
+                                   false,
+                                   true,
+                                   true);
 }
 
 void RenderButtonText(SDL_Renderer* renderer, SDL_Rect button, const char* text) {
     SDL_Color textColor = {0, 0, 0, 255};  // Black text
-    RenderTextWithColor(renderer, button, text, textColor, 24);
+    RenderTextWithColor(renderer, button, text, textColor, 18);
+}
+
+void RenderButtonTextWithColor(SDL_Renderer* renderer,
+                               SDL_Rect button,
+                               const char* text,
+                               SDL_Color text_color) {
+    RenderTextWithColor(renderer, button, text, text_color, 18);
 }
 
 void RenderLabelText(SDL_Renderer* renderer, SDL_Rect area, const char* text, SDL_Color color) {
-    RenderTextWithColor(renderer, area, text, color, 22);
+    SDL_Rect previous_clip = {0, 0, 0, 0};
+    SDL_bool clip_was_enabled = SDL_FALSE;
+    if (!renderer) return;
+    clip_was_enabled = SDL_RenderIsClipEnabled(renderer);
+    SDL_RenderGetClipRect(renderer, &previous_clip);
+    if (area.w > 0 && area.h > 0) {
+        SDL_RenderSetClipRect(renderer, &area);
+    }
+    RenderTextWithColor(renderer, area, text, color, 16);
+    if (clip_was_enabled) {
+        SDL_RenderSetClipRect(renderer, &previous_clip);
+    } else {
+        SDL_RenderSetClipRect(renderer, NULL);
+    }
+}
+
+int RenderLabelTextLeft(SDL_Renderer* renderer, SDL_Rect area, const char* text, SDL_Color color) {
+    SDL_Rect previous_clip = {0, 0, 0, 0};
+    SDL_bool clip_was_enabled = SDL_FALSE;
+    int used_height = 0;
+    if (!renderer) return 0;
+    clip_was_enabled = SDL_RenderIsClipEnabled(renderer);
+    SDL_RenderGetClipRect(renderer, &previous_clip);
+    if (area.w > 0 && area.h > 0) {
+        SDL_RenderSetClipRect(renderer, &area);
+    }
+    used_height = RenderTextBlockWithColor(renderer,
+                                           area,
+                                           text,
+                                           color,
+                                           16,
+                                           false,
+                                           false,
+                                           false);
+    if (clip_was_enabled) {
+        SDL_RenderSetClipRect(renderer, &previous_clip);
+    } else {
+        SDL_RenderSetClipRect(renderer, NULL);
+    }
+    return used_height;
+}
+
+int RenderLabelTextWrappedLeft(SDL_Renderer* renderer, SDL_Rect area, const char* text, SDL_Color color) {
+    SDL_Rect previous_clip = {0, 0, 0, 0};
+    SDL_bool clip_was_enabled = SDL_FALSE;
+    int used_height = 0;
+    if (!renderer) return 0;
+    clip_was_enabled = SDL_RenderIsClipEnabled(renderer);
+    SDL_RenderGetClipRect(renderer, &previous_clip);
+    if (area.w > 0 && area.h > 0) {
+        SDL_RenderSetClipRect(renderer, &area);
+    }
+    used_height = RenderTextBlockWithColor(renderer,
+                                           area,
+                                           text,
+                                           color,
+                                           16,
+                                           true,
+                                           false,
+                                           false);
+    if (clip_was_enabled) {
+        SDL_RenderSetClipRect(renderer, &previous_clip);
+    } else {
+        SDL_RenderSetClipRect(renderer, NULL);
+    }
+    return used_height;
 }
                 
 
 void RenderSceneObject(SDL_Renderer* renderer, SceneObject* obj, bool fillObjects) {
-
+    if (SceneObjectIsGuideOnly(obj)) {
+        RenderGuideShape(renderer, obj);
+        return;
+    }
 
     if (strcmp(obj->type, "circle") == 0) {
         double depth_scale = (animSettings.spaceMode == SPACE_MODE_3D)
@@ -349,16 +553,6 @@ void RenderSceneObjects(SDL_Renderer* renderer, bool fillObjects) {
 
     for (int i = 0; i < count; i++) {
         SceneObject* obj = &sceneSettings.sceneObjects[draw_order[i]];
-
-        if (strcmp(obj->type, "circle") == 0) {
-            double depth_scale = (animSettings.spaceMode == SPACE_MODE_3D)
-                                     ? RenderHelper_DepthScaleForObjectZ(obj->z)
-                                     : 1.0;
-            CameraPoint center = ToScreenDepthProjected(obj->x, obj->y, obj->z);
-            int radius = (int)lround(obj->radius * obj->scale * sceneSettings.camera.zoom * depth_scale);
-            RenderCircle(renderer, (int)lround(center.x), (int)lround(center.y), radius, fillObjects);
-        } else {
-            RenderShape(renderer, obj, fillObjects);
-        }
+        RenderSceneObject(renderer, obj, fillObjects);
     }
 }

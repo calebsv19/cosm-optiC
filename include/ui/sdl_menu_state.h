@@ -7,6 +7,8 @@
 #include <limits.h>
 #include <stddef.h>
 
+#include "app/render_export_batch.h"
+
 #define SDL_MENU_MAX_MANIFEST_OPTIONS 128
 #define SDL_MENU_MANIFEST_ITEM_HEIGHT 26
 
@@ -20,7 +22,30 @@
 typedef struct {
     char name[128];
     char path[PATH_MAX];
+    int source;
 } ManifestOption;
+
+typedef struct {
+    char name[128];
+    char path[PATH_MAX];
+    int kind;
+} VolumeSourceOption;
+
+typedef enum {
+    MENU_SCENE_LIBRARY_2D_CONFIG = 0,
+    MENU_SCENE_LIBRARY_FLUID_MANIFEST = 1,
+    MENU_SCENE_LIBRARY_RUNTIME_SCENE = 2
+} MenuSceneLibraryLane;
+
+typedef enum {
+    MENU_VIEW_MAIN = 0,
+    MENU_VIEW_SCENE_EDITOR = 1
+} MenuViewMode;
+
+typedef enum {
+    MENU_RENDERER_CONTROLS_LIGHTING = 0,
+    MENU_RENDERER_CONTROLS_PERFORMANCE = 1
+} MenuRendererControlsTab;
 
 typedef struct {
     bool draggingSlider;
@@ -33,8 +58,12 @@ typedef struct {
     char inputBuffer[10];
     bool editingBounce;
     bool editingFrame;
+    bool editingStartFrame;
     bool editingInputRoot;
+    bool editingMeshAssetRoot;
     bool editingOutputRoot;
+    bool editingFrameDir;
+    bool editingVideoOutputRoot;
     char pathInputBuffer[PATH_MAX];
 
     int rouletteSliderValue;
@@ -43,13 +72,25 @@ typedef struct {
     int lightIntensitySliderValue;
     int lightDecaySoftnessSliderValue;
     int forwardDecaySliderValue;
-
+    int topFillStrengthSliderValue;
+    int environmentBackgroundBrightnessSliderValue;
+    int bounceDepth3DSliderValue;
+    int rouletteThreshold3DSliderValue;
+    int secondaryDiffuseSamples3DSliderValue;
+    int transmissionSamples3DSliderValue;
+    int temporalFrames3DSliderValue;
+    int renderScale3DSliderValue;
     int oldWindowWidth;
     int oldWindowHeight;
 
     Uint32 statusExpireMs;
     SDL_Color statusColor;
     char statusLabel[64];
+    RayTracingRenderExportStatus exportBatchStatus;
+    MenuViewMode activeView;
+    MenuRendererControlsTab rendererControlsTab;
+    int activeSceneSource;
+    MenuSceneLibraryLane activeSceneLibraryLane;
 
     ManifestOption manifestOptions[SDL_MENU_MAX_MANIFEST_OPTIONS];
     size_t manifestOptionCount;
@@ -67,6 +108,27 @@ typedef struct {
     float manifestScroll;
     float manifestMaxScroll;
 
+    VolumeSourceOption volumeOptions[SDL_MENU_MAX_MANIFEST_OPTIONS];
+    size_t volumeOptionCount;
+    bool volumeDropdownOpen;
+    SDL_Rect volumePanelRect;
+    SDL_Rect volumeListRect;
+    SDL_Rect volumeScrollbarRect;
+    bool volumeScrollbarVisible;
+    bool volumeScrollbarDragging;
+    float volumeThumbHeight;
+    float volumeTrackHeight;
+    int volumeDragStartY;
+    float volumeScrollStart;
+    float volumeScroll;
+    float volumeMaxScroll;
+    bool volumeSummaryValid;
+    char volumeSummaryLine1[160];
+    char volumeSummaryLine2[160];
+    char volumeSummaryPath[PATH_MAX];
+    int volumeSummaryKind;
+    bool volumeSummaryEnabled;
+
     SDL_Rect sliderPanelRect;
     float sliderScroll;
     float sliderMaxScroll;
@@ -78,14 +140,20 @@ void menu_state_sync_from_anim(MenuRuntimeState* state);
 
 void menu_state_manifest_clamp_scroll(MenuRuntimeState* state);
 void menu_state_manifest_scroll_by(MenuRuntimeState* state, float delta);
+void menu_state_volume_clamp_scroll(MenuRuntimeState* state);
+void menu_state_volume_scroll_by(MenuRuntimeState* state, float delta);
 float menu_state_slider_clamp_scroll(float value, float maxScroll);
 
 void menu_state_refresh_manifest_options(MenuRuntimeState* state);
+void menu_state_refresh_volume_options(MenuRuntimeState* state);
 void menu_state_set_load_scene_enabled(MenuRuntimeState* state, bool enabled);
+void menu_state_set_volume_load_enabled(MenuRuntimeState* state, bool enabled);
 void menu_state_apply_special_slider_rules(MenuRuntimeState* state, int* target);
 void menu_state_reanchor_camera_after_resize(int previousWidth, int previousHeight);
 
 void menu_state_build_manifest_label(const char *path, char *out, size_t outSize);
+bool menu_state_manifest_option_visible(const MenuRuntimeState* state,
+                                        const ManifestOption* option);
 
 bool menu_state_reload_font(TTF_Font** font);
 

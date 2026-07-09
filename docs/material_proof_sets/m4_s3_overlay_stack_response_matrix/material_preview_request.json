@@ -1,0 +1,21 @@
+{
+  "schema": "ray_tracing_material_preview_request_v1",
+  "runtime_scene_path": "../../../tests/fixtures/disney_v2_visual_matrix/transparent_interior_stack/scene_runtime.json",
+  "object_id": "rear_blue_panel",
+  "width": 160,
+  "height": 160,
+  "columns": 4,
+  "background_color": 2697513,
+  "output_path": "preview.bmp",
+  "summary_path": "material_preview_summary.json",
+  "variants": [
+    { "label": "base_clean" },
+    { "label": "rust_overlay", "preview_overlay": { "kind": "rust", "opacity": 0.82, "scale": 1.15, "coverage": 0.62, "grain": 0.52, "contrast": 0.72, "surface_damage": 0.70, "color_depth": 0.82, "seed": 31 } },
+    { "label": "grime_overlay", "preview_overlay": { "kind": "grime", "opacity": 0.72, "scale": 1.05, "coverage": 0.58, "grain": 0.64, "contrast": 0.78, "surface_damage": 0.68, "flow": 0.42, "seed": 43 } },
+    { "label": "oil_overlay", "preview_overlay": { "kind": "oil", "opacity": 0.72, "scale": 1.05, "coverage": 0.54, "grain": 0.38, "contrast": 0.58, "surface_damage": 0.74, "flow": 0.66, "seed": 47 } },
+    { "label": "fog_overlay", "preview_overlay": { "kind": "fog", "opacity": 0.68, "scale": 1.25, "coverage": 0.56, "grain": 0.36, "contrast": 0.44, "surface_damage": 0.52, "color_depth": 0.70, "seed": 53 } },
+    { "label": "scratches_overlay", "preview_overlay": { "kind": "scratches", "opacity": 0.78, "scale": 1.35, "coverage": 0.48, "grain": 0.70, "contrast": 0.82, "surface_damage": 0.76, "flow": 0.20, "seed": 59 } },
+    { "label": "edge_wear_overlay", "preview_overlay": { "kind": "edge_wear", "opacity": 0.78, "scale": 1.10, "coverage": 0.52, "grain": 0.56, "contrast": 0.76, "surface_damage": 0.72, "color_depth": 0.68, "seed": 61 } },
+    { "label": "grime_oil_order_contract", "preview_overlay": { "kind": "oil", "opacity": 0.70, "scale": 0.92, "coverage": 0.60, "grain": 0.48, "contrast": 0.70, "surface_damage": 0.72, "flow": 0.82, "seed": 67 } }
+  ]
+}

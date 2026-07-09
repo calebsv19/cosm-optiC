@@ -1,0 +1,40 @@
+{
+  "schema_version": "ray_tracing_visual_matrix_v1",
+  "matrix_id": "primitive_glass_corridor",
+  "title": "Primitive Glass Corridor Integrator And Denoise Matrix",
+  "scene_path": "../../../../config/samples/ps4d_runtime_scene_visual_test.json",
+  "default_output_root": "../../../../build/agent_runs/ray_tracing/disney_v2_visual_matrix/primitive_glass_corridor",
+  "private_workspace_output_root": "../../../../../_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_visual_matrix/primitive_glass_corridor",
+  "default_review_root": "../../../../../_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_visual_matrix/primitive_glass_corridor/matrix_review",
+  "groups": [
+    {
+      "id": "integrator_layers",
+      "purpose": "Educational comparison of current native 3D integrator layers on the same scene and camera.",
+      "requests": [
+        "request_direct_light.json",
+        "request_diffuse_bounce.json",
+        "request_material.json",
+        "request_emission_transparency.json",
+        "request_disney.json",
+        "request_disney_v2.json"
+      ]
+    },
+    {
+      "id": "disney_v2_denoise_ablation",
+      "purpose": "Apples-to-apples D2.18 temporal denoise comparison with temporal_frames=12 in both renders.",
+      "requests": [
+        "request_disney_v2_denoise_off_12.json",
+        "request_disney_v2_denoise_on_12.json"
+      ]
+    }
+  ],
+  "comparisons": [
+    {
+      "id": "disney_v2_denoise_off_vs_on_12",
+      "group": "disney_v2_denoise_ablation",
+      "before": "request_disney_v2_denoise_off_12.json",
+      "after": "request_disney_v2_denoise_on_12.json",
+      "purpose": "Verify the same 12-frame Disney v2 render only changes through the edge-safe denoise final resolve."
+    }
+  ]
+}

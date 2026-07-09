@@ -1,0 +1,339 @@
+{
+  "schema": "ray_tracing_material_proof_summary_v1",
+  "proof_id": "m4_s3_overlay_stack_response_matrix",
+  "phase": "M4-S3",
+  "route": {
+    "primary": "headless_material_preview",
+    "secondary": "runtime_lighting_materials_payload_tests",
+    "secondary_status": "source_contract_readback"
+  },
+  "status": "generated",
+  "artifacts": {
+    "request_path": "request.json",
+    "preview_request_path": "material_preview_request.json",
+    "preview_summary_path": "material_preview_summary.json",
+    "summary_path": "summary.json",
+    "index_path": "index.md",
+    "image_path": "preview.bmp",
+    "image_status": "generated"
+  },
+  "source": {
+    "runtime_scene_path": "../../../tests/fixtures/disney_v2_visual_matrix/transparent_interior_stack/scene_runtime.json",
+    "object_id": "rear_blue_panel",
+    "base_color": [
+      0.227451,
+      0.631373,
+      0.964706
+    ],
+    "base_roughness": 0.55,
+    "base_reflectivity": 0.08,
+    "source_contract_tests": [
+      "test_runtime_material_texture_stack_grime_and_oil_overlay_responses",
+      "test_runtime_material_texture_stack_grime_oil_order_changes_result",
+      "test_runtime_material_texture_stack_overlays_do_not_reopen_transparency",
+      "test_runtime_material_payload_3d_rust_texture_is_hit_anchored",
+      "test_runtime_material_payload_3d_fog_texture_roughens_transparency"
+    ]
+  },
+  "rows": [
+    {
+      "row_id": "base_clean",
+      "label": "clean base panel",
+      "material_family": "overlay_stack",
+      "base_color": [
+        0.227451,
+        0.631373,
+        0.964706
+      ],
+      "display_alpha": 1.0,
+      "physical_opacity": "not_exposed_by_preview_route",
+      "transmission_weight": 0.0,
+      "roughness": 0.55,
+      "reflectivity_floor": 0.08,
+      "specular_weight": "preset_default_not_exposed_by_preview_summary",
+      "ior": "not_exposed_by_preview_route",
+      "derived_dielectric_f0": "not_exposed_by_preview_route",
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": "deferred_unpromoted",
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [],
+      "preview_interpretation": "baseline row for visual overlay comparison",
+      "bsdf_interpretation": "base response before procedural overlay stack",
+      "evaluated_response": {
+        "color": "baseline",
+        "roughness": "baseline",
+        "reflectivity": "baseline",
+        "specular_weight": "baseline",
+        "transparency": "opaque"
+      },
+      "deferred_status": {
+        "authored_bitmap_channels": "deferred_to_M6"
+      }
+    },
+    {
+      "row_id": "rust_overlay",
+      "label": "rust overlay",
+      "material_family": "overlay_stack",
+      "base_color": [
+        0.227451,
+        0.631373,
+        0.964706
+      ],
+      "display_alpha": 1.0,
+      "physical_opacity": "not_exposed_by_preview_route",
+      "transmission_weight": 0.0,
+      "roughness": "source_backed_increases",
+      "reflectivity_floor": "source_backed_decreases",
+      "specular_weight": "source_backed_decreases",
+      "ior": "not_exposed_by_preview_route",
+      "derived_dielectric_f0": "not_exposed_by_preview_route",
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": "deferred_unpromoted",
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [],
+      "preview_interpretation": "visible rust overlay mask and warm damage tint",
+      "bsdf_interpretation": "rust roughens, reduces reflectivity/specular, and shifts color toward rust",
+      "evaluated_response": {
+        "color": "warm/red shift",
+        "roughness": "increase",
+        "reflectivity": "decrease",
+        "specular_weight": "decrease",
+        "transparency": "does_not_reopen"
+      },
+      "deferred_status": {
+        "authored_bitmap_channels": "deferred_to_M6"
+      }
+    },
+    {
+      "row_id": "grime_overlay",
+      "label": "grime overlay",
+      "material_family": "overlay_stack",
+      "base_color": [
+        0.227451,
+        0.631373,
+        0.964706
+      ],
+      "display_alpha": 1.0,
+      "physical_opacity": "not_exposed_by_preview_route",
+      "transmission_weight": 0.0,
+      "roughness": "source_backed_increases",
+      "reflectivity_floor": "source_backed_decreases",
+      "specular_weight": "source_backed_decreases",
+      "ior": "not_exposed_by_preview_route",
+      "derived_dielectric_f0": "not_exposed_by_preview_route",
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": "deferred_unpromoted",
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [],
+      "preview_interpretation": "visible grime darkening and damage mask",
+      "bsdf_interpretation": "grime darkens, roughens, reduces reflectivity, and reduces specular weight",
+      "evaluated_response": {
+        "color": "darken",
+        "roughness": "increase",
+        "reflectivity": "decrease",
+        "specular_weight": "decrease",
+        "transparency": "preserve_or_reduce_only"
+      },
+      "deferred_status": {
+        "authored_bitmap_channels": "deferred_to_M6"
+      }
+    },
+    {
+      "row_id": "oil_overlay",
+      "label": "oil overlay",
+      "material_family": "overlay_stack",
+      "base_color": [
+        0.227451,
+        0.631373,
+        0.964706
+      ],
+      "display_alpha": 1.0,
+      "physical_opacity": "not_exposed_by_preview_route",
+      "transmission_weight": 0.0,
+      "roughness": "source_backed_decreases",
+      "reflectivity_floor": "source_backed_increases",
+      "specular_weight": "source_backed_increases",
+      "ior": "not_exposed_by_preview_route",
+      "derived_dielectric_f0": "not_exposed_by_preview_route",
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": "deferred_unpromoted",
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [],
+      "preview_interpretation": "visible oil film/smear mask",
+      "bsdf_interpretation": "oil lowers roughness, raises reflectivity/specular, and does not make opaque blockers transparent",
+      "evaluated_response": {
+        "color": "dark glossy film",
+        "roughness": "decrease",
+        "reflectivity": "increase",
+        "specular_weight": "increase",
+        "transparency": "opaque_base_preserved"
+      },
+      "deferred_status": {
+        "authored_bitmap_channels": "deferred_to_M6"
+      }
+    },
+    {
+      "row_id": "fog_overlay",
+      "label": "fog overlay",
+      "material_family": "overlay_stack",
+      "base_color": [
+        0.227451,
+        0.631373,
+        0.964706
+      ],
+      "display_alpha": 1.0,
+      "physical_opacity": "not_exposed_by_preview_route",
+      "transmission_weight": 0.0,
+      "roughness": "source_backed_preserved_or_increases",
+      "reflectivity_floor": "source_backed_decreases",
+      "specular_weight": "source_backed_decreases",
+      "ior": "not_exposed_by_preview_route",
+      "derived_dielectric_f0": "not_exposed_by_preview_route",
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": "deferred_unpromoted",
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [],
+      "preview_interpretation": "visible fog veil/cool lightening overlay",
+      "bsdf_interpretation": "fog roughens or preserves roughness and reduces transparency only without reopening it",
+      "evaluated_response": {
+        "color": "cool/lighten",
+        "roughness": "preserve_or_increase",
+        "reflectivity": "decrease",
+        "specular_weight": "decrease",
+        "transparency": "reduce_only_on_transmissive_base"
+      },
+      "deferred_status": {
+        "authored_bitmap_channels": "deferred_to_M6"
+      }
+    },
+    {
+      "row_id": "scratches_overlay",
+      "label": "scratches overlay",
+      "material_family": "overlay_stack",
+      "base_color": [
+        0.227451,
+        0.631373,
+        0.964706
+      ],
+      "display_alpha": 1.0,
+      "physical_opacity": "not_exposed_by_preview_route",
+      "transmission_weight": 0.0,
+      "roughness": "preview_visual_only",
+      "reflectivity_floor": "preview_visual_only",
+      "specular_weight": "preview_visual_only",
+      "ior": "not_exposed_by_preview_route",
+      "derived_dielectric_f0": "not_exposed_by_preview_route",
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": "deferred_unpromoted",
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [],
+      "preview_interpretation": "visible scratch procedural mask through current preview overlay route",
+      "bsdf_interpretation": "current package records visual route; numeric response remains route-limited",
+      "evaluated_response": {
+        "color": "visible procedural damage",
+        "roughness": "not_exposed_by_preview_summary",
+        "reflectivity": "not_exposed_by_preview_summary",
+        "specular_weight": "not_exposed_by_preview_summary",
+        "transparency": "not_reopened"
+      },
+      "deferred_status": {
+        "authored_bitmap_channels": "deferred_to_M6"
+      }
+    },
+    {
+      "row_id": "edge_wear_overlay",
+      "label": "edge wear overlay",
+      "material_family": "overlay_stack",
+      "base_color": [
+        0.227451,
+        0.631373,
+        0.964706
+      ],
+      "display_alpha": 1.0,
+      "physical_opacity": "not_exposed_by_preview_route",
+      "transmission_weight": 0.0,
+      "roughness": "preview_visual_only",
+      "reflectivity_floor": "preview_visual_only",
+      "specular_weight": "preview_visual_only",
+      "ior": "not_exposed_by_preview_route",
+      "derived_dielectric_f0": "not_exposed_by_preview_route",
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": "deferred_unpromoted",
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [],
+      "preview_interpretation": "visible edge-wear procedural mask through current preview overlay route",
+      "bsdf_interpretation": "current package records visual route; numeric response remains route-limited",
+      "evaluated_response": {
+        "color": "visible procedural wear",
+        "roughness": "not_exposed_by_preview_summary",
+        "reflectivity": "not_exposed_by_preview_summary",
+        "specular_weight": "not_exposed_by_preview_summary",
+        "transparency": "not_reopened"
+      },
+      "deferred_status": {
+        "authored_bitmap_channels": "deferred_to_M6"
+      }
+    },
+    {
+      "row_id": "grime_oil_order_contract",
+      "label": "grime/oil order contract",
+      "material_family": "overlay_stack",
+      "base_color": "source_backed_wood_test",
+      "display_alpha": 1.0,
+      "physical_opacity": "not_exposed_by_preview_route",
+      "transmission_weight": 0.0,
+      "roughness": "source_backed_order_sensitive",
+      "reflectivity_floor": "source_backed_order_sensitive",
+      "specular_weight": "source_backed_order_sensitive",
+      "ior": "not_exposed_by_preview_route",
+      "derived_dielectric_f0": "not_exposed_by_preview_route",
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": "deferred_unpromoted",
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [],
+      "preview_interpretation": "single-overlay preview proxy only; true order pair is source-backed",
+      "bsdf_interpretation": "focused test proves grime_then_oil versus oil_then_grime changes evaluated color, roughness, or specular weight",
+      "evaluated_response": {
+        "order_a": "grime_then_oil",
+        "order_b": "oil_then_grime",
+        "result": "order_changes_evaluated_response"
+      },
+      "deferred_status": {
+        "visual_order_pair": "not_exposed_by_single_overlay_preview_route",
+        "authored_bitmap_channels": "deferred_to_M6"
+      }
+    }
+  ],
+  "readback_notes": [
+    "This S3 package uses headless material preview for one-overlay visual review and focused payload tests for numeric overlay response and order sensitivity.",
+    "The preview route exposes preview_overlay rows but does not expose full multi-layer stack order rendering in one variant.",
+    "Grime darkens/roughens/reduces reflectivity/specular; oil lowers roughness and raises reflectivity/specular.",
+    "The source-backed grime/oil order test proves overlay order changes evaluated color, roughness, or specular weight.",
+    "Rust and fog legacy/procedural texture tests cover rust response and fog roughness/transparency behavior.",
+    "Authored bitmap channel expansion remains deferred to M6; authored texture alpha remains a sample mask."
+  ]
+}

@@ -377,7 +377,11 @@ static double PathTracePixel(const IntegratorContext* ctx,
     int minDepth = 2;
     double throughput = 1.0;
     double radiance = 0.0;
-    double envLight = animSettings.environmentBrightness > 0.0 ? animSettings.environmentBrightness : 0.0;
+    double envLight = (animation_config_environment_light_mode_clamp(
+                           animSettings.environmentLightMode) == ENVIRONMENT_LIGHT_MODE_AMBIENT &&
+                       animSettings.environmentBrightness > 0.0)
+                          ? fmin(animSettings.environmentBrightness, 255.0) / 255.0
+                          : 0.0;
 
     double jitterX = FastRNGNextDouble(rng) - 0.5;
     double jitterY = FastRNGNextDouble(rng) - 0.5;
@@ -527,14 +531,14 @@ void CameraPathIntegratorRenderDisney(IntegratorContext* ctx, const LightSource*
     bool usingBuffer = (!usingTiles && ctx->energyBuffer);
     if (!usingTiles && !usingBuffer) return;
 
-    ts_start_timer("CameraPath Clear");
+    ts_session_start_timer(timer_hud_session(), "CameraPath Clear");
     ClearEnergyBuffer(ctx);
-    ts_stop_timer("CameraPath Clear");
+    ts_session_stop_timer(timer_hud_session(), "CameraPath Clear");
 
     int spp = (animSettings.pathSamplesPerPixel > 0) ? animSettings.pathSamplesPerPixel : 1;
     if (spp < 4) spp = 4; // safety baseline to reduce structured artifacts
 
-    ts_start_timer("CameraPath Trace");
+    ts_session_start_timer(timer_hud_session(), "CameraPath Trace");
     for (int y = 0; y < ctx->height; y++) {
         for (int x = 0; x < ctx->width; x++) {
             double pixelEnergy = 0.0;
@@ -547,7 +551,7 @@ void CameraPathIntegratorRenderDisney(IntegratorContext* ctx, const LightSource*
             AccumulateEnergyAdd(ctx, x, y, (float)pixelEnergy);
         }
     }
-    ts_stop_timer("CameraPath Trace");
+    ts_session_stop_timer(timer_hud_session(), "CameraPath Trace");
 
     // Auto exposure to counter very dim outputs
     if (usingTiles) {
@@ -557,7 +561,7 @@ void CameraPathIntegratorRenderDisney(IntegratorContext* ctx, const LightSource*
     }
 
     if (!ctx->pixelBuffer) return;
-    ts_start_timer("CameraPath Tonemap");
+    ts_session_start_timer(timer_hud_session(), "CameraPath Tonemap");
     if (usingTiles) {
         TonemapTiles(ctx);
     } else if (ctx->energyBuffer) {
@@ -570,5 +574,5 @@ void CameraPathIntegratorRenderDisney(IntegratorContext* ctx, const LightSource*
         size_t total = (size_t)ctx->width * (size_t)ctx->height;
         memset(ctx->pixelBuffer, 0, total * sizeof(Uint8));
     }
-    ts_stop_timer("CameraPath Tonemap");
+    ts_session_stop_timer(timer_hud_session(), "CameraPath Tonemap");
 }

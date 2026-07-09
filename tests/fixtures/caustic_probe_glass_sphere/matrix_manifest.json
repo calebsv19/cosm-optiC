@@ -1,0 +1,50 @@
+{
+  "schema_version": "ray_tracing_visual_matrix_v1",
+  "matrix_id": "caustic_probe_glass_sphere",
+  "title": "Caustic Probe Glass Sphere L4 Matrix",
+  "scene_path": "scene_runtime.json",
+  "default_output_root": "../../../build/agent_runs/ray_tracing/caustic_probe_glass_sphere",
+  "private_workspace_output_root": "../../../../_private_workspace_artifacts/agent_runs/ray_tracing/caustic_probe_glass_sphere",
+  "default_review_root": "../../../../_private_workspace_artifacts/agent_runs/ray_tracing/caustic_probe_glass_sphere/matrix_review",
+  "caustic_probe": {
+    "expected_current_state": "no_caustic_solver",
+    "receiver_roi_normalized": {
+      "x0": 0.30,
+      "y0": 0.50,
+      "x1": 0.70,
+      "y1": 0.92
+    },
+    "hotspot_relative_luma": 0.82,
+    "future_acceptance_notes": [
+      "A future caustic sidecar should raise receiver concentration and max/mean while keeping hotspot area bounded.",
+      "Current direct-light and Disney v2 runs are baseline measurements, not caustic-pass assertions."
+    ]
+  },
+  "groups": [
+    {
+      "id": "current_baselines",
+      "purpose": "Compare current native 3D routes on the same overhead-light glass-sphere receiver scene before caustic implementation.",
+      "requests": [
+        "request_direct_light.json",
+        "request_emission_transparency.json",
+        "request_disney_v2.json"
+      ]
+    }
+  ],
+  "comparisons": [
+    {
+      "id": "direct_light_vs_emission_transparency",
+      "group": "current_baselines",
+      "before": "request_direct_light.json",
+      "after": "request_emission_transparency.json",
+      "purpose": "Measure the transparent route delta without claiming caustic focusing."
+    },
+    {
+      "id": "emission_transparency_vs_disney_v2",
+      "group": "current_baselines",
+      "before": "request_emission_transparency.json",
+      "after": "request_disney_v2.json",
+      "purpose": "Measure Disney v2 baseline behavior on the same receiver before sidecar caustics exist."
+    }
+  ]
+}

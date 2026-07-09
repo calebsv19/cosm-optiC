@@ -1,0 +1,6 @@
+#ifndef TEST_RUNTIME_CAUSTIC_SPHERE_LENS_3D_H
+#define TEST_RUNTIME_CAUSTIC_SPHERE_LENS_3D_H
+
+int run_test_runtime_caustic_sphere_lens_3d_tests(void);
+
+#endif

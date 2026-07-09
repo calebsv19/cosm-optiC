@@ -1,5 +1,7 @@
 # Ignore build artifacts
 build/
+build_clang_obj/
+build_fisics_obj/
 build_release/
 Frontend/
 Backend/
@@ -20,12 +22,18 @@ output.mp4
 data/runtime/
 data/snapshots/
 tmp/
+captures/
+visual_artifacts/
+_private_workspace_artifacts/
 /dist/
+tools/packaging/macos/local_app_icon/
 
 # Optional: temporary files and OS-specific junk
 *.log
 *.tmp
 *.exe
+__pycache__/
+*.py[cod]
 .DS_Store
 **/.DS_Store
 Thumbs.db

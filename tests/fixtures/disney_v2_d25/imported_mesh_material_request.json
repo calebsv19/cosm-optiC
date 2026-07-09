@@ -1,0 +1,47 @@
+{
+  "schema_version": "ray_tracing_agent_render_request_v1",
+  "run_id": "disney_v2_d25_imported_mesh_material",
+  "scene": {
+    "runtime_scene_path": "../mesh_asset_runtime_spheres/scene_runtime_pressure.json"
+  },
+  "volume": {
+    "enabled": false
+  },
+  "render": {
+    "start_frame": 0,
+    "frame_count": 1,
+    "width": 192,
+    "height": 108,
+    "normalized_t": 0.0,
+    "temporal_frames": 1,
+    "integrator_3d": "disney_v2"
+  },
+  "inspection": {
+    "camera_position": {
+      "x": 0.0,
+      "y": -6.2,
+      "z": 2.2
+    },
+    "camera_look_at": {
+      "x": 0.0,
+      "y": 0.35,
+      "z": 0.9
+    },
+    "camera_zoom": 1.0,
+    "environment_light_mode": "ambient",
+    "ambient_strength": 0.32,
+    "top_fill_strength": 1.5,
+    "light_intensity": 4.2,
+    "light_radius": 0.14,
+    "secondary_diffuse_samples_3d": 8,
+    "transmission_samples_3d": 4
+  },
+  "output": {
+    "root": "../../../build/agent_runs/ray_tracing/disney_v2_d25/imported_mesh_material",
+    "overwrite": true
+  },
+  "progress": {
+    "summary_path": "../../../build/agent_runs/ray_tracing/disney_v2_d25/imported_mesh_material/render_summary.json",
+    "progress_path": "../../../build/agent_runs/ray_tracing/disney_v2_d25/imported_mesh_material/render_progress.json"
+  }
+}

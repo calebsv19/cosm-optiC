@@ -1,0 +1,343 @@
+{
+  "schema_family": "codework_scene",
+  "schema_variant": "scene_runtime_v1",
+  "schema_version": 1,
+  "scene_id": "scene_mesh_asset_sphere_pressure_mrt6",
+  "source_scene_id": "scene_mesh_asset_sphere_pressure_mrt6",
+  "compile_meta": {
+    "compiler_version": "mrt6_fixture",
+    "compiled_at_ns": 0,
+    "normalization": "manual_mrt6_fixture"
+  },
+  "space_mode_default": "3d",
+  "unit_system": "meters",
+  "world_scale": 1.0,
+  "objects": [
+    {
+      "object_id": "obj_floor",
+      "object_type": "plane_primitive",
+      "dimensional_mode": "plane_locked",
+      "locked_plane": "xy",
+      "transform": {
+        "position": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "rotation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "scale": {
+          "x": 1.0,
+          "y": 1.0,
+          "z": 1.0
+        }
+      },
+      "geometry_ref": {
+        "kind": "shape_asset",
+        "id": "shape_obj_floor"
+      },
+      "material_ref": {
+        "id": "mat_floor"
+      },
+      "flags": {
+        "visible": true,
+        "locked": false,
+        "selectable": true
+      },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 8.0,
+        "height": 6.0,
+        "frame": {
+          "origin": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          },
+          "axis_u": {
+            "x": 1.0,
+            "y": 0.0,
+            "z": 0.0
+          },
+          "axis_v": {
+            "x": 0.0,
+            "y": 1.0,
+            "z": 0.0
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          }
+        },
+        "lock_to_construction_plane": false,
+        "lock_to_bounds": false
+      }
+    },
+    {
+      "object_id": "obj_back_wall",
+      "object_type": "plane_primitive",
+      "dimensional_mode": "plane_locked",
+      "locked_plane": "xy",
+      "transform": {
+        "position": {
+          "x": 0.0,
+          "y": 3.0,
+          "z": 2.0
+        },
+        "rotation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "scale": {
+          "x": 1.0,
+          "y": 1.0,
+          "z": 1.0
+        }
+      },
+      "geometry_ref": {
+        "kind": "shape_asset",
+        "id": "shape_obj_back_wall"
+      },
+      "material_ref": {
+        "id": "mat_wall"
+      },
+      "flags": {
+        "visible": true,
+        "locked": false,
+        "selectable": true
+      },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 8.0,
+        "height": 4.0,
+        "frame": {
+          "origin": {
+            "x": 0.0,
+            "y": 3.0,
+            "z": 2.0
+          },
+          "axis_u": {
+            "x": 1.0,
+            "y": 0.0,
+            "z": 0.0
+          },
+          "axis_v": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "normal": {
+            "x": 0.0,
+            "y": -1.0,
+            "z": 0.0
+          }
+        },
+        "lock_to_construction_plane": false,
+        "lock_to_bounds": false
+      }
+    },
+    {
+      "object_id": "obj_left_wall",
+      "object_type": "plane_primitive",
+      "dimensional_mode": "plane_locked",
+      "locked_plane": "xy",
+      "transform": {
+        "position": {
+          "x": -4.0,
+          "y": 0.0,
+          "z": 2.0
+        },
+        "rotation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "scale": {
+          "x": 1.0,
+          "y": 1.0,
+          "z": 1.0
+        }
+      },
+      "geometry_ref": {
+        "kind": "shape_asset",
+        "id": "shape_obj_left_wall"
+      },
+      "material_ref": {
+        "id": "mat_wall"
+      },
+      "flags": {
+        "visible": true,
+        "locked": false,
+        "selectable": true
+      },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 6.0,
+        "height": 4.0,
+        "frame": {
+          "origin": {
+            "x": -4.0,
+            "y": 0.0,
+            "z": 2.0
+          },
+          "axis_u": {
+            "x": 0.0,
+            "y": 1.0,
+            "z": 0.0
+          },
+          "axis_v": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          },
+          "normal": {
+            "x": 1.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        "lock_to_construction_plane": false,
+        "lock_to_bounds": false
+      }
+    },
+    {
+      "object_id": "obj_sphere_pressure",
+      "object_type": "mesh_asset_instance",
+      "dimensional_mode": "full_3d",
+      "transform": {
+        "position": {
+          "x": 0.0,
+          "y": 0.3,
+          "z": 0.75
+        },
+        "rotation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "scale": {
+          "x": 0.65,
+          "y": 0.65,
+          "z": 0.65
+        }
+      },
+      "geometry_ref": {
+        "kind": "mesh_asset",
+        "id": "asset_sphere_64x32",
+        "variant": "runtime_default"
+      },
+      "material_ref": {
+        "id": "mat_sphere_pressure"
+      },
+      "flags": {
+        "visible": true,
+        "locked": false,
+        "selectable": true
+      }
+    }
+  ],
+  "hierarchy": [],
+  "materials": [
+    {
+      "material_id": "mat_floor",
+      "kind": "lambert",
+      "albedo": [
+        0.45,
+        0.45,
+        0.42
+      ]
+    },
+    {
+      "material_id": "mat_wall",
+      "kind": "lambert",
+      "albedo": [
+        0.58,
+        0.56,
+        0.52
+      ]
+    },
+    {
+      "material_id": "mat_sphere_pressure",
+      "kind": "lambert",
+      "albedo": [
+        0.84,
+        0.66,
+        0.29
+      ]
+    }
+  ],
+  "lights": [
+    {
+      "light_id": "light_key",
+      "kind": "point",
+      "position": {
+        "x": -2.5,
+        "y": -2.8,
+        "z": 4.2
+      },
+      "intensity": 2.8,
+      "radius": 0.12
+    }
+  ],
+  "cameras": [
+    {
+      "camera_id": "cam_main",
+      "kind": "perspective",
+      "position": {
+        "x": 0.0,
+        "y": -6.2,
+        "z": 2.2
+      },
+      "target": {
+        "x": 0.0,
+        "y": 0.35,
+        "z": 0.85
+      },
+      "yaw": 0.0,
+      "look_pitch": -0.08
+    }
+  ],
+  "constraints": [],
+  "extensions": {
+    "ray_tracing": {
+      "authoring": {
+        "camera_focus_target": {
+          "x": 0.0,
+          "y": 0.35,
+          "z": 0.9
+        },
+        "object_materials": [
+          {
+            "object_id": "obj_floor",
+            "material_id": 0,
+            "object_color": 7304303,
+            "roughness": 0.8
+          },
+          {
+            "object_id": "obj_back_wall",
+            "material_id": 0,
+            "object_color": 9078657,
+            "roughness": 0.75
+          },
+          {
+            "object_id": "obj_left_wall",
+            "material_id": 0,
+            "object_color": 7830403,
+            "roughness": 0.75
+          },
+          {
+            "object_id": "obj_sphere_pressure",
+            "material_id": 0,
+            "object_color": 14002250,
+            "roughness": 0.28
+          }
+        ]
+      }
+    }
+  }
+}

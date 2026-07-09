@@ -1,0 +1,209 @@
+{
+  "schema": "ray_tracing_material_proof_summary_v1",
+  "proof_id": "m4_s4_imported_mesh_material_regression",
+  "phase": "M4-S4",
+  "route": {
+    "primary": "selected_native_render",
+    "secondary": "runtime_mesh_asset_headless_audit",
+    "secondary_status": "source_contract_readback"
+  },
+  "status": "generated",
+  "artifacts": {
+    "request_path": "request.json",
+    "render_request_path": "render_request.json",
+    "render_summary_path": "render/render_summary.json",
+    "stdout_summary_path": "render/stdout_summary.json",
+    "summary_path": "summary.json",
+    "index_path": "index.md",
+    "image_path": "render/frames/frame_0000.bmp",
+    "image_status": "generated"
+  },
+  "source": {
+    "runtime_scene_path": "../../../tests/fixtures/mesh_asset_runtime_spheres/scene_runtime.json",
+    "render_integrator": "direct_light",
+    "source_contract_tests": [
+      "test_runtime_mesh_asset_headless_audit",
+      "test_imported_tetrahedron_runtime_mesh_asset_audit"
+    ],
+    "source_contract_fixture": "../../../tests/fixtures/mesh_asset_runtime_imported_tetrahedron/scene_runtime.json"
+  },
+  "rows": [
+    {
+      "row_id": "runtime_mesh_low_red_matte",
+      "label": "low-resolution runtime mesh red matte",
+      "material_family": "imported_runtime_mesh",
+      "base_color": [
+        0.77,
+        0.35,
+        0.29
+      ],
+      "display_alpha": 1.0,
+      "physical_opacity": "not_promoted_object_wide_mesh_material",
+      "transmission_weight": 0.0,
+      "roughness": 0.45,
+      "reflectivity_floor": "default_scene_object_compatibility",
+      "specular_weight": "direct_light_route_not_exposed",
+      "ior": "not_exposed_by_direct_light_route",
+      "derived_dielectric_f0": "not_exposed_by_direct_light_route",
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": 0.0,
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_direct_light_route"
+      },
+      "compatibility_bridges": [
+        "object_materials_extension_to_scene_object_material_scalars"
+      ],
+      "preview_interpretation": "not_applicable_selected_native_render",
+      "bsdf_interpretation": "object-wide authored material scalar is applied before imported/runtime mesh triangles are appended",
+      "render_interpretation": "generated native render shows audited mesh object; object audit reports scene_object_index 3, material_id 0, triangle_count 48, and primary_hit_pixels 236",
+      "deferred_status": {
+        "mesh_region_material_authoring": "deferred_until_stable_mesh_region_metadata"
+      }
+    },
+    {
+      "row_id": "runtime_mesh_medium_blue_matte",
+      "label": "medium-resolution runtime mesh blue matte",
+      "material_family": "imported_runtime_mesh",
+      "base_color": [
+        0.31,
+        0.55,
+        0.79
+      ],
+      "display_alpha": 1.0,
+      "physical_opacity": "not_promoted_object_wide_mesh_material",
+      "transmission_weight": 0.0,
+      "roughness": 0.38,
+      "reflectivity_floor": "default_scene_object_compatibility",
+      "specular_weight": "direct_light_route_not_exposed",
+      "ior": "not_exposed_by_direct_light_route",
+      "derived_dielectric_f0": "not_exposed_by_direct_light_route",
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": 0.0,
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_direct_light_route"
+      },
+      "compatibility_bridges": [
+        "object_materials_extension_to_scene_object_material_scalars"
+      ],
+      "preview_interpretation": "not_applicable_selected_native_render",
+      "bsdf_interpretation": "object-wide authored material scalar is applied before imported/runtime mesh triangles are appended",
+      "render_interpretation": "generated native render shows audited mesh object; object audit reports scene_object_index 4, material_id 0, triangle_count 224, and primary_hit_pixels 248",
+      "deferred_status": {
+        "mesh_region_material_authoring": "deferred_until_stable_mesh_region_metadata"
+      }
+    },
+    {
+      "row_id": "runtime_mesh_high_gold_matte",
+      "label": "high-resolution runtime mesh gold matte",
+      "material_family": "imported_runtime_mesh",
+      "base_color": [
+        0.84,
+        0.66,
+        0.29
+      ],
+      "display_alpha": 1.0,
+      "physical_opacity": "not_promoted_object_wide_mesh_material",
+      "transmission_weight": 0.0,
+      "roughness": 0.32,
+      "reflectivity_floor": "default_scene_object_compatibility",
+      "specular_weight": "direct_light_route_not_exposed",
+      "ior": "not_exposed_by_direct_light_route",
+      "derived_dielectric_f0": "not_exposed_by_direct_light_route",
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": 0.0,
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_direct_light_route"
+      },
+      "compatibility_bridges": [
+        "object_materials_extension_to_scene_object_material_scalars"
+      ],
+      "preview_interpretation": "not_applicable_selected_native_render",
+      "bsdf_interpretation": "object-wide authored material scalar is applied before imported/runtime mesh triangles are appended",
+      "render_interpretation": "generated native render shows audited mesh object; object audit reports scene_object_index 5, material_id 0, triangle_count 960, and primary_hit_pixels 268",
+      "deferred_status": {
+        "mesh_region_material_authoring": "deferred_until_stable_mesh_region_metadata"
+      }
+    },
+    {
+      "row_id": "imported_tetrahedron_source_contract",
+      "label": "imported tetrahedron source contract",
+      "material_family": "imported_runtime_mesh",
+      "base_color": [
+        0.8,
+        0.7,
+        0.55
+      ],
+      "display_alpha": 1.0,
+      "physical_opacity": "not_promoted_object_wide_mesh_material",
+      "transmission_weight": 0.0,
+      "roughness": 0.6,
+      "reflectivity_floor": "default_scene_object_compatibility",
+      "specular_weight": "source_route_not_exposed",
+      "ior": "source_route_not_exposed",
+      "derived_dielectric_f0": "source_route_not_exposed",
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": 0.0,
+      "emission": {
+        "strength": 0.0,
+        "color": "source_route_not_exposed"
+      },
+      "compatibility_bridges": [
+        "imported_runtime_mesh_asset_to_scene_object_material_ref"
+      ],
+      "preview_interpretation": "not_applicable_selected_native_render",
+      "bsdf_interpretation": "source audit proves imported mesh object retains object-wide material owner; per-surface material authoring remains deferred",
+      "render_interpretation": "source contract readback passed; imported tetrahedron fixture loads asset_imported_tetrahedron_01 as obj_imported_tetrahedron with triangle_count 4 and surface_group imported_surface",
+      "deferred_status": {
+        "image_row": "source_backed_not_rendered_in_contact_image",
+        "mesh_region_material_authoring": "deferred_until_stable_mesh_region_metadata"
+      }
+    }
+  ],
+  "render_readback": {
+    "schema_version": "ray_tracing_headless_summary_v1",
+    "scene_applied": true,
+    "route_native_3d": true,
+    "integrator_3d": "direct_light",
+    "rendered_frames": true,
+    "frames_rendered": 1,
+    "frame_path": "render/frames/frame_0000.bmp",
+    "frame_format": "BMP 160x96x32",
+    "bvh_ready": true,
+    "bvh_triangle_count": 1238,
+    "bvh_trace_overflows": 0,
+    "render_nonzero_pixels": 15360,
+    "render_visible_pixels": 10266,
+    "object_audit": [
+      {
+        "object_id": "obj_sphere_low",
+        "scene_object_index": 3,
+        "material_id": 0,
+        "triangle_count": 48,
+        "primary_hit_pixels": 236
+      },
+      {
+        "object_id": "obj_sphere_medium",
+        "scene_object_index": 4,
+        "material_id": 0,
+        "triangle_count": 224,
+        "primary_hit_pixels": 248
+      },
+      {
+        "object_id": "obj_sphere_high",
+        "scene_object_index": 5,
+        "material_id": 0,
+        "triangle_count": 960,
+        "primary_hit_pixels": 268
+      }
+    ]
+  },
+  "readback_notes": [
+    "Native render route generated render/frames/frame_0000.bmp from the runtime mesh spheres fixture with direct_light integrator.",
+    "Object audit confirms all three mesh_asset_instance sphere objects are visible with nonzero primary hit pixels and expected triangle counts.",
+    "Focused runtime mesh asset headless audit confirms the imported tetrahedron fixture loads one asset, one instance, triangle_count 4, and surface_group imported_surface.",
+    "Object-wide material assignment is the proven scope. Per-region imported mesh material authoring remains deferred until stable mesh-region metadata exists."
+  ]
+}

@@ -28,6 +28,7 @@ void CleanupRayTracing(void);
 
 // ray_tracing2.h
 void SetLightPosition(double x, double y);
+bool ExportCurrentNative3DFrameBMP(const char* filename);
 
 typedef struct {
     IrradianceCache cache;

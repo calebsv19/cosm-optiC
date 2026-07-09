@@ -2,16 +2,33 @@
 #include "editor/scene_editor.h"
 #include "editor/bezier_editor.h"
 #include "editor/object_editor.h"   //  Required for object editing
+#include "editor/material_editor.h"
+#include "editor/object_editor_panels.h"
 #include "editor/camera_editor.h"   //  Required for camera adjustments
 #include "config/config_manager.h"  //  Required for loading/saving scene settings
 #include "scene/object_manager.h"
 #include "app/animation.h"
+#include "import/runtime_scene_bridge.h"
 #include "render/fluid/fluid_state.h"
+#include "render/ray_tracing_mode_backend.h"
 #include "camera/camera.h"
 #include "editor/editor_mode_router.h"
+#include "editor/scene_editor_chrome_actions.h"
+#include "editor/scene_editor_chrome_shell.h"
+#include "editor/scene_editor_control_surface.h"
+#include "editor/scene_editor_digest_overlay.h"
+#include "editor/scene_editor_input_router.h"
+#include "editor/scene_editor_session_runtime.h"
+#include "editor/scene_editor_surface_render.h"
+#include "editor/scene_editor_viewport_nav.h"
+#include "engine/Render/render_font.h"
 #include "engine/Render/render_pipeline.h"
+#include "render/font_runtime.h"
+#include "render/text_draw.h"
+#include "render/text_upload_policy.h"
 #include "render/vk_shared_device.h"
 #include "ui/text_zoom_shortcuts.h"
+#include "ui/shared_theme_font_adapter.h"
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
@@ -19,15 +36,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <stdint.h>
 
-// UI Button
-SDL_Rect applyButton = {1000, 700, 150, 50};
-SDL_Rect previewButton;
-SDL_Rect changeModeButton;
-SDL_Rect addButton;  // Small square
-SDL_Rect deleteButton;
-SDL_Rect toggleButton;
+static SceneEditorPaneHost g_scenePaneHost;
+static SceneEditorPaneLayout g_scenePaneLayout;
+static bool g_scenePaneLayoutValid = false;
+static bool g_sceneEditorPreviewOnBegin = false;
+
+#define SCENE_EDITOR_BEZIER_POINT_PICK_RADIUS_PX 18.0
+#define SCENE_EDITOR_BEZIER_HANDLE_PICK_RADIUS_PX 16.0
+#define SCENE_EDITOR_BEZIER_GIZMO_PICK_RADIUS_PX 18.0
 
 #if USE_VULKAN
 static VkRenderer g_scene_renderer_storage;
@@ -35,196 +52,220 @@ static VkRenderer g_scene_renderer_storage;
 
 bool sceneEditorExitFlag = false;  //  Used to signal Scene Editor should exit
 static void InitializeEditorMode(SceneEditor* editor);
+static void SceneEditorLayoutChrome(void);
+void SceneEditorSyncWindowSize(SceneEditor* editor);
+void SceneEditorRefreshPaneSplitterHover(SceneEditor* editor);
+bool SceneEditorHandlePaneSplitterEvent(SceneEditor* editor, SDL_Event* event);
+static void SceneEditorResumeAfterPreview(SceneEditor* editor);
 
-static bool FluidSceneLocksObjects(void) {
-    return AnimationUseFluidScene();
-}
+#define SCENE_EDITOR_DIGEST_OVERLAY_DEFAULT_YAW_DEG (-35.0)
+#define SCENE_EDITOR_DIGEST_OVERLAY_DEFAULT_PITCH_DEG (24.0)
+#define SCENE_EDITOR_DIGEST_OVERLAY_MIN_PITCH_DEG (-80.0)
+#define SCENE_EDITOR_DIGEST_OVERLAY_MAX_PITCH_DEG (80.0)
+#define SCENE_EDITOR_DIGEST_OVERLAY_MIN_ZOOM (0.03)
+#define SCENE_EDITOR_DIGEST_OVERLAY_MAX_ZOOM (4.0)
+#define SCENE_EDITOR_DIGEST_OVERLAY_FRAME_FIT_FACTOR (0.72)
 
-typedef enum SceneEditorInputTarget {
-    SCENE_EDITOR_INPUT_TARGET_NONE = 0,
-    SCENE_EDITOR_INPUT_TARGET_SYSTEM,
-    SCENE_EDITOR_INPUT_TARGET_CHROME,
-    SCENE_EDITOR_INPUT_TARGET_BEZIER_PANE,
-    SCENE_EDITOR_INPUT_TARGET_OBJECT_PANE,
-    SCENE_EDITOR_INPUT_TARGET_CAMERA_PANE
-} SceneEditorInputTarget;
-
-typedef enum SceneEditorInputActionClass {
-    SCENE_EDITOR_INPUT_ACTION_IGNORED = 0,
-    SCENE_EDITOR_INPUT_ACTION_IMMEDIATE,
-    SCENE_EDITOR_INPUT_ACTION_QUEUED
-} SceneEditorInputActionClass;
-
-typedef enum SceneEditorInputRoutePolicy {
-    SCENE_EDITOR_INPUT_ROUTE_POLICY_NONE = 0,
-    SCENE_EDITOR_INPUT_ROUTE_POLICY_GLOBAL,
-    SCENE_EDITOR_INPUT_ROUTE_POLICY_CHROME,
-    SCENE_EDITOR_INPUT_ROUTE_POLICY_ACTIVE_PANE
-} SceneEditorInputRoutePolicy;
-
-typedef struct SceneEditorInputRoutingResult {
-    SceneEditorInputTarget target;
-    bool consumed;
-    bool requested_target_invalidation;
-    bool requested_full_invalidation;
-    uint8_t pane_hit_region;
-    uint8_t invalidation_class;
-    uint32_t invalidation_reason_bits;
-} SceneEditorInputRoutingResult;
-
-typedef struct SceneEditorInputNormalized {
-    SceneEditorInputActionClass action_class;
-    SceneEditorInputRoutePolicy route_policy;
-    SceneEditorInputTarget target_hint;
-    const SDL_Event* event;
-} SceneEditorInputNormalized;
-
-typedef struct SceneEditorInputDiagFrame {
-    uint32_t raw_event_count;
-    uint32_t normalized_count;
-    uint32_t ignored_count;
-    uint32_t immediate_count;
-    uint32_t queued_count;
-    uint32_t routed_global_count;
-    uint32_t routed_chrome_count;
-    uint32_t routed_pane_count;
-    uint32_t pane_controls_count;
-    uint32_t pane_canvas_count;
-    uint32_t pane_drag_count;
-    uint32_t target_invalidation_count;
-    uint32_t full_invalidation_count;
-} SceneEditorInputDiagFrame;
-
-enum {
-    SCENE_EDITOR_INVALIDATE_REASON_UI = 1u << 0,
-    SCENE_EDITOR_INVALIDATE_REASON_PANE = 1u << 1,
-    SCENE_EDITOR_INVALIDATE_REASON_EXIT = 1u << 2,
-    SCENE_EDITOR_INVALIDATE_REASON_PANE_CONTROLS = 1u << 3,
-    SCENE_EDITOR_INVALIDATE_REASON_PANE_CANVAS = 1u << 4,
-    SCENE_EDITOR_INVALIDATE_REASON_PANE_DRAG = 1u << 5
+static SceneEditorDigestOverlayNavState g_viewport_nav_state = {
+    false,
+    0,
+    0,
+    SCENE_EDITOR_DIGEST_OVERLAY_DEFAULT_YAW_DEG,
+    SCENE_EDITOR_DIGEST_OVERLAY_DEFAULT_PITCH_DEG,
+    1.0
 };
+static int g_digest_hover_object_index = -1;
+static SceneEditorBezier3DGizmoState g_bezier3d_gizmo_state = {0};
+static SceneEditorCamera3DGizmoState g_camera3d_gizmo_state = {0};
 
-typedef enum SceneEditorPaneHitRegion {
-    SCENE_EDITOR_PANE_HIT_NONE = 0,
-    SCENE_EDITOR_PANE_HIT_CONTROLS,
-    SCENE_EDITOR_PANE_HIT_LIST_PANEL,
-    SCENE_EDITOR_PANE_HIT_CANVAS,
-    SCENE_EDITOR_PANE_HIT_DRAG
-} SceneEditorPaneHitRegion;
-
-typedef enum SceneEditorInvalidationClass {
-    SCENE_EDITOR_INVALIDATION_NONE = 0,
-    SCENE_EDITOR_INVALIDATION_TARGET_UI,
-    SCENE_EDITOR_INVALIDATION_TARGET_PANE,
-    SCENE_EDITOR_INVALIDATION_TARGET_INTERACTION,
-    SCENE_EDITOR_INVALIDATION_FULL_EXIT
-} SceneEditorInvalidationClass;
-
-typedef enum SceneEditorPaneCommandKind {
-    SCENE_EDITOR_PANE_COMMAND_NONE = 0,
-    SCENE_EDITOR_PANE_COMMAND_POINTER_DOWN,
-    SCENE_EDITOR_PANE_COMMAND_POINTER_UP,
-    SCENE_EDITOR_PANE_COMMAND_POINTER_DRAG,
-    SCENE_EDITOR_PANE_COMMAND_WHEEL,
-    SCENE_EDITOR_PANE_COMMAND_KEY
-} SceneEditorPaneCommandKind;
-
-typedef struct SceneEditorPaneCommand {
-    SceneEditorPaneCommandKind kind;
-    SceneEditorInputTarget target;
-    SceneEditorPaneHitRegion pane_hit_region;
-    SDL_Event* event;
-} SceneEditorPaneCommand;
-
-static void SceneEditorInputRoutingResult_Reset(SceneEditorInputRoutingResult* result) {
-    if (!result) return;
-    memset(result, 0, sizeof(*result));
-    result->target = SCENE_EDITOR_INPUT_TARGET_NONE;
-}
-
-static void SceneEditorInputNormalized_Reset(SceneEditorInputNormalized* normalized) {
-    if (!normalized) return;
-    memset(normalized, 0, sizeof(*normalized));
-    normalized->action_class = SCENE_EDITOR_INPUT_ACTION_IGNORED;
-    normalized->route_policy = SCENE_EDITOR_INPUT_ROUTE_POLICY_NONE;
-    normalized->target_hint = SCENE_EDITOR_INPUT_TARGET_NONE;
-    normalized->event = NULL;
-}
-
-static bool SceneEditorInputDiagEnabled(void) {
-    const char* value = getenv("RAY_TRACING_EDITOR_INPUT_DIAG");
-    if (!value || !value[0]) return false;
-    return strcmp(value, "1") == 0 ||
-           strcmp(value, "true") == 0 ||
-           strcmp(value, "TRUE") == 0 ||
-           strcmp(value, "yes") == 0 ||
-           strcmp(value, "on") == 0;
-}
-
-static bool SceneEditorIsTextZoomShortcutKey(SDL_Keycode key, SDL_Keymod mod) {
-    if ((mod & (KMOD_CTRL | KMOD_GUI)) == 0) {
+static bool SceneEditorResolveThemeShortcut(SDL_Keycode key,
+                                            SDL_Keymod mod,
+                                            bool* out_cycle_next) {
+    bool ctrl_or_cmd = ((mod & (KMOD_CTRL | KMOD_GUI)) != 0);
+    bool shift = ((mod & KMOD_SHIFT) != 0);
+    if (out_cycle_next) {
+        *out_cycle_next = false;
+    }
+    if (!ctrl_or_cmd) {
         return false;
     }
-    return key == SDLK_0 ||
-           key == SDLK_KP_0 ||
-           key == SDLK_EQUALS ||
-           key == SDLK_PLUS ||
-           key == SDLK_KP_PLUS ||
-           key == SDLK_MINUS ||
-           key == SDLK_UNDERSCORE ||
-           key == SDLK_KP_MINUS;
+    if (key == SDLK_t) {
+        if (out_cycle_next) {
+            *out_cycle_next = true;
+        }
+        return true;
+    }
+    if (key == SDLK_u || key == SDLK_y) {
+        if (out_cycle_next) {
+            *out_cycle_next = false;
+        }
+        return true;
+    }
+    (void)shift;
+    return false;
 }
 
-static void SceneEditorInputDiagMaybeEmit(const SDL_Event* event,
-                                          const SceneEditorInputDiagFrame* diag,
-                                          const SceneEditorInputRoutingResult* route) {
-    if (!event || !diag || !route) return;
-    if (!SceneEditorInputDiagEnabled()) return;
-    if (!(event->type == SDL_QUIT ||
-          event->type == SDL_KEYDOWN ||
-          event->type == SDL_MOUSEBUTTONDOWN ||
-          event->type == SDL_WINDOWEVENT)) {
+static bool SceneEditorEventMatchesEditorWindow(const SceneEditor* editor, const SDL_Event* event) {
+    Uint32 editor_window_id = 0;
+    Uint32 event_window_id = 0;
+    if (!editor || !editor->window || !event) return true;
+    editor_window_id = SDL_GetWindowID(editor->window);
+    if (editor_window_id == 0) return true;
+    switch (event->type) {
+        case SDL_KEYDOWN:
+        case SDL_KEYUP:
+            event_window_id = event->key.windowID;
+            break;
+        case SDL_MOUSEMOTION:
+            event_window_id = event->motion.windowID;
+            break;
+        case SDL_MOUSEBUTTONDOWN:
+        case SDL_MOUSEBUTTONUP:
+            event_window_id = event->button.windowID;
+            break;
+        case SDL_MOUSEWHEEL:
+            event_window_id = event->wheel.windowID;
+            break;
+        case SDL_TEXTINPUT:
+            event_window_id = event->text.windowID;
+            break;
+        case SDL_TEXTEDITING:
+            event_window_id = event->edit.windowID;
+            break;
+        case SDL_WINDOWEVENT:
+            event_window_id = event->window.windowID;
+            break;
+        default:
+            return true;
+    }
+    if (event_window_id == 0) return true;
+    return event_window_id == editor_window_id;
+}
+
+static bool SceneEditorIsOwnWindowCloseEvent(const SceneEditor* editor, const SDL_Event* event) {
+    Uint32 window_id = 0;
+    if (!editor || !event || !editor->window) return false;
+    if (event->type != SDL_WINDOWEVENT || event->window.event != SDL_WINDOWEVENT_CLOSE) {
+        return false;
+    }
+    window_id = SDL_GetWindowID(editor->window);
+    if (window_id == 0) return false;
+    return event->window.windowID == window_id;
+}
+
+static void SceneEditorBezier3DGizmoReset(void) {
+    memset(&g_bezier3d_gizmo_state, 0, sizeof(g_bezier3d_gizmo_state));
+    g_bezier3d_gizmo_state.drag_axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
+}
+
+static void SceneEditorCamera3DGizmoReset(void) {
+    memset(&g_camera3d_gizmo_state, 0, sizeof(g_camera3d_gizmo_state));
+    g_camera3d_gizmo_state.drag_axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
+}
+
+static void SceneEditorResumeAfterPreview(SceneEditor* editor) {
+    if (!editor || !editor->window || !editor->renderer) return;
+    SDL_CaptureMouse(SDL_FALSE);
+    SDL_SetRelativeMouseMode(SDL_FALSE);
+    SceneEditorInputRouterReset();
+    g_viewport_nav_state.orbit_active = false;
+    g_viewport_nav_state.last_mouse_x = 0;
+    g_viewport_nav_state.last_mouse_y = 0;
+    SceneEditorBezier3DGizmoReset();
+    SceneEditorCamera3DGizmoReset();
+    SceneEditorSyncWindowSize(editor);
+    SceneEditorLayoutChrome();
+    InitializeEditorMode(editor);
+    (void)SceneEditorViewportNavFitDigestOverlay(&g_viewport_nav_state,
+                                                 g_scenePaneLayoutValid ? &g_scenePaneLayout.viewport_rect : NULL,
+                                                 false);
+    setRenderContext(editor->renderer,
+                     editor->window,
+                     sceneSettings.windowWidth,
+                     sceneSettings.windowHeight);
+    SDL_PumpEvents();
+    SDL_FlushEvents(SDL_MOUSEMOTION, SDL_MOUSEWHEEL);
+    SDL_FlushEvents(SDL_TEXTINPUT, SDL_TEXTEDITING);
+}
+
+void RenderSceneDigestOverlay(SDL_Renderer* renderer) {
+    int active_mode = EditorModeRouter_ClampEditorMode(animSettings.editorMode,
+                                                       SceneEditorControlSurfaceLocksObjectMode());
+    int selected_object_index = ObjectEditorGetSelectedObjectIndex();
+    int mouse_x = 0;
+    int mouse_y = 0;
+    if (!renderer || !g_scenePaneLayoutValid) {
+        g_digest_hover_object_index = -1;
         return;
     }
-
-    printf("[ir1] scene_editor_input raw=%u normalized=%u ignored=%u immediate=%u queued=%u "
-           "route(g=%u c=%u p=%u) pane_hit(ctrl=%u canvas=%u drag=%u) "
-           "invalidate(target=%u full=%u class=%u) consumed=%d target=%d reasons=0x%x\n",
-           diag->raw_event_count,
-           diag->normalized_count,
-           diag->ignored_count,
-           diag->immediate_count,
-           diag->queued_count,
-           diag->routed_global_count,
-           diag->routed_chrome_count,
-           diag->routed_pane_count,
-           diag->pane_controls_count,
-           diag->pane_canvas_count,
-           diag->pane_drag_count,
-           diag->target_invalidation_count,
-           diag->full_invalidation_count,
-           (unsigned int)route->invalidation_class,
-           route->consumed ? 1 : 0,
-           (int)route->target,
-           (unsigned int)route->invalidation_reason_bits);
+    SDL_GetMouseState(&mouse_x, &mouse_y);
+    if (active_mode == EDITOR_MODE_MATERIAL) {
+        selected_object_index = MaterialEditorResolveFocusedObjectIndex();
+    }
+    g_digest_hover_object_index = SceneEditorDigestOverlayRender(renderer,
+                                                                 &g_scenePaneLayout.viewport_rect,
+                                                                 &g_viewport_nav_state,
+                                                                 active_mode,
+                                                                 selected_object_index,
+                                                                 mouse_x,
+                                                                 mouse_y,
+                                                                 &g_bezier3d_gizmo_state,
+                                                                 &g_camera3d_gizmo_state);
 }
 
-static bool SceneEditorPointInRect(int x, int y, const SDL_Rect* rect) {
-    if (!rect) return false;
-    return x >= rect->x && x <= rect->x + rect->w &&
-           y >= rect->y && y <= rect->y + rect->h;
+static bool SceneEditorHandleViewportNavigation(SceneEditor* editor,
+                                                const SceneEditorPaneCommand* command,
+                                                SceneEditorInputRoutingResult* result) {
+    SceneEditorControlSurfaceContract contract = {0};
+    SceneEditorViewportNavCommand nav_command = {0};
+    bool interaction_drag = false;
+    if (!editor || !command || !result) return false;
+    SceneEditorControlSurfaceBuildCurrent(ObjectEditorGetSelectedObjectIndex(), &contract);
+    nav_command.viewport_rect = g_scenePaneLayoutValid ? &g_scenePaneLayout.viewport_rect : NULL;
+    nav_command.event = command->event;
+    nav_command.viewport_canvas_region = (command->pane_hit_region == SCENE_EDITOR_PANE_HIT_CANVAS);
+    nav_command.viewport_drag_region = (command->pane_hit_region == SCENE_EDITOR_PANE_HIT_DRAG);
+    nav_command.key_frame_enabled = contract.laneKeyFrameEnabled;
+    nav_command.gesture_orbit_enabled = contract.laneGestureOrbitEnabled;
+    nav_command.wheel_zoom_enabled = contract.laneWheelZoomEnabled;
+    nav_command.active_mode = contract.activeMode;
+    nav_command.selected_object_index = (contract.activeMode == EDITOR_MODE_MATERIAL)
+                                            ? MaterialEditorResolveFocusedObjectIndex()
+                                            : ObjectEditorGetSelectedObjectIndex();
+    result->consumed = SceneEditorViewportNavHandleCommand(&nav_command,
+                                                           &g_viewport_nav_state,
+                                                           &interaction_drag);
+    if (!result->consumed) {
+        return false;
+    }
+
+    result->target = command->target;
+    result->pane_hit_region = (uint8_t)command->pane_hit_region;
+    result->requested_target_invalidation = true;
+    result->invalidation_reason_bits |= (SCENE_EDITOR_INVALIDATE_REASON_PANE |
+                                         SCENE_EDITOR_INVALIDATE_REASON_PANE_CANVAS);
+    if (interaction_drag) {
+        result->invalidation_class = SCENE_EDITOR_INVALIDATION_TARGET_INTERACTION;
+        result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_PANE_DRAG;
+    } else {
+        result->invalidation_class = SCENE_EDITOR_INVALIDATION_TARGET_PANE;
+    }
+    return true;
 }
 
 static SceneEditorInputTarget SceneEditorResolvePaneTarget(const SceneEditor* editor) {
     if (!editor) return SCENE_EDITOR_INPUT_TARGET_NONE;
     switch (editor->currentMode) {
-        case 0:
+        case EDITOR_MODE_PATH:
             return SCENE_EDITOR_INPUT_TARGET_BEZIER_PANE;
-        case 1:
-            return FluidSceneLocksObjects() ? SCENE_EDITOR_INPUT_TARGET_NONE
-                                            : SCENE_EDITOR_INPUT_TARGET_OBJECT_PANE;
-        case 2:
+        case EDITOR_MODE_OBJECT:
+            return SceneEditorControlSurfaceLocksObjectMode() ? SCENE_EDITOR_INPUT_TARGET_NONE
+                                                              : SCENE_EDITOR_INPUT_TARGET_OBJECT_PANE;
+        case EDITOR_MODE_CAMERA:
             return SCENE_EDITOR_INPUT_TARGET_CAMERA_PANE;
+        case EDITOR_MODE_MATERIAL:
+            return SceneEditorControlSurfaceLocksObjectMode() ? SCENE_EDITOR_INPUT_TARGET_NONE
+                                                              : SCENE_EDITOR_INPUT_TARGET_MATERIAL_PANE;
         default:
             return SCENE_EDITOR_INPUT_TARGET_NONE;
     }
@@ -233,9 +274,10 @@ static SceneEditorInputTarget SceneEditorResolvePaneTarget(const SceneEditor* ed
 static bool SceneEditorHandleSystemInput(SceneEditor* editor,
                                          SDL_Event* event,
                                          SceneEditorInputRoutingResult* result) {
+    SceneEditorControlSurfaceContract contract = {0};
     if (!editor || !event || !result) return false;
-    if (event->type == SDL_QUIT ||
-        (event->type == SDL_WINDOWEVENT && event->window.event == SDL_WINDOWEVENT_CLOSE)) {
+    SceneEditorControlSurfaceBuildCurrent(ObjectEditorGetSelectedObjectIndex(), &contract);
+    if (event->type == SDL_QUIT || SceneEditorIsOwnWindowCloseEvent(editor, event)) {
         printf("Received SDL_QUIT event. Closing Scene Editor.\n");
         editor->running = false;
         sceneEditorExitFlag = true;
@@ -246,11 +288,14 @@ static bool SceneEditorHandleSystemInput(SceneEditor* editor,
         result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_EXIT;
         return true;
     }
-    if (event->type == SDL_KEYDOWN && event->key.keysym.sym == SDLK_TAB) {
+    if (event->type == SDL_KEYDOWN &&
+        event->key.keysym.sym == SDLK_TAB &&
+        contract.sharedKeyTabCycleEnabled &&
+        contract.cycleModeEnabled) {
         editor->currentMode = EditorModeRouter_NextEditorMode(
             editor->currentMode,
             (event->key.keysym.mod & KMOD_SHIFT) != 0,
-            FluidSceneLocksObjects());
+            SceneEditorControlSurfaceLocksObjectMode());
         animSettings.editorMode = editor->currentMode;
         InitializeEditorMode(editor);
         printf("Changed Mode to %d via TAB\n", editor->currentMode);
@@ -261,10 +306,40 @@ static bool SceneEditorHandleSystemInput(SceneEditor* editor,
         result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_UI;
         return true;
     }
+    if (event->type == SDL_KEYDOWN &&
+        event->key.keysym.sym == SDLK_ESCAPE &&
+        contract.sharedKeyEscapeEnabled) {
+        editor->running = false;
+        sceneEditorExitFlag = true;
+        result->target = SCENE_EDITOR_INPUT_TARGET_SYSTEM;
+        result->consumed = true;
+        result->invalidation_class = SCENE_EDITOR_INVALIDATION_FULL_EXIT;
+        result->requested_full_invalidation = true;
+        result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_EXIT;
+        return true;
+    }
     if (event->type == SDL_KEYDOWN) {
+        bool cycle_next = false;
         bool changed = false;
         int zoom_step = 0;
         int zoom_percent = 100;
+        if (SceneEditorResolveThemeShortcut(event->key.keysym.sym,
+                                            event->key.keysym.mod,
+                                            &cycle_next)) {
+            if (cycle_next) {
+                ray_tracing_shared_theme_cycle_next();
+            } else {
+                ray_tracing_shared_theme_cycle_prev();
+            }
+            ray_tracing_shared_theme_save_persisted();
+            ray_tracing_font_runtime_invalidate_all();
+            result->target = SCENE_EDITOR_INPUT_TARGET_SYSTEM;
+            result->consumed = true;
+            result->invalidation_class = SCENE_EDITOR_INVALIDATION_TARGET_UI;
+            result->requested_target_invalidation = true;
+            result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_UI;
+            return true;
+        }
         if (ray_tracing_text_zoom_apply_shortcut(event->key.keysym.sym,
                                                  event->key.keysym.mod,
                                                  &changed,
@@ -285,241 +360,6 @@ static bool SceneEditorHandleSystemInput(SceneEditor* editor,
     return false;
 }
 
-static bool SceneEditorHandleChromeInput(SceneEditor* editor,
-                                         SDL_Event* event,
-                                         SceneEditorInputRoutingResult* result) {
-    if (!editor || !event || !result) return false;
-    if (event->type != SDL_MOUSEBUTTONDOWN) return false;
-
-    const int mx = event->button.x;
-    const int my = event->button.y;
-
-    if (SceneEditorPointInRect(mx, my, &previewButton)) {
-        RunPreviewModeEmbedded();
-        result->target = SCENE_EDITOR_INPUT_TARGET_CHROME;
-        result->consumed = true;
-        result->invalidation_class = SCENE_EDITOR_INVALIDATION_TARGET_UI;
-        result->requested_target_invalidation = true;
-        result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_UI;
-        return true;
-    }
-    if (SceneEditorPointInRect(mx, my, &changeModeButton)) {
-        editor->currentMode = EditorModeRouter_NextEditorMode(editor->currentMode,
-                                                              false,
-                                                              FluidSceneLocksObjects());
-        animSettings.editorMode = editor->currentMode;
-        InitializeEditorMode(editor);
-        SaveAllSettings();
-        LoadAllSettings();
-        printf("Changed Mode to %d\n", editor->currentMode);
-        result->target = SCENE_EDITOR_INPUT_TARGET_CHROME;
-        result->consumed = true;
-        result->invalidation_class = SCENE_EDITOR_INVALIDATION_TARGET_UI;
-        result->requested_target_invalidation = true;
-        result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_UI;
-        return true;
-    }
-    if (SceneEditorPointInRect(mx, my, &applyButton)) {
-        SaveAllSettings();
-        editor->running = false;
-        sceneEditorExitFlag = true;
-        printf("Changed Mode to %d\n", editor->currentMode);
-        result->target = SCENE_EDITOR_INPUT_TARGET_CHROME;
-        result->consumed = true;
-        result->invalidation_class = SCENE_EDITOR_INVALIDATION_FULL_EXIT;
-        result->requested_full_invalidation = true;
-        result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_EXIT;
-        return true;
-    }
-    return false;
-}
-
-static void SceneEditorRoutePaneEvent(SceneEditor* editor,
-                                      const SceneEditorPaneCommand* command,
-                                      SceneEditorInputRoutingResult* result) {
-    if (!editor || !command || !command->event || !result) return;
-    switch (command->target) {
-        case SCENE_EDITOR_INPUT_TARGET_BEZIER_PANE:
-            HandleBezierEditorEvents(command->event, &draggingPoint, &draggingVelocity);
-            result->consumed = true;
-            break;
-        case SCENE_EDITOR_INPUT_TARGET_OBJECT_PANE:
-            HandleObjectEditorEvents(command->event);
-            result->consumed = true;
-            break;
-        case SCENE_EDITOR_INPUT_TARGET_CAMERA_PANE:
-            HandleCameraEditorEvents(command->event);
-            result->consumed = true;
-            break;
-        default:
-            result->consumed = false;
-            break;
-    }
-    if (result->consumed) {
-        result->target = command->target;
-        result->pane_hit_region = (uint8_t)command->pane_hit_region;
-        result->requested_target_invalidation = true;
-        result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_PANE;
-        if (command->pane_hit_region == SCENE_EDITOR_PANE_HIT_CONTROLS ||
-            command->pane_hit_region == SCENE_EDITOR_PANE_HIT_LIST_PANEL) {
-            result->invalidation_class = SCENE_EDITOR_INVALIDATION_TARGET_UI;
-            result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_PANE_CONTROLS;
-        } else if (command->pane_hit_region == SCENE_EDITOR_PANE_HIT_DRAG) {
-            result->invalidation_class = SCENE_EDITOR_INVALIDATION_TARGET_INTERACTION;
-            result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_PANE_DRAG;
-        } else {
-            result->invalidation_class = SCENE_EDITOR_INVALIDATION_TARGET_PANE;
-            result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_PANE_CANVAS;
-        }
-    }
-}
-
-static bool SceneEditorResolvePaneCommand(SceneEditorInputTarget target,
-                                          SceneEditorPaneHitRegion pane_hit_region,
-                                          SDL_Event* event,
-                                          SceneEditorPaneCommand* command) {
-    if (!event || !command) return false;
-    memset(command, 0, sizeof(*command));
-    command->target = target;
-    command->pane_hit_region = pane_hit_region;
-    command->event = event;
-    command->kind = SCENE_EDITOR_PANE_COMMAND_NONE;
-
-    if (target != SCENE_EDITOR_INPUT_TARGET_BEZIER_PANE &&
-        target != SCENE_EDITOR_INPUT_TARGET_OBJECT_PANE &&
-        target != SCENE_EDITOR_INPUT_TARGET_CAMERA_PANE) {
-        return false;
-    }
-
-    switch (event->type) {
-        case SDL_MOUSEBUTTONDOWN:
-            command->kind = SCENE_EDITOR_PANE_COMMAND_POINTER_DOWN;
-            break;
-        case SDL_MOUSEBUTTONUP:
-            command->kind = SCENE_EDITOR_PANE_COMMAND_POINTER_UP;
-            break;
-        case SDL_MOUSEMOTION:
-            command->kind = SCENE_EDITOR_PANE_COMMAND_POINTER_DRAG;
-            break;
-        case SDL_MOUSEWHEEL:
-            command->kind = SCENE_EDITOR_PANE_COMMAND_WHEEL;
-            break;
-        case SDL_KEYDOWN:
-            command->kind = SCENE_EDITOR_PANE_COMMAND_KEY;
-            break;
-        default:
-            command->kind = SCENE_EDITOR_PANE_COMMAND_NONE;
-            break;
-    }
-
-    return command->kind != SCENE_EDITOR_PANE_COMMAND_NONE;
-}
-
-static SceneEditorPaneHitRegion SceneEditorResolvePaneHitRegion(SceneEditorInputTarget target,
-                                                                const SDL_Event* event) {
-    int mx = 0;
-    int my = 0;
-    if (!event) return SCENE_EDITOR_PANE_HIT_NONE;
-
-    if (event->type == SDL_MOUSEMOTION) {
-        mx = event->motion.x;
-        my = event->motion.y;
-        if (event->motion.state & SDL_BUTTON_LMASK) {
-            return SCENE_EDITOR_PANE_HIT_DRAG;
-        }
-    } else if (event->type == SDL_MOUSEBUTTONDOWN || event->type == SDL_MOUSEBUTTONUP) {
-        mx = event->button.x;
-        my = event->button.y;
-    } else if (event->type == SDL_MOUSEWHEEL) {
-        SDL_GetMouseState(&mx, &my);
-    } else {
-        return SCENE_EDITOR_PANE_HIT_NONE;
-    }
-
-    if (target == SCENE_EDITOR_INPUT_TARGET_BEZIER_PANE) {
-        BezierEditorHitRegion hit = BezierEditorHitRegionAtPoint(mx, my);
-        if (hit == BEZIER_EDITOR_HIT_CONTROLS) return SCENE_EDITOR_PANE_HIT_CONTROLS;
-        return SCENE_EDITOR_PANE_HIT_CANVAS;
-    }
-    if (target == SCENE_EDITOR_INPUT_TARGET_OBJECT_PANE) {
-        ObjectEditorHitRegion hit = ObjectEditorHitRegionAtPoint(mx, my);
-        if (hit == OBJECT_EDITOR_HIT_CONTROLS) return SCENE_EDITOR_PANE_HIT_CONTROLS;
-        if (hit == OBJECT_EDITOR_HIT_ASSET_PANEL || hit == OBJECT_EDITOR_HIT_MATERIAL_PANEL) {
-            return SCENE_EDITOR_PANE_HIT_LIST_PANEL;
-        }
-        return SCENE_EDITOR_PANE_HIT_CANVAS;
-    }
-    if (target == SCENE_EDITOR_INPUT_TARGET_CAMERA_PANE) {
-        CameraEditorHitRegion hit = CameraEditorHitRegionAtPoint(mx, my);
-        if (hit == CAMERA_EDITOR_HIT_CONTROLS || hit == CAMERA_EDITOR_HIT_SLIDER) {
-            return SCENE_EDITOR_PANE_HIT_CONTROLS;
-        }
-        return SCENE_EDITOR_PANE_HIT_CANVAS;
-    }
-
-    return SCENE_EDITOR_PANE_HIT_NONE;
-}
-
-static void SceneEditorNormalizeInput(SceneEditor* editor,
-                                      const SDL_Event* event,
-                                      SceneEditorInputNormalized* normalized) {
-    if (!editor || !event || !normalized) return;
-
-    SceneEditorInputNormalized_Reset(normalized);
-    normalized->event = event;
-
-    if (event->type == SDL_QUIT ||
-        (event->type == SDL_WINDOWEVENT && event->window.event == SDL_WINDOWEVENT_CLOSE)) {
-        normalized->action_class = SCENE_EDITOR_INPUT_ACTION_IMMEDIATE;
-        normalized->route_policy = SCENE_EDITOR_INPUT_ROUTE_POLICY_GLOBAL;
-        normalized->target_hint = SCENE_EDITOR_INPUT_TARGET_SYSTEM;
-        return;
-    }
-
-    if (event->type == SDL_KEYDOWN) {
-        if (event->key.keysym.sym == SDLK_TAB) {
-            normalized->action_class = SCENE_EDITOR_INPUT_ACTION_IMMEDIATE;
-            normalized->route_policy = SCENE_EDITOR_INPUT_ROUTE_POLICY_GLOBAL;
-            normalized->target_hint = SCENE_EDITOR_INPUT_TARGET_SYSTEM;
-            return;
-        }
-        if (SceneEditorIsTextZoomShortcutKey(event->key.keysym.sym, event->key.keysym.mod)) {
-            normalized->action_class = SCENE_EDITOR_INPUT_ACTION_IMMEDIATE;
-            normalized->route_policy = SCENE_EDITOR_INPUT_ROUTE_POLICY_GLOBAL;
-            normalized->target_hint = SCENE_EDITOR_INPUT_TARGET_SYSTEM;
-            return;
-        }
-    }
-
-    if (event->type == SDL_MOUSEBUTTONDOWN) {
-        const int mx = event->button.x;
-        const int my = event->button.y;
-        if (SceneEditorPointInRect(mx, my, &previewButton) ||
-            SceneEditorPointInRect(mx, my, &changeModeButton) ||
-            SceneEditorPointInRect(mx, my, &applyButton)) {
-            normalized->action_class = SCENE_EDITOR_INPUT_ACTION_IMMEDIATE;
-            normalized->route_policy = SCENE_EDITOR_INPUT_ROUTE_POLICY_CHROME;
-            normalized->target_hint = SCENE_EDITOR_INPUT_TARGET_CHROME;
-            return;
-        }
-    }
-
-    normalized->target_hint = SceneEditorResolvePaneTarget(editor);
-    if (normalized->target_hint != SCENE_EDITOR_INPUT_TARGET_NONE &&
-        (event->type == SDL_MOUSEBUTTONDOWN ||
-         event->type == SDL_MOUSEBUTTONUP ||
-         event->type == SDL_MOUSEMOTION ||
-         event->type == SDL_MOUSEWHEEL ||
-         event->type == SDL_KEYDOWN)) {
-        normalized->action_class = SCENE_EDITOR_INPUT_ACTION_IMMEDIATE;
-        normalized->route_policy = SCENE_EDITOR_INPUT_ROUTE_POLICY_ACTIVE_PANE;
-        return;
-    }
-
-    normalized->action_class = SCENE_EDITOR_INPUT_ACTION_IGNORED;
-    normalized->route_policy = SCENE_EDITOR_INPUT_ROUTE_POLICY_NONE;
-}
-
 static void SceneEditorApplyInputInvalidation(SceneEditor* editor,
                                               const SceneEditorInputRoutingResult* result) {
     (void)editor;
@@ -527,139 +367,352 @@ static void SceneEditorApplyInputInvalidation(SceneEditor* editor,
     // IR1-S3 policy seam: invalidation classes are explicit even while render invalidation remains behavior-preserving.
 }
 
-static void SceneEditorHandleInputRouted(SceneEditor* editor, SDL_Event* event) {
-    SceneEditorInputNormalized normalized;
-    SceneEditorInputDiagFrame diag;
-    SceneEditorInputRoutingResult route;
-
-    memset(&diag, 0, sizeof(diag));
-    diag.raw_event_count = 1u;
-    SceneEditorInputNormalized_Reset(&normalized);
-    SceneEditorNormalizeInput(editor, event, &normalized);
-
-    SceneEditorInputRoutingResult_Reset(&route);
-    if (normalized.action_class == SCENE_EDITOR_INPUT_ACTION_IMMEDIATE ||
-        normalized.action_class == SCENE_EDITOR_INPUT_ACTION_QUEUED) {
-        diag.normalized_count += 1u;
-    }
-    if (normalized.action_class == SCENE_EDITOR_INPUT_ACTION_IGNORED) {
-        diag.ignored_count += 1u;
-    } else if (normalized.action_class == SCENE_EDITOR_INPUT_ACTION_IMMEDIATE) {
-        diag.immediate_count += 1u;
-    } else if (normalized.action_class == SCENE_EDITOR_INPUT_ACTION_QUEUED) {
-        diag.queued_count += 1u;
-    }
-
-    if (normalized.route_policy == SCENE_EDITOR_INPUT_ROUTE_POLICY_GLOBAL) {
-        if (SceneEditorHandleSystemInput(editor, event, &route)) {
-            diag.routed_global_count += 1u;
-        }
-    } else if (normalized.route_policy == SCENE_EDITOR_INPUT_ROUTE_POLICY_CHROME) {
-        if (SceneEditorHandleChromeInput(editor, event, &route)) {
-            diag.routed_chrome_count += 1u;
-        }
-    } else if (normalized.route_policy == SCENE_EDITOR_INPUT_ROUTE_POLICY_ACTIVE_PANE) {
-        SceneEditorPaneHitRegion pane_hit = SceneEditorResolvePaneHitRegion(normalized.target_hint, event);
-        SceneEditorPaneCommand pane_command;
-        if (SceneEditorResolvePaneCommand(normalized.target_hint, pane_hit, event, &pane_command)) {
-            SceneEditorRoutePaneEvent(editor, &pane_command, &route);
-        }
-        if (route.consumed) {
-            diag.routed_pane_count += 1u;
-            if (pane_hit == SCENE_EDITOR_PANE_HIT_CONTROLS || pane_hit == SCENE_EDITOR_PANE_HIT_LIST_PANEL) {
-                diag.pane_controls_count += 1u;
-            } else if (pane_hit == SCENE_EDITOR_PANE_HIT_DRAG) {
-                diag.pane_drag_count += 1u;
-            } else {
-                diag.pane_canvas_count += 1u;
-            }
-        }
-    }
-
-    SceneEditorApplyInputInvalidation(editor, &route);
-    if (route.requested_target_invalidation) {
-        diag.target_invalidation_count += 1u;
-    }
-    if (route.requested_full_invalidation) {
-        diag.full_invalidation_count += 1u;
-    }
-    SceneEditorInputDiagMaybeEmit(event, &diag, &route);
+static void SceneEditorChromeActionsInitializeMode(SceneEditor* editor) {
+    InitializeEditorMode(editor);
 }
 
-static int SceneEditorMeasureButtonWidth(const char* label, int min_width) {
-    const char* font_path = "/System/Library/Fonts/Supplemental/Arial.ttf";
-    int point_size = animation_config_scale_text_point_size(&animSettings, 24, 12);
-    int text_w = 0;
-    int text_h = 0;
-    TTF_Font* font = NULL;
-    if (!label || !label[0]) return min_width;
-    font = TTF_OpenFont(font_path, point_size);
-    if (!font) return min_width;
-    if (TTF_SizeUTF8(font, label, &text_w, &text_h) != 0) {
-        TTF_CloseFont(font);
-        return min_width;
+static void SceneEditorChromeActionsResumePreview(SceneEditor* editor) {
+    SceneEditorResumeAfterPreview(editor);
+}
+
+static SceneEditorChromeActionsEnvironment SceneEditorBuildChromeActionsEnvironment(void) {
+    SceneEditorChromeActionsEnvironment env = {0};
+    env.pane_layout = &g_scenePaneLayout;
+    env.pane_layout_valid = g_scenePaneLayoutValid;
+    env.viewport_nav_state = &g_viewport_nav_state;
+    env.digest_hover_object_index = &g_digest_hover_object_index;
+    env.bezier_gizmo_state = &g_bezier3d_gizmo_state;
+    env.camera_gizmo_state = &g_camera3d_gizmo_state;
+    env.handle_viewport_navigation = SceneEditorHandleViewportNavigation;
+    env.initialize_editor_mode = SceneEditorChromeActionsInitializeMode;
+    env.resume_after_preview = SceneEditorChromeActionsResumePreview;
+    return env;
+}
+
+static bool SceneEditorInputRouterEventMatchesEditorWindow(void* context, const SDL_Event* event) {
+    return SceneEditorEventMatchesEditorWindow((const SceneEditor*)context, event);
+}
+
+static bool SceneEditorInputRouterShouldRouteGlobalKey(void* context, const SDL_Event* event) {
+    SceneEditor* editor = (SceneEditor*)context;
+    SceneEditorControlSurfaceContract contract = {0};
+    if (!editor || !event || event->type != SDL_KEYDOWN) {
+        return false;
     }
-    TTF_CloseFont(font);
-    if (text_w + 28 > min_width) {
-        min_width = text_w + 28;
+    SceneEditorControlSurfaceBuildCurrent(ObjectEditorGetSelectedObjectIndex(), &contract);
+    if (event->key.keysym.sym == SDLK_TAB) {
+        return contract.sharedKeyTabCycleEnabled && contract.cycleModeEnabled;
     }
-    return min_width;
+    if (event->key.keysym.sym == SDLK_ESCAPE) {
+        return contract.sharedKeyEscapeEnabled;
+    }
+    return false;
 }
 
-static int SceneEditorMeasureButtonHeight(int min_height) {
-    int point_size = animation_config_scale_text_point_size(&animSettings, 24, 12);
-    int target = point_size + 14;
-    if (target > min_height) return target;
-    return min_height;
+static bool SceneEditorInputRouterIsChromeHit(void* context, int mx, int my) {
+    (void)context;
+    return SceneEditorChromeShellIsButtonHit(mx, my);
 }
 
-static void RenderFluidBounds(SDL_Renderer* renderer) {
-    if (!g_fluidGrid.valid) return;
-    Camera cam = CameraBuildPreviewCamera(&sceneSettings.camera,
-                                          GetCurrentMarginPixels(),
-                                          sceneSettings.windowWidth,
-                                          sceneSettings.windowHeight);
-    SpaceModeViewContext view_ctx = EditorModeRouter_BuildViewContext(&cam,
-                                                                       sceneSettings.windowWidth,
-                                                                       sceneSettings.windowHeight);
-    CameraPoint minS = SpaceModeAdapter_WorldToScreen(&view_ctx,
-                                                       g_fluidGrid.min_x,
-                                                       g_fluidGrid.min_y);
-    CameraPoint maxS = SpaceModeAdapter_WorldToScreen(&view_ctx,
-                                                       g_fluidGrid.max_x,
-                                                       g_fluidGrid.max_y);
-    int x0 = (int)lrint(fmin(minS.x, maxS.x));
-    int x1 = (int)lrint(fmax(minS.x, maxS.x));
-    int y0 = (int)lrint(fmin(minS.y, maxS.y));
-    int y1 = (int)lrint(fmax(minS.y, maxS.y));
-    SDL_Rect rect = {x0, y0, x1 - x0, y1 - y0};
-    SDL_SetRenderDrawColor(renderer, 120, 200, 255, 180);
-    SDL_RenderDrawRect(renderer, &rect);
+static bool SceneEditorInputRouterHandleSystem(void* context,
+                                               SDL_Event* event,
+                                               SceneEditorInputRoutingResult* result) {
+    return SceneEditorHandleSystemInput((SceneEditor*)context, event, result);
 }
 
-void InitializeSceneEditor(SceneEditor* editor) {
-    LoadAnimationConfig();
-    //  Load all scene configurations (window size, objects, paths)
-    LoadSceneConfig();
-    if (animSettings.useFluidScene && animSettings.fluidManifest[0]) {
-        if (!AnimationApplyFluidScene(animSettings.fluidManifest)) {
-            fprintf(stderr, "[editor] failed to apply fluid scene: %s\n", animSettings.fluidManifest);
-        }
+static SceneEditorInputTarget SceneEditorInputRouterResolvePane(void* context) {
+    return SceneEditorResolvePaneTarget((const SceneEditor*)context);
+}
+
+static bool SceneEditorInputRouterResolveChrome(void* context,
+                                                const SDL_Event* event,
+                                                SceneEditorChromeAction* out_action) {
+    (void)context;
+    return SceneEditorChromeActionsResolve(event, out_action);
+}
+
+static void SceneEditorInputRouterApplyChrome(void* context, const SceneEditorChromeAction* action) {
+    SceneEditorChromeActionsEnvironment env = SceneEditorBuildChromeActionsEnvironment();
+    SceneEditorChromeActionsApply((SceneEditor*)context, action, &env);
+}
+
+static void SceneEditorInputRouterRoutePane(void* context,
+                                            const SceneEditorPaneCommand* command,
+                                            SceneEditorInputRoutingResult* result) {
+    SceneEditorChromeActionsEnvironment env = SceneEditorBuildChromeActionsEnvironment();
+    SceneEditorChromeActionsRoutePaneEvent((SceneEditor*)context, &env, command, result);
+}
+
+static void SceneEditorInputRouterApplyInvalidation(void* context,
+                                                    const SceneEditorInputRoutingResult* result) {
+    SceneEditorApplyInputInvalidation((SceneEditor*)context, result);
+}
+
+static bool SceneEditorInputRouterShouldStopProcessing(void* context) {
+    const SceneEditor* editor = (const SceneEditor*)context;
+    return !editor || !editor->running || sceneEditorExitFlag;
+}
+
+SceneEditorInputRouterCallbacks SceneEditorBuildInputRouterCallbacks(SceneEditor* editor) {
+    SceneEditorInputRouterCallbacks callbacks = {0};
+    callbacks.context = editor;
+    callbacks.event_matches_editor_window = SceneEditorInputRouterEventMatchesEditorWindow;
+    callbacks.should_route_global_key = SceneEditorInputRouterShouldRouteGlobalKey;
+    callbacks.is_chrome_hit = SceneEditorInputRouterIsChromeHit;
+    callbacks.handle_system_input = SceneEditorInputRouterHandleSystem;
+    callbacks.resolve_pane_target = SceneEditorInputRouterResolvePane;
+    callbacks.resolve_chrome_action = SceneEditorInputRouterResolveChrome;
+    callbacks.apply_chrome_action = SceneEditorInputRouterApplyChrome;
+    callbacks.route_pane_event = SceneEditorInputRouterRoutePane;
+    callbacks.apply_invalidation = SceneEditorInputRouterApplyInvalidation;
+    callbacks.should_stop_processing = SceneEditorInputRouterShouldStopProcessing;
+    return callbacks;
+}
+
+static void SceneEditorLayoutChrome(void) {
+    const SceneEditorPaneLayout* layout = NULL;
+    bool pane_ok = false;
+
+    if (!g_scenePaneHost.initialized) {
+        pane_ok = scene_editor_pane_host_init(&g_scenePaneHost,
+                                              sceneSettings.windowWidth,
+                                              sceneSettings.windowHeight);
     } else {
-        AnimationClearFluidGrid();
+        pane_ok = scene_editor_pane_host_rebuild(&g_scenePaneHost,
+                                                 sceneSettings.windowWidth,
+                                                 sceneSettings.windowHeight);
     }
-    if (animSettings.editorMode < 0)
+    if (!pane_ok) {
+        memset(&g_scenePaneLayout, 0, sizeof(g_scenePaneLayout));
+        g_scenePaneLayoutValid = false;
+        SceneEditorChromeShellLayoutFallback(sceneSettings.windowWidth, sceneSettings.windowHeight);
+        return;
+    }
+
+    layout = scene_editor_pane_host_layout(&g_scenePaneHost);
+    if (!layout) {
+        memset(&g_scenePaneLayout, 0, sizeof(g_scenePaneLayout));
+        g_scenePaneLayoutValid = false;
+        SceneEditorChromeShellLayoutFallback(sceneSettings.windowWidth, sceneSettings.windowHeight);
+        return;
+    }
+    g_scenePaneLayout = *layout;
+    g_scenePaneLayoutValid = true;
+
+    SceneEditorChromeShellLayoutFromPane(&g_scenePaneLayout);
+}
+
+void SceneEditorSyncWindowSize(SceneEditor* editor) {
+    int width = 0;
+    int height = 0;
+    if (!editor || !editor->window) return;
+    SDL_GetWindowSize(editor->window, &width, &height);
+    if (width <= 0 || height <= 0) return;
+    if (width != sceneSettings.windowWidth || height != sceneSettings.windowHeight) {
+        sceneSettings.windowWidth = width;
+        sceneSettings.windowHeight = height;
+#if USE_VULKAN
+        if (editor->renderer) {
+            vk_renderer_set_logical_size((VkRenderer*)editor->renderer,
+                                         (float)sceneSettings.windowWidth,
+                                         (float)sceneSettings.windowHeight);
+        }
+#endif
+    }
+    SceneEditorLayoutChrome();
+    SceneEditorRefreshPaneSplitterHover(editor);
+}
+
+void SceneEditorRefreshPaneSplitterHover(SceneEditor* editor) {
+    int mouse_x = 0;
+    int mouse_y = 0;
+
+    if (!editor || !editor->window || !g_scenePaneHost.initialized) return;
+    SDL_GetMouseState(&mouse_x, &mouse_y);
+    scene_editor_pane_host_update_pointer(&g_scenePaneHost, (float)mouse_x, (float)mouse_y);
+}
+
+bool SceneEditorHandlePaneSplitterEvent(SceneEditor* editor, SDL_Event* event) {
+    if (!editor || !event || !g_scenePaneHost.initialized) {
+        return false;
+    }
+    if (!SceneEditorEventMatchesEditorWindow(editor, event)) {
+        return false;
+    }
+
+    switch (event->type) {
+        case SDL_MOUSEMOTION:
+            if (scene_editor_pane_host_splitter_drag_active(&g_scenePaneHost)) {
+                if (scene_editor_pane_host_update_splitter_drag(&g_scenePaneHost,
+                                                                (float)event->motion.x,
+                                                                (float)event->motion.y)) {
+                    SceneEditorLayoutChrome();
+                }
+                return true;
+            }
+            scene_editor_pane_host_update_pointer(&g_scenePaneHost,
+                                                  (float)event->motion.x,
+                                                  (float)event->motion.y);
+            return false;
+        case SDL_MOUSEBUTTONDOWN:
+            if (event->button.button != SDL_BUTTON_LEFT) {
+                return false;
+            }
+            scene_editor_pane_host_update_pointer(&g_scenePaneHost,
+                                                  (float)event->button.x,
+                                                  (float)event->button.y);
+            return scene_editor_pane_host_begin_splitter_drag(&g_scenePaneHost,
+                                                              (float)event->button.x,
+                                                              (float)event->button.y);
+        case SDL_MOUSEBUTTONUP:
+            if (scene_editor_pane_host_splitter_drag_active(&g_scenePaneHost)) {
+                scene_editor_pane_host_end_splitter_drag(&g_scenePaneHost);
+                scene_editor_pane_host_update_pointer(&g_scenePaneHost,
+                                                      (float)event->button.x,
+                                                      (float)event->button.y);
+                return true;
+            }
+            scene_editor_pane_host_update_pointer(&g_scenePaneHost,
+                                                  (float)event->button.x,
+                                                  (float)event->button.y);
+            return false;
+        default:
+            return false;
+    }
+}
+
+static bool SceneEditorLoadSessionState(SceneEditor* editor) {
+    AnimationConfig live_config;
+    bool has_live_runtime_selection = false;
+    if (!editor) {
+        return false;
+    }
+    live_config = animSettings;
+    has_live_runtime_selection =
+        animation_config_scene_source_clamp(live_config.sceneSource) == SCENE_SOURCE_RUNTIME_SCENE &&
+        live_config.runtimeScenePath[0] != '\0';
+    LoadAnimationConfig();
+    LoadSceneConfig();
+    if (has_live_runtime_selection) {
+        animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+        animSettings.useFluidScene = false;
+        animSettings.fluidManifest[0] = '\0';
+        animSettings.spaceMode = live_config.spaceMode;
+        snprintf(animSettings.runtimeScenePath,
+                 sizeof(animSettings.runtimeScenePath),
+                 "%s",
+                 live_config.runtimeScenePath);
+    }
+    ApplyAnimationWindowSizeOverride();
+    if (animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE &&
+        animSettings.runtimeScenePath[0] != '\0') {
+        RuntimeSceneBridgePreflight summary = {0};
+        char runtime_scene_path[sizeof(animSettings.runtimeScenePath)];
+        snprintf(runtime_scene_path, sizeof(runtime_scene_path), "%s", animSettings.runtimeScenePath);
+        if (!runtime_scene_bridge_apply_file_defer_mesh_assets(runtime_scene_path, &summary)) {
+            fprintf(stderr,
+                    "[editor] failed to apply runtime scene source '%s': %s\n",
+                    runtime_scene_path,
+                    summary.diagnostics);
+        }
+    } else if (!AnimationRestoreActiveSceneSource(true)) {
+        fprintf(stderr, "[editor] failed to apply active scene source; selection preserved.\n");
+    }
+    ApplyAnimationWindowSizeOverride();
+    if (animSettings.editorMode < 0) {
         animSettings.editorMode = 0;
-    editor->currentMode = EditorModeRouter_ClampEditorMode(animSettings.editorMode % 3,
-                                                           FluidSceneLocksObjects());
+    }
+    editor->currentMode = EditorModeRouter_ClampEditorMode(animSettings.editorMode,
+                                                           SceneEditorControlSurfaceLocksObjectMode());
+    return true;
+}
+
+bool SceneEditorSessionBegin(SceneEditor* editor, SDL_Renderer* renderer, SDL_Window* window) {
+    int width = 0;
+    int height = 0;
+    if (!editor || !renderer || !window) {
+        return false;
+    }
+    memset(editor, 0, sizeof(*editor));
+    SceneEditorInputRouterReset();
+    if (!SceneEditorLoadSessionState(editor)) {
+        return false;
+    }
+
+    editor->window = window;
+    editor->renderer = renderer;
+    editor->owns_window = false;
+    editor->owns_renderer = false;
+    editor->running = true;
+    g_viewport_nav_state.orbit_active = false;
+    g_viewport_nav_state.last_mouse_x = 0;
+    g_viewport_nav_state.last_mouse_y = 0;
+    SceneEditorViewportNavResetDigestOverlayNavigation(&g_viewport_nav_state);
+    SceneEditorBezier3DGizmoReset();
+    SceneEditorCamera3DGizmoReset();
+
+    if (!ray_tracing_font_runtime_init()) {
+        fprintf(stderr, "Error: TTF_Init failed: %s\n", TTF_GetError());
+        memset(editor, 0, sizeof(*editor));
+        return false;
+    }
+
+    SDL_GetWindowSize(window, &width, &height);
+    if (width > 0 && height > 0) {
+        sceneSettings.windowWidth = width;
+        sceneSettings.windowHeight = height;
+    }
+#if USE_VULKAN
+    vk_renderer_set_logical_size((VkRenderer*)editor->renderer,
+                                 (float)sceneSettings.windowWidth,
+                                 (float)sceneSettings.windowHeight);
+#endif
+    setRenderContext(editor->renderer, editor->window,
+                     sceneSettings.windowWidth, sceneSettings.windowHeight);
+    ray_tracing_font_runtime_attach_renderer(editor->renderer);
+    SceneEditorLayoutChrome();
+    SceneEditorRefreshPaneSplitterHover(editor);
+    (void)SceneEditorViewportNavFitDigestOverlay(&g_viewport_nav_state,
+                                                 g_scenePaneLayoutValid ? &g_scenePaneLayout.viewport_rect : NULL,
+                                                 true);
+    InitializeEditorMode(editor);
+    UpdateObjects();
+    sceneEditorExitFlag = false;
+    if (g_sceneEditorPreviewOnBegin) {
+        g_sceneEditorPreviewOnBegin = false;
+        RunPreviewModeEmbedded(editor->window, editor->renderer);
+        SceneEditorResumeAfterPreview(editor);
+    }
+    printf("Scene Editor Session Begin. Host Size: %dx%d\n",
+           sceneSettings.windowWidth,
+           sceneSettings.windowHeight);
+    return true;
+}
+
+bool InitializeSceneEditor(SceneEditor* editor) {
+    if (!editor) {
+        return false;
+    }
+    memset(editor, 0, sizeof(*editor));
+    SceneEditorInputRouterReset();
+    editor->running = false;
+    editor->window = NULL;
+    editor->renderer = NULL;
+    editor->owns_window = false;
+    editor->owns_renderer = false;
+
+    if (!SceneEditorLoadSessionState(editor)) {
+        return false;
+    }
 
     //  Create the window using stored scene settings
     editor->window = SDL_CreateWindow("Scene Editor", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                       sceneSettings.windowWidth, sceneSettings.windowHeight,
-                                      SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
+                                      SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE |
+                                          SDL_WINDOW_ALLOW_HIGHDPI);
     if (!editor->window) {
         fprintf(stderr, "Error: Failed to create scene window.\n");
-        return;
+        return false;
     }
 
 #if USE_VULKAN
@@ -674,21 +727,24 @@ void InitializeSceneEditor(SceneEditor* editor) {
     if (!vk_shared_device_init(editor->window, &cfg)) {
         fprintf(stderr, "vk_shared_device_init failed.\n");
         SDL_DestroyWindow(editor->window);
-        return;
+        editor->window = NULL;
+        return false;
     }
 
     VkRendererDevice* shared_device = vk_shared_device_get();
     if (!shared_device) {
         fprintf(stderr, "vk_shared_device_get failed.\n");
         SDL_DestroyWindow(editor->window);
-        return;
+        editor->window = NULL;
+        return false;
     }
 
     VkResult init = vk_renderer_init_with_device(&g_scene_renderer_storage, shared_device, editor->window, &cfg);
     if (init != VK_SUCCESS) {
         fprintf(stderr, "vk_renderer_init failed: %d\n", init);
         SDL_DestroyWindow(editor->window);
-        return;
+        editor->window = NULL;
+        return false;
     }
     editor->renderer = (SDL_Renderer*)&g_scene_renderer_storage;
     vk_renderer_set_logical_size((VkRenderer*)editor->renderer,
@@ -701,173 +757,168 @@ void InitializeSceneEditor(SceneEditor* editor) {
     if (!editor->renderer) {
         fprintf(stderr, "Error: Failed to create scene renderer.\n");
         SDL_DestroyWindow(editor->window);
-        return;
+        editor->window = NULL;
+        return false;
     }
 #endif
 
+    editor->owns_window = true;
+    editor->owns_renderer = true;
+
     //  Initialize TTF for font rendering
-    if (TTF_Init() == -1) {
+    if (!ray_tracing_font_runtime_init()) {
         fprintf(stderr, "Error: TTF_Init failed: %s\n", TTF_GetError());
 #if USE_VULKAN
-        vk_renderer_wait_idle((VkRenderer*)editor->renderer);
-        vk_renderer_shutdown_surface((VkRenderer*)editor->renderer);
+        if (editor->owns_renderer && editor->renderer) {
+            ray_tracing_text_reset_renderer(editor->renderer);
+            vk_renderer_wait_idle((VkRenderer*)editor->renderer);
+            vk_renderer_shutdown_surface((VkRenderer*)editor->renderer);
+        }
 #else
-        SDL_DestroyRenderer(editor->renderer);
+        if (editor->owns_renderer && editor->renderer) {
+            ray_tracing_text_reset_renderer(editor->renderer);
+            SDL_DestroyRenderer(editor->renderer);
+        }
 #endif
-        SDL_DestroyWindow(editor->window);
-        return;
+        editor->renderer = NULL;
+        if (editor->owns_window && editor->window) {
+            SDL_DestroyWindow(editor->window);
+        }
+        editor->window = NULL;
+        editor->owns_window = false;
+        editor->owns_renderer = false;
+        return false;
     }
-    // **Initialize Button Positions Based on Window Size**
-    int width = sceneSettings.windowWidth;
-    int height = sceneSettings.windowHeight;
-    int compactButtonWidth = 70;
-    int compactButtonHeight = SceneEditorMeasureButtonHeight(40);
-    int footerButtonHeight = SceneEditorMeasureButtonHeight(50);
-    int applyWidth = SceneEditorMeasureButtonWidth("Apply", 150);
-    int previewWidth = SceneEditorMeasureButtonWidth("Preview", 150);
-    int changeModeWidth = SceneEditorMeasureButtonWidth("Change Mode", 130);
-    addButton = (SDL_Rect){width - compactButtonWidth - 20, 20, compactButtonWidth, compactButtonHeight};
-    deleteButton = (SDL_Rect){width - compactButtonWidth - 20, 20 + compactButtonHeight + 20,
-                              compactButtonWidth, compactButtonHeight};
-    toggleButton = (SDL_Rect){width - compactButtonWidth - 20, 20 + (compactButtonHeight + 20) * 2,
-                              compactButtonWidth, compactButtonHeight};
-    
-    applyButton = (SDL_Rect){width - applyWidth - 30, height - footerButtonHeight - 30,
-                             applyWidth, footerButtonHeight};  // Bottom-right apply button
-    previewButton = (SDL_Rect){applyButton.x - previewWidth - 20, applyButton.y,
-                               previewWidth, footerButtonHeight}; // Left of apply
-    changeModeButton = (SDL_Rect){width - changeModeWidth - 30,
-                                  applyButton.y - footerButtonHeight - 12,
-                                  changeModeWidth, footerButtonHeight};
+    setRenderContext(editor->renderer, editor->window,
+                     sceneSettings.windowWidth, sceneSettings.windowHeight);
+    ray_tracing_font_runtime_attach_renderer(editor->renderer);
+    SceneEditorLayoutChrome();
+    SceneEditorRefreshPaneSplitterHover(editor);
 
     InitializeEditorMode(editor);
 
 
     UpdateObjects();
+    editor->running = true;
     printf("Scene Editor Initialized. Window Size: %dx%d\n", sceneSettings.windowWidth, 
-		sceneSettings.windowHeight);
+			sceneSettings.windowHeight);
+    return true;
 }
 
 void RenderSceneButtons(SDL_Renderer* renderer) {
-    //Individual Buttons
-    SDL_SetRenderDrawColor(renderer, 50, 255, 50, 255);
-    SDL_RenderFillRect(renderer, &applyButton);
-    SDL_SetRenderDrawColor(renderer, 180, 180, 180, 255);
-    SDL_RenderFillRect(renderer, &previewButton);
-    SDL_SetRenderDrawColor(renderer, 0, 200, 255, 255);
-    SDL_RenderFillRect(renderer, &changeModeButton);
-    
-    // Outlines and Text
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    SDL_RenderDrawRect(renderer, &applyButton);
-    RenderButtonText(renderer, applyButton, "Apply");
-    SDL_RenderDrawRect(renderer, &previewButton);
-    RenderButtonText(renderer, previewButton, "Preview");
-    SDL_RenderDrawRect(renderer, &changeModeButton);
-    RenderButtonText(renderer, changeModeButton, "Change Mode");
+    SceneEditorControlSurfaceContract contract = {0};
+    CorePaneRect splitter_rect = {0};
+    bool splitter_visible = false;
+    bool splitter_hovered = false;
+    bool splitter_active = false;
 
-    if (EditorModeRouter_IsControlled3D()) {
-        SDL_Rect hintRect = {
-            20,
-            changeModeButton.y - 28,
-            sceneSettings.windowWidth - 40,
-            22
-        };
-        SDL_Color hintColor = {255, 220, 140, 255};
-        SDL_SetRenderDrawColor(renderer, 30, 30, 38, 220);
-        SDL_RenderFillRect(renderer, &hintRect);
-        SDL_SetRenderDrawColor(renderer, 90, 90, 110, 255);
-        SDL_RenderDrawRect(renderer, &hintRect);
-        RenderLabelText(renderer, hintRect, EditorModeRouter_RuntimeHintLabel(), hintColor);
-    }
+    if (!renderer) return;
+    SceneEditorControlSurfaceBuildCurrent(ObjectEditorGetSelectedObjectIndex(), &contract);
+    splitter_visible = scene_editor_pane_host_visible_splitter(&g_scenePaneHost,
+                                                               &splitter_rect,
+                                                               &splitter_hovered,
+                                                               &splitter_active);
+    SceneEditorChromeShellRender(renderer,
+                                 &g_scenePaneLayout,
+                                 g_scenePaneLayoutValid,
+                                 &contract,
+                                 splitter_visible ? &splitter_rect : NULL,
+                                 splitter_hovered,
+                                 splitter_active);
 }
 
 void SceneEditorLoop(SceneEditor* editor) {
-    SDL_Event event;
-    sceneEditorExitFlag = false;
+    SceneEditorSessionRuntimeLoop(editor);
+}
 
-    while (editor->running && !sceneEditorExitFlag) {
-        while (SDL_PollEvent(&event)) {
-            HandleSceneEditorEvents(editor, &event);
-            if (sceneEditorExitFlag)
-                break;
-        }
-
-        // **Check for Dirty Objects and Update Them**
-        for (int i = 0; i < sceneSettings.objectCount; i++) {
-            SceneObject* obj = &sceneSettings.sceneObjects[i];
-            if (IsObjectDirty(obj)) {
-                UpdateObject(obj);
-            }
-        }
-
-        setRenderContext(editor->renderer, editor->window,
-                         sceneSettings.windowWidth, sceneSettings.windowHeight);
-        render_set_clear_color(editor->renderer, 0, 0, 0, 255);
-        if (!render_begin_frame()) {
-            if (render_device_lost()) {
-                editor->running = false;
-                sceneEditorExitFlag = true;
-            }
-            SDL_Delay(10);
-            continue;
-        }
-
-        // **Render Active Editor Mode**
-        switch (editor->currentMode) {
-            case 0:
-                RenderBezierEditor(editor->renderer);
-                break;
-            case 1:
-                RenderObjectEditor(editor->renderer);
-                break;
-            case 2:
-                RenderCameraEditor(editor->renderer);
-                break;
-        }
-        RenderFluidBounds(editor->renderer);
-	RenderSceneButtons(editor->renderer);
-
-        render_end_frame();
-        SDL_Delay(16);  // Maintain ~60 FPS
+void SceneEditorSessionHandleEvent(SceneEditor* editor, SDL_Event* event) {
+    if (!editor || !event || !editor->running) {
+        return;
     }
+    SceneEditorSessionRuntimeHandleEvent(editor, event);
+}
 
-    DestroySceneEditor(editor);
+void SceneEditorSessionRender(SceneEditor* editor) {
+    SceneEditorSessionRuntimeRender(editor);
+}
+
+void SceneEditorSessionRenderWithPostDraw(SceneEditor* editor,
+                                          SceneEditorSessionPostDrawFn post_draw,
+                                          void* context) {
+    SceneEditorSessionRuntimeRenderWithPostDraw(editor, post_draw, context);
+}
+
+bool SceneEditorSessionWantsExit(const SceneEditor* editor) {
+    if (!editor) {
+        return true;
+    }
+    return sceneEditorExitFlag || !editor->running;
+}
+
+bool SceneEditorSessionInteractionActive(const SceneEditor* editor) {
+    (void)editor;
+    return g_viewport_nav_state.orbit_active ||
+           scene_editor_pane_host_splitter_drag_active(&g_scenePaneHost) ||
+           g_bezier3d_gizmo_state.dragging ||
+           g_camera3d_gizmo_state.dragging;
+}
+
+void SceneEditorSessionRequestPreviewOnBegin(void) {
+    g_sceneEditorPreviewOnBegin = true;
+}
+
+void SceneEditorSessionEnd(SceneEditor* editor) {
+    if (!editor) {
+        return;
+    }
+    editor->running = false;
+    editor->window = NULL;
+    editor->renderer = NULL;
+    editor->owns_window = false;
+    editor->owns_renderer = false;
+    g_viewport_nav_state.orbit_active = false;
+    g_viewport_nav_state.last_mouse_x = 0;
+    g_viewport_nav_state.last_mouse_y = 0;
+    SceneEditorViewportNavResetDigestOverlayNavigation(&g_viewport_nav_state);
+    SceneEditorBezier3DGizmoReset();
+    SceneEditorCamera3DGizmoReset();
+    scene_editor_pane_host_end_splitter_drag(&g_scenePaneHost);
+    SceneEditorInputRouterReset();
+    sceneEditorExitFlag = false;
+    setRenderContext(NULL, NULL, 0, 0);
 }
 
 
 void HandleSceneEditorEvents(SceneEditor* editor, SDL_Event* event) {
-    SceneEditorHandleInputRouted(editor, event);
+    SceneEditorSessionRuntimeHandleEvent(editor, event);
 }
 
 bool IsClickingButtonMain(int mx, int my) {
-    // Check if click is within main buttons
-    if ((mx >= applyButton.x && mx <= applyButton.x + applyButton.w && my >= applyButton.y 
-                && my <= applyButton.y + applyButton.h) ||
-        (mx >= previewButton.x && mx <= previewButton.x + previewButton.w && my >= previewButton.y
-                && my <= previewButton.y + previewButton.h) ||
-	(mx >= changeModeButton.x && mx <= changeModeButton.x + changeModeButton.w &&
-            my >= changeModeButton.y && my <= changeModeButton.y + changeModeButton.h)) {
-	return true;  // Click is inside a UI button
-    }
+    return SceneEditorChromeShellIsButtonHit(mx, my);
+}
 
-
-    if ((mx >= addButton.x && mx <= addButton.x + addButton.w && my >= addButton.y 
-		&& my <= addButton.y + addButton.h) ||
-        (mx >= deleteButton.x && mx <= deleteButton.x + deleteButton.w && my >= deleteButton.y 
-		&& my <= deleteButton.y + deleteButton.h) ||  
-        (mx >= toggleButton.x && mx <= toggleButton.x + toggleButton.w && my >= toggleButton.y 
-		&& my <= toggleButton.y+ toggleButton.h)) {
-        return true;  // Click is inside a UI button
+bool SceneEditorIsPaneToolButton(int mx, int my) {
+    if ((mx >= selectButton.x && mx <= selectButton.x + selectButton.w &&
+         my >= selectButton.y && my <= selectButton.y + selectButton.h) ||
+        (mx >= addButton.x && mx <= addButton.x + addButton.w &&
+         my >= addButton.y && my <= addButton.y + addButton.h) ||
+        (mx >= deleteButton.x && mx <= deleteButton.x + deleteButton.w &&
+         my >= deleteButton.y && my <= deleteButton.y + deleteButton.h)) {
+        return true;
     }
-         
-    return false;  // Click is not inside a UI button
+    return false;
+}
+
+bool SceneEditorGetPaneLayout(SceneEditorPaneLayout* out_layout) {
+    if (!out_layout || !g_scenePaneLayoutValid) return false;
+    *out_layout = g_scenePaneLayout;
+    return true;
 }
 
 void ToggleSceneMode(SceneEditor* editor) {
     editor->currentMode = EditorModeRouter_NextEditorMode(editor->currentMode,
                                                           false,
-                                                          FluidSceneLocksObjects());
+                                                          SceneEditorControlSurfaceLocksObjectMode());
     animSettings.editorMode = editor->currentMode;
     InitializeEditorMode(editor);
     printf("Switched to mode: %d\n", editor->currentMode);
@@ -875,8 +926,9 @@ void ToggleSceneMode(SceneEditor* editor) {
 
 // Set Scene Mode
 void SetSceneMode(SceneEditor* editor, int mode) {
-    if (mode >= 0 && mode <= 2) {
-        editor->currentMode = EditorModeRouter_ClampEditorMode(mode, FluidSceneLocksObjects());
+    if (mode >= 0 && mode < EDITOR_MODE_COUNT) {
+        editor->currentMode = EditorModeRouter_ClampEditorMode(mode,
+                                                               SceneEditorControlSurfaceLocksObjectMode());
         animSettings.editorMode = editor->currentMode;
         InitializeEditorMode(editor);
     }
@@ -884,6 +936,7 @@ void SetSceneMode(SceneEditor* editor, int mode) {
 
 void ResetSceneEditor(SceneEditor* editor) {
     LoadSceneConfig();  // Reload all scene settings
+    ApplyAnimationWindowSizeOverride();
     editor->currentMode = 0;  // Default to Bezier Editor Mode
     animSettings.editorMode = 0;
     InitializeEditorMode(editor);
@@ -892,32 +945,48 @@ void ResetSceneEditor(SceneEditor* editor) {
 
 
 void DestroySceneEditor(SceneEditor* editor) {
-    if (editor->renderer) {
+    if (!editor) {
+        return;
+    }
+    editor->running = false;
+    ray_tracing_font_runtime_detach_renderer(editor->renderer);
+    if (editor->renderer && editor->owns_renderer) {
 #if USE_VULKAN
+        ray_tracing_text_reset_renderer(editor->renderer);
         vk_renderer_wait_idle((VkRenderer*)editor->renderer);
         vk_renderer_shutdown_surface((VkRenderer*)editor->renderer);
 #else
+        ray_tracing_text_reset_renderer(editor->renderer);
         SDL_DestroyRenderer(editor->renderer);
 #endif
-        editor->renderer = NULL;
     }
-    if (editor->window) {
+    editor->renderer = NULL;
+    if (editor->window && editor->owns_window) {
         SDL_DestroyWindow(editor->window);
-        editor->window = NULL;
     }
+    editor->window = NULL;
+    editor->owns_window = false;
+    editor->owns_renderer = false;
+    scene_editor_pane_host_end_splitter_drag(&g_scenePaneHost);
+    SceneEditorInputRouterReset();
+    ray_tracing_font_runtime_shutdown();
+    setRenderContext(NULL, NULL, 0, 0);
     printf("Scene Editor Closed. Returning to main menu...\n");
 }
 
 static void InitializeEditorMode(SceneEditor* editor) {
     switch (editor->currentMode) {
-        case 0:
+        case EDITOR_MODE_PATH:
             InitializeBezierEditor();
             break;
-        case 1:
+        case EDITOR_MODE_OBJECT:
             InitializeObjectEditor();
             break;
-        case 2:
+        case EDITOR_MODE_CAMERA:
             InitializeCameraEditor();
+            break;
+        case EDITOR_MODE_MATERIAL:
+            InitializeMaterialEditor();
             break;
         default:
             break;

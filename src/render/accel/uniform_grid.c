@@ -54,13 +54,21 @@ static void ExpandBounds(UniformGrid* grid, SceneObject* objects, int objectCoun
     }
     double minX = DBL_MAX, minY = DBL_MAX;
     double maxX = -DBL_MAX, maxY = -DBL_MAX;
+    bool seeded = false;
     for (int i = 0; i < objectCount; i++) {
         double objMinX, objMinY, objMaxX, objMaxY;
+        if (!SceneObjectParticipatesInRender(&objects[i])) continue;
         ComputeObjectBounds(&objects[i], &objMinX, &objMinY, &objMaxX, &objMaxY);
         if (objMinX < minX) minX = objMinX;
         if (objMinY < minY) minY = objMinY;
         if (objMaxX > maxX) maxX = objMaxX;
         if (objMaxY > maxY) maxY = objMaxY;
+        seeded = true;
+    }
+    if (!seeded) {
+        grid->minX = grid->minY = -1.0;
+        grid->maxX = grid->maxY = 1.0;
+        return;
     }
     double margin = 5.0;
     grid->minX = minX - margin;
@@ -106,6 +114,7 @@ bool UniformGridBuild(UniformGrid* grid,
 
     for (int i = 0; i < objectCount; i++) {
         double objMinX, objMinY, objMaxX, objMaxY;
+        if (!SceneObjectParticipatesInRender(&objects[i])) continue;
         ComputeObjectBounds(&objects[i], &objMinX, &objMinY, &objMaxX, &objMaxY);
         int minCellX = (int)floor((objMinX - grid->minX) / grid->cellSize);
         int maxCellX = (int)floor((objMaxX - grid->minX) / grid->cellSize);

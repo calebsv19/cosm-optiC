@@ -19,7 +19,13 @@ void RenderDrawShape(SDL_Renderer* renderer, SceneObject* obj);
 void RenderFillShape(SDL_Renderer* renderer, SceneObject* obj);
 void RenderStaticScene(SDL_Renderer* renderer);
 void RenderButtonText(SDL_Renderer* renderer, SDL_Rect button, const char* text);
+void RenderButtonTextWithColor(SDL_Renderer* renderer,
+                               SDL_Rect button,
+                               const char* text,
+                               SDL_Color text_color);
 void RenderLabelText(SDL_Renderer* renderer, SDL_Rect area, const char* text, SDL_Color color);
+int RenderLabelTextLeft(SDL_Renderer* renderer, SDL_Rect area, const char* text, SDL_Color color);
+int RenderLabelTextWrappedLeft(SDL_Renderer* renderer, SDL_Rect area, const char* text, SDL_Color color);
 int CalculateObjectBrightness(SceneObject* obj, double lightX, double lightY);
 int compareInts(const void* a, const void* b);
 double RenderHelper_DepthScaleForObjectZ(double object_z);

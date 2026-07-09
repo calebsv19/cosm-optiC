@@ -58,8 +58,16 @@ FILE* config_io_open_read_with_fallback(const char* primary,
                                         const char* legacy,
                                         const char** selected_path) {
     const char* candidates[] = {primary, fallback, legacy};
+    return config_io_open_read_first(candidates,
+                                     sizeof(candidates) / sizeof(candidates[0]),
+                                     selected_path);
+}
+
+FILE* config_io_open_read_first(const char* const* candidates,
+                                size_t candidate_count,
+                                const char** selected_path) {
     if (selected_path) *selected_path = NULL;
-    for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); ++i) {
+    for (size_t i = 0; i < candidate_count; ++i) {
         const char* path = candidates[i];
         if (!path || !path[0]) continue;
         FILE* file = fopen(path, "r");

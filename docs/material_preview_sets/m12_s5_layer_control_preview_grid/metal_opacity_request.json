@@ -1,0 +1,69 @@
+{
+  "background_color": 2698549,
+  "columns": 4,
+  "height": 144,
+  "object_id": "rear_blue_panel",
+  "output_path": "<redacted-local-path:metal_opacity_preview.bmp>",
+  "runtime_scene_path": "<redacted-local-path:metal_opacity_scene_runtime.json>",
+  "schema": "ray_tracing_material_preview_request_v1",
+  "summary_path": "<redacted-local-path:metal_opacity_summary.json>",
+  "variants": [
+    {
+      "label": "base_no_overlay",
+      "reflectivity": 0.72,
+      "roughness": 0.52
+    },
+    {
+      "label": "rust_op025",
+      "preview_overlay": {
+        "color_depth": 0.82,
+        "contrast": 0.72,
+        "coverage": 0.62,
+        "grain": 0.52,
+        "kind": "rust",
+        "opacity": 0.25,
+        "reflectivity_influence": -0.35,
+        "roughness_influence": 0.7,
+        "seed": 31,
+        "specular_influence": -0.25,
+        "strength": 0.8,
+        "surface_damage": 0.7
+      }
+    },
+    {
+      "label": "rust_op060",
+      "preview_overlay": {
+        "color_depth": 0.82,
+        "contrast": 0.72,
+        "coverage": 0.62,
+        "grain": 0.52,
+        "kind": "rust",
+        "opacity": 0.6,
+        "reflectivity_influence": -0.35,
+        "roughness_influence": 0.7,
+        "seed": 31,
+        "specular_influence": -0.25,
+        "strength": 0.8,
+        "surface_damage": 0.7
+      }
+    },
+    {
+      "label": "rust_op095",
+      "preview_overlay": {
+        "color_depth": 0.82,
+        "contrast": 0.72,
+        "coverage": 0.62,
+        "grain": 0.52,
+        "kind": "rust",
+        "opacity": 0.95,
+        "reflectivity_influence": -0.35,
+        "roughness_influence": 0.7,
+        "seed": 31,
+        "specular_influence": -0.25,
+        "strength": 0.8,
+        "surface_damage": 0.7
+      }
+    }
+  ],
+  "width": 144
+}
