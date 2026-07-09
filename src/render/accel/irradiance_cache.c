@@ -13,6 +13,10 @@
 #include <string.h>
 #include <stdint.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #define CACHE_SAMPLES_PER_BIN 4
 #define CACHE_STEP_DISTANCE 8.0
 #define CACHE_MAX_DISTANCE 400.0

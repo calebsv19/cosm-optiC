@@ -1,6 +1,6 @@
 # Ray Tracing Desktop Packaging
 
-Last updated: 2026-06-08
+Last updated: 2026-07-08
 
 ## Bundle Contract
 
@@ -11,7 +11,7 @@ Last updated: 2026-06-08
 - app bundle metadata:
   - bundle id: `com.cosm.optic`
   - product name: `optiC`
-  - version: `0.1.0`
+  - version: generated from `RELEASE_VERSION` during package creation
 - bundled frameworks live under `Contents/Frameworks/`
 
 ## Public Package Discovery
@@ -40,6 +40,22 @@ reports `CFBundleShortVersionString=0.1.0`. Treat that as package identity
 hygiene for a future approved package build, not as approval to replace the
 already-published artifacts in place.
 
+Future release-artifact hygiene:
+
+- `release-bundle-audit` now rejects packaged app bundles whose
+  `CFBundleShortVersionString` or `CFBundleVersion` does not equal
+  `RELEASE_VERSION`.
+- `release-artifact` stages the already-notarized app plus a ZIP-root
+  `.manifest.txt` file before creating the release ZIP. The manifest is outside
+  `optiC.app`, so adding it does not mutate the signed/notarized app bundle.
+- the embedded ZIP-root manifest is self-describing but cannot contain the
+  final ZIP digest without creating a circular hash dependency. The adjacent
+  external `.manifest.txt` and `.zip.sha256` sidecars remain authoritative for
+  the final archive digest.
+- checksum sidecars name the ZIP basename, not a local build path, so fresh
+  public agents can validate sidecars without knowing the maintainer's
+  filesystem layout.
+
 ## Make Targets
 
 - local packaging:
@@ -51,6 +67,95 @@ already-published artifacts in place.
   - `make -C ray_tracing package-desktop-open`
   - `make -C ray_tracing package-desktop-remove`
   - `make -C ray_tracing package-desktop-refresh`
+- private Linux desktop package proof:
+  - `make -C ray_tracing package-linux-desktop-contract`
+  - `make -C ray_tracing package-linux-desktop`
+  - `make -C ray_tracing package-linux-desktop-self-test`
+  - `make -C ray_tracing package-linux-desktop-determinism-test`
+
+Linux desktop package target:
+
+- status:
+  private proof target only; not a public release target yet
+- package class:
+  `desktop_app_linux`
+- artifact role:
+  `desktop_app`
+- runtime:
+  `linux_gui`
+- expected private artifact name:
+  `optiC-<version>-linux-x86_64-desktop-stable.tar.gz`
+- expected private checksum sidecar:
+  `optiC-<version>-linux-x86_64-desktop-stable.tar.gz.sha256`
+- package root layout:
+
+```text
+optiC-<version>-linux-x86_64-desktop-stable/
+  bin/raytracing-launcher
+  bin/raytracing-bin
+  resources/config/
+  resources/shared/
+  resources/shaders/
+  resources/vk_renderer/
+  resources/data/runtime/
+  manifest.json
+  package_manifest.json
+  README.md
+```
+
+The Linux launcher copies bundled resources into a writable runtime directory,
+then launches `bin/raytracing-bin` from that runtime root. By default it uses
+`${XDG_DATA_HOME:-$HOME/.local/share}/RayTracing/runtime`, but proof helpers can
+override `RAY_TRACING_RUNTIME_DIR` and `XDG_STATE_HOME` so package smoke runs
+stay thread-local.
+
+The Linux desktop tarball is produced with deterministic archive metadata:
+
+- sorted tar entries by name;
+- POSIX tar format with deterministic PAX extended-header names;
+- PAX `atime` and `ctime` values deleted;
+- fixed tar mtime from `LINUX_DESKTOP_PACKAGE_EPOCH` (default `0`);
+- numeric owner/group `0:0`;
+- gzip `-n` so the gzip header does not embed local filename or timestamp;
+- a `.tar.gz.sha256` sidecar naming the archive basename.
+
+Use `package-linux-desktop-determinism-test` before treating a package target as
+release-ready. The target creates one staged package, records the archive
+SHA-256, removes only the archive and sidecar, archives the same staged package
+again, and fails if the second SHA differs from the first. This proves
+deterministic tar/gzip metadata for stable staged content; it does not claim
+full compiler/linker output reproducibility.
+
+Before any public Linux desktop release, the package must pass a real-display
+unpacked-package proof on the Linux PC. The minimum proof is:
+
+- build from a named source branch/commit;
+- run `package-linux-desktop-self-test`;
+- extract the tarball to a clean directory;
+- run `bin/raytracing-launcher --self-test` from the unpacked package;
+- launch `bin/raytracing-launcher` in the real KDE/X11 desktop session;
+- capture menu, post-action, and late screenshots;
+- confirm `[Menu] Start pressed` through the package launcher log;
+- keep the artifact role explicit so it cannot be confused with the Linux
+  headless worker tarball.
+
+Reusable Linux GUI package/proof flow for future programs:
+
+1. Add a role-explicit package class such as `desktop_app_linux`.
+2. Keep the package separate from any headless worker or CLI artifact.
+3. Bundle only the app binary, launcher, stable resources, manifests, and
+   package-local docs.
+4. Make the launcher copy resources into a writable runtime root instead of
+   mutating files inside the unpacked package.
+5. Emit deterministic tar metadata and a checksum sidecar.
+6. Add an unpacked launcher self-test that does not require a visible display.
+7. Prove the package on the Linux PC real desktop session through the bounded
+   report-inbox helper lane.
+8. Capture the app window, not the root desktop, and require a runtime marker
+   such as `[Menu] Start pressed` before classifying render progress as green.
+9. Keep public release promotion separate from private proof. Promotion needs an
+   explicit release-control approval, version decision, and public metadata
+   update.
 
 Optional icon inputs:
 
@@ -141,6 +246,9 @@ Release and worker artifact hygiene:
 - Signing, notarization, upload, and distribution targets remain explicit
   operator actions; the contract and self-test targets do not sign, notarize,
   upload, or publish.
+- Future release ZIPs produced by `release-artifact` include a ZIP-root
+  `.manifest.txt` entry and adjacent `.manifest.txt` / `.zip.sha256` sidecars.
+  Already-published `0.5.0` ZIP contents are unchanged.
 
 ## Launcher Runtime Contract
 
@@ -213,6 +321,36 @@ Bundled framework/runtime rules include:
 - Routine packaged-app confidence remains covered by `package-desktop-self-test`,
   `release-bundle-audit`, launcher `--print-config`, and manual/local launch
   checks.
+
+## Linux Desktop GUI Proof Boundary
+
+- The Linux headless worker package and the Linux desktop/windowed GUI package
+  are separate release surfaces. A clean headless render does not prove the SDL
+  window, desktop session, or Vulkan presentation path.
+- The first Linux desktop GUI proof should build the windowed `visual-harness`
+  target from a named Git branch or commit, launch the resulting `Ray_anim`
+  binary inside a real logged-in Linux desktop session, detect the RayTracing
+  window title, and capture a nonblank first-frame screenshot.
+- The current intended Linux PC proof command shape is:
+
+```sh
+python3 bin/linux_pc_ray_tracing_gui_proof_request.py \
+  --source-archive /path/to/ray-tracing-worker-vps-source-bundle.tar.gz \
+  --source-state-note "clean Git branch or commit source snapshot" \
+  --jobs 4 \
+  --launch-seconds 8
+```
+
+- Runtime assumptions for that proof:
+  - a real Linux desktop session is already logged in
+  - `DISPLAY` and `XAUTHORITY` are discovered from the desktop user's session
+  - SDL uses the X11 video driver for the first proof
+  - Vulkan and OpenGL must resolve to the installed desktop GPU driver
+  - screenshot capture is a proof artifact, not a packaged-app acceptance test
+- The expected pass classification is `gui_first_frame_captured`.
+- Package work should start only after a clean-source GUI proof passes. The next
+  package boundary is a Linux desktop app layout and unpacked smoke proof, not
+  publication.
 
 ## Current Limits
 

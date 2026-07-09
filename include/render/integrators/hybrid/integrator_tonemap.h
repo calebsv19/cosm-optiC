@@ -2,6 +2,7 @@
 #define INTEGRATOR_TONEMAP_H
 
 #include <stddef.h>
+#include <stdint.h>
 #include "render/integrator_common.h"
 
 #ifdef __cplusplus
@@ -17,6 +18,8 @@ typedef struct {
 } TonemapContext;
 
 float TonemapCurve(float x);
+float TonemapCurveWithFloor(float x, float floor);
+uint8_t TonemapCurveToByteWithFloor(float x, uint8_t floor_byte);
 void  TonemapApply(TonemapContext* ctx);
 void  TonemapTiles(TonemapContext* ctx);
 void  TonemapTile(TonemapContext* ctx, const IntegratorTile* tile);

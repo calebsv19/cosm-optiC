@@ -1,0 +1,45 @@
+{
+  "schema_version": "ray_tracing_agent_render_request_v1",
+  "run_id": "agent_render_mesh_asset_sphere_pressure_mrt12_static_cache",
+  "scene": {
+    "runtime_scene_path": "mesh_asset_runtime_spheres/scene_runtime_pressure_mrt10.json"
+  },
+  "volume": {
+    "enabled": false
+  },
+  "render": {
+    "start_frame": 0,
+    "frame_count": 3,
+    "width": 160,
+    "height": 96,
+    "normalized_t": 0.0,
+    "temporal_frames": 1,
+    "integrator_3d": "direct_light"
+  },
+  "inspection": {
+    "camera_position": {
+      "x": 0.0,
+      "y": -6.2,
+      "z": 2.2
+    },
+    "camera_look_at": {
+      "x": 0.0,
+      "y": 0.35,
+      "z": 0.9
+    },
+    "camera_zoom": 1.0,
+    "environment_light_mode": "ambient",
+    "ambient_strength": 0.35,
+    "top_fill_strength": 1.5,
+    "light_intensity": 4.0,
+    "light_radius": 0.12
+  },
+  "output": {
+    "root": "../../build/agent_runs/ray_tracing/mesh_asset_sphere_pressure_mrt12_static_cache",
+    "overwrite": true
+  },
+  "progress": {
+    "summary_path": "../../build/agent_runs/ray_tracing/mesh_asset_sphere_pressure_mrt12_static_cache/render_summary.json",
+    "progress_path": "../../build/agent_runs/ray_tracing/mesh_asset_sphere_pressure_mrt12_static_cache/render_progress.json"
+  }
+}

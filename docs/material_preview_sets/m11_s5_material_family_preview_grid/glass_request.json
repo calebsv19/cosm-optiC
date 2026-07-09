@@ -1,0 +1,47 @@
+{
+  "background_color": 2698549,
+  "columns": 4,
+  "height": 144,
+  "object_id": "rear_blue_panel",
+  "output_path": "<redacted-local-path:glass_preview.bmp>",
+  "runtime_scene_path": "<redacted-local-path:glass_scene_runtime.json>",
+  "schema": "ray_tracing_material_preview_request_v1",
+  "summary_path": "<redacted-local-path:glass_summary.json>",
+  "variants": [
+    {
+      "alpha": 0.62,
+      "label": "clear_a062",
+      "reflectivity": 0.02,
+      "roughness": 0.04
+    },
+    {
+      "alpha": 0.62,
+      "label": "frosted_a062",
+      "reflectivity": 0.02,
+      "roughness": 0.72
+    },
+    {
+      "alpha": 0.82,
+      "label": "dense_a082",
+      "reflectivity": 0.02,
+      "roughness": 0.18
+    },
+    {
+      "alpha": 0.68,
+      "label": "fog_overlay",
+      "preview_overlay": {
+        "color_depth": 0.7,
+        "contrast": 0.44,
+        "coverage": 0.56,
+        "grain": 0.36,
+        "kind": "fog",
+        "opacity": 0.68,
+        "seed": 53,
+        "surface_damage": 0.52
+      },
+      "reflectivity": 0.02,
+      "roughness": 0.24
+    }
+  ],
+  "width": 144
+}

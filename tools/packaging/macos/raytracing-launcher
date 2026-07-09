@@ -4,6 +4,7 @@ set -eu
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 APP_CONTENTS_DIR="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 RES_DIR="$APP_CONTENTS_DIR/Resources"
+TOOLS_DIR="$RES_DIR/bin"
 APP_SUPPORT_DIR_DEFAULT="${HOME}/Library/Application Support/RayTracing"
 APP_SUPPORT_DIR="${RAY_TRACING_APP_SUPPORT_DIR:-$APP_SUPPORT_DIR_DEFAULT}"
 RUNTIME_DIR_DEFAULT="$APP_SUPPORT_DIR/runtime"
@@ -13,6 +14,80 @@ LOG_FILE="$LOG_DIR/launcher.log"
 MOLTENVK_DYLIB="$APP_CONTENTS_DIR/Frameworks/libMoltenVK.dylib"
 VK_RUNTIME_DIR=""
 VK_ICD_FILE=""
+
+ensure_bundle_link() {
+    target="$1"
+    source="$2"
+    required_rels="${3:-}"
+    if [ -L "$target" ]; then
+        return 0
+    fi
+    if [ -e "$target" ]; then
+        if [ -n "$required_rels" ]; then
+            old_ifs="${IFS}"
+            IFS=':'
+            all_present=1
+            for required_rel in $required_rels; do
+                if [ ! -e "$target/$required_rel" ]; then
+                    all_present=0
+                    break
+                fi
+            done
+            IFS="${old_ifs}"
+            if [ "$all_present" -eq 1 ]; then
+                return 0
+            fi
+        fi
+        rm -rf "$target" 2>/dev/null || true
+    fi
+    if [ -e "$source" ]; then
+        ln -s "$source" "$target"
+    fi
+}
+
+ensure_bundle_copy() {
+    target="$1"
+    source="$2"
+    required_rels="${3:-}"
+    if [ -L "$target" ]; then
+        rm -rf "$target" 2>/dev/null || true
+    fi
+    if [ -e "$target" ] && [ -n "$required_rels" ]; then
+        old_ifs="${IFS}"
+        IFS=':'
+        all_present=1
+        for required_rel in $required_rels; do
+            if [ ! -e "$target/$required_rel" ]; then
+                all_present=0
+                break
+            fi
+        done
+        IFS="${old_ifs}"
+        if [ "$all_present" -eq 1 ]; then
+            return 0
+        fi
+        rm -rf "$target" 2>/dev/null || true
+    fi
+    [ -e "$source" ] || return 0
+    mkdir -p "$(dirname "$target")" 2>/dev/null || true
+    if [ -d "$source" ]; then
+        /usr/bin/ditto "$source" "$target"
+    else
+        cp "$source" "$target"
+    fi
+}
+
+sync_bundle_files() {
+    target_dir="$1"
+    source_dir="$2"
+    pattern="$3"
+    [ -d "$source_dir" ] || return 0
+    mkdir -p "$target_dir" 2>/dev/null || true
+    for source_file in "$source_dir"/$pattern; do
+        [ -f "$source_file" ] || continue
+        cp "$source_file" "$target_dir/$(basename "$source_file")"
+    done
+}
 
 mkdir -p "$LOG_DIR" 2>/dev/null || true
 if ! touch "$LOG_FILE" 2>/dev/null; then
@@ -35,27 +110,31 @@ setup_runtime_root() {
         "$RUNTIME_DIR/data/runtime/videos" \
         "$RUNTIME_DIR/data/snapshots" 2>/dev/null || true
 
-    for lane in config shared shaders vk_renderer; do
-        target="$RUNTIME_DIR/$lane"
-        source="$RES_DIR/$lane"
-        if [ -L "$target" ] || [ -e "$target" ]; then
-            continue
-        fi
-        if [ -e "$source" ]; then
-            ln -s "$source" "$target"
-        fi
-    done
+    ensure_bundle_copy "$RUNTIME_DIR/config" "$RES_DIR/config" "scene_config.json:animation_config.json:default.ttf"
+    sync_bundle_files "$RUNTIME_DIR/config/materials" "$RES_DIR/config/materials" "*.json"
+    ensure_bundle_copy "$RUNTIME_DIR/shared" "$RES_DIR/shared" "assets/fonts/Montserrat-Regular.ttf"
+    ensure_bundle_copy "$RUNTIME_DIR/shaders" "$RES_DIR/shaders" "textured.vert.spv:textured.frag.spv:line.vert.spv:line.frag.spv"
+    ensure_bundle_copy "$RUNTIME_DIR/vk_renderer" "$RES_DIR/vk_renderer" "shaders/textured.vert.spv:shaders/textured.frag.spv:shaders/line.vert.spv:shaders/line.frag.spv"
 }
 
 setup_runtime_root
 
 export VK_RENDERER_SHADER_ROOT="${VK_RENDERER_SHADER_ROOT:-$RUNTIME_DIR}"
 export SHAPE_ASSET_DIR="${SHAPE_ASSET_DIR:-$RUNTIME_DIR/config/objects}"
+export TIMERHUD_OUTPUT_ROOT="${TIMERHUD_OUTPUT_ROOT:-$RUNTIME_DIR}"
+export RAY_TRACING_TIMER_HUD_SETTINGS="${RAY_TRACING_TIMER_HUD_SETTINGS:-$RUNTIME_DIR/data/runtime/timer_hud_settings.json}"
+export RAY_TRACING_TIMER_HUD="${RAY_TRACING_TIMER_HUD:-1}"
+export RAY_TRACING_TIMER_HUD_OVERLAY="${RAY_TRACING_TIMER_HUD_OVERLAY:-1}"
+export RAY_TRACING_TIMER_HUD_VISUAL_MODE="${RAY_TRACING_TIMER_HUD_VISUAL_MODE:-hybrid}"
 export RAY_TRACING_USE_SHARED_THEME="${RAY_TRACING_USE_SHARED_THEME:-1}"
 export RAY_TRACING_USE_SHARED_THEME_FONT="${RAY_TRACING_USE_SHARED_THEME_FONT:-1}"
 export RAY_TRACING_USE_SHARED_FONT="${RAY_TRACING_USE_SHARED_FONT:-1}"
-export RAY_TRACING_FONT_PRESET="${RAY_TRACING_FONT_PRESET:-daw_default}"
+export RAY_TRACING_FONT_PRESET="${RAY_TRACING_FONT_PRESET:-ide}"
 export RAY_TRACING_RENDER_METRICS_DATASET_PATH="${RAY_TRACING_RENDER_METRICS_DATASET_PATH:-$RUNTIME_DIR/data/runtime/render_metrics.dataset.json}"
+if [ -x "$TOOLS_DIR/ffmpeg" ] && [ -z "${RAY_TRACING_FFMPEG_BIN:-}" ]; then
+    export RAY_TRACING_FFMPEG_BIN="$TOOLS_DIR/ffmpeg"
+fi
+export PATH="$TOOLS_DIR:/opt/homebrew/bin:/usr/local/bin:${PATH:-/usr/bin:/bin:/usr/sbin:/sbin}"
 
 if [ -f "$MOLTENVK_DYLIB" ]; then
     VK_RUNTIME_DIR="$RUNTIME_DIR/vk"
@@ -89,6 +168,11 @@ if [ "${1:-}" = "--print-config" ]; then
     echo "RES_DIR=$RES_DIR"
     echo "LOG_FILE=$LOG_FILE"
     echo "RAY_TRACING_RUNTIME_DIR=$RUNTIME_DIR"
+    echo "TIMERHUD_OUTPUT_ROOT=$TIMERHUD_OUTPUT_ROOT"
+    echo "RAY_TRACING_TIMER_HUD_SETTINGS=$RAY_TRACING_TIMER_HUD_SETTINGS"
+    echo "RAY_TRACING_TIMER_HUD=$RAY_TRACING_TIMER_HUD"
+    echo "RAY_TRACING_TIMER_HUD_OVERLAY=$RAY_TRACING_TIMER_HUD_OVERLAY"
+    echo "RAY_TRACING_TIMER_HUD_VISUAL_MODE=$RAY_TRACING_TIMER_HUD_VISUAL_MODE"
     echo "VK_RENDERER_SHADER_ROOT=$VK_RENDERER_SHADER_ROOT"
     echo "SHAPE_ASSET_DIR=$SHAPE_ASSET_DIR"
     echo "RAY_TRACING_USE_SHARED_THEME=$RAY_TRACING_USE_SHARED_THEME"
@@ -96,6 +180,8 @@ if [ "${1:-}" = "--print-config" ]; then
     echo "RAY_TRACING_USE_SHARED_FONT=$RAY_TRACING_USE_SHARED_FONT"
     echo "RAY_TRACING_FONT_PRESET=$RAY_TRACING_FONT_PRESET"
     echo "RAY_TRACING_RENDER_METRICS_DATASET_PATH=$RAY_TRACING_RENDER_METRICS_DATASET_PATH"
+    echo "RAY_TRACING_FFMPEG_BIN=${RAY_TRACING_FFMPEG_BIN:-}"
+    echo "PATH=$PATH"
     echo "VK_ICD_FILENAMES=${VK_ICD_FILENAMES:-}"
     echo "VK_DRIVER_FILES=${VK_DRIVER_FILES:-}"
     echo "MOLTENVK_DYLIB=$MOLTENVK_DYLIB"
@@ -108,21 +194,37 @@ if [ "${1:-}" = "--self-test" ]; then
     [ -f "$RUNTIME_DIR/config/animation_config.json" ] || { echo "missing: config/animation_config.json" >&2; exit 1; }
     [ -f "$RUNTIME_DIR/config/scene_config.json" ] || { echo "missing: config/scene_config.json" >&2; exit 1; }
     [ -f "$RUNTIME_DIR/config/default.ttf" ] || { echo "missing: config/default.ttf" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/config/materials/transparent.json" ] || { echo "missing: config/materials/transparent.json" >&2; exit 1; }
+    grep -q '"thin_walled": true' "$RUNTIME_DIR/config/materials/transparent.json" || { echo "stale: transparent material preset missing thin_walled=true" >&2; exit 1; }
     [ -f "$RUNTIME_DIR/config/objects/Hexagon.asset.json" ] || { echo "missing: bundled shape assets" >&2; exit 1; }
     [ -d "$RUNTIME_DIR/data/runtime" ] || { echo "missing: runtime dir" >&2; exit 1; }
     [ -d "$RUNTIME_DIR/data/runtime/frames" ] || { echo "missing: runtime frames dir" >&2; exit 1; }
     [ -d "$RUNTIME_DIR/data/runtime/videos" ] || { echo "missing: runtime videos dir" >&2; exit 1; }
+    if [ -n "${RAY_TRACING_FFMPEG_BIN:-}" ]; then
+        [ -x "$RAY_TRACING_FFMPEG_BIN" ] || { echo "missing: configured ffmpeg binary" >&2; exit 1; }
+    fi
     [ -f "$RUNTIME_DIR/vk_renderer/shaders/textured.vert.spv" ] || { echo "missing: bundled vk_renderer shader" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/vk_renderer/shaders/line.vert.spv" ] || { echo "missing: bundled vk_renderer line shader" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/vk_renderer/shaders/line.frag.spv" ] || { echo "missing: bundled vk_renderer line shader" >&2; exit 1; }
     [ -f "$RUNTIME_DIR/shaders/textured.vert.spv" ] || { echo "missing: bundled runtime shader" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/shaders/line.vert.spv" ] || { echo "missing: bundled runtime line shader" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/shaders/line.frag.spv" ] || { echo "missing: bundled runtime line shader" >&2; exit 1; }
     [ -f "$MOLTENVK_DYLIB" ] || { echo "missing: bundled MoltenVK dylib" >&2; exit 1; }
     [ -d "$RUNTIME_DIR" ] || { echo "missing: runtime state dir ($RUNTIME_DIR)" >&2; exit 1; }
     echo "self-test: ok"
     echo "LOG_FILE=$LOG_FILE"
     echo "RAY_TRACING_RUNTIME_DIR=$RUNTIME_DIR"
+    echo "TIMERHUD_OUTPUT_ROOT=$TIMERHUD_OUTPUT_ROOT"
+    echo "RAY_TRACING_TIMER_HUD_SETTINGS=$RAY_TRACING_TIMER_HUD_SETTINGS"
+    echo "RAY_TRACING_TIMER_HUD=$RAY_TRACING_TIMER_HUD"
+    echo "RAY_TRACING_TIMER_HUD_OVERLAY=$RAY_TRACING_TIMER_HUD_OVERLAY"
+    echo "RAY_TRACING_TIMER_HUD_VISUAL_MODE=$RAY_TRACING_TIMER_HUD_VISUAL_MODE"
     echo "VK_RENDERER_SHADER_ROOT=$VK_RENDERER_SHADER_ROOT"
     echo "SHAPE_ASSET_DIR=$SHAPE_ASSET_DIR"
     echo "RAY_TRACING_FONT_PRESET=$RAY_TRACING_FONT_PRESET"
     echo "RAY_TRACING_RENDER_METRICS_DATASET_PATH=$RAY_TRACING_RENDER_METRICS_DATASET_PATH"
+    echo "RAY_TRACING_FFMPEG_BIN=${RAY_TRACING_FFMPEG_BIN:-}"
+    echo "PATH=$PATH"
     echo "VK_ICD_FILENAMES=${VK_ICD_FILENAMES:-}"
     echo "VK_DRIVER_FILES=${VK_DRIVER_FILES:-}"
     echo "MOLTENVK_DYLIB=$MOLTENVK_DYLIB"
@@ -132,4 +234,7 @@ fi
 cd "$RUNTIME_DIR"
 printf '%s launch begin pid=%s cwd=%s runtime_dir=%s shader_root=%s shape_asset_dir=%s args=%s\n' \
     "$(date '+%Y-%m-%d %H:%M:%S')" "$$" "$RUNTIME_DIR" "$RUNTIME_DIR" "$VK_RENDERER_SHADER_ROOT" "$SHAPE_ASSET_DIR" "$*" >>"$LOG_FILE" 2>/dev/null || true
-exec "$SCRIPT_DIR/raytracing-bin" "$@" >>"$LOG_FILE" 2>&1
+"$SCRIPT_DIR/raytracing-bin" "$@" >>"$LOG_FILE" 2>&1
+status=$?
+printf '%s launch end pid=%s status=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$$" "$status" >>"$LOG_FILE" 2>/dev/null || true
+exit "$status"

@@ -1,18 +1,61 @@
 #include "scene/object_manager.h"
 #include "config/config_manager.h"
 #include "material/material_manager.h"
+#include "render/runtime_native_3d_prepare_cache.h"
 #include <string.h>
 #include <math.h>
 #include <stdlib.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+static double scene_object_clamp(double value, double min_value, double max_value) {
+    if (value < min_value) return min_value;
+    if (value > max_value) return max_value;
+    return value;
+}
+
 static void InitDefaultMaterial(SceneObject* obj) {
+    const Material* default_material = MaterialManagerGet(MaterialManagerDefaultId());
     obj->texture[0] = '\0';
     obj->color = 0xFFFFFF;
     obj->opacity = 1.0;
+    obj->alpha = 1.0;
     obj->reflectivity = 0.35;
     obj->roughness = 0.65;
+    obj->emissiveStrength = 0.0;
     obj->textureId = 0;
+    obj->textureOffsetU = 0.0;
+    obj->textureOffsetV = 0.0;
+    obj->textureScale = 1.0;
+    obj->textureStrength = 0.0;
+    obj->texturePatternMode = 0;
+    obj->textureCoverage = 0.5;
+    obj->textureGrain = 0.5;
+    obj->textureEdgeSoftness = 0.5;
+    obj->textureContrast = 0.5;
+    obj->textureFlow = 0.0;
+    obj->textureColorDepth = 0.5;
+    obj->textureSurfaceDamage = 0.5;
+    obj->textureSeed = 0;
     obj->material_id = MaterialManagerDefaultId();
+    obj->hasGlassTransportOverride = false;
+    obj->glassTransmission = default_material ? default_material->transparency : 0.0;
+    obj->glassIor = default_material ? default_material->ior : 1.0;
+    obj->glassAbsorptionDistance =
+        default_material ? default_material->absorption_distance : 1.0;
+    obj->glassThinWalled = default_material ? default_material->thin_walled : false;
+    obj->hasMirrorResponseOverride = false;
+    obj->mirrorReflectivity = obj->reflectivity;
+    obj->mirrorRoughness = obj->roughness;
+    obj->mirrorSpecular =
+        scene_object_clamp((default_material ? default_material->specular : 0.0) +
+                               obj->reflectivity,
+                           0.0,
+                           1.0);
+    obj->mirrorTint = obj->color & 0xFFFFFF;
+    obj->guideOnly = false;
 }
 
 void InitObject(SceneObject* obj, int type, double x, double y, double param1, double param2, double points[][2], int numPoints) {
@@ -188,12 +231,180 @@ void ScaleObject(SceneObject* obj, double scaleFactor) {
 
 // Marks an object as needing updates
 void MarkObjectDirty(SceneObject* obj) {
+    if (!obj) return;
     obj->dirty = true;
+    RuntimeNative3DPreparedSceneMarkDirty("scene_object_dirty");
 }
 
 // Checks if an object needs to be updated
 bool IsObjectDirty(SceneObject* obj) {
     return obj->dirty;
+}
+
+bool SceneObjectIsGuideOnly(const SceneObject* obj) {
+    return obj && obj->guideOnly;
+}
+
+bool SceneObjectParticipatesInRender(const SceneObject* obj) {
+    return obj && !obj->guideOnly;
+}
+
+int SceneObjectPackRGBBytes(Uint8 r, Uint8 g, Uint8 b) {
+    return ((int)r << 16) | ((int)g << 8) | (int)b;
+}
+
+Uint8 SceneObjectColorR(const SceneObject* obj) {
+    int packed = obj ? (obj->color & 0xFFFFFF) : 0xFFFFFF;
+    return (Uint8)((packed >> 16) & 0xFF);
+}
+
+Uint8 SceneObjectColorG(const SceneObject* obj) {
+    int packed = obj ? (obj->color & 0xFFFFFF) : 0xFFFFFF;
+    return (Uint8)((packed >> 8) & 0xFF);
+}
+
+Uint8 SceneObjectColorB(const SceneObject* obj) {
+    int packed = obj ? (obj->color & 0xFFFFFF) : 0xFFFFFF;
+    return (Uint8)(packed & 0xFF);
+}
+
+Uint8 SceneObjectAlphaByte(const SceneObject* obj) {
+    double alpha = obj ? obj->alpha : 1.0;
+    if (alpha < 0.0) alpha = 0.0;
+    if (alpha > 1.0) alpha = 1.0;
+    return (Uint8)lround(alpha * 255.0);
+}
+
+double SceneObjectAlphaFromByte(Uint8 alpha) {
+    return (double)alpha / 255.0;
+}
+
+void SceneObjectClearGlassTransportOverride(SceneObject* obj) {
+    const Material* material = NULL;
+    if (!obj) return;
+    material = MaterialManagerGet(obj->material_id);
+    obj->hasGlassTransportOverride = false;
+    obj->glassTransmission = material ? material->transparency : 0.0;
+    obj->glassIor = material ? material->ior : 1.0;
+    obj->glassAbsorptionDistance = material ? material->absorption_distance : 1.0;
+    obj->glassThinWalled = material ? material->thin_walled : false;
+}
+
+void SceneObjectSeedGlassTransportOverrideFromMaterial(SceneObject* obj) {
+    const Material* material = NULL;
+    if (!obj) return;
+    if (obj->hasGlassTransportOverride) return;
+    material = MaterialManagerGet(obj->material_id);
+    obj->hasGlassTransportOverride = true;
+    obj->glassTransmission = scene_object_clamp(material ? material->transparency : 0.0,
+                                                0.0,
+                                                1.0);
+    obj->glassIor = scene_object_clamp(material ? material->ior : 1.45, 1.0, 2.5);
+    obj->glassAbsorptionDistance =
+        scene_object_clamp(material ? material->absorption_distance : 2.0, 0.25, 8.0);
+    obj->glassThinWalled = material ? material->thin_walled : true;
+}
+
+bool SceneObjectResolveGlassTransport(const SceneObject* obj,
+                                      double* out_transmission,
+                                      double* out_ior,
+                                      double* out_absorption_distance,
+                                      bool* out_thin_walled) {
+    const Material* material = NULL;
+    if (!obj) return false;
+    material = MaterialManagerGet(obj->material_id);
+    if (out_transmission) {
+        *out_transmission = obj->hasGlassTransportOverride
+                                ? scene_object_clamp(obj->glassTransmission, 0.0, 1.0)
+                                : scene_object_clamp(material ? material->transparency : 0.0,
+                                                     0.0,
+                                                     1.0);
+    }
+    if (out_ior) {
+        *out_ior = obj->hasGlassTransportOverride
+                       ? scene_object_clamp(obj->glassIor, 1.0, 2.5)
+                       : scene_object_clamp(material ? material->ior : 1.0, 1.0, 2.5);
+    }
+    if (out_absorption_distance) {
+        *out_absorption_distance =
+            obj->hasGlassTransportOverride
+                ? scene_object_clamp(obj->glassAbsorptionDistance, 0.25, 8.0)
+                : scene_object_clamp(material ? material->absorption_distance : 1.0,
+                                     0.25,
+                                     8.0);
+    }
+    if (out_thin_walled) {
+        *out_thin_walled = obj->hasGlassTransportOverride
+                               ? obj->glassThinWalled
+                               : (material ? material->thin_walled : false);
+    }
+    return true;
+}
+
+static double scene_object_mirror_default_specular(const SceneObject* obj,
+                                                   const Material* material,
+                                                   double reflectivity) {
+    (void)obj;
+    return scene_object_clamp((material ? material->specular : 0.0) + reflectivity,
+                              0.0,
+                              1.0);
+}
+
+void SceneObjectClearMirrorResponseOverride(SceneObject* obj) {
+    const Material* material = NULL;
+    if (!obj) return;
+    material = MaterialManagerGet(obj->material_id);
+    obj->hasMirrorResponseOverride = false;
+    obj->mirrorReflectivity = scene_object_clamp(obj->reflectivity, 0.0, 1.0);
+    obj->mirrorRoughness = scene_object_clamp(obj->roughness, 0.0, 1.0);
+    obj->mirrorSpecular =
+        scene_object_mirror_default_specular(obj, material, obj->mirrorReflectivity);
+    obj->mirrorTint = obj->color & 0xFFFFFF;
+}
+
+void SceneObjectSeedMirrorResponseOverrideFromMaterial(SceneObject* obj) {
+    const Material* material = NULL;
+    if (!obj) return;
+    if (obj->hasMirrorResponseOverride) return;
+    material = MaterialManagerGet(obj->material_id);
+    obj->hasMirrorResponseOverride = true;
+    obj->mirrorReflectivity = scene_object_clamp(obj->reflectivity, 0.0, 1.0);
+    obj->mirrorRoughness = scene_object_clamp(obj->roughness, 0.0, 1.0);
+    obj->mirrorSpecular =
+        scene_object_mirror_default_specular(obj, material, obj->mirrorReflectivity);
+    obj->mirrorTint = obj->color & 0xFFFFFF;
+}
+
+bool SceneObjectResolveMirrorResponse(const SceneObject* obj,
+                                      double* out_reflectivity,
+                                      double* out_roughness,
+                                      double* out_specular,
+                                      int* out_tint) {
+    const Material* material = NULL;
+    double reflectivity = 0.0;
+    if (!obj) return false;
+    material = MaterialManagerGet(obj->material_id);
+    reflectivity = obj->hasMirrorResponseOverride
+                       ? scene_object_clamp(obj->mirrorReflectivity, 0.0, 1.0)
+                       : scene_object_clamp(obj->reflectivity, 0.0, 1.0);
+    if (out_reflectivity) {
+        *out_reflectivity = reflectivity;
+    }
+    if (out_roughness) {
+        *out_roughness = obj->hasMirrorResponseOverride
+                             ? scene_object_clamp(obj->mirrorRoughness, 0.0, 1.0)
+                             : scene_object_clamp(obj->roughness, 0.0, 1.0);
+    }
+    if (out_specular) {
+        *out_specular = obj->hasMirrorResponseOverride
+                            ? scene_object_clamp(obj->mirrorSpecular, 0.0, 1.0)
+                            : scene_object_mirror_default_specular(obj, material, reflectivity);
+    }
+    if (out_tint) {
+        *out_tint = obj->hasMirrorResponseOverride ? (obj->mirrorTint & 0xFFFFFF)
+                                                   : (obj->color & 0xFFFFFF);
+    }
+    return true;
 }
 
 void SegmentPathInit(SegmentPath* path) {

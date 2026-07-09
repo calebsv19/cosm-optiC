@@ -1,0 +1,158 @@
+#!/bin/sh
+set -eu
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+PACKAGE_DIR="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
+RES_DIR="$PACKAGE_DIR/resources"
+TOOLS_DIR="$RES_DIR/bin"
+XDG_DATA_HOME_DEFAULT="${HOME}/.local/share"
+XDG_STATE_HOME_DEFAULT="${HOME}/.local/state"
+APP_SUPPORT_DIR_DEFAULT="${XDG_DATA_HOME:-$XDG_DATA_HOME_DEFAULT}/RayTracing"
+APP_SUPPORT_DIR="${RAY_TRACING_APP_SUPPORT_DIR:-$APP_SUPPORT_DIR_DEFAULT}"
+RUNTIME_DIR_DEFAULT="$APP_SUPPORT_DIR/runtime"
+RUNTIME_DIR="${RAY_TRACING_RUNTIME_DIR:-$RUNTIME_DIR_DEFAULT}"
+LOG_DIR="${XDG_STATE_HOME:-$XDG_STATE_HOME_DEFAULT}/RayTracing"
+LOG_FILE="$LOG_DIR/launcher.log"
+
+copy_tree_if_needed() {
+    target="$1"
+    source="$2"
+    required_rels="${3:-}"
+    if [ -L "$target" ]; then
+        rm -rf "$target" 2>/dev/null || true
+    fi
+    if [ -e "$target" ] && [ -n "$required_rels" ]; then
+        old_ifs="${IFS}"
+        IFS=':'
+        all_present=1
+        for required_rel in $required_rels; do
+            if [ ! -e "$target/$required_rel" ]; then
+                all_present=0
+                break
+            fi
+        done
+        IFS="${old_ifs}"
+        if [ "$all_present" -eq 1 ]; then
+            return 0
+        fi
+        rm -rf "$target" 2>/dev/null || true
+    fi
+    [ -e "$source" ] || return 0
+    mkdir -p "$(dirname "$target")" 2>/dev/null || true
+    cp -R "$source" "$target"
+}
+
+sync_bundle_files() {
+    target_dir="$1"
+    source_dir="$2"
+    pattern="$3"
+    [ -d "$source_dir" ] || return 0
+    mkdir -p "$target_dir" 2>/dev/null || true
+    for source_file in "$source_dir"/$pattern; do
+        [ -f "$source_file" ] || continue
+        cp "$source_file" "$target_dir/$(basename "$source_file")"
+    done
+}
+
+mkdir -p "$LOG_DIR" 2>/dev/null || true
+if ! touch "$LOG_FILE" 2>/dev/null; then
+    LOG_FILE="${TMPDIR:-/tmp}/raytracing-launcher.log"
+    touch "$LOG_FILE" 2>/dev/null || true
+fi
+
+setup_runtime_root() {
+    mkdir -p "$RUNTIME_DIR" 2>/dev/null || true
+    if [ ! -d "$RUNTIME_DIR" ]; then
+        RUNTIME_DIR="${TMPDIR:-/tmp}/RayTracing/runtime"
+        mkdir -p "$RUNTIME_DIR" 2>/dev/null || true
+    fi
+    if [ ! -d "$RUNTIME_DIR" ]; then
+        echo "failed to create writable runtime directory" >&2
+        exit 1
+    fi
+
+    mkdir -p "$RUNTIME_DIR/data/runtime/frames" \
+        "$RUNTIME_DIR/data/runtime/videos" \
+        "$RUNTIME_DIR/data/snapshots" 2>/dev/null || true
+
+    copy_tree_if_needed "$RUNTIME_DIR/config" "$RES_DIR/config" "scene_config.json:animation_config.json:default.ttf"
+    sync_bundle_files "$RUNTIME_DIR/config/materials" "$RES_DIR/config/materials" "*.json"
+    copy_tree_if_needed "$RUNTIME_DIR/shared" "$RES_DIR/shared" "assets/fonts/Montserrat-Regular.ttf"
+    copy_tree_if_needed "$RUNTIME_DIR/shaders" "$RES_DIR/shaders" "textured.vert.spv:textured.frag.spv:line.vert.spv:line.frag.spv"
+    copy_tree_if_needed "$RUNTIME_DIR/vk_renderer" "$RES_DIR/vk_renderer" "shaders/textured.vert.spv:shaders/textured.frag.spv:shaders/line.vert.spv:shaders/line.frag.spv"
+}
+
+setup_runtime_root
+
+export VK_RENDERER_SHADER_ROOT="${VK_RENDERER_SHADER_ROOT:-$RUNTIME_DIR}"
+export SHAPE_ASSET_DIR="${SHAPE_ASSET_DIR:-$RUNTIME_DIR/config/objects}"
+export TIMERHUD_OUTPUT_ROOT="${TIMERHUD_OUTPUT_ROOT:-$RUNTIME_DIR}"
+export RAY_TRACING_TIMER_HUD_SETTINGS="${RAY_TRACING_TIMER_HUD_SETTINGS:-$RUNTIME_DIR/data/runtime/timer_hud_settings.json}"
+export RAY_TRACING_TIMER_HUD="${RAY_TRACING_TIMER_HUD:-1}"
+export RAY_TRACING_TIMER_HUD_OVERLAY="${RAY_TRACING_TIMER_HUD_OVERLAY:-1}"
+export RAY_TRACING_TIMER_HUD_VISUAL_MODE="${RAY_TRACING_TIMER_HUD_VISUAL_MODE:-hybrid}"
+export RAY_TRACING_USE_SHARED_THEME="${RAY_TRACING_USE_SHARED_THEME:-1}"
+export RAY_TRACING_USE_SHARED_THEME_FONT="${RAY_TRACING_USE_SHARED_THEME_FONT:-1}"
+export RAY_TRACING_USE_SHARED_FONT="${RAY_TRACING_USE_SHARED_FONT:-1}"
+export RAY_TRACING_FONT_PRESET="${RAY_TRACING_FONT_PRESET:-ide}"
+export RAY_TRACING_RENDER_METRICS_DATASET_PATH="${RAY_TRACING_RENDER_METRICS_DATASET_PATH:-$RUNTIME_DIR/data/runtime/render_metrics.dataset.json}"
+if [ -x "$TOOLS_DIR/ffmpeg" ] && [ -z "${RAY_TRACING_FFMPEG_BIN:-}" ]; then
+    export RAY_TRACING_FFMPEG_BIN="$TOOLS_DIR/ffmpeg"
+fi
+export PATH="$TOOLS_DIR:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
+
+if [ "${1:-}" = "--print-config" ]; then
+    echo "PACKAGE_DIR=$PACKAGE_DIR"
+    echo "RES_DIR=$RES_DIR"
+    echo "LOG_FILE=$LOG_FILE"
+    echo "RAY_TRACING_RUNTIME_DIR=$RUNTIME_DIR"
+    echo "TIMERHUD_OUTPUT_ROOT=$TIMERHUD_OUTPUT_ROOT"
+    echo "RAY_TRACING_TIMER_HUD_SETTINGS=$RAY_TRACING_TIMER_HUD_SETTINGS"
+    echo "RAY_TRACING_TIMER_HUD=$RAY_TRACING_TIMER_HUD"
+    echo "RAY_TRACING_TIMER_HUD_OVERLAY=$RAY_TRACING_TIMER_HUD_OVERLAY"
+    echo "RAY_TRACING_TIMER_HUD_VISUAL_MODE=$RAY_TRACING_TIMER_HUD_VISUAL_MODE"
+    echo "VK_RENDERER_SHADER_ROOT=$VK_RENDERER_SHADER_ROOT"
+    echo "SHAPE_ASSET_DIR=$SHAPE_ASSET_DIR"
+    echo "RAY_TRACING_USE_SHARED_THEME=$RAY_TRACING_USE_SHARED_THEME"
+    echo "RAY_TRACING_USE_SHARED_THEME_FONT=$RAY_TRACING_USE_SHARED_THEME_FONT"
+    echo "RAY_TRACING_USE_SHARED_FONT=$RAY_TRACING_USE_SHARED_FONT"
+    echo "RAY_TRACING_FONT_PRESET=$RAY_TRACING_FONT_PRESET"
+    echo "RAY_TRACING_RENDER_METRICS_DATASET_PATH=$RAY_TRACING_RENDER_METRICS_DATASET_PATH"
+    echo "RAY_TRACING_FFMPEG_BIN=${RAY_TRACING_FFMPEG_BIN:-}"
+    echo "PATH=$PATH"
+    exit 0
+fi
+
+if [ "${1:-}" = "--self-test" ]; then
+    [ -x "$SCRIPT_DIR/raytracing-bin" ] || { echo "missing: raytracing-bin" >&2; exit 1; }
+    [ -f "$PACKAGE_DIR/package_manifest.json" ] || { echo "missing: package_manifest.json" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/config/animation_config.json" ] || { echo "missing: config/animation_config.json" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/config/scene_config.json" ] || { echo "missing: config/scene_config.json" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/config/default.ttf" ] || { echo "missing: config/default.ttf" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/config/materials/transparent.json" ] || { echo "missing: config/materials/transparent.json" >&2; exit 1; }
+    grep -q '"thin_walled": true' "$RUNTIME_DIR/config/materials/transparent.json" || { echo "stale: transparent material preset missing thin_walled=true" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/config/objects/Hexagon.asset.json" ] || { echo "missing: bundled shape assets" >&2; exit 1; }
+    [ -d "$RUNTIME_DIR/data/runtime" ] || { echo "missing: runtime dir" >&2; exit 1; }
+    [ -d "$RUNTIME_DIR/data/runtime/frames" ] || { echo "missing: runtime frames dir" >&2; exit 1; }
+    [ -d "$RUNTIME_DIR/data/runtime/videos" ] || { echo "missing: runtime videos dir" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/vk_renderer/shaders/textured.vert.spv" ] || { echo "missing: bundled vk_renderer shader" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/vk_renderer/shaders/line.vert.spv" ] || { echo "missing: bundled vk_renderer line shader" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/vk_renderer/shaders/line.frag.spv" ] || { echo "missing: bundled vk_renderer line shader" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/shaders/textured.vert.spv" ] || { echo "missing: bundled runtime shader" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/shaders/line.vert.spv" ] || { echo "missing: bundled runtime line shader" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/shaders/line.frag.spv" ] || { echo "missing: bundled runtime line shader" >&2; exit 1; }
+    echo "self-test: ok"
+    echo "LOG_FILE=$LOG_FILE"
+    echo "RAY_TRACING_RUNTIME_DIR=$RUNTIME_DIR"
+    echo "VK_RENDERER_SHADER_ROOT=$VK_RENDERER_SHADER_ROOT"
+    echo "SHAPE_ASSET_DIR=$SHAPE_ASSET_DIR"
+    echo "RAY_TRACING_FONT_PRESET=$RAY_TRACING_FONT_PRESET"
+    echo "RAY_TRACING_RENDER_METRICS_DATASET_PATH=$RAY_TRACING_RENDER_METRICS_DATASET_PATH"
+    echo "RAY_TRACING_FFMPEG_BIN=${RAY_TRACING_FFMPEG_BIN:-}"
+    exit 0
+fi
+
+cd "$RUNTIME_DIR"
+printf '%s launch begin pid=%s cwd=%s runtime_dir=%s shader_root=%s shape_asset_dir=%s args=%s\n' \
+    "$(date '+%Y-%m-%d %H:%M:%S')" "$$" "$RUNTIME_DIR" "$RUNTIME_DIR" "$VK_RENDERER_SHADER_ROOT" "$SHAPE_ASSET_DIR" "$*" >>"$LOG_FILE" 2>/dev/null || true
+exec "$SCRIPT_DIR/raytracing-bin" "$@" >>"$LOG_FILE" 2>&1

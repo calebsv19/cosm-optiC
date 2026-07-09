@@ -1,0 +1,66 @@
+{
+  "schema_version": "ray_tracing_visual_matrix_v1",
+  "matrix_id": "mirror_surface_unification",
+  "title": "Mirror Surface Unification Visual Matrix",
+  "scene_path": "scene_plane_runtime.json",
+  "default_output_root": "../../../../build/agent_runs/ray_tracing/disney_v2_visual_matrix/mirror_surface_unification",
+  "private_workspace_output_root": "../../../../../_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_visual_matrix/mirror_surface_unification",
+  "default_review_root": "../../../../../_private_workspace_artifacts/agent_runs/ray_tracing/disney_v2_visual_matrix/mirror_surface_unification/matrix_review",
+  "groups": [
+    {
+      "id": "surface_kind_parity",
+      "purpose": "Compare plane, thin-prism, and mesh-asset mirror walls without denoise.",
+      "requests": [
+        "request_plane_denoise_off_1.json",
+        "request_prism_denoise_off_1.json",
+        "request_mesh_denoise_off_1.json"
+      ]
+    },
+    {
+      "id": "surface_kind_denoise_on",
+      "purpose": "Show the same mirror wall variants under the Disney v2 denoise/temporal policy.",
+      "requests": [
+        "request_plane_denoise_on_12.json",
+        "request_prism_denoise_on_12.json",
+        "request_mesh_denoise_on_12.json"
+      ]
+    }
+  ],
+  "comparisons": [
+    {
+      "id": "plane_vs_prism_mirror_no_denoise",
+      "group": "surface_kind_parity",
+      "before": "request_plane_denoise_off_1.json",
+      "after": "request_prism_denoise_off_1.json",
+      "purpose": "Plane and prism mirror walls should reflect the same colored objects and finite light."
+    },
+    {
+      "id": "plane_vs_mesh_mirror_no_denoise",
+      "group": "surface_kind_parity",
+      "before": "request_plane_denoise_off_1.json",
+      "after": "request_mesh_denoise_off_1.json",
+      "purpose": "Plane and mesh-asset mirror walls should reflect the same colored objects and finite light."
+    },
+    {
+      "id": "plane_mirror_denoise_off_vs_on",
+      "group": "surface_kind_denoise_on",
+      "before": "request_plane_denoise_off_1.json",
+      "after": "request_plane_denoise_on_12.json",
+      "purpose": "Denoise may smooth stable matte regions while preserving mirror/glossy pixels."
+    },
+    {
+      "id": "prism_mirror_denoise_off_vs_on",
+      "group": "surface_kind_denoise_on",
+      "before": "request_prism_denoise_off_1.json",
+      "after": "request_prism_denoise_on_12.json",
+      "purpose": "Denoise may smooth stable matte regions while preserving prism mirror pixels."
+    },
+    {
+      "id": "mesh_mirror_denoise_off_vs_on",
+      "group": "surface_kind_denoise_on",
+      "before": "request_mesh_denoise_off_1.json",
+      "after": "request_mesh_denoise_on_12.json",
+      "purpose": "Denoise may smooth stable matte regions while preserving mesh mirror pixels."
+    }
+  ]
+}

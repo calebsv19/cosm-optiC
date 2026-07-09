@@ -7,7 +7,7 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 CHECKER_C="$TMP_DIR/check_fluid_pack_contract_parity.c"
 CHECKER_BIN="$TMP_DIR/check_fluid_pack_contract_parity"
-PACK_PATH="$ROOT_DIR/../shared/core/core_pack/tests/fixtures/physics_v1_sample.pack"
+PACK_PATH="$ROOT_DIR/third_party/codework_shared/core/core_pack/tests/fixtures/physics_v1_sample.pack"
 
 cat > "$CHECKER_C" <<'C_EOF'
 #include <stdint.h>
@@ -169,14 +169,14 @@ C_EOF
 cc -std=c11 -Wall -Wextra -Wpedantic -g \
    -I"$ROOT_DIR/include" \
    -I"$ROOT_DIR/src" \
-   -I"$ROOT_DIR/../shared/core/core_pack/include" \
-   -I"$ROOT_DIR/../shared/core/core_io/include" \
-   -I"$ROOT_DIR/../shared/core/core_base/include" \
+   -I"$ROOT_DIR/third_party/codework_shared/core/core_pack/include" \
+   -I"$ROOT_DIR/third_party/codework_shared/core/core_io/include" \
+   -I"$ROOT_DIR/third_party/codework_shared/core/core_base/include" \
    "$CHECKER_C" \
    "$ROOT_DIR/src/import/fluid_pack_import.c" \
-   "$ROOT_DIR/../shared/core/core_pack/src/core_pack.c" \
-   "$ROOT_DIR/../shared/core/core_io/src/core_io.c" \
-   "$ROOT_DIR/../shared/core/core_base/src/core_base.c" \
+   "$ROOT_DIR/third_party/codework_shared/core/core_pack/src/core_pack.c" \
+   "$ROOT_DIR/third_party/codework_shared/core/core_io/src/core_io.c" \
+   "$ROOT_DIR/third_party/codework_shared/core/core_base/src/core_base.c" \
    -o "$CHECKER_BIN" -lm
 
 "$CHECKER_BIN" "$PACK_PATH"

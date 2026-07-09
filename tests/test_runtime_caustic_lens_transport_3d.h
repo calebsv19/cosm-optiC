@@ -1,0 +1,6 @@
+#ifndef TEST_RUNTIME_CAUSTIC_LENS_TRANSPORT_3D_H
+#define TEST_RUNTIME_CAUSTIC_LENS_TRANSPORT_3D_H
+
+int run_test_runtime_caustic_lens_transport_3d_tests(void);
+
+#endif

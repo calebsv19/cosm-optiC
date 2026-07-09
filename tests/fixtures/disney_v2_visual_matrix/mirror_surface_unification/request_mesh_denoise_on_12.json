@@ -1,0 +1,38 @@
+{
+  "schema_version": "ray_tracing_agent_render_request_v1",
+  "run_id": "visual_matrix_mirror_surface_mesh_denoise_on_12",
+  "scene": { "runtime_scene_path": "scene_mesh_runtime.json" },
+  "volume": { "enabled": false },
+  "render": {
+    "start_frame": 0,
+    "frame_count": 1,
+    "width": 240,
+    "height": 135,
+    "normalized_t": 0.0,
+    "temporal_frames": 12,
+    "integrator_3d": "disney_v2",
+    "denoise_enabled": true
+  },
+  "inspection": {
+    "camera_position": { "x": 0.0, "y": -4.4, "z": 0.62 },
+    "camera_look_at": { "x": 0.0, "y": 0.55, "z": -0.02 },
+    "camera_zoom": 1.0,
+    "environment_light_mode": "ambient",
+    "ambient_strength": 0.16,
+    "top_fill_strength": 0.45,
+    "light_intensity": 9.5,
+    "light_radius": 0.16,
+    "secondary_diffuse_samples_3d": 4,
+    "transmission_samples_3d": 2,
+    "object_audit_enabled": true,
+    "object_audit_max_dimension": 128
+  },
+  "output": {
+    "root": "../../../../build/agent_runs/ray_tracing/disney_v2_visual_matrix/mirror_surface_unification/mesh_denoise_on_12",
+    "overwrite": true
+  },
+  "progress": {
+    "summary_path": "../../../../build/agent_runs/ray_tracing/disney_v2_visual_matrix/mirror_surface_unification/mesh_denoise_on_12/render_summary.json",
+    "progress_path": "../../../../build/agent_runs/ray_tracing/disney_v2_visual_matrix/mirror_surface_unification/mesh_denoise_on_12/render_progress.json"
+  }
+}

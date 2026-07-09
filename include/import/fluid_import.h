@@ -4,6 +4,15 @@
 #include <stdint.h>
 #include <stddef.h>
 
+// Legacy planar fluid import contract.
+//
+// These types intentionally describe the vf2d/VFHD physics lane only:
+// width/height grids plus density/velX/velY metadata.
+//
+// PSBU-11A freezes truthful XYZ volume ingest as a separate vf3d/VF3H contract.
+// When that lane lands, it should use dedicated 3D carrier types/APIs rather
+// than mutating this planar struct family in place.
+
 typedef struct {
     uint32_t version;            // 1 or 2
     uint32_t grid_w;
@@ -61,4 +70,6 @@ void fluid_manifest_free(FluidManifest *manifest);
 
 // Convenience: load a single frame without a manifest. Uses header metadata
 // (origin defaults 0/0, cell_size 1 for v1) and leaves manifest fields empty.
+// This remains a vf2d-oriented convenience path until the dedicated vf3d lane
+// adds its own single-frame helper.
 bool fluid_frame_load_single(const char *path, FluidFrame *out);

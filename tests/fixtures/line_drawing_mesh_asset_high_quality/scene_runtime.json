@@ -1,0 +1,146 @@
+{
+  "schema_family": "codework_scene",
+  "schema_variant": "scene_runtime_v1",
+  "schema_version": 1,
+  "scene_id": "line_drawing_high_quality_mesh_asset_parity",
+  "source_scene_id": "agent_high_quality_mesh_sphere",
+  "space_mode_default": "3d",
+  "unit_system": "meters",
+  "world_scale": 1.0,
+  "objects": [
+    {
+      "object_id": "floor",
+      "object_type": "plane_primitive",
+      "space_mode_intent": "2d",
+      "dimensional_mode": "plane_locked",
+      "locked_plane": "xy",
+      "projection_policy": "plane_xy_lock",
+      "extrusion_policy": "none",
+      "transform": {
+        "position": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+      },
+      "geometry_ref": { "kind": "shape_asset", "id": "shape_floor" },
+      "tags": ["authoring", "line_drawing", "primitive", "plane"],
+      "flags": { "visible": true, "locked": false, "selectable": true },
+      "material_ref": { "id": "mat_high_quality_default" },
+      "extensions": {
+        "line_drawing": {
+          "geometry_source": "objects3d",
+          "source_lane": "objects3d",
+          "layout_object_id": 1,
+          "primitive_kind": "plane",
+          "primitive_payload": {
+            "width": 4.2,
+            "height": 4.2,
+            "lock_to_construction_plane": false,
+            "lock_to_bounds": true,
+            "frame": {
+              "origin": { "x": 0.0, "y": 0.0, "z": 0.0 },
+              "axisU": { "x": 1.0, "y": 0.0, "z": 0.0 },
+              "axisV": { "x": 0.0, "y": 1.0, "z": 0.0 },
+              "normal": { "x": 0.0, "y": 0.0, "z": 1.0 }
+            }
+          }
+        }
+      },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 4.2,
+        "height": 4.2,
+        "lock_to_construction_plane": false,
+        "lock_to_bounds": true,
+        "frame": {
+          "origin": { "x": 0.0, "y": 0.0, "z": 0.0 },
+          "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+          "axis_v": { "x": 0.0, "y": 1.0, "z": 0.0 },
+          "normal": { "x": 0.0, "y": 0.0, "z": 1.0 }
+        }
+      }
+    },
+    {
+      "object_id": "high_quality_sphere",
+      "object_type": "mesh_asset_instance",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": {
+        "position": { "x": 0.0, "y": 0.0, "z": 0.62 },
+        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "scale": { "x": 0.52, "y": 0.52, "z": 0.52 }
+      },
+      "geometry_ref": {
+        "kind": "mesh_asset",
+        "id": "asset_sphere_128x64",
+        "variant": "runtime_default"
+      },
+      "material_ref": { "id": "mat_high_quality_sphere" },
+      "tags": ["authoring", "line_drawing", "mesh_asset"],
+      "flags": { "visible": true, "locked": false, "selectable": true },
+      "extensions": {
+        "line_drawing": {
+          "geometry_source": "mesh_asset_instance",
+          "source_lane": "objects3d",
+          "layout_object_id": 2,
+          "mesh_asset_id": "asset_sphere_128x64",
+          "runtime_mesh_path": "../mesh_asset_runtime_spheres/assets/mesh_assets/asset_sphere_128x64.runtime.json",
+          "runtime_vertex_count": 8066,
+          "runtime_triangle_count": 16128,
+          "local_bounds": {
+            "min": { "x": -1.0, "y": -1.0, "z": -1.0 },
+            "max": { "x": 1.0, "y": 1.0, "z": 1.0 }
+          }
+        }
+      }
+    }
+  ],
+  "hierarchy": [
+    { "parent_object_id": "obj_line_drawing_layout", "child_object_id": "floor" },
+    { "parent_object_id": "obj_line_drawing_layout", "child_object_id": "high_quality_sphere" }
+  ],
+  "materials": [
+    {
+      "material_id": "mat_high_quality_default",
+      "material_type": "flat_color",
+      "extensions": { "line_drawing": { "preset": "default" } }
+    },
+    {
+      "material_id": "mat_high_quality_sphere",
+      "material_type": "flat_color",
+      "extensions": { "line_drawing": { "preset": "mesh_asset" } }
+    }
+  ],
+  "lights": [
+    {
+      "light_id": "light_high_quality_key",
+      "light_type": "point",
+      "transform": { "position": { "x": 3.0, "y": 4.0, "z": 5.0 } }
+    }
+  ],
+  "cameras": [
+    {
+      "camera_id": "cam_high_quality_default",
+      "camera_type": "perspective",
+      "transform": { "position": { "x": 0.0, "y": 0.0, "z": 8.0 } }
+    }
+  ],
+  "constraints": [],
+  "extensions": {
+    "line_drawing": {
+      "active_anchor_count": 0,
+      "active_wall_count": 0,
+      "producer": "line_drawing",
+      "authoring_contract": "np2",
+      "active_object3d_count": 1
+    },
+    "ray_tracing": {
+      "authoring": {
+        "camera_focus_target": { "x": 0.0, "y": 0.0, "z": 0.65 },
+        "object_materials": [
+          { "object_id": "floor", "material_id": 0, "object_color": 7304303, "roughness": 0.85 },
+          { "object_id": "high_quality_sphere", "material_id": 0, "object_color": 12933707, "roughness": 0.46 }
+        ]
+      }
+    }
+  }
+}

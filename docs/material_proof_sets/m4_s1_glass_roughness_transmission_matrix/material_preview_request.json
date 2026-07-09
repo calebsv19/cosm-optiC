@@ -1,0 +1,61 @@
+{
+  "schema": "ray_tracing_material_preview_request_v1",
+  "runtime_scene_path": "../../../tests/fixtures/disney_v2_visual_matrix/transparent_interior_stack/scene_runtime.json",
+  "object_id": "glass_front",
+  "width": 160,
+  "height": 160,
+  "columns": 4,
+  "background_color": 2697513,
+  "output_path": "preview.bmp",
+  "summary_path": "material_preview_summary.json",
+  "variants": [
+    {
+      "label": "r00_smooth_alpha085",
+      "roughness": 0.04,
+      "alpha": 0.85,
+      "reflectivity": 0.02
+    },
+    {
+      "label": "r01_low_alpha085",
+      "roughness": 0.12,
+      "alpha": 0.85,
+      "reflectivity": 0.02
+    },
+    {
+      "label": "r02_soft_alpha085",
+      "roughness": 0.24,
+      "alpha": 0.85,
+      "reflectivity": 0.02
+    },
+    {
+      "label": "r03_mid_alpha085",
+      "roughness": 0.4,
+      "alpha": 0.85,
+      "reflectivity": 0.02
+    },
+    {
+      "label": "r04_rough_alpha085",
+      "roughness": 0.68,
+      "alpha": 0.85,
+      "reflectivity": 0.02
+    },
+    {
+      "label": "r05_frosted_alpha085",
+      "roughness": 1.0,
+      "alpha": 0.85,
+      "reflectivity": 0.02
+    },
+    {
+      "label": "t00_alpha100",
+      "roughness": 0.18,
+      "alpha": 1.0,
+      "reflectivity": 0.02
+    },
+    {
+      "label": "t01_alpha075",
+      "roughness": 0.18,
+      "alpha": 0.75,
+      "reflectivity": 0.02
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "schema_version": "ray_tracing_agent_render_request_v1",
+  "run_id": "caustic_probe_glass_sphere_emission_transparency_l4",
+  "scene": {
+    "runtime_scene_path": "scene_runtime.json"
+  },
+  "volume": {
+    "enabled": false
+  },
+  "render": {
+    "start_frame": 0,
+    "frame_count": 1,
+    "width": 192,
+    "height": 128,
+    "normalized_t": 0.0,
+    "temporal_frames": 1,
+    "integrator_3d": "emission_transparency"
+  },
+  "inspection": {
+    "preset": "glass_review",
+    "camera_position": { "x": 0.0, "y": -4.8, "z": 2.05 },
+    "camera_look_at": { "x": 0.0, "y": 0.0, "z": 0.62 },
+    "camera_zoom": 1.02,
+    "environment_light_mode": "ambient",
+    "ambient_strength": 0.06,
+    "top_fill_strength": 0.0,
+    "light_intensity": 7.5,
+    "light_radius": 0.10,
+    "transmission_samples_3d": 8,
+    "object_audit_enabled": true
+  },
+  "output": {
+    "root": "../../../build/agent_runs/ray_tracing/caustic_probe_glass_sphere/emission_transparency",
+    "overwrite": true
+  },
+  "progress": {
+    "summary_path": "../../../build/agent_runs/ray_tracing/caustic_probe_glass_sphere/emission_transparency/render_summary.json",
+    "progress_path": "../../../build/agent_runs/ray_tracing/caustic_probe_glass_sphere/emission_transparency/render_progress.json"
+  }
+}

@@ -15,6 +15,14 @@ typedef struct {
     bool canUseFreeCamera3D;
 } EditorModeCapabilities;
 
+enum {
+    EDITOR_MODE_PATH = 0,
+    EDITOR_MODE_OBJECT = 1,
+    EDITOR_MODE_CAMERA = 2,
+    EDITOR_MODE_MATERIAL = 3,
+    EDITOR_MODE_COUNT = 4
+};
+
 int EditorModeRouter_ClampEditorMode(int current_mode, bool lock_object_mode);
 int EditorModeRouter_NextEditorMode(int current_mode, bool reverse, bool lock_object_mode);
 

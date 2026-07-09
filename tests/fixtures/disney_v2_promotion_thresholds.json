@@ -1,0 +1,44 @@
+{
+  "schema_version": "ray_tracing_disney_v2_promotion_thresholds_v1",
+  "description": "Candidate local Disney v2 promotion thresholds. These are explicit regression gates, not route-default signoff.",
+  "global": {
+    "max_bvh_trace_overflows": 0,
+    "max_disney_v2_elapsed_seconds": 30.0,
+    "max_disney_v2_to_disney_elapsed_ratio": 2.5,
+    "min_nonzero_pixels": 1,
+    "min_visible_pixels": 1,
+    "min_secondary_rays": 1,
+    "min_secondary_hits": 0,
+    "min_max_radiance": 0.01,
+    "max_max_radiance": 12.0
+  },
+  "scenes": {
+    "primitive_glass_corridor": {
+      "max_disney_v2_elapsed_seconds": 10.0,
+      "max_disney_v2_to_disney_elapsed_ratio": 1.5,
+      "min_bvh_triangle_count": 20,
+      "min_visible_pixels": 1000,
+      "min_secondary_rays": 1000,
+      "min_secondary_hits": 100,
+      "max_max_radiance": 8.0
+    },
+    "imported_mesh_material": {
+      "max_disney_v2_elapsed_seconds": 20.0,
+      "max_disney_v2_to_disney_elapsed_ratio": 1.5,
+      "min_bvh_triangle_count": 1000,
+      "min_visible_pixels": 5000,
+      "min_secondary_rays": 5000,
+      "min_secondary_hits": 1000,
+      "max_max_radiance": 8.0
+    },
+    "imported_mesh_pressure_mrt8": {
+      "max_disney_v2_elapsed_seconds": 60.0,
+      "max_disney_v2_to_disney_elapsed_ratio": 1.5,
+      "min_bvh_triangle_count": 10000,
+      "min_visible_pixels": 3000,
+      "min_secondary_rays": 3000,
+      "min_secondary_hits": 500,
+      "max_max_radiance": 8.0
+    }
+  }
+}

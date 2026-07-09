@@ -1,0 +1,60 @@
+{
+  "fixture": "ray_tracing_mesh_asset_runtime_spheres_mrt0",
+  "scene_runtime": "scene_runtime.json",
+  "assets": [
+    {
+      "asset_id": "asset_sphere_8x4",
+      "path": "assets/mesh_assets/asset_sphere_8x4.runtime.json",
+      "segments": 8,
+      "rings": 4,
+      "vertex_count": 26,
+      "triangle_count": 48,
+      "fidelity": "low"
+    },
+    {
+      "asset_id": "asset_sphere_16x8",
+      "path": "assets/mesh_assets/asset_sphere_16x8.runtime.json",
+      "segments": 16,
+      "rings": 8,
+      "vertex_count": 114,
+      "triangle_count": 224,
+      "fidelity": "medium"
+    },
+    {
+      "asset_id": "asset_sphere_32x16",
+      "path": "assets/mesh_assets/asset_sphere_32x16.runtime.json",
+      "segments": 32,
+      "rings": 16,
+      "vertex_count": 482,
+      "triangle_count": 960,
+      "fidelity": "high"
+    },
+    {
+      "asset_id": "asset_sphere_64x32",
+      "path": "assets/mesh_assets/asset_sphere_64x32.runtime.json",
+      "segments": 64,
+      "rings": 32,
+      "vertex_count": 1986,
+      "triangle_count": 3968,
+      "fidelity": "pressure"
+    },
+    {
+      "asset_id": "asset_sphere_128x64",
+      "path": "assets/mesh_assets/asset_sphere_128x64.runtime.json",
+      "segments": 128,
+      "rings": 64,
+      "vertex_count": 8066,
+      "triangle_count": 16128,
+      "fidelity": "pressure_mrt8"
+    },
+    {
+      "asset_id": "asset_sphere_256x128",
+      "path": "assets/mesh_assets/asset_sphere_256x128.runtime.json",
+      "segments": 256,
+      "rings": 128,
+      "vertex_count": 32514,
+      "triangle_count": 65024,
+      "fidelity": "pressure_mrt10"
+    }
+  ]
+}

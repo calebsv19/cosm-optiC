@@ -1,0 +1,41 @@
+{
+  "schema": "ray_tracing_material_proof_package_request_v1",
+  "proof_id": "m4_s2_reflectivity_specular_f0_ior_matrix",
+  "title": "M4-S2 Reflectivity, Specular, F0, And IOR Contrast Matrix",
+  "phase": "M4-S2",
+  "route": {
+    "primary": "headless_material_preview",
+    "secondary": "runtime_lighting_materials_payload_tests",
+    "secondary_status": "source_contract_readback",
+    "secondary_policy": "preview shows reflectivity-floor contrast; existing focused tests prove IOR-derived F0, specular scaling, and no metallic inference"
+  },
+  "source": {
+    "runtime_scene_path": "../../../tests/fixtures/disney_v2_visual_matrix/transparent_interior_stack/scene_runtime.json",
+    "object_id": "rear_blue_panel",
+    "material_preset": "Default",
+    "material_preset_path": "../../../config/materials/default.json",
+    "source_contract_tests": [
+      "test_runtime_principled_bsdf_conversion_adapter_m2_contract",
+      "test_runtime_material_compatibility_bridges_are_explicit"
+    ]
+  },
+  "artifacts": {
+    "request_path": "request.json",
+    "preview_request_path": "material_preview_request.json",
+    "preview_summary_path": "material_preview_summary.json",
+    "summary_path": "summary.json",
+    "index_path": "index.md",
+    "image_path": "preview.bmp",
+    "image_status": "generated"
+  },
+  "rows": [
+    { "row_id": "ior100_ref000_sp025", "label": "IOR 1.00 reflectivity 0.00 specular 0.25", "material_family": "dielectric", "source_material": { "ior": 1.0, "reflectivity_floor": 0.0, "specular_weight": 0.25, "roughness": 0.22 }, "expected_behavior": "derived F0 is zero, no reflectivity floor, no metallic inference", "deferred_status": { "authored_dielectric_f0": "deferred_future_field", "metallic": "deferred_unpromoted" } },
+    { "row_id": "ior133_ref0015_sp025", "label": "IOR 1.33 reflectivity 0.015 specular 0.25", "material_family": "dielectric", "source_material": { "ior": 1.33, "reflectivity_floor": 0.015, "specular_weight": 0.25, "roughness": 0.22 }, "expected_behavior": "IOR-derived F0 remains above low reflectivity floor", "deferred_status": { "authored_dielectric_f0": "deferred_future_field", "metallic": "deferred_unpromoted" } },
+    { "row_id": "ior133_ref018_sp025", "label": "IOR 1.33 reflectivity 0.18 specular 0.25", "material_family": "dielectric", "source_material": { "ior": 1.33, "reflectivity_floor": 0.18, "specular_weight": 0.25, "roughness": 0.22 }, "expected_behavior": "legacy reflectivity floor raises dielectric F0 without making the material metallic", "deferred_status": { "authored_dielectric_f0": "deferred_future_field", "metallic": "deferred_unpromoted" } },
+    { "row_id": "ior145_ref002_sp025", "label": "IOR 1.45 reflectivity 0.02 specular 0.25", "material_family": "dielectric", "source_material": { "ior": 1.45, "reflectivity_floor": 0.02, "specular_weight": 0.25, "roughness": 0.22 }, "expected_behavior": "transparent-preset-style IOR-derived F0 remains above reflectivity floor", "deferred_status": { "authored_dielectric_f0": "deferred_future_field", "metallic": "deferred_unpromoted" } },
+    { "row_id": "ior180_ref002_sp025", "label": "IOR 1.80 reflectivity 0.02 specular 0.25", "material_family": "dielectric", "source_material": { "ior": 1.8, "reflectivity_floor": 0.02, "specular_weight": 0.25, "roughness": 0.22 }, "expected_behavior": "higher IOR raises derived F0 without using reflectivity as identity", "deferred_status": { "authored_dielectric_f0": "deferred_future_field", "metallic": "deferred_unpromoted" } },
+    { "row_id": "ior145_ref004_sp010", "label": "IOR 1.45 reflectivity 0.04 specular 0.10", "material_family": "dielectric", "source_material": { "ior": 1.45, "reflectivity_floor": 0.04, "specular_weight": 0.10, "roughness": 0.22 }, "expected_behavior": "specular weight scales lobe strength, not F0 identity", "deferred_status": { "authored_dielectric_f0": "deferred_future_field", "metallic": "deferred_unpromoted" } },
+    { "row_id": "ior145_ref004_sp080", "label": "IOR 1.45 reflectivity 0.04 specular 0.80", "material_family": "dielectric", "source_material": { "ior": 1.45, "reflectivity_floor": 0.04, "specular_weight": 0.80, "roughness": 0.22 }, "expected_behavior": "higher specular weight increases lobe strength against the same F0", "deferred_status": { "authored_dielectric_f0": "deferred_future_field", "metallic": "deferred_unpromoted" } },
+    { "row_id": "ior180_ref060_sp025", "label": "IOR 1.80 reflectivity 0.60 specular 0.25", "material_family": "dielectric", "source_material": { "ior": 1.8, "reflectivity_floor": 0.60, "specular_weight": 0.25, "roughness": 0.22 }, "expected_behavior": "high dielectric reflectivity floor raises F0 but does not infer metallic", "deferred_status": { "authored_dielectric_f0": "deferred_future_field", "metallic": "deferred_unpromoted" } }
+  ]
+}

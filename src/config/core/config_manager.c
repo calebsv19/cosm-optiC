@@ -1,7 +1,15 @@
 #include "config/config_manager.h"
 #include "config/config_file_io.h"
+#include "config/scene/config_scene_material_persistence.h"
 #include "config/config_scene_path_io.h"
+#include "config/core/config_runtime_paths.h"
 #include "app/data_paths.h"
+#include "editor/scene_editor_material_graph.h"
+#include "editor/scene_editor_material_face_placement.h"
+#include "editor/scene_editor_material_stack.h"
+#include "render/ray_tracing_integrator_catalog.h"
+#include "render/runtime_material_authored_texture_3d.h"
+#include "render/runtime_material_texture_stack_3d.h"
 #include "scene/object_manager.h"
 #include "material/material_manager.h"
 #include <stdio.h>       // For file handling (fopen, fprintf, fclose, perror)
@@ -9,153 +17,19 @@
 #include <string.h>      // For string functions (strncpy)
 #include <json-c/json.h> // For JSON handling
 #include <math.h>
+#include <limits.h>
 
 #define SCENE_CONFIG_DEFAULT_FILE "config/scene_config.json"
 #define SCENE_CONFIG_RUNTIME_FILE "data/runtime/scene_config.json"
 #define SCENE_CONFIG_LEGACY_FILE "Configs/scene_config.json"
-#define ANIMATION_CONFIG_DEFAULT_FILE "config/animation_config.json"
-#define ANIMATION_CONFIG_RUNTIME_FILE "data/runtime/animation_config.json"
-#define ANIMATION_CONFIG_LEGACY_FILE "Configs/animation_config.json"
 #define MATERIALS_DEFAULT_DIR "config/materials"
 #define MATERIALS_LEGACY_DIR "Configs/materials"
 #define FRAME_DIR_DEFAULT "data/runtime/frames/default"
-#define FRAME_DIR_LEGACY_PREFIX "Animations/"
-#define TEXT_ZOOM_STEP_MIN (-4)
-#define TEXT_ZOOM_STEP_MAX (5)
-#define TEXT_ZOOM_STEP_PERCENT_PER_STEP (10)
-
-static void NormalizeFrameDirPath(void) {
-    const char *frame_root = ray_tracing_default_frame_root();
-    const char *default_frame_dir = ray_tracing_default_frame_dir();
-    if (animSettings.frameDir[0] == '\0') {
-        strncpy(animSettings.frameDir, default_frame_dir, sizeof(animSettings.frameDir) - 1);
-        animSettings.frameDir[sizeof(animSettings.frameDir) - 1] = '\0';
-        return;
-    }
-
-    size_t legacy_prefix_len = strlen(FRAME_DIR_LEGACY_PREFIX);
-    if (strncmp(animSettings.frameDir, FRAME_DIR_LEGACY_PREFIX, legacy_prefix_len) != 0) {
-        return;
-    }
-
-    const char* suffix = animSettings.frameDir + legacy_prefix_len;
-    if (!suffix[0]) suffix = "default";
-
-    char mapped[sizeof(animSettings.frameDir)];
-    int written = snprintf(mapped, sizeof(mapped), "%s/%s", frame_root, suffix);
-    if (written <= 0 || (size_t)written >= sizeof(mapped)) {
-        strncpy(animSettings.frameDir, default_frame_dir, sizeof(animSettings.frameDir) - 1);
-        animSettings.frameDir[sizeof(animSettings.frameDir) - 1] = '\0';
-        return;
-    }
-
-    strncpy(animSettings.frameDir, mapped, sizeof(animSettings.frameDir) - 1);
-    animSettings.frameDir[sizeof(animSettings.frameDir) - 1] = '\0';
-}
-
-static void NormalizeDataRootPaths(void) {
-    const char *default_input_root = ray_tracing_default_input_root();
-    const char *default_output_root = ray_tracing_default_output_root();
-    if (animSettings.inputRoot[0] == '\0') {
-        strncpy(animSettings.inputRoot, default_input_root, sizeof(animSettings.inputRoot) - 1);
-        animSettings.inputRoot[sizeof(animSettings.inputRoot) - 1] = '\0';
-    }
-    if (animSettings.outputRoot[0] == '\0') {
-        strncpy(animSettings.outputRoot, default_output_root, sizeof(animSettings.outputRoot) - 1);
-        animSettings.outputRoot[sizeof(animSettings.outputRoot) - 1] = '\0';
-    }
-}
-
-static bool ValidateDataRootPath(char *target,
-                                 size_t target_size,
-                                 const char *default_path,
-                                 const char *label,
-                                 bool create_if_missing) {
-    bool corrected = false;
-    if (!target || target_size == 0 || !default_path || !default_path[0]) return false;
-    if (target[0] == '\0') {
-        fprintf(stderr,
-                "[startup] %s root is empty; using default '%s'.\n",
-                label ? label : "data",
-                default_path);
-        snprintf(target, target_size, "%s", default_path);
-        corrected = true;
-    }
-    if (create_if_missing && !config_io_directory_exists(target)) {
-        if (!config_io_ensure_directory_exists(target)) {
-            fprintf(stderr,
-                    "[startup] %s root '%s' could not be created; using default '%s'.\n",
-                    label ? label : "data",
-                    target,
-                    default_path);
-            snprintf(target, target_size, "%s", default_path);
-            corrected = true;
-        }
-    }
-    if (!config_io_directory_exists(target)) {
-        fprintf(stderr,
-                "[startup] %s root '%s' missing; using default '%s'.\n",
-                label ? label : "data",
-                target,
-                default_path);
-        snprintf(target, target_size, "%s", default_path);
-        corrected = true;
-    }
-    if (create_if_missing && !config_io_directory_exists(target)) {
-        if (!config_io_ensure_directory_exists(target)) {
-            fprintf(stderr,
-                    "[startup] %s default root '%s' is unavailable after fallback.\n",
-                    label ? label : "data",
-                    target);
-        }
-    }
-    return corrected;
-}
 
 typedef enum {
     LONG_RAYS = 0,         // Original ray casting mode
     REALISTIC_LIGHT = 1    // Inverse-square law lighting
 } LightMode;
-
-static double ClampDoubleValue(double value, double minValue, double maxValue) {
-    if (value < minValue) return minValue;
-    if (value > maxValue) return maxValue;
-    return value;
-}
-
-int animation_config_text_zoom_step_clamp(int step) {
-    if (step < TEXT_ZOOM_STEP_MIN) return TEXT_ZOOM_STEP_MIN;
-    if (step > TEXT_ZOOM_STEP_MAX) return TEXT_ZOOM_STEP_MAX;
-    return step;
-}
-
-int animation_config_text_zoom_percent_from_step(int step) {
-    int clamped = animation_config_text_zoom_step_clamp(step);
-    return 100 + (clamped * TEXT_ZOOM_STEP_PERCENT_PER_STEP);
-}
-
-int animation_config_space_mode_clamp(int mode) {
-    if (mode < SPACE_MODE_2D) return SPACE_MODE_2D;
-    if (mode > SPACE_MODE_3D) return SPACE_MODE_2D;
-    return mode;
-}
-
-int animation_config_scale_text_point_size(const AnimationConfig* cfg,
-                                           int base_point_size,
-                                           int min_point_size) {
-    int percent = 100;
-    double scaled = 0.0;
-    int out_size = 0;
-    if (base_point_size <= 0) base_point_size = 1;
-    if (min_point_size <= 0) min_point_size = 1;
-    if (cfg) {
-        percent = animation_config_text_zoom_percent_from_step(cfg->textZoomStep);
-    }
-    scaled = ((double)base_point_size * (double)percent) / 100.0;
-    out_size = (int)lround(scaled);
-    if (out_size < min_point_size) out_size = min_point_size;
-    return out_size;
-}
 
 // **Global config instances**
 AnimationConfig animSettings = {
@@ -166,12 +40,16 @@ AnimationConfig animSettings = {
     .bounceLimit = 10,
     .frameLimit = 50,
     .framesForTravel = 40,
+    .startFrameIndex = 0,
+    .resumeFromExistingFrames = false,
     .maxLoopCount = 1,
     .fps = 30,
     .frameDuration = 1.0 / 30.0,
     .inputRoot = "config",
+    .meshAssetRoot = "",
     .outputRoot = "data/runtime",
     .frameDir = FRAME_DIR_DEFAULT,
+    .videoOutputRoot = "data/runtime/videos",
     .loopMode = "Normal",
     .lightMode = 0,
     .blurMode = 0,
@@ -183,28 +61,58 @@ AnimationConfig animSettings = {
     .tileSize = 16,
     .rouletteThreshold = 0.01,
     .integratorMode = 0,
+    .integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT,
     .pathSamplesPerPixel = 4,
     .pathMaxDepth = 4,
     .pathDirectLighting = true,
     .pathRussianRoulette = true,
     .pathEnableMIS = true,
     .environmentBrightness = 0.0,
+    .environmentPreset = ENVIRONMENT_PRESET_SKY,
+    .environmentBackgroundLightingAuthored = true,
+    .environmentBackgroundBrightnessAuto = true,
+    .environmentBackgroundBrightness = 0.0,
+    .environmentBackgroundColorR = 1.0,
+    .environmentBackgroundColorG = 1.0,
+    .environmentBackgroundColorB = 1.0,
     .pathSeed = 1,
     .editorMode = 0,
     .spaceMode = SPACE_MODE_2D,
     .textZoomStep = 0,
     .cacheContributionWeight = 1.0,
     .bsdfModel = 1,
-    .lightIntensity = 5.0,
+    .lightIntensity = RAY_TRACING_DEFAULT_LIGHT_INTENSITY,
     .forwardDecay = 0.0,
     .forwardFalloffMode = FORWARD_FALLOFF_MODE_QUADRATIC,
     .renderQuality = RENDER_QUALITY_MEDIUM,
     .cacheVarianceCutoff = 0.35,
     .cacheHaloRadius = 3.5,
     .lightDecaySoftness = 1.0,
+    .lightRadius = 0.0,
     .lightHeight = 8.0,
+    .environmentLightMode = ENVIRONMENT_LIGHT_MODE_OFF,
+    .topFillStrength = 1.0,
+    .disneyDenoiseEnabled = true,
+    .bounceDepth3D = RUNTIME_3D_BOUNCE_DEPTH_DEFAULT,
+    .specularDepth3D = RUNTIME_3D_SPECULAR_DEPTH_DEFAULT,
+    .transmissionDepth3D = RUNTIME_3D_TRANSMISSION_DEPTH_DEFAULT,
+    .rouletteThreshold3D = RUNTIME_3D_ROULETTE_THRESHOLD_DEFAULT,
+    .secondaryDiffuseSamples3D = RUNTIME_3D_SECONDARY_SAMPLES_DEFAULT,
+    .transmissionSamples3D = RUNTIME_3D_TRANSMISSION_SAMPLES_DEFAULT,
+    .temporalFrames3D = RUNTIME_3D_TEMPORAL_FRAMES_DEFAULT,
+    .renderScale3D = RUNTIME_3D_RENDER_SCALE_DEFAULT,
+    .upscaleMode3D = RUNTIME_3D_UPSCALE_MODE_DEFAULT,
+    .runtimeWindowWidth = 0,
+    .runtimeWindowHeight = 0,
+    .sceneSource = SCENE_SOURCE_CONFIG_2D,
     .useFluidScene = false,
-    .fluidManifest = ""
+    .fluidManifest = "",
+    .runtimeScenePath = "",
+    .volumeInteractionEnabled = false,
+    .volumeSourceKind = VOLUME_SOURCE_NONE,
+    .volumeSourcePath = "",
+    .volumeAffectsLighting = true,
+    .volumeDebugOverlayEnabled = false
 };
 
 SceneConfig sceneSettings = {
@@ -212,35 +120,91 @@ SceneConfig sceneSettings = {
     .windowHeight = 800,
     .objectCount = 0,  // No objects initially
     .bezierPath = { .numPoints = 0, .mode = BEZIER_CUBIC },
+    .bezierPath3D = {0},
     .cameraPath = { .numPoints = 0, .mode = BEZIER_CUBIC },
     .rays = 2000,
     .camera = { .x = 0.0, .y = 0.0, .zoom = 1.0, .rotation = 0.0 },
+    .cameraZ = 0.0,
     .cameraMargin = 80.0
 };
 
-static double DefaultForwardFalloffDistance(void) {
-    double w = (sceneSettings.windowWidth > 0) ? sceneSettings.windowWidth : 1200.0;
-    double h = (sceneSettings.windowHeight > 0) ? sceneSettings.windowHeight : 800.0;
-    return hypot(w, h);
+static void SyncSceneSourceLegacyFieldsForSave(void) {
+    animSettings.sceneSource = animation_config_scene_source_clamp(animSettings.sceneSource);
+    animSettings.useFluidScene = animation_config_scene_source_is_fluid(animSettings.sceneSource);
 }
 
 void SaveAllSettings(void) {
     MaterialManagerInit();
-    if (!animSettings.useFluidScene) {
+    SyncSceneSourceLegacyFieldsForSave();
+    if (animSettings.sceneSource == SCENE_SOURCE_CONFIG_2D) {
         SaveSceneConfig();
     }
     SaveAnimationConfig();
 }
 
+static bool LoadMaterialsFromDirIfPresent(const char* material_dir) {
+    if (!config_io_directory_exists(material_dir)) {
+        return false;
+    }
+    MaterialManagerLoadDir(material_dir);
+    return true;
+}
+
+static void LoadMaterialPresets(void) {
+    char stable_input_root[PATH_MAX];
+    char stable_materials_dir[PATH_MAX];
+
+    if (LoadMaterialsFromDirIfPresent(MATERIALS_DEFAULT_DIR)) {
+        return;
+    }
+
+    if (ray_tracing_find_stable_input_root(stable_input_root, sizeof(stable_input_root)) &&
+        ray_tracing_compose_path(stable_input_root,
+                                 "materials",
+                                 stable_materials_dir,
+                                 sizeof(stable_materials_dir)) &&
+        LoadMaterialsFromDirIfPresent(stable_materials_dir)) {
+        return;
+    }
+
+    (void)LoadMaterialsFromDirIfPresent(MATERIALS_LEGACY_DIR);
+}
+
+static FILE* OpenSceneConfigRead(const char** loaded_path) {
+    char stable_input_root[PATH_MAX];
+    char stable_output_root[PATH_MAX];
+    char stable_runtime_file[PATH_MAX];
+    char stable_default_file[PATH_MAX];
+    const char* candidates[5] = {0};
+    size_t candidate_count = 0;
+
+    candidates[candidate_count++] = SCENE_CONFIG_RUNTIME_FILE;
+    if (ray_tracing_find_stable_output_root(stable_output_root, sizeof(stable_output_root)) &&
+        ray_tracing_compose_path(stable_output_root,
+                                 "scene_config.json",
+                                 stable_runtime_file,
+                                 sizeof(stable_runtime_file))) {
+        candidates[candidate_count++] = stable_runtime_file;
+    }
+    candidates[candidate_count++] = SCENE_CONFIG_DEFAULT_FILE;
+    if (ray_tracing_find_stable_input_root(stable_input_root, sizeof(stable_input_root)) &&
+        ray_tracing_compose_path(stable_input_root,
+                                 "scene_config.json",
+                                 stable_default_file,
+                                 sizeof(stable_default_file))) {
+        candidates[candidate_count++] = stable_default_file;
+    }
+
+    candidates[candidate_count++] = SCENE_CONFIG_LEGACY_FILE;
+    return config_io_open_read_first(candidates, candidate_count, loaded_path);
+}
+
 void LoadAllSettings(void) {
     MaterialManagerInit();
-    if (config_io_directory_exists(MATERIALS_DEFAULT_DIR)) {
-        MaterialManagerLoadDir(MATERIALS_DEFAULT_DIR);
-    } else {
-        MaterialManagerLoadDir(MATERIALS_LEGACY_DIR);
-    }
+    LoadMaterialPresets();
     LoadSceneConfig();
     LoadAnimationConfig();
+    ApplyAnimationWindowSizeOverride();
 }
 
 void SaveSceneConfig(void) {
@@ -291,9 +255,72 @@ void SaveSceneConfig(void) {
         json_object_object_add(jsonObj, "texture", json_object_new_string(obj->texture));
         json_object_object_add(jsonObj, "color", json_object_new_int(obj->color));
         json_object_object_add(jsonObj, "opacity", json_object_new_double(obj->opacity));
+        json_object_object_add(jsonObj, "alpha", json_object_new_double(obj->alpha));
         json_object_object_add(jsonObj, "reflectivity", json_object_new_double(obj->reflectivity));
         json_object_object_add(jsonObj, "roughness", json_object_new_double(obj->roughness));
+        json_object_object_add(jsonObj, "emissiveStrength", json_object_new_double(obj->emissiveStrength));
         json_object_object_add(jsonObj, "textureId", json_object_new_int(obj->textureId));
+        json_object_object_add(jsonObj, "textureOffsetU", json_object_new_double(obj->textureOffsetU));
+        json_object_object_add(jsonObj, "textureOffsetV", json_object_new_double(obj->textureOffsetV));
+        json_object_object_add(jsonObj, "textureScale", json_object_new_double(obj->textureScale));
+        json_object_object_add(jsonObj, "textureStrength", json_object_new_double(obj->textureStrength));
+        json_object_object_add(jsonObj, "texturePatternMode", json_object_new_int(obj->texturePatternMode));
+        json_object_object_add(jsonObj, "textureCoverage", json_object_new_double(obj->textureCoverage));
+        json_object_object_add(jsonObj, "textureGrain", json_object_new_double(obj->textureGrain));
+        json_object_object_add(jsonObj, "textureEdgeSoftness", json_object_new_double(obj->textureEdgeSoftness));
+        json_object_object_add(jsonObj, "textureContrast", json_object_new_double(obj->textureContrast));
+        json_object_object_add(jsonObj, "textureFlow", json_object_new_double(obj->textureFlow));
+        json_object_object_add(jsonObj, "textureColorDepth", json_object_new_double(obj->textureColorDepth));
+        json_object_object_add(jsonObj, "textureSurfaceDamage", json_object_new_double(obj->textureSurfaceDamage));
+        json_object_object_add(jsonObj, "textureSeed", json_object_new_int(obj->textureSeed));
+        if (obj->hasGlassTransportOverride) {
+            json_object_object_add(jsonObj,
+                                   "glassTransportOverride",
+                                   json_object_new_boolean(obj->hasGlassTransportOverride));
+            json_object_object_add(jsonObj,
+                                   "glassTransmission",
+                                   json_object_new_double(obj->glassTransmission));
+            json_object_object_add(jsonObj,
+                                   "glassIor",
+                                   json_object_new_double(obj->glassIor));
+            json_object_object_add(jsonObj,
+                                   "glassAbsorptionDistance",
+                                   json_object_new_double(obj->glassAbsorptionDistance));
+            json_object_object_add(jsonObj,
+                                   "glassThinWalled",
+                                   json_object_new_boolean(obj->glassThinWalled));
+        }
+        if (obj->hasMirrorResponseOverride) {
+            json_object_object_add(jsonObj,
+                                   "mirrorResponseOverride",
+                                   json_object_new_boolean(obj->hasMirrorResponseOverride));
+            json_object_object_add(jsonObj,
+                                   "mirrorReflectivity",
+                                   json_object_new_double(obj->mirrorReflectivity));
+            json_object_object_add(jsonObj,
+                                   "mirrorRoughness",
+                                   json_object_new_double(obj->mirrorRoughness));
+            json_object_object_add(jsonObj,
+                                   "mirrorSpecular",
+                                   json_object_new_double(obj->mirrorSpecular));
+            json_object_object_add(jsonObj,
+                                   "mirrorTint",
+                                   json_object_new_int(obj->mirrorTint & 0xFFFFFF));
+        }
+        {
+            struct json_object* materialTextureStack = ConfigSaveMaterialTextureStackForObject(i);
+            struct json_object* materialGraph = ConfigSaveMaterialGraphForObject(i);
+            struct json_object* facePlacements = SaveMaterialFacePlacementsForObject(i);
+            if (materialGraph) {
+                json_object_object_add(jsonObj, "materialGraph", materialGraph);
+            }
+            if (materialTextureStack) {
+                json_object_object_add(jsonObj, "materialTextureStack", materialTextureStack);
+            }
+            if (facePlacements) {
+                json_object_object_add(jsonObj, "materialFacePlacements", facePlacements);
+            }
+        }
         json_object_object_add(jsonObj, "materialId", json_object_new_int(obj->material_id));
         json_object_object_add(jsonObj, "materialId", json_object_new_int(obj->material_id));
 
@@ -327,7 +354,16 @@ void SaveSceneConfig(void) {
 
     // Save Bézier Paths
     config_scene_save_path_to_json(config, "path", &sceneSettings.bezierPath);
+    config_scene_save_path_depth_to_json(config,
+                                         "pathDepth",
+                                         &sceneSettings.bezierPath3D,
+                                         &sceneSettings.bezierPath);
     config_scene_save_path_to_json(config, "cameraPath", &sceneSettings.cameraPath);
+    config_scene_save_camera_path_depth_to_json(config,
+                                                "cameraPathDepth",
+                                                &sceneSettings.cameraPath3D,
+                                                &sceneSettings.cameraPath);
+    json_object_object_add(config, "cameraZ", json_object_new_double(sceneSettings.cameraZ));
 
     // Write JSON Data to File
     fprintf(file, "%s", json_object_to_json_string_ext(config, JSON_C_TO_STRING_PRETTY));
@@ -336,81 +372,6 @@ void SaveSceneConfig(void) {
 
     printf("Scene configuration saved successfully.\n");
 }
-
-
-void SaveAnimationConfig(void) {
-    if (!config_io_ensure_parent_directory_for_file(ANIMATION_CONFIG_RUNTIME_FILE)) {
-        fprintf(stderr, "Error: Failed to prepare runtime config lane for %s\n", ANIMATION_CONFIG_RUNTIME_FILE);
-        return;
-    }
-    FILE* file = fopen(ANIMATION_CONFIG_RUNTIME_FILE, "w");
-    if (!file) {
-        perror("Failed to open animation config file for writing");
-        return;
-    }
-
-    struct json_object* config = json_object_new_object();
-
-    json_object_object_add(config, "interactiveMode", json_object_new_boolean(animSettings.interactiveMode));
-    json_object_object_add(config, "deepRenderMode", json_object_new_boolean(animSettings.deepRenderMode));
-    json_object_object_add(config, "bounceMode", json_object_new_boolean(animSettings.bounceMode));
-    json_object_object_add(config, "autoMP4", json_object_new_boolean(animSettings.autoMP4));
-    json_object_object_add(config, "bounceLimit", json_object_new_int(animSettings.bounceLimit));
-    json_object_object_add(config, "frameLimit", json_object_new_int(animSettings.frameLimit));
-    json_object_object_add(config, "framesForTravel", json_object_new_int(animSettings.framesForTravel));
-    json_object_object_add(config, "fps", json_object_new_int(animSettings.fps));
-    json_object_object_add(config, "frameDuration", json_object_new_double(animSettings.frameDuration));
-    NormalizeDataRootPaths();
-    json_object_object_add(config, "inputRoot", json_object_new_string(animSettings.inputRoot));
-    json_object_object_add(config, "outputRoot", json_object_new_string(animSettings.outputRoot));
-    NormalizeFrameDirPath();
-    json_object_object_add(config, "frameDir", json_object_new_string(animSettings.frameDir));
-    json_object_object_add(config, "maxLoopCount", json_object_new_int(animSettings.maxLoopCount));
-    json_object_object_add(config, "loopMode", json_object_new_string(animSettings.loopMode));
-    json_object_object_add(config, "lightMode", json_object_new_int(animSettings.lightMode));
-    json_object_object_add(config, "blurMode", json_object_new_int(animSettings.blurMode));
-    json_object_object_add(config, "lightDiffusionEnabled", json_object_new_boolean(animSettings.lightDiffusionEnabled));
-    json_object_object_add(config, "lightDiffusionRadius", json_object_new_int(animSettings.lightDiffusionRadius));
-    json_object_object_add(config, "lightDiffusionStrength", json_object_new_double(animSettings.lightDiffusionStrength));
-    json_object_object_add(config, "editorMode", json_object_new_int(animSettings.editorMode));
-    json_object_object_add(config, "spaceMode",
-                           json_object_new_int(animation_config_space_mode_clamp(animSettings.spaceMode)));
-    json_object_object_add(config, "textZoomStep",
-                           json_object_new_int(animation_config_text_zoom_step_clamp(animSettings.textZoomStep)));
-    json_object_object_add(config, "useTiledRenderer", json_object_new_boolean(animSettings.useTiledRenderer));
-    json_object_object_add(config, "tilePreviewEnabled", json_object_new_boolean(animSettings.tilePreviewEnabled));
-    json_object_object_add(config, "tileSize", json_object_new_int(animSettings.tileSize));
-    json_object_object_add(config, "rouletteThreshold", json_object_new_double(animSettings.rouletteThreshold));
-    json_object_object_add(config, "integratorMode", json_object_new_int(animSettings.integratorMode));
-    json_object_object_add(config, "previewDuration", json_object_new_double(animSettings.previewDuration));
-    json_object_object_add(config, "pathSamplesPerPixel", json_object_new_int(animSettings.pathSamplesPerPixel));
-    json_object_object_add(config, "pathMaxDepth", json_object_new_int(animSettings.pathMaxDepth));
-    json_object_object_add(config, "pathDirectLighting", json_object_new_boolean(animSettings.pathDirectLighting));
-    json_object_object_add(config, "pathRussianRoulette", json_object_new_boolean(animSettings.pathRussianRoulette));
-    json_object_object_add(config, "pathEnableMIS", json_object_new_boolean(animSettings.pathEnableMIS));
-    json_object_object_add(config, "environmentBrightness", json_object_new_double(animSettings.environmentBrightness));
-    json_object_object_add(config, "pathSeed", json_object_new_int(animSettings.pathSeed));
-    json_object_object_add(config, "cacheContributionWeight", json_object_new_double(animSettings.cacheContributionWeight));
-    json_object_object_add(config, "bsdfModel", json_object_new_int(animSettings.bsdfModel));
-    json_object_object_add(config, "lightIntensity", json_object_new_double(animSettings.lightIntensity));
-    json_object_object_add(config, "forwardDecay", json_object_new_double(animSettings.forwardDecay));
-    json_object_object_add(config, "forwardFalloffMode", json_object_new_int(animSettings.forwardFalloffMode));
-    json_object_object_add(config, "renderQuality", json_object_new_int(animSettings.renderQuality));
-    json_object_object_add(config, "cacheVarianceCutoff", json_object_new_double(animSettings.cacheVarianceCutoff));
-    json_object_object_add(config, "cacheHaloRadius", json_object_new_double(animSettings.cacheHaloRadius));
-    json_object_object_add(config, "lightDecaySoftness", json_object_new_double(animSettings.lightDecaySoftness));
-    json_object_object_add(config, "lightHeight", json_object_new_double(animSettings.lightHeight));
-    json_object_object_add(config, "useFluidScene", json_object_new_boolean(animSettings.useFluidScene));
-    json_object_object_add(config, "fluidManifest", json_object_new_string(animSettings.fluidManifest));
-    json_object_object_add(config, "lightHeight", json_object_new_double(animSettings.lightHeight));
-    fprintf(file, "%s", json_object_to_json_string_ext(config, JSON_C_TO_STRING_PRETTY));
-    fclose(file);
-    json_object_put(config);
-
-    printf("✅ Animation config saved successfully.\n");
-}
-
-
 void LoadWindowConfig(struct json_object* config) {
     printf("DEBUG: Loading Window Configuration...\n");
 
@@ -481,7 +442,13 @@ static void LoadCameraConfig(struct json_object* config) {
 }
 
 void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
-    struct json_object *texture, *color, *opacity, *reflectivity, *roughness, *textureId, *materialId;
+    struct json_object *texture, *color, *opacity, *alpha, *transparency, *reflectivity, *roughness,
+        *emissiveStrength, *textureId, *textureOffsetU, *textureOffsetV, *textureScale,
+        *textureStrength, *texturePatternMode, *textureCoverage, *textureGrain, *textureEdgeSoftness,
+        *textureContrast, *textureFlow, *textureColorDepth, *textureSurfaceDamage, *textureSeed,
+        *materialId, *glassTransportOverride, *glassTransmission, *glassIor,
+        *glassAbsorptionDistance, *glassThinWalled, *mirrorResponseOverride,
+        *mirrorReflectivity, *mirrorRoughness, *mirrorSpecular, *mirrorTint;
 
     // Load texture path
     if (json_object_object_get_ex(obj, "texture", &texture)) {
@@ -505,6 +472,14 @@ void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
         sceneObject->opacity = 1.0; // Default: Fully opaque
     }
 
+    if (json_object_object_get_ex(obj, "alpha", &alpha)) {
+        sceneObject->alpha = json_object_get_double(alpha);
+    } else if (json_object_object_get_ex(obj, "transparency", &transparency)) {
+        sceneObject->alpha = json_object_get_double(transparency);
+    } else {
+        sceneObject->alpha = 1.0;
+    }
+
     if (json_object_object_get_ex(obj, "reflectivity", &reflectivity)) {
         sceneObject->reflectivity = json_object_get_double(reflectivity);
     } else {
@@ -517,10 +492,107 @@ void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
         sceneObject->roughness = 0.65;
     }
 
+    if (json_object_object_get_ex(obj, "emissiveStrength", &emissiveStrength)) {
+        sceneObject->emissiveStrength = json_object_get_double(emissiveStrength);
+    } else {
+        sceneObject->emissiveStrength = 0.0;
+    }
+
     if (json_object_object_get_ex(obj, "textureId", &textureId)) {
         sceneObject->textureId = json_object_get_int(textureId);
     } else {
         sceneObject->textureId = 0;
+    }
+
+    if (json_object_object_get_ex(obj, "textureOffsetU", &textureOffsetU)) {
+        sceneObject->textureOffsetU = json_object_get_double(textureOffsetU);
+    } else {
+        sceneObject->textureOffsetU = 0.0;
+    }
+
+    if (json_object_object_get_ex(obj, "textureOffsetV", &textureOffsetV)) {
+        sceneObject->textureOffsetV = json_object_get_double(textureOffsetV);
+    } else {
+        sceneObject->textureOffsetV = 0.0;
+    }
+
+    if (json_object_object_get_ex(obj, "textureScale", &textureScale)) {
+        sceneObject->textureScale = json_object_get_double(textureScale);
+    } else {
+        sceneObject->textureScale = 1.0;
+    }
+
+    if (json_object_object_get_ex(obj, "textureStrength", &textureStrength)) {
+        sceneObject->textureStrength = json_object_get_double(textureStrength);
+    } else {
+        sceneObject->textureStrength = 0.0;
+    }
+
+    if (json_object_object_get_ex(obj, "texturePatternMode", &texturePatternMode)) {
+        sceneObject->texturePatternMode = json_object_get_int(texturePatternMode);
+    } else {
+        sceneObject->texturePatternMode = 0;
+    }
+
+    if (json_object_object_get_ex(obj, "textureCoverage", &textureCoverage)) {
+        sceneObject->textureCoverage = json_object_get_double(textureCoverage);
+    } else {
+        sceneObject->textureCoverage = 0.5;
+    }
+
+    if (json_object_object_get_ex(obj, "textureGrain", &textureGrain)) {
+        sceneObject->textureGrain = json_object_get_double(textureGrain);
+    } else {
+        sceneObject->textureGrain = 0.5;
+    }
+
+    if (json_object_object_get_ex(obj, "textureEdgeSoftness", &textureEdgeSoftness)) {
+        sceneObject->textureEdgeSoftness = json_object_get_double(textureEdgeSoftness);
+    } else {
+        sceneObject->textureEdgeSoftness = 0.5;
+    }
+
+    if (json_object_object_get_ex(obj, "textureContrast", &textureContrast)) {
+        sceneObject->textureContrast = json_object_get_double(textureContrast);
+    } else {
+        sceneObject->textureContrast = 0.5;
+    }
+
+    if (json_object_object_get_ex(obj, "textureFlow", &textureFlow)) {
+        sceneObject->textureFlow = json_object_get_double(textureFlow);
+    } else {
+        sceneObject->textureFlow = 0.0;
+    }
+
+    if (json_object_object_get_ex(obj, "textureColorDepth", &textureColorDepth)) {
+        sceneObject->textureColorDepth = json_object_get_double(textureColorDepth);
+    } else {
+        sceneObject->textureColorDepth = 0.5;
+    }
+
+    if (json_object_object_get_ex(obj, "textureSurfaceDamage", &textureSurfaceDamage)) {
+        sceneObject->textureSurfaceDamage = json_object_get_double(textureSurfaceDamage);
+    } else {
+        sceneObject->textureSurfaceDamage = 0.5;
+    }
+
+    if (json_object_object_get_ex(obj, "textureSeed", &textureSeed)) {
+        sceneObject->textureSeed = json_object_get_int(textureSeed);
+    } else {
+        sceneObject->textureSeed = 0;
+    }
+    {
+        RuntimeMaterialTexture3DParams params =
+            RuntimeMaterialTexture3DParamsFromObject(sceneObject);
+        sceneObject->texturePatternMode = params.patternMode;
+        sceneObject->textureCoverage = params.coverage;
+        sceneObject->textureGrain = params.grain;
+        sceneObject->textureEdgeSoftness = params.edgeSoftness;
+        sceneObject->textureContrast = params.contrast;
+        sceneObject->textureFlow = params.flow;
+        sceneObject->textureColorDepth = params.colorDepth;
+        sceneObject->textureSurfaceDamage = params.surfaceDamage;
+        sceneObject->textureSeed = params.seed;
     }
 
     if (json_object_object_get_ex(obj, "materialId", &materialId)) {
@@ -528,11 +600,48 @@ void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
     } else {
         sceneObject->material_id = MaterialManagerDefaultId();
     }
+    SceneObjectClearGlassTransportOverride(sceneObject);
+    SceneObjectClearMirrorResponseOverride(sceneObject);
+    if (json_object_object_get_ex(obj, "glassTransportOverride", &glassTransportOverride) &&
+        json_object_get_boolean(glassTransportOverride)) {
+        SceneObjectSeedGlassTransportOverrideFromMaterial(sceneObject);
+        if (json_object_object_get_ex(obj, "glassTransmission", &glassTransmission)) {
+            sceneObject->glassTransmission = json_object_get_double(glassTransmission);
+        }
+        if (json_object_object_get_ex(obj, "glassIor", &glassIor)) {
+            sceneObject->glassIor = json_object_get_double(glassIor);
+        }
+        if (json_object_object_get_ex(obj, "glassAbsorptionDistance", &glassAbsorptionDistance)) {
+            sceneObject->glassAbsorptionDistance = json_object_get_double(glassAbsorptionDistance);
+        }
+        if (json_object_object_get_ex(obj, "glassThinWalled", &glassThinWalled)) {
+            sceneObject->glassThinWalled = json_object_get_boolean(glassThinWalled);
+        }
+    }
+    if (json_object_object_get_ex(obj, "mirrorResponseOverride", &mirrorResponseOverride) &&
+        json_object_get_boolean(mirrorResponseOverride)) {
+        SceneObjectSeedMirrorResponseOverrideFromMaterial(sceneObject);
+        if (json_object_object_get_ex(obj, "mirrorReflectivity", &mirrorReflectivity)) {
+            sceneObject->mirrorReflectivity = json_object_get_double(mirrorReflectivity);
+        }
+        if (json_object_object_get_ex(obj, "mirrorRoughness", &mirrorRoughness)) {
+            sceneObject->mirrorRoughness = json_object_get_double(mirrorRoughness);
+        }
+        if (json_object_object_get_ex(obj, "mirrorSpecular", &mirrorSpecular)) {
+            sceneObject->mirrorSpecular = json_object_get_double(mirrorSpecular);
+        }
+        if (json_object_object_get_ex(obj, "mirrorTint", &mirrorTint)) {
+            sceneObject->mirrorTint = json_object_get_int(mirrorTint) & 0xFFFFFF;
+        }
+    }
 }
 
-            
 void LoadSceneObjects(struct json_object* config) {
     printf("DEBUG: Loading Scene Objects...\n");
+    SceneEditorMaterialFacePlacementResetAll();
+    SceneEditorMaterialStackResetAll();
+    SceneEditorMaterialGraphResetAll();
+    RuntimeMaterialAuthoredTextureResetAll();
 
     struct json_object *objects;
     if (json_object_object_get_ex(config, "objects", &objects)) {
@@ -544,6 +653,9 @@ void LoadSceneObjects(struct json_object* config) {
             SceneObject* sceneObj = &sceneSettings.sceneObjects[i];
 
             LoadObjectProperties(obj, sceneObj);
+            ConfigLoadMaterialTextureStack(obj, i);
+            ConfigLoadMaterialGraph(obj, i);
+            LoadMaterialFacePlacements(obj, i);
 
             struct json_object *type, *x, *y, *z, *scale, *rotation, *radius, *numPoints, *baseShapePoints, 
 *shapePoints;
@@ -640,12 +752,9 @@ void LoadSceneObjects(struct json_object* config) {
 
 void LoadSceneConfig(void) {
     const char *loaded_path = NULL;
-    FILE *file = config_io_open_read_with_fallback(SCENE_CONFIG_RUNTIME_FILE,
-                                                   SCENE_CONFIG_DEFAULT_FILE,
-                                                   SCENE_CONFIG_LEGACY_FILE,
-                                                   &loaded_path);
+    FILE *file = OpenSceneConfigRead(&loaded_path);
     if (!file) {
-        printf("ERROR: Failed to open scene config file (tried %s, %s, %s)\n",
+        printf("INFO: Scene config file not found (tried %s, %s, %s); using defaults/runtime overrides.\n",
                SCENE_CONFIG_RUNTIME_FILE,
                SCENE_CONFIG_DEFAULT_FILE,
                SCENE_CONFIG_LEGACY_FILE);
@@ -670,16 +779,44 @@ void LoadSceneConfig(void) {
     if (!lightPathLoaded || sceneSettings.bezierPath.numPoints < 2) {
         printf("ERROR: Bézier path missing or invalid in scene_config.json.\n");
         sceneSettings.bezierPath.numPoints = 0;
+        CameraPath3D_Reset(&sceneSettings.bezierPath3D);
     } else {
         printf("INFO: Loaded Bézier Path with %d points and %d segments.\n",
                sceneSettings.bezierPath.numPoints, sceneSettings.bezierPath.numPoints - 1);
+        if (!config_scene_load_path_depth_from_json(config,
+                                                    "pathDepth",
+                                                    &sceneSettings.bezierPath3D,
+                                                    &sceneSettings.bezierPath)) {
+            CameraPath3D_Reset(&sceneSettings.bezierPath3D);
+            for (int i = 0; i < sceneSettings.bezierPath.numPoints && i < MAX_BEZIER_POINTS; ++i) {
+                sceneSettings.bezierPath3D.point_z[i] = animSettings.lightHeight;
+            }
+        }
     }
 
-    bool cameraPathLoaded = config_scene_load_path_from_json(config, "cameraPath", &sceneSettings.cameraPath);
+    bool cameraPathLoaded = config_scene_load_camera_path_from_json(config,
+                                                                    "cameraPath",
+                                                                    &sceneSettings.cameraPath);
     if (cameraPathLoaded) {
         printf("INFO: Loaded Camera Path with %d point(s).\n", sceneSettings.cameraPath.numPoints);
     } else {
-        printf("INFO: Camera path missing in config; using default at camera center.\n");
+        printf("INFO: Camera path missing in config; leaving authored camera path empty.\n");
+    }
+    {
+        struct json_object* camera_z_obj = NULL;
+        if (json_object_object_get_ex(config, "cameraZ", &camera_z_obj)) {
+            sceneSettings.cameraZ = json_object_get_double(camera_z_obj);
+        }
+    }
+    if (!config_scene_load_camera_path_depth_from_json(config,
+                                                       "cameraPathDepth",
+                                                       &sceneSettings.cameraPath3D,
+                                                       &sceneSettings.cameraPath)) {
+        int i = 0;
+        CameraPath3D_Reset(&sceneSettings.cameraPath3D);
+        for (i = 0; i < sceneSettings.cameraPath.numPoints && i < MAX_BEZIER_POINTS; ++i) {
+            sceneSettings.cameraPath3D.point_z[i] = sceneSettings.cameraZ;
+        }
     }
     config_scene_ensure_camera_path_default(&sceneSettings);
 
@@ -702,242 +839,4 @@ void LoadSceneConfig(void) {
 
     json_object_put(config);
     config_scene_ensure_camera_path_default(&sceneSettings);
-}
-
-void LoadAnimationConfig(void) {
-    const char* loaded_path = NULL;
-    FILE* file = config_io_open_read_with_fallback(ANIMATION_CONFIG_RUNTIME_FILE,
-                                                   ANIMATION_CONFIG_DEFAULT_FILE,
-                                                   ANIMATION_CONFIG_LEGACY_FILE,
-                                                   &loaded_path);
-    if (!file) {
-        printf("Failed to open animation config file (tried %s, %s, %s)\n",
-               ANIMATION_CONFIG_RUNTIME_FILE,
-               ANIMATION_CONFIG_DEFAULT_FILE,
-               ANIMATION_CONFIG_LEGACY_FILE);
-        return;
-    }
-    if (loaded_path) {
-        printf("INFO: Loaded animation config from: %s\n", loaded_path);
-    }
-
-    struct json_object* config = config_io_parse_json_file(file, "animation config", true);
-    if (!config) {
-        return;
-    }
-
-    struct json_object* temp;
-    
-    if (json_object_object_get_ex(config, "interactiveMode", &temp))   
-        animSettings.interactiveMode = json_object_get_boolean(temp);   
-    if (json_object_object_get_ex(config, "deepRenderMode", &temp)) 
-        animSettings.deepRenderMode = json_object_get_boolean(temp);    
-    if (json_object_object_get_ex(config, "bounceMode", &temp))     
-        animSettings.bounceMode = json_object_get_boolean(temp);        
-    if (json_object_object_get_ex(config, "autoMP4", &temp))        
-        animSettings.autoMP4 = json_object_get_boolean(temp);          
-    if (json_object_object_get_ex(config, "bounceLimit", &temp))   
-        animSettings.bounceLimit = json_object_get_int(temp);
-    if (json_object_object_get_ex(config, "frameLimit", &temp))
-        animSettings.frameLimit = json_object_get_int(temp);
-    if (json_object_object_get_ex(config, "framesForTravel", &temp))
-        animSettings.framesForTravel = json_object_get_int(temp);
-    if (json_object_object_get_ex(config, "fps", &temp)) {
-        animSettings.fps = json_object_get_int(temp);
-        animSettings.frameDuration = (animSettings.fps > 0) ? 1.0 / animSettings.fps : 1.0 / 30.0;
-    }
-    if (json_object_object_get_ex(config, "inputRoot", &temp) && json_object_is_type(temp, json_type_string)) {
-        const char *path = json_object_get_string(temp);
-        if (path) {
-            strncpy(animSettings.inputRoot, path, sizeof(animSettings.inputRoot) - 1);
-            animSettings.inputRoot[sizeof(animSettings.inputRoot) - 1] = '\0';
-        }
-    }
-    if (json_object_object_get_ex(config, "outputRoot", &temp) && json_object_is_type(temp, json_type_string)) {
-        const char *path = json_object_get_string(temp);
-        if (path) {
-            strncpy(animSettings.outputRoot, path, sizeof(animSettings.outputRoot) - 1);
-            animSettings.outputRoot[sizeof(animSettings.outputRoot) - 1] = '\0';
-        }
-    }
-    NormalizeDataRootPaths();
-    (void)setenv("RAY_TRACING_INPUT_ROOT", animSettings.inputRoot, 1);
-    (void)setenv("RAY_TRACING_OUTPUT_ROOT", animSettings.outputRoot, 1);
-    if (json_object_object_get_ex(config, "loopMode", &temp)) {
-        strncpy(animSettings.loopMode, json_object_get_string(temp), sizeof(animSettings.loopMode) - 1);
-        animSettings.loopMode[sizeof(animSettings.loopMode) - 1] = '\0';
-    }
-    if (json_object_object_get_ex(config, "maxLoopCount", &temp))
-        animSettings.maxLoopCount = json_object_get_int(temp);
-    if (json_object_object_get_ex(config, "frameDir", &temp)) {
-        const char* dir = json_object_get_string(temp);
-        if (dir) {
-            strncpy(animSettings.frameDir, dir, sizeof(animSettings.frameDir) - 1);
-            animSettings.frameDir[sizeof(animSettings.frameDir) - 1] = '\0';
-        }
-    }
-    NormalizeFrameDirPath();
-    if (json_object_object_get_ex(config, "lightMode", &temp))
-        animSettings.lightMode = json_object_get_int(temp);
-    if (json_object_object_get_ex(config, "blurMode", &temp))
-        animSettings.blurMode = json_object_get_int(temp); 
-    if (json_object_object_get_ex(config, "lightDiffusionEnabled", &temp))
-        animSettings.lightDiffusionEnabled = json_object_get_boolean(temp);
-    if (json_object_object_get_ex(config, "lightDiffusionRadius", &temp))
-        animSettings.lightDiffusionRadius = json_object_get_int(temp);
-    if (json_object_object_get_ex(config, "lightDiffusionStrength", &temp))
-        animSettings.lightDiffusionStrength = json_object_get_double(temp);
-    if (json_object_object_get_ex(config, "editorMode", &temp))
-        animSettings.editorMode = json_object_get_int(temp); 
-    if (json_object_object_get_ex(config, "spaceMode", &temp)) {
-        animSettings.spaceMode = animation_config_space_mode_clamp(json_object_get_int(temp));
-    } else if (json_object_object_get_ex(config, "space_mode", &temp)) {
-        animSettings.spaceMode = animation_config_space_mode_clamp(json_object_get_int(temp));
-    } else {
-        animSettings.spaceMode = SPACE_MODE_2D;
-    }
-    if (json_object_object_get_ex(config, "textZoomStep", &temp)) {
-        animSettings.textZoomStep = json_object_get_int(temp);
-    } else if (json_object_object_get_ex(config, "text_zoom_step", &temp)) {
-        animSettings.textZoomStep = json_object_get_int(temp);
-    } else {
-        animSettings.textZoomStep = 0;
-    }
-    if (json_object_object_get_ex(config, "useTiledRenderer", &temp))
-        animSettings.useTiledRenderer = json_object_get_boolean(temp);
-    if (json_object_object_get_ex(config, "tilePreviewEnabled", &temp))
-        animSettings.tilePreviewEnabled = json_object_get_boolean(temp);
-    if (json_object_object_get_ex(config, "tileSize", &temp))
-        animSettings.tileSize = json_object_get_int(temp);
-    if (json_object_object_get_ex(config, "rouletteThreshold", &temp))
-        animSettings.rouletteThreshold = json_object_get_double(temp);
-    if (json_object_object_get_ex(config, "integratorMode", &temp))
-        animSettings.integratorMode = json_object_get_int(temp);
-    if (animSettings.integratorMode < 0) {
-        animSettings.integratorMode = 0;
-    } else if (animSettings.integratorMode > 2) {
-        animSettings.integratorMode = 2;
-    }
-    if (json_object_object_get_ex(config, "previewDuration", &temp)) {
-        animSettings.previewDuration = json_object_get_double(temp);
-        if (animSettings.previewDuration <= 0.1) animSettings.previewDuration = 5.0;
-    } else {
-        animSettings.previewDuration = 5.0;
-    }
-    if (json_object_object_get_ex(config, "pathSamplesPerPixel", &temp))
-        animSettings.pathSamplesPerPixel = json_object_get_int(temp);
-    if (json_object_object_get_ex(config, "pathMaxDepth", &temp))
-        animSettings.pathMaxDepth = json_object_get_int(temp);
-    if (json_object_object_get_ex(config, "pathDirectLighting", &temp))
-        animSettings.pathDirectLighting = json_object_get_boolean(temp);
-    if (json_object_object_get_ex(config, "pathRussianRoulette", &temp))
-        animSettings.pathRussianRoulette = json_object_get_boolean(temp);
-    if (json_object_object_get_ex(config, "pathEnableMIS", &temp))
-        animSettings.pathEnableMIS = json_object_get_boolean(temp);
-    if (json_object_object_get_ex(config, "environmentBrightness", &temp))
-        animSettings.environmentBrightness = json_object_get_double(temp);
-    if (json_object_object_get_ex(config, "pathSeed", &temp))
-        animSettings.pathSeed = json_object_get_int(temp);
-    if (json_object_object_get_ex(config, "cacheContributionWeight", &temp))
-        animSettings.cacheContributionWeight = json_object_get_double(temp);
-    if (json_object_object_get_ex(config, "bsdfModel", &temp))
-        animSettings.bsdfModel = json_object_get_int(temp);
-    if (json_object_object_get_ex(config, "lightIntensity", &temp))
-        animSettings.lightIntensity = json_object_get_double(temp);
-    if (json_object_object_get_ex(config, "forwardDecay", &temp))
-        animSettings.forwardDecay = json_object_get_double(temp);
-    if (json_object_object_get_ex(config, "forwardFalloffMode", &temp))
-        animSettings.forwardFalloffMode = json_object_get_int(temp);
-    if (json_object_object_get_ex(config, "renderQuality", &temp))
-        animSettings.renderQuality = (RenderQuality)json_object_get_int(temp);
-    if (json_object_object_get_ex(config, "cacheVarianceCutoff", &temp)) {
-        animSettings.cacheVarianceCutoff = json_object_get_double(temp);
-    } else {
-        animSettings.cacheVarianceCutoff = 0.35;
-    }
-    if (json_object_object_get_ex(config, "cacheHaloRadius", &temp)) {
-        animSettings.cacheHaloRadius = json_object_get_double(temp);
-    } else {
-        animSettings.cacheHaloRadius = 3.5;
-    }
-    if (json_object_object_get_ex(config, "lightDecaySoftness", &temp)) {
-        animSettings.lightDecaySoftness = json_object_get_double(temp);
-    } else {
-        animSettings.lightDecaySoftness = 1.0;
-    }
-    if (json_object_object_get_ex(config, "lightHeight", &temp)) {
-        animSettings.lightHeight = json_object_get_double(temp);
-    } else {
-        animSettings.lightHeight = 8.0;
-    }
-    if (json_object_object_get_ex(config, "useFluidScene", &temp) && json_object_is_type(temp, json_type_boolean)) {
-        animSettings.useFluidScene = json_object_get_boolean(temp);
-    } else {
-        animSettings.useFluidScene = false;
-    }
-    if (json_object_object_get_ex(config, "fluidManifest", &temp) && json_object_is_type(temp, json_type_string)) {
-        const char *fm = json_object_get_string(temp);
-        if (fm) {
-            strncpy(animSettings.fluidManifest, fm, sizeof(animSettings.fluidManifest) - 1);
-            animSettings.fluidManifest[sizeof(animSettings.fluidManifest) - 1] = '\0';
-        }
-    }
-
-    bool root_corrected = false;
-    animSettings.cacheContributionWeight = ClampDoubleValue(animSettings.cacheContributionWeight, 0.0, 1.0);
-    animSettings.bsdfModel = (animSettings.bsdfModel != 0) ? 1 : 0;
-    animSettings.lightIntensity = ClampDoubleValue(animSettings.lightIntensity, 0.0, 20.0);
-    if (animSettings.forwardDecay <= 1.0) {
-        double legacyDrop = 1.0 - ClampDoubleValue(animSettings.forwardDecay, 0.0, 0.999999);
-        double scaleFactor = 1.0 / fmax(legacyDrop, 1e-6);
-        animSettings.forwardDecay = DefaultForwardFalloffDistance() * scaleFactor;
-    }
-    if (animSettings.forwardDecay <= 0.0) {
-        animSettings.forwardDecay = DefaultForwardFalloffDistance();
-    }
-    animSettings.forwardDecay = ClampDoubleValue(animSettings.forwardDecay, 50.0, 100000.0);
-
-    if (animSettings.forwardFalloffMode < FORWARD_FALLOFF_MODE_QUADRATIC || animSettings.forwardFalloffMode > FORWARD_FALLOFF_MODE_NONE) {
-        animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_QUADRATIC;
-    }
-    if (animSettings.renderQuality < RENDER_QUALITY_LOW || animSettings.renderQuality > RENDER_QUALITY_HIGH) {
-        animSettings.renderQuality = RENDER_QUALITY_MEDIUM;
-    }
-    if (animSettings.cacheVarianceCutoff <= 0.0) {
-        animSettings.cacheVarianceCutoff = 0.35;
-    }
-    if (animSettings.cacheHaloRadius <= 0.0) {
-        animSettings.cacheHaloRadius = 3.5;
-    }
-    if (animSettings.lightDecaySoftness <= 0.0) {
-        animSettings.lightDecaySoftness = 1.0;
-    }
-    if (animSettings.lightDecaySoftness > 10.0) {
-        animSettings.lightDecaySoftness = 10.0;
-    }
-    if (!isfinite(animSettings.lightHeight) || animSettings.lightHeight < 0.0) {
-        animSettings.lightHeight = 8.0;
-    }
-    root_corrected |= ValidateDataRootPath(animSettings.inputRoot,
-                                           sizeof(animSettings.inputRoot),
-                                           ray_tracing_default_input_root(),
-                                           "input",
-                                           false);
-    root_corrected |= ValidateDataRootPath(animSettings.outputRoot,
-                                           sizeof(animSettings.outputRoot),
-                                           ray_tracing_default_output_root(),
-                                           "output",
-                                           true);
-    (void)setenv("RAY_TRACING_INPUT_ROOT", animSettings.inputRoot, 1);
-    (void)setenv("RAY_TRACING_OUTPUT_ROOT", animSettings.outputRoot, 1);
-    if (root_corrected) {
-        SaveAnimationConfig();
-        fprintf(stderr,
-                "[startup] Data root fallback correction persisted to runtime animation config.\n");
-    }
-    animSettings.spaceMode = animation_config_space_mode_clamp(animSettings.spaceMode);
-    animSettings.textZoomStep = animation_config_text_zoom_step_clamp(animSettings.textZoomStep);
-	
-    printf(" Loaded animation config successfully.\n");
-    json_object_put(config);
 }

@@ -1,0 +1,6 @@
+#ifndef TIMESCOPE_SETTINGS_LOADER_LOCAL_H
+#define TIMESCOPE_SETTINGS_LOADER_LOCAL_H
+
+#include "timer_hud/settings_loader.h"
+
+#endif // TIMESCOPE_SETTINGS_LOADER_LOCAL_H

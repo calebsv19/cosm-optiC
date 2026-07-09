@@ -1,0 +1,232 @@
+{
+  "cases": [
+    {
+      "active": 0,
+      "global_actions": [
+        "+",
+        "Mute",
+        "Up",
+        "Down",
+        "Del"
+      ],
+      "guard": "Base layer locked: add overlays; move/delete guarded.",
+      "header": "Layers 2/8 | object stack | sel #0",
+      "id": "base_locked",
+      "row_actions": [],
+      "rows": [
+        {
+          "base": true,
+          "enabled": true,
+          "label": "#0 B Brushed Metal On R/Refl/Spec"
+        },
+        {
+          "base": false,
+          "enabled": true,
+          "label": "#1 O Rust On R/Refl/Spec"
+        }
+      ],
+      "title": "Base Locked"
+    },
+    {
+      "active": 1,
+      "global_actions": [
+        "+",
+        "Mute",
+        "Up",
+        "Down",
+        "Del"
+      ],
+      "guard": "Only overlay: move guarded; delete still available.",
+      "header": "Layers 2/8 | object stack | sel #1",
+      "id": "only_overlay",
+      "row_actions": [
+        {
+          "enabled": false,
+          "label": "Up"
+        },
+        {
+          "enabled": false,
+          "label": "Dn"
+        },
+        {
+          "enabled": true,
+          "label": "Del"
+        }
+      ],
+      "rows": [
+        {
+          "base": true,
+          "enabled": true,
+          "label": "#0 B Brushed Metal On R/Refl/Spec"
+        },
+        {
+          "base": false,
+          "enabled": true,
+          "label": "#1 O Rust On R/Refl/Spec"
+        }
+      ],
+      "title": "Only Overlay"
+    },
+    {
+      "active": 2,
+      "global_actions": [
+        "+",
+        "Mute",
+        "Up",
+        "Down",
+        "Del"
+      ],
+      "guard": "Structure edits target selected overlay.",
+      "header": "Layers 4/8 | object stack | sel #2",
+      "id": "middle_overlay",
+      "row_actions": [
+        {
+          "enabled": true,
+          "label": "Up"
+        },
+        {
+          "enabled": true,
+          "label": "Dn"
+        },
+        {
+          "enabled": true,
+          "label": "Del"
+        }
+      ],
+      "rows": [
+        {
+          "base": true,
+          "enabled": true,
+          "label": "#0 B Brushed Metal On R/Refl/Spec"
+        },
+        {
+          "base": false,
+          "enabled": true,
+          "label": "#1 O Rust On R/Refl/Spec"
+        },
+        {
+          "base": false,
+          "enabled": true,
+          "label": "#2 O Grime On R/Refl/Diff"
+        },
+        {
+          "base": false,
+          "enabled": true,
+          "label": "#3 O Oil On R/Refl/Spec/Diff"
+        }
+      ],
+      "title": "Middle Overlay Actions"
+    },
+    {
+      "active": 1,
+      "global_actions": [
+        "+",
+        "Unmute",
+        "Up",
+        "Down",
+        "Del"
+      ],
+      "guard": "Muted layer: skipped in preview/export.",
+      "header": "Layers 3/8 | object stack | sel #1",
+      "id": "muted_overlay",
+      "row_actions": [
+        {
+          "enabled": false,
+          "label": "Up"
+        },
+        {
+          "enabled": true,
+          "label": "Dn"
+        },
+        {
+          "enabled": true,
+          "label": "Del"
+        }
+      ],
+      "rows": [
+        {
+          "base": true,
+          "enabled": true,
+          "label": "#0 B Brushed Metal On R/Refl/Spec"
+        },
+        {
+          "base": false,
+          "enabled": false,
+          "label": "#1 O Grime Muted R/Refl/Diff"
+        },
+        {
+          "base": false,
+          "enabled": true,
+          "label": "#2 O Oil On R/Refl/Spec/Diff"
+        }
+      ],
+      "title": "Muted Overlay Export"
+    },
+    {
+      "active": 2,
+      "global_actions": [
+        "+",
+        "Mute",
+        "Up",
+        "Down",
+        "Del"
+      ],
+      "guard": "Stack full: add guarded; edit/delete selected overlay.",
+      "header": "Layers 8/8 | object stack | sel #2",
+      "id": "full_stack",
+      "row_actions": [
+        {
+          "enabled": true,
+          "label": "Up"
+        },
+        {
+          "enabled": true,
+          "label": "Dn"
+        },
+        {
+          "enabled": true,
+          "label": "Del"
+        }
+      ],
+      "rows": [
+        {
+          "base": true,
+          "enabled": true,
+          "label": "#0 B Solid On"
+        },
+        {
+          "base": false,
+          "enabled": true,
+          "label": "#1 O Rust On R/Refl/Spec"
+        },
+        {
+          "base": false,
+          "enabled": true,
+          "label": "#2 O Grime On R/Refl/Diff"
+        },
+        {
+          "base": false,
+          "enabled": true,
+          "label": "#3 O Oil On R/Refl/Spec/Diff"
+        }
+      ],
+      "title": "Full Stack Guard"
+    }
+  ],
+  "non_goals": [
+    "renderer material-difference proof",
+    "drag-and-drop",
+    "layer naming",
+    "named variants or preset persistence",
+    "graph editing depth"
+  ],
+  "output_root": "/Users/calebsv/Desktop/CodeWork/ray_tracing/build/agent_runs/ray_tracing/m13_s3_stack_structure_proof_grid",
+  "preview_svg": "/Users/calebsv/Desktop/CodeWork/ray_tracing/build/agent_runs/ray_tracing/m13_s3_stack_structure_proof_grid/preview.svg",
+  "proof_id": "m13_s3_stack_structure_proof_grid",
+  "schema": "ray_tracing_material_stack_structure_proof_grid_summary_v1",
+  "scope": [
+    "compact Stack pane structure readback",
+    "selected-overlay row-local structure actions",
+    "base, overlay-bound, muted, and full-stack guard states"
+  ]
+}

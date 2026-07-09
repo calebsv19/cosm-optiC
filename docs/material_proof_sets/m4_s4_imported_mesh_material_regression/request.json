@@ -1,0 +1,105 @@
+{
+  "schema": "ray_tracing_material_proof_package_request_v1",
+  "proof_id": "m4_s4_imported_mesh_material_regression",
+  "title": "M4-S4 Imported Mesh Material Regression Matrix",
+  "phase": "M4-S4",
+  "route": {
+    "primary": "selected_native_render",
+    "secondary": "runtime_mesh_asset_headless_audit",
+    "secondary_status": "source_contract_readback",
+    "secondary_policy": "native render proves runtime mesh object visibility/material assignment; focused mesh audit tests prove imported tetrahedron identity, surface group, triangle count, and append path"
+  },
+  "source": {
+    "runtime_scene_path": "../../../tests/fixtures/mesh_asset_runtime_spheres/scene_runtime.json",
+    "render_request_path": "render_request.json",
+    "render_integrator": "direct_light",
+    "rendered_objects": [
+      "obj_sphere_low",
+      "obj_sphere_medium",
+      "obj_sphere_high"
+    ],
+    "source_contract_tests": [
+      "test_runtime_mesh_asset_headless_audit",
+      "test_imported_tetrahedron_runtime_mesh_asset_audit"
+    ],
+    "source_contract_fixture": "../../../tests/fixtures/mesh_asset_runtime_imported_tetrahedron/scene_runtime.json"
+  },
+  "artifacts": {
+    "request_path": "request.json",
+    "render_request_path": "render_request.json",
+    "render_summary_path": "render/render_summary.json",
+    "stdout_summary_path": "render/stdout_summary.json",
+    "summary_path": "summary.json",
+    "index_path": "index.md",
+    "image_path": "render/frames/frame_0000.bmp",
+    "image_status": "generated"
+  },
+  "rows": [
+    {
+      "row_id": "runtime_mesh_low_red_matte",
+      "label": "low-resolution runtime mesh red matte",
+      "material_family": "imported_runtime_mesh",
+      "source_material": {
+        "object_id": "obj_sphere_low",
+        "geometry_ref": "asset_sphere_8x4",
+        "material_ref": "mat_sphere_low",
+        "object_color": "0xC55A4B",
+        "roughness": 0.45
+      },
+      "expected_behavior": "object-wide authored material color/roughness survives runtime mesh geometry and produces a visible audited mesh object",
+      "deferred_status": {
+        "mesh_region_material_authoring": "deferred_until_stable_mesh_region_metadata"
+      }
+    },
+    {
+      "row_id": "runtime_mesh_medium_blue_matte",
+      "label": "medium-resolution runtime mesh blue matte",
+      "material_family": "imported_runtime_mesh",
+      "source_material": {
+        "object_id": "obj_sphere_medium",
+        "geometry_ref": "asset_sphere_16x8",
+        "material_ref": "mat_sphere_medium",
+        "object_color": "0x4F8CC9",
+        "roughness": 0.38
+      },
+      "expected_behavior": "second runtime mesh object keeps its distinct object-wide material assignment and is independently audited",
+      "deferred_status": {
+        "mesh_region_material_authoring": "deferred_until_stable_mesh_region_metadata"
+      }
+    },
+    {
+      "row_id": "runtime_mesh_high_gold_matte",
+      "label": "high-resolution runtime mesh gold matte",
+      "material_family": "imported_runtime_mesh",
+      "source_material": {
+        "object_id": "obj_sphere_high",
+        "geometry_ref": "asset_sphere_32x16",
+        "material_ref": "mat_sphere_high",
+        "object_color": "0xD5A84A",
+        "roughness": 0.32
+      },
+      "expected_behavior": "higher-triangle runtime mesh object keeps its object-wide material assignment and contributes audited triangle/hit counts",
+      "deferred_status": {
+        "mesh_region_material_authoring": "deferred_until_stable_mesh_region_metadata"
+      }
+    },
+    {
+      "row_id": "imported_tetrahedron_source_contract",
+      "label": "imported tetrahedron source contract",
+      "material_family": "imported_runtime_mesh",
+      "source_material": {
+        "object_id": "obj_imported_tetrahedron",
+        "geometry_ref": "asset_imported_tetrahedron_01",
+        "material_ref": "mat_imported_surface",
+        "surface_group": "imported_surface",
+        "roughness": 0.6,
+        "metallic": 0.0
+      },
+      "expected_behavior": "source audit proves STL-derived imported mesh asset loads as one object with one imported_surface group and object-wide material ownership",
+      "deferred_status": {
+        "image_row": "source_backed_not_rendered_in_contact_image",
+        "mesh_region_material_authoring": "deferred_until_stable_mesh_region_metadata"
+      }
+    }
+  ]
+}

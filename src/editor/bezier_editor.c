@@ -6,7 +6,10 @@
 #include "config/config_manager.h"
 #include "camera/camera.h"
 #include "editor/editor_mode_router.h"
+#include "editor/scene_editor_tool_state.h"
 #include "math/vec2.h"
+#include "render/render_helper.h"
+#include "ui/shared_theme_font_adapter.h"
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
@@ -16,20 +19,232 @@
 #include <stdlib.h>
 #include <string.h>
 
-extern SDL_Rect applyButton;  // the existing definition from scene_editor.c
 extern SDL_Rect addButton;  // the existing definition from scene_editor.c
 extern SDL_Rect deleteButton;  // the existing definition from scene_editor.c
-extern SDL_Rect toggleButton;  // the existing definition from scene_editor.c
+extern SDL_Rect selectButton;  // the visible shared tool button
+static SDL_Rect bezierModeButton = {0};
+static SDL_Rect bezierLinkButton = {0};
+static SDL_Rect bezierLightRadiusSlider = {0};
+static SDL_Rect bezierLightIntensitySlider = {0};
 
+#define BEZIER_EDITOR_LIGHT_RADIUS_MIN (0.0)
+#define BEZIER_EDITOR_LIGHT_RADIUS_MAX (25.0)
+#define BEZIER_EDITOR_LIGHT_INTENSITY_MIN (0.0)
+#define BEZIER_EDITOR_LIGHT_INTENSITY_MAX (20.0)
 
-// Global mode states
-static bool addModeActive = false;
-static bool deleteModeActive = false;
+typedef enum BezierEditorPaneSliderKind {
+    BEZIER_EDITOR_PANE_SLIDER_NONE = 0,
+    BEZIER_EDITOR_PANE_SLIDER_LIGHT_RADIUS,
+    BEZIER_EDITOR_PANE_SLIDER_LIGHT_INTENSITY
+} BezierEditorPaneSliderKind;
+
+static bool BezierEditorPointInRect(int x, int y, const SDL_Rect* rect) {
+    if (!rect || rect->w <= 0 || rect->h <= 0) return false;
+    return x >= rect->x && x <= rect->x + rect->w &&
+           y >= rect->y && y <= rect->y + rect->h;
+}
+
+static void BezierEditorDrawPaneButton(SDL_Renderer* renderer,
+                                       SDL_Rect rect,
+                                       const char* label,
+                                       bool active) {
+    RayTracingThemePalette palette = {0};
+    SDL_Color fill = {180, 180, 180, 255};
+    SDL_Color border = {95, 95, 112, 255};
+    SDL_Color text = {0, 0, 0, 255};
+    if (!renderer || rect.w <= 0 || rect.h <= 0 || !label) return;
+    if (ray_tracing_shared_theme_resolve_palette(&palette)) {
+        fill = active ? ray_tracing_theme_resolve_button_active_fill(palette) : palette.button_fill;
+        border = palette.panel_border;
+        text = ray_tracing_theme_choose_button_text(fill, palette);
+    } else if (active) {
+        fill = (SDL_Color){70, 140, 215, 255};
+        text = (SDL_Color){245, 247, 250, 255};
+    }
+    SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
+    SDL_RenderFillRect(renderer, &rect);
+    SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
+    SDL_RenderDrawRect(renderer, &rect);
+    RenderButtonTextWithColor(renderer, rect, label, text);
+}
+
+static double bezier_editor_clamp(double value, double min_value, double max_value) {
+    if (value < min_value) return min_value;
+    if (value > max_value) return max_value;
+    return value;
+}
+
+static bool bezier_editor_slider_range(BezierEditorPaneSliderKind slider_kind,
+                                       double* out_min_value,
+                                       double* out_max_value) {
+    if (!out_min_value || !out_max_value) return false;
+    switch (slider_kind) {
+        case BEZIER_EDITOR_PANE_SLIDER_LIGHT_RADIUS:
+            *out_min_value = BEZIER_EDITOR_LIGHT_RADIUS_MIN;
+            *out_max_value = BEZIER_EDITOR_LIGHT_RADIUS_MAX;
+            return true;
+        case BEZIER_EDITOR_PANE_SLIDER_LIGHT_INTENSITY:
+            *out_min_value = BEZIER_EDITOR_LIGHT_INTENSITY_MIN;
+            *out_max_value = BEZIER_EDITOR_LIGHT_INTENSITY_MAX;
+            return true;
+        default:
+            return false;
+    }
+}
+
+static void bezier_editor_slider_set_value(BezierEditorPaneSliderKind slider_kind, double value) {
+    switch (slider_kind) {
+        case BEZIER_EDITOR_PANE_SLIDER_LIGHT_RADIUS:
+            animSettings.lightRadius = bezier_editor_clamp(value,
+                                                           BEZIER_EDITOR_LIGHT_RADIUS_MIN,
+                                                           BEZIER_EDITOR_LIGHT_RADIUS_MAX);
+            break;
+        case BEZIER_EDITOR_PANE_SLIDER_LIGHT_INTENSITY:
+            animSettings.lightIntensity = bezier_editor_clamp(value,
+                                                              BEZIER_EDITOR_LIGHT_INTENSITY_MIN,
+                                                              BEZIER_EDITOR_LIGHT_INTENSITY_MAX);
+            break;
+        default:
+            break;
+    }
+}
+
+static bool bezier_editor_slider_point_in_slider(int x, int y, const SDL_Rect* slider_rect) {
+    SDL_Rect expanded = {0, 0, 0, 0};
+    if (!slider_rect || slider_rect->w <= 0 || slider_rect->h <= 0) return false;
+    expanded.x = slider_rect->x;
+    expanded.y = slider_rect->y - 8;
+    expanded.w = slider_rect->w;
+    expanded.h = slider_rect->h + 16;
+    return BezierEditorPointInRect(x, y, &expanded);
+}
+
+static BezierEditorPaneSliderKind bezier_editor_slider_kind_at_point(int x, int y) {
+    if (bezier_editor_slider_point_in_slider(x, y, &bezierLightRadiusSlider)) {
+        return BEZIER_EDITOR_PANE_SLIDER_LIGHT_RADIUS;
+    }
+    if (bezier_editor_slider_point_in_slider(x, y, &bezierLightIntensitySlider)) {
+        return BEZIER_EDITOR_PANE_SLIDER_LIGHT_INTENSITY;
+    }
+    return BEZIER_EDITOR_PANE_SLIDER_NONE;
+}
+
+static double bezier_editor_slider_value_from_pointer(const SDL_Rect* slider_rect,
+                                                      double min_value,
+                                                      double max_value,
+                                                      int pointer_x) {
+    double t = 0.0;
+    if (!slider_rect || slider_rect->w <= 1) return min_value;
+    t = ((double)(pointer_x - slider_rect->x)) / (double)(slider_rect->w - 1);
+    t = bezier_editor_clamp(t, 0.0, 1.0);
+    return min_value + (max_value - min_value) * t;
+}
+
+static bool bezier_editor_apply_slider_pointer(BezierEditorPaneSliderKind slider_kind,
+                                               int pointer_x) {
+    SDL_Rect slider_rect = {0, 0, 0, 0};
+    double min_value = 0.0;
+    double max_value = 0.0;
+    double value = 0.0;
+    if (!bezier_editor_slider_range(slider_kind, &min_value, &max_value)) {
+        return false;
+    }
+    switch (slider_kind) {
+        case BEZIER_EDITOR_PANE_SLIDER_LIGHT_RADIUS:
+            slider_rect = bezierLightRadiusSlider;
+            break;
+        case BEZIER_EDITOR_PANE_SLIDER_LIGHT_INTENSITY:
+            slider_rect = bezierLightIntensitySlider;
+            break;
+        default:
+            return false;
+    }
+    value = bezier_editor_slider_value_from_pointer(&slider_rect, min_value, max_value, pointer_x);
+    bezier_editor_slider_set_value(slider_kind, value);
+    return true;
+}
+
+static void bezier_editor_draw_slider(SDL_Renderer* renderer,
+                                      SDL_Rect bounds,
+                                      const char* label,
+                                      double value,
+                                      double min_value,
+                                      double max_value,
+                                      bool auto_zero,
+                                      SDL_Rect* out_slider_rect) {
+    RayTracingThemePalette palette = {0};
+    SDL_Color label_color = {240, 240, 245, 255};
+    SDL_Color value_color = {210, 210, 220, 255};
+    SDL_Color track_fill = {70, 70, 80, 255};
+    SDL_Color track_border = {100, 100, 115, 255};
+    SDL_Color knob_fill = {190, 190, 205, 255};
+    SDL_Color knob_border = {40, 40, 48, 255};
+    SDL_Rect label_rect = {0, 0, 0, 0};
+    SDL_Rect value_rect = {0, 0, 0, 0};
+    SDL_Rect track_rect = {0, 0, 0, 0};
+    SDL_Rect fill_rect = {0, 0, 0, 0};
+    SDL_Rect knob_rect = {0, 0, 0, 0};
+    char value_text[64];
+    double t = 0.0;
+    int knob_center_x = 0;
+    if (!renderer || !label || bounds.w <= 0 || bounds.h <= 0) return;
+    if (ray_tracing_shared_theme_resolve_palette(&palette)) {
+        label_color = palette.text_primary;
+        value_color = palette.text_primary;
+        value_color.a = 210;
+        track_fill = (SDL_Color){palette.panel_fill.r, palette.panel_fill.g, palette.panel_fill.b, 255};
+        track_border = palette.panel_border;
+        knob_fill = palette.button_fill;
+        knob_border = palette.panel_border;
+    }
+    label_rect = (SDL_Rect){bounds.x, bounds.y, bounds.w * 2 / 3, 16};
+    value_rect = (SDL_Rect){bounds.x + bounds.w * 2 / 3, bounds.y, bounds.w / 3, 16};
+    track_rect = (SDL_Rect){bounds.x, bounds.y + 20, bounds.w, 8};
+    if (track_rect.w < 24) track_rect.w = 24;
+    if (track_rect.h < 6) track_rect.h = 6;
+    t = (max_value > min_value) ? ((value - min_value) / (max_value - min_value)) : 0.0;
+    t = bezier_editor_clamp(t, 0.0, 1.0);
+    knob_center_x = track_rect.x + (int)lround(t * (double)(track_rect.w - 1));
+    fill_rect = track_rect;
+    fill_rect.w = (int)lround((double)track_rect.w * t);
+    if (fill_rect.w < 2 && t > 0.0) fill_rect.w = 2;
+    knob_rect = (SDL_Rect){knob_center_x - 5, track_rect.y - 4, 10, 16};
+    if (auto_zero && value <= 1e-9) {
+        snprintf(value_text, sizeof(value_text), "Auto");
+    } else {
+        snprintf(value_text, sizeof(value_text), "%.2f", value);
+    }
+    SDL_SetRenderDrawColor(renderer, track_fill.r, track_fill.g, track_fill.b, track_fill.a);
+    SDL_RenderFillRect(renderer, &track_rect);
+    if (fill_rect.w > 0) {
+        SDL_SetRenderDrawColor(renderer, knob_fill.r, knob_fill.g, knob_fill.b, 140);
+        SDL_RenderFillRect(renderer, &fill_rect);
+    }
+    SDL_SetRenderDrawColor(renderer, track_border.r, track_border.g, track_border.b, track_border.a);
+    SDL_RenderDrawRect(renderer, &track_rect);
+    SDL_SetRenderDrawColor(renderer, knob_fill.r, knob_fill.g, knob_fill.b, knob_fill.a);
+    SDL_RenderFillRect(renderer, &knob_rect);
+    SDL_SetRenderDrawColor(renderer, knob_border.r, knob_border.g, knob_border.b, knob_border.a);
+    SDL_RenderDrawRect(renderer, &knob_rect);
+    RenderLabelTextLeft(renderer, label_rect, label, label_color);
+    RenderLabelText(renderer, value_rect, value_text, value_color);
+    if (out_slider_rect) {
+        *out_slider_rect = track_rect;
+    }
+}
+
 
 // Dragging state
 int draggingPoint = -1;
 int draggingVelocity = -1;
 static int selectedPoint = -1;
+static int selectedHandleSegment = -1;
+static int selectedHandleIndex = -1;
+static BezierEditorSelectionKind selectionKind = BEZIER_EDITOR_SELECTION_NONE;
+static bool viewportPanDragging = false;
+static int viewportPanLastMouseX = 0;
+static int viewportPanLastMouseY = 0;
+static BezierEditorPaneSliderKind activePaneSlider = BEZIER_EDITOR_PANE_SLIDER_NONE;
 
 typedef enum BezierEditorAction {
     BEZIER_EDITOR_ACTION_NONE = 0,
@@ -65,6 +280,13 @@ static CameraPoint ScreenToWorldBezier(const Camera* camera, int sx, int sy) {
                                                                       sceneSettings.windowWidth,
                                                                       sceneSettings.windowHeight);
     return SpaceModeAdapter_ScreenToWorld(&view_ctx, sx, sy);
+}
+
+static void PanViewportBezierByScreenDelta(int prev_x, int prev_y, int cur_x, int cur_y) {
+    Camera previewCam = BuildBezierEditorCamera();
+    CameraPoint prev = ScreenToWorldBezier(&previewCam, prev_x, prev_y);
+    CameraPoint cur = ScreenToWorldBezier(&previewCam, cur_x, cur_y);
+    CameraPan(&sceneSettings.camera, prev.x - cur.x, prev.y - cur.y);
 }
 
 static bool HitOnScreen(const Camera* camera, double wx, double wy, int mx, int my, double radius) {
@@ -124,7 +346,17 @@ static void RenderBezierViewportOverlay(SDL_Renderer* renderer, double margin) {
 }
 
 void InitializeBezierEditor(void) {
-
+    SceneEditorToolStateReset();
+    draggingPoint = -1;
+    draggingVelocity = -1;
+    selectedPoint = -1;
+    selectedHandleSegment = -1;
+    selectedHandleIndex = -1;
+    selectionKind = BEZIER_EDITOR_SELECTION_NONE;
+    viewportPanDragging = false;
+    viewportPanLastMouseX = 0;
+    viewportPanLastMouseY = 0;
+    activePaneSlider = BEZIER_EDITOR_PANE_SLIDER_NONE;
 }
 
 void ToggleBezierPathMode(Path* path) {
@@ -234,56 +466,81 @@ void RemoveBezierPoint(Path* path, int index) {
 }
 
 
-void AddBezierPoint(Path* path, int x, int y) {
+void AddBezierPointPrecise(Path* path, double x, double y, double default_handle_length) {
+    double prev_x = 0.0;
+    double prev_y = 0.0;
     if (!path) return;
     if (path->numPoints >= MAX_BEZIER_POINTS) {
         printf("Max points reached, cannot add more.\n");
         return;
     }
+    if (!(default_handle_length > 0.0) || !isfinite(default_handle_length)) {
+        default_handle_length = 50.0;
+    }
             
     int index = path->numPoints;
+    if (index > 0) {
+        prev_x = path->points[index - 1].x;
+        prev_y = path->points[index - 1].y;
+    }
     path->points[index].x = x;
     path->points[index].y = y;
     path->rotations[index] = 0.0;
     path->rotationSet[index] = false;
-         
-    // First point gets no previous handle
-    if (index == 0) {
-        path->handles[0][0].vx = 50;
-        path->handles[0][0].vy = 0;
+
+    if (index < MAX_BEZIER_POINTS - 1) {
+        path->handles[index][0].vx = 0.0;
+        path->handles[index][0].vy = 0.0;
+        path->handles[index][1].vx = 0.0;
+        path->handles[index][1].vy = 0.0;
     }
-    // Second point initializes first segment
-    else if (index == 1) {
-        path->handles[0][1].vx = -50;
-        path->handles[0][1].vy = 0;
-    }   
-    // Third point makes the previous endpoint a midpoint 
-    else {
-        path->handles[index - 1][0].vx = 50;
-        path->handles[index - 1][0].vy = 0;
-            
-        path->handles[index - 1][1].vx = -50;
-        path->handles[index - 1][1].vy = 0;
+
+    if (index > 0) {
+        double dx = x - prev_x;
+        double dy = y - prev_y;
+        double dist = sqrt(dx * dx + dy * dy);
+        if (dist > 1e-6) {
+            double dir_x = dx / dist;
+            double dir_y = dy / dist;
+            double handle_length = fmin(default_handle_length, dist * 0.20);
+            double min_handle_length = fmin(default_handle_length * 0.35, dist * 0.10);
+            if (handle_length < min_handle_length) {
+                handle_length = min_handle_length;
+            }
+            path->handles[index - 1][0].vx = dir_x * handle_length;
+            path->handles[index - 1][0].vy = dir_y * handle_length;
+            path->handles[index - 1][1].vx = -dir_x * handle_length;
+            path->handles[index - 1][1].vy = -dir_y * handle_length;
+        } else {
+            path->handles[index - 1][0].vx = 0.0;
+            path->handles[index - 1][0].vy = 0.0;
+            path->handles[index - 1][1].vx = 0.0;
+            path->handles[index - 1][1].vy = 0.0;
+        }
+    } else {
+        path->handles[0][0].vx = 0.0;
+        path->handles[0][0].vy = 0.0;
+        path->handles[0][1].vx = 0.0;
+        path->handles[0][1].vy = 0.0;
     }
      
     path->numPoints++;
     path->handleLink[index] = false;
-    printf("Added new point at (%d, %d), Segment Count: %d\n", x, y, path->numPoints - 1);
+    printf("Added new point at (%.3f, %.3f), Segment Count: %d\n", x, y, path->numPoints - 1);
+}
+
+void AddBezierPoint(Path* path, int x, int y) {
+    AddBezierPointPrecise(path, (double)x, (double)y, 50.0);
 }
 
 bool IsClickingButtonBezier(int mx, int my) {
-    (void)mx;
-    (void)my;
-    return false;  // Click is not inside a UI button
+    return BezierEditorPointInRect(mx, my, &bezierModeButton) ||
+           BezierEditorPointInRect(mx, my, &bezierLinkButton) ||
+           bezier_editor_slider_kind_at_point(mx, my) != BEZIER_EDITOR_PANE_SLIDER_NONE;
 }
 
 BezierEditorHitRegion BezierEditorHitRegionAtPoint(int mx, int my) {
-    if (IsClickingButtonMain(mx, my)) {
-        return BEZIER_EDITOR_HIT_CONTROLS;
-    }
-    if ((mx >= addButton.x && mx <= addButton.x + addButton.w && my >= addButton.y && my <= addButton.y + addButton.h) ||
-        (mx >= deleteButton.x && mx <= deleteButton.x + deleteButton.w && my >= deleteButton.y && my <= deleteButton.y + deleteButton.h) ||
-        (mx >= toggleButton.x && mx <= toggleButton.x + toggleButton.w && my >= toggleButton.y && my <= toggleButton.y + toggleButton.h)) {
+    if (IsClickingButtonMain(mx, my) || SceneEditorIsPaneToolButton(mx, my) || IsClickingButtonBezier(mx, my)) {
         return BEZIER_EDITOR_HIT_CONTROLS;
     }
     return BEZIER_EDITOR_HIT_CANVAS;
@@ -293,15 +550,15 @@ void HandleBezierEditorKeyPress(SDL_Event* event) {
     if (event->type == SDL_KEYDOWN) {
         switch (event->key.keysym.sym) {
             case SDLK_a:
-                addModeActive = !addModeActive;
-                deleteModeActive = false;
-                printf("Add Mode: %s\n", addModeActive ? "ON" : "OFF");
+                SceneEditorToolStateToggleOrReset(SCENE_EDITOR_TOOL_ADD);
+                printf("Add Mode: %s\n",
+                       SceneEditorToolStateToolIsActive(SCENE_EDITOR_TOOL_ADD) ? "ON" : "OFF");
                 break;
 
             case SDLK_d:
-                deleteModeActive = !deleteModeActive;
-                addModeActive = false;
-                printf("Delete Mode: %s\n", deleteModeActive ? "ON" : "OFF");
+                SceneEditorToolStateToggleOrReset(SCENE_EDITOR_TOOL_DELETE);
+                printf("Delete Mode: %s\n",
+                       SceneEditorToolStateToolIsActive(SCENE_EDITOR_TOOL_DELETE) ? "ON" : "OFF");
                 break;
 
             case SDLK_t: // Toggle between cubic and quadratic Bézier paths
@@ -318,6 +575,162 @@ void HandleBezierEditorKeyPress(SDL_Event* event) {
         }
     }
 }
+
+int BezierEditorGetSelectedPointIndex(void) {
+    return selectedPoint;
+}
+
+void BezierEditorSetSelectedPointIndex(int index) {
+    selectedPoint = index;
+    if (index >= 0) {
+        selectionKind = BEZIER_EDITOR_SELECTION_POINT;
+        selectedHandleSegment = -1;
+        selectedHandleIndex = -1;
+    } else {
+        selectionKind = BEZIER_EDITOR_SELECTION_NONE;
+        selectedHandleSegment = -1;
+        selectedHandleIndex = -1;
+    }
+}
+
+BezierEditorSelectionKind BezierEditorGetSelectionKind(void) {
+    return selectionKind;
+}
+
+void BezierEditorClearSelection(void) {
+    selectedPoint = -1;
+    selectedHandleSegment = -1;
+    selectedHandleIndex = -1;
+    selectionKind = BEZIER_EDITOR_SELECTION_NONE;
+}
+
+void BezierEditorSelectHandle(int segmentIndex, int handleIndex) {
+    selectedHandleSegment = segmentIndex;
+    selectedHandleIndex = handleIndex;
+    selectedPoint = (handleIndex == 0) ? segmentIndex : (segmentIndex + 1);
+    selectionKind = BEZIER_EDITOR_SELECTION_HANDLE;
+}
+
+bool BezierEditorGetSelectedHandle(int* out_segment_index, int* out_handle_index) {
+    if (selectionKind != BEZIER_EDITOR_SELECTION_HANDLE ||
+        selectedHandleSegment < 0 ||
+        selectedHandleIndex < 0) {
+        return false;
+    }
+    if (out_segment_index) *out_segment_index = selectedHandleSegment;
+    if (out_handle_index) *out_handle_index = selectedHandleIndex;
+    return true;
+}
+
+bool BezierEditorGetSelectionWorldPosition(double* out_x, double* out_y) {
+    if (selectionKind == BEZIER_EDITOR_SELECTION_HANDLE &&
+        selectedHandleSegment >= 0 &&
+        selectedHandleSegment < sceneSettings.bezierPath.numPoints - 1 &&
+        (selectedHandleIndex == 0 || selectedHandleIndex == 1)) {
+        int pointIndex = (selectedHandleIndex == 0) ? selectedHandleSegment : (selectedHandleSegment + 1);
+        if (out_x) {
+            *out_x = sceneSettings.bezierPath.points[pointIndex].x +
+                     sceneSettings.bezierPath.handles[selectedHandleSegment][selectedHandleIndex].vx;
+        }
+        if (out_y) {
+            *out_y = sceneSettings.bezierPath.points[pointIndex].y +
+                     sceneSettings.bezierPath.handles[selectedHandleSegment][selectedHandleIndex].vy;
+        }
+        return true;
+    }
+    if (selectionKind == BEZIER_EDITOR_SELECTION_POINT &&
+        selectedPoint >= 0 &&
+        selectedPoint < sceneSettings.bezierPath.numPoints) {
+        if (out_x) *out_x = sceneSettings.bezierPath.points[selectedPoint].x;
+        if (out_y) *out_y = sceneSettings.bezierPath.points[selectedPoint].y;
+        return true;
+    }
+    return false;
+}
+
+bool BezierEditorGetSelectionWorldPosition3D(double* out_x, double* out_y, double* out_z) {
+    if (selectionKind == BEZIER_EDITOR_SELECTION_HANDLE &&
+        selectedHandleSegment >= 0 &&
+        selectedHandleSegment < sceneSettings.bezierPath.numPoints - 1 &&
+        (selectedHandleIndex == 0 || selectedHandleIndex == 1)) {
+        int pointIndex = (selectedHandleIndex == 0) ? selectedHandleSegment : (selectedHandleSegment + 1);
+        if (out_x) {
+            *out_x = sceneSettings.bezierPath.points[pointIndex].x +
+                     sceneSettings.bezierPath.handles[selectedHandleSegment][selectedHandleIndex].vx;
+        }
+        if (out_y) {
+            *out_y = sceneSettings.bezierPath.points[pointIndex].y +
+                     sceneSettings.bezierPath.handles[selectedHandleSegment][selectedHandleIndex].vy;
+        }
+        if (out_z) {
+            *out_z = sceneSettings.bezierPath3D.point_z[pointIndex] +
+                     sceneSettings.bezierPath3D.handles_vz[selectedHandleSegment][selectedHandleIndex];
+        }
+        return true;
+    }
+    if (selectionKind == BEZIER_EDITOR_SELECTION_POINT &&
+        selectedPoint >= 0 &&
+        selectedPoint < sceneSettings.bezierPath.numPoints) {
+        if (out_x) *out_x = sceneSettings.bezierPath.points[selectedPoint].x;
+        if (out_y) *out_y = sceneSettings.bezierPath.points[selectedPoint].y;
+        if (out_z) *out_z = sceneSettings.bezierPath3D.point_z[selectedPoint];
+        return true;
+    }
+    return false;
+}
+
+bool BezierEditorMoveSelectionTo(double world_x, double world_y) {
+    if (selectionKind == BEZIER_EDITOR_SELECTION_HANDLE &&
+        selectedHandleSegment >= 0 &&
+        selectedHandleSegment < sceneSettings.bezierPath.numPoints - 1 &&
+        (selectedHandleIndex == 0 || selectedHandleIndex == 1)) {
+        int pointIndex = (selectedHandleIndex == 0) ? selectedHandleSegment : (selectedHandleSegment + 1);
+        Velocity* target = &sceneSettings.bezierPath.handles[selectedHandleSegment][selectedHandleIndex];
+        target->vx = world_x - sceneSettings.bezierPath.points[pointIndex].x;
+        target->vy = world_y - sceneSettings.bezierPath.points[pointIndex].y;
+        if (sceneSettings.bezierPath.handleLink[pointIndex]) {
+            EnforceHandleLink(&sceneSettings.bezierPath, pointIndex);
+        }
+        return true;
+    }
+    if (selectionKind == BEZIER_EDITOR_SELECTION_POINT &&
+        selectedPoint >= 0 &&
+        selectedPoint < sceneSettings.bezierPath.numPoints) {
+        sceneSettings.bezierPath.points[selectedPoint].x = world_x;
+        sceneSettings.bezierPath.points[selectedPoint].y = world_y;
+        return true;
+    }
+    return false;
+}
+
+bool BezierEditorMoveSelectionTo3D(double world_x, double world_y, double world_z) {
+    if (selectionKind == BEZIER_EDITOR_SELECTION_HANDLE &&
+        selectedHandleSegment >= 0 &&
+        selectedHandleSegment < sceneSettings.bezierPath.numPoints - 1 &&
+        (selectedHandleIndex == 0 || selectedHandleIndex == 1)) {
+        int pointIndex = (selectedHandleIndex == 0) ? selectedHandleSegment : (selectedHandleSegment + 1);
+        Velocity* target = &sceneSettings.bezierPath.handles[selectedHandleSegment][selectedHandleIndex];
+        target->vx = world_x - sceneSettings.bezierPath.points[pointIndex].x;
+        target->vy = world_y - sceneSettings.bezierPath.points[pointIndex].y;
+        sceneSettings.bezierPath3D.handles_vz[selectedHandleSegment][selectedHandleIndex] =
+            world_z - sceneSettings.bezierPath3D.point_z[pointIndex];
+        if (sceneSettings.bezierPath.handleLink[pointIndex]) {
+            EnforceHandleLink(&sceneSettings.bezierPath, pointIndex);
+            sceneSettings.bezierPath3D.handles_vz[selectedHandleSegment][selectedHandleIndex ^ 1] =
+                -sceneSettings.bezierPath3D.handles_vz[selectedHandleSegment][selectedHandleIndex];
+        }
+        return true;
+    }
+    if (selectionKind == BEZIER_EDITOR_SELECTION_POINT &&
+        selectedPoint >= 0 &&
+        selectedPoint < sceneSettings.bezierPath.numPoints) {
+        sceneSettings.bezierPath.points[selectedPoint].x = world_x;
+        sceneSettings.bezierPath.points[selectedPoint].y = world_y;
+        sceneSettings.bezierPath3D.point_z[selectedPoint] = world_z;
+        return true;
+    }
+    return false;
+}
 			
 
 void HandleBezierEditorMouseClick(SDL_Event* event) {
@@ -326,52 +739,63 @@ void HandleBezierEditorMouseClick(SDL_Event* event) {
     Camera previewCam = BuildBezierEditorCamera();
     CameraPoint worldPoint = ScreenToWorldBezier(&previewCam, mx, my);
     Vec2 world = vec2(worldPoint.x, worldPoint.y);
+    SceneEditorTool active_tool = SceneEditorToolStateGetEffective(SDL_GetModState());
 
     // Reset dragging states
     draggingPoint = -1;
     draggingVelocity = -1;
+    viewportPanDragging = false;
+    activePaneSlider = BEZIER_EDITOR_PANE_SLIDER_NONE;
 
     // Prevent accidental shape creation when clicking UI buttons
-    bool clickedButton = IsClickingButtonMain(mx, my);
+    bool clickedButton = IsClickingButtonMain(mx, my) || SceneEditorIsPaneToolButton(mx, my);
     if(!clickedButton){
 	IsClickingButtonBezier(mx, my);
     }
 
-    //  Check if clicking inside the Add or Delete button area
-    if (mx >= sceneSettings.windowWidth - addButton.x * 2 - 20 && mx <= sceneSettings.windowWidth - 20) {
-	// Handle UI Buttons Clicks 
-        if (mx >= addButton.x && mx <= addButton.x + addButton.w && my >= addButton.y && 
-                my <= addButton.y + addButton.h) {
-            addModeActive = !addModeActive;
-            deleteModeActive = false;
-            return;
-        }
-        if (mx >= deleteButton.x && mx <= deleteButton.x + deleteButton.w && my >= deleteButton.y && 
-                my <= deleteButton.y + deleteButton.h) {
-            deleteModeActive = !deleteModeActive;
-            addModeActive = false;
-            return;
-        }
-
-	if (mx >= toggleButton.x && mx <= toggleButton.x + toggleButton.w && my >= toggleButton.y &&
-                        my <= toggleButton.y + toggleButton.h) {
-            ToggleBezierPathMode(&sceneSettings.bezierPath);
-            return;
-        }
+    // Handle editor control buttons
+    if (mx >= addButton.x && mx <= addButton.x + addButton.w && my >= addButton.y &&
+            my <= addButton.y + addButton.h) {
+        SceneEditorToolStateToggleOrReset(SCENE_EDITOR_TOOL_ADD);
+        return;
     }
-
+    if (mx >= selectButton.x && mx <= selectButton.x + selectButton.w && my >= selectButton.y &&
+            my <= selectButton.y + selectButton.h) {
+        SceneEditorToolStateSetActive(SCENE_EDITOR_TOOL_SELECT);
+        return;
+    }
+    if (mx >= deleteButton.x && mx <= deleteButton.x + deleteButton.w && my >= deleteButton.y &&
+            my <= deleteButton.y + deleteButton.h) {
+        SceneEditorToolStateToggleOrReset(SCENE_EDITOR_TOOL_DELETE);
+        return;
+    }
+    if (BezierEditorPointInRect(mx, my, &bezierModeButton)) {
+        ToggleBezierPathMode(&sceneSettings.bezierPath);
+        return;
+    }
+    if (BezierEditorPointInRect(mx, my, &bezierLinkButton) &&
+        selectedPoint >= 0 && selectedPoint < sceneSettings.bezierPath.numPoints) {
+        sceneSettings.bezierPath.handleLink[selectedPoint] = !sceneSettings.bezierPath.handleLink[selectedPoint];
+        EnforceHandleLink(&sceneSettings.bezierPath, selectedPoint);
+        return;
+    }
+    activePaneSlider = bezier_editor_slider_kind_at_point(mx, my);
+    if (activePaneSlider != BEZIER_EDITOR_PANE_SLIDER_NONE) {
+        bezier_editor_apply_slider_pointer(activePaneSlider, mx);
+        return;
+    }
     // Check for clicks on Bézier points
     for (int i = 0; i < sceneSettings.bezierPath.numPoints; i++) {
         double px = sceneSettings.bezierPath.points[i].x;
         double py = sceneSettings.bezierPath.points[i].y;
         if (HitOnScreen(&previewCam, px, py, mx, my, POINT_HIT_RADIUS)) {
             draggingPoint = i;
-            selectedPoint = i;
+            BezierEditorSetSelectedPointIndex(i);
 
             //  If in Delete Mode, remove the point
-            if (deleteModeActive) {
+            if (active_tool == SCENE_EDITOR_TOOL_DELETE) {
                 RemoveBezierPoint(&sceneSettings.bezierPath, i);
-                selectedPoint = -1;
+                BezierEditorClearSelection();
             }
 
             return;
@@ -389,18 +813,21 @@ void HandleBezierEditorMouseClick(SDL_Event* event) {
             if (HitOnScreen(&previewCam, vx, vy, mx, my, POINT_HIT_RADIUS)) {
                 draggingPoint = i;
                 draggingVelocity = j;
-                selectedPoint = (j == 0) ? i : i + 1;
+                BezierEditorSelectHandle(i, j);
                 return;
             }
         }
     }
 
     //  If in Add Mode, add a new point at the clicked position
-    if (addModeActive && !clickedButton) {
+    if (active_tool == SCENE_EDITOR_TOOL_ADD && !clickedButton) {
         AddBezierPoint(&sceneSettings.bezierPath, (int)world.x, (int)world.y);
-        selectedPoint = sceneSettings.bezierPath.numPoints - 1;
+        BezierEditorSetSelectedPointIndex(sceneSettings.bezierPath.numPoints - 1);
     } else if (!clickedButton) {
-        selectedPoint = -1;
+        BezierEditorClearSelection();
+        viewportPanDragging = true;
+        viewportPanLastMouseX = mx;
+        viewportPanLastMouseY = my;
     }
 
 }
@@ -418,7 +845,20 @@ void HandleBezierEditorEvents(SDL_Event* event, int* draggingPoint, int* draggin
             Camera previewCam = BuildBezierEditorCamera();
             CameraPoint worldPoint = ScreenToWorldBezier(&previewCam, screenX, screenY);
             Vec2 world = vec2(worldPoint.x, worldPoint.y);
-            if (*draggingPoint != -1 && *draggingVelocity == -1) {
+            if (activePaneSlider != BEZIER_EDITOR_PANE_SLIDER_NONE &&
+                (event->motion.state & SDL_BUTTON_LMASK)) {
+                bezier_editor_apply_slider_pointer(activePaneSlider, screenX);
+            } else if (viewportPanDragging &&
+                (*draggingPoint == -1) &&
+                (*draggingVelocity == -1) &&
+                (event->motion.state & SDL_BUTTON_LMASK)) {
+                PanViewportBezierByScreenDelta(viewportPanLastMouseX,
+                                               viewportPanLastMouseY,
+                                               screenX,
+                                               screenY);
+                viewportPanLastMouseX = screenX;
+                viewportPanLastMouseY = screenY;
+            } else if (*draggingPoint != -1 && *draggingVelocity == -1) {
                 MoveEndPoint(&sceneSettings.bezierPath, (int)round(world.x), (int)round(world.y), *draggingPoint);
             } else if (*draggingPoint != -1 && *draggingVelocity != -1) {
                 MoveVelocityHandle(&sceneSettings.bezierPath,
@@ -438,6 +878,8 @@ void HandleBezierEditorEvents(SDL_Event* event, int* draggingPoint, int* draggin
         case BEZIER_EDITOR_ACTION_MOUSE_UP_LEFT:
             *draggingPoint = -1;
             *draggingVelocity = -1;
+            viewportPanDragging = false;
+            activePaneSlider = BEZIER_EDITOR_PANE_SLIDER_NONE;
             // keep selectedPoint as-is after drag to persist selection
             break;
         case BEZIER_EDITOR_ACTION_NONE:
@@ -445,29 +887,19 @@ void HandleBezierEditorEvents(SDL_Event* event, int* draggingPoint, int* draggin
             break;
     }
 }
-
-
-
-void RenderBezierEditorUI(SDL_Renderer* renderer) {
-    // Button colors (white when inactive, green/red when active)
-    SDL_SetRenderDrawColor(renderer, addModeActive ? 0 : 255, addModeActive ? 255 : 255, 0, 255);
-    SDL_RenderFillRect(renderer, &addButton); // Add Point button
-    
-    SDL_SetRenderDrawColor(renderer, deleteModeActive ? 255 : 255, deleteModeActive ? 0 : 255, 0, 255);
-    SDL_RenderFillRect(renderer, &deleteButton); // Delete Point button
-        
-    // Draw button outlines
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    SDL_RenderDrawRect(renderer, &addButton);
-    RenderButtonText(renderer, addButton, "Add");
-    SDL_RenderDrawRect(renderer, &deleteButton);
-    RenderButtonText(renderer, deleteButton, "Delete");
-    SDL_RenderDrawRect(renderer, &toggleButton);
-    RenderButtonText(renderer, toggleButton, BEZIER_MODE_STRINGS[sceneSettings.bezierPath.mode]);
-}
- 
 void RenderBezierEditor(SDL_Renderer* renderer) {
-    SDL_SetRenderDrawColor(renderer, 80, 80, 85, 255);  
+    RayTracingThemePalette palette = {0};
+    SDL_Color objectColor = {255, 255, 255, 255};
+    if (ray_tracing_shared_theme_resolve_palette(&palette)) {
+        SDL_SetRenderDrawColor(renderer,
+                               palette.background_fill.r,
+                               palette.background_fill.g,
+                               palette.background_fill.b,
+                               255);
+        objectColor = palette.text_primary;
+    } else {
+        SDL_SetRenderDrawColor(renderer, 80, 80, 85, 255);
+    }
     SDL_Rect bg = {0, 0, sceneSettings.windowWidth, sceneSettings.windowHeight};
     SDL_RenderFillRect(renderer, &bg);
 
@@ -475,7 +907,7 @@ void RenderBezierEditor(SDL_Renderer* renderer) {
     Camera original = sceneSettings.camera;
     sceneSettings.camera = preview;
 
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    SDL_SetRenderDrawColor(renderer, objectColor.r, objectColor.g, objectColor.b, 255);
     RenderSceneObjects(renderer, !AnimationUseFluidScene());
 
     if (sceneSettings.bezierPath.numPoints >= 2) {
@@ -487,26 +919,69 @@ void RenderBezierEditor(SDL_Renderer* renderer) {
     // Show faded camera path for context
     if (sceneSettings.cameraPath.numPoints >= 2) {
         SDL_Color camPathColor = {120, 180, 240, 130};
-        SDL_Color handleColor = (SDL_Color){0, 0, 0, 0};
-        SDL_Color selectColor = (SDL_Color){0, 0, 0, 0};
-        RenderBezierPathCameraStyled(renderer,
-                                     &sceneSettings.cameraPath,
-                                     false,
-                                     &preview,
-                                     camPathColor,
-                                     handleColor,
-                                     -1,
-                                     selectColor,
-                                     4);
+        RenderBezierPathCameraPassive(renderer,
+                                      &sceneSettings.cameraPath,
+                                      &preview,
+                                      camPathColor,
+                                      4);
     }
 
     sceneSettings.camera = original;
 
     RenderBezierViewportOverlay(renderer, GetCurrentMarginPixels());
-    RenderEditorHUD(renderer, "Bezier", false);
-    RenderBezierEditorUI(renderer);
+}
 
-    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
-    SDL_RenderFillRect(renderer, &applyButton);
-    RenderButtonText(renderer, applyButton, "Apply");
+int BezierEditorRenderPaneControls(SDL_Renderer* renderer, SDL_Rect content_bounds, int top_y, int bottom_y) {
+    const int gap = 8;
+    const int button_h = 34;
+    const int slider_h = 32;
+    char label[128];
+    int cursor_y = top_y;
+    bezierModeButton = (SDL_Rect){0, 0, 0, 0};
+    bezierLinkButton = (SDL_Rect){0, 0, 0, 0};
+    bezierLightRadiusSlider = (SDL_Rect){0, 0, 0, 0};
+    bezierLightIntensitySlider = (SDL_Rect){0, 0, 0, 0};
+    if (!renderer || content_bounds.w <= 0 || top_y >= bottom_y) return top_y;
+    if (cursor_y + button_h > bottom_y) return cursor_y;
+    bezierModeButton = (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, button_h};
+    snprintf(label,
+             sizeof(label),
+             "Path Mode: %s",
+             (sceneSettings.bezierPath.mode == BEZIER_CUBIC) ? "Cubic" : "Quadratic");
+    BezierEditorDrawPaneButton(renderer, bezierModeButton, label, false);
+    cursor_y += button_h + gap;
+    if (selectedPoint >= 0 &&
+        selectedPoint < sceneSettings.bezierPath.numPoints &&
+        cursor_y + button_h <= bottom_y) {
+        bool linked = sceneSettings.bezierPath.handleLink[selectedPoint];
+        bezierLinkButton = (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, button_h};
+        snprintf(label, sizeof(label), "Handles: %s", linked ? "Linked" : "Independent");
+        BezierEditorDrawPaneButton(renderer, bezierLinkButton, label, linked);
+        cursor_y += button_h + gap;
+    }
+    if (cursor_y + slider_h <= bottom_y) {
+        SDL_Rect slider_bounds = {content_bounds.x, cursor_y, content_bounds.w, slider_h};
+        bezier_editor_draw_slider(renderer,
+                                  slider_bounds,
+                                  "Light Radius",
+                                  animSettings.lightRadius,
+                                  BEZIER_EDITOR_LIGHT_RADIUS_MIN,
+                                  BEZIER_EDITOR_LIGHT_RADIUS_MAX,
+                                  true,
+                                  &bezierLightRadiusSlider);
+        cursor_y += slider_h + gap;
+    }
+    if (cursor_y + slider_h <= bottom_y) {
+        SDL_Rect slider_bounds = {content_bounds.x, cursor_y, content_bounds.w, slider_h};
+        bezier_editor_draw_slider(renderer,
+                                  slider_bounds,
+                                  "Light Brightness",
+                                  animSettings.lightIntensity,
+                                  BEZIER_EDITOR_LIGHT_INTENSITY_MIN,
+                                  BEZIER_EDITOR_LIGHT_INTENSITY_MAX,
+                                  false,
+                                  &bezierLightIntensitySlider);
+        cursor_y += slider_h + gap;
+    }
+    return cursor_y;
 }

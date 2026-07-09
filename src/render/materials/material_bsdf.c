@@ -23,17 +23,51 @@ static double Clamp01(double v) {
     return Clamp(v, 0.0, 1.0);
 }
 
-static double ExtractBaseAlbedo(const SceneObject* obj) {
-    double r = (double)((obj->color >> 16) & 0xFF) / 255.0;
-    double g = (double)((obj->color >> 8) & 0xFF) / 255.0;
-    double b = (double)(obj->color & 0xFF) / 255.0;
-    double luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    return Clamp01(luma);
+static double MaterialBSDFLegacyIorFallback(const Material* preset, double reflectivity) {
+    return Clamp(preset ? preset->ior : ((reflectivity > 0.0) ? 1.45 : 1.0), 1.0, 4.0);
 }
 
-static MaterialBSDFModel SelectModel(const SceneObject* obj) {
-    double reflectivity = Clamp01(obj->reflectivity);
-    return (reflectivity > 0.05) ? MATERIAL_BSDF_GGX : MATERIAL_BSDF_LAMBERT;
+static double MaterialBSDFLegacySpecWeightFallback(const Material* preset, double reflectivity) {
+    return Clamp01((preset ? preset->specular : 0.0) + reflectivity);
+}
+
+static double MaterialBSDFLegacyDiffuseWeightFallback(const Material* preset, double reflectivity) {
+    return preset ? Clamp01(preset->diffuse) : Clamp01(1.0 - reflectivity);
+}
+
+static void ExtractBaseColor(const SceneObject* obj, double* out_r, double* out_g, double* out_b) {
+    int packed = 0xFFFFFF;
+    double r = 1.0;
+    double g = 1.0;
+    double b = 1.0;
+
+    if (obj) {
+        packed = obj->color & 0xFFFFFF;
+    }
+
+    /* The current I6 authoring palette does not expose black yet.
+     * Preserve older scenes that still carry zero-initialized colors by
+     * treating 0x000000 as an unset legacy value rather than a deliberate
+     * black surface choice. */
+    if (packed != 0) {
+        r = (double)((packed >> 16) & 0xFF) / 255.0;
+        g = (double)((packed >> 8) & 0xFF) / 255.0;
+        b = (double)(packed & 0xFF) / 255.0;
+    }
+
+    if (out_r) *out_r = Clamp01(r);
+    if (out_g) *out_g = Clamp01(g);
+    if (out_b) *out_b = Clamp01(b);
+}
+
+static double ExtractBaseAlbedo(const SceneObject* obj) {
+    double r = 0.0;
+    double g = 0.0;
+    double b = 0.0;
+    double luma = 0.0;
+    ExtractBaseColor(obj, &r, &g, &b);
+    luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return Clamp01(luma);
 }
 
 static void BuildTangent(double nx, double ny, double* tx, double* ty) {
@@ -221,6 +255,10 @@ void MaterialBSDFInitFromSceneObject(const SceneObject* obj, MaterialBSDF* mater
     if (!obj || !material) return;
     const Material* preset = MaterialManagerGet(obj->material_id);
     memset(material, 0, sizeof(*material));
+    ExtractBaseColor(obj,
+                     &material->baseColorR,
+                     &material->baseColorG,
+                     &material->baseColorB);
     double objLuma = ExtractBaseAlbedo(obj);
     double presetLuma = 1.0;
     if (preset) {
@@ -228,13 +266,21 @@ void MaterialBSDFInitFromSceneObject(const SceneObject* obj, MaterialBSDF* mater
     }
     material->albedo = Clamp01(objLuma * presetLuma);
     material->opacity = Clamp01(obj->opacity);
-    material->reflectivity = Clamp01(preset ? preset->reflectivity : obj->reflectivity);
-    material->roughness = Clamp(preset ? preset->roughness : obj->roughness, 0.02, 1.0);
-    material->ior = (material->reflectivity > 0.0) ? 1.45 : 1.0;
+    /*
+     * Runtime-scene authoring stores object-level material scalars after any
+     * preset has been assigned. Keep the preset for diffuse/specular/emissive
+     * defaults, but make the concrete SceneObject values authoritative so
+     * imported mesh instances can carry authored glossy/matte settings.
+     */
+    material->reflectivity = Clamp01(obj->reflectivity);
+    material->roughness = Clamp(obj->roughness, 0.02, 1.0);
+    material->ior = MaterialBSDFLegacyIorFallback(preset, material->reflectivity);
     material->textureId = obj->textureId;
     material->model = (material->reflectivity > 0.05) ? MATERIAL_BSDF_GGX : MATERIAL_BSDF_LAMBERT;
-    material->specWeight = (preset ? preset->specular : 0.0) + material->reflectivity;
-    material->diffuseWeight = preset ? preset->diffuse : Clamp01(1.0 - material->reflectivity);
+    material->specWeight =
+        MaterialBSDFLegacySpecWeightFallback(preset, material->reflectivity);
+    material->diffuseWeight =
+        MaterialBSDFLegacyDiffuseWeightFallback(preset, material->reflectivity);
 
     // Enforce energy conservation: diffuse + spec <= 1.0
     double total = material->diffuseWeight + material->specWeight;
@@ -252,7 +298,7 @@ void MaterialBSDFInitFromSceneObject(const SceneObject* obj, MaterialBSDF* mater
     if (preset) {
         emissiveLuma = Clamp01(0.2126 * preset->emissive.x + 0.7152 * preset->emissive.y + 0.0722 * preset->emissive.z);
     }
-    material->emissive = emissiveLuma;
+    material->emissive = Clamp01(emissiveLuma * Clamp01(obj->emissiveStrength));
 }
 
 double MaterialBSDFDiffuseProbability(const MaterialBSDF* material) {

@@ -22,6 +22,7 @@
   "useTiledRenderer": true,
   "tilePreviewEnabled": true,
   "tileSize": 16,
+  "upscaleMode3D": 0,
   "rouletteThreshold": 0.01,
   "integratorMode": 2,
   "previewDuration": 5.0,

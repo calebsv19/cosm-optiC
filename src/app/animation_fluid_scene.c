@@ -1,10 +1,14 @@
 #include "app/animation.h"
 
+#include "camera/camera_path_3d.h"
 #include "config/config_manager.h"
 #include "core_space.h"
 #include "geo/shape_adapter.h"
 #include "geo/shape_asset.h"
 #include "import/fluid_import.h"
+#include "import/fluid_volume_import_3d.h"
+#include "import/runtime_scene_bridge.h"
+#include "import/runtime_scene_volume_defaults.h"
 #include "import/scene_bundle_import.h"
 #include "import/shape_import.h"
 #include "render/fluid/fluid_state.h"
@@ -12,6 +16,10 @@
 #include <json-c/json.h>
 #include <math.h>
 #include <stdio.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include <stdlib.h>
 #include <string.h>
 
@@ -30,17 +38,49 @@ static double ClampDoubleLocal(double value, double min_value, double max_value)
     return value;
 }
 
+static double FluidSceneZeroLength(void) {
+    double zero [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    return zero;
+}
+
+static double FluidSceneLengthEpsilon(void) {
+    double epsilon [[fisics::dim(length)]] [[fisics::unit(meter)]] = 1e-4;
+    return epsilon;
+}
+
+static double FluidSceneUnitLength(void) {
+    double unit_length [[fisics::dim(length)]] [[fisics::unit(meter)]] = 1.0;
+    return unit_length;
+}
+
+static double FluidSceneLengthCenter(double min_value [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                     double span [[fisics::dim(length)]] [[fisics::unit(meter)]]) {
+    double half_span [[fisics::dim(length)]] [[fisics::unit(meter)]] = span * 0.5;
+    return min_value + half_span;
+}
+
+static double FluidSceneLengthInterpolate(
+    double min_value [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double span [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double normalized) {
+    double delta [[fisics::dim(length)]] [[fisics::unit(meter)]] = span * normalized;
+    return min_value + delta;
+}
+
 static void ResetPathLocal(Path *path, BezierMode mode) {
     if (!path) return;
     memset(path, 0, sizeof(*path));
     path->mode = mode;
 }
 
-static void ApplyFluidWindowAndCameraFit(double min_x, double min_y,
-                                         double max_x, double max_y) {
-    double grid_w_world = max_x - min_x;
-    double grid_h_world = max_y - min_y;
-    if (grid_w_world <= 1e-4 || grid_h_world <= 1e-4) return;
+static void ApplyFluidWindowAndCameraFit(double min_x [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                         double min_y [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                         double max_x [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                         double max_y [[fisics::dim(length)]] [[fisics::unit(meter)]]) {
+    double grid_w_world [[fisics::dim(length)]] [[fisics::unit(meter)]] = max_x - min_x;
+    double grid_h_world [[fisics::dim(length)]] [[fisics::unit(meter)]] = max_y - min_y;
+    double epsilon = FluidSceneLengthEpsilon();
+    if (grid_w_world <= epsilon || grid_h_world <= epsilon) return;
 
     const int target_long_edge = 1200;
     const int min_w = 320, min_h = 200;
@@ -58,13 +98,13 @@ static void ApplyFluidWindowAndCameraFit(double min_x, double min_y,
     sceneSettings.windowWidth = ClampEvenInt(target_w / 2, min_w, max_w);
     sceneSettings.windowHeight = ClampEvenInt(target_h / 2, min_h, max_h);
 
-    sceneSettings.camera.x = min_x + grid_w_world * 0.5;
-    sceneSettings.camera.y = min_y + grid_h_world * 0.5;
+    sceneSettings.camera.x = FluidSceneLengthCenter(min_x, grid_w_world);
+    sceneSettings.camera.y = FluidSceneLengthCenter(min_y, grid_h_world);
     sceneSettings.camera.rotation = 0.0;
-    double padded_w = grid_w_world * 1.10;
-    double padded_h = grid_h_world * 1.10;
-    double zoom_x = (padded_w > 1e-4) ? ((double)sceneSettings.windowWidth / padded_w) : 1.0;
-    double zoom_y = (padded_h > 1e-4) ? ((double)sceneSettings.windowHeight / padded_h) : 1.0;
+    double padded_w [[fisics::dim(length)]] [[fisics::unit(meter)]] = grid_w_world * 1.10;
+    double padded_h [[fisics::dim(length)]] [[fisics::unit(meter)]] = grid_h_world * 1.10;
+    double zoom_x = (padded_w > epsilon) ? ((double)sceneSettings.windowWidth / padded_w) : 1.0;
+    double zoom_y = (padded_h > epsilon) ? ((double)sceneSettings.windowHeight / padded_h) : 1.0;
     sceneSettings.camera.zoom = ClampDoubleLocal(fmin(zoom_x, zoom_y), 0.01, 100.0);
 
     double margin_cap = fmin((double)sceneSettings.windowWidth, (double)sceneSettings.windowHeight) * 0.45;
@@ -72,27 +112,30 @@ static void ApplyFluidWindowAndCameraFit(double min_x, double min_y,
     sceneSettings.cameraMargin = ClampDoubleLocal(sceneSettings.cameraMargin, 0.0, margin_cap);
 }
 
-static void BuildDefaultFluidPaths(double min_x, double min_y,
-                                   double max_x, double max_y) {
-    double grid_w_world = max_x - min_x;
-    double grid_h_world = max_y - min_y;
-    if (grid_w_world <= 1e-4 || grid_h_world <= 1e-4) return;
+static void BuildDefaultFluidPaths(double min_x [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                   double min_y [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                   double max_x [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                   double max_y [[fisics::dim(length)]] [[fisics::unit(meter)]]) {
+    double grid_w_world [[fisics::dim(length)]] [[fisics::unit(meter)]] = max_x - min_x;
+    double grid_h_world [[fisics::dim(length)]] [[fisics::unit(meter)]] = max_y - min_y;
+    double epsilon = FluidSceneLengthEpsilon();
+    if (grid_w_world <= epsilon || grid_h_world <= epsilon) return;
 
     ResetPathLocal(&sceneSettings.cameraPath, BEZIER_CUBIC);
-    sceneSettings.cameraPath.numPoints = 1;
-    sceneSettings.cameraPath.points[0].x = sceneSettings.camera.x;
-    sceneSettings.cameraPath.points[0].y = sceneSettings.camera.y;
-    sceneSettings.cameraPath.rotations[0] = sceneSettings.camera.rotation;
-    sceneSettings.cameraPath.rotationSet[0] = true;
-    sceneSettings.cameraPath.handleLink[0] = true;
+    CameraPath3D_Reset(&sceneSettings.cameraPath3D);
 
     ResetPathLocal(&sceneSettings.bezierPath, BEZIER_CUBIC);
-    double cx = min_x + grid_w_world * 0.5;
-    double cy = min_y + grid_h_world * 0.5;
-    double orbit_rx = fmax(grid_w_world * 0.30, grid_w_world * 0.08);
-    double orbit_ry = fmax(grid_h_world * 0.30, grid_h_world * 0.08);
-    if (orbit_rx <= 1e-4) orbit_rx = 1.0;
-    if (orbit_ry <= 1e-4) orbit_ry = 1.0;
+    CameraPath3D_Reset(&sceneSettings.bezierPath3D);
+    double cx [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        FluidSceneLengthCenter(min_x, grid_w_world);
+    double cy [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        FluidSceneLengthCenter(min_y, grid_h_world);
+    double orbit_rx [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        fmax(grid_w_world * 0.30, grid_w_world * 0.08);
+    double orbit_ry [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        fmax(grid_h_world * 0.30, grid_h_world * 0.08);
+    if (orbit_rx <= epsilon) orbit_rx = FluidSceneUnitLength();
+    if (orbit_ry <= epsilon) orbit_ry = FluidSceneUnitLength();
 
     sceneSettings.bezierPath.numPoints = 4;
     sceneSettings.bezierPath.points[0] = (Point){cx - orbit_rx, cy};
@@ -103,6 +146,7 @@ static void BuildDefaultFluidPaths(double min_x, double min_y,
         sceneSettings.bezierPath.rotations[i] = 0.0;
         sceneSettings.bezierPath.rotationSet[i] = true;
         sceneSettings.bezierPath.handleLink[i] = true;
+        sceneSettings.bezierPath3D.point_z[i] = animSettings.lightHeight;
     }
 }
 
@@ -326,13 +370,68 @@ static void ApplyBundleSceneMetadata(const SceneBundleImportResult *bundle_info)
 }
 
 bool AnimationUseFluidScene(void) {
-    return animSettings.useFluidScene && animSettings.fluidManifest[0];
+    return animation_config_scene_source_is_fluid(animSettings.sceneSource) &&
+           animSettings.fluidManifest[0];
 }
 
 void AnimationClearFluidGrid(void) {
     g_fluidGrid.valid = false;
     g_fluidGrid.min_x = g_fluidGrid.min_y = 0.0f;
     g_fluidGrid.max_x = g_fluidGrid.max_y = 0.0f;
+}
+
+static RuntimeVolume3DSourceKind animation_volume_source_kind_to_runtime_kind(int kind) {
+    switch (animation_config_volume_source_kind_clamp(kind)) {
+        case VOLUME_SOURCE_MANIFEST:
+            return RUNTIME_VOLUME_3D_SOURCE_MANIFEST;
+        case VOLUME_SOURCE_RAW_VF3D:
+            return RUNTIME_VOLUME_3D_SOURCE_RAW_VF3D;
+        case VOLUME_SOURCE_PACK:
+            return RUNTIME_VOLUME_3D_SOURCE_PACK;
+        case VOLUME_SOURCE_NONE:
+        default:
+            return RUNTIME_VOLUME_3D_SOURCE_NONE;
+    }
+}
+
+bool AnimationSelectVolumeSource(int kind, const char *path, bool apply_immediately) {
+    AnimationConfigSceneSourceState snapshot = {0};
+    RuntimeVolumeAttachment3D attachment = {0};
+    RuntimeVolume3DSourceKind runtime_kind = RUNTIME_VOLUME_3D_SOURCE_NONE;
+    char diagnostics[128] = {0};
+
+    kind = animation_config_volume_source_kind_clamp(kind);
+    if (kind == VOLUME_SOURCE_NONE || !path || !path[0]) {
+        return false;
+    }
+
+    animation_config_scene_source_state_capture(&animSettings, &snapshot);
+    if (!animation_config_set_volume_source_selection(&animSettings, kind, path)) {
+        return false;
+    }
+
+    if (!apply_immediately) {
+        return true;
+    }
+
+    runtime_kind = animation_volume_source_kind_to_runtime_kind(kind);
+    if (runtime_kind == RUNTIME_VOLUME_3D_SOURCE_NONE ||
+        !fluid_volume_import_3d_load_source(path,
+                                            runtime_kind,
+                                            &attachment,
+                                            diagnostics,
+                                            sizeof(diagnostics))) {
+        animation_config_scene_source_state_restore(&animSettings, &snapshot);
+        RuntimeVolumeAttachment3D_Reset(&attachment);
+        return false;
+    }
+
+    RuntimeVolumeAttachment3D_Reset(&attachment);
+    return true;
+}
+
+void AnimationClearVolumeSource(void) {
+    animation_config_clear_volume_source_selection(&animSettings);
 }
 
 bool AnimationApplyFluidScene(const char *manifest_path) {
@@ -356,8 +455,10 @@ bool AnimationApplyFluidScene(const char *manifest_path) {
     g_fluidGrid.max_y = manifest.origin_y + manifest.cell_size * (float)manifest.grid_h;
 
     sceneSettings.objectCount = 0;
-    double grid_w_world = g_fluidGrid.max_x - g_fluidGrid.min_x;
-    double grid_h_world = g_fluidGrid.max_y - g_fluidGrid.min_y;
+    double grid_w_world [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        g_fluidGrid.max_x - g_fluidGrid.min_x;
+    double grid_h_world [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        g_fluidGrid.max_y - g_fluidGrid.min_y;
     ApplyFluidWindowAndCameraFit(g_fluidGrid.min_x, g_fluidGrid.min_y,
                                  g_fluidGrid.max_x, g_fluidGrid.max_y);
     BuildDefaultFluidPaths(g_fluidGrid.min_x, g_fluidGrid.min_y,
@@ -388,8 +489,10 @@ bool AnimationApplyFluidScene(const char *manifest_path) {
     for (size_t i = 0; i < manifest.import_count; ++i) {
         const FluidImportShape *imp = &manifest.imports[i];
         if (!imp->path) continue;
-        double world_x = g_fluidGrid.min_x + (grid_w_world) * imp->pos_x_norm;
-        double world_y = g_fluidGrid.min_y + (grid_h_world) * imp->pos_y_norm;
+        double world_x [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+            FluidSceneLengthInterpolate(g_fluidGrid.min_x, grid_w_world, imp->pos_x_norm);
+        double world_y [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+            FluidSceneLengthInterpolate(g_fluidGrid.min_y, grid_h_world, imp->pos_y_norm);
         ShapeAsset asset = {0};
         bool loaded = LoadImportShapeAsset(imp->path, &asset);
         double angle = imp->rotation_deg * M_PI / 180.0;
@@ -434,11 +537,9 @@ bool AnimationApplyFluidScene(const char *manifest_path) {
         }
     }
 
-    animSettings.useFluidScene = true;
-    if (manifest_path != animSettings.fluidManifest) {
-        strncpy(animSettings.fluidManifest, manifest_path, sizeof(animSettings.fluidManifest) - 1);
-        animSettings.fluidManifest[sizeof(animSettings.fluidManifest) - 1] = '\0';
-    }
+    (void)animation_config_set_scene_source_selection(&animSettings,
+                                                      SCENE_SOURCE_FLUID_MANIFEST,
+                                                      manifest_path);
     printf("[fluid] scene applied source=%s grid=%ux%u window=%dx%d camera=(%.2f,%.2f) zoom=%.3f\n",
            source_path,
            manifest.grid_w,
@@ -450,4 +551,101 @@ bool AnimationApplyFluidScene(const char *manifest_path) {
            sceneSettings.camera.zoom);
     fluid_manifest_free(&manifest);
     return true;
+}
+
+bool AnimationApplyActiveSceneSource(void) {
+    int source = animation_config_scene_source_clamp(animSettings.sceneSource);
+    animSettings.sceneSource = (SceneSource)source;
+
+    if (source == SCENE_SOURCE_FLUID_MANIFEST) {
+        if (animSettings.fluidManifest[0] == '\0') {
+            animSettings.useFluidScene = false;
+            AnimationClearFluidGrid();
+            return false;
+        }
+        if (!AnimationApplyFluidScene(animSettings.fluidManifest)) {
+            fprintf(stderr,
+                    "[fluid-scene] failed to apply fluid scene source '%s'\n",
+                    animSettings.fluidManifest);
+            animSettings.useFluidScene = false;
+            AnimationClearFluidGrid();
+            return false;
+        }
+        return true;
+    }
+
+    if (source == SCENE_SOURCE_RUNTIME_SCENE) {
+        RuntimeSceneBridgePreflight summary;
+        if (animSettings.runtimeScenePath[0] == '\0') {
+            animSettings.useFluidScene = false;
+            AnimationClearFluidGrid();
+            return false;
+        }
+        if (!runtime_scene_bridge_apply_file(animSettings.runtimeScenePath, &summary)) {
+            fprintf(stderr,
+                    "[runtime-scene] failed to apply runtime scene source '%s': %s\n",
+                    animSettings.runtimeScenePath,
+                    summary.diagnostics);
+            if (runtime_scene_bridge_apply_file_defer_mesh_assets(animSettings.runtimeScenePath, &summary)) {
+                fprintf(stderr,
+                        "[runtime-scene] applied runtime scene source '%s' with mesh assets deferred.\n",
+                        animSettings.runtimeScenePath);
+                animSettings.useFluidScene = false;
+                return true;
+            }
+            animSettings.useFluidScene = false;
+            AnimationClearFluidGrid();
+            return false;
+        }
+        animSettings.useFluidScene = false;
+        return true;
+    }
+
+    (void)animation_config_set_scene_source_selection(&animSettings,
+                                                      SCENE_SOURCE_CONFIG_2D,
+                                                      NULL);
+    AnimationClearFluidGrid();
+    return true;
+}
+
+bool AnimationSelectSceneSource(int source, const char *path, bool apply_immediately) {
+    AnimationConfigSceneSourceState snapshot = {0};
+    char previous_runtime_scene_path[sizeof(animSettings.runtimeScenePath)] = {0};
+    int clamped_source = animation_config_scene_source_clamp(source);
+
+    animation_config_scene_source_state_capture(&animSettings, &snapshot);
+    snprintf(previous_runtime_scene_path,
+             sizeof(previous_runtime_scene_path),
+             "%s",
+             animSettings.runtimeScenePath);
+    if (!animation_config_set_scene_source_selection(&animSettings, clamped_source, path)) {
+        return false;
+    }
+    if (clamped_source == SCENE_SOURCE_RUNTIME_SCENE) {
+        runtime_scene_volume_defaults_apply_transition(&animSettings,
+                                                       previous_runtime_scene_path,
+                                                       animSettings.runtimeScenePath);
+    }
+    if (!apply_immediately) {
+        return true;
+    }
+    if (AnimationApplyActiveSceneSource()) {
+        return true;
+    }
+    animation_config_scene_source_state_restore(&animSettings, &snapshot);
+    return false;
+}
+
+bool AnimationRestoreActiveSceneSource(bool persist_on_failure) {
+    AnimationConfigSceneSourceState snapshot = {0};
+    int source = animation_config_scene_source_clamp(animSettings.sceneSource);
+    animation_config_scene_source_state_capture(&animSettings, &snapshot);
+    bool ok = AnimationApplyActiveSceneSource();
+    if (!ok && source == SCENE_SOURCE_RUNTIME_SCENE) {
+        animation_config_scene_source_state_restore(&animSettings, &snapshot);
+    }
+    if (!ok && persist_on_failure) {
+        SaveAnimationConfig();
+    }
+    return ok;
 }

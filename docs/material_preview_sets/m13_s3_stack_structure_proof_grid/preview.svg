@@ -1,0 +1,159 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="926" height="918" viewBox="0 0 926 918">
+<rect width="100%" height="100%" fill="#0e1116"/>
+<text x="22" y="34" fill="#f8fafc" font-size="20" font-weight="700" font-family="Menlo, Consolas, monospace">M13-S3 Material Stack Structure Proof</text>
+<text x="22" y="58" fill="#aab6c2" font-size="13" font-weight="500" font-family="Menlo, Consolas, monospace">S1 readback + S2 selected-row actions; no drag/drop, naming, variants, or graph depth.</text>
+<rect x="22" y="100" width="430" height="260" rx="4" fill="#14181e" stroke="#33404d" stroke-width="1"/>
+<text x="36" y="124" fill="#f8fafc" font-size="15" font-weight="700" font-family="Menlo, Consolas, monospace">Base Locked</text>
+<text x="36" y="148" fill="#dbe5ee" font-size="12" font-weight="600" font-family="Menlo, Consolas, monospace">Layers 2/8 | object stack | sel #0</text>
+<rect x="36" y="160" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="43" y="175" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">+</text>
+<rect x="90" y="160" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="97" y="175" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Mute</text>
+<rect x="144" y="160" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="151" y="175" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Up</text>
+<rect x="198" y="160" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="205" y="175" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Down</text>
+<rect x="252" y="160" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="259" y="175" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Del</text>
+<text x="36" y="201" fill="#9fb0c0" font-size="12" font-weight="500" font-family="Menlo, Consolas, monospace">Base layer locked: add overlays; move/delete guarded.</text>
+<rect x="36" y="216" width="402" height="24" rx="4" fill="#35516d" stroke="#7ab3e5" stroke-width="1"/>
+<text x="46" y="232" fill="#f8fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">#0 B Brushed Metal On R/Refl/Spec</text>
+<rect x="396" y="219" width="34" height="18" rx="4" fill="#5d7fa6" stroke="#88b6e0" stroke-width="1"/>
+<text x="403" y="234" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">On</text>
+<rect x="36" y="245" width="402" height="24" rx="4" fill="#1d232b" stroke="#3b4654" stroke-width="1"/>
+<text x="46" y="261" fill="#f8fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">#1 O Rust On R/Refl/Spec</text>
+<rect x="396" y="248" width="34" height="18" rx="4" fill="#5d7fa6" stroke="#88b6e0" stroke-width="1"/>
+<text x="403" y="263" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">On</text>
+<rect x="474" y="100" width="430" height="260" rx="4" fill="#14181e" stroke="#33404d" stroke-width="1"/>
+<text x="488" y="124" fill="#f8fafc" font-size="15" font-weight="700" font-family="Menlo, Consolas, monospace">Only Overlay</text>
+<text x="488" y="148" fill="#dbe5ee" font-size="12" font-weight="600" font-family="Menlo, Consolas, monospace">Layers 2/8 | object stack | sel #1</text>
+<rect x="488" y="160" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="495" y="175" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">+</text>
+<rect x="542" y="160" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="549" y="175" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Mute</text>
+<rect x="596" y="160" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="603" y="175" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Up</text>
+<rect x="650" y="160" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="657" y="175" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Down</text>
+<rect x="704" y="160" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="711" y="175" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Del</text>
+<text x="488" y="201" fill="#9fb0c0" font-size="12" font-weight="500" font-family="Menlo, Consolas, monospace">Only overlay: move guarded; delete still available.</text>
+<rect x="488" y="216" width="402" height="24" rx="4" fill="#1d232b" stroke="#3b4654" stroke-width="1"/>
+<text x="498" y="232" fill="#f8fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">#0 B Brushed Metal On R/Refl/Spec</text>
+<rect x="848" y="219" width="34" height="18" rx="4" fill="#5d7fa6" stroke="#88b6e0" stroke-width="1"/>
+<text x="855" y="234" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">On</text>
+<rect x="488" y="245" width="402" height="24" rx="4" fill="#35516d" stroke="#7ab3e5" stroke-width="1"/>
+<text x="498" y="261" fill="#f8fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">#1 O Rust On R/Refl/Spec</text>
+<rect x="848" y="248" width="34" height="18" rx="4" fill="#5d7fa6" stroke="#88b6e0" stroke-width="1"/>
+<text x="855" y="263" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">On</text>
+<rect x="762" y="248" width="25" height="18" rx="4" fill="#20262d" stroke="#3b434c" stroke-width="1"/>
+<text x="769" y="263" fill="#7d8791" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Up</text>
+<rect x="791" y="248" width="25" height="18" rx="4" fill="#20262d" stroke="#3b434c" stroke-width="1"/>
+<text x="798" y="263" fill="#7d8791" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Dn</text>
+<rect x="820" y="248" width="25" height="18" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="827" y="263" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Del</text>
+<rect x="22" y="382" width="430" height="260" rx="4" fill="#14181e" stroke="#33404d" stroke-width="1"/>
+<text x="36" y="406" fill="#f8fafc" font-size="15" font-weight="700" font-family="Menlo, Consolas, monospace">Middle Overlay Actions</text>
+<text x="36" y="430" fill="#dbe5ee" font-size="12" font-weight="600" font-family="Menlo, Consolas, monospace">Layers 4/8 | object stack | sel #2</text>
+<rect x="36" y="442" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="43" y="457" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">+</text>
+<rect x="90" y="442" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="97" y="457" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Mute</text>
+<rect x="144" y="442" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="151" y="457" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Up</text>
+<rect x="198" y="442" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="205" y="457" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Down</text>
+<rect x="252" y="442" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="259" y="457" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Del</text>
+<text x="36" y="483" fill="#9fb0c0" font-size="12" font-weight="500" font-family="Menlo, Consolas, monospace">Structure edits target selected overlay.</text>
+<rect x="36" y="498" width="402" height="24" rx="4" fill="#1d232b" stroke="#3b4654" stroke-width="1"/>
+<text x="46" y="514" fill="#f8fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">#0 B Brushed Metal On R/Refl/Spec</text>
+<rect x="396" y="501" width="34" height="18" rx="4" fill="#5d7fa6" stroke="#88b6e0" stroke-width="1"/>
+<text x="403" y="516" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">On</text>
+<rect x="36" y="527" width="402" height="24" rx="4" fill="#1d232b" stroke="#3b4654" stroke-width="1"/>
+<text x="46" y="543" fill="#f8fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">#1 O Rust On R/Refl/Spec</text>
+<rect x="396" y="530" width="34" height="18" rx="4" fill="#5d7fa6" stroke="#88b6e0" stroke-width="1"/>
+<text x="403" y="545" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">On</text>
+<rect x="36" y="556" width="402" height="24" rx="4" fill="#35516d" stroke="#7ab3e5" stroke-width="1"/>
+<text x="46" y="572" fill="#f8fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">#2 O Grime On R/Refl/Diff</text>
+<rect x="396" y="559" width="34" height="18" rx="4" fill="#5d7fa6" stroke="#88b6e0" stroke-width="1"/>
+<text x="403" y="574" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">On</text>
+<rect x="310" y="559" width="25" height="18" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="317" y="574" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Up</text>
+<rect x="339" y="559" width="25" height="18" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="346" y="574" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Dn</text>
+<rect x="368" y="559" width="25" height="18" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="375" y="574" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Del</text>
+<rect x="36" y="585" width="402" height="24" rx="4" fill="#1d232b" stroke="#3b4654" stroke-width="1"/>
+<text x="46" y="601" fill="#f8fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">#3 O Oil On R/Refl/Spec/Diff</text>
+<rect x="396" y="588" width="34" height="18" rx="4" fill="#5d7fa6" stroke="#88b6e0" stroke-width="1"/>
+<text x="403" y="603" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">On</text>
+<rect x="474" y="382" width="430" height="260" rx="4" fill="#14181e" stroke="#33404d" stroke-width="1"/>
+<text x="488" y="406" fill="#f8fafc" font-size="15" font-weight="700" font-family="Menlo, Consolas, monospace">Muted Overlay Export</text>
+<text x="488" y="430" fill="#dbe5ee" font-size="12" font-weight="600" font-family="Menlo, Consolas, monospace">Layers 3/8 | object stack | sel #1</text>
+<rect x="488" y="442" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="495" y="457" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">+</text>
+<rect x="542" y="442" width="48" height="22" rx="4" fill="#5d7fa6" stroke="#88b6e0" stroke-width="1"/>
+<text x="549" y="457" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Unmute</text>
+<rect x="596" y="442" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="603" y="457" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Up</text>
+<rect x="650" y="442" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="657" y="457" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Down</text>
+<rect x="704" y="442" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="711" y="457" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Del</text>
+<text x="488" y="483" fill="#9fb0c0" font-size="12" font-weight="500" font-family="Menlo, Consolas, monospace">Muted layer: skipped in preview/export.</text>
+<rect x="488" y="498" width="402" height="24" rx="4" fill="#1d232b" stroke="#3b4654" stroke-width="1"/>
+<text x="498" y="514" fill="#f8fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">#0 B Brushed Metal On R/Refl/Spec</text>
+<rect x="848" y="501" width="34" height="18" rx="4" fill="#5d7fa6" stroke="#88b6e0" stroke-width="1"/>
+<text x="855" y="516" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">On</text>
+<rect x="488" y="527" width="402" height="24" rx="4" fill="#35516d" stroke="#7ab3e5" stroke-width="1"/>
+<text x="498" y="543" fill="#89949f" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">#1 O Grime Muted R/Refl/Diff</text>
+<rect x="848" y="530" width="34" height="18" rx="4" fill="#20262d" stroke="#3b434c" stroke-width="1"/>
+<text x="855" y="545" fill="#7d8791" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Off</text>
+<rect x="762" y="530" width="25" height="18" rx="4" fill="#20262d" stroke="#3b434c" stroke-width="1"/>
+<text x="769" y="545" fill="#7d8791" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Up</text>
+<rect x="791" y="530" width="25" height="18" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="798" y="545" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Dn</text>
+<rect x="820" y="530" width="25" height="18" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="827" y="545" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Del</text>
+<rect x="488" y="556" width="402" height="24" rx="4" fill="#1d232b" stroke="#3b4654" stroke-width="1"/>
+<text x="498" y="572" fill="#f8fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">#2 O Oil On R/Refl/Spec/Diff</text>
+<rect x="848" y="559" width="34" height="18" rx="4" fill="#5d7fa6" stroke="#88b6e0" stroke-width="1"/>
+<text x="855" y="574" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">On</text>
+<rect x="22" y="664" width="430" height="260" rx="4" fill="#14181e" stroke="#33404d" stroke-width="1"/>
+<text x="36" y="688" fill="#f8fafc" font-size="15" font-weight="700" font-family="Menlo, Consolas, monospace">Full Stack Guard</text>
+<text x="36" y="712" fill="#dbe5ee" font-size="12" font-weight="600" font-family="Menlo, Consolas, monospace">Layers 8/8 | object stack | sel #2</text>
+<rect x="36" y="724" width="48" height="22" rx="4" fill="#20262d" stroke="#3b434c" stroke-width="1"/>
+<text x="43" y="739" fill="#7d8791" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">+</text>
+<rect x="90" y="724" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="97" y="739" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Mute</text>
+<rect x="144" y="724" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="151" y="739" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Up</text>
+<rect x="198" y="724" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="205" y="739" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Down</text>
+<rect x="252" y="724" width="48" height="22" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="259" y="739" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Del</text>
+<text x="36" y="765" fill="#9fb0c0" font-size="12" font-weight="500" font-family="Menlo, Consolas, monospace">Stack full: add guarded; edit/delete selected overlay.</text>
+<rect x="36" y="780" width="402" height="24" rx="4" fill="#1d232b" stroke="#3b4654" stroke-width="1"/>
+<text x="46" y="796" fill="#f8fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">#0 B Solid On</text>
+<rect x="396" y="783" width="34" height="18" rx="4" fill="#5d7fa6" stroke="#88b6e0" stroke-width="1"/>
+<text x="403" y="798" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">On</text>
+<rect x="36" y="809" width="402" height="24" rx="4" fill="#1d232b" stroke="#3b4654" stroke-width="1"/>
+<text x="46" y="825" fill="#f8fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">#1 O Rust On R/Refl/Spec</text>
+<rect x="396" y="812" width="34" height="18" rx="4" fill="#5d7fa6" stroke="#88b6e0" stroke-width="1"/>
+<text x="403" y="827" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">On</text>
+<rect x="36" y="838" width="402" height="24" rx="4" fill="#35516d" stroke="#7ab3e5" stroke-width="1"/>
+<text x="46" y="854" fill="#f8fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">#2 O Grime On R/Refl/Diff</text>
+<rect x="396" y="841" width="34" height="18" rx="4" fill="#5d7fa6" stroke="#88b6e0" stroke-width="1"/>
+<text x="403" y="856" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">On</text>
+<rect x="310" y="841" width="25" height="18" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="317" y="856" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Up</text>
+<rect x="339" y="841" width="25" height="18" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="346" y="856" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Dn</text>
+<rect x="368" y="841" width="25" height="18" rx="4" fill="#2f3946" stroke="#88b6e0" stroke-width="1"/>
+<text x="375" y="856" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">Del</text>
+<rect x="36" y="867" width="402" height="24" rx="4" fill="#1d232b" stroke="#3b4654" stroke-width="1"/>
+<text x="46" y="883" fill="#f8fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">#3 O Oil On R/Refl/Spec/Diff</text>
+<rect x="396" y="870" width="34" height="18" rx="4" fill="#5d7fa6" stroke="#88b6e0" stroke-width="1"/>
+<text x="403" y="885" fill="#f6fbff" font-size="11" font-weight="600" font-family="Menlo, Consolas, monospace">On</text>
+</svg>

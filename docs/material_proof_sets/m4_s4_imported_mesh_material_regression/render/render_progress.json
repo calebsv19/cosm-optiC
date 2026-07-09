@@ -1,0 +1,19 @@
+{
+  "schema_version": "ray_tracing_render_progress_v1",
+  "run_id": "m4_s4_imported_mesh_material_regression",
+  "stage": "completed",
+  "state": "completed",
+  "frame_index": 0,
+  "frames_completed": 1,
+  "frame_count": 1,
+  "temporal_subpasses_started": 1,
+  "temporal_subpasses_completed": 1,
+  "temporal_subpasses_total": 1,
+  "completed_tiles_in_subpass": 0,
+  "total_tiles_in_subpass": 0,
+  "elapsed_seconds": 0.000000,
+  "estimated_remaining_seconds": 0.000000,
+  "progress_ratio": 1.000000,
+  "updated_at_utc": "2026-06-27T16:58:39Z",
+  "diagnostics": "render completed"
+}

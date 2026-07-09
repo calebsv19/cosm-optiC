@@ -1,0 +1,312 @@
+{
+  "schema": "ray_tracing_material_proof_summary_v1",
+  "proof_id": "m4_s1_glass_roughness_transmission_matrix",
+  "phase": "M4-S1",
+  "route": {
+    "primary": "headless_material_preview",
+    "secondary": "selected_native_render",
+    "secondary_status": "deferred_not_required_for_s1_preview_matrix"
+  },
+  "status": "generated",
+  "artifacts": {
+    "request_path": "request.json",
+    "preview_request_path": "material_preview_request.json",
+    "preview_summary_path": "material_preview_summary.json",
+    "summary_path": "summary.json",
+    "index_path": "index.md",
+    "image_path": "preview.bmp",
+    "image_status": "generated"
+  },
+  "source": {
+    "runtime_scene_path": "../../../tests/fixtures/disney_v2_visual_matrix/transparent_interior_stack/scene_runtime.json",
+    "object_id": "glass_front",
+    "material_preset": "Transparent",
+    "preset_transparency": 0.75,
+    "preset_ior": 1.45,
+    "preset_thin_walled": true,
+    "derived_dielectric_f0_formula": "((ior - 1) / (ior + 1))^2",
+    "derived_dielectric_f0": 0.03373594335693461
+  },
+  "rows": [
+    {
+      "row_id": "r00_smooth_alpha085",
+      "label": "smooth glass alpha 0.85",
+      "material_family": "glass",
+      "base_color": [
+        0.752941,
+        0.921569,
+        1.0
+      ],
+      "display_alpha": 0.85,
+      "physical_opacity": "coverage_1_0_conceptual_not_promoted",
+      "transmission_weight": 0.6375,
+      "roughness": 0.04,
+      "reflectivity_floor": 0.02,
+      "specular_weight": "preset_default_not_exposed_by_preview_summary",
+      "ior": 1.45,
+      "derived_dielectric_f0": 0.03373594335693461,
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": "deferred_unpromoted",
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [
+        "legacy_alpha_transparency_bridge"
+      ],
+      "preview_interpretation": "smooth glass row at fixed display alpha/transmission bridge",
+      "bsdf_interpretation": "IOR-derived F0 remains canonical; reflectivity floor 0.02 does not raise it",
+      "deferred_status": {
+        "caustics": "qualitative_deferred",
+        "physical_opacity": "not promoted",
+        "authored_dielectric_f0": "not promoted"
+      }
+    },
+    {
+      "row_id": "r01_low_alpha085",
+      "label": "low roughness glass alpha 0.85",
+      "material_family": "glass",
+      "base_color": [
+        0.752941,
+        0.921569,
+        1.0
+      ],
+      "display_alpha": 0.85,
+      "physical_opacity": "coverage_1_0_conceptual_not_promoted",
+      "transmission_weight": 0.6375,
+      "roughness": 0.12,
+      "reflectivity_floor": 0.02,
+      "specular_weight": "preset_default_not_exposed_by_preview_summary",
+      "ior": 1.45,
+      "derived_dielectric_f0": 0.03373594335693461,
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": "deferred_unpromoted",
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [
+        "legacy_alpha_transparency_bridge"
+      ],
+      "preview_interpretation": "low roughness contrast at fixed compatibility transmission",
+      "bsdf_interpretation": "IOR-derived F0 remains canonical; reflectivity floor 0.02 does not raise it",
+      "deferred_status": {
+        "caustics": "qualitative_deferred",
+        "physical_opacity": "not promoted",
+        "authored_dielectric_f0": "not promoted"
+      }
+    },
+    {
+      "row_id": "r02_soft_alpha085",
+      "label": "soft glass alpha 0.85",
+      "material_family": "glass",
+      "base_color": [
+        0.752941,
+        0.921569,
+        1.0
+      ],
+      "display_alpha": 0.85,
+      "physical_opacity": "coverage_1_0_conceptual_not_promoted",
+      "transmission_weight": 0.6375,
+      "roughness": 0.24,
+      "reflectivity_floor": 0.02,
+      "specular_weight": "preset_default_not_exposed_by_preview_summary",
+      "ior": 1.45,
+      "derived_dielectric_f0": 0.03373594335693461,
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": "deferred_unpromoted",
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [
+        "legacy_alpha_transparency_bridge"
+      ],
+      "preview_interpretation": "soft roughness contrast at fixed compatibility transmission",
+      "bsdf_interpretation": "IOR-derived F0 remains canonical; reflectivity floor 0.02 does not raise it",
+      "deferred_status": {
+        "caustics": "qualitative_deferred",
+        "physical_opacity": "not promoted",
+        "authored_dielectric_f0": "not promoted"
+      }
+    },
+    {
+      "row_id": "r03_mid_alpha085",
+      "label": "mid rough glass alpha 0.85",
+      "material_family": "glass",
+      "base_color": [
+        0.752941,
+        0.921569,
+        1.0
+      ],
+      "display_alpha": 0.85,
+      "physical_opacity": "coverage_1_0_conceptual_not_promoted",
+      "transmission_weight": 0.6375,
+      "roughness": 0.4,
+      "reflectivity_floor": 0.02,
+      "specular_weight": "preset_default_not_exposed_by_preview_summary",
+      "ior": 1.45,
+      "derived_dielectric_f0": 0.03373594335693461,
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": "deferred_unpromoted",
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [
+        "legacy_alpha_transparency_bridge"
+      ],
+      "preview_interpretation": "mid roughness contrast at fixed compatibility transmission",
+      "bsdf_interpretation": "IOR-derived F0 remains canonical; reflectivity floor 0.02 does not raise it",
+      "deferred_status": {
+        "caustics": "qualitative_deferred",
+        "physical_opacity": "not promoted",
+        "authored_dielectric_f0": "not promoted"
+      }
+    },
+    {
+      "row_id": "r04_rough_alpha085",
+      "label": "rough glass alpha 0.85",
+      "material_family": "glass",
+      "base_color": [
+        0.752941,
+        0.921569,
+        1.0
+      ],
+      "display_alpha": 0.85,
+      "physical_opacity": "coverage_1_0_conceptual_not_promoted",
+      "transmission_weight": 0.6375,
+      "roughness": 0.68,
+      "reflectivity_floor": 0.02,
+      "specular_weight": "preset_default_not_exposed_by_preview_summary",
+      "ior": 1.45,
+      "derived_dielectric_f0": 0.03373594335693461,
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": "deferred_unpromoted",
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [
+        "legacy_alpha_transparency_bridge"
+      ],
+      "preview_interpretation": "rough/frosted preview contrast at fixed compatibility transmission",
+      "bsdf_interpretation": "IOR-derived F0 remains canonical; reflectivity floor 0.02 does not raise it",
+      "deferred_status": {
+        "caustics": "qualitative_deferred",
+        "physical_opacity": "not promoted",
+        "authored_dielectric_f0": "not promoted"
+      }
+    },
+    {
+      "row_id": "r05_frosted_alpha085",
+      "label": "frosted glass alpha 0.85",
+      "material_family": "glass",
+      "base_color": [
+        0.752941,
+        0.921569,
+        1.0
+      ],
+      "display_alpha": 0.85,
+      "physical_opacity": "coverage_1_0_conceptual_not_promoted",
+      "transmission_weight": 0.6375,
+      "roughness": 1.0,
+      "reflectivity_floor": 0.02,
+      "specular_weight": "preset_default_not_exposed_by_preview_summary",
+      "ior": 1.45,
+      "derived_dielectric_f0": 0.03373594335693461,
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": "deferred_unpromoted",
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [
+        "legacy_alpha_transparency_bridge"
+      ],
+      "preview_interpretation": "bounded maximum roughness/frosted preview row",
+      "bsdf_interpretation": "IOR-derived F0 remains canonical; reflectivity floor 0.02 does not raise it",
+      "deferred_status": {
+        "caustics": "qualitative_deferred",
+        "physical_opacity": "not promoted",
+        "authored_dielectric_f0": "not promoted"
+      }
+    },
+    {
+      "row_id": "t00_alpha100",
+      "label": "display alpha 1.00",
+      "material_family": "glass",
+      "base_color": [
+        0.752941,
+        0.921569,
+        1.0
+      ],
+      "display_alpha": 1.0,
+      "physical_opacity": "coverage_1_0_conceptual_not_promoted",
+      "transmission_weight": 0.75,
+      "roughness": 0.18,
+      "reflectivity_floor": 0.02,
+      "specular_weight": "preset_default_not_exposed_by_preview_summary",
+      "ior": 1.45,
+      "derived_dielectric_f0": 0.03373594335693461,
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": "deferred_unpromoted",
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [
+        "legacy_alpha_transparency_bridge"
+      ],
+      "preview_interpretation": "highest alpha/transmission bridge row in contrast set",
+      "bsdf_interpretation": "transparency bridge maps to transmission; opacity is inverse compatibility only",
+      "deferred_status": {
+        "caustics": "qualitative_deferred",
+        "physical_opacity": "not promoted",
+        "authored_dielectric_f0": "not promoted"
+      }
+    },
+    {
+      "row_id": "t01_alpha075",
+      "label": "display alpha 0.75",
+      "material_family": "glass",
+      "base_color": [
+        0.752941,
+        0.921569,
+        1.0
+      ],
+      "display_alpha": 0.75,
+      "physical_opacity": "coverage_1_0_conceptual_not_promoted",
+      "transmission_weight": 0.5625,
+      "roughness": 0.18,
+      "reflectivity_floor": 0.02,
+      "specular_weight": "preset_default_not_exposed_by_preview_summary",
+      "ior": 1.45,
+      "derived_dielectric_f0": 0.03373594335693461,
+      "authored_dielectric_f0": "deferred_future_field",
+      "metallic": "deferred_unpromoted",
+      "emission": {
+        "strength": 0.0,
+        "color": "not_exposed_by_preview_route"
+      },
+      "compatibility_bridges": [
+        "legacy_alpha_transparency_bridge"
+      ],
+      "preview_interpretation": "display alpha bridge lowers current compatibility transmission",
+      "bsdf_interpretation": "transparency bridge maps to transmission; opacity is inverse compatibility only",
+      "deferred_status": {
+        "caustics": "qualitative_deferred",
+        "physical_opacity": "not promoted",
+        "authored_dielectric_f0": "not promoted"
+      }
+    }
+  ],
+  "readback_notes": [
+    "This S1 proof uses the headless material preview route for deterministic row/contact-sheet evidence.",
+    "The existing preview route emitted an 8-cell bounded contact sheet; S1 uses that as the similarly bounded matrix allowed by the plan.",
+    "The preview route does not physically validate caustics, focal distortion, or full dielectric transport; those remain qualitative/deferred here.",
+    "Transmission weight is recorded from the current legacy alpha/transparency bridge: preset transparency 0.75 multiplied by display alpha.",
+    "Physical opacity remains conceptual coverage 1.0 and is not promoted as an authored field.",
+    "Derived dielectric F0 uses IOR 1.45; reflectivity floor 0.02 is lower and does not raise F0."
+  ]
+}

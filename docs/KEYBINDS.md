@@ -13,6 +13,7 @@
 ## Runtime Rendering Controls
 
 - `B`: Cycle blur mode (`None` -> `Light` -> `Heavy`).
+- `U`: Cycle native `3D` upscale mode (`OFF` -> `Nearest` -> `Bilinear`).
 - `Esc`: Exit current run loop (returns to menu flow).
 
 ## Menu Data Root Controls
@@ -31,4 +32,5 @@
 ## Notes
 
 - Fluid controls apply when a fluid scene/frame is active.
+- The `U` toggle affects the native `3D` reconstruction/present lane only; it is separate from the legacy blur toggle.
 - Velocity arrows currently use stride `4` sampling with capped, log-scaled lengths to avoid extreme spikes.

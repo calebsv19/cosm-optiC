@@ -1,0 +1,41 @@
+{
+  "schema_version": "ray_tracing_agent_render_request_v1",
+  "run_id": "visual_matrix_glass_corridor_diffuse_bounce",
+  "scene": {
+    "runtime_scene_path": "../../../../config/samples/ps4d_runtime_scene_visual_test.json"
+  },
+  "volume": {
+    "enabled": false
+  },
+  "render": {
+    "start_frame": 0,
+    "frame_count": 1,
+    "width": 240,
+    "height": 135,
+    "normalized_t": 0.0,
+    "temporal_frames": 4,
+    "integrator_3d": "diffuse_bounce"
+  },
+  "inspection": {
+    "preset": "glass_review",
+    "camera_position": { "x": -7.0, "y": 1.0, "z": 3.5 },
+    "camera_look_at": { "x": 0.25, "y": 0.25, "z": 0.25 },
+    "camera_zoom": 0.95,
+    "environment_light_mode": "ambient",
+    "ambient_strength": 0.28,
+    "top_fill_strength": 1.4,
+    "light_intensity": 4.4,
+    "light_radius": 0.18,
+    "secondary_diffuse_samples_3d": 8,
+    "transmission_samples_3d": 8,
+    "object_audit_enabled": false
+  },
+  "output": {
+    "root": "../../../../build/agent_runs/ray_tracing/disney_v2_visual_matrix/primitive_glass_corridor/diffuse_bounce",
+    "overwrite": true
+  },
+  "progress": {
+    "summary_path": "../../../../build/agent_runs/ray_tracing/disney_v2_visual_matrix/primitive_glass_corridor/diffuse_bounce/render_summary.json",
+    "progress_path": "../../../../build/agent_runs/ray_tracing/disney_v2_visual_matrix/primitive_glass_corridor/diffuse_bounce/render_progress.json"
+  }
+}

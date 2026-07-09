@@ -2,6 +2,7 @@
 #define CONFIG_FILE_IO_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <json-c/json.h>
 
@@ -13,6 +14,10 @@ FILE* config_io_open_read_with_fallback(const char* primary,
                                         const char* fallback,
                                         const char* legacy,
                                         const char** selected_path);
+
+FILE* config_io_open_read_first(const char* const* candidates,
+                                size_t candidate_count,
+                                const char** selected_path);
 
 struct json_object* config_io_parse_json_file(FILE* file,
                                               const char* lane_name,

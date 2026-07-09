@@ -1,0 +1,34 @@
+{
+  "schema_version": "ray_tracing_agent_render_request_v1",
+  "run_id": "agent_render_preflight_smoke",
+  "scene": {
+    "runtime_scene_path": "../../config/samples/ps4d_runtime_scene_visual_test.json"
+  },
+  "volume": {
+    "enabled": false
+  },
+  "render": {
+    "start_frame": 0,
+    "frame_count": 1,
+    "width": 160,
+    "height": 96,
+    "normalized_t": 0.0,
+    "temporal_frames": 1
+  },
+  "inspection": {
+    "preset": "glass_preview",
+    "environment_light_mode": "ambient",
+    "ambient_strength": 0.30,
+    "environment_preset": "sky",
+    "background_brightness": 0.42,
+    "background_color": { "r": 0.90, "g": 0.95, "b": 1.00 }
+  },
+  "output": {
+    "root": "../../build/agent_runs/ray_tracing/preflight_smoke",
+    "overwrite": true
+  },
+  "progress": {
+    "summary_path": "../../build/agent_runs/ray_tracing/preflight_smoke/render_summary.json",
+    "progress_path": "../../build/agent_runs/ray_tracing/preflight_smoke/render_progress.json"
+  }
+}

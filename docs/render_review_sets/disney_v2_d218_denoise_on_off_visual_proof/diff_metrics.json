@@ -1,0 +1,30 @@
+{
+  "after_bmp": "<redacted-local-path:frame_0000.bmp>",
+  "after_png": "<redacted-local-path:denoise_on_12.png>",
+  "before_bmp": "<redacted-local-path:frame_0000.bmp>",
+  "before_png": "<redacted-local-path:denoise_off_12.png>",
+  "changed_pixel_ratio": 0.10600694444444445,
+  "changed_pixels": 6106,
+  "changed_pixels_gt_2": 1338,
+  "changed_pixels_gt_2_ratio": 0.023229166666666665,
+  "changed_pixels_gt_8": 23,
+  "changed_pixels_gt_8_ratio": 0.0003993055555555556,
+  "diff8": {
+    "diff_amplification": 8
+  },
+  "diff_8x_png": "<redacted-local-path:diff_abs_amplified8x.png>",
+  "diff_amplification": 4,
+  "diff_png": "<redacted-local-path:diff_abs_amplified4x.png>",
+  "max_abs_channel_delta": 12,
+  "max_luma_delta": 12.0,
+  "mean_abs_all_channels": 0.1613599537037037,
+  "mean_abs_luma": 0.1625976458333344,
+  "mean_abs_rgb": [
+    0.16010416666666666,
+    0.16355902777777778,
+    0.16041666666666668
+  ],
+  "pixels": 57600,
+  "rms_rgb_error": 0.6986884207279088,
+  "side_by_side_png": "<redacted-local-path:side_by_side_denoise_off_12_denoise_on_12_diff4x.png>"
+}

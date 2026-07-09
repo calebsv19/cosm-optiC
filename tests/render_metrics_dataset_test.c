@@ -44,6 +44,9 @@ int run_render_metrics_dataset_tests(void) {
     snapshot.target_fps = 60;
     snapshot.frame_duration_seconds = 1.0 / 60.0;
     snapshot.integrator_mode = 1;
+    snapshot.integrator_mode_3d = 0;
+    snapshot.route_family = 2;
+    snapshot.integrator_uses_3d_catalog = true;
     snapshot.bounce_limit = 8;
     snapshot.path_samples_per_pixel = 4;
     snapshot.path_max_depth = 6;
@@ -56,6 +59,10 @@ int run_render_metrics_dataset_tests(void) {
     snapshot.interactive_mode = false;
     snapshot.deep_render_mode = true;
     snapshot.bounce_mode = false;
+    snprintf(snapshot.integrator_status_label,
+             sizeof(snapshot.integrator_status_label),
+             "%s",
+             "integrator: 3D Direct Light");
 
     if (!ray_tracing_render_metrics_dataset_export_json(&snapshot, json_path)) {
         failures += fail("render_metrics_dataset_export");
@@ -73,7 +80,7 @@ int run_render_metrics_dataset_tests(void) {
             }
             cJSON *profile = cJSON_GetObjectItem(root, "profile");
             if (!cJSON_IsString(profile) ||
-                strcmp(profile->valuestring, "ray_tracing_render_metrics_v1") != 0) {
+                strcmp(profile->valuestring, "ray_tracing_render_metrics_v2") != 0) {
                 failures += fail("render_metrics_dataset_profile");
             }
             cJSON *schema_family = cJSON_GetObjectItem(root, "schema_family");
@@ -90,12 +97,23 @@ int run_render_metrics_dataset_tests(void) {
             if (!cJSON_IsArray(items)) {
                 failures += fail("render_metrics_dataset_items");
             }
-            if (!strstr((const char *)buffer.data, "render_metrics_table_v1")) {
+            cJSON *metadata = cJSON_GetObjectItem(root, "metadata");
+            cJSON *status_label = metadata ? cJSON_GetObjectItem(metadata, "integrator_status_label") : NULL;
+            if (!cJSON_IsString(status_label) ||
+                strcmp(status_label->valuestring, "integrator: 3D Direct Light") != 0) {
+                failures += fail("render_metrics_dataset_integrator_status_label");
+            }
+            if (!strstr((const char *)buffer.data, "render_metrics_table_v2")) {
                 failures += fail("render_metrics_dataset_table_name");
             }
             if (!strstr((const char *)buffer.data, "\"frames_rendered\"") ||
                 !strstr((const char *)buffer.data, "42")) {
                 failures += fail("render_metrics_dataset_frames_value");
+            }
+            if (!strstr((const char *)buffer.data, "\"integrator_mode_3d\"") ||
+                !strstr((const char *)buffer.data, "\"route_family\"") ||
+                !strstr((const char *)buffer.data, "\"integrator_uses_3d_catalog\"")) {
+                failures += fail("render_metrics_dataset_3d_truth_columns");
             }
             cJSON_Delete(root);
         }
