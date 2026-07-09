@@ -35,6 +35,11 @@ static void ray_tracing_headless_note_registered_lights(
     for (int i = 0; i < frame->scene.lightSet.lightCount; ++i) {
         const RuntimeLightSource3D* source = &frame->scene.lightSet.lights[i];
         if (i == 0) {
+            preflight->registered_light_first_position_x = source->position.x;
+            preflight->registered_light_first_position_y = source->position.y;
+            preflight->registered_light_first_position_z = source->position.z;
+            preflight->registered_light_first_radius = source->radius;
+            preflight->registered_light_first_intensity = source->intensity;
             preflight->registered_light_first_color_r = source->color.x;
             preflight->registered_light_first_color_g = source->color.y;
             preflight->registered_light_first_color_b = source->color.z;

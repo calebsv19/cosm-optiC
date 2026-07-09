@@ -108,6 +108,25 @@ static int runtime_disney_v2_3d_resolve_transmission_sample_count(
     return value;
 }
 
+static bool runtime_disney_v2_3d_reflected_first_subpass_no_hit_reuse_probe_enabled(void) {
+    const char* value =
+        getenv("RAY_TRACING_DISNEY_V2_REFLECTED_FIRST_SUBPASS_NO_HIT_REUSE_PROBE");
+    return !value || value[0] == '\0' || value[0] != '0';
+}
+
+static bool runtime_disney_v2_3d_can_reuse_reflected_first_subpass_no_hit(
+    RuntimeRenderTraceCostTransmissionSource3D ledger_source,
+    RuntimeRenderTraceCostTransmissionPixelStability3D ledger_pixel_stability,
+    int sample_index,
+    RuntimeRenderTraceCostTransmissionTermination3D termination) {
+    return runtime_disney_v2_3d_reflected_first_subpass_no_hit_reuse_probe_enabled() &&
+           ledger_source == RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED &&
+           ledger_pixel_stability ==
+               RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_FIRST_SUBPASS &&
+           sample_index == 0 &&
+           termination == RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_NO_HIT;
+}
+
 static uint32_t runtime_disney_v2_3d_transmission_hash_u32(uint32_t x) {
     x ^= x >> 16;
     x *= 0x7feb352dU;
@@ -534,6 +553,37 @@ runtime_disney_v2_3d_transmission_surface_kind(
     return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_SOLID_NONPHYSICAL;
 }
 
+static RuntimeRenderTraceCostTransmissionScreenRegion3D
+runtime_disney_v2_3d_transmission_screen_region(const RuntimeDisneyV2_3DResult* result) {
+    if (!result || !result->tracePixelContextResolved ||
+        result->tracePixelWidth <= 0 || result->tracePixelHeight <= 0) {
+        return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_UNKNOWN;
+    }
+    const bool right = result->tracePixelX >= (result->tracePixelWidth / 2);
+    const bool bottom = result->tracePixelY >= (result->tracePixelHeight / 2);
+    if (bottom) {
+        return right ? RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_BOTTOM_RIGHT
+                     : RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_BOTTOM_LEFT;
+    }
+    return right ? RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_TOP_RIGHT
+                 : RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_TOP_LEFT;
+}
+
+static RuntimeRenderTraceCostTransmissionPixelStability3D
+runtime_disney_v2_3d_transmission_pixel_stability(
+    const RuntimeNative3DSamplingContext* sampling) {
+    if (!sampling || sampling->temporalSubpassCount <= 1u) {
+        return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_UNKNOWN;
+    }
+    if (sampling->temporalSubpassIndex == 0u) {
+        return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_FIRST_SUBPASS;
+    }
+    if (sampling->temporalSubpassIndex + 1u >= sampling->temporalSubpassCount) {
+        return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_LATE_SUBPASS;
+    }
+    return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_EARLY_SUBPASS;
+}
+
 static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
     const RuntimeScene3D* scene,
     const RuntimePrimaryHit3DResult* primary_hit,
@@ -551,6 +601,11 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
     int* out_depth,
     bool* out_receiver_found,
     RuntimeRenderTraceCostTransmissionSource3D ledger_source,
+    int ledger_sample_index,
+    double ledger_direction_alignment,
+    RuntimeRenderTraceCostTransmissionScreenRegion3D ledger_screen_region,
+    RuntimeRenderTraceCostTransmissionPixelStability3D ledger_pixel_stability,
+    RuntimeRenderTraceCostTransmissionTermination3D* out_termination,
     bool allow_recursive_receiver_shade) {
     HitInfo3D source_hit = {0};
     HitInfo3D hit = {0};
@@ -582,6 +637,9 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
     }
 
     *out_receiver_found = false;
+    if (out_termination) {
+        *out_termination = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_UNKNOWN;
+    }
     source_hit = primary_hit->hitInfo;
     runtime_disney_v2_3d_medium_stack_init(&medium_stack);
     if (runtime_disney_v2_3d_policy_is_physical_transmission(&io_result->payload,
@@ -626,6 +684,10 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
             RuntimeRenderTraceCostLedger3D_RecordTransmissionSample(
                 ledger_source,
                 termination,
+                ledger_sample_index,
+                ledger_direction_alignment,
+                ledger_screen_region,
+                ledger_pixel_stability,
                 depth,
                 sample_ray_total,
                 transparent_surface_count,
@@ -634,6 +696,9 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
                                                        throughput_g,
                                                        throughput_b),
                 runtime_disney_v2_transmission_3d_peak(accum_r, accum_g, accum_b));
+            if (out_termination) {
+                *out_termination = termination;
+            }
             return false;
         }
         principled = RuntimePrincipledBSDF3D_FromMaterialPayload(&payload);
@@ -643,7 +708,14 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
                 RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_OPAQUE_RECEIVER,
                 &hit);
             if (allow_recursive_receiver_shade &&
-                RuntimeDisneyV2_3D_ShadeHit(scene, &hit, sampling, &receiver_result) &&
+                RuntimeDisneyV2_3D_ShadeHitWithTraceContext(scene,
+                                                            &hit,
+                                                            sampling,
+                                                            io_result->tracePixelX,
+                                                            io_result->tracePixelY,
+                                                            io_result->tracePixelWidth,
+                                                            io_result->tracePixelHeight,
+                                                            &receiver_result) &&
                 receiver_result.visible) {
                 io_result->primaryTransmissionReceiverShadeCount += 1;
                 io_result->primaryTransmissionReceiverRadianceR += receiver_result.radianceR;
@@ -706,7 +778,14 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
             io_result->primaryTransmissionPhysicalSurfaceCount += 1;
         }
         if (allow_recursive_receiver_shade &&
-            RuntimeDisneyV2_3D_ShadeHit(scene, &hit, sampling, &receiver_result) &&
+            RuntimeDisneyV2_3D_ShadeHitWithTraceContext(scene,
+                                                        &hit,
+                                                        sampling,
+                                                        io_result->tracePixelX,
+                                                        io_result->tracePixelY,
+                                                        io_result->tracePixelWidth,
+                                                        io_result->tracePixelHeight,
+                                                        &receiver_result) &&
             receiver_result.visible) {
             double layer_r = receiver_result.radianceR *
                              throughput_r * blend_weight * transparent_policy.visibleWeight;
@@ -771,12 +850,19 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
         RuntimeRenderTraceCostLedger3D_RecordTransmissionSample(
             ledger_source,
             termination,
+            ledger_sample_index,
+            ledger_direction_alignment,
+            ledger_screen_region,
+            ledger_pixel_stability,
             depth,
             sample_ray_total,
             transparent_surface_count,
             receiver_found,
             runtime_disney_v2_transmission_3d_peak(throughput_r, throughput_g, throughput_b),
             runtime_disney_v2_transmission_3d_peak(accum_r, accum_g, accum_b));
+        if (out_termination) {
+            *out_termination = termination;
+        }
         return false;
     }
 
@@ -801,12 +887,19 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
     RuntimeRenderTraceCostLedger3D_RecordTransmissionSample(
         ledger_source,
         termination,
+        ledger_sample_index,
+        ledger_direction_alignment,
+        ledger_screen_region,
+        ledger_pixel_stability,
         depth,
         sample_ray_total,
         transparent_surface_count,
         receiver_found,
         runtime_disney_v2_transmission_3d_peak(throughput_r, throughput_g, throughput_b),
         runtime_disney_v2_transmission_3d_peak(accum_r, accum_g, accum_b));
+    if (out_termination) {
+        *out_termination = termination;
+    }
     return true;
 }
 
@@ -897,10 +990,17 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
         allow_recursive_receiver_shade
             ? RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_PRIMARY
             : RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED;
+    RuntimeRenderTraceCostTransmissionScreenRegion3D ledger_screen_region =
+        runtime_disney_v2_3d_transmission_screen_region(io_result);
+    RuntimeRenderTraceCostTransmissionPixelStability3D ledger_pixel_stability =
+        runtime_disney_v2_3d_transmission_pixel_stability(sampling);
     RuntimeRenderTraceCostLedger3D_RecordTransmissionPathEvaluation(ledger_source,
                                                                     sample_count);
+    bool reflected_first_subpass_no_hit_reuse = false;
 
     for (int sample_index = 0; sample_index < sample_count; ++sample_index) {
+        RuntimeRenderTraceCostTransmissionTermination3D sample_termination =
+            RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_UNKNOWN;
         Vec3 sample_direction = runtime_disney_v2_3d_roughen_transmission_direction(
             sample.direction,
             io_result->principled.roughness,
@@ -908,6 +1008,8 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
             sample_seed,
             sample_count,
             sample_index);
+        double sample_direction_alignment =
+            vec3_dot(vec3_normalize(sample.direction), vec3_normalize(sample_direction));
 
         sample_path = sample;
         sample_path.direction = sample_direction;
@@ -919,6 +1021,22 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
         path_throughput_b = 0.0;
         receiver_depth = 0;
         bool receiver_found = false;
+        if (reflected_first_subpass_no_hit_reuse) {
+            RuntimeRenderTraceCostLedger3D_RecordTransmissionSample(
+                ledger_source,
+                RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_POLICY_REJECT,
+                sample_index,
+                sample_direction_alignment,
+                ledger_screen_region,
+                ledger_pixel_stability,
+                1,
+                0,
+                0,
+                false,
+                0.0,
+                0.0);
+            continue;
+        }
         if (!runtime_disney_v2_3d_trace_primary_transmission_receiver(scene,
                                                                       primary_hit,
                                                                       sampling,
@@ -935,7 +1053,19 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
                                                                       &receiver_depth,
                                                                       &receiver_found,
                                                                       ledger_source,
+                                                                      sample_index,
+                                                                      sample_direction_alignment,
+                                                                      ledger_screen_region,
+                                                                      ledger_pixel_stability,
+                                                                      &sample_termination,
                                                                       allow_recursive_receiver_shade)) {
+            if (runtime_disney_v2_3d_can_reuse_reflected_first_subpass_no_hit(
+                    ledger_source,
+                    ledger_pixel_stability,
+                    sample_index,
+                    sample_termination)) {
+                reflected_first_subpass_no_hit_reuse = true;
+            }
             continue;
         }
         accum_r += continuation_direct.radianceR;
@@ -1099,6 +1229,11 @@ bool RuntimeDisneyV2_3D_ApplyReflectedTransmissionContinuation(
         runtime_disney_v2_transmission_3d_clamp01(principled.transmissionWeight);
     transmission_result.pathPolicy = io_result->pathPolicy;
     transmission_result.pathPolicyResolved = io_result->pathPolicyResolved;
+    transmission_result.tracePixelContextResolved = io_result->tracePixelContextResolved;
+    transmission_result.tracePixelX = io_result->tracePixelX;
+    transmission_result.tracePixelY = io_result->tracePixelY;
+    transmission_result.tracePixelWidth = io_result->tracePixelWidth;
+    transmission_result.tracePixelHeight = io_result->tracePixelHeight;
 
     reflected_primary.hit = true;
     reflected_primary.primaryRay = reflected_ray;

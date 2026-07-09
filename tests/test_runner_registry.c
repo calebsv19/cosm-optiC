@@ -41,6 +41,7 @@
 int run_test_runner_runtime_tests(void);
 int run_test_config_animation_tests(void);
 int run_test_ui_menu_contract_tests(void);
+int run_test_runtime_native_3d_async_render_job_tests(void);
 
 typedef int (*TestGroupFn)(void);
 
@@ -122,6 +123,7 @@ int test_runner_main(int argc, char** argv) {
         {"runtime_diffuse_temporal", run_test_runtime_diffuse_temporal_tests},
         {"runtime_emission_transparency", run_test_runtime_emission_transparency_tests},
         {"runtime_native_3d_denoise", run_test_runtime_native_3d_denoise_tests},
+        {"runtime_native_3d_async_render_job", run_test_runtime_native_3d_async_render_job_tests},
         {"runtime_native_3d_render", run_test_runtime_native_3d_render_tests},
         {"runtime_native_3d_render_live", run_test_runtime_native_3d_render_live_suite},
         {"runtime_native_3d_render_prepared", run_test_runtime_native_3d_render_prepared_suite},

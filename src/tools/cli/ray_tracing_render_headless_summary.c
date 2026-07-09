@@ -337,6 +337,14 @@ void ray_tracing_render_headless_write_summary(
             preflight->registered_light_emissive_weight);
     fprintf(file, "    \"emissive_proxy_radius_max\": %.9f,\n",
             preflight->registered_light_emissive_proxy_radius_max);
+    fprintf(file, "    \"first_position\": [%.9f, %.9f, %.9f],\n",
+            preflight->registered_light_first_position_x,
+            preflight->registered_light_first_position_y,
+            preflight->registered_light_first_position_z);
+    fprintf(file, "    \"first_radius\": %.9f,\n",
+            preflight->registered_light_first_radius);
+    fprintf(file, "    \"first_intensity\": %.9f,\n",
+            preflight->registered_light_first_intensity);
     fprintf(file, "    \"first_color\": [%.9f, %.9f, %.9f]\n",
             preflight->registered_light_first_color_r,
             preflight->registered_light_first_color_g,
@@ -696,6 +704,10 @@ void ray_tracing_render_headless_write_summary(
         file,
         RuntimeRay3DTraceRouteLabel(preflight->ray_trace_route_stats.requestedRoute));
     fprintf(file, ",\n");
+    fprintf(file, "    \"trace_context_stats_owned\": %s,\n",
+            preflight->ray_trace_route_stats.traceContextStatsOwned ? "true" : "false");
+    fprintf(file, "    \"trace_context_callback_bound\": %s,\n",
+            preflight->ray_trace_route_stats.sceneAccelerationTraceCallbackBound ? "true" : "false");
     fprintf(file, "    \"route_trace_calls\": %llu,\n",
             (unsigned long long)preflight->ray_trace_route_stats.traceCalls);
     fprintf(file, "    \"route_flattened_trace_calls\": %llu,\n",
@@ -727,6 +739,7 @@ void ray_tracing_render_headless_write_summary(
     ray_tracing_headless_write_dynamic_geometry_acceleration_summary(file, preflight);
     ray_tracing_headless_write_dynamic_water_acceleration_cache_summary(file, preflight);
     ray_tracing_headless_write_render_trace_cost_ledger(file, preflight);
+    ray_tracing_headless_write_frame_dataflow_state_ledger(file, request, preflight);
     fprintf(file, "  \"bvh_summary\": {\n");
     fprintf(file, "    \"ready\": %s,\n",
             preflight->bvh_build_stats.ready ? "true" : "false");

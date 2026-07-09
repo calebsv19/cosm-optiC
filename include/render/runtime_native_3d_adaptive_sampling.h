@@ -11,11 +11,17 @@
 
 #define RUNTIME_NATIVE_3D_ADAPTIVE_TILE_SIZE 16
 #define RUNTIME_NATIVE_3D_ADAPTIVE_MIN_SUBPASSES 2
+#ifndef RUNTIME_NATIVE_3D_ADAPTIVE_REGION_COUNT
+#define RUNTIME_NATIVE_3D_ADAPTIVE_REGION_COUNT 4
+#endif
 
 bool RuntimeNative3DAdaptiveSampling_RuntimeEnabled(void);
 void RuntimeNative3DAdaptiveSampling_SetRuntimeOverride(bool has_override, bool enabled);
 bool RuntimeNative3DAdaptiveSampling_RiskEarlyStopEnabled(void);
 void RuntimeNative3DAdaptiveSampling_SetRiskEarlyStopOverride(bool has_override, bool enabled);
+bool RuntimeNative3DAdaptiveSampling_TemporalBudgetHeatmapEnabled(void);
+bool RuntimeNative3DAdaptiveSampling_FlagsSafeForEarlyStop(uint16_t flags);
+int RuntimeNative3DAdaptiveSampling_BudgetBucket(uint16_t sample_count, int min_sample_floor);
 
 typedef struct {
     uint8_t* stableEmitterMask;
@@ -31,6 +37,12 @@ typedef struct {
     int activePixelCount;
     int activeTileCount;
     int inactiveTileCount;
+    int conservativeEarlyStopEligiblePixelCount;
+    int conservativeEarlyStopBaseActivePixelCount;
+    int conservativeEarlyStopPaddingHoldPixelCount;
+    int conservativeEarlyStopPaddingHoldHighSeedPixelCount;
+    int conservativeEarlyStopPaddingHoldMediumSeedPixelCount;
+    int conservativeEarlyStopPaddingHoldRegionCounts[RUNTIME_NATIVE_3D_ADAPTIVE_REGION_COUNT];
 } RuntimeNative3DAdaptiveSamplingMask;
 
 enum {
@@ -75,6 +87,27 @@ typedef struct {
     int directLightStablePartialPixelCount;
     int directLightMixedPartialPixelCount;
     int directLightBoundaryRiskPixelCount;
+    int earlyStopEligiblePixelCount;
+    int earlyStopHeldPixelCount;
+    int earlyStopHoldProbePixelCount;
+    int earlyStopHoldHighRiskPixelCount;
+    int earlyStopHoldActivityRiskPixelCount;
+    int earlyStopHoldMaterialRiskPixelCount;
+    int earlyStopHoldTransparentRiskPixelCount;
+    int earlyStopHoldGeometryEdgeRiskPixelCount;
+    int earlyStopHoldDirectLightRiskPixelCount;
+    int earlyStopEligibleRegionCounts[RUNTIME_NATIVE_3D_ADAPTIVE_REGION_COUNT];
+    int earlyStopHeldRegionCounts[RUNTIME_NATIVE_3D_ADAPTIVE_REGION_COUNT];
+    int budgetBucketPixelCounts[RUNTIME_NATIVE_3D_TEMPORAL_BUDGET_BUCKET_COUNT];
+    int budgetActiveBucketPixelCounts[RUNTIME_NATIVE_3D_TEMPORAL_BUDGET_BUCKET_COUNT];
+    int budgetEligibleBucketPixelCounts[RUNTIME_NATIVE_3D_TEMPORAL_BUDGET_BUCKET_COUNT];
+    int budgetHeldBucketPixelCounts[RUNTIME_NATIVE_3D_TEMPORAL_BUDGET_BUCKET_COUNT];
+    int budgetClearVisibleEligiblePixelCount;
+    int budgetClearVisibleHeldPixelCount;
+    int budgetPartialHeldPixelCount;
+    int budgetTransparentHeldPixelCount;
+    int budgetGeometryHeldPixelCount;
+    int budgetActivityHeldPixelCount;
     int mixedRiskTileCount;
     int minSampleFloor;
     double riskSum;

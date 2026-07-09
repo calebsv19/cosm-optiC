@@ -68,6 +68,33 @@ Future release-artifact hygiene:
   - `make -C ray_tracing package-desktop-remove`
   - `make -C ray_tracing package-desktop-refresh`
 
+## Runtime Efficiency Defaults
+
+The desktop app inherits safe render-cost defaults from the runtime binary.
+Do not add these as launcher environment variables unless a rollback test needs
+to force old behavior:
+
+- pure `tlas_blas` native `3D` renders skip the legacy flattened-BVH build by
+  default. Roll back with `RAY_TRACING_NATIVE3D_DISABLE_DEFAULT_TLAS_BVH_SKIP=1`.
+- Disney v2 reflected-transmission first-subpass no-hit reuse is default-on.
+  Roll back with
+  `RAY_TRACING_DISNEY_V2_REFLECTED_FIRST_SUBPASS_NO_HIT_REUSE_PROBE=0`.
+
+The following efficiency/diagnostic envs remain opt-in for headless proofing
+and should not be baked into the packaged desktop launcher yet:
+
+- `RAY_TRACING_NATIVE_3D_TEMPORAL_RISK_EARLY_STOP=1`
+- `RAY_TRACING_NATIVE_3D_TEMPORAL_BUDGET_HEATMAP=1`
+- `RAY_TRACING_DIRECT_LIGHT_CLEAR_VISIBLE_DECISION_SAMPLE_PROBE=1`
+- `RAY_TRACING_DISNEY_V2_REFLECTED_TRANSMISSION_SAMPLE_CAP=<n>`
+- `RAY_TRACING_RENDER_TRACE_COST_LEDGER=1`
+- `RAY_TRACING_FRAME_DATAFLOW_STATE_LEDGER=1`
+
+`RAY_TRACING_NATIVE_3D_TEMPORAL_RISK_EARLY_STOP=1` remains opt-in only. The
+representative textured-glass operator-scene proof did not justify default
+promotion, so do not add this env to the macOS launcher script or package
+defaults.
+
 Optional icon inputs:
 
 - default local icon store:

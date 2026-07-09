@@ -14,6 +14,20 @@ void runtime_native_3d_tile_scheduler_collect_activity(
         scheduler->activePixelCount += job->activePixelCount;
         scheduler->activeTileCount += job->activeTileCount;
         scheduler->inactiveTileCount += job->inactiveTileCount;
+        scheduler->stats.temporalAdaptiveEarlyStopBaseActivePixels +=
+            job->renderUnit.adaptiveMask.conservativeEarlyStopBaseActivePixelCount;
+        scheduler->stats.temporalAdaptiveEarlyStopPaddingHoldPixels +=
+            job->renderUnit.adaptiveMask.conservativeEarlyStopPaddingHoldPixelCount;
+        scheduler->stats.temporalAdaptiveEarlyStopPaddingHoldHighSeedPixels +=
+            job->renderUnit.adaptiveMask.conservativeEarlyStopPaddingHoldHighSeedPixelCount;
+        scheduler->stats.temporalAdaptiveEarlyStopPaddingHoldMediumSeedPixels +=
+            job->renderUnit.adaptiveMask.conservativeEarlyStopPaddingHoldMediumSeedPixelCount;
+        scheduler->stats.temporalAdaptiveEarlyStopActiveAfterPaddingPixels +=
+            job->renderUnit.adaptiveMask.activePixelCount;
+        for (int region = 0; region < RUNTIME_NATIVE_3D_ADAPTIVE_REGION_COUNT; ++region) {
+            scheduler->stats.temporalAdaptiveEarlyStopPaddingHoldRegionCounts[region] +=
+                job->renderUnit.adaptiveMask.conservativeEarlyStopPaddingHoldRegionCounts[region];
+        }
         if (job->parentMetricIndex >= scheduler->parentMetricCount) {
             continue;
         }
@@ -54,6 +68,52 @@ static void runtime_native_3d_tile_scheduler_record_adaptive_state_summary(
         summary->directLightMixedPartialPixelCount;
     stats->temporalAdaptiveStateDirectLightBoundaryRiskPixels +=
         summary->directLightBoundaryRiskPixelCount;
+    stats->temporalAdaptiveEarlyStopEligiblePixels +=
+        summary->earlyStopEligiblePixelCount;
+    stats->temporalAdaptiveEarlyStopHeldPixels +=
+        summary->earlyStopHeldPixelCount;
+    stats->temporalAdaptiveEarlyStopHoldProbePixels +=
+        summary->earlyStopHoldProbePixelCount;
+    stats->temporalAdaptiveEarlyStopHoldHighRiskPixels +=
+        summary->earlyStopHoldHighRiskPixelCount;
+    stats->temporalAdaptiveEarlyStopHoldActivityRiskPixels +=
+        summary->earlyStopHoldActivityRiskPixelCount;
+    stats->temporalAdaptiveEarlyStopHoldMaterialRiskPixels +=
+        summary->earlyStopHoldMaterialRiskPixelCount;
+    stats->temporalAdaptiveEarlyStopHoldTransparentRiskPixels +=
+        summary->earlyStopHoldTransparentRiskPixelCount;
+    stats->temporalAdaptiveEarlyStopHoldGeometryEdgeRiskPixels +=
+        summary->earlyStopHoldGeometryEdgeRiskPixelCount;
+    stats->temporalAdaptiveEarlyStopHoldDirectLightRiskPixels +=
+        summary->earlyStopHoldDirectLightRiskPixelCount;
+    for (int region = 0; region < RUNTIME_NATIVE_3D_ADAPTIVE_REGION_COUNT; ++region) {
+        stats->temporalAdaptiveEarlyStopEligibleRegionCounts[region] +=
+            summary->earlyStopEligibleRegionCounts[region];
+        stats->temporalAdaptiveEarlyStopHeldRegionCounts[region] +=
+            summary->earlyStopHeldRegionCounts[region];
+    }
+    for (int bucket = 0; bucket < RUNTIME_NATIVE_3D_TEMPORAL_BUDGET_BUCKET_COUNT; ++bucket) {
+        stats->temporalAdaptiveBudgetBucketPixels[bucket] +=
+            summary->budgetBucketPixelCounts[bucket];
+        stats->temporalAdaptiveBudgetActiveBucketPixels[bucket] +=
+            summary->budgetActiveBucketPixelCounts[bucket];
+        stats->temporalAdaptiveBudgetEligibleBucketPixels[bucket] +=
+            summary->budgetEligibleBucketPixelCounts[bucket];
+        stats->temporalAdaptiveBudgetHeldBucketPixels[bucket] +=
+            summary->budgetHeldBucketPixelCounts[bucket];
+    }
+    stats->temporalAdaptiveBudgetClearVisibleEligiblePixels +=
+        summary->budgetClearVisibleEligiblePixelCount;
+    stats->temporalAdaptiveBudgetClearVisibleHeldPixels +=
+        summary->budgetClearVisibleHeldPixelCount;
+    stats->temporalAdaptiveBudgetPartialHeldPixels +=
+        summary->budgetPartialHeldPixelCount;
+    stats->temporalAdaptiveBudgetTransparentHeldPixels +=
+        summary->budgetTransparentHeldPixelCount;
+    stats->temporalAdaptiveBudgetGeometryHeldPixels +=
+        summary->budgetGeometryHeldPixelCount;
+    stats->temporalAdaptiveBudgetActivityHeldPixels +=
+        summary->budgetActivityHeldPixelCount;
     stats->temporalAdaptiveStateMixedRiskTiles += summary->mixedRiskTileCount;
     stats->temporalAdaptiveStateRiskSum += summary->riskSum;
     if (summary->riskMax > stats->temporalAdaptiveStateRiskMax) {

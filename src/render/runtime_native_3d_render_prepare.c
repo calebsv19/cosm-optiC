@@ -2,7 +2,9 @@
 
 #include <math.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
@@ -16,8 +18,10 @@
 #include "import/water_surface_import.h"
 #include "material/material.h"
 #include "render/runtime_dynamic_geometry_accel_3d.h"
+#include "render/runtime_frame_dataflow_ledger_3d.h"
 #include "render/runtime_scene_3d_builder.h"
 #include "render/runtime_scene_3d_samples.h"
+#include "render/runtime_ray_3d.h"
 #include "render/runtime_triangle_bvh_3d.h"
 #include "render/runtime_water_material_3d.h"
 #include "render/runtime_native_3d_prepare_diagnostics.h"
@@ -48,6 +52,11 @@ static uint64_t gRuntimeNative3DPreparedSceneCacheMisses = 0u;
 static uint64_t gRuntimeNative3DPreparedSceneCacheStores = 0u;
 static uint64_t gRuntimeNative3DPreparedSceneCacheInvalidations = 0u;
 static uint64_t gRuntimeNative3DPreparedSceneCacheTimeIndependentHits = 0u;
+static RuntimeNative3DPreparedSceneCacheStats gRuntimeNative3DPreparedSceneDataflowStats;
+static const char* kRuntimeNative3DFrameBVHSkipOnTLASEnv =
+    "RAY_TRACING_NATIVE3D_SKIP_FLATTENED_BVH_ON_TLAS";
+static const char* kRuntimeNative3DFrameBVHSkipDefaultDisableEnv =
+    "RAY_TRACING_NATIVE3D_DISABLE_DEFAULT_TLAS_BVH_SKIP";
 
 static double runtime_native_3d_prepare_elapsed_ms_since(const struct timespec* start_time) {
     struct timespec now = {0};
@@ -57,6 +66,213 @@ static double runtime_native_3d_prepare_elapsed_ms_since(const struct timespec* 
     elapsed = (double)(now.tv_sec - start_time->tv_sec) * 1000.0;
     elapsed += (double)(now.tv_nsec - start_time->tv_nsec) / 1000000.0;
     return elapsed < 0.0 ? 0.0 : elapsed;
+}
+
+static uint64_t runtime_native_3d_prepare_u64_product(uint64_t a, uint64_t b) {
+    if (a == 0u || b == 0u) return 0u;
+    if (a > UINT64_MAX / b) return UINT64_MAX;
+    return a * b;
+}
+
+static uint64_t runtime_native_3d_prepare_u64_add(uint64_t a, uint64_t b) {
+    if (UINT64_MAX - a < b) return UINT64_MAX;
+    return a + b;
+}
+
+static uint64_t runtime_native_3d_prepare_scene_array_bytes(
+    int count,
+    uint64_t element_size) {
+    if (count <= 0) return 0u;
+    return runtime_native_3d_prepare_u64_product((uint64_t)count, element_size);
+}
+
+static bool runtime_native_3d_env_truthy(const char* name) {
+    const char* value = name ? getenv(name) : NULL;
+    if (!value || value[0] == '\0') return false;
+    if (strcmp(value, "0") == 0 ||
+        strcmp(value, "false") == 0 ||
+        strcmp(value, "FALSE") == 0 ||
+        strcmp(value, "off") == 0 ||
+        strcmp(value, "OFF") == 0 ||
+        strcmp(value, "no") == 0 ||
+        strcmp(value, "NO") == 0) {
+        return false;
+    }
+    return true;
+}
+
+static void runtime_native_3d_prepare_dataflow_reset_last(bool enabled) {
+    RuntimeNative3DPreparedSceneCacheStats* stats =
+        &gRuntimeNative3DPreparedSceneDataflowStats;
+    stats->dataflowStatsEnabled = enabled;
+    stats->lastPrepareValid = false;
+    stats->lastPrepareCacheHit = false;
+    stats->lastPrepareCacheMiss = false;
+    stats->lastPrepareCopiedScene = false;
+    stats->lastSceneBuildMs = 0.0;
+    stats->lastCacheStoreMs = 0.0;
+    stats->lastCopyMs = 0.0;
+    stats->lastBindAfterCopyMs = 0.0;
+    stats->lastFinalFrameBindMs = 0.0;
+    stats->lastFrameBVHEnsureMs = 0.0;
+    stats->lastFrameBVHTLASReadinessBindMs = 0.0;
+    stats->lastFrameBVHRequired = true;
+    stats->lastFrameBVHSkippedForTLAS = false;
+    stats->lastFrameBVHReady = false;
+    stats->lastTLASReadyForFrameBVHSkip = false;
+    stats->lastFrameBVHSkipDecision =
+        RUNTIME_NATIVE_3D_FRAME_BVH_SKIP_DECISION_NOT_REQUESTED;
+    stats->lastCopiedPrimitiveCount = 0;
+    stats->lastCopiedTriangleCount = 0;
+    stats->lastCopiedBVHNodeCount = 0;
+    stats->lastCopiedLightCount = 0;
+    stats->lastCopiedEmissiveCandidateCount = 0;
+    stats->lastFrameBVHTriangleCount = 0;
+    stats->lastFrameBVHNodeCount = 0;
+    stats->lastFrameBVHTotalBytes = 0u;
+    stats->lastCopiedPrimitiveBytes = 0u;
+    stats->lastCopiedTriangleBytes = 0u;
+    stats->lastCopiedBVHBytes = 0u;
+    stats->lastCopiedLightBytes = 0u;
+    stats->lastCopiedEmissiveCandidateBytes = 0u;
+    stats->lastCopiedEstimatedBytes = 0u;
+}
+
+static void runtime_native_3d_prepare_dataflow_begin(bool enabled) {
+    if (!enabled) {
+        memset(&gRuntimeNative3DPreparedSceneDataflowStats,
+               0,
+               sizeof(gRuntimeNative3DPreparedSceneDataflowStats));
+        return;
+    }
+    runtime_native_3d_prepare_dataflow_reset_last(enabled);
+    gRuntimeNative3DPreparedSceneDataflowStats.prepareCalls += 1u;
+}
+
+static uint64_t runtime_native_3d_prepare_scene_copy_bytes(
+    const RuntimeScene3D* scene,
+    RuntimeTriangleBVH3DBuildStats* out_bvh_stats) {
+    uint64_t bytes = 0u;
+    RuntimeTriangleBVH3DBuildStats bvh_stats = {0};
+    if (out_bvh_stats) memset(out_bvh_stats, 0, sizeof(*out_bvh_stats));
+    if (!scene) return 0u;
+    bytes = runtime_native_3d_prepare_u64_add(
+        bytes,
+        runtime_native_3d_prepare_scene_array_bytes(
+            scene->primitiveCount,
+            (uint64_t)sizeof(RuntimePrimitive3D)));
+    bytes = runtime_native_3d_prepare_u64_add(
+        bytes,
+        runtime_native_3d_prepare_scene_array_bytes(
+            scene->triangleMesh.triangleCount,
+            (uint64_t)sizeof(RuntimeTriangle3D)));
+    bytes = runtime_native_3d_prepare_u64_add(
+        bytes,
+        runtime_native_3d_prepare_scene_array_bytes(
+            scene->lightSet.lightCount,
+            (uint64_t)sizeof(RuntimeLightSource3D)));
+    bytes = runtime_native_3d_prepare_u64_add(
+        bytes,
+        runtime_native_3d_prepare_scene_array_bytes(
+            scene->emissiveLightSet.candidateCount,
+            (uint64_t)sizeof(RuntimeEmissiveLightCandidate3D)));
+    if (RuntimeTriangleMesh3D_BVHBuildStats(&scene->triangleMesh, &bvh_stats) &&
+        bvh_stats.ready) {
+        bytes = runtime_native_3d_prepare_u64_add(bytes, bvh_stats.totalBytes);
+        if (out_bvh_stats) *out_bvh_stats = bvh_stats;
+    }
+    return bytes;
+}
+
+static bool runtime_native_3d_prepare_copy_scene_for_frame(RuntimeScene3D* dst,
+                                                          const RuntimeScene3D* src,
+                                                          bool cache_hit) {
+    RuntimeTriangleBVH3DBuildStats bvh_stats = {0};
+    struct timespec copy_started_at = {0};
+    const bool enabled =
+        gRuntimeNative3DPreparedSceneDataflowStats.dataflowStatsEnabled;
+    const uint64_t primitive_bytes =
+        runtime_native_3d_prepare_scene_array_bytes(
+            src ? src->primitiveCount : 0,
+            (uint64_t)sizeof(RuntimePrimitive3D));
+    const uint64_t triangle_bytes =
+        runtime_native_3d_prepare_scene_array_bytes(
+            src ? src->triangleMesh.triangleCount : 0,
+            (uint64_t)sizeof(RuntimeTriangle3D));
+    const uint64_t light_bytes =
+        runtime_native_3d_prepare_scene_array_bytes(
+            src ? src->lightSet.lightCount : 0,
+            (uint64_t)sizeof(RuntimeLightSource3D));
+    const uint64_t emissive_bytes =
+        runtime_native_3d_prepare_scene_array_bytes(
+            src ? src->emissiveLightSet.candidateCount : 0,
+            (uint64_t)sizeof(RuntimeEmissiveLightCandidate3D));
+    const uint64_t estimated_bytes =
+        runtime_native_3d_prepare_scene_copy_bytes(src, &bvh_stats);
+    bool ok = false;
+    (void)clock_gettime(CLOCK_MONOTONIC, &copy_started_at);
+    ok = RuntimeScene3D_CopyGeometryFrom(dst, src);
+    if (enabled) {
+        RuntimeNative3DPreparedSceneCacheStats* stats =
+            &gRuntimeNative3DPreparedSceneDataflowStats;
+        const double copy_ms =
+            runtime_native_3d_prepare_elapsed_ms_since(&copy_started_at);
+        stats->copyCalls += 1u;
+        if (cache_hit) {
+            stats->cacheHitCopyCalls += 1u;
+            stats->cacheHitCopyMsTotal += copy_ms;
+            stats->lastPrepareCacheHit = true;
+        } else {
+            stats->cacheMissCopyCalls += 1u;
+            stats->cacheMissCopyMsTotal += copy_ms;
+            stats->lastPrepareCacheMiss = true;
+        }
+        stats->copyMsTotal += copy_ms;
+        stats->lastCopyMs = copy_ms;
+        stats->lastPrepareCopiedScene = ok;
+        stats->lastCopiedPrimitiveCount = src ? src->primitiveCount : 0;
+        stats->lastCopiedTriangleCount = src ? src->triangleMesh.triangleCount : 0;
+        stats->lastCopiedBVHNodeCount = bvh_stats.nodeCount;
+        stats->lastCopiedLightCount = src ? src->lightSet.lightCount : 0;
+        stats->lastCopiedEmissiveCandidateCount =
+            src ? src->emissiveLightSet.candidateCount : 0;
+        stats->lastCopiedPrimitiveBytes = primitive_bytes;
+        stats->lastCopiedTriangleBytes = triangle_bytes;
+        stats->lastCopiedBVHBytes = bvh_stats.totalBytes;
+        stats->lastCopiedLightBytes = light_bytes;
+        stats->lastCopiedEmissiveCandidateBytes = emissive_bytes;
+        stats->lastCopiedEstimatedBytes = estimated_bytes;
+        stats->totalCopiedEstimatedBytes =
+            runtime_native_3d_prepare_u64_add(stats->totalCopiedEstimatedBytes,
+                                              estimated_bytes);
+    }
+    return ok;
+}
+
+static bool runtime_native_3d_prepare_bind_scene_for_frame(const RuntimeScene3D* scene,
+                                                          bool final_frame_bind) {
+    struct timespec bind_started_at = {0};
+    const bool enabled =
+        gRuntimeNative3DPreparedSceneDataflowStats.dataflowStatsEnabled;
+    bool ok = false;
+    (void)clock_gettime(CLOCK_MONOTONIC, &bind_started_at);
+    ok = RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(scene);
+    if (enabled) {
+        RuntimeNative3DPreparedSceneCacheStats* stats =
+            &gRuntimeNative3DPreparedSceneDataflowStats;
+        const double bind_ms =
+            runtime_native_3d_prepare_elapsed_ms_since(&bind_started_at);
+        if (final_frame_bind) {
+            stats->finalFrameBindCalls += 1u;
+            stats->finalFrameBindMsTotal += bind_ms;
+            stats->lastFinalFrameBindMs = bind_ms;
+        } else {
+            stats->bindAfterCopyCalls += 1u;
+            stats->bindAfterCopyMsTotal += bind_ms;
+            stats->lastBindAfterCopyMs = bind_ms;
+        }
+    }
+    return ok;
 }
 
 void runtime_native_3d_prepare_frame_set_diag(const char* message) {
@@ -130,6 +346,122 @@ void RuntimeNative3DPreparedSceneCacheStatsSnapshot(
             RuntimeTriangleMesh3D_BVHLeafCount(
                 &gRuntimeNative3DPreparedSceneCache.triangleMesh);
     }
+    out_stats->dataflowStatsEnabled =
+        gRuntimeNative3DPreparedSceneDataflowStats.dataflowStatsEnabled;
+    out_stats->lastPrepareValid =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastPrepareValid;
+    out_stats->lastPrepareCacheHit =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastPrepareCacheHit;
+    out_stats->lastPrepareCacheMiss =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastPrepareCacheMiss;
+    out_stats->lastPrepareCopiedScene =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastPrepareCopiedScene;
+    out_stats->prepareCalls =
+        gRuntimeNative3DPreparedSceneDataflowStats.prepareCalls;
+    out_stats->cacheHitPrepareCalls =
+        gRuntimeNative3DPreparedSceneDataflowStats.cacheHitPrepareCalls;
+    out_stats->cacheMissPrepareCalls =
+        gRuntimeNative3DPreparedSceneDataflowStats.cacheMissPrepareCalls;
+    out_stats->copyCalls =
+        gRuntimeNative3DPreparedSceneDataflowStats.copyCalls;
+    out_stats->cacheHitCopyCalls =
+        gRuntimeNative3DPreparedSceneDataflowStats.cacheHitCopyCalls;
+    out_stats->cacheMissCopyCalls =
+        gRuntimeNative3DPreparedSceneDataflowStats.cacheMissCopyCalls;
+    out_stats->bindAfterCopyCalls =
+        gRuntimeNative3DPreparedSceneDataflowStats.bindAfterCopyCalls;
+    out_stats->finalFrameBindCalls =
+        gRuntimeNative3DPreparedSceneDataflowStats.finalFrameBindCalls;
+    out_stats->frameBVHEnsureCalls =
+        gRuntimeNative3DPreparedSceneDataflowStats.frameBVHEnsureCalls;
+    out_stats->frameBVHBuildCalls =
+        gRuntimeNative3DPreparedSceneDataflowStats.frameBVHBuildCalls;
+    out_stats->frameBVHAlreadyReadyCalls =
+        gRuntimeNative3DPreparedSceneDataflowStats.frameBVHAlreadyReadyCalls;
+    out_stats->frameBVHSkipForTLASCalls =
+        gRuntimeNative3DPreparedSceneDataflowStats.frameBVHSkipForTLASCalls;
+    out_stats->frameBVHTLASReadinessChecks =
+        gRuntimeNative3DPreparedSceneDataflowStats.frameBVHTLASReadinessChecks;
+    out_stats->sceneBuildMsTotal =
+        gRuntimeNative3DPreparedSceneDataflowStats.sceneBuildMsTotal;
+    out_stats->cacheStoreMsTotal =
+        gRuntimeNative3DPreparedSceneDataflowStats.cacheStoreMsTotal;
+    out_stats->copyMsTotal =
+        gRuntimeNative3DPreparedSceneDataflowStats.copyMsTotal;
+    out_stats->cacheHitCopyMsTotal =
+        gRuntimeNative3DPreparedSceneDataflowStats.cacheHitCopyMsTotal;
+    out_stats->cacheMissCopyMsTotal =
+        gRuntimeNative3DPreparedSceneDataflowStats.cacheMissCopyMsTotal;
+    out_stats->bindAfterCopyMsTotal =
+        gRuntimeNative3DPreparedSceneDataflowStats.bindAfterCopyMsTotal;
+    out_stats->finalFrameBindMsTotal =
+        gRuntimeNative3DPreparedSceneDataflowStats.finalFrameBindMsTotal;
+    out_stats->frameBVHEnsureMsTotal =
+        gRuntimeNative3DPreparedSceneDataflowStats.frameBVHEnsureMsTotal;
+    out_stats->frameBVHTLASReadinessBindMsTotal =
+        gRuntimeNative3DPreparedSceneDataflowStats.frameBVHTLASReadinessBindMsTotal;
+    out_stats->lastSceneBuildMs =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastSceneBuildMs;
+    out_stats->lastCacheStoreMs =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastCacheStoreMs;
+    out_stats->lastCopyMs =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastCopyMs;
+    out_stats->lastBindAfterCopyMs =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastBindAfterCopyMs;
+    out_stats->lastFinalFrameBindMs =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastFinalFrameBindMs;
+    out_stats->lastFrameBVHEnsureMs =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastFrameBVHEnsureMs;
+    out_stats->lastFrameBVHTLASReadinessBindMs =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastFrameBVHTLASReadinessBindMs;
+    out_stats->flattenedBVHSkipOnTLASEnabled =
+        gRuntimeNative3DPreparedSceneDataflowStats.flattenedBVHSkipOnTLASEnabled;
+    out_stats->flattenedBVHSkipOnTLASDefaultEnabled =
+        gRuntimeNative3DPreparedSceneDataflowStats.flattenedBVHSkipOnTLASDefaultEnabled;
+    out_stats->flattenedBVHSkipOnTLASForceEnabled =
+        gRuntimeNative3DPreparedSceneDataflowStats.flattenedBVHSkipOnTLASForceEnabled;
+    out_stats->flattenedBVHSkipOnTLASDefaultDisabled =
+        gRuntimeNative3DPreparedSceneDataflowStats.flattenedBVHSkipOnTLASDefaultDisabled;
+    out_stats->lastFrameBVHRequired =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastFrameBVHRequired;
+    out_stats->lastFrameBVHSkippedForTLAS =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastFrameBVHSkippedForTLAS;
+    out_stats->lastFrameBVHReady =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastFrameBVHReady;
+    out_stats->lastTLASReadyForFrameBVHSkip =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastTLASReadyForFrameBVHSkip;
+    out_stats->lastFrameBVHSkipDecision =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastFrameBVHSkipDecision;
+    out_stats->lastCopiedPrimitiveCount =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastCopiedPrimitiveCount;
+    out_stats->lastCopiedTriangleCount =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastCopiedTriangleCount;
+    out_stats->lastCopiedBVHNodeCount =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastCopiedBVHNodeCount;
+    out_stats->lastCopiedLightCount =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastCopiedLightCount;
+    out_stats->lastCopiedEmissiveCandidateCount =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastCopiedEmissiveCandidateCount;
+    out_stats->lastFrameBVHTriangleCount =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastFrameBVHTriangleCount;
+    out_stats->lastFrameBVHNodeCount =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastFrameBVHNodeCount;
+    out_stats->lastFrameBVHTotalBytes =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastFrameBVHTotalBytes;
+    out_stats->lastCopiedPrimitiveBytes =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastCopiedPrimitiveBytes;
+    out_stats->lastCopiedTriangleBytes =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastCopiedTriangleBytes;
+    out_stats->lastCopiedBVHBytes =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastCopiedBVHBytes;
+    out_stats->lastCopiedLightBytes =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastCopiedLightBytes;
+    out_stats->lastCopiedEmissiveCandidateBytes =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastCopiedEmissiveCandidateBytes;
+    out_stats->lastCopiedEstimatedBytes =
+        gRuntimeNative3DPreparedSceneDataflowStats.lastCopiedEstimatedBytes;
+    out_stats->totalCopiedEstimatedBytes =
+        gRuntimeNative3DPreparedSceneDataflowStats.totalCopiedEstimatedBytes;
 }
 
 void RuntimeNative3DPreparedSceneCacheResetForTests(void) {
@@ -147,6 +479,9 @@ void RuntimeNative3DPreparedSceneCacheResetForTests(void) {
     gRuntimeNative3DPreparedSceneCacheStores = 0u;
     gRuntimeNative3DPreparedSceneCacheInvalidations = 0u;
     gRuntimeNative3DPreparedSceneCacheTimeIndependentHits = 0u;
+    memset(&gRuntimeNative3DPreparedSceneDataflowStats,
+           0,
+           sizeof(gRuntimeNative3DPreparedSceneDataflowStats));
 }
 
 void RuntimeNative3DRender_ResetInspectionCameraOverrides(void) {
@@ -459,7 +794,9 @@ static bool runtime_native_3d_render_build_live_scene(RuntimeScene3D* scene,
                                                       double normalized_t,
                                                       double live_light_x,
                                                       double live_light_y) {
+    const bool dataflow_enabled = RuntimeFrameDataflowLedger3D_IsEnabled();
     if (!scene) return false;
+    runtime_native_3d_prepare_dataflow_begin(dataflow_enabled);
     runtime_native_3d_prepared_scene_cache_ensure_initialized();
     gRuntimeNative3DPreparedSceneCacheLastRequestedT = normalized_t;
     if (gRuntimeNative3DPreparedSceneCacheValid &&
@@ -468,23 +805,42 @@ static bool runtime_native_3d_render_build_live_scene(RuntimeScene3D* scene,
         (gRuntimeNative3DPreparedSceneCacheStaticGeometry ||
          fabs(gRuntimeNative3DPreparedSceneCacheNormalizedT - normalized_t) <= 1e-12)) {
         gRuntimeNative3DPreparedSceneCacheHits += 1u;
+        if (dataflow_enabled) {
+            gRuntimeNative3DPreparedSceneDataflowStats.cacheHitPrepareCalls += 1u;
+            gRuntimeNative3DPreparedSceneDataflowStats.lastPrepareCacheHit = true;
+        }
         if (fabs(gRuntimeNative3DPreparedSceneCacheNormalizedT - normalized_t) > 1e-12) {
             gRuntimeNative3DPreparedSceneCacheTimeIndependentHits += 1u;
         }
-        if (!RuntimeScene3D_CopyGeometryFrom(scene,
-                                             &gRuntimeNative3DPreparedSceneCache)) {
+        if (!runtime_native_3d_prepare_copy_scene_for_frame(
+                scene,
+                &gRuntimeNative3DPreparedSceneCache,
+                true)) {
             return false;
         }
-        RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(scene);
+        runtime_native_3d_prepare_bind_scene_for_frame(scene, false);
         RuntimeScene3D_RefreshMaterialFlags(scene);
     } else {
         RuntimeScene3D built_scene = {0};
+        struct timespec stage_started_at = {0};
         RuntimeScene3D_Init(&built_scene);
         gRuntimeNative3DPreparedSceneCacheMisses += 1u;
+        if (dataflow_enabled) {
+            gRuntimeNative3DPreparedSceneDataflowStats.cacheMissPrepareCalls += 1u;
+            gRuntimeNative3DPreparedSceneDataflowStats.lastPrepareCacheMiss = true;
+        }
+        (void)clock_gettime(CLOCK_MONOTONIC, &stage_started_at);
         if (!RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(&built_scene, normalized_t)) {
             RuntimeScene3D_Free(&built_scene);
             return false;
         }
+        if (dataflow_enabled) {
+            const double build_ms =
+                runtime_native_3d_prepare_elapsed_ms_since(&stage_started_at);
+            gRuntimeNative3DPreparedSceneDataflowStats.sceneBuildMsTotal += build_ms;
+            gRuntimeNative3DPreparedSceneDataflowStats.lastSceneBuildMs = build_ms;
+        }
+        (void)clock_gettime(CLOCK_MONOTONIC, &stage_started_at);
         RuntimeScene3D_Free(&gRuntimeNative3DPreparedSceneCache);
         gRuntimeNative3DPreparedSceneCache = built_scene;
         memset(&built_scene, 0, sizeof(built_scene));
@@ -494,11 +850,19 @@ static bool runtime_native_3d_render_build_live_scene(RuntimeScene3D* scene,
         gRuntimeNative3DPreparedSceneCachedGeneration =
             gRuntimeNative3DPreparedSceneDirtyGeneration;
         gRuntimeNative3DPreparedSceneCacheStores += 1u;
-        if (!RuntimeScene3D_CopyGeometryFrom(scene,
-                                             &gRuntimeNative3DPreparedSceneCache)) {
+        if (dataflow_enabled) {
+            const double store_ms =
+                runtime_native_3d_prepare_elapsed_ms_since(&stage_started_at);
+            gRuntimeNative3DPreparedSceneDataflowStats.cacheStoreMsTotal += store_ms;
+            gRuntimeNative3DPreparedSceneDataflowStats.lastCacheStoreMs = store_ms;
+        }
+        if (!runtime_native_3d_prepare_copy_scene_for_frame(
+                scene,
+                &gRuntimeNative3DPreparedSceneCache,
+                false)) {
             return false;
         }
-        RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(scene);
+        runtime_native_3d_prepare_bind_scene_for_frame(scene, false);
         RuntimeScene3D_RefreshMaterialFlags(scene);
     }
 
@@ -509,10 +873,16 @@ static bool runtime_native_3d_render_build_live_scene(RuntimeScene3D* scene,
     (void)width;
     (void)height;
     runtime_native_3d_render_apply_live_camera(scene, normalized_t);
-    return scene->primitiveCount > 0 &&
-           scene->triangleMesh.triangleCount > 0 &&
-           scene->hasLight &&
-           scene->hasCamera;
+    if (scene->primitiveCount > 0 &&
+        scene->triangleMesh.triangleCount > 0 &&
+        scene->hasLight &&
+        scene->hasCamera) {
+        if (dataflow_enabled) {
+            gRuntimeNative3DPreparedSceneDataflowStats.lastPrepareValid = true;
+        }
+        return true;
+    }
+    return false;
 }
 
 static RuntimeVolume3DSourceKind runtime_native_3d_render_map_volume_source_kind(
@@ -796,6 +1166,126 @@ static bool runtime_native_3d_render_ensure_ready_bvh(RuntimeScene3D* scene) {
     return true;
 }
 
+static void runtime_native_3d_prepare_record_frame_bvh_stats(
+    const RuntimeScene3D* scene,
+    bool ready) {
+    RuntimeNative3DPreparedSceneCacheStats* stats =
+        &gRuntimeNative3DPreparedSceneDataflowStats;
+    RuntimeTriangleBVH3DBuildStats bvh_stats = {0};
+    if (!stats->dataflowStatsEnabled) return;
+    stats->lastFrameBVHReady = ready;
+    stats->lastFrameBVHTriangleCount =
+        scene ? scene->triangleMesh.triangleCount : 0;
+    stats->lastFrameBVHNodeCount = 0;
+    stats->lastFrameBVHTotalBytes = 0u;
+    if (scene &&
+        RuntimeTriangleMesh3D_BVHBuildStats(&scene->triangleMesh, &bvh_stats)) {
+        stats->lastFrameBVHTriangleCount = bvh_stats.triangleCount;
+        stats->lastFrameBVHNodeCount = bvh_stats.nodeCount;
+        stats->lastFrameBVHTotalBytes = bvh_stats.totalBytes;
+        stats->lastFrameBVHReady = bvh_stats.ready;
+    }
+}
+
+static bool runtime_native_3d_prepare_try_skip_frame_bvh_for_tlas(
+    const RuntimeScene3D* scene) {
+    struct timespec bind_started_at = {0};
+    RuntimeNative3DPreparedSceneCacheStats* stats =
+        &gRuntimeNative3DPreparedSceneDataflowStats;
+    RuntimeRay3DTraceRoute route = RuntimeRay3D_CurrentTraceRoute();
+    bool force_enabled = runtime_native_3d_env_truthy(
+        kRuntimeNative3DFrameBVHSkipOnTLASEnv);
+    bool default_disabled = runtime_native_3d_env_truthy(
+        kRuntimeNative3DFrameBVHSkipDefaultDisableEnv);
+    bool default_enabled =
+        route == RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS && !default_disabled;
+    bool skip_enabled = force_enabled || default_enabled;
+    bool tlas_ready = false;
+
+    if (stats->dataflowStatsEnabled) {
+        stats->flattenedBVHSkipOnTLASEnabled = skip_enabled;
+        stats->flattenedBVHSkipOnTLASDefaultEnabled = default_enabled;
+        stats->flattenedBVHSkipOnTLASForceEnabled = force_enabled;
+        stats->flattenedBVHSkipOnTLASDefaultDisabled = default_disabled;
+        stats->lastFrameBVHRequired = true;
+        stats->lastFrameBVHSkippedForTLAS = false;
+        stats->lastTLASReadyForFrameBVHSkip = false;
+        stats->lastFrameBVHSkipDecision =
+            RUNTIME_NATIVE_3D_FRAME_BVH_SKIP_DECISION_NOT_REQUESTED;
+    }
+    if (route != RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS) {
+        if (stats->dataflowStatsEnabled) {
+            stats->lastFrameBVHSkipDecision =
+                RUNTIME_NATIVE_3D_FRAME_BVH_SKIP_DECISION_ROUTE_REQUIRES_FLATTENED_BVH;
+        }
+        return false;
+    }
+    if (default_disabled && !force_enabled) {
+        if (stats->dataflowStatsEnabled) {
+            stats->lastFrameBVHSkipDecision =
+                RUNTIME_NATIVE_3D_FRAME_BVH_SKIP_DECISION_DISABLED_BY_ENV;
+        }
+        return false;
+    }
+    if (!skip_enabled) {
+        return false;
+    }
+
+    (void)clock_gettime(CLOCK_MONOTONIC, &bind_started_at);
+    tlas_ready = RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(scene);
+    if (stats->dataflowStatsEnabled) {
+        const double bind_ms =
+            runtime_native_3d_prepare_elapsed_ms_since(&bind_started_at);
+        stats->frameBVHTLASReadinessChecks += 1u;
+        stats->frameBVHTLASReadinessBindMsTotal += bind_ms;
+        stats->lastFrameBVHTLASReadinessBindMs = bind_ms;
+        stats->lastTLASReadyForFrameBVHSkip = tlas_ready;
+    }
+    if (!tlas_ready) {
+        if (stats->dataflowStatsEnabled) {
+            stats->lastFrameBVHSkipDecision =
+                RUNTIME_NATIVE_3D_FRAME_BVH_SKIP_DECISION_TLAS_BIND_NOT_READY;
+        }
+        return false;
+    }
+
+    if (stats->dataflowStatsEnabled) {
+        stats->frameBVHSkipForTLASCalls += 1u;
+        stats->lastFrameBVHRequired = false;
+        stats->lastFrameBVHSkippedForTLAS = true;
+        stats->lastFrameBVHSkipDecision =
+            RUNTIME_NATIVE_3D_FRAME_BVH_SKIP_DECISION_SKIPPED_TLAS_READY;
+        runtime_native_3d_prepare_record_frame_bvh_stats(scene, false);
+    }
+    return true;
+}
+
+static bool runtime_native_3d_prepare_ensure_frame_bvh(RuntimeScene3D* scene) {
+    struct timespec ensure_started_at = {0};
+    RuntimeNative3DPreparedSceneCacheStats* stats =
+        &gRuntimeNative3DPreparedSceneDataflowStats;
+    bool had_ready_bvh = scene && RuntimeTriangleMesh3D_HasReadyBVH(&scene->triangleMesh);
+    bool ok = false;
+
+    (void)clock_gettime(CLOCK_MONOTONIC, &ensure_started_at);
+    ok = runtime_native_3d_render_ensure_ready_bvh(scene);
+    if (stats->dataflowStatsEnabled) {
+        const double ensure_ms =
+            runtime_native_3d_prepare_elapsed_ms_since(&ensure_started_at);
+        stats->frameBVHEnsureCalls += 1u;
+        stats->frameBVHEnsureMsTotal += ensure_ms;
+        stats->lastFrameBVHEnsureMs = ensure_ms;
+        stats->lastFrameBVHRequired = true;
+        if (had_ready_bvh) {
+            stats->frameBVHAlreadyReadyCalls += 1u;
+        } else if (ok) {
+            stats->frameBVHBuildCalls += 1u;
+        }
+        runtime_native_3d_prepare_record_frame_bvh_stats(scene, ok);
+    }
+    return ok;
+}
+
 bool RuntimeNative3DPrepareFrame(RuntimeNative3DPreparedFrame* out_frame,
                                  int width,
                                  int height,
@@ -914,7 +1404,8 @@ bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
         RuntimeScene3D_Free(&frame.scene);
         return false;
     }
-    if (!runtime_native_3d_render_ensure_ready_bvh(&frame.scene)) {
+    if (!runtime_native_3d_prepare_try_skip_frame_bvh_for_tlas(&frame.scene) &&
+        !runtime_native_3d_prepare_ensure_frame_bvh(&frame.scene)) {
         RuntimeScene3D_Free(&frame.scene);
         return false;
     }
@@ -960,6 +1451,6 @@ bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
     }
     frame.valid = true;
     *out_frame = frame;
-    RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(&out_frame->scene);
+    runtime_native_3d_prepare_bind_scene_for_frame(&out_frame->scene, true);
     return true;
 }

@@ -18,7 +18,9 @@ static const float kRuntimeNative3DAdaptiveTileRiskInfluence = 0.5f;
 static const float kRuntimeNative3DAdaptiveHighActivityScale = 1.75f;
 static const int kRuntimeNative3DAdaptiveNeighborhoodRadiusMedium = 1;
 static const int kRuntimeNative3DAdaptiveNeighborhoodRadiusHigh = 2;
+static const int kRuntimeNative3DAdaptiveEarlyStopNeighborhoodRadiusMedium = 1;
 static const float kRuntimeNative3DAdaptiveStateStableActivityThreshold = 0.008f;
+static const float kRuntimeNative3DAdaptiveRiskEarlyStopStableActivityThreshold = 0.010f;
 static const float kRuntimeNative3DAdaptiveStateHighRiskThreshold = 0.35f;
 static const int kRuntimeNative3DAdaptiveStateDefaultTileSize = 16;
 static const int kRuntimeNative3DAdaptiveStateDefaultMinSampleFloor = 2;
@@ -68,7 +70,21 @@ void RuntimeNative3DAdaptiveSampling_SetRiskEarlyStopOverride(bool has_override,
     s_runtime_native_3d_adaptive_risk_early_stop_override_enabled = enabled;
 }
 
+bool RuntimeNative3DAdaptiveSampling_TemporalBudgetHeatmapEnabled(void) {
+    return runtime_native_3d_adaptive_sampling_env_enabled(
+        "RAY_TRACING_NATIVE_3D_TEMPORAL_BUDGET_HEATMAP");
+}
+
 static int runtime_native_3d_adaptive_sampling_compute_tiles(int extent, int tile_size);
+static bool runtime_native_3d_adaptive_sampling_flags_safe_for_early_stop(uint16_t flags);
+static int runtime_native_3d_adaptive_sampling_budget_bucket(uint16_t sample_count,
+                                                             int min_sample_floor);
+static void runtime_native_3d_adaptive_sampling_note_early_stop_hold_flags(
+    RuntimeNative3DAdaptivePixelStateSummary* summary,
+    uint16_t flags,
+    int region_index,
+    int budget_bucket,
+    RuntimeNative3DDirectLightVisibilityOutcome visibility);
 
 static float runtime_native_3d_adaptive_sampling_clampf(float value,
                                                         float min_value,
@@ -86,6 +102,15 @@ static int runtime_native_3d_adaptive_sampling_clampi(int value,
     return value;
 }
 
+static int runtime_native_3d_adaptive_sampling_region_index(int x,
+                                                            int y,
+                                                            int width,
+                                                            int height) {
+    const int right = (width > 0 && x >= width / 2) ? 1 : 0;
+    const int bottom = (height > 0 && y >= height / 2) ? 2 : 0;
+    return right | bottom;
+}
+
 static float runtime_native_3d_adaptive_sampling_luma(float r, float g, float b) {
     return (0.2126f * r) + (0.7152f * g) + (0.0722f * b);
 }
@@ -93,6 +118,12 @@ static float runtime_native_3d_adaptive_sampling_luma(float r, float g, float b)
 static float runtime_native_3d_adaptive_sampling_bias_correction(uint16_t sample_count) {
     if (sample_count == 0u) return 0.0f;
     return 1.0f - powf(1.0f - kRuntimeNative3DAdaptiveStateEMAAlpha, (float)sample_count);
+}
+
+static float runtime_native_3d_adaptive_sampling_stable_activity_threshold(void) {
+    return RuntimeNative3DAdaptiveSampling_RiskEarlyStopEnabled()
+               ? kRuntimeNative3DAdaptiveRiskEarlyStopStableActivityThreshold
+               : kRuntimeNative3DAdaptiveStateStableActivityThreshold;
 }
 
 static float runtime_native_3d_adaptive_sampling_compute_feature_risk(
@@ -406,6 +437,8 @@ bool RuntimeNative3DAdaptiveSampling_MeasurePixelState(
             RuntimeNative3DAdaptivePixelState* pixel = &state->pixels[pixel_index];
             const uint16_t sample_count = accumulation->sampleCountBuffer[pixel_index];
             const float activity = accumulation->activityBuffer[pixel_index];
+            const float stable_activity_threshold =
+                runtime_native_3d_adaptive_sampling_stable_activity_threshold();
             uint16_t reason_flags = 0u;
             const float risk =
                 features ? runtime_native_3d_adaptive_sampling_compute_feature_risk(features,
@@ -416,11 +449,13 @@ bool RuntimeNative3DAdaptiveSampling_MeasurePixelState(
                                                                                     &reason_flags)
                          : 0.0f;
             const bool activity_risk =
-                activity > kRuntimeNative3DAdaptiveStateStableActivityThreshold;
+                activity > stable_activity_threshold;
             const bool high_risk = risk >= kRuntimeNative3DAdaptiveStateHighRiskThreshold;
+            const int region_index =
+                runtime_native_3d_adaptive_sampling_region_index(x, y, width, height);
             const bool stable =
                 sample_count >= (uint16_t)resolved_min_sample_floor &&
-                activity <= kRuntimeNative3DAdaptiveStateStableActivityThreshold &&
+                activity <= stable_activity_threshold &&
                 !high_risk;
             const int countdown =
                 stable ? ((resolved_probe_period -
@@ -493,6 +528,16 @@ bool RuntimeNative3DAdaptiveSampling_MeasurePixelState(
             }
             summary.directLightBoundaryRiskPixelCount +=
                 (reason_flags & RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_DIRECT_LIGHT_RISK) ? 1 : 0;
+            runtime_native_3d_adaptive_sampling_note_early_stop_hold_flags(
+                &summary,
+                pixel->flags,
+                region_index,
+                runtime_native_3d_adaptive_sampling_budget_bucket(sample_count,
+                                                                  resolved_min_sample_floor),
+                (features && features->directLightVisibilityOutcomeBuffer)
+                    ? (RuntimeNative3DDirectLightVisibilityOutcome)
+                          features->directLightVisibilityOutcomeBuffer[pixel_index]
+                    : RUNTIME_NATIVE_3D_DIRECT_LIGHT_VISIBILITY_NO_TRACE);
             summary.riskSum += (double)risk;
             if ((double)risk > summary.riskMax) {
                 summary.riskMax = (double)risk;
@@ -997,6 +1042,84 @@ static bool runtime_native_3d_adaptive_sampling_flags_safe_for_early_stop(uint16
            (flags & hold_flags) == 0u;
 }
 
+bool RuntimeNative3DAdaptiveSampling_FlagsSafeForEarlyStop(uint16_t flags) {
+    return runtime_native_3d_adaptive_sampling_flags_safe_for_early_stop(flags);
+}
+
+static int runtime_native_3d_adaptive_sampling_budget_bucket(uint16_t sample_count,
+                                                             int min_sample_floor) {
+    const int floor = (min_sample_floor > 0) ? min_sample_floor : 2;
+    if ((int)sample_count <= floor) return 0;
+    if (sample_count <= 4u) return 1;
+    if (sample_count <= 8u) return 2;
+    return 3;
+}
+
+int RuntimeNative3DAdaptiveSampling_BudgetBucket(uint16_t sample_count,
+                                                 int min_sample_floor) {
+    return runtime_native_3d_adaptive_sampling_budget_bucket(sample_count, min_sample_floor);
+}
+
+static void runtime_native_3d_adaptive_sampling_note_early_stop_hold_flags(
+    RuntimeNative3DAdaptivePixelStateSummary* summary,
+    uint16_t flags,
+    int region_index,
+    int budget_bucket,
+    RuntimeNative3DDirectLightVisibilityOutcome visibility) {
+    const bool safe_for_early_stop =
+        runtime_native_3d_adaptive_sampling_flags_safe_for_early_stop(flags);
+    if (!summary) return;
+    if (region_index < 0 || region_index >= RUNTIME_NATIVE_3D_ADAPTIVE_REGION_COUNT) {
+        region_index = 0;
+    }
+    if (budget_bucket < 0 || budget_bucket >= RUNTIME_NATIVE_3D_TEMPORAL_BUDGET_BUCKET_COUNT) {
+        budget_bucket = 0;
+    }
+
+    summary->budgetBucketPixelCounts[budget_bucket] += 1;
+    summary->budgetActiveBucketPixelCounts[budget_bucket] +=
+        (flags & RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_ACTIVE) ? 1 : 0;
+
+    if (safe_for_early_stop) {
+        summary->earlyStopEligiblePixelCount += 1;
+        summary->earlyStopEligibleRegionCounts[region_index] += 1;
+        summary->budgetEligibleBucketPixelCounts[budget_bucket] += 1;
+        summary->budgetClearVisibleEligiblePixelCount +=
+            (visibility == RUNTIME_NATIVE_3D_DIRECT_LIGHT_VISIBILITY_CLEAR_VISIBLE) ? 1 : 0;
+        return;
+    }
+    summary->earlyStopHeldPixelCount += 1;
+    summary->earlyStopHeldRegionCounts[region_index] += 1;
+    summary->budgetHeldBucketPixelCounts[budget_bucket] += 1;
+    summary->budgetClearVisibleHeldPixelCount +=
+        (visibility == RUNTIME_NATIVE_3D_DIRECT_LIGHT_VISIBILITY_CLEAR_VISIBLE) ? 1 : 0;
+    summary->budgetPartialHeldPixelCount +=
+        (visibility == RUNTIME_NATIVE_3D_DIRECT_LIGHT_VISIBILITY_STABLE_PARTIAL ||
+         visibility == RUNTIME_NATIVE_3D_DIRECT_LIGHT_VISIBILITY_MIXED_PARTIAL)
+            ? 1
+            : 0;
+    summary->budgetTransparentHeldPixelCount +=
+        (flags & RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_TRANSPARENT_RISK) ? 1 : 0;
+    summary->budgetGeometryHeldPixelCount +=
+        (flags & RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_GEOMETRY_EDGE_RISK) ? 1 : 0;
+    summary->budgetActivityHeldPixelCount +=
+        (flags & RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_ACTIVITY_RISK) ? 1 : 0;
+    summary->earlyStopHoldProbePixelCount +=
+        (flags & RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_PROBE) ? 1 : 0;
+    summary->earlyStopHoldHighRiskPixelCount +=
+        (flags & RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_HIGH_RISK) ? 1 : 0;
+    summary->earlyStopHoldActivityRiskPixelCount +=
+        (flags & RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_ACTIVITY_RISK) ? 1 : 0;
+    summary->earlyStopHoldMaterialRiskPixelCount +=
+        (flags & RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_MATERIAL_RISK) ? 1 : 0;
+    summary->earlyStopHoldTransparentRiskPixelCount +=
+        (flags & RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_TRANSPARENT_RISK) ? 1 : 0;
+    summary->earlyStopHoldGeometryEdgeRiskPixelCount +=
+        (flags & RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_GEOMETRY_EDGE_RISK) ? 1 : 0;
+    summary->earlyStopHoldDirectLightRiskPixelCount +=
+        (flags & RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_DIRECT_LIGHT_RISK) ? 1 : 0;
+}
+
 static uint8_t runtime_native_3d_adaptive_sampling_early_stop_seed_from_flags(
     uint16_t flags,
     bool active) {
@@ -1009,7 +1132,7 @@ static uint8_t runtime_native_3d_adaptive_sampling_early_stop_seed_from_flags(
     if ((flags & high_seed_flags) != 0u) {
         return 2u;
     }
-    return active ? 1u : 0u;
+    return (active && (flags & RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_ACTIVITY_RISK) != 0u) ? 1u : 0u;
 }
 
 bool RuntimeNative3DAdaptiveSampling_RefreshConservativeEarlyStopMaskFromPixelState(
@@ -1046,11 +1169,24 @@ bool RuntimeNative3DAdaptiveSampling_RefreshConservativeEarlyStopMaskFromPixelSt
     mask->activePixelCount = 0;
     mask->activeTileCount = 0;
     mask->inactiveTileCount = 0;
+    mask->conservativeEarlyStopEligiblePixelCount = 0;
+    mask->conservativeEarlyStopBaseActivePixelCount = 0;
+    mask->conservativeEarlyStopPaddingHoldPixelCount = 0;
+    mask->conservativeEarlyStopPaddingHoldHighSeedPixelCount = 0;
+    mask->conservativeEarlyStopPaddingHoldMediumSeedPixelCount = 0;
+    memset(mask->conservativeEarlyStopPaddingHoldRegionCounts,
+           0,
+           sizeof(mask->conservativeEarlyStopPaddingHoldRegionCounts));
 
     for (size_t i = 0; i < pixel_count; ++i) {
         const uint16_t flags = state->pixels[i].flags;
         const bool active =
             !runtime_native_3d_adaptive_sampling_flags_safe_for_early_stop(flags);
+        if (active) {
+            mask->conservativeEarlyStopBaseActivePixelCount += 1;
+        } else {
+            mask->conservativeEarlyStopEligiblePixelCount += 1;
+        }
         mask->activeSampleMask[i] = active ? 1u : 0u;
         mask->scratchSampleMask[i] =
             runtime_native_3d_adaptive_sampling_early_stop_seed_from_flags(flags, active);
@@ -1070,15 +1206,25 @@ bool RuntimeNative3DAdaptiveSampling_RefreshConservativeEarlyStopMaskFromPixelSt
                     x,
                     y,
                     2u,
-                    kRuntimeNative3DAdaptiveNeighborhoodRadiusHigh) ||
-                runtime_native_3d_adaptive_sampling_has_neighbor_seed(
-                    mask,
-                    x,
-                    y,
-                    1u,
-                    kRuntimeNative3DAdaptiveNeighborhoodRadiusMedium)) {
+                    kRuntimeNative3DAdaptiveNeighborhoodRadiusHigh)) {
                 mask->activeSampleMask[pixel_index] = 1u;
                 mask->activePixelCount += 1;
+                mask->conservativeEarlyStopPaddingHoldPixelCount += 1;
+                mask->conservativeEarlyStopPaddingHoldHighSeedPixelCount += 1;
+                mask->conservativeEarlyStopPaddingHoldRegionCounts
+                    [runtime_native_3d_adaptive_sampling_region_index(x, y, width, height)] += 1;
+            } else if (runtime_native_3d_adaptive_sampling_has_neighbor_seed(
+                           mask,
+                           x,
+                           y,
+                           1u,
+                           kRuntimeNative3DAdaptiveEarlyStopNeighborhoodRadiusMedium)) {
+                mask->activeSampleMask[pixel_index] = 1u;
+                mask->activePixelCount += 1;
+                mask->conservativeEarlyStopPaddingHoldPixelCount += 1;
+                mask->conservativeEarlyStopPaddingHoldMediumSeedPixelCount += 1;
+                mask->conservativeEarlyStopPaddingHoldRegionCounts
+                    [runtime_native_3d_adaptive_sampling_region_index(x, y, width, height)] += 1;
             }
         }
     }

@@ -6,7 +6,7 @@ Public identity:
 - packaged desktop product: `optiC`
 - repository/program key: `ray_tracing`
 
-Last audited: 2026-07-04.
+Last audited: 2026-07-08.
 
 Current public focus:
 - dual-toolchain compiler-units rollout now starts at the runtime-scene import
@@ -50,6 +50,10 @@ Current public focus:
     and `background_color`
   - resolved headless `environment_lighting` summary fields explain whether
     ambient fill, background miss radiance, or top-fill can contribute
+- headless render-cost diagnostics now document the current default/opt-in env
+  policy for trace-cost ledgers, frame-dataflow ledgers, R4 temporal risk
+  early-stop, temporal budget heatmaps, direct-light probes, and
+  reflected-transmission probes
 - native `3D` zero-thickness plane surfaces now shade from both camera sides:
   plane-generated triangles are marked `twoSided`, ray hits orient shading
   normals against the incoming ray, and solid rect-prism/runtime-mesh geometry
@@ -80,8 +84,9 @@ Current public focus:
 - `docs/current_truth.md`: current runtime contract and active boundaries.
 - `docs/future_intent.md`: near-term renderer and workflow direction.
 - `docs/headless_agent_render_cli.md`: `ray_tracing_agent_render_request_v1`
-  request schema, preflight/render CLI command, PhysicsSim VF3D handoff, and
-  first water-surface sidecar handoff.
+  request schema, preflight/render CLI command, PhysicsSim VF3D handoff,
+  water-surface sidecar handoff, and the current render-cost/temporal-pruning
+  diagnostic env policy.
 - `docs/headless_continuation_visualizer_workflow.md`: operator workflow for
   seed render -> RayTracing-only continuation -> cancel/publish-backfill ->
   visualizer grouping, including shared sampling-window chunks for continuous

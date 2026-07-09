@@ -270,6 +270,74 @@ const char* RuntimeRenderTraceCostTransmissionTermination3DLabel(
     }
 }
 
+const char* RuntimeRenderTraceCostTransmissionSampleIndexBucket3DLabel(
+    RuntimeRenderTraceCostTransmissionSampleIndexBucket3D bucket) {
+    switch (bucket) {
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_FIRST:
+            return "first";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_SECOND:
+            return "second";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_THIRD:
+            return "third";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_FOURTH:
+            return "fourth";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_LATER:
+            return "later";
+        default:
+            return "unknown";
+    }
+}
+
+const char* RuntimeRenderTraceCostTransmissionAlignmentBucket3DLabel(
+    RuntimeRenderTraceCostTransmissionAlignmentBucket3D bucket) {
+    switch (bucket) {
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_AXIAL:
+            return "axial";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_NARROW:
+            return "narrow";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_MEDIUM:
+            return "medium";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_WIDE:
+            return "wide";
+        default:
+            return "unknown";
+    }
+}
+
+const char* RuntimeRenderTraceCostTransmissionScreenRegion3DLabel(
+    RuntimeRenderTraceCostTransmissionScreenRegion3D region) {
+    switch (region) {
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_UNKNOWN:
+            return "unknown";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_TOP_LEFT:
+            return "top_left";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_TOP_RIGHT:
+            return "top_right";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_BOTTOM_LEFT:
+            return "bottom_left";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_BOTTOM_RIGHT:
+            return "bottom_right";
+        default:
+            return "unknown";
+    }
+}
+
+const char* RuntimeRenderTraceCostTransmissionPixelStability3DLabel(
+    RuntimeRenderTraceCostTransmissionPixelStability3D bucket) {
+    switch (bucket) {
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_UNKNOWN:
+            return "unknown";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_FIRST_SUBPASS:
+            return "first_subpass";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_EARLY_SUBPASS:
+            return "early_subpass";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_LATE_SUBPASS:
+            return "late_subpass";
+        default:
+            return "unknown";
+    }
+}
+
 const char* RuntimeRenderTraceCostThroughputBucket3DLabel(
     RuntimeRenderTraceCostThroughputBucket3D bucket) {
     switch (bucket) {
@@ -424,6 +492,37 @@ runtime_render_trace_cost_throughput_bucket(double peak) {
     return RUNTIME_RENDER_TRACE_COST_THROUGHPUT_HIGH;
 }
 
+static RuntimeRenderTraceCostTransmissionSampleIndexBucket3D
+runtime_render_trace_cost_transmission_sample_index_bucket(int sample_index) {
+    if (sample_index <= 0) {
+        return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_FIRST;
+    }
+    if (sample_index == 1) {
+        return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_SECOND;
+    }
+    if (sample_index == 2) {
+        return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_THIRD;
+    }
+    if (sample_index == 3) {
+        return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_FOURTH;
+    }
+    return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_LATER;
+}
+
+static RuntimeRenderTraceCostTransmissionAlignmentBucket3D
+runtime_render_trace_cost_transmission_alignment_bucket(double direction_alignment) {
+    if (direction_alignment >= 0.9995) {
+        return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_AXIAL;
+    }
+    if (direction_alignment >= 0.9975) {
+        return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_NARROW;
+    }
+    if (direction_alignment >= 0.9925) {
+        return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_MEDIUM;
+    }
+    return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_WIDE;
+}
+
 void RuntimeRenderTraceCostLedger3D_RecordDirectLightVisibilityPolicy(
     RuntimeRenderTraceCostDirectLightCaller3D caller,
     RuntimeRenderTraceCostDirectLightSourceKind3D source_kind,
@@ -489,6 +588,43 @@ void RuntimeRenderTraceCostLedger3D_RecordDirectLightVisibilityPolicy(
     policy->importanceBucketCounts[importance_bucket] += 1u;
     policy->sourceKindOutcomeCounts[source_kind][outcome] += 1u;
     policy->sourceKindStopReasonCounts[source_kind][stop_reason] += 1u;
+    policy->evaluatedSamplesBySourceKind[source_kind] +=
+        light_sample_evaluated_count > 0 ? (uint64_t)light_sample_evaluated_count : 0u;
+    policy->visibilityTracesBySourceKind[source_kind] +=
+        visibility_trace_count > 0 ? (uint64_t)visibility_trace_count : 0u;
+    policy->evaluatedSamplesBySourceOrigin[source_origin] +=
+        light_sample_evaluated_count > 0 ? (uint64_t)light_sample_evaluated_count : 0u;
+    policy->visibilityTracesBySourceOrigin[source_origin] +=
+        visibility_trace_count > 0 ? (uint64_t)visibility_trace_count : 0u;
+    policy->evaluatedSamplesByEmissionProfile[emission_profile] +=
+        light_sample_evaluated_count > 0 ? (uint64_t)light_sample_evaluated_count : 0u;
+    policy->visibilityTracesByEmissionProfile[emission_profile] +=
+        visibility_trace_count > 0 ? (uint64_t)visibility_trace_count : 0u;
+    policy->evaluatedSamplesByOutcome[outcome] +=
+        light_sample_evaluated_count > 0 ? (uint64_t)light_sample_evaluated_count : 0u;
+    policy->visibilityTracesByOutcome[outcome] +=
+        visibility_trace_count > 0 ? (uint64_t)visibility_trace_count : 0u;
+    policy->evaluatedSamplesByStopReason[stop_reason] +=
+        light_sample_evaluated_count > 0 ? (uint64_t)light_sample_evaluated_count : 0u;
+    policy->visibilityTracesByStopReason[stop_reason] +=
+        visibility_trace_count > 0 ? (uint64_t)visibility_trace_count : 0u;
+    policy->evaluatedSamplesBySampleBucket[sample_bucket] +=
+        light_sample_evaluated_count > 0 ? (uint64_t)light_sample_evaluated_count : 0u;
+    policy->visibilityTracesBySampleBucket[sample_bucket] +=
+        visibility_trace_count > 0 ? (uint64_t)visibility_trace_count : 0u;
+    policy->evaluatedSamplesByDistance[distance_bucket] +=
+        light_sample_evaluated_count > 0 ? (uint64_t)light_sample_evaluated_count : 0u;
+    policy->visibilityTracesByDistance[distance_bucket] +=
+        visibility_trace_count > 0 ? (uint64_t)visibility_trace_count : 0u;
+    policy->evaluatedSamplesByImportance[importance_bucket] +=
+        light_sample_evaluated_count > 0 ? (uint64_t)light_sample_evaluated_count : 0u;
+    policy->visibilityTracesByImportance[importance_bucket] +=
+        visibility_trace_count > 0 ? (uint64_t)visibility_trace_count : 0u;
+    policy->distanceImportanceCounts[distance_bucket][importance_bucket] += 1u;
+    policy->evaluatedSamplesByDistanceImportance[distance_bucket][importance_bucket] +=
+        light_sample_evaluated_count > 0 ? (uint64_t)light_sample_evaluated_count : 0u;
+    policy->visibilityTracesByDistanceImportance[distance_bucket][importance_bucket] +=
+        visibility_trace_count > 0 ? (uint64_t)visibility_trace_count : 0u;
     if (source_kind == RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_RECT &&
         source_origin == RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_ORIGIN_MATERIAL_EMITTER &&
         emission_profile == RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_EMISSION_ONE_SIDED) {
@@ -603,6 +739,10 @@ void RuntimeRenderTraceCostLedger3D_RecordTransmissionSurface(
 void RuntimeRenderTraceCostLedger3D_RecordTransmissionSample(
     RuntimeRenderTraceCostTransmissionSource3D source,
     RuntimeRenderTraceCostTransmissionTermination3D termination,
+    int sample_index,
+    double direction_alignment,
+    RuntimeRenderTraceCostTransmissionScreenRegion3D screen_region,
+    RuntimeRenderTraceCostTransmissionPixelStability3D pixel_stability,
     int terminal_depth,
     int ray_trace_count,
     int transparent_surface_count,
@@ -617,6 +757,10 @@ void RuntimeRenderTraceCostLedger3D_RecordTransmissionSample(
         runtime_render_trace_cost_throughput_bucket(throughput_peak);
     RuntimeRenderTraceCostThroughputBucket3D contribution_bucket =
         runtime_render_trace_cost_throughput_bucket(contribution_peak);
+    RuntimeRenderTraceCostTransmissionSampleIndexBucket3D index_bucket =
+        runtime_render_trace_cost_transmission_sample_index_bucket(sample_index);
+    RuntimeRenderTraceCostTransmissionAlignmentBucket3D alignment_bucket =
+        runtime_render_trace_cost_transmission_alignment_bucket(direction_alignment);
     if (!gRuntimeRenderTraceCostLedger3D.enabled) return;
     if (source < 0 || source >= RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT) {
         source = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_UNKNOWN;
@@ -625,12 +769,64 @@ void RuntimeRenderTraceCostLedger3D_RecordTransmissionSample(
         termination >= RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_COUNT) {
         termination = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_UNKNOWN;
     }
+    if (screen_region < 0 ||
+        screen_region >= RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_COUNT) {
+        screen_region = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_UNKNOWN;
+    }
+    if (pixel_stability < 0 ||
+        pixel_stability >= RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_COUNT) {
+        pixel_stability = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_UNKNOWN;
+    }
     policy->sampleEvaluations += 1u;
+    policy->sampleIndexCounts[index_bucket] += 1u;
+    policy->sourceSampleIndexCounts[source][index_bucket] += 1u;
+    policy->alignmentCounts[alignment_bucket] += 1u;
+    policy->sourceAlignmentCounts[source][alignment_bucket] += 1u;
+    policy->screenRegionCounts[screen_region] += 1u;
+    policy->sourceScreenRegionCounts[source][screen_region] += 1u;
+    policy->pixelStabilityCounts[pixel_stability] += 1u;
+    policy->sourcePixelStabilityCounts[source][pixel_stability] += 1u;
     if (contribution_peak > 1.0e-9) {
         policy->contributingSamples += 1u;
+        policy->contributingSamplesByIndex[index_bucket] += 1u;
+        policy->sourceContributingSamplesByIndex[source][index_bucket] += 1u;
+        policy->contributingSamplesByAlignment[alignment_bucket] += 1u;
+        policy->sourceContributingSamplesByAlignment[source][alignment_bucket] += 1u;
+        policy->contributingSamplesByScreenRegion[screen_region] += 1u;
+        policy->sourceContributingSamplesByScreenRegion[source][screen_region] += 1u;
+        policy->contributingSamplesByPixelStability[pixel_stability] += 1u;
+        policy->sourceContributingSamplesByPixelStability[source][pixel_stability] += 1u;
     }
     if (receiver_found) {
         policy->receiverSamples += 1u;
+        policy->receiverSamplesByIndex[index_bucket] += 1u;
+        policy->sourceReceiverSamplesByIndex[source][index_bucket] += 1u;
+        policy->receiverSamplesByAlignment[alignment_bucket] += 1u;
+        policy->sourceReceiverSamplesByAlignment[source][alignment_bucket] += 1u;
+        policy->receiverSamplesByScreenRegion[screen_region] += 1u;
+        policy->sourceReceiverSamplesByScreenRegion[source][screen_region] += 1u;
+        policy->receiverSamplesByPixelStability[pixel_stability] += 1u;
+        policy->sourceReceiverSamplesByPixelStability[source][pixel_stability] += 1u;
+    }
+    if (termination == RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_NO_HIT) {
+        policy->noHitSamplesByIndex[index_bucket] += 1u;
+        policy->sourceNoHitSamplesByIndex[source][index_bucket] += 1u;
+        policy->noHitSamplesByAlignment[alignment_bucket] += 1u;
+        policy->sourceNoHitSamplesByAlignment[source][alignment_bucket] += 1u;
+        policy->noHitSamplesByScreenRegion[screen_region] += 1u;
+        policy->sourceNoHitSamplesByScreenRegion[source][screen_region] += 1u;
+        policy->noHitSamplesByPixelStability[pixel_stability] += 1u;
+        policy->sourceNoHitSamplesByPixelStability[source][pixel_stability] += 1u;
+    }
+    if (!(contribution_peak > 1.0e-9)) {
+        policy->zeroContributionSamplesByIndex[index_bucket] += 1u;
+        policy->sourceZeroContributionSamplesByIndex[source][index_bucket] += 1u;
+        policy->zeroContributionSamplesByAlignment[alignment_bucket] += 1u;
+        policy->sourceZeroContributionSamplesByAlignment[source][alignment_bucket] += 1u;
+        policy->zeroContributionSamplesByScreenRegion[screen_region] += 1u;
+        policy->sourceZeroContributionSamplesByScreenRegion[source][screen_region] += 1u;
+        policy->zeroContributionSamplesByPixelStability[pixel_stability] += 1u;
+        policy->sourceZeroContributionSamplesByPixelStability[source][pixel_stability] += 1u;
     }
     policy->terminationCounts[termination] += 1u;
     policy->sourceTerminationCounts[source][termination] += 1u;

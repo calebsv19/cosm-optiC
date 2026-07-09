@@ -1,6 +1,6 @@
 # optiC Current Truth
 
-Last updated: 2026-07-04
+Last updated: 2026-07-08
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -740,7 +740,8 @@ Last updated: 2026-07-04
       and fallback for unsupported, unready, no-BVH, or stack-overflow cases
     - pure `tlas_blas` bridge-scene construction skips the flattened scene BVH
       build; explicit `flattened_bvh`, parity/debug routes, and fallback-capable
-      routes still build the flattened compatibility BVH
+      routes still build the flattened compatibility BVH. For rollback/parity
+      checks, set `RAY_TRACING_NATIVE3D_DISABLE_DEFAULT_TLAS_BVH_SKIP=1`.
     - retained runtime mesh asset sets record scene and sidecar file stamps, so
       runtime-scene preflight can reuse the just-loaded mesh documents when all
       stamps still match and can fall back to normal validation when any file
@@ -786,6 +787,17 @@ Last updated: 2026-07-04
     - headless mesh-asset timing summaries report the selected persistent
       document-cache mode and refresh count so cache-controlled runs can be
       compared without guessing process environment
+    - current render-cost defaults and diagnostics are documented in
+      `docs/headless_agent_render_cli.md`: Disney v2 reflected-transmission
+      first-subpass no-hit reuse is default-on with rollback
+      `RAY_TRACING_DISNEY_V2_REFLECTED_FIRST_SUBPASS_NO_HIT_REUSE_PROBE=0`,
+      while `RAY_TRACING_NATIVE_3D_TEMPORAL_RISK_EARLY_STOP=1`,
+      `RAY_TRACING_NATIVE_3D_TEMPORAL_BUDGET_HEATMAP=1`,
+      `RAY_TRACING_DIRECT_LIGHT_CLEAR_VISIBLE_DECISION_SAMPLE_PROBE=1`,
+      `RAY_TRACING_RENDER_TRACE_COST_LEDGER=1`, and
+      `RAY_TRACING_FRAME_DATAFLOW_STATE_LEDGER=1` remain opt-in headless proof
+      or diagnostic envs. The R4 textured-glass operator proof did not promote
+      temporal risk early-stop to a default.
     - prepared acceleration summaries report
       `blas_persistent_cache_hits`, misses, writes, invalidations, refreshes,
       read time, and write time separately from the existing in-process BLAS

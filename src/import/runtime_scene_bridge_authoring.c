@@ -727,6 +727,8 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
         json_object *reflectivity_obj = NULL;
         json_object *roughness_obj = NULL;
         json_object *emissive_strength_obj = NULL;
+        json_object *glass_transport_override_obj = NULL;
+        json_object *glass_thin_walled_obj = NULL;
         const char *object_id = NULL;
         int material_id = MaterialManagerDefaultId();
         int object_color = 0xFFFFFF;
@@ -738,6 +740,16 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
         bool has_reflectivity = false;
         bool has_roughness = false;
         bool has_emissive_strength = false;
+        bool has_glass_override = false;
+        bool glass_transport_override = false;
+        double glass_transmission = 0.0;
+        double glass_ior = 1.45;
+        double glass_absorption_distance = 2.0;
+        bool glass_thin_walled = true;
+        bool has_glass_transmission = false;
+        bool has_glass_ior = false;
+        bool has_glass_absorption_distance = false;
+        bool has_glass_thin_walled = false;
         int scene_index = 0;
         if (!entry || !json_object_is_type(entry, json_type_object)) continue;
         if (!json_object_object_get_ex(entry, "object_id", &object_id_obj) ||
@@ -784,6 +796,37 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
             emissive_strength = json_object_get_double(emissive_strength_obj);
             has_emissive_strength = true;
         }
+        if ((json_object_object_get_ex(entry,
+                                       "glass_transport_override",
+                                       &glass_transport_override_obj) ||
+             json_object_object_get_ex(entry,
+                                       "glassTransportOverride",
+                                       &glass_transport_override_obj)) &&
+            json_object_is_type(glass_transport_override_obj, json_type_boolean)) {
+            glass_transport_override = json_object_get_boolean(glass_transport_override_obj);
+            has_glass_override = true;
+        }
+        has_glass_transmission =
+            runtime_scene_bridge_parse_double_field_any(entry,
+                                                        "glass_transmission",
+                                                        "glassTransmission",
+                                                        &glass_transmission);
+        has_glass_ior =
+            runtime_scene_bridge_parse_double_field_any(entry,
+                                                        "glass_ior",
+                                                        "glassIor",
+                                                        &glass_ior);
+        has_glass_absorption_distance =
+            runtime_scene_bridge_parse_double_field_any(entry,
+                                                        "glass_absorption_distance",
+                                                        "glassAbsorptionDistance",
+                                                        &glass_absorption_distance);
+        if ((json_object_object_get_ex(entry, "glass_thin_walled", &glass_thin_walled_obj) ||
+             json_object_object_get_ex(entry, "glassThinWalled", &glass_thin_walled_obj)) &&
+            json_object_is_type(glass_thin_walled_obj, json_type_boolean)) {
+            glass_thin_walled = json_object_get_boolean(glass_thin_walled_obj);
+            has_glass_thin_walled = true;
+        }
         if (!object_id || !object_id[0]) continue;
         for (scene_index = 0;
              scene_index < sceneSettings.objectCount && scene_index < g_last_runtime_object_id_count;
@@ -812,6 +855,33 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
                 if (has_emissive_strength) {
                     sceneSettings.sceneObjects[scene_index].emissiveStrength =
                         fmax(0.0, fmin(1.0, emissive_strength));
+                }
+                if (glass_transport_override ||
+                    has_glass_transmission ||
+                    has_glass_ior ||
+                    has_glass_absorption_distance ||
+                    has_glass_thin_walled) {
+                    SceneObjectSeedGlassTransportOverrideFromMaterial(
+                        &sceneSettings.sceneObjects[scene_index]);
+                    if (has_glass_transmission) {
+                        sceneSettings.sceneObjects[scene_index].glassTransmission =
+                            fmax(0.0, fmin(1.0, glass_transmission));
+                    }
+                    if (has_glass_ior) {
+                        sceneSettings.sceneObjects[scene_index].glassIor =
+                            fmax(1.0, fmin(2.5, glass_ior));
+                    }
+                    if (has_glass_absorption_distance) {
+                        sceneSettings.sceneObjects[scene_index].glassAbsorptionDistance =
+                            fmax(0.25, fmin(8.0, glass_absorption_distance));
+                    }
+                    if (has_glass_thin_walled) {
+                        sceneSettings.sceneObjects[scene_index].glassThinWalled =
+                            glass_thin_walled;
+                    }
+                } else if (has_glass_override && !glass_transport_override) {
+                    SceneObjectClearGlassTransportOverride(
+                        &sceneSettings.sceneObjects[scene_index]);
                 }
                 apply_ray_authoring_object_authored_texture(entry, scene_index, object_id);
                 apply_ray_authoring_object_procedural_texture(entry, scene_index);

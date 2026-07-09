@@ -529,14 +529,18 @@ static bool runtime_material_payload_3d_resolve(int scene_object_index,
         double glass_transmission = payload.transparency;
         double glass_ior = payload.opticalIor;
         double glass_absorption_distance = payload.absorptionDistance;
+        double glass_alpha = object_copy.alpha;
         bool glass_thin_walled = payload.thinWalled;
         if (SceneObjectResolveGlassTransport(&object_copy,
                                              &glass_transmission,
                                              &glass_ior,
                                              &glass_absorption_distance,
                                              &glass_thin_walled)) {
+            if (object_copy.hasGlassTransportOverride) {
+                glass_alpha = 1.0;
+            }
             payload.transparency =
-                runtime_material_payload_3d_clamp01(glass_transmission * object_copy.alpha);
+                runtime_material_payload_3d_clamp01(glass_transmission * glass_alpha);
             payload.opticalIor = glass_ior;
             payload.absorptionDistance =
                 runtime_material_payload_3d_clamp_positive(glass_absorption_distance, 1.0);

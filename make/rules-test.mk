@@ -273,6 +273,15 @@ test-ray-tracing-spatial-caustic-mesh-dielectric-lens-fixture: $(RAY_TRACING_REN
 test-ray-tracing-spatial-caustic-imported-lens-wall-preview: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/run_ray_tracing_spatial_caustic_imported_lens_wall_preview.py --debug-export
 
+test-ray-tracing-spatial-caustic-imported-lens-distance-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_imported_lens_distance_matrix.py --debug-export
+
+test-ray-tracing-spatial-caustic-plano-convex-lens-distance-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_plano_convex_lens_distance_matrix.py --debug-export
+
+test-ray-tracing-spatial-caustic-plano-convex-heatmap-diagnostic: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_plano_convex_heatmap_diagnostic.py --debug-export
+
 test-ray-tracing-spatial-caustic-authored-validation-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/run_ray_tracing_spatial_caustic_authored_validation_matrix.py
 
@@ -292,6 +301,7 @@ RUNTIME_TRIANGLE_BVH_3D_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_light_set_3d.c \
 	$(SRC_DIR)/render/runtime_environment_3d.c \
 	$(SRC_DIR)/render/runtime_triangle_bvh_3d.c \
+	$(SRC_DIR)/render/runtime_triangle_bvh_trace_3d.c \
 	$(SRC_DIR)/render/runtime_volume_3d.c
 
 $(RUNTIME_TRIANGLE_BVH_3D_TEST_BIN): $(RUNTIME_TRIANGLE_BVH_3D_TEST_SRCS)

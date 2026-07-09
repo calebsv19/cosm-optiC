@@ -157,15 +157,49 @@ inside-distance/entry-cosine/exit-cosine ranges, deposit into the volume cache,
 and brighten the mist versus the no-caustic baseline.
 
 `test-ray-tracing-spatial-caustic-imported-lens-wall-preview` is the local S4V
-imported closed-lens wall-composition preview target. It generates a
-high-segment closed runtime mesh sidecar, audits that sidecar for closed
-manifold topology, renders no-caustic and `mesh_dielectric_lens` surface-cache
-cells with a vivid blue receiver wall, and writes the contact sheet, diff, and
-report under `_private_workspace_artifacts/agent_runs/ray_tracing/`. The
-preview gate currently proves scene composition, mesh import/topology, and
-debug readback only; emitted mesh paths, surface-cache deposits, and visible
-wall whitening are reported as explicit preview warnings until the next
-optical-placement/deposition slice turns this into a true wall-caustic proof.
+imported closed-lens wall-caustic proof target. It generates a high-resolution
+closed biconvex runtime mesh sidecar, audits that sidecar for closed manifold
+topology, renders no-caustic and `mesh_dielectric_lens` surface-cache cells
+with a vivid blue receiver wall, and writes the contact sheet, diff, and report
+under `_private_workspace_artifacts/agent_runs/ray_tracing/`. The fixture keeps
+the real light on the optical axis, omits scene-geometry light markers that
+could intercept transport rays, and requires mesh-dielectric path emission,
+surface-cache deposits, and visible wall whitening versus the no-caustic
+baseline. It renders a wall-caustic energy-scale bracket from `0.0005` through
+`0.05` and reports positive-pixel, saturation, percentile, max, mean, and
+centroid metrics so future defaults can use an unsaturated reference instead of
+the old blown-out debug scale. Its original hard-coded visual references were
+captured before broad surface-cache footprints were area-normalized; rerun this
+fixture before treating those exact numeric scale tiers as current defaults.
+
+`test-ray-tracing-spatial-caustic-imported-lens-distance-matrix` is the local
+S4V lens-distance comparison target. It keeps the light and wall fixed, moves
+the imported biconvex lens through six optical-axis `y` positions, and renders
+three calibrated surface-caustic scales per position: `0.001`, `0.0025`, and
+`0.005`. The output matrix is ordered by lens distance in rows and energy scale
+in columns, and the report records emitted paths, deposits, wall positive and
+saturated pixels, percentile/max luma delta, centroid, and approximate
+footprint radius.
+
+`test-ray-tracing-spatial-caustic-plano-convex-lens-distance-matrix` is the
+stronger closed-lens visual proof for S4V. It generates a high-resolution
+closed plano-convex spherical-cap mesh with the curved face toward the light
+and a flat exit face toward the wall, fixes the surface-caustic energy scale at
+`0.0025`, and renders ten optical-axis lens-distance positions. The fixture is
+intended to separate "closed mesh traversal works" from "the lens prescription
+is visually useful" by using a center-thick lens that should show clearer
+distance-dependent wall deposition than the shallow biconvex control.
+
+`test-ray-tracing-spatial-caustic-plano-convex-heatmap-diagnostic` is the
+caustic-only diagnostic for the same plano-convex proof. It renders no-caustic
+baselines, subtracts them from fixed-energy caustic renders, and writes a
+heatmap sheet with rendered preview, `caustic_on - caustic_off` heatmaps at
+surface footprint scales `1.0`, `2.0`, and `5.0`, plus a debug post-exit
+receiver-crossing hit map from `caustic_transport_debug_paths.jsonl`. This is
+the preferred fixture for diagnosing whether a visual wall blob is caused by
+post-exit ray distribution or by broad surface-cache splat/composite behavior.
+The report also emits aperture-sample and receiver-hit symmetry errors so
+accepted path bias is visible before further lens-geometry tuning.
 
 `test-ray-tracing-emissive-light-preview-matrix` is the local emitter-light
 preview proof target. It renders flat wall-panel, complex emissive prism, and

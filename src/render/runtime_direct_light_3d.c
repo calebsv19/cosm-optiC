@@ -1,6 +1,7 @@
 #include "render/runtime_direct_light_3d.h"
 
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 #ifndef M_PI
@@ -18,6 +19,7 @@ static const double kRuntimeDirectLight3DTopFillIntensityScale = 0.08;
 static const double kRuntimeDirectLight3DTopFillIntensityMax = 0.75;
 static const double kRuntimeDirectLight3DContributionEpsilon = 1e-8;
 static const double kRuntimeDirectLight3DVisibilityClearLuma = 0.995;
+static const double kRuntimeDirectLight3DVisibilityProbeStrictClearLuma = 0.9999;
 static const double kRuntimeDirectLight3DVisibilityBlockedLuma = 0.005;
 static const double kRuntimeDirectLight3DVisibilityStablePartialSpan = 0.02;
 static const double kRuntimeDirectLight3DMaterialEmitterRectLowImportancePeak = 0.01;
@@ -121,6 +123,12 @@ static bool runtime_direct_light_3d_sample_contributes(double light_intensity,
                                                        double attenuation,
                                                        double ndotl) {
     return light_intensity * attenuation * ndotl > kRuntimeDirectLight3DContributionEpsilon;
+}
+
+static bool runtime_direct_light_3d_clear_visible_decision_probe_enabled(void) {
+    const char* value =
+        getenv("RAY_TRACING_DIRECT_LIGHT_CLEAR_VISIBLE_DECISION_SAMPLE_PROBE");
+    return value && value[0] != '\0' && value[0] != '0';
 }
 
 static Vec3 runtime_direct_light_3d_default_tangent(Vec3 normal) {
@@ -243,10 +251,34 @@ static int runtime_direct_light_3d_area_light_decision_count_for_samples(int sam
     return RUNTIME_DIRECT_LIGHT_3D_AREA_LIGHT_DECISION_COUNT;
 }
 
+static int runtime_direct_light_3d_clear_visible_decision_count_for_samples(
+    int sample_count,
+    int default_decision_count,
+    bool receiver_is_transparent) {
+    if (!runtime_direct_light_3d_clear_visible_decision_probe_enabled()) {
+        return default_decision_count;
+    }
+    if (receiver_is_transparent) {
+        return default_decision_count;
+    }
+    if (sample_count <= 2) {
+        return sample_count;
+    }
+    return 2;
+}
+
+static bool runtime_direct_light_3d_payload_is_transparent(
+    const RuntimeMaterialPayload3D* payload) {
+    return payload && payload->valid &&
+           (payload->materialId == MATERIAL_PRESET_TRANSPARENT ||
+            payload->transparency > 1.0e-6);
+}
+
 static RuntimeRenderTraceCostDirectLightStopReason3D
 runtime_direct_light_3d_area_light_stop_reason(
     int evaluated_count,
     int decision_count,
+    int clear_visible_decision_count,
     int max_count,
     int clear_visible_count,
     int clear_blocked_count,
@@ -255,6 +287,14 @@ runtime_direct_light_3d_area_light_stop_reason(
     double transmittance_luma_max) {
     if (decision_count <= 0 || decision_count >= max_count) {
         return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_FULL_SAMPLE_COUNT;
+    }
+    if (clear_visible_decision_count > 0 &&
+        clear_visible_decision_count < decision_count &&
+        evaluated_count == clear_visible_decision_count &&
+        clear_visible_count == clear_visible_decision_count &&
+        visibility_trace_count == clear_visible_decision_count &&
+        transmittance_luma_min >= kRuntimeDirectLight3DVisibilityProbeStrictClearLuma) {
+        return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_ALL_CLEAR;
     }
     if (evaluated_count != decision_count) {
         return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_FULL_SAMPLE_COUNT;
@@ -277,6 +317,7 @@ runtime_direct_light_3d_area_light_stop_reason(
 static bool runtime_direct_light_3d_area_light_update_stop_reason(
     int evaluated_count,
     int decision_count,
+    int clear_visible_decision_count,
     int max_count,
     int clear_visible_count,
     int clear_blocked_count,
@@ -287,6 +328,7 @@ static bool runtime_direct_light_3d_area_light_update_stop_reason(
     RuntimeRenderTraceCostDirectLightStopReason3D reason =
         runtime_direct_light_3d_area_light_stop_reason(evaluated_count,
                                                        decision_count,
+                                                       clear_visible_decision_count,
                                                        max_count,
                                                        clear_visible_count,
                                                        clear_blocked_count,
@@ -693,6 +735,7 @@ static void runtime_direct_light_3d_accumulate_source(
     const RuntimeScene3D* scene,
     const HitInfo3D* hit,
     const RuntimeLightSource3D* source,
+    bool receiver_is_transparent,
     RuntimeRenderTraceCostDirectLightCaller3D caller,
     const RuntimeNative3DSamplingContext* sampling,
     RuntimeDirectLight3DResult* io_result,
@@ -713,6 +756,7 @@ static void runtime_direct_light_3d_accumulate_source(
     bool source_visible = false;
     int light_sample_count = 0;
     int light_sample_decision_count = 0;
+    int clear_visible_decision_count = 0;
     int light_sample_evaluated_count = 0;
     int clear_visible_sample_count = 0;
     int clear_blocked_sample_count = 0;
@@ -766,6 +810,11 @@ static void runtime_direct_light_3d_accumulate_source(
     light_sample_count = runtime_direct_light_3d_source_area_light_sample_count(source, &light);
     light_sample_decision_count =
         runtime_direct_light_3d_area_light_decision_count_for_samples(light_sample_count);
+    clear_visible_decision_count =
+        runtime_direct_light_3d_clear_visible_decision_count_for_samples(
+            light_sample_count,
+            light_sample_decision_count,
+            receiver_is_transparent);
     if (ndotl > 0.0 && light_sample_count > 0) {
         for (int i = 0; i < light_sample_count; ++i) {
             RuntimeVisibility3DTransmittance transmittance = {0};
@@ -792,6 +841,7 @@ static void runtime_direct_light_3d_accumulate_source(
                 if (runtime_direct_light_3d_area_light_update_stop_reason(
                         light_sample_evaluated_count,
                         light_sample_decision_count,
+                        clear_visible_decision_count,
                         light_sample_count,
                         clear_visible_sample_count,
                         clear_blocked_sample_count,
@@ -822,6 +872,7 @@ static void runtime_direct_light_3d_accumulate_source(
                 if (runtime_direct_light_3d_area_light_update_stop_reason(
                         light_sample_evaluated_count,
                         light_sample_decision_count,
+                        clear_visible_decision_count,
                         light_sample_count,
                         clear_visible_sample_count,
                         clear_blocked_sample_count,
@@ -838,6 +889,7 @@ static void runtime_direct_light_3d_accumulate_source(
                 if (runtime_direct_light_3d_area_light_update_stop_reason(
                         light_sample_evaluated_count,
                         light_sample_decision_count,
+                        clear_visible_decision_count,
                         light_sample_count,
                         clear_visible_sample_count,
                         clear_blocked_sample_count,
@@ -858,6 +910,7 @@ static void runtime_direct_light_3d_accumulate_source(
                 if (runtime_direct_light_3d_area_light_update_stop_reason(
                         light_sample_evaluated_count,
                         light_sample_decision_count,
+                        clear_visible_decision_count,
                         light_sample_count,
                         clear_visible_sample_count,
                         clear_blocked_sample_count,
@@ -920,6 +973,7 @@ static void runtime_direct_light_3d_accumulate_source(
             if (runtime_direct_light_3d_area_light_update_stop_reason(
                     light_sample_evaluated_count,
                     light_sample_decision_count,
+                    clear_visible_decision_count,
                     light_sample_count,
                     clear_visible_sample_count,
                     clear_blocked_sample_count,
@@ -1134,6 +1188,8 @@ static bool runtime_direct_light_3d_shade_hit_with_light_set_and_payload(
     double light_b = 0.0;
     double top_fill = 0.0;
     bool any_light_sample_visible = false;
+    const bool receiver_is_transparent =
+        runtime_direct_light_3d_payload_is_transparent(payload);
 
     if (!scene || !hit || !out_result) return false;
     if (!light_set) return false;
@@ -1149,6 +1205,7 @@ static bool runtime_direct_light_3d_shade_hit_with_light_set_and_payload(
         runtime_direct_light_3d_accumulate_source(scene,
                                                   hit,
                                                   source,
+                                                  receiver_is_transparent,
                                                   caller,
                                                   sampling,
                                                   &result,

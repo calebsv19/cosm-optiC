@@ -74,9 +74,11 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/editor/scene_editor_material_graph.o \
 	$(BUILD_DIR)/editor/scene_editor_material_stack.o \
 	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \
+	$(BUILD_DIR)/render/runtime_native_3d_async_render_job.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_output.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_prepare.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render_request_snapshot.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_stats.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading_basic.o \
@@ -93,6 +95,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_dynamic_geometry_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
+	$(BUILD_DIR)/render/runtime_frame_dataflow_ledger_3d.o \
 	$(BUILD_DIR)/render/runtime_render_trace_cost_ledger_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \
 	$(BUILD_DIR)/render/runtime_environment_3d.o \
@@ -183,6 +186,7 @@ RAY_TRACING_RENDER_HEADLESS_DEPS = \
 	$(BUILD_DIR)/tools/make_video.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_caustic_summary.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_dynamic_summary.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_frame_dataflow_summary.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_frame_analysis.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_frame_output.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_object_audit_prepare.o \
@@ -246,6 +250,7 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_diffuse_temporal.o \
 	$(BUILD_DIR)/tests/test_runtime_emission_transparency.o \
 	$(BUILD_DIR)/tests/test_runtime_native_3d_denoise.o \
+	$(BUILD_DIR)/tests/test_runtime_native_3d_async_render_job.o \
 	$(BUILD_DIR)/tests/test_runtime_native_3d_render.o \
 	$(BUILD_DIR)/tests/test_runtime_native_3d_render_live_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_native_3d_render_prepared_suite.o \
@@ -354,6 +359,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading_disney_v2.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading_shared.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_output.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render_request_snapshot.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_stats.o \
 	$(BUILD_DIR)/render/runtime_native_3d_progress_hud.o \
 	$(BUILD_DIR)/render/runtime_native_3d_preview_reconstruction.o \
@@ -365,6 +371,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_dynamic_geometry_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
+	$(BUILD_DIR)/render/runtime_frame_dataflow_ledger_3d.o \
 	$(BUILD_DIR)/render/runtime_render_trace_cost_ledger_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \
 	$(BUILD_DIR)/render/runtime_environment_3d.o \

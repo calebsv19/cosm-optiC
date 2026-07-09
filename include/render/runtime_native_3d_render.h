@@ -22,6 +22,8 @@
 #define RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL 3
 #define RUNTIME_NATIVE_3D_RADIANCE_CHANNELS 4
 #define RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES 4
+#define RUNTIME_NATIVE_3D_ADAPTIVE_REGION_COUNT 4
+#define RUNTIME_NATIVE_3D_TEMPORAL_BUDGET_BUCKET_COUNT 4
 
 typedef struct RuntimeNative3DFeatureBuffer RuntimeNative3DFeatureBuffer;
 
@@ -141,6 +143,13 @@ typedef struct {
     int temporalHostFullResolveCount;
     int temporalFinalPreviewPresentCount;
     int temporalHistoryPromoteCount;
+    uint64_t temporalDirtyPreviewHostPixels;
+    uint64_t temporalDirtyPreviewHostBytes;
+    uint64_t temporalFinalResolveHostPixels;
+    uint64_t temporalFinalResolveHostBytes;
+    uint64_t temporalHistorySeedHostBytes;
+    uint64_t temporalHistoryPromoteHostBytes;
+    uint64_t temporalFinalPreviewPresentHostBytes;
     int temporalAdaptiveStateMeasuredPixels;
     int temporalAdaptiveStateStablePixels;
     int temporalAdaptiveStateActivePixels;
@@ -162,12 +171,71 @@ typedef struct {
     int temporalAdaptiveStateDirectLightStablePartialPixels;
     int temporalAdaptiveStateDirectLightMixedPartialPixels;
     int temporalAdaptiveStateDirectLightBoundaryRiskPixels;
+    int temporalAdaptiveEarlyStopEligiblePixels;
+    int temporalAdaptiveEarlyStopHeldPixels;
+    int temporalAdaptiveEarlyStopHoldProbePixels;
+    int temporalAdaptiveEarlyStopHoldHighRiskPixels;
+    int temporalAdaptiveEarlyStopHoldActivityRiskPixels;
+    int temporalAdaptiveEarlyStopHoldMaterialRiskPixels;
+    int temporalAdaptiveEarlyStopHoldTransparentRiskPixels;
+    int temporalAdaptiveEarlyStopHoldGeometryEdgeRiskPixels;
+    int temporalAdaptiveEarlyStopHoldDirectLightRiskPixels;
+    int temporalAdaptiveEarlyStopBaseActivePixels;
+    int temporalAdaptiveEarlyStopPaddingHoldPixels;
+    int temporalAdaptiveEarlyStopPaddingHoldHighSeedPixels;
+    int temporalAdaptiveEarlyStopPaddingHoldMediumSeedPixels;
+    int temporalAdaptiveEarlyStopActiveAfterPaddingPixels;
+    int temporalAdaptiveEarlyStopEligibleRegionCounts[RUNTIME_NATIVE_3D_ADAPTIVE_REGION_COUNT];
+    int temporalAdaptiveEarlyStopHeldRegionCounts[RUNTIME_NATIVE_3D_ADAPTIVE_REGION_COUNT];
+    int temporalAdaptiveEarlyStopPaddingHoldRegionCounts[RUNTIME_NATIVE_3D_ADAPTIVE_REGION_COUNT];
+    int temporalAdaptiveBudgetBucketPixels[RUNTIME_NATIVE_3D_TEMPORAL_BUDGET_BUCKET_COUNT];
+    int temporalAdaptiveBudgetActiveBucketPixels[RUNTIME_NATIVE_3D_TEMPORAL_BUDGET_BUCKET_COUNT];
+    int temporalAdaptiveBudgetEligibleBucketPixels[RUNTIME_NATIVE_3D_TEMPORAL_BUDGET_BUCKET_COUNT];
+    int temporalAdaptiveBudgetHeldBucketPixels[RUNTIME_NATIVE_3D_TEMPORAL_BUDGET_BUCKET_COUNT];
+    int temporalAdaptiveBudgetClearVisibleEligiblePixels;
+    int temporalAdaptiveBudgetClearVisibleHeldPixels;
+    int temporalAdaptiveBudgetPartialHeldPixels;
+    int temporalAdaptiveBudgetTransparentHeldPixels;
+    int temporalAdaptiveBudgetGeometryHeldPixels;
+    int temporalAdaptiveBudgetActivityHeldPixels;
+    int temporalAdaptiveBudgetHeatmapEnabled;
     int temporalAdaptiveStateMixedRiskTiles;
     double temporalAdaptiveStateRiskSum;
     double temporalAdaptiveStateRiskMax;
     int temporalMeasuredTileJobs;
     int temporalAdaptiveSplitParentCount;
     int temporalAdaptiveChildTileCount;
+    int temporalTileSchedulerJobArrayOwnerCount;
+    int temporalTileSchedulerParentMetricArrayOwnerCount;
+    int temporalTileSchedulerProgressTileArrayOwnerCount;
+    int temporalTileSchedulerCompletionQueueOwnerCount;
+    int temporalTileSchedulerWorkerPoolOwnerCount;
+    int temporalTileSchedulerCancelTokenBound;
+    int temporalTileSchedulerCancelCheckCount;
+    int temporalTileSchedulerCancelRequestedCount;
+    int temporalTileSchedulerCancelBeforeDispatchCount;
+    int temporalTileSchedulerCancelDuringWaitCount;
+    int temporalTileSchedulerCancelBeforeFinalResolveCount;
+    int temporalTileSchedulerFinalResolveBlockedByCancelCount;
+    int temporalTileSchedulerWorkerDrainShutdownCount;
+    int temporalTileSchedulerWorkerCancelShutdownCount;
+    uint64_t temporalTileSchedulerCancelGeneration;
+    uint64_t renderUnitScratchOwnerCount;
+    uint64_t renderUnitScratchSetupCalls;
+    uint64_t renderUnitScratchCacheAcquireHits;
+    uint64_t renderUnitScratchCacheAcquireMisses;
+    uint64_t renderUnitRadianceScratchResizeCalls;
+    uint64_t renderUnitRadianceScratchReuseCalls;
+    uint64_t renderUnitRadianceScratchClearBytes;
+    uint64_t renderUnitRadianceScratchRequestedBytesMax;
+    uint64_t renderUnitRadianceScratchCapacityBytesMax;
+    uint64_t renderUnitTemporalScratchCapacityBytesMax;
+    uint64_t renderUnitAdaptiveMaskScratchCapacityBytesMax;
+    uint64_t renderUnitAdaptiveStateScratchCapacityBytesMax;
+    uint64_t renderUnitFeatureScratchCapacityBytesMax;
+    uint64_t renderUnitScratchOwnedBytes;
+    uint64_t renderUnitScratchMaxOwnerBytes;
+    uint64_t renderUnitScratchMaxFrameOwnedBytes;
     int temporalSlowTileOriginX;
     int temporalSlowTileOriginY;
     int temporalSlowTileWidth;

@@ -98,7 +98,16 @@
     }
   ],
   "materials": [],
-  "lights": [],
+  "lights": [
+    {
+      "id": "transparent_stack_key",
+      "kind": "sphere",
+      "position": { "x": -0.8, "y": -1.45, "z": 8.0 },
+      "radius": 0.16,
+      "intensity": 6.4,
+      "color": { "r": 1.0, "g": 1.0, "b": 1.0 }
+    }
+  ],
   "cameras": [],
   "extensions": {
     "ray_tracing": {

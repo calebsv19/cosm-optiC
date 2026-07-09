@@ -91,6 +91,11 @@ typedef struct RayTracingHeadlessPreflight {
     double registered_light_emissive_area;
     double registered_light_emissive_weight;
     double registered_light_emissive_proxy_radius_max;
+    double registered_light_first_position_x;
+    double registered_light_first_position_y;
+    double registered_light_first_position_z;
+    double registered_light_first_radius;
+    double registered_light_first_intensity;
     double registered_light_first_color_r;
     double registered_light_first_color_g;
     double registered_light_first_color_b;
@@ -207,6 +212,10 @@ typedef struct RayTracingTemporalProgressContext {
 void ray_tracing_render_headless_usage(const char *argv0);
 void ray_tracing_headless_write_startup_load_timing_matrix(
     FILE* file,
+    const RayTracingHeadlessPreflight* preflight);
+void ray_tracing_headless_write_frame_dataflow_state_ledger(
+    FILE* file,
+    const RayTracingAgentRenderRequest* request,
     const RayTracingHeadlessPreflight* preflight);
 void ray_tracing_headless_write_caustic_state_summary(
     FILE *file,

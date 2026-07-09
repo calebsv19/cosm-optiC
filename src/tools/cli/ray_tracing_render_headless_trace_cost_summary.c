@@ -2,6 +2,283 @@
 
 #include <stdio.h>
 
+static void ray_tracing_headless_write_direct_light_source_kind_map(
+    FILE* file,
+    const char* key,
+    const uint64_t* values,
+    const char* indent,
+    const char* suffix) {
+    fprintf(file, "%s\"%s\": {\n", indent, key);
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_KIND_COUNT; ++i) {
+        fprintf(file,
+                "%s  \"%s\": %llu%s\n",
+                indent,
+                RuntimeRenderTraceCostDirectLightSourceKind3DLabel(
+                    (RuntimeRenderTraceCostDirectLightSourceKind3D)i),
+                (unsigned long long)(values ? values[i] : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_KIND_COUNT ? "," : "");
+    }
+    fprintf(file, "%s}%s\n", indent, suffix ? suffix : "");
+}
+
+static void ray_tracing_headless_write_transmission_screen_region_map(
+    FILE* file,
+    const char* key,
+    const uint64_t* values,
+    const char* indent,
+    const char* suffix) {
+    fprintf(file, "%s\"%s\": {\n", indent, key);
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_COUNT; ++i) {
+        fprintf(file,
+                "%s  \"%s\": %llu%s\n",
+                indent,
+                RuntimeRenderTraceCostTransmissionScreenRegion3DLabel(
+                    (RuntimeRenderTraceCostTransmissionScreenRegion3D)i),
+                (unsigned long long)(values ? values[i] : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_COUNT ? "," : "");
+    }
+    fprintf(file, "%s}%s\n", indent, suffix ? suffix : "");
+}
+
+static void ray_tracing_headless_write_transmission_pixel_stability_map(
+    FILE* file,
+    const char* key,
+    const uint64_t* values,
+    const char* indent,
+    const char* suffix) {
+    fprintf(file, "%s\"%s\": {\n", indent, key);
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_COUNT; ++i) {
+        fprintf(file,
+                "%s  \"%s\": %llu%s\n",
+                indent,
+                RuntimeRenderTraceCostTransmissionPixelStability3DLabel(
+                    (RuntimeRenderTraceCostTransmissionPixelStability3D)i),
+                (unsigned long long)(values ? values[i] : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_COUNT ? "," : "");
+    }
+    fprintf(file, "%s}%s\n", indent, suffix ? suffix : "");
+}
+
+static void ray_tracing_headless_write_transmission_source_screen_region_map(
+    FILE* file,
+    const char* key,
+    const uint64_t values[RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT]
+                         [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_COUNT],
+    const char* indent,
+    const char* suffix) {
+    fprintf(file, "%s\"%s\": {\n", indent, key);
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT; ++i) {
+        fprintf(file,
+                "%s  \"%s\": {",
+                indent,
+                RuntimeRenderTraceCostTransmissionSource3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSource3D)i));
+        for (int j = 0; j < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_COUNT; ++j) {
+            fprintf(file,
+                    " \"%s\": %llu%s",
+                    RuntimeRenderTraceCostTransmissionScreenRegion3DLabel(
+                        (RuntimeRenderTraceCostTransmissionScreenRegion3D)j),
+                    (unsigned long long)(values ? values[i][j] : 0u),
+                    j + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_COUNT ? "," : "");
+        }
+        fprintf(file,
+                " }%s\n",
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT ? "," : "");
+    }
+    fprintf(file, "%s}%s\n", indent, suffix ? suffix : "");
+}
+
+static void ray_tracing_headless_write_transmission_source_pixel_stability_map(
+    FILE* file,
+    const char* key,
+    const uint64_t values[RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT]
+                         [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_COUNT],
+    const char* indent,
+    const char* suffix) {
+    fprintf(file, "%s\"%s\": {\n", indent, key);
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT; ++i) {
+        fprintf(file,
+                "%s  \"%s\": {",
+                indent,
+                RuntimeRenderTraceCostTransmissionSource3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSource3D)i));
+        for (int j = 0; j < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_COUNT; ++j) {
+            fprintf(file,
+                    " \"%s\": %llu%s",
+                    RuntimeRenderTraceCostTransmissionPixelStability3DLabel(
+                        (RuntimeRenderTraceCostTransmissionPixelStability3D)j),
+                    (unsigned long long)(values ? values[i][j] : 0u),
+                    j + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_COUNT ? "," : "");
+        }
+        fprintf(file,
+                " }%s\n",
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT ? "," : "");
+    }
+    fprintf(file, "%s}%s\n", indent, suffix ? suffix : "");
+}
+
+static void ray_tracing_headless_write_direct_light_origin_map(
+    FILE* file,
+    const char* key,
+    const uint64_t* values,
+    const char* indent,
+    const char* suffix) {
+    fprintf(file, "%s\"%s\": {\n", indent, key);
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_ORIGIN_COUNT; ++i) {
+        fprintf(file,
+                "%s  \"%s\": %llu%s\n",
+                indent,
+                RuntimeRenderTraceCostDirectLightSourceOrigin3DLabel(
+                    (RuntimeRenderTraceCostDirectLightSourceOrigin3D)i),
+                (unsigned long long)(values ? values[i] : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_ORIGIN_COUNT ? "," : "");
+    }
+    fprintf(file, "%s}%s\n", indent, suffix ? suffix : "");
+}
+
+static void ray_tracing_headless_write_direct_light_emission_map(
+    FILE* file,
+    const char* key,
+    const uint64_t* values,
+    const char* indent,
+    const char* suffix) {
+    fprintf(file, "%s\"%s\": {\n", indent, key);
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_EMISSION_COUNT; ++i) {
+        fprintf(file,
+                "%s  \"%s\": %llu%s\n",
+                indent,
+                RuntimeRenderTraceCostDirectLightEmissionProfile3DLabel(
+                    (RuntimeRenderTraceCostDirectLightEmissionProfile3D)i),
+                (unsigned long long)(values ? values[i] : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_EMISSION_COUNT ? "," : "");
+    }
+    fprintf(file, "%s}%s\n", indent, suffix ? suffix : "");
+}
+
+static void ray_tracing_headless_write_direct_light_outcome_map(
+    FILE* file,
+    const char* key,
+    const uint64_t* values,
+    const char* indent,
+    const char* suffix) {
+    fprintf(file, "%s\"%s\": {\n", indent, key);
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_COUNT; ++i) {
+        fprintf(file,
+                "%s  \"%s\": %llu%s\n",
+                indent,
+                RuntimeRenderTraceCostDirectLightOutcome3DLabel(
+                    (RuntimeRenderTraceCostDirectLightOutcome3D)i),
+                (unsigned long long)(values ? values[i] : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_COUNT ? "," : "");
+    }
+    fprintf(file, "%s}%s\n", indent, suffix ? suffix : "");
+}
+
+static void ray_tracing_headless_write_direct_light_stop_map(
+    FILE* file,
+    const char* key,
+    const uint64_t* values,
+    const char* indent,
+    const char* suffix) {
+    fprintf(file, "%s\"%s\": {\n", indent, key);
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_COUNT; ++i) {
+        fprintf(file,
+                "%s  \"%s\": %llu%s\n",
+                indent,
+                RuntimeRenderTraceCostDirectLightStopReason3DLabel(
+                    (RuntimeRenderTraceCostDirectLightStopReason3D)i),
+                (unsigned long long)(values ? values[i] : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_COUNT ? "," : "");
+    }
+    fprintf(file, "%s}%s\n", indent, suffix ? suffix : "");
+}
+
+static void ray_tracing_headless_write_direct_light_sample_map(
+    FILE* file,
+    const char* key,
+    const uint64_t* values,
+    const char* indent,
+    const char* suffix) {
+    fprintf(file, "%s\"%s\": {\n", indent, key);
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SAMPLES_COUNT; ++i) {
+        fprintf(file,
+                "%s  \"%s\": %llu%s\n",
+                indent,
+                RuntimeRenderTraceCostDirectLightSampleBucket3DLabel(
+                    (RuntimeRenderTraceCostDirectLightSampleBucket3D)i),
+                (unsigned long long)(values ? values[i] : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SAMPLES_COUNT ? "," : "");
+    }
+    fprintf(file, "%s}%s\n", indent, suffix ? suffix : "");
+}
+
+static void ray_tracing_headless_write_direct_light_distance_map(
+    FILE* file,
+    const char* key,
+    const uint64_t* values,
+    const char* indent,
+    const char* suffix) {
+    fprintf(file, "%s\"%s\": {\n", indent, key);
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_COUNT; ++i) {
+        fprintf(file,
+                "%s  \"%s\": %llu%s\n",
+                indent,
+                RuntimeRenderTraceCostDirectLightDistanceBucket3DLabel(
+                    (RuntimeRenderTraceCostDirectLightDistanceBucket3D)i),
+                (unsigned long long)(values ? values[i] : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_COUNT ? "," : "");
+    }
+    fprintf(file, "%s}%s\n", indent, suffix ? suffix : "");
+}
+
+static void ray_tracing_headless_write_direct_light_importance_map(
+    FILE* file,
+    const char* key,
+    const uint64_t* values,
+    const char* indent,
+    const char* suffix) {
+    fprintf(file, "%s\"%s\": {\n", indent, key);
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_COUNT; ++i) {
+        fprintf(file,
+                "%s  \"%s\": %llu%s\n",
+                indent,
+                RuntimeRenderTraceCostDirectLightImportanceBucket3DLabel(
+                    (RuntimeRenderTraceCostDirectLightImportanceBucket3D)i),
+                (unsigned long long)(values ? values[i] : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_COUNT ? "," : "");
+    }
+    fprintf(file, "%s}%s\n", indent, suffix ? suffix : "");
+}
+
+static void ray_tracing_headless_write_direct_light_distance_importance_matrix(
+    FILE* file,
+    const char* key,
+    const uint64_t values[RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_COUNT]
+                         [RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_COUNT],
+    const char* indent,
+    const char* suffix) {
+    fprintf(file, "%s\"%s\": {\n", indent, key);
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_COUNT; ++i) {
+        fprintf(file,
+                "%s  \"%s\": {",
+                indent,
+                RuntimeRenderTraceCostDirectLightDistanceBucket3DLabel(
+                    (RuntimeRenderTraceCostDirectLightDistanceBucket3D)i));
+        for (int j = 0; j < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_COUNT; ++j) {
+            fprintf(file,
+                    " \"%s\": %llu%s",
+                    RuntimeRenderTraceCostDirectLightImportanceBucket3DLabel(
+                        (RuntimeRenderTraceCostDirectLightImportanceBucket3D)j),
+                    (unsigned long long)(values ? values[i][j] : 0u),
+                    j + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_COUNT ? "," : "");
+        }
+        fprintf(file,
+                " }%s\n",
+                i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_COUNT ? "," : "");
+    }
+    fprintf(file, "%s}%s\n", indent, suffix ? suffix : "");
+}
+
 void ray_tracing_headless_write_render_trace_cost_ledger(
     FILE* file,
     const RayTracingHeadlessPreflight* preflight) {
@@ -117,6 +394,474 @@ void ray_tracing_headless_write_render_trace_cost_ledger(
                 i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT ? "," : "");
     }
     fprintf(file, "      },\n");
+    fprintf(file, "      \"sample_index_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostTransmissionSampleIndexBucket3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSampleIndexBucket3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->transmissionPathPolicy.sampleIndexCounts[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"source_sample_index_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": {",
+                RuntimeRenderTraceCostTransmissionSource3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSource3D)i));
+        for (int j = 0; j < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_COUNT; ++j) {
+            fprintf(file,
+                    " \"%s\": %llu%s",
+                    RuntimeRenderTraceCostTransmissionSampleIndexBucket3DLabel(
+                        (RuntimeRenderTraceCostTransmissionSampleIndexBucket3D)j),
+                    (unsigned long long)(ledger
+                                             ? ledger->transmissionPathPolicy
+                                                   .sourceSampleIndexCounts[i][j]
+                                             : 0u),
+                    j + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_COUNT ? "," : "");
+        }
+        fprintf(file,
+                " }%s\n",
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"contributing_samples_by_index\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostTransmissionSampleIndexBucket3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSampleIndexBucket3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->transmissionPathPolicy
+                                               .contributingSamplesByIndex[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"receiver_samples_by_index\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostTransmissionSampleIndexBucket3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSampleIndexBucket3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->transmissionPathPolicy
+                                               .receiverSamplesByIndex[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"no_hit_samples_by_index\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostTransmissionSampleIndexBucket3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSampleIndexBucket3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->transmissionPathPolicy
+                                               .noHitSamplesByIndex[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"zero_contribution_samples_by_index\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostTransmissionSampleIndexBucket3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSampleIndexBucket3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->transmissionPathPolicy
+                                               .zeroContributionSamplesByIndex[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"source_contributing_samples_by_index\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": {",
+                RuntimeRenderTraceCostTransmissionSource3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSource3D)i));
+        for (int j = 0; j < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_COUNT; ++j) {
+            fprintf(file,
+                    " \"%s\": %llu%s",
+                    RuntimeRenderTraceCostTransmissionSampleIndexBucket3DLabel(
+                        (RuntimeRenderTraceCostTransmissionSampleIndexBucket3D)j),
+                    (unsigned long long)(ledger
+                                             ? ledger->transmissionPathPolicy
+                                                   .sourceContributingSamplesByIndex[i][j]
+                                             : 0u),
+                    j + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_COUNT ? "," : "");
+        }
+        fprintf(file,
+                " }%s\n",
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"source_receiver_samples_by_index\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": {",
+                RuntimeRenderTraceCostTransmissionSource3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSource3D)i));
+        for (int j = 0; j < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_COUNT; ++j) {
+            fprintf(file,
+                    " \"%s\": %llu%s",
+                    RuntimeRenderTraceCostTransmissionSampleIndexBucket3DLabel(
+                        (RuntimeRenderTraceCostTransmissionSampleIndexBucket3D)j),
+                    (unsigned long long)(ledger
+                                             ? ledger->transmissionPathPolicy
+                                                   .sourceReceiverSamplesByIndex[i][j]
+                                             : 0u),
+                    j + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_COUNT ? "," : "");
+        }
+        fprintf(file,
+                " }%s\n",
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"source_no_hit_samples_by_index\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": {",
+                RuntimeRenderTraceCostTransmissionSource3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSource3D)i));
+        for (int j = 0; j < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_COUNT; ++j) {
+            fprintf(file,
+                    " \"%s\": %llu%s",
+                    RuntimeRenderTraceCostTransmissionSampleIndexBucket3DLabel(
+                        (RuntimeRenderTraceCostTransmissionSampleIndexBucket3D)j),
+                    (unsigned long long)(ledger
+                                             ? ledger->transmissionPathPolicy
+                                                   .sourceNoHitSamplesByIndex[i][j]
+                                             : 0u),
+                    j + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_COUNT ? "," : "");
+        }
+        fprintf(file,
+                " }%s\n",
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"source_zero_contribution_samples_by_index\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": {",
+                RuntimeRenderTraceCostTransmissionSource3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSource3D)i));
+        for (int j = 0; j < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_COUNT; ++j) {
+            fprintf(file,
+                    " \"%s\": %llu%s",
+                    RuntimeRenderTraceCostTransmissionSampleIndexBucket3DLabel(
+                        (RuntimeRenderTraceCostTransmissionSampleIndexBucket3D)j),
+                    (unsigned long long)(ledger
+                                             ? ledger->transmissionPathPolicy
+                                                   .sourceZeroContributionSamplesByIndex[i][j]
+                                             : 0u),
+                    j + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_COUNT ? "," : "");
+        }
+        fprintf(file,
+                " }%s\n",
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"alignment_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostTransmissionAlignmentBucket3DLabel(
+                    (RuntimeRenderTraceCostTransmissionAlignmentBucket3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->transmissionPathPolicy.alignmentCounts[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"source_alignment_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": {",
+                RuntimeRenderTraceCostTransmissionSource3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSource3D)i));
+        for (int j = 0; j < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_COUNT; ++j) {
+            fprintf(file,
+                    " \"%s\": %llu%s",
+                    RuntimeRenderTraceCostTransmissionAlignmentBucket3DLabel(
+                        (RuntimeRenderTraceCostTransmissionAlignmentBucket3D)j),
+                    (unsigned long long)(ledger
+                                             ? ledger->transmissionPathPolicy
+                                                   .sourceAlignmentCounts[i][j]
+                                             : 0u),
+                    j + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_COUNT ? "," : "");
+        }
+        fprintf(file,
+                " }%s\n",
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"contributing_samples_by_alignment\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostTransmissionAlignmentBucket3DLabel(
+                    (RuntimeRenderTraceCostTransmissionAlignmentBucket3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->transmissionPathPolicy
+                                               .contributingSamplesByAlignment[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"receiver_samples_by_alignment\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostTransmissionAlignmentBucket3DLabel(
+                    (RuntimeRenderTraceCostTransmissionAlignmentBucket3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->transmissionPathPolicy
+                                               .receiverSamplesByAlignment[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"no_hit_samples_by_alignment\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostTransmissionAlignmentBucket3DLabel(
+                    (RuntimeRenderTraceCostTransmissionAlignmentBucket3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->transmissionPathPolicy
+                                               .noHitSamplesByAlignment[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"zero_contribution_samples_by_alignment\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostTransmissionAlignmentBucket3DLabel(
+                    (RuntimeRenderTraceCostTransmissionAlignmentBucket3D)i),
+                (unsigned long long)(ledger
+                                         ? ledger->transmissionPathPolicy
+                                               .zeroContributionSamplesByAlignment[i]
+                                         : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"source_contributing_samples_by_alignment\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": {",
+                RuntimeRenderTraceCostTransmissionSource3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSource3D)i));
+        for (int j = 0; j < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_COUNT; ++j) {
+            fprintf(file,
+                    " \"%s\": %llu%s",
+                    RuntimeRenderTraceCostTransmissionAlignmentBucket3DLabel(
+                        (RuntimeRenderTraceCostTransmissionAlignmentBucket3D)j),
+                    (unsigned long long)(ledger
+                                             ? ledger->transmissionPathPolicy
+                                                   .sourceContributingSamplesByAlignment[i][j]
+                                             : 0u),
+                    j + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_COUNT ? "," : "");
+        }
+        fprintf(file,
+                " }%s\n",
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"source_receiver_samples_by_alignment\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": {",
+                RuntimeRenderTraceCostTransmissionSource3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSource3D)i));
+        for (int j = 0; j < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_COUNT; ++j) {
+            fprintf(file,
+                    " \"%s\": %llu%s",
+                    RuntimeRenderTraceCostTransmissionAlignmentBucket3DLabel(
+                        (RuntimeRenderTraceCostTransmissionAlignmentBucket3D)j),
+                    (unsigned long long)(ledger
+                                             ? ledger->transmissionPathPolicy
+                                                   .sourceReceiverSamplesByAlignment[i][j]
+                                             : 0u),
+                    j + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_COUNT ? "," : "");
+        }
+        fprintf(file,
+                " }%s\n",
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"source_no_hit_samples_by_alignment\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": {",
+                RuntimeRenderTraceCostTransmissionSource3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSource3D)i));
+        for (int j = 0; j < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_COUNT; ++j) {
+            fprintf(file,
+                    " \"%s\": %llu%s",
+                    RuntimeRenderTraceCostTransmissionAlignmentBucket3DLabel(
+                        (RuntimeRenderTraceCostTransmissionAlignmentBucket3D)j),
+                    (unsigned long long)(ledger
+                                             ? ledger->transmissionPathPolicy
+                                                   .sourceNoHitSamplesByAlignment[i][j]
+                                             : 0u),
+                    j + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_COUNT ? "," : "");
+        }
+        fprintf(file,
+                " }%s\n",
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"source_zero_contribution_samples_by_alignment\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": {",
+                RuntimeRenderTraceCostTransmissionSource3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSource3D)i));
+        for (int j = 0; j < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_COUNT; ++j) {
+            fprintf(file,
+                    " \"%s\": %llu%s",
+                    RuntimeRenderTraceCostTransmissionAlignmentBucket3DLabel(
+                        (RuntimeRenderTraceCostTransmissionAlignmentBucket3D)j),
+                    (unsigned long long)(ledger
+                                             ? ledger->transmissionPathPolicy
+                                                   .sourceZeroContributionSamplesByAlignment[i][j]
+                                             : 0u),
+                    j + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_COUNT ? "," : "");
+        }
+        fprintf(file,
+                " }%s\n",
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    ray_tracing_headless_write_transmission_screen_region_map(
+        file,
+        "screen_region_counts",
+        ledger ? ledger->transmissionPathPolicy.screenRegionCounts : NULL,
+        "      ",
+        ",");
+    ray_tracing_headless_write_transmission_source_screen_region_map(
+        file,
+        "source_screen_region_counts",
+        ledger ? ledger->transmissionPathPolicy.sourceScreenRegionCounts : NULL,
+        "      ",
+        ",");
+    ray_tracing_headless_write_transmission_screen_region_map(
+        file,
+        "contributing_samples_by_screen_region",
+        ledger ? ledger->transmissionPathPolicy.contributingSamplesByScreenRegion : NULL,
+        "      ",
+        ",");
+    ray_tracing_headless_write_transmission_screen_region_map(
+        file,
+        "receiver_samples_by_screen_region",
+        ledger ? ledger->transmissionPathPolicy.receiverSamplesByScreenRegion : NULL,
+        "      ",
+        ",");
+    ray_tracing_headless_write_transmission_screen_region_map(
+        file,
+        "no_hit_samples_by_screen_region",
+        ledger ? ledger->transmissionPathPolicy.noHitSamplesByScreenRegion : NULL,
+        "      ",
+        ",");
+    ray_tracing_headless_write_transmission_screen_region_map(
+        file,
+        "zero_contribution_samples_by_screen_region",
+        ledger ? ledger->transmissionPathPolicy.zeroContributionSamplesByScreenRegion : NULL,
+        "      ",
+        ",");
+    ray_tracing_headless_write_transmission_source_screen_region_map(
+        file,
+        "source_contributing_samples_by_screen_region",
+        ledger ? ledger->transmissionPathPolicy.sourceContributingSamplesByScreenRegion : NULL,
+        "      ",
+        ",");
+    ray_tracing_headless_write_transmission_source_screen_region_map(
+        file,
+        "source_receiver_samples_by_screen_region",
+        ledger ? ledger->transmissionPathPolicy.sourceReceiverSamplesByScreenRegion : NULL,
+        "      ",
+        ",");
+    ray_tracing_headless_write_transmission_source_screen_region_map(
+        file,
+        "source_no_hit_samples_by_screen_region",
+        ledger ? ledger->transmissionPathPolicy.sourceNoHitSamplesByScreenRegion : NULL,
+        "      ",
+        ",");
+    ray_tracing_headless_write_transmission_source_screen_region_map(
+        file,
+        "source_zero_contribution_samples_by_screen_region",
+        ledger ? ledger->transmissionPathPolicy.sourceZeroContributionSamplesByScreenRegion : NULL,
+        "      ",
+        ",");
+    ray_tracing_headless_write_transmission_pixel_stability_map(
+        file,
+        "pixel_stability_counts",
+        ledger ? ledger->transmissionPathPolicy.pixelStabilityCounts : NULL,
+        "      ",
+        ",");
+    ray_tracing_headless_write_transmission_source_pixel_stability_map(
+        file,
+        "source_pixel_stability_counts",
+        ledger ? ledger->transmissionPathPolicy.sourcePixelStabilityCounts : NULL,
+        "      ",
+        ",");
+    ray_tracing_headless_write_transmission_pixel_stability_map(
+        file,
+        "contributing_samples_by_pixel_stability",
+        ledger ? ledger->transmissionPathPolicy.contributingSamplesByPixelStability : NULL,
+        "      ",
+        ",");
+    ray_tracing_headless_write_transmission_pixel_stability_map(
+        file,
+        "receiver_samples_by_pixel_stability",
+        ledger ? ledger->transmissionPathPolicy.receiverSamplesByPixelStability : NULL,
+        "      ",
+        ",");
+    ray_tracing_headless_write_transmission_pixel_stability_map(
+        file,
+        "no_hit_samples_by_pixel_stability",
+        ledger ? ledger->transmissionPathPolicy.noHitSamplesByPixelStability : NULL,
+        "      ",
+        ",");
+    ray_tracing_headless_write_transmission_pixel_stability_map(
+        file,
+        "zero_contribution_samples_by_pixel_stability",
+        ledger ? ledger->transmissionPathPolicy.zeroContributionSamplesByPixelStability : NULL,
+        "      ",
+        ",");
+    ray_tracing_headless_write_transmission_source_pixel_stability_map(
+        file,
+        "source_contributing_samples_by_pixel_stability",
+        ledger ? ledger->transmissionPathPolicy.sourceContributingSamplesByPixelStability : NULL,
+        "      ",
+        ",");
+    ray_tracing_headless_write_transmission_source_pixel_stability_map(
+        file,
+        "source_receiver_samples_by_pixel_stability",
+        ledger ? ledger->transmissionPathPolicy.sourceReceiverSamplesByPixelStability : NULL,
+        "      ",
+        ",");
+    ray_tracing_headless_write_transmission_source_pixel_stability_map(
+        file,
+        "source_no_hit_samples_by_pixel_stability",
+        ledger ? ledger->transmissionPathPolicy.sourceNoHitSamplesByPixelStability : NULL,
+        "      ",
+        ",");
+    ray_tracing_headless_write_transmission_source_pixel_stability_map(
+        file,
+        "source_zero_contribution_samples_by_pixel_stability",
+        ledger ? ledger->transmissionPathPolicy.sourceZeroContributionSamplesByPixelStability : NULL,
+        "      ",
+        ",");
     fprintf(file, "      \"termination_counts\": {\n");
     for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_COUNT; ++i) {
         fprintf(file,
@@ -391,6 +1136,124 @@ void ray_tracing_headless_write_render_trace_cost_ledger(
                                          : 0u),
                 i + 1 < RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_COUNT ? "," : "");
     }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"attribution\": {\n");
+    ray_tracing_headless_write_direct_light_source_kind_map(
+        file,
+        "evaluated_samples_by_source_kind",
+        ledger ? ledger->directLightVisibilityPolicy.evaluatedSamplesBySourceKind : NULL,
+        "        ",
+        ",");
+    ray_tracing_headless_write_direct_light_source_kind_map(
+        file,
+        "visibility_sample_queries_by_source_kind",
+        ledger ? ledger->directLightVisibilityPolicy.visibilityTracesBySourceKind : NULL,
+        "        ",
+        ",");
+    ray_tracing_headless_write_direct_light_origin_map(
+        file,
+        "evaluated_samples_by_source_origin",
+        ledger ? ledger->directLightVisibilityPolicy.evaluatedSamplesBySourceOrigin : NULL,
+        "        ",
+        ",");
+    ray_tracing_headless_write_direct_light_origin_map(
+        file,
+        "visibility_sample_queries_by_source_origin",
+        ledger ? ledger->directLightVisibilityPolicy.visibilityTracesBySourceOrigin : NULL,
+        "        ",
+        ",");
+    ray_tracing_headless_write_direct_light_emission_map(
+        file,
+        "evaluated_samples_by_emission_profile",
+        ledger ? ledger->directLightVisibilityPolicy.evaluatedSamplesByEmissionProfile : NULL,
+        "        ",
+        ",");
+    ray_tracing_headless_write_direct_light_emission_map(
+        file,
+        "visibility_sample_queries_by_emission_profile",
+        ledger ? ledger->directLightVisibilityPolicy.visibilityTracesByEmissionProfile : NULL,
+        "        ",
+        ",");
+    ray_tracing_headless_write_direct_light_outcome_map(
+        file,
+        "evaluated_samples_by_outcome",
+        ledger ? ledger->directLightVisibilityPolicy.evaluatedSamplesByOutcome : NULL,
+        "        ",
+        ",");
+    ray_tracing_headless_write_direct_light_outcome_map(
+        file,
+        "visibility_sample_queries_by_outcome",
+        ledger ? ledger->directLightVisibilityPolicy.visibilityTracesByOutcome : NULL,
+        "        ",
+        ",");
+    ray_tracing_headless_write_direct_light_stop_map(
+        file,
+        "evaluated_samples_by_stop_reason",
+        ledger ? ledger->directLightVisibilityPolicy.evaluatedSamplesByStopReason : NULL,
+        "        ",
+        ",");
+    ray_tracing_headless_write_direct_light_stop_map(
+        file,
+        "visibility_sample_queries_by_stop_reason",
+        ledger ? ledger->directLightVisibilityPolicy.visibilityTracesByStopReason : NULL,
+        "        ",
+        ",");
+    ray_tracing_headless_write_direct_light_sample_map(
+        file,
+        "evaluated_samples_by_sample_bucket",
+        ledger ? ledger->directLightVisibilityPolicy.evaluatedSamplesBySampleBucket : NULL,
+        "        ",
+        ",");
+    ray_tracing_headless_write_direct_light_sample_map(
+        file,
+        "visibility_sample_queries_by_sample_bucket",
+        ledger ? ledger->directLightVisibilityPolicy.visibilityTracesBySampleBucket : NULL,
+        "        ",
+        ",");
+    ray_tracing_headless_write_direct_light_distance_map(
+        file,
+        "evaluated_samples_by_distance",
+        ledger ? ledger->directLightVisibilityPolicy.evaluatedSamplesByDistance : NULL,
+        "        ",
+        ",");
+    ray_tracing_headless_write_direct_light_distance_map(
+        file,
+        "visibility_sample_queries_by_distance",
+        ledger ? ledger->directLightVisibilityPolicy.visibilityTracesByDistance : NULL,
+        "        ",
+        ",");
+    ray_tracing_headless_write_direct_light_importance_map(
+        file,
+        "evaluated_samples_by_importance",
+        ledger ? ledger->directLightVisibilityPolicy.evaluatedSamplesByImportance : NULL,
+        "        ",
+        ",");
+    ray_tracing_headless_write_direct_light_importance_map(
+        file,
+        "visibility_sample_queries_by_importance",
+        ledger ? ledger->directLightVisibilityPolicy.visibilityTracesByImportance : NULL,
+        "        ",
+        ",");
+    ray_tracing_headless_write_direct_light_distance_importance_matrix(
+        file,
+        "distance_importance_counts",
+        ledger ? ledger->directLightVisibilityPolicy.distanceImportanceCounts : NULL,
+        "        ",
+        ",");
+    ray_tracing_headless_write_direct_light_distance_importance_matrix(
+        file,
+        "evaluated_samples_by_distance_importance",
+        ledger ? ledger->directLightVisibilityPolicy.evaluatedSamplesByDistanceImportance
+               : NULL,
+        "        ",
+        ",");
+    ray_tracing_headless_write_direct_light_distance_importance_matrix(
+        file,
+        "visibility_sample_queries_by_distance_importance",
+        ledger ? ledger->directLightVisibilityPolicy.visibilityTracesByDistanceImportance
+               : NULL,
+        "        ",
+        "");
     fprintf(file, "      },\n");
     fprintf(file, "      \"material_emitter_rect_policy\": {\n");
     fprintf(file, "        \"source_evaluations\": %llu,\n",

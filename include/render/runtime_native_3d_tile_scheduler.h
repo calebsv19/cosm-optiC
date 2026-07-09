@@ -32,6 +32,15 @@ typedef bool (*RuntimeNative3DTileSchedulerProgressCallback)(
     const RuntimeNative3DTileSchedulerProgress* progress,
     void* user_data);
 
+typedef struct RuntimeNative3DTileSchedulerCancelToken {
+    const volatile bool* cancelRequested;
+    uint64_t generation;
+} RuntimeNative3DTileSchedulerCancelToken;
+
+typedef struct RuntimeNative3DTileSchedulerControl {
+    const RuntimeNative3DTileSchedulerCancelToken* cancelToken;
+} RuntimeNative3DTileSchedulerControl;
+
 int RuntimeNative3DTileSchedulerResolveTileSize(int requested);
 int RuntimeNative3DTileSchedulerResolveTileSizeForScale(int requested, int render_scale);
 int RuntimeNative3DTileSchedulerAdaptiveMinChildTileSize(void);
@@ -84,6 +93,18 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressAndBudget(
     RuntimeNative3DTileSchedulerProgressCallback tile_progress_callback,
     void* tile_progress_user_data,
     const RuntimeNative3DResourceBudget* resource_budget,
+    RuntimeNative3DRenderStats* out_stats);
+bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressBudgetAndControl(
+    uint8_t* pixel_buffer,
+    RayTracing3DIntegratorId integrator_id,
+    RuntimeNative3DPreparedFrame* frame,
+    int temporal_frames,
+    RuntimeNative3DTemporalProgressCallback progress_callback,
+    void* progress_user_data,
+    RuntimeNative3DTileSchedulerProgressCallback tile_progress_callback,
+    void* tile_progress_user_data,
+    const RuntimeNative3DResourceBudget* resource_budget,
+    const RuntimeNative3DTileSchedulerControl* scheduler_control,
     RuntimeNative3DRenderStats* out_stats);
 
 #endif

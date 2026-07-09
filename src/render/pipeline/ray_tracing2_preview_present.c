@@ -76,6 +76,13 @@ static bool g_native3d_preview_history_valid = false;
 #define NATIVE3D_PREVIEW_HISTORY_DIM_NUMERATOR 1u
 #define NATIVE3D_PREVIEW_HISTORY_DIM_DENOMINATOR 4u
 
+static uint64_t Native3DHostMovementBytes(int width, int height) {
+    if (width <= 0 || height <= 0) return 0u;
+    return (uint64_t)width *
+           (uint64_t)height *
+           (uint64_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+}
+
 static SDL_Rect resolve_full_window_destination(SDL_Renderer* renderer,
                                                 int fallback_width,
                                                 int fallback_height) {
@@ -142,6 +149,8 @@ bool RayTracing2PreviewPresent_ReconstructNative3DHostTruth(
     }
     if (ok && stats) {
         stats->temporalHostFullResolveCount += 1;
+        stats->temporalFinalResolveHostPixels += (uint64_t)host_width * (uint64_t)host_height;
+        stats->temporalFinalResolveHostBytes += Native3DHostMovementBytes(host_width, host_height);
     }
     RecordNative3DPresentationEvent(RAY_TRACING2_NATIVE3D_PRESENT_EVENT_FINAL_RESOLVE,
                                     false,
@@ -202,7 +211,8 @@ static void SeedNative3DPreviewHistoryUnderlay(Uint8* host_buffer,
                                                int host_width,
                                                int host_height,
                                                const RuntimeScene3D* scene,
-                                               const RuntimeCameraProjector3D* projector) {
+                                               const RuntimeCameraProjector3D* projector,
+                                               RuntimeNative3DRenderStats* stats) {
     if (!host_buffer || host_pixel_count == 0u || host_width <= 0 || host_height <= 0) {
         return;
     }
@@ -216,6 +226,10 @@ static void SeedNative3DPreviewHistoryUnderlay(Uint8* host_buffer,
                                                  host_height,
                                                  scene,
                                                  projector);
+        if (stats) {
+            stats->temporalHistorySeedHostBytes +=
+                Native3DHostMovementBytes(host_width, host_height);
+        }
         RecordNative3DPresentationEvent(RAY_TRACING2_NATIVE3D_PRESENT_EVENT_HISTORY_SEED,
                                         false,
                                         0,
@@ -235,6 +249,10 @@ static void SeedNative3DPreviewHistoryUnderlay(Uint8* host_buffer,
                                           host_pixel_count,
                                           NATIVE3D_PREVIEW_HISTORY_DIM_NUMERATOR,
                                           NATIVE3D_PREVIEW_HISTORY_DIM_DENOMINATOR);
+    if (stats) {
+        stats->temporalHistorySeedHostBytes +=
+            Native3DHostMovementBytes(host_width, host_height);
+    }
     RecordNative3DPresentationEvent(RAY_TRACING2_NATIVE3D_PRESENT_EVENT_HISTORY_SEED,
                                     false,
                                     0,
@@ -266,6 +284,7 @@ static bool PromoteNative3DPreviewHistory(const Uint8* host_buffer,
     g_native3d_preview_history_valid = true;
     if (stats) {
         stats->temporalHistoryPromoteCount += 1;
+        stats->temporalHistoryPromoteHostBytes += byte_count;
     }
     RecordNative3DPresentationEvent(RAY_TRACING2_NATIVE3D_PRESENT_EVENT_HISTORY_PROMOTE,
                                     false,
@@ -538,6 +557,13 @@ static bool PresentNative3DPreviewTileProgress(
                    (Runtime3DUpscaleMode)animSettings.upscaleMode3D)) {
         return false;
     }
+    if (ctx->stats) {
+        const uint64_t dirty_pixels =
+            (uint64_t)host_dirty_rect.w * (uint64_t)host_dirty_rect.h;
+        ctx->stats->temporalDirtyPreviewHostPixels += dirty_pixels;
+        ctx->stats->temporalDirtyPreviewHostBytes +=
+            dirty_pixels * (uint64_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
+    }
     RecordNative3DPresentationEvent(RAY_TRACING2_NATIVE3D_PRESENT_EVENT_DIRTY_PROGRESS,
                                     ctx->renderer != NULL,
                                     ctx->renderWidth,
@@ -755,6 +781,7 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
     RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DPreparedFrame frame = {0};
     RuntimeNative3DRenderStats stats = {0};
+    RuntimeNative3DRenderStats presentation_stats = {0};
     IntegratorContext preview_ctx = {
         .width = host_width,
         .height = host_height
@@ -771,7 +798,7 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
             .width = host_width,
             .height = host_height
         },
-        .stats = &stats
+        .stats = &presentation_stats
     };
     size_t total = (size_t)render_width * (size_t)render_height;
     bool env_capture_started = false;
@@ -811,7 +838,8 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
                                            host_width,
                                            host_height,
                                            &frame.scene,
-                                           &frame.projector);
+                                           &frame.projector,
+                                           &presentation_stats);
     }
     if (present_progress && renderer) {
         if (!PresentNative3DTilePreviewFrameTimed(renderer,
@@ -842,6 +870,7 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
         return false;
     }
     ts_session_stop_timer(timer_hud_session(), "Tile Frame Calc");
+    RuntimeNative3DRenderStats_Accumulate(&stats, &presentation_stats);
 
     if (!RayTracing2PreviewPresent_ReconstructNative3DHostTruth(
             render_buffer,
@@ -868,6 +897,8 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
             return false;
         }
         stats.temporalFinalPreviewPresentCount += 1;
+        stats.temporalFinalPreviewPresentHostBytes +=
+            Native3DHostMovementBytes(host_width, host_height);
         RecordNative3DPresentationEvent(RAY_TRACING2_NATIVE3D_PRESENT_EVENT_FINAL_PRESENT,
                                         true,
                                         render_width,
