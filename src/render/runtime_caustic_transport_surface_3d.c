@@ -335,7 +335,8 @@ bool runtime_caustic_transport_deposit_surface(
     double surface_footprint_scale,
     double surface_radiance_scale,
     const RuntimeCausticTransportSurfaceReceiverContext3D* receiver_context,
-    RuntimeCausticTransport3DDiagnostics* diagnostics) {
+    RuntimeCausticTransport3DDiagnostics* diagnostics,
+    RuntimeCausticTransportDebugPath3D* debug_path) {
     HitInfo3D receiver = {0};
     RuntimeMaterialPayload3D receiver_payload = {0};
     Ray3D current_ray = {0};
@@ -511,6 +512,22 @@ runtime_caustic_transport_surface_receiver_ready:
                                                    deposit.y,
                                                    deposit.z)) {
         return false;
+    }
+    if (debug_path) {
+        Vec3 receiver_normal = vec3_length(receiver.normal) > 1.0e-9
+                                   ? vec3_normalize(receiver.normal)
+                                   : vec3(0.0, 0.0, 1.0);
+        debug_path->surfaceReceiverResolved = true;
+        debug_path->surfaceReceiverTriangleIndex = receiver.triangleIndex;
+        debug_path->surfaceReceiverPrimitiveIndex = receiver.primitiveIndex;
+        debug_path->surfaceReceiverSceneObjectIndex = receiver.sceneObjectIndex;
+        debug_path->surfaceReceiverPosition = receiver.position;
+        debug_path->surfaceReceiverNormal = receiver_normal;
+        debug_path->surfaceReceiverT = receiver.t;
+        debug_path->surfaceReceiverFootprintRadius = radius;
+        debug_path->surfaceReceiverNormalDotRay =
+            vec3_dot(receiver_normal, vec3_normalize(current_ray.direction));
+        debug_path->surfaceReceiverDepositedRadiance = deposit;
     }
     luma = runtime_caustic_transport_luma(deposit);
     diagnostics->totalRadianceR += deposit.x;

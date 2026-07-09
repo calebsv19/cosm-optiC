@@ -145,6 +145,16 @@ static void runtime_caustic_transport_debug_write_path(FILE* file,
     WRITE_FIELD_PREFIX("lens_tint"); runtime_caustic_transport_debug_write_vec3(file, path->lensTint); WRITE_FIELD_COMMA();
     WRITE_FIELD_PREFIX("lens_absorption_distance"); fprintf(file, "%.9f", path->lensAbsorptionDistance); WRITE_FIELD_COMMA();
     WRITE_FIELD_PREFIX("lens_aperture_radius_scale"); fprintf(file, "%.9f", path->lensApertureRadiusScale); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("surface_receiver_resolved"); fprintf(file, "%s", path->surfaceReceiverResolved ? "true" : "false"); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("surface_receiver_triangle_index"); fprintf(file, "%d", path->surfaceReceiverTriangleIndex); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("surface_receiver_primitive_index"); fprintf(file, "%d", path->surfaceReceiverPrimitiveIndex); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("surface_receiver_scene_object_index"); fprintf(file, "%d", path->surfaceReceiverSceneObjectIndex); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("surface_receiver_position"); runtime_caustic_transport_debug_write_vec3(file, path->surfaceReceiverPosition); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("surface_receiver_normal"); runtime_caustic_transport_debug_write_vec3(file, path->surfaceReceiverNormal); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("surface_receiver_t"); fprintf(file, "%.9f", path->surfaceReceiverT); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("surface_receiver_footprint_radius"); fprintf(file, "%.9f", path->surfaceReceiverFootprintRadius); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("surface_receiver_normal_dot_ray"); fprintf(file, "%.9f", path->surfaceReceiverNormalDotRay); WRITE_FIELD_COMMA();
+    WRITE_FIELD_PREFIX("surface_receiver_deposited_radiance"); runtime_caustic_transport_debug_write_vec3(file, path->surfaceReceiverDepositedRadiance); WRITE_FIELD_COMMA();
     WRITE_FIELD_PREFIX("sphere_lens_entry_position"); runtime_caustic_transport_debug_write_vec3(file, path->sphereLensEntryPosition); WRITE_FIELD_COMMA();
     WRITE_FIELD_PREFIX("sphere_lens_exit_position"); runtime_caustic_transport_debug_write_vec3(file, path->sphereLensExitPosition); WRITE_FIELD_COMMA();
     WRITE_FIELD_PREFIX("sphere_lens_receiver_crossing"); runtime_caustic_transport_debug_write_vec3(file, path->sphereLensReceiverCrossing); WRITE_FIELD_COMMA();

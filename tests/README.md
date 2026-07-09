@@ -159,18 +159,16 @@ and brighten the mist versus the no-caustic baseline.
 `test-ray-tracing-spatial-caustic-imported-lens-wall-preview` is the local S4V
 imported closed-lens wall-caustic proof target. It generates a high-resolution
 closed biconvex runtime mesh sidecar, audits that sidecar for closed manifold
-topology, renders no-caustic and `mesh_dielectric_lens` surface-cache cells
-with a vivid blue receiver wall, and writes the contact sheet, diff, and report
-under `_private_workspace_artifacts/agent_runs/ray_tracing/`. The fixture keeps
-the real light on the optical axis, omits scene-geometry light markers that
-could intercept transport rays, and requires mesh-dielectric path emission,
-surface-cache deposits, and visible wall whitening versus the no-caustic
-baseline. It renders a wall-caustic energy-scale bracket from `0.0005` through
-`0.05` and reports positive-pixel, saturation, percentile, max, mean, and
-centroid metrics so future defaults can use an unsaturated reference instead of
-the old blown-out debug scale. Its original hard-coded visual references were
-captured before broad surface-cache footprints were area-normalized; rerun this
-fixture before treating those exact numeric scale tiers as current defaults.
+topology, renders no-lens, lens/no-caustic, and fixed-scale lens/caustic cells
+with a vivid blue receiver wall, and writes the diagnostic sheet, signed
+caustic heatmap, diffs, and report under
+`_private_workspace_artifacts/agent_runs/ray_tracing/`. The fixture keeps the
+real light on the optical axis, omits scene-geometry light markers that could
+intercept transport rays, pins the preview route to `flattened_bvh`, and
+requires mesh-dielectric path emission, surface-cache deposits, and visible wall
+whitening versus the lens/no-caustic baseline. The fixed reference caustic scale
+is `0.0025`; broader gain brackets belong in separate calibration fixtures so
+this target remains a causality diagnostic.
 
 `test-ray-tracing-spatial-caustic-imported-lens-distance-matrix` is the local
 S4V lens-distance comparison target. It keeps the light and wall fixed, moves
@@ -200,6 +198,47 @@ the preferred fixture for diagnosing whether a visual wall blob is caused by
 post-exit ray distribution or by broad surface-cache splat/composite behavior.
 The report also emits aperture-sample and receiver-hit symmetry errors so
 accepted path bias is visible before further lens-geometry tuning.
+
+`test-ray-tracing-spatial-caustic-lens-shape-comparison` is the fixed-distance
+S4V shape-comparison diagnostic. It keeps the light, wall, lens center, material
+override, caustic scale (`0.0025`), and surface footprint policy fixed while
+rendering flat slab, biconvex, plano-convex, and biconcave closed meshes. Each
+shape renders a paired lens/no-caustic baseline plus a lens/caustic frame; the
+output sheet orders rendered caustic frames on the first row and signed
+caustic-only heatmaps on the second row. The report requires closed topology,
+mesh-dielectric path emission, surface-cache deposits, visible positive
+receiver deltas, and nonzero distribution spread across lens shapes.
+
+`test-ray-tracing-spatial-caustic-lens-focal-sweep-diagnostic` is the
+receiver-distance optical bench diagnostic. It keeps the light, lens center,
+glass override, caustic scale (`0.0025`), and footprint policy fixed, then
+sweeps the vivid receiver wall along the optical axis for plano-convex and
+biconcave closed lenses. Each receiver distance renders paired lens/no-caustic
+and lens/caustic cells; the output sheet contains render rows, signed
+caustic-only heatmap rows, and nominal debug-hit rows. The fixture intentionally
+sets the plane transform position, not only the primitive frame origin, because
+the runtime scene bridge treats transform position as the effective plane
+origin. The render/heatmap curves validate receiver-distance response, while
+the debug-hit rows are currently marked as nominal-provider diagnostics because
+`lens_receiver_crossing` still uses the mesh provider's internal receiver
+distance rather than the actual surface receiver hit.
+
+`test-ray-tracing-spatial-caustic-ball-lens-focal-crossing` is the stronger
+focus-crossing diagnostic for a generated closed ball lens. It uses a darker
+blue receiver wall, a small distant on-axis sphere light, an explicit
+low-contrast ball-lens traversal profile (`material_ior=1.20`), caustic scale
+`0.0025`, and a narrower surface footprint scale (`1.5`) while sweeping the
+receiver wall through the expected focus region. The caustic debug JSONL now
+exports actual `surface_receiver_*` fields from the surface-cache deposit path,
+so the output sheet leads with receiver-space caustic distribution maps instead
+of full-scene camera renders. The second row shows an analytic Snell sphere
+reference bundle for the same light, lens IOR, lens radius, and receiver planes;
+the third row keeps camera-space signed heatmaps for comparison. The report
+records actual surface-hit radius, reference radius, focus-distance error,
+positive-delta p95, centroid, emitted/deposited path counts, and U-shape scores;
+missing path transport or measured/reference focus disagreement is a hard
+failure, while weak focus-crossing evidence is reported as a warning so the PNG
+remains available for diagnosis.
 
 `test-ray-tracing-emissive-light-preview-matrix` is the local emitter-light
 preview proof target. It renders flat wall-panel, complex emissive prism, and

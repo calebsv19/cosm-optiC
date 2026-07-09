@@ -141,6 +141,9 @@ static bool runtime_caustic_transport_emit_to_triangle_target(
         debug_path.initialRadiance = radiance;
         debug_path.insideSpecularObjectAfterEvent = inside_specular_object;
         debug_path.mediumExitSceneObjectIndex = -1;
+        debug_path.surfaceReceiverTriangleIndex = -1;
+        debug_path.surfaceReceiverPrimitiveIndex = -1;
+        debug_path.surfaceReceiverSceneObjectIndex = -1;
     }
     if (cache) {
         Ray3D volume_ray = outgoing;
@@ -175,7 +178,8 @@ static bool runtime_caustic_transport_emit_to_triangle_target(
                                                   surface_footprint_scale,
                                                   surface_radiance_scale,
                                                   receiver_context,
-                                                  diagnostics)) {
+                                                  diagnostics,
+                                                  debug_enabled ? &debug_path : NULL)) {
         emitted = true;
     }
     if (emitted) {

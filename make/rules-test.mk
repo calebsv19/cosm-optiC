@@ -282,6 +282,15 @@ test-ray-tracing-spatial-caustic-plano-convex-lens-distance-matrix: $(RAY_TRACIN
 test-ray-tracing-spatial-caustic-plano-convex-heatmap-diagnostic: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/run_ray_tracing_spatial_caustic_plano_convex_heatmap_diagnostic.py --debug-export
 
+test-ray-tracing-spatial-caustic-lens-shape-comparison: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_lens_shape_comparison.py --debug-export
+
+test-ray-tracing-spatial-caustic-lens-focal-sweep-diagnostic: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_lens_focal_sweep_diagnostic.py --debug-export
+
+test-ray-tracing-spatial-caustic-ball-lens-focal-crossing: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_ball_lens_focal_crossing.py --debug-export
+
 test-ray-tracing-spatial-caustic-authored-validation-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/run_ray_tracing_spatial_caustic_authored_validation_matrix.py
 

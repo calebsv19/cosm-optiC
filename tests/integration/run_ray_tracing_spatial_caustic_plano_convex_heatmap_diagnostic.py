@@ -337,18 +337,29 @@ def read_debug_hits(paths_path: Path) -> tuple[list[dict], dict]:
         if not line.strip():
             continue
         record = json.loads(line)
-        crossing = record.get("lens_receiver_crossing") or {}
+        has_surface_receiver = bool(record.get("surface_receiver_resolved"))
+        crossing = (
+            record.get("surface_receiver_position")
+            if has_surface_receiver
+            else record.get("lens_receiver_crossing")
+        ) or {}
         target = record.get("target_position") or {}
         x = float(crossing.get("x", 0.0))
         y = float(crossing.get("y", 0.0))
         z = float(crossing.get("z", 0.0))
         if not all(math.isfinite(v) for v in (x, y, z)):
             continue
+        weight_rgb = (
+            record.get("surface_receiver_deposited_radiance")
+            if has_surface_receiver
+            else record.get("throughput")
+        ) or {}
         hits.append({
             "x": x,
             "y": y,
             "z": z,
-            "weight": max(0.0, vec_luma(record.get("throughput") or {})),
+            "weight": max(0.0, vec_luma(weight_rgb)),
+            "surface_receiver": has_surface_receiver,
         })
         tx = float(target.get("x", 0.0))
         tz = float(target.get("z", 0.0)) - 1.25
@@ -369,6 +380,8 @@ def read_debug_hits(paths_path: Path) -> tuple[list[dict], dict]:
     target_low_z = len(target_offsets) - target_high_z
     stats = {
         "count": len(hits),
+        "surface_receiver_count": sum(1 for hit in hits if hit.get("surface_receiver")),
+        "nominal_receiver_count": sum(1 for hit in hits if not hit.get("surface_receiver")),
         "x_min": min(hit["x"] for hit in hits),
         "x_max": max(hit["x"] for hit in hits),
         "z_min": min(hit["z"] for hit in hits),
