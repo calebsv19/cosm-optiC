@@ -1,6 +1,6 @@
 # Ray Tracing Desktop Packaging
 
-Last updated: 2026-07-07
+Last updated: 2026-07-08
 
 ## Bundle Contract
 
@@ -232,6 +232,36 @@ Bundled framework/runtime rules include:
 - Routine packaged-app confidence remains covered by `package-desktop-self-test`,
   `release-bundle-audit`, launcher `--print-config`, and manual/local launch
   checks.
+
+## Linux Desktop GUI Proof Boundary
+
+- The Linux headless worker package and the Linux desktop/windowed GUI package
+  are separate release surfaces. A clean headless render does not prove the SDL
+  window, desktop session, or Vulkan presentation path.
+- The first Linux desktop GUI proof should build the windowed `visual-harness`
+  target from a named Git branch or commit, launch the resulting `Ray_anim`
+  binary inside a real logged-in Linux desktop session, detect the RayTracing
+  window title, and capture a nonblank first-frame screenshot.
+- The current intended Linux PC proof command shape is:
+
+```sh
+python3 bin/linux_pc_ray_tracing_gui_proof_request.py \
+  --source-archive /path/to/ray-tracing-worker-vps-source-bundle.tar.gz \
+  --source-state-note "clean Git branch or commit source snapshot" \
+  --jobs 4 \
+  --launch-seconds 8
+```
+
+- Runtime assumptions for that proof:
+  - a real Linux desktop session is already logged in
+  - `DISPLAY` and `XAUTHORITY` are discovered from the desktop user's session
+  - SDL uses the X11 video driver for the first proof
+  - Vulkan and OpenGL must resolve to the installed desktop GPU driver
+  - screenshot capture is a proof artifact, not a packaged-app acceptance test
+- The expected pass classification is `gui_first_frame_captured`.
+- Package work should start only after a clean-source GUI proof passes. The next
+  package boundary is a Linux desktop app layout and unpacked smoke proof, not
+  publication.
 
 ## Current Limits
 
