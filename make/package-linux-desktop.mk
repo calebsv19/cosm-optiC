@@ -26,7 +26,12 @@ LINUX_DESKTOP_RUNTIME_DATA_DIR := $(LINUX_DESKTOP_RESOURCES_DIR)/data/runtime
 LINUX_DESKTOP_MANIFEST_JSON := $(LINUX_DESKTOP_DIR)/manifest.json
 LINUX_DESKTOP_PACKAGE_MANIFEST := $(LINUX_DESKTOP_DIR)/package_manifest.json
 LINUX_DESKTOP_ARCHIVE := $(RELEASE_DIR)/$(LINUX_DESKTOP_BASENAME).tar.gz
+LINUX_DESKTOP_ARCHIVE_TMP := $(LINUX_DESKTOP_ARCHIVE).tmp
+LINUX_DESKTOP_ARCHIVE_SHA256 := $(LINUX_DESKTOP_ARCHIVE).sha256
 LINUX_DESKTOP_LAUNCHER_SRC := tools/packaging/linux/raytracing-launcher
+LINUX_DESKTOP_TAR ?= tar
+LINUX_DESKTOP_GZIP ?= gzip
+LINUX_DESKTOP_PACKAGE_EPOCH ?= 0
 
 package-linux-desktop-contract:
 	@echo "Linux desktop package contract"
@@ -37,11 +42,13 @@ package-linux-desktop-contract:
 	@echo "  platform:      $(LINUX_DESKTOP_PLATFORM)"
 	@echo "  stage dir:     $(LINUX_DESKTOP_DIR)"
 	@echo "  archive:       $(LINUX_DESKTOP_ARCHIVE)"
+	@echo "  archive sha:   $(LINUX_DESKTOP_ARCHIVE_SHA256)"
+	@echo "  archive epoch: $(LINUX_DESKTOP_PACKAGE_EPOCH)"
 	@echo "  launcher:      $(LINUX_DESKTOP_BIN_DIR)/raytracing-launcher"
 	@echo "  binary:        $(LINUX_DESKTOP_BIN_DIR)/raytracing-bin"
 
 package-linux-desktop-clean:
-	@rm -rf "$(LINUX_DESKTOP_DIR)" "$(LINUX_DESKTOP_ARCHIVE)"
+	@rm -rf "$(LINUX_DESKTOP_DIR)" "$(LINUX_DESKTOP_ARCHIVE)" "$(LINUX_DESKTOP_ARCHIVE_TMP)" "$(LINUX_DESKTOP_ARCHIVE_TMP).tar" "$(LINUX_DESKTOP_ARCHIVE_SHA256)"
 	@echo "Removed Linux desktop package artifacts: $(LINUX_DESKTOP_BASENAME)"
 
 package-linux-desktop: visual-harness
@@ -87,14 +94,32 @@ package-linux-desktop: visual-harness
 	@printf '  },\n' >> "$(LINUX_DESKTOP_PACKAGE_MANIFEST)"
 	@printf '  "resources": ["resources/config", "resources/shared", "resources/shaders", "resources/vk_renderer"],\n' >> "$(LINUX_DESKTOP_PACKAGE_MANIFEST)"
 	@printf '  "runtime_dependencies": ["glibc", "libgcc_s", "libm", "SDL2", "SDL2_ttf", "json-c", "libpng16", "vulkan-loader", "gpu-vulkan-driver"],\n' >> "$(LINUX_DESKTOP_PACKAGE_MANIFEST)"
+	@printf '  "deterministic_archive": {\n' >> "$(LINUX_DESKTOP_PACKAGE_MANIFEST)"
+	@printf '    "format": "tar.gz",\n' >> "$(LINUX_DESKTOP_PACKAGE_MANIFEST)"
+	@printf '    "tar_sort": "name",\n' >> "$(LINUX_DESKTOP_PACKAGE_MANIFEST)"
+	@printf '    "mtime_epoch": %s,\n' "$(LINUX_DESKTOP_PACKAGE_EPOCH)" >> "$(LINUX_DESKTOP_PACKAGE_MANIFEST)"
+	@printf '    "owner": 0,\n' >> "$(LINUX_DESKTOP_PACKAGE_MANIFEST)"
+	@printf '    "group": 0,\n' >> "$(LINUX_DESKTOP_PACKAGE_MANIFEST)"
+	@printf '    "numeric_owner": true,\n' >> "$(LINUX_DESKTOP_PACKAGE_MANIFEST)"
+	@printf '    "gzip_original_name": false\n' >> "$(LINUX_DESKTOP_PACKAGE_MANIFEST)"
+	@printf '  },\n' >> "$(LINUX_DESKTOP_PACKAGE_MANIFEST)"
 	@printf '  "self_test": {\n' >> "$(LINUX_DESKTOP_PACKAGE_MANIFEST)"
 	@printf '    "type": "command",\n' >> "$(LINUX_DESKTOP_PACKAGE_MANIFEST)"
 	@printf '    "argv": ["bin/raytracing-launcher", "--self-test"]\n' >> "$(LINUX_DESKTOP_PACKAGE_MANIFEST)"
 	@printf '  }\n' >> "$(LINUX_DESKTOP_PACKAGE_MANIFEST)"
 	@printf '}\n' >> "$(LINUX_DESKTOP_PACKAGE_MANIFEST)"
 	@mkdir -p "$(RELEASE_DIR)"
-	@COPYFILE_DISABLE=1 tar -czf "$(LINUX_DESKTOP_ARCHIVE)" -C "$(RELEASE_DIR)" "$(LINUX_DESKTOP_BASENAME)"
+	@$(MAKE) package-linux-desktop-archive >/dev/null
 	@echo "Linux desktop package ready: $(LINUX_DESKTOP_ARCHIVE)"
+
+package-linux-desktop-archive:
+	@test -d "$(LINUX_DESKTOP_DIR)" || (echo "Missing Linux desktop package stage dir"; exit 1)
+	@rm -f "$(LINUX_DESKTOP_ARCHIVE)" "$(LINUX_DESKTOP_ARCHIVE_TMP)" "$(LINUX_DESKTOP_ARCHIVE_SHA256)"
+	@COPYFILE_DISABLE=1 "$(LINUX_DESKTOP_TAR)" --sort=name --format=posix --pax-option=exthdr.name=%d/PaxHeaders/%f,delete=atime,delete=ctime --mtime="@$(LINUX_DESKTOP_PACKAGE_EPOCH)" --owner=0 --group=0 --numeric-owner -cf "$(LINUX_DESKTOP_ARCHIVE_TMP).tar" -C "$(RELEASE_DIR)" "$(LINUX_DESKTOP_BASENAME)"
+	@"$(LINUX_DESKTOP_GZIP)" -n -c "$(LINUX_DESKTOP_ARCHIVE_TMP).tar" > "$(LINUX_DESKTOP_ARCHIVE_TMP)"
+	@rm -f "$(LINUX_DESKTOP_ARCHIVE_TMP).tar"
+	@mv "$(LINUX_DESKTOP_ARCHIVE_TMP)" "$(LINUX_DESKTOP_ARCHIVE)"
+	@sha256sum "$(LINUX_DESKTOP_ARCHIVE)" | awk '{print $$1 "  $(notdir $(LINUX_DESKTOP_ARCHIVE))"}' > "$(LINUX_DESKTOP_ARCHIVE_SHA256)"
 
 package-linux-desktop-self-test: package-linux-desktop
 	@test -x "$(LINUX_DESKTOP_BIN_DIR)/raytracing-launcher" || (echo "Missing Linux desktop launcher"; exit 1)
@@ -109,7 +134,27 @@ package-linux-desktop-self-test: package-linux-desktop
 	@test -f "$(LINUX_DESKTOP_RESOURCES_DIR)/vk_renderer/shaders/textured.vert.spv" || (echo "Missing bundled vk_renderer shader"; exit 1)
 	@test -f "$(LINUX_DESKTOP_RESOURCES_DIR)/shaders/textured.vert.spv" || (echo "Missing bundled runtime shader"; exit 1)
 	@test -f "$(LINUX_DESKTOP_ARCHIVE)" || (echo "Missing Linux desktop archive"; exit 1)
+	@test -f "$(LINUX_DESKTOP_ARCHIVE_SHA256)" || (echo "Missing Linux desktop archive SHA-256 sidecar"; exit 1)
+	@(cd "$(RELEASE_DIR)" && sha256sum -c "$(notdir $(LINUX_DESKTOP_ARCHIVE_SHA256))")
 	@RAY_TRACING_RUNTIME_DIR="$(LINUX_DESKTOP_DIR)/.self_test_runtime" "$(LINUX_DESKTOP_BIN_DIR)/raytracing-launcher" --self-test
 	@python3 -m json.tool "$(LINUX_DESKTOP_MANIFEST_JSON)" >/dev/null
 	@python3 -m json.tool "$(LINUX_DESKTOP_PACKAGE_MANIFEST)" >/dev/null
 	@echo "package-linux-desktop-self-test passed."
+
+package-linux-desktop-determinism-test:
+	@$(MAKE) package-linux-desktop-clean >/dev/null
+	@$(MAKE) package-linux-desktop >/dev/null
+	@set -e; \
+		first_sha="$$(sha256sum "$(LINUX_DESKTOP_ARCHIVE)" | awk '{print $$1}')"; \
+		test -n "$$first_sha"; \
+		rm -f "$(LINUX_DESKTOP_ARCHIVE)" "$(LINUX_DESKTOP_ARCHIVE_TMP)" "$(LINUX_DESKTOP_ARCHIVE_TMP).tar" "$(LINUX_DESKTOP_ARCHIVE_SHA256)"; \
+		$(MAKE) package-linux-desktop-archive >/dev/null; \
+		second_sha="$$(sha256sum "$(LINUX_DESKTOP_ARCHIVE)" | awk '{print $$1}')"; \
+		test -n "$$second_sha"; \
+		if [ "$$first_sha" != "$$second_sha" ]; then \
+			echo "Linux desktop package determinism failed"; \
+			echo "first:  $$first_sha"; \
+			echo "second: $$second_sha"; \
+			exit 1; \
+		fi; \
+		echo "package-linux-desktop-determinism-test passed: $$second_sha"
