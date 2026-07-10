@@ -236,3 +236,120 @@ bool RuntimeCausticPhotonIntegration3D_Query(
     *out_result = result;
     return result.surfaceHit || result.volumeHit;
 }
+
+bool RuntimeCausticPhotonIntegration3D_BuildContribution(
+    const RuntimeCausticPhotonIntegrationSettings3D* settings,
+    const RuntimeCausticPhotonIntegrationQuery3D* query,
+    const RuntimeCausticPhotonIntegrationResult3D* query_result,
+    RuntimeCausticPhotonContribution3D* out_contribution) {
+    RuntimeCausticPhotonIntegrationSettings3D default_settings;
+    RuntimeCausticPhotonIntegrationQuery3D default_query;
+    const RuntimeCausticPhotonIntegrationSettings3D* active_settings = settings;
+    const RuntimeCausticPhotonIntegrationQuery3D* active_query = query;
+    RuntimeCausticPhotonContribution3D contribution;
+
+    memset(&contribution, 0, sizeof(contribution));
+    if (out_contribution) *out_contribution = contribution;
+    if (!out_contribution) return false;
+    if (!query_result) return false;
+    if (!active_settings) {
+        RuntimeCausticPhotonIntegration3D_DefaultSettings(&default_settings);
+        active_settings = &default_settings;
+    }
+    if (!active_query) {
+        RuntimeCausticPhotonIntegration3D_DefaultQuery(&default_query);
+        active_query = &default_query;
+    }
+
+    contribution.suppressed = !active_settings->renderContributionEnabled;
+    if (!active_settings->renderContributionEnabled ||
+        query_result->route !=
+            RUNTIME_CAUSTIC_PHOTON_INTEGRATION_ROUTE_PHOTON_QUERY_READY) {
+        *out_contribution = contribution;
+        return false;
+    }
+
+    if (query_result->surfaceHit && active_settings->surfaceQueryEnabled &&
+        active_query->querySurface) {
+        contribution.hasSurfaceContribution = true;
+        contribution.surfacePosition = active_query->surface.position;
+        contribution.surfaceNormal = vec3_normalize(active_query->surface.normal);
+        contribution.surfaceRadius =
+            photon_integration_clamp_double(active_query->surface.radius, 0.005, 2.0);
+        contribution.surfaceRadiance = query_result->surfaceFlux;
+        contribution.surfaceSceneObjectIndex = active_query->surface.sceneObjectIndex;
+        contribution.surfacePrimitiveIndex = active_query->surface.primitiveIndex;
+        contribution.surfaceTriangleIndex = active_query->surface.triangleIndex;
+        contribution.surfaceContributingCount =
+            query_result->surfaceContributingCount;
+    }
+
+    if (query_result->volumeHit && active_settings->volumeQueryEnabled &&
+        active_query->queryVolume) {
+        contribution.hasVolumeContribution = true;
+        contribution.volumePosition = active_query->volume.position;
+        contribution.volumeDirection = vec3_normalize(active_query->volume.direction);
+        contribution.volumeRadius =
+            photon_integration_clamp_double(active_query->volume.radius, 0.005, 4.0);
+        contribution.volumeRadiance = query_result->volumeFlux;
+        contribution.volumeContributingCount = query_result->volumeContributingCount;
+    }
+
+    contribution.combinedRadiance =
+        vec3_add(contribution.surfaceRadiance, contribution.volumeRadiance);
+    contribution.eligible = contribution.hasSurfaceContribution ||
+                            contribution.hasVolumeContribution;
+    *out_contribution = contribution;
+    return contribution.eligible;
+}
+
+bool RuntimeCausticPhotonIntegration3D_DepositContributionToCaches(
+    RuntimeCausticSurfaceCache3D* surface_cache,
+    RuntimeCausticVolumeCache3D* volume_cache,
+    const RuntimeCausticPhotonContribution3D* contribution,
+    RuntimeCausticPhotonContributionDepositResult3D* out_result) {
+    RuntimeCausticPhotonContributionDepositResult3D result;
+
+    memset(&result, 0, sizeof(result));
+    if (out_result) *out_result = result;
+    if (!out_result || !contribution || !contribution->eligible ||
+        contribution->suppressed) {
+        return false;
+    }
+
+    result.attempted = true;
+    if (contribution->hasSurfaceContribution) {
+        HitInfo3D hit;
+        HitInfo3D_Reset(&hit);
+        hit.position = contribution->surfacePosition;
+        hit.normal = contribution->surfaceNormal;
+        hit.sceneObjectIndex = contribution->surfaceSceneObjectIndex;
+        hit.primitiveIndex = contribution->surfacePrimitiveIndex;
+        hit.triangleIndex = contribution->surfaceTriangleIndex;
+        result.surfaceAttempted = true;
+        result.surfaceDeposited = RuntimeCausticSurfaceCache3D_DepositAtHit(
+            surface_cache,
+            &hit,
+            contribution->surfaceRadius,
+            contribution->surfaceRadiance.x,
+            contribution->surfaceRadiance.y,
+            contribution->surfaceRadiance.z);
+    }
+
+    if (contribution->hasVolumeContribution) {
+        result.volumeAttempted = true;
+        result.volumeDeposited =
+            RuntimeCausticVolumeCache3D_DepositDirectionalFootprintAtPosition(
+                volume_cache,
+                contribution->volumePosition,
+                contribution->volumeDirection,
+                contribution->volumeRadius,
+                contribution->volumeRadius,
+                contribution->volumeRadiance.x,
+                contribution->volumeRadiance.y,
+                contribution->volumeRadiance.z);
+    }
+
+    *out_result = result;
+    return result.surfaceDeposited || result.volumeDeposited;
+}

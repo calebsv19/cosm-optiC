@@ -138,6 +138,7 @@ RUNTIME_MESH_ASSET_BUILDER_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_dynamic_geometry_accel_3d.c \
 	$(SRC_DIR)/render/runtime_mesh_accel_pack_3d.c \
 	$(SRC_DIR)/render/runtime_mesh_blas_cache_3d.c \
+	$(SRC_DIR)/render/runtime_scene_accel_3d_instances.c \
 	$(SRC_DIR)/render/runtime_scene_accel_3d.c \
 	$(SRC_DIR)/render/runtime_scene_3d_builder.c \
 	$(SRC_DIR)/render/runtime_triangle_bvh_3d.c \
@@ -182,6 +183,7 @@ RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_dynamic_geometry_accel_3d.c \
 	$(SRC_DIR)/render/runtime_mesh_accel_pack_3d.c \
 	$(SRC_DIR)/render/runtime_mesh_blas_cache_3d.c \
+	$(SRC_DIR)/render/runtime_scene_accel_3d_instances.c \
 	$(SRC_DIR)/render/runtime_scene_accel_3d.c \
 	$(SRC_DIR)/render/runtime_scene_3d_builder.c \
 	$(SRC_DIR)/render/runtime_triangle_bvh_3d.c \

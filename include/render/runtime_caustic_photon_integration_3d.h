@@ -6,6 +6,8 @@
 #include "render/runtime_caustic_beam_map_3d.h"
 #include "render/runtime_caustic_photon_map_3d.h"
 #include "render/runtime_caustic_settings_3d.h"
+#include "render/runtime_caustic_surface_cache_3d.h"
+#include "render/runtime_caustic_volume_cache_3d.h"
 
 typedef enum {
     RUNTIME_CAUSTIC_PRODUCT_MODE_OFF = 0,
@@ -56,6 +58,35 @@ typedef struct {
     uint64_t volumeContributingCount;
 } RuntimeCausticPhotonIntegrationResult3D;
 
+typedef struct {
+    bool eligible;
+    bool suppressed;
+    bool hasSurfaceContribution;
+    bool hasVolumeContribution;
+    Vec3 surfacePosition;
+    Vec3 surfaceNormal;
+    double surfaceRadius;
+    Vec3 surfaceRadiance;
+    int surfaceSceneObjectIndex;
+    int surfacePrimitiveIndex;
+    int surfaceTriangleIndex;
+    Vec3 volumePosition;
+    Vec3 volumeDirection;
+    double volumeRadius;
+    Vec3 volumeRadiance;
+    Vec3 combinedRadiance;
+    uint64_t surfaceContributingCount;
+    uint64_t volumeContributingCount;
+} RuntimeCausticPhotonContribution3D;
+
+typedef struct {
+    bool attempted;
+    bool surfaceAttempted;
+    bool surfaceDeposited;
+    bool volumeAttempted;
+    bool volumeDeposited;
+} RuntimeCausticPhotonContributionDepositResult3D;
+
 void RuntimeCausticPhotonIntegration3D_DefaultSettings(
     RuntimeCausticPhotonIntegrationSettings3D* settings);
 void RuntimeCausticPhotonIntegration3D_DefaultQuery(
@@ -77,5 +108,15 @@ bool RuntimeCausticPhotonIntegration3D_Query(
     const RuntimeCausticPhotonIntegrationSettings3D* settings,
     const RuntimeCausticPhotonIntegrationQuery3D* query,
     RuntimeCausticPhotonIntegrationResult3D* out_result);
+bool RuntimeCausticPhotonIntegration3D_BuildContribution(
+    const RuntimeCausticPhotonIntegrationSettings3D* settings,
+    const RuntimeCausticPhotonIntegrationQuery3D* query,
+    const RuntimeCausticPhotonIntegrationResult3D* query_result,
+    RuntimeCausticPhotonContribution3D* out_contribution);
+bool RuntimeCausticPhotonIntegration3D_DepositContributionToCaches(
+    RuntimeCausticSurfaceCache3D* surface_cache,
+    RuntimeCausticVolumeCache3D* volume_cache,
+    const RuntimeCausticPhotonContribution3D* contribution,
+    RuntimeCausticPhotonContributionDepositResult3D* out_result);
 
 #endif

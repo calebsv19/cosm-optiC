@@ -47,6 +47,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_caustic_volume_cache_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_caustic_sidecar_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_estimator_3d.o \
+	$(BUILD_DIR)/render/runtime_disney_v2_transmission_policy_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_transport_emissive_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_transport_sampling_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_transport_3d.o \
@@ -103,6 +104,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_mesh_accel_pack_3d.o \
 	$(BUILD_DIR)/render/runtime_mesh_blas_cache_3d.o \
 	$(BUILD_DIR)/render/runtime_dynamic_geometry_accel_3d.o \
+	$(BUILD_DIR)/render/runtime_scene_accel_3d_instances.o \
 	$(BUILD_DIR)/render/runtime_scene_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
 	$(BUILD_DIR)/render/runtime_frame_dataflow_ledger_3d.o \
@@ -153,6 +155,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/app/animation_fluid_scene.o \
 	$(BUILD_DIR)/app/data_paths.o \
 	$(BUILD_DIR)/config/core/config_runtime_paths.o \
+	$(BUILD_DIR)/config/core/config_animation_runtime3d.o \
 	$(BUILD_DIR)/config/core/config_animation_persistence.o \
 	$(BUILD_DIR)/config/scene/config_scene_material_persistence.o \
 	$(BUILD_DIR)/config/io/config_file_io.o \
@@ -192,6 +195,7 @@ RAY_TRACING_RENDER_HEADLESS_DEPS = \
 	$(BUILD_DIR)/app/agent_render_request_defaults.o \
 	$(BUILD_DIR)/app/agent_render_request_helpers.o \
 	$(BUILD_DIR)/app/agent_render_request_labels.o \
+	$(BUILD_DIR)/app/agent_render_request_validate.o \
 	$(BUILD_DIR)/render/adapters/timer_hud_headless_stub.o \
 	$(BUILD_DIR)/tools/make_video.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_caustic_summary.o \
@@ -349,6 +353,7 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_caustic_volume_cache_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_caustic_sidecar_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_estimator_3d.o \
+		$(BUILD_DIR)/render/runtime_disney_v2_transmission_policy_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_transport_emissive_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_transport_sampling_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_transport_3d.o \
@@ -394,6 +399,7 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_mesh_accel_pack_3d.o \
 		$(BUILD_DIR)/render/runtime_mesh_blas_cache_3d.o \
 	$(BUILD_DIR)/render/runtime_dynamic_geometry_accel_3d.o \
+	$(BUILD_DIR)/render/runtime_scene_accel_3d_instances.o \
 	$(BUILD_DIR)/render/runtime_scene_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
 	$(BUILD_DIR)/render/runtime_frame_dataflow_ledger_3d.o \
@@ -429,6 +435,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/editor/material_editor_texture_channel_readback.o \
 	$(BUILD_DIR)/editor/material_editor_face_region_readback.o \
 	$(BUILD_DIR)/editor/material_editor_compact_layout.o \
+	$(BUILD_DIR)/editor/material_editor_compact_response_render.o \
 	$(BUILD_DIR)/editor/material_editor_compact_render.o \
 	$(BUILD_DIR)/editor/material_editor.o \
 	$(BUILD_DIR)/editor/material_preview_surface_eval.o \
@@ -479,6 +486,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/app/animation_fluid_scene.o \
 	$(BUILD_DIR)/app/data_paths.o \
 	$(BUILD_DIR)/config/core/config_runtime_paths.o \
+	$(BUILD_DIR)/config/core/config_animation_runtime3d.o \
 	$(BUILD_DIR)/config/core/config_animation_persistence.o \
 		$(BUILD_DIR)/config/io/config_file_io.o \
 	$(BUILD_DIR)/config/scene/config_scene_path_io.o \

@@ -118,10 +118,12 @@ no-render-contribution guard before any volume-cache deposit or render-path
 contribution.
 
 `TEST_RUNNER_GROUP=runtime_caustic_photon_integration_3d make -C ray_tracing test`
-is the focused PPM-4 product integration/defaults proof. It covers
+is the focused PPM-4/PPM-5 product integration proof. It covers
 off/reference/production product labels, product-mode-to-caustic-settings
 application, bounded sample/depth defaults, combined surface photon-map plus
-volume beam-map query readback, and the render-contribution suppression guard.
+volume beam-map query readback, default render-contribution suppression, and
+explicit opt-in contribution/cache conversion into surface and volume caustic
+caches.
 
 `test-ray-tracing-spatial-caustic-phase6-surface-matrix` is the local Phase 6
 surface-calibration proof target. It renders off, analytic-only,

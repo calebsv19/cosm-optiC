@@ -143,6 +143,140 @@ static int test_runtime_caustic_photon_integration_queries_maps(void) {
     return 0;
 }
 
+static int test_runtime_caustic_photon_integration_suppresses_contribution_by_default(void) {
+    RuntimeCausticPhotonIntegrationSettings3D settings;
+    RuntimeCausticPhotonIntegrationQuery3D query;
+    RuntimeCausticPhotonIntegrationResult3D query_result = {0};
+    RuntimeCausticPhotonContribution3D contribution;
+
+    RuntimeCausticPhotonIntegration3D_DefaultSettings(&settings);
+    RuntimeCausticPhotonIntegration3D_DefaultQuery(&query);
+    settings.productMode = RUNTIME_CAUSTIC_PRODUCT_MODE_PRODUCTION;
+    query_result.route = RUNTIME_CAUSTIC_PHOTON_INTEGRATION_ROUTE_PHOTON_QUERY_READY;
+    query_result.surfaceHit = true;
+    query_result.surfaceFlux = vec3(1.0, 1.0, 1.0);
+    query_result.surfaceContributingCount = 1u;
+    query.surface.position = vec3(0.0, 0.0, 0.0);
+    query.surface.normal = vec3(0.0, 1.0, 0.0);
+    query.surface.radius = 0.20;
+
+    assert_true("runtime_caustic_photon_integration_contribution_default_suppressed",
+                !RuntimeCausticPhotonIntegration3D_BuildContribution(&settings,
+                                                                     &query,
+                                                                     &query_result,
+                                                                     &contribution));
+    assert_true("runtime_caustic_photon_integration_contribution_suppressed_readback",
+                contribution.suppressed && !contribution.eligible &&
+                    !contribution.hasSurfaceContribution);
+    return 0;
+}
+
+static int test_runtime_caustic_photon_integration_deposits_gated_contribution(void) {
+    RuntimeCausticPhotonMap3D surface_map;
+    RuntimeCausticBeamMap3D beam_map;
+    RuntimeCausticSurfaceCache3D surface_cache;
+    RuntimeCausticVolumeCache3D volume_cache;
+    RuntimeCausticSurfaceCacheDiagnostics3D surface_diag;
+    RuntimeCausticVolumeCacheDiagnostics3D volume_diag;
+    RuntimeVolumeGrid3D grid;
+    RuntimeCausticPhotonIntegrationSettings3D settings;
+    RuntimeCausticPhotonIntegrationQuery3D query;
+    RuntimeCausticPhotonIntegrationResult3D query_result;
+    RuntimeCausticPhotonContribution3D contribution;
+    RuntimeCausticPhotonContributionDepositResult3D deposit_result;
+    RuntimeCausticPhotonMapRecord3D surface = test_surface_record();
+    RuntimeCausticPhotonVolumeBeamSegment3D volume = test_volume_segment();
+
+    RuntimeCausticPhotonMap3D_Init(&surface_map);
+    RuntimeCausticBeamMap3D_Init(&beam_map);
+    RuntimeCausticSurfaceCache3D_Init(&surface_cache);
+    RuntimeCausticVolumeCache3D_Init(&volume_cache);
+    RuntimeVolumeGrid3D_Reset(&grid);
+    RuntimeCausticPhotonIntegration3D_DefaultSettings(&settings);
+    RuntimeCausticPhotonIntegration3D_DefaultQuery(&query);
+    settings.productMode = RUNTIME_CAUSTIC_PRODUCT_MODE_PRODUCTION;
+    settings.volumeQueryEnabled = true;
+    settings.renderContributionEnabled = true;
+
+    assert_true("runtime_caustic_photon_integration_deposit_surface_alloc",
+                RuntimeCausticPhotonMap3D_Allocate(&surface_map, 4u));
+    assert_true("runtime_caustic_photon_integration_deposit_beam_alloc",
+                RuntimeCausticBeamMap3D_Allocate(&beam_map, 4u));
+    assert_true("runtime_caustic_photon_integration_deposit_surface_store",
+                RuntimeCausticPhotonMap3D_StoreRecord(&surface_map, &surface));
+    assert_true("runtime_caustic_photon_integration_deposit_beam_store",
+                RuntimeCausticBeamMap3D_StoreSegment(&beam_map, &volume));
+    assert_true("runtime_caustic_photon_integration_surface_cache_alloc",
+                RuntimeCausticSurfaceCache3D_Allocate(&surface_cache, 4u));
+    assert_true("runtime_caustic_photon_integration_volume_grid_config",
+                RuntimeVolumeGrid3D_Configure(&grid,
+                                              1u,
+                                              4u,
+                                              4u,
+                                              4u,
+                                              0.0,
+                                              0u,
+                                              0.0,
+                                              vec3(-1.0, -1.0, -1.0),
+                                              1.0,
+                                              vec3(0.0, 1.0, 0.0),
+                                              0u));
+    assert_true("runtime_caustic_photon_integration_volume_cache_alloc",
+                RuntimeCausticVolumeCache3D_Allocate(&volume_cache, &grid));
+
+    query.surface.position = vec3(0.02, 0.0, 0.0);
+    query.surface.normal = vec3(0.0, 1.0, 0.0);
+    query.surface.radius = 0.20;
+    query.surface.sceneObjectIndex = 9;
+    query.surface.primitiveIndex = 8;
+    query.surface.triangleIndex = 7;
+    query.volume.position = vec3(0.05, 0.0, 1.0);
+    query.volume.direction = vec3(0.0, 0.0, 1.0);
+    query.volume.radius = 1.0;
+    query.volume.mediumId = 4;
+
+    assert_true("runtime_caustic_photon_integration_deposit_query_hit",
+                RuntimeCausticPhotonIntegration3D_Query(&surface_map,
+                                                        &beam_map,
+                                                        &settings,
+                                                        &query,
+                                                        &query_result));
+    assert_true("runtime_caustic_photon_integration_build_contribution",
+                RuntimeCausticPhotonIntegration3D_BuildContribution(&settings,
+                                                                    &query,
+                                                                    &query_result,
+                                                                    &contribution));
+    assert_true("runtime_caustic_photon_integration_contribution_fields",
+                contribution.eligible && !contribution.suppressed &&
+                    contribution.hasSurfaceContribution &&
+                    contribution.hasVolumeContribution &&
+                    contribution.combinedRadiance.x > contribution.surfaceRadiance.x);
+    assert_true("runtime_caustic_photon_integration_deposit_contribution",
+                RuntimeCausticPhotonIntegration3D_DepositContributionToCaches(
+                    &surface_cache,
+                    &volume_cache,
+                    &contribution,
+                    &deposit_result));
+    assert_true("runtime_caustic_photon_integration_deposit_result",
+                deposit_result.attempted && deposit_result.surfaceDeposited &&
+                    deposit_result.volumeDeposited);
+
+    RuntimeCausticSurfaceCache3D_SnapshotDiagnostics(&surface_cache, &surface_diag);
+    RuntimeCausticVolumeCache3D_SnapshotDiagnostics(&volume_cache, &volume_diag);
+    assert_true("runtime_caustic_photon_integration_surface_cache_written",
+                surface_diag.recordCount == 1u &&
+                    surface_diag.depositAcceptedCount == 1u);
+    assert_true("runtime_caustic_photon_integration_volume_cache_written",
+                volume_diag.depositAcceptedCount == 1u &&
+                    volume_diag.footprintDepositCount == 1u);
+
+    RuntimeCausticSurfaceCache3D_Free(&surface_cache);
+    RuntimeCausticVolumeCache3D_Free(&volume_cache);
+    RuntimeCausticPhotonMap3D_Free(&surface_map);
+    RuntimeCausticBeamMap3D_Free(&beam_map);
+    return 0;
+}
+
 static int test_runtime_caustic_photon_integration_reference_does_not_query_maps(void) {
     RuntimeCausticPhotonMap3D surface_map;
     RuntimeCausticBeamMap3D beam_map;
@@ -190,6 +324,9 @@ int run_test_runtime_caustic_photon_integration_3d_tests(void) {
     int failures = 0;
     failures += test_runtime_caustic_photon_integration_modes_and_settings();
     failures += test_runtime_caustic_photon_integration_queries_maps();
+    failures +=
+        test_runtime_caustic_photon_integration_suppresses_contribution_by_default();
+    failures += test_runtime_caustic_photon_integration_deposits_gated_contribution();
     failures += test_runtime_caustic_photon_integration_reference_does_not_query_maps();
     return failures;
 }
