@@ -21,7 +21,11 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_disney_v2_result_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_stochastic_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_bootstrap_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_beam_map_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_lens_transport_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_map_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_settings_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_trace_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_settings_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_sphere_lens_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_surface_cache_3d.o \
@@ -74,6 +78,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/editor/scene_editor_material_graph.o \
 	$(BUILD_DIR)/editor/scene_editor_material_stack.o \
 	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling.o \
+	$(BUILD_DIR)/render/runtime_native_3d_async_render_bridge.o \
 	$(BUILD_DIR)/render/runtime_native_3d_async_render_job.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_output.o \
@@ -236,7 +241,10 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_water_surface_runtime.o \
 	$(BUILD_DIR)/tests/test_runtime_volume_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_bootstrap_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_beam_map_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_lens_transport_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_photon_map_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_photon_trace_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_sphere_lens_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_surface_cache_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_transport_3d.o \
@@ -250,6 +258,7 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_diffuse_temporal.o \
 	$(BUILD_DIR)/tests/test_runtime_emission_transparency.o \
 	$(BUILD_DIR)/tests/test_runtime_native_3d_denoise.o \
+	$(BUILD_DIR)/tests/test_runtime_native_3d_async_render_bridge.o \
 	$(BUILD_DIR)/tests/test_runtime_native_3d_async_render_job.o \
 	$(BUILD_DIR)/tests/test_runtime_native_3d_render.o \
 	$(BUILD_DIR)/tests/test_runtime_native_3d_render_live_suite.o \
@@ -308,7 +317,11 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_disney_v2_result_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_stochastic_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_bootstrap_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_beam_map_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_lens_transport_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_photon_map_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_photon_settings_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_photon_trace_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_settings_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_sphere_lens_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_surface_cache_3d.o \

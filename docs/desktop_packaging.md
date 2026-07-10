@@ -1,6 +1,6 @@
 # Ray Tracing Desktop Packaging
 
-Last updated: 2026-07-07
+Last updated: 2026-07-08
 
 ## Bundle Contract
 
@@ -67,6 +67,95 @@ Future release-artifact hygiene:
   - `make -C ray_tracing package-desktop-open`
   - `make -C ray_tracing package-desktop-remove`
   - `make -C ray_tracing package-desktop-refresh`
+- private Linux desktop package proof:
+  - `make -C ray_tracing package-linux-desktop-contract`
+  - `make -C ray_tracing package-linux-desktop`
+  - `make -C ray_tracing package-linux-desktop-self-test`
+  - `make -C ray_tracing package-linux-desktop-determinism-test`
+
+Linux desktop package target:
+
+- status:
+  private proof target only; not a public release target yet
+- package class:
+  `desktop_app_linux`
+- artifact role:
+  `desktop_app`
+- runtime:
+  `linux_gui`
+- expected private artifact name:
+  `optiC-<version>-linux-x86_64-desktop-stable.tar.gz`
+- expected private checksum sidecar:
+  `optiC-<version>-linux-x86_64-desktop-stable.tar.gz.sha256`
+- package root layout:
+
+```text
+optiC-<version>-linux-x86_64-desktop-stable/
+  bin/raytracing-launcher
+  bin/raytracing-bin
+  resources/config/
+  resources/shared/
+  resources/shaders/
+  resources/vk_renderer/
+  resources/data/runtime/
+  manifest.json
+  package_manifest.json
+  README.md
+```
+
+The Linux launcher copies bundled resources into a writable runtime directory,
+then launches `bin/raytracing-bin` from that runtime root. By default it uses
+`${XDG_DATA_HOME:-$HOME/.local/share}/RayTracing/runtime`, but proof helpers can
+override `RAY_TRACING_RUNTIME_DIR` and `XDG_STATE_HOME` so package smoke runs
+stay thread-local.
+
+The Linux desktop tarball is produced with deterministic archive metadata:
+
+- sorted tar entries by name;
+- POSIX tar format with deterministic PAX extended-header names;
+- PAX `atime` and `ctime` values deleted;
+- fixed tar mtime from `LINUX_DESKTOP_PACKAGE_EPOCH` (default `0`);
+- numeric owner/group `0:0`;
+- gzip `-n` so the gzip header does not embed local filename or timestamp;
+- a `.tar.gz.sha256` sidecar naming the archive basename.
+
+Use `package-linux-desktop-determinism-test` before treating a package target as
+release-ready. The target creates one staged package, records the archive
+SHA-256, removes only the archive and sidecar, archives the same staged package
+again, and fails if the second SHA differs from the first. This proves
+deterministic tar/gzip metadata for stable staged content; it does not claim
+full compiler/linker output reproducibility.
+
+Before any public Linux desktop release, the package must pass a real-display
+unpacked-package proof on the Linux PC. The minimum proof is:
+
+- build from a named source branch/commit;
+- run `package-linux-desktop-self-test`;
+- extract the tarball to a clean directory;
+- run `bin/raytracing-launcher --self-test` from the unpacked package;
+- launch `bin/raytracing-launcher` in the real KDE/X11 desktop session;
+- capture menu, post-action, and late app-window screenshots;
+- confirm `[Menu] Start pressed` through the package launcher log;
+- keep the artifact role explicit so it cannot be confused with the Linux
+  headless worker tarball.
+
+Reusable Linux GUI package/proof flow for future programs:
+
+1. Add a role-explicit package class such as `desktop_app_linux`.
+2. Keep the package separate from any headless worker or CLI artifact.
+3. Bundle only the app binary, launcher, stable resources, manifests, and
+   package-local docs.
+4. Make the launcher copy resources into a writable runtime root instead of
+   mutating files inside the unpacked package.
+5. Emit deterministic tar metadata and a checksum sidecar.
+6. Add an unpacked launcher self-test that does not require a visible display.
+7. Prove the package on the Linux PC real desktop session through the bounded
+   report-inbox helper lane.
+8. Capture the app window, not the root desktop, and require a runtime marker
+   such as `[Menu] Start pressed` before classifying render progress as green.
+9. Keep public release promotion separate from private proof. Promotion needs
+   an explicit release-control approval, version decision, and public metadata
+   update.
 
 ## Runtime Efficiency Defaults
 

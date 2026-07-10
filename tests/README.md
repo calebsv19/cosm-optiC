@@ -97,6 +97,26 @@ proves receiver-cache lifecycle/deposit/sample behavior, and
 transport can populate a surface cache and Disney v2 can sample it with the
 analytic caustic sidecar disabled.
 
+`TEST_RUNNER_GROUP=runtime_caustic_photon_trace_3d make -C ray_tracing test`
+is the focused PPM-1 photon-mapper contract proof. It covers isolated photon
+path state, closed sphere/ball-lens emission plus entry/exit dielectric events,
+refracted branch/PDF readback, post-exit parity with the existing sphere optics
+helper, emitted/final/rejected flux reconciliation, and max-depth rejection
+before any photon-map storage or render contribution.
+
+`TEST_RUNNER_GROUP=runtime_caustic_photon_map_3d make -C ray_tracing test`
+is the focused PPM-2 surface photon-map proof. It covers map allocation,
+explicit surface-hit storage/query, PDF-normalized query flux, diagnostics,
+storing a closed sphere/ball-lens PPM-1 trace receiver, receiver-identity
+filtering, and capacity rejection before any render-path contribution.
+
+`TEST_RUNNER_GROUP=runtime_caustic_beam_map_3d make -C ray_tracing test`
+is the focused PPM-3 volume beam-map proof. It covers map allocation, explicit
+beam-segment storage/query, diagnostics, storing a closed sphere/ball-lens
+PPM-1 trace segment, medium filtering, capacity rejection, and the
+no-render-contribution guard before any volume-cache deposit or render-path
+contribution.
+
 `test-ray-tracing-spatial-caustic-phase6-surface-matrix` is the local Phase 6
 surface-calibration proof target. It renders off, analytic-only,
 transport-surface-cache-only, and combined transport+analytic cells on the

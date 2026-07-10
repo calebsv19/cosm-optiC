@@ -54,6 +54,8 @@ void RuntimeCausticTransport3D_SetRequestState(const RuntimeCausticSettings3D* s
     RuntimeCausticTransportDebug3D_BeginFrame();
     g_caustic_transport_state.enabled =
         src->mode == RUNTIME_CAUSTIC_MODE_TRANSPORT &&
+        src->transportEngine ==
+            RUNTIME_CAUSTIC_TRANSPORT_ENGINE_EXPLORATORY_LENS_TRANSPORT &&
         (src->volumeCacheEnabled || src->surfaceCacheEnabled);
 }
 

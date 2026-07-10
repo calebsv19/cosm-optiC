@@ -11,6 +11,7 @@
 #include "app/data_paths.h"
 #include "app/ray_tracing_runtime_host.h"
 #include "app/ray_tracing_core_sim_runtime_frame.h"
+#include "app/ray_tracing_desktop_async_bridge.h"
 #include "app/render_export_batch.h"
 #include "app/runtime_time.h"
 #include "config/config_manager.h"
@@ -207,6 +208,7 @@ int AnimationInit(void) {
 
 
 void AnimationCleanup(void) {   
+    RayTracingDesktopAsyncBridge_Shutdown();
     CleanupRayTracing();
     ray_tracing_runtime_host_shutdown();
 }
@@ -611,6 +613,14 @@ static void SubmitRenderFrame(const RayTracingFrameRenderInputs* inputs,
                               int* frameCounter,
                               bool* running) {
     if (!inputs) {
+        return;
+    }
+    if (RayTracingDesktopAsyncBridge_SubmitFrame(window,
+                                                renderer,
+                                                inputs->light_x,
+                                                inputs->light_y,
+                                                frameCounter,
+                                                running)) {
         return;
     }
     RenderFrame(inputs->light_x, inputs->light_y, frameCounter, running);

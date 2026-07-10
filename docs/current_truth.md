@@ -78,6 +78,18 @@ Last updated: 2026-07-08
 
 ## Current Shipped State
 - Legacy `2D` rendering and editor flows remain present.
+- Linux GUI package status:
+  - `desktop_app_linux` is proven as a private Linux desktop package class for
+    optiC, separate from the already-published Linux headless worker/CLI
+    artifact.
+  - The private proof package shape is
+    `optiC-<version>-linux-x86_64-desktop-stable.tar.gz` plus `.sha256`
+    sidecar.
+  - Release-grade Linux GUI proof requires deterministic archive metadata,
+    package self-test, clean unpacked launcher self-test, real Linux PC
+    desktop-session launch, app-window screenshots, and a runtime action marker.
+  - This is not yet a public Linux GUI release; public promotion still requires
+    a separate release-control version/export/metadata/readback lane.
 - Native `3D` runtime ladder is shipped through:
   - `Direct Light`
   - `Diffuse Bounce`

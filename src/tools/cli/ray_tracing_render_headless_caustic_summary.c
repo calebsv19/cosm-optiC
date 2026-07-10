@@ -62,10 +62,16 @@ void ray_tracing_headless_write_caustic_state_summary(
                 RuntimeCausticCacheState3D_Label(caustic_readback.volumeCacheState));
         fprintf(file, "      \"surface_cache_state\": \"%s\",\n",
                 RuntimeCausticCacheState3D_Label(caustic_readback.surfaceCacheState));
+        fprintf(file, "      \"transport_engine\": \"%s\",\n",
+                RuntimeCausticTransportEngine3D_Label(caustic_readback.transportEngine));
         fprintf(file, "      \"path_emission_active\": %s,\n",
                 caustic_readback.pathEmissionActive ? "true" : "false");
         fprintf(file, "      \"transport_reserved\": %s,\n",
                 caustic_readback.transportReserved ? "true" : "false");
+        fprintf(file, "      \"photon_map_requested\": %s,\n",
+                caustic_readback.photonMapRequested ? "true" : "false");
+        fprintf(file, "      \"photon_map_implemented\": %s,\n",
+                caustic_readback.photonMapImplemented ? "true" : "false");
         fprintf(file, "      \"temporary_analytic_bridge\": %s,\n",
                 preflight->stats.causticBootstrapTemporaryBridgeActive > 0 ? "true" : "false");
         fprintf(file, "      \"transport_path_emission_active\": %s,\n",

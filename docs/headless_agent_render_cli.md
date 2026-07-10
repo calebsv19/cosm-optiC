@@ -543,7 +543,10 @@ frames. The summary reports:
 - `inspection.secondary_diffuse_samples_3d`
 - `inspection.transmission_samples_3d`
 - `inspection.caustic_mode` (`disney_v2` only; `analytic` default, `off`,
-  `transport` reserved)
+  `transport` for explicit caustic cache transport)
+- `inspection.caustic_transport_engine` (`transport` only;
+  `exploratory_lens_transport` default, `photon_map` accepted/read back as the
+  PPM-0A production photon-mapper contract state without photon tracing yet)
 - `inspection.caustic_sidecar_enabled` (`disney_v2` legacy alias)
 - `inspection.caustic_sidecar_strength` (`disney_v2` only)
 - `inspection.volume_tint`
