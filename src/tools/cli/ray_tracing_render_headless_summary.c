@@ -396,6 +396,37 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "    \"light_count\": %d,\n", preflight->scene_summary.light_count);
     fprintf(file, "    \"camera_count\": %d\n", preflight->scene_summary.camera_count);
     fprintf(file, "  },\n");
+    fprintf(file, "  \"object_motion\": {\n");
+    fprintf(file, "    \"valid\": %s,\n",
+            preflight->object_motion_summary.valid ? "true" : "false");
+    fprintf(file, "    \"has_object_motion_tracks\": %s,\n",
+            preflight->object_motion_summary.has_object_motion_tracks ? "true" : "false");
+    fprintf(file, "    \"total_tracks\": %d,\n", preflight->object_motion_summary.total_tracks);
+    fprintf(file, "    \"stored_tracks\": %d,\n", preflight->object_motion_summary.stored_tracks);
+    fprintf(file, "    \"enabled_tracks\": %d,\n", preflight->object_motion_summary.enabled_tracks);
+    fprintf(file, "    \"disabled_tracks\": %d,\n", preflight->object_motion_summary.disabled_tracks);
+    fprintf(file, "    \"matched_tracks\": %d,\n", preflight->object_motion_summary.matched_tracks);
+    fprintf(file, "    \"unmatched_tracks\": %d,\n", preflight->object_motion_summary.unmatched_tracks);
+    fprintf(file, "    \"unsupported_tracks\": %d,\n",
+            preflight->object_motion_summary.unsupported_tracks);
+    fprintf(file, "    \"duplicate_tracks\": %d,\n",
+            preflight->object_motion_summary.duplicate_tracks);
+    fprintf(file, "    \"authored_path_tracks\": %d,\n",
+            preflight->object_motion_summary.authored_path_tracks);
+    fprintf(file, "    \"physics_tracks\": %d,\n", preflight->object_motion_summary.physics_tracks);
+    fprintf(file, "    \"first_object_id\": ");
+    RayTracingJsonWriteString(file, preflight->object_motion_summary.first_object_id);
+    fprintf(file, ",\n");
+    fprintf(file, "    \"first_unmatched_object_id\": ");
+    RayTracingJsonWriteString(file, preflight->object_motion_summary.first_unmatched_object_id);
+    fprintf(file, ",\n");
+    fprintf(file, "    \"first_unsupported_object_id\": ");
+    RayTracingJsonWriteString(file, preflight->object_motion_summary.first_unsupported_object_id);
+    fprintf(file, ",\n");
+    fprintf(file, "    \"diagnostics\": ");
+    RayTracingJsonWriteString(file, preflight->object_motion_summary.diagnostics);
+    fprintf(file, "\n");
+    fprintf(file, "  },\n");
     fprintf(file, "  \"volume_summary\": {\n");
     fprintf(file, "    \"enabled\": %s,\n", preflight->volume_summary.enabled ? "true" : "false");
     fprintf(file, "    \"debug_overlay_enabled\": %s,\n",

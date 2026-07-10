@@ -32,6 +32,7 @@
 #include "test_runtime_scene_editor.h"
 #include "test_runtime_path_policy.h"
 #include "test_runtime_mode_backend_policy.h"
+#include "test_runtime_object_motion_tracks.h"
 #include "test_runtime_lighting_materials.h"
 #include "test_runtime_lighting_materials_internal.h"
 #include "test_runtime_mesh_asset_loader.h"
@@ -147,6 +148,7 @@ int test_runner_main(int argc, char** argv) {
         {"runtime_scene_editor", run_test_runtime_scene_editor_tests},
         {"runtime_path_policy", run_test_runtime_path_policy_tests},
         {"runtime_mode_backend_policy", run_test_runtime_mode_backend_policy_tests},
+        {"runtime_object_motion_tracks", run_test_runtime_object_motion_tracks_tests},
         {"runtime_and_editor", run_test_runner_runtime_tests},
         {"fluid_volume_import_3d", run_test_fluid_volume_import_3d_tests},
         {"fluid_volume_pack_import_3d", run_test_fluid_volume_pack_import_3d_tests},

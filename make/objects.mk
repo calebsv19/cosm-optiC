@@ -54,6 +54,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_disney_v2_transport_utils_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_transmission_3d.o \
 	$(BUILD_DIR)/render/runtime_emission_transparency_3d.o \
+	$(BUILD_DIR)/render/runtime_emission_transparency_3d_support.o \
 	$(BUILD_DIR)/render/runtime_emission_transparency_3d_sampling.o \
 	$(BUILD_DIR)/render/runtime_path_depth_policy_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_feature_buffer.o \
@@ -141,7 +142,10 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/import/scene_bundle_import.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_json_utils.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_authoring.o \
+	$(BUILD_DIR)/import/runtime_scene_bridge_authoring_environment.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_authoring_paths.o \
+	$(BUILD_DIR)/import/runtime_scene_bridge_file.o \
+	$(BUILD_DIR)/import/runtime_scene_motion_bridge.o \
 	$(BUILD_DIR)/import/runtime_scene_volume_defaults.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_pack.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader.o \
@@ -152,6 +156,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/path/path_arc_length.o \
 	$(BUILD_DIR)/camera/camera.o \
 	$(BUILD_DIR)/camera/camera_path_3d.o \
+	$(BUILD_DIR)/motion/runtime_motion_track_3d.o \
 	$(BUILD_DIR)/app/animation_fluid_scene.o \
 	$(BUILD_DIR)/app/data_paths.o \
 	$(BUILD_DIR)/config/core/config_runtime_paths.o \
@@ -203,6 +208,7 @@ RAY_TRACING_RENDER_HEADLESS_DEPS = \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_frame_dataflow_summary.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_frame_analysis.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_frame_output.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_inspection_overrides.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_object_audit_prepare.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_object_audit_summary.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_progress_callbacks.o \
@@ -244,6 +250,7 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_ui_menu_contracts.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_bridge_core.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_bridge_writeback.o \
+	$(BUILD_DIR)/tests/test_runtime_object_motion_tracks.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry_builder_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry_trace_suite.o \
@@ -360,6 +367,7 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_disney_v2_transport_utils_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_transmission_3d.o \
 		$(BUILD_DIR)/render/runtime_emission_transparency_3d.o \
+		$(BUILD_DIR)/render/runtime_emission_transparency_3d_support.o \
 		$(BUILD_DIR)/render/runtime_path_depth_policy_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_feature_buffer.o \
 	$(BUILD_DIR)/render/runtime_native_3d_denoise.o \
@@ -463,6 +471,7 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/pipeline/ray_tracing2_native3d_overlay.o \
 		$(BUILD_DIR)/render/pipeline/ray_tracing2_preview.o \
 		$(BUILD_DIR)/render/pipeline/ray_tracing2_preview_present_capture.o \
+		$(BUILD_DIR)/render/pipeline/ray_tracing2_preview_present_history.o \
 		$(BUILD_DIR)/render/pipeline/ray_tracing2_preview_present.o \
 		$(BUILD_DIR)/render/pipeline/ray_tracing2.o \
 	$(BUILD_DIR)/render/fluid/fluid_state.o \
@@ -507,12 +516,16 @@ TEST_DEPS := \
 	$(BUILD_DIR)/import/scene_bundle_import.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_json_utils.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_authoring.o \
+	$(BUILD_DIR)/import/runtime_scene_bridge_authoring_environment.o \
+	$(BUILD_DIR)/import/runtime_scene_bridge_file.o \
+	$(BUILD_DIR)/import/runtime_scene_motion_bridge.o \
 	$(BUILD_DIR)/import/runtime_scene_volume_defaults.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_pack.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader_cache.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader_utils.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge.o \
+	$(BUILD_DIR)/motion/runtime_motion_track_3d.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_render.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_render_controls.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_render_manifest.o \

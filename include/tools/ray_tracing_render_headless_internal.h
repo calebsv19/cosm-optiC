@@ -7,6 +7,7 @@
 
 #include "app/agent_render_request.h"
 #include "import/runtime_scene_bridge.h"
+#include "import/runtime_scene_motion_bridge.h"
 #include "import/runtime_mesh_asset_loader.h"
 #include "render/ray_tracing_mode_backend.h"
 #include "render/runtime_dynamic_geometry_accel_3d.h"
@@ -70,6 +71,7 @@ typedef struct RayTracingHeadlessPreflight {
     int frames_rendered;
     RayTracingRuntimeRoute route;
     RuntimeSceneBridgePreflight scene_summary;
+    RuntimeMotionTrack3DSummary object_motion_summary;
     RuntimeEnvironment3D environment_summary;
     bool environment_summary_built;
     int registered_light_count;
@@ -242,6 +244,8 @@ bool ray_tracing_headless_populate_water_surface_frame_selection(
 void ray_tracing_headless_note_water_surface_mesh(
     RayTracingHeadlessPreflight *preflight,
     const RuntimeNative3DPreparedFrame *frame);
+void ray_tracing_headless_apply_inspection_overrides(
+    const RayTracingAgentRenderRequest *request);
 size_t ray_tracing_headless_count_nonzero_pixels(const uint8_t *pixels,
                                                  int width,
                                                  int height,

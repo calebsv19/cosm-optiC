@@ -34,6 +34,16 @@ typedef struct {
     RuntimeLightEmitterHit3DResult emitterHit;
 } RuntimeEmissionTransparency3DTransmissionResult;
 
+bool runtime_emission_transparency_3d_can_skip_emission_support(
+    const RuntimeScene3D* scene,
+    const RuntimeMaterialPayload3D* payload);
+bool runtime_emission_transparency_3d_can_skip_transparency_support(
+    const RuntimeScene3D* scene,
+    const RuntimeMaterialPayload3D* payload);
+void runtime_emission_transparency_3d_copy_material_result(
+    const RuntimeMaterialResponse3DResult* source,
+    const RuntimeMaterialPayload3D* payload,
+    RuntimeEmissionTransparency3DResult* out_result);
 int runtime_emission_transparency_3d_resolve_secondary_sample_count(void);
 int runtime_emission_transparency_3d_resolve_transmission_sample_count(void);
 double runtime_emission_transparency_3d_clamp(double value,

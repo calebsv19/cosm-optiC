@@ -10,6 +10,7 @@ CLI="$(ray_tracing_tool_path ray_tracing_render_headless "$ROOT_DIR")"
 REQUEST="$ROOT_DIR/tests/fixtures/agent_render_preflight_request.json"
 WORK_ROOT="$(ray_tracing_test_reset_work_root preflight_smoke "$ROOT_DIR")"
 SUMMARY="$WORK_ROOT/render_summary.json"
+OBJECT_MOTION_SUMMARY="$WORK_ROOT/object_motion_summary.json"
 LEDGER_ENABLED_SUMMARY="$WORK_ROOT/frame_dataflow_enabled_summary.json"
 LEDGER_TLAS_SKIP_SUMMARY="$WORK_ROOT/frame_dataflow_tlas_skip_summary.json"
 LEDGER_TLAS_SKIP_DISABLED_SUMMARY="$WORK_ROOT/frame_dataflow_tlas_skip_disabled_summary.json"
@@ -45,12 +46,70 @@ grep -q '"light_count": 2' "$SUMMARY"
 grep -q '"enabled_count": 2' "$SUMMARY"
 grep -q '"shape_counts": { "point": 0, "sphere": 1, "disk": 0, "rect": 1, "mesh_emissive": 0 }' "$SUMMARY"
 grep -q '"source_counts": { "authored": 0, "compatibility": 1, "material_emitter": 1 }' "$SUMMARY"
+grep -q '"object_motion": {' "$SUMMARY"
+grep -q '"has_object_motion_tracks": false' "$SUMMARY"
+grep -q '"total_tracks": 0' "$SUMMARY"
+grep -q '"diagnostics": "object_motion_tracks_missing"' "$SUMMARY"
 grep -q '"active_trace_route": "tlas_blas"' "$SUMMARY"
 grep -q '"requested_trace_route": "tlas_blas"' "$SUMMARY"
 grep -q '"trace_context_stats_owned": true' "$SUMMARY"
 grep -q '"trace_context_callback_bound": true' "$SUMMARY"
 grep -q '"route_trace_calls": 0' "$SUMMARY"
 grep -q '"route_parity_mismatches": 0' "$SUMMARY"
+
+python3 - "$REQUEST" "$WORK_ROOT/object_motion_scene_runtime.json" "$WORK_ROOT/object_motion_request.json" "$WORK_ROOT/object_motion_output" <<'PY'
+import json
+import pathlib
+import sys
+
+request_path, scene_dst, request_dst, output_root = sys.argv[1:5]
+request = json.load(open(request_path, "r", encoding="utf-8"))
+scene_path = pathlib.Path(request["scene"]["runtime_scene_path"])
+if not scene_path.is_absolute():
+    scene_path = (pathlib.Path(request_path).parent / scene_path).resolve()
+scene = json.load(open(scene_path, "r", encoding="utf-8"))
+objects = scene.get("objects") or []
+matched_id = objects[0].get("object_id") if objects else "object_motion_fixture_object"
+scene.setdefault("extensions", {}).setdefault("ray_tracing", {}).setdefault("authoring", {})[
+    "object_motion_tracks"
+] = [
+    {
+        "object_id": matched_id,
+        "enabled": True,
+        "mode": "authored_path",
+        "timing_domain": "frame",
+        "wrap": "clamp",
+    },
+    {
+        "object_id": "missing_object_motion_fixture",
+        "enabled": True,
+        "mode": "authored_path",
+        "timing_domain": "frame",
+        "wrap": "clamp",
+    },
+]
+with open(scene_dst, "w", encoding="utf-8") as f:
+    json.dump(scene, f, indent=2)
+    f.write("\n")
+request["scene"]["runtime_scene_path"] = scene_dst
+request["output"]["root"] = output_root
+request["progress"]["summary_path"] = f"{output_root}/render_summary.json"
+request["progress"]["progress_path"] = f"{output_root}/render_progress.json"
+with open(request_dst, "w", encoding="utf-8") as f:
+    json.dump(request, f, indent=2)
+    f.write("\n")
+PY
+
+"$CLI" --request "$WORK_ROOT/object_motion_request.json" --preflight \
+  --summary "$OBJECT_MOTION_SUMMARY" > "$WORK_ROOT/object_motion_stdout_summary.json"
+
+grep -q '"object_motion": {' "$OBJECT_MOTION_SUMMARY"
+grep -q '"has_object_motion_tracks": true' "$OBJECT_MOTION_SUMMARY"
+grep -q '"total_tracks": 2' "$OBJECT_MOTION_SUMMARY"
+grep -q '"enabled_tracks": 2' "$OBJECT_MOTION_SUMMARY"
+grep -q '"matched_tracks": 1' "$OBJECT_MOTION_SUMMARY"
+grep -q '"unmatched_tracks": 1' "$OBJECT_MOTION_SUMMARY"
+grep -q '"diagnostics": "ok"' "$OBJECT_MOTION_SUMMARY"
 
 RAY_TRACING_FRAME_DATAFLOW_STATE_LEDGER=1 \
   "$CLI" --request "$REQUEST" --preflight --summary "$LEDGER_ENABLED_SUMMARY" \
