@@ -217,6 +217,9 @@ void ray_tracing_headless_write_frame_dataflow_state_ledger(
     FILE* file,
     const RayTracingAgentRenderRequest* request,
     const RayTracingHeadlessPreflight* preflight);
+void ray_tracing_headless_write_direct_light_visibility_policy(
+    FILE* file,
+    const RuntimeRenderTraceCostLedger3D* ledger);
 void ray_tracing_headless_write_caustic_state_summary(
     FILE *file,
     const RayTracingAgentRenderRequest *request,

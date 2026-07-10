@@ -117,6 +117,12 @@ PPM-1 trace segment, medium filtering, capacity rejection, and the
 no-render-contribution guard before any volume-cache deposit or render-path
 contribution.
 
+`TEST_RUNNER_GROUP=runtime_caustic_photon_integration_3d make -C ray_tracing test`
+is the focused PPM-4 product integration/defaults proof. It covers
+off/reference/production product labels, product-mode-to-caustic-settings
+application, bounded sample/depth defaults, combined surface photon-map plus
+volume beam-map query readback, and the render-contribution suppression guard.
+
 `test-ray-tracing-spatial-caustic-phase6-surface-matrix` is the local Phase 6
 surface-calibration proof target. It renders off, analytic-only,
 transport-surface-cache-only, and combined transport+analytic cells on the
