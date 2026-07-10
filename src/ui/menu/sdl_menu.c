@@ -26,10 +26,17 @@
 #include "ui/sdl_menu_render.h"
 #include "ui/sdl_menu_state.h"
 
+#if defined(__linux__)
+#define MENU_WIDTH 1024
+#define MENU_HEIGHT 700
+#define MENU_MIN_WIDTH 960
+#define MENU_MIN_HEIGHT 640
+#else
 #define MENU_WIDTH 1200
 #define MENU_HEIGHT 900
 #define MENU_MIN_WIDTH 1080
 #define MENU_MIN_HEIGHT 760
+#endif
 #define MENU_IDLE_HEARTBEAT_MS 250u
 
 #if USE_VULKAN
