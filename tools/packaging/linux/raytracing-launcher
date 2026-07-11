@@ -22,17 +22,44 @@ if ! touch "$LOG_FILE" 2>/dev/null; then
     touch "$LOG_FILE" 2>/dev/null || true
 fi
 
-copy_lane_once() {
-    lane="$1"
-    source="$RES_DIR/$lane"
-    target="$RUNTIME_DIR/$lane"
-    if [ -L "$target" ] || [ -e "$target" ]; then
-        return 0
+copy_tree_if_needed() {
+    target="$1"
+    source="$2"
+    required_rels="${3:-}"
+    if [ -L "$target" ]; then
+        rm -rf "$target" 2>/dev/null || true
     fi
-    if [ -e "$source" ]; then
-        mkdir -p "$(dirname "$target")"
-        cp -R "$source" "$target"
+    if [ -e "$target" ] && [ -n "$required_rels" ]; then
+        old_ifs="${IFS}"
+        IFS=':'
+        all_present=1
+        for required_rel in $required_rels; do
+            if [ ! -e "$target/$required_rel" ]; then
+                all_present=0
+                break
+            fi
+        done
+        IFS="${old_ifs}"
+        if [ "$all_present" -eq 1 ]; then
+            return 0
+        fi
+        rm -rf "$target" 2>/dev/null || true
     fi
+    [ -e "$source" ] || return 0
+    mkdir -p "$(dirname "$target")" 2>/dev/null || true
+    cp -R "$source" "$target"
+}
+
+sync_bundle_files() {
+    target_dir="$1"
+    source_dir="$2"
+    pattern="$3"
+    [ -d "$source_dir" ] || return 0
+    mkdir -p "$target_dir" 2>/dev/null || true
+    for source_file in "$source_dir"/$pattern; do
+        [ -f "$source_file" ] || continue
+        cp "$source_file" "$target_dir/$(basename "$source_file")"
+    done
 }
 
 setup_runtime_root() {
@@ -46,28 +73,41 @@ setup_runtime_root() {
         exit 1
     fi
 
-    mkdir -p "$RUNTIME_DIR/data/runtime" "$RUNTIME_DIR/data/runtime/frames" "$RUNTIME_DIR/data/runtime/videos" "$RUNTIME_DIR/data/snapshots"
-    copy_lane_once config
-    copy_lane_once shared
-    copy_lane_once shaders
-    copy_lane_once vk_renderer
+    mkdir -p "$RUNTIME_DIR/data/runtime" \
+        "$RUNTIME_DIR/data/runtime/frames" \
+        "$RUNTIME_DIR/data/runtime/videos" \
+        "$RUNTIME_DIR/data/snapshots" 2>/dev/null || true
+
+    copy_tree_if_needed "$RUNTIME_DIR/config" "$RES_DIR/config" "scene_config.json:animation_config.json:default.ttf"
+    sync_bundle_files "$RUNTIME_DIR/config/materials" "$RES_DIR/config/materials" "*.json"
+    copy_tree_if_needed "$RUNTIME_DIR/shared" "$RES_DIR/shared" "assets/fonts/Montserrat-Regular.ttf"
+    copy_tree_if_needed "$RUNTIME_DIR/shaders" "$RES_DIR/shaders" "textured.vert.spv:textured.frag.spv:line.vert.spv:line.frag.spv"
+    copy_tree_if_needed "$RUNTIME_DIR/vk_renderer" "$RES_DIR/vk_renderer" "shaders/textured.vert.spv:shaders/textured.frag.spv:shaders/line.vert.spv:shaders/line.frag.spv"
 }
 
 setup_runtime_root
 
-export PATH="$TOOLS_DIR:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+export PATH="$TOOLS_DIR:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
 export VK_RENDERER_SHADER_ROOT="${VK_RENDERER_SHADER_ROOT:-$RUNTIME_DIR}"
 export SHAPE_ASSET_DIR="${SHAPE_ASSET_DIR:-$RUNTIME_DIR/config/objects}"
 export TIMERHUD_OUTPUT_ROOT="${TIMERHUD_OUTPUT_ROOT:-$RUNTIME_DIR/data/runtime}"
-export RAY_TRACING_TIMER_HUD_SETTINGS="${RAY_TRACING_TIMER_HUD_SETTINGS:-$RUNTIME_DIR/config/timer_hud_settings.json}"
+export RAY_TRACING_TIMER_HUD_SETTINGS="${RAY_TRACING_TIMER_HUD_SETTINGS:-$RUNTIME_DIR/data/runtime/timer_hud_settings.json}"
 export RAY_TRACING_TIMER_HUD="${RAY_TRACING_TIMER_HUD:-0}"
 export RAY_TRACING_TIMER_HUD_OVERLAY="${RAY_TRACING_TIMER_HUD_OVERLAY:-0}"
 export RAY_TRACING_TIMER_HUD_VISUAL_MODE="${RAY_TRACING_TIMER_HUD_VISUAL_MODE:-hybrid}"
+export RAY_TRACING_USE_SHARED_THEME="${RAY_TRACING_USE_SHARED_THEME:-1}"
+export RAY_TRACING_USE_SHARED_THEME_FONT="${RAY_TRACING_USE_SHARED_THEME_FONT:-1}"
+export RAY_TRACING_USE_SHARED_FONT="${RAY_TRACING_USE_SHARED_FONT:-1}"
+export RAY_TRACING_FONT_PRESET="${RAY_TRACING_FONT_PRESET:-ide}"
+export RAY_TRACING_RENDER_METRICS_DATASET_PATH="${RAY_TRACING_RENDER_METRICS_DATASET_PATH:-$RUNTIME_DIR/data/runtime/render_metrics.dataset.json}"
 export CODEWORK_SHARED_THEME_DIR="${CODEWORK_SHARED_THEME_DIR:-$RUNTIME_DIR/shared/assets/themes}"
 export CODEWORK_SHARED_FONT_DIR="${CODEWORK_SHARED_FONT_DIR:-$RUNTIME_DIR/shared/assets/fonts}"
 export CODEWORK_FONT_PRESET="${CODEWORK_FONT_PRESET:-default}"
 export RENDER_METRICS_DATASET_PATH="${RENDER_METRICS_DATASET_PATH:-$RUNTIME_DIR/data/runtime/render_metrics_dataset.csv}"
 
+if [ -x "$TOOLS_DIR/ffmpeg" ] && [ -z "${RAY_TRACING_FFMPEG_BIN:-}" ]; then
+    export RAY_TRACING_FFMPEG_BIN="$TOOLS_DIR/ffmpeg"
+fi
 if command -v ffmpeg >/dev/null 2>&1; then
     export FFMPEG_BIN="${FFMPEG_BIN:-$(command -v ffmpeg)}"
 fi
@@ -84,15 +124,23 @@ if [ "${1:-}" = "--print-config" ]; then
     echo "RAY_TRACING_TIMER_HUD=$RAY_TRACING_TIMER_HUD"
     echo "RAY_TRACING_TIMER_HUD_OVERLAY=$RAY_TRACING_TIMER_HUD_OVERLAY"
     echo "RAY_TRACING_TIMER_HUD_VISUAL_MODE=$RAY_TRACING_TIMER_HUD_VISUAL_MODE"
+    echo "RAY_TRACING_USE_SHARED_THEME=$RAY_TRACING_USE_SHARED_THEME"
+    echo "RAY_TRACING_USE_SHARED_THEME_FONT=$RAY_TRACING_USE_SHARED_THEME_FONT"
+    echo "RAY_TRACING_USE_SHARED_FONT=$RAY_TRACING_USE_SHARED_FONT"
+    echo "RAY_TRACING_FONT_PRESET=$RAY_TRACING_FONT_PRESET"
+    echo "RAY_TRACING_RENDER_METRICS_DATASET_PATH=$RAY_TRACING_RENDER_METRICS_DATASET_PATH"
+    echo "RAY_TRACING_FFMPEG_BIN=${RAY_TRACING_FFMPEG_BIN:-}"
     echo "CODEWORK_SHARED_FONT_DIR=$CODEWORK_SHARED_FONT_DIR"
     echo "CODEWORK_FONT_PRESET=$CODEWORK_FONT_PRESET"
     echo "RENDER_METRICS_DATASET_PATH=$RENDER_METRICS_DATASET_PATH"
     echo "FFMPEG_BIN=${FFMPEG_BIN:-}"
+    echo "PATH=$PATH"
     exit 0
 fi
 
 if [ "${1:-}" = "--self-test" ]; then
     [ -x "$SCRIPT_DIR/raytracing-bin" ] || { echo "missing: raytracing-bin" >&2; exit 1; }
+    [ -f "$PACKAGE_ROOT/package_manifest.json" ] || { echo "missing: package_manifest.json" >&2; exit 1; }
     [ -f "$RUNTIME_DIR/config/animation_config.json" ] || { echo "missing: config/animation_config.json" >&2; exit 1; }
     [ -f "$RUNTIME_DIR/config/scene_config.json" ] || { echo "missing: config/scene_config.json" >&2; exit 1; }
     [ -f "$RUNTIME_DIR/config/default.ttf" ] || { echo "missing: config/default.ttf" >&2; exit 1; }
@@ -105,7 +153,11 @@ if [ "${1:-}" = "--self-test" ]; then
     [ -d "$RUNTIME_DIR/data/snapshots" ] || { echo "missing: snapshots dir" >&2; exit 1; }
     [ -f "$RUNTIME_DIR/shared/assets/fonts/Montserrat-Regular.ttf" ] || { echo "missing: bundled shared font" >&2; exit 1; }
     [ -f "$RUNTIME_DIR/vk_renderer/shaders/textured.vert.spv" ] || { echo "missing: bundled vk_renderer shader" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/vk_renderer/shaders/line.vert.spv" ] || { echo "missing: bundled vk_renderer line shader" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/vk_renderer/shaders/line.frag.spv" ] || { echo "missing: bundled vk_renderer line shader" >&2; exit 1; }
     [ -f "$RUNTIME_DIR/shaders/textured.vert.spv" ] || { echo "missing: bundled runtime shader" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/shaders/line.vert.spv" ] || { echo "missing: bundled runtime line shader" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/shaders/line.frag.spv" ] || { echo "missing: bundled runtime line shader" >&2; exit 1; }
     echo "self-test: ok"
     echo "LOG_FILE=$LOG_FILE"
     echo "RAY_TRACING_RUNTIME_DIR=$RUNTIME_DIR"
@@ -114,6 +166,9 @@ if [ "${1:-}" = "--self-test" ]; then
     echo "RAY_TRACING_TIMER_HUD=$RAY_TRACING_TIMER_HUD"
     echo "RAY_TRACING_TIMER_HUD_OVERLAY=$RAY_TRACING_TIMER_HUD_OVERLAY"
     echo "RAY_TRACING_TIMER_HUD_VISUAL_MODE=$RAY_TRACING_TIMER_HUD_VISUAL_MODE"
+    echo "RAY_TRACING_FONT_PRESET=$RAY_TRACING_FONT_PRESET"
+    echo "RAY_TRACING_RENDER_METRICS_DATASET_PATH=$RAY_TRACING_RENDER_METRICS_DATASET_PATH"
+    echo "RAY_TRACING_FFMPEG_BIN=${RAY_TRACING_FFMPEG_BIN:-}"
     exit 0
 fi
 
