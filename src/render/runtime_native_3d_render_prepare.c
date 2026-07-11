@@ -475,10 +475,19 @@ static void runtime_native_3d_render_configure_water_surface_object(
     double tint_r = 88.0 / 255.0;
     double tint_g = 178.0 / 255.0;
     double tint_b = 235.0 / 255.0;
+    double water_transparency = 0.92;
+    double water_ior = 1.333;
+    double water_absorption_distance = 4.0;
     if (!object || !water) return;
 
+    water_transparency = runtime_native_3d_render_clamp01(water_transparency);
+    if (water->material.valid) {
+        water_ior = fmax(1.0, fmin(4.0, water->material.ior));
+        water_absorption_distance = fmax(water->material.absorption_distance_m, 1e-6);
+    }
+
     RuntimeWaterMaterial3D_ComputeTransmittanceTint(
-        water->material.valid ? water->material.absorption_distance_m : 4.0,
+        water_absorption_distance,
         water->material.valid ? water->material.absorption_rgb[0] : 0.10,
         water->material.valid ? water->material.absorption_rgb[1] : 0.035,
         water->material.valid ? water->material.absorption_rgb[2] : 0.015,
@@ -498,7 +507,7 @@ static void runtime_native_3d_render_configure_water_surface_object(
     object->scale = 1.0;
     object->color = SceneObjectPackRGBBytes(r, g, b);
     object->opacity = 1.0;
-    object->alpha = 1.0;
+    object->alpha = water_transparency;
     object->reflectivity = runtime_native_3d_water_material_or_default(
         water->material.reflectivity,
         kRuntimeNative3DWaterSurfaceReflectivity);
@@ -506,6 +515,11 @@ static void runtime_native_3d_render_configure_water_surface_object(
         water->material.roughness,
         kRuntimeNative3DWaterSurfaceRoughness);
     object->material_id = MATERIAL_PRESET_TRANSPARENT;
+    SceneObjectSeedGlassTransportOverrideFromMaterial(object);
+    object->glassTransmission = water_transparency;
+    object->glassIor = water_ior;
+    object->glassAbsorptionDistance = water_absorption_distance;
+    object->glassThinWalled = false;
     object->dirty = false;
     object->guideOnly = false;
 }

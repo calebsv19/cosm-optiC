@@ -8,6 +8,21 @@
 #include "render/runtime_ray_3d.h"
 #include "render/runtime_render_trace_cost_ledger_3d.h"
 
+static double runtime_disney_v2_3d_direction_delta_degrees(Vec3 a, Vec3 b) {
+    const double kRadiansToDegrees = 57.2957795130823208768;
+    double dot = vec3_dot(vec3_normalize(a), vec3_normalize(b));
+    dot = runtime_disney_v2_transmission_3d_clamp(dot, -1.0, 1.0);
+    return acos(dot) * kRadiansToDegrees;
+}
+
+static double runtime_disney_v2_3d_payload_optical_ior(
+    const RuntimeMaterialPayload3D* payload) {
+    if (!payload || !payload->valid) return 0.0;
+    if (payload->opticalIor >= 1.0) return payload->opticalIor;
+    if (payload->bsdf.ior >= 1.0) return payload->bsdf.ior;
+    return 0.0;
+}
+
 static void runtime_disney_v2_3d_medium_stack_init(
     RuntimeDisneyV2_3DMediumStackTracker* stack) {
     if (!stack) return;
@@ -104,6 +119,57 @@ static bool runtime_disney_v2_3d_record_solid_interior_return(
     io_result->primaryTransmissionInteriorReturnRadianceG += return_g;
     io_result->primaryTransmissionInteriorReturnRadianceB += return_b;
     io_result->primaryTransmissionInteriorReturnSurfaceCount += 1;
+    return true;
+}
+
+static bool runtime_disney_v2_3d_apply_ambient_receiver_fallback(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeMaterialPayload3D* payload,
+    RuntimeDirectLight3DResult* io_direct) {
+    double intensity = 0.0;
+    double bias = 0.0;
+    double directional = 0.0;
+    double up_facing = 0.0;
+    double ambient_r = 0.0;
+    double ambient_g = 0.0;
+    double ambient_b = 0.0;
+    double emissive_strength = 0.0;
+
+    if (!scene || !hit || !payload || !payload->valid || !io_direct ||
+        hit->triangleIndex < 0) {
+        return false;
+    }
+
+    if (scene->environment.lightMode == ENVIRONMENT_LIGHT_MODE_AMBIENT) {
+        intensity = RuntimeEnvironment3D_AmbientStrength(&scene->environment);
+        if (intensity > 0.0) {
+            bias = runtime_disney_v2_transmission_3d_clamp01(scene->environment.topDownBias);
+            up_facing = runtime_disney_v2_transmission_3d_clamp01(hit->normal.z);
+            directional = (1.0 - bias) + (bias * up_facing);
+            ambient_r = intensity * directional * scene->environment.ambientColor.x *
+                        payload->baseColorR;
+            ambient_g = intensity * directional * scene->environment.ambientColor.y *
+                        payload->baseColorG;
+            ambient_b = intensity * directional * scene->environment.ambientColor.z *
+                        payload->baseColorB;
+        }
+    }
+
+    emissive_strength = runtime_disney_v2_transmission_3d_clamp01(payload->emissive);
+    ambient_r += payload->baseColorR * emissive_strength;
+    ambient_g += payload->baseColorG * emissive_strength;
+    ambient_b += payload->baseColorB * emissive_strength;
+    if (runtime_disney_v2_transmission_3d_peak(ambient_r, ambient_g, ambient_b) <= 1e-9) {
+        return false;
+    }
+    io_direct->radianceR += ambient_r;
+    io_direct->radianceG += ambient_g;
+    io_direct->radianceB += ambient_b;
+    io_direct->radiance = runtime_disney_v2_transmission_3d_peak(io_direct->radianceR,
+                                                                 io_direct->radianceG,
+                                                                 io_direct->radianceB);
+    io_direct->visible = true;
     return true;
 }
 
@@ -352,6 +418,10 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
         }
         principled = RuntimePrincipledBSDF3D_FromMaterialPayload(&payload);
         if (!runtime_disney_v2_3d_payload_is_transparent(&payload, &principled)) {
+            double contribution_r = 0.0;
+            double contribution_g = 0.0;
+            double contribution_b = 0.0;
+            bool receiver_shaded = false;
             RuntimeRenderTraceCostLedger3D_RecordTransmissionSurface(
                 ledger_source,
                 RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_OPAQUE_RECEIVER,
@@ -365,12 +435,17 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
                                                             io_result->tracePixelWidth,
                                                             io_result->tracePixelHeight,
                                                             &receiver_result) &&
-                receiver_result.visible) {
+                receiver_result.visible &&
+                runtime_disney_v2_transmission_3d_peak(receiver_result.radianceR,
+                                                       receiver_result.radianceG,
+                                                       receiver_result.radianceB) > 1e-9) {
                 io_result->primaryTransmissionReceiverShadeCount += 1;
                 io_result->primaryTransmissionReceiverRadianceR += receiver_result.radianceR;
                 io_result->primaryTransmissionReceiverRadianceG += receiver_result.radianceG;
                 io_result->primaryTransmissionReceiverRadianceB += receiver_result.radianceB;
-            } else {
+                receiver_shaded = true;
+            }
+            if (!receiver_shaded) {
                 if (!RuntimeDirectLight3D_ShadeHitWithPayload(scene,
                                                               &hit,
                                                               &payload,
@@ -382,10 +457,28 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
                 receiver_result.radianceG = direct.radianceG;
                 receiver_result.radianceB = direct.radianceB;
                 receiver_result.radiance = direct.radiance;
+                if (receiver_result.radiance <= 1e-9 &&
+                    runtime_disney_v2_3d_apply_ambient_receiver_fallback(scene,
+                                                                         &hit,
+                                                                         &payload,
+                                                                         &direct)) {
+                    receiver_result.radianceR = direct.radianceR;
+                    receiver_result.radianceG = direct.radianceG;
+                    receiver_result.radianceB = direct.radianceB;
+                    receiver_result.radiance = direct.radiance;
+                }
             }
-            accum_r += receiver_result.radianceR * throughput_r * blend_weight;
-            accum_g += receiver_result.radianceG * throughput_g * blend_weight;
-            accum_b += receiver_result.radianceB * throughput_b * blend_weight;
+            contribution_r = receiver_result.radianceR * throughput_r * blend_weight;
+            contribution_g = receiver_result.radianceG * throughput_g * blend_weight;
+            contribution_b = receiver_result.radianceB * throughput_b * blend_weight;
+            RuntimeRenderTraceCostLedger3D_RecordTransmissionReceiverContribution(
+                &hit,
+                contribution_r,
+                contribution_g,
+                contribution_b);
+            accum_r += contribution_r;
+            accum_g += contribution_g;
+            accum_b += contribution_b;
             contributed = runtime_disney_v2_transmission_3d_peak(accum_r, accum_g, accum_b) > 1e-9;
             receiver_found = true;
             *out_direct = direct;
@@ -405,10 +498,51 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
             runtime_disney_v2_3d_resolve_transparent_policy(&payload,
                                                             &principled,
                                                             segment_distance);
+        RuntimeDielectricTransport3D interface_transport = {0};
+        bool interface_transport_resolved = false;
+        bool interface_entering = vec3_dot(direction, hit.normal) < 0.0;
+        bool interface_direction_changed = false;
+        double interface_angle_delta_deg = -1.0;
+        RuntimeRenderTraceCostTransmissionSurfaceKind3D interface_surface_kind =
+            runtime_disney_v2_3d_transmission_surface_kind(&transparent_policy);
+
+        if (transparent_policy.physicalTransmission) {
+            interface_transport_resolved =
+                RuntimeDielectricTransport3D_Resolve(&payload,
+                                                     hit.normal,
+                                                     direction,
+                                                     &interface_transport);
+            if (interface_transport_resolved) {
+                interface_entering = interface_transport.entering;
+                if (interface_transport.hasRefraction) {
+                    interface_angle_delta_deg =
+                        runtime_disney_v2_3d_direction_delta_degrees(
+                            direction,
+                            interface_transport.refractionDir);
+                    if (!transparent_policy.thinWalled &&
+                        interface_angle_delta_deg > 1.0e-5) {
+                        direction = interface_transport.refractionDir;
+                        interface_direction_changed = true;
+                    }
+                }
+            }
+        }
+
         RuntimeRenderTraceCostLedger3D_RecordTransmissionSurface(
             ledger_source,
-            runtime_disney_v2_3d_transmission_surface_kind(&transparent_policy),
+            interface_surface_kind,
             &hit);
+        RuntimeRenderTraceCostLedger3D_RecordTransmissionInterface(
+            ledger_source,
+            interface_surface_kind,
+            &hit,
+            &payload,
+            runtime_disney_v2_3d_payload_optical_ior(&payload),
+            interface_entering,
+            transparent_policy.thinWalled,
+            transparent_policy.physicalTransmission,
+            interface_angle_delta_deg,
+            interface_direction_changed);
         transparent_surface_count += 1;
         if (transparent_policy.alphaOnly) {
             io_result->primaryTransmissionAlphaOnlySurfaceCount += 1;
@@ -426,7 +560,7 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
         if (transparent_policy.physicalTransmission) {
             io_result->primaryTransmissionPhysicalSurfaceCount += 1;
         }
-        if (allow_recursive_receiver_shade &&
+        if (!transparent_policy.physicalTransmission && allow_recursive_receiver_shade &&
             RuntimeDisneyV2_3D_ShadeHitWithTraceContext(scene,
                                                         &hit,
                                                         sampling,
@@ -566,6 +700,7 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
     Vec3 view_dir = vec3(0.0, 0.0, 1.0);
     double fresnel_transmission = 0.0;
     double blend_weight = 0.0;
+    double front_body_weight = 1.0;
     double front_diffuse_weight = 1.0;
     double front_specular_weight = 1.0;
     double accum_r = 0.0;
@@ -588,6 +723,7 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
     uint32_t sample_seed = 0U;
     HitInfo3D best_hit = {0};
     Ray3D best_ray = {0};
+    bool physical_front_transmission = false;
     RuntimeRenderTraceCostTransmissionSource3D ledger_source =
         continuation_mode == RUNTIME_DISNEY_V2_3D_TRANSMISSION_CONTINUATION_REFLECTED
             ? RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED
@@ -633,6 +769,17 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
                                                     (sample.dielectric.fresnel * 0.80),
                                                 0.05,
                                                 0.65);
+    physical_front_transmission =
+        runtime_disney_v2_3d_policy_is_physical_transmission(&io_result->payload,
+                                                             &io_result->principled);
+    front_body_weight = physical_front_transmission ? 0.0 : front_diffuse_weight;
+    if (physical_front_transmission) {
+        io_result->primaryTransmissionPhysicalSurfaceCount += 1;
+        front_specular_weight =
+            runtime_disney_v2_transmission_3d_clamp(sample.dielectric.fresnel,
+                                                    0.0,
+                                                    0.35);
+    }
     sample_count =
         runtime_disney_v2_3d_resolve_transmission_sample_count(
             continuation_mode);
@@ -645,6 +792,23 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
         runtime_disney_v2_3d_transmission_pixel_stability(sampling);
     RuntimeRenderTraceCostLedger3D_RecordTransmissionPathEvaluation(ledger_source,
                                                                     sample_count);
+    RuntimeRenderTraceCostLedger3D_RecordTransmissionInterface(
+        ledger_source,
+        physical_front_transmission
+            ? RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_SOLID_PHYSICAL
+            : (io_result->payload.thinWalled
+                   ? RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_THIN_WALLED
+                   : RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_SOLID_NONPHYSICAL),
+        &primary_hit->hitInfo,
+        &io_result->payload,
+        runtime_disney_v2_3d_payload_optical_ior(&io_result->payload),
+        sample.dielectric.entering,
+        io_result->payload.thinWalled,
+        physical_front_transmission,
+        runtime_disney_v2_3d_direction_delta_degrees(sample.dielectric.incidentDir,
+                                                     sample.dielectric.refractionDir),
+        runtime_disney_v2_3d_direction_delta_degrees(sample.dielectric.incidentDir,
+                                                     sample.dielectric.refractionDir) > 1.0e-5);
     bool reflected_first_subpass_no_hit_reuse = false;
 
     for (int sample_index = 0; sample_index < sample_count; ++sample_index) {
@@ -739,27 +903,27 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
         return false;
     }
 
-    io_result->directRadianceR *= front_diffuse_weight;
-    io_result->directRadianceG *= front_diffuse_weight;
-    io_result->directRadianceB *= front_diffuse_weight;
-    io_result->diffuseRadianceR *= front_diffuse_weight;
-    io_result->diffuseRadianceG *= front_diffuse_weight;
-    io_result->diffuseRadianceB *= front_diffuse_weight;
+    io_result->directRadianceR *= front_body_weight;
+    io_result->directRadianceG *= front_body_weight;
+    io_result->directRadianceB *= front_body_weight;
+    io_result->diffuseRadianceR *= front_body_weight;
+    io_result->diffuseRadianceG *= front_body_weight;
+    io_result->diffuseRadianceB *= front_body_weight;
     io_result->specularRadianceR *= front_specular_weight;
     io_result->specularRadianceG *= front_specular_weight;
     io_result->specularRadianceB *= front_specular_weight;
-    io_result->transmissionRadianceR *= front_diffuse_weight;
-    io_result->transmissionRadianceG *= front_diffuse_weight;
-    io_result->transmissionRadianceB *= front_diffuse_weight;
-    io_result->stochasticDirectRadianceR *= front_diffuse_weight;
-    io_result->stochasticDirectRadianceG *= front_diffuse_weight;
-    io_result->stochasticDirectRadianceB *= front_diffuse_weight;
-    io_result->stochasticBsdfRadianceR *= front_diffuse_weight;
-    io_result->stochasticBsdfRadianceG *= front_diffuse_weight;
-    io_result->stochasticBsdfRadianceB *= front_diffuse_weight;
-    io_result->recursiveBsdfRadianceR *= front_diffuse_weight;
-    io_result->recursiveBsdfRadianceG *= front_diffuse_weight;
-    io_result->recursiveBsdfRadianceB *= front_diffuse_weight;
+    io_result->transmissionRadianceR *= front_body_weight;
+    io_result->transmissionRadianceG *= front_body_weight;
+    io_result->transmissionRadianceB *= front_body_weight;
+    io_result->stochasticDirectRadianceR *= front_body_weight;
+    io_result->stochasticDirectRadianceG *= front_body_weight;
+    io_result->stochasticDirectRadianceB *= front_body_weight;
+    io_result->stochasticBsdfRadianceR *= front_body_weight;
+    io_result->stochasticBsdfRadianceG *= front_body_weight;
+    io_result->stochasticBsdfRadianceB *= front_body_weight;
+    io_result->recursiveBsdfRadianceR *= front_body_weight;
+    io_result->recursiveBsdfRadianceG *= front_body_weight;
+    io_result->recursiveBsdfRadianceB *= front_body_weight;
 
     io_result->primaryTransmissionRadianceR = accum_r / (double)contributing_sample_count;
     io_result->primaryTransmissionRadianceG = accum_g / (double)contributing_sample_count;

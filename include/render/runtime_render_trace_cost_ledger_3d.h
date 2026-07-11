@@ -4,7 +4,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "render/runtime_material_payload_3d.h"
 #include "render/runtime_ray_3d.h"
+#include "scene/object_manager.h"
 
 typedef enum RuntimeRenderTraceCostRayClass3D {
     RUNTIME_RENDER_TRACE_COST_RAY_PRIMARY = 0,
@@ -175,6 +177,22 @@ typedef enum RuntimeRenderTraceCostTransmissionPixelStability3D {
     RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_LATE_SUBPASS = 3,
     RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_COUNT = 4
 } RuntimeRenderTraceCostTransmissionPixelStability3D;
+
+typedef enum RuntimeRenderTraceCostTransmissionMaterialClass3D {
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_MATERIAL_UNKNOWN = 0,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_MATERIAL_WATER_SURFACE = 1,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_MATERIAL_TRANSPARENT_OTHER = 2,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_MATERIAL_OPAQUE_RECEIVER = 3,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_MATERIAL_CLASS_COUNT = 4
+} RuntimeRenderTraceCostTransmissionMaterialClass3D;
+
+typedef enum RuntimeRenderTraceCostTransmissionEtaPair3D {
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ETA_UNKNOWN = 0,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ETA_AIR_TO_MATERIAL = 1,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ETA_MATERIAL_TO_AIR = 2,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ETA_MATCHED = 3,
+    RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ETA_PAIR_COUNT = 4
+} RuntimeRenderTraceCostTransmissionEtaPair3D;
 
 typedef enum RuntimeRenderTraceCostThroughputBucket3D {
     RUNTIME_RENDER_TRACE_COST_THROUGHPUT_ZERO = 0,
@@ -391,6 +409,43 @@ typedef struct RuntimeRenderTraceCostTransmissionPathPolicy3D {
                                       [RUNTIME_RENDER_TRACE_COST_MATERIAL_COUNT];
     uint64_t transparentSurfaceMaterialCounts[RUNTIME_RENDER_TRACE_COST_MATERIAL_COUNT];
     uint64_t receiverMaterialCounts[RUNTIME_RENDER_TRACE_COST_MATERIAL_COUNT];
+    uint64_t receiverObjectHitCounts[MAX_OBJECTS];
+    uint64_t receiverObjectContributionCounts[MAX_OBJECTS];
+    double receiverObjectContributionR[MAX_OBJECTS];
+    double receiverObjectContributionG[MAX_OBJECTS];
+    double receiverObjectContributionB[MAX_OBJECTS];
+    uint64_t refractionEventCount;
+    uint64_t refractionMaterialCounts
+        [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_MATERIAL_CLASS_COUNT];
+    uint64_t etaPairCounts[RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ETA_PAIR_COUNT];
+    uint64_t materialEtaPairCounts
+        [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_MATERIAL_CLASS_COUNT]
+        [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ETA_PAIR_COUNT];
+    uint64_t thinWalledStraightThroughCount;
+    uint64_t transparentPhysicalHitsWithoutRefractionCount;
+    uint64_t directionChangedCount;
+    uint64_t directionUnchangedCount;
+    uint64_t refractionAngleDeltaCount;
+    double refractionAngleDeltaSumDeg;
+    double refractionAngleDeltaMinDeg;
+    double refractionAngleDeltaMaxDeg;
+    uint64_t waterSurfaceNormalSampleCount;
+    double waterSurfaceNormalYSum;
+    double waterSurfaceNormalZSum;
+    double waterSurfaceNormalYMin;
+    double waterSurfaceNormalYMax;
+    double waterSurfaceNormalZMin;
+    double waterSurfaceNormalZMax;
+    uint64_t receiverPositionSampleCount;
+    double receiverPositionXSum;
+    double receiverPositionYSum;
+    double receiverPositionZSum;
+    double receiverPositionXMin;
+    double receiverPositionXMax;
+    double receiverPositionYMin;
+    double receiverPositionYMax;
+    double receiverPositionZMin;
+    double receiverPositionZMax;
     uint64_t terminalDepthCounts[RUNTIME_RENDER_TRACE_COST_DEPTH_BUCKET_COUNT];
     uint64_t rayDepthCounts[RUNTIME_RENDER_TRACE_COST_DEPTH_BUCKET_COUNT];
     uint64_t throughputBucketCounts[RUNTIME_RENDER_TRACE_COST_THROUGHPUT_COUNT];
@@ -450,6 +505,10 @@ const char* RuntimeRenderTraceCostTransmissionScreenRegion3DLabel(
     RuntimeRenderTraceCostTransmissionScreenRegion3D region);
 const char* RuntimeRenderTraceCostTransmissionPixelStability3DLabel(
     RuntimeRenderTraceCostTransmissionPixelStability3D bucket);
+const char* RuntimeRenderTraceCostTransmissionMaterialClass3DLabel(
+    RuntimeRenderTraceCostTransmissionMaterialClass3D material_class);
+const char* RuntimeRenderTraceCostTransmissionEtaPair3DLabel(
+    RuntimeRenderTraceCostTransmissionEtaPair3D eta_pair);
 const char* RuntimeRenderTraceCostThroughputBucket3DLabel(
     RuntimeRenderTraceCostThroughputBucket3D bucket);
 void RuntimeRenderTraceCostLedger3D_SetEnabled(bool enabled);
@@ -486,6 +545,22 @@ void RuntimeRenderTraceCostLedger3D_RecordTransmissionSurface(
     RuntimeRenderTraceCostTransmissionSource3D source,
     RuntimeRenderTraceCostTransmissionSurfaceKind3D surface_kind,
     const HitInfo3D* hit);
+void RuntimeRenderTraceCostLedger3D_RecordTransmissionReceiverContribution(
+    const HitInfo3D* hit,
+    double contribution_r,
+    double contribution_g,
+    double contribution_b);
+void RuntimeRenderTraceCostLedger3D_RecordTransmissionInterface(
+    RuntimeRenderTraceCostTransmissionSource3D source,
+    RuntimeRenderTraceCostTransmissionSurfaceKind3D surface_kind,
+    const HitInfo3D* hit,
+    const RuntimeMaterialPayload3D* payload,
+    double optical_ior,
+    bool entering,
+    bool thin_walled,
+    bool physical_transmission,
+    double refraction_angle_delta_deg,
+    bool direction_changed);
 void RuntimeRenderTraceCostLedger3D_RecordTransmissionSample(
     RuntimeRenderTraceCostTransmissionSource3D source,
     RuntimeRenderTraceCostTransmissionTermination3D termination,

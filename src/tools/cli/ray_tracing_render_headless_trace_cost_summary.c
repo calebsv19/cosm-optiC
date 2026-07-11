@@ -1,5 +1,9 @@
 #include "tools/ray_tracing_render_headless_internal.h"
 
+#include "app/ray_tracing_request_utils.h"
+#include "config/config_manager.h"
+#include "import/runtime_scene_bridge.h"
+
 #include <stdio.h>
 
 static void ray_tracing_headless_write_transmission_screen_region_map(
@@ -98,6 +102,246 @@ static void ray_tracing_headless_write_transmission_source_pixel_stability_map(
     fprintf(file, "%s}%s\n", indent, suffix ? suffix : "");
 }
 
+static void ray_tracing_headless_write_transmission_receiver_object_hits(
+    FILE* file,
+    const RuntimeRenderTraceCostLedger3D* ledger) {
+    bool first = true;
+    fprintf(file, "      \"receiver_object_hits\": [\n");
+    if (ledger) {
+        for (int i = 0; i < MAX_OBJECTS; ++i) {
+            char object_id[64] = {0};
+            const uint64_t hit_count =
+                ledger->transmissionPathPolicy.receiverObjectHitCounts[i];
+            if (hit_count == 0u) continue;
+            if (!first) {
+                fprintf(file, ",\n");
+            }
+            first = false;
+            if (!runtime_scene_bridge_get_last_object_id_for_scene_index(i,
+                                                                         object_id,
+                                                                         sizeof(object_id))) {
+                object_id[0] = '\0';
+            }
+            fprintf(file, "        {\n");
+            fprintf(file, "          \"scene_object_index\": %d,\n", i);
+            fprintf(file, "          \"object_id\": ");
+            RayTracingJsonWriteString(file, object_id);
+            fprintf(file, ",\n");
+            fprintf(file, "          \"object_type\": ");
+            if (i >= 0 && i < sceneSettings.objectCount) {
+                RayTracingJsonWriteString(file, sceneSettings.sceneObjects[i].type);
+            } else {
+                RayTracingJsonWriteString(file, "");
+            }
+            fprintf(file, ",\n");
+            const uint64_t contribution_count =
+                ledger->transmissionPathPolicy.receiverObjectContributionCounts[i];
+            const double contribution_r =
+                ledger->transmissionPathPolicy.receiverObjectContributionR[i];
+            const double contribution_g =
+                ledger->transmissionPathPolicy.receiverObjectContributionG[i];
+            const double contribution_b =
+                ledger->transmissionPathPolicy.receiverObjectContributionB[i];
+            const double divisor = contribution_count > 0u ? (double)contribution_count : 1.0;
+            fprintf(file, "          \"hit_count\": %llu,\n", (unsigned long long)hit_count);
+            fprintf(file,
+                    "          \"contribution_count\": %llu,\n",
+                    (unsigned long long)contribution_count);
+            fprintf(file, "          \"contribution_sum_r\": %.9f,\n", contribution_r);
+            fprintf(file, "          \"contribution_sum_g\": %.9f,\n", contribution_g);
+            fprintf(file, "          \"contribution_sum_b\": %.9f,\n", contribution_b);
+            fprintf(file, "          \"contribution_avg_r\": %.9f,\n", contribution_r / divisor);
+            fprintf(file, "          \"contribution_avg_g\": %.9f,\n", contribution_g / divisor);
+            fprintf(file, "          \"contribution_avg_b\": %.9f\n", contribution_b / divisor);
+            fprintf(file, "        }");
+        }
+    }
+    fprintf(file, "\n      ],\n");
+}
+
+static void ray_tracing_headless_write_transmission_ior_diagnostics(
+    FILE* file,
+    const RuntimeRenderTraceCostLedger3D* ledger) {
+    const RuntimeRenderTraceCostTransmissionPathPolicy3D* policy =
+        ledger ? &ledger->transmissionPathPolicy : NULL;
+    const double angle_count =
+        policy && policy->refractionAngleDeltaCount > 0u
+            ? (double)policy->refractionAngleDeltaCount
+            : 1.0;
+    const double water_normal_count =
+        policy && policy->waterSurfaceNormalSampleCount > 0u
+            ? (double)policy->waterSurfaceNormalSampleCount
+            : 1.0;
+    const double receiver_position_count =
+        policy && policy->receiverPositionSampleCount > 0u
+            ? (double)policy->receiverPositionSampleCount
+            : 1.0;
+
+    fprintf(file, "      \"ior_diagnostics\": {\n");
+    fprintf(file,
+            "        \"refraction_event_count\": %llu,\n",
+            (unsigned long long)(policy ? policy->refractionEventCount : 0u));
+    fprintf(file,
+            "        \"thin_walled_straight_through_count\": %llu,\n",
+            (unsigned long long)(policy ? policy->thinWalledStraightThroughCount : 0u));
+    fprintf(file,
+            "        \"transparent_physical_hits_without_refraction_count\": %llu,\n",
+            (unsigned long long)(policy
+                                     ? policy->transparentPhysicalHitsWithoutRefractionCount
+                                     : 0u));
+    fprintf(file,
+            "        \"direction_changed_count\": %llu,\n",
+            (unsigned long long)(policy ? policy->directionChangedCount : 0u));
+    fprintf(file,
+            "        \"direction_unchanged_count\": %llu,\n",
+            (unsigned long long)(policy ? policy->directionUnchangedCount : 0u));
+    fprintf(file, "        \"refraction_angle_delta_deg\": {\n");
+    fprintf(file,
+            "          \"count\": %llu,\n",
+            (unsigned long long)(policy ? policy->refractionAngleDeltaCount : 0u));
+    fprintf(file,
+            "          \"min\": %.9f,\n",
+            policy && policy->refractionAngleDeltaCount > 0u
+                ? policy->refractionAngleDeltaMinDeg
+                : 0.0);
+    fprintf(file,
+            "          \"mean\": %.9f,\n",
+            policy && policy->refractionAngleDeltaCount > 0u
+                ? policy->refractionAngleDeltaSumDeg / angle_count
+                : 0.0);
+    fprintf(file,
+            "          \"max\": %.9f\n",
+            policy && policy->refractionAngleDeltaCount > 0u
+                ? policy->refractionAngleDeltaMaxDeg
+                : 0.0);
+    fprintf(file, "        },\n");
+    fprintf(file, "        \"refraction_material_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_MATERIAL_CLASS_COUNT; ++i) {
+        fprintf(file,
+                "          \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostTransmissionMaterialClass3DLabel(
+                    (RuntimeRenderTraceCostTransmissionMaterialClass3D)i),
+                (unsigned long long)(policy ? policy->refractionMaterialCounts[i] : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_MATERIAL_CLASS_COUNT ? "," : "");
+    }
+    fprintf(file, "        },\n");
+    fprintf(file, "        \"eta_pair_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ETA_PAIR_COUNT; ++i) {
+        fprintf(file,
+                "          \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostTransmissionEtaPair3DLabel(
+                    (RuntimeRenderTraceCostTransmissionEtaPair3D)i),
+                (unsigned long long)(policy ? policy->etaPairCounts[i] : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ETA_PAIR_COUNT ? "," : "");
+    }
+    fprintf(file, "        },\n");
+    fprintf(file, "        \"material_eta_pair_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_MATERIAL_CLASS_COUNT; ++i) {
+        fprintf(file,
+                "          \"%s\": {",
+                RuntimeRenderTraceCostTransmissionMaterialClass3DLabel(
+                    (RuntimeRenderTraceCostTransmissionMaterialClass3D)i));
+        for (int j = 0; j < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ETA_PAIR_COUNT; ++j) {
+            fprintf(file,
+                    " \"%s\": %llu%s",
+                    RuntimeRenderTraceCostTransmissionEtaPair3DLabel(
+                        (RuntimeRenderTraceCostTransmissionEtaPair3D)j),
+                    (unsigned long long)(policy ? policy->materialEtaPairCounts[i][j] : 0u),
+                    j + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ETA_PAIR_COUNT ? "," : "");
+        }
+        fprintf(file,
+                " }%s\n",
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_MATERIAL_CLASS_COUNT ? "," : "");
+    }
+    fprintf(file, "        },\n");
+    fprintf(file, "        \"water_surface_sampled_normal_stats\": {\n");
+    fprintf(file,
+            "          \"count\": %llu,\n",
+            (unsigned long long)(policy ? policy->waterSurfaceNormalSampleCount : 0u));
+    fprintf(file,
+            "          \"normal_y_min\": %.9f,\n",
+            policy && policy->waterSurfaceNormalSampleCount > 0u
+                ? policy->waterSurfaceNormalYMin
+                : 0.0);
+    fprintf(file,
+            "          \"normal_y_mean\": %.9f,\n",
+            policy && policy->waterSurfaceNormalSampleCount > 0u
+                ? policy->waterSurfaceNormalYSum / water_normal_count
+                : 0.0);
+    fprintf(file,
+            "          \"normal_y_max\": %.9f,\n",
+            policy && policy->waterSurfaceNormalSampleCount > 0u
+                ? policy->waterSurfaceNormalYMax
+                : 0.0);
+    fprintf(file,
+            "          \"normal_z_min\": %.9f,\n",
+            policy && policy->waterSurfaceNormalSampleCount > 0u
+                ? policy->waterSurfaceNormalZMin
+                : 0.0);
+    fprintf(file,
+            "          \"normal_z_mean\": %.9f,\n",
+            policy && policy->waterSurfaceNormalSampleCount > 0u
+                ? policy->waterSurfaceNormalZSum / water_normal_count
+                : 0.0);
+    fprintf(file,
+            "          \"normal_z_max\": %.9f\n",
+            policy && policy->waterSurfaceNormalSampleCount > 0u
+                ? policy->waterSurfaceNormalZMax
+                : 0.0);
+    fprintf(file, "        },\n");
+    fprintf(file, "        \"terminal_receiver_position_stats\": {\n");
+    fprintf(file,
+            "          \"count\": %llu,\n",
+            (unsigned long long)(policy ? policy->receiverPositionSampleCount : 0u));
+    fprintf(file,
+            "          \"x_min\": %.9f,\n",
+            policy && policy->receiverPositionSampleCount > 0u
+                ? policy->receiverPositionXMin
+                : 0.0);
+    fprintf(file,
+            "          \"x_mean\": %.9f,\n",
+            policy && policy->receiverPositionSampleCount > 0u
+                ? policy->receiverPositionXSum / receiver_position_count
+                : 0.0);
+    fprintf(file,
+            "          \"x_max\": %.9f,\n",
+            policy && policy->receiverPositionSampleCount > 0u
+                ? policy->receiverPositionXMax
+                : 0.0);
+    fprintf(file,
+            "          \"y_min\": %.9f,\n",
+            policy && policy->receiverPositionSampleCount > 0u
+                ? policy->receiverPositionYMin
+                : 0.0);
+    fprintf(file,
+            "          \"y_mean\": %.9f,\n",
+            policy && policy->receiverPositionSampleCount > 0u
+                ? policy->receiverPositionYSum / receiver_position_count
+                : 0.0);
+    fprintf(file,
+            "          \"y_max\": %.9f,\n",
+            policy && policy->receiverPositionSampleCount > 0u
+                ? policy->receiverPositionYMax
+                : 0.0);
+    fprintf(file,
+            "          \"z_min\": %.9f,\n",
+            policy && policy->receiverPositionSampleCount > 0u
+                ? policy->receiverPositionZMin
+                : 0.0);
+    fprintf(file,
+            "          \"z_mean\": %.9f,\n",
+            policy && policy->receiverPositionSampleCount > 0u
+                ? policy->receiverPositionZSum / receiver_position_count
+                : 0.0);
+    fprintf(file,
+            "          \"z_max\": %.9f\n",
+            policy && policy->receiverPositionSampleCount > 0u
+                ? policy->receiverPositionZMax
+                : 0.0);
+    fprintf(file, "        }\n");
+    fprintf(file, "      },\n");
+}
+
 void ray_tracing_headless_write_render_trace_cost_ledger(
     FILE* file,
     const RayTracingHeadlessPreflight* preflight) {
@@ -173,6 +417,8 @@ void ray_tracing_headless_write_render_trace_cost_ledger(
                                         : 0u));
     fprintf(file, "      \"receiver_hits\": %llu,\n",
             (unsigned long long)(ledger ? ledger->transmissionPathPolicy.receiverHits : 0u));
+    ray_tracing_headless_write_transmission_ior_diagnostics(file, ledger);
+    ray_tracing_headless_write_transmission_receiver_object_hits(file, ledger);
     fprintf(file, "      \"avg_ray_traces_per_sample\": %.6f,\n",
             ledger && ledger->transmissionPathPolicy.sampleEvaluations > 0u
                 ? (double)ledger->transmissionPathPolicy.totalRayTracesPerSample /

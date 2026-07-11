@@ -3,7 +3,9 @@
 #include "material/material.h"
 #include "render/runtime_material_payload_3d.h"
 
+#include <math.h>
 #include <stdlib.h>
+#include <strings.h>
 #include <string.h>
 
 static RuntimeRenderTraceCostLedger3D gRuntimeRenderTraceCostLedger3D;
@@ -338,6 +340,36 @@ const char* RuntimeRenderTraceCostTransmissionPixelStability3DLabel(
     }
 }
 
+const char* RuntimeRenderTraceCostTransmissionMaterialClass3DLabel(
+    RuntimeRenderTraceCostTransmissionMaterialClass3D material_class) {
+    switch (material_class) {
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_MATERIAL_WATER_SURFACE:
+            return "water_surface";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_MATERIAL_TRANSPARENT_OTHER:
+            return "transparent_other";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_MATERIAL_OPAQUE_RECEIVER:
+            return "opaque_receiver";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_MATERIAL_UNKNOWN:
+        default:
+            return "unknown";
+    }
+}
+
+const char* RuntimeRenderTraceCostTransmissionEtaPair3DLabel(
+    RuntimeRenderTraceCostTransmissionEtaPair3D eta_pair) {
+    switch (eta_pair) {
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ETA_AIR_TO_MATERIAL:
+            return "air_to_material";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ETA_MATERIAL_TO_AIR:
+            return "material_to_air";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ETA_MATCHED:
+            return "matched";
+        case RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ETA_UNKNOWN:
+        default:
+            return "unknown";
+    }
+}
+
 const char* RuntimeRenderTraceCostThroughputBucket3DLabel(
     RuntimeRenderTraceCostThroughputBucket3D bucket) {
     switch (bucket) {
@@ -406,6 +438,14 @@ static bool runtime_render_trace_cost_hit_is_runtime_mesh(const HitInfo3D* hit) 
     return hit && hit->source.kind == RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH;
 }
 
+static bool runtime_render_trace_cost_hit_is_water_surface(const HitInfo3D* hit) {
+    if (!hit || hit->sceneObjectIndex < 0 || hit->sceneObjectIndex >= sceneSettings.objectCount) {
+        return false;
+    }
+    return strcasecmp(sceneSettings.sceneObjects[hit->sceneObjectIndex].type,
+                      "water_surface") == 0;
+}
+
 static RuntimeRenderTraceCostMaterialFamily3D
 runtime_render_trace_cost_material_family_from_hit(const HitInfo3D* hit,
                                                    const RuntimeMaterialPayload3D* payload) {
@@ -432,6 +472,37 @@ runtime_render_trace_cost_material_family_from_hit(const HitInfo3D* hit,
     }
     return runtime_mesh ? RUNTIME_RENDER_TRACE_COST_MATERIAL_RUNTIME_MESH_OPAQUE
                         : RUNTIME_RENDER_TRACE_COST_MATERIAL_PRIMITIVE_OPAQUE;
+}
+
+static RuntimeRenderTraceCostTransmissionMaterialClass3D
+runtime_render_trace_cost_transmission_material_class_from_hit(
+    RuntimeRenderTraceCostTransmissionSurfaceKind3D surface_kind,
+    const HitInfo3D* hit,
+    const RuntimeMaterialPayload3D* payload) {
+    if (surface_kind == RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_OPAQUE_RECEIVER) {
+        return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_MATERIAL_OPAQUE_RECEIVER;
+    }
+    if (runtime_render_trace_cost_hit_is_water_surface(hit)) {
+        return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_MATERIAL_WATER_SURFACE;
+    }
+    if (payload && payload->valid &&
+        (payload->transparency > 0.0 ||
+         payload->materialId == MATERIAL_PRESET_TRANSPARENT)) {
+        return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_MATERIAL_TRANSPARENT_OTHER;
+    }
+    return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_MATERIAL_UNKNOWN;
+}
+
+static RuntimeRenderTraceCostTransmissionEtaPair3D
+runtime_render_trace_cost_transmission_eta_pair(double optical_ior, bool entering) {
+    if (!(optical_ior > 0.0)) {
+        return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ETA_UNKNOWN;
+    }
+    if (fabs(optical_ior - 1.0) <= 1.0e-6) {
+        return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ETA_MATCHED;
+    }
+    return entering ? RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ETA_AIR_TO_MATERIAL
+                    : RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ETA_MATERIAL_TO_AIR;
 }
 
 void RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(const HitInfo3D* hit) {
@@ -734,9 +805,155 @@ void RuntimeRenderTraceCostLedger3D_RecordTransmissionSurface(
     if (surface_kind == RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_OPAQUE_RECEIVER) {
         policy->receiverHits += 1u;
         policy->receiverMaterialCounts[family] += 1u;
+        if (hit && hit->sceneObjectIndex >= 0 && hit->sceneObjectIndex < MAX_OBJECTS) {
+            policy->receiverObjectHitCounts[hit->sceneObjectIndex] += 1u;
+        }
+        if (hit) {
+            if (policy->receiverPositionSampleCount == 0u) {
+                policy->receiverPositionXMin = hit->position.x;
+                policy->receiverPositionXMax = hit->position.x;
+                policy->receiverPositionYMin = hit->position.y;
+                policy->receiverPositionYMax = hit->position.y;
+                policy->receiverPositionZMin = hit->position.z;
+                policy->receiverPositionZMax = hit->position.z;
+            } else {
+                if (hit->position.x < policy->receiverPositionXMin) {
+                    policy->receiverPositionXMin = hit->position.x;
+                }
+                if (hit->position.x > policy->receiverPositionXMax) {
+                    policy->receiverPositionXMax = hit->position.x;
+                }
+                if (hit->position.y < policy->receiverPositionYMin) {
+                    policy->receiverPositionYMin = hit->position.y;
+                }
+                if (hit->position.y > policy->receiverPositionYMax) {
+                    policy->receiverPositionYMax = hit->position.y;
+                }
+                if (hit->position.z < policy->receiverPositionZMin) {
+                    policy->receiverPositionZMin = hit->position.z;
+                }
+                if (hit->position.z > policy->receiverPositionZMax) {
+                    policy->receiverPositionZMax = hit->position.z;
+                }
+            }
+            policy->receiverPositionSampleCount += 1u;
+            policy->receiverPositionXSum += hit->position.x;
+            policy->receiverPositionYSum += hit->position.y;
+            policy->receiverPositionZSum += hit->position.z;
+        }
     } else {
         policy->transparentSurfaceHits += 1u;
         policy->transparentSurfaceMaterialCounts[family] += 1u;
+    }
+}
+
+void RuntimeRenderTraceCostLedger3D_RecordTransmissionReceiverContribution(
+    const HitInfo3D* hit,
+    double contribution_r,
+    double contribution_g,
+    double contribution_b) {
+    RuntimeRenderTraceCostTransmissionPathPolicy3D* policy =
+        &gRuntimeRenderTraceCostLedger3D.transmissionPathPolicy;
+    if (!gRuntimeRenderTraceCostLedger3D.enabled || !hit ||
+        hit->sceneObjectIndex < 0 || hit->sceneObjectIndex >= MAX_OBJECTS) {
+        return;
+    }
+    if (!(contribution_r > 0.0) && !(contribution_g > 0.0) && !(contribution_b > 0.0)) {
+        return;
+    }
+    policy->receiverObjectContributionCounts[hit->sceneObjectIndex] += 1u;
+    policy->receiverObjectContributionR[hit->sceneObjectIndex] += contribution_r;
+    policy->receiverObjectContributionG[hit->sceneObjectIndex] += contribution_g;
+    policy->receiverObjectContributionB[hit->sceneObjectIndex] += contribution_b;
+}
+
+void RuntimeRenderTraceCostLedger3D_RecordTransmissionInterface(
+    RuntimeRenderTraceCostTransmissionSource3D source,
+    RuntimeRenderTraceCostTransmissionSurfaceKind3D surface_kind,
+    const HitInfo3D* hit,
+    const RuntimeMaterialPayload3D* payload,
+    double optical_ior,
+    bool entering,
+    bool thin_walled,
+    bool physical_transmission,
+    double refraction_angle_delta_deg,
+    bool direction_changed) {
+    RuntimeRenderTraceCostTransmissionPathPolicy3D* policy =
+        &gRuntimeRenderTraceCostLedger3D.transmissionPathPolicy;
+    RuntimeRenderTraceCostTransmissionMaterialClass3D material_class =
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_MATERIAL_UNKNOWN;
+    RuntimeRenderTraceCostTransmissionEtaPair3D eta_pair =
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ETA_UNKNOWN;
+    (void)source;
+    if (!gRuntimeRenderTraceCostLedger3D.enabled) return;
+    if (surface_kind < 0 ||
+        surface_kind >= RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_COUNT) {
+        surface_kind = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_UNKNOWN;
+    }
+    material_class = runtime_render_trace_cost_transmission_material_class_from_hit(
+        surface_kind,
+        hit,
+        payload);
+    eta_pair = runtime_render_trace_cost_transmission_eta_pair(optical_ior, entering);
+    if (eta_pair == RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ETA_MATCHED) {
+        refraction_angle_delta_deg = 0.0;
+        direction_changed = false;
+    }
+    policy->refractionEventCount += 1u;
+    policy->refractionMaterialCounts[material_class] += 1u;
+    policy->etaPairCounts[eta_pair] += 1u;
+    policy->materialEtaPairCounts[material_class][eta_pair] += 1u;
+    if (thin_walled && !direction_changed) {
+        policy->thinWalledStraightThroughCount += 1u;
+    }
+    if (physical_transmission && !direction_changed &&
+        surface_kind != RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_THIN_WALLED) {
+        policy->transparentPhysicalHitsWithoutRefractionCount += 1u;
+    }
+    if (direction_changed) {
+        policy->directionChangedCount += 1u;
+    } else {
+        policy->directionUnchangedCount += 1u;
+    }
+    if (refraction_angle_delta_deg >= 0.0 && isfinite(refraction_angle_delta_deg)) {
+        if (policy->refractionAngleDeltaCount == 0u) {
+            policy->refractionAngleDeltaMinDeg = refraction_angle_delta_deg;
+            policy->refractionAngleDeltaMaxDeg = refraction_angle_delta_deg;
+        } else {
+            if (refraction_angle_delta_deg < policy->refractionAngleDeltaMinDeg) {
+                policy->refractionAngleDeltaMinDeg = refraction_angle_delta_deg;
+            }
+            if (refraction_angle_delta_deg > policy->refractionAngleDeltaMaxDeg) {
+                policy->refractionAngleDeltaMaxDeg = refraction_angle_delta_deg;
+            }
+        }
+        policy->refractionAngleDeltaCount += 1u;
+        policy->refractionAngleDeltaSumDeg += refraction_angle_delta_deg;
+    }
+    if (material_class == RUNTIME_RENDER_TRACE_COST_TRANSMISSION_MATERIAL_WATER_SURFACE &&
+        hit) {
+        if (policy->waterSurfaceNormalSampleCount == 0u) {
+            policy->waterSurfaceNormalYMin = hit->normal.y;
+            policy->waterSurfaceNormalYMax = hit->normal.y;
+            policy->waterSurfaceNormalZMin = hit->normal.z;
+            policy->waterSurfaceNormalZMax = hit->normal.z;
+        } else {
+            if (hit->normal.y < policy->waterSurfaceNormalYMin) {
+                policy->waterSurfaceNormalYMin = hit->normal.y;
+            }
+            if (hit->normal.y > policy->waterSurfaceNormalYMax) {
+                policy->waterSurfaceNormalYMax = hit->normal.y;
+            }
+            if (hit->normal.z < policy->waterSurfaceNormalZMin) {
+                policy->waterSurfaceNormalZMin = hit->normal.z;
+            }
+            if (hit->normal.z > policy->waterSurfaceNormalZMax) {
+                policy->waterSurfaceNormalZMax = hit->normal.z;
+            }
+        }
+        policy->waterSurfaceNormalSampleCount += 1u;
+        policy->waterSurfaceNormalYSum += hit->normal.y;
+        policy->waterSurfaceNormalZSum += hit->normal.z;
     }
 }
 

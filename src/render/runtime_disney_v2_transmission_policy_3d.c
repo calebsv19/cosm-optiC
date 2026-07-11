@@ -247,6 +247,14 @@ RuntimeDisneyV2_3DTransparentPolicy runtime_disney_v2_3d_resolve_transparent_pol
     policy.alphaOnly =
         runtime_disney_v2_3d_payload_has_transparent_alpha(payload, principled) &&
         !policy.physicalTransmission;
+    if (policy.physicalTransmission && !policy.alphaOnly) {
+        policy.visibleWeight *= policy.visibleWeight;
+    }
+    if (policy.physicalTransmission && policy.thinWalled) {
+        policy.tintR = 1.0;
+        policy.tintG = 1.0;
+        policy.tintB = 1.0;
+    }
     if (!payload || payload->thinWalled || policy.alphaOnly) {
         return policy;
     }

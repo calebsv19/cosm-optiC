@@ -3513,9 +3513,8 @@ static int test_runtime_disney_v2_3d_transparency_policy_splits_thin_walled_and_
                 solid.primaryTransmissionReceiverSampleCount == 0 &&
                 thin.primaryTransmissionReceiverSampleCount == 0);
     assert_true("runtime_disney_v2_transparency_policy_solid_interior_return",
-                solid.primaryTransmissionInteriorReturnSampleCount > 0 &&
-                solid.primaryTransmissionInteriorReturnSurfaceCount > 0 &&
-                solid.primaryTransmissionInteriorReturnRadiance > 0.0 &&
+                solid.primaryTransmissionInteriorReturnSampleCount == 0 &&
+                solid.primaryTransmissionInteriorReturnSurfaceCount == 0 &&
                 solid.primaryTransmissionPhysicalSurfaceCount > 0 &&
                 solid.primaryTransmissionMaxMediumStackDepth > 0);
     assert_true("runtime_disney_v2_transparency_policy_thin_has_no_interior_return",

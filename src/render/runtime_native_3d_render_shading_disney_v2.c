@@ -127,13 +127,16 @@ bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
                                                        &result.radiance,
                                                        &result.visible,
                                                        &scatter);
-            runtime_native_3d_render_apply_ambient_hit_lighting(scene,
-                                                                &result.hitInfo,
-                                                                &result.radianceR,
-                                                                &result.radianceG,
-                                                                &result.radianceB,
-                                                                &result.radiance,
-                                                                &result.visible);
+            if (!result.primaryTransmissionContinued ||
+                result.primaryTransmissionPhysicalSurfaceCount <= 0) {
+                runtime_native_3d_render_apply_ambient_hit_lighting(scene,
+                                                                    &result.hitInfo,
+                                                                    &result.radianceR,
+                                                                    &result.radianceG,
+                                                                    &result.radianceB,
+                                                                    &result.radiance,
+                                                                    &result.visible);
+            }
             runtime_native_3d_render_apply_surface_caustic_cache(surface_cache,
                                                                  &result.hitInfo,
                                                                  &result.radianceR,
