@@ -8,7 +8,9 @@
 #include "editor/scene_editor_material_graph.h"
 #include "editor/scene_editor_material_face_placement.h"
 #include "editor/scene_editor_material_stack.h"
+#include "editor/object_editor_motion.h"
 #include "import/runtime_scene_bridge.h"
+#include "import/runtime_scene_motion_bridge.h"
 #include "render/runtime_material_texture_stack_3d.h"
 #include "render/runtime_material_graph_3d.h"
 #include "render/runtime_material_authored_texture_3d.h"
@@ -590,6 +592,7 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
     json_object* camera_path = NULL;
     json_object* camera_path_depth = NULL;
     json_object* object_materials = NULL;
+    json_object* object_motion_tracks = NULL;
     const char* serialized = NULL;
     char* out = NULL;
     Path saved_light_path = {0};
@@ -626,6 +629,7 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
     camera_path = config_scene_path_to_json_object(&saved_camera_path);
     camera_path_depth = CameraPath3D_ToJsonObject(&saved_camera_path3d, &saved_camera_path);
     object_materials = scene_editor_runtime_scene_build_object_materials_json();
+    object_motion_tracks = ObjectEditorMotionBuildAuthoringTracksJson(authored_to_runtime);
 
     if (!overlay_root || !overlay_meta || !extensions || !ray_tracing || !authoring ||
         !environment ||
@@ -633,6 +637,7 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
         !camera_path || !camera_path_depth || !object_materials) {
         scene_editor_runtime_scene_diag(out_diagnostics, out_diagnostics_size, "failed to build overlay json");
         if (environment) json_object_put(environment);
+        if (object_motion_tracks) json_object_put(object_motion_tracks);
         if (object_materials) json_object_put(object_materials);
         if (light_path_depth) json_object_put(light_path_depth);
         if (light_settings) json_object_put(light_settings);
@@ -707,6 +712,9 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
     json_object_object_add(authoring, "camera_path", camera_path);
     json_object_object_add(authoring, "camera_path_depth", camera_path_depth);
     json_object_object_add(authoring, "object_materials", object_materials);
+    if (object_motion_tracks) {
+        json_object_object_add(authoring, "object_motion_tracks", object_motion_tracks);
+    }
     json_object_object_add(ray_tracing, "authoring", authoring);
     json_object_object_add(extensions, "ray_tracing", ray_tracing);
     json_object_object_add(overlay_root, "extensions", extensions);
@@ -802,6 +810,11 @@ bool SceneEditorRuntimeScenePersistAuthoring(char* out_diagnostics, size_t out_d
     if (!runtime_scene_bridge_apply_file_defer_mesh_assets(animSettings.runtimeScenePath, &summary)) {
         scene_editor_runtime_scene_diag(out_diagnostics, out_diagnostics_size, summary.diagnostics);
         return false;
+    }
+    {
+        RuntimeMotionTrack3DSummary motion_summary;
+        runtime_scene_motion_bridge_get_last_summary(&motion_summary);
+        ObjectEditorMotionHydrateFromRuntimeSummary(&motion_summary);
     }
     animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
     snprintf(animSettings.runtimeScenePath,

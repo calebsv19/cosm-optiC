@@ -1,6 +1,7 @@
 #include "config/config_manager.h"
 #include "config/config_file_io.h"
 #include "config/core/config_runtime_paths.h"
+#include "config_animation_runtime3d.h"
 #include "app/data_paths.h"
 #include "render/ray_tracing_integrator_catalog.h"
 #include <stdio.h>
@@ -246,130 +247,6 @@ static double DefaultForwardFalloffDistance(void) {
     return hypot(w, h);
 }
 
-static int ClampSecondaryDiffuseSamples3D(int value) {
-    if (value < RUNTIME_3D_SECONDARY_SAMPLES_MIN) {
-        value = RUNTIME_3D_SECONDARY_SAMPLES_MIN;
-    }
-    if (value > RUNTIME_3D_SECONDARY_SAMPLES_MAX) {
-        value = RUNTIME_3D_SECONDARY_SAMPLES_MAX;
-    }
-    value = ((value + (RUNTIME_3D_SECONDARY_SAMPLES_STEP / 2)) /
-             RUNTIME_3D_SECONDARY_SAMPLES_STEP) *
-            RUNTIME_3D_SECONDARY_SAMPLES_STEP;
-    if (value < RUNTIME_3D_SECONDARY_SAMPLES_MIN) {
-        value = RUNTIME_3D_SECONDARY_SAMPLES_MIN;
-    }
-    if (value > RUNTIME_3D_SECONDARY_SAMPLES_MAX) {
-        value = RUNTIME_3D_SECONDARY_SAMPLES_MAX;
-    }
-    return value;
-}
-
-static int ClampBounceDepth3D(int value) {
-    if (value < RUNTIME_3D_BOUNCE_DEPTH_MIN) {
-        value = RUNTIME_3D_BOUNCE_DEPTH_MIN;
-    }
-    if (value > RUNTIME_3D_BOUNCE_DEPTH_MAX) {
-        value = RUNTIME_3D_BOUNCE_DEPTH_MAX;
-    }
-    return value;
-}
-
-static int ClampSpecularDepth3D(int value) {
-    if (value < RUNTIME_3D_SPECULAR_DEPTH_MIN) {
-        value = RUNTIME_3D_SPECULAR_DEPTH_MIN;
-    }
-    if (value > RUNTIME_3D_SPECULAR_DEPTH_MAX) {
-        value = RUNTIME_3D_SPECULAR_DEPTH_MAX;
-    }
-    return value;
-}
-
-static int ClampTransmissionDepth3D(int value) {
-    if (value < RUNTIME_3D_TRANSMISSION_DEPTH_MIN) {
-        value = RUNTIME_3D_TRANSMISSION_DEPTH_MIN;
-    }
-    if (value > RUNTIME_3D_TRANSMISSION_DEPTH_MAX) {
-        value = RUNTIME_3D_TRANSMISSION_DEPTH_MAX;
-    }
-    return value;
-}
-
-static double ClampRouletteThreshold3D(double value) {
-    return ClampDoubleValue(value,
-                            RUNTIME_3D_ROULETTE_THRESHOLD_MIN,
-                            RUNTIME_3D_ROULETTE_THRESHOLD_MAX);
-}
-
-static int ClampTransmissionSamples3D(int value) {
-    if (value < RUNTIME_3D_TRANSMISSION_SAMPLES_MIN) {
-        value = RUNTIME_3D_TRANSMISSION_SAMPLES_MIN;
-    }
-    if (value > RUNTIME_3D_TRANSMISSION_SAMPLES_MAX) {
-        value = RUNTIME_3D_TRANSMISSION_SAMPLES_MAX;
-    }
-    return value;
-}
-
-static int ClampTemporalFrames3D(int value) {
-    if (value < RUNTIME_3D_TEMPORAL_FRAMES_MIN) {
-        value = RUNTIME_3D_TEMPORAL_FRAMES_MIN;
-    }
-    if (value > RUNTIME_3D_TEMPORAL_FRAMES_MAX) {
-        value = RUNTIME_3D_TEMPORAL_FRAMES_MAX;
-    }
-    return value;
-}
-
-static int ClampRenderScale3D(int value) {
-    if (value == RUNTIME_3D_RENDER_SCALE_HIDPI) {
-        return RUNTIME_3D_RENDER_SCALE_HIDPI;
-    }
-    if (value < 1) {
-        value = RUNTIME_3D_RENDER_SCALE_DEFAULT;
-    }
-    if (value > RUNTIME_3D_RENDER_SCALE_MAX) {
-        value = RUNTIME_3D_RENDER_SCALE_MAX;
-    }
-    return value;
-}
-
-static int ClampUpscaleMode3D(int value) {
-    if (value < RUNTIME_3D_UPSCALE_MODE_MIN) {
-        value = RUNTIME_3D_UPSCALE_MODE_MIN;
-    }
-    if (value > RUNTIME_3D_UPSCALE_MODE_MAX) {
-        value = RUNTIME_3D_UPSCALE_MODE_MAX;
-    }
-    return value;
-}
-
-static int ClampRuntimeWindowDimension(int value, int fallback) {
-    if (value <= 0) {
-        value = fallback;
-    }
-    if (value < 200) {
-        value = 200;
-    }
-    if (value % 2 != 0) {
-        value += 1;
-    }
-    return value;
-}
-
-void ApplyAnimationWindowSizeOverride(void) {
-    if (animation_config_scene_source_is_fluid(animSettings.sceneSource)) {
-        return;
-    }
-    if (animSettings.runtimeWindowWidth <= 0 || animSettings.runtimeWindowHeight <= 0) {
-        return;
-    }
-    sceneSettings.windowWidth =
-        ClampRuntimeWindowDimension(animSettings.runtimeWindowWidth, sceneSettings.windowWidth);
-    sceneSettings.windowHeight =
-        ClampRuntimeWindowDimension(animSettings.runtimeWindowHeight, sceneSettings.windowHeight);
-}
-
 void SaveAnimationConfig(void) {
     if (!config_io_ensure_parent_directory_for_file(ANIMATION_CONFIG_RUNTIME_FILE)) {
         fprintf(stderr, "Error: Failed to prepare runtime config lane for %s\n", ANIMATION_CONFIG_RUNTIME_FILE);
@@ -384,8 +261,10 @@ void SaveAnimationConfig(void) {
     struct json_object* config = json_object_new_object();
     animation_config_sync_scene_source_legacy_fields(&animSettings);
     animation_config_sync_volume_source_fields(&animSettings);
-    animSettings.runtimeWindowWidth = ClampRuntimeWindowDimension(sceneSettings.windowWidth, 1200);
-    animSettings.runtimeWindowHeight = ClampRuntimeWindowDimension(sceneSettings.windowHeight, 800);
+    animSettings.runtimeWindowWidth =
+        animation_config_runtime_window_dimension_clamp(sceneSettings.windowWidth, 1200);
+    animSettings.runtimeWindowHeight =
+        animation_config_runtime_window_dimension_clamp(sceneSettings.windowHeight, 800);
 
     json_object_object_add(config, "interactiveMode", json_object_new_boolean(animSettings.interactiveMode));
     json_object_object_add(config, "deepRenderMode", json_object_new_boolean(animSettings.deepRenderMode));
@@ -1057,28 +936,13 @@ void LoadAnimationConfig(void) {
     if (animSettings.topFillStrength > 20.0) {
         animSettings.topFillStrength = 20.0;
     }
-    animSettings.secondaryDiffuseSamples3D =
-        ClampSecondaryDiffuseSamples3D(animSettings.secondaryDiffuseSamples3D);
-    animSettings.bounceDepth3D =
-        ClampBounceDepth3D(animSettings.bounceDepth3D);
-    animSettings.specularDepth3D =
-        ClampSpecularDepth3D(animSettings.specularDepth3D);
-    animSettings.transmissionDepth3D =
-        ClampTransmissionDepth3D(animSettings.transmissionDepth3D);
-    animSettings.rouletteThreshold3D =
-        ClampRouletteThreshold3D(animSettings.rouletteThreshold3D);
-    animSettings.transmissionSamples3D =
-        ClampTransmissionSamples3D(animSettings.transmissionSamples3D);
-    animSettings.temporalFrames3D =
-        ClampTemporalFrames3D(animSettings.temporalFrames3D);
-    animSettings.renderScale3D =
-        ClampRenderScale3D(animSettings.renderScale3D);
-    animSettings.upscaleMode3D =
-        ClampUpscaleMode3D(animSettings.upscaleMode3D);
+    animation_config_normalize_runtime3d_fields(&animSettings);
     animSettings.runtimeWindowWidth =
-        ClampRuntimeWindowDimension(animSettings.runtimeWindowWidth, sceneSettings.windowWidth);
+        animation_config_runtime_window_dimension_clamp(animSettings.runtimeWindowWidth,
+                                                        sceneSettings.windowWidth);
     animSettings.runtimeWindowHeight =
-        ClampRuntimeWindowDimension(animSettings.runtimeWindowHeight, sceneSettings.windowHeight);
+        animation_config_runtime_window_dimension_clamp(animSettings.runtimeWindowHeight,
+                                                        sceneSettings.windowHeight);
     root_corrected |= config_runtime_paths_validate_root(animSettings.inputRoot,
                                                          sizeof(animSettings.inputRoot),
                                                          ray_tracing_default_input_root(),

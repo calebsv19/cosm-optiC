@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
@@ -15,12 +16,17 @@
 #include "import/runtime_scene_bridge.h"
 #include "import/water_surface_import.h"
 #include "material/material.h"
+#include "render/runtime_caustic_beam_map_3d.h"
+#include "render/runtime_caustic_photon_map_3d.h"
+#include "render/runtime_caustic_photon_scene_descriptor_3d.h"
 #include "render/runtime_dynamic_geometry_accel_3d.h"
 #include "render/runtime_scene_3d_builder.h"
 #include "render/runtime_scene_3d_samples.h"
+#include "render/runtime_ray_3d.h"
 #include "render/runtime_triangle_bvh_3d.h"
 #include "render/runtime_water_material_3d.h"
 #include "render/runtime_native_3d_prepare_diagnostics.h"
+#include "render/runtime_native_3d_prepared_scene_cache_internal.h"
 #include "render/runtime_scene_accel_3d.h"
 #include "scene/object_manager.h"
 
@@ -33,30 +39,29 @@ static double runtime_native_3d_water_material_or_default(double value, double f
 
 static bool gRuntimeNative3DInspectionCameraPositionEnabled = false;
 static bool gRuntimeNative3DInspectionCameraLookAtEnabled = false;
+static bool gRuntimeNative3DCausticPhotonRenderPrepPopulationEnabled = false;
 static Vec3 gRuntimeNative3DInspectionCameraPosition = {0};
 static Vec3 gRuntimeNative3DInspectionCameraLookAt = {0};
-static RuntimeScene3D gRuntimeNative3DPreparedSceneCache;
-static bool gRuntimeNative3DPreparedSceneCacheInitialized = false;
-static bool gRuntimeNative3DPreparedSceneCacheValid = false;
-static bool gRuntimeNative3DPreparedSceneCacheStaticGeometry = true;
-static double gRuntimeNative3DPreparedSceneCacheNormalizedT = 0.0;
-static double gRuntimeNative3DPreparedSceneCacheLastRequestedT = 0.0;
-static uint64_t gRuntimeNative3DPreparedSceneDirtyGeneration = 1u;
-static uint64_t gRuntimeNative3DPreparedSceneCachedGeneration = 0u;
-static uint64_t gRuntimeNative3DPreparedSceneCacheHits = 0u;
-static uint64_t gRuntimeNative3DPreparedSceneCacheMisses = 0u;
-static uint64_t gRuntimeNative3DPreparedSceneCacheStores = 0u;
-static uint64_t gRuntimeNative3DPreparedSceneCacheInvalidations = 0u;
-static uint64_t gRuntimeNative3DPreparedSceneCacheTimeIndependentHits = 0u;
+static RuntimeCausticPhotonIntegrationSettings3D
+    gRuntimeNative3DCausticPhotonRenderPrepSettings;
+static const char* kRuntimeNative3DFrameBVHSkipOnTLASEnv =
+    "RAY_TRACING_NATIVE3D_SKIP_FLATTENED_BVH_ON_TLAS";
+static const char* kRuntimeNative3DFrameBVHSkipDefaultDisableEnv =
+    "RAY_TRACING_NATIVE3D_DISABLE_DEFAULT_TLAS_BVH_SKIP";
 
-static double runtime_native_3d_prepare_elapsed_ms_since(const struct timespec* start_time) {
-    struct timespec now = {0};
-    double elapsed = 0.0;
-    if (!start_time) return 0.0;
-    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return 0.0;
-    elapsed = (double)(now.tv_sec - start_time->tv_sec) * 1000.0;
-    elapsed += (double)(now.tv_nsec - start_time->tv_nsec) / 1000000.0;
-    return elapsed < 0.0 ? 0.0 : elapsed;
+static bool runtime_native_3d_env_truthy(const char* name) {
+    const char* value = name ? getenv(name) : NULL;
+    if (!value || value[0] == '\0') return false;
+    if (strcmp(value, "0") == 0 ||
+        strcmp(value, "false") == 0 ||
+        strcmp(value, "FALSE") == 0 ||
+        strcmp(value, "off") == 0 ||
+        strcmp(value, "OFF") == 0 ||
+        strcmp(value, "no") == 0 ||
+        strcmp(value, "NO") == 0) {
+        return false;
+    }
+    return true;
 }
 
 void runtime_native_3d_prepare_frame_set_diag(const char* message) {
@@ -80,75 +85,6 @@ const char* RuntimeNative3DPrepareFrameLastDiagnostics(void) {
     return RuntimeNative3DPrepareDiagnostics_Get();
 }
 
-static void runtime_native_3d_prepared_scene_cache_ensure_initialized(void) {
-    if (gRuntimeNative3DPreparedSceneCacheInitialized) return;
-    RuntimeScene3D_Init(&gRuntimeNative3DPreparedSceneCache);
-    gRuntimeNative3DPreparedSceneCacheInitialized = true;
-}
-
-void RuntimeNative3DPreparedSceneMarkDirty(const char* reason) {
-    (void)reason;
-    runtime_native_3d_prepared_scene_cache_ensure_initialized();
-    gRuntimeNative3DPreparedSceneDirtyGeneration += 1u;
-    if (gRuntimeNative3DPreparedSceneCacheValid) {
-        gRuntimeNative3DPreparedSceneCacheInvalidations += 1u;
-    }
-    gRuntimeNative3DPreparedSceneCacheValid = false;
-    gRuntimeNative3DPreparedSceneCachedGeneration = 0u;
-    RuntimeScene3D_Free(&gRuntimeNative3DPreparedSceneCache);
-    RuntimeScene3D_Init(&gRuntimeNative3DPreparedSceneCache);
-}
-
-void RuntimeNative3DPreparedSceneCacheStatsSnapshot(
-    RuntimeNative3DPreparedSceneCacheStats* out_stats) {
-    if (!out_stats) return;
-    memset(out_stats, 0, sizeof(*out_stats));
-    runtime_native_3d_prepared_scene_cache_ensure_initialized();
-    out_stats->generation = gRuntimeNative3DPreparedSceneDirtyGeneration;
-    out_stats->cachedGeneration = gRuntimeNative3DPreparedSceneCachedGeneration;
-    out_stats->valid = gRuntimeNative3DPreparedSceneCacheValid;
-    out_stats->hits = gRuntimeNative3DPreparedSceneCacheHits;
-    out_stats->misses = gRuntimeNative3DPreparedSceneCacheMisses;
-    out_stats->stores = gRuntimeNative3DPreparedSceneCacheStores;
-    out_stats->invalidations = gRuntimeNative3DPreparedSceneCacheInvalidations;
-    out_stats->staticGeometryReuseEnabled =
-        gRuntimeNative3DPreparedSceneCacheStaticGeometry;
-    out_stats->timeIndependentHits =
-        gRuntimeNative3DPreparedSceneCacheTimeIndependentHits;
-    out_stats->cachedNormalizedT = gRuntimeNative3DPreparedSceneCacheNormalizedT;
-    out_stats->lastRequestedNormalizedT =
-        gRuntimeNative3DPreparedSceneCacheLastRequestedT;
-    if (gRuntimeNative3DPreparedSceneCacheValid) {
-        out_stats->cachedPrimitiveCount =
-            gRuntimeNative3DPreparedSceneCache.primitiveCount;
-        out_stats->cachedTriangleCount =
-            gRuntimeNative3DPreparedSceneCache.triangleMesh.triangleCount;
-        out_stats->cachedBVHNodeCount =
-            RuntimeTriangleMesh3D_BVHNodeCount(
-                &gRuntimeNative3DPreparedSceneCache.triangleMesh);
-        out_stats->cachedBVHLeafCount =
-            RuntimeTriangleMesh3D_BVHLeafCount(
-                &gRuntimeNative3DPreparedSceneCache.triangleMesh);
-    }
-}
-
-void RuntimeNative3DPreparedSceneCacheResetForTests(void) {
-    runtime_native_3d_prepared_scene_cache_ensure_initialized();
-    RuntimeScene3D_Free(&gRuntimeNative3DPreparedSceneCache);
-    RuntimeScene3D_Init(&gRuntimeNative3DPreparedSceneCache);
-    gRuntimeNative3DPreparedSceneCacheValid = false;
-    gRuntimeNative3DPreparedSceneCacheStaticGeometry = true;
-    gRuntimeNative3DPreparedSceneCacheNormalizedT = 0.0;
-    gRuntimeNative3DPreparedSceneCacheLastRequestedT = 0.0;
-    gRuntimeNative3DPreparedSceneDirtyGeneration = 1u;
-    gRuntimeNative3DPreparedSceneCachedGeneration = 0u;
-    gRuntimeNative3DPreparedSceneCacheHits = 0u;
-    gRuntimeNative3DPreparedSceneCacheMisses = 0u;
-    gRuntimeNative3DPreparedSceneCacheStores = 0u;
-    gRuntimeNative3DPreparedSceneCacheInvalidations = 0u;
-    gRuntimeNative3DPreparedSceneCacheTimeIndependentHits = 0u;
-}
-
 void RuntimeNative3DRender_ResetInspectionCameraOverrides(void) {
     gRuntimeNative3DInspectionCameraPositionEnabled = false;
     gRuntimeNative3DInspectionCameraLookAtEnabled = false;
@@ -164,6 +100,18 @@ void RuntimeNative3DRender_SetInspectionCameraPosition(Vec3 position) {
 void RuntimeNative3DRender_SetInspectionCameraLookAt(Vec3 target) {
     gRuntimeNative3DInspectionCameraLookAtEnabled = true;
     gRuntimeNative3DInspectionCameraLookAt = target;
+}
+
+void RuntimeNative3DRender_SetCausticPhotonRenderPrepPopulation(
+    bool enabled,
+    const RuntimeCausticPhotonIntegrationSettings3D* settings) {
+    gRuntimeNative3DCausticPhotonRenderPrepPopulationEnabled = enabled;
+    if (settings) {
+        gRuntimeNative3DCausticPhotonRenderPrepSettings = *settings;
+    } else {
+        RuntimeCausticPhotonIntegration3D_DefaultSettings(
+            &gRuntimeNative3DCausticPhotonRenderPrepSettings);
+    }
 }
 
 static double runtime_native_3d_render_resolve_default_light_radius(
@@ -459,47 +407,11 @@ static bool runtime_native_3d_render_build_live_scene(RuntimeScene3D* scene,
                                                       double normalized_t,
                                                       double live_light_x,
                                                       double live_light_y) {
+    RuntimeNative3DPreparedSceneCacheStats* stats =
+        runtime_native_3d_prepared_scene_dataflow_stats();
     if (!scene) return false;
-    runtime_native_3d_prepared_scene_cache_ensure_initialized();
-    gRuntimeNative3DPreparedSceneCacheLastRequestedT = normalized_t;
-    if (gRuntimeNative3DPreparedSceneCacheValid &&
-        gRuntimeNative3DPreparedSceneCachedGeneration ==
-            gRuntimeNative3DPreparedSceneDirtyGeneration &&
-        (gRuntimeNative3DPreparedSceneCacheStaticGeometry ||
-         fabs(gRuntimeNative3DPreparedSceneCacheNormalizedT - normalized_t) <= 1e-12)) {
-        gRuntimeNative3DPreparedSceneCacheHits += 1u;
-        if (fabs(gRuntimeNative3DPreparedSceneCacheNormalizedT - normalized_t) > 1e-12) {
-            gRuntimeNative3DPreparedSceneCacheTimeIndependentHits += 1u;
-        }
-        if (!RuntimeScene3D_CopyGeometryFrom(scene,
-                                             &gRuntimeNative3DPreparedSceneCache)) {
-            return false;
-        }
-        RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(scene);
-        RuntimeScene3D_RefreshMaterialFlags(scene);
-    } else {
-        RuntimeScene3D built_scene = {0};
-        RuntimeScene3D_Init(&built_scene);
-        gRuntimeNative3DPreparedSceneCacheMisses += 1u;
-        if (!RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(&built_scene, normalized_t)) {
-            RuntimeScene3D_Free(&built_scene);
-            return false;
-        }
-        RuntimeScene3D_Free(&gRuntimeNative3DPreparedSceneCache);
-        gRuntimeNative3DPreparedSceneCache = built_scene;
-        memset(&built_scene, 0, sizeof(built_scene));
-        gRuntimeNative3DPreparedSceneCacheValid = true;
-        gRuntimeNative3DPreparedSceneCacheStaticGeometry = true;
-        gRuntimeNative3DPreparedSceneCacheNormalizedT = normalized_t;
-        gRuntimeNative3DPreparedSceneCachedGeneration =
-            gRuntimeNative3DPreparedSceneDirtyGeneration;
-        gRuntimeNative3DPreparedSceneCacheStores += 1u;
-        if (!RuntimeScene3D_CopyGeometryFrom(scene,
-                                             &gRuntimeNative3DPreparedSceneCache)) {
-            return false;
-        }
-        RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(scene);
-        RuntimeScene3D_RefreshMaterialFlags(scene);
+    if (!runtime_native_3d_prepared_scene_build_or_copy_for_frame(scene, normalized_t)) {
+        return false;
     }
 
     runtime_native_3d_render_apply_live_light(scene,
@@ -509,10 +421,16 @@ static bool runtime_native_3d_render_build_live_scene(RuntimeScene3D* scene,
     (void)width;
     (void)height;
     runtime_native_3d_render_apply_live_camera(scene, normalized_t);
-    return scene->primitiveCount > 0 &&
-           scene->triangleMesh.triangleCount > 0 &&
-           scene->hasLight &&
-           scene->hasCamera;
+    if (scene->primitiveCount > 0 &&
+        scene->triangleMesh.triangleCount > 0 &&
+        scene->hasLight &&
+        scene->hasCamera) {
+        if (stats->dataflowStatsEnabled) {
+            stats->lastPrepareValid = true;
+        }
+        return true;
+    }
+    return false;
 }
 
 static RuntimeVolume3DSourceKind runtime_native_3d_render_map_volume_source_kind(
@@ -575,10 +493,19 @@ static void runtime_native_3d_render_configure_water_surface_object(
     double tint_r = 88.0 / 255.0;
     double tint_g = 178.0 / 255.0;
     double tint_b = 235.0 / 255.0;
+    double water_transparency = 0.92;
+    double water_ior = 1.333;
+    double water_absorption_distance = 4.0;
     if (!object || !water) return;
 
+    water_transparency = runtime_native_3d_render_clamp01(water_transparency);
+    if (water->material.valid) {
+        water_ior = fmax(1.0, fmin(4.0, water->material.ior));
+        water_absorption_distance = fmax(water->material.absorption_distance_m, 1e-6);
+    }
+
     RuntimeWaterMaterial3D_ComputeTransmittanceTint(
-        water->material.valid ? water->material.absorption_distance_m : 4.0,
+        water_absorption_distance,
         water->material.valid ? water->material.absorption_rgb[0] : 0.10,
         water->material.valid ? water->material.absorption_rgb[1] : 0.035,
         water->material.valid ? water->material.absorption_rgb[2] : 0.015,
@@ -598,7 +525,7 @@ static void runtime_native_3d_render_configure_water_surface_object(
     object->scale = 1.0;
     object->color = SceneObjectPackRGBBytes(r, g, b);
     object->opacity = 1.0;
-    object->alpha = 1.0;
+    object->alpha = water_transparency;
     object->reflectivity = runtime_native_3d_water_material_or_default(
         water->material.reflectivity,
         kRuntimeNative3DWaterSurfaceReflectivity);
@@ -606,6 +533,11 @@ static void runtime_native_3d_render_configure_water_surface_object(
         water->material.roughness,
         kRuntimeNative3DWaterSurfaceRoughness);
     object->material_id = MATERIAL_PRESET_TRANSPARENT;
+    SceneObjectSeedGlassTransportOverrideFromMaterial(object);
+    object->glassTransmission = water_transparency;
+    object->glassIor = water_ior;
+    object->glassAbsorptionDistance = water_absorption_distance;
+    object->glassThinWalled = false;
     object->dirty = false;
     object->guideOnly = false;
 }
@@ -796,6 +728,126 @@ static bool runtime_native_3d_render_ensure_ready_bvh(RuntimeScene3D* scene) {
     return true;
 }
 
+static void runtime_native_3d_prepare_record_frame_bvh_stats(
+    const RuntimeScene3D* scene,
+    bool ready) {
+    RuntimeNative3DPreparedSceneCacheStats* stats =
+        runtime_native_3d_prepared_scene_dataflow_stats();
+    RuntimeTriangleBVH3DBuildStats bvh_stats = {0};
+    if (!stats || !stats->dataflowStatsEnabled) return;
+    stats->lastFrameBVHReady = ready;
+    stats->lastFrameBVHTriangleCount =
+        scene ? scene->triangleMesh.triangleCount : 0;
+    stats->lastFrameBVHNodeCount = 0;
+    stats->lastFrameBVHTotalBytes = 0u;
+    if (scene &&
+        RuntimeTriangleMesh3D_BVHBuildStats(&scene->triangleMesh, &bvh_stats)) {
+        stats->lastFrameBVHTriangleCount = bvh_stats.triangleCount;
+        stats->lastFrameBVHNodeCount = bvh_stats.nodeCount;
+        stats->lastFrameBVHTotalBytes = bvh_stats.totalBytes;
+        stats->lastFrameBVHReady = bvh_stats.ready;
+    }
+}
+
+static bool runtime_native_3d_prepare_try_skip_frame_bvh_for_tlas(
+    const RuntimeScene3D* scene) {
+    struct timespec bind_started_at = {0};
+    RuntimeNative3DPreparedSceneCacheStats* stats =
+        runtime_native_3d_prepared_scene_dataflow_stats();
+    RuntimeRay3DTraceRoute route = RuntimeRay3D_CurrentTraceRoute();
+    bool force_enabled = runtime_native_3d_env_truthy(
+        kRuntimeNative3DFrameBVHSkipOnTLASEnv);
+    bool default_disabled = runtime_native_3d_env_truthy(
+        kRuntimeNative3DFrameBVHSkipDefaultDisableEnv);
+    bool default_enabled =
+        route == RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS && !default_disabled;
+    bool skip_enabled = force_enabled || default_enabled;
+    bool tlas_ready = false;
+
+    if (stats && stats->dataflowStatsEnabled) {
+        stats->flattenedBVHSkipOnTLASEnabled = skip_enabled;
+        stats->flattenedBVHSkipOnTLASDefaultEnabled = default_enabled;
+        stats->flattenedBVHSkipOnTLASForceEnabled = force_enabled;
+        stats->flattenedBVHSkipOnTLASDefaultDisabled = default_disabled;
+        stats->lastFrameBVHRequired = true;
+        stats->lastFrameBVHSkippedForTLAS = false;
+        stats->lastTLASReadyForFrameBVHSkip = false;
+        stats->lastFrameBVHSkipDecision =
+            RUNTIME_NATIVE_3D_FRAME_BVH_SKIP_DECISION_NOT_REQUESTED;
+    }
+    if (route != RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS) {
+        if (stats && stats->dataflowStatsEnabled) {
+            stats->lastFrameBVHSkipDecision =
+                RUNTIME_NATIVE_3D_FRAME_BVH_SKIP_DECISION_ROUTE_REQUIRES_FLATTENED_BVH;
+        }
+        return false;
+    }
+    if (default_disabled && !force_enabled) {
+        if (stats && stats->dataflowStatsEnabled) {
+            stats->lastFrameBVHSkipDecision =
+                RUNTIME_NATIVE_3D_FRAME_BVH_SKIP_DECISION_DISABLED_BY_ENV;
+        }
+        return false;
+    }
+    if (!skip_enabled) {
+        return false;
+    }
+
+    (void)clock_gettime(CLOCK_MONOTONIC, &bind_started_at);
+    tlas_ready = RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(scene);
+    if (stats && stats->dataflowStatsEnabled) {
+        const double bind_ms =
+            runtime_native_3d_prepare_elapsed_ms_since(&bind_started_at);
+        stats->frameBVHTLASReadinessChecks += 1u;
+        stats->frameBVHTLASReadinessBindMsTotal += bind_ms;
+        stats->lastFrameBVHTLASReadinessBindMs = bind_ms;
+        stats->lastTLASReadyForFrameBVHSkip = tlas_ready;
+    }
+    if (!tlas_ready) {
+        if (stats && stats->dataflowStatsEnabled) {
+            stats->lastFrameBVHSkipDecision =
+                RUNTIME_NATIVE_3D_FRAME_BVH_SKIP_DECISION_TLAS_BIND_NOT_READY;
+        }
+        return false;
+    }
+
+    if (stats && stats->dataflowStatsEnabled) {
+        stats->frameBVHSkipForTLASCalls += 1u;
+        stats->lastFrameBVHRequired = false;
+        stats->lastFrameBVHSkippedForTLAS = true;
+        stats->lastFrameBVHSkipDecision =
+            RUNTIME_NATIVE_3D_FRAME_BVH_SKIP_DECISION_SKIPPED_TLAS_READY;
+        runtime_native_3d_prepare_record_frame_bvh_stats(scene, false);
+    }
+    return true;
+}
+
+static bool runtime_native_3d_prepare_ensure_frame_bvh(RuntimeScene3D* scene) {
+    struct timespec ensure_started_at = {0};
+    RuntimeNative3DPreparedSceneCacheStats* stats =
+        runtime_native_3d_prepared_scene_dataflow_stats();
+    bool had_ready_bvh = scene && RuntimeTriangleMesh3D_HasReadyBVH(&scene->triangleMesh);
+    bool ok = false;
+
+    (void)clock_gettime(CLOCK_MONOTONIC, &ensure_started_at);
+    ok = runtime_native_3d_render_ensure_ready_bvh(scene);
+    if (stats && stats->dataflowStatsEnabled) {
+        const double ensure_ms =
+            runtime_native_3d_prepare_elapsed_ms_since(&ensure_started_at);
+        stats->frameBVHEnsureCalls += 1u;
+        stats->frameBVHEnsureMsTotal += ensure_ms;
+        stats->lastFrameBVHEnsureMs = ensure_ms;
+        stats->lastFrameBVHRequired = true;
+        if (had_ready_bvh) {
+            stats->frameBVHAlreadyReadyCalls += 1u;
+        } else if (ok) {
+            stats->frameBVHBuildCalls += 1u;
+        }
+        runtime_native_3d_prepare_record_frame_bvh_stats(scene, ok);
+    }
+    return ok;
+}
+
 bool RuntimeNative3DPrepareFrame(RuntimeNative3DPreparedFrame* out_frame,
                                  int width,
                                  int height,
@@ -844,6 +896,182 @@ bool RuntimeNative3DPrepareFrameWithSampling(RuntimeNative3DPreparedFrame* out_f
                                                                live_light_x,
                                                                live_light_y,
                                                                sampling);
+}
+
+static bool runtime_native_3d_prepare_harvest_photon_mesh_dielectric(
+    const RuntimeScene3D* scene,
+    RuntimeCausticLensShape3D* out_shape,
+    RuntimeTriangle3D* out_entry_triangle,
+    RuntimeCausticPhotonMapPopulationReadback3D* io_population) {
+    RuntimeCausticPhotonSceneDescriptorBatch3D batch;
+    const RuntimeCausticPhotonMeshDielectricDescriptor3D* selected = NULL;
+
+    if (io_population) {
+        io_population->preparedSceneMeshDielectricAttempted = true;
+        io_population->preparedSceneMeshDielectricSceneObjectIndex = -1;
+        io_population->preparedSceneMeshDielectricPrimitiveIndex = -1;
+        io_population->preparedSceneMeshDielectricTriangleIndex = -1;
+        io_population->preparedSceneMeshDielectricTriangleCount = 0;
+    }
+    if (!scene || !out_shape || !out_entry_triangle) return false;
+    if (!RuntimeCausticPhotonSceneDescriptor3D_HarvestMeshDielectricBatch(scene,
+                                                                          &batch)) {
+        if (io_population) {
+            io_population->preparedSceneMeshDielectricCandidateCount =
+                batch.meshDielectricCandidateCount;
+        }
+        return false;
+    }
+
+    selected = RuntimeCausticPhotonSceneDescriptor3D_SelectedMeshDielectric(&batch);
+    if (!selected) return false;
+    *out_shape = selected->shape;
+    *out_entry_triangle = selected->entryTriangle;
+    if (io_population) {
+        io_population->preparedSceneMeshDielectricSucceeded = true;
+        io_population->preparedSceneMeshDielectricCandidateCount =
+            batch.meshDielectricCandidateCount;
+        io_population->preparedSceneMeshDielectricSceneObjectIndex =
+            selected->sceneObjectIndex;
+        io_population->preparedSceneMeshDielectricPrimitiveIndex =
+            selected->primitiveIndex;
+        io_population->preparedSceneMeshDielectricTriangleIndex =
+            selected->triangleIndex;
+        io_population->preparedSceneMeshDielectricTriangleCount =
+            selected->triangleCount;
+    }
+    return true;
+}
+
+static void runtime_native_3d_prepare_populate_photon_render_prep(
+    RuntimeNative3DPreparedFrame* frame) {
+    RuntimeCausticPhotonIntegrationSettings3D settings;
+    RuntimeCausticPhotonMap3D surface_map;
+    RuntimeCausticPhotonMapPopulationReadback3D population;
+    RuntimeCausticPhotonMapPopulationReadback3D harvest;
+    RuntimeCausticPhotonReceiverSelection3D receiver;
+    RuntimeCausticLensShape3D shape;
+    RuntimeTriangle3D triangle;
+    uint64_t cache_capacity = 1u;
+
+    if (!frame || !gRuntimeNative3DCausticPhotonRenderPrepPopulationEnabled) return;
+
+    settings = gRuntimeNative3DCausticPhotonRenderPrepSettings;
+    if (RuntimeCausticPhotonIntegration3D_RouteForSettings(&settings) !=
+        RUNTIME_CAUSTIC_PHOTON_INTEGRATION_ROUTE_PHOTON_QUERY_READY) {
+        return;
+    }
+    if (!settings.renderContributionEnabled || !settings.surfaceQueryEnabled) return;
+    if (settings.sampleBudget <= 0) settings.sampleBudget = 8;
+    if (!(settings.surfaceQueryRadius > 0.0)) settings.surfaceQueryRadius = 0.20;
+    if (!(settings.volumeQueryRadius > 0.0)) settings.volumeQueryRadius = 0.20;
+    cache_capacity = (uint64_t)settings.sampleBudget;
+
+    memset(&harvest, 0, sizeof(harvest));
+    if (!runtime_native_3d_prepare_harvest_photon_mesh_dielectric(&frame->scene,
+                                                                  &shape,
+                                                                  &triangle,
+                                                                  &harvest)) {
+        return;
+    }
+
+    if (!RuntimeCausticSurfaceCache3D_IsAllocated(&frame->causticSurfaceCache)) {
+        (void)RuntimeCausticSurfaceCache3D_Allocate(&frame->causticSurfaceCache,
+                                                    cache_capacity);
+    }
+    if (settings.volumeQueryEnabled &&
+        !RuntimeCausticVolumeCache3D_IsAllocated(&frame->causticVolumeCache)) {
+        (void)RuntimeCausticVolumeCache3D_AllocateFromVolume(&frame->causticVolumeCache,
+                                                             &frame->scene.volume);
+    }
+
+    RuntimeCausticPhotonMap3D_Init(&surface_map);
+    memset(&population, 0, sizeof(population));
+    memset(&receiver, 0, sizeof(receiver));
+    if (!RuntimeCausticPhotonIntegration3D_PopulateReceiverSurfaceMapFromMeshDielectricScene(
+            &surface_map,
+            &frame->scene,
+            &shape,
+            &triangle,
+            &settings,
+            &population,
+            &receiver)) {
+        population.preparedSceneMeshDielectricAttempted =
+            harvest.preparedSceneMeshDielectricAttempted;
+        population.preparedSceneMeshDielectricSucceeded =
+            harvest.preparedSceneMeshDielectricSucceeded;
+        population.fixtureMeshDielectricFallbackUsed =
+            harvest.fixtureMeshDielectricFallbackUsed;
+        population.preparedSceneMeshDielectricCandidateCount =
+            harvest.preparedSceneMeshDielectricCandidateCount;
+        population.preparedSceneMeshDielectricSceneObjectIndex =
+            harvest.preparedSceneMeshDielectricSceneObjectIndex;
+        population.preparedSceneMeshDielectricPrimitiveIndex =
+            harvest.preparedSceneMeshDielectricPrimitiveIndex;
+        population.preparedSceneMeshDielectricTriangleIndex =
+            harvest.preparedSceneMeshDielectricTriangleIndex;
+        population.preparedSceneMeshDielectricTriangleCount =
+            harvest.preparedSceneMeshDielectricTriangleCount;
+        frame->causticPhotonRenderPrepReadback.mapPopulation = population;
+        frame->causticPhotonRenderPrepReadbackBuilt = true;
+        RuntimeCausticPhotonMap3D_Free(&surface_map);
+        return;
+    }
+    population.preparedSceneMeshDielectricAttempted =
+        harvest.preparedSceneMeshDielectricAttempted;
+    population.preparedSceneMeshDielectricSucceeded =
+        harvest.preparedSceneMeshDielectricSucceeded;
+    population.fixtureMeshDielectricFallbackUsed = harvest.fixtureMeshDielectricFallbackUsed;
+    population.preparedSceneMeshDielectricCandidateCount =
+        harvest.preparedSceneMeshDielectricCandidateCount;
+    population.preparedSceneMeshDielectricSceneObjectIndex =
+        harvest.preparedSceneMeshDielectricSceneObjectIndex;
+    population.preparedSceneMeshDielectricPrimitiveIndex =
+        harvest.preparedSceneMeshDielectricPrimitiveIndex;
+    population.preparedSceneMeshDielectricTriangleIndex =
+        harvest.preparedSceneMeshDielectricTriangleIndex;
+    population.preparedSceneMeshDielectricTriangleCount =
+        harvest.preparedSceneMeshDielectricTriangleCount;
+
+    memset(&frame->causticPhotonRenderPrepReadback,
+           0,
+           sizeof(frame->causticPhotonRenderPrepReadback));
+    frame->causticPhotonRenderPrepReadback.productMode = settings.productMode;
+    frame->causticPhotonRenderPrepReadback.route =
+        RuntimeCausticPhotonIntegration3D_RouteForSettings(&settings);
+    frame->causticPhotonRenderPrepReadback.renderContributionSuppressed =
+        !settings.renderContributionEnabled;
+    frame->causticPhotonRenderPrepReadback.queryAttempted = true;
+    frame->causticPhotonRenderPrepReadback.contributionAttempted = true;
+    frame->causticPhotonRenderPrepReadback.cacheDepositAttempted = true;
+    (void)RuntimeCausticPhotonIntegration3D_DepositSurfaceContributionsForReceiverBuckets(
+        &surface_map,
+        &frame->causticSurfaceCache,
+        &settings,
+        &frame->causticPhotonRenderPrepReadback.receiverContribution);
+    frame->causticPhotonRenderPrepReadback.queryHit =
+        frame->causticPhotonRenderPrepReadback.receiverContribution
+            .receiverQueryHitCount > 0u;
+    frame->causticPhotonRenderPrepReadback.contributionEligible =
+        frame->causticPhotonRenderPrepReadback.receiverContribution.eligible;
+    frame->causticPhotonRenderPrepReadback.surfaceDeposited =
+        frame->causticPhotonRenderPrepReadback.receiverContribution
+            .receiverSurfaceDepositAcceptedCount > 0u;
+    frame->causticPhotonRenderPrepReadback.surfaceCandidateCount =
+        frame->causticPhotonRenderPrepReadback.receiverContribution
+            .receiverSurfaceCandidateCount;
+    frame->causticPhotonRenderPrepReadback.surfaceContributingCount =
+        frame->causticPhotonRenderPrepReadback.receiverContribution
+            .receiverSurfaceContributingCount;
+    frame->causticPhotonRenderPrepReadback.estimatedCost =
+        frame->causticPhotonRenderPrepReadback.receiverContribution
+            .receiverQueryAttemptCount;
+    frame->causticPhotonRenderPrepReadback.radiance =
+        frame->causticPhotonRenderPrepReadback.receiverContribution
+            .receiverSurfaceRadiance;
+    frame->causticPhotonRenderPrepReadback.mapPopulation = population;
+    frame->causticPhotonRenderPrepReadbackBuilt = true;
+    RuntimeCausticPhotonMap3D_Free(&surface_map);
 }
 
 bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
@@ -914,7 +1142,8 @@ bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
         RuntimeScene3D_Free(&frame.scene);
         return false;
     }
-    if (!runtime_native_3d_render_ensure_ready_bvh(&frame.scene)) {
+    if (!runtime_native_3d_prepare_try_skip_frame_bvh_for_tlas(&frame.scene) &&
+        !runtime_native_3d_prepare_ensure_frame_bvh(&frame.scene)) {
         RuntimeScene3D_Free(&frame.scene);
         return false;
     }
@@ -932,6 +1161,7 @@ bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
             &frame.causticVolumeCache,
             &frame.causticBootstrapDiagnostics);
     }
+    runtime_native_3d_prepare_populate_photon_render_prep(&frame);
     frame.causticCachePrepMs =
         runtime_native_3d_prepare_elapsed_ms_since(&caustic_prep_started_at);
 
@@ -960,6 +1190,6 @@ bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
     }
     frame.valid = true;
     *out_frame = frame;
-    RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(&out_frame->scene);
+    runtime_native_3d_prepare_bind_scene_for_frame(&out_frame->scene, true);
     return true;
 }

@@ -25,13 +25,63 @@ static void runtime_native_3d_tile_scheduler_free(RuntimeNative3DTileScheduler* 
     if (!scheduler) return;
     if (scheduler->jobs) {
         for (size_t i = 0; i < scheduler->jobCount; ++i) {
-            RuntimeNative3DRenderUnit_Free(&scheduler->jobs[i].renderUnit);
+            RuntimeNative3DRenderUnit_ReturnReusable(&scheduler->jobs[i].renderUnit);
         }
     }
     free(scheduler->jobs);
     free(scheduler->parentMetrics);
     free(scheduler->progressTiles);
     runtime_native_3d_tile_scheduler_reset(scheduler);
+}
+
+static bool runtime_native_3d_tile_scheduler_cancel_requested(
+    RuntimeNative3DTileScheduler* scheduler) {
+    const RuntimeNative3DTileSchedulerCancelToken* token = NULL;
+    bool requested = false;
+
+    if (!scheduler) {
+        return false;
+    }
+    scheduler->cancelCheckCount += 1;
+    token = scheduler->control ? scheduler->control->cancelToken : NULL;
+    requested = token && token->cancelRequested && *token->cancelRequested;
+    if (requested) {
+        scheduler->cancelRequested = true;
+        scheduler->cancelRequestedCount += 1;
+    }
+    return requested;
+}
+
+static void runtime_native_3d_tile_scheduler_record_lifetime_stats(
+    const RuntimeNative3DTileScheduler* scheduler,
+    RuntimeNative3DRenderStats* stats) {
+    if (!scheduler || !stats) {
+        return;
+    }
+    stats->temporalTileSchedulerJobArrayOwnerCount = scheduler->jobArrayOwnerCount;
+    stats->temporalTileSchedulerParentMetricArrayOwnerCount =
+        scheduler->parentMetricArrayOwnerCount;
+    stats->temporalTileSchedulerProgressTileArrayOwnerCount =
+        scheduler->progressTileArrayOwnerCount;
+    stats->temporalTileSchedulerCompletionQueueOwnerCount =
+        scheduler->completionQueueOwnerCount;
+    stats->temporalTileSchedulerWorkerPoolOwnerCount = scheduler->workerPoolOwnerCount;
+    stats->temporalTileSchedulerCancelTokenBound =
+        scheduler->control && scheduler->control->cancelToken ? 1 : 0;
+    stats->temporalTileSchedulerCancelCheckCount = scheduler->cancelCheckCount;
+    stats->temporalTileSchedulerCancelRequestedCount = scheduler->cancelRequestedCount;
+    stats->temporalTileSchedulerCancelBeforeDispatchCount =
+        scheduler->cancelBeforeDispatchCount;
+    stats->temporalTileSchedulerCancelDuringWaitCount = scheduler->cancelDuringWaitCount;
+    stats->temporalTileSchedulerCancelBeforeFinalResolveCount =
+        scheduler->cancelBeforeFinalResolveCount;
+    stats->temporalTileSchedulerFinalResolveBlockedByCancelCount =
+        scheduler->finalResolveBlockedByCancelCount;
+    stats->temporalTileSchedulerWorkerDrainShutdownCount =
+        scheduler->workerDrainShutdownCount;
+    stats->temporalTileSchedulerWorkerCancelShutdownCount =
+        scheduler->workerCancelShutdownCount;
+    stats->temporalTileSchedulerCancelGeneration = scheduler->cancelGeneration;
 }
 
 
@@ -73,7 +123,7 @@ static bool runtime_native_3d_tile_scheduler_emit_job(RuntimeNative3DTileSchedul
                                                                end_y);
     job->parentTile = *parent_tile;
     job->parentMetricIndex = parent_metric_index;
-    RuntimeNative3DRenderUnit_Init(&job->renderUnit);
+    RuntimeNative3DRenderUnit_TakeReusable(&job->renderUnit);
     if (!RuntimeNative3DRenderUnit_Setup(&job->renderUnit,
                                          integrator_id,
                                          frame,
@@ -84,6 +134,7 @@ static bool runtime_native_3d_tile_scheduler_emit_job(RuntimeNative3DTileSchedul
                                          &frame->sampling,
                                          temporal_frames,
                                          animSettings.disneyDenoiseEnabled)) {
+        RuntimeNative3DRenderUnit_Free(&job->renderUnit);
         return false;
     }
 
@@ -106,16 +157,19 @@ static bool runtime_native_3d_tile_scheduler_build_jobs(RuntimeNative3DTileSched
     if (!scheduler->jobs) {
         return false;
     }
+    scheduler->jobArrayOwnerCount = 1;
     scheduler->parentMetrics =
         (RuntimeNative3DTileSchedulerParentMetric*)calloc(max_parent_tiles,
                                                           sizeof(*scheduler->parentMetrics));
     if (!scheduler->parentMetrics) {
         return false;
     }
+    scheduler->parentMetricArrayOwnerCount = 1;
     scheduler->progressTiles = (IntegratorTile*)calloc(max_tiles, sizeof(*scheduler->progressTiles));
     if (!scheduler->progressTiles) {
         return false;
     }
+    scheduler->progressTileArrayOwnerCount = 1;
     adaptive_plan = runtime_native_3d_tile_scheduler_active_plan(frame,
                                                                    integrator_id,
                                                                    temporal_frames,
@@ -303,6 +357,10 @@ static bool runtime_native_3d_tile_scheduler_wait_for_subpass(
     }
     while (completions < expected_completions) {
         void* completion = NULL;
+        if (runtime_native_3d_tile_scheduler_cancel_requested(scheduler)) {
+            scheduler->cancelDuringWaitCount += 1;
+            return false;
+        }
         if (!core_queue_mutex_timed_pop(completion_queue, &completion, 100u)) {
             continue;
         }
@@ -429,6 +487,11 @@ static bool runtime_native_3d_tile_scheduler_dispatch_subpass(
         return true;
     }
 
+    if (runtime_native_3d_tile_scheduler_cancel_requested(scheduler)) {
+        scheduler->cancelBeforeDispatchCount += 1;
+        return false;
+    }
+
     if (progress_callback) {
         progress_callback(subpass_index + 1,
                           scheduler->committedSubpasses,
@@ -536,6 +599,32 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressAndBudget(
     void* tile_progress_user_data,
     const RuntimeNative3DResourceBudget* resource_budget,
     RuntimeNative3DRenderStats* out_stats) {
+    return RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressBudgetAndControl(
+        pixel_buffer,
+        integrator_id,
+        frame,
+        temporal_frames,
+        progress_callback,
+        progress_user_data,
+        tile_progress_callback,
+        tile_progress_user_data,
+        resource_budget,
+        NULL,
+        out_stats);
+}
+
+bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressBudgetAndControl(
+    uint8_t* pixel_buffer,
+    RayTracing3DIntegratorId integrator_id,
+    RuntimeNative3DPreparedFrame* frame,
+    int temporal_frames,
+    RuntimeNative3DTemporalProgressCallback progress_callback,
+    void* progress_user_data,
+    RuntimeNative3DTileSchedulerProgressCallback tile_progress_callback,
+    void* tile_progress_user_data,
+    const RuntimeNative3DResourceBudget* resource_budget,
+    const RuntimeNative3DTileSchedulerControl* scheduler_control,
+    RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DTileScheduler scheduler = {0};
     const uint64_t frame_start_ticks = (uint64_t)SDL_GetPerformanceCounter();
     const int effective_temporal_frames = (temporal_frames <= 1) ? 1 : temporal_frames;
@@ -563,6 +652,10 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressAndBudget(
     (void)occupancy_ok;
 
     runtime_native_3d_tile_scheduler_reset(&scheduler);
+    scheduler.control = scheduler_control;
+    if (scheduler_control && scheduler_control->cancelToken) {
+        scheduler.cancelGeneration = scheduler_control->cancelToken->generation;
+    }
     scheduler.firstFrameConservativeTileRender = frame->tileOccupancyConservativeAllTiles;
     if (!runtime_native_3d_tile_scheduler_build_jobs(&scheduler,
                                                      frame,
@@ -592,6 +685,7 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressAndBudget(
     if (!core_queue_mutex_init(&completion_queue, completion_slots, scheduler.jobCount)) {
         goto finalize;
     }
+    scheduler.completionQueueOwnerCount = 1;
     if (!core_workers_init(&workers,
                            thread_slots,
                            worker_count,
@@ -599,8 +693,10 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressAndBudget(
                            scheduler.jobCount,
                            &completion_queue)) {
         core_queue_mutex_destroy(&completion_queue);
+        scheduler.completionQueueOwnerCount = 0;
         goto finalize;
     }
+    scheduler.workerPoolOwnerCount = 1;
 
     ok = true;
     for (int subpass = 0; ok && subpass < effective_temporal_frames; ++subpass) {
@@ -620,31 +716,58 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressAndBudget(
         }
     }
 
-    core_workers_shutdown(&workers);
+    if (scheduler.cancelRequested) {
+        core_workers_shutdown_with_mode(&workers, CORE_WORKERS_SHUTDOWN_CANCEL);
+        scheduler.workerCancelShutdownCount += 1;
+    } else {
+        core_workers_shutdown(&workers);
+        scheduler.workerDrainShutdownCount += 1;
+    }
     core_queue_mutex_destroy(&completion_queue);
 
     if (!ok) {
         goto finalize;
     }
 
+    if (runtime_native_3d_tile_scheduler_cancel_requested(&scheduler)) {
+        scheduler.cancelBeforeFinalResolveCount += 1;
+        scheduler.finalResolveBlockedByCancelCount += 1;
+        ok = false;
+        goto finalize;
+    }
+
     for (size_t i = 0; i < scheduler.jobCount; ++i) {
         RuntimeNative3DRenderStats resolve_stats = {0};
-        if (!RuntimeNative3DRenderUnit_ResolveCurrentToPixelsWithStats(
-                &scheduler.jobs[i].renderUnit,
-                pixel_buffer,
-                frame->width,
-                &resolve_stats)) {
+        const bool heatmap_enabled =
+            RuntimeNative3DAdaptiveSampling_TemporalBudgetHeatmapEnabled();
+        if (heatmap_enabled) {
+            if (!RuntimeNative3DRenderUnit_ResolveTemporalBudgetHeatmapToPixels(
+                    &scheduler.jobs[i].renderUnit,
+                    pixel_buffer,
+                    frame->width)) {
+                ok = false;
+                break;
+            }
+            resolve_stats.temporalAdaptiveBudgetHeatmapEnabled = 1;
+        } else if (!RuntimeNative3DRenderUnit_ResolveCurrentToPixelsWithStats(
+                       &scheduler.jobs[i].renderUnit,
+                       pixel_buffer,
+                       frame->width,
+                       &resolve_stats)) {
             ok = false;
             break;
         }
-        runtime_native_3d_tile_scheduler_capture_black_hit_pixels(&scheduler.jobs[i],
-                                                                  pixel_buffer,
-                                                                  frame->width,
-                                                                  scheduler.jobs[i]
-                                                                      .renderUnit
-                                                                      .committedSubpasses,
-                                                                  "final_resolve");
+        if (!heatmap_enabled) {
+            runtime_native_3d_tile_scheduler_capture_black_hit_pixels(
+                &scheduler.jobs[i],
+                pixel_buffer,
+                frame->width,
+                scheduler.jobs[i].renderUnit.committedSubpasses,
+                "final_resolve");
+        }
         RuntimeNative3DRenderStats_Accumulate(&scheduler.stats, &resolve_stats);
+        RuntimeNative3DRenderUnit_RecordScratchStats(&scheduler.jobs[i].renderUnit,
+                                                     &scheduler.stats);
     }
     if (!ok) {
         goto finalize;
@@ -662,10 +785,24 @@ finalize:
                                                      frame_start_ticks));
     if (ok && out_stats) {
         *out_stats = scheduler.stats;
+        runtime_native_3d_tile_scheduler_record_lifetime_stats(&scheduler, out_stats);
         out_stats->temporalCommittedSubpasses = scheduler.committedSubpasses;
         out_stats->temporalActivePixelCount = scheduler.activePixelCount;
         out_stats->temporalActiveTileCount = scheduler.activeTileCount;
         out_stats->temporalInactiveTileCount = scheduler.inactiveTileCount;
+        out_stats->temporalPlannedParentTileCount = scheduler.plannedParentTileCount;
+        out_stats->temporalEmittedTileJobCount = (int)scheduler.jobCount;
+        out_stats->temporalOccupancySkippedTileCount = scheduler.occupancySkippedTileCount;
+        out_stats->temporalDispatchedTileJobCount = scheduler.dispatchedTileJobCount;
+        out_stats->temporalCompletedTileJobCount = scheduler.completedTileJobCount;
+        out_stats->temporalProgressDirtyBatchCount = scheduler.progressDirtyTileBatchCount;
+        out_stats->temporalProgressDirtyTileCount = scheduler.progressDirtyTileCount;
+        out_stats->temporalConservativeFirstFrameTileRender =
+            scheduler.firstFrameConservativeTileRender ? 1 : 0;
+    } else if (!ok && out_stats && scheduler.cancelRequested) {
+        *out_stats = scheduler.stats;
+        runtime_native_3d_tile_scheduler_record_lifetime_stats(&scheduler, out_stats);
+        out_stats->temporalCommittedSubpasses = scheduler.committedSubpasses;
         out_stats->temporalPlannedParentTileCount = scheduler.plannedParentTileCount;
         out_stats->temporalEmittedTileJobCount = (int)scheduler.jobCount;
         out_stats->temporalOccupancySkippedTileCount = scheduler.occupancySkippedTileCount;

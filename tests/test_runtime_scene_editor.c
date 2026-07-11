@@ -12,6 +12,7 @@
 #include "editor/material_editor_internal.h"
 #include "editor/material_preview_surface_eval.h"
 #include "editor/object_editor.h"
+#include "editor/object_editor_motion.h"
 #include "editor/object_editor_object_ops.h"
 #include "editor/object_editor_selection_tracker.h"
 #include "editor/editor_mode_router.h"
@@ -29,6 +30,7 @@
 #include "editor/scene_editor_viewport_render.h"
 #include "import/runtime_mesh_asset_loader.h"
 #include "import/runtime_scene_bridge.h"
+#include "import/runtime_scene_motion_bridge.h"
 #include "material/material_manager.h"
 #include "render/runtime_material_authored_texture_3d.h"
 #include "render/runtime_material_graph_3d.h"
@@ -602,6 +604,114 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip(void) {
     unlink(runtime_path);
     sceneSettings = saved_scene;
     animSettings = saved_anim;
+    return 0;
+}
+
+static int test_scene_editor_runtime_scene_persistence_roundtrip_object_motion(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char *runtime_path = "/tmp/ray_tracing_runtime_scene_authoring_motion_roundtrip.json";
+    const char *runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_authoring_motion_persist_1\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":2.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"motion_panel\","
+          "\"object_type\":\"plane\","
+          "\"transform\":{"
+            "\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}"
+          "},"
+          "\"primitive\":{\"kind\":\"plane\",\"width\":1.0,\"height\":1.0}"
+        "}],"
+        "\"materials\":[],"
+        "\"lights\":[],"
+        "\"cameras\":[],"
+        "\"constraints\":[],"
+        "\"extensions\":{}"
+        "}";
+    char diagnostics[256];
+    char *persisted_json = NULL;
+    FILE *file = fopen(runtime_path, "wb");
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeMotionTrack3DSummary motion_summary;
+    RuntimeMotionTrack3DSample sample;
+    bool ok = false;
+
+    assert_true("runtime_scene_motion_persist_open_tmp", file != NULL);
+    if (!file) {
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+    fwrite(runtime_json, 1, strlen(runtime_json), file);
+    fclose(file);
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    ObjectEditorMotionReset();
+    ok = runtime_scene_bridge_apply_file(runtime_path, &summary);
+    assert_true("runtime_scene_motion_persist_apply_ok", ok);
+    if (!ok) {
+        unlink(runtime_path);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    snprintf(animSettings.runtimeScenePath, sizeof(animSettings.runtimeScenePath), "%s", runtime_path);
+    animSettings.spaceMode = SPACE_MODE_3D;
+    assert_true("runtime_scene_motion_persist_set_track",
+                ObjectEditorMotionSetObjectAuthored("motion_panel",
+                                                    4.0,
+                                                    -2.0,
+                                                    6.0,
+                                                    M_PI / 6.0));
+
+    ok = SceneEditorRuntimeScenePersistAuthoring(diagnostics, sizeof(diagnostics));
+    assert_true("runtime_scene_motion_persist_writeback_ok", ok);
+    if (!ok) {
+        unlink(runtime_path);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        ObjectEditorMotionReset();
+        return 0;
+    }
+
+    persisted_json = read_text_file_alloc(runtime_path, NULL);
+    assert_true("runtime_scene_motion_persist_readback_ok", persisted_json != NULL);
+    if (persisted_json) {
+        assert_true("runtime_scene_motion_persist_has_tracks",
+                    strstr(persisted_json, "\"object_motion_tracks\"") != NULL);
+        assert_true("runtime_scene_motion_persist_has_object_id",
+                    strstr(persisted_json, "\"motion_panel\"") != NULL);
+        assert_true("runtime_scene_motion_persist_has_authored_path",
+                    strstr(persisted_json, "\"authored_path\"") != NULL);
+    }
+
+    runtime_scene_motion_bridge_get_last_summary(&motion_summary);
+    assert_true("runtime_scene_motion_persist_summary_tracks",
+                motion_summary.has_object_motion_tracks && motion_summary.sampled_tracks == 1);
+    assert_true("runtime_scene_motion_persist_sample_ok",
+                runtime_scene_motion_bridge_sample_object("motion_panel", 0.0, &sample));
+    assert_true("runtime_scene_motion_persist_sample_position",
+                sample.has_position &&
+                fabs(sample.position_x - 4.0) <= 1e-6 &&
+                fabs(sample.position_z - 6.0) <= 1e-6);
+    assert_true("runtime_scene_motion_persist_store_hydrated",
+                ObjectEditorMotionFindTrack("motion_panel") != NULL);
+
+    free(persisted_json);
+    unlink(runtime_path);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    ObjectEditorMotionReset();
     return 0;
 }
 
@@ -6581,6 +6691,7 @@ int run_test_runtime_scene_editor_tests(void) {
 
     test_scene_editor_tool_state_contract();
     test_scene_editor_runtime_scene_persistence_roundtrip();
+    test_scene_editor_runtime_scene_persistence_roundtrip_object_motion();
     test_scene_editor_runtime_scene_persist_keeps_preview_limited_mesh_reload();
     test_scene_editor_runtime_scene_persistence_roundtrip_object_materials();
     test_scene_editor_runtime_scene_material_stack_roundtrip_payload();

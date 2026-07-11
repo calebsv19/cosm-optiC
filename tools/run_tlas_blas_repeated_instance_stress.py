@@ -247,8 +247,10 @@ def build_case_report(
         and summary.get("scene_applied") is True
         and summary.get("route_native_3d") is True
         and summary.get("frames_rendered") == 1
-        and bvh.get("ready") is True
+        and bvh.get("ready") is False
         and int(bvh.get("triangle_count", 0) or 0) == expected_total_triangles
+        and int(bvh.get("node_count", 0) or 0) == 0
+        and int(bvh.get("leaf_count", 0) or 0) == 0
         and int(bvh.get("trace_overflows", 0) or 0) == 0
         and int(bvh.get("overflow_fallback_calls", 0) or 0) == 0
         and int(bvh.get("flat_fallback_calls", 0) or 0) == 0

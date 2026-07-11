@@ -17,9 +17,11 @@
 #include "render/runtime_native_3d_feature_buffer.h"
 #include "render/runtime_native_3d_preview_reconstruction.h"
 #include "render/runtime_native_3d_render.h"
+#include "render/runtime_native_3d_render_request_snapshot.h"
 #include "render/runtime_native_3d_render_unit.h"
 #include "render/runtime_native_3d_tile_scheduler.h"
 #include "render/runtime_native_3d_temporal_accum.h"
+#include "render/runtime_render_trace_cost_ledger_3d.h"
 #include "render/runtime_scene_accel_3d.h"
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_triangle_bvh_3d.h"
@@ -41,6 +43,146 @@ static bool runtime_native_3d_tile_progress_probe(
     probe->callback_count += 1;
     probe->dirty_tile_count += progress->dirtyTileCount;
     return true;
+}
+
+static int test_runtime_native_3d_render_request_snapshot_copies_async_boundary_fields(void) {
+    RuntimeNative3DRenderRequestSnapshot snapshot;
+    RuntimeNative3DResourceBudget budget = {
+        .cpuPercent = 75,
+        .maxWorkerThreads = 4,
+        .reserveCpuCount = 1,
+    };
+    RuntimeNative3DSamplingContext sampling = {
+        .sampleSequence = 11u,
+        .temporalSubpassIndex = 2u,
+        .temporalSubpassCount = 8u,
+    };
+    volatile bool cancel_requested = false;
+    RuntimeNative3DTileSchedulerCancelToken cancel_token = {
+        .cancelRequested = &cancel_requested,
+        .generation = 17u,
+    };
+    RuntimeNative3DRenderRequestSnapshotDesc desc = {
+        .generationBound = true,
+        .generation = 42u,
+        .outputWidth = 640,
+        .outputHeight = 360,
+        .renderWidth = 320,
+        .renderHeight = 180,
+        .hostWidth = 640,
+        .hostHeight = 360,
+        .frameIndex = 3,
+        .frameCount = 12,
+        .temporalFrames = 8,
+        .tileSize = 32,
+        .integratorId = RAY_TRACING_3D_INTEGRATOR_DISNEY_V2,
+        .sampling = &sampling,
+        .resourceBudget = &budget,
+        .preparedFrameBound = true,
+        .preparedFrameValid = true,
+        .preparedFrameWidth = 320,
+        .preparedFrameHeight = 180,
+        .preparedPrimitiveCount = 23u,
+        .preparedTriangleCount = 89u,
+        .materialSnapshotBound = true,
+        .materialCount = 5u,
+        .materialObjectBindingCount = 7u,
+        .lightSnapshotBound = true,
+        .enabledLightCount = 2u,
+        .materialEmitterLightCount = 1u,
+        .sceneAccelerationBound = true,
+        .traceRoute = RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS,
+        .tlasInstanceCount = 4u,
+        .tlasNodeCount = 9u,
+        .traceContextCallbackBound = true,
+        .volumeEnabled = true,
+        .volumeAttached = true,
+        .volumeFrameSelectionDynamic = true,
+        .waterSurfaceSourceFound = true,
+        .waterSurfaceLoaded = true,
+        .waterSurfaceMeshAttached = true,
+        .waterSurfaceFrameSelectionDynamic = true,
+        .waterSurfaceSampleCount = 128u,
+        .waterSurfaceTriangleCount = 14,
+        .frameDataflowLedgerEnabled = true,
+        .outputRoot = "build/s7/output",
+        .summaryPath = "build/s7/render_summary.json",
+        .progressPath = "build/s7/render_progress.json",
+        .cancelToken = &cancel_token,
+    };
+    bool ok = RuntimeNative3DRenderRequestSnapshot_Build(&snapshot, &desc);
+
+    assert_true("runtime_native_3d_render_request_snapshot_build_ok", ok);
+    assert_true("runtime_native_3d_render_request_snapshot_valid", snapshot.valid);
+    assert_true("runtime_native_3d_render_request_snapshot_generation",
+                snapshot.generationBound && snapshot.generation == 42u);
+    assert_true("runtime_native_3d_render_request_snapshot_dimensions",
+                snapshot.outputWidth == 640 && snapshot.outputHeight == 360 &&
+                    snapshot.renderWidth == 320 && snapshot.renderHeight == 180 &&
+                    snapshot.hostWidth == 640 && snapshot.hostHeight == 360);
+    assert_true("runtime_native_3d_render_request_snapshot_sampling",
+                snapshot.samplingBound &&
+                    snapshot.sampling.sampleSequence == 11u &&
+                    snapshot.sampling.temporalSubpassIndex == 2u &&
+                    snapshot.sampling.temporalSubpassCount == 8u &&
+                    snapshot.temporalFrames == 8 &&
+                    snapshot.tileSize == 32);
+    assert_true("runtime_native_3d_render_request_snapshot_budget",
+                snapshot.resourceBudgetBound &&
+                    snapshot.resourceBudget.cpuPercent == 75 &&
+                    snapshot.resourceBudget.maxWorkerThreads == 4 &&
+                    snapshot.resourceBudget.reserveCpuCount == 1);
+    assert_true("runtime_native_3d_render_request_snapshot_scene_identity",
+                snapshot.preparedFrameBound &&
+                    snapshot.preparedFrameValid &&
+                    snapshot.preparedPrimitiveCount == 23u &&
+                    snapshot.preparedTriangleCount == 89u &&
+                    snapshot.materialSnapshotBound &&
+                    snapshot.materialCount == 5u &&
+                    snapshot.materialObjectBindingCount == 7u);
+    assert_true("runtime_native_3d_render_request_snapshot_light_identity",
+                snapshot.lightSnapshotBound &&
+                    snapshot.enabledLightCount == 2u &&
+                    snapshot.materialEmitterLightCount == 1u);
+    assert_true("runtime_native_3d_render_request_snapshot_accel",
+                snapshot.sceneAccelerationBound &&
+                    snapshot.traceRoute == RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS &&
+                    snapshot.tlasInstanceCount == 4u &&
+                    snapshot.tlasNodeCount == 9u &&
+                    snapshot.traceContextCallbackBound);
+    assert_true("runtime_native_3d_render_request_snapshot_volume_water",
+                snapshot.volumeEnabled &&
+                    snapshot.volumeAttached &&
+                    snapshot.volumeFrameSelectionDynamic &&
+                    snapshot.waterSurfaceSourceFound &&
+                    snapshot.waterSurfaceLoaded &&
+                    snapshot.waterSurfaceMeshAttached &&
+                    snapshot.waterSurfaceFrameSelectionDynamic &&
+                    snapshot.waterSurfaceSampleCount == 128u &&
+                    snapshot.waterSurfaceTriangleCount == 14);
+    assert_true("runtime_native_3d_render_request_snapshot_paths",
+                snapshot.frameDataflowLedgerEnabled &&
+                    snapshot.outputRootBound &&
+                    snapshot.summaryDestinationBound &&
+                    snapshot.progressDestinationBound &&
+                    strcmp(snapshot.outputRoot, "build/s7/output") == 0 &&
+                    strcmp(snapshot.summaryPath, "build/s7/render_summary.json") == 0 &&
+                    strcmp(snapshot.progressPath, "build/s7/render_progress.json") == 0);
+    assert_true("runtime_native_3d_render_request_snapshot_cancel",
+                snapshot.cancelTokenBound &&
+                    snapshot.cancelToken.cancelRequested == &cancel_requested &&
+                    snapshot.cancelToken.generation == 17u &&
+                    snapshot.cancelGeneration == 17u);
+
+    RuntimeNative3DRenderRequestSnapshot_Init(&snapshot);
+    assert_true("runtime_native_3d_render_request_snapshot_init_clears_valid",
+                !snapshot.valid && !snapshot.generationBound &&
+                    snapshot.outputRoot[0] == '\0');
+    ok = RuntimeNative3DRenderRequestSnapshot_Build(&snapshot, NULL);
+    assert_true("runtime_native_3d_render_request_snapshot_null_desc_fails", !ok);
+    assert_true("runtime_native_3d_render_request_snapshot_null_desc_invalid",
+                !snapshot.valid);
+    return 0;
 }
 
 static int test_runtime_native_3d_background_volume_single_scatter_lifts_black_miss(void) {
@@ -700,8 +842,17 @@ static int test_runtime_native_3d_preview_final_truth_reconstruct_counters(void)
         assert_true(label, memcmp(expected_host, truth_host, sizeof(expected_host)) == 0);
         assert_true("runtime_native_3d_preview_t2_host_resolve_counter",
                     stats.temporalHostFullResolveCount == 1);
+        assert_true("runtime_native_3d_preview_t2_host_resolve_pixels",
+                    stats.temporalFinalResolveHostPixels ==
+                        (uint64_t)kHostWidth * (uint64_t)kHostHeight);
+        assert_true("runtime_native_3d_preview_t2_host_resolve_bytes",
+                    stats.temporalFinalResolveHostBytes ==
+                        (uint64_t)kHostWidth * (uint64_t)kHostHeight *
+                            (uint64_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES);
         assert_true("runtime_native_3d_preview_t2_no_dirty_present_counter",
                     stats.temporalDirtyPreviewPresentCount == 0);
+        assert_true("runtime_native_3d_preview_t2_no_dirty_host_bytes",
+                    stats.temporalDirtyPreviewHostBytes == 0u);
         assert_true("runtime_native_3d_preview_t2_no_final_present_counter",
                     stats.temporalFinalPreviewPresentCount == 0);
         assert_true("runtime_native_3d_preview_t2_no_history_promote_counter",
@@ -788,8 +939,18 @@ static int test_runtime_native_3d_tiled_presenter_final_truth_without_progress(v
                 stats.temporalHostFullResolveCount == 1);
     assert_true("runtime_native_3d_preview_t2_presenter_history_promote",
                 stats.temporalHistoryPromoteCount == 1);
+    assert_true("runtime_native_3d_preview_t2_presenter_host_resolve_bytes",
+                stats.temporalFinalResolveHostBytes ==
+                    32u * 32u * (uint64_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES);
+    assert_true("runtime_native_3d_preview_t2_presenter_history_promote_bytes",
+                stats.temporalHistoryPromoteHostBytes ==
+                    32u * 32u * (uint64_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES);
+    assert_true("runtime_native_3d_preview_t2_presenter_no_history_seed_bytes",
+                stats.temporalHistorySeedHostBytes == 0u);
     assert_true("runtime_native_3d_preview_t2_presenter_no_dirty_present",
                 stats.temporalDirtyPreviewPresentCount == 0);
+    assert_true("runtime_native_3d_preview_t2_presenter_no_dirty_bytes",
+                stats.temporalDirtyPreviewHostBytes == 0u);
     assert_true("runtime_native_3d_preview_t2_presenter_no_final_present_without_renderer",
                 stats.temporalFinalPreviewPresentCount == 0);
     assert_true("runtime_native_3d_preview_t2_presenter_scheduler_final_resolve",
@@ -951,6 +1112,21 @@ static int test_runtime_native_3d_tiled_presenter_t6_capture_replay_without_rend
                 stats.temporalHostFullResolveCount == 1);
     assert_true("runtime_native_3d_preview_t6_capture_stats_history_promote",
                 stats.temporalHistoryPromoteCount == 1);
+    assert_true("runtime_native_3d_preview_t6_capture_stats_dirty_host_bytes",
+                stats.temporalDirtyPreviewHostBytes > 0u);
+    assert_true("runtime_native_3d_preview_t6_capture_stats_dirty_host_pixels",
+                stats.temporalDirtyPreviewHostPixels > 0u);
+    assert_true("runtime_native_3d_preview_t6_capture_stats_final_host_bytes",
+                stats.temporalFinalResolveHostBytes ==
+                    32u * 32u * (uint64_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES);
+    assert_true("runtime_native_3d_preview_t6_capture_stats_history_seed_bytes",
+                stats.temporalHistorySeedHostBytes ==
+                    32u * 32u * (uint64_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES);
+    assert_true("runtime_native_3d_preview_t6_capture_stats_history_promote_bytes",
+                stats.temporalHistoryPromoteHostBytes ==
+                    32u * 32u * (uint64_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES);
+    assert_true("runtime_native_3d_preview_t6_capture_no_final_present_bytes",
+                stats.temporalFinalPreviewPresentHostBytes == 0u);
 
     TileGridFree(&grid);
     sceneSettings = saved_scene;
@@ -1223,10 +1399,52 @@ static int test_runtime_native_3d_adaptive_pixel_state_t5_conservative_stop_cont
     assert_true("runtime_native_3d_adaptive_state_t5_risk_counts",
                 state.summary.materialRiskPixelCount == 1 &&
                     state.summary.directLightBoundaryRiskPixelCount == 1);
+    assert_true("runtime_native_3d_adaptive_state_t5_early_stop_hold_counts",
+                state.summary.earlyStopEligiblePixelCount > 0 &&
+                    state.summary.earlyStopHeldPixelCount > 0 &&
+                    state.summary.earlyStopHoldMaterialRiskPixelCount == 1 &&
+                    state.summary.earlyStopHoldDirectLightRiskPixelCount == 1);
+    assert_true("runtime_native_3d_adaptive_state_t5_budget_counts",
+                state.summary.budgetBucketPixelCounts[1] == (int)pixel_count &&
+                    state.summary.budgetEligibleBucketPixelCounts[1] ==
+                        state.summary.earlyStopEligiblePixelCount &&
+                    state.summary.budgetHeldBucketPixelCounts[1] ==
+                        state.summary.earlyStopHeldPixelCount &&
+                    state.summary.budgetPartialHeldPixelCount == 1 &&
+                    state.summary.budgetClearVisibleEligiblePixelCount == 0);
+    assert_true("runtime_native_3d_adaptive_state_t5_region_counts",
+                state.summary.earlyStopEligibleRegionCounts[0] +
+                        state.summary.earlyStopEligibleRegionCounts[1] +
+                        state.summary.earlyStopEligibleRegionCounts[2] +
+                        state.summary.earlyStopEligibleRegionCounts[3] ==
+                    state.summary.earlyStopEligiblePixelCount &&
+                    state.summary.earlyStopHeldRegionCounts[0] +
+                            state.summary.earlyStopHeldRegionCounts[1] +
+                            state.summary.earlyStopHeldRegionCounts[2] +
+                            state.summary.earlyStopHeldRegionCounts[3] ==
+                        state.summary.earlyStopHeldPixelCount);
     assert_true("runtime_native_3d_adaptive_state_t5_mask_keeps_risk_active",
                 mask.activeSampleMask[0] != 0u && mask.activeSampleMask[2] != 0u);
     assert_true("runtime_native_3d_adaptive_state_t5_padding_holds_boundary_neighbor",
-                mask.activeSampleMask[1] != 0u);
+                mask.activeSampleMask[1] != 0u &&
+                    mask.conservativeEarlyStopPaddingHoldPixelCount > 0);
+    assert_true("runtime_native_3d_adaptive_state_t5_base_active_counts",
+                mask.conservativeEarlyStopBaseActivePixelCount > 0 &&
+                    mask.conservativeEarlyStopEligiblePixelCount > 0 &&
+                    mask.activePixelCount ==
+                        mask.conservativeEarlyStopBaseActivePixelCount +
+                            mask.conservativeEarlyStopPaddingHoldPixelCount);
+    assert_true("runtime_native_3d_adaptive_state_t5_padding_seed_counts",
+                mask.conservativeEarlyStopPaddingHoldHighSeedPixelCount > 0 &&
+                    mask.conservativeEarlyStopPaddingHoldHighSeedPixelCount +
+                            mask.conservativeEarlyStopPaddingHoldMediumSeedPixelCount ==
+                        mask.conservativeEarlyStopPaddingHoldPixelCount);
+    assert_true("runtime_native_3d_adaptive_state_t5_padding_region_counts",
+                mask.conservativeEarlyStopPaddingHoldRegionCounts[0] +
+                        mask.conservativeEarlyStopPaddingHoldRegionCounts[1] +
+                        mask.conservativeEarlyStopPaddingHoldRegionCounts[2] +
+                        mask.conservativeEarlyStopPaddingHoldRegionCounts[3] ==
+                    mask.conservativeEarlyStopPaddingHoldPixelCount);
     assert_true("runtime_native_3d_adaptive_state_t5_far_stable_pixel_stops",
                 mask.activeSampleMask[far_pixel] == 0u);
     assert_true("runtime_native_3d_adaptive_state_t5_mask_reduces_work",
@@ -1236,6 +1454,343 @@ static int test_runtime_native_3d_adaptive_pixel_state_t5_conservative_stop_cont
     RuntimeNative3DAdaptivePixelStateBuffer_Free(&state);
     RuntimeNative3DFeatureBuffer_Free(&features);
     RuntimeNative3DTemporalAccumulation_Free(&accumulation);
+    return 0;
+}
+
+static int test_runtime_native_3d_adaptive_pixel_state_t6_probe_only_does_not_pad(void) {
+    RuntimeNative3DAdaptivePixelStateBuffer state = {0};
+    RuntimeNative3DAdaptiveSamplingMask mask = {0};
+    const int width = 5;
+    const int height = 1;
+    bool ok = false;
+
+    RuntimeNative3DAdaptivePixelStateBuffer_Init(&state);
+    RuntimeNative3DAdaptiveSamplingMask_Init(&mask);
+
+    ok = RuntimeNative3DAdaptivePixelStateBuffer_Ensure(&state, width, height);
+    assert_true("runtime_native_3d_adaptive_state_t6_setup_ok", ok);
+    if (!ok) {
+        RuntimeNative3DAdaptiveSamplingMask_Free(&mask);
+        RuntimeNative3DAdaptivePixelStateBuffer_Free(&state);
+        return 0;
+    }
+
+    state.summary.minSampleFloor = 2;
+    state.pixels[0].flags = RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_STABLE |
+                            RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_ACTIVE |
+                            RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_PROBE;
+    state.pixels[1].flags = RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_STABLE;
+    state.pixels[2].flags = RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_STABLE;
+    state.pixels[3].flags = RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_STABLE |
+                            RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_ACTIVE |
+                            RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_ACTIVITY_RISK;
+    state.pixels[4].flags = RUNTIME_NATIVE_3D_ADAPTIVE_PIXEL_STABLE;
+
+    ok = RuntimeNative3DAdaptiveSampling_RefreshConservativeEarlyStopMaskFromPixelState(
+        &mask,
+        &state,
+        width);
+    assert_true("runtime_native_3d_adaptive_state_t6_mask_ok", ok);
+    assert_true("runtime_native_3d_adaptive_state_t6_probe_pixel_held",
+                mask.activeSampleMask[0] != 0u);
+    assert_true("runtime_native_3d_adaptive_state_t6_probe_neighbor_not_padded",
+                mask.activeSampleMask[1] == 0u);
+    assert_true("runtime_native_3d_adaptive_state_t6_activity_neighbors_padded",
+                mask.activeSampleMask[2] != 0u && mask.activeSampleMask[4] != 0u);
+    assert_true("runtime_native_3d_adaptive_state_t6_seed_counts",
+                mask.conservativeEarlyStopPaddingHoldHighSeedPixelCount == 0 &&
+                    mask.conservativeEarlyStopPaddingHoldMediumSeedPixelCount == 2 &&
+                    mask.conservativeEarlyStopPaddingHoldPixelCount == 2);
+
+    RuntimeNative3DAdaptiveSamplingMask_Free(&mask);
+    RuntimeNative3DAdaptivePixelStateBuffer_Free(&state);
+    return 0;
+}
+
+static int test_runtime_render_trace_cost_ledger_direct_light_visibility_attribution(void) {
+    RuntimeRenderTraceCostLedger3D ledger = {0};
+
+    RuntimeRenderTraceCostLedger3D_SetEnabled(true);
+    RuntimeRenderTraceCostLedger3D_Reset();
+    RuntimeRenderTraceCostLedger3D_RecordDirectLightVisibilityPolicy(
+        RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_CALLER_PRIMARY_HIT,
+        RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_SPHERE,
+        RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_ORIGIN_AUTHORED_LIGHT,
+        RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_EMISSION_OMNI,
+        RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_CLEAR_VISIBLE,
+        RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_ALL_CLEAR,
+        16,
+        4,
+        4,
+        4,
+        3.0,
+        0.25,
+        1.0,
+        1.0);
+    RuntimeRenderTraceCostLedger3D_RecordDirectLightVisibilityPolicy(
+        RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_CALLER_SHADED_HIT,
+        RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_RECT,
+        RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_ORIGIN_MATERIAL_EMITTER,
+        RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_EMISSION_ONE_SIDED,
+        RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_MIXED_PARTIAL,
+        RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_STOP_FULL_SAMPLE_COUNT,
+        16,
+        4,
+        16,
+        12,
+        12.0,
+        0.005,
+        0.0,
+        0.7);
+
+    RuntimeRenderTraceCostLedger3D_Snapshot(&ledger);
+    assert_true("render_trace_cost_direct_light_attr_total_samples",
+                ledger.directLightVisibilityPolicy.evaluatedSamples == 20u);
+    assert_true("render_trace_cost_direct_light_attr_total_visibility",
+                ledger.directLightVisibilityPolicy.visibilityTraces == 16u);
+    assert_true("render_trace_cost_direct_light_attr_source_kind_visibility",
+                ledger.directLightVisibilityPolicy.visibilityTracesBySourceKind
+                            [RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_SPHERE] == 4u &&
+                    ledger.directLightVisibilityPolicy.visibilityTracesBySourceKind
+                            [RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_RECT] == 12u);
+    assert_true("render_trace_cost_direct_light_attr_origin_samples",
+                ledger.directLightVisibilityPolicy.evaluatedSamplesBySourceOrigin
+                            [RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_ORIGIN_AUTHORED_LIGHT] ==
+                        4u &&
+                    ledger.directLightVisibilityPolicy.evaluatedSamplesBySourceOrigin
+                            [RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_ORIGIN_MATERIAL_EMITTER] ==
+                        16u);
+    assert_true("render_trace_cost_direct_light_attr_outcome_visibility",
+                ledger.directLightVisibilityPolicy.visibilityTracesByOutcome
+                            [RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_CLEAR_VISIBLE] ==
+                        4u &&
+                    ledger.directLightVisibilityPolicy.visibilityTracesByOutcome
+                            [RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_OUTCOME_MIXED_PARTIAL] ==
+                        12u);
+    assert_true("render_trace_cost_direct_light_attr_distance_importance_visibility",
+                ledger.directLightVisibilityPolicy.visibilityTracesByDistanceImportance
+                            [RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_MID]
+                            [RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_HIGH] == 4u &&
+                    ledger.directLightVisibilityPolicy.visibilityTracesByDistanceImportance
+                            [RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_DISTANCE_FAR]
+                            [RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_IMPORTANCE_LOW] == 12u);
+    assert_true("render_trace_cost_direct_light_attr_sample_bucket_visibility",
+                ledger.directLightVisibilityPolicy.visibilityTracesBySampleBucket
+                            [RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SAMPLES_DECISION] == 4u &&
+                    ledger.directLightVisibilityPolicy.visibilityTracesBySampleBucket
+                            [RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SAMPLES_FULL] == 12u);
+
+    RuntimeRenderTraceCostLedger3D_SetEnabled(false);
+    RuntimeRenderTraceCostLedger3D_Reset();
+    return 0;
+}
+
+static int test_runtime_render_trace_cost_ledger_transmission_sample_index_attribution(void) {
+    RuntimeRenderTraceCostLedger3D ledger = {0};
+
+    RuntimeRenderTraceCostLedger3D_SetEnabled(true);
+    RuntimeRenderTraceCostLedger3D_Reset();
+    RuntimeRenderTraceCostLedger3D_RecordTransmissionSample(
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED,
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_RECEIVER_HIT,
+        0,
+        0.9999,
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_TOP_LEFT,
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_FIRST_SUBPASS,
+        2,
+        1,
+        0,
+        true,
+        0.8,
+        0.4);
+    RuntimeRenderTraceCostLedger3D_RecordTransmissionSample(
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED,
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_NO_HIT,
+        1,
+        0.9980,
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_TOP_RIGHT,
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_EARLY_SUBPASS,
+        2,
+        1,
+        0,
+        false,
+        0.8,
+        0.0);
+    RuntimeRenderTraceCostLedger3D_RecordTransmissionSample(
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_PRIMARY,
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_NO_CONTRIBUTION,
+        3,
+        0.9950,
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_BOTTOM_LEFT,
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_LATE_SUBPASS,
+        1,
+        1,
+        0,
+        false,
+        0.8,
+        0.0);
+    RuntimeRenderTraceCostLedger3D_RecordTransmissionSample(
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED,
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_RECEIVER_HIT,
+        6,
+        0.9800,
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_BOTTOM_RIGHT,
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_EARLY_SUBPASS,
+        2,
+        1,
+        0,
+        true,
+        0.8,
+        0.05);
+    RuntimeRenderTraceCostLedger3D_RecordTransmissionRayAtDepth(
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED,
+        1);
+    RuntimeRenderTraceCostLedger3D_RecordTransmissionRayAtDepth(
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED,
+        3);
+    RuntimeRenderTraceCostLedger3D_RecordTransmissionRayAtDepth(
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_PRIMARY,
+        2);
+
+    RuntimeRenderTraceCostLedger3D_Snapshot(&ledger);
+    assert_true("render_trace_cost_transmission_index_total",
+                ledger.transmissionPathPolicy.sampleEvaluations == 4u);
+    assert_true("render_trace_cost_transmission_index_counts",
+                ledger.transmissionPathPolicy.sampleIndexCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_FIRST] == 1u &&
+                    ledger.transmissionPathPolicy.sampleIndexCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_SECOND] == 1u &&
+                    ledger.transmissionPathPolicy.sampleIndexCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_FOURTH] == 1u &&
+                    ledger.transmissionPathPolicy.sampleIndexCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_LATER] == 1u);
+    assert_true("render_trace_cost_transmission_index_source_counts",
+                ledger.transmissionPathPolicy.sourceSampleIndexCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED]
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_FIRST] == 1u &&
+                    ledger.transmissionPathPolicy.sourceSampleIndexCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED]
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_LATER] == 1u &&
+                    ledger.transmissionPathPolicy.sourceSampleIndexCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_PRIMARY]
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_FOURTH] == 1u);
+    assert_true("render_trace_cost_transmission_index_productivity",
+                ledger.transmissionPathPolicy.contributingSamplesByIndex
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_FIRST] == 1u &&
+                    ledger.transmissionPathPolicy.contributingSamplesByIndex
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_LATER] == 1u &&
+                    ledger.transmissionPathPolicy.noHitSamplesByIndex
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_SECOND] == 1u &&
+                    ledger.transmissionPathPolicy.zeroContributionSamplesByIndex
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_SECOND] == 1u &&
+                    ledger.transmissionPathPolicy.zeroContributionSamplesByIndex
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_FOURTH] == 1u);
+    assert_true("render_trace_cost_transmission_index_source_productivity",
+                ledger.transmissionPathPolicy.sourceContributingSamplesByIndex
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED]
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_FIRST] == 1u &&
+                    ledger.transmissionPathPolicy.sourceContributingSamplesByIndex
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED]
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_LATER] == 1u &&
+                    ledger.transmissionPathPolicy.sourceNoHitSamplesByIndex
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED]
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_SECOND] == 1u &&
+                    ledger.transmissionPathPolicy.sourceZeroContributionSamplesByIndex
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_PRIMARY]
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_FOURTH] == 1u &&
+                    ledger.transmissionPathPolicy.sourceReceiverSamplesByIndex
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED]
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_LATER] == 1u);
+    assert_true("render_trace_cost_transmission_alignment_counts",
+                ledger.transmissionPathPolicy.alignmentCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_AXIAL] == 1u &&
+                    ledger.transmissionPathPolicy.alignmentCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_NARROW] == 1u &&
+                    ledger.transmissionPathPolicy.alignmentCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_MEDIUM] == 1u &&
+                    ledger.transmissionPathPolicy.alignmentCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_WIDE] == 1u);
+    assert_true("render_trace_cost_transmission_alignment_source_productivity",
+                ledger.transmissionPathPolicy.sourceContributingSamplesByAlignment
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED]
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_AXIAL] == 1u &&
+                    ledger.transmissionPathPolicy.sourceNoHitSamplesByAlignment
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED]
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_NARROW] == 1u &&
+                    ledger.transmissionPathPolicy.sourceZeroContributionSamplesByAlignment
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_PRIMARY]
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_MEDIUM] == 1u &&
+                    ledger.transmissionPathPolicy.sourceReceiverSamplesByAlignment
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED]
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_WIDE] == 1u);
+    assert_true("render_trace_cost_transmission_region_counts",
+                ledger.transmissionPathPolicy.screenRegionCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_TOP_LEFT] == 1u &&
+                    ledger.transmissionPathPolicy.screenRegionCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_TOP_RIGHT] == 1u &&
+                    ledger.transmissionPathPolicy.screenRegionCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_BOTTOM_LEFT] == 1u &&
+                    ledger.transmissionPathPolicy.screenRegionCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_BOTTOM_RIGHT] == 1u);
+    assert_true("render_trace_cost_transmission_region_source_productivity",
+                ledger.transmissionPathPolicy.sourceContributingSamplesByScreenRegion
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED]
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_TOP_LEFT] == 1u &&
+                    ledger.transmissionPathPolicy.sourceNoHitSamplesByScreenRegion
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED]
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_TOP_RIGHT] == 1u &&
+                    ledger.transmissionPathPolicy.sourceZeroContributionSamplesByScreenRegion
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_PRIMARY]
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_BOTTOM_LEFT] == 1u &&
+                    ledger.transmissionPathPolicy.sourceReceiverSamplesByScreenRegion
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED]
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SCREEN_REGION_BOTTOM_RIGHT] == 1u);
+    assert_true("render_trace_cost_transmission_stability_counts",
+                ledger.transmissionPathPolicy.pixelStabilityCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_FIRST_SUBPASS] ==
+                        1u &&
+                    ledger.transmissionPathPolicy.pixelStabilityCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_EARLY_SUBPASS] ==
+                        2u &&
+                    ledger.transmissionPathPolicy.pixelStabilityCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_LATE_SUBPASS] ==
+                        1u);
+    assert_true("render_trace_cost_transmission_stability_source_productivity",
+                ledger.transmissionPathPolicy.sourceContributingSamplesByPixelStability
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED]
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_FIRST_SUBPASS] ==
+                        1u &&
+                    ledger.transmissionPathPolicy.sourceNoHitSamplesByPixelStability
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED]
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_EARLY_SUBPASS] ==
+                        1u &&
+                    ledger.transmissionPathPolicy.sourceZeroContributionSamplesByPixelStability
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_PRIMARY]
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_LATE_SUBPASS] ==
+                        1u &&
+                    ledger.transmissionPathPolicy.sourceReceiverSamplesByPixelStability
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED]
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_EARLY_SUBPASS] ==
+                        1u);
+    assert_true("render_trace_cost_transmission_source_ray_counts",
+                ledger.transmissionPathPolicy.rayTraces == 3u &&
+                    ledger.transmissionPathPolicy.sourceRayTraces
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED] == 2u &&
+                    ledger.transmissionPathPolicy.sourceRayTraces
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_PRIMARY] == 1u);
+    assert_true("render_trace_cost_transmission_source_ray_depth_counts",
+                ledger.transmissionPathPolicy.sourceRayDepthCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED]
+                            [RUNTIME_RENDER_TRACE_COST_DEPTH_1] == 1u &&
+                    ledger.transmissionPathPolicy.sourceRayDepthCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED]
+                            [RUNTIME_RENDER_TRACE_COST_DEPTH_3_PLUS] == 1u &&
+                    ledger.transmissionPathPolicy.sourceRayDepthCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_PRIMARY]
+                            [RUNTIME_RENDER_TRACE_COST_DEPTH_2] == 1u);
+
+    RuntimeRenderTraceCostLedger3D_SetEnabled(false);
+    RuntimeRenderTraceCostLedger3D_Reset();
     return 0;
 }
 
@@ -1292,6 +1847,79 @@ static int test_runtime_native_3d_render_unit_setup_defers_feature_prepass(void)
                     unit.adaptiveMask.activePixelCount == 64);
     assert_true("runtime_native_3d_unit_s1_later_subpass_not_skipped",
                 RuntimeNative3DRenderUnit_ShouldRenderSubpass(&unit, 1));
+
+    RuntimeNative3DRenderUnit_Free(&unit);
+    RuntimeNative3DPreparedFrame_Free(&frame);
+    return 0;
+}
+
+static int test_runtime_native_3d_render_unit_scratch_reuses_compatible_setup(void) {
+    RuntimeNative3DPreparedFrame frame = {0};
+    RuntimeNative3DRenderUnit unit;
+    RuntimeNative3DSamplingContext sampling = {0};
+    RuntimeNative3DRenderStats scratch_stats = {0};
+    RuntimeScene3D scene;
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    RuntimeNative3DRenderUnit_Init(&unit);
+    RuntimeNative3DTileOccupancy_Init(&frame.tileOccupancy);
+
+    scene.hasCamera = true;
+    scene.camera.position = vec3(0.0, -4.0, 1.5);
+    scene.camera.rotation = 0.0;
+    scene.camera.lookPitch = -0.1;
+    scene.camera.zoom = 1.0;
+    scene.camera.nearPlane = 0.1;
+    scene.hasLight = true;
+    scene.light.position = vec3(0.0, -2.0, 3.0);
+    scene.light.radius = 0.2;
+    scene.light.intensity = 1.0;
+
+    ok = RuntimeCameraProjector3D_Build(&scene.camera, 8, 8, &frame.projector);
+    assert_true("runtime_native_3d_unit_scratch_projector_ok", ok);
+    if (!ok) {
+        RuntimeNative3DRenderUnit_Free(&unit);
+        RuntimeNative3DPreparedFrame_Free(&frame);
+        return 0;
+    }
+
+    frame.scene = scene;
+    frame.width = 8;
+    frame.height = 8;
+    frame.valid = true;
+
+    ok = RuntimeNative3DRenderUnit_Setup(&unit,
+                                         RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT,
+                                         &frame,
+                                         0,
+                                         0,
+                                         8,
+                                         8,
+                                         &sampling,
+                                         1,
+                                         false);
+    assert_true("runtime_native_3d_unit_scratch_first_setup_ok", ok);
+    ok = ok && RuntimeNative3DRenderUnit_Setup(&unit,
+                                               RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT,
+                                               &frame,
+                                               0,
+                                               0,
+                                               8,
+                                               8,
+                                               &sampling,
+                                               1,
+                                               false);
+    assert_true("runtime_native_3d_unit_scratch_second_setup_ok", ok);
+    RuntimeNative3DRenderUnit_RecordScratchStats(&unit, &scratch_stats);
+    assert_true("runtime_native_3d_unit_scratch_resize_once",
+                scratch_stats.renderUnitRadianceScratchResizeCalls == 1u);
+    assert_true("runtime_native_3d_unit_scratch_reuse_once",
+                scratch_stats.renderUnitRadianceScratchReuseCalls == 1u);
+    assert_true("runtime_native_3d_unit_scratch_owned_bytes",
+                scratch_stats.renderUnitScratchOwnedBytes > 0u &&
+                    scratch_stats.renderUnitRadianceScratchCapacityBytesMax >=
+                        scratch_stats.renderUnitRadianceScratchRequestedBytesMax);
 
     RuntimeNative3DRenderUnit_Free(&unit);
     RuntimeNative3DPreparedFrame_Free(&frame);
@@ -1557,6 +2185,108 @@ static int test_runtime_native_3d_tiled_first_frame_occupancy_culls_empty_tiles(
     return 0;
 }
 
+static int test_runtime_native_3d_tiled_cancel_before_dispatch_blocks_publish(void) {
+    AnimationConfig saved_anim = animSettings;
+    RuntimeNative3DPreparedFrame frame = {0};
+    RuntimeScene3D scene;
+    RuntimeNative3DRenderStats stats = {0};
+    volatile bool cancel_requested = true;
+    RuntimeNative3DTileSchedulerCancelToken cancel_token = {0};
+    RuntimeNative3DTileSchedulerControl scheduler_control = {0};
+    uint8_t pixel_buffer[32 * 32 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    RuntimeNative3DTileOccupancy_Init(&frame.tileOccupancy);
+    memset(pixel_buffer, 0x7c, sizeof(pixel_buffer));
+    animSettings.tileSize = 16;
+    animSettings.renderScale3D = 1;
+    animSettings.disneyDenoiseEnabled = false;
+    RuntimeNative3DTileSchedulerResetAdaptivePlan();
+
+    scene.hasCamera = true;
+    scene.camera.position = vec3(0.0, -4.0, 1.5);
+    scene.camera.rotation = 0.0;
+    scene.camera.lookPitch = -0.1;
+    scene.camera.zoom = 1.0;
+    scene.camera.nearPlane = 0.1;
+    scene.hasLight = true;
+    scene.light.position = vec3(0.0, -2.0, 3.0);
+    scene.light.radius = 0.2;
+    scene.light.intensity = 1.0;
+
+    ok = RuntimeCameraProjector3D_Build(&scene.camera, 32, 32, &frame.projector);
+    assert_true("runtime_native_3d_tiled_cancel_projector_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    frame.scene = scene;
+    frame.width = 32;
+    frame.height = 32;
+    frame.valid = true;
+    frame.tileOccupancyConservativeAllTiles = true;
+    cancel_token.cancelRequested = &cancel_requested;
+    cancel_token.generation = 17u;
+    scheduler_control.cancelToken = &cancel_token;
+
+    ok = RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressBudgetAndControl(
+        pixel_buffer,
+        RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT,
+        &frame,
+        1,
+        NULL,
+        NULL,
+        runtime_native_3d_tile_progress_probe,
+        NULL,
+        NULL,
+        &scheduler_control,
+        &stats);
+    assert_true("runtime_native_3d_tiled_cancel_render_reports_false", !ok);
+    assert_true("runtime_native_3d_tiled_cancel_token_bound",
+                stats.temporalTileSchedulerCancelTokenBound == 1);
+    assert_true("runtime_native_3d_tiled_cancel_generation",
+                stats.temporalTileSchedulerCancelGeneration == 17u);
+    assert_true("runtime_native_3d_tiled_cancel_planned_tiles",
+                stats.temporalPlannedParentTileCount == 4);
+    assert_true("runtime_native_3d_tiled_cancel_emitted_jobs",
+                stats.temporalEmittedTileJobCount == 4);
+    assert_true("runtime_native_3d_tiled_cancel_dispatched_jobs_counted",
+                stats.temporalDispatchedTileJobCount == 4);
+    assert_true("runtime_native_3d_tiled_cancel_no_completed_jobs",
+                stats.temporalCompletedTileJobCount == 0);
+    assert_true("runtime_native_3d_tiled_cancel_no_committed_subpasses",
+                stats.temporalCommittedSubpasses == 0);
+    assert_true("runtime_native_3d_tiled_cancel_no_final_resolve",
+                stats.temporalFinalFullResolveCount == 0);
+    assert_true("runtime_native_3d_tiled_cancel_no_progress_publish",
+                stats.temporalProgressDirtyBatchCount == 0 &&
+                    stats.temporalProgressDirtyTileCount == 0);
+    assert_true("runtime_native_3d_tiled_cancel_checkpoint",
+                stats.temporalTileSchedulerCancelCheckCount >= 1 &&
+                    stats.temporalTileSchedulerCancelRequestedCount >= 1 &&
+                    stats.temporalTileSchedulerCancelBeforeDispatchCount == 1);
+    assert_true("runtime_native_3d_tiled_cancel_shutdown_mode",
+                stats.temporalTileSchedulerWorkerCancelShutdownCount == 1 &&
+                    stats.temporalTileSchedulerWorkerDrainShutdownCount == 0);
+    assert_true("runtime_native_3d_tiled_cancel_lifetime_owners",
+                stats.temporalTileSchedulerJobArrayOwnerCount == 1 &&
+                    stats.temporalTileSchedulerParentMetricArrayOwnerCount == 1 &&
+                    stats.temporalTileSchedulerProgressTileArrayOwnerCount == 1 &&
+                    stats.temporalTileSchedulerCompletionQueueOwnerCount == 1 &&
+                    stats.temporalTileSchedulerWorkerPoolOwnerCount == 1);
+    assert_true("runtime_native_3d_tiled_cancel_buffer_untouched",
+                pixel_buffer[0] == 0x7cu &&
+                    pixel_buffer[sizeof(pixel_buffer) - 1u] == 0x7cu);
+
+    RuntimeNative3DPreparedFrame_Free(&frame);
+    animSettings = saved_anim;
+    RuntimeNative3DTileSchedulerResetAdaptivePlan();
+    return 0;
+}
+
 int run_test_runtime_native_3d_render_prepared_scatter_preview_suite(void) {
     int before = test_support_failures();
 
@@ -1567,14 +2297,20 @@ int run_test_runtime_native_3d_render_prepared_scatter_preview_suite(void) {
     test_runtime_native_3d_preview_reconstruction_rect_parity();
     test_runtime_native_3d_preview_reconstruction_dirty_tile_parity();
     test_runtime_native_3d_preview_final_truth_reconstruct_counters();
+    test_runtime_native_3d_render_request_snapshot_copies_async_boundary_fields();
     test_runtime_native_3d_tiled_presenter_final_truth_without_progress();
     test_runtime_native_3d_tiled_presenter_t6_capture_replay_without_renderer();
     test_runtime_native_3d_adaptive_pixel_state_t3_measurement_contract();
     test_runtime_native_3d_adaptive_pixel_state_t4_activity_mask_contract();
     test_runtime_native_3d_adaptive_pixel_state_t5_conservative_stop_contract();
+    test_runtime_native_3d_adaptive_pixel_state_t6_probe_only_does_not_pad();
+    test_runtime_render_trace_cost_ledger_direct_light_visibility_attribution();
+    test_runtime_render_trace_cost_ledger_transmission_sample_index_attribution();
     test_runtime_native_3d_render_unit_setup_defers_feature_prepass();
+    test_runtime_native_3d_render_unit_scratch_reuses_compatible_setup();
     test_runtime_native_3d_render_unit_preserves_prepared_tlas_binding();
     test_runtime_native_3d_render_unit_raw_progress_resolve_bypasses_denoise();
     test_runtime_native_3d_tiled_first_frame_occupancy_culls_empty_tiles();
+    test_runtime_native_3d_tiled_cancel_before_dispatch_blocks_publish();
     return test_support_failures() - before;
 }

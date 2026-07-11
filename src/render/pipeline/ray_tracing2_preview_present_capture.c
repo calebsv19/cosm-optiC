@@ -108,8 +108,22 @@ void WriteNative3DEnvPresentationCapture(bool enabled,
                 stats->temporalHostFullResolveCount);
         fprintf(f, "    \"temporal_final_preview_presents\": %d,\n",
                 stats->temporalFinalPreviewPresentCount);
-        fprintf(f, "    \"temporal_history_promotes\": %d\n",
+        fprintf(f, "    \"temporal_history_promotes\": %d,\n",
                 stats->temporalHistoryPromoteCount);
+        fprintf(f, "    \"temporal_dirty_preview_host_pixels\": %llu,\n",
+                (unsigned long long)stats->temporalDirtyPreviewHostPixels);
+        fprintf(f, "    \"temporal_dirty_preview_host_bytes\": %llu,\n",
+                (unsigned long long)stats->temporalDirtyPreviewHostBytes);
+        fprintf(f, "    \"temporal_final_resolve_host_pixels\": %llu,\n",
+                (unsigned long long)stats->temporalFinalResolveHostPixels);
+        fprintf(f, "    \"temporal_final_resolve_host_bytes\": %llu,\n",
+                (unsigned long long)stats->temporalFinalResolveHostBytes);
+        fprintf(f, "    \"temporal_history_seed_host_bytes\": %llu,\n",
+                (unsigned long long)stats->temporalHistorySeedHostBytes);
+        fprintf(f, "    \"temporal_history_promote_host_bytes\": %llu,\n",
+                (unsigned long long)stats->temporalHistoryPromoteHostBytes);
+        fprintf(f, "    \"temporal_final_preview_present_host_bytes\": %llu\n",
+                (unsigned long long)stats->temporalFinalPreviewPresentHostBytes);
         fprintf(f, "  },\n");
     }
     fprintf(f, "  \"events\": [\n");

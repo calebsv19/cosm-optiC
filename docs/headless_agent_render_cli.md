@@ -543,7 +543,10 @@ frames. The summary reports:
 - `inspection.secondary_diffuse_samples_3d`
 - `inspection.transmission_samples_3d`
 - `inspection.caustic_mode` (`disney_v2` only; `analytic` default, `off`,
-  `transport` reserved)
+  `transport` for explicit caustic cache transport)
+- `inspection.caustic_transport_engine` (`transport` only;
+  `exploratory_lens_transport` default, `photon_map` accepted/read back as the
+  PPM-0A production photon-mapper contract state without photon tracing yet)
 - `inspection.caustic_sidecar_enabled` (`disney_v2` legacy alias)
 - `inspection.caustic_sidecar_strength` (`disney_v2` only)
 - `inspection.volume_tint`
@@ -618,6 +621,63 @@ range-bounds scans, sort/partition work, node append, final stats, unaccounted
 build overhead, range/sort/node call counts, and maximum range sizes. These are
 for local performance diagnosis and should not be used as route promotion
 criteria.
+
+## Render-Cost and Temporal-Pruning Diagnostics
+
+Use these environment gates when a headless run is meant to explain ray count,
+per-ray cost, or temporal-subpass work. Keep baseline beauty renders free of
+diagnostic envs unless the comparison explicitly calls for them.
+
+Current default-on render-cost policies:
+
+- pure `tlas_blas` native `3D` renders skip the legacy flattened-BVH build by
+  default. Use `RAY_TRACING_NATIVE3D_DISABLE_DEFAULT_TLAS_BVH_SKIP=1` only for
+  rollback/parity checks.
+- Disney v2 reflected-transmission first-subpass no-hit reuse is default-on.
+  Use `RAY_TRACING_DISNEY_V2_REFLECTED_FIRST_SUBPASS_NO_HIT_REUSE_PROBE=0` to
+  force old full-trace behavior for regression checks.
+
+Current opt-in diagnostics and candidates:
+
+- `RAY_TRACING_RENDER_TRACE_COST_LEDGER=1` writes the render trace cost ledger
+  into the headless summary. Use it for ray-class, material-family,
+  direct-light visibility, transmission, and Disney v2 path-cost attribution.
+- `RAY_TRACING_FRAME_DATAFLOW_STATE_LEDGER=1` writes frame-dataflow and
+  ownership diagnostics into the headless summary. Use it for startup,
+  scheduler, scratch, TLAS/BLAS, and frame-lifetime accounting.
+- `RAY_TRACING_NATIVE_3D_TEMPORAL_RISK_EARLY_STOP=1` enables the R4 per-pixel
+  temporal risk early-stop candidate. It is not a default launcher or desktop
+  package setting. The representative textured-glass operator-scene proof did
+  not justify promotion, so keep this as an operator/debug option unless a
+  future narrower policy earns a new proof.
+- `RAY_TRACING_NATIVE_3D_TEMPORAL_BUDGET_HEATMAP=1` emits the temporal budget
+  heatmap for threshold review. Pair it with the risk early-stop env when the
+  goal is to see which pixels were pruned, held by transparent/material risk,
+  held by light/edge risk, or kept as high-budget glass/receiver regions.
+- `RAY_TRACING_DIRECT_LIGHT_CLEAR_VISIBLE_DECISION_SAMPLE_PROBE=1` enables the
+  stricter all-clear direct-light visibility decision probe. It is useful for
+  attribution and ray-count study, but it is not a timing win on the restored
+  transparent stack and should stay off for default beauty runs.
+- `RAY_TRACING_DISNEY_V2_REFLECTED_TRANSMISSION_SAMPLE_CAP=<n>` is an
+  experimental reflected-transmission cap override. The current proven safe
+  reflected-transmission default is the guarded first-subpass no-hit reuse
+  above, not a blind lower cap.
+
+For tiled A/B reviews, run the exact same request and tile renderer settings
+with only the candidate env changed. The promotion review should include:
+
+- rendered pixel-subpass delta
+- total ray and transmission/direct-light ray deltas
+- max channel delta and count of pixels above small thresholds
+- internal tile-line and 1-pixel tile-band changed-pixel density
+- side-by-side and amplified-diff images
+- the headless summary paths and candidate envs used
+
+The current R4 status is intentionally conservative: high-quality synthetic
+reviews showed useful subpass reduction and structurally clean tile borders,
+but the representative textured-glass operator-scene proof had nontrivial drift
+and no timing win. `RAY_TRACING_NATIVE_3D_TEMPORAL_RISK_EARLY_STOP=1` remains
+opt-in only.
 
 When a runtime-scene camera seed provides position but no authored orientation,
 the native `3D` render path now auto-aims that camera toward the built scene

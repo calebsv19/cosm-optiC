@@ -11,7 +11,7 @@ static bool runtime_native_3d_render_prepared_frame_serial(
     RuntimeNative3DRenderUnit render_unit = {0};
     bool ok = false;
 
-    RuntimeNative3DRenderUnit_Init(&render_unit);
+    RuntimeNative3DRenderUnit_TakeReusable(&render_unit);
     ok = RuntimeNative3DRenderUnit_Setup(&render_unit,
                                          integrator_id,
                                          frame,
@@ -56,10 +56,18 @@ static bool runtime_native_3d_render_prepared_frame_serial(
 
     if (ok) {
         RuntimeNative3DRenderStats resolve_stats = {0};
-        ok = RuntimeNative3DRenderUnit_ResolveCurrentToPixelsWithStats(&render_unit,
-                                                                       pixel_buffer,
-                                                                       frame->width,
-                                                                       &resolve_stats);
+        if (RuntimeNative3DAdaptiveSampling_TemporalBudgetHeatmapEnabled()) {
+            ok = RuntimeNative3DRenderUnit_ResolveTemporalBudgetHeatmapToPixels(
+                &render_unit,
+                pixel_buffer,
+                frame->width);
+            resolve_stats.temporalAdaptiveBudgetHeatmapEnabled = ok ? 1 : 0;
+        } else {
+            ok = RuntimeNative3DRenderUnit_ResolveCurrentToPixelsWithStats(&render_unit,
+                                                                           pixel_buffer,
+                                                                           frame->width,
+                                                                           &resolve_stats);
+        }
         if (ok && out_stats) {
             RuntimeNative3DRenderStats_Accumulate(out_stats, &resolve_stats);
         }
@@ -75,9 +83,10 @@ static bool runtime_native_3d_render_prepared_frame_serial(
         RuntimeNative3DRenderUnit_GetAdaptiveStateSummary(&render_unit, &adaptive_summary);
         runtime_native_3d_render_stats_record_adaptive_state_summary(out_stats,
                                                                      &adaptive_summary);
+        RuntimeNative3DRenderUnit_RecordScratchStats(&render_unit, out_stats);
     }
 
-    RuntimeNative3DRenderUnit_Free(&render_unit);
+    RuntimeNative3DRenderUnit_ReturnReusable(&render_unit);
     return ok;
 }
 

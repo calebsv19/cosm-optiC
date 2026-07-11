@@ -1,5 +1,7 @@
 #include "render/runtime_scene_3d_builder_internal.h"
 
+#include "import/runtime_scene_motion_bridge.h"
+
 static Vec3 runtime_scene_3d_builder_rotate_instance(Vec3 p,
                                                      const RayTracingRuntimeMeshAssetInstance* instance) {
     double cx = cos(instance->rotation_x);
@@ -161,10 +163,32 @@ static int runtime_scene_3d_builder_resolve_mesh_scene_object_index(
     return instance->scene_object_index;
 }
 
-bool runtime_scene_3d_builder_append_mesh_asset_set(
+static void runtime_scene_3d_builder_apply_motion_to_mesh_instance(
+    RayTracingRuntimeMeshAssetInstance* instance,
+    double normalized_t) {
+    RuntimeMotionTrack3DSample sample = {0};
+    if (!instance || !runtime_scene_motion_bridge_sample_object(instance->object_id,
+                                                                normalized_t,
+                                                                &sample)) {
+        return;
+    }
+    if (sample.has_position) {
+        instance->position_x = sample.position_x;
+        instance->position_y = sample.position_y;
+        instance->position_z = sample.position_z;
+    }
+    if (sample.has_rotation) {
+        instance->rotation_x = sample.pitch_radians;
+        instance->rotation_y = sample.yaw_radians;
+        instance->rotation_z = sample.roll_radians;
+    }
+}
+
+bool runtime_scene_3d_builder_append_mesh_asset_set_at_t(
     RuntimeScene3D* scene,
     const RayTracingRuntimeMeshAssetSet* mesh_assets,
-    bool require_ready_bvh) {
+    bool require_ready_bvh,
+    double normalized_t) {
     int extra_primitives = 0;
     int extra_triangles = 0;
     struct timespec total_start = {0};
@@ -219,7 +243,8 @@ bool runtime_scene_3d_builder_append_mesh_asset_set(
 
     (void)clock_gettime(CLOCK_MONOTONIC, &stage_start);
     for (int i = 0; i < mesh_assets->instance_count; ++i) {
-        const RayTracingRuntimeMeshAssetInstance* instance = &mesh_assets->instances[i];
+        RayTracingRuntimeMeshAssetInstance sampled_instance = mesh_assets->instances[i];
+        const RayTracingRuntimeMeshAssetInstance* instance = &sampled_instance;
         const RayTracingRuntimeMeshAsset* asset = &mesh_assets->assets[instance->asset_index];
         const CoreMeshAssetRuntimeDocument* document = &asset->document;
         RuntimePrimitive3D* primitive = &scene->primitives[scene->primitiveCount];
@@ -230,6 +255,13 @@ bool runtime_scene_3d_builder_append_mesh_asset_set(
             runtime_scene_3d_builder_mesh_bounds(document, instance);
         Vec3 pivot = runtime_scene_3d_builder_mesh_rotation_pivot(document, instance);
         int appended_triangle_count = 0;
+
+        runtime_scene_3d_builder_apply_motion_to_mesh_instance(&sampled_instance,
+                                                               normalized_t);
+        instance = &sampled_instance;
+        scene_object_index = runtime_scene_3d_builder_resolve_mesh_scene_object_index(instance);
+        bounds = runtime_scene_3d_builder_mesh_bounds(document, instance);
+        pivot = runtime_scene_3d_builder_mesh_rotation_pivot(document, instance);
 
         memset(primitive, 0, sizeof(*primitive));
         primitive->kind = RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH;
@@ -298,6 +330,16 @@ bool runtime_scene_3d_builder_append_mesh_asset_set(
     runtime_scene_3d_builder_timing_mutable()->mesh_append_total_ms +=
         runtime_scene_3d_builder_elapsed_ms_since(&total_start);
     return true;
+}
+
+bool runtime_scene_3d_builder_append_mesh_asset_set(
+    RuntimeScene3D* scene,
+    const RayTracingRuntimeMeshAssetSet* mesh_assets,
+    bool require_ready_bvh) {
+    return runtime_scene_3d_builder_append_mesh_asset_set_at_t(scene,
+                                                              mesh_assets,
+                                                              require_ready_bvh,
+                                                              0.0);
 }
 
 bool RuntimeScene3DBuilder_AppendMeshAssetSet(

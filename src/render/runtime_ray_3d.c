@@ -10,11 +10,8 @@ static const double kRuntimeRay3DDeterminantEpsilon = 1e-9;
 static const double kRuntimeRay3DMinimumOffsetEpsilon = 1e-9;
 static const RuntimeRay3DTraceRoute kRuntimeRay3DDefaultTraceRoute =
     RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS;
-static RuntimeRay3DTraceRoute gRuntimeRay3DTraceRoute =
-    RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS;
-static RuntimeRay3DRouteStats gRuntimeRay3DRouteStats;
-static RuntimeRay3DSceneAccelerationTraceFirstHitFn
-    gRuntimeRay3DSceneAccelerationTraceFirstHit;
+static RuntimeRay3DTraceContext gRuntimeRay3DDefaultTraceContext;
+static bool gRuntimeRay3DDefaultTraceContextInitialized = false;
 
 typedef enum RuntimeSceneAcceleration3DTraceStatusForRayRoute {
     RUNTIME_RAY_3D_ACCEL_TRACE_UNREADY = 0,
@@ -23,6 +20,87 @@ typedef enum RuntimeSceneAcceleration3DTraceStatusForRayRoute {
     RUNTIME_RAY_3D_ACCEL_TRACE_UNSUPPORTED = 3,
     RUNTIME_RAY_3D_ACCEL_TRACE_ERROR = 4
 } RuntimeSceneAcceleration3DTraceStatusForRayRoute;
+
+static RuntimeRay3DTraceRoute runtime_ray_3d_sanitize_trace_route(
+    RuntimeRay3DTraceRoute route) {
+    if (route < RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH ||
+        route > RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS) {
+        return RuntimeRay3D_DefaultTraceRoute();
+    }
+    return route;
+}
+
+static void runtime_ray_3d_trace_context_refresh_stats_header(
+    RuntimeRay3DTraceContext* context) {
+    if (!context) return;
+    context->routeStats.requestedRoute = context->requestedRoute;
+    context->routeStats.activeRoute = context->activeRoute;
+    context->routeStats.traceContextStatsOwned = true;
+    context->routeStats.sceneAccelerationTraceCallbackBound =
+        context->sceneAccelerationTraceFirstHit != NULL;
+}
+
+void RuntimeRay3DTraceContext_Init(RuntimeRay3DTraceContext* context) {
+    if (!context) return;
+    memset(context, 0, sizeof(*context));
+    context->requestedRoute = RuntimeRay3D_DefaultTraceRoute();
+    context->activeRoute = context->requestedRoute;
+    runtime_ray_3d_trace_context_refresh_stats_header(context);
+}
+
+static RuntimeRay3DTraceContext* runtime_ray_3d_default_trace_context(void) {
+    if (!gRuntimeRay3DDefaultTraceContextInitialized) {
+        RuntimeRay3DTraceContext_Init(&gRuntimeRay3DDefaultTraceContext);
+        gRuntimeRay3DDefaultTraceContextInitialized = true;
+    }
+    return &gRuntimeRay3DDefaultTraceContext;
+}
+
+void RuntimeRay3DTraceContext_SetTraceRoute(RuntimeRay3DTraceContext* context,
+                                            RuntimeRay3DTraceRoute route) {
+    if (!context) return;
+    route = runtime_ray_3d_sanitize_trace_route(route);
+    context->requestedRoute = route;
+    context->activeRoute = route;
+    runtime_ray_3d_trace_context_refresh_stats_header(context);
+}
+
+void RuntimeRay3DTraceContext_SetSceneAccelerationTraceFirstHit(
+    RuntimeRay3DTraceContext* context,
+    RuntimeRay3DSceneAccelerationTraceFirstHitFn trace_first_hit) {
+    if (!context) return;
+    context->sceneAccelerationTraceFirstHit = trace_first_hit;
+    runtime_ray_3d_trace_context_refresh_stats_header(context);
+}
+
+void RuntimeRay3DTraceContext_ResetRouteStats(RuntimeRay3DTraceContext* context) {
+    RuntimeRay3DTraceRoute requested_route;
+    RuntimeRay3DTraceRoute active_route;
+    RuntimeRay3DSceneAccelerationTraceFirstHitFn trace_first_hit;
+    if (!context) return;
+    requested_route = context->requestedRoute;
+    active_route = context->activeRoute;
+    trace_first_hit = context->sceneAccelerationTraceFirstHit;
+    memset(&context->routeStats, 0, sizeof(context->routeStats));
+    context->requestedRoute = requested_route;
+    context->activeRoute = active_route;
+    context->sceneAccelerationTraceFirstHit = trace_first_hit;
+    runtime_ray_3d_trace_context_refresh_stats_header(context);
+}
+
+void RuntimeRay3DTraceContext_SnapshotRouteStats(
+    const RuntimeRay3DTraceContext* context,
+    RuntimeRay3DRouteStats* out_stats) {
+    if (!out_stats) return;
+    memset(out_stats, 0, sizeof(*out_stats));
+    if (!context) return;
+    *out_stats = context->routeStats;
+    out_stats->requestedRoute = context->requestedRoute;
+    out_stats->activeRoute = context->activeRoute;
+    out_stats->traceContextStatsOwned = true;
+    out_stats->sceneAccelerationTraceCallbackBound =
+        context->sceneAccelerationTraceFirstHit != NULL;
+}
 
 static Vec3 runtime_ray_3d_triangle_normal(const RuntimeTriangle3D* triangle) {
     Vec3 edge1;
@@ -187,22 +265,19 @@ RuntimeRay3DTraceRoute RuntimeRay3D_DefaultTraceRoute(void) {
 }
 
 RuntimeRay3DTraceRoute RuntimeRay3D_CurrentTraceRoute(void) {
-    return gRuntimeRay3DTraceRoute;
+    return runtime_ray_3d_default_trace_context()->activeRoute;
 }
 
 void RuntimeRay3D_SetSceneAccelerationTraceFirstHit(
     RuntimeRay3DSceneAccelerationTraceFirstHitFn trace_first_hit) {
-    gRuntimeRay3DSceneAccelerationTraceFirstHit = trace_first_hit;
+    RuntimeRay3DTraceContext_SetSceneAccelerationTraceFirstHit(
+        runtime_ray_3d_default_trace_context(),
+        trace_first_hit);
 }
 
 void RuntimeRay3D_SetTraceRoute(RuntimeRay3DTraceRoute route) {
-    if (route < RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH ||
-        route > RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS) {
-        route = RuntimeRay3D_DefaultTraceRoute();
-    }
-    gRuntimeRay3DTraceRoute = route;
-    gRuntimeRay3DRouteStats.requestedRoute = route;
-    gRuntimeRay3DRouteStats.activeRoute = route;
+    RuntimeRay3DTraceContext_SetTraceRoute(runtime_ray_3d_default_trace_context(),
+                                           route);
 }
 
 void RuntimeRay3D_SetTraceRouteForTests(RuntimeRay3DTraceRoute route) {
@@ -214,16 +289,13 @@ void RuntimeRay3D_ResetTraceRouteForTests(void) {
 }
 
 void RuntimeRay3D_ResetRouteStats(void) {
-    RuntimeRay3DTraceRoute route = gRuntimeRay3DTraceRoute;
-    memset(&gRuntimeRay3DRouteStats, 0, sizeof(gRuntimeRay3DRouteStats));
-    gRuntimeRay3DRouteStats.requestedRoute = route;
-    gRuntimeRay3DRouteStats.activeRoute = route;
+    RuntimeRay3DTraceContext_ResetRouteStats(runtime_ray_3d_default_trace_context());
 }
 
 void RuntimeRay3D_SnapshotRouteStats(RuntimeRay3DRouteStats* out_stats) {
-    if (!out_stats) return;
-    *out_stats = gRuntimeRay3DRouteStats;
-    out_stats->requestedRoute = gRuntimeRay3DTraceRoute;
+    RuntimeRay3DTraceContext_SnapshotRouteStats(
+        runtime_ray_3d_default_trace_context(),
+        out_stats);
 }
 
 static bool runtime_ray_3d_trace_scene_first_hit_flat(
@@ -296,31 +368,37 @@ static bool runtime_ray_3d_trace_scene_first_hit_flattened(
 }
 
 static void runtime_ray_3d_record_tlas_status(
+    RuntimeRay3DTraceContext* context,
     RuntimeSceneAcceleration3DTraceStatusForRayRoute status) {
-    gRuntimeRay3DRouteStats.tlasTraceCalls += 1u;
+    RuntimeRay3DRouteStats* stats = context ? &context->routeStats : NULL;
+    if (!stats) return;
+    stats->tlasTraceCalls += 1u;
     switch (status) {
         case RUNTIME_RAY_3D_ACCEL_TRACE_HIT:
-            gRuntimeRay3DRouteStats.tlasTraceHits += 1u;
+            stats->tlasTraceHits += 1u;
             break;
         case RUNTIME_RAY_3D_ACCEL_TRACE_MISS:
-            gRuntimeRay3DRouteStats.tlasTraceMisses += 1u;
+            stats->tlasTraceMisses += 1u;
             break;
         case RUNTIME_RAY_3D_ACCEL_TRACE_UNREADY:
-            gRuntimeRay3DRouteStats.tlasTraceUnready += 1u;
+            stats->tlasTraceUnready += 1u;
             break;
         case RUNTIME_RAY_3D_ACCEL_TRACE_UNSUPPORTED:
-            gRuntimeRay3DRouteStats.tlasTraceUnsupported += 1u;
+            stats->tlasTraceUnsupported += 1u;
             break;
         case RUNTIME_RAY_3D_ACCEL_TRACE_ERROR:
         default:
-            gRuntimeRay3DRouteStats.tlasTraceErrors += 1u;
+            stats->tlasTraceErrors += 1u;
             break;
     }
 }
 
-static void runtime_ray_3d_set_parity_mismatch(const char* reason) {
-    snprintf(gRuntimeRay3DRouteStats.lastParityMismatchReason,
-             sizeof(gRuntimeRay3DRouteStats.lastParityMismatchReason),
+static void runtime_ray_3d_set_parity_mismatch(RuntimeRay3DTraceContext* context,
+                                               const char* reason) {
+    RuntimeRay3DRouteStats* stats = context ? &context->routeStats : NULL;
+    if (!stats) return;
+    snprintf(stats->lastParityMismatchReason,
+             sizeof(stats->lastParityMismatchReason),
              "%s",
              (reason && reason[0]) ? reason : "unknown");
 }
@@ -371,6 +449,7 @@ static bool runtime_ray_3d_hits_match(const HitInfo3D* expected,
 }
 
 static bool runtime_ray_3d_trace_scene_first_hit_parity(
+    RuntimeRay3DTraceContext* context,
     const RuntimeScene3D* scene,
     const Ray3D* ray,
     [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
@@ -382,39 +461,43 @@ static bool runtime_ray_3d_trace_scene_first_hit_parity(
     RuntimeSceneAcceleration3DTraceStatusForRayRoute tlas_status;
     bool tlas_found = false;
     char reason[128] = {0};
+    RuntimeRay3DRouteStats* stats = context ? &context->routeStats : NULL;
 
-    if (gRuntimeRay3DSceneAccelerationTraceFirstHit) {
+    if (!stats) return false;
+    if (context->sceneAccelerationTraceFirstHit) {
         tlas_status = (RuntimeSceneAcceleration3DTraceStatusForRayRoute)
-            gRuntimeRay3DSceneAccelerationTraceFirstHit(scene,
-                                                        ray,
-                                                        t_min,
-                                                        t_max,
-                                                        &tlas_hit);
+            context->sceneAccelerationTraceFirstHit(scene,
+                                                    ray,
+                                                    t_min,
+                                                    t_max,
+                                                    &tlas_hit);
     } else {
         HitInfo3D_Reset(&tlas_hit);
         tlas_status = RUNTIME_RAY_3D_ACCEL_TRACE_UNREADY;
     }
-    runtime_ray_3d_record_tlas_status(tlas_status);
+    runtime_ray_3d_record_tlas_status(context, tlas_status);
     tlas_found = tlas_status == RUNTIME_RAY_3D_ACCEL_TRACE_HIT;
 
-    gRuntimeRay3DRouteStats.flattenedTraceCalls += 1u;
+    stats->flattenedTraceCalls += 1u;
     flattened_found = runtime_ray_3d_trace_scene_first_hit_flattened(scene,
                                                                      ray,
                                                                      t_min,
                                                                      t_max,
                                                                      &flattened_hit);
-    gRuntimeRay3DRouteStats.parityCheckedRays += 1u;
+    stats->parityCheckedRays += 1u;
     if (flattened_found != tlas_found) {
-        gRuntimeRay3DRouteStats.parityMismatches += 1u;
-        runtime_ray_3d_set_parity_mismatch(flattened_found ? "tlas_miss_flattened_hit"
-                                                           : "tlas_hit_flattened_miss");
+        stats->parityMismatches += 1u;
+        runtime_ray_3d_set_parity_mismatch(
+            context,
+            flattened_found ? "tlas_miss_flattened_hit"
+                            : "tlas_hit_flattened_miss");
     } else if (flattened_found &&
                !runtime_ray_3d_hits_match(&flattened_hit,
                                            &tlas_hit,
                                            reason,
                                            sizeof(reason))) {
-        gRuntimeRay3DRouteStats.parityMismatches += 1u;
-        runtime_ray_3d_set_parity_mismatch(reason);
+        stats->parityMismatches += 1u;
+        runtime_ray_3d_set_parity_mismatch(context, reason);
     }
 
     if (flattened_found) {
@@ -426,24 +509,27 @@ static bool runtime_ray_3d_trace_scene_first_hit_parity(
 }
 
 static bool runtime_ray_3d_trace_scene_first_hit_tlas_blas(
+    RuntimeRay3DTraceContext* context,
     const RuntimeScene3D* scene,
     const Ray3D* ray,
     [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
     [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
     HitInfo3D* out_hit) {
     RuntimeSceneAcceleration3DTraceStatusForRayRoute tlas_status;
-    if (gRuntimeRay3DSceneAccelerationTraceFirstHit) {
+    RuntimeRay3DRouteStats* stats = context ? &context->routeStats : NULL;
+    if (!stats) return false;
+    if (context->sceneAccelerationTraceFirstHit) {
         tlas_status = (RuntimeSceneAcceleration3DTraceStatusForRayRoute)
-            gRuntimeRay3DSceneAccelerationTraceFirstHit(scene,
-                                                        ray,
-                                                        t_min,
-                                                        t_max,
-                                                        out_hit);
+            context->sceneAccelerationTraceFirstHit(scene,
+                                                    ray,
+                                                    t_min,
+                                                    t_max,
+                                                    out_hit);
     } else {
         HitInfo3D_Reset(out_hit);
         tlas_status = RUNTIME_RAY_3D_ACCEL_TRACE_UNREADY;
     }
-    runtime_ray_3d_record_tlas_status(tlas_status);
+    runtime_ray_3d_record_tlas_status(context, tlas_status);
     if (tlas_status == RUNTIME_RAY_3D_ACCEL_TRACE_HIT) {
         return true;
     }
@@ -451,8 +537,8 @@ static bool runtime_ray_3d_trace_scene_first_hit_tlas_blas(
         HitInfo3D_Reset(out_hit);
         return false;
     }
-    gRuntimeRay3DRouteStats.flattenedFallbackCalls += 1u;
-    gRuntimeRay3DRouteStats.flattenedTraceCalls += 1u;
+    stats->flattenedFallbackCalls += 1u;
+    stats->flattenedTraceCalls += 1u;
     return runtime_ray_3d_trace_scene_first_hit_flattened(scene,
                                                          ray,
                                                          t_min,
@@ -465,26 +551,47 @@ bool RuntimeRay3D_TraceSceneFirstHit(const RuntimeScene3D* scene,
                                      [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
                                      [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
                                      HitInfo3D* out_hit) {
-    if (!scene || !ray || !out_hit) return false;
-    gRuntimeRay3DRouteStats.traceCalls += 1u;
-    gRuntimeRay3DRouteStats.requestedRoute = gRuntimeRay3DTraceRoute;
-    gRuntimeRay3DRouteStats.activeRoute = gRuntimeRay3DTraceRoute;
+    return RuntimeRay3D_TraceSceneFirstHitWithContext(
+        runtime_ray_3d_default_trace_context(),
+        scene,
+        ray,
+        t_min,
+        t_max,
+        out_hit);
+}
 
-    if (gRuntimeRay3DTraceRoute == RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS_PARITY) {
-        return runtime_ray_3d_trace_scene_first_hit_parity(scene,
+bool RuntimeRay3D_TraceSceneFirstHitWithContext(RuntimeRay3DTraceContext* context,
+                                                const RuntimeScene3D* scene,
+                                                const Ray3D* ray,
+                                                [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
+                                                [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
+                                                HitInfo3D* out_hit) {
+    RuntimeRay3DRouteStats* stats = NULL;
+    if (!context) context = runtime_ray_3d_default_trace_context();
+    if (!scene || !ray || !out_hit) return false;
+    context->requestedRoute = runtime_ray_3d_sanitize_trace_route(context->requestedRoute);
+    context->activeRoute = runtime_ray_3d_sanitize_trace_route(context->activeRoute);
+    runtime_ray_3d_trace_context_refresh_stats_header(context);
+    stats = &context->routeStats;
+    stats->traceCalls += 1u;
+
+    if (context->activeRoute == RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS_PARITY) {
+        return runtime_ray_3d_trace_scene_first_hit_parity(context,
+                                                           scene,
                                                            ray,
                                                            t_min,
                                                            t_max,
                                                            out_hit);
     }
-    if (gRuntimeRay3DTraceRoute == RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS) {
-        return runtime_ray_3d_trace_scene_first_hit_tlas_blas(scene,
+    if (context->activeRoute == RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS) {
+        return runtime_ray_3d_trace_scene_first_hit_tlas_blas(context,
+                                                              scene,
                                                               ray,
                                                               t_min,
                                                               t_max,
                                                               out_hit);
     }
 
-    gRuntimeRay3DRouteStats.flattenedTraceCalls += 1u;
+    stats->flattenedTraceCalls += 1u;
     return runtime_ray_3d_trace_scene_first_hit_flattened(scene, ray, t_min, t_max, out_hit);
 }

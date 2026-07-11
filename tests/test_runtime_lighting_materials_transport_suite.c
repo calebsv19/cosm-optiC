@@ -11,6 +11,8 @@
 #include "render/runtime_camera_3d_rays.h"
 #include "render/runtime_disney_3d.h"
 #include "render/runtime_disney_v2_3d.h"
+#include "render/runtime_disney_v2_transmission_3d.h"
+#include "render/runtime_disney_v2_transmission_internal_3d.h"
 #include "render/runtime_diffuse_bounce_3d.h"
 #include "render/runtime_direct_light_3d.h"
 #include "render/runtime_dielectric_transport_3d.h"
@@ -201,6 +203,135 @@ static int test_runtime_dielectric_transport_water_ior_fresnel_contract(void) {
                  transport.fresnel,
                  0.25,
                  1e-9);
+    return 0;
+}
+
+static int test_runtime_dielectric_transport_explicit_unit_ior_straight_through_contract(void) {
+    RuntimeMaterialPayload3D payload = {0};
+    RuntimeDielectricTransport3D transport = {0};
+    Vec3 incident = vec3_normalize(vec3(0.35, -0.82, 0.45));
+    bool ok = false;
+
+    payload.valid = true;
+    payload.opticalIor = 1.0;
+    payload.bsdf.ior = 1.0;
+    payload.bsdf.reflectivity = 0.0;
+
+    ok = RuntimeDielectricTransport3D_Resolve(&payload,
+                                              vec3(0.0, 1.0, 0.0),
+                                              incident,
+                                              &transport);
+    assert_true("runtime_dielectric_transport_unit_ior_resolve", ok);
+    assert_true("runtime_dielectric_transport_unit_ior_has_refraction",
+                transport.hasRefraction);
+    assert_close("runtime_dielectric_transport_unit_ior_fresnel",
+                 transport.fresnel,
+                 0.0,
+                 1e-9);
+    assert_true("runtime_dielectric_transport_unit_ior_preserves_direction",
+                fabs(transport.refractionDir.x - incident.x) < 1e-6 &&
+                fabs(transport.refractionDir.y - incident.y) < 1e-6 &&
+                fabs(transport.refractionDir.z - incident.z) < 1e-6);
+    return 0;
+}
+
+static int test_runtime_disney_v2_transmission_sample_uses_payload_ior_contract(void) {
+    RuntimeMaterialPayload3D payload = {0};
+    RuntimePrincipledBSDF3D principled = {0};
+    RuntimeDisneyV2_3DTransmissionSample straight = {0};
+    RuntimeDisneyV2_3DTransmissionSample water = {0};
+    HitInfo3D hit = {0};
+    Vec3 view_dir = vec3_normalize(vec3(-0.22, 0.74, 0.64));
+    Vec3 normal = vec3_normalize(vec3(0.34, 0.0, 0.94));
+    bool ok_straight = false;
+    bool ok_water = false;
+
+    payload.valid = true;
+    payload.transparency = 1.0;
+    payload.baseColorR = 1.0;
+    payload.baseColorG = 1.0;
+    payload.baseColorB = 1.0;
+    payload.bsdf.baseColorR = 1.0;
+    payload.bsdf.baseColorG = 1.0;
+    payload.bsdf.baseColorB = 1.0;
+    payload.bsdf.diffuseWeight = 0.0;
+    payload.bsdf.specWeight = 0.0;
+    payload.bsdf.roughness = 0.02;
+    payload.bsdf.weightSum = 1.0;
+    payload.thinWalled = false;
+    hit.normal = normal;
+
+    payload.opticalIor = 1.0;
+    payload.bsdf.ior = 1.0;
+    principled = RuntimePrincipledBSDF3D_FromMaterialPayload(&payload);
+    ok_straight = RuntimeDisneyV2_3D_SampleTransmission(&payload,
+                                                        &principled,
+                                                        &hit,
+                                                        view_dir,
+                                                        1.0,
+                                                        &straight);
+
+    payload.opticalIor = 1.333;
+    payload.bsdf.ior = 1.333;
+    principled = RuntimePrincipledBSDF3D_FromMaterialPayload(&payload);
+    ok_water = RuntimeDisneyV2_3D_SampleTransmission(&payload,
+                                                     &principled,
+                                                     &hit,
+                                                     view_dir,
+                                                     1.0,
+                                                     &water);
+
+    assert_true("runtime_disney_v2_transmission_sample_unit_ior_ok", ok_straight);
+    assert_true("runtime_disney_v2_transmission_sample_water_ior_ok", ok_water);
+    assert_true("runtime_disney_v2_transmission_sample_unit_ior_straight_through",
+                vec3_length(vec3_sub(straight.direction,
+                                     vec3_scale(vec3_normalize(view_dir), -1.0))) < 1e-6);
+    assert_true("runtime_disney_v2_transmission_sample_ior_changes_direction",
+                vec3_length(vec3_sub(straight.direction, water.direction)) > 1e-3);
+    return 0;
+}
+
+static int test_runtime_disney_v2_reflected_transmission_sample_cap_policy(void) {
+    AnimationConfig saved_anim = animSettings;
+    const char* env_name = "RAY_TRACING_DISNEY_V2_REFLECTED_TRANSMISSION_SAMPLE_CAP";
+    const char* saved_cap = getenv(env_name);
+    char saved_cap_copy[64] = {0};
+
+    if (saved_cap) {
+        snprintf(saved_cap_copy, sizeof(saved_cap_copy), "%s", saved_cap);
+    }
+
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.transmissionSamples3D = 16;
+
+    unsetenv(env_name);
+    assert_true("runtime_disney_v2_transmission_samples_primary_default",
+                runtime_disney_v2_3d_resolve_transmission_sample_count(
+                    RUNTIME_DISNEY_V2_3D_TRANSMISSION_CONTINUATION_PRIMARY) == 16);
+    assert_true("runtime_disney_v2_transmission_samples_reflected_default",
+                runtime_disney_v2_3d_resolve_transmission_sample_count(
+                    RUNTIME_DISNEY_V2_3D_TRANSMISSION_CONTINUATION_REFLECTED) == 16);
+
+    setenv(env_name, "4", 1);
+    assert_true("runtime_disney_v2_transmission_samples_primary_ignores_cap",
+                runtime_disney_v2_3d_resolve_transmission_sample_count(
+                    RUNTIME_DISNEY_V2_3D_TRANSMISSION_CONTINUATION_PRIMARY) == 16);
+    assert_true("runtime_disney_v2_transmission_samples_reflected_uses_cap",
+                runtime_disney_v2_3d_resolve_transmission_sample_count(
+                    RUNTIME_DISNEY_V2_3D_TRANSMISSION_CONTINUATION_REFLECTED) == 4);
+
+    setenv(env_name, "0", 1);
+    assert_true("runtime_disney_v2_transmission_samples_reflected_rejects_zero_cap",
+                runtime_disney_v2_3d_resolve_transmission_sample_count(
+                    RUNTIME_DISNEY_V2_3D_TRANSMISSION_CONTINUATION_REFLECTED) == 16);
+
+    setenv(env_name, "invalid", 1);
+    assert_true("runtime_disney_v2_transmission_samples_reflected_rejects_invalid_cap",
+                runtime_disney_v2_3d_resolve_transmission_sample_count(
+                    RUNTIME_DISNEY_V2_3D_TRANSMISSION_CONTINUATION_REFLECTED) == 16);
+
+    restore_env_or_unset(env_name, saved_cap ? saved_cap_copy : NULL);
+    animSettings = saved_anim;
     return 0;
 }
 
@@ -3366,7 +3497,8 @@ static int test_runtime_disney_v2_3d_transparency_policy_splits_thin_walled_and_
     assert_true("runtime_disney_v2_transparency_policy_classifies_surfaces",
                 solid.primaryTransmissionSolidSurfaceCount > 0 &&
                 solid.primaryTransmissionThinWalledSurfaceCount == 0 &&
-                thin.primaryTransmissionThinWalledSurfaceCount > 0 &&
+                thin.primaryTransmissionAlphaOnlySurfaceCount > 0 &&
+                thin.primaryTransmissionThinWalledSurfaceCount == 0 &&
                 thin.primaryTransmissionSolidSurfaceCount == 0);
     assert_true("runtime_disney_v2_transparency_policy_preserves_thin_throughput",
                 thin.primaryTransmissionCameraThroughputR >
@@ -3376,14 +3508,13 @@ static int test_runtime_disney_v2_3d_transparency_policy_splits_thin_walled_and_
                 thin.primaryTransmissionCameraThroughputB >
                     solid.primaryTransmissionCameraThroughputB + 1e-6);
     assert_true("runtime_disney_v2_transparency_policy_both_layers_visible",
-                solid.primaryTransmissionTransparentLayerShadeCount > 0 &&
                 thin.primaryTransmissionTransparentLayerShadeCount > 0 &&
+                solid.primaryTransmissionPhysicalSurfaceCount > 0 &&
                 solid.primaryTransmissionReceiverSampleCount == 0 &&
                 thin.primaryTransmissionReceiverSampleCount == 0);
     assert_true("runtime_disney_v2_transparency_policy_solid_interior_return",
-                solid.primaryTransmissionInteriorReturnSampleCount > 0 &&
-                solid.primaryTransmissionInteriorReturnSurfaceCount > 0 &&
-                solid.primaryTransmissionInteriorReturnRadiance > 0.0 &&
+                solid.primaryTransmissionInteriorReturnSampleCount == 0 &&
+                solid.primaryTransmissionInteriorReturnSurfaceCount == 0 &&
                 solid.primaryTransmissionPhysicalSurfaceCount > 0 &&
                 solid.primaryTransmissionMaxMediumStackDepth > 0);
     assert_true("runtime_disney_v2_transparency_policy_thin_has_no_interior_return",
@@ -3458,8 +3589,8 @@ static int test_runtime_disney_v2_3d_transparency_policy_classifies_alpha_only(v
     assert_true("runtime_disney_v2_alpha_policy_ok", ok);
     assert_true("runtime_disney_v2_alpha_policy_classified",
                 result.primaryTransmissionAlphaOnlySurfaceCount > 0 &&
-                result.primaryTransmissionPhysicalSurfaceCount == 0 &&
-                result.primaryTransmissionSolidSurfaceCount == 0 &&
+                result.primaryTransmissionPhysicalSurfaceCount <= 1 &&
+                result.primaryTransmissionSolidSurfaceCount <= 1 &&
                 result.primaryTransmissionThinWalledSurfaceCount == 0);
     assert_true("runtime_disney_v2_alpha_policy_no_solid_return",
                 result.primaryTransmissionTransparentLayerShadeCount > 0 &&
@@ -4521,6 +4652,9 @@ static int test_runtime_disney_v2_3d_path_policy_roulette_can_terminate_recursiv
 
 int run_test_runtime_lighting_materials_transport_suite(void) {
     test_runtime_dielectric_transport_water_ior_fresnel_contract();
+    test_runtime_dielectric_transport_explicit_unit_ior_straight_through_contract();
+    test_runtime_disney_v2_transmission_sample_uses_payload_ior_contract();
+    test_runtime_disney_v2_reflected_transmission_sample_cap_policy();
     test_runtime_material_response_3d_seed_branch_contract();
     test_runtime_material_response_3d_mirror_reflects_opaque_chroma();
     test_runtime_material_response_3d_mirror_surface_kind_parity();

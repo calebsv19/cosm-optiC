@@ -7,7 +7,10 @@
 #include "app/animation.h"
 #include "app/data_paths.h"
 #include "config/config_manager.h"
+#include "editor/object_editor_motion.h"
 #include "editor/object_editor_panels_internal.h"
+#include "editor/scene_editor_digest_overlay.h"
+#include "motion/runtime_motion_track_3d.h"
 #include "render/ray_tracing_integrator_catalog.h"
 #include "render/render_helper.h"
 #include "test_support.h"
@@ -203,6 +206,143 @@ static int test_menu_scene_project_summary_detects_project_files(void) {
     snprintf(path, sizeof(path), "%s/scene_project.json", tmp_root);
     unlink(path);
     rmdir(tmp_root);
+    return 0;
+}
+
+static int test_object_editor_motion_panel_fits_material_space(void) {
+    SceneConfig saved_scene = sceneSettings;
+    bool saved_assets_collapsed = assetsCollapsed;
+    bool saved_materials_collapsed = materialsCollapsed;
+    SDL_Rect region = {12, 24, 190, 300};
+    SDL_Rect motion_section = {0};
+    SDL_Rect authored_button = {0};
+    int list_y = 0;
+    ObjectEditorPanelMotionAction action = OBJECT_EDITOR_PANEL_MOTION_ACTION_NONE;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    sceneSettings.objectCount = 1;
+    sceneSettings.sceneObjects[0].x = 32.0;
+    sceneSettings.sceneObjects[0].y = 48.0;
+    sceneSettings.sceneObjects[0].z = 2.0;
+    sceneSettings.sceneObjects[0].scale = 1.0;
+    sceneSettings.sceneObjects[0].material_id = 0;
+    assetsCollapsed = false;
+    materialsCollapsed = false;
+    ObjectEditorSetSelectedObjectIndex(0);
+
+    ObjectEditorPanels_UpdateLayoutForRegion(&region);
+    ObjectEditorPanels_ResolveMotionSectionMetrics(&motion_section,
+                                                   NULL,
+                                                   NULL,
+                                                   &authored_button,
+                                                   NULL,
+                                                   NULL,
+                                                   NULL);
+    ObjectEditorPanels_ResolveMaterialListMetrics(&list_y, NULL, NULL, NULL);
+
+    assert_true("object_motion_panel_visible_for_selected",
+                ObjectEditorPanels_MotionSectionHeight() > 0);
+    assert_true("object_motion_panel_inside_material_panel",
+                motion_section.x >= materialPanelRect.x &&
+                motion_section.y >= materialPanelRect.y &&
+                motion_section.x + motion_section.w <= materialPanelRect.x + materialPanelRect.w &&
+                motion_section.y + motion_section.h <= materialPanelRect.y + materialPanelRect.h);
+    assert_true("object_motion_panel_material_list_after_motion",
+                list_y >= motion_section.y + motion_section.h);
+    assert_true("object_motion_panel_authored_hit",
+                ObjectEditorPanels_MotionActionAtPoint(authored_button.x + authored_button.w / 2,
+                                                       authored_button.y + authored_button.h / 2,
+                                                       &action) &&
+                action == OBJECT_EDITOR_PANEL_MOTION_ACTION_AUTHORED);
+
+    ObjectEditorSetSelectedObjectIndex(-1);
+    ObjectEditorPanels_UpdateLayoutForRegion(&region);
+    assert_true("object_motion_panel_hidden_without_selection",
+                ObjectEditorPanels_MotionSectionHeight() == 0);
+
+    sceneSettings = saved_scene;
+    assetsCollapsed = saved_assets_collapsed;
+    materialsCollapsed = saved_materials_collapsed;
+    ObjectEditorSetSelectedObjectIndex(-1);
+    return 0;
+}
+
+static int test_object_editor_motion_overlay_reports_selected_path_readback(void) {
+    RuntimeMotionTrack3D path_track;
+    SceneEditorDigestOverlayProjector projector;
+    SceneEditorMotionOverlayMetrics metrics;
+    const RuntimeMotionTrack3D* default_track = NULL;
+
+    memset(&projector, 0, sizeof(projector));
+    projector.viewport = (SDL_Rect){0, 0, 240, 200};
+    projector.center_x = 0.0;
+    projector.center_y = 0.0;
+    projector.center_z = 0.0;
+    projector.scale = 22.0;
+    projector.distance = 10.0;
+    projector.span_max = 12.0;
+
+    ObjectEditorMotionReset();
+    assert_true("object_motion_overlay_seed_authored",
+                ObjectEditorMotionSetObjectAuthored("moving_plane", 1.0, 2.0, 0.5, 0.0));
+    default_track = ObjectEditorMotionFindTrack("moving_plane");
+    memset(&metrics, 0, sizeof(metrics));
+    assert_true("object_motion_overlay_default_visible",
+                SceneEditorDigestOverlayResolveMotionTrackMetrics(&projector,
+                                                                  default_track,
+                                                                  &metrics));
+    assert_true("object_motion_overlay_default_center_marker",
+                metrics.visible &&
+                metrics.control_point_count == 1 &&
+                metrics.projected_control_point_count == 1 &&
+                metrics.center_marker_bounds.w > 0 &&
+                metrics.center_marker_bounds.h > 0);
+    assert_true("object_motion_overlay_default_no_curve",
+                !metrics.has_path_curve && metrics.sampled_segment_count == 0);
+
+    memset(&path_track, 0, sizeof(path_track));
+    path_track.used = true;
+    path_track.enabled = true;
+    path_track.mode = RUNTIME_MOTION_TRACK_3D_MODE_AUTHORED_PATH;
+    path_track.supported_mode = true;
+    path_track.has_position_path = true;
+    path_track.position_path.mode = BEZIER_CUBIC;
+    RuntimeMotionTrack3DCopyString(path_track.object_id,
+                                   sizeof(path_track.object_id),
+                                   "two_point_path");
+    assert_true("object_motion_overlay_insert_path_a",
+                CameraPath3D_InsertPoint(&path_track.position_path_3d,
+                                         &path_track.position_path,
+                                         -2.0,
+                                         -1.0,
+                                         0.0,
+                                         0.0));
+    assert_true("object_motion_overlay_insert_path_b",
+                CameraPath3D_InsertPoint(&path_track.position_path_3d,
+                                         &path_track.position_path,
+                                         3.0,
+                                         2.0,
+                                         1.0,
+                                         0.0));
+    memset(&metrics, 0, sizeof(metrics));
+    assert_true("object_motion_overlay_path_visible",
+                SceneEditorDigestOverlayResolveMotionTrackMetrics(&projector,
+                                                                  &path_track,
+                                                                  &metrics));
+    assert_true("object_motion_overlay_path_readback",
+                metrics.has_path_curve &&
+                metrics.control_point_count == 2 &&
+                metrics.projected_control_point_count == 2 &&
+                metrics.sampled_segment_count > 0);
+
+    path_track.enabled = false;
+    memset(&metrics, 0, sizeof(metrics));
+    assert_true("object_motion_overlay_static_hidden",
+                !SceneEditorDigestOverlayResolveMotionTrackMetrics(&projector,
+                                                                   &path_track,
+                                                                   &metrics) &&
+                !metrics.visible);
+    ObjectEditorMotionReset();
     return 0;
 }
 
@@ -1443,6 +1583,8 @@ int run_test_ui_menu_contract_tests(void) {
     test_menu_batch_panel_click_starts_frame_dir_edit();
     test_menu_batch_panel_clear_button_updates_frame_count();
     test_menu_scene_project_summary_detects_project_files();
+    test_object_editor_motion_panel_fits_material_space();
+    test_object_editor_motion_overlay_reports_selected_path_readback();
     test_menu_scene_project_summary_keeps_loose_runtime_scene_separate();
     test_menu_layout_builds_non_overlapping_primary_zones();
     test_menu_layout_keeps_manifest_list_inside_left_panel();

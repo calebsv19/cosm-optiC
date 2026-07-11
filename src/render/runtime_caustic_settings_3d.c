@@ -9,6 +9,8 @@ void RuntimeCausticSettings3D_Default(RuntimeCausticSettings3D* settings) {
     settings->surfaceCacheEnabled = false;
     settings->sampleBudget = 0;
     settings->maxPathDepth = 0;
+    settings->transportEngine =
+        RUNTIME_CAUSTIC_TRANSPORT_ENGINE_EXPLORATORY_LENS_TRANSPORT;
     settings->emissionPolicy = RUNTIME_CAUSTIC_TRANSPORT_EMISSION_TRIANGLE_TARGETS;
     settings->surfaceRadianceScale = 1.0;
     settings->surfaceFootprintScale = 1.0;
@@ -174,13 +176,21 @@ RuntimeCausticReadback3D RuntimeCausticSettings3D_Phase0Readback(
     readback.surfaceCacheState = readback.surfaceCacheRequested
                                      ? RUNTIME_CAUSTIC_CACHE_STATE_REQUESTED_NOT_ALLOCATED
                                      : RUNTIME_CAUSTIC_CACHE_STATE_NONE;
+    readback.transportEngine = src->transportEngine;
     readback.emissionPolicy = src->emissionPolicy;
     readback.pathEmissionActive =
         src->mode == RUNTIME_CAUSTIC_MODE_TRANSPORT &&
+        src->transportEngine ==
+            RUNTIME_CAUSTIC_TRANSPORT_ENGINE_EXPLORATORY_LENS_TRANSPORT &&
         (src->volumeCacheEnabled || src->surfaceCacheEnabled);
     readback.transportReserved =
         src->mode == RUNTIME_CAUSTIC_MODE_TRANSPORT &&
         !src->volumeCacheEnabled &&
         !src->surfaceCacheEnabled;
+    readback.photonMapRequested =
+        src->mode == RUNTIME_CAUSTIC_MODE_TRANSPORT &&
+        src->transportEngine == RUNTIME_CAUSTIC_TRANSPORT_ENGINE_PHOTON_MAP &&
+        (src->volumeCacheEnabled || src->surfaceCacheEnabled);
+    readback.photonMapImplemented = false;
     return readback;
 }

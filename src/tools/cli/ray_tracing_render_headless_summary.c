@@ -223,6 +223,26 @@ void ray_tracing_render_headless_write_summary(
             request->has_caustic_mode_override ? "true" : "false");
     fprintf(file, "    \"caustic_mode\": \"%s\",\n",
             RuntimeDisneyV2_3D_CausticModeLabel(request->caustic_mode));
+    fprintf(file, "    \"has_caustic_product_mode_override\": %s,\n",
+            request->has_caustic_product_mode_override ? "true" : "false");
+    fprintf(file, "    \"caustic_product_mode\": \"%s\",\n",
+            RuntimeCausticProductMode3D_Label(
+                request->caustic_photon_integration_settings.productMode));
+    fprintf(file, "    \"caustic_render_contribution_enabled\": %s,\n",
+            request->caustic_photon_integration_settings.renderContributionEnabled
+                ? "true"
+                : "false");
+    fprintf(file, "    \"caustic_photon_render_prep_population_enabled\": %s,\n",
+            request->caustic_photon_render_prep_population_enabled ? "true"
+                                                                   : "false");
+    fprintf(file, "    \"caustic_photon_populated_callsite_readback_enabled\": %s,\n",
+            request->caustic_photon_populated_callsite_readback_enabled ? "true"
+                                                                        : "false");
+    fprintf(file,
+            "    \"caustic_photon_trace_populated_callsite_readback_enabled\": %s,\n",
+            request->caustic_photon_trace_populated_callsite_readback_enabled
+                ? "true"
+                : "false");
     ray_tracing_headless_write_caustic_state_summary(file, request, preflight);
     fprintf(file, "    \"has_caustic_sidecar_enabled_override\": %s,\n",
             request->has_caustic_sidecar_enabled_override ? "true" : "false");
@@ -337,6 +357,14 @@ void ray_tracing_render_headless_write_summary(
             preflight->registered_light_emissive_weight);
     fprintf(file, "    \"emissive_proxy_radius_max\": %.9f,\n",
             preflight->registered_light_emissive_proxy_radius_max);
+    fprintf(file, "    \"first_position\": [%.9f, %.9f, %.9f],\n",
+            preflight->registered_light_first_position_x,
+            preflight->registered_light_first_position_y,
+            preflight->registered_light_first_position_z);
+    fprintf(file, "    \"first_radius\": %.9f,\n",
+            preflight->registered_light_first_radius);
+    fprintf(file, "    \"first_intensity\": %.9f,\n",
+            preflight->registered_light_first_intensity);
     fprintf(file, "    \"first_color\": [%.9f, %.9f, %.9f]\n",
             preflight->registered_light_first_color_r,
             preflight->registered_light_first_color_g,
@@ -387,6 +415,45 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "    \"material_count\": %d,\n", preflight->scene_summary.material_count);
     fprintf(file, "    \"light_count\": %d,\n", preflight->scene_summary.light_count);
     fprintf(file, "    \"camera_count\": %d\n", preflight->scene_summary.camera_count);
+    fprintf(file, "  },\n");
+    fprintf(file, "  \"object_motion\": {\n");
+    fprintf(file, "    \"valid\": %s,\n",
+            preflight->object_motion_summary.valid ? "true" : "false");
+    fprintf(file, "    \"has_object_motion_tracks\": %s,\n",
+            preflight->object_motion_summary.has_object_motion_tracks ? "true" : "false");
+    fprintf(file, "    \"total_tracks\": %d,\n", preflight->object_motion_summary.total_tracks);
+    fprintf(file, "    \"stored_tracks\": %d,\n", preflight->object_motion_summary.stored_tracks);
+    fprintf(file, "    \"enabled_tracks\": %d,\n", preflight->object_motion_summary.enabled_tracks);
+    fprintf(file, "    \"disabled_tracks\": %d,\n", preflight->object_motion_summary.disabled_tracks);
+    fprintf(file, "    \"matched_tracks\": %d,\n", preflight->object_motion_summary.matched_tracks);
+    fprintf(file, "    \"unmatched_tracks\": %d,\n", preflight->object_motion_summary.unmatched_tracks);
+    fprintf(file, "    \"unsupported_tracks\": %d,\n",
+            preflight->object_motion_summary.unsupported_tracks);
+    fprintf(file, "    \"duplicate_tracks\": %d,\n",
+            preflight->object_motion_summary.duplicate_tracks);
+    fprintf(file, "    \"authored_path_tracks\": %d,\n",
+            preflight->object_motion_summary.authored_path_tracks);
+    fprintf(file, "    \"physics_tracks\": %d,\n", preflight->object_motion_summary.physics_tracks);
+    fprintf(file, "    \"position_path_tracks\": %d,\n",
+            preflight->object_motion_summary.position_path_tracks);
+    fprintf(file, "    \"rotation_keyframe_tracks\": %d,\n",
+            preflight->object_motion_summary.rotation_keyframe_tracks);
+    fprintf(file, "    \"sampled_tracks\": %d,\n",
+            preflight->object_motion_summary.sampled_tracks);
+    fprintf(file, "    \"has_executable_motion\": %s,\n",
+            preflight->object_motion_summary.has_executable_motion ? "true" : "false");
+    fprintf(file, "    \"first_object_id\": ");
+    RayTracingJsonWriteString(file, preflight->object_motion_summary.first_object_id);
+    fprintf(file, ",\n");
+    fprintf(file, "    \"first_unmatched_object_id\": ");
+    RayTracingJsonWriteString(file, preflight->object_motion_summary.first_unmatched_object_id);
+    fprintf(file, ",\n");
+    fprintf(file, "    \"first_unsupported_object_id\": ");
+    RayTracingJsonWriteString(file, preflight->object_motion_summary.first_unsupported_object_id);
+    fprintf(file, ",\n");
+    fprintf(file, "    \"diagnostics\": ");
+    RayTracingJsonWriteString(file, preflight->object_motion_summary.diagnostics);
+    fprintf(file, "\n");
     fprintf(file, "  },\n");
     fprintf(file, "  \"volume_summary\": {\n");
     fprintf(file, "    \"enabled\": %s,\n", preflight->volume_summary.enabled ? "true" : "false");
@@ -696,6 +763,10 @@ void ray_tracing_render_headless_write_summary(
         file,
         RuntimeRay3DTraceRouteLabel(preflight->ray_trace_route_stats.requestedRoute));
     fprintf(file, ",\n");
+    fprintf(file, "    \"trace_context_stats_owned\": %s,\n",
+            preflight->ray_trace_route_stats.traceContextStatsOwned ? "true" : "false");
+    fprintf(file, "    \"trace_context_callback_bound\": %s,\n",
+            preflight->ray_trace_route_stats.sceneAccelerationTraceCallbackBound ? "true" : "false");
     fprintf(file, "    \"route_trace_calls\": %llu,\n",
             (unsigned long long)preflight->ray_trace_route_stats.traceCalls);
     fprintf(file, "    \"route_flattened_trace_calls\": %llu,\n",
@@ -724,9 +795,11 @@ void ray_tracing_render_headless_write_summary(
         preflight->ray_trace_route_stats.lastParityMismatchReason);
     fprintf(file, "\n");
     fprintf(file, "  },\n");
+    ray_tracing_headless_write_object_motion_acceleration_summary(file, request, preflight);
     ray_tracing_headless_write_dynamic_geometry_acceleration_summary(file, preflight);
     ray_tracing_headless_write_dynamic_water_acceleration_cache_summary(file, preflight);
     ray_tracing_headless_write_render_trace_cost_ledger(file, preflight);
+    ray_tracing_headless_write_frame_dataflow_state_ledger(file, request, preflight);
     fprintf(file, "  \"bvh_summary\": {\n");
     fprintf(file, "    \"ready\": %s,\n",
             preflight->bvh_build_stats.ready ? "true" : "false");

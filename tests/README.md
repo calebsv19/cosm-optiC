@@ -73,6 +73,7 @@ make -C ray_tracing test-ray-tracing-spatial-caustic-phase8-receiver-policy-matr
 make -C ray_tracing test-ray-tracing-spatial-caustic-phase9-transmitted-receiver-matrix
 make -C ray_tracing test-ray-tracing-spatial-caustic-phase10-tangent-receiver-matrix
 make -C ray_tracing test-ray-tracing-spatial-caustic-visual-sphere-mist-matrix
+make -C ray_tracing test-ray-tracing-ppm10-product-ab-fixture
 make -C ray_tracing test-ray-tracing-emissive-light-preview-matrix
 ```
 
@@ -96,6 +97,75 @@ proves receiver-cache lifecycle/deposit/sample behavior, and
 `TEST_RUNNER_GROUP=runtime_caustic_transport_3d make -C ray_tracing test` proves
 transport can populate a surface cache and Disney v2 can sample it with the
 analytic caustic sidecar disabled.
+
+`TEST_RUNNER_GROUP=runtime_caustic_photon_trace_3d make -C ray_tracing test`
+is the focused PPM-1/PPM-8 photon-mapper trace proof. It covers isolated photon
+path state, closed sphere/ball-lens emission plus entry/exit dielectric events,
+refracted branch/PDF readback, post-exit parity with the existing sphere optics
+helper, emitted/final/rejected flux reconciliation, max-depth rejection, and
+the PPM-8 mesh-dielectric path entrypoint fed by PPM-7 emitted photon samples.
+The PPM-8 coverage stores traced mesh-dielectric output into the existing
+surface photon map and volume beam map helpers while keeping render contribution
+outside this module.
+
+`TEST_RUNNER_GROUP=runtime_caustic_photon_map_3d make -C ray_tracing test`
+is the focused PPM-2 surface photon-map proof. It covers map allocation,
+explicit surface-hit storage/query, PDF-normalized query flux, diagnostics,
+storing a closed sphere/ball-lens PPM-1 trace receiver, receiver-identity
+filtering, and capacity rejection before any render-path contribution.
+
+`TEST_RUNNER_GROUP=runtime_caustic_beam_map_3d make -C ray_tracing test`
+is the focused PPM-3 volume beam-map proof. It covers map allocation, explicit
+beam-segment storage/query, diagnostics, storing a closed sphere/ball-lens
+PPM-1 trace segment, medium filtering, capacity rejection, and the
+no-render-contribution guard before any volume-cache deposit or render-path
+contribution.
+
+`TEST_RUNNER_GROUP=runtime_caustic_photon_emit_3d make -C ray_tracing test`
+is the focused PPM-7 photon-emission distribution proof. It covers
+deterministic emission from finite/emissive light-set entries, stable photon
+ids, seeds, source PDFs, wavelength buckets, flux diagnostics, fixture-safe
+surface photon-map proxy population, map-capacity reject accounting, and the
+guard that render contribution remains gated outside this module.
+
+`TEST_RUNNER_GROUP=runtime_caustic_photon_integration_3d make -C ray_tracing test`
+is the focused PPM-4/PPM-6/PPM-11/PPM-12A/PPM-12C/PPM-13 product integration proof. It covers
+off/reference/production product labels, product-mode-to-caustic-settings
+application, bounded sample/depth defaults, combined surface photon-map plus
+volume beam-map query readback, default render-contribution suppression, and
+explicit opt-in contribution/cache conversion into surface and volume caustic
+caches plus renderer/headless callsite route and numeric readback. It also
+proves the populated-callsite surface-map allocation, deterministic emission,
+surface store, grid insertion, query, contribution, and cache-deposit counts,
+and proves that existing `RuntimeCausticPhotonTrace3D` records can populate
+both the surface photon map and volume beam map with
+`population_source=trace_records`. It also proves the deterministic
+mesh-dielectric trace-harvest helper used by the PPM-12C prepared-scene
+headless probe: emitted photons are converted into solved lens paths, traced
+into photon records, stored into both production maps, and queried for surface
+plus volume contribution. It also proves the PPM-13 reusable
+`RuntimeScene3D` mesh-dielectric descriptor batch used by the headless trace
+cell.
+
+`test-ray-tracing-ppm10-product-ab-fixture` is the compact PPM-10/PPM-11A/PPM-12C/PPM-13/PPM-14/PPM-15
+product A/B fixture. It renders generated `off`, `reference`, explicit opt-in
+`production`, explicit `production_populated`, and explicit
+`production_trace_populated` cells from the same transparent mesh scene plus a
+guarded Disney v2 `production_render_prep_populated` floor visual cell and a
+generated `production_render_prep_wall_populated` vertical-receiver visual
+cell, writes per-cell request JSON, summaries, PNG frames, a contact sheet, and
+`ppm10_product_ab_report.json`, and validates source-specific counts. The
+proxy-populated cell must report `population_source=surface_proxy`; the
+trace-populated cell must report `population_source=trace_records` plus nonzero
+trace-path, trace-record, beam-segment, surface-contributor, and
+volume-contributor counts, one prepared-scene mesh-dielectric candidate, and no
+fixture fallback. The render-prep cells must report trace-record population,
+receiver lookup/acceptance counters, distribution-derived receiver footprint
+radius, surface-map contribution, a successful prepared-cache deposit,
+generated visual output, and positive surface-cache sampling contribution. The
+render-prep path no longer writes a synthetic dielectric-centroid cache
+footprint; it stores traced prepared-scene receiver hits through the production
+integration receiver-policy adapter before cache conversion.
 
 `test-ray-tracing-spatial-caustic-phase6-surface-matrix` is the local Phase 6
 surface-calibration proof target. It renders off, analytic-only,
@@ -157,15 +227,88 @@ inside-distance/entry-cosine/exit-cosine ranges, deposit into the volume cache,
 and brighten the mist versus the no-caustic baseline.
 
 `test-ray-tracing-spatial-caustic-imported-lens-wall-preview` is the local S4V
-imported closed-lens wall-composition preview target. It generates a
-high-segment closed runtime mesh sidecar, audits that sidecar for closed
-manifold topology, renders no-caustic and `mesh_dielectric_lens` surface-cache
-cells with a vivid blue receiver wall, and writes the contact sheet, diff, and
-report under `_private_workspace_artifacts/agent_runs/ray_tracing/`. The
-preview gate currently proves scene composition, mesh import/topology, and
-debug readback only; emitted mesh paths, surface-cache deposits, and visible
-wall whitening are reported as explicit preview warnings until the next
-optical-placement/deposition slice turns this into a true wall-caustic proof.
+imported closed-lens wall-caustic proof target. It generates a high-resolution
+closed biconvex runtime mesh sidecar, audits that sidecar for closed manifold
+topology, renders no-lens, lens/no-caustic, and fixed-scale lens/caustic cells
+with a vivid blue receiver wall, and writes the diagnostic sheet, signed
+caustic heatmap, diffs, and report under
+`_private_workspace_artifacts/agent_runs/ray_tracing/`. The fixture keeps the
+real light on the optical axis, omits scene-geometry light markers that could
+intercept transport rays, pins the preview route to `flattened_bvh`, and
+requires mesh-dielectric path emission, surface-cache deposits, and visible wall
+whitening versus the lens/no-caustic baseline. The fixed reference caustic scale
+is `0.0025`; broader gain brackets belong in separate calibration fixtures so
+this target remains a causality diagnostic.
+
+`test-ray-tracing-spatial-caustic-imported-lens-distance-matrix` is the local
+S4V lens-distance comparison target. It keeps the light and wall fixed, moves
+the imported biconvex lens through six optical-axis `y` positions, and renders
+three calibrated surface-caustic scales per position: `0.001`, `0.0025`, and
+`0.005`. The output matrix is ordered by lens distance in rows and energy scale
+in columns, and the report records emitted paths, deposits, wall positive and
+saturated pixels, percentile/max luma delta, centroid, and approximate
+footprint radius.
+
+`test-ray-tracing-spatial-caustic-plano-convex-lens-distance-matrix` is the
+stronger closed-lens visual proof for S4V. It generates a high-resolution
+closed plano-convex spherical-cap mesh with the curved face toward the light
+and a flat exit face toward the wall, fixes the surface-caustic energy scale at
+`0.0025`, and renders ten optical-axis lens-distance positions. The fixture is
+intended to separate "closed mesh traversal works" from "the lens prescription
+is visually useful" by using a center-thick lens that should show clearer
+distance-dependent wall deposition than the shallow biconvex control.
+
+`test-ray-tracing-spatial-caustic-plano-convex-heatmap-diagnostic` is the
+caustic-only diagnostic for the same plano-convex proof. It renders no-caustic
+baselines, subtracts them from fixed-energy caustic renders, and writes a
+heatmap sheet with rendered preview, `caustic_on - caustic_off` heatmaps at
+surface footprint scales `1.0`, `2.0`, and `5.0`, plus a debug post-exit
+receiver-crossing hit map from `caustic_transport_debug_paths.jsonl`. This is
+the preferred fixture for diagnosing whether a visual wall blob is caused by
+post-exit ray distribution or by broad surface-cache splat/composite behavior.
+The report also emits aperture-sample and receiver-hit symmetry errors so
+accepted path bias is visible before further lens-geometry tuning.
+
+`test-ray-tracing-spatial-caustic-lens-shape-comparison` is the fixed-distance
+S4V shape-comparison diagnostic. It keeps the light, wall, lens center, material
+override, caustic scale (`0.0025`), and surface footprint policy fixed while
+rendering flat slab, biconvex, plano-convex, and biconcave closed meshes. Each
+shape renders a paired lens/no-caustic baseline plus a lens/caustic frame; the
+output sheet orders rendered caustic frames on the first row and signed
+caustic-only heatmaps on the second row. The report requires closed topology,
+mesh-dielectric path emission, surface-cache deposits, visible positive
+receiver deltas, and nonzero distribution spread across lens shapes.
+
+`test-ray-tracing-spatial-caustic-lens-focal-sweep-diagnostic` is the
+receiver-distance optical bench diagnostic. It keeps the light, lens center,
+glass override, caustic scale (`0.0025`), and footprint policy fixed, then
+sweeps the vivid receiver wall along the optical axis for plano-convex and
+biconcave closed lenses. Each receiver distance renders paired lens/no-caustic
+and lens/caustic cells; the output sheet contains render rows, signed
+caustic-only heatmap rows, and nominal debug-hit rows. The fixture intentionally
+sets the plane transform position, not only the primitive frame origin, because
+the runtime scene bridge treats transform position as the effective plane
+origin. The render/heatmap curves validate receiver-distance response, while
+the debug-hit rows are currently marked as nominal-provider diagnostics because
+`lens_receiver_crossing` still uses the mesh provider's internal receiver
+distance rather than the actual surface receiver hit.
+
+`test-ray-tracing-spatial-caustic-ball-lens-focal-crossing` is the stronger
+focus-crossing diagnostic for a generated closed ball lens. It uses a darker
+blue receiver wall, a small distant on-axis sphere light, an explicit
+low-contrast ball-lens traversal profile (`material_ior=1.20`), caustic scale
+`0.0025`, and a narrower surface footprint scale (`1.5`) while sweeping the
+receiver wall through the expected focus region. The caustic debug JSONL now
+exports actual `surface_receiver_*` fields from the surface-cache deposit path,
+so the output sheet leads with receiver-space caustic distribution maps instead
+of full-scene camera renders. The second row shows an analytic Snell sphere
+reference bundle for the same light, lens IOR, lens radius, and receiver planes;
+the third row keeps camera-space signed heatmaps for comparison. The report
+records actual surface-hit radius, reference radius, focus-distance error,
+positive-delta p95, centroid, emitted/deposited path counts, and U-shape scores;
+missing path transport or measured/reference focus disagreement is a hard
+failure, while weak focus-crossing evidence is reported as a warning so the PNG
+remains available for diagnosis.
 
 `test-ray-tracing-emissive-light-preview-matrix` is the local emitter-light
 preview proof target. It renders flat wall-panel, complex emissive prism, and

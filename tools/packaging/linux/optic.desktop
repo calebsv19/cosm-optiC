@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=optiC
+Comment=RayTracing desktop renderer
+Exec=raytracing-launcher
+Icon=optic
+Terminal=false
+Categories=Graphics;Science;Development;
+StartupNotify=true

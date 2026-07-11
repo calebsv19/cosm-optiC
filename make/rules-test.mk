@@ -138,10 +138,17 @@ RUNTIME_MESH_ASSET_BUILDER_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_dynamic_geometry_accel_3d.c \
 	$(SRC_DIR)/render/runtime_mesh_accel_pack_3d.c \
 	$(SRC_DIR)/render/runtime_mesh_blas_cache_3d.c \
+	$(SRC_DIR)/render/runtime_scene_accel_3d_instances.c \
 	$(SRC_DIR)/render/runtime_scene_accel_3d.c \
 	$(SRC_DIR)/render/runtime_scene_3d_builder.c \
+	$(SRC_DIR)/render/runtime_scene_3d_builder_geometry.c \
+	$(SRC_DIR)/render/runtime_scene_3d_builder_mesh.c \
+	$(SRC_DIR)/render/runtime_scene_3d_builder_shared.c \
 	$(SRC_DIR)/render/runtime_triangle_bvh_3d.c \
+	$(SRC_DIR)/render/runtime_triangle_bvh_cache_3d.c \
+	$(SRC_DIR)/render/runtime_triangle_bvh_trace_3d.c \
 	$(SRC_DIR)/render/runtime_volume_3d.c \
+	$(TEST_DIR)/test_runtime_scene_motion_bridge_noop_stub.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
 	$(CORE_IO_DIR)/src/core_io.c \
@@ -182,10 +189,17 @@ RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_dynamic_geometry_accel_3d.c \
 	$(SRC_DIR)/render/runtime_mesh_accel_pack_3d.c \
 	$(SRC_DIR)/render/runtime_mesh_blas_cache_3d.c \
+	$(SRC_DIR)/render/runtime_scene_accel_3d_instances.c \
 	$(SRC_DIR)/render/runtime_scene_accel_3d.c \
 	$(SRC_DIR)/render/runtime_scene_3d_builder.c \
+	$(SRC_DIR)/render/runtime_scene_3d_builder_geometry.c \
+	$(SRC_DIR)/render/runtime_scene_3d_builder_mesh.c \
+	$(SRC_DIR)/render/runtime_scene_3d_builder_shared.c \
 	$(SRC_DIR)/render/runtime_triangle_bvh_3d.c \
+	$(SRC_DIR)/render/runtime_triangle_bvh_cache_3d.c \
+	$(SRC_DIR)/render/runtime_triangle_bvh_trace_3d.c \
 	$(SRC_DIR)/render/runtime_volume_3d.c \
+	$(TEST_DIR)/test_runtime_scene_motion_bridge_noop_stub.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
 	$(CORE_IO_DIR)/src/core_io.c \
@@ -273,6 +287,27 @@ test-ray-tracing-spatial-caustic-mesh-dielectric-lens-fixture: $(RAY_TRACING_REN
 test-ray-tracing-spatial-caustic-imported-lens-wall-preview: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/run_ray_tracing_spatial_caustic_imported_lens_wall_preview.py --debug-export
 
+test-ray-tracing-spatial-caustic-imported-lens-distance-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_imported_lens_distance_matrix.py --debug-export
+
+test-ray-tracing-spatial-caustic-plano-convex-lens-distance-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_plano_convex_lens_distance_matrix.py --debug-export
+
+test-ray-tracing-spatial-caustic-plano-convex-heatmap-diagnostic: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_plano_convex_heatmap_diagnostic.py --debug-export
+
+test-ray-tracing-spatial-caustic-lens-shape-comparison: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_lens_shape_comparison.py --debug-export
+
+test-ray-tracing-spatial-caustic-lens-focal-sweep-diagnostic: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_lens_focal_sweep_diagnostic.py --debug-export
+
+test-ray-tracing-spatial-caustic-ball-lens-focal-crossing: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_spatial_caustic_ball_lens_focal_crossing.py --debug-export
+
+test-ray-tracing-ppm10-product-ab-fixture: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_ppm10_product_ab_fixture.py
+
 test-ray-tracing-spatial-caustic-authored-validation-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/run_ray_tracing_spatial_caustic_authored_validation_matrix.py
 
@@ -292,6 +327,7 @@ RUNTIME_TRIANGLE_BVH_3D_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_light_set_3d.c \
 	$(SRC_DIR)/render/runtime_environment_3d.c \
 	$(SRC_DIR)/render/runtime_triangle_bvh_3d.c \
+	$(SRC_DIR)/render/runtime_triangle_bvh_trace_3d.c \
 	$(SRC_DIR)/render/runtime_volume_3d.c
 
 $(RUNTIME_TRIANGLE_BVH_3D_TEST_BIN): $(RUNTIME_TRIANGLE_BVH_3D_TEST_SRCS)

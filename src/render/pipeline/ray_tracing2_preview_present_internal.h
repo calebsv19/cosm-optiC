@@ -23,5 +23,18 @@ void RecordNative3DPresentationEvent(
     const SDL_Rect* rect,
     bool reset_dirty_preview,
     bool success);
+uint64_t Native3DHostMovementBytes(int width, int height);
+void SeedNative3DPreviewHistoryUnderlay(Uint8* host_buffer,
+                                        size_t host_pixel_count,
+                                        int host_width,
+                                        int host_height,
+                                        const RuntimeScene3D* scene,
+                                        const RuntimeCameraProjector3D* projector,
+                                        RuntimeNative3DRenderStats* stats);
+bool PromoteNative3DPreviewHistory(const Uint8* host_buffer,
+                                   size_t host_pixel_count,
+                                   int host_width,
+                                   int host_height,
+                                   RuntimeNative3DRenderStats* stats);
 
 #endif

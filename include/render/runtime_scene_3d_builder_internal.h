@@ -64,6 +64,11 @@ bool runtime_scene_3d_builder_append_mesh_asset_set(
     RuntimeScene3D* scene,
     const RayTracingRuntimeMeshAssetSet* mesh_assets,
     bool require_ready_bvh);
+bool runtime_scene_3d_builder_append_mesh_asset_set_at_t(
+    RuntimeScene3D* scene,
+    const RayTracingRuntimeMeshAssetSet* mesh_assets,
+    bool require_ready_bvh,
+    double normalized_t);
 void runtime_scene_3d_builder_fill_primitive(RuntimePrimitive3D* primitive,
                                              const RuntimeSceneBridgePrimitiveSeed* seed);
 

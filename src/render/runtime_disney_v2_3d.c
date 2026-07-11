@@ -150,6 +150,10 @@ static bool runtime_disney_v2_3d_shade_hit_with_payload(
     const RuntimeMaterialPayload3D* payload,
     const RuntimeNative3DSamplingContext* sampling,
     Vec3 view_dir,
+    int trace_pixel_x,
+    int trace_pixel_y,
+    int trace_pixel_width,
+    int trace_pixel_height,
     RuntimeDisneyV2_3DResult* out_result) {
     RuntimeDisneyV2_3DResult result = {0};
     RuntimeDirectLight3DResult direct = {0};
@@ -166,6 +170,14 @@ static bool runtime_disney_v2_3d_shade_hit_with_payload(
     result.hit = true;
     result.hitInfo = *hit;
     result.primaryRay.direction = vec3_scale(view_dir, -1.0);
+    if (trace_pixel_x >= 0 && trace_pixel_y >= 0 &&
+        trace_pixel_width > 0 && trace_pixel_height > 0) {
+        result.tracePixelContextResolved = true;
+        result.tracePixelX = trace_pixel_x;
+        result.tracePixelY = trace_pixel_y;
+        result.tracePixelWidth = trace_pixel_width;
+        result.tracePixelHeight = trace_pixel_height;
+    }
     result.payloadResolved = runtime_disney_v2_3d_resolve_payload(hit, payload, &result.payload);
     if (!result.payloadResolved) {
         *out_result = result;
@@ -264,11 +276,33 @@ bool RuntimeDisneyV2_3D_ShadeHit(const RuntimeScene3D* scene,
                                  const HitInfo3D* hit,
                                  const RuntimeNative3DSamplingContext* sampling,
                                  RuntimeDisneyV2_3DResult* out_result) {
+    return RuntimeDisneyV2_3D_ShadeHitWithTraceContext(scene,
+                                                       hit,
+                                                       sampling,
+                                                       -1,
+                                                       -1,
+                                                       0,
+                                                       0,
+                                                       out_result);
+}
+
+bool RuntimeDisneyV2_3D_ShadeHitWithTraceContext(const RuntimeScene3D* scene,
+                                                 const HitInfo3D* hit,
+                                                 const RuntimeNative3DSamplingContext* sampling,
+                                                 int pixel_x,
+                                                 int pixel_y,
+                                                 int width,
+                                                 int height,
+                                                 RuntimeDisneyV2_3DResult* out_result) {
     return runtime_disney_v2_3d_shade_hit_with_payload(scene,
                                                        hit,
                                                        NULL,
                                                        sampling,
                                                        runtime_disney_v2_3d_default_view_dir(hit),
+                                                       pixel_x,
+                                                       pixel_y,
+                                                       width,
+                                                       height,
                                                        out_result);
 }
 
@@ -289,6 +323,27 @@ bool RuntimeDisneyV2_3D_ShadePrimaryHitWithPayload(
     const RuntimeMaterialPayload3D* payload,
     const RuntimeNative3DSamplingContext* sampling,
     RuntimeDisneyV2_3DResult* out_result) {
+    return RuntimeDisneyV2_3D_ShadePrimaryHitWithPayloadAndTraceContext(scene,
+                                                                        primary_hit,
+                                                                        payload,
+                                                                        sampling,
+                                                                        -1,
+                                                                        -1,
+                                                                        0,
+                                                                        0,
+                                                                        out_result);
+}
+
+bool RuntimeDisneyV2_3D_ShadePrimaryHitWithPayloadAndTraceContext(
+    const RuntimeScene3D* scene,
+    const RuntimePrimaryHit3DResult* primary_hit,
+    const RuntimeMaterialPayload3D* payload,
+    const RuntimeNative3DSamplingContext* sampling,
+    int pixel_x,
+    int pixel_y,
+    int width,
+    int height,
+    RuntimeDisneyV2_3DResult* out_result) {
     RuntimeDisneyV2_3DResult result = {0};
     Vec3 view_dir = vec3(0.0, 0.0, 1.0);
 
@@ -305,12 +360,23 @@ bool RuntimeDisneyV2_3D_ShadePrimaryHitWithPayload(
                                                      payload,
                                                      sampling,
                                                      view_dir,
+                                                     pixel_x,
+                                                     pixel_y,
+                                                     width,
+                                                     height,
                                                      &result)) {
         result.primaryRay = primary_hit->primaryRay;
         *out_result = result;
         return false;
     }
     result.primaryRay = primary_hit->primaryRay;
+    if (pixel_x >= 0 && pixel_y >= 0 && width > 0 && height > 0) {
+        result.tracePixelContextResolved = true;
+        result.tracePixelX = pixel_x;
+        result.tracePixelY = pixel_y;
+        result.tracePixelWidth = width;
+        result.tracePixelHeight = height;
+    }
     runtime_disney_v2_3d_apply_transmittance(&primary_hit->primaryTransmittance, &result);
     (void)RuntimeDisneyV2_3D_ApplyPrimaryTransmissionContinuation(scene,
                                                                   primary_hit,

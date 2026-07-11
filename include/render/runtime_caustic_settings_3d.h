@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #include "render/runtime_caustic_lens_transport_3d.h"
+#include "render/runtime_caustic_photon_settings_3d.h"
 
 typedef enum {
     RUNTIME_CAUSTIC_MODE_OFF = 0,
@@ -41,6 +42,7 @@ typedef struct {
     bool surfaceCacheEnabled;
     int sampleBudget;
     int maxPathDepth;
+    RuntimeCausticTransportEngine3D transportEngine;
     RuntimeCausticTransportEmissionPolicy3D emissionPolicy;
     double surfaceRadianceScale;
     double surfaceFootprintScale;
@@ -59,9 +61,12 @@ typedef struct {
     bool surfaceCacheRequested;
     RuntimeCausticCacheState3D volumeCacheState;
     RuntimeCausticCacheState3D surfaceCacheState;
+    RuntimeCausticTransportEngine3D transportEngine;
     RuntimeCausticTransportEmissionPolicy3D emissionPolicy;
     bool pathEmissionActive;
     bool transportReserved;
+    bool photonMapRequested;
+    bool photonMapImplemented;
 } RuntimeCausticReadback3D;
 
 void RuntimeCausticSettings3D_Default(RuntimeCausticSettings3D* settings);

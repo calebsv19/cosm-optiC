@@ -62,10 +62,234 @@ void ray_tracing_headless_write_caustic_state_summary(
                 RuntimeCausticCacheState3D_Label(caustic_readback.volumeCacheState));
         fprintf(file, "      \"surface_cache_state\": \"%s\",\n",
                 RuntimeCausticCacheState3D_Label(caustic_readback.surfaceCacheState));
+        fprintf(file, "      \"transport_engine\": \"%s\",\n",
+                RuntimeCausticTransportEngine3D_Label(caustic_readback.transportEngine));
         fprintf(file, "      \"path_emission_active\": %s,\n",
                 caustic_readback.pathEmissionActive ? "true" : "false");
         fprintf(file, "      \"transport_reserved\": %s,\n",
                 caustic_readback.transportReserved ? "true" : "false");
+        fprintf(file, "      \"photon_map_requested\": %s,\n",
+                caustic_readback.photonMapRequested ? "true" : "false");
+        fprintf(file, "      \"photon_map_implemented\": %s,\n",
+                caustic_readback.photonMapImplemented ? "true" : "false");
+        {
+            const RuntimeCausticPhotonRenderCallsiteReadback3D* callsite =
+                &preflight->causticPhotonCallsiteReadback;
+            const RuntimeCausticPhotonMapPopulationReadback3D* population =
+                &callsite->mapPopulation;
+            fprintf(file, "      \"photon_callsite_readback_built\": %s,\n",
+                    preflight->causticPhotonCallsiteReadbackBuilt ? "true" : "false");
+            fprintf(file, "      \"photon_callsite\": {\n");
+            fprintf(file, "        \"product_mode\": \"%s\",\n",
+                    RuntimeCausticProductMode3D_Label(callsite->productMode));
+            fprintf(file, "        \"route\": \"%s\",\n",
+                    RuntimeCausticPhotonIntegrationRoute3D_Label(callsite->route));
+            fprintf(file, "        \"query_attempted\": %s,\n",
+                    callsite->queryAttempted ? "true" : "false");
+            fprintf(file, "        \"query_hit\": %s,\n",
+                    callsite->queryHit ? "true" : "false");
+            fprintf(file, "        \"contribution_attempted\": %s,\n",
+                    callsite->contributionAttempted ? "true" : "false");
+            fprintf(file, "        \"contribution_eligible\": %s,\n",
+                    callsite->contributionEligible ? "true" : "false");
+            fprintf(file, "        \"render_contribution_suppressed\": %s,\n",
+                    callsite->renderContributionSuppressed ? "true" : "false");
+            fprintf(file, "        \"cache_deposit_attempted\": %s,\n",
+                    callsite->cacheDepositAttempted ? "true" : "false");
+            fprintf(file, "        \"surface_deposited\": %s,\n",
+                    callsite->surfaceDeposited ? "true" : "false");
+            fprintf(file, "        \"volume_deposited\": %s,\n",
+                    callsite->volumeDeposited ? "true" : "false");
+            fprintf(file, "        \"surface_candidate_count\": %llu,\n",
+                    (unsigned long long)callsite->surfaceCandidateCount);
+            fprintf(file, "        \"surface_contributing_count\": %llu,\n",
+                    (unsigned long long)callsite->surfaceContributingCount);
+            fprintf(file, "        \"volume_candidate_count\": %llu,\n",
+                    (unsigned long long)callsite->volumeCandidateCount);
+            fprintf(file, "        \"volume_contributing_count\": %llu,\n",
+                    (unsigned long long)callsite->volumeContributingCount);
+            fprintf(file, "        \"receiver_contribution_attempted\": %s,\n",
+                    callsite->receiverContribution.attempted ? "true" : "false");
+            fprintf(file, "        \"receiver_contribution_eligible\": %s,\n",
+                    callsite->receiverContribution.eligible ? "true" : "false");
+            fprintf(file, "        \"receiver_contribution_bucket_count\": %llu,\n",
+                    (unsigned long long)callsite->receiverContribution
+                        .receiverBucketCount);
+            fprintf(file, "        \"receiver_contribution_query_attempt_count\": %llu,\n",
+                    (unsigned long long)callsite->receiverContribution
+                        .receiverQueryAttemptCount);
+            fprintf(file, "        \"receiver_contribution_query_hit_count\": %llu,\n",
+                    (unsigned long long)callsite->receiverContribution
+                        .receiverQueryHitCount);
+            fprintf(file, "        \"receiver_contribution_eligible_count\": %llu,\n",
+                    (unsigned long long)callsite->receiverContribution
+                        .receiverContributionEligibleCount);
+            fprintf(file,
+                    "        \"receiver_contribution_surface_deposit_attempt_count\": %llu,\n",
+                    (unsigned long long)callsite->receiverContribution
+                        .receiverSurfaceDepositAttemptCount);
+            fprintf(file,
+                    "        \"receiver_contribution_surface_deposit_accepted_count\": %llu,\n",
+                    (unsigned long long)callsite->receiverContribution
+                        .receiverSurfaceDepositAcceptedCount);
+            fprintf(file,
+                    "        \"receiver_contribution_surface_candidate_count\": %llu,\n",
+                    (unsigned long long)callsite->receiverContribution
+                        .receiverSurfaceCandidateCount);
+            fprintf(file,
+                    "        \"receiver_contribution_surface_contributing_count\": %llu,\n",
+                    (unsigned long long)callsite->receiverContribution
+                        .receiverSurfaceContributingCount);
+            fprintf(file,
+                    "        \"receiver_contribution_surface_radiance\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
+                    callsite->receiverContribution.receiverSurfaceRadiance.x,
+                    callsite->receiverContribution.receiverSurfaceRadiance.y,
+                    callsite->receiverContribution.receiverSurfaceRadiance.z);
+            fprintf(file, "        \"estimated_cost\": %llu,\n",
+                    (unsigned long long)callsite->estimatedCost);
+            fprintf(file,
+                    "        \"radiance\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
+                    callsite->radiance.x,
+                    callsite->radiance.y,
+                    callsite->radiance.z);
+            fprintf(file, "        \"map_population\": {\n");
+            fprintf(file, "          \"attempted\": %s,\n",
+                    population->attempted ? "true" : "false");
+            fprintf(file, "          \"population_source\": \"%s\",\n",
+                    RuntimeCausticPhotonPopulationSource3D_Label(
+                        population->populationSource));
+            fprintf(file, "          \"surface_map_allocated\": %s,\n",
+                    population->surfaceMapAllocated ? "true" : "false");
+            fprintf(file, "          \"emission_attempted\": %s,\n",
+                    population->emissionAttempted ? "true" : "false");
+            fprintf(file, "          \"emission_succeeded\": %s,\n",
+                    population->emissionSucceeded ? "true" : "false");
+            fprintf(file, "          \"surface_map_population_attempted\": %s,\n",
+                    population->surfaceMapPopulationAttempted ? "true" : "false");
+            fprintf(file, "          \"surface_map_populated\": %s,\n",
+                    population->surfaceMapPopulated ? "true" : "false");
+            fprintf(file, "          \"trace_population_attempted\": %s,\n",
+                    population->tracePopulationAttempted ? "true" : "false");
+            fprintf(file, "          \"trace_population_succeeded\": %s,\n",
+                    population->tracePopulationSucceeded ? "true" : "false");
+            fprintf(file, "          \"prepared_scene_mesh_dielectric_attempted\": %s,\n",
+                    population->preparedSceneMeshDielectricAttempted ? "true"
+                                                                     : "false");
+            fprintf(file, "          \"prepared_scene_mesh_dielectric_succeeded\": %s,\n",
+                    population->preparedSceneMeshDielectricSucceeded ? "true"
+                                                                     : "false");
+            fprintf(file, "          \"fixture_mesh_dielectric_fallback_used\": %s,\n",
+                    population->fixtureMeshDielectricFallbackUsed ? "true"
+                                                                  : "false");
+            fprintf(file, "          \"volume_beam_map_allocated\": %s,\n",
+                    population->volumeBeamMapAllocated ? "true" : "false");
+            fprintf(file, "          \"volume_beam_population_attempted\": %s,\n",
+                    population->volumeBeamPopulationAttempted ? "true" : "false");
+            fprintf(file, "          \"volume_beam_populated\": %s,\n",
+                    population->volumeBeamPopulated ? "true" : "false");
+            fprintf(file, "          \"requested_sample_budget\": %llu,\n",
+                    (unsigned long long)population->requestedSampleBudget);
+            fprintf(file, "          \"emitted_photon_count\": %llu,\n",
+                    (unsigned long long)population->emittedPhotonCount);
+            fprintf(file, "          \"rejected_photon_count\": %llu,\n",
+                    (unsigned long long)population->rejectedPhotonCount);
+            fprintf(file, "          \"trace_input_count\": %llu,\n",
+                    (unsigned long long)population->traceInputCount);
+            fprintf(file, "          \"trace_solved_path_count\": %llu,\n",
+                    (unsigned long long)population->traceSolvedPathCount);
+            fprintf(file, "          \"trace_record_count\": %llu,\n",
+                    (unsigned long long)population->traceRecordCount);
+            fprintf(file, "          \"receiver_lookup_attempt_count\": %llu,\n",
+                    (unsigned long long)population->receiverLookupAttemptCount);
+            fprintf(file, "          \"receiver_direct_hit_count\": %llu,\n",
+                    (unsigned long long)population->receiverDirectHitCount);
+            fprintf(file, "          \"receiver_crossing_probe_attempt_count\": %llu,\n",
+                    (unsigned long long)population
+                        ->receiverCrossingProbeAttemptCount);
+            fprintf(file, "          \"receiver_crossing_probe_hit_count\": %llu,\n",
+                    (unsigned long long)population->receiverCrossingProbeHitCount);
+            fprintf(file, "          \"receiver_candidate_count\": %llu,\n",
+                    (unsigned long long)population->receiverCandidateCount);
+            fprintf(file, "          \"receiver_accepted_hit_count\": %llu,\n",
+                    (unsigned long long)population->receiverAcceptedHitCount);
+            fprintf(file, "          \"receiver_miss_reject_count\": %llu,\n",
+                    (unsigned long long)population->receiverMissRejectCount);
+            fprintf(file, "          \"receiver_self_hit_reject_count\": %llu,\n",
+                    (unsigned long long)population->receiverSelfHitRejectCount);
+            fprintf(file, "          \"receiver_invalid_reject_count\": %llu,\n",
+                    (unsigned long long)population->receiverInvalidRejectCount);
+            fprintf(file, "          \"receiver_material_filter_reject_count\": %llu,\n",
+                    (unsigned long long)population->receiverMaterialFilterRejectCount);
+            fprintf(file, "          \"receiver_object_filter_reject_count\": %llu,\n",
+                    (unsigned long long)population->receiverObjectFilterRejectCount);
+            fprintf(file, "          \"receiver_competing_reject_count\": %llu,\n",
+                    (unsigned long long)population->receiverCompetingRejectCount);
+            fprintf(file, "          \"receiver_selected_hit_count\": %llu,\n",
+                    (unsigned long long)population->receiverSelectedHitCount);
+            fprintf(file, "          \"receiver_selected_bucket_count\": %llu,\n",
+                    (unsigned long long)population->receiverSelectedBucketCount);
+            fprintf(file, "          \"receiver_footprint_radius\": %.9f,\n",
+                    population->receiverFootprintRadius);
+            fprintf(file, "          \"receiver_mean_distance\": %.9f,\n",
+                    population->receiverMeanDistance);
+            fprintf(file, "          \"receiver_max_distance\": %.9f,\n",
+                    population->receiverMaxDistance);
+            fprintf(file,
+                    "          \"prepared_scene_mesh_dielectric_candidate_count\": %llu,\n",
+                    (unsigned long long)population
+                        ->preparedSceneMeshDielectricCandidateCount);
+            fprintf(file,
+                    "          \"prepared_scene_mesh_dielectric_scene_object_index\": %d,\n",
+                    population->preparedSceneMeshDielectricSceneObjectIndex);
+            fprintf(file,
+                    "          \"prepared_scene_mesh_dielectric_primitive_index\": %d,\n",
+                    population->preparedSceneMeshDielectricPrimitiveIndex);
+            fprintf(file,
+                    "          \"prepared_scene_mesh_dielectric_triangle_index\": %d,\n",
+                    population->preparedSceneMeshDielectricTriangleIndex);
+            fprintf(file,
+                    "          \"prepared_scene_mesh_dielectric_triangle_count\": %d,\n",
+                    population->preparedSceneMeshDielectricTriangleCount);
+            fprintf(file, "          \"surface_map_store_attempt_count\": %llu,\n",
+                    (unsigned long long)population->surfaceMapStoreAttemptCount);
+            fprintf(file, "          \"surface_map_store_accepted_count\": %llu,\n",
+                    (unsigned long long)population->surfaceMapStoreAcceptedCount);
+            fprintf(file, "          \"surface_map_store_rejected_count\": %llu,\n",
+                    (unsigned long long)population->surfaceMapStoreRejectedCount);
+            fprintf(file, "          \"surface_map_record_count\": %llu,\n",
+                    (unsigned long long)population->surfaceMapRecordCount);
+            fprintf(file, "          \"surface_map_acceleration_inserted_count\": %llu,\n",
+                    (unsigned long long)population->surfaceMapAccelerationInsertedCount);
+            fprintf(file, "          \"volume_beam_store_attempt_count\": %llu,\n",
+                    (unsigned long long)population->volumeBeamStoreAttemptCount);
+            fprintf(file, "          \"volume_beam_store_accepted_count\": %llu,\n",
+                    (unsigned long long)population->volumeBeamStoreAcceptedCount);
+            fprintf(file, "          \"volume_beam_store_rejected_count\": %llu,\n",
+                    (unsigned long long)population->volumeBeamStoreRejectedCount);
+            fprintf(file, "          \"volume_beam_segment_count\": %llu,\n",
+                    (unsigned long long)population->volumeBeamSegmentCount);
+            fprintf(file,
+                    "          \"volume_beam_acceleration_inserted_count\": %llu,\n",
+                    (unsigned long long)population
+                        ->volumeBeamAccelerationInsertedCount);
+            fprintf(file,
+                    "          \"total_emitted_flux\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
+                    population->totalEmittedFlux.x,
+                    population->totalEmittedFlux.y,
+                    population->totalEmittedFlux.z);
+            fprintf(file,
+                    "          \"total_stored_surface_flux\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
+                    population->totalStoredSurfaceFlux.x,
+                    population->totalStoredSurfaceFlux.y,
+                    population->totalStoredSurfaceFlux.z);
+            fprintf(file,
+                    "          \"total_stored_volume_flux\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f }\n",
+                    population->totalStoredVolumeFlux.x,
+                    population->totalStoredVolumeFlux.y,
+                    population->totalStoredVolumeFlux.z);
+            fprintf(file, "        }\n");
+            fprintf(file, "      },\n");
+        }
         fprintf(file, "      \"temporary_analytic_bridge\": %s,\n",
                 preflight->stats.causticBootstrapTemporaryBridgeActive > 0 ? "true" : "false");
         fprintf(file, "      \"transport_path_emission_active\": %s,\n",

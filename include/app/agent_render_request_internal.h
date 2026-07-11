@@ -38,5 +38,10 @@ int agent_render_request_parse_environment_preset(const char* label);
 void agent_render_request_set_diagf(char* out, size_t out_size, const char* format, ...);
 int agent_render_request_clamp_secondary_diffuse_samples_3d_override(int value);
 int agent_render_request_clamp_transmission_samples_3d_override(int value);
+bool agent_render_request_finalize_loaded(RayTracingAgentRenderRequest* request,
+                                          json_object* root,
+                                          const char* request_path,
+                                          char* out_diagnostics,
+                                          size_t out_diagnostics_size);
 
 #endif

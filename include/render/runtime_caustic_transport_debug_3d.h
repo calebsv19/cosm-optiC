@@ -73,6 +73,16 @@ typedef struct {
     Vec3 lensTint;
     double lensAbsorptionDistance;
     double lensApertureRadiusScale;
+    bool surfaceReceiverResolved;
+    int surfaceReceiverTriangleIndex;
+    int surfaceReceiverPrimitiveIndex;
+    int surfaceReceiverSceneObjectIndex;
+    Vec3 surfaceReceiverPosition;
+    Vec3 surfaceReceiverNormal;
+    double surfaceReceiverT;
+    double surfaceReceiverFootprintRadius;
+    double surfaceReceiverNormalDotRay;
+    Vec3 surfaceReceiverDepositedRadiance;
     Vec3 sphereLensEntryPosition;
     Vec3 sphereLensExitPosition;
     Vec3 sphereLensReceiverCrossing;

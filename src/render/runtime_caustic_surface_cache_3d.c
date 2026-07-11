@@ -5,6 +5,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 enum {
     RUNTIME_CAUSTIC_SURFACE_CACHE_DEFAULT_CAPACITY = 4096,
     RUNTIME_CAUSTIC_SURFACE_CACHE_MAX_CAPACITY = 65536
@@ -20,6 +24,18 @@ static double runtime_caustic_surface_cache_clamp(double value,
     if (value < min_value) return min_value;
     if (value > max_value) return max_value;
     return value;
+}
+
+static double runtime_caustic_surface_cache_kernel_area_normalization(double radius) {
+    /*
+     * Treat deposited record radiance as bounded flux, not as a peak value.
+     * Broad footprints should spread that flux across receiver samples instead
+     * of preserving peak intensity while touching more pixels. Keep compact
+     * proof-scale footprints unchanged to avoid inflating small diagnostic dots.
+     */
+    const double gaussian_area = 2.0 * M_PI * radius * radius;
+    if (!(gaussian_area > 1.0)) return 1.0;
+    return 1.0 / gaussian_area;
 }
 
 void RuntimeCausticSurfaceCache3D_Init(RuntimeCausticSurfaceCache3D* cache) {
@@ -156,7 +172,8 @@ bool RuntimeCausticSurfaceCache3D_SampleAtHit(RuntimeCausticSurfaceCache3D* cach
             continue;
         }
         weight = exp(-d2 / (2.0 * radius * radius)) *
-                 runtime_caustic_surface_cache_clamp(normal_dot, 0.0, 1.0);
+                 runtime_caustic_surface_cache_clamp(normal_dot, 0.0, 1.0) *
+                 runtime_caustic_surface_cache_kernel_area_normalization(radius);
         result.x += (double)record->radianceR * weight;
         result.y += (double)record->radianceG * weight;
         result.z += (double)record->radianceB * weight;

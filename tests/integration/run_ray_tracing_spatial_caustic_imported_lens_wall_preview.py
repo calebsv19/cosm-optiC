@@ -24,6 +24,9 @@ import run_ray_tracing_spatial_caustic_mesh_dielectric_lens_fixture as mesh_fixt
 import run_ray_tracing_spatial_caustic_visual_sphere_mist_matrix as sphere_mist  # noqa: E402
 
 
+REFERENCE_CAUSTIC_ENERGY_SCALE = 0.0025
+
+
 def repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
@@ -72,17 +75,27 @@ def load_json(path: Path) -> dict:
         return json.load(f)
 
 
-def copy_sphere_marker_asset(mesh_dir: Path) -> None:
-    source = (
-        repo_root()
-        / "tests"
-        / "fixtures"
-        / "mesh_asset_runtime_spheres"
-        / "assets"
-        / "mesh_assets"
-        / "asset_sphere_32x16.runtime.json"
-    )
-    shutil.copy2(source, mesh_dir / "asset_sphere_32x16.runtime.json")
+def clean_generated_review_root(review_root: Path) -> None:
+    for child_name in (
+        "generated_scene",
+        "generated_requests",
+        "runs",
+        "summaries",
+        "frames",
+        "diffs",
+    ):
+        child = review_root / child_name
+        if child.exists():
+            shutil.rmtree(child)
+    for file_name in (
+        "imported_lens_wall_preview_report.json",
+        "imported_lens_wall_preview_index.md",
+        "imported_lens_wall_preview_contact_sheet.png",
+        "imported_lens_wall_preview_diagnostic_sheet.png",
+    ):
+        path = review_root / file_name
+        if path.exists():
+            path.unlink()
 
 
 def write_biconvex_lens_asset(mesh_dir: Path) -> Path:
@@ -257,8 +270,8 @@ def wall_plane() -> dict:
             "axis_v": {"x": 0.0, "y": 0.0, "z": 1.0},
             "normal": {"x": 0.0, "y": -1.0, "z": 0.0},
         },
-        3.2,
-        2.2,
+        7.0,
+        5.0,
         "mat_vivid_wall",
     )
 
@@ -278,83 +291,97 @@ def floor_plane() -> dict:
     )
 
 
-def write_preview_scene(review_root: Path) -> tuple[Path, Path]:
+def lens_instance_object() -> dict:
+    return {
+        "object_id": "imported_biconvex_lens",
+        "object_type": "mesh_asset_instance",
+        "space_mode_intent": "3d",
+        "dimensional_mode": "full_3d",
+        "transform": {
+            "position": {"x": 0.0, "y": -1.05, "z": 1.25},
+            "rotation": {"x": 0.0, "y": 0.0, "z": 0.0},
+            "scale": {"x": 0.52, "y": 0.52, "z": 0.52},
+        },
+        "geometry_ref": {
+            "kind": "mesh_asset",
+            "id": "asset_imported_biconvex_lens_96x16",
+            "variant": "runtime_default",
+        },
+        "extensions": {
+            "line_drawing": {
+                "runtime_mesh_path": "assets/mesh_assets/asset_imported_biconvex_lens_96x16.runtime.json",
+            }
+        },
+        "material_id": "mat_lens_glass",
+        "flags": {"visible": True, "locked": False, "selectable": True},
+    }
+
+
+def lens_material_binding() -> dict:
+    return {
+        "object_id": "imported_biconvex_lens",
+        "material_id": 5,
+        "object_color": sphere_mist.rgb_u24(126, 228, 255),
+        "alpha": 0.18,
+        "glass_transport_override": True,
+        "glass_transmission": 0.82,
+        "glass_ior": 1.52,
+        "glass_absorption_distance": 4.0,
+        "glass_thin_walled": True,
+        "roughness": 0.006,
+        "reflectivity": 0.01,
+    }
+
+
+def write_preview_scene(review_root: Path, scene_name: str, include_lens: bool) -> tuple[Path, Path]:
     scene_dir = review_root / "generated_scene"
     mesh_dir = scene_dir / "assets" / "mesh_assets"
     mesh_dir.mkdir(parents=True, exist_ok=True)
     lens_path = write_biconvex_lens_asset(mesh_dir)
-    copy_sphere_marker_asset(mesh_dir)
+    objects = [wall_plane()]
+    if include_lens:
+        objects.append(lens_instance_object())
+    object_materials = [
+        {
+            "object_id": "matte_floor",
+            "material_id": 0,
+            "object_color": sphere_mist.rgb_u24(18, 18, 18),
+            "roughness": 0.9,
+            "reflectivity": 0.0,
+            "alpha": 1.0,
+        },
+        {
+            "object_id": "vivid_receiver_wall",
+            "material_id": 0,
+            "object_color": sphere_mist.rgb_u24(0, 78, 220),
+            "roughness": 0.78,
+            "reflectivity": 0.01,
+            "alpha": 1.0,
+        },
+    ]
+    if include_lens:
+        object_materials.append(lens_material_binding())
     scene = {
         "schema_family": "codework_scene",
         "schema_variant": "scene_runtime_v1",
         "schema_version": 1,
-        "scene_id": "caustic_imported_lens_wall_preview_v1",
+        "scene_id": f"caustic_imported_lens_wall_preview_{scene_name}_v1",
         "space_mode_default": "3d",
         "unit_system": "meters",
         "world_scale": 1.0,
-        "objects": [
-            floor_plane(),
-            wall_plane(),
-            {
-                "object_id": "imported_biconvex_lens",
-                "object_type": "mesh_asset_instance",
-                "space_mode_intent": "3d",
-                "dimensional_mode": "full_3d",
-                "transform": {
-                    "position": {"x": 0.0, "y": -1.05, "z": 1.25},
-                    "rotation": {"x": 0.0, "y": 0.0, "z": 0.0},
-                    "scale": {"x": 0.52, "y": 0.52, "z": 0.52},
-                },
-                "geometry_ref": {
-                    "kind": "mesh_asset",
-                    "id": "asset_imported_biconvex_lens_96x16",
-                    "variant": "runtime_default",
-                },
-                "extensions": {
-                    "line_drawing": {
-                        "runtime_mesh_path": "assets/mesh_assets/asset_imported_biconvex_lens_96x16.runtime.json",
-                    }
-                },
-                "material_id": "mat_lens_glass",
-                "flags": {"visible": True, "locked": False, "selectable": True},
-            },
-            {
-                "object_id": "visible_light_marker",
-                "object_type": "mesh_asset_instance",
-                "space_mode_intent": "3d",
-                "dimensional_mode": "full_3d",
-                "transform": {
-                    "position": {"x": 0.0, "y": -2.85, "z": 1.25},
-                    "rotation": {"x": 0.0, "y": 0.0, "z": 0.0},
-                    "scale": {"x": 0.090, "y": 0.090, "z": 0.090},
-                },
-                "geometry_ref": {
-                    "kind": "mesh_asset",
-                    "id": "asset_sphere_32x16",
-                    "variant": "runtime_default",
-                },
-                "extensions": {
-                    "line_drawing": {
-                        "runtime_mesh_path": "assets/mesh_assets/asset_sphere_32x16.runtime.json",
-                    }
-                },
-                "material_id": "mat_light_marker",
-                "flags": {"visible": True, "locked": False, "selectable": True},
-            },
-        ],
+        "objects": objects,
         "materials": [
             {"material_id": "mat_dark_floor", "kind": "lambert", "albedo": [0.06, 0.06, 0.06]},
-            {"material_id": "mat_vivid_wall", "kind": "lambert", "albedo": [0.0, 0.42, 1.0]},
+            {"material_id": "mat_vivid_wall", "kind": "lambert", "albedo": [0.0, 0.30, 0.85]},
             {"material_id": "mat_lens_glass", "kind": "dielectric", "albedo": [0.88, 0.97, 1.0]},
-            {"material_id": "mat_light_marker", "kind": "emissive", "albedo": [1.0, 0.93, 0.80]},
         ],
         "lights": [
             {
                 "light_id": "lens_preview_light",
                 "kind": "sphere",
                 "position": {"x": 0.0, "y": -2.85, "z": 1.25},
-                "radius": 0.070,
-                "intensity": 26.0,
+                "radius": 0.090,
+                "intensity": 24.0,
                 "falloff_distance": 5.0,
                 "color": {"r": 1.0, "g": 0.96, "b": 0.88},
                 "enabled": True,
@@ -379,49 +406,15 @@ def write_preview_scene(review_root: Path) -> tuple[Path, Path]:
                     "camera_focus_target": {"x": 0.0, "y": -1.05, "z": 1.24},
                     "environment": {
                         "light_mode": 1,
-                        "ambient_strength": 0.24,
+                        "ambient_strength": 0.18,
                         "top_fill_strength": 0.08,
                     },
-                    "object_materials": [
-                        {
-                            "object_id": "matte_floor",
-                            "material_id": 0,
-                            "object_color": sphere_mist.rgb_u24(18, 18, 18),
-                            "roughness": 0.9,
-                            "reflectivity": 0.0,
-                            "alpha": 1.0,
-                        },
-                        {
-                            "object_id": "vivid_receiver_wall",
-                            "material_id": 0,
-                            "object_color": sphere_mist.rgb_u24(0, 104, 255),
-                            "roughness": 0.78,
-                            "reflectivity": 0.01,
-                            "alpha": 1.0,
-                        },
-                        {
-                            "object_id": "imported_biconvex_lens",
-                            "material_id": 5,
-                            "object_color": sphere_mist.rgb_u24(126, 228, 255),
-                            "alpha": 0.18,
-                            "roughness": 0.006,
-                            "reflectivity": 0.01,
-                        },
-                        {
-                            "object_id": "visible_light_marker",
-                            "material_id": 4,
-                            "object_color": sphere_mist.rgb_u24(255, 238, 205),
-                            "roughness": 0.2,
-                            "reflectivity": 0.0,
-                            "emissive_strength": 7.0,
-                            "alpha": 1.0,
-                        },
-                    ],
+                    "object_materials": object_materials,
                 }
             }
         },
     }
-    scene_path = scene_dir / "scene_runtime.json"
+    scene_path = scene_dir / f"scene_runtime_{scene_name}.json"
     write_json(scene_path, scene)
     return scene_path, lens_path
 
@@ -452,15 +445,16 @@ def base_request(run_id: str,
             "camera_look_at": {"x": 0.0, "y": -1.05, "z": 1.24},
             "camera_zoom": 0.52,
             "environment_light_mode": "ambient",
-            "ambient_strength": 0.24,
+            "ambient_strength": 0.18,
             "top_fill_strength": 0.08,
             "background_brightness": 0.012,
             "background_color": {"r": 0.01, "g": 0.012, "b": 0.016},
             "light_position": {"x": 0.0, "y": -2.85, "z": 1.25},
-            "light_intensity": 26.0,
-            "light_radius": 0.070,
+            "light_intensity": 24.0,
+            "light_radius": 0.090,
             "secondary_diffuse_samples_3d": 6,
             "transmission_samples_3d": 8,
+            "trace_route": "flattened_bvh",
             "caustic_debug_summary": True,
             "object_audit_enabled": True,
         },
@@ -487,7 +481,7 @@ def request_for_cell(review_root: Path,
         output_root,
         summary_path,
     )
-    if cell_id == "wall_no_caustic":
+    if cell_id in ("wall_no_lens", "wall_lens_no_caustic"):
         request["inspection"].update({
             "caustic_mode": "off",
             "caustic_volume_enabled": False,
@@ -495,7 +489,7 @@ def request_for_cell(review_root: Path,
             "caustic_sidecar_enabled": False,
             "caustic_sample_budget": 0,
         })
-    elif cell_id == "wall_mesh_dielectric_surface":
+    elif cell_id == "wall_lens_caustic_reference":
         request["inspection"].update({
             "caustic_mode": "transport",
             "caustic_volume_enabled": False,
@@ -503,7 +497,7 @@ def request_for_cell(review_root: Path,
             "caustic_sidecar_enabled": False,
             "caustic_sample_budget": 2048,
             "caustic_max_path_depth": 2,
-            "caustic_surface_energy_scale": 2.5,
+            "caustic_surface_energy_scale": REFERENCE_CAUSTIC_ENERGY_SCALE,
             "caustic_surface_footprint_scale": 5.0,
             "caustic_surface_receiver_fallback_enabled": False,
             "caustic_transport_emission_policy": "mesh_dielectric_lens",
@@ -574,10 +568,22 @@ def wall_delta_metrics(baseline_path: Path, caustic_path: Path) -> dict:
     min_y = 0
     max_y = height
     positive_pixels = 0
+    negative_pixels = 0
     white_shift_pixels = 0
+    saturated_pixels = 0
+    delta_samples: list[float] = []
+    positive_delta_samples: list[float] = []
+    negative_delta_samples: list[float] = []
     total_delta = 0.0
     max_delta = 0.0
+    min_delta = 0.0
     max_white_shift = 0.0
+    weighted_x = 0.0
+    weighted_y = 0.0
+    weight_sum = 0.0
+    negative_weighted_x = 0.0
+    negative_weighted_y = 0.0
+    negative_weight_sum = 0.0
     for y in range(min_y, max_y):
         for x in range(min_x, max_x):
             before = baseline[y][x]
@@ -595,13 +601,30 @@ def wall_delta_metrics(baseline_path: Path, caustic_path: Path) -> dict:
             )
             white_shift = before_white_distance - after_white_distance
             total_delta += delta
+            delta_samples.append(delta)
             if delta > 0.5:
                 positive_pixels += 1
+                positive_delta_samples.append(delta)
+                weighted_x += float(x) * delta
+                weighted_y += float(y) * delta
+                weight_sum += delta
+            if delta < -0.5:
+                negative_pixels += 1
+                negative_delta_samples.append(delta)
+                negative_weight = -delta
+                negative_weighted_x += float(x) * negative_weight
+                negative_weighted_y += float(y) * negative_weight
+                negative_weight_sum += negative_weight
             if white_shift > 1.0:
                 white_shift_pixels += 1
+            if after[0] >= 250 or after[1] >= 250 or after[2] >= 250:
+                saturated_pixels += 1
             max_delta = max(max_delta, delta)
+            min_delta = min(min_delta, delta)
             max_white_shift = max(max_white_shift, white_shift)
     area = float(max(1, (max_x - min_x) * (max_y - min_y)))
+    delta_samples.sort()
+    positive_delta_samples.sort()
     return {
         "roi": {
             "min_x": min_x,
@@ -611,23 +634,58 @@ def wall_delta_metrics(baseline_path: Path, caustic_path: Path) -> dict:
         },
         "positive_pixel_count": positive_pixels,
         "positive_area_ratio": positive_pixels / area,
+        "negative_pixel_count": negative_pixels,
+        "negative_area_ratio": negative_pixels / area,
         "white_shift_pixel_count": white_shift_pixels,
         "white_shift_area_ratio": white_shift_pixels / area,
+        "saturated_pixel_count": saturated_pixels,
+        "saturated_area_ratio": saturated_pixels / area,
+        "positive_delta_p50": percentile(positive_delta_samples, 0.50),
+        "positive_delta_p95": percentile(positive_delta_samples, 0.95),
+        "positive_delta_p99": percentile(positive_delta_samples, 0.99),
+        "delta_p95": percentile(delta_samples, 0.95),
+        "delta_p99": percentile(delta_samples, 0.99),
+        "positive_delta_mean": (
+            sum(positive_delta_samples) / float(len(positive_delta_samples))
+            if positive_delta_samples else 0.0
+        ),
+        "positive_delta_centroid": {
+            "x": weighted_x / weight_sum if weight_sum > 0.0 else None,
+            "y": weighted_y / weight_sum if weight_sum > 0.0 else None,
+        },
+        "negative_delta_p50": percentile(negative_delta_samples, 0.50),
+        "negative_delta_p95": percentile(negative_delta_samples, 0.95),
+        "negative_delta_centroid": {
+            "x": negative_weighted_x / negative_weight_sum if negative_weight_sum > 0.0 else None,
+            "y": negative_weighted_y / negative_weight_sum if negative_weight_sum > 0.0 else None,
+        },
         "mean_luma_delta": total_delta / area,
         "max_luma_delta": max_delta,
+        "min_luma_delta": min_delta,
         "max_white_shift": max_white_shift,
     }
 
 
-def write_delta_artifacts(review_root: Path, baseline_path: Path, caustic_path: Path) -> dict:
+def percentile(sorted_values: list[float], fraction: float) -> float:
+    if not sorted_values:
+        return 0.0
+    clamped = min(1.0, max(0.0, fraction))
+    index = int(round(clamped * float(len(sorted_values) - 1)))
+    return float(sorted_values[index])
+
+
+def write_delta_artifacts(review_root: Path,
+                          baseline_path: Path,
+                          caustic_path: Path,
+                          artifact_name: str) -> dict:
     before_w, before_h, before = review_artifacts.read_bmp_rgb(baseline_path)
     after_w, after_h, after = review_artifacts.read_bmp_rgb(caustic_path)
     if (before_w, before_h) != (after_w, after_h):
         raise ValueError("delta frames must have matching dimensions")
     diff16 = review_artifacts.abs_diff_pixels(before, after, 16)
     side_w, side_h, side = review_artifacts.side_by_side(before, after, diff16)
-    diff_path = review_root / "diffs" / "wall_mesh_dielectric_surface_vs_off_diff16x.png"
-    side_path = review_root / "diffs" / "wall_preview_side_by_side_diff16x.png"
+    diff_path = review_root / "diffs" / f"{artifact_name}_diff16x.png"
+    side_path = review_root / "diffs" / f"{artifact_name}_side_by_side_diff16x.png"
     diff_path.parent.mkdir(parents=True, exist_ok=True)
     review_artifacts.write_png_rgb(diff_path, before_w, before_h, diff16)
     review_artifacts.write_png_rgb(side_path, side_w, side_h, side)
@@ -635,6 +693,34 @@ def write_delta_artifacts(review_root: Path, baseline_path: Path, caustic_path: 
         "diff16_path": str(diff_path),
         "side_by_side_diff16_path": str(side_path),
     }
+
+
+def write_caustic_heatmap_artifact(review_root: Path,
+                                   baseline_path: Path,
+                                   caustic_path: Path,
+                                   artifact_name: str) -> tuple[Path, int, int, list[list[tuple[int, int, int]]]]:
+    before_w, before_h, before = review_artifacts.read_bmp_rgb(baseline_path)
+    after_w, after_h, after = review_artifacts.read_bmp_rgb(caustic_path)
+    if (before_w, before_h) != (after_w, after_h):
+        raise ValueError("heatmap frames must have matching dimensions")
+    rows: list[list[tuple[int, int, int]]] = []
+    for y in range(before_h):
+        row: list[tuple[int, int, int]] = []
+        for x in range(before_w):
+            delta = luma(after[y][x]) - luma(before[y][x])
+            if delta > 0.25:
+                t = min(1.0, delta / 24.0)
+                row.append((int(255.0 * t), int(210.0 * t), int(48.0 * t)))
+            elif delta < -0.25:
+                t = min(1.0, -delta / 24.0)
+                row.append((int(32.0 * t), int(96.0 * t), int(255.0 * t)))
+            else:
+                row.append((0, 0, 0))
+        rows.append(row)
+    heatmap_path = review_root / "diffs" / f"{artifact_name}_signed_heatmap.png"
+    heatmap_path.parent.mkdir(parents=True, exist_ok=True)
+    review_artifacts.write_png_rgb(heatmap_path, before_w, before_h, rows)
+    return heatmap_path, before_w, before_h, rows
 
 
 def caustic_digest(summary: dict) -> dict:
@@ -671,6 +757,10 @@ def write_contact_sheet(path: Path, runs: list[dict]) -> None:
     for run in runs:
         width, height, pixels = review_artifacts.read_bmp_rgb(Path(run["frame_path"]))
         images.append((width, height, pixels))
+    write_image_sheet(path, images)
+
+
+def write_image_sheet(path: Path, images: list[tuple[int, int, list[list[tuple[int, int, int]]]]]) -> None:
     if not images:
         return
     cell_width = images[0][0]
@@ -694,10 +784,13 @@ def write_index(path: Path, report: dict) -> None:
         f"- preview scene ready: `{report['proof_status']['preview_scene_ready']}`",
         f"- mesh traversal emitted: `{report['proof_status']['mesh_traversal_emitted']}`",
         f"- wall caustic visible: `{report['proof_status']['wall_caustic_visible']}`",
-        f"- scene: `{report['scene_path']}`",
+        f"- reference caustic scale: `{report['reference_caustic_energy_scale']}`",
+        f"- no-lens scene: `{report['scene_paths']['no_lens']}`",
+        f"- lens scene: `{report['scene_paths']['with_lens']}`",
         f"- lens mesh: `{report['lens_mesh_path']}`",
         f"- contact sheet: `{report['contact_sheet_path']}`",
-        f"- side-by-side diff: `{report['delta_artifacts']['side_by_side_diff16_path']}`",
+        f"- diagnostic sheet: `{report['diagnostic_sheet_path']}`",
+        f"- caustic heatmap: `{report['diagnostic_artifacts']['caustic_signed_heatmap_path']}`",
         "",
         "## Topology",
         "",
@@ -713,14 +806,23 @@ def write_index(path: Path, report: dict) -> None:
         f"`{topology.get('absolute_volume', 0.0):.6f}`, usable "
         f"`{topology.get('usable_for_closed_traversal', False)}`"
     )
-    lines.extend(["", "## Wall Readback", ""])
-    wall = report.get("wall_delta_metrics", {})
+    lines.extend(["", "## Diagnostic Readback", ""])
+    lens = report.get("lens_only_delta_metrics", {})
+    caustic = report.get("caustic_delta_metrics", {})
     lines.append(
-        f"- positive pixels `{wall.get('positive_pixel_count', 0)}`, "
-        f"white-shift pixels `{wall.get('white_shift_pixel_count', 0)}`, "
-        f"mean luma delta `{wall.get('mean_luma_delta', 0.0):.4f}`, "
-        f"max luma delta `{wall.get('max_luma_delta', 0.0):.4f}`, "
-        f"max white shift `{wall.get('max_white_shift', 0.0):.4f}`"
+        f"- lens-only delta (`no lens` -> `lens/no caustic`): positive "
+        f"`{lens.get('positive_pixel_count', 0)}`, negative "
+        f"`{lens.get('negative_pixel_count', 0)}`, min "
+        f"`{lens.get('min_luma_delta', 0.0):.4f}`, max "
+        f"`{lens.get('max_luma_delta', 0.0):.4f}`"
+    )
+    lines.append(
+        f"- caustic delta (`lens/no caustic` -> `lens/caustic`): positive "
+        f"`{caustic.get('positive_pixel_count', 0)}`, negative "
+        f"`{caustic.get('negative_pixel_count', 0)}`, p95+ "
+        f"`{caustic.get('positive_delta_p95', 0.0):.4f}`, max "
+        f"`{caustic.get('max_luma_delta', 0.0):.4f}`, saturated "
+        f"`{caustic.get('saturated_pixel_count', 0)}`"
     )
     lines.extend(["", "## Runs", ""])
     for run in report.get("runs", []):
@@ -752,8 +854,10 @@ def main() -> int:
         print(f"missing headless CLI: {cli}", file=sys.stderr)
         return 2
     review_root.mkdir(parents=True, exist_ok=True)
+    clean_generated_review_root(review_root)
 
-    scene_path, lens_path = write_preview_scene(review_root)
+    no_lens_scene_path, lens_path = write_preview_scene(review_root, "no_lens", include_lens=False)
+    with_lens_scene_path, _lens_path_again = write_preview_scene(review_root, "with_lens", include_lens=True)
     topology = mesh_fixture.audit_runtime_mesh_topology(lens_path)
     failures = [
         f"lens_topology: {failure}"
@@ -762,8 +866,14 @@ def main() -> int:
     preview_warnings = []
     runs = []
     runs_by_cell = {}
-    for cell_id in ("wall_no_caustic", "wall_mesh_dielectric_surface"):
-        item = request_for_cell(review_root, scene_path, cell_id, args.debug_export)
+    cell_scene_paths = {
+        "wall_no_lens": no_lens_scene_path,
+        "wall_lens_no_caustic": with_lens_scene_path,
+        "wall_lens_caustic_reference": with_lens_scene_path,
+    }
+    cell_ids = list(cell_scene_paths.keys())
+    for cell_id in cell_ids:
+        item = request_for_cell(review_root, cell_scene_paths[cell_id], cell_id, args.debug_export)
         elapsed = render_request(cli, item["request_path"], item["summary_path"], args.skip_render)
         summary = load_json(item["summary_path"])
         frame_path, png_path = copy_frame_png(summary, review_root, cell_id)
@@ -783,48 +893,88 @@ def main() -> int:
         runs.append(run)
         runs_by_cell[cell_id] = run
 
-    caustic_digest_data = runs_by_cell["wall_mesh_dielectric_surface"]["caustic"]
-    if caustic_digest_data["transport_mesh_dielectric_lens_resolved_count"] <= 0:
-        failures.append("mesh dielectric lens did not resolve in wall preview")
-    if caustic_digest_data["transport_mesh_dielectric_lens_emitted_path_count"] <= 0:
-        preview_warnings.append("mesh dielectric lens did not emit paths in wall preview")
-    if caustic_digest_data["surface_cache_record_count"] <= 0:
-        preview_warnings.append("wall preview did not record surface-cache deposits")
-
-    baseline = Path(runs_by_cell["wall_no_caustic"]["frame_path"])
-    caustic = Path(runs_by_cell["wall_mesh_dielectric_surface"]["frame_path"])
-    wall_metrics = wall_delta_metrics(baseline, caustic)
-    delta_artifacts = write_delta_artifacts(review_root, baseline, caustic)
+    no_lens = Path(runs_by_cell["wall_no_lens"]["frame_path"])
+    lens_no_caustic = Path(runs_by_cell["wall_lens_no_caustic"]["frame_path"])
+    lens_caustic = Path(runs_by_cell["wall_lens_caustic_reference"]["frame_path"])
+    lens_only_metrics = wall_delta_metrics(no_lens, lens_no_caustic)
+    caustic_delta_metrics = wall_delta_metrics(lens_no_caustic, lens_caustic)
+    no_lens_to_caustic_metrics = wall_delta_metrics(no_lens, lens_caustic)
+    lens_delta_artifacts = write_delta_artifacts(
+        review_root,
+        no_lens,
+        lens_no_caustic,
+        "wall_no_lens_vs_lens_no_caustic",
+    )
+    caustic_delta_artifacts = write_delta_artifacts(
+        review_root,
+        lens_no_caustic,
+        lens_caustic,
+        "wall_lens_no_caustic_vs_lens_caustic",
+    )
+    caustic_heatmap_path, heatmap_w, heatmap_h, heatmap_pixels = write_caustic_heatmap_artifact(
+        review_root,
+        lens_no_caustic,
+        lens_caustic,
+        "wall_lens_no_caustic_vs_lens_caustic",
+    )
     contact_sheet_path = review_root / "imported_lens_wall_preview_contact_sheet.png"
     write_contact_sheet(contact_sheet_path, runs)
+    diagnostic_sheet_path = review_root / "imported_lens_wall_preview_diagnostic_sheet.png"
+    diagnostic_images = [
+        review_artifacts.read_bmp_rgb(no_lens),
+        review_artifacts.read_bmp_rgb(lens_no_caustic),
+        review_artifacts.read_bmp_rgb(lens_caustic),
+        (heatmap_w, heatmap_h, heatmap_pixels),
+    ]
+    write_image_sheet(diagnostic_sheet_path, diagnostic_images)
 
-    if wall_metrics["positive_pixel_count"] <= 0:
-        preview_warnings.append("wall preview did not brighten any receiver ROI pixels")
+    caustic_digest_data = runs_by_cell["wall_lens_caustic_reference"]["caustic"]
+    if caustic_delta_metrics.get("positive_pixel_count", 0) <= 0:
+        failures.append("reference caustic did not brighten any lens-baseline receiver pixels")
+    if caustic_digest_data.get("transport_mesh_dielectric_lens_emitted_path_count", 0) <= 0:
+        failures.append("reference caustic did not emit mesh dielectric paths")
+    if caustic_digest_data.get("surface_cache_record_count", 0) <= 0:
+        failures.append("reference caustic did not record surface-cache deposits")
+    if caustic_delta_metrics.get("saturated_area_ratio", 0.0) > 0.001:
+        preview_warnings.append("reference caustic has measurable saturation")
 
     proof_status = {
         "preview_scene_ready": (
             len(failures) == 0
             and bool(contact_sheet_path.exists())
-            and bool(delta_artifacts.get("side_by_side_diff16_path"))
+            and bool(diagnostic_sheet_path.exists())
+            and bool(caustic_delta_artifacts.get("side_by_side_diff16_path"))
+            and bool(caustic_heatmap_path.exists())
         ),
         "mesh_traversal_emitted": (
             caustic_digest_data["transport_mesh_dielectric_lens_emitted_path_count"] > 0
         ),
         "surface_cache_deposited": caustic_digest_data["surface_cache_record_count"] > 0,
-        "wall_caustic_visible": wall_metrics["positive_pixel_count"] > 0,
+        "wall_caustic_visible": caustic_delta_metrics["positive_pixel_count"] > 0,
     }
 
     report = {
-        "schema_version": "ray_tracing_imported_lens_wall_preview_v1",
+        "schema_version": "ray_tracing_imported_lens_wall_preview_v2",
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "cli": str(cli),
         "review_root": str(review_root),
-        "scene_path": str(scene_path),
+        "scene_paths": {
+            "no_lens": str(no_lens_scene_path),
+            "with_lens": str(with_lens_scene_path),
+        },
         "lens_mesh_path": str(lens_path),
         "lens_topology_audit": topology,
         "contact_sheet_path": str(contact_sheet_path),
-        "delta_artifacts": delta_artifacts,
-        "wall_delta_metrics": wall_metrics,
+        "diagnostic_sheet_path": str(diagnostic_sheet_path),
+        "reference_caustic_energy_scale": REFERENCE_CAUSTIC_ENERGY_SCALE,
+        "diagnostic_artifacts": {
+            "lens_only_delta": lens_delta_artifacts,
+            "caustic_delta": caustic_delta_artifacts,
+            "caustic_signed_heatmap_path": str(caustic_heatmap_path),
+        },
+        "lens_only_delta_metrics": lens_only_metrics,
+        "caustic_delta_metrics": caustic_delta_metrics,
+        "no_lens_to_caustic_metrics": no_lens_to_caustic_metrics,
         "runs": runs,
         "proof_status": proof_status,
         "preview_warnings": preview_warnings,
@@ -835,8 +985,8 @@ def main() -> int:
     write_json(report_path, report)
     write_index(review_root / "imported_lens_wall_preview_index.md", report)
     print(report_path)
-    print(contact_sheet_path)
-    print(delta_artifacts["side_by_side_diff16_path"])
+    print(diagnostic_sheet_path)
+    print(caustic_heatmap_path)
     return 0 if report["passed"] else 1
 
 

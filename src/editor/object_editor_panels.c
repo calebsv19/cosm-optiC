@@ -46,3 +46,9 @@ bool ObjectEditorPanels_SliderValueForKindAtX(ObjectEditorPanelSliderKind kind,
                                               double* out_value) {
     return ObjectEditorPanels_SliderValueForKindAtXImpl(kind, mx, out_value);
 }
+
+bool ObjectEditorPanels_MotionActionAtPoint(int mx,
+                                            int my,
+                                            ObjectEditorPanelMotionAction* out_action) {
+    return ObjectEditorPanels_MotionActionAtPointImpl(mx, my, out_action);
+}

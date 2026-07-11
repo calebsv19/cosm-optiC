@@ -1,6 +1,7 @@
 #include "editor/object_editor_internal.h"
 
 #include "app/data_paths.h"
+#include "editor/object_editor_motion.h"
 #include "editor/object_editor_object_ops.h"
 #include "editor/scene_editor_tool_state.h"
 #include "geo/shape_adapter.h"
@@ -286,6 +287,25 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
                 return;
             }
             if (!materialsCollapsed) {
+                ObjectEditorPanelMotionAction motion_action =
+                    OBJECT_EDITOR_PANEL_MOTION_ACTION_NONE;
+                if (ObjectEditorPanels_MotionActionAtPoint(mx, my, &motion_action)) {
+                    int selected_index = ObjectEditorGetSelectedObjectIndex();
+                    activeMaterialSlider = OBJECT_EDITOR_PANEL_SLIDER_NONE;
+                    if (motion_action == OBJECT_EDITOR_PANEL_MOTION_ACTION_STATIC) {
+                        if (!ObjectEditorMotionSetSelectedObjectStatic(selected_index)) {
+                            printf("Motion Static unavailable for selected object.\n");
+                        }
+                    } else if (motion_action == OBJECT_EDITOR_PANEL_MOTION_ACTION_AUTHORED) {
+                        if (!ObjectEditorMotionSetSelectedObjectAuthored(selected_index)) {
+                            printf("Motion Path unavailable for selected object.\n");
+                        }
+                    } else if (motion_action ==
+                               OBJECT_EDITOR_PANEL_MOTION_ACTION_PHYSICS_RESERVED) {
+                        printf("Motion Physics is reserved for a future solver handoff.\n");
+                    }
+                    return;
+                }
                 int idx = ObjectEditorPanels_MaterialIndexAtPoint(mx, my);
                 if (idx >= 0 && idx < MaterialManagerCount()) {
                     ObjectEditorSetSelectedMaterialIndex(idx);

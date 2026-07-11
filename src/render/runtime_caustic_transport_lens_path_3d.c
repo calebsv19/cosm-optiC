@@ -111,6 +111,9 @@ static void runtime_caustic_transport_fill_lens_debug_path(
     debug_path->lensTint = path->traversalProfile.tint;
     debug_path->lensAbsorptionDistance = path->traversalProfile.absorptionDistance;
     debug_path->lensApertureRadiusScale = path->traversalProfile.apertureRadiusScale;
+    debug_path->surfaceReceiverTriangleIndex = -1;
+    debug_path->surfaceReceiverPrimitiveIndex = -1;
+    debug_path->surfaceReceiverSceneObjectIndex = -1;
     if (lens_context->writeSphereLensCompatibilityFields) {
         debug_path->sphereLensEntryPosition =
             entry_event ? entry_event->position : path->targetPosition;
@@ -188,7 +191,8 @@ bool runtime_caustic_transport_deposit_lens_path(
                                                   surface_footprint_scale,
                                                   surface_radiance_scale,
                                                   receiver_context,
-                                                  diagnostics)) {
+                                                  diagnostics,
+                                                  debug_enabled ? &debug_path : NULL)) {
         emitted = true;
     }
 

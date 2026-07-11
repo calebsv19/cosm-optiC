@@ -13,6 +13,13 @@ typedef enum ObjectEditorPanelSliderKind {
     OBJECT_EDITOR_PANEL_SLIDER_EMISSIVE_STRENGTH = 5
 } ObjectEditorPanelSliderKind;
 
+typedef enum ObjectEditorPanelMotionAction {
+    OBJECT_EDITOR_PANEL_MOTION_ACTION_NONE = 0,
+    OBJECT_EDITOR_PANEL_MOTION_ACTION_STATIC = 1,
+    OBJECT_EDITOR_PANEL_MOTION_ACTION_AUTHORED = 2,
+    OBJECT_EDITOR_PANEL_MOTION_ACTION_PHYSICS_RESERVED = 3
+} ObjectEditorPanelMotionAction;
+
 void ObjectEditorPanels_UpdateLayout(void);
 void ObjectEditorPanels_UpdateLayoutForRegion(const SDL_Rect* region);
 void ObjectEditorPanels_DrawAssetList(SDL_Renderer* renderer);
@@ -28,5 +35,8 @@ bool ObjectEditorPanels_SliderValueAtPoint(int mx,
 bool ObjectEditorPanels_SliderValueForKindAtX(ObjectEditorPanelSliderKind kind,
                                               int mx,
                                               double* out_value);
+bool ObjectEditorPanels_MotionActionAtPoint(int mx,
+                                            int my,
+                                            ObjectEditorPanelMotionAction* out_action);
 
 #endif

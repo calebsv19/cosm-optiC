@@ -14,7 +14,12 @@
 #include "test_runtime_diffuse_temporal.h"
 #include "test_runtime_emission_transparency.h"
 #include "test_runtime_caustic_bootstrap_3d.h"
+#include "test_runtime_caustic_beam_map_3d.h"
 #include "test_runtime_caustic_lens_transport_3d.h"
+#include "test_runtime_caustic_photon_emit_3d.h"
+#include "test_runtime_caustic_photon_integration_3d.h"
+#include "test_runtime_caustic_photon_map_3d.h"
+#include "test_runtime_caustic_photon_trace_3d.h"
 #include "test_runtime_caustic_sphere_lens_3d.h"
 #include "test_runtime_caustic_surface_cache_3d.h"
 #include "test_runtime_caustic_transport_3d.h"
@@ -28,6 +33,7 @@
 #include "test_runtime_scene_editor.h"
 #include "test_runtime_path_policy.h"
 #include "test_runtime_mode_backend_policy.h"
+#include "test_runtime_object_motion_tracks.h"
 #include "test_runtime_lighting_materials.h"
 #include "test_runtime_lighting_materials_internal.h"
 #include "test_runtime_mesh_asset_loader.h"
@@ -41,6 +47,8 @@
 int run_test_runner_runtime_tests(void);
 int run_test_config_animation_tests(void);
 int run_test_ui_menu_contract_tests(void);
+int run_test_runtime_native_3d_async_render_bridge_tests(void);
+int run_test_runtime_native_3d_async_render_job_tests(void);
 
 typedef int (*TestGroupFn)(void);
 
@@ -109,7 +117,13 @@ int test_runner_main(int argc, char** argv) {
         {"runtime_scene_3d_geometry", run_test_runtime_scene_3d_geometry_tests},
         {"runtime_volume_3d", run_test_runtime_volume_3d_tests},
         {"runtime_caustic_bootstrap_3d", run_test_runtime_caustic_bootstrap_3d_tests},
+        {"runtime_caustic_beam_map_3d", run_test_runtime_caustic_beam_map_3d_tests},
         {"runtime_caustic_lens_transport_3d", run_test_runtime_caustic_lens_transport_3d_tests},
+        {"runtime_caustic_photon_emit_3d", run_test_runtime_caustic_photon_emit_3d_tests},
+        {"runtime_caustic_photon_integration_3d",
+         run_test_runtime_caustic_photon_integration_3d_tests},
+        {"runtime_caustic_photon_map_3d", run_test_runtime_caustic_photon_map_3d_tests},
+        {"runtime_caustic_photon_trace_3d", run_test_runtime_caustic_photon_trace_3d_tests},
         {"runtime_caustic_sphere_lens_3d", run_test_runtime_caustic_sphere_lens_3d_tests},
         {"runtime_caustic_surface_cache_3d", run_test_runtime_caustic_surface_cache_3d_tests},
         {"runtime_caustic_transport_3d", run_test_runtime_caustic_transport_3d_tests},
@@ -122,6 +136,8 @@ int test_runner_main(int argc, char** argv) {
         {"runtime_diffuse_temporal", run_test_runtime_diffuse_temporal_tests},
         {"runtime_emission_transparency", run_test_runtime_emission_transparency_tests},
         {"runtime_native_3d_denoise", run_test_runtime_native_3d_denoise_tests},
+        {"runtime_native_3d_async_render_bridge", run_test_runtime_native_3d_async_render_bridge_tests},
+        {"runtime_native_3d_async_render_job", run_test_runtime_native_3d_async_render_job_tests},
         {"runtime_native_3d_render", run_test_runtime_native_3d_render_tests},
         {"runtime_native_3d_render_live", run_test_runtime_native_3d_render_live_suite},
         {"runtime_native_3d_render_prepared", run_test_runtime_native_3d_render_prepared_suite},
@@ -134,6 +150,7 @@ int test_runner_main(int argc, char** argv) {
         {"runtime_scene_editor", run_test_runtime_scene_editor_tests},
         {"runtime_path_policy", run_test_runtime_path_policy_tests},
         {"runtime_mode_backend_policy", run_test_runtime_mode_backend_policy_tests},
+        {"runtime_object_motion_tracks", run_test_runtime_object_motion_tracks_tests},
         {"runtime_and_editor", run_test_runner_runtime_tests},
         {"fluid_volume_import_3d", run_test_fluid_volume_import_3d_tests},
         {"fluid_volume_pack_import_3d", run_test_fluid_volume_pack_import_3d_tests},

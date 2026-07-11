@@ -6,8 +6,10 @@
 #include "editor/scene_editor_material_graph.h"
 #include "editor/scene_editor_material_face_placement.h"
 #include "editor/scene_editor_material_stack.h"
+#include "import/runtime_scene_bridge_authoring_environment.h"
 #include "import/runtime_scene_bridge_authoring_internal.h"
 #include "import/runtime_scene_bridge_json_utils.h"
+#include "import/runtime_scene_motion_bridge.h"
 #include "material/material_manager.h"
 #include "render/runtime_material_authored_texture_3d.h"
 #include "render/runtime_material_graph_3d.h"
@@ -18,153 +20,6 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
-
-static void apply_ray_authoring_light_settings(json_object *authoring, double world_scale) {
-    json_object *light_settings = NULL;
-    json_object *intensity_obj = NULL;
-    json_object *radius_obj = NULL;
-    if (!authoring) return;
-    if (!json_object_object_get_ex(authoring, "light_settings", &light_settings) ||
-        !json_object_is_type(light_settings, json_type_object)) {
-        return;
-    }
-    if (json_object_object_get_ex(light_settings, "intensity", &intensity_obj) &&
-        (json_object_is_type(intensity_obj, json_type_int) ||
-         json_object_is_type(intensity_obj, json_type_double))) {
-        animSettings.lightIntensity = json_object_get_double(intensity_obj);
-    }
-    (void)world_scale;
-    if (json_object_object_get_ex(light_settings, "radius", &radius_obj) &&
-        (json_object_is_type(radius_obj, json_type_int) ||
-         json_object_is_type(radius_obj, json_type_double))) {
-        animSettings.lightRadius = json_object_get_double(radius_obj);
-        if (animSettings.lightRadius < 0.0) {
-            animSettings.lightRadius = 0.0;
-        }
-    }
-}
-
-static bool runtime_scene_bridge_parse_color_rgb(json_object *owner,
-                                                 const char *key,
-                                                 double *out_r,
-                                                 double *out_g,
-                                                 double *out_b) {
-    json_object *obj = NULL;
-    if (!owner || !key || !out_r || !out_g || !out_b ||
-        !json_object_object_get_ex(owner, key, &obj)) {
-        return false;
-    }
-    if (json_object_is_type(obj, json_type_object)) {
-        json_object *r_obj = NULL;
-        json_object *g_obj = NULL;
-        json_object *b_obj = NULL;
-        if (!json_object_object_get_ex(obj, "r", &r_obj) ||
-            !json_object_object_get_ex(obj, "g", &g_obj) ||
-            !json_object_object_get_ex(obj, "b", &b_obj)) {
-            return false;
-        }
-        *out_r = json_object_get_double(r_obj);
-        *out_g = json_object_get_double(g_obj);
-        *out_b = json_object_get_double(b_obj);
-        return true;
-    }
-    if (json_object_is_type(obj, json_type_array) &&
-        json_object_array_length(obj) >= 3u) {
-        *out_r = json_object_get_double(json_object_array_get_idx(obj, 0));
-        *out_g = json_object_get_double(json_object_array_get_idx(obj, 1));
-        *out_b = json_object_get_double(json_object_array_get_idx(obj, 2));
-        return true;
-    }
-    return false;
-}
-
-static void apply_ray_authoring_environment_settings(json_object *authoring) {
-    json_object *environment = NULL;
-    json_object *light_mode_obj = NULL;
-    json_object *environment_preset_obj = NULL;
-    json_object *ambient_brightness_obj = NULL;
-    json_object *ambient_strength_obj = NULL;
-    json_object *background_auto_obj = NULL;
-    json_object *background_brightness_obj = NULL;
-    json_object *top_fill_strength_obj = NULL;
-    bool has_background_auto = false;
-    double color_r = 1.0;
-    double color_g = 1.0;
-    double color_b = 1.0;
-    if (!authoring) return;
-    if (!json_object_object_get_ex(authoring, "environment", &environment) ||
-        !json_object_is_type(environment, json_type_object)) {
-        return;
-    }
-    animSettings.environmentPreset = ENVIRONMENT_PRESET_SKY;
-    animSettings.environmentBackgroundBrightnessAuto = true;
-    animSettings.environmentBackgroundBrightness = 0.0;
-    animSettings.environmentBackgroundColorR = 1.0;
-    animSettings.environmentBackgroundColorG = 1.0;
-    animSettings.environmentBackgroundColorB = 1.0;
-    if (json_object_object_get_ex(environment, "light_mode", &light_mode_obj) &&
-        (json_object_is_type(light_mode_obj, json_type_int) ||
-         json_object_is_type(light_mode_obj, json_type_double))) {
-        animSettings.environmentLightMode =
-            animation_config_environment_light_mode_clamp(json_object_get_int(light_mode_obj));
-    }
-    if (json_object_object_get_ex(environment, "ambient_strength", &ambient_strength_obj) &&
-        (json_object_is_type(ambient_strength_obj, json_type_int) ||
-         json_object_is_type(ambient_strength_obj, json_type_double))) {
-        animSettings.environmentBrightness =
-            255.0 * fmax(0.0, fmin(1.0, json_object_get_double(ambient_strength_obj)));
-    } else if (json_object_object_get_ex(environment,
-                                         "ambient_brightness",
-                                         &ambient_brightness_obj) &&
-        (json_object_is_type(ambient_brightness_obj, json_type_int) ||
-         json_object_is_type(ambient_brightness_obj, json_type_double))) {
-        animSettings.environmentBrightness =
-            fmax(0.0, fmin(255.0, json_object_get_double(ambient_brightness_obj)));
-    }
-    if (json_object_object_get_ex(environment, "environment_preset", &environment_preset_obj)) {
-        if (json_object_is_type(environment_preset_obj, json_type_string)) {
-            animSettings.environmentPreset =
-                RuntimeEnvironment3DPresetFromLabel(json_object_get_string(environment_preset_obj));
-        } else if (json_object_is_type(environment_preset_obj, json_type_int) ||
-                   json_object_is_type(environment_preset_obj, json_type_double)) {
-            animSettings.environmentPreset =
-                animation_config_environment_preset_clamp(json_object_get_int(environment_preset_obj));
-        }
-    }
-    has_background_auto =
-        json_object_object_get_ex(environment, "background_brightness_auto", &background_auto_obj) &&
-        json_object_is_type(background_auto_obj, json_type_boolean);
-    if (has_background_auto) {
-        animSettings.environmentBackgroundBrightnessAuto =
-            json_object_get_boolean(background_auto_obj) != 0;
-    }
-    if (json_object_object_get_ex(environment, "background_brightness", &background_brightness_obj) &&
-        (json_object_is_type(background_brightness_obj, json_type_int) ||
-         json_object_is_type(background_brightness_obj, json_type_double))) {
-        if (!has_background_auto) {
-            animSettings.environmentBackgroundBrightnessAuto = false;
-        }
-        if (!animSettings.environmentBackgroundBrightnessAuto) {
-            animSettings.environmentBackgroundBrightness =
-                fmax(0.0, fmin(4.0, json_object_get_double(background_brightness_obj)));
-        }
-    }
-    if (runtime_scene_bridge_parse_color_rgb(environment,
-                                            "background_color",
-                                            &color_r,
-                                            &color_g,
-                                            &color_b)) {
-        animSettings.environmentBackgroundColorR = fmax(0.0, fmin(1.0, color_r));
-        animSettings.environmentBackgroundColorG = fmax(0.0, fmin(1.0, color_g));
-        animSettings.environmentBackgroundColorB = fmax(0.0, fmin(1.0, color_b));
-    }
-    if (json_object_object_get_ex(environment, "top_fill_strength", &top_fill_strength_obj) &&
-        (json_object_is_type(top_fill_strength_obj, json_type_int) ||
-         json_object_is_type(top_fill_strength_obj, json_type_double))) {
-        animSettings.topFillStrength =
-            fmax(0.0, fmin(20.0, json_object_get_double(top_fill_strength_obj)));
-    }
-}
 
 static int runtime_scene_bridge_color_from_material_preset(int material_id) {
     const Material *preset = MaterialManagerGet(material_id);
@@ -727,6 +582,8 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
         json_object *reflectivity_obj = NULL;
         json_object *roughness_obj = NULL;
         json_object *emissive_strength_obj = NULL;
+        json_object *glass_transport_override_obj = NULL;
+        json_object *glass_thin_walled_obj = NULL;
         const char *object_id = NULL;
         int material_id = MaterialManagerDefaultId();
         int object_color = 0xFFFFFF;
@@ -738,6 +595,16 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
         bool has_reflectivity = false;
         bool has_roughness = false;
         bool has_emissive_strength = false;
+        bool has_glass_override = false;
+        bool glass_transport_override = false;
+        double glass_transmission = 0.0;
+        double glass_ior = 1.45;
+        double glass_absorption_distance = 2.0;
+        bool glass_thin_walled = true;
+        bool has_glass_transmission = false;
+        bool has_glass_ior = false;
+        bool has_glass_absorption_distance = false;
+        bool has_glass_thin_walled = false;
         int scene_index = 0;
         if (!entry || !json_object_is_type(entry, json_type_object)) continue;
         if (!json_object_object_get_ex(entry, "object_id", &object_id_obj) ||
@@ -784,6 +651,37 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
             emissive_strength = json_object_get_double(emissive_strength_obj);
             has_emissive_strength = true;
         }
+        if ((json_object_object_get_ex(entry,
+                                       "glass_transport_override",
+                                       &glass_transport_override_obj) ||
+             json_object_object_get_ex(entry,
+                                       "glassTransportOverride",
+                                       &glass_transport_override_obj)) &&
+            json_object_is_type(glass_transport_override_obj, json_type_boolean)) {
+            glass_transport_override = json_object_get_boolean(glass_transport_override_obj);
+            has_glass_override = true;
+        }
+        has_glass_transmission =
+            runtime_scene_bridge_parse_double_field_any(entry,
+                                                        "glass_transmission",
+                                                        "glassTransmission",
+                                                        &glass_transmission);
+        has_glass_ior =
+            runtime_scene_bridge_parse_double_field_any(entry,
+                                                        "glass_ior",
+                                                        "glassIor",
+                                                        &glass_ior);
+        has_glass_absorption_distance =
+            runtime_scene_bridge_parse_double_field_any(entry,
+                                                        "glass_absorption_distance",
+                                                        "glassAbsorptionDistance",
+                                                        &glass_absorption_distance);
+        if ((json_object_object_get_ex(entry, "glass_thin_walled", &glass_thin_walled_obj) ||
+             json_object_object_get_ex(entry, "glassThinWalled", &glass_thin_walled_obj)) &&
+            json_object_is_type(glass_thin_walled_obj, json_type_boolean)) {
+            glass_thin_walled = json_object_get_boolean(glass_thin_walled_obj);
+            has_glass_thin_walled = true;
+        }
         if (!object_id || !object_id[0]) continue;
         for (scene_index = 0;
              scene_index < sceneSettings.objectCount && scene_index < g_last_runtime_object_id_count;
@@ -812,6 +710,33 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
                 if (has_emissive_strength) {
                     sceneSettings.sceneObjects[scene_index].emissiveStrength =
                         fmax(0.0, fmin(1.0, emissive_strength));
+                }
+                if (glass_transport_override ||
+                    has_glass_transmission ||
+                    has_glass_ior ||
+                    has_glass_absorption_distance ||
+                    has_glass_thin_walled) {
+                    SceneObjectSeedGlassTransportOverrideFromMaterial(
+                        &sceneSettings.sceneObjects[scene_index]);
+                    if (has_glass_transmission) {
+                        sceneSettings.sceneObjects[scene_index].glassTransmission =
+                            fmax(0.0, fmin(1.0, glass_transmission));
+                    }
+                    if (has_glass_ior) {
+                        sceneSettings.sceneObjects[scene_index].glassIor =
+                            fmax(1.0, fmin(2.5, glass_ior));
+                    }
+                    if (has_glass_absorption_distance) {
+                        sceneSettings.sceneObjects[scene_index].glassAbsorptionDistance =
+                            fmax(0.25, fmin(8.0, glass_absorption_distance));
+                    }
+                    if (has_glass_thin_walled) {
+                        sceneSettings.sceneObjects[scene_index].glassThinWalled =
+                            glass_thin_walled;
+                    }
+                } else if (has_glass_override && !glass_transport_override) {
+                    SceneObjectClearGlassTransportOverride(
+                        &sceneSettings.sceneObjects[scene_index]);
                 }
                 apply_ray_authoring_object_authored_texture(entry, scene_index, object_id);
                 apply_ray_authoring_object_procedural_texture(entry, scene_index);
@@ -1002,7 +927,8 @@ void runtime_scene_bridge_apply_ray_authoring_paths(json_object *root,
             }
         }
     }
-    apply_ray_authoring_environment_settings(authoring);
-    apply_ray_authoring_light_settings(authoring, world_scale);
+    runtime_scene_bridge_apply_ray_authoring_environment_settings(authoring);
+    runtime_scene_bridge_apply_ray_authoring_light_settings(authoring, world_scale);
     apply_ray_authoring_object_materials(authoring);
+    runtime_scene_motion_bridge_apply_authoring(authoring, world_scale);
 }

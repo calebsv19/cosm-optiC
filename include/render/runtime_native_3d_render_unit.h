@@ -31,6 +31,14 @@ typedef struct {
     int temporalFrames;
     int committedSubpasses;
     size_t radianceCapacity;
+    uint64_t scratchSetupCalls;
+    uint64_t scratchCacheAcquireHits;
+    uint64_t scratchCacheAcquireMisses;
+    uint64_t radianceScratchResizeCalls;
+    uint64_t radianceScratchReuseCalls;
+    uint64_t radianceScratchClearBytes;
+    uint64_t radianceScratchRequestedBytesMax;
+    uint64_t radianceScratchCapacityBytesMax;
     bool useAdaptiveSampling;
     bool useDisneyTemporalPruning;
     bool useDenoise;
@@ -40,6 +48,9 @@ typedef struct {
 
 void RuntimeNative3DRenderUnit_Init(RuntimeNative3DRenderUnit* unit);
 void RuntimeNative3DRenderUnit_Free(RuntimeNative3DRenderUnit* unit);
+void RuntimeNative3DRenderUnit_TakeReusable(RuntimeNative3DRenderUnit* unit);
+void RuntimeNative3DRenderUnit_ReturnReusable(RuntimeNative3DRenderUnit* unit);
+void RuntimeNative3DRenderUnit_ReleaseReusableScratchCache(void);
 bool RuntimeNative3DRenderUnit_Setup(RuntimeNative3DRenderUnit* unit,
                                      RayTracing3DIntegratorId integrator_id,
                                      const RuntimeNative3DPreparedFrame* frame,
@@ -61,6 +72,10 @@ bool RuntimeNative3DRenderUnit_ResolveCurrentToPixels(const RuntimeNative3DRende
 bool RuntimeNative3DRenderUnit_ResolveCurrentRawToPixels(const RuntimeNative3DRenderUnit* unit,
                                                          uint8_t* pixel_buffer,
                                                          int pixel_width);
+bool RuntimeNative3DRenderUnit_ResolveTemporalBudgetHeatmapToPixels(
+    const RuntimeNative3DRenderUnit* unit,
+    uint8_t* pixel_buffer,
+    int pixel_width);
 bool RuntimeNative3DRenderUnit_ResolveCurrentToPixelsWithStats(
     const RuntimeNative3DRenderUnit* unit,
     uint8_t* pixel_buffer,
@@ -74,5 +89,7 @@ void RuntimeNative3DRenderUnit_GetActivityCounts(const RuntimeNative3DRenderUnit
 void RuntimeNative3DRenderUnit_GetAdaptiveStateSummary(
     const RuntimeNative3DRenderUnit* unit,
     RuntimeNative3DAdaptivePixelStateSummary* out_summary);
+void RuntimeNative3DRenderUnit_RecordScratchStats(const RuntimeNative3DRenderUnit* unit,
+                                                  RuntimeNative3DRenderStats* out_stats);
 
 #endif

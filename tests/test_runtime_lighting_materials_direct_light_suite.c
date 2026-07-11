@@ -25,12 +25,25 @@
 #include "test_runtime_lighting_materials_internal.h"
 #include "test_support.h"
 
+#define RUNTIME_DIRECT_LIGHT_CLEAR_VISIBLE_DECISION_PROBE_ENV \
+    "RAY_TRACING_DIRECT_LIGHT_CLEAR_VISIBLE_DECISION_SAMPLE_PROBE"
+
 static void runtime_lighting_materials_direct_reset_authoring_state(void) {
     memset(&sceneSettings, 0, sizeof(sceneSettings));
     memset(&animSettings, 0, sizeof(animSettings));
     SceneEditorMaterialFacePlacementResetAll();
     SceneEditorMaterialStackResetAll();
     MaterialManagerResetDefaults();
+}
+
+static void runtime_lighting_materials_direct_restore_clear_probe_env(
+    bool had_value,
+    const char* saved_value) {
+    if (had_value && saved_value) {
+        setenv(RUNTIME_DIRECT_LIGHT_CLEAR_VISIBLE_DECISION_PROBE_ENV, saved_value, 1);
+    } else {
+        unsetenv(RUNTIME_DIRECT_LIGHT_CLEAR_VISIBLE_DECISION_PROBE_ENV);
+    }
 }
 
 static bool runtime_direct_light_3d_setup_wall_scene(RuntimeScene3D* scene,
@@ -950,6 +963,115 @@ static int test_runtime_direct_light_3d_transparent_blocker_partial_shadow_contr
     return 0;
 }
 
+static int test_runtime_direct_light_3d_glass_transport_override_decouples_shadow_from_alpha(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    HitInfo3D hit = {0};
+    RuntimeMaterialPayload3D payload = {0};
+    RuntimeVisibility3DTransmittance transmittance = {0};
+    RuntimeDirectLight3DResult result = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    runtime_lighting_materials_direct_reset_authoring_state();
+    sceneSettings.objectCount = 2;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_DEFAULT;
+    sceneSettings.sceneObjects[0].color = 0xFFFFFF;
+    sceneSettings.sceneObjects[1].material_id = MATERIAL_PRESET_TRANSPARENT;
+    sceneSettings.sceneObjects[1].color = 0xFFFFFF;
+    sceneSettings.sceneObjects[1].alpha = 0.16;
+    sceneSettings.sceneObjects[1].hasGlassTransportOverride = true;
+    sceneSettings.sceneObjects[1].glassTransmission = 0.82;
+    sceneSettings.sceneObjects[1].glassIor = 1.52;
+    sceneSettings.sceneObjects[1].glassAbsorptionDistance = 4.0;
+    sceneSettings.sceneObjects[1].glassThinWalled = true;
+
+    scene.hasLight = true;
+    scene.light.position = vec3(2.0, -2.0, 0.0);
+    scene.light.intensity = 10.0;
+    scene.light.falloffDistance = 10.0;
+    scene.light.falloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    scene.primitiveCapacity = 2;
+    scene.triangleMesh.triangleCapacity = 2;
+    scene.primitives = (RuntimePrimitive3D*)calloc((size_t)scene.primitiveCapacity,
+                                                   sizeof(*scene.primitives));
+    scene.triangleMesh.triangles =
+        (RuntimeTriangle3D*)calloc((size_t)scene.triangleMesh.triangleCapacity,
+                                   sizeof(*scene.triangleMesh.triangles));
+    assert_true("runtime_direct_light_3d_glass_override_alloc_primitives", scene.primitives != NULL);
+    assert_true("runtime_direct_light_3d_glass_override_alloc_triangles", scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    scene.primitiveCount = 2;
+    scene.triangleMesh.triangleCount = 2;
+    scene.primitives[0].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene.primitives[0].source.sceneObjectIndex = 0;
+    scene.primitives[1].source.kind = RUNTIME_PRIMITIVE_3D_KIND_PLANE;
+    scene.primitives[1].source.sceneObjectIndex = 1;
+    scene.triangleMesh.triangles[0].p0 = vec3(-3.0, -5.0, -3.0);
+    scene.triangleMesh.triangles[0].p1 = vec3(-3.0, -5.0, 3.0);
+    scene.triangleMesh.triangles[0].p2 = vec3(3.0, -5.0, -3.0);
+    scene.triangleMesh.triangles[0].normal = vec3(0.0, 1.0, 0.0);
+    scene.triangleMesh.triangles[0].primitiveIndex = 0;
+    scene.triangleMesh.triangles[0].sceneObjectIndex = 0;
+    scene.triangleMesh.triangles[1].p0 = vec3(1.0, -4.5, -2.0);
+    scene.triangleMesh.triangles[1].p1 = vec3(1.0, -2.5, 0.0);
+    scene.triangleMesh.triangles[1].p2 = vec3(1.0, -4.5, 2.0);
+    scene.triangleMesh.triangles[1].normal = vec3(1.0, 0.0, 0.0);
+    scene.triangleMesh.triangles[1].primitiveIndex = 1;
+    scene.triangleMesh.triangles[1].sceneObjectIndex = 1;
+
+    RuntimeScene3D_RefreshMaterialFlags(&scene);
+    assert_true("runtime_direct_light_3d_glass_override_flags_transparent",
+                scene.materialFlags.hasTransparentSurfaces);
+    assert_true("runtime_direct_light_3d_glass_override_fast_path_disabled",
+                !RuntimeVisibility3D_CanUseOpaqueNoVolumeFastPath(&scene));
+
+    hit.t = 5.0;
+    hit.position = vec3(0.0, -5.0, 0.0);
+    hit.normal = vec3(0.0, 1.0, 0.0);
+    hit.triangleIndex = 0;
+    hit.primitiveIndex = 0;
+    hit.sceneObjectIndex = 0;
+    hit.source = scene.primitives[0].source;
+    hit.baryU = 0.333333333333;
+    hit.baryV = 0.333333333333;
+    hit.baryW = 0.333333333334;
+
+    ok = RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(1, &payload);
+    assert_true("runtime_direct_light_3d_glass_override_payload_ok", ok);
+    assert_close("runtime_direct_light_3d_glass_override_payload_transmission",
+                 payload.transparency,
+                 0.82,
+                 1e-9);
+
+    transmittance = RuntimeVisibility3D_TransmittanceFromHitToPointRGB(&scene,
+                                                                       &hit,
+                                                                       scene.light.position,
+                                                                       -1,
+                                                                       -1);
+    assert_true("runtime_direct_light_3d_glass_override_transmittance_high",
+                transmittance.luma > 0.78);
+
+    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, NULL, &result);
+    assert_true("runtime_direct_light_3d_glass_override_shade_ok", ok);
+    assert_true("runtime_direct_light_3d_glass_override_visible", result.visible);
+    assert_true("runtime_direct_light_3d_glass_override_radiance_not_shadow_black",
+                result.radiance > scene.light.intensity * result.attenuation *
+                                      result.ndotl * 0.75);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 static int test_runtime_direct_light_3d_opaque_no_volume_fast_path_gate(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -1293,12 +1415,20 @@ static int test_runtime_direct_light_3d_area_light_sampling_sequence_changes_sha
 static int test_runtime_direct_light_3d_area_light_clear_visibility_stops_after_four(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
+    const char* saved_probe_value =
+        getenv(RUNTIME_DIRECT_LIGHT_CLEAR_VISIBLE_DECISION_PROBE_ENV);
+    char saved_probe_buffer[64] = {0};
+    const bool had_probe_value = saved_probe_value != NULL;
     RuntimeScene3D scene;
     HitInfo3D hit = {0};
     RuntimeDirectLight3DResult result = {0};
     RuntimeTriangleBVH3DTraceStats stats = {0};
     bool ok = false;
 
+    if (saved_probe_value) {
+        snprintf(saved_probe_buffer, sizeof(saved_probe_buffer), "%s", saved_probe_value);
+    }
+    setenv(RUNTIME_DIRECT_LIGHT_CLEAR_VISIBLE_DECISION_PROBE_ENV, "0", 1);
     RuntimeScene3D_Init(&scene);
     runtime_lighting_materials_direct_reset_authoring_state();
     sceneSettings.objectCount = 1;
@@ -1326,6 +1456,8 @@ static int test_runtime_direct_light_3d_area_light_clear_visibility_stops_after_
         RuntimeScene3D_Free(&scene);
         sceneSettings = saved_scene;
         animSettings = saved_anim;
+        runtime_lighting_materials_direct_restore_clear_probe_env(had_probe_value,
+                                                                  saved_probe_buffer);
         return 0;
     }
 
@@ -1367,6 +1499,140 @@ static int test_runtime_direct_light_3d_area_light_clear_visibility_stops_after_
     RuntimeScene3D_Free(&scene);
     sceneSettings = saved_scene;
     animSettings = saved_anim;
+    runtime_lighting_materials_direct_restore_clear_probe_env(had_probe_value,
+                                                              saved_probe_buffer);
+    return 0;
+}
+
+static int test_runtime_direct_light_3d_clear_visible_probe_stops_after_two(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char* saved_probe_value =
+        getenv(RUNTIME_DIRECT_LIGHT_CLEAR_VISIBLE_DECISION_PROBE_ENV);
+    char saved_probe_buffer[64] = {0};
+    const bool had_probe_value = saved_probe_value != NULL;
+    RuntimeScene3D scene;
+    HitInfo3D hit = {0};
+    RuntimeDirectLight3DResult result = {0};
+    RuntimeTriangleBVH3DTraceStats stats = {0};
+    bool ok = false;
+
+    if (saved_probe_value) {
+        snprintf(saved_probe_buffer, sizeof(saved_probe_buffer), "%s", saved_probe_value);
+    }
+    setenv(RUNTIME_DIRECT_LIGHT_CLEAR_VISIBLE_DECISION_PROBE_ENV, "1", 1);
+    RuntimeScene3D_Init(&scene);
+    runtime_lighting_materials_direct_reset_authoring_state();
+    sceneSettings.objectCount = 1;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_DEFAULT;
+    sceneSettings.sceneObjects[0].color = 0xFFFFFF;
+
+    scene.hasLight = true;
+    scene.light.position = vec3(0.0, -2.0, 0.0);
+    scene.light.radius = 0.8;
+    scene.light.intensity = 10.0;
+    scene.light.falloffDistance = 10.0;
+    scene.light.falloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    ok = runtime_direct_light_3d_setup_wall_scene(&scene, &hit, false);
+    assert_true("runtime_direct_light_3d_clear_probe_scene_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        runtime_lighting_materials_direct_restore_clear_probe_env(had_probe_value,
+                                                                  saved_probe_buffer);
+        return 0;
+    }
+    ok = RuntimeTriangleMesh3D_BuildBVH(&scene.triangleMesh);
+    assert_true("runtime_direct_light_3d_clear_probe_bvh_ok", ok);
+
+    RuntimeTriangleBVH3D_ResetTraceStats();
+    ok = RuntimeDirectLight3D_ShadeHit(&scene, &hit, NULL, &result);
+    RuntimeTriangleBVH3D_SnapshotTraceStats(&stats);
+    RuntimeTriangleBVH3D_DisableTraceStats();
+    assert_true("runtime_direct_light_3d_clear_probe_ok", ok);
+    assert_true("runtime_direct_light_3d_clear_probe_visible", result.visible);
+    assert_true("runtime_direct_light_3d_clear_probe_radiance_positive",
+                result.radiance > 0.0);
+    assert_true("runtime_direct_light_3d_clear_probe_two_shadow_traces",
+                stats.traceCalls == 2u);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    runtime_lighting_materials_direct_restore_clear_probe_env(had_probe_value,
+                                                              saved_probe_buffer);
+    return 0;
+}
+
+static int test_runtime_direct_light_3d_clear_visible_probe_keeps_transparent_receiver_four(
+    void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char* saved_probe_value =
+        getenv(RUNTIME_DIRECT_LIGHT_CLEAR_VISIBLE_DECISION_PROBE_ENV);
+    char saved_probe_buffer[64] = {0};
+    const bool had_probe_value = saved_probe_value != NULL;
+    RuntimeScene3D scene;
+    HitInfo3D hit = {0};
+    RuntimeDirectLight3DResult result = {0};
+    RuntimeMaterialPayload3D payload = {0};
+    RuntimeTriangleBVH3DTraceStats stats = {0};
+    bool ok = false;
+
+    if (saved_probe_value) {
+        snprintf(saved_probe_buffer, sizeof(saved_probe_buffer), "%s", saved_probe_value);
+    }
+    setenv(RUNTIME_DIRECT_LIGHT_CLEAR_VISIBLE_DECISION_PROBE_ENV, "1", 1);
+    RuntimeScene3D_Init(&scene);
+    runtime_lighting_materials_direct_reset_authoring_state();
+    sceneSettings.objectCount = 1;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
+    sceneSettings.sceneObjects[0].color = 0xFFFFFF;
+
+    scene.hasLight = true;
+    scene.light.position = vec3(0.0, -2.0, 0.0);
+    scene.light.radius = 0.8;
+    scene.light.intensity = 10.0;
+    scene.light.falloffDistance = 10.0;
+    scene.light.falloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    ok = runtime_direct_light_3d_setup_wall_scene(&scene, &hit, false);
+    assert_true("runtime_direct_light_3d_clear_probe_trans_scene_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        runtime_lighting_materials_direct_restore_clear_probe_env(had_probe_value,
+                                                                  saved_probe_buffer);
+        return 0;
+    }
+    ok = RuntimeTriangleMesh3D_BuildBVH(&scene.triangleMesh);
+    assert_true("runtime_direct_light_3d_clear_probe_trans_bvh_ok", ok);
+
+    payload.valid = true;
+    payload.sceneObjectIndex = 0;
+    payload.materialId = MATERIAL_PRESET_TRANSPARENT;
+    payload.baseColorR = 1.0;
+    payload.baseColorG = 1.0;
+    payload.baseColorB = 1.0;
+    payload.transparency = 0.65;
+
+    RuntimeTriangleBVH3D_ResetTraceStats();
+    ok = RuntimeDirectLight3D_ShadeHitWithPayload(&scene, &hit, &payload, NULL, &result);
+    RuntimeTriangleBVH3D_SnapshotTraceStats(&stats);
+    RuntimeTriangleBVH3D_DisableTraceStats();
+    assert_true("runtime_direct_light_3d_clear_probe_trans_ok", ok);
+    assert_true("runtime_direct_light_3d_clear_probe_trans_visible", result.visible);
+    assert_true("runtime_direct_light_3d_clear_probe_trans_radiance_positive",
+                result.radiance > 0.0);
+    assert_true("runtime_direct_light_3d_clear_probe_trans_four_shadow_traces",
+                stats.traceCalls == 4u);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    runtime_lighting_materials_direct_restore_clear_probe_env(had_probe_value,
+                                                              saved_probe_buffer);
     return 0;
 }
 
@@ -2168,10 +2434,13 @@ int run_test_runtime_lighting_materials_direct_light_suite(void) {
     test_runtime_direct_light_3d_legacy_zero_color_fallback_contract();
     test_runtime_direct_light_3d_top_fill_lifts_upward_faces();
     test_runtime_direct_light_3d_transparent_blocker_partial_shadow_contract();
+    test_runtime_direct_light_3d_glass_transport_override_decouples_shadow_from_alpha();
     test_runtime_direct_light_3d_opaque_no_volume_fast_path_gate();
     test_runtime_direct_light_3d_area_light_softens_edge_shadow_contract();
     test_runtime_direct_light_3d_area_light_sampling_sequence_changes_shadow();
     test_runtime_direct_light_3d_area_light_clear_visibility_stops_after_four();
+    test_runtime_direct_light_3d_clear_visible_probe_stops_after_two();
+    test_runtime_direct_light_3d_clear_visible_probe_keeps_transparent_receiver_four();
     test_runtime_direct_light_3d_low_contribution_skips_shadow_trace();
     test_runtime_direct_light_3d_oil_overlay_opaque_blocker_stays_solid();
     test_runtime_direct_light_3d_authored_light_motion_contract();

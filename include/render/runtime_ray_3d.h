@@ -36,6 +36,8 @@ typedef enum RuntimeRay3DTraceRoute {
 typedef struct RuntimeRay3DRouteStats {
     RuntimeRay3DTraceRoute requestedRoute;
     RuntimeRay3DTraceRoute activeRoute;
+    bool traceContextStatsOwned;
+    bool sceneAccelerationTraceCallbackBound;
     uint64_t traceCalls;
     uint64_t flattenedTraceCalls;
     uint64_t tlasTraceCalls;
@@ -57,6 +59,13 @@ typedef int (*RuntimeRay3DSceneAccelerationTraceFirstHitFn)(
     [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
     HitInfo3D* out_hit);
 
+typedef struct RuntimeRay3DTraceContext {
+    RuntimeRay3DTraceRoute requestedRoute;
+    RuntimeRay3DTraceRoute activeRoute;
+    RuntimeRay3DSceneAccelerationTraceFirstHitFn sceneAccelerationTraceFirstHit;
+    RuntimeRay3DRouteStats routeStats;
+} RuntimeRay3DTraceContext;
+
 Ray3D RuntimeRay3D_Make(Vec3 origin, Vec3 direction);
 Ray3D RuntimeRay3D_MakeOffset(Vec3 origin,
                               Vec3 normal,
@@ -76,10 +85,26 @@ bool RuntimeRay3D_TraceSceneFirstHit(const RuntimeScene3D* scene,
                                      [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
                                      [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
                                      HitInfo3D* out_hit);
+bool RuntimeRay3D_TraceSceneFirstHitWithContext(RuntimeRay3DTraceContext* context,
+                                                const RuntimeScene3D* scene,
+                                                const Ray3D* ray,
+                                                [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
+                                                [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
+                                                HitInfo3D* out_hit);
 
 const char* RuntimeRay3DTraceRouteLabel(RuntimeRay3DTraceRoute route);
 RuntimeRay3DTraceRoute RuntimeRay3D_DefaultTraceRoute(void);
 RuntimeRay3DTraceRoute RuntimeRay3D_CurrentTraceRoute(void);
+void RuntimeRay3DTraceContext_Init(RuntimeRay3DTraceContext* context);
+void RuntimeRay3DTraceContext_SetTraceRoute(RuntimeRay3DTraceContext* context,
+                                            RuntimeRay3DTraceRoute route);
+void RuntimeRay3DTraceContext_SetSceneAccelerationTraceFirstHit(
+    RuntimeRay3DTraceContext* context,
+    RuntimeRay3DSceneAccelerationTraceFirstHitFn trace_first_hit);
+void RuntimeRay3DTraceContext_ResetRouteStats(RuntimeRay3DTraceContext* context);
+void RuntimeRay3DTraceContext_SnapshotRouteStats(
+    const RuntimeRay3DTraceContext* context,
+    RuntimeRay3DRouteStats* out_stats);
 void RuntimeRay3D_SetSceneAccelerationTraceFirstHit(
     RuntimeRay3DSceneAccelerationTraceFirstHitFn trace_first_hit);
 void RuntimeRay3D_SetTraceRoute(RuntimeRay3DTraceRoute route);

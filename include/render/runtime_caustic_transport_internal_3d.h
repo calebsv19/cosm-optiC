@@ -179,7 +179,8 @@ bool runtime_caustic_transport_deposit_surface(
     double surface_footprint_scale,
     double surface_radiance_scale,
     const RuntimeCausticTransportSurfaceReceiverContext3D* receiver_context,
-    RuntimeCausticTransport3DDiagnostics* diagnostics);
+    RuntimeCausticTransport3DDiagnostics* diagnostics,
+    RuntimeCausticTransportDebugPath3D* debug_path);
 bool runtime_caustic_transport_deposit_segment(
     const RuntimeScene3D* scene,
     RuntimeCausticVolumeCache3D* cache,

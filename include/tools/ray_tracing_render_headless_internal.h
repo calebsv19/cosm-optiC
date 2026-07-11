@@ -7,9 +7,11 @@
 
 #include "app/agent_render_request.h"
 #include "import/runtime_scene_bridge.h"
+#include "import/runtime_scene_motion_bridge.h"
 #include "import/runtime_mesh_asset_loader.h"
 #include "render/ray_tracing_mode_backend.h"
 #include "render/runtime_dynamic_geometry_accel_3d.h"
+#include "render/runtime_caustic_photon_integration_3d.h"
 #include "render/runtime_mesh_blas_cache_3d.h"
 #include "render/runtime_native_3d_render.h"
 #include "render/runtime_render_trace_cost_ledger_3d.h"
@@ -70,6 +72,7 @@ typedef struct RayTracingHeadlessPreflight {
     int frames_rendered;
     RayTracingRuntimeRoute route;
     RuntimeSceneBridgePreflight scene_summary;
+    RuntimeMotionTrack3DSummary object_motion_summary;
     RuntimeEnvironment3D environment_summary;
     bool environment_summary_built;
     int registered_light_count;
@@ -91,6 +94,11 @@ typedef struct RayTracingHeadlessPreflight {
     double registered_light_emissive_area;
     double registered_light_emissive_weight;
     double registered_light_emissive_proxy_radius_max;
+    double registered_light_first_position_x;
+    double registered_light_first_position_y;
+    double registered_light_first_position_z;
+    double registered_light_first_radius;
+    double registered_light_first_intensity;
     double registered_light_first_color_r;
     double registered_light_first_color_g;
     double registered_light_first_color_b;
@@ -149,6 +157,8 @@ typedef struct RayTracingHeadlessPreflight {
     double water_surface_payload_tint_b;
     int water_surface_triangle_count;
     RuntimeNative3DRenderStats stats;
+    RuntimeCausticPhotonRenderCallsiteReadback3D causticPhotonCallsiteReadback;
+    bool causticPhotonCallsiteReadbackBuilt;
     RuntimeNative3DPreparedSceneCacheStats prepared_scene_cache_stats;
     RuntimeDynamicGeometryWaterCacheDiagnostics3D dynamic_water_cache_stats;
     RuntimeSceneAcceleration3DDiagnostics scene_acceleration_stats;
@@ -208,6 +218,13 @@ void ray_tracing_render_headless_usage(const char *argv0);
 void ray_tracing_headless_write_startup_load_timing_matrix(
     FILE* file,
     const RayTracingHeadlessPreflight* preflight);
+void ray_tracing_headless_write_frame_dataflow_state_ledger(
+    FILE* file,
+    const RayTracingAgentRenderRequest* request,
+    const RayTracingHeadlessPreflight* preflight);
+void ray_tracing_headless_write_direct_light_visibility_policy(
+    FILE* file,
+    const RuntimeRenderTraceCostLedger3D* ledger);
 void ray_tracing_headless_write_caustic_state_summary(
     FILE *file,
     const RayTracingAgentRenderRequest *request,
@@ -216,6 +233,14 @@ void ray_tracing_headless_write_object_audit(
     FILE *file,
     const RayTracingHeadlessPreflight *preflight);
 void ray_tracing_headless_audit_prepared_frame(
+    RayTracingHeadlessPreflight *preflight,
+    const RuntimeNative3DPreparedFrame *frame,
+    const RayTracingAgentRenderRequest *request);
+void ray_tracing_headless_probe_caustic_photon_callsite(
+    RayTracingHeadlessPreflight *preflight,
+    const RuntimeNative3DPreparedFrame *frame,
+    const RayTracingAgentRenderRequest *request);
+void ray_tracing_headless_probe_caustic_photon_trace_callsite(
     RayTracingHeadlessPreflight *preflight,
     const RuntimeNative3DPreparedFrame *frame,
     const RayTracingAgentRenderRequest *request);
@@ -230,6 +255,8 @@ bool ray_tracing_headless_populate_water_surface_frame_selection(
 void ray_tracing_headless_note_water_surface_mesh(
     RayTracingHeadlessPreflight *preflight,
     const RuntimeNative3DPreparedFrame *frame);
+void ray_tracing_headless_apply_inspection_overrides(
+    const RayTracingAgentRenderRequest *request);
 size_t ray_tracing_headless_count_nonzero_pixels(const uint8_t *pixels,
                                                  int width,
                                                  int height,
@@ -332,6 +359,10 @@ void ray_tracing_headless_write_dynamic_geometry_acceleration_summary(
     const RayTracingHeadlessPreflight *preflight);
 void ray_tracing_headless_write_dynamic_water_acceleration_cache_summary(
     FILE *file,
+    const RayTracingHeadlessPreflight *preflight);
+void ray_tracing_headless_write_object_motion_acceleration_summary(
+    FILE *file,
+    const RayTracingAgentRenderRequest *request,
     const RayTracingHeadlessPreflight *preflight);
 void ray_tracing_render_headless_write_summary(FILE *file,
                                                const RayTracingAgentRenderRequest *request,

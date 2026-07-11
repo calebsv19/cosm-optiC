@@ -10,6 +10,20 @@ static double ray_tracing_headless_render_stats_safe_ratio(double numerator, dou
     return denominator > 0.0 ? numerator / denominator : 0.0;
 }
 
+static void ray_tracing_headless_render_stats_write_region_counts(FILE* file,
+                                                                  const char* name,
+                                                                  const int counts[4],
+                                                                  bool trailing_comma) {
+    fprintf(file,
+            "    \"%s\": { \"top_left\": %d, \"top_right\": %d, \"bottom_left\": %d, \"bottom_right\": %d }%s\n",
+            name,
+            counts ? counts[0] : 0,
+            counts ? counts[1] : 0,
+            counts ? counts[2] : 0,
+            counts ? counts[3] : 0,
+            trailing_comma ? "," : "");
+}
+
 void ray_tracing_headless_write_render_stats_summary(
     FILE *file,
     const RayTracingHeadlessPreflight *preflight) {
@@ -362,6 +376,36 @@ void ray_tracing_headless_write_render_stats_summary(
             preflight->stats.temporalProgressDirtyBatchCount);
     fprintf(file, "    \"temporal_progress_dirty_tiles\": %d,\n",
             preflight->stats.temporalProgressDirtyTileCount);
+    fprintf(file, "    \"temporal_tile_scheduler_job_array_owners\": %d,\n",
+            preflight->stats.temporalTileSchedulerJobArrayOwnerCount);
+    fprintf(file, "    \"temporal_tile_scheduler_parent_metric_array_owners\": %d,\n",
+            preflight->stats.temporalTileSchedulerParentMetricArrayOwnerCount);
+    fprintf(file, "    \"temporal_tile_scheduler_progress_tile_array_owners\": %d,\n",
+            preflight->stats.temporalTileSchedulerProgressTileArrayOwnerCount);
+    fprintf(file, "    \"temporal_tile_scheduler_completion_queue_owners\": %d,\n",
+            preflight->stats.temporalTileSchedulerCompletionQueueOwnerCount);
+    fprintf(file, "    \"temporal_tile_scheduler_worker_pool_owners\": %d,\n",
+            preflight->stats.temporalTileSchedulerWorkerPoolOwnerCount);
+    fprintf(file, "    \"temporal_tile_scheduler_cancel_token_bound\": %d,\n",
+            preflight->stats.temporalTileSchedulerCancelTokenBound);
+    fprintf(file, "    \"temporal_tile_scheduler_cancel_checks\": %d,\n",
+            preflight->stats.temporalTileSchedulerCancelCheckCount);
+    fprintf(file, "    \"temporal_tile_scheduler_cancel_requested\": %d,\n",
+            preflight->stats.temporalTileSchedulerCancelRequestedCount);
+    fprintf(file, "    \"temporal_tile_scheduler_cancel_before_dispatch\": %d,\n",
+            preflight->stats.temporalTileSchedulerCancelBeforeDispatchCount);
+    fprintf(file, "    \"temporal_tile_scheduler_cancel_during_wait\": %d,\n",
+            preflight->stats.temporalTileSchedulerCancelDuringWaitCount);
+    fprintf(file, "    \"temporal_tile_scheduler_cancel_before_final_resolve\": %d,\n",
+            preflight->stats.temporalTileSchedulerCancelBeforeFinalResolveCount);
+    fprintf(file, "    \"temporal_tile_scheduler_final_resolve_blocked_by_cancel\": %d,\n",
+            preflight->stats.temporalTileSchedulerFinalResolveBlockedByCancelCount);
+    fprintf(file, "    \"temporal_tile_scheduler_worker_drain_shutdowns\": %d,\n",
+            preflight->stats.temporalTileSchedulerWorkerDrainShutdownCount);
+    fprintf(file, "    \"temporal_tile_scheduler_worker_cancel_shutdowns\": %d,\n",
+            preflight->stats.temporalTileSchedulerWorkerCancelShutdownCount);
+    fprintf(file, "    \"temporal_tile_scheduler_cancel_generation\": %llu,\n",
+            (unsigned long long)preflight->stats.temporalTileSchedulerCancelGeneration);
     fprintf(file, "    \"temporal_dirty_preview_presents\": %d,\n",
             preflight->stats.temporalDirtyPreviewPresentCount);
     fprintf(file, "    \"temporal_conservative_first_frame_tile_render\": %d,\n",
@@ -374,6 +418,20 @@ void ray_tracing_headless_write_render_stats_summary(
             preflight->stats.temporalFinalPreviewPresentCount);
     fprintf(file, "    \"temporal_history_promotes\": %d,\n",
             preflight->stats.temporalHistoryPromoteCount);
+    fprintf(file, "    \"temporal_dirty_preview_host_pixels\": %llu,\n",
+            (unsigned long long)preflight->stats.temporalDirtyPreviewHostPixels);
+    fprintf(file, "    \"temporal_dirty_preview_host_bytes\": %llu,\n",
+            (unsigned long long)preflight->stats.temporalDirtyPreviewHostBytes);
+    fprintf(file, "    \"temporal_final_resolve_host_pixels\": %llu,\n",
+            (unsigned long long)preflight->stats.temporalFinalResolveHostPixels);
+    fprintf(file, "    \"temporal_final_resolve_host_bytes\": %llu,\n",
+            (unsigned long long)preflight->stats.temporalFinalResolveHostBytes);
+    fprintf(file, "    \"temporal_history_seed_host_bytes\": %llu,\n",
+            (unsigned long long)preflight->stats.temporalHistorySeedHostBytes);
+    fprintf(file, "    \"temporal_history_promote_host_bytes\": %llu,\n",
+            (unsigned long long)preflight->stats.temporalHistoryPromoteHostBytes);
+    fprintf(file, "    \"temporal_final_preview_present_host_bytes\": %llu,\n",
+            (unsigned long long)preflight->stats.temporalFinalPreviewPresentHostBytes);
     fprintf(file, "    \"temporal_adaptive_state_measured_pixels\": %d,\n",
             preflight->stats.temporalAdaptiveStateMeasuredPixels);
     fprintf(file, "    \"temporal_adaptive_state_stable_pixels\": %d,\n",
@@ -416,6 +474,88 @@ void ray_tracing_headless_write_render_stats_summary(
             preflight->stats.temporalAdaptiveStateDirectLightMixedPartialPixels);
     fprintf(file, "    \"temporal_adaptive_state_direct_light_boundary_risk_pixels\": %d,\n",
             preflight->stats.temporalAdaptiveStateDirectLightBoundaryRiskPixels);
+    fprintf(file, "    \"temporal_adaptive_early_stop_eligible_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveEarlyStopEligiblePixels);
+    fprintf(file, "    \"temporal_adaptive_early_stop_held_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveEarlyStopHeldPixels);
+    fprintf(file, "    \"temporal_adaptive_early_stop_hold_probe_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveEarlyStopHoldProbePixels);
+    fprintf(file, "    \"temporal_adaptive_early_stop_hold_high_risk_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveEarlyStopHoldHighRiskPixels);
+    fprintf(file, "    \"temporal_adaptive_early_stop_hold_activity_risk_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveEarlyStopHoldActivityRiskPixels);
+    fprintf(file, "    \"temporal_adaptive_early_stop_hold_material_risk_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveEarlyStopHoldMaterialRiskPixels);
+    fprintf(file, "    \"temporal_adaptive_early_stop_hold_transparent_risk_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveEarlyStopHoldTransparentRiskPixels);
+    fprintf(file, "    \"temporal_adaptive_early_stop_hold_geometry_edge_risk_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveEarlyStopHoldGeometryEdgeRiskPixels);
+    fprintf(file, "    \"temporal_adaptive_early_stop_hold_direct_light_risk_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveEarlyStopHoldDirectLightRiskPixels);
+    fprintf(file, "    \"temporal_adaptive_early_stop_base_active_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveEarlyStopBaseActivePixels);
+    fprintf(file, "    \"temporal_adaptive_early_stop_padding_hold_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveEarlyStopPaddingHoldPixels);
+    fprintf(file, "    \"temporal_adaptive_early_stop_padding_hold_high_seed_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveEarlyStopPaddingHoldHighSeedPixels);
+    fprintf(file, "    \"temporal_adaptive_early_stop_padding_hold_medium_seed_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveEarlyStopPaddingHoldMediumSeedPixels);
+    fprintf(file, "    \"temporal_adaptive_early_stop_active_after_padding_pixels\": %d,\n",
+            preflight->stats.temporalAdaptiveEarlyStopActiveAfterPaddingPixels);
+    ray_tracing_headless_render_stats_write_region_counts(
+        file,
+        "temporal_adaptive_early_stop_eligible_region_counts",
+        preflight->stats.temporalAdaptiveEarlyStopEligibleRegionCounts,
+        true);
+    ray_tracing_headless_render_stats_write_region_counts(
+        file,
+        "temporal_adaptive_early_stop_held_region_counts",
+        preflight->stats.temporalAdaptiveEarlyStopHeldRegionCounts,
+        true);
+    ray_tracing_headless_render_stats_write_region_counts(
+        file,
+        "temporal_adaptive_early_stop_padding_hold_region_counts",
+        preflight->stats.temporalAdaptiveEarlyStopPaddingHoldRegionCounts,
+        true);
+    fprintf(file,
+            "    \"temporal_adaptive_budget_buckets\": { "
+            "\"floor\": { \"pixels\": %d, \"active\": %d, \"eligible\": %d, \"held\": %d }, "
+            "\"three_to_four\": { \"pixels\": %d, \"active\": %d, \"eligible\": %d, \"held\": %d }, "
+            "\"five_to_eight\": { \"pixels\": %d, \"active\": %d, \"eligible\": %d, \"held\": %d }, "
+            "\"nine_plus\": { \"pixels\": %d, \"active\": %d, \"eligible\": %d, \"held\": %d } },\n",
+            preflight->stats.temporalAdaptiveBudgetBucketPixels[0],
+            preflight->stats.temporalAdaptiveBudgetActiveBucketPixels[0],
+            preflight->stats.temporalAdaptiveBudgetEligibleBucketPixels[0],
+            preflight->stats.temporalAdaptiveBudgetHeldBucketPixels[0],
+            preflight->stats.temporalAdaptiveBudgetBucketPixels[1],
+            preflight->stats.temporalAdaptiveBudgetActiveBucketPixels[1],
+            preflight->stats.temporalAdaptiveBudgetEligibleBucketPixels[1],
+            preflight->stats.temporalAdaptiveBudgetHeldBucketPixels[1],
+            preflight->stats.temporalAdaptiveBudgetBucketPixels[2],
+            preflight->stats.temporalAdaptiveBudgetActiveBucketPixels[2],
+            preflight->stats.temporalAdaptiveBudgetEligibleBucketPixels[2],
+            preflight->stats.temporalAdaptiveBudgetHeldBucketPixels[2],
+            preflight->stats.temporalAdaptiveBudgetBucketPixels[3],
+            preflight->stats.temporalAdaptiveBudgetActiveBucketPixels[3],
+            preflight->stats.temporalAdaptiveBudgetEligibleBucketPixels[3],
+            preflight->stats.temporalAdaptiveBudgetHeldBucketPixels[3]);
+    fprintf(file,
+            "    \"temporal_adaptive_budget_risk_attribution\": { "
+            "\"clear_visible_eligible\": %d, "
+            "\"clear_visible_held\": %d, "
+            "\"partial_held\": %d, "
+            "\"transparent_held\": %d, "
+            "\"geometry_held\": %d, "
+            "\"activity_held\": %d },\n",
+            preflight->stats.temporalAdaptiveBudgetClearVisibleEligiblePixels,
+            preflight->stats.temporalAdaptiveBudgetClearVisibleHeldPixels,
+            preflight->stats.temporalAdaptiveBudgetPartialHeldPixels,
+            preflight->stats.temporalAdaptiveBudgetTransparentHeldPixels,
+            preflight->stats.temporalAdaptiveBudgetGeometryHeldPixels,
+            preflight->stats.temporalAdaptiveBudgetActivityHeldPixels);
+    fprintf(file,
+            "    \"temporal_adaptive_budget_heatmap_enabled\": %s,\n",
+            preflight->stats.temporalAdaptiveBudgetHeatmapEnabled ? "true" : "false");
     fprintf(file, "    \"temporal_adaptive_state_mixed_risk_tiles\": %d,\n",
             preflight->stats.temporalAdaptiveStateMixedRiskTiles);
     fprintf(file, "    \"temporal_adaptive_state_risk_avg\": %.9f,\n",

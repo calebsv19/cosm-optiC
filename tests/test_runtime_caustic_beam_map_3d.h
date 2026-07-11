@@ -1,0 +1,6 @@
+#ifndef TEST_RUNTIME_CAUSTIC_BEAM_MAP_3D_H
+#define TEST_RUNTIME_CAUSTIC_BEAM_MAP_3D_H
+
+int run_test_runtime_caustic_beam_map_3d_tests(void);
+
+#endif

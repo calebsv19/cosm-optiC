@@ -19,6 +19,7 @@ typedef struct {
     double opticalIor;
     double absorptionDistance;
     bool thinWalled;
+    bool hasGlassTransportOverride;
     double textureMask;
     double textureU;
     double textureV;

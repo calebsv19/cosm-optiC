@@ -47,5 +47,8 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
                                                int active_mode,
                                                int selected_object_index,
                                                int hover_object_index);
+void SceneEditorDigestOverlayRenderMotionLayer(SDL_Renderer* renderer,
+                                               const SceneEditorDigestOverlayProjector* projector,
+                                               int selected_object_index);
 
 #endif

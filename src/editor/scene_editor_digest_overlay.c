@@ -365,6 +365,11 @@ int SceneEditorDigestOverlayRender(SDL_Renderer* renderer,
                                               active_mode,
                                               selected_object_index,
                                               hover_object_index);
+    if (active_mode == EDITOR_MODE_OBJECT || active_mode == EDITOR_MODE_MATERIAL) {
+        SceneEditorDigestOverlayRenderMotionLayer(renderer,
+                                                  &projector,
+                                                  selected_object_index);
+    }
 
     if (active_mode != EDITOR_MODE_MATERIAL) {
         SceneEditorDigestOverlayDrawPathPassive3D(renderer,

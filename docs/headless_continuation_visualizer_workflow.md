@@ -162,6 +162,12 @@ operator surface. For long renders, watch:
 - `completed_frames`
 - `remaining_frames`
 
+For PhysicsSim-only stopped-stage jobs, do not infer progress from RayTracing
+frame fields. Read the PhysicsSim stage status and, once available, its
+`run_progress.json` / `run_summary.json`. The VPS dashboard should surface
+PhysicsSim completed simulation frames and selected export counts separately
+from RayTracing rendered-frame counts.
+
 After the run, confirm:
 
 - `publication_state`

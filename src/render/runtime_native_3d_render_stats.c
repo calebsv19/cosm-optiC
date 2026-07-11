@@ -519,6 +519,13 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
     dst->temporalHostFullResolveCount += src->temporalHostFullResolveCount;
     dst->temporalFinalPreviewPresentCount += src->temporalFinalPreviewPresentCount;
     dst->temporalHistoryPromoteCount += src->temporalHistoryPromoteCount;
+    dst->temporalDirtyPreviewHostPixels += src->temporalDirtyPreviewHostPixels;
+    dst->temporalDirtyPreviewHostBytes += src->temporalDirtyPreviewHostBytes;
+    dst->temporalFinalResolveHostPixels += src->temporalFinalResolveHostPixels;
+    dst->temporalFinalResolveHostBytes += src->temporalFinalResolveHostBytes;
+    dst->temporalHistorySeedHostBytes += src->temporalHistorySeedHostBytes;
+    dst->temporalHistoryPromoteHostBytes += src->temporalHistoryPromoteHostBytes;
+    dst->temporalFinalPreviewPresentHostBytes += src->temporalFinalPreviewPresentHostBytes;
     dst->temporalAdaptiveStateMeasuredPixels += src->temporalAdaptiveStateMeasuredPixels;
     dst->temporalAdaptiveStateStablePixels += src->temporalAdaptiveStateStablePixels;
     dst->temporalAdaptiveStateActivePixels += src->temporalAdaptiveStateActivePixels;
@@ -550,6 +557,67 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
         src->temporalAdaptiveStateDirectLightMixedPartialPixels;
     dst->temporalAdaptiveStateDirectLightBoundaryRiskPixels +=
         src->temporalAdaptiveStateDirectLightBoundaryRiskPixels;
+    dst->temporalAdaptiveEarlyStopEligiblePixels +=
+        src->temporalAdaptiveEarlyStopEligiblePixels;
+    dst->temporalAdaptiveEarlyStopHeldPixels +=
+        src->temporalAdaptiveEarlyStopHeldPixels;
+    dst->temporalAdaptiveEarlyStopHoldProbePixels +=
+        src->temporalAdaptiveEarlyStopHoldProbePixels;
+    dst->temporalAdaptiveEarlyStopHoldHighRiskPixels +=
+        src->temporalAdaptiveEarlyStopHoldHighRiskPixels;
+    dst->temporalAdaptiveEarlyStopHoldActivityRiskPixels +=
+        src->temporalAdaptiveEarlyStopHoldActivityRiskPixels;
+    dst->temporalAdaptiveEarlyStopHoldMaterialRiskPixels +=
+        src->temporalAdaptiveEarlyStopHoldMaterialRiskPixels;
+    dst->temporalAdaptiveEarlyStopHoldTransparentRiskPixels +=
+        src->temporalAdaptiveEarlyStopHoldTransparentRiskPixels;
+    dst->temporalAdaptiveEarlyStopHoldGeometryEdgeRiskPixels +=
+        src->temporalAdaptiveEarlyStopHoldGeometryEdgeRiskPixels;
+    dst->temporalAdaptiveEarlyStopHoldDirectLightRiskPixels +=
+        src->temporalAdaptiveEarlyStopHoldDirectLightRiskPixels;
+    dst->temporalAdaptiveEarlyStopBaseActivePixels +=
+        src->temporalAdaptiveEarlyStopBaseActivePixels;
+    dst->temporalAdaptiveEarlyStopPaddingHoldPixels +=
+        src->temporalAdaptiveEarlyStopPaddingHoldPixels;
+    dst->temporalAdaptiveEarlyStopPaddingHoldHighSeedPixels +=
+        src->temporalAdaptiveEarlyStopPaddingHoldHighSeedPixels;
+    dst->temporalAdaptiveEarlyStopPaddingHoldMediumSeedPixels +=
+        src->temporalAdaptiveEarlyStopPaddingHoldMediumSeedPixels;
+    dst->temporalAdaptiveEarlyStopActiveAfterPaddingPixels +=
+        src->temporalAdaptiveEarlyStopActiveAfterPaddingPixels;
+    for (int i = 0; i < RUNTIME_NATIVE_3D_ADAPTIVE_REGION_COUNT; ++i) {
+        dst->temporalAdaptiveEarlyStopEligibleRegionCounts[i] +=
+            src->temporalAdaptiveEarlyStopEligibleRegionCounts[i];
+        dst->temporalAdaptiveEarlyStopHeldRegionCounts[i] +=
+            src->temporalAdaptiveEarlyStopHeldRegionCounts[i];
+        dst->temporalAdaptiveEarlyStopPaddingHoldRegionCounts[i] +=
+            src->temporalAdaptiveEarlyStopPaddingHoldRegionCounts[i];
+    }
+    for (int i = 0; i < RUNTIME_NATIVE_3D_TEMPORAL_BUDGET_BUCKET_COUNT; ++i) {
+        dst->temporalAdaptiveBudgetBucketPixels[i] +=
+            src->temporalAdaptiveBudgetBucketPixels[i];
+        dst->temporalAdaptiveBudgetActiveBucketPixels[i] +=
+            src->temporalAdaptiveBudgetActiveBucketPixels[i];
+        dst->temporalAdaptiveBudgetEligibleBucketPixels[i] +=
+            src->temporalAdaptiveBudgetEligibleBucketPixels[i];
+        dst->temporalAdaptiveBudgetHeldBucketPixels[i] +=
+            src->temporalAdaptiveBudgetHeldBucketPixels[i];
+    }
+    dst->temporalAdaptiveBudgetClearVisibleEligiblePixels +=
+        src->temporalAdaptiveBudgetClearVisibleEligiblePixels;
+    dst->temporalAdaptiveBudgetClearVisibleHeldPixels +=
+        src->temporalAdaptiveBudgetClearVisibleHeldPixels;
+    dst->temporalAdaptiveBudgetPartialHeldPixels +=
+        src->temporalAdaptiveBudgetPartialHeldPixels;
+    dst->temporalAdaptiveBudgetTransparentHeldPixels +=
+        src->temporalAdaptiveBudgetTransparentHeldPixels;
+    dst->temporalAdaptiveBudgetGeometryHeldPixels +=
+        src->temporalAdaptiveBudgetGeometryHeldPixels;
+    dst->temporalAdaptiveBudgetActivityHeldPixels +=
+        src->temporalAdaptiveBudgetActivityHeldPixels;
+    dst->temporalAdaptiveBudgetHeatmapEnabled =
+        dst->temporalAdaptiveBudgetHeatmapEnabled ||
+        src->temporalAdaptiveBudgetHeatmapEnabled;
     dst->temporalAdaptiveStateMixedRiskTiles += src->temporalAdaptiveStateMixedRiskTiles;
     dst->temporalAdaptiveStateRiskSum += src->temporalAdaptiveStateRiskSum;
     if (src->temporalAdaptiveStateRiskMax > dst->temporalAdaptiveStateRiskMax) {
@@ -563,6 +631,86 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
     dst->temporalMeasuredTileJobs += src->temporalMeasuredTileJobs;
     dst->temporalAdaptiveSplitParentCount += src->temporalAdaptiveSplitParentCount;
     dst->temporalAdaptiveChildTileCount += src->temporalAdaptiveChildTileCount;
+    dst->temporalTileSchedulerJobArrayOwnerCount +=
+        src->temporalTileSchedulerJobArrayOwnerCount;
+    dst->temporalTileSchedulerParentMetricArrayOwnerCount +=
+        src->temporalTileSchedulerParentMetricArrayOwnerCount;
+    dst->temporalTileSchedulerProgressTileArrayOwnerCount +=
+        src->temporalTileSchedulerProgressTileArrayOwnerCount;
+    dst->temporalTileSchedulerCompletionQueueOwnerCount +=
+        src->temporalTileSchedulerCompletionQueueOwnerCount;
+    dst->temporalTileSchedulerWorkerPoolOwnerCount +=
+        src->temporalTileSchedulerWorkerPoolOwnerCount;
+    dst->temporalTileSchedulerCancelTokenBound +=
+        src->temporalTileSchedulerCancelTokenBound;
+    dst->temporalTileSchedulerCancelCheckCount +=
+        src->temporalTileSchedulerCancelCheckCount;
+    dst->temporalTileSchedulerCancelRequestedCount +=
+        src->temporalTileSchedulerCancelRequestedCount;
+    dst->temporalTileSchedulerCancelBeforeDispatchCount +=
+        src->temporalTileSchedulerCancelBeforeDispatchCount;
+    dst->temporalTileSchedulerCancelDuringWaitCount +=
+        src->temporalTileSchedulerCancelDuringWaitCount;
+    dst->temporalTileSchedulerCancelBeforeFinalResolveCount +=
+        src->temporalTileSchedulerCancelBeforeFinalResolveCount;
+    dst->temporalTileSchedulerFinalResolveBlockedByCancelCount +=
+        src->temporalTileSchedulerFinalResolveBlockedByCancelCount;
+    dst->temporalTileSchedulerWorkerDrainShutdownCount +=
+        src->temporalTileSchedulerWorkerDrainShutdownCount;
+    dst->temporalTileSchedulerWorkerCancelShutdownCount +=
+        src->temporalTileSchedulerWorkerCancelShutdownCount;
+    if (src->temporalTileSchedulerCancelGeneration >
+        dst->temporalTileSchedulerCancelGeneration) {
+        dst->temporalTileSchedulerCancelGeneration =
+            src->temporalTileSchedulerCancelGeneration;
+    }
+    dst->renderUnitScratchOwnerCount += src->renderUnitScratchOwnerCount;
+    dst->renderUnitScratchSetupCalls += src->renderUnitScratchSetupCalls;
+    dst->renderUnitScratchCacheAcquireHits += src->renderUnitScratchCacheAcquireHits;
+    dst->renderUnitScratchCacheAcquireMisses += src->renderUnitScratchCacheAcquireMisses;
+    dst->renderUnitRadianceScratchResizeCalls +=
+        src->renderUnitRadianceScratchResizeCalls;
+    dst->renderUnitRadianceScratchReuseCalls += src->renderUnitRadianceScratchReuseCalls;
+    dst->renderUnitRadianceScratchClearBytes += src->renderUnitRadianceScratchClearBytes;
+    if (src->renderUnitRadianceScratchRequestedBytesMax >
+        dst->renderUnitRadianceScratchRequestedBytesMax) {
+        dst->renderUnitRadianceScratchRequestedBytesMax =
+            src->renderUnitRadianceScratchRequestedBytesMax;
+    }
+    if (src->renderUnitRadianceScratchCapacityBytesMax >
+        dst->renderUnitRadianceScratchCapacityBytesMax) {
+        dst->renderUnitRadianceScratchCapacityBytesMax =
+            src->renderUnitRadianceScratchCapacityBytesMax;
+    }
+    if (src->renderUnitTemporalScratchCapacityBytesMax >
+        dst->renderUnitTemporalScratchCapacityBytesMax) {
+        dst->renderUnitTemporalScratchCapacityBytesMax =
+            src->renderUnitTemporalScratchCapacityBytesMax;
+    }
+    if (src->renderUnitAdaptiveMaskScratchCapacityBytesMax >
+        dst->renderUnitAdaptiveMaskScratchCapacityBytesMax) {
+        dst->renderUnitAdaptiveMaskScratchCapacityBytesMax =
+            src->renderUnitAdaptiveMaskScratchCapacityBytesMax;
+    }
+    if (src->renderUnitAdaptiveStateScratchCapacityBytesMax >
+        dst->renderUnitAdaptiveStateScratchCapacityBytesMax) {
+        dst->renderUnitAdaptiveStateScratchCapacityBytesMax =
+            src->renderUnitAdaptiveStateScratchCapacityBytesMax;
+    }
+    if (src->renderUnitFeatureScratchCapacityBytesMax >
+        dst->renderUnitFeatureScratchCapacityBytesMax) {
+        dst->renderUnitFeatureScratchCapacityBytesMax =
+            src->renderUnitFeatureScratchCapacityBytesMax;
+    }
+    dst->renderUnitScratchOwnedBytes += src->renderUnitScratchOwnedBytes;
+    if (src->renderUnitScratchMaxOwnerBytes > dst->renderUnitScratchMaxOwnerBytes) {
+        dst->renderUnitScratchMaxOwnerBytes = src->renderUnitScratchMaxOwnerBytes;
+    }
+    if (src->renderUnitScratchMaxFrameOwnedBytes >
+        dst->renderUnitScratchMaxFrameOwnedBytes) {
+        dst->renderUnitScratchMaxFrameOwnedBytes =
+            src->renderUnitScratchMaxFrameOwnedBytes;
+    }
     if (src->denoiseTemporalFrameCount > dst->denoiseTemporalFrameCount) {
         dst->denoiseTemporalFrameCount = src->denoiseTemporalFrameCount;
     }
@@ -730,6 +878,52 @@ void runtime_native_3d_render_stats_record_adaptive_state_summary(
         summary->directLightMixedPartialPixelCount;
     stats->temporalAdaptiveStateDirectLightBoundaryRiskPixels +=
         summary->directLightBoundaryRiskPixelCount;
+    stats->temporalAdaptiveEarlyStopEligiblePixels +=
+        summary->earlyStopEligiblePixelCount;
+    stats->temporalAdaptiveEarlyStopHeldPixels +=
+        summary->earlyStopHeldPixelCount;
+    stats->temporalAdaptiveEarlyStopHoldProbePixels +=
+        summary->earlyStopHoldProbePixelCount;
+    stats->temporalAdaptiveEarlyStopHoldHighRiskPixels +=
+        summary->earlyStopHoldHighRiskPixelCount;
+    stats->temporalAdaptiveEarlyStopHoldActivityRiskPixels +=
+        summary->earlyStopHoldActivityRiskPixelCount;
+    stats->temporalAdaptiveEarlyStopHoldMaterialRiskPixels +=
+        summary->earlyStopHoldMaterialRiskPixelCount;
+    stats->temporalAdaptiveEarlyStopHoldTransparentRiskPixels +=
+        summary->earlyStopHoldTransparentRiskPixelCount;
+    stats->temporalAdaptiveEarlyStopHoldGeometryEdgeRiskPixels +=
+        summary->earlyStopHoldGeometryEdgeRiskPixelCount;
+    stats->temporalAdaptiveEarlyStopHoldDirectLightRiskPixels +=
+        summary->earlyStopHoldDirectLightRiskPixelCount;
+    for (int i = 0; i < RUNTIME_NATIVE_3D_ADAPTIVE_REGION_COUNT; ++i) {
+        stats->temporalAdaptiveEarlyStopEligibleRegionCounts[i] +=
+            summary->earlyStopEligibleRegionCounts[i];
+        stats->temporalAdaptiveEarlyStopHeldRegionCounts[i] +=
+            summary->earlyStopHeldRegionCounts[i];
+    }
+    for (int i = 0; i < RUNTIME_NATIVE_3D_TEMPORAL_BUDGET_BUCKET_COUNT; ++i) {
+        stats->temporalAdaptiveBudgetBucketPixels[i] +=
+            summary->budgetBucketPixelCounts[i];
+        stats->temporalAdaptiveBudgetActiveBucketPixels[i] +=
+            summary->budgetActiveBucketPixelCounts[i];
+        stats->temporalAdaptiveBudgetEligibleBucketPixels[i] +=
+            summary->budgetEligibleBucketPixelCounts[i];
+        stats->temporalAdaptiveBudgetHeldBucketPixels[i] +=
+            summary->budgetHeldBucketPixelCounts[i];
+    }
+    stats->temporalAdaptiveBudgetClearVisibleEligiblePixels +=
+        summary->budgetClearVisibleEligiblePixelCount;
+    stats->temporalAdaptiveBudgetClearVisibleHeldPixels +=
+        summary->budgetClearVisibleHeldPixelCount;
+    stats->temporalAdaptiveBudgetPartialHeldPixels +=
+        summary->budgetPartialHeldPixelCount;
+    stats->temporalAdaptiveBudgetTransparentHeldPixels +=
+        summary->budgetTransparentHeldPixelCount;
+    stats->temporalAdaptiveBudgetGeometryHeldPixels +=
+        summary->budgetGeometryHeldPixelCount;
+    stats->temporalAdaptiveBudgetActivityHeldPixels +=
+        summary->budgetActivityHeldPixelCount;
     stats->temporalAdaptiveStateMixedRiskTiles += summary->mixedRiskTileCount;
     stats->temporalAdaptiveStateRiskSum += summary->riskSum;
     if (summary->riskMax > stats->temporalAdaptiveStateRiskMax) {

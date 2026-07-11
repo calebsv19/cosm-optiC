@@ -50,6 +50,12 @@ int ObjectEditorPanels_AuxSliderSectionHeight(void) {
     return animation_config_scale_text_point_size(&animSettings, 44, 38);
 }
 
+int ObjectEditorPanels_MotionSectionHeight(void) {
+    const SceneObject* selected = ObjectEditorPanels_SelectedObject();
+    if (!selected) return 0;
+    return animation_config_scale_text_point_size(&animSettings, 74, 64);
+}
+
 RayTracingThemePalette ObjectEditorPanels_ResolvePanelPalette(void) {
     RayTracingThemePalette palette = {0};
     if (!ray_tracing_shared_theme_resolve_palette(&palette)) {
@@ -408,6 +414,88 @@ void ObjectEditorPanels_ResolveAuxSliderMetrics(int ordinal,
     }
 }
 
+void ObjectEditorPanels_ResolveMotionSectionMetrics(SDL_Rect* out_section,
+                                                    SDL_Rect* out_label,
+                                                    SDL_Rect* out_static_button,
+                                                    SDL_Rect* out_authored_button,
+                                                    SDL_Rect* out_physics_button,
+                                                    SDL_Rect* out_status_label,
+                                                    SDL_Rect* out_status_swatch) {
+    int header_h = ObjectEditorPanels_HeaderHeight();
+    int color_h = ObjectEditorPanels_ColorSectionHeight();
+    int aux_h = ObjectEditorPanels_AuxSectionHeight();
+    int motion_h = ObjectEditorPanels_MotionSectionHeight();
+    int label_h = animation_config_scale_text_point_size(&animSettings, 14, 12);
+    int button_h = animation_config_scale_text_point_size(&animSettings, 22, 20);
+    int swatch_size = animation_config_scale_text_point_size(&animSettings, 10, 8);
+    int y = materialPanelRect.y + PANEL_PADDING + header_h + 4;
+    SDL_Rect section = {0};
+    SDL_Rect label = {0};
+    SDL_Rect static_button = {0};
+    SDL_Rect authored_button = {0};
+    SDL_Rect physics_button = {0};
+    SDL_Rect status_label = {0};
+    SDL_Rect status_swatch = {0};
+    int gap = 4;
+    int button_w = 0;
+
+    if (color_h > 0) y += color_h + 8;
+    if (aux_h > 0) y += aux_h;
+    if (motion_h <= 0) {
+        if (out_section) *out_section = section;
+        if (out_label) *out_label = label;
+        if (out_static_button) *out_static_button = static_button;
+        if (out_authored_button) *out_authored_button = authored_button;
+        if (out_physics_button) *out_physics_button = physics_button;
+        if (out_status_label) *out_status_label = status_label;
+        if (out_status_swatch) *out_status_swatch = status_swatch;
+        return;
+    }
+
+    section = (SDL_Rect){
+        materialPanelRect.x + PANEL_PADDING,
+        y + 4,
+        materialPanelRect.w - PANEL_PADDING * 2,
+        motion_h
+    };
+    label = (SDL_Rect){section.x,
+                       section.y,
+                       section.w,
+                       label_h};
+    button_w = (section.w - gap * 2) / 3;
+    if (button_w < 34) button_w = 34;
+    static_button = (SDL_Rect){section.x,
+                               label.y + label.h + 6,
+                               button_w,
+                               button_h};
+    authored_button = (SDL_Rect){static_button.x + static_button.w + gap,
+                                 static_button.y,
+                                 button_w,
+                                 button_h};
+    physics_button = (SDL_Rect){authored_button.x + authored_button.w + gap,
+                                static_button.y,
+                                section.x + section.w -
+                                    (authored_button.x + authored_button.w + gap),
+                                button_h};
+    if (physics_button.w < 34) physics_button.w = 34;
+    status_swatch = (SDL_Rect){section.x + 2,
+                               static_button.y + static_button.h + 9,
+                               swatch_size,
+                               swatch_size};
+    status_label = (SDL_Rect){status_swatch.x + status_swatch.w + 6,
+                              static_button.y + static_button.h + 4,
+                              section.w - swatch_size - 10,
+                              label_h + 4};
+
+    if (out_section) *out_section = section;
+    if (out_label) *out_label = label;
+    if (out_static_button) *out_static_button = static_button;
+    if (out_authored_button) *out_authored_button = authored_button;
+    if (out_physics_button) *out_physics_button = physics_button;
+    if (out_status_label) *out_status_label = status_label;
+    if (out_status_swatch) *out_status_swatch = status_swatch;
+}
+
 void ObjectEditorPanels_ResolveMaterialListMetrics(int* out_list_y,
                                                    int* out_row_h,
                                                    int* out_max_rows,
@@ -416,6 +504,7 @@ void ObjectEditorPanels_ResolveMaterialListMetrics(int* out_list_y,
     int header_h = ObjectEditorPanels_HeaderHeight();
     int color_h = ObjectEditorPanels_ColorSectionHeight();
     int aux_h = ObjectEditorPanels_AuxSectionHeight();
+    int motion_h = ObjectEditorPanels_MotionSectionHeight();
     int list_y = 0;
     int visible = ObjectEditorPanels_MaterialVisibleCount();
     int row_area_h = materialPanelRect.h - (list_y - materialPanelRect.y) - PANEL_PADDING;
@@ -424,6 +513,7 @@ void ObjectEditorPanels_ResolveMaterialListMetrics(int* out_list_y,
     list_y = materialPanelRect.y + PANEL_PADDING + header_h + 4;
     if (color_h > 0) list_y += color_h + 8;
     if (aux_h > 0) list_y += aux_h;
+    if (motion_h > 0) list_y += motion_h + 4;
     list_y += 4;
     row_area_h = materialPanelRect.h - (list_y - materialPanelRect.y) - PANEL_PADDING;
     if (row_area_h < row_h) row_area_h = row_h;
@@ -454,6 +544,7 @@ void ObjectEditorPanels_UpdateLayoutForRegionImpl(const SDL_Rect* region) {
     int material_content = 0;
     int color_content = 0;
     int aux_slider_content = 0;
+    int motion_content = 0;
     int overflow = 0;
 
     if (region && region->w > 0 && region->h > 0) {
@@ -479,11 +570,14 @@ void ObjectEditorPanels_UpdateLayoutForRegionImpl(const SDL_Rect* region) {
     int asset_rows = showImports ? importCount : (int)assetLib.count;
     color_content = ObjectEditorPanels_ColorSectionHeight();
     aux_slider_content = ObjectEditorPanels_AuxSectionHeight();
+    motion_content = ObjectEditorPanels_MotionSectionHeight();
     if (asset_rows < 1) asset_rows = 1;
     asset_min_content = header_h + PANEL_PADDING * 2 + asset_row_h;
     material_min_content = header_h + PANEL_PADDING * 2 +
                            (color_content > 0 ? color_content + 8 : 0) +
-                           aux_slider_content + material_row_h;
+                           aux_slider_content +
+                           (motion_content > 0 ? motion_content + 4 : 0) +
+                           material_row_h;
     asset_content = header_h + PANEL_PADDING * 2 + 4 + asset_rows * asset_row_h;
     if (asset_content > panel_max_h) asset_content = panel_max_h;
     assetPanelRect = (SDL_Rect){x, y, panel_w, asset_content};
@@ -500,7 +594,9 @@ void ObjectEditorPanels_UpdateLayoutForRegionImpl(const SDL_Rect* region) {
     if (material_rows < 1) material_rows = 1;
     material_content = header_h + PANEL_PADDING * 2 +
                        (color_content > 0 ? color_content + 8 : 0) +
-                       aux_slider_content + 4 + material_rows * material_row_h;
+                       aux_slider_content +
+                       (motion_content > 0 ? motion_content + 4 : 0) +
+                       4 + material_rows * material_row_h;
     if (material_content > panel_max_h) material_content = panel_max_h;
 
     overflow = asset_content + PANEL_GAP + material_content - available_h;
@@ -586,6 +682,44 @@ int ObjectEditorPanels_MaterialIndexAtPointImpl(int mx, int my) {
     if (idx < 0 || idx >= visible) return -1;
     if (idx >= materialScroll + max_rows) return -1;
     return idx;
+}
+
+bool ObjectEditorPanels_MotionActionAtPointImpl(int mx,
+                                                int my,
+                                                ObjectEditorPanelMotionAction* out_action) {
+    SDL_Rect static_button = {0};
+    SDL_Rect authored_button = {0};
+    SDL_Rect physics_button = {0};
+    if (out_action) {
+        *out_action = OBJECT_EDITOR_PANEL_MOTION_ACTION_NONE;
+    }
+    if (materialsCollapsed || ObjectEditorPanels_MotionSectionHeight() <= 0) {
+        return false;
+    }
+    if (mx < materialPanelRect.x || mx >= materialPanelRect.x + materialPanelRect.w ||
+        my < materialPanelRect.y || my >= materialPanelRect.y + materialPanelRect.h) {
+        return false;
+    }
+    ObjectEditorPanels_ResolveMotionSectionMetrics(NULL,
+                                                   NULL,
+                                                   &static_button,
+                                                   &authored_button,
+                                                   &physics_button,
+                                                   NULL,
+                                                   NULL);
+    if (object_editor_panels_point_in_rect(mx, my, &static_button)) {
+        if (out_action) *out_action = OBJECT_EDITOR_PANEL_MOTION_ACTION_STATIC;
+        return true;
+    }
+    if (object_editor_panels_point_in_rect(mx, my, &authored_button)) {
+        if (out_action) *out_action = OBJECT_EDITOR_PANEL_MOTION_ACTION_AUTHORED;
+        return true;
+    }
+    if (object_editor_panels_point_in_rect(mx, my, &physics_button)) {
+        if (out_action) *out_action = OBJECT_EDITOR_PANEL_MOTION_ACTION_PHYSICS_RESERVED;
+        return true;
+    }
+    return false;
 }
 
 bool ObjectEditorPanels_SliderValueAtPointImpl(int mx,

@@ -115,7 +115,7 @@ static bool runtime_caustic_transport_mesh_dielectric_entry_sample(
     Vec3 normal = vec3(0.0, 1.0, 0.0);
     Vec3 basis_u = vec3(1.0, 0.0, 0.0);
     Vec3 basis_v = vec3(0.0, 0.0, 1.0);
-    Vec3 centroid = vec3(0.0, 0.0, 0.0);
+    Vec3 aperture_center = vec3(0.0, 0.0, 0.0);
     Vec3 ray_origin = vec3(0.0, 0.0, 0.0);
     Vec3 target = vec3(0.0, 0.0, 0.0);
     Vec3 ray_dir = vec3(0.0, 0.0, 0.0);
@@ -129,7 +129,10 @@ static bool runtime_caustic_transport_mesh_dielectric_entry_sample(
     triangle = &mesh_dielectric->entryTriangle;
     edge_u = vec3_sub(triangle->p1, triangle->p0);
     edge_v = vec3_sub(triangle->p2, triangle->p0);
-    normal = vec3_normalize(triangle->normal);
+    normal = vec3_normalize(mesh_dielectric->shape.axis);
+    if (!(vec3_length(normal) > 1.0e-9)) {
+        normal = vec3_normalize(triangle->normal);
+    }
     if (!(vec3_length(normal) > 1.0e-9)) {
         normal = vec3_normalize(vec3_cross(edge_u, edge_v));
     }
@@ -138,26 +141,26 @@ static bool runtime_caustic_transport_mesh_dielectric_entry_sample(
         !(vec3_length(normal) > 1.0e-9)) {
         return false;
     }
-    basis_u = vec3_normalize(edge_u);
-    basis_v = vec3_normalize(vec3_cross(normal, basis_u));
-    if (!(vec3_length(basis_v) > 1.0e-9)) {
-        runtime_caustic_transport_mesh_dielectric_build_basis(normal, &basis_u, &basis_v);
+    runtime_caustic_transport_mesh_dielectric_build_basis(normal, &basis_u, &basis_v);
+    aperture_center = mesh_dielectric->shape.center;
+    if (!(isfinite(aperture_center.x) && isfinite(aperture_center.y) &&
+          isfinite(aperture_center.z))) {
+        aperture_center = vec3_scale(vec3_add(vec3_add(triangle->p0, triangle->p1),
+                                              triangle->p2),
+                                     1.0 / 3.0);
     }
-    centroid = vec3_scale(vec3_add(vec3_add(triangle->p0, triangle->p1),
-                                   triangle->p2),
-                          1.0 / 3.0);
     aperture_radius = mesh_dielectric->shape.radius > 1.0e-9
                           ? mesh_dielectric->shape.radius
                           : 0.25;
     aperture_scale = profile->apertureRadiusScale;
     target = vec3_add(
-        centroid,
+        aperture_center,
         vec3_add(vec3_scale(basis_u,
                             runtime_caustic_transport_clamp(sample->lensU, -0.95, 0.95) *
-                                aperture_radius * 0.35 * aperture_scale),
+                                aperture_radius * aperture_scale),
                  vec3_scale(basis_v,
                             runtime_caustic_transport_clamp(sample->lensV, -0.95, 0.95) *
-                                aperture_radius * 0.35 * aperture_scale)));
+                                aperture_radius * aperture_scale)));
     ray_origin = vec3_add(
         light->position,
         vec3_add(vec3_scale(basis_u,

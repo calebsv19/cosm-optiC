@@ -63,6 +63,11 @@ typedef struct {
     bool hit;
     bool visible;
     bool payloadResolved;
+    bool tracePixelContextResolved;
+    int tracePixelX;
+    int tracePixelY;
+    int tracePixelWidth;
+    int tracePixelHeight;
     Ray3D primaryRay;
     HitInfo3D hitInfo;
     RuntimeMaterialPayload3D payload;
@@ -361,6 +366,15 @@ bool RuntimeDisneyV2_3D_ShadeHit(const RuntimeScene3D* scene,
                                  const RuntimeNative3DSamplingContext* sampling,
                                  RuntimeDisneyV2_3DResult* out_result);
 
+bool RuntimeDisneyV2_3D_ShadeHitWithTraceContext(const RuntimeScene3D* scene,
+                                                 const HitInfo3D* hit,
+                                                 const RuntimeNative3DSamplingContext* sampling,
+                                                 int pixel_x,
+                                                 int pixel_y,
+                                                 int width,
+                                                 int height,
+                                                 RuntimeDisneyV2_3DResult* out_result);
+
 bool RuntimeDisneyV2_3D_ShadePrimaryHit(const RuntimeScene3D* scene,
                                         const RuntimePrimaryHit3DResult* primary_hit,
                                         const RuntimeNative3DSamplingContext* sampling,
@@ -371,6 +385,17 @@ bool RuntimeDisneyV2_3D_ShadePrimaryHitWithPayload(
     const RuntimePrimaryHit3DResult* primary_hit,
     const RuntimeMaterialPayload3D* payload,
     const RuntimeNative3DSamplingContext* sampling,
+    RuntimeDisneyV2_3DResult* out_result);
+
+bool RuntimeDisneyV2_3D_ShadePrimaryHitWithPayloadAndTraceContext(
+    const RuntimeScene3D* scene,
+    const RuntimePrimaryHit3DResult* primary_hit,
+    const RuntimeMaterialPayload3D* payload,
+    const RuntimeNative3DSamplingContext* sampling,
+    int pixel_x,
+    int pixel_y,
+    int width,
+    int height,
     RuntimeDisneyV2_3DResult* out_result);
 
 bool RuntimeDisneyV2_3D_ShadePixel(const RuntimeScene3D* scene,

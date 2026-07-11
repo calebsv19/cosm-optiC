@@ -662,6 +662,7 @@ bool runtime_caustic_transport_resolve_mesh_dielectric(
         double max_extent = 0.0;
         double mid_extent = 0.0;
         double score = 0.0;
+        Vec3 aperture_axis = vec3(0.0, 1.0, 0.0);
         if (!candidate->seen) continue;
         extent = vec3_sub(candidate->boundsMax, candidate->boundsMin);
         ex = fmax(extent.x, 0.0);
@@ -673,6 +674,14 @@ bool runtime_caustic_transport_resolve_mesh_dielectric(
         if (!(max_extent > 1.0e-6)) continue;
         if (!(mid_extent > 1.0e-6)) mid_extent = max_extent;
         if (!(min_extent > 1.0e-6)) min_extent = max_extent * 0.08;
+        if (ex <= ey && ex <= ez) {
+            aperture_axis = vec3(1.0, 0.0, 0.0);
+        } else if (ez <= ex && ez <= ey) {
+            aperture_axis = vec3(0.0, 0.0, 1.0);
+        }
+        if (vec3_dot(aperture_axis, candidate->entryTriangle.normal) < 0.0) {
+            aperture_axis = vec3_scale(aperture_axis, -1.0);
+        }
 
         memset(&resolved, 0, sizeof(resolved));
         resolved.valid = true;
@@ -690,7 +699,7 @@ bool runtime_caustic_transport_resolve_mesh_dielectric(
         resolved.shape.center = vec3_scale(vec3_add(candidate->boundsMin,
                                                     candidate->boundsMax),
                                            0.5);
-        resolved.shape.axis = vec3_normalize(candidate->entryTriangle.normal);
+        resolved.shape.axis = aperture_axis;
         if (!(vec3_length(resolved.shape.axis) > 1.0e-9)) {
             resolved.shape.axis = vec3(0.0, 1.0, 0.0);
         }

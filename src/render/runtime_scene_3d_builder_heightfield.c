@@ -16,7 +16,7 @@ static bool runtime_scene_3d_builder_heightfield_quad_is_dry(
     h10 = desc->heights_y[(size_t)z * (size_t)w + (size_t)(x + 1u)];
     h11 = desc->heights_y[(size_t)(z + 1u) * (size_t)w + (size_t)(x + 1u)];
     h01 = desc->heights_y[(size_t)(z + 1u) * (size_t)w + (size_t)x];
-    return h00 <= threshold && h10 <= threshold && h11 <= threshold && h01 <= threshold;
+    return h00 <= threshold || h10 <= threshold || h11 <= threshold || h01 <= threshold;
 }
 
 static int runtime_scene_3d_builder_heightfield_quad_count(
