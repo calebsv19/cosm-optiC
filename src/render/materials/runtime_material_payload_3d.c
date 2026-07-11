@@ -538,6 +538,7 @@ static bool runtime_material_payload_3d_resolve(int scene_object_index,
                                              &glass_thin_walled)) {
             if (object_copy.hasGlassTransportOverride) {
                 glass_alpha = 1.0;
+                payload.hasGlassTransportOverride = true;
             }
             payload.transparency =
                 runtime_material_payload_3d_clamp01(glass_transmission * glass_alpha);

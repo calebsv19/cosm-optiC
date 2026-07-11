@@ -207,8 +207,11 @@ bool runtime_disney_v2_3d_policy_is_physical_transmission(
     if (!payload || !payload->valid) {
         return false;
     }
-    if (payload->materialId == MATERIAL_PRESET_TRANSPARENT) {
+    if (payload->hasGlassTransportOverride) {
         return true;
+    }
+    if (payload->materialId == MATERIAL_PRESET_TRANSPARENT && payload->thinWalled) {
+        return false;
     }
     if (payload->thinWalled) {
         return true;

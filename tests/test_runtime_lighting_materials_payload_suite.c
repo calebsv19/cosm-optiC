@@ -20,6 +20,7 @@
 #include "render/runtime_disney_3d.h"
 #include "render/runtime_diffuse_bounce_3d.h"
 #include "render/runtime_direct_light_3d.h"
+#include "render/runtime_disney_v2_transmission_internal_3d.h"
 #include "render/runtime_emission_transparency_3d.h"
 #include "render/runtime_material_authored_texture_3d.h"
 #include "render/runtime_material_graph_3d.h"
@@ -922,6 +923,99 @@ static int test_runtime_material_compatibility_bridges_are_explicit(void) {
                  principled.specularF0R,
                  0.18 * 0.25,
                  1e-12);
+
+    sceneSettings = saved_scene;
+    return 0;
+}
+
+static int test_runtime_material_payload_3d_authored_alpha_transparent_is_alpha_layer(void) {
+    SceneConfig saved_scene = sceneSettings;
+    RuntimeMaterialPayload3D payload = {0};
+    RuntimePrincipledBSDF3D principled = RuntimePrincipledBSDF3D_Default();
+    RuntimeDisneyV2_3DTransparentPolicy policy = {0};
+    bool ok = false;
+
+    MaterialManagerResetDefaults();
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 10.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
+    sceneSettings.sceneObjects[0].alpha = 0.88;
+    sceneSettings.sceneObjects[0].opacity = 1.0;
+    SceneObjectClearGlassTransportOverride(&sceneSettings.sceneObjects[0]);
+
+    ok = RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(0, &payload);
+    assert_true("runtime_material_payload_authored_alpha_transparent_resolve", ok);
+    assert_true("runtime_material_payload_authored_alpha_transparent_no_glass_override",
+                !payload.hasGlassTransportOverride);
+    assert_close("runtime_material_payload_authored_alpha_transparent_legacy_strength",
+                 payload.transparency,
+                 0.75 * 0.88,
+                 1e-9);
+
+    principled = RuntimePrincipledBSDF3D_FromMaterialPayload(&payload);
+    assert_true("runtime_material_payload_authored_alpha_transparent_principled_valid",
+                principled.valid);
+    assert_true("runtime_material_payload_authored_alpha_transparent_not_physical",
+                !runtime_disney_v2_3d_policy_is_physical_transmission(&payload,
+                                                                      &principled));
+    policy = runtime_disney_v2_3d_resolve_transparent_policy(&payload, &principled, 0.12);
+    assert_true("runtime_material_payload_authored_alpha_transparent_alpha_only",
+                policy.alphaOnly);
+    assert_true("runtime_material_payload_authored_alpha_transparent_surface_visible",
+                policy.visibleWeight > 1e-6);
+
+    sceneSettings = saved_scene;
+    return 0;
+}
+
+static int test_runtime_material_payload_3d_glass_override_is_physical_transport(void) {
+    SceneConfig saved_scene = sceneSettings;
+    RuntimeMaterialPayload3D payload = {0};
+    RuntimePrincipledBSDF3D principled = RuntimePrincipledBSDF3D_Default();
+    RuntimeDisneyV2_3DTransparentPolicy policy = {0};
+    bool ok = false;
+
+    MaterialManagerResetDefaults();
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0], OBJECT_CIRCLE, 0.0, 0.0, 10.0, 0.0, NULL, 0);
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
+    sceneSettings.sceneObjects[0].alpha = 0.08;
+    sceneSettings.sceneObjects[0].opacity = 1.0;
+    SceneObjectSeedGlassTransportOverrideFromMaterial(&sceneSettings.sceneObjects[0]);
+    sceneSettings.sceneObjects[0].glassTransmission = 0.96;
+    sceneSettings.sceneObjects[0].glassIor = 1.45;
+    sceneSettings.sceneObjects[0].glassAbsorptionDistance = 6.0;
+    sceneSettings.sceneObjects[0].glassThinWalled = true;
+
+    ok = RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(0, &payload);
+    assert_true("runtime_material_payload_glass_transport_resolve", ok);
+    assert_close("runtime_material_payload_glass_transport_ignores_display_alpha",
+                 payload.transparency,
+                 0.96,
+                 1e-9);
+    assert_close("runtime_material_payload_glass_transport_ior",
+                 payload.opticalIor,
+                 1.45,
+                 1e-9);
+    assert_close("runtime_material_payload_glass_transport_absorption",
+                 payload.absorptionDistance,
+                 6.0,
+                 1e-9);
+    assert_true("runtime_material_payload_glass_transport_thin_walled", payload.thinWalled);
+
+    principled = RuntimePrincipledBSDF3D_FromMaterialPayload(&payload);
+    assert_true("runtime_material_payload_glass_transport_principled_valid",
+                principled.valid);
+    assert_true("runtime_material_payload_glass_transport_policy_physical",
+                runtime_disney_v2_3d_policy_is_physical_transmission(&payload,
+                                                                     &principled));
+    policy = runtime_disney_v2_3d_resolve_transparent_policy(&payload, &principled, 0.12);
+    assert_true("runtime_material_payload_glass_transport_not_alpha_only",
+                !policy.alphaOnly);
+    assert_true("runtime_material_payload_glass_transport_policy_thin_walled",
+                policy.thinWalled);
 
     sceneSettings = saved_scene;
     return 0;
@@ -4551,6 +4645,8 @@ int run_test_runtime_lighting_materials_payload_suite(void) {
     test_runtime_material_payload_3d_authoring_object_values_override_preset();
     test_runtime_material_payload_3d_object_multipliers_contract();
     test_runtime_material_compatibility_bridges_are_explicit();
+    test_runtime_material_payload_3d_authored_alpha_transparent_is_alpha_layer();
+    test_runtime_material_payload_3d_glass_override_is_physical_transport();
     test_runtime_material_payload_3d_water_override_contract();
     test_material_manager_default_presets_include_i4_entries();
     test_material_manager_load_dir_preserves_shipped_preset_ids();
