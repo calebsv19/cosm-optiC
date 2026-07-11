@@ -26,6 +26,29 @@ static Vec3 photon_trace_normalize_or_zero(Vec3 value) {
     return vec3_normalize(value);
 }
 
+static void photon_trace_store_reject(
+    const RuntimeCausticPhotonSample3D* sample,
+    RuntimeCausticPhotonRejectReason3D reason,
+    RuntimeCausticPhotonTrace3D* out_trace) {
+    RuntimeCausticPhotonPathState3D state;
+    if (!out_trace) return;
+    memset(out_trace, 0, sizeof(*out_trace));
+    RuntimeCausticPhotonTrace3D_InitPathState(sample, &state);
+    state.active = false;
+    state.terminated = true;
+    state.rejectReason = reason;
+    if (sample) {
+        out_trace->sample = *sample;
+        out_trace->debug.photonId = sample->photonId;
+        out_trace->debug.emittedFlux = sample->flux;
+        out_trace->debug.rejectedFlux = sample->flux;
+    }
+    out_trace->initialState = state;
+    out_trace->finalState = state;
+    out_trace->debug.rejectedPhotonCount = 1u;
+    out_trace->debug.lastRejectReason = reason;
+}
+
 static bool photon_trace_append_event(RuntimeCausticPhotonTrace3D* trace,
                                       const RuntimeCausticPhotonEvent3D* event) {
     if (!trace || !event ||
@@ -266,6 +289,43 @@ bool RuntimeCausticPhotonTrace3D_FromLensPath(
     trace.valid = !current.terminated;
     *out_trace = trace;
     return trace.valid;
+}
+
+bool RuntimeCausticPhotonTrace3D_TraceMeshDielectricPath(
+    const RuntimeCausticLensPath3D* mesh_dielectric_path,
+    const RuntimeCausticPhotonSample3D* emitted_sample,
+    const RuntimeCausticPhotonTraceSettings3D* settings,
+    RuntimeCausticPhotonTrace3D* out_trace) {
+    RuntimeCausticPhotonSample3D path_sample;
+    Vec3 incident;
+
+    if (out_trace) memset(out_trace, 0, sizeof(*out_trace));
+    if (!emitted_sample || !out_trace) return false;
+    if (!mesh_dielectric_path || !mesh_dielectric_path->valid ||
+        mesh_dielectric_path->shapeKind != RUNTIME_CAUSTIC_LENS_SHAPE_MESH_DIELECTRIC ||
+        mesh_dielectric_path->interfaceEventCount == 0u) {
+        photon_trace_store_reject(emitted_sample,
+                                  RUNTIME_CAUSTIC_PHOTON_REJECT_INVALID_MEDIUM,
+                                  out_trace);
+        return false;
+    }
+
+    path_sample = *emitted_sample;
+    path_sample.position = mesh_dielectric_path->lightSamplePosition;
+    incident = vec3_sub(mesh_dielectric_path->targetPosition,
+                        mesh_dielectric_path->lightSamplePosition);
+    path_sample.direction = photon_trace_normalize_or_zero(incident);
+    if (!(vec3_length(path_sample.direction) > 1.0e-12)) {
+        photon_trace_store_reject(emitted_sample,
+                                  RUNTIME_CAUSTIC_PHOTON_REJECT_ESCAPED_SCENE,
+                                  out_trace);
+        return false;
+    }
+
+    return RuntimeCausticPhotonTrace3D_FromLensPath(mesh_dielectric_path,
+                                                   &path_sample,
+                                                   settings,
+                                                   out_trace);
 }
 
 bool RuntimeCausticPhotonTrace3D_TraceSphereLens(

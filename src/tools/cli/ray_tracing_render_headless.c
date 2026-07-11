@@ -450,6 +450,17 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
         preflight.environment_summary = frame.scene.environment;
         preflight.environment_summary_built = true;
         ray_tracing_headless_note_registered_lights(&preflight, &frame);
+        if (frame.causticPhotonRenderPrepReadbackBuilt) {
+            preflight.causticPhotonCallsiteReadback =
+                frame.causticPhotonRenderPrepReadback;
+            preflight.causticPhotonCallsiteReadbackBuilt = true;
+        }
+        ray_tracing_headless_probe_caustic_photon_callsite(&preflight,
+                                                          &frame,
+                                                          request);
+        ray_tracing_headless_probe_caustic_photon_trace_callsite(&preflight,
+                                                                &frame,
+                                                                request);
         RuntimeTriangleMesh3D_BVHBuildStats(&frame.scene.triangleMesh,
                                             &preflight.bvh_build_stats);
         if (flattened_bvh_required &&

@@ -25,8 +25,12 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_caustic_beam_map_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_lens_transport_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_lens_transport_shapes_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_emit_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_integration_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_map_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_receiver_contribution_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_receiver_policy_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_scene_descriptor_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_settings_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_trace_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_settings_3d.o \
@@ -203,6 +207,7 @@ RAY_TRACING_RENDER_HEADLESS_DEPS = \
 	$(BUILD_DIR)/app/agent_render_request_validate.o \
 	$(BUILD_DIR)/render/adapters/timer_hud_headless_stub.o \
 	$(BUILD_DIR)/tools/make_video.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_caustic_photon_probe.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_caustic_summary.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_dynamic_summary.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_frame_dataflow_summary.o \
@@ -260,6 +265,7 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_caustic_bootstrap_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_beam_map_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_lens_transport_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_photon_emit_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_integration_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_map_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_trace_3d.o \
@@ -339,8 +345,12 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_caustic_beam_map_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_lens_transport_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_lens_transport_shapes_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_photon_emit_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_photon_integration_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_photon_map_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_photon_receiver_contribution_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_photon_receiver_policy_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_photon_scene_descriptor_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_photon_settings_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_photon_trace_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_settings_3d.o \

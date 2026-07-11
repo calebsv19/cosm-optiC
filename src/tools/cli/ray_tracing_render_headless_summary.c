@@ -223,6 +223,26 @@ void ray_tracing_render_headless_write_summary(
             request->has_caustic_mode_override ? "true" : "false");
     fprintf(file, "    \"caustic_mode\": \"%s\",\n",
             RuntimeDisneyV2_3D_CausticModeLabel(request->caustic_mode));
+    fprintf(file, "    \"has_caustic_product_mode_override\": %s,\n",
+            request->has_caustic_product_mode_override ? "true" : "false");
+    fprintf(file, "    \"caustic_product_mode\": \"%s\",\n",
+            RuntimeCausticProductMode3D_Label(
+                request->caustic_photon_integration_settings.productMode));
+    fprintf(file, "    \"caustic_render_contribution_enabled\": %s,\n",
+            request->caustic_photon_integration_settings.renderContributionEnabled
+                ? "true"
+                : "false");
+    fprintf(file, "    \"caustic_photon_render_prep_population_enabled\": %s,\n",
+            request->caustic_photon_render_prep_population_enabled ? "true"
+                                                                   : "false");
+    fprintf(file, "    \"caustic_photon_populated_callsite_readback_enabled\": %s,\n",
+            request->caustic_photon_populated_callsite_readback_enabled ? "true"
+                                                                        : "false");
+    fprintf(file,
+            "    \"caustic_photon_trace_populated_callsite_readback_enabled\": %s,\n",
+            request->caustic_photon_trace_populated_callsite_readback_enabled
+                ? "true"
+                : "false");
     ray_tracing_headless_write_caustic_state_summary(file, request, preflight);
     fprintf(file, "    \"has_caustic_sidecar_enabled_override\": %s,\n",
             request->has_caustic_sidecar_enabled_override ? "true" : "false");

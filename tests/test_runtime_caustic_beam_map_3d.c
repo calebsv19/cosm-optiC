@@ -152,10 +152,134 @@ static int test_runtime_caustic_beam_map_rejects_capacity_and_medium(void) {
     return 0;
 }
 
+static int test_runtime_caustic_beam_map_query_cost_and_energy_ledgers(void) {
+    RuntimeCausticBeamMap3D map;
+    RuntimeCausticPhotonVolumeBeamSegment3D segment = {0};
+    RuntimeCausticBeamMapQuery3D query = test_beam_query(vec3(0.0, 0.0, 0.5), 3);
+    RuntimeCausticBeamMapQueryResult3D result;
+    RuntimeCausticBeamMapDiagnostics3D diagnostics;
+
+    RuntimeCausticBeamMap3D_Init(&map);
+    assert_true("runtime_caustic_beam_map_ppm9_allocate",
+                RuntimeCausticBeamMap3D_Allocate(&map, 4u));
+
+    segment.depth = 2u;
+    segment.start = vec3(0.0, 0.0, 0.0);
+    segment.end = vec3(0.0, 0.0, 1.0);
+    segment.direction = vec3(0.0, 0.0, 1.0);
+    segment.flux = vec3(1.0, 0.5, 0.25);
+    segment.radiusStart = 0.20;
+    segment.radiusEnd = 0.20;
+    segment.transmittance = 1.0;
+    segment.densityWeight = 1.0;
+    segment.mediumId = 3;
+
+    segment.photonId = 1u;
+    assert_true("runtime_caustic_beam_map_ppm9_store_first",
+                RuntimeCausticBeamMap3D_StoreSegment(&map, &segment));
+    segment.photonId = 2u;
+    segment.start = vec3(0.02, 0.0, 0.0);
+    segment.end = vec3(0.02, 0.0, 1.0);
+    assert_true("runtime_caustic_beam_map_ppm9_store_second",
+                RuntimeCausticBeamMap3D_StoreSegment(&map, &segment));
+    segment.photonId = 3u;
+    segment.start = vec3(0.04, 0.0, 0.0);
+    segment.end = vec3(0.04, 0.0, 1.0);
+    assert_true("runtime_caustic_beam_map_ppm9_store_third",
+                RuntimeCausticBeamMap3D_StoreSegment(&map, &segment));
+
+    query.candidateLimit = 2u;
+    query.physicalEnergyScale = 0.50;
+    query.displayGain = 2.0;
+    assert_true("runtime_caustic_beam_map_ppm9_query_hit",
+                RuntimeCausticBeamMap3D_Query(&map, &query, &result));
+    assert_true("runtime_caustic_beam_map_ppm9_cost_bounded",
+                result.testedCount == 2u &&
+                    result.candidateCount == 2u &&
+                    result.contributingCount == 2u &&
+                    result.candidateLimit == 2u &&
+                    result.candidateLimitReached);
+    assert_close("runtime_caustic_beam_map_ppm9_flux_alias",
+                 result.flux.x,
+                 result.physicalFlux.x,
+                 1e-9);
+    assert_close("runtime_caustic_beam_map_ppm9_display_gain",
+                 result.displayFlux.x,
+                 result.physicalFlux.x * 2.0,
+                 1e-9);
+
+    RuntimeCausticBeamMap3D_SnapshotDiagnostics(&map, &diagnostics);
+    assert_true("runtime_caustic_beam_map_ppm9_diag_cost",
+                diagnostics.lastQueryTestedCount == 2u &&
+                    diagnostics.lastQueryCandidateLimit == 2u &&
+                    diagnostics.lastQueryCandidateLimitReached);
+    assert_close("runtime_caustic_beam_map_ppm9_diag_stored_flux",
+                 diagnostics.totalStoredFlux.x,
+                 3.0,
+                 1e-9);
+    assert_close("runtime_caustic_beam_map_ppm9_diag_queried_physical",
+                 diagnostics.totalQueriedPhysicalFlux.x,
+                 result.physicalFlux.x,
+                 1e-9);
+    assert_close("runtime_caustic_beam_map_ppm9_diag_queried_display",
+                 diagnostics.totalQueriedDisplayFlux.x,
+                 result.displayFlux.x,
+                 1e-9);
+    RuntimeCausticBeamMap3D_Free(&map);
+    return 0;
+}
+
+static int test_runtime_caustic_beam_map_grid_acceleration_prunes_sparse_segments(void) {
+    RuntimeCausticBeamMap3D map;
+    RuntimeCausticPhotonVolumeBeamSegment3D segment = {0};
+    RuntimeCausticBeamMapQuery3D query = test_beam_query(vec3(0.0, 0.0, 0.05), 3);
+    RuntimeCausticBeamMapQueryResult3D result;
+    RuntimeCausticBeamMapDiagnostics3D diagnostics;
+
+    RuntimeCausticBeamMap3D_Init(&map);
+    assert_true("runtime_caustic_beam_map_grid_allocate",
+                RuntimeCausticBeamMap3D_Allocate(&map, 16u));
+
+    segment.depth = 2u;
+    segment.direction = vec3(0.0, 0.0, 1.0);
+    segment.flux = vec3(1.0, 1.0, 1.0);
+    segment.radiusStart = 0.05;
+    segment.radiusEnd = 0.05;
+    segment.transmittance = 1.0;
+    segment.densityWeight = 1.0;
+    segment.mediumId = 3;
+
+    for (uint64_t i = 0u; i < 12u; ++i) {
+        const double x = (double)i * 5.0;
+        segment.photonId = i + 1u;
+        segment.start = vec3(x, 0.0, 0.0);
+        segment.end = vec3(x, 0.0, 0.10);
+        assert_true("runtime_caustic_beam_map_grid_store",
+                    RuntimeCausticBeamMap3D_StoreSegment(&map, &segment));
+    }
+
+    query.radius = 0.10;
+    assert_true("runtime_caustic_beam_map_grid_query",
+                RuntimeCausticBeamMap3D_Query(&map, &query, &result));
+    RuntimeCausticBeamMap3D_SnapshotDiagnostics(&map, &diagnostics);
+    assert_true("runtime_caustic_beam_map_grid_pruned",
+                result.contributingCount == 1u &&
+                    result.testedCount < map.segmentCount &&
+                    diagnostics.lastQueryAccelerationUsed &&
+                    diagnostics.lastQueryGridCellVisitCount > 0u &&
+                    diagnostics.accelerationAllocated &&
+                    diagnostics.accelerationInsertedCount == map.segmentCount &&
+                    diagnostics.accelerationFallbackLinearQueryCount == 0u);
+    RuntimeCausticBeamMap3D_Free(&map);
+    return 0;
+}
+
 int run_test_runtime_caustic_beam_map_3d_tests(void) {
     int failures = 0;
     failures += test_runtime_caustic_beam_map_allocate_store_query();
     failures += test_runtime_caustic_beam_map_trace_segment_store();
     failures += test_runtime_caustic_beam_map_rejects_capacity_and_medium();
+    failures += test_runtime_caustic_beam_map_query_cost_and_energy_ledgers();
+    failures += test_runtime_caustic_beam_map_grid_acceleration_prunes_sparse_segments();
     return failures;
 }

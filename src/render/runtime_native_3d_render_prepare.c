@@ -16,6 +16,9 @@
 #include "import/runtime_scene_bridge.h"
 #include "import/water_surface_import.h"
 #include "material/material.h"
+#include "render/runtime_caustic_beam_map_3d.h"
+#include "render/runtime_caustic_photon_map_3d.h"
+#include "render/runtime_caustic_photon_scene_descriptor_3d.h"
 #include "render/runtime_dynamic_geometry_accel_3d.h"
 #include "render/runtime_scene_3d_builder.h"
 #include "render/runtime_scene_3d_samples.h"
@@ -36,8 +39,11 @@ static double runtime_native_3d_water_material_or_default(double value, double f
 
 static bool gRuntimeNative3DInspectionCameraPositionEnabled = false;
 static bool gRuntimeNative3DInspectionCameraLookAtEnabled = false;
+static bool gRuntimeNative3DCausticPhotonRenderPrepPopulationEnabled = false;
 static Vec3 gRuntimeNative3DInspectionCameraPosition = {0};
 static Vec3 gRuntimeNative3DInspectionCameraLookAt = {0};
+static RuntimeCausticPhotonIntegrationSettings3D
+    gRuntimeNative3DCausticPhotonRenderPrepSettings;
 static const char* kRuntimeNative3DFrameBVHSkipOnTLASEnv =
     "RAY_TRACING_NATIVE3D_SKIP_FLATTENED_BVH_ON_TLAS";
 static const char* kRuntimeNative3DFrameBVHSkipDefaultDisableEnv =
@@ -94,6 +100,18 @@ void RuntimeNative3DRender_SetInspectionCameraPosition(Vec3 position) {
 void RuntimeNative3DRender_SetInspectionCameraLookAt(Vec3 target) {
     gRuntimeNative3DInspectionCameraLookAtEnabled = true;
     gRuntimeNative3DInspectionCameraLookAt = target;
+}
+
+void RuntimeNative3DRender_SetCausticPhotonRenderPrepPopulation(
+    bool enabled,
+    const RuntimeCausticPhotonIntegrationSettings3D* settings) {
+    gRuntimeNative3DCausticPhotonRenderPrepPopulationEnabled = enabled;
+    if (settings) {
+        gRuntimeNative3DCausticPhotonRenderPrepSettings = *settings;
+    } else {
+        RuntimeCausticPhotonIntegration3D_DefaultSettings(
+            &gRuntimeNative3DCausticPhotonRenderPrepSettings);
+    }
 }
 
 static double runtime_native_3d_render_resolve_default_light_radius(
@@ -880,6 +898,182 @@ bool RuntimeNative3DPrepareFrameWithSampling(RuntimeNative3DPreparedFrame* out_f
                                                                sampling);
 }
 
+static bool runtime_native_3d_prepare_harvest_photon_mesh_dielectric(
+    const RuntimeScene3D* scene,
+    RuntimeCausticLensShape3D* out_shape,
+    RuntimeTriangle3D* out_entry_triangle,
+    RuntimeCausticPhotonMapPopulationReadback3D* io_population) {
+    RuntimeCausticPhotonSceneDescriptorBatch3D batch;
+    const RuntimeCausticPhotonMeshDielectricDescriptor3D* selected = NULL;
+
+    if (io_population) {
+        io_population->preparedSceneMeshDielectricAttempted = true;
+        io_population->preparedSceneMeshDielectricSceneObjectIndex = -1;
+        io_population->preparedSceneMeshDielectricPrimitiveIndex = -1;
+        io_population->preparedSceneMeshDielectricTriangleIndex = -1;
+        io_population->preparedSceneMeshDielectricTriangleCount = 0;
+    }
+    if (!scene || !out_shape || !out_entry_triangle) return false;
+    if (!RuntimeCausticPhotonSceneDescriptor3D_HarvestMeshDielectricBatch(scene,
+                                                                          &batch)) {
+        if (io_population) {
+            io_population->preparedSceneMeshDielectricCandidateCount =
+                batch.meshDielectricCandidateCount;
+        }
+        return false;
+    }
+
+    selected = RuntimeCausticPhotonSceneDescriptor3D_SelectedMeshDielectric(&batch);
+    if (!selected) return false;
+    *out_shape = selected->shape;
+    *out_entry_triangle = selected->entryTriangle;
+    if (io_population) {
+        io_population->preparedSceneMeshDielectricSucceeded = true;
+        io_population->preparedSceneMeshDielectricCandidateCount =
+            batch.meshDielectricCandidateCount;
+        io_population->preparedSceneMeshDielectricSceneObjectIndex =
+            selected->sceneObjectIndex;
+        io_population->preparedSceneMeshDielectricPrimitiveIndex =
+            selected->primitiveIndex;
+        io_population->preparedSceneMeshDielectricTriangleIndex =
+            selected->triangleIndex;
+        io_population->preparedSceneMeshDielectricTriangleCount =
+            selected->triangleCount;
+    }
+    return true;
+}
+
+static void runtime_native_3d_prepare_populate_photon_render_prep(
+    RuntimeNative3DPreparedFrame* frame) {
+    RuntimeCausticPhotonIntegrationSettings3D settings;
+    RuntimeCausticPhotonMap3D surface_map;
+    RuntimeCausticPhotonMapPopulationReadback3D population;
+    RuntimeCausticPhotonMapPopulationReadback3D harvest;
+    RuntimeCausticPhotonReceiverSelection3D receiver;
+    RuntimeCausticLensShape3D shape;
+    RuntimeTriangle3D triangle;
+    uint64_t cache_capacity = 1u;
+
+    if (!frame || !gRuntimeNative3DCausticPhotonRenderPrepPopulationEnabled) return;
+
+    settings = gRuntimeNative3DCausticPhotonRenderPrepSettings;
+    if (RuntimeCausticPhotonIntegration3D_RouteForSettings(&settings) !=
+        RUNTIME_CAUSTIC_PHOTON_INTEGRATION_ROUTE_PHOTON_QUERY_READY) {
+        return;
+    }
+    if (!settings.renderContributionEnabled || !settings.surfaceQueryEnabled) return;
+    if (settings.sampleBudget <= 0) settings.sampleBudget = 8;
+    if (!(settings.surfaceQueryRadius > 0.0)) settings.surfaceQueryRadius = 0.20;
+    if (!(settings.volumeQueryRadius > 0.0)) settings.volumeQueryRadius = 0.20;
+    cache_capacity = (uint64_t)settings.sampleBudget;
+
+    memset(&harvest, 0, sizeof(harvest));
+    if (!runtime_native_3d_prepare_harvest_photon_mesh_dielectric(&frame->scene,
+                                                                  &shape,
+                                                                  &triangle,
+                                                                  &harvest)) {
+        return;
+    }
+
+    if (!RuntimeCausticSurfaceCache3D_IsAllocated(&frame->causticSurfaceCache)) {
+        (void)RuntimeCausticSurfaceCache3D_Allocate(&frame->causticSurfaceCache,
+                                                    cache_capacity);
+    }
+    if (settings.volumeQueryEnabled &&
+        !RuntimeCausticVolumeCache3D_IsAllocated(&frame->causticVolumeCache)) {
+        (void)RuntimeCausticVolumeCache3D_AllocateFromVolume(&frame->causticVolumeCache,
+                                                             &frame->scene.volume);
+    }
+
+    RuntimeCausticPhotonMap3D_Init(&surface_map);
+    memset(&population, 0, sizeof(population));
+    memset(&receiver, 0, sizeof(receiver));
+    if (!RuntimeCausticPhotonIntegration3D_PopulateReceiverSurfaceMapFromMeshDielectricScene(
+            &surface_map,
+            &frame->scene,
+            &shape,
+            &triangle,
+            &settings,
+            &population,
+            &receiver)) {
+        population.preparedSceneMeshDielectricAttempted =
+            harvest.preparedSceneMeshDielectricAttempted;
+        population.preparedSceneMeshDielectricSucceeded =
+            harvest.preparedSceneMeshDielectricSucceeded;
+        population.fixtureMeshDielectricFallbackUsed =
+            harvest.fixtureMeshDielectricFallbackUsed;
+        population.preparedSceneMeshDielectricCandidateCount =
+            harvest.preparedSceneMeshDielectricCandidateCount;
+        population.preparedSceneMeshDielectricSceneObjectIndex =
+            harvest.preparedSceneMeshDielectricSceneObjectIndex;
+        population.preparedSceneMeshDielectricPrimitiveIndex =
+            harvest.preparedSceneMeshDielectricPrimitiveIndex;
+        population.preparedSceneMeshDielectricTriangleIndex =
+            harvest.preparedSceneMeshDielectricTriangleIndex;
+        population.preparedSceneMeshDielectricTriangleCount =
+            harvest.preparedSceneMeshDielectricTriangleCount;
+        frame->causticPhotonRenderPrepReadback.mapPopulation = population;
+        frame->causticPhotonRenderPrepReadbackBuilt = true;
+        RuntimeCausticPhotonMap3D_Free(&surface_map);
+        return;
+    }
+    population.preparedSceneMeshDielectricAttempted =
+        harvest.preparedSceneMeshDielectricAttempted;
+    population.preparedSceneMeshDielectricSucceeded =
+        harvest.preparedSceneMeshDielectricSucceeded;
+    population.fixtureMeshDielectricFallbackUsed = harvest.fixtureMeshDielectricFallbackUsed;
+    population.preparedSceneMeshDielectricCandidateCount =
+        harvest.preparedSceneMeshDielectricCandidateCount;
+    population.preparedSceneMeshDielectricSceneObjectIndex =
+        harvest.preparedSceneMeshDielectricSceneObjectIndex;
+    population.preparedSceneMeshDielectricPrimitiveIndex =
+        harvest.preparedSceneMeshDielectricPrimitiveIndex;
+    population.preparedSceneMeshDielectricTriangleIndex =
+        harvest.preparedSceneMeshDielectricTriangleIndex;
+    population.preparedSceneMeshDielectricTriangleCount =
+        harvest.preparedSceneMeshDielectricTriangleCount;
+
+    memset(&frame->causticPhotonRenderPrepReadback,
+           0,
+           sizeof(frame->causticPhotonRenderPrepReadback));
+    frame->causticPhotonRenderPrepReadback.productMode = settings.productMode;
+    frame->causticPhotonRenderPrepReadback.route =
+        RuntimeCausticPhotonIntegration3D_RouteForSettings(&settings);
+    frame->causticPhotonRenderPrepReadback.renderContributionSuppressed =
+        !settings.renderContributionEnabled;
+    frame->causticPhotonRenderPrepReadback.queryAttempted = true;
+    frame->causticPhotonRenderPrepReadback.contributionAttempted = true;
+    frame->causticPhotonRenderPrepReadback.cacheDepositAttempted = true;
+    (void)RuntimeCausticPhotonIntegration3D_DepositSurfaceContributionsForReceiverBuckets(
+        &surface_map,
+        &frame->causticSurfaceCache,
+        &settings,
+        &frame->causticPhotonRenderPrepReadback.receiverContribution);
+    frame->causticPhotonRenderPrepReadback.queryHit =
+        frame->causticPhotonRenderPrepReadback.receiverContribution
+            .receiverQueryHitCount > 0u;
+    frame->causticPhotonRenderPrepReadback.contributionEligible =
+        frame->causticPhotonRenderPrepReadback.receiverContribution.eligible;
+    frame->causticPhotonRenderPrepReadback.surfaceDeposited =
+        frame->causticPhotonRenderPrepReadback.receiverContribution
+            .receiverSurfaceDepositAcceptedCount > 0u;
+    frame->causticPhotonRenderPrepReadback.surfaceCandidateCount =
+        frame->causticPhotonRenderPrepReadback.receiverContribution
+            .receiverSurfaceCandidateCount;
+    frame->causticPhotonRenderPrepReadback.surfaceContributingCount =
+        frame->causticPhotonRenderPrepReadback.receiverContribution
+            .receiverSurfaceContributingCount;
+    frame->causticPhotonRenderPrepReadback.estimatedCost =
+        frame->causticPhotonRenderPrepReadback.receiverContribution
+            .receiverQueryAttemptCount;
+    frame->causticPhotonRenderPrepReadback.radiance =
+        frame->causticPhotonRenderPrepReadback.receiverContribution
+            .receiverSurfaceRadiance;
+    frame->causticPhotonRenderPrepReadback.mapPopulation = population;
+    frame->causticPhotonRenderPrepReadbackBuilt = true;
+    RuntimeCausticPhotonMap3D_Free(&surface_map);
+}
+
 bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
     RuntimeNative3DPreparedFrame* out_frame,
     int width,
@@ -967,6 +1161,7 @@ bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
             &frame.causticVolumeCache,
             &frame.causticBootstrapDiagnostics);
     }
+    runtime_native_3d_prepare_populate_photon_render_prep(&frame);
     frame.causticCachePrepMs =
         runtime_native_3d_prepare_elapsed_ms_since(&caustic_prep_started_at);
 

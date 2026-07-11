@@ -7,6 +7,7 @@
 
 #include "config/config_manager.h"
 #include "render/ray_tracing_integrator_catalog.h"
+#include "render/runtime_caustic_photon_integration_3d.h"
 #include "render/runtime_caustic_settings_3d.h"
 #include "render/runtime_disney_v2_caustic_sidecar_3d.h"
 #include "render/runtime_ray_3d.h"
@@ -108,6 +109,11 @@ typedef struct RayTracingAgentRenderRequest {
     bool has_caustic_mode_override;
     RuntimeDisneyV2CausticMode3D caustic_mode;
     RuntimeCausticSettings3D caustic_settings;
+    bool has_caustic_product_mode_override;
+    RuntimeCausticPhotonIntegrationSettings3D caustic_photon_integration_settings;
+    bool caustic_photon_render_prep_population_enabled;
+    bool caustic_photon_populated_callsite_readback_enabled;
+    bool caustic_photon_trace_populated_callsite_readback_enabled;
     bool has_caustic_sidecar_enabled_override;
     bool caustic_sidecar_enabled;
     bool has_caustic_sidecar_strength_override;

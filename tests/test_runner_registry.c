@@ -16,6 +16,7 @@
 #include "test_runtime_caustic_bootstrap_3d.h"
 #include "test_runtime_caustic_beam_map_3d.h"
 #include "test_runtime_caustic_lens_transport_3d.h"
+#include "test_runtime_caustic_photon_emit_3d.h"
 #include "test_runtime_caustic_photon_integration_3d.h"
 #include "test_runtime_caustic_photon_map_3d.h"
 #include "test_runtime_caustic_photon_trace_3d.h"
@@ -118,6 +119,7 @@ int test_runner_main(int argc, char** argv) {
         {"runtime_caustic_bootstrap_3d", run_test_runtime_caustic_bootstrap_3d_tests},
         {"runtime_caustic_beam_map_3d", run_test_runtime_caustic_beam_map_3d_tests},
         {"runtime_caustic_lens_transport_3d", run_test_runtime_caustic_lens_transport_3d_tests},
+        {"runtime_caustic_photon_emit_3d", run_test_runtime_caustic_photon_emit_3d_tests},
         {"runtime_caustic_photon_integration_3d",
          run_test_runtime_caustic_photon_integration_3d_tests},
         {"runtime_caustic_photon_map_3d", run_test_runtime_caustic_photon_map_3d_tests},

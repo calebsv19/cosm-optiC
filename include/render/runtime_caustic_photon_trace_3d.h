@@ -57,6 +57,11 @@ bool RuntimeCausticPhotonTrace3D_FromLensPath(
     const RuntimeCausticPhotonSample3D* sample,
     const RuntimeCausticPhotonTraceSettings3D* settings,
     RuntimeCausticPhotonTrace3D* out_trace);
+bool RuntimeCausticPhotonTrace3D_TraceMeshDielectricPath(
+    const RuntimeCausticLensPath3D* mesh_dielectric_path,
+    const RuntimeCausticPhotonSample3D* emitted_sample,
+    const RuntimeCausticPhotonTraceSettings3D* settings,
+    RuntimeCausticPhotonTrace3D* out_trace);
 bool RuntimeCausticPhotonTrace3D_TraceSphereLens(
     const RuntimeCausticSphereLens3DDescriptor* sphere,
     const RuntimeCausticSphereLens3DLight* light,

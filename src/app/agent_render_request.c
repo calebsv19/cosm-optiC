@@ -581,6 +581,110 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             request.caustic_settings.emissionPolicy =
                 RuntimeCausticTransportEmissionPolicy3D_FromLabel(value);
         }
+        if (RayTracingJsonGetString(inspection, "caustic_product_mode", &value) ||
+            RayTracingJsonGetString(inspection, "caustic_photon_product_mode", &value)) {
+            request.has_caustic_product_mode_override = true;
+            request.caustic_photon_integration_settings.productMode =
+                RuntimeCausticProductMode3D_FromLabel(value);
+        }
+        if (RayTracingJsonGetBool(inspection,
+                                  "caustic_surface_query_enabled",
+                                  &bool_value) ||
+            RayTracingJsonGetBool(inspection,
+                                  "caustic_photon_surface_query_enabled",
+                                  &bool_value)) {
+            request.has_caustic_product_mode_override = true;
+            request.caustic_photon_integration_settings.surfaceQueryEnabled = bool_value;
+        }
+        if (RayTracingJsonGetBool(inspection,
+                                  "caustic_volume_query_enabled",
+                                  &bool_value) ||
+            RayTracingJsonGetBool(inspection,
+                                  "caustic_photon_volume_query_enabled",
+                                  &bool_value)) {
+            request.has_caustic_product_mode_override = true;
+            request.caustic_photon_integration_settings.volumeQueryEnabled = bool_value;
+        }
+        if (RayTracingJsonGetBool(inspection,
+                                  "caustic_render_contribution_enabled",
+                                  &bool_value) ||
+            RayTracingJsonGetBool(inspection,
+                                  "caustic_photon_render_contribution_enabled",
+                                  &bool_value)) {
+            request.has_caustic_product_mode_override = true;
+            request.caustic_photon_integration_settings.renderContributionEnabled =
+                bool_value;
+        }
+        if (RayTracingJsonGetBool(inspection,
+                                  "caustic_photon_render_prep_population_enabled",
+                                  &bool_value) ||
+            RayTracingJsonGetBool(inspection,
+                                  "caustic_production_render_prep_population_enabled",
+                                  &bool_value)) {
+            request.has_caustic_product_mode_override = true;
+            request.caustic_photon_render_prep_population_enabled = bool_value;
+        }
+        if (RayTracingJsonGetInt(inspection, "caustic_photon_sample_budget", &int_value)) {
+            request.has_caustic_product_mode_override = true;
+            request.caustic_photon_integration_settings.sampleBudget = int_value;
+        }
+        if (RayTracingJsonGetInt(inspection, "caustic_photon_max_path_depth", &int_value)) {
+            request.has_caustic_product_mode_override = true;
+            request.caustic_photon_integration_settings.maxPathDepth = int_value;
+        }
+        if (RayTracingJsonGetDouble(inspection,
+                                    "caustic_photon_surface_radiance_scale",
+                                    &double_value)) {
+            request.has_caustic_product_mode_override = true;
+            request.caustic_photon_integration_settings.surfaceRadianceScale =
+                double_value;
+        }
+        if (RayTracingJsonGetDouble(inspection,
+                                    "caustic_photon_surface_query_radius",
+                                    &double_value)) {
+            request.has_caustic_product_mode_override = true;
+            request.caustic_photon_integration_settings.surfaceQueryRadius =
+                double_value;
+        }
+        if (RayTracingJsonGetDouble(inspection,
+                                    "caustic_photon_volume_query_radius",
+                                    &double_value)) {
+            request.has_caustic_product_mode_override = true;
+            request.caustic_photon_integration_settings.volumeQueryRadius =
+                double_value;
+        }
+        if (RayTracingJsonGetBool(inspection,
+                                  "caustic_photon_populated_callsite_readback_enabled",
+                                  &bool_value) ||
+            RayTracingJsonGetBool(inspection,
+                                  "caustic_production_populated_callsite_readback_enabled",
+                                  &bool_value)) {
+            request.has_caustic_product_mode_override = true;
+            request.caustic_photon_populated_callsite_readback_enabled = bool_value;
+        }
+        if (RayTracingJsonGetBool(
+                inspection,
+                "caustic_photon_trace_populated_callsite_readback_enabled",
+                &bool_value) ||
+            RayTracingJsonGetBool(
+                inspection,
+                "caustic_production_trace_populated_callsite_readback_enabled",
+                &bool_value)) {
+            request.has_caustic_product_mode_override = true;
+            request.caustic_photon_trace_populated_callsite_readback_enabled =
+                bool_value;
+        }
+        if (request.has_caustic_product_mode_override) {
+            RuntimeCausticPhotonIntegration3D_ApplyToCausticSettings(
+                &request.caustic_photon_integration_settings,
+                &request.caustic_settings);
+            request.has_caustic_mode_override = true;
+            request.caustic_mode =
+                agent_render_request_caustic_mode_to_disney_v2_mode(
+                    request.caustic_settings.mode);
+            request.caustic_sidecar_enabled =
+                request.caustic_settings.mode == RUNTIME_CAUSTIC_MODE_ANALYTIC;
+        }
         if (json_object_object_get_ex(inspection,
                                       "caustic_lens_traversal_profile",
                                       &caustic_profile)) {

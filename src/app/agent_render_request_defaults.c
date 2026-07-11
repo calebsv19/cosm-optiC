@@ -66,6 +66,12 @@ void ray_tracing_agent_render_request_defaults(RayTracingAgentRenderRequest *req
     request->has_caustic_mode_override = false;
     request->caustic_mode = RUNTIME_DISNEY_V2_CAUSTIC_MODE_ANALYTIC;
     RuntimeCausticSettings3D_Default(&request->caustic_settings);
+    request->has_caustic_product_mode_override = false;
+    RuntimeCausticPhotonIntegration3D_DefaultSettings(
+        &request->caustic_photon_integration_settings);
+    request->caustic_photon_render_prep_population_enabled = false;
+    request->caustic_photon_populated_callsite_readback_enabled = false;
+    request->caustic_photon_trace_populated_callsite_readback_enabled = false;
     request->has_caustic_sidecar_enabled_override = false;
     request->caustic_sidecar_enabled = true;
     request->has_caustic_sidecar_strength_override = false;

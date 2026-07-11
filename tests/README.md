@@ -73,6 +73,7 @@ make -C ray_tracing test-ray-tracing-spatial-caustic-phase8-receiver-policy-matr
 make -C ray_tracing test-ray-tracing-spatial-caustic-phase9-transmitted-receiver-matrix
 make -C ray_tracing test-ray-tracing-spatial-caustic-phase10-tangent-receiver-matrix
 make -C ray_tracing test-ray-tracing-spatial-caustic-visual-sphere-mist-matrix
+make -C ray_tracing test-ray-tracing-ppm10-product-ab-fixture
 make -C ray_tracing test-ray-tracing-emissive-light-preview-matrix
 ```
 
@@ -98,11 +99,14 @@ transport can populate a surface cache and Disney v2 can sample it with the
 analytic caustic sidecar disabled.
 
 `TEST_RUNNER_GROUP=runtime_caustic_photon_trace_3d make -C ray_tracing test`
-is the focused PPM-1 photon-mapper contract proof. It covers isolated photon
+is the focused PPM-1/PPM-8 photon-mapper trace proof. It covers isolated photon
 path state, closed sphere/ball-lens emission plus entry/exit dielectric events,
 refracted branch/PDF readback, post-exit parity with the existing sphere optics
-helper, emitted/final/rejected flux reconciliation, and max-depth rejection
-before any photon-map storage or render contribution.
+helper, emitted/final/rejected flux reconciliation, max-depth rejection, and
+the PPM-8 mesh-dielectric path entrypoint fed by PPM-7 emitted photon samples.
+The PPM-8 coverage stores traced mesh-dielectric output into the existing
+surface photon map and volume beam map helpers while keeping render contribution
+outside this module.
 
 `TEST_RUNNER_GROUP=runtime_caustic_photon_map_3d make -C ray_tracing test`
 is the focused PPM-2 surface photon-map proof. It covers map allocation,
@@ -117,13 +121,51 @@ PPM-1 trace segment, medium filtering, capacity rejection, and the
 no-render-contribution guard before any volume-cache deposit or render-path
 contribution.
 
+`TEST_RUNNER_GROUP=runtime_caustic_photon_emit_3d make -C ray_tracing test`
+is the focused PPM-7 photon-emission distribution proof. It covers
+deterministic emission from finite/emissive light-set entries, stable photon
+ids, seeds, source PDFs, wavelength buckets, flux diagnostics, fixture-safe
+surface photon-map proxy population, map-capacity reject accounting, and the
+guard that render contribution remains gated outside this module.
+
 `TEST_RUNNER_GROUP=runtime_caustic_photon_integration_3d make -C ray_tracing test`
-is the focused PPM-4/PPM-5 product integration proof. It covers
+is the focused PPM-4/PPM-6/PPM-11/PPM-12A/PPM-12C/PPM-13 product integration proof. It covers
 off/reference/production product labels, product-mode-to-caustic-settings
 application, bounded sample/depth defaults, combined surface photon-map plus
 volume beam-map query readback, default render-contribution suppression, and
 explicit opt-in contribution/cache conversion into surface and volume caustic
-caches.
+caches plus renderer/headless callsite route and numeric readback. It also
+proves the populated-callsite surface-map allocation, deterministic emission,
+surface store, grid insertion, query, contribution, and cache-deposit counts,
+and proves that existing `RuntimeCausticPhotonTrace3D` records can populate
+both the surface photon map and volume beam map with
+`population_source=trace_records`. It also proves the deterministic
+mesh-dielectric trace-harvest helper used by the PPM-12C prepared-scene
+headless probe: emitted photons are converted into solved lens paths, traced
+into photon records, stored into both production maps, and queried for surface
+plus volume contribution. It also proves the PPM-13 reusable
+`RuntimeScene3D` mesh-dielectric descriptor batch used by the headless trace
+cell.
+
+`test-ray-tracing-ppm10-product-ab-fixture` is the compact PPM-10/PPM-11A/PPM-12C/PPM-13/PPM-14/PPM-15
+product A/B fixture. It renders generated `off`, `reference`, explicit opt-in
+`production`, explicit `production_populated`, and explicit
+`production_trace_populated` cells from the same transparent mesh scene plus a
+guarded Disney v2 `production_render_prep_populated` floor visual cell and a
+generated `production_render_prep_wall_populated` vertical-receiver visual
+cell, writes per-cell request JSON, summaries, PNG frames, a contact sheet, and
+`ppm10_product_ab_report.json`, and validates source-specific counts. The
+proxy-populated cell must report `population_source=surface_proxy`; the
+trace-populated cell must report `population_source=trace_records` plus nonzero
+trace-path, trace-record, beam-segment, surface-contributor, and
+volume-contributor counts, one prepared-scene mesh-dielectric candidate, and no
+fixture fallback. The render-prep cells must report trace-record population,
+receiver lookup/acceptance counters, distribution-derived receiver footprint
+radius, surface-map contribution, a successful prepared-cache deposit,
+generated visual output, and positive surface-cache sampling contribution. The
+render-prep path no longer writes a synthetic dielectric-centroid cache
+footprint; it stores traced prepared-scene receiver hits through the production
+integration receiver-policy adapter before cache conversion.
 
 `test-ray-tracing-spatial-caustic-phase6-surface-matrix` is the local Phase 6
 surface-calibration proof target. It renders off, analytic-only,

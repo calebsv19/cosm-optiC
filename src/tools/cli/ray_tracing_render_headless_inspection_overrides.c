@@ -14,6 +14,9 @@ void ray_tracing_headless_apply_inspection_overrides(
     if (!request) return;
 
     RuntimeNative3DRender_ResetInspectionCameraOverrides();
+    RuntimeNative3DRender_SetCausticPhotonRenderPrepPopulation(
+        request->caustic_photon_render_prep_population_enabled,
+        &request->caustic_photon_integration_settings);
     RuntimeVolume3DScatter_ResetTuning();
     RuntimeVolume3DMaterial_ResetTuning();
     RuntimeRay3D_SetTraceRoute(request->trace_route);

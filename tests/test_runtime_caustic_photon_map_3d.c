@@ -153,10 +153,131 @@ static int test_runtime_caustic_photon_map_rejects_capacity_and_identity(void) {
     return 0;
 }
 
+static int test_runtime_caustic_photon_map_query_cost_and_energy_ledgers(void) {
+    RuntimeCausticPhotonMap3D map;
+    RuntimeCausticPhotonMapRecord3D record = {0};
+    RuntimeCausticPhotonMapQuery3D query = test_query(vec3(0.0, 0.0, 0.0),
+                                                      vec3(0.0, 1.0, 0.0));
+    RuntimeCausticPhotonMapQueryResult3D result;
+    RuntimeCausticPhotonMapDiagnostics3D diagnostics;
+
+    RuntimeCausticPhotonMap3D_Init(&map);
+    assert_true("runtime_caustic_photon_map_ppm9_allocate",
+                RuntimeCausticPhotonMap3D_Allocate(&map, 4u));
+
+    record.normal = vec3(0.0, 1.0, 0.0);
+    record.incidentDirection = vec3(0.0, -1.0, 0.0);
+    record.flux = vec3(1.0, 0.5, 0.25);
+    record.pathPdf = 1.0;
+    record.queryRadius = 0.20;
+    record.sceneObjectIndex = 9;
+    record.primitiveIndex = 8;
+    record.triangleIndex = 7;
+
+    record.photonId = 1u;
+    record.position = vec3(0.0, 0.0, 0.0);
+    assert_true("runtime_caustic_photon_map_ppm9_store_first",
+                RuntimeCausticPhotonMap3D_StoreRecord(&map, &record));
+    record.photonId = 2u;
+    record.position = vec3(0.02, 0.0, 0.0);
+    assert_true("runtime_caustic_photon_map_ppm9_store_second",
+                RuntimeCausticPhotonMap3D_StoreRecord(&map, &record));
+    record.photonId = 3u;
+    record.position = vec3(0.04, 0.0, 0.0);
+    assert_true("runtime_caustic_photon_map_ppm9_store_third",
+                RuntimeCausticPhotonMap3D_StoreRecord(&map, &record));
+
+    query.candidateLimit = 2u;
+    query.physicalEnergyScale = 0.50;
+    query.displayGain = 2.0;
+    assert_true("runtime_caustic_photon_map_ppm9_query_hit",
+                RuntimeCausticPhotonMap3D_Query(&map, &query, &result));
+    assert_true("runtime_caustic_photon_map_ppm9_cost_bounded",
+                result.testedCount == 2u &&
+                    result.candidateCount == 2u &&
+                    result.contributingCount == 2u &&
+                    result.candidateLimit == 2u &&
+                    result.candidateLimitReached);
+    assert_close("runtime_caustic_photon_map_ppm9_flux_alias",
+                 result.flux.x,
+                 result.physicalFlux.x,
+                 1e-9);
+    assert_close("runtime_caustic_photon_map_ppm9_display_gain",
+                 result.displayFlux.x,
+                 result.physicalFlux.x * 2.0,
+                 1e-9);
+
+    RuntimeCausticPhotonMap3D_SnapshotDiagnostics(&map, &diagnostics);
+    assert_true("runtime_caustic_photon_map_ppm9_diag_cost",
+                diagnostics.lastQueryTestedCount == 2u &&
+                    diagnostics.lastQueryCandidateLimit == 2u &&
+                    diagnostics.lastQueryCandidateLimitReached);
+    assert_close("runtime_caustic_photon_map_ppm9_diag_stored_flux",
+                 diagnostics.totalStoredFlux.x,
+                 3.0,
+                 1e-9);
+    assert_close("runtime_caustic_photon_map_ppm9_diag_queried_physical",
+                 diagnostics.totalQueriedPhysicalFlux.x,
+                 result.physicalFlux.x,
+                 1e-9);
+    assert_close("runtime_caustic_photon_map_ppm9_diag_queried_display",
+                 diagnostics.totalQueriedDisplayFlux.x,
+                 result.displayFlux.x,
+                 1e-9);
+    RuntimeCausticPhotonMap3D_Free(&map);
+    return 0;
+}
+
+static int test_runtime_caustic_photon_map_grid_acceleration_prunes_sparse_records(void) {
+    RuntimeCausticPhotonMap3D map;
+    RuntimeCausticPhotonMapRecord3D record = {0};
+    RuntimeCausticPhotonMapQuery3D query = test_query(vec3(0.0, 0.0, 0.0),
+                                                      vec3(0.0, 1.0, 0.0));
+    RuntimeCausticPhotonMapQueryResult3D result;
+    RuntimeCausticPhotonMapDiagnostics3D diagnostics;
+
+    RuntimeCausticPhotonMap3D_Init(&map);
+    assert_true("runtime_caustic_photon_map_grid_allocate",
+                RuntimeCausticPhotonMap3D_Allocate(&map, 16u));
+
+    record.normal = vec3(0.0, 1.0, 0.0);
+    record.incidentDirection = vec3(0.0, -1.0, 0.0);
+    record.flux = vec3(1.0, 1.0, 1.0);
+    record.pathPdf = 1.0;
+    record.queryRadius = 0.10;
+    record.sceneObjectIndex = 9;
+    record.primitiveIndex = 8;
+    record.triangleIndex = 7;
+
+    for (uint64_t i = 0u; i < 12u; ++i) {
+        record.photonId = i + 1u;
+        record.position = vec3((double)i * 5.0, 0.0, 0.0);
+        assert_true("runtime_caustic_photon_map_grid_store",
+                    RuntimeCausticPhotonMap3D_StoreRecord(&map, &record));
+    }
+
+    query.radius = 0.20;
+    assert_true("runtime_caustic_photon_map_grid_query",
+                RuntimeCausticPhotonMap3D_Query(&map, &query, &result));
+    RuntimeCausticPhotonMap3D_SnapshotDiagnostics(&map, &diagnostics);
+    assert_true("runtime_caustic_photon_map_grid_pruned",
+                result.contributingCount == 1u &&
+                    result.testedCount < map.recordCount &&
+                    diagnostics.lastQueryAccelerationUsed &&
+                    diagnostics.lastQueryGridCellVisitCount > 0u &&
+                    diagnostics.accelerationAllocated &&
+                    diagnostics.accelerationInsertedCount == map.recordCount &&
+                    diagnostics.accelerationFallbackLinearQueryCount == 0u);
+    RuntimeCausticPhotonMap3D_Free(&map);
+    return 0;
+}
+
 int run_test_runtime_caustic_photon_map_3d_tests(void) {
     int failures = 0;
     failures += test_runtime_caustic_photon_map_allocate_store_query();
     failures += test_runtime_caustic_photon_map_trace_receiver_store();
     failures += test_runtime_caustic_photon_map_rejects_capacity_and_identity();
+    failures += test_runtime_caustic_photon_map_query_cost_and_energy_ledgers();
+    failures += test_runtime_caustic_photon_map_grid_acceleration_prunes_sparse_records();
     return failures;
 }

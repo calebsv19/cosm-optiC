@@ -555,6 +555,70 @@ static int test_agent_render_request_caustic_photon_map_contract_only(void) {
     return 0;
 }
 
+static int test_agent_render_request_caustic_photon_product_mode_ppm6(void) {
+    char request_path[PATH_MAX];
+    char diagnostics[256];
+    RayTracingAgentRenderRequest request;
+    RuntimeCausticReadback3D readback;
+    const char* json_text =
+        "{\n"
+        "  \"schema_version\": \"ray_tracing_agent_render_request_v1\",\n"
+        "  \"run_id\": \"caustic_photon_product_mode_ppm6_test\",\n"
+        "  \"scene\": {\"runtime_scene_path\": \"scene_runtime.json\"},\n"
+        "  \"render\": {\"integrator_3d\": \"direct_light\"},\n"
+        "  \"inspection\": {\n"
+        "    \"caustic_product_mode\": \"production\",\n"
+        "    \"caustic_surface_query_enabled\": true,\n"
+        "    \"caustic_volume_query_enabled\": true,\n"
+        "    \"caustic_render_contribution_enabled\": true,\n"
+        "    \"caustic_photon_sample_budget\": 192,\n"
+        "    \"caustic_photon_max_path_depth\": 6,\n"
+        "    \"caustic_photon_surface_radiance_scale\": 2.5,\n"
+        "    \"caustic_photon_trace_populated_callsite_readback_enabled\": true\n"
+        "  }\n"
+        "}\n";
+
+    snprintf(request_path,
+             sizeof(request_path),
+             "%s",
+             "/tmp/ray_tracing_agent_render_caustic_photon_product_mode_ppm6_request.json");
+    assert_true("agent_render_caustic_photon_product_mode_request_write",
+                write_text_file(request_path, json_text));
+    assert_true("agent_render_caustic_photon_product_mode_request_load",
+                ray_tracing_agent_render_request_load_file(request_path,
+                                                           &request,
+                                                           diagnostics,
+                                                           sizeof(diagnostics)));
+    assert_true("agent_render_caustic_photon_product_mode_override",
+                request.has_caustic_product_mode_override &&
+                    request.has_caustic_mode_override);
+    assert_true("agent_render_caustic_photon_product_mode_settings",
+                request.caustic_photon_integration_settings.productMode ==
+                        RUNTIME_CAUSTIC_PRODUCT_MODE_PRODUCTION &&
+                    request.caustic_photon_integration_settings.renderContributionEnabled &&
+                    request.caustic_photon_trace_populated_callsite_readback_enabled);
+    assert_true("agent_render_caustic_photon_product_mode_caustic_settings",
+                request.caustic_settings.mode == RUNTIME_CAUSTIC_MODE_TRANSPORT &&
+                    request.caustic_settings.transportEngine ==
+                        RUNTIME_CAUSTIC_TRANSPORT_ENGINE_PHOTON_MAP &&
+                    request.caustic_settings.surfaceCacheEnabled &&
+                    request.caustic_settings.volumeCacheEnabled &&
+                    request.caustic_settings.sampleBudget == 192 &&
+                    request.caustic_settings.maxPathDepth == 6);
+    assert_true("agent_render_caustic_photon_product_mode_sidecar_off",
+                !request.caustic_sidecar_enabled &&
+                    request.caustic_mode == RUNTIME_DISNEY_V2_CAUSTIC_MODE_OFF);
+    readback = RuntimeCausticSettings3D_Phase0Readback(&request.caustic_settings,
+                                                       request.caustic_sidecar_enabled);
+    assert_true("agent_render_caustic_photon_product_mode_readback",
+                readback.photonMapRequested &&
+                    !readback.pathEmissionActive &&
+                    readback.transportEngine ==
+                        RUNTIME_CAUSTIC_TRANSPORT_ENGINE_PHOTON_MAP);
+    unlink(request_path);
+    return 0;
+}
+
 static int test_agent_render_request_caustic_lens_traversal_profile_override(void) {
     char request_path[PATH_MAX];
     char diagnostics[256];
@@ -1780,6 +1844,7 @@ int run_test_config_animation_settings_export_suite(void) {
     test_agent_render_request_trace_route_roundtrip_and_validation();
     test_agent_render_request_caustic_transport_volume_phase4_contract();
     test_agent_render_request_caustic_photon_map_contract_only();
+    test_agent_render_request_caustic_photon_product_mode_ppm6();
     test_agent_render_request_caustic_lens_traversal_profile_override();
     test_agent_render_request_caustic_transport_surface_sidecar_combined_contract();
     test_agent_render_request_caustic_sidecar_rejects_non_disney_v2();

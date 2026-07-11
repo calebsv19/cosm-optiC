@@ -293,6 +293,9 @@ test-ray-tracing-spatial-caustic-lens-focal-sweep-diagnostic: $(RAY_TRACING_REND
 test-ray-tracing-spatial-caustic-ball-lens-focal-crossing: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/run_ray_tracing_spatial_caustic_ball_lens_focal_crossing.py --debug-export
 
+test-ray-tracing-ppm10-product-ab-fixture: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_ppm10_product_ab_fixture.py
+
 test-ray-tracing-spatial-caustic-authored-validation-matrix: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/run_ray_tracing_spatial_caustic_authored_validation_matrix.py
 

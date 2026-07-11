@@ -7,6 +7,7 @@
 
 #include "render/runtime_camera_3d_rays.h"
 #include "render/runtime_caustic_bootstrap_3d.h"
+#include "render/runtime_caustic_photon_integration_3d.h"
 #include "render/runtime_caustic_surface_cache_3d.h"
 #include "render/runtime_caustic_transport_3d.h"
 #include "render/runtime_caustic_volume_cache_3d.h"
@@ -336,6 +337,7 @@ typedef struct {
     RuntimeDisneyV2CausticSidecarProbe3D causticSidecarProbe;
     RuntimeCausticBootstrap3DDiagnostics causticBootstrapDiagnostics;
     RuntimeCausticTransport3DDiagnostics causticTransportDiagnostics;
+    RuntimeCausticPhotonRenderCallsiteReadback3D causticPhotonRenderPrepReadback;
     double causticCachePrepMs;
     int width;
     int height;
@@ -345,6 +347,7 @@ typedef struct {
     int featureAttributionStartY;
     bool directLightVisibilityAttributionEnabled;
     bool causticSidecarProbeValid;
+    bool causticPhotonRenderPrepReadbackBuilt;
     bool valid;
 } RuntimeNative3DPreparedFrame;
 
@@ -371,6 +374,9 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
 void RuntimeNative3DRender_ResetInspectionCameraOverrides(void);
 void RuntimeNative3DRender_SetInspectionCameraPosition(Vec3 position);
 void RuntimeNative3DRender_SetInspectionCameraLookAt(Vec3 target);
+void RuntimeNative3DRender_SetCausticPhotonRenderPrepPopulation(
+    bool enabled,
+    const RuntimeCausticPhotonIntegrationSettings3D* settings);
 const char* RuntimeNative3DPrepareFrameLastDiagnostics(void);
 bool RuntimeNative3DPrepareFrame(RuntimeNative3DPreparedFrame* out_frame,
                                  int width,

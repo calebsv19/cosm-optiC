@@ -11,6 +11,7 @@
 #include "import/runtime_mesh_asset_loader.h"
 #include "render/ray_tracing_mode_backend.h"
 #include "render/runtime_dynamic_geometry_accel_3d.h"
+#include "render/runtime_caustic_photon_integration_3d.h"
 #include "render/runtime_mesh_blas_cache_3d.h"
 #include "render/runtime_native_3d_render.h"
 #include "render/runtime_render_trace_cost_ledger_3d.h"
@@ -156,6 +157,8 @@ typedef struct RayTracingHeadlessPreflight {
     double water_surface_payload_tint_b;
     int water_surface_triangle_count;
     RuntimeNative3DRenderStats stats;
+    RuntimeCausticPhotonRenderCallsiteReadback3D causticPhotonCallsiteReadback;
+    bool causticPhotonCallsiteReadbackBuilt;
     RuntimeNative3DPreparedSceneCacheStats prepared_scene_cache_stats;
     RuntimeDynamicGeometryWaterCacheDiagnostics3D dynamic_water_cache_stats;
     RuntimeSceneAcceleration3DDiagnostics scene_acceleration_stats;
@@ -230,6 +233,14 @@ void ray_tracing_headless_write_object_audit(
     FILE *file,
     const RayTracingHeadlessPreflight *preflight);
 void ray_tracing_headless_audit_prepared_frame(
+    RayTracingHeadlessPreflight *preflight,
+    const RuntimeNative3DPreparedFrame *frame,
+    const RayTracingAgentRenderRequest *request);
+void ray_tracing_headless_probe_caustic_photon_callsite(
+    RayTracingHeadlessPreflight *preflight,
+    const RuntimeNative3DPreparedFrame *frame,
+    const RayTracingAgentRenderRequest *request);
+void ray_tracing_headless_probe_caustic_photon_trace_callsite(
     RayTracingHeadlessPreflight *preflight,
     const RuntimeNative3DPreparedFrame *frame,
     const RayTracingAgentRenderRequest *request);
