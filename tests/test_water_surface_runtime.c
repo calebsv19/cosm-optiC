@@ -11,7 +11,7 @@ static int test_water_surface_runtime_appends_heightfield_surface(void) {
     RuntimeScene3DHeightfieldSurfaceDesc desc = {0};
     float heights[9] = {
         0.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 0.45f,
+        0.0f, 0.45f, 0.48f,
         0.0f, 0.50f, 0.60f
     };
     int appended_triangle_count = 0;
@@ -43,9 +43,9 @@ static int test_water_surface_runtime_appends_heightfield_surface(void) {
     assert_true("water_surface_runtime_heightfield_primitive_count",
                 scene.primitiveCount == 1);
     assert_true("water_surface_runtime_heightfield_triangle_count",
-                scene.triangleMesh.triangleCount == 6);
+                scene.triangleMesh.triangleCount == 2);
     assert_true("water_surface_runtime_heightfield_reported_count",
-                appended_triangle_count == 6);
+                appended_triangle_count == 2);
     assert_true("water_surface_runtime_heightfield_source_index",
                 scene.primitives[0].source.sceneObjectIndex == 7);
     assert_true("water_surface_runtime_heightfield_object_id",
@@ -56,6 +56,47 @@ static int test_water_surface_runtime_appends_heightfield_surface(void) {
                 scene.triangleMesh.triangles[0].normal.y > 0.0);
     assert_true("water_surface_runtime_heightfield_two_sided",
                 scene.triangleMesh.triangles[0].twoSided);
+
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
+static int test_water_surface_runtime_skips_cutout_boundary_quads(void) {
+    RuntimeScene3D scene;
+    RuntimeScene3DHeightfieldSurfaceDesc desc = {0};
+    float heights[9] = {
+        0.80f, 0.82f, 0.81f,
+        0.79f, 0.00f, 0.83f,
+        0.78f, 0.80f, 0.82f
+    };
+    int appended_triangle_count = 0;
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    desc.object_id = "water_surface";
+    desc.scene_object_index = 5;
+    desc.grid_w = 3u;
+    desc.grid_d = 3u;
+    desc.heights_y = heights;
+    desc.sample_origin_x = 0.0;
+    desc.sample_origin_z = 0.0;
+    desc.sample_spacing_x = 0.25;
+    desc.sample_spacing_z = 0.25;
+    desc.dry_height = 0.0;
+    desc.dry_height_epsilon = 1e-6;
+    desc.skip_dry_quads = true;
+    desc.two_sided = true;
+
+    ok = RuntimeScene3DBuilder_AppendHeightfieldSurface(&scene,
+                                                        &desc,
+                                                        &appended_triangle_count);
+    assert_true("water_surface_runtime_cutout_boundary_ok", ok);
+    assert_true("water_surface_runtime_cutout_boundary_no_primitive",
+                scene.primitiveCount == 0);
+    assert_true("water_surface_runtime_cutout_boundary_no_triangles",
+                scene.triangleMesh.triangleCount == 0);
+    assert_true("water_surface_runtime_cutout_boundary_reported_count",
+                appended_triangle_count == 0);
 
     RuntimeScene3D_Free(&scene);
     return 0;
@@ -122,6 +163,7 @@ static int test_water_surface_runtime_maps_physics_y_height_to_scene_z(void) {
 int run_test_water_surface_runtime_tests(void) {
     int before = test_support_failures();
     test_water_surface_runtime_appends_heightfield_surface();
+    test_water_surface_runtime_skips_cutout_boundary_quads();
     test_water_surface_runtime_maps_physics_y_height_to_scene_z();
     return test_support_failures() - before;
 }
