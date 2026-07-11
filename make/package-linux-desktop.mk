@@ -142,9 +142,12 @@ package-linux-desktop-self-test: package-linux-desktop
 	@test -f "$(LINUX_DESKTOP_ARCHIVE)" || (echo "Missing Linux desktop archive"; exit 1)
 	@test -f "$(LINUX_DESKTOP_SHA256)" || (echo "Missing Linux desktop checksum"; exit 1)
 	@rm -rf "$(RELEASE_DIR)/linux-desktop-self-test"
-	@mkdir -p "$(RELEASE_DIR)/linux-desktop-self-test/unpack" "$(LINUX_DESKTOP_SELF_TEST_RUNTIME_DIR)" "$(LINUX_DESKTOP_SELF_TEST_STATE_DIR)"
+	@mkdir -p "$(RELEASE_DIR)/linux-desktop-self-test/unpack" "$(RELEASE_DIR)/linux-desktop-self-test/home" "$(RELEASE_DIR)/linux-desktop-self-test/xdg-data" "$(LINUX_DESKTOP_SELF_TEST_RUNTIME_DIR)" "$(LINUX_DESKTOP_SELF_TEST_STATE_DIR)"
 	@cd "$(RELEASE_DIR)" && sha256sum -c "$(notdir $(LINUX_DESKTOP_SHA256))"
 	@tar -xzf "$(LINUX_DESKTOP_ARCHIVE)" -C "$(RELEASE_DIR)/linux-desktop-self-test/unpack"
+	@HOME="$(abspath $(RELEASE_DIR)/linux-desktop-self-test/home)" XDG_DATA_HOME="$(abspath $(RELEASE_DIR)/linux-desktop-self-test/xdg-data)" "$(RELEASE_DIR)/linux-desktop-self-test/unpack/$(LINUX_DESKTOP_BASENAME)/share/install-desktop-entry.sh" >/dev/null
+	@test -f "$(RELEASE_DIR)/linux-desktop-self-test/xdg-data/applications/optic.desktop" || (echo "Installer did not write optic.desktop"; exit 1)
+	@test -f "$(RELEASE_DIR)/linux-desktop-self-test/xdg-data/icons/hicolor/scalable/apps/optic.svg" || (echo "Installer did not write optic.svg"; exit 1)
 	@RAY_TRACING_RUNTIME_DIR="$(LINUX_DESKTOP_SELF_TEST_RUNTIME_DIR)" XDG_STATE_HOME="$(LINUX_DESKTOP_SELF_TEST_STATE_DIR)" "$(RELEASE_DIR)/linux-desktop-self-test/unpack/$(LINUX_DESKTOP_BASENAME)/bin/raytracing-launcher" --self-test
 	@echo "package-linux-desktop-self-test passed."
 

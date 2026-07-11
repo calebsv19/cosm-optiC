@@ -1024,6 +1024,8 @@ static int test_runtime_material_payload_3d_glass_override_is_physical_transport
 static int test_runtime_material_payload_3d_water_override_contract(void) {
     SceneConfig saved_scene = sceneSettings;
     RuntimeMaterialPayload3D payload = {0};
+    RuntimePrincipledBSDF3D principled = RuntimePrincipledBSDF3D_Default();
+    RuntimeDisneyV2_3DTransparentPolicy policy = {0};
     RuntimeWaterMaterial3DOverride override = {0};
     double expected_tint_r = 0.0;
     double expected_tint_g = 0.0;
@@ -1102,6 +1104,17 @@ static int test_runtime_material_payload_3d_water_override_contract(void) {
     assert_true("runtime_material_payload_water_override_specular_weight",
                 payload.bsdf.specWeight >= 0.12);
     assert_true("runtime_material_payload_water_override_solid", !payload.thinWalled);
+    principled = RuntimePrincipledBSDF3D_FromMaterialPayload(&payload);
+    assert_true("runtime_material_payload_water_override_principled_valid",
+                principled.valid);
+    assert_true("runtime_material_payload_water_override_physical_transport",
+                runtime_disney_v2_3d_policy_is_physical_transmission(&payload,
+                                                                     &principled));
+    policy = runtime_disney_v2_3d_resolve_transparent_policy(&payload, &principled, 0.45);
+    assert_true("runtime_material_payload_water_override_not_alpha_only",
+                !policy.alphaOnly);
+    assert_true("runtime_material_payload_water_override_solid_physical",
+                policy.physicalTransmission && !policy.thinWalled);
 
     RuntimeWaterMaterial3D_ClearAll();
     sceneSettings = saved_scene;
