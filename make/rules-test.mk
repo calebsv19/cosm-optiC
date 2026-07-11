@@ -141,8 +141,14 @@ RUNTIME_MESH_ASSET_BUILDER_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_scene_accel_3d_instances.c \
 	$(SRC_DIR)/render/runtime_scene_accel_3d.c \
 	$(SRC_DIR)/render/runtime_scene_3d_builder.c \
+	$(SRC_DIR)/render/runtime_scene_3d_builder_geometry.c \
+	$(SRC_DIR)/render/runtime_scene_3d_builder_mesh.c \
+	$(SRC_DIR)/render/runtime_scene_3d_builder_shared.c \
 	$(SRC_DIR)/render/runtime_triangle_bvh_3d.c \
+	$(SRC_DIR)/render/runtime_triangle_bvh_cache_3d.c \
+	$(SRC_DIR)/render/runtime_triangle_bvh_trace_3d.c \
 	$(SRC_DIR)/render/runtime_volume_3d.c \
+	$(TEST_DIR)/test_runtime_scene_motion_bridge_noop_stub.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
 	$(CORE_IO_DIR)/src/core_io.c \
@@ -186,8 +192,14 @@ RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_scene_accel_3d_instances.c \
 	$(SRC_DIR)/render/runtime_scene_accel_3d.c \
 	$(SRC_DIR)/render/runtime_scene_3d_builder.c \
+	$(SRC_DIR)/render/runtime_scene_3d_builder_geometry.c \
+	$(SRC_DIR)/render/runtime_scene_3d_builder_mesh.c \
+	$(SRC_DIR)/render/runtime_scene_3d_builder_shared.c \
 	$(SRC_DIR)/render/runtime_triangle_bvh_3d.c \
+	$(SRC_DIR)/render/runtime_triangle_bvh_cache_3d.c \
+	$(SRC_DIR)/render/runtime_triangle_bvh_trace_3d.c \
 	$(SRC_DIR)/render/runtime_volume_3d.c \
+	$(TEST_DIR)/test_runtime_scene_motion_bridge_noop_stub.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
 	$(CORE_IO_DIR)/src/core_io.c \

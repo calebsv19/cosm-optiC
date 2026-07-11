@@ -49,18 +49,7 @@ assert summary["rendered_frames"] is True
 assert summary["frames_rendered"] == 1
 
 bvh = summary["bvh_summary"]
-assert bvh["ready"] is True
 assert bvh["triangle_count"] == 1238, bvh["triangle_count"]
-assert bvh["node_count"] > 1, bvh["node_count"]
-assert bvh["leaf_count"] > 1, bvh["leaf_count"]
-assert bvh["max_depth"] > 1, bvh["max_depth"]
-assert bvh["max_leaf_triangle_count"] <= bvh["leaf_size"], bvh
-assert bvh["total_bytes"] > 0, bvh["total_bytes"]
-assert bvh["centroid_bytes"] > 0, bvh["centroid_bytes"]
-assert bvh["triangle_bounds_min_bytes"] > 0, bvh["triangle_bounds_min_bytes"]
-assert bvh["triangle_bounds_max_bytes"] > 0, bvh["triangle_bounds_max_bytes"]
-assert bvh["sort_scratch_bytes"] == 0, bvh["sort_scratch_bytes"]
-assert bvh["build_scratch_bytes"] == bvh["centroid_bytes"] + bvh["triangle_bounds_min_bytes"] + bvh["triangle_bounds_max_bytes"] + bvh["sort_scratch_bytes"], bvh
 assert bvh["trace_calls"] > 0, bvh["trace_calls"]
 assert bvh["node_visits"] > 0, bvh["node_visits"]
 assert bvh["aabb_tests"] >= bvh["node_visits"], bvh
@@ -71,6 +60,10 @@ assert bvh["overflow_fallback_calls"] == 0, bvh["overflow_fallback_calls"]
 accel = summary["prepared_acceleration"]
 assert accel["active_trace_route"] == "tlas_blas", accel["active_trace_route"]
 assert accel["requested_trace_route"] == "tlas_blas", accel["requested_trace_route"]
+assert bvh["ready"] is False, bvh
+assert bvh["node_count"] == 0, bvh["node_count"]
+assert bvh["leaf_count"] == 0, bvh["leaf_count"]
+assert bvh["total_bytes"] == 0, bvh["total_bytes"]
 assert accel["route_trace_calls"] > 0, accel["route_trace_calls"]
 assert accel["route_tlas_trace_calls"] == accel["route_trace_calls"], accel
 assert accel["route_tlas_trace_hits"] > 0, accel["route_tlas_trace_hits"]
@@ -128,9 +121,21 @@ assert tlas_accel["route_flattened_fallback_calls"] == 0, tlas_accel
 assert tlas_accel["route_parity_mismatches"] == 0, tlas_accel["route_parity_mismatches"]
 
 flattened_accel = flattened_summary["prepared_acceleration"]
+flattened_bvh = flattened_summary["bvh_summary"]
 assert flattened_summary["rendered_frames"] is True
 assert flattened_accel["active_trace_route"] == "flattened_bvh", flattened_accel["active_trace_route"]
 assert flattened_accel["requested_trace_route"] == "flattened_bvh", flattened_accel["requested_trace_route"]
+assert flattened_bvh["ready"] is True, flattened_bvh
+assert flattened_bvh["node_count"] > 1, flattened_bvh["node_count"]
+assert flattened_bvh["leaf_count"] > 1, flattened_bvh["leaf_count"]
+assert flattened_bvh["max_depth"] > 1, flattened_bvh["max_depth"]
+assert flattened_bvh["max_leaf_triangle_count"] <= flattened_bvh["leaf_size"], flattened_bvh
+assert flattened_bvh["total_bytes"] > 0, flattened_bvh["total_bytes"]
+assert flattened_bvh["centroid_bytes"] > 0, flattened_bvh["centroid_bytes"]
+assert flattened_bvh["triangle_bounds_min_bytes"] > 0, flattened_bvh["triangle_bounds_min_bytes"]
+assert flattened_bvh["triangle_bounds_max_bytes"] > 0, flattened_bvh["triangle_bounds_max_bytes"]
+assert flattened_bvh["sort_scratch_bytes"] == 0, flattened_bvh["sort_scratch_bytes"]
+assert flattened_bvh["build_scratch_bytes"] == flattened_bvh["centroid_bytes"] + flattened_bvh["triangle_bounds_min_bytes"] + flattened_bvh["triangle_bounds_max_bytes"] + flattened_bvh["sort_scratch_bytes"], flattened_bvh
 assert flattened_accel["route_trace_calls"] > 0, flattened_accel["route_trace_calls"]
 assert flattened_accel["route_flattened_trace_calls"] == flattened_accel["route_trace_calls"], flattened_accel
 assert flattened_accel["route_tlas_trace_calls"] == 0, flattened_accel["route_tlas_trace_calls"]

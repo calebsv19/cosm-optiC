@@ -190,13 +190,31 @@ bool runtime_scene_3d_builder_append_quad(RuntimeScene3D* scene,
                                                  Vec3 p3,
                                                  Vec3 expected_normal,
                                                  bool two_sided) {
+    Vec3 normal_a = vec3_cross(vec3_sub(p1, p0), vec3_sub(p2, p0));
+    Vec3 normal_b = vec3_cross(vec3_sub(p2, p0), vec3_sub(p3, p0));
+    if (vec3_length(normal_a) > 1e-9) {
+        normal_a = vec3_normalize(normal_a);
+        if (vec3_dot(normal_a, expected_normal) < 0.0) {
+            normal_a = vec3_scale(normal_a, -1.0);
+        }
+    } else {
+        normal_a = expected_normal;
+    }
+    if (vec3_length(normal_b) > 1e-9) {
+        normal_b = vec3_normalize(normal_b);
+        if (vec3_dot(normal_b, expected_normal) < 0.0) {
+            normal_b = vec3_scale(normal_b, -1.0);
+        }
+    } else {
+        normal_b = expected_normal;
+    }
     if (!runtime_scene_3d_builder_append_triangle_internal(scene,
                                                            primitive_index,
                                                            scene_object_index,
                                                            p0,
                                                            p1,
                                                            p2,
-                                                           expected_normal,
+                                                           normal_a,
                                                            -1,
                                                            two_sided,
                                                            false,
@@ -211,7 +229,7 @@ bool runtime_scene_3d_builder_append_quad(RuntimeScene3D* scene,
                                                             p0,
                                                             p2,
                                                             p3,
-                                                            expected_normal,
+                                                            normal_b,
                                                             -1,
                                                             two_sided,
                                                             false,

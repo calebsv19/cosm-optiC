@@ -32,12 +32,20 @@ assert summary["rendered_frames"] is True
 assert summary["frames_rendered"] == 3
 
 bvh = summary["bvh_summary"]
-assert bvh["ready"] is True
 assert bvh["triangle_count"] == 65030, bvh["triangle_count"]
-assert bvh["node_count"] == 32767, bvh["node_count"]
-assert bvh["leaf_count"] == 16384, bvh["leaf_count"]
 assert bvh["trace_calls"] > 0, bvh["trace_calls"]
 assert bvh["trace_overflows"] == 0, bvh["trace_overflows"]
+
+accel = summary["prepared_acceleration"]
+assert accel["active_trace_route"] == "tlas_blas", accel["active_trace_route"]
+assert accel["requested_trace_route"] == "tlas_blas", accel["requested_trace_route"]
+assert bvh["ready"] is False, bvh
+assert bvh["node_count"] == 0, bvh["node_count"]
+assert bvh["leaf_count"] == 0, bvh["leaf_count"]
+assert accel["route_trace_calls"] > 0, accel["route_trace_calls"]
+assert accel["route_tlas_trace_calls"] == accel["route_trace_calls"], accel
+assert accel["route_tlas_trace_hits"] > 0, accel
+assert accel["route_flattened_fallback_calls"] == 0, accel
 
 cache = summary["prepared_scene_cache"]
 assert cache["valid"] is True, cache

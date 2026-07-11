@@ -40,6 +40,7 @@ int ObjectEditorPanels_MaterialRowHeight(void);
 int ObjectEditorPanels_ColorPreviewSize(void);
 int ObjectEditorPanels_ColorSliderSectionHeight(void);
 int ObjectEditorPanels_AuxSliderSectionHeight(void);
+int ObjectEditorPanels_MotionSectionHeight(void);
 RayTracingThemePalette ObjectEditorPanels_ResolvePanelPalette(void);
 SDL_Color ObjectEditorPanels_PanelBodyFill(const RayTracingThemePalette* palette);
 SDL_Color ObjectEditorPanels_PanelHeaderFill(const RayTracingThemePalette* palette);
@@ -83,6 +84,13 @@ void ObjectEditorPanels_ResolveAuxSliderMetrics(int ordinal,
                                                 SDL_Rect* out_value,
                                                 SDL_Rect* out_track,
                                                 SDL_Rect* out_knob);
+void ObjectEditorPanels_ResolveMotionSectionMetrics(SDL_Rect* out_section,
+                                                    SDL_Rect* out_label,
+                                                    SDL_Rect* out_static_button,
+                                                    SDL_Rect* out_authored_button,
+                                                    SDL_Rect* out_physics_button,
+                                                    SDL_Rect* out_status_label,
+                                                    SDL_Rect* out_status_swatch);
 void ObjectEditorPanels_ResolveMaterialListMetrics(int* out_list_y,
                                                    int* out_row_h,
                                                    int* out_max_rows,
@@ -100,8 +108,13 @@ bool ObjectEditorPanels_SliderValueAtPointImpl(int mx,
 bool ObjectEditorPanels_SliderValueForKindAtXImpl(ObjectEditorPanelSliderKind kind,
                                                   int mx,
                                                   double* out_value);
+bool ObjectEditorPanels_MotionActionAtPointImpl(int mx,
+                                                int my,
+                                                ObjectEditorPanelMotionAction* out_action);
 
 void ObjectEditorPanels_DrawAssetListImpl(SDL_Renderer* renderer);
 void ObjectEditorPanels_DrawMaterialListImpl(SDL_Renderer* renderer);
+void ObjectEditorPanels_DrawMotionSection(SDL_Renderer* renderer,
+                                          const RayTracingThemePalette* palette);
 
 #endif

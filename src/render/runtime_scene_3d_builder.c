@@ -1,5 +1,73 @@
 #include "render/runtime_scene_3d_builder_internal.h"
 
+#include "import/runtime_scene_motion_bridge.h"
+
+static Vec3 runtime_scene_3d_builder_rotate_motion_axis(Vec3 p,
+                                                        double pitch,
+                                                        double yaw,
+                                                        double roll) {
+    double cx = cos(pitch);
+    double sx = sin(pitch);
+    double cy = cos(yaw);
+    double sy = sin(yaw);
+    double cz = cos(roll);
+    double sz = sin(roll);
+    Vec3 q = p;
+    Vec3 r = q;
+
+    q.y = r.y * cx - r.z * sx;
+    q.z = r.y * sx + r.z * cx;
+    r = q;
+    q.x = r.x * cy + r.z * sy;
+    q.z = -r.x * sy + r.z * cy;
+    r = q;
+    q.x = r.x * cz - r.y * sz;
+    q.y = r.x * sz + r.y * cz;
+    return q;
+}
+
+static void runtime_scene_3d_builder_apply_motion_to_primitive_seed(
+    RuntimeSceneBridgePrimitiveSeed* seed,
+    double normalized_t) {
+    RuntimeMotionTrack3DSample sample = {0};
+    if (!seed || !runtime_scene_motion_bridge_sample_object(seed->object_id,
+                                                            normalized_t,
+                                                            &sample)) {
+        return;
+    }
+    if (sample.has_position) {
+        seed->origin_x = sample.position_x;
+        seed->origin_y = sample.position_y;
+        seed->origin_z = sample.position_z;
+    }
+    if (sample.has_rotation) {
+        Vec3 axis_u = runtime_scene_3d_builder_rotate_motion_axis(
+            vec3(1.0, 0.0, 0.0),
+            sample.pitch_radians,
+            sample.yaw_radians,
+            sample.roll_radians);
+        Vec3 axis_v = runtime_scene_3d_builder_rotate_motion_axis(
+            vec3(0.0, 1.0, 0.0),
+            sample.pitch_radians,
+            sample.yaw_radians,
+            sample.roll_radians);
+        Vec3 normal = runtime_scene_3d_builder_rotate_motion_axis(
+            vec3(0.0, 0.0, 1.0),
+            sample.pitch_radians,
+            sample.yaw_radians,
+            sample.roll_radians);
+        seed->axis_u_x = axis_u.x;
+        seed->axis_u_y = axis_u.y;
+        seed->axis_u_z = axis_u.z;
+        seed->axis_v_x = axis_v.x;
+        seed->axis_v_y = axis_v.y;
+        seed->axis_v_z = axis_v.z;
+        seed->normal_x = normal.x;
+        seed->normal_y = normal.y;
+        seed->normal_z = normal.z;
+    }
+}
+
 static RuntimeLight3D runtime_scene_3d_builder_compat_light_from_source(
     const RuntimeLightSource3D* source) {
     RuntimeLight3D light = {0};
@@ -142,10 +210,13 @@ static bool runtime_scene_3d_builder_build_from_primitive_seed_state_at_t(
         RuntimePrimitive3DKind kind =
             runtime_scene_3d_builder_map_kind(seed_state->primitives[i].kind);
         RuntimePrimitive3D* primitive = NULL;
+        RuntimeSceneBridgePrimitiveSeed sampled_seed = seed_state->primitives[i];
         if (!RuntimePrimitive3DKindSupportedByR0(kind)) continue;
 
         primitive = &scene->primitives[scene->primitiveCount];
-        runtime_scene_3d_builder_fill_primitive(primitive, &seed_state->primitives[i]);
+        runtime_scene_3d_builder_apply_motion_to_primitive_seed(&sampled_seed,
+                                                                normalized_t);
+        runtime_scene_3d_builder_fill_primitive(primitive, &sampled_seed);
         if (!runtime_scene_3d_builder_append_triangles(scene, scene->primitiveCount, primitive)) {
             runtime_scene_3d_builder_set_diag("primitive seed build failed: triangle append failed");
             RuntimeScene3D_Reset(scene);
@@ -216,7 +287,10 @@ bool RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(RuntimeScene3D* scene, double
     mesh_assets = ray_tracing_runtime_mesh_assets_last();
     mesh_instance_count = mesh_assets ? mesh_assets->instance_count : -1;
     mesh_asset_count = mesh_assets ? mesh_assets->asset_count : -1;
-    if (!runtime_scene_3d_builder_append_mesh_asset_set(scene, mesh_assets, false)) {
+    if (!runtime_scene_3d_builder_append_mesh_asset_set_at_t(scene,
+                                                             mesh_assets,
+                                                             false,
+                                                             normalized_t)) {
         char diag[2048];
         const char* lower_diag = RuntimeScene3DBuilder_LastDiagnostics();
         snprintf(diag,
@@ -328,5 +402,8 @@ bool RuntimeScene3DBuilder_BuildRouteProbeFromBridgeSeedsAtT(RuntimeScene3D* sce
                                                                        false)) {
         return false;
     }
-    return runtime_scene_3d_builder_append_mesh_asset_set(scene, mesh_assets, false);
+    return runtime_scene_3d_builder_append_mesh_asset_set_at_t(scene,
+                                                              mesh_assets,
+                                                              false,
+                                                              normalized_t);
 }

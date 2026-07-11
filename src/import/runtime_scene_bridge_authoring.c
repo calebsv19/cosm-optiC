@@ -930,5 +930,5 @@ void runtime_scene_bridge_apply_ray_authoring_paths(json_object *root,
     runtime_scene_bridge_apply_ray_authoring_environment_settings(authoring);
     runtime_scene_bridge_apply_ray_authoring_light_settings(authoring, world_scale);
     apply_ray_authoring_object_materials(authoring);
-    runtime_scene_motion_bridge_apply_authoring(authoring);
+    runtime_scene_motion_bridge_apply_authoring(authoring, world_scale);
 }

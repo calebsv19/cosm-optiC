@@ -1,14 +1,20 @@
 #include "import/runtime_scene_motion_bridge.h"
 
+#include "config/config_scene_path_io.h"
 #include "import/runtime_scene_bridge.h"
 #include "scene/object_manager.h"
 
 #include <json-c/json.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
 static RuntimeMotionTrack3DSummary g_last_object_motion_summary = {0};
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 static const char *json_string_field(json_object *owner, const char *key) {
     json_object *field = NULL;
@@ -28,6 +34,30 @@ static bool json_bool_field_default(json_object *owner, const char *key, bool fa
         return fallback;
     }
     return json_object_get_boolean(field);
+}
+
+static bool json_double_field(json_object *owner, const char *key, double *out_value) {
+    json_object *field = NULL;
+    if (!owner || !key || !out_value ||
+        !json_object_object_get_ex(owner, key, &field) ||
+        !(json_object_is_type(field, json_type_double) ||
+          json_object_is_type(field, json_type_int))) {
+        return false;
+    }
+    *out_value = json_object_get_double(field);
+    return true;
+}
+
+static const char *json_nested_string_field(json_object *owner,
+                                            const char *object_key,
+                                            const char *field_key) {
+    json_object *nested = NULL;
+    if (!owner || !object_key || !field_key ||
+        !json_object_object_get_ex(owner, object_key, &nested) ||
+        !json_object_is_type(nested, json_type_object)) {
+        return NULL;
+    }
+    return json_string_field(nested, field_key);
 }
 
 static bool runtime_scene_motion_bridge_object_id_exists(const char *object_id) {
@@ -64,12 +94,124 @@ static bool runtime_scene_motion_bridge_is_duplicate_enabled_object(
     return false;
 }
 
+static void runtime_scene_motion_bridge_scale_path(Path *path, double world_scale) {
+    if (!path) return;
+    for (int i = 0; i < path->numPoints && i < MAX_BEZIER_POINTS; ++i) {
+        path->points[i].x *= world_scale;
+        path->points[i].y *= world_scale;
+        if (i < MAX_BEZIER_POINTS - 1) {
+            path->handles[i][0].vx *= world_scale;
+            path->handles[i][0].vy *= world_scale;
+            path->handles[i][1].vx *= world_scale;
+            path->handles[i][1].vy *= world_scale;
+        }
+    }
+}
+
+static bool runtime_scene_motion_bridge_parse_position_path(json_object *entry,
+                                                            double world_scale,
+                                                            RuntimeMotionTrack3D *track) {
+    json_object *path_obj = NULL;
+    json_object *points = NULL;
+    Path path = {0};
+    CameraPath3D path3d = {0};
+    if (!entry || !track ||
+        !json_object_object_get_ex(entry, "path", &path_obj) ||
+        !json_object_is_type(path_obj, json_type_object)) {
+        return false;
+    }
+    if (!config_scene_load_path_from_json_object(path_obj, &path, true) ||
+        path.numPoints <= 0) {
+        return false;
+    }
+    runtime_scene_motion_bridge_scale_path(&path, world_scale);
+    CameraPath3D_Reset(&path3d);
+    CameraPath3D_SyncDefaults(&path3d, &path, 0.0);
+    if (json_object_object_get_ex(path_obj, "points", &points) &&
+        json_object_is_type(points, json_type_array)) {
+        int point_count = json_object_array_length(points);
+        if (point_count > path.numPoints) point_count = path.numPoints;
+        for (int i = 0; i < point_count; ++i) {
+            json_object *point = json_object_array_get_idx(points, i);
+            double z = 0.0;
+            if (json_double_field(point, "z", &z)) {
+                path3d.point_z[i] = z * world_scale;
+            }
+            if (i < point_count - 1) {
+                json_object *velocity1 = NULL;
+                double vz = 0.0;
+                if (json_object_object_get_ex(point, "velocity1", &velocity1) &&
+                    json_object_is_type(velocity1, json_type_object) &&
+                    json_double_field(velocity1, "vz", &vz)) {
+                    path3d.handles_vz[i][0] = vz * world_scale;
+                }
+            }
+            if (i > 0) {
+                json_object *velocity2 = NULL;
+                double vz = 0.0;
+                if (json_object_object_get_ex(point, "velocity2", &velocity2) &&
+                    json_object_is_type(velocity2, json_type_object) &&
+                    json_double_field(velocity2, "vz", &vz)) {
+                    path3d.handles_vz[i - 1][1] = vz * world_scale;
+                }
+            }
+        }
+    }
+    track->position_path = path;
+    track->position_path_3d = path3d;
+    track->has_position_path = true;
+    return true;
+}
+
+static bool runtime_scene_motion_bridge_parse_rotation_keyframes(
+    json_object *entry,
+    RuntimeMotionTrack3D *track) {
+    json_object *keyframes = NULL;
+    size_t keyframe_count = 0u;
+    if (!entry || !track ||
+        !json_object_object_get_ex(entry, "rotation_keyframes", &keyframes) ||
+        !json_object_is_type(keyframes, json_type_array)) {
+        return false;
+    }
+    keyframe_count = json_object_array_length(keyframes);
+    if (keyframe_count == 0u) {
+        return false;
+    }
+    if (keyframe_count > RUNTIME_MOTION_TRACK_3D_MAX_ROTATION_KEYFRAMES) {
+        keyframe_count = RUNTIME_MOTION_TRACK_3D_MAX_ROTATION_KEYFRAMES;
+    }
+    for (size_t i = 0u; i < keyframe_count; ++i) {
+        json_object *keyframe = json_object_array_get_idx(keyframes, i);
+        RuntimeMotionTrack3DRotationKeyframe *dst =
+            &track->rotation_keyframes[track->rotation_keyframe_count];
+        double yaw_degrees = 0.0;
+        double pitch_degrees = 0.0;
+        double roll_degrees = 0.0;
+        if (!keyframe || !json_object_is_type(keyframe, json_type_object)) {
+            continue;
+        }
+        (void)json_double_field(keyframe, "t", &dst->t);
+        if (dst->t < 0.0) dst->t = 0.0;
+        if (dst->t > 1.0) dst->t = 1.0;
+        (void)json_double_field(keyframe, "yaw_degrees", &yaw_degrees);
+        (void)json_double_field(keyframe, "pitch_degrees", &pitch_degrees);
+        (void)json_double_field(keyframe, "roll_degrees", &roll_degrees);
+        dst->yaw_radians = yaw_degrees * M_PI / 180.0;
+        dst->pitch_radians = pitch_degrees * M_PI / 180.0;
+        dst->roll_radians = roll_degrees * M_PI / 180.0;
+        track->rotation_keyframe_count += 1;
+    }
+    track->has_rotation_keyframes = track->rotation_keyframe_count > 0;
+    return track->has_rotation_keyframes;
+}
+
 void runtime_scene_motion_bridge_reset(void) {
     RuntimeMotionTrack3DSummaryInit(&g_last_object_motion_summary,
                                     "object_motion_tracks_missing");
 }
 
-void runtime_scene_motion_bridge_apply_authoring(json_object *authoring) {
+void runtime_scene_motion_bridge_apply_authoring(json_object *authoring,
+                                                 double world_scale) {
     json_object *tracks = NULL;
     size_t track_count = 0u;
 
@@ -127,8 +269,10 @@ void runtime_scene_motion_bridge_apply_authoring(json_object *authoring) {
 
         object_id = json_string_field(entry, "object_id");
         mode_label = json_string_field(entry, "mode");
-        timing_domain = json_string_field(entry, "timing_domain");
-        wrap_label = json_string_field(entry, "wrap");
+        timing_domain = json_nested_string_field(entry, "timing", "domain");
+        if (!timing_domain) timing_domain = json_string_field(entry, "timing_domain");
+        wrap_label = json_nested_string_field(entry, "timing", "wrap");
+        if (!wrap_label) wrap_label = json_string_field(entry, "wrap");
         enabled = json_bool_field_default(entry, "enabled", true);
         mode = RuntimeMotionTrack3DModeFromLabel(mode_label);
         supported = RuntimeMotionTrack3DModeSupported(mode);
@@ -159,6 +303,16 @@ void runtime_scene_motion_bridge_apply_authoring(json_object *authoring) {
             RuntimeMotionTrack3DCopyString(track->wrap_label,
                                            sizeof(track->wrap_label),
                                            wrap_label);
+            if (mode == RUNTIME_MOTION_TRACK_3D_MODE_AUTHORED_PATH) {
+                if (runtime_scene_motion_bridge_parse_position_path(entry,
+                                                                    world_scale,
+                                                                    track)) {
+                    g_last_object_motion_summary.position_path_tracks += 1;
+                }
+                if (runtime_scene_motion_bridge_parse_rotation_keyframes(entry, track)) {
+                    g_last_object_motion_summary.rotation_keyframe_tracks += 1;
+                }
+            }
         }
 
         if (!g_last_object_motion_summary.first_object_id[0] && object_id && object_id[0]) {
@@ -205,6 +359,10 @@ void runtime_scene_motion_bridge_apply_authoring(json_object *authoring) {
         if (duplicate) {
             g_last_object_motion_summary.duplicate_tracks += 1;
         }
+        if (track && RuntimeMotionTrack3DHasExecutableMotion(track)) {
+            g_last_object_motion_summary.sampled_tracks += 1;
+            g_last_object_motion_summary.has_executable_motion = true;
+        }
     }
 }
 
@@ -213,4 +371,26 @@ void runtime_scene_motion_bridge_get_last_summary(RuntimeMotionTrack3DSummary *o
         return;
     }
     *out_summary = g_last_object_motion_summary;
+}
+
+bool runtime_scene_motion_bridge_sample_object(const char *object_id,
+                                               double normalized_t,
+                                               RuntimeMotionTrack3DSample *out_sample) {
+    RuntimeMotionTrack3DSample sample = {0};
+    if (out_sample) *out_sample = sample;
+    if (!object_id || !object_id[0] || !out_sample) {
+        return false;
+    }
+    for (int i = 0; i < g_last_object_motion_summary.stored_tracks; ++i) {
+        RuntimeMotionTrack3D *track = &g_last_object_motion_summary.tracks[i];
+        if (!track->used || strcmp(track->object_id, object_id) != 0) {
+            continue;
+        }
+        return RuntimeMotionTrack3DSampleTrack(track, normalized_t, out_sample);
+    }
+    return false;
+}
+
+bool runtime_scene_motion_bridge_has_executable_motion(void) {
+    return g_last_object_motion_summary.has_executable_motion;
 }

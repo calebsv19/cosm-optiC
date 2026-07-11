@@ -2,6 +2,7 @@
 #include "editor/scene_editor.h"
 #include "editor/bezier_editor.h"
 #include "editor/object_editor.h"   //  Required for object editing
+#include "editor/object_editor_motion.h"
 #include "editor/material_editor.h"
 #include "editor/object_editor_panels.h"
 #include "editor/camera_editor.h"   //  Required for camera adjustments
@@ -9,6 +10,7 @@
 #include "scene/object_manager.h"
 #include "app/animation.h"
 #include "import/runtime_scene_bridge.h"
+#include "import/runtime_scene_motion_bridge.h"
 #include "render/fluid/fluid_state.h"
 #include "render/ray_tracing_mode_backend.h"
 #include "camera/camera.h"
@@ -614,6 +616,10 @@ static bool SceneEditorLoadSessionState(SceneEditor* editor) {
                     "[editor] failed to apply runtime scene source '%s': %s\n",
                     runtime_scene_path,
                     summary.diagnostics);
+        } else {
+            RuntimeMotionTrack3DSummary motion_summary;
+            runtime_scene_motion_bridge_get_last_summary(&motion_summary);
+            ObjectEditorMotionHydrateFromRuntimeSummary(&motion_summary);
         }
     } else if (!AnimationRestoreActiveSceneSource(true)) {
         fprintf(stderr, "[editor] failed to apply active scene source; selection preserved.\n");

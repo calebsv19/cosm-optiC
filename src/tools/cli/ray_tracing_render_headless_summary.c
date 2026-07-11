@@ -434,6 +434,14 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "    \"authored_path_tracks\": %d,\n",
             preflight->object_motion_summary.authored_path_tracks);
     fprintf(file, "    \"physics_tracks\": %d,\n", preflight->object_motion_summary.physics_tracks);
+    fprintf(file, "    \"position_path_tracks\": %d,\n",
+            preflight->object_motion_summary.position_path_tracks);
+    fprintf(file, "    \"rotation_keyframe_tracks\": %d,\n",
+            preflight->object_motion_summary.rotation_keyframe_tracks);
+    fprintf(file, "    \"sampled_tracks\": %d,\n",
+            preflight->object_motion_summary.sampled_tracks);
+    fprintf(file, "    \"has_executable_motion\": %s,\n",
+            preflight->object_motion_summary.has_executable_motion ? "true" : "false");
     fprintf(file, "    \"first_object_id\": ");
     RayTracingJsonWriteString(file, preflight->object_motion_summary.first_object_id);
     fprintf(file, ",\n");
@@ -787,6 +795,7 @@ void ray_tracing_render_headless_write_summary(
         preflight->ray_trace_route_stats.lastParityMismatchReason);
     fprintf(file, "\n");
     fprintf(file, "  },\n");
+    ray_tracing_headless_write_object_motion_acceleration_summary(file, request, preflight);
     ray_tracing_headless_write_dynamic_geometry_acceleration_summary(file, preflight);
     ray_tracing_headless_write_dynamic_water_acceleration_cache_summary(file, preflight);
     ray_tracing_headless_write_render_trace_cost_ledger(file, preflight);

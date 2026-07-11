@@ -56,6 +56,10 @@ grep -q '"trace_context_stats_owned": true' "$SUMMARY"
 grep -q '"trace_context_callback_bound": true' "$SUMMARY"
 grep -q '"route_trace_calls": 0' "$SUMMARY"
 grep -q '"route_parity_mismatches": 0' "$SUMMARY"
+grep -q '"object_motion_acceleration": {' "$SUMMARY"
+grep -q '"authored_rigid_motion_tracks": 0' "$SUMMARY"
+grep -q '"moving_object_tlas_policy": "static_scene_or_prepared_cache_reuse"' "$SUMMARY"
+grep -q '"flattened_fallback_available": true' "$SUMMARY"
 
 python3 - "$REQUEST" "$WORK_ROOT/object_motion_scene_runtime.json" "$WORK_ROOT/object_motion_request.json" "$WORK_ROOT/object_motion_output" <<'PY'
 import json
@@ -77,8 +81,18 @@ scene.setdefault("extensions", {}).setdefault("ray_tracing", {}).setdefault("aut
         "object_id": matched_id,
         "enabled": True,
         "mode": "authored_path",
-        "timing_domain": "frame",
-        "wrap": "clamp",
+        "timing": {"domain": "normalized_t", "wrap": "hold"},
+        "path": {
+            "mode": "BEZIER_CUBIC",
+            "points": [
+                {"x": 0.0, "y": 0.0, "z": 0.0},
+                {"x": 0.25, "y": 0.0, "z": 0.0},
+            ],
+        },
+        "rotation_keyframes": [
+            {"t": 0.0, "yaw_degrees": 0.0, "pitch_degrees": 0.0, "roll_degrees": 0.0},
+            {"t": 1.0, "yaw_degrees": 5.0, "pitch_degrees": 0.0, "roll_degrees": 0.0},
+        ],
     },
     {
         "object_id": "missing_object_motion_fixture",
@@ -92,6 +106,7 @@ with open(scene_dst, "w", encoding="utf-8") as f:
     json.dump(scene, f, indent=2)
     f.write("\n")
 request["scene"]["runtime_scene_path"] = scene_dst
+request["render"]["frame_count"] = 3
 request["output"]["root"] = output_root
 request["progress"]["summary_path"] = f"{output_root}/render_summary.json"
 request["progress"]["progress_path"] = f"{output_root}/render_progress.json"
@@ -109,7 +124,100 @@ grep -q '"total_tracks": 2' "$OBJECT_MOTION_SUMMARY"
 grep -q '"enabled_tracks": 2' "$OBJECT_MOTION_SUMMARY"
 grep -q '"matched_tracks": 1' "$OBJECT_MOTION_SUMMARY"
 grep -q '"unmatched_tracks": 1' "$OBJECT_MOTION_SUMMARY"
+grep -q '"position_path_tracks": 1' "$OBJECT_MOTION_SUMMARY"
+grep -q '"rotation_keyframe_tracks": 1' "$OBJECT_MOTION_SUMMARY"
+grep -q '"sampled_tracks": 1' "$OBJECT_MOTION_SUMMARY"
+grep -q '"has_executable_motion": true' "$OBJECT_MOTION_SUMMARY"
 grep -q '"diagnostics": "ok"' "$OBJECT_MOTION_SUMMARY"
+grep -q '"object_motion_acceleration": {' "$OBJECT_MOTION_SUMMARY"
+grep -q '"authored_rigid_motion_tracks": 1' "$OBJECT_MOTION_SUMMARY"
+grep -q '"authored_rigid_primitive_motion_tracks": 1' "$OBJECT_MOTION_SUMMARY"
+grep -q '"moving_object_tlas_policy": "rebuild_tlas_per_sample_until_refit_contract_lands"' "$OBJECT_MOTION_SUMMARY"
+grep -q '"prepared_scene_time_dependent_required": true' "$OBJECT_MOTION_SUMMARY"
+grep -q '"tlas_rebuild_required": true' "$OBJECT_MOTION_SUMMARY"
+grep -q '"tlas_refit_available": false' "$OBJECT_MOTION_SUMMARY"
+grep -q '"normalized_t_changes_across_frames": true' "$OBJECT_MOTION_SUMMARY"
+
+python3 - "$REQUEST" "$WORK_ROOT/object_motion_mesh_scene_runtime.json" "$WORK_ROOT/object_motion_mesh_request.json" "$WORK_ROOT/object_motion_mesh_output" "$ROOT_DIR" <<'PY'
+import json
+import pathlib
+import sys
+
+request_path, scene_dst, request_dst, output_root, root_dir = sys.argv[1:6]
+mesh_path = pathlib.Path(root_dir) / "tests/fixtures/mesh_asset_runtime_spheres/assets/mesh_assets/asset_sphere_8x4.runtime.json"
+request = json.load(open(request_path, "r", encoding="utf-8"))
+scene = {
+    "schema_family": "codework_scene",
+    "schema_variant": "scene_runtime_v1",
+    "schema_version": 1,
+    "scene_id": "scene_object_motion_mesh_accel_policy",
+    "unit_system": "meters",
+    "world_scale": 1.0,
+    "space_mode_default": "3d",
+    "objects": [
+        {
+            "object_id": "mesh_glider",
+            "object_type": "mesh_asset_instance",
+            "dimensional_mode": "full_3d",
+            "transform": {
+                "position": {"x": 0.0, "y": 0.0, "z": 0.0},
+                "rotation": {"x": 0.0, "y": 0.0, "z": 0.0},
+                "scale": {"x": 0.5, "y": 0.5, "z": 0.5},
+            },
+            "geometry_ref": {"kind": "mesh_asset", "id": "asset_sphere_8x4"},
+            "extensions": {"line_drawing": {"runtime_mesh_path": str(mesh_path)}},
+        }
+    ],
+    "materials": [],
+    "lights": [],
+    "cameras": [],
+    "constraints": [],
+    "extensions": {
+        "ray_tracing": {
+            "authoring": {
+                "object_motion_tracks": [
+                    {
+                        "object_id": "mesh_glider",
+                        "enabled": True,
+                        "mode": "authored_path",
+                        "timing": {"domain": "normalized_t", "wrap": "hold"},
+                        "path": {
+                            "mode": "BEZIER_CUBIC",
+                            "points": [
+                                {"x": 0.0, "y": 0.0, "z": 0.0},
+                                {"x": 1.0, "y": 0.0, "z": 0.0},
+                            ],
+                        },
+                    }
+                ]
+            }
+        }
+    },
+}
+with open(scene_dst, "w", encoding="utf-8") as f:
+    json.dump(scene, f, indent=2)
+    f.write("\n")
+request["scene"]["runtime_scene_path"] = scene_dst
+request["render"]["frame_count"] = 3
+request["output"]["root"] = output_root
+request["progress"]["summary_path"] = f"{output_root}/render_summary.json"
+request["progress"]["progress_path"] = f"{output_root}/render_progress.json"
+with open(request_dst, "w", encoding="utf-8") as f:
+    json.dump(request, f, indent=2)
+    f.write("\n")
+PY
+
+"$CLI" --request "$WORK_ROOT/object_motion_mesh_request.json" --preflight \
+  --summary "$WORK_ROOT/object_motion_mesh_summary.json" \
+  > "$WORK_ROOT/object_motion_mesh_stdout_summary.json"
+
+grep -q '"authored_rigid_motion_tracks": 1' "$WORK_ROOT/object_motion_mesh_summary.json"
+grep -q '"authored_rigid_mesh_motion_tracks": 1' "$WORK_ROOT/object_motion_mesh_summary.json"
+grep -q '"moving_mesh_asset_instances": 1' "$WORK_ROOT/object_motion_mesh_summary.json"
+grep -q '"mesh_local_blas_identity_reusable": true' "$WORK_ROOT/object_motion_mesh_summary.json"
+grep -q '"mesh_local_blas_policy": "reuse_mesh_asset_local_blas_for_rigid_instance_motion"' "$WORK_ROOT/object_motion_mesh_summary.json"
+grep -q '"static_mesh_asset_instances": 0' "$WORK_ROOT/object_motion_mesh_summary.json"
+grep -q '"normalized_t_changes_across_frames": true' "$WORK_ROOT/object_motion_mesh_summary.json"
 
 RAY_TRACING_FRAME_DATAFLOW_STATE_LEDGER=1 \
   "$CLI" --request "$REQUEST" --preflight --summary "$LEDGER_ENABLED_SUMMARY" \

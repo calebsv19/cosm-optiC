@@ -360,6 +360,10 @@ void ray_tracing_headless_write_dynamic_geometry_acceleration_summary(
 void ray_tracing_headless_write_dynamic_water_acceleration_cache_summary(
     FILE *file,
     const RayTracingHeadlessPreflight *preflight);
+void ray_tracing_headless_write_object_motion_acceleration_summary(
+    FILE *file,
+    const RayTracingAgentRenderRequest *request,
+    const RayTracingHeadlessPreflight *preflight);
 void ray_tracing_render_headless_write_summary(FILE *file,
                                                const RayTracingAgentRenderRequest *request,
                                                const RayTracingHeadlessPreflight *preflight);

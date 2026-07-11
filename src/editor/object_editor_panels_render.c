@@ -356,6 +356,8 @@ void ObjectEditorPanels_DrawMaterialListImpl(SDL_Renderer* renderer) {
         SDL_RenderDrawRect(renderer, &knob_rect);
     }
 
+    ObjectEditorPanels_DrawMotionSection(renderer, &palette);
+
     int count = MaterialManagerCount();
     ObjectEditorPanels_ResolveMaterialListMetrics(&list_y, &material_row_h, &max_rows, NULL);
     int max_scroll = count - max_rows;

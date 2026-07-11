@@ -1,5 +1,7 @@
 #include "render/runtime_native_3d_prepared_scene_cache_internal.h"
 
+#include "import/runtime_scene_motion_bridge.h"
+
 #include <math.h>
 #include <stdint.h>
 #include <string.h>
@@ -404,7 +406,8 @@ void RuntimeNative3DPreparedSceneCacheResetForTests(void) {
     RuntimeScene3D_Free(&gRuntimeNative3DPreparedSceneCache);
     RuntimeScene3D_Init(&gRuntimeNative3DPreparedSceneCache);
     gRuntimeNative3DPreparedSceneCacheValid = false;
-    gRuntimeNative3DPreparedSceneCacheStaticGeometry = true;
+    gRuntimeNative3DPreparedSceneCacheStaticGeometry =
+        !runtime_scene_motion_bridge_has_executable_motion();
     gRuntimeNative3DPreparedSceneCacheNormalizedT = 0.0;
     gRuntimeNative3DPreparedSceneCacheLastRequestedT = 0.0;
     gRuntimeNative3DPreparedSceneDirtyGeneration = 1u;
@@ -476,7 +479,8 @@ bool runtime_native_3d_prepared_scene_build_or_copy_for_frame(
     gRuntimeNative3DPreparedSceneCache = built_scene;
     memset(&built_scene, 0, sizeof(built_scene));
     gRuntimeNative3DPreparedSceneCacheValid = true;
-    gRuntimeNative3DPreparedSceneCacheStaticGeometry = true;
+    gRuntimeNative3DPreparedSceneCacheStaticGeometry =
+        !runtime_scene_motion_bridge_has_executable_motion();
     gRuntimeNative3DPreparedSceneCacheNormalizedT = normalized_t;
     gRuntimeNative3DPreparedSceneCachedGeneration =
         gRuntimeNative3DPreparedSceneDirtyGeneration;

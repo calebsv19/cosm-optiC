@@ -6,7 +6,12 @@
 #include "motion/runtime_motion_track_3d.h"
 
 void runtime_scene_motion_bridge_reset(void);
-void runtime_scene_motion_bridge_apply_authoring(json_object *authoring);
+void runtime_scene_motion_bridge_apply_authoring(json_object *authoring,
+                                                 double world_scale);
 void runtime_scene_motion_bridge_get_last_summary(RuntimeMotionTrack3DSummary *out_summary);
+bool runtime_scene_motion_bridge_sample_object(const char *object_id,
+                                               double normalized_t,
+                                               RuntimeMotionTrack3DSample *out_sample);
+bool runtime_scene_motion_bridge_has_executable_motion(void);
 
 #endif

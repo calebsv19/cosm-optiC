@@ -7,6 +7,7 @@
 
 #include "camera/camera_path_3d.h"
 #include "import/runtime_scene_bridge.h"
+#include "motion/runtime_motion_track_3d.h"
 
 typedef struct SceneEditorDigestOverlayNavState {
     bool orbit_active;
@@ -64,6 +65,15 @@ typedef struct SceneEditorBezier3DInteractionMetrics {
     double default_handle_length;
 } SceneEditorBezier3DInteractionMetrics;
 
+typedef struct SceneEditorMotionOverlayMetrics {
+    bool visible;
+    bool has_path_curve;
+    int control_point_count;
+    int projected_control_point_count;
+    int sampled_segment_count;
+    SDL_Rect center_marker_bounds;
+} SceneEditorMotionOverlayMetrics;
+
 bool SceneEditorDigestOverlayResolve(RuntimeSceneBridge3DDigestState* out_digest);
 bool SceneEditorDigestOverlayResolveExtents(const RuntimeSceneBridge3DDigestState* digest,
                                             double* out_min_x,
@@ -108,6 +118,10 @@ bool SceneEditorDigestOverlayProjectPoint(const SceneEditorDigestOverlayProjecto
                                           double world_z,
                                           int* out_x,
                                           int* out_y);
+bool SceneEditorDigestOverlayResolveMotionTrackMetrics(
+    const SceneEditorDigestOverlayProjector* projector,
+    const RuntimeMotionTrack3D* track,
+    SceneEditorMotionOverlayMetrics* out_metrics);
 double SceneEditorDigestOverlayResolveEditPlaneZ(const RuntimeSceneBridge3DDigestState* digest,
                                                  const SceneEditorDigestOverlayProjector* projector);
 bool SceneEditorDigestOverlayScreenRayToPlanePoint(const SceneEditorDigestOverlayProjector* projector,
