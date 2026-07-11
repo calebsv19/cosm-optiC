@@ -213,6 +213,17 @@ void ray_tracing_headless_write_render_trace_cost_ledger(
                 i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT ? "," : "");
     }
     fprintf(file, "      },\n");
+    fprintf(file, "      \"source_ray_traces\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": %llu%s\n",
+                RuntimeRenderTraceCostTransmissionSource3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSource3D)i),
+                (unsigned long long)(ledger ? ledger->transmissionPathPolicy.sourceRayTraces[i]
+                                            : 0u),
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
     fprintf(file, "      \"sample_index_counts\": {\n");
     for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_COUNT; ++i) {
         fprintf(file,
@@ -794,6 +805,28 @@ void ray_tracing_headless_write_render_trace_cost_ledger(
                 (unsigned long long)(ledger ? ledger->transmissionPathPolicy.rayDepthCounts[i]
                                             : 0u),
                 i + 1 < RUNTIME_RENDER_TRACE_COST_DEPTH_BUCKET_COUNT ? "," : "");
+    }
+    fprintf(file, "      },\n");
+    fprintf(file, "      \"source_ray_depth_counts\": {\n");
+    for (int i = 0; i < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT; ++i) {
+        fprintf(file,
+                "        \"%s\": {",
+                RuntimeRenderTraceCostTransmissionSource3DLabel(
+                    (RuntimeRenderTraceCostTransmissionSource3D)i));
+        for (int j = 0; j < RUNTIME_RENDER_TRACE_COST_DEPTH_BUCKET_COUNT; ++j) {
+            fprintf(file,
+                    " \"%s\": %llu%s",
+                    RuntimeRenderTraceCostPathDepthBucket3DLabel(
+                        (RuntimeRenderTraceCostPathDepthBucket3D)j),
+                    (unsigned long long)(ledger
+                                             ? ledger->transmissionPathPolicy
+                                                   .sourceRayDepthCounts[i][j]
+                                             : 0u),
+                    j + 1 < RUNTIME_RENDER_TRACE_COST_DEPTH_BUCKET_COUNT ? "," : "");
+        }
+        fprintf(file,
+                " }%s\n",
+                i + 1 < RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT ? "," : "");
     }
     fprintf(file, "      },\n");
     fprintf(file, "      \"throughput_bucket_counts\": {\n");

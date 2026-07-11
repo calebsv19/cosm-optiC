@@ -1642,6 +1642,15 @@ static int test_runtime_render_trace_cost_ledger_transmission_sample_index_attri
         true,
         0.8,
         0.05);
+    RuntimeRenderTraceCostLedger3D_RecordTransmissionRayAtDepth(
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED,
+        1);
+    RuntimeRenderTraceCostLedger3D_RecordTransmissionRayAtDepth(
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED,
+        3);
+    RuntimeRenderTraceCostLedger3D_RecordTransmissionRayAtDepth(
+        RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_PRIMARY,
+        2);
 
     RuntimeRenderTraceCostLedger3D_Snapshot(&ledger);
     assert_true("render_trace_cost_transmission_index_total",
@@ -1763,6 +1772,22 @@ static int test_runtime_render_trace_cost_ledger_transmission_sample_index_attri
                             [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED]
                             [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_PIXEL_STABILITY_EARLY_SUBPASS] ==
                         1u);
+    assert_true("render_trace_cost_transmission_source_ray_counts",
+                ledger.transmissionPathPolicy.rayTraces == 3u &&
+                    ledger.transmissionPathPolicy.sourceRayTraces
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED] == 2u &&
+                    ledger.transmissionPathPolicy.sourceRayTraces
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_PRIMARY] == 1u);
+    assert_true("render_trace_cost_transmission_source_ray_depth_counts",
+                ledger.transmissionPathPolicy.sourceRayDepthCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED]
+                            [RUNTIME_RENDER_TRACE_COST_DEPTH_1] == 1u &&
+                    ledger.transmissionPathPolicy.sourceRayDepthCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED]
+                            [RUNTIME_RENDER_TRACE_COST_DEPTH_3_PLUS] == 1u &&
+                    ledger.transmissionPathPolicy.sourceRayDepthCounts
+                            [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_PRIMARY]
+                            [RUNTIME_RENDER_TRACE_COST_DEPTH_2] == 1u);
 
     RuntimeRenderTraceCostLedger3D_SetEnabled(false);
     RuntimeRenderTraceCostLedger3D_Reset();

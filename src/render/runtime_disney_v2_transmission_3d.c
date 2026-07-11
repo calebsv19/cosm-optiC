@@ -253,7 +253,7 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
     RuntimeRenderTraceCostTransmissionScreenRegion3D ledger_screen_region,
     RuntimeRenderTraceCostTransmissionPixelStability3D ledger_pixel_stability,
     RuntimeRenderTraceCostTransmissionTermination3D* out_termination,
-    bool allow_recursive_receiver_shade) {
+    RuntimeDisneyV2_3DTransmissionContinuationMode continuation_mode) {
     HitInfo3D source_hit = {0};
     HitInfo3D hit = {0};
     Ray3D ray = {0};
@@ -276,6 +276,8 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
         RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_UNKNOWN;
     bool contributed = false;
     bool receiver_found = false;
+    bool allow_recursive_receiver_shade =
+        continuation_mode == RUNTIME_DISNEY_V2_3D_TRANSMISSION_CONTINUATION_PRIMARY;
 
     if (!scene || !primary_hit || !primary_hit->hit || !initial_sample || !io_result ||
         !out_direct || !out_hit || !out_ray || !out_throughput_r || !out_throughput_g ||
@@ -555,7 +557,7 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
     const RuntimePrimaryHit3DResult* primary_hit,
     const RuntimeNative3DSamplingContext* sampling,
     RuntimeDisneyV2_3DResult* io_result,
-    bool allow_recursive_receiver_shade) {
+    RuntimeDisneyV2_3DTransmissionContinuationMode continuation_mode) {
     RuntimeDisneyV2_3DTransmissionSample sample = {0};
     RuntimeDisneyV2_3DTransmissionSample sample_path = {0};
     HitInfo3D continuation_hit = {0};
@@ -586,6 +588,10 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
     uint32_t sample_seed = 0U;
     HitInfo3D best_hit = {0};
     Ray3D best_ray = {0};
+    RuntimeRenderTraceCostTransmissionSource3D ledger_source =
+        continuation_mode == RUNTIME_DISNEY_V2_3D_TRANSMISSION_CONTINUATION_REFLECTED
+            ? RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED
+            : RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_PRIMARY;
 
     if (!scene || !primary_hit || !primary_hit->hit || !io_result ||
         !io_result->payloadResolved || !io_result->principled.valid) {
@@ -629,14 +635,10 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
                                                 0.65);
     sample_count =
         runtime_disney_v2_3d_resolve_transmission_sample_count(
-            allow_recursive_receiver_shade);
+            continuation_mode);
     sample_seed = runtime_disney_v2_3d_transmission_seed_from_hit(&primary_hit->hitInfo,
                                                                   sampling);
     io_result->primaryTransmissionSampleCount = sample_count;
-    RuntimeRenderTraceCostTransmissionSource3D ledger_source =
-        allow_recursive_receiver_shade
-            ? RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_PRIMARY
-            : RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_REFLECTED;
     RuntimeRenderTraceCostTransmissionScreenRegion3D ledger_screen_region =
         runtime_disney_v2_3d_transmission_screen_region(io_result);
     RuntimeRenderTraceCostTransmissionPixelStability3D ledger_pixel_stability =
@@ -705,7 +707,7 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
                                                                       ledger_screen_region,
                                                                       ledger_pixel_stability,
                                                                       &sample_termination,
-                                                                      allow_recursive_receiver_shade)) {
+                                                                      continuation_mode)) {
             if (runtime_disney_v2_3d_can_reuse_reflected_first_subpass_no_hit(
                     ledger_source,
                     ledger_pixel_stability,
@@ -834,7 +836,7 @@ bool RuntimeDisneyV2_3D_ApplyPrimaryTransmissionContinuation(
                                                                primary_hit,
                                                                sampling,
                                                                io_result,
-                                                               true);
+                                                               RUNTIME_DISNEY_V2_3D_TRANSMISSION_CONTINUATION_PRIMARY);
 }
 
 bool RuntimeDisneyV2_3D_ApplyReflectedTransmissionContinuation(
@@ -889,7 +891,7 @@ bool RuntimeDisneyV2_3D_ApplyReflectedTransmissionContinuation(
                                                               &reflected_primary,
                                                               sampling,
                                                               &transmission_result,
-                                                              false)) {
+                                                              RUNTIME_DISNEY_V2_3D_TRANSMISSION_CONTINUATION_REFLECTED)) {
         return false;
     }
 

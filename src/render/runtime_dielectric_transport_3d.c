@@ -32,18 +32,19 @@ bool RuntimeDielectricTransport3D_Resolve(const RuntimeMaterialPayload3D* payloa
     double eta = 1.0;
     double sin2_t = 0.0;
     double cos_t = 0.0;
-    double dielectric_f0 = 0.04;
-    double authored_f0 = 0.04;
-    double f0 = 0.04;
+    double dielectric_f0 = 0.0;
+    double authored_f0 = 0.0;
+    double f0 = 0.0;
 
     if (!payload || !out_transport) return false;
 
     reflectivity = runtime_dielectric_transport_3d_clamp(payload->bsdf.reflectivity, 0.0, 1.0);
-    if (payload->opticalIor > 1.0 + 1e-6) {
+    if (payload->opticalIor >= 1.0) {
         ior = payload->opticalIor;
     } else if (payload->bsdf.ior > 1.0 + 1e-6) {
         ior = payload->bsdf.ior;
     }
+    eta_t = ior;
 
     transport.entering = (cos_i < 0.0);
     if (transport.entering) {
@@ -69,7 +70,8 @@ bool RuntimeDielectricTransport3D_Resolve(const RuntimeMaterialPayload3D* payloa
     }
     authored_f0 = runtime_dielectric_transport_3d_clamp(reflectivity, 0.0, 1.0);
     f0 = fmax(dielectric_f0, authored_f0);
-    transport.fresnel = FresnelSchlick(cos_i, f0);
+    transport.fresnel =
+        (ior <= 1.0 + 1e-6 && reflectivity <= 1e-9) ? 0.0 : FresnelSchlick(cos_i, f0);
 
     if (payload->thinWalled) {
         transport.totalInternalReflection = false;

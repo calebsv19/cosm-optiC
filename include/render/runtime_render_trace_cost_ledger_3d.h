@@ -280,6 +280,9 @@ typedef struct RuntimeRenderTraceCostTransmissionPathPolicy3D {
     uint64_t receiverHits;
     uint64_t sourceCounts[RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT];
     uint64_t sourceSampleCounts[RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT];
+    uint64_t sourceRayTraces[RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT];
+    uint64_t sourceRayDepthCounts[RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT]
+                                 [RUNTIME_RENDER_TRACE_COST_DEPTH_BUCKET_COUNT];
     uint64_t sampleIndexCounts
         [RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SAMPLE_INDEX_COUNT];
     uint64_t sourceSampleIndexCounts

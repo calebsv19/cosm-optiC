@@ -694,13 +694,17 @@ void RuntimeRenderTraceCostLedger3D_RecordTransmissionRayAtDepth(
         &gRuntimeRenderTraceCostLedger3D.transmissionPathPolicy;
     RuntimeRenderTraceCostPathDepthBucket3D depth_bucket =
         runtime_render_trace_cost_depth_bucket(path_depth);
-    (void)source;
+    if (source < 0 || source >= RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT) {
+        source = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_UNKNOWN;
+    }
     RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
         RUNTIME_RENDER_TRACE_COST_RAY_TRANSMISSION,
         path_depth);
     if (!gRuntimeRenderTraceCostLedger3D.enabled) return;
     policy->rayTraces += 1u;
+    policy->sourceRayTraces[source] += 1u;
     policy->rayDepthCounts[depth_bucket] += 1u;
+    policy->sourceRayDepthCounts[source][depth_bucket] += 1u;
 }
 
 void RuntimeRenderTraceCostLedger3D_RecordTransmissionSurface(

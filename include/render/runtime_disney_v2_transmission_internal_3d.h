@@ -39,6 +39,11 @@ typedef struct {
     int mismatchCount;
 } RuntimeDisneyV2_3DMediumStackTracker;
 
+typedef enum RuntimeDisneyV2_3DTransmissionContinuationMode {
+    RUNTIME_DISNEY_V2_3D_TRANSMISSION_CONTINUATION_PRIMARY = 0,
+    RUNTIME_DISNEY_V2_3D_TRANSMISSION_CONTINUATION_REFLECTED = 1
+} RuntimeDisneyV2_3DTransmissionContinuationMode;
+
 static inline double runtime_disney_v2_transmission_3d_clamp(double value,
                                                              double min_value,
                                                              double max_value) {
@@ -62,7 +67,7 @@ bool runtime_disney_v2_3d_payload_has_transparent_alpha(
     const RuntimePrincipledBSDF3D* principled);
 
 int runtime_disney_v2_3d_resolve_transmission_sample_count(
-    bool allow_recursive_receiver_shade);
+    RuntimeDisneyV2_3DTransmissionContinuationMode mode);
 
 bool runtime_disney_v2_3d_can_reuse_reflected_first_subpass_no_hit(
     RuntimeRenderTraceCostTransmissionSource3D ledger_source,

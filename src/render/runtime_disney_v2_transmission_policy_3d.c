@@ -28,13 +28,13 @@ static int runtime_disney_v2_3d_resolve_primary_transmission_sample_count(void) 
 }
 
 int runtime_disney_v2_3d_resolve_transmission_sample_count(
-    bool allow_recursive_receiver_shade) {
+    RuntimeDisneyV2_3DTransmissionContinuationMode mode) {
     int value = runtime_disney_v2_3d_resolve_primary_transmission_sample_count();
     const char* reflected_cap_text = NULL;
     char* reflected_cap_end = NULL;
     long reflected_cap = 0;
 
-    if (allow_recursive_receiver_shade) {
+    if (mode != RUNTIME_DISNEY_V2_3D_TRANSMISSION_CONTINUATION_REFLECTED) {
         return value;
     }
 
