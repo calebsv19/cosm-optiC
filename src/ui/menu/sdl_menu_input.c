@@ -15,6 +15,7 @@
 #include "engine/Render/render_pipeline.h"
 #include "render/ray_tracing_integrator_catalog.h"
 #include "import/runtime_scene_bridge.h"
+#include "platform/ray_tracing_folder_picker.h"
 #include "ui/menu_batch_panel.h"
 #include "ui/menu_resume_panel.h"
 #include "ui/scene_source_ui_labels.h"
@@ -40,35 +41,6 @@ static bool scene_manifest_list_visible(const MenuRuntimeState *state) {
     return state &&
            (state->manifestDropdownOpen ||
             animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D);
-}
-
-static bool pick_folder_macos(const char *prompt, char *out_path, size_t out_cap) {
-#if defined(__APPLE__)
-    FILE *pipe = NULL;
-    char cmd[320];
-    char line[512];
-    if (!prompt || !out_path || out_cap == 0u) return false;
-    snprintf(cmd,
-             sizeof(cmd),
-             "/usr/bin/osascript -e 'POSIX path of (choose folder with prompt \"%s\")'",
-             prompt);
-    pipe = popen(cmd, "r");
-    if (!pipe) return false;
-    if (!fgets(line, sizeof(line), pipe)) {
-        (void)pclose(pipe);
-        return false;
-    }
-    (void)pclose(pipe);
-    line[strcspn(line, "\r\n")] = '\0';
-    if (line[0] == '\0') return false;
-    snprintf(out_path, out_cap, "%s", line);
-    return true;
-#else
-    (void)prompt;
-    (void)out_path;
-    (void)out_cap;
-    return false;
-#endif
 }
 
 static void begin_input_root_edit(MenuRuntimeState *state) {
@@ -235,7 +207,7 @@ void menu_input_handle_key(SDL_Event* event,
     if (ctrl_or_cmd && shift) {
         if (event->key.keysym.sym == SDLK_b) {
             char selected[PATH_MAX];
-            if (pick_folder_macos("Choose optiC Output Root", selected, sizeof(selected))) {
+            if (RayTracing_FolderPicker_Select("Choose optiC Output Root", animSettings.outputRoot, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_SELECTED) {
                 apply_output_root(state, selected);
             }
             return;
@@ -263,7 +235,7 @@ void menu_input_handle_key(SDL_Event* event,
     }
     if (ctrl_or_cmd && event->key.keysym.sym == SDLK_b) {
         char selected[PATH_MAX];
-        if (pick_folder_macos("Choose optiC Input Root", selected, sizeof(selected))) {
+        if (RayTracing_FolderPicker_Select("Choose optiC Input Root", animSettings.inputRoot, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_SELECTED) {
             apply_input_root(state, selected);
         }
         return;
@@ -617,7 +589,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
 
     if (point_in_rect(&buttons.inputRootFolderRect, x, y)) {
         char selected[PATH_MAX];
-        if (pick_folder_macos("Choose optiC Input Root", selected, sizeof(selected))) {
+        if (RayTracing_FolderPicker_Select("Choose optiC Input Root", animSettings.inputRoot, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_SELECTED) {
             apply_input_root(state, selected);
         }
         return;
@@ -636,7 +608,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     }
     if (point_in_rect(&buttons.meshAssetRootFolderRect, x, y)) {
         char selected[PATH_MAX];
-        if (pick_folder_macos("Choose optiC Mesh Asset Root", selected, sizeof(selected))) {
+        if (RayTracing_FolderPicker_Select("Choose optiC Mesh Asset Root", animSettings.meshAssetRoot, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_SELECTED) {
             apply_mesh_asset_root(state, selected);
         }
         return;
