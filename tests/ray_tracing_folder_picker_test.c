@@ -105,8 +105,17 @@ static bool test_no_picker_available(void) {
 }
 
 int main(void) {
-    const bool passed = test_zenity_selection() && test_kdialog_fallback() &&
-                        test_cancel_does_not_fallback() && test_no_picker_available();
+    const bool zenity_selection = test_zenity_selection();
+    const bool kdialog_fallback = test_kdialog_fallback();
+    const bool cancellation = test_cancel_does_not_fallback();
+    const bool unavailable = test_no_picker_available();
+    const bool passed = zenity_selection && kdialog_fallback && cancellation && unavailable;
+    fprintf(stderr,
+            "ray_tracing_folder_picker_test cases: zenity=%d kdialog=%d cancel=%d unavailable=%d\n",
+            zenity_selection,
+            kdialog_fallback,
+            cancellation,
+            unavailable);
     fprintf(stdout, "ray_tracing_folder_picker_test: %s\n", passed ? "success" : "failed");
     return passed ? 0 : 1;
 }
