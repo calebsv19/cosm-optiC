@@ -8,6 +8,10 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
 static bool write_script(const char *path, const char *body) {
     FILE *file = fopen(path, "w");
     if (!file) return false;
