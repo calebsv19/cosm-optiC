@@ -78,9 +78,9 @@ static int test_agent_render_request_disney_v2_integrator_label_roundtrip(void) 
     assert_true("agent_render_disney_v2_request_id",
                 request.integrator_3d == RAY_TRACING_3D_INTEGRATOR_DISNEY_V2);
     assert_true("agent_render_disney_v2_caustic_default_mode",
-                request.caustic_mode == RUNTIME_DISNEY_V2_CAUSTIC_MODE_ANALYTIC);
-    assert_true("agent_render_disney_v2_caustic_default_enabled",
-                request.caustic_sidecar_enabled);
+                request.caustic_mode == RUNTIME_DISNEY_V2_CAUSTIC_MODE_OFF);
+    assert_true("agent_render_disney_v2_caustic_default_disabled",
+                !request.caustic_sidecar_enabled);
     assert_true("agent_render_disney_v2_label",
                 strcmp(ray_tracing_agent_render_request_integrator_label(
                            RAY_TRACING_3D_INTEGRATOR_DISNEY_V2),
@@ -1054,6 +1054,37 @@ static int test_agent_render_request_environment_lighting_overrides(void) {
     return 0;
 }
 
+static int test_agent_render_request_render_trace_cost_ledger_flag(void) {
+    char request_path[PATH_MAX];
+    char diagnostics[256];
+    RayTracingAgentRenderRequest request;
+    const char* json_text =
+        "{\n"
+        "  \"schema_version\": \"ray_tracing_agent_render_request_v1\",\n"
+        "  \"run_id\": \"render_trace_cost_ledger_test\",\n"
+        "  \"scene\": {\"runtime_scene_path\": \"scene_runtime.json\"},\n"
+        "  \"inspection\": {\n"
+        "    \"render_trace_cost_ledger_enabled\": true\n"
+        "  }\n"
+        "}\n";
+
+    snprintf(request_path,
+             sizeof(request_path),
+             "%s",
+             "/tmp/ray_tracing_agent_render_trace_cost_ledger_request.json");
+    assert_true("agent_render_trace_cost_ledger_request_write",
+                write_text_file(request_path, json_text));
+    assert_true("agent_render_trace_cost_ledger_request_load",
+                ray_tracing_agent_render_request_load_file(request_path,
+                                                           &request,
+                                                           diagnostics,
+                                                           sizeof(diagnostics)));
+    assert_true("agent_render_trace_cost_ledger_enabled",
+                request.render_trace_cost_ledger_enabled);
+    unlink(request_path);
+    return 0;
+}
+
 static int test_animation_native_3d_temporal_frames_roundtrip_and_clamp(void) {
     size_t backup_size = 0;
     char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
@@ -1853,6 +1884,7 @@ int run_test_config_animation_settings_export_suite(void) {
     test_agent_render_request_resource_budget_roundtrip();
     test_agent_render_request_resource_budget_env_default();
     test_agent_render_request_environment_lighting_overrides();
+    test_agent_render_request_render_trace_cost_ledger_flag();
     test_animation_native_3d_temporal_frames_roundtrip_and_clamp();
     test_animation_native_3d_bounce_depth_and_roulette_roundtrip_and_clamp();
     test_animation_native_3d_top_fill_roundtrip_and_default();

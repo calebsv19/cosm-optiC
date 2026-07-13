@@ -685,6 +685,9 @@ static int run_render(const RayTracingAgentRenderRequest *request,
 
     ray_tracing_headless_initial_light_point(&light_x, &light_y);
     ray_tracing_headless_reset_render_trace_state();
+    if (request->render_trace_cost_ledger_enabled) {
+        RuntimeRenderTraceCostLedger3D_SetEnabled(true);
+    }
 
     for (int i = 0; i < request->frame_count; ++i) {
         char frame_path[PATH_MAX];

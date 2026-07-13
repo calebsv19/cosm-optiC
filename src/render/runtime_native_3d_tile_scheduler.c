@@ -14,6 +14,8 @@
 #include "render/timer_hud_adapter.h"
 #include "render/runtime_native_3d_resolution.h"
 #include "render/runtime_native_3d_render_unit.h"
+#include "render/runtime_ray_3d.h"
+#include "render/runtime_scene_accel_3d.h"
 #include "render/runtime_volume_3d.h"
 
 static void runtime_native_3d_tile_scheduler_reset(RuntimeNative3DTileScheduler* scheduler) {
@@ -626,6 +628,7 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressBudgetAndControl
     const RuntimeNative3DTileSchedulerControl* scheduler_control,
     RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DTileScheduler scheduler = {0};
+    const RuntimeScene3D* trace_scene = NULL;
     const uint64_t frame_start_ticks = (uint64_t)SDL_GetPerformanceCounter();
     const int effective_temporal_frames = (temporal_frames <= 1) ? 1 : temporal_frames;
     const int effective_tile_size = RuntimeNative3DTileSchedulerResolveTileSizeForScale(
@@ -644,6 +647,14 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressBudgetAndControl
         memset(out_stats, 0, sizeof(*out_stats));
     }
     if (!pixel_buffer || !frame || !frame->valid || frame->width <= 0 || frame->height <= 0) {
+        return false;
+    }
+
+    trace_scene = frame->traceScene ? frame->traceScene : &frame->scene;
+    if (frame->traceScene &&
+        RuntimeRay3D_CurrentTraceRoute() !=
+            RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH &&
+        !RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(trace_scene)) {
         return false;
     }
 

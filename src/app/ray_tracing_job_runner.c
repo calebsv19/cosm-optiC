@@ -475,6 +475,12 @@ static bool write_canonical_request_file(const char *path,
                 request->volume_albedo_b);
         wrote_field = true;
     }
+    if (request->render_trace_cost_ledger_enabled) {
+        fprintf(file,
+                "%s    \"render_trace_cost_ledger_enabled\": true",
+                wrote_field ? ",\n" : "");
+        wrote_field = true;
+    }
     if (wrote_field) {
         fprintf(file, "\n");
     }

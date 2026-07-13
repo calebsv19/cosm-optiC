@@ -119,6 +119,29 @@ direct tooling. Current Desktop queue prepare still expects
 also writes `bundle/presets/inspection_settings.json` and points queue
 `submit_args` at that file.
 
+For a runtime scene beside `scene_project.json`, RayTracing also recognizes a
+project-owned render request. It prefers the manifest's active render-request
+pointer and otherwise uses `ray_tracing/render_request.json`. The request keeps
+the existing `ray_tracing_agent_render_request_v1` schema and adds
+project-relative `scene_project` metadata plus a `simulation_frames` object:
+
+```json
+{
+  "simulation_frames": {
+    "cache_manifest": "physics_sim/active_cache_manifest.json",
+    "start": 0,
+    "count": 1,
+    "stride": 1
+  }
+}
+```
+
+The menu's existing scene-only export creates this sidecar when it is absent.
+Existing request fields are preserved during writeback. Unsafe project pointer
+traversal is rejected; explicit external request paths remain read-only
+compatibility inputs. Scene-plus-PhysicsSim cache packaging is still deferred
+to the separate R2-B export mode.
+
 ## Publication Lanes
 
 There are two different post-render publication targets:

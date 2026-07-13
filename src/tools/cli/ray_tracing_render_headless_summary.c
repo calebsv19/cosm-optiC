@@ -783,8 +783,15 @@ void ray_tracing_render_headless_write_summary(
             (unsigned long long)preflight->ray_trace_route_stats.tlasTraceUnsupported);
     fprintf(file, "    \"route_tlas_trace_errors\": %llu,\n",
             (unsigned long long)preflight->ray_trace_route_stats.tlasTraceErrors);
+    fprintf(file, "    \"route_acceleration_failure_calls\": %llu,\n",
+            (unsigned long long)preflight->ray_trace_route_stats.accelerationFailureCalls);
     fprintf(file, "    \"route_flattened_fallback_calls\": %llu,\n",
             (unsigned long long)preflight->ray_trace_route_stats.flattenedFallbackCalls);
+    fprintf(file, "    \"last_acceleration_failure_status\": ");
+    RayTracingJsonWriteString(
+        file,
+        preflight->ray_trace_route_stats.lastAccelerationFailureStatus);
+    fprintf(file, ",\n");
     fprintf(file, "    \"route_parity_checked_rays\": %llu,\n",
             (unsigned long long)preflight->ray_trace_route_stats.parityCheckedRays);
     fprintf(file, "    \"route_parity_mismatches\": %llu,\n",
@@ -794,6 +801,26 @@ void ray_tracing_render_headless_write_summary(
         file,
         preflight->ray_trace_route_stats.lastParityMismatchReason);
     fprintf(file, "\n");
+    fprintf(file, "  },\n");
+    fprintf(file, "  \"scene_acceleration_trace_summary\": {\n");
+    fprintf(file, "    \"trace_calls\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_trace_stats.traceCalls);
+    fprintf(file, "    \"trace_unready\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_trace_stats.traceUnready);
+    fprintf(file, "    \"trace_unsupported\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_trace_stats.traceUnsupported);
+    fprintf(file, "    \"trace_errors\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_trace_stats.traceErrors);
+    fprintf(file, "    \"remap_failures\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_trace_stats.identityRemapFailures);
+    fprintf(file, "    \"remap_triangle_lookup_failures\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_trace_stats.identityRemapTriangleLookupFailures);
+    fprintf(file, "    \"remap_ray_direction_failures\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_trace_stats.identityRemapRayDirectionFailures);
+    fprintf(file, "    \"remap_range_failures\": %llu,\n",
+            (unsigned long long)preflight->scene_acceleration_trace_stats.identityRemapRangeFailures);
+    fprintf(file, "    \"remap_range_tolerance_clamps\": %llu\n",
+            (unsigned long long)preflight->scene_acceleration_trace_stats.identityRemapRangeToleranceClamps);
     fprintf(file, "  },\n");
     ray_tracing_headless_write_object_motion_acceleration_summary(file, request, preflight);
     ray_tracing_headless_write_dynamic_geometry_acceleration_summary(file, preflight);

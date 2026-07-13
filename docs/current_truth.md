@@ -602,10 +602,17 @@ Last updated: 2026-07-08
     PhysicsSim cache, PhysicsSim bundle, and RayTracing render-request
     presence without changing paths or export modes
   - the menu worker export action is intentionally narrow: it requires the
-    selected scene source to be a runtime scene and resolves the render request
-    from `RAY_TRACING_WORKER_RENDER_REQUEST`, `render_request.json`, or
-    `ray_tracing_request.json` beside that runtime scene before writing a
-    queue-ready item under `visual_artifacts/worker_queue_exports/`
+    selected scene source to be a runtime scene; project-backed scenes resolve
+    the manifest's active request pointer (defaulting to
+    `ray_tracing/render_request.json`) and create it on first export with
+    portable simulation-frame start/count/stride state, while loose scenes and
+    `RAY_TRACING_WORKER_RENDER_REQUEST` keep compatibility behavior
+  - project render-request discovery and JSON-preserving writeback live in
+    `src/app/scene_project_render_request.c`; unsafe project-relative traversal
+    is rejected and explicit external requests are never written
+  - worker export still writes a scene-only queue-ready item under
+    `visual_artifacts/worker_queue_exports/`; PhysicsSim attachment packaging
+    remains the next separate boundary
   - main-menu frame-resume state now lives in a compact `Frame Resume` pane
     below `Data I/O + Batch`; it owns resume-existing, start-frame editing, and
     next-existing readback instead of using oversized route-stack buttons

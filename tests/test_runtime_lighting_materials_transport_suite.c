@@ -3227,6 +3227,92 @@ static int test_runtime_disney_v2_3d_primary_transparency_continues_camera_ray(v
     return 0;
 }
 
+static int test_runtime_disney_v2_3d_scene_object_glass_override_continues_camera_ray(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    RuntimePrimaryHit3DResult primary = {0};
+    RuntimeMaterialPayload3D payload = {0};
+    RuntimePrincipledBSDF3D principled = {0};
+    RuntimeNative3DSamplingContext sampling = {
+        .sampleSequence = 41U,
+        .temporalSubpassIndex = 0U,
+        .temporalSubpassCount = 1U,
+    };
+    RuntimeDisneyV2_3DResult result = {0};
+    bool ok = false;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    MaterialManagerResetDefaults();
+    animSettings.bounceDepth3D = 2;
+    animSettings.specularDepth3D = 2;
+    animSettings.transmissionDepth3D = 1;
+    animSettings.transmissionSamples3D = 1;
+    animSettings.rouletteThreshold3D = 0.0;
+    runtime_disney_v2_test_init_primary_transparency_scene(&scene);
+    assert_true("runtime_disney_v2_object_glass_scene_alloc",
+                scene.primitives != NULL && scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+    primary = runtime_disney_v2_test_primary_hit(&scene);
+    runtime_disney_v2_test_configure_scene_material(0,
+                                                    MATERIAL_PRESET_TRANSPARENT,
+                                                    0xBEEBFF,
+                                                    0.10,
+                                                    0.004);
+    sceneSettings.sceneObjects[0].alpha = 0.24;
+    sceneSettings.sceneObjects[0].hasGlassTransportOverride = true;
+    sceneSettings.sceneObjects[0].glassTransmission = 0.96;
+    sceneSettings.sceneObjects[0].glassIor = 1.45;
+    sceneSettings.sceneObjects[0].glassAbsorptionDistance = 6.0;
+    sceneSettings.sceneObjects[0].glassThinWalled = true;
+    runtime_disney_v2_test_configure_scene_material(1,
+                                                    MATERIAL_PRESET_DEFAULT,
+                                                    0xFF3020,
+                                                    0.05,
+                                                    0.55);
+
+    ok = RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(0, &payload);
+    assert_true("runtime_disney_v2_object_glass_payload_resolved", ok && payload.valid);
+    assert_true("runtime_disney_v2_object_glass_payload_override",
+                payload.hasGlassTransportOverride &&
+                payload.transparency > 0.95 &&
+                payload.thinWalled &&
+                payload.absorptionDistance > 5.5);
+    principled = RuntimePrincipledBSDF3D_FromMaterialPayload(&payload);
+    assert_true("runtime_disney_v2_object_glass_principled_transmits",
+                principled.valid &&
+                principled.transmissionWeight > 0.95 &&
+                principled.opacity < 0.05);
+
+    ok = RuntimeDisneyV2_3D_ShadePrimaryHitWithPayload(&scene,
+                                                       &primary,
+                                                       &payload,
+                                                       &sampling,
+                                                       &result);
+    assert_true("runtime_disney_v2_object_glass_shade_ok", ok);
+    assert_true("runtime_disney_v2_object_glass_continues",
+                result.primaryTransmissionContinued &&
+                result.primaryTransmissionPathState.valid &&
+                result.primaryTransmissionPathState.hit &&
+                result.primaryTransmissionPathState.hitInfo.sceneObjectIndex == 1);
+    assert_true("runtime_disney_v2_object_glass_receiver_contributes",
+                result.primaryTransmissionReceiverSampleCount > 0 &&
+                result.primaryTransmissionReceiverRadiance > 0.0 &&
+                result.primaryTransmissionRadianceR >
+                    result.primaryTransmissionRadianceB + 1e-6);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 static int test_runtime_disney_v2_3d_nested_rough_primary_transparency_reaches_receiver(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -4678,6 +4764,7 @@ int run_test_runtime_lighting_materials_transport_suite(void) {
     test_runtime_disney_v2_3d_one_bounce_light_emitter_contributes();
     test_runtime_disney_v2_3d_transmission_glass_participates();
     test_runtime_disney_v2_3d_primary_transparency_continues_camera_ray();
+    test_runtime_disney_v2_3d_scene_object_glass_override_continues_camera_ray();
     test_runtime_disney_v2_3d_nested_rough_primary_transparency_reaches_receiver();
     test_runtime_disney_v2_3d_primary_transparency_accumulates_transparent_layers();
     test_runtime_disney_v2_3d_transparency_policy_splits_thin_walled_and_solid();

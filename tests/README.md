@@ -80,9 +80,10 @@ make -C ray_tracing test-ray-tracing-emissive-light-preview-matrix
 `test-ray-tracing-caustic-probe-matrix` is the local L4 caustic-readiness proof
 target. It renders the canonical overhead-light, glass-sphere, matte-receiver
 fixture and writes baseline receiver metrics under `_private_workspace_artifacts/`.
-The original L4 baseline proved the old no-solver state. The current Disney v2
-request now runs the L5 analytic caustic policy by default, while direct-light
-and emission-transparency cells remain baseline comparisons.
+The original L4 baseline proved the old no-solver state. Ordinary Disney v2
+requests now default caustics to off; this fixture explicitly enables the L5
+analytic policy while direct-light and emission-transparency cells remain
+baseline comparisons.
 
 `test-ray-tracing-spatial-caustic-phase4-matrix` is the local spatial-caustic
 Phase 4 proof target. It generates a compact uniform raw VF3D fog field under

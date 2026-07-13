@@ -346,6 +346,38 @@ static void test_parity_route_reports_unready_accel_mismatch(void) {
     RuntimeScene3D_Free(&scene);
 }
 
+static void test_tlas_route_fails_closed_without_flattened_fallback(void) {
+    RuntimeScene3D scene;
+    Ray3D ray;
+    HitInfo3D hit = {0};
+    RuntimeRay3DRouteStats route_stats = {0};
+
+    RuntimeScene3D_Init(&scene);
+    assert_true("route_tlas_fail_closed_build_scene", build_test_scene(&scene));
+    ray = RuntimeRay3D_Make(vec3(-0.5, 0.0, 1.0), vec3(0.0, 1.0, 0.0));
+
+    RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS);
+    RuntimeRay3D_ResetRouteStats();
+    assert_true("route_tlas_fail_closed_returns_no_hit",
+                !RuntimeRay3D_TraceSceneFirstHit(&scene,
+                                                 &ray,
+                                                 0.001,
+                                                 100.0,
+                                                 &hit));
+    RuntimeRay3D_SnapshotRouteStats(&route_stats);
+    assert_true("route_tlas_fail_closed_unready", route_stats.tlasTraceUnready == 1u);
+    assert_true("route_tlas_fail_closed_failure", route_stats.accelerationFailureCalls == 1u);
+    assert_true("route_tlas_fail_closed_no_flattened",
+                route_stats.flattenedTraceCalls == 0u);
+    assert_true("route_tlas_fail_closed_no_fallback",
+                route_stats.flattenedFallbackCalls == 0u);
+    assert_true("route_tlas_fail_closed_status",
+                strcmp(route_stats.lastAccelerationFailureStatus, "unready") == 0);
+    RuntimeRay3D_ResetTraceRouteForTests();
+    RuntimeRay3D_ResetRouteStats();
+    RuntimeScene3D_Free(&scene);
+}
+
 static void test_trace_context_owns_route_stats(void) {
     RuntimeScene3D scene;
     RuntimeRay3DTraceContext context;
@@ -393,11 +425,14 @@ static void test_trace_context_owns_route_stats(void) {
 }
 
 int main(void) {
+    RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH);
     test_bvh_matches_flat_trace();
     test_bvh_copy_preserves_trace_results();
     test_bvh_overflow_falls_back_to_flat_trace();
     test_bvh_reports_nonfinite_centroid();
+    RuntimeRay3D_ResetTraceRouteForTests();
     test_parity_route_reports_unready_accel_mismatch();
+    test_tlas_route_fails_closed_without_flattened_fallback();
     test_trace_context_owns_route_stats();
     return g_failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

@@ -547,6 +547,8 @@ static int test_runtime_native_3d_disney_v2_mirror_stats_visible_from_render_pat
     frame.height = kHeight;
     frame.valid = true;
     memset(radiance, 0, sizeof(radiance));
+    /* This shading-only fixture constructs no prepared TLAS. */
+    RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH);
     ok = RuntimeNative3DRenderPreparedRegionRadianceRGB(radiance,
                                                         kWidth,
                                                         RAY_TRACING_3D_INTEGRATOR_DISNEY_V2,
@@ -556,6 +558,7 @@ static int test_runtime_native_3d_disney_v2_mirror_stats_visible_from_render_pat
                                                         kWidth,
                                                         kHeight,
                                                         &stats);
+    RuntimeRay3D_ResetTraceRouteForTests();
     assert_true("runtime_native_3d_mirror_stats_render", ok);
     assert_true("runtime_native_3d_mirror_stats_dominant_pixels",
                 stats.mirrorDominantPixelCount > 0);
@@ -1959,12 +1962,14 @@ static int test_runtime_native_3d_render_unit_preserves_prepared_tlas_binding(vo
         "}";
     RuntimeSceneBridgePreflight summary = {0};
     RuntimeNative3DPreparedFrame frame = {0};
+    RuntimeNative3DPreparedFrame scheduled_frame = {0};
     RuntimeNative3DRenderUnit unit;
     RuntimeNative3DSamplingContext sampling = {0};
     RuntimeNative3DRenderStats stats = {0};
     Ray3D ray = RuntimeRay3D_Make(vec3(0.0, 0.0, 0.0), vec3(0.0, -1.0, 0.0));
     HitInfo3D hit = {0};
     RuntimeSceneAcceleration3DTraceStatus trace_status;
+    RuntimeRay3DRouteStats route_stats = {0};
     bool ok = false;
 
     RuntimeNative3DRenderUnit_Init(&unit);
@@ -2010,9 +2015,12 @@ static int test_runtime_native_3d_render_unit_preserves_prepared_tlas_binding(vo
     assert_true("runtime_native_3d_unit_tlas_binding_initial_trace_bound",
                 trace_status != RUNTIME_SCENE_ACCEL_3D_TRACE_UNREADY);
 
+    scheduled_frame = frame;
+    scheduled_frame.traceScene = &frame.scene;
+    RuntimeRay3D_ResetRouteStats();
     ok = RuntimeNative3DRenderUnit_Setup(&unit,
                                          RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT,
-                                         &frame,
+                                         &scheduled_frame,
                                          0,
                                          0,
                                          16,
@@ -2024,6 +2032,13 @@ static int test_runtime_native_3d_render_unit_preserves_prepared_tlas_binding(vo
     if (ok) {
         ok = RuntimeNative3DRenderUnit_RenderSubpass(&unit, 0, &stats);
         assert_true("runtime_native_3d_unit_tlas_binding_subpass_ok", ok);
+        RuntimeRay3D_SnapshotRouteStats(&route_stats);
+        assert_true("runtime_native_3d_unit_tlas_binding_subpass_tlas_traced",
+                    route_stats.tlasTraceCalls > 0u);
+        assert_true("runtime_native_3d_unit_tlas_binding_subpass_no_unready",
+                    route_stats.tlasTraceUnready == 0u);
+        assert_true("runtime_native_3d_unit_tlas_binding_subpass_no_fallback",
+                    route_stats.flattenedFallbackCalls == 0u);
     }
 
     HitInfo3D_Reset(&hit);

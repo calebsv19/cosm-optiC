@@ -393,6 +393,24 @@ static void runtime_ray_3d_record_tlas_status(
     }
 }
 
+static void runtime_ray_3d_record_acceleration_failure(
+    RuntimeRay3DTraceContext* context,
+    RuntimeSceneAcceleration3DTraceStatusForRayRoute status) {
+    RuntimeRay3DRouteStats* stats = context ? &context->routeStats : NULL;
+    const char* label = "error";
+    if (!stats) return;
+    if (status == RUNTIME_RAY_3D_ACCEL_TRACE_UNREADY) {
+        label = "unready";
+    } else if (status == RUNTIME_RAY_3D_ACCEL_TRACE_UNSUPPORTED) {
+        label = "unsupported";
+    }
+    stats->accelerationFailureCalls += 1u;
+    snprintf(stats->lastAccelerationFailureStatus,
+             sizeof(stats->lastAccelerationFailureStatus),
+             "%s",
+             label);
+}
+
 static void runtime_ray_3d_set_parity_mismatch(RuntimeRay3DTraceContext* context,
                                                const char* reason) {
     RuntimeRay3DRouteStats* stats = context ? &context->routeStats : NULL;
@@ -537,13 +555,14 @@ static bool runtime_ray_3d_trace_scene_first_hit_tlas_blas(
         HitInfo3D_Reset(out_hit);
         return false;
     }
-    stats->flattenedFallbackCalls += 1u;
-    stats->flattenedTraceCalls += 1u;
-    return runtime_ray_3d_trace_scene_first_hit_flattened(scene,
-                                                         ray,
-                                                         t_min,
-                                                         t_max,
-                                                         out_hit);
+    /*
+     * TLAS/BLAS is fail-closed. Compatibility tracing is an explicit route,
+     * and parity is the explicit dual-trace route; an acceleration defect must
+     * never silently turn one ray into a full-scene scan.
+     */
+    runtime_ray_3d_record_acceleration_failure(context, tlas_status);
+    HitInfo3D_Reset(out_hit);
+    return false;
 }
 
 bool RuntimeRay3D_TraceSceneFirstHit(const RuntimeScene3D* scene,

@@ -66,6 +66,7 @@ void ray_tracing_headless_initial_light_point(double *out_x, double *out_y) {
 
 void ray_tracing_headless_reset_render_trace_state(void) {
     RuntimeTriangleBVH3D_ResetTraceStats();
+    RuntimeSceneAcceleration3D_ResetTraceStats();
     RuntimeRay3D_ResetRouteStats();
     RuntimeRenderTraceCostLedger3D_SetEnabledFromEnvironment();
     RuntimeRenderTraceCostLedger3D_Reset();

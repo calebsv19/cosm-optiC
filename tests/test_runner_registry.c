@@ -47,6 +47,7 @@
 int run_test_runner_runtime_tests(void);
 int run_test_config_animation_tests(void);
 int run_test_ui_menu_contract_tests(void);
+int run_test_scene_project_render_request_tests(void);
 int run_test_runtime_native_3d_async_render_bridge_tests(void);
 int run_test_runtime_native_3d_async_render_job_tests(void);
 
@@ -112,6 +113,7 @@ int test_runner_main(int argc, char** argv) {
         {"config_animation", run_test_config_animation_tests},
         {"config_animation_settings_export", run_test_config_animation_settings_export_suite},
         {"ui_menu_contracts", run_test_ui_menu_contract_tests},
+        {"scene_project_render_request", run_test_scene_project_render_request_tests},
         {"runtime_scene_bridge_core", run_test_runtime_scene_bridge_core_tests},
         {"runtime_scene_bridge_writeback", run_test_runtime_scene_bridge_writeback_tests},
         {"runtime_scene_3d_geometry", run_test_runtime_scene_3d_geometry_tests},

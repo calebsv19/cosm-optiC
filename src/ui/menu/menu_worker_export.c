@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include "config/config_manager.h"
+#include "app/scene_project_render_request.h"
 
 static bool file_exists(const char *path) {
     FILE *f = NULL;
@@ -136,26 +137,30 @@ static bool find_program_root(char *out, size_t out_size) {
 static bool resolve_render_request(const char *scene_runtime_path,
                                    char *out,
                                    size_t out_size) {
-    char scene_dir[PATH_MAX];
-    char candidate[PATH_MAX];
+    RayTracingSceneProjectRenderRequest request;
+    char error[256];
     const char *env_path = getenv("RAY_TRACING_WORKER_RENDER_REQUEST");
 
     if (!out || out_size == 0) return false;
-    if (env_path && env_path[0] && file_exists(env_path)) {
-        return copy_string(out, out_size, env_path);
-    }
-    if (!dirname_of(scene_runtime_path, scene_dir, sizeof(scene_dir))) {
+    if (!ray_tracing_scene_project_render_request_resolve(scene_runtime_path,
+                                                          env_path,
+                                                          &request,
+                                                          error,
+                                                          sizeof(error))) {
         return false;
     }
-    if (join_path(scene_dir, "render_request.json", candidate, sizeof(candidate)) &&
-        file_exists(candidate)) {
-        return copy_string(out, out_size, candidate);
+    if (request.project_backed && request.project_owned && !request.request_exists) {
+        int frame_count = animSettings.frameLimit > 0 ? animSettings.frameLimit : 1;
+        if (!ray_tracing_scene_project_render_request_write(&request,
+                                                            animSettings.startFrameIndex,
+                                                            frame_count,
+                                                            1,
+                                                            error,
+                                                            sizeof(error))) {
+            return false;
+        }
     }
-    if (join_path(scene_dir, "ray_tracing_request.json", candidate, sizeof(candidate)) &&
-        file_exists(candidate)) {
-        return copy_string(out, out_size, candidate);
-    }
-    return false;
+    return request.request_exists && copy_string(out, out_size, request.request_path);
 }
 
 static bool resolve_mesh_asset_root(const char *scene_runtime_path,
