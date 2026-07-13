@@ -134,12 +134,13 @@ is the focused PPM-21 seeded sampling and roulette proof. It validates stable
 sample replay from photon identity plus depth, independent lobe/direction/
 roulette dimensions, mixed-lobe population frequencies, RGB expected-energy
 reconciliation, shared path-depth-policy roulette decisions, survival
-reweighting, termination accounting, and statistical unbiasedness. Recursive
-scene continuation, TIR continuation, nested-media tracking, map storage, and
-production-default integration remain PPM-22 and later work.
+reweighting, termination accounting, and statistical unbiasedness. Nested-
+medium eta selection and production-default integration remain PPM-23.2 and
+later work.
 
 `TEST_RUNNER_GROUP=runtime_caustic_photon_path_transport_3d make -C ray_tracing test`
-is the focused PPM-22 continuation proof. The PPM-22.1 fixture traces a seeded
+is the focused PPM-22 continuation and PPM-23.1 path-integration proof. The
+PPM-22.1 fixture traces a seeded
 photon between reflective surfaces for three shared-TLAS hits, resolves material
 state and records a distinct sample stream at every depth, applies geometric-
 normal ray offsets, preserves cumulative throughput/PDF, reproduces the same
@@ -158,6 +159,20 @@ one receiver record plus both unique traversed beam segments. The same fixture
 proves per-path/batch accounting and zero map mutation for insufficient beam
 capacity, invalid traces, emissive terminal-before-storage paths, and
 transparent-only paths.
+
+The glass-to-mirror and same-object TIR fixtures also prove PPM-23.1 transition
+readback: a solid-dielectric entry pushes one object/material medium above air,
+while each TIR records a successful no-change transition without changing
+depth. These assertions remain diagnostic and do not change eta selection,
+directions, throughput, storage, or production defaults.
+
+`TEST_RUNNER_GROUP=runtime_caustic_photon_medium_stack_3d make -C ray_tracing test`
+is the independent PPM-23.1 medium-state proof. It validates explicit air
+initialization, material metadata conversion, ordered glass/water entry and
+exit, TIR no-change, duplicate-entry and wrong-exit mismatch records, bounded
+overflow, air underflow, invalid entries, counters, and stable reason labels.
+No scene traversal, direction sampling, attenuation, or map mutation occurs in
+this group.
 
 `TEST_RUNNER_GROUP=runtime_caustic_photon_map_3d make -C ray_tracing test`
 is the focused PPM-2 surface photon-map proof. It covers map allocation,

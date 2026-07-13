@@ -62,6 +62,32 @@ static bool photon_path_transport_append_dielectric(
     return true;
 }
 
+static void photon_path_transport_observe_medium(
+    RuntimeCausticPhotonMediumStack3D* stack,
+    const HitInfo3D* hit,
+    const RuntimeMaterialPayload3D* material,
+    const RuntimeCausticPhotonBsdfDirection3D* direction,
+    RuntimeCausticPhotonSceneHitEvent3D* hit_event,
+    RuntimeCausticPhotonSceneTraceReadback3D* readback) {
+    RuntimeCausticPhotonMediumEntry3D boundary;
+    bool succeeded;
+    if (!stack || !hit || !material || !direction || !hit_event || !readback ||
+        material->thinWalled) {
+        return;
+    }
+    memset(&boundary, 0, sizeof(boundary));
+    RuntimeCausticPhotonMediumEntry3D_FromMaterial(
+        material, hit->sceneObjectIndex, 0.0, &boundary);
+    succeeded = RuntimeCausticPhotonMediumStack3D_ObserveBoundary(
+        stack,
+        &boundary,
+        direction->dielectric.entering,
+        direction->totalInternalReflection,
+        &hit_event->mediumTransition);
+    readback->mediumTransitionCount++;
+    if (!succeeded) readback->mediumTransitionFailureCount++;
+}
+
 static void photon_path_transport_mark_terminal(
     RuntimeCausticPhotonSceneTrace3D* result,
     RuntimeCausticPhotonSceneTermination3D termination,
@@ -167,6 +193,7 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
     RuntimeCausticPhotonSceneTrace3D result;
     RuntimeCausticPhotonTrace3D* trace = &result.trace;
     RuntimeCausticPhotonPathState3D state;
+    RuntimeCausticPhotonMediumStack3D medium_stack;
     RuntimeCausticPhotonEvent3D event;
     RuntimeRay3DTraceContext ray_context;
     Vec3 previous_normal = vec3(0.0, 0.0, 0.0);
@@ -184,6 +211,9 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
 
     memset(&result, 0, sizeof(result));
     result.readback.attempted = true;
+    RuntimeCausticPhotonMediumStack3D_Init(&medium_stack);
+    result.initialMediumStack = medium_stack;
+    result.finalMediumStack = medium_stack;
     trace->sample = *sample;
     RuntimeCausticPhotonTrace3D_InitPathState(sample, &state);
     trace->initialState = state;
@@ -409,6 +439,12 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
                 hard_failure = true;
                 break;
             }
+            photon_path_transport_observe_medium(&medium_stack,
+                                                 &hit,
+                                                 &material,
+                                                 &hit_event->bsdfDirection,
+                                                 hit_event,
+                                                 &result.readback);
             if (hit_event->bsdfDirection.totalInternalReflection) {
                 trace->debug.totalInternalReflectionCount++;
                 trace->debug.reflectedBranchCount++;
@@ -545,6 +581,7 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
                                                 &result.readback.routeStats);
     result.readback.usedSharedSceneAccelerationRoute =
         result.readback.routeStats.tlasTraceCalls > 0u;
+    result.finalMediumStack = medium_stack;
     trace->debug.eventCount = trace->eventCount;
     *out_trace = result;
     return result.readback.succeeded;

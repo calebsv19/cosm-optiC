@@ -160,6 +160,8 @@ bool RuntimeCausticPhotonSceneTrace3D_TraceDeterministicDielectric(
 
     memset(&result, 0, sizeof(result));
     result.readback.attempted = true;
+    RuntimeCausticPhotonMediumStack3D_Init(&result.initialMediumStack);
+    result.finalMediumStack = result.initialMediumStack;
     trace->sample = *sample;
     RuntimeCausticPhotonTrace3D_InitPathState(sample, &state);
     trace->initialState = state;
@@ -492,6 +494,8 @@ bool RuntimeCausticPhotonSceneTrace3D_TraceDeterministicBsdfHit(
 
     memset(&result, 0, sizeof(result));
     result.readback.attempted = true;
+    RuntimeCausticPhotonMediumStack3D_Init(&result.initialMediumStack);
+    result.finalMediumStack = result.initialMediumStack;
     trace->sample = *sample;
     RuntimeCausticPhotonTrace3D_InitPathState(sample, &state);
     trace->initialState = state;

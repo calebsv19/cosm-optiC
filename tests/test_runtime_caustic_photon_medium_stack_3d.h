@@ -1,0 +1,6 @@
+#ifndef TEST_RUNTIME_CAUSTIC_PHOTON_MEDIUM_STACK_3D_H
+#define TEST_RUNTIME_CAUSTIC_PHOTON_MEDIUM_STACK_3D_H
+
+int run_test_runtime_caustic_photon_medium_stack_3d_tests(void);
+
+#endif
