@@ -1219,6 +1219,10 @@ Last updated: 2026-07-13
   - `make -C ray_tracing package-linux-worker`
   - the package manifest platform follows the Linux build host architecture
   - `LINUX_WORKER_PLATFORM=<value>` remains available for explicit override
+- `package-linux-worker-self-test` now rejects a native worker binary whose ELF
+  machine does not match the selected platform, and requires `manifest.json`
+  plus `package_manifest.json` to agree on the exact platform and advertised
+  RayTracing worker capabilities.
 - Linux PC package promotion requires the package manifest to report
   `platform=linux-x86_64`. The local Mac-side package lane can produce/stage
   Linux PC `x86_64` worker artifacts when the x86_64 package/toolchain mode is

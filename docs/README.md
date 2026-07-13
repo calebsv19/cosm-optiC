@@ -145,6 +145,8 @@ Current verification contract:
 - `make -C ray_tracing release-bundle-audit`
 - Linux worker packaging now follows the Linux build-host architecture by
   default (`linux-x86_64` or `linux-aarch64`)
+- Linux worker package self-test validates native ELF architecture and exact
+  platform/capability parity across both worker manifests
 - Linux PC worker refreshes must use a package whose manifest reports
   `platform=linux-x86_64`; do not treat an Apple Silicon Mac as limited to
   `linux-aarch64` worker artifacts when the x86_64 package/toolchain lane is
