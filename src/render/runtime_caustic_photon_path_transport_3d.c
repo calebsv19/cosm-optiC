@@ -105,24 +105,55 @@ static bool photon_path_transport_append_dielectric(
     return true;
 }
 
-static void photon_path_transport_observe_medium(
+static void photon_path_transport_mark_terminal(
+    RuntimeCausticPhotonSceneTrace3D* result,
+    RuntimeCausticPhotonSceneTermination3D termination,
+    RuntimeCausticPhotonRejectReason3D reject_reason,
+    Vec3 rejected_throughput,
+    bool succeeded);
+
+static bool photon_path_transport_observe_medium(
     RuntimeCausticPhotonMediumStack3D* stack,
     const RuntimeCausticPhotonMediumEntry3D* boundary,
-    const RuntimeCausticPhotonBsdfDirection3D* direction,
+    bool entering,
+    bool total_internal_reflection,
+    uint32_t depth,
+    RuntimeCausticPhotonMediumFailurePolicy3D failure_policy,
     RuntimeCausticPhotonSceneHitEvent3D* hit_event,
     RuntimeCausticPhotonSceneTraceReadback3D* readback) {
     bool succeeded;
-    if (!stack || !boundary || !direction || !hit_event || !readback) {
-        return;
-    }
+    if (!stack || !boundary || !hit_event || !readback) return false;
     succeeded = RuntimeCausticPhotonMediumStack3D_ObserveBoundary(
         stack,
         boundary,
-        direction->dielectric.entering,
-        direction->totalInternalReflection,
+        entering,
+        total_internal_reflection,
         &hit_event->mediumTransition);
     readback->mediumTransitionCount++;
-    if (!succeeded) readback->mediumTransitionFailureCount++;
+    if (!succeeded) {
+        readback->mediumTransitionFailureCount++;
+        readback->terminatedByMediumFailurePolicy = true;
+        readback->mediumFailureDepth = depth;
+        readback->mediumFailurePolicy = failure_policy;
+        readback->mediumFailureReason = hit_event->mediumTransition.reason;
+    }
+    return succeeded;
+}
+
+static void photon_path_transport_mark_medium_failure(
+    RuntimeCausticPhotonSceneTrace3D* result,
+    RuntimeCausticPhotonPathState3D* state,
+    RuntimeCausticPhotonSceneHitEvent3D* hit_event) {
+    if (!result || !state || !hit_event) return;
+    hit_event->termination =
+        RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_MEDIUM_TRANSITION_REJECTED;
+    result->trace.finalState = *state;
+    photon_path_transport_mark_terminal(
+        result,
+        hit_event->termination,
+        RUNTIME_CAUSTIC_PHOTON_REJECT_INVALID_MEDIUM,
+        state->throughput,
+        false);
 }
 
 static void photon_path_transport_mark_terminal(
@@ -215,6 +246,8 @@ void RuntimeCausticPhotonPathTransport3D_DefaultSettings(
     settings->depthPolicy = RuntimePathDepthPolicy3D_Resolve();
     settings->applyRoulette = true;
     settings->continueTotalInternalReflection = true;
+    settings->mediumFailurePolicy =
+        RUNTIME_CAUSTIC_PHOTON_MEDIUM_FAILURE_FAIL_CLOSED;
     RuntimeCausticPhotonMediumStack3D_Init(&settings->initialMediumStack);
 }
 
@@ -474,10 +507,25 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
         terminal = hit_event->bsdfSelection.termination !=
                    RUNTIME_CAUSTIC_PHOTON_BSDF_TERMINATION_NONE;
         if (!terminal && !exact_tir &&
-            ((hit_event->bsdfSelection.lobe ==
-                  RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_TRANSMISSION &&
-              !material.thinWalled && !medium_interface_resolved) ||
-             !RuntimeCausticPhotonBsdfDirection3D_SampleInterface(
+            hit_event->bsdfSelection.lobe ==
+                RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_TRANSMISSION &&
+            !material.thinWalled && !medium_interface_resolved) {
+            photon_path_transport_observe_medium(
+                &medium_stack,
+                &medium_boundary,
+                entering,
+                false,
+                depth,
+                active->mediumFailurePolicy,
+                hit_event,
+                &result.readback);
+            photon_path_transport_mark_medium_failure(
+                &result, &state, hit_event);
+            hard_failure = true;
+            break;
+        }
+        if (!terminal && !exact_tir &&
+            !RuntimeCausticPhotonBsdfDirection3D_SampleInterface(
                  hit_event->bsdfSelection.lobe,
                  &material,
                  state.direction,
@@ -493,7 +541,7 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
                          !material.thinWalled
                      ? eta_to
                      : 0.0,
-                 &hit_event->bsdfDirection))) {
+                 &hit_event->bsdfDirection)) {
             hit_event->termination =
                 hit_event->bsdfDirection.totalInternalReflection
                     ? RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_TIR_DEFERRED
@@ -505,6 +553,25 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
                 RUNTIME_CAUSTIC_PHOTON_REJECT_INVALID_MEDIUM,
                 state.throughput,
                 false);
+            hard_failure = true;
+            break;
+        }
+
+        if (!terminal &&
+            hit_event->bsdfSelection.lobe ==
+                RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_TRANSMISSION &&
+            !material.thinWalled &&
+            !photon_path_transport_observe_medium(
+                &medium_stack,
+                &medium_boundary,
+                hit_event->bsdfDirection.dielectric.entering,
+                hit_event->bsdfDirection.totalInternalReflection,
+                depth,
+                active->mediumFailurePolicy,
+                hit_event,
+                &result.readback)) {
+            photon_path_transport_mark_medium_failure(
+                &result, &state, hit_event);
             hard_failure = true;
             break;
         }
@@ -534,17 +601,6 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
                                                           &hit_event->dielectric)) {
                 hard_failure = true;
                 break;
-            }
-            if (!material.thinWalled) {
-                photon_path_transport_observe_medium(&medium_stack,
-                                                     &medium_boundary,
-                                                     &hit_event->bsdfDirection,
-                                                     hit_event,
-                                                     &result.readback);
-                if (!hit_event->mediumTransition.succeeded) {
-                    hard_failure = true;
-                    break;
-                }
             }
             if (hit_event->bsdfDirection.totalInternalReflection) {
                 trace->debug.totalInternalReflectionCount++;

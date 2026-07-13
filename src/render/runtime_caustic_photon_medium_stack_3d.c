@@ -325,3 +325,12 @@ const char* RuntimeCausticPhotonMediumTransitionReason3D_Label(
             return "none";
     }
 }
+
+const char* RuntimeCausticPhotonMediumFailurePolicy3D_Label(
+    RuntimeCausticPhotonMediumFailurePolicy3D policy) {
+    switch (policy) {
+        case RUNTIME_CAUSTIC_PHOTON_MEDIUM_FAILURE_FAIL_CLOSED:
+        default:
+            return "fail_closed";
+    }
+}

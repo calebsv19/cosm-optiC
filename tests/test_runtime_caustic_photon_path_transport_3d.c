@@ -295,7 +295,9 @@ static int test_runtime_caustic_photon_path_transport_defaults(void) {
                     settings.sceneTrace.traceRoute ==
                         RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS &&
                     settings.applyRoulette &&
-                    settings.continueTotalInternalReflection);
+                    settings.continueTotalInternalReflection &&
+                    settings.mediumFailurePolicy ==
+                        RUNTIME_CAUSTIC_PHOTON_MEDIUM_FAILURE_FAIL_CLOSED);
     return 0;
 }
 

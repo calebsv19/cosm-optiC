@@ -27,6 +27,7 @@ typedef enum {
     RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_ABSORBED,
     RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_DIRECTION_INVALID,
     RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_ROULETTE_TERMINATED,
+    RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_MEDIUM_TRANSITION_REJECTED,
     RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_TRACE_ERROR
 } RuntimeCausticPhotonSceneTermination3D;
 
@@ -86,6 +87,10 @@ typedef struct {
     uint32_t attenuatedSegmentCount;
     double attenuatedSegmentDistance;
     Vec3 mediumAbsorbedFlux;
+    bool terminatedByMediumFailurePolicy;
+    uint32_t mediumFailureDepth;
+    RuntimeCausticPhotonMediumFailurePolicy3D mediumFailurePolicy;
+    RuntimeCausticPhotonMediumTransitionReason3D mediumFailureReason;
     bool usedSharedSceneAccelerationRoute;
     RuntimeCausticPhotonSceneTermination3D termination;
     RuntimeRay3DRouteStats routeStats;

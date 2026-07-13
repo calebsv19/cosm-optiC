@@ -21,6 +21,10 @@ typedef enum {
     RUNTIME_CAUSTIC_PHOTON_MEDIUM_TRANSITION_INVALID_ENTRY
 } RuntimeCausticPhotonMediumTransitionReason3D;
 
+typedef enum {
+    RUNTIME_CAUSTIC_PHOTON_MEDIUM_FAILURE_FAIL_CLOSED = 0
+} RuntimeCausticPhotonMediumFailurePolicy3D;
+
 typedef struct {
     bool valid;
     bool isAir;
@@ -90,5 +94,7 @@ bool RuntimeCausticPhotonMediumStack3D_ObserveBoundary(
     RuntimeCausticPhotonMediumTransition3D* out_transition);
 const char* RuntimeCausticPhotonMediumTransitionReason3D_Label(
     RuntimeCausticPhotonMediumTransitionReason3D reason);
+const char* RuntimeCausticPhotonMediumFailurePolicy3D_Label(
+    RuntimeCausticPhotonMediumFailurePolicy3D policy);
 
 #endif

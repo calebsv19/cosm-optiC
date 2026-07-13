@@ -126,6 +126,8 @@ const char* RuntimeCausticPhotonSceneTermination3D_Label(
             return "bsdf_direction_invalid";
         case RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_ROULETTE_TERMINATED:
             return "bsdf_roulette_terminated";
+        case RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_MEDIUM_TRANSITION_REJECTED:
+            return "medium_transition_rejected";
         case RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_TRACE_ERROR:
             return "trace_error";
         case RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_NONE:
