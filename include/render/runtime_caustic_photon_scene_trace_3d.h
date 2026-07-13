@@ -4,6 +4,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "render/runtime_caustic_photon_bsdf_direction_3d.h"
+#include "render/runtime_caustic_photon_bsdf_policy_3d.h"
+#include "render/runtime_caustic_photon_bsdf_sampling_3d.h"
 #include "render/runtime_caustic_photon_trace_3d.h"
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_ray_3d.h"
@@ -18,6 +21,11 @@ typedef enum {
     RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_MAX_DEPTH,
     RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_DIFFERENT_OBJECT_BEFORE_EXIT,
     RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_TIR_DEFERRED,
+    RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_EVENT_READY,
+    RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_EMISSIVE,
+    RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_ABSORBED,
+    RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_DIRECTION_INVALID,
+    RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_ROULETTE_TERMINATED,
     RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_TRACE_ERROR
 } RuntimeCausticPhotonSceneTermination3D;
 
@@ -37,11 +45,20 @@ typedef struct {
     void* materialResolverUserData;
 } RuntimeCausticPhotonSceneTraceSettings3D;
 
+typedef RuntimeCausticPhotonBsdfExplicitSample3D
+    RuntimeCausticPhotonSceneBsdfSample3D;
+
 typedef struct {
     uint32_t depth;
     HitInfo3D hit;
     RuntimeMaterialPayload3D material;
     RuntimeCausticPhotonDielectricEvent3D dielectric;
+    RuntimeCausticPhotonBsdfPolicy3D bsdfPolicy;
+    RuntimeCausticPhotonBsdfSelection3D bsdfSelection;
+    RuntimeCausticPhotonBsdfDirection3D bsdfDirection;
+    RuntimeCausticPhotonBsdfSampleStream3D bsdfSampleStream;
+    RuntimeCausticPhotonRoulette3D roulette;
+    bool usedSeededBsdfSamples;
     RuntimeCausticPhotonSceneTermination3D termination;
 } RuntimeCausticPhotonSceneHitEvent3D;
 
@@ -84,6 +101,25 @@ const char* RuntimeCausticPhotonSceneTermination3D_Label(
 bool RuntimeCausticPhotonSceneTrace3D_TraceDeterministicDielectric(
     const RuntimeScene3D* scene,
     const RuntimeCausticPhotonSample3D* sample,
+    const RuntimeCausticPhotonSceneTraceSettings3D* settings,
+    RuntimeCausticPhotonSceneTrace3D* out_trace);
+bool RuntimeCausticPhotonSceneTrace3D_TraceDeterministicBsdfHit(
+    const RuntimeScene3D* scene,
+    const RuntimeCausticPhotonSample3D* sample,
+    const RuntimeCausticPhotonSceneBsdfSample3D* bsdf_sample,
+    const RuntimeCausticPhotonSceneTraceSettings3D* settings,
+    RuntimeCausticPhotonSceneTrace3D* out_trace);
+bool RuntimeCausticPhotonSceneTrace3D_TraceSeededBsdfHit(
+    const RuntimeScene3D* scene,
+    const RuntimeCausticPhotonSample3D* sample,
+    uint32_t depth,
+    const RuntimeCausticPhotonSceneTraceSettings3D* settings,
+    RuntimeCausticPhotonSceneTrace3D* out_trace);
+bool RuntimeCausticPhotonSceneTrace3D_TraceSeededBsdfHitWithRoulette(
+    const RuntimeScene3D* scene,
+    const RuntimeCausticPhotonSample3D* sample,
+    uint32_t depth,
+    const RuntimePathDepthPolicy3D* roulette_policy,
     const RuntimeCausticPhotonSceneTraceSettings3D* settings,
     RuntimeCausticPhotonSceneTrace3D* out_trace);
 bool RuntimeCausticPhotonSceneTrace3D_CompareDescriptorOracle(
