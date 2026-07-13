@@ -19,6 +19,7 @@
 #include "test_runtime_caustic_photon_emit_3d.h"
 #include "test_runtime_caustic_photon_integration_3d.h"
 #include "test_runtime_caustic_photon_map_3d.h"
+#include "test_runtime_caustic_photon_scene_trace_3d.h"
 #include "test_runtime_caustic_photon_trace_3d.h"
 #include "test_runtime_caustic_sphere_lens_3d.h"
 #include "test_runtime_caustic_surface_cache_3d.h"
@@ -123,6 +124,8 @@ int test_runner_main(int argc, char** argv) {
         {"runtime_caustic_photon_integration_3d",
          run_test_runtime_caustic_photon_integration_3d_tests},
         {"runtime_caustic_photon_map_3d", run_test_runtime_caustic_photon_map_3d_tests},
+        {"runtime_caustic_photon_scene_trace_3d",
+         run_test_runtime_caustic_photon_scene_trace_3d_tests},
         {"runtime_caustic_photon_trace_3d", run_test_runtime_caustic_photon_trace_3d_tests},
         {"runtime_caustic_sphere_lens_3d", run_test_runtime_caustic_sphere_lens_3d_tests},
         {"runtime_caustic_surface_cache_3d", run_test_runtime_caustic_surface_cache_3d_tests},

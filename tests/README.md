@@ -108,6 +108,15 @@ The PPM-8 coverage stores traced mesh-dielectric output into the existing
 surface photon map and volume beam map helpers while keeping render contribution
 outside this module.
 
+`TEST_RUNNER_GROUP=runtime_caustic_photon_scene_trace_3d make -C ray_tracing test`
+is the focused PPM-20 slice-one general traversal proof. It builds a two-interface
+glass slab in a real `RuntimeScene3D`, rebuilds TLAS, proves both photon hits use
+the shared TLAS route without flattened fallback, retains resolved material and
+object/primitive/triangle identity for every hit, and matches deterministic
+entry/exit direction, branch, termination, and flux against the descriptor-fed
+oracle. Separate cases prove unresolved-material diagnostics and opaque-hit
+payload retention. No map storage or render contribution occurs in this group.
+
 `TEST_RUNNER_GROUP=runtime_caustic_photon_map_3d make -C ray_tracing test`
 is the focused PPM-2 surface photon-map proof. It covers map allocation,
 explicit surface-hit storage/query, PDF-normalized query flux, diagnostics,

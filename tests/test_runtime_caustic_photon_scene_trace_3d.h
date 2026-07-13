@@ -1,0 +1,6 @@
+#ifndef TEST_RUNTIME_CAUSTIC_PHOTON_SCENE_TRACE_3D_H
+#define TEST_RUNTIME_CAUSTIC_PHOTON_SCENE_TRACE_3D_H
+
+int run_test_runtime_caustic_photon_scene_trace_3d_tests(void);
+
+#endif
