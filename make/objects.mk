@@ -31,6 +31,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_caustic_photon_map_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_map_store_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_path_transport_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_path_population_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_beam_contribution_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_bsdf_direction_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_bsdf_policy_3d.o \

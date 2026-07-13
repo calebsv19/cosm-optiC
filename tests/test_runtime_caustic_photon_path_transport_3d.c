@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "render/runtime_caustic_photon_path_population_3d.h"
 #include "render/runtime_caustic_photon_path_transport_3d.h"
 #include "render/runtime_scene_accel_3d.h"
 #include "test_support.h"
@@ -80,6 +81,22 @@ static RuntimeMaterialPayload3D photon_path_transport_glass(void) {
     material.bsdf.diffuseWeight = 0.0;
     material.bsdf.specWeight = 0.0;
     material.bsdf.roughness = 0.0;
+    return material;
+}
+
+static RuntimeMaterialPayload3D photon_path_transport_diffuse(void) {
+    RuntimeMaterialPayload3D material;
+    RuntimeMaterialPayload3D_Reset(&material);
+    material.valid = true;
+    material.baseColorR = 0.8;
+    material.baseColorG = 0.7;
+    material.baseColorB = 0.6;
+    material.opticalIor = 1.5;
+    material.bsdf.ior = 1.5;
+    material.bsdf.diffuseWeight = 1.0;
+    material.bsdf.specWeight = 0.0;
+    material.bsdf.reflectivity = 0.0;
+    material.bsdf.roughness = 1.0;
     return material;
 }
 
@@ -463,6 +480,181 @@ static int test_runtime_caustic_photon_path_transport_tir_continuation(void) {
     return 0;
 }
 
+static int test_runtime_caustic_photon_path_population_transaction(void) {
+    RuntimeScene3D scene;
+    RuntimeCausticPhotonSample3D sample = photon_path_transport_sample();
+    RuntimeCausticPhotonPathTransportSettings3D transport_settings;
+    RuntimeCausticPhotonPathPopulationSettings3D population_settings;
+    RuntimeCausticPhotonPathPopulationReadback3D readback;
+    RuntimeCausticPhotonPathPopulationBatch3D batch;
+    RuntimeCausticPhotonSceneTrace3D trace;
+    RuntimeCausticPhotonSceneTrace3D invalid_trace;
+    RuntimeCausticPhotonSceneTrace3D terminal_trace;
+    PhotonPathTransportMultiMaterialFixture3D fixture;
+    RuntimeCausticPhotonBsdfSampleStream3D stream;
+    RuntimeCausticPhotonMap3D surface_map;
+    RuntimeCausticBeamMap3D beam_map;
+    bool found_transmission_sample = false;
+
+    sample.position = vec3(0.0, 0.0, 2.0);
+    for (uint64_t i = 0u; i < 128u; ++i) {
+        sample.photonId = 25000u + i;
+        sample.sampleIndex = i;
+        if (RuntimeCausticPhotonBsdfSampling3D_Generate(&sample, 1u, &stream) &&
+            stream.bsdfSample.lobeUnitSample > 0.2) {
+            found_transmission_sample = true;
+            break;
+        }
+    }
+    assert_true("runtime_caustic_photon_path_population_find_transmission_sample",
+                found_transmission_sample);
+    assert_true("runtime_caustic_photon_path_population_build",
+                photon_path_transport_build_two_object_scene(&scene, 0.0));
+    memset(&fixture, 0, sizeof(fixture));
+    fixture.object51 = photon_path_transport_glass();
+    fixture.object52 = photon_path_transport_diffuse();
+    RuntimeCausticPhotonPathTransport3D_DefaultSettings(&transport_settings);
+    transport_settings.sceneTrace.maxDepth = 2u;
+    transport_settings.sceneTrace.materialResolver =
+        photon_path_transport_multi_material;
+    transport_settings.sceneTrace.materialResolverUserData = &fixture;
+    transport_settings.applyRoulette = false;
+    assert_true("runtime_caustic_photon_path_population_trace",
+                RuntimeCausticPhotonPathTransport3D_Trace(
+                    &scene, &sample, &transport_settings, &trace));
+    assert_true("runtime_caustic_photon_path_population_trace_shape",
+                trace.readback.hitEventCount == 2u &&
+                    trace.hitEvents[0].bsdfSelection.lobe ==
+                        RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_TRANSMISSION &&
+                    trace.hitEvents[1].bsdfSelection.lobe ==
+                        RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_DIFFUSE &&
+                    trace.hitEvents[0].pathPdfBefore == sample.emissionPdf &&
+                    trace.hitEvents[1].pathStart.z == 1.0 &&
+                    trace.hitEvents[1].pathPdfBefore ==
+                        trace.hitEvents[0].pathPdfAfter);
+
+    RuntimeCausticPhotonMap3D_Init(&surface_map);
+    RuntimeCausticBeamMap3D_Init(&beam_map);
+    assert_true("runtime_caustic_photon_path_population_surface_alloc",
+                RuntimeCausticPhotonMap3D_Allocate(&surface_map, 2u));
+    assert_true("runtime_caustic_photon_path_population_beam_alloc",
+                RuntimeCausticBeamMap3D_Allocate(&beam_map, 3u));
+    RuntimeCausticPhotonPathPopulation3D_DefaultSettings(&population_settings);
+    assert_true("runtime_caustic_photon_path_population_store",
+                RuntimeCausticPhotonPathPopulation3D_PopulateMaps(
+                    &trace,
+                    &population_settings,
+                    &surface_map,
+                    &beam_map,
+                    &readback));
+    assert_true("runtime_caustic_photon_path_population_store_readback",
+                readback.succeeded && readback.preflightAccepted &&
+                    readback.diffuseReceiverCount == 1u &&
+                    readback.beamCandidateCount == 2u &&
+                    readback.transparentHitCount == 1u &&
+                    readback.storedSurfaceCount == 1u &&
+                    readback.storedBeamCount == 2u &&
+                    surface_map.recordCount == 1u && beam_map.segmentCount == 2u &&
+                    surface_map.records[0].sceneObjectIndex == 52 &&
+                    surface_map.records[0].depth == 2u &&
+                    beam_map.segments[0].start.z == 2.0 &&
+                    beam_map.segments[0].end.z == 1.0 &&
+                    beam_map.segments[1].start.z == 1.0 &&
+                    beam_map.segments[1].end.z == 0.0);
+    assert_close("runtime_caustic_photon_path_population_surface_pdf",
+                 surface_map.records[0].pathPdf,
+                 trace.hitEvents[1].pathPdfBefore,
+                 1.0e-12);
+    assert_close("runtime_caustic_photon_path_population_surface_flux",
+                 readback.storedSurfaceFlux.x,
+                 trace.hitEvents[1].bsdfSelection.throughputBefore.x,
+                 1.0e-12);
+    memset(&batch, 0, sizeof(batch));
+    RuntimeCausticPhotonPathPopulationBatch3D_Accumulate(&batch, &readback);
+    assert_true("runtime_caustic_photon_path_population_batch",
+                batch.pathCount == 1u && batch.succeededPathCount == 1u &&
+                    batch.storedSurfaceCount == 1u && batch.storedBeamCount == 2u);
+
+    RuntimeCausticPhotonMap3D_Clear(&surface_map);
+    RuntimeCausticBeamMap3D_Free(&beam_map);
+    RuntimeCausticBeamMap3D_Init(&beam_map);
+    assert_true("runtime_caustic_photon_path_population_small_beam_alloc",
+                RuntimeCausticBeamMap3D_Allocate(&beam_map, 1u));
+    assert_true("runtime_caustic_photon_path_population_capacity_reject",
+                !RuntimeCausticPhotonPathPopulation3D_PopulateMaps(
+                    &trace,
+                    &population_settings,
+                    &surface_map,
+                    &beam_map,
+                    &readback));
+    assert_true("runtime_caustic_photon_path_population_capacity_atomic",
+                readback.termination ==
+                        RUNTIME_CAUSTIC_PHOTON_PATH_POPULATION_CAPACITY_REJECTED &&
+                    !readback.preflightAccepted && surface_map.recordCount == 0u &&
+                    beam_map.segmentCount == 0u &&
+                    surface_map.storeAttemptCount == 0u &&
+                    beam_map.storeAttemptCount == 0u &&
+                    readback.storedSurfaceFlux.x == 0.0 &&
+                    readback.storedBeamFlux.x == 0.0);
+
+    invalid_trace = trace;
+    invalid_trace.trace.valid = false;
+    assert_true("runtime_caustic_photon_path_population_invalid_trace_reject",
+                !RuntimeCausticPhotonPathPopulation3D_PopulateMaps(
+                    &invalid_trace,
+                    &population_settings,
+                    &surface_map,
+                    &beam_map,
+                    &readback) &&
+                    readback.termination ==
+                        RUNTIME_CAUSTIC_PHOTON_PATH_POPULATION_INVALID_TRACE &&
+                    surface_map.recordCount == 0u && beam_map.segmentCount == 0u);
+
+    terminal_trace = trace;
+    terminal_trace.hitEvents[1].bsdfSelection.lobe =
+        RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_EMISSIVE;
+    terminal_trace.hitEvents[1].bsdfSelection.termination =
+        RUNTIME_CAUSTIC_PHOTON_BSDF_TERMINATION_EMISSIVE;
+    terminal_trace.hitEvents[1].bsdfDirection.valid = false;
+    terminal_trace.readback.termination =
+        RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_EMISSIVE;
+    assert_true("runtime_caustic_photon_path_population_terminal_no_write",
+                !RuntimeCausticPhotonPathPopulation3D_PopulateMaps(
+                    &terminal_trace,
+                    &population_settings,
+                    &surface_map,
+                    &beam_map,
+                    &readback) &&
+                    readback.terminalHitCount == 1u &&
+                    readback.termination ==
+                        RUNTIME_CAUSTIC_PHOTON_PATH_POPULATION_NO_DIFFUSE_RECEIVER &&
+                    surface_map.recordCount == 0u && beam_map.segmentCount == 0u);
+
+    memset(&fixture, 0, sizeof(fixture));
+    fixture.object51 = photon_path_transport_glass();
+    fixture.object52 = photon_path_transport_glass();
+    transport_settings.sceneTrace.materialResolverUserData = &fixture;
+    assert_true("runtime_caustic_photon_path_population_transparent_trace",
+                RuntimeCausticPhotonPathTransport3D_Trace(
+                    &scene, &sample, &transport_settings, &trace));
+    assert_true("runtime_caustic_photon_path_population_transparent_no_write",
+                !RuntimeCausticPhotonPathPopulation3D_PopulateMaps(
+                    &trace,
+                    &population_settings,
+                    &surface_map,
+                    &beam_map,
+                    &readback) &&
+                    readback.termination ==
+                        RUNTIME_CAUSTIC_PHOTON_PATH_POPULATION_NO_DIFFUSE_RECEIVER &&
+                    surface_map.recordCount == 0u && beam_map.segmentCount == 0u);
+
+    RuntimeCausticBeamMap3D_Free(&beam_map);
+    RuntimeCausticPhotonMap3D_Free(&surface_map);
+    RuntimeSceneAcceleration3D_ResetTLASForTests();
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
 int run_test_runtime_caustic_photon_path_transport_3d_tests(void) {
     int failures = 0;
     failures += test_runtime_caustic_photon_path_transport_defaults();
@@ -470,5 +662,6 @@ int run_test_runtime_caustic_photon_path_transport_3d_tests(void) {
     failures += test_runtime_caustic_photon_path_transport_two_object_reflection();
     failures += test_runtime_caustic_photon_path_transport_two_object_transmission();
     failures += test_runtime_caustic_photon_path_transport_tir_continuation();
+    failures += test_runtime_caustic_photon_path_population_transaction();
     return failures;
 }

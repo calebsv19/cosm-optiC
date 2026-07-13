@@ -219,7 +219,9 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
         RuntimeDielectricTransport3D dielectric_probe;
         HitInfo3D hit;
         Ray3D ray;
+        Vec3 path_start = state.position;
         Vec3 throughput_before = state.throughput;
+        double path_pdf_before = state.pathPdf;
         Vec3 geometric_normal;
         bool found;
         bool terminal;
@@ -285,6 +287,8 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
         }
         hit_event->bsdfSampleStream = stream;
         hit_event->usedSeededBsdfSamples = true;
+        hit_event->pathStart = path_start;
+        hit_event->pathPdfBefore = path_pdf_before;
         geometric_normal = photon_path_transport_geometric_normal(scene, &hit);
         hit.normal = geometric_normal;
         hit_event->hit.normal = geometric_normal;
@@ -432,6 +436,7 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
             state.pathPdf *= hit_event->roulette.branchPdf;
             state.throughput = hit_event->roulette.throughputAfter;
         }
+        hit_event->pathPdfAfter = state.pathPdf;
 
         memset(&event, 0, sizeof(event));
         event.photonId = sample->photonId;

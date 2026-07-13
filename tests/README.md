@@ -147,12 +147,17 @@ path on replay, and terminates through the explicit max-depth ledger. PPM-22.2
 adds distinct-object mirror-to-mirror and glass-to-mirror fixtures that prove
 ordered object
 and material resolution, reflective/refractive direction, dielectric event
-counts, cumulative branch PDF, and throughput across object boundaries. The
-module still does not write surface or beam maps; storage acceptance remains a
-subsequent PPM-22 slice. PPM-22.3 adds an outward-normal closed glass
+counts, cumulative branch PDF, and throughput across object boundaries.
+PPM-22.3 adds an outward-normal closed glass
 slab with an internally launched above-critical-angle path and proves four
 same-object TIR continuations, alternating reflected directions, unit branch
 PDFs, preserved throughput, no false self-hit, and max-depth termination.
+PPM-22.4 traces transparent object 51 into diffuse receiver object 52, preserves
+the incoming receiver flux and pre-event path PDF, and transactionally stores
+one receiver record plus both unique traversed beam segments. The same fixture
+proves per-path/batch accounting and zero map mutation for insufficient beam
+capacity, invalid traces, emissive terminal-before-storage paths, and
+transparent-only paths.
 
 `TEST_RUNNER_GROUP=runtime_caustic_photon_map_3d make -C ray_tracing test`
 is the focused PPM-2 surface photon-map proof. It covers map allocation,
