@@ -55,11 +55,18 @@ static double mesh_normals_corner_angle(CoreObjectVec3 center,
 }
 
 static CoreResult mesh_normals_generate_smooth(CoreMeshAssetRuntimeDocument *document) {
+    CoreObjectVec3 *fallback_normals = NULL;
     size_t i;
     if (!document || !document->vertices || document->vertex_count == 0u ||
         !document->triangles || document->triangle_count == 0u) {
         return mesh_normals_invalid_arg("smooth normal generation input is invalid");
     }
+    fallback_normals =
+        (CoreObjectVec3 *)core_alloc(document->vertex_count * sizeof(*fallback_normals));
+    if (!fallback_normals) {
+        return (CoreResult){CORE_ERR_OUT_OF_MEMORY, "out of memory"};
+    }
+    memset(fallback_normals, 0, document->vertex_count * sizeof(*fallback_normals));
     for (i = 0u; i < document->vertex_count; ++i) {
         document->vertices[i].normal = (CoreObjectVec3){0.0, 0.0, 0.0};
     }
@@ -77,6 +84,7 @@ static CoreResult mesh_normals_generate_smooth(CoreMeshAssetRuntimeDocument *doc
                 mesh_normals_cross(mesh_normals_sub(points[1], points[0]),
                                    mesh_normals_sub(points[2], points[0])),
                 &face_normal)) {
+            core_free(fallback_normals);
             return mesh_normals_invalid_arg("smooth normal face is degenerate");
         }
         for (corner = 0u; corner < 3u; ++corner) {
@@ -84,6 +92,10 @@ static CoreResult mesh_normals_generate_smooth(CoreMeshAssetRuntimeDocument *doc
                                                      points[(corner + 1u) % 3u],
                                                      points[(corner + 2u) % 3u]);
             CoreObjectVec3 *normal = &document->vertices[indices[corner]].normal;
+            CoreObjectVec3 *fallback = &fallback_normals[indices[corner]];
+            if (mesh_normals_dot(*fallback, *fallback) <= 1e-24) {
+                *fallback = face_normal;
+            }
             normal->x += face_normal.x * angle;
             normal->y += face_normal.y * angle;
             normal->z += face_normal.z * angle;
@@ -92,10 +104,14 @@ static CoreResult mesh_normals_generate_smooth(CoreMeshAssetRuntimeDocument *doc
     for (i = 0u; i < document->vertex_count; ++i) {
         CoreObjectVec3 normalized;
         if (!mesh_normals_normalize(document->vertices[i].normal, &normalized)) {
-            return mesh_normals_invalid_arg("smooth vertex normal has zero contribution");
+            if (!mesh_normals_normalize(fallback_normals[i], &normalized)) {
+                core_free(fallback_normals);
+                return mesh_normals_invalid_arg("smooth vertex normal has zero contribution");
+            }
         }
         document->vertices[i].normal = normalized;
     }
+    core_free(fallback_normals);
     document->vertex_normal_count = document->vertex_count;
     document->normal_provenance =
         CORE_MESH_ASSET_RUNTIME_NORMAL_PROVENANCE_GENERATED_SMOOTH;

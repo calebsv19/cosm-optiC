@@ -80,7 +80,9 @@ Shared compile-boundary helpers for the mesh-asset rollout.
 - v0.7.0 adds opt-in angle-weighted smooth and crease-aware vertex-normal
   generation. The topology path uses welded indices and edge-connected face
   neighborhoods rather than render-acceleration proximity, and normal logic is
-  isolated in `core_mesh_compile_normals.c`.
+  isolated in `core_mesh_compile_normals.c`. When inconsistent legacy winding
+  cancels an angle-weighted vertex sum, smooth mode deterministically falls back
+  to the first valid incident face normal instead of rejecting the whole mesh.
 - v0.6.6 keeps the binary STL size guard warning-clean under strict Linux
   C11 builds where `size_t` is wider than the 32-bit STL triangle-count field.
 - v0.6.5 raises the bounded imported STL proof ceiling to `3000000`

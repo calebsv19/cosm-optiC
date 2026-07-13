@@ -5,6 +5,11 @@
 #include <stdio.h>
 #include <string.h>
 
+CoreResult core_mesh_compile_runtime_generate_vertex_normals(
+    CoreMeshAssetRuntimeDocument *document,
+    CoreMeshAssetImportedNormalMode mode,
+    double crease_angle_degrees);
+
 #define CHECK(cond) do { if (!(cond)) { printf("fail:%d\n", __LINE__); return 1; } } while (0)
 
 static int file_contains_all(const char *path, const char **needles, size_t needle_count) {
@@ -161,6 +166,37 @@ static int test_imported_stl_generates_angle_weighted_smooth_normals(void) {
 
     core_mesh_asset_runtime_document_free(&runtime);
     core_mesh_asset_authoring_document_free(&authoring);
+    return 0;
+}
+
+static int test_smooth_normals_fall_back_when_opposite_faces_cancel(void) {
+    CoreMeshAssetRuntimeDocument runtime;
+    size_t i;
+
+    core_mesh_asset_runtime_document_init(&runtime);
+    CHECK(core_mesh_asset_runtime_document_set_vertex_count(&runtime, 3u).code == CORE_OK);
+    CHECK(core_mesh_asset_runtime_document_set_triangle_count(&runtime, 2u).code == CORE_OK);
+    runtime.vertices[0].position = (CoreObjectVec3){0.0, 0.0, 0.0};
+    runtime.vertices[1].position = (CoreObjectVec3){1.0, 0.0, 0.0};
+    runtime.vertices[2].position = (CoreObjectVec3){0.0, 1.0, 0.0};
+    runtime.triangles[0].a = 0u;
+    runtime.triangles[0].b = 1u;
+    runtime.triangles[0].c = 2u;
+    runtime.triangles[1].a = 0u;
+    runtime.triangles[1].b = 2u;
+    runtime.triangles[1].c = 1u;
+    CHECK(core_mesh_compile_runtime_generate_vertex_normals(
+              &runtime,
+              CORE_MESH_ASSET_IMPORTED_NORMAL_MODE_SMOOTH,
+              180.0).code == CORE_OK);
+    CHECK(runtime.vertex_normal_count == runtime.vertex_count);
+    for (i = 0u; i < runtime.vertex_count; ++i) {
+        CoreObjectVec3 normal = runtime.vertices[i].normal;
+        double length_sq = normal.x * normal.x + normal.y * normal.y + normal.z * normal.z;
+        CHECK(fabs(length_sq - 1.0) < 1e-8);
+        CHECK(normal.z > 0.999999);
+    }
+    core_mesh_asset_runtime_document_free(&runtime);
     return 0;
 }
 
@@ -547,6 +583,7 @@ int main(void) {
     if (test_authoring_compile_contract_validation() != 0) return 1;
     if (test_imported_stl_to_runtime_document() != 0) return 1;
     if (test_imported_stl_generates_angle_weighted_smooth_normals() != 0) return 1;
+    if (test_smooth_normals_fall_back_when_opposite_faces_cancel() != 0) return 1;
     if (test_imported_stl_crease_aware_normals_split_hard_edges() != 0) return 1;
     if (test_imported_stl_to_runtime_file() != 0) return 1;
     if (test_imported_binary_stl_to_runtime_document() != 0) return 1;
