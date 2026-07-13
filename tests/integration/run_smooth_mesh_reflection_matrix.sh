@@ -42,6 +42,19 @@ for mode in ("smooth", "flat"):
         summaries[(mode, route)] = (summary, hashlib.sha256(frame.read_bytes()).hexdigest())
 if summaries[("smooth", "tlas_blas_parity")][1] == summaries[("flat", "tlas_blas_parity")][1]:
     raise SystemExit("smooth and flat reflection images are unexpectedly identical")
+smooth_render_ms = summaries[("smooth", "tlas_blas_parity")][0]["timing_breakdown"]["render_frames_ms"]
+flat_render_ms = summaries[("flat", "tlas_blas_parity")][0]["timing_breakdown"]["render_frames_ms"]
+assets = {}
+for family in ("analytic_sphere", "icosphere", "organic_blob", "crease"):
+    runtime_path = next((root / "assets" / "mesh_assets").glob(
+        f"smooth_reflection_{family}_*.runtime.json"))
+    mesh = json.loads(runtime_path.read_text())["mesh"]
+    assets[family] = {
+        "vertex_count": mesh["vertex_count"],
+        "normal_count": mesh.get("normal_count", 0),
+        "triangle_count": mesh["triangle_count"],
+        "normal_provenance": mesh.get("normal_provenance", "none"),
+    }
 report = {
     "schema": "smooth_mesh_reflection_matrix_report_v1",
     "smooth_tlas_sha256": summaries[("smooth", "tlas_blas_parity")][1],
@@ -49,6 +62,21 @@ report = {
     "smooth_flattened_sha256": summaries[("smooth", "flattened_bvh")][1],
     "flat_flattened_sha256": summaries[("flat", "flattened_bvh")][1],
     "triangle_count": summaries[("smooth", "tlas_blas_parity")][0]["bvh_summary"]["triangle_count"],
+    "assets": assets,
+    "route_parity_mismatches": {
+        f"{mode}_{route}": summary["prepared_acceleration"]["route_parity_mismatches"]
+        for (mode, route), (summary, _) in summaries.items()
+    },
+    "timing_ms": {
+        "smooth_render": smooth_render_ms,
+        "flat_render": flat_render_ms,
+        "smooth_total": summaries[("smooth", "tlas_blas_parity")][0]["timing_breakdown"]["total_run_ms"],
+        "flat_total": summaries[("flat", "tlas_blas_parity")][0]["timing_breakdown"]["total_run_ms"],
+    },
+    "smooth_vs_flat_render_delta_percent": (
+        ((smooth_render_ms - flat_render_ms) / flat_render_ms) * 100.0
+        if flat_render_ms > 0.0 else None
+    ),
 }
 (root / "matrix_report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
 print("[smooth-mesh-reflection-matrix] PASS")

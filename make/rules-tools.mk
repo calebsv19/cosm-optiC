@@ -78,8 +78,14 @@ video:
 SMOOTH_MESH_CORE_ROOT := third_party/codework_shared/core
 SMOOTH_MESH_COMPILE_ROOT := $(SMOOTH_MESH_CORE_ROOT)/core_mesh_compile
 SMOOTH_MESH_ASSET_ROOT := $(SMOOTH_MESH_CORE_ROOT)/core_mesh_asset
+SMOOTH_MESH_RUNTIME_COMPILE_DEPS := \
+	$(wildcard $(SMOOTH_MESH_COMPILE_ROOT)/src/*.c) \
+	$(wildcard $(SMOOTH_MESH_COMPILE_ROOT)/src/*.h) \
+	$(wildcard $(SMOOTH_MESH_COMPILE_ROOT)/include/*.h) \
+	$(wildcard $(SMOOTH_MESH_ASSET_ROOT)/src/*.c) \
+	$(wildcard $(SMOOTH_MESH_ASSET_ROOT)/include/*.h)
 
-$(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN): tools/smooth_mesh_reflection/compile_runtime_fixture.c
+$(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN): tools/smooth_mesh_reflection/compile_runtime_fixture.c $(SMOOTH_MESH_RUNTIME_COMPILE_DEPS)
 	$(MAKE) -C $(SMOOTH_MESH_COMPILE_ROOT)
 	$(MAKE) -C $(SMOOTH_MESH_ASSET_ROOT)
 	$(MAKE) -C $(SMOOTH_MESH_CORE_ROOT)/core_object
