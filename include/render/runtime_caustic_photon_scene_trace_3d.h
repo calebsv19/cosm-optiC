@@ -50,6 +50,9 @@ typedef RuntimeCausticPhotonBsdfExplicitSample3D
 
 typedef struct {
     uint32_t depth;
+    Vec3 pathStart;
+    double pathPdfBefore;
+    double pathPdfAfter;
     HitInfo3D hit;
     RuntimeMaterialPayload3D material;
     RuntimeCausticPhotonDielectricEvent3D dielectric;

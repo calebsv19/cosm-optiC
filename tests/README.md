@@ -138,6 +138,27 @@ reweighting, termination accounting, and statistical unbiasedness. Recursive
 scene continuation, TIR continuation, nested-media tracking, map storage, and
 production-default integration remain PPM-22 and later work.
 
+`TEST_RUNNER_GROUP=runtime_caustic_photon_path_transport_3d make -C ray_tracing test`
+is the focused PPM-22 continuation proof. The PPM-22.1 fixture traces a seeded
+photon between reflective surfaces for three shared-TLAS hits, resolves material
+state and records a distinct sample stream at every depth, applies geometric-
+normal ray offsets, preserves cumulative throughput/PDF, reproduces the same
+path on replay, and terminates through the explicit max-depth ledger. PPM-22.2
+adds distinct-object mirror-to-mirror and glass-to-mirror fixtures that prove
+ordered object
+and material resolution, reflective/refractive direction, dielectric event
+counts, cumulative branch PDF, and throughput across object boundaries.
+PPM-22.3 adds an outward-normal closed glass
+slab with an internally launched above-critical-angle path and proves four
+same-object TIR continuations, alternating reflected directions, unit branch
+PDFs, preserved throughput, no false self-hit, and max-depth termination.
+PPM-22.4 traces transparent object 51 into diffuse receiver object 52, preserves
+the incoming receiver flux and pre-event path PDF, and transactionally stores
+one receiver record plus both unique traversed beam segments. The same fixture
+proves per-path/batch accounting and zero map mutation for insufficient beam
+capacity, invalid traces, emissive terminal-before-storage paths, and
+transparent-only paths.
+
 `TEST_RUNNER_GROUP=runtime_caustic_photon_map_3d make -C ray_tracing test`
 is the focused PPM-2 surface photon-map proof. It covers map allocation,
 explicit surface-hit storage/query, PDF-normalized query flux, diagnostics,
