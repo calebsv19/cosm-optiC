@@ -393,15 +393,45 @@ static int test_menu_layout_builds_non_overlapping_primary_zones(void) {
     assert_true("menu_layout_center_above_footer",
                 screen.centerBatchRect.y + screen.centerBatchRect.h <= screen.bottomActionRowRect.y);
     assert_true("menu_layout_resume_panel_has_width", screen.centerResumeRect.w >= 300);
-    assert_true("menu_layout_batch_above_resume",
-                screen.centerBatchRect.y + screen.centerBatchRect.h < screen.centerResumeRect.y);
+    assert_true("menu_layout_workspace_modules_share_content_rect",
+                memcmp(&screen.centerBatchRect,
+                       &screen.centerResumeRect,
+                       sizeof(SDL_Rect)) == 0 &&
+                memcmp(&screen.centerControlsRect,
+                       &screen.centerBatchRect,
+                       sizeof(SDL_Rect)) == 0);
     assert_true("menu_layout_resume_above_footer",
                 screen.centerResumeRect.y + screen.centerResumeRect.h <= screen.bottomActionRowRect.y);
     assert_true("menu_layout_footer_starts_after_left_panel",
                 screen.bottomActionRowRect.x > screen.leftPanelRect.x + screen.leftPanelRect.w);
-    assert_true("menu_layout_left_panel_reaches_footer_band",
-                screen.leftPanelRect.y + screen.leftPanelRect.h > screen.bottomActionRowRect.y);
+    assert_true("menu_layout_left_panel_stops_above_global_footer",
+                screen.leftPanelRect.y + screen.leftPanelRect.h <= screen.bottomActionRowRect.y);
     animSettings = saved_anim;
+    return 0;
+}
+
+static int test_menu_workspace_registers_and_switches_nested_modules(void) {
+    MenuWorkspaceHost host;
+    MenuWorkspaceLayout layout;
+    SDL_Rect frame = {400, 30, 420, 700};
+
+    memset(&host, 0, sizeof(host));
+    memset(&layout, 0, sizeof(layout));
+    assert_true("menu_workspace_host_init", menu_workspace_host_init(&host));
+    assert_true("menu_workspace_defaults_to_render",
+                host.active_module == MENU_WORKSPACE_RENDER);
+    assert_true("menu_workspace_selects_output",
+                menu_workspace_host_select(&host, MENU_WORKSPACE_OUTPUT));
+    assert_true("menu_workspace_output_active",
+                host.active_module == MENU_WORKSPACE_OUTPUT);
+    menu_workspace_build_layout(frame, &layout);
+    assert_true("menu_workspace_content_below_tabs",
+                layout.content_rect.y > layout.tab_rects[0].y + layout.tab_rects[0].h);
+    assert_true("menu_workspace_tab_hit",
+                menu_workspace_tab_at_point(&layout,
+                                            layout.tab_rects[2].x + 2,
+                                            layout.tab_rects[2].y + 2) ==
+                    (int)MENU_WORKSPACE_RUN);
     return 0;
 }
 
@@ -437,10 +467,10 @@ static int test_menu_layout_keeps_manifest_list_inside_left_panel(void) {
                 test_rect_right(&screen.manifestReserveRect) <= test_rect_right(&screen.leftPanelRect));
     assert_true("menu_layout_manifest_list_inside_left_panel_bottom",
                 test_rect_bottom(&screen.manifestReserveRect) <= test_rect_bottom(&screen.leftPanelRect));
-    assert_true("menu_layout_batch_y_unchanged_when_manifest_opens",
-                screen.centerBatchRect.y == screen.centerControlsRect.y + screen.centerControlsRect.h + 18);
-    assert_true("menu_layout_batch_above_resume",
-                screen.centerBatchRect.y + screen.centerBatchRect.h < screen.centerResumeRect.y);
+    assert_true("menu_layout_workspace_unchanged_when_manifest_opens",
+                memcmp(&screen.centerBatchRect,
+                       &screen.centerControlsRect,
+                       sizeof(SDL_Rect)) == 0);
     animSettings = saved_anim;
     return 0;
 }
@@ -1587,6 +1617,7 @@ int run_test_ui_menu_contract_tests(void) {
     test_object_editor_motion_overlay_reports_selected_path_readback();
     test_menu_scene_project_summary_keeps_loose_runtime_scene_separate();
     test_menu_layout_builds_non_overlapping_primary_zones();
+    test_menu_workspace_registers_and_switches_nested_modules();
     test_menu_layout_keeps_manifest_list_inside_left_panel();
     test_menu_button_layout_respects_owned_screen_zones();
     test_menu_button_layout_compacts_scene_mode_controls_in_3d();

@@ -334,6 +334,18 @@ void menu_input_handle_key(SDL_Event* event,
 
 void menu_input_handle_mouse_motion(SDL_Event* event, MenuRuntimeState* state) {
     if (!event || !state) return;
+    if (ray_tracing_menu_pane_host_splitter_drag_active(&state->menuPaneHost)) {
+        (void)ray_tracing_menu_pane_host_update_splitter_drag(&state->menuPaneHost,
+                                                              (float)event->motion.x,
+                                                              (float)event->motion.y);
+        return;
+    }
+    if (!state->draggingSlider && !state->manifestScrollbarDragging &&
+        !state->volumeScrollbarDragging) {
+        ray_tracing_menu_pane_host_update_pointer(&state->menuPaneHost,
+                                                  (float)event->motion.x,
+                                                  (float)event->motion.y);
+    }
     if (state->manifestScrollbarDragging && scene_manifest_list_visible(state) && state->manifestScrollbarVisible) {
         float trackRange = state->manifestTrackHeight - state->manifestThumbHeight;
         if (trackRange < 1.0f) trackRange = 1.0f;
@@ -418,20 +430,37 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         SDL_GetWindowSize(render_ctx->window, &menu_width, &menu_height);
     }
     menu_layout_build_base(*font, state, menu_width, menu_height, &screenLayout);
+    if (ray_tracing_menu_pane_host_begin_splitter_drag(&state->menuPaneHost,
+                                                       (float)event->button.x,
+                                                       (float)event->button.y)) {
+        state->draggingSlider = false;
+        state->selectedSlider = NULL;
+        return;
+    }
     menu_render_build_button_layout(*font, state, &screenLayout, &buttons);
     menu_layout_finalize_with_buttons(&screenLayout, &buttons, state);
     menu_render_build_slider_layout(*font, state, &screenLayout, &layout);
     menu_batch_panel_build_layout(*font, state, &screenLayout, &batchLayout);
     menu_resume_panel_build_layout(*font, state, &screenLayout, &resumeLayout);
-    if (handle_slider_click(event, &buttons.rendererControlSliders, state)) {
+    int x = event->button.x;
+    int y = event->button.y;
+    {
+        int workspace_tab = menu_workspace_tab_at_point(&screenLayout.workspace, x, y);
+        if (workspace_tab >= 0) {
+            (void)menu_workspace_host_select(&state->menuWorkspaceHost,
+                                             (MenuWorkspaceModule)workspace_tab);
+            state->draggingSlider = false;
+            state->selectedSlider = NULL;
+            return;
+        }
+    }
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER &&
+        handle_slider_click(event, &buttons.rendererControlSliders, state)) {
         return;
     }
     if (handle_slider_click(event, &layout, state)) {
         return;
     }
-
-    int x = event->button.x;
-    int y = event->button.y;
 
     if (scene_manifest_list_visible(state)) {
         if (point_in_rect(&state->manifestPanelRect, x, y)) {
@@ -519,13 +548,15 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         }
     }
 
-    if (point_in_rect(&buttons.rendererLightingTabRect, x, y)) {
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER &&
+        point_in_rect(&buttons.rendererLightingTabRect, x, y)) {
         state->rendererControlsTab = MENU_RENDERER_CONTROLS_LIGHTING;
         state->draggingSlider = false;
         state->selectedSlider = NULL;
         return;
     }
-    if (point_in_rect(&buttons.rendererPerformanceTabRect, x, y)) {
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER &&
+        point_in_rect(&buttons.rendererPerformanceTabRect, x, y)) {
         state->rendererControlsTab = MENU_RENDERER_CONTROLS_PERFORMANCE;
         state->draggingSlider = false;
         state->selectedSlider = NULL;
@@ -579,11 +610,13 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         return;
     }
 
-    if (menu_batch_panel_handle_click(event, renderer, *font, state, &batchLayout)) {
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_OUTPUT &&
+        menu_batch_panel_handle_click(event, renderer, *font, state, &batchLayout)) {
         return;
     }
 
-    if (menu_resume_panel_handle_click(event, state, &resumeLayout)) {
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RUN &&
+        menu_resume_panel_handle_click(event, state, &resumeLayout)) {
         return;
     }
 

@@ -201,6 +201,10 @@ $(BUILD_DIR)/core_pane/%.o: $(CORE_PANE_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
+$(BUILD_DIR)/core_pane_module/%.o: $(CORE_PANE_MODULE_DIR)/src/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
 $(BUILD_DIR)/core_theme/%.o: $(CORE_THEME_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@

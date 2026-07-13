@@ -180,9 +180,41 @@ void menu_render_frame(SDL_Renderer* renderer,
     }
 
     menu_panel_chrome_draw(renderer, font, &screenLayout.leftPanelRect, "Scene + Mode", true);
-    menu_panel_chrome_draw(renderer, font, &screenLayout.centerControlsRect, "Renderer Controls", false);
+    menu_panel_chrome_draw(renderer, font, &screenLayout.workspace.frame_rect, NULL, false);
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER) {
+        menu_panel_chrome_draw(renderer, font, &screenLayout.centerControlsRect, "Render Recipe", false);
+    }
     menu_panel_chrome_draw(renderer, font, &screenLayout.routeStackRect, NULL, false);
     menu_panel_chrome_draw(renderer, font, &screenLayout.bottomActionRowRect, NULL, false);
+    {
+        RayTracingMenuPaneSplitterVisual splitters[RAY_TRACING_MENU_PANE_SPLITTER_CAP];
+        uint32_t splitter_count = ray_tracing_menu_pane_host_splitter_visuals(
+            &state->menuPaneHost,
+            splitters,
+            RAY_TRACING_MENU_PANE_SPLITTER_CAP);
+        uint32_t splitter_index;
+        for (splitter_index = 0u; splitter_index < splitter_count; ++splitter_index) {
+            SDL_Color splitter_color = has_shared_palette
+                                           ? palette.panel_border
+                                           : (SDL_Color){72, 76, 86, 255};
+            if (splitters[splitter_index].hovered) {
+                splitter_color = has_shared_palette
+                                     ? palette.accent_primary
+                                     : (SDL_Color){125, 155, 215, 255};
+            }
+            if (splitters[splitter_index].active) {
+                splitter_color = has_shared_palette
+                                     ? palette.accent_primary
+                                     : (SDL_Color){170, 205, 255, 255};
+            }
+            SDL_SetRenderDrawColor(renderer,
+                                   splitter_color.r,
+                                   splitter_color.g,
+                                   splitter_color.b,
+                                   splitter_color.a);
+            SDL_RenderFillRect(renderer, &splitters[splitter_index].rect);
+        }
+    }
 
     menu_render_draw_button_rect(renderer, font, &buttons.interactiveRect, "Interactive Mode", animSettings.interactiveMode);
     menu_render_draw_button_rect(renderer,
@@ -299,17 +331,34 @@ void menu_render_frame(SDL_Renderer* renderer,
         state->volumeThumbHeight = 0.0f;
         state->volumeTrackHeight = 0.0f;
     }
-    menu_render_draw_button_rect(renderer,
-                                 font,
-                                 &buttons.rendererLightingTabRect,
-                                 "Lighting",
-                                 state->rendererControlsTab == MENU_RENDERER_CONTROLS_LIGHTING);
-    menu_render_draw_button_rect(renderer,
-                                 font,
-                                 &buttons.rendererPerformanceTabRect,
-                                 "Performance",
-                                 state->rendererControlsTab == MENU_RENDERER_CONTROLS_PERFORMANCE);
-    if (state->rendererControlsTab == MENU_RENDERER_CONTROLS_PERFORMANCE) {
+    {
+        int module_index;
+        for (module_index = 0;
+             module_index < MENU_WORKSPACE_MODULE_COUNT;
+             ++module_index) {
+            menu_render_draw_button_rect(
+                renderer,
+                font,
+                &screenLayout.workspace.tab_rects[module_index],
+                menu_workspace_module_label((MenuWorkspaceModule)module_index),
+                state->menuWorkspaceHost.active_module ==
+                    (MenuWorkspaceModule)module_index);
+        }
+    }
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER) {
+        menu_render_draw_button_rect(renderer,
+                                     font,
+                                     &buttons.rendererLightingTabRect,
+                                     "Lighting",
+                                     state->rendererControlsTab == MENU_RENDERER_CONTROLS_LIGHTING);
+        menu_render_draw_button_rect(renderer,
+                                     font,
+                                     &buttons.rendererPerformanceTabRect,
+                                     "Performance",
+                                     state->rendererControlsTab == MENU_RENDERER_CONTROLS_PERFORMANCE);
+    }
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER &&
+        state->rendererControlsTab == MENU_RENDERER_CONTROLS_PERFORMANCE) {
         const char* tileButtonLabel =
             animSettings.useTiledRenderer ? "Tile Renderer: ON" : "Tile Renderer: OFF";
         const char* previewLabel =
@@ -337,7 +386,7 @@ void menu_render_frame(SDL_Renderer* renderer,
                                      &buttons.upscaleModeRect,
                                      menu_upscale_mode_button_label(),
                                      animSettings.upscaleMode3D != RUNTIME_3D_UPSCALE_MODE_OFF);
-    } else {
+    } else if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER) {
         menu_render_draw_button_rect(renderer,
                                      font,
                                      &buttons.topFillRect,
@@ -361,15 +410,20 @@ void menu_render_frame(SDL_Renderer* renderer,
                                          : "BG: Manual",
                                      !animSettings.environmentBackgroundBrightnessAuto);
     }
-    menu_render_draw_slider_items(renderer,
-                                  font,
-                                  state,
-                                  &buttons.rendererControlSliders,
-                                  NULL);
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER) {
+        menu_render_draw_slider_items(renderer,
+                                      font,
+                                      state,
+                                      &buttons.rendererControlSliders,
+                                      NULL);
+    }
 
     menu_render_draw_sliders(renderer, font, state, &sliderLayout);
-    menu_batch_panel_render(renderer, font, state, &batchPanel);
-    menu_resume_panel_render(renderer, font, state, &resumePanel);
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_OUTPUT) {
+        menu_batch_panel_render(renderer, font, state, &batchPanel);
+    } else if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RUN) {
+        menu_resume_panel_render(renderer, font, state, &resumePanel);
+    }
 
     menu_render_draw_button_rect(renderer, font, &buttons.sceneEditorRect, "Scene Editor", false);
     int currentEditorMode = EditorModeRouter_ClampEditorMode(animSettings.editorMode,

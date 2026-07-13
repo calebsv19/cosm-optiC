@@ -8,6 +8,8 @@
 #include <stddef.h>
 
 #include "app/render_export_batch.h"
+#include "ui/menu_pane_host.h"
+#include "ui/menu_workspace.h"
 
 #define SDL_MENU_MAX_MANIFEST_OPTIONS 128
 #define SDL_MENU_MANIFEST_ITEM_HEIGHT 26
@@ -132,6 +134,8 @@ typedef struct {
     SDL_Rect sliderPanelRect;
     float sliderScroll;
     float sliderMaxScroll;
+    RayTracingMenuPaneHost menuPaneHost;
+    MenuWorkspaceHost menuWorkspaceHost;
 } MenuRuntimeState;
 
 void menu_state_init(MenuRuntimeState* state);

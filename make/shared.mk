@@ -21,6 +21,7 @@ CORE_UNITS_DIR := $(SHARED_ROOT)/core/core_units
 CORE_TRACE_DIR := $(SHARED_ROOT)/core/core_trace
 CORE_SPACE_DIR := $(SHARED_ROOT)/core/core_space
 CORE_PANE_DIR := $(SHARED_ROOT)/core/core_pane
+CORE_PANE_MODULE_DIR := $(SHARED_ROOT)/core/core_pane_module
 CORE_THEME_DIR := $(SHARED_ROOT)/core/core_theme
 CORE_FONT_DIR := $(SHARED_ROOT)/core/core_font
 CORE_HEADLESS_JOB_DIR := $(SHARED_ROOT)/core/core_headless_job

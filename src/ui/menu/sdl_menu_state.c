@@ -792,6 +792,7 @@ void menu_state_init(MenuRuntimeState* state) {
     state->manifestDropdownOpen = false;
     state->volumeDropdownOpen = false;
     state->rendererControlsTab = MENU_RENDERER_CONTROLS_LIGHTING;
+    (void)menu_workspace_host_init(&state->menuWorkspaceHost);
     menu_state_sync_load_scene_dropdown_flags(state);
     menu_state_sync_from_anim(state);
     menu_state_sync_source_and_library(state);
@@ -901,6 +902,12 @@ void menu_state_reset_defaults(MenuRuntimeState* state) {
     if (state) {
         state->sliderScroll = 0.0f;
         state->rendererControlsTab = MENU_RENDERER_CONTROLS_LIGHTING;
+        if (!state->menuWorkspaceHost.initialized) {
+            (void)menu_workspace_host_init(&state->menuWorkspaceHost);
+        } else {
+            (void)menu_workspace_host_select(&state->menuWorkspaceHost,
+                                             MENU_WORKSPACE_RENDER);
+        }
     }
     double diag = hypot(sceneSettings.windowWidth, sceneSettings.windowHeight);
     animSettings.forwardDecay = (diag > 0.0) ? diag : 2000.0;

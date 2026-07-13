@@ -883,6 +883,22 @@ void menu_render_build_button_layout(TTF_Font* font,
         }
     }
 
+    if (state &&
+        state->menuWorkspaceHost.active_module != MENU_WORKSPACE_RENDER) {
+        layout.rendererLightingTabRect = (SDL_Rect){0, 0, 0, 0};
+        layout.rendererPerformanceTabRect = (SDL_Rect){0, 0, 0, 0};
+        layout.falloffRect = (SDL_Rect){0, 0, 0, 0};
+        layout.tileRect = (SDL_Rect){0, 0, 0, 0};
+        layout.tilePreviewRect = (SDL_Rect){0, 0, 0, 0};
+        layout.denoiseRect = (SDL_Rect){0, 0, 0, 0};
+        layout.topFillRect = (SDL_Rect){0, 0, 0, 0};
+        layout.environmentPresetRect = (SDL_Rect){0, 0, 0, 0};
+        layout.environmentBackgroundModeRect = (SDL_Rect){0, 0, 0, 0};
+        layout.upscaleModeRect = (SDL_Rect){0, 0, 0, 0};
+        layout.lightHeightRect = (SDL_Rect){0, 0, 0, 0};
+        layout.rendererControlSliders.count = 0u;
+    }
+
     if (out_layout) {
         *out_layout = layout;
     }
