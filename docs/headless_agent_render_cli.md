@@ -78,6 +78,38 @@ Optional submit policy flags:
 
 ## Portable Worker Queue Fixture Export
 
+Before packaging a project, create or update its RayTracing-owned render
+intent without opening the menu:
+
+```bash
+make -C ray_tracing scene-project-render-request-tool
+ray_tracing/build/toolchains/clang/arm64/tools/cli/scene_project_render_request_tool \
+  --runtime-scene /path/to/project/scene_runtime.json \
+  --start 0 \
+  --count 3 \
+  --stride 1
+```
+
+The tool uses the same resolver and JSON-preserving writer as the desktop
+menu. It writes only a project-owned request, preserves unknown request fields,
+and rejects unsafe or external write targets.
+
+Validate the complete LineDrawing -> PhysicsSim -> RayTracing project contract
+before export:
+
+```bash
+python3 ray_tracing/tools/validate_scene_project.py \
+  --project-root /path/to/project \
+  --report /path/to/project/ray_tracing/project_validation.json
+```
+
+The validator checks active pointers, project containment, scene identity,
+LineDrawing mesh attachments, declared hashes, PhysicsSim retained-frame
+availability, and RayTracing frame-window consistency. Its stable content hash
+is independent of the project root and is copied into scene-plus-physics-cache
+package manifests. The separate `--runtime-scene` mode retains loose explicit
+path compatibility without claiming that those files form a portable project.
+
 RayTracing can now create a local, queue-root-style fixture package for the
 Desktop VPS worker queue without opening the UI or submitting remotely:
 
@@ -115,6 +147,9 @@ PhysicsSim frames using `simulation_frames.start`, `count`, and `stride`, and
 copies only those VF3D/pack and water-surface frames. It also includes the
 project, authoring, runtime, optional object manifest, referenced mesh assets,
 active cache/scene-bundle/water manifests, package hashes, and source lineage.
+The package manifest also records `source_project_content_sha256` and its file
+count, allowing a relocated copy to be matched to the validated source content
+without comparing absolute lineage paths.
 
 The portable bundle and live worker request keep canonical project attachment
 paths under `assets/vf3d/...` and `assets/physics/...`. Portable-only project
@@ -127,11 +162,10 @@ When a compatible package exists on only one worker, `--force-worker-id <id>`
 can hard-target that exported job. The option changes only the generated job's
 submit arguments; it does not alter scheduler policy.
 
-The first approved live proof reached Linux PC and rendered the scene, VF3D
-volume, water mesh, and two frames successfully. The VPS did not publish that
-run because its completed-stage result upload returned HTTP 400. Treat
-completion-result upload acceptance as a separate worker-control boundary; do
-not reconstruct package paths or rerender solely to reproduce that failure.
+The first approved live proof reached Linux PC and rendered successfully but
+exposed a completed-result schema mismatch. S5-B corrected the bounded inline
+result contract; fresh job `r2bscene05` subsequently imported four RayTracing
+outputs on the VPS and reached terminal `batch_ready` publication.
 
 The same helper can export explicit runtime scene and render-request paths:
 
@@ -176,6 +210,29 @@ Existing request fields are preserved during writeback. Unsafe project pointer
 traversal is rejected; explicit external request paths remain read-only
 compatibility inputs. The R2-B CLI snapshot mode consumes this state without
 changing the menu's scene-only behavior.
+
+After terminal worker evidence has been fetched through an approved handoff,
+retain its lineage in the originating project without downloading large frame
+or video outputs implicitly:
+
+```bash
+python3 ray_tracing/tools/scene_project_worker_receipt.py import \
+  --project-root /path/to/portable_scene_project \
+  --export-manifest /path/to/export/manifest.json \
+  --completion-evidence /path/to/completion_evidence.json \
+  --render-run-id <render-run-id> \
+  --render-summary /path/to/render_summary.json
+
+python3 ray_tracing/tools/scene_project_worker_receipt.py validate \
+  --project-root /path/to/portable_scene_project \
+  --render-run-id <render-run-id>
+```
+
+Import requires terminal `completed` evidence whose job and source-project
+identity match the worker export. It writes only beneath
+`ray_tracing/runs/<render-run-id>/`, is idempotent for identical evidence, and
+rejects conflicting or tampered retained files. It does not mutate the
+LineDrawing authoring document or PhysicsSim cache manifests.
 
 ## Publication Lanes
 

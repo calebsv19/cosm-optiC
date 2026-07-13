@@ -54,6 +54,13 @@ $(RAY_TRACING_JOB_RUNNER_BIN): $(RAY_TRACING_JOB_RUNNER_OBJ) $(RAY_TRACING_JOB_R
 	@mkdir -p $(dir $@)
 	$(CC) $(RAY_TRACING_JOB_RUNNER_OBJ) $(RAY_TRACING_JOB_RUNNER_DEPS) -o $@ $(LDFLAGS)
 
+scene-project-render-request-tool: $(RAY_TRACING_SCENE_PROJECT_REQUEST_TOOL_BIN)
+	@echo "ray_tracing scene-project render-request CLI ready: $(RAY_TRACING_SCENE_PROJECT_REQUEST_TOOL_BIN)"
+
+$(RAY_TRACING_SCENE_PROJECT_REQUEST_TOOL_BIN): $(RAY_TRACING_SCENE_PROJECT_REQUEST_TOOL_OBJ) $(BUILD_DIR)/app/scene_project_render_request.o
+	@mkdir -p $(dir $@)
+	$(CC) $(RAY_TRACING_SCENE_PROJECT_REQUEST_TOOL_OBJ) $(BUILD_DIR)/app/scene_project_render_request.o -o $@ $(LDFLAGS)
+
 ray-tracing-material-preview-headless: $(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_BIN)
 	@echo "ray_tracing material preview CLI ready: $(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_BIN)"
 

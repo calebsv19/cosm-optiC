@@ -1,6 +1,6 @@
 # optiC Current Truth
 
-Last updated: 2026-07-12
+Last updated: 2026-07-13
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -610,6 +610,12 @@ Last updated: 2026-07-12
   - project render-request discovery and JSON-preserving writeback live in
     `src/app/scene_project_render_request.c`; unsafe project-relative traversal
     is rejected and explicit external requests are never written
+  - the same writer now has a focused headless entrypoint,
+    `scene_project_render_request_tool`, for deterministic project-owned
+    start/count/stride persistence without opening the desktop menu
+  - `tools/validate_scene_project.py` runs the shared project envelope plus
+    LineDrawing, PhysicsSim, and RayTracing adapter checks; its content identity
+    is relocation-stable and is embedded in project-backed worker manifests
   - the existing menu action still writes the original scene-only queue item;
     the headless export CLI also provides an explicit
     `scene-plus-physics-cache` mode for project-backed scenes
@@ -623,12 +629,20 @@ Last updated: 2026-07-12
   - the renderer projection stays within the live preview profile's 16-file
     limit by excluding portable-only project metadata from inline payload files
     without removing it from the portable snapshot
-  - the approved S5 item was accepted, claimed by Linux PC, and rendered two
-    frames with scene, VF3D volume, and water attachments intact; bounded
-    readback reports diagnostics `ok`
-  - VPS terminal status is still failed with publication `none` because upload
-    of the completed 94,324-byte stage result returned HTTP 400 after local
-    rendering; completion-result acceptance is the next boundary
+  - the original S5 item rendered successfully but exposed a completed-result
+    schema mismatch; S5-B corrected the bounded inline result contract
+  - fresh job `r2bscene05` then reached terminal completion, imported four
+    RayTracing outputs on the VPS, and reached Visualizer `batch_ready`
+  - H1 now proves a production-generated LineDrawing mesh project can receive a
+    three-frame PhysicsSim cache and RayTracing request, relocate unchanged,
+    retain the same 16-file content hash, and pass local package preparation
+  - `tools/scene_project_worker_receipt.py` now imports terminal worker evidence
+    into `ray_tracing/runs/<render-run-id>/` as retained render intent, optional
+    render summary, and a hash-locked `ray_tracing_worker_receipt_v1` lineage
+    record; offline validation rejects changed files and path escape attempts
+  - receipt import is RayTracing-owned and does not rewrite LineDrawing
+    `scene_authoring.json` or PhysicsSim active-cache state; frame/video fetch
+    remains a separate explicit operation
   - main-menu frame-resume state now lives in the switchable compact
     `Frame Resume` center module; it owns resume-existing, start-frame editing,
     and next-existing readback, while compact `Preview` and `Start` actions stay

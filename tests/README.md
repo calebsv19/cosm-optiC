@@ -61,7 +61,10 @@ make -C ray_tracing test-scene-editor-pane-host-contract
 Scene-project worker snapshot lane:
 
 ```bash
-python3 -m unittest ray_tracing/tests/test_scene_project_worker_export.py
+python3 -m unittest \
+  ray_tracing/tests/test_scene_project_contract.py \
+  ray_tracing/tests/test_scene_project_worker_export.py \
+  ray_tracing/tests/test_scene_project_worker_receipt.py
 python3 ray_tracing/tools/export_worker_queue_fixture.py \
   --fixture \
   --mode scene-plus-physics-cache \
@@ -70,11 +73,18 @@ python3 ray_tracing/tools/export_worker_queue_fixture.py \
   --force
 ```
 
-The Python fixture proves selected-frame VF3D/pack and water attachment
+The contract fixture proves three-owner validation, LineDrawing top-level and
+nested active-pointer compatibility, relocation-stable content identity,
+declared-hash checks, forward unknown fields, unsafe-path rejection, legacy
+explicit inputs, CLI report output, and relocated worker render preparation.
+The worker-export fixture proves selected-frame VF3D/pack and water attachment
 copying, canonical worker attachment paths, source lineage, unsafe-path
 rejection, live inline-file-limit compliance, optional job-scoped worker
 targeting, and missing-frame failure before partial output creation. The
 existing `scene-only` fixture remains a separate regression gate.
+The worker-receipt fixture proves terminal evidence/job matching, retained-run
+idempotency, offline hash validation, path containment, and preservation of
+LineDrawing authoring plus PhysicsSim cache ownership.
 
 Headless request/render/material lanes:
 

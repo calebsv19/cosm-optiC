@@ -14,6 +14,8 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from scene_project_contract import SceneProjectValidationError, validate_project
+
 
 SCENE_PROJECT_SCHEMA = "codework_scene_project_v1"
 RENDER_REQUEST_SCHEMA = "ray_tracing_agent_render_request_v1"
@@ -485,6 +487,10 @@ def export_scene_plus_physics_cache(
 ) -> dict[str, Any]:
     project_root = project_root.resolve()
     output_root = output_root.resolve()
+    try:
+        project_validation = validate_project(project_root)
+    except SceneProjectValidationError as exc:
+        raise SceneProjectExportError(str(exc)) from exc
     if not project_root.is_dir():
         raise SceneProjectExportError(f"scene project root is not a directory: {project_root}")
     project_manifest_path = project_root / "scene_project.json"
@@ -765,6 +771,8 @@ def export_scene_plus_physics_cache(
         "source_object_manifest": str(object_manifest_path) if object_manifest_path else None,
         "source_render_request": str(render_request_path),
         "source_cache_manifest": str(cache_manifest_path),
+        "source_project_content_sha256": project_validation["content"]["sha256"],
+        "source_project_content_file_count": project_validation["content"]["file_count"],
         "mesh_asset_ids": asset_ids,
         "selected_frame_indices": selected_indices,
         "files": manifest_files,
