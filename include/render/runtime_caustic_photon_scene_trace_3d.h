@@ -27,6 +27,7 @@ typedef enum {
     RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_ABSORBED,
     RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_DIRECTION_INVALID,
     RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_ROULETTE_TERMINATED,
+    RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_MEDIUM_TRANSITION_REJECTED,
     RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_TRACE_ERROR
 } RuntimeCausticPhotonSceneTermination3D;
 
@@ -54,6 +55,13 @@ typedef struct {
     Vec3 pathStart;
     double pathPdfBefore;
     double pathPdfAfter;
+    RuntimeCausticPhotonMediumEntry3D segmentMedium;
+    double segmentDistance;
+    Vec3 segmentTransmittance;
+    Vec3 throughputBeforeAttenuation;
+    Vec3 throughputAfterAttenuation;
+    Vec3 segmentAbsorbedFlux;
+    bool segmentAttenuationApplied;
     HitInfo3D hit;
     RuntimeMaterialPayload3D material;
     RuntimeCausticPhotonDielectricEvent3D dielectric;
@@ -76,6 +84,13 @@ typedef struct {
     uint32_t hitEventCount;
     uint32_t mediumTransitionCount;
     uint32_t mediumTransitionFailureCount;
+    uint32_t attenuatedSegmentCount;
+    double attenuatedSegmentDistance;
+    Vec3 mediumAbsorbedFlux;
+    bool terminatedByMediumFailurePolicy;
+    uint32_t mediumFailureDepth;
+    RuntimeCausticPhotonMediumFailurePolicy3D mediumFailurePolicy;
+    RuntimeCausticPhotonMediumTransitionReason3D mediumFailureReason;
     bool usedSharedSceneAccelerationRoute;
     RuntimeCausticPhotonSceneTermination3D termination;
     RuntimeRay3DRouteStats routeStats;

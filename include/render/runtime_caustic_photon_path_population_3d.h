@@ -45,6 +45,7 @@ typedef struct {
     Vec3 activeFlux;
     Vec3 storedSurfaceFlux;
     Vec3 storedBeamFlux;
+    Vec3 mediumAbsorbedFlux;
     Vec3 escapedFlux;
     Vec3 absorbedFlux;
     Vec3 rouletteTerminatedFlux;
@@ -61,6 +62,7 @@ typedef struct {
     Vec3 activeFlux;
     Vec3 storedSurfaceFlux;
     Vec3 storedBeamFlux;
+    Vec3 mediumAbsorbedFlux;
     Vec3 escapedFlux;
     Vec3 absorbedFlux;
     Vec3 rouletteTerminatedFlux;

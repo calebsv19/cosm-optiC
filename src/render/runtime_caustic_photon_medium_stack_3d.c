@@ -121,6 +121,30 @@ bool RuntimeCausticPhotonMediumEntry3D_FromMaterial(
     return true;
 }
 
+bool RuntimeCausticPhotonMediumEntry3D_SegmentTransmittance(
+    const RuntimeCausticPhotonMediumEntry3D* entry,
+    double distance,
+    Vec3* out_transmittance) {
+    const double minimum_transmittance = 1.0e-12;
+    double exponent;
+    if (out_transmittance) *out_transmittance = vec3(0.0, 0.0, 0.0);
+    if (!photon_medium_entry_valid(entry) || !out_transmittance ||
+        !isfinite(distance) || distance < 0.0) {
+        return false;
+    }
+    *out_transmittance = vec3(1.0, 1.0, 1.0);
+    if (entry->isAir || distance <= 1.0e-12 ||
+        entry->absorptionDistance <= 1.0e-12) {
+        return true;
+    }
+    exponent = distance / entry->absorptionDistance;
+    *out_transmittance = vec3(
+        pow(fmax(entry->absorptionColor.x, minimum_transmittance), exponent),
+        pow(fmax(entry->absorptionColor.y, minimum_transmittance), exponent),
+        pow(fmax(entry->absorptionColor.z, minimum_transmittance), exponent));
+    return true;
+}
+
 const RuntimeCausticPhotonMediumEntry3D* RuntimeCausticPhotonMediumStack3D_Top(
     const RuntimeCausticPhotonMediumStack3D* stack) {
     if (!stack || stack->count == 0u ||
@@ -299,5 +323,14 @@ const char* RuntimeCausticPhotonMediumTransitionReason3D_Label(
         case RUNTIME_CAUSTIC_PHOTON_MEDIUM_TRANSITION_NONE:
         default:
             return "none";
+    }
+}
+
+const char* RuntimeCausticPhotonMediumFailurePolicy3D_Label(
+    RuntimeCausticPhotonMediumFailurePolicy3D policy) {
+    switch (policy) {
+        case RUNTIME_CAUSTIC_PHOTON_MEDIUM_FAILURE_FAIL_CLOSED:
+        default:
+            return "fail_closed";
     }
 }
