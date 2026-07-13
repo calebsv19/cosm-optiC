@@ -16,6 +16,13 @@ $(error Unsupported Linux worker package host architecture: $(LINUX_WORKER_HOST_
 endif
 endif
 LINUX_WORKER_SLUG := ray_tracing_headless_worker
+ifeq ($(LINUX_WORKER_PLATFORM),linux-x86_64)
+LINUX_WORKER_PLATFORM_CAPABILITY := platform-linux-x86_64-v1
+else ifeq ($(LINUX_WORKER_PLATFORM),linux-aarch64)
+LINUX_WORKER_PLATFORM_CAPABILITY := platform-linux-aarch64-v1
+else
+$(error Unsupported Linux worker package platform: $(LINUX_WORKER_PLATFORM))
+endif
 LINUX_WORKER_BASENAME := $(RELEASE_PROGRAM_KEY)-$(RELEASE_VERSION)-$(LINUX_WORKER_PLATFORM)-worker
 LINUX_WORKER_DIR := $(RELEASE_DIR)/$(LINUX_WORKER_BASENAME)
 LINUX_WORKER_BIN_DIR := $(LINUX_WORKER_DIR)/bin
@@ -64,6 +71,7 @@ package-linux-worker: ray-tracing-render-headless ray-tracing-job-runner
 	@printf '  "platform": "%s",\n' "$(LINUX_WORKER_PLATFORM)" >> "$(LINUX_WORKER_MANIFEST_JSON)"
 	@printf '  "program": "%s",\n' "$(RELEASE_PROGRAM_KEY)" >> "$(LINUX_WORKER_MANIFEST_JSON)"
 	@printf '  "job_types": ["trio_headless_stage"],\n' >> "$(LINUX_WORKER_MANIFEST_JSON)"
+	@printf '  "capabilities": ["trio-headless-v1", "scene-project-portable-v1", "ray-tracing-project-render-v1", "%s"],\n' "$(LINUX_WORKER_PLATFORM_CAPABILITY)" >> "$(LINUX_WORKER_MANIFEST_JSON)"
 	@printf '  "entrypoint": "bin/run_worker.sh",\n' >> "$(LINUX_WORKER_MANIFEST_JSON)"
 	@printf '  "default_args": [],\n' >> "$(LINUX_WORKER_MANIFEST_JSON)"
 	@printf '  "default_resource_budget": {\n' >> "$(LINUX_WORKER_MANIFEST_JSON)"
@@ -82,6 +90,7 @@ package-linux-worker: ray-tracing-render-headless ray-tracing-job-runner
 	@printf '    "headless_cli": "bin/ray_tracing_render_headless",\n' >> "$(LINUX_WORKER_MANIFEST)"
 	@printf '    "job_runner": "bin/ray_tracing_job_runner"\n' >> "$(LINUX_WORKER_MANIFEST)"
 	@printf '  },\n' >> "$(LINUX_WORKER_MANIFEST)"
+	@printf '  "capabilities": ["trio-headless-v1", "scene-project-portable-v1", "ray-tracing-project-render-v1", "%s"],\n' "$(LINUX_WORKER_PLATFORM_CAPABILITY)" >> "$(LINUX_WORKER_MANIFEST)"
 	@printf '  "runtime_dependencies": ["glibc", "libgcc_s", "libm", "ffmpeg"],\n' >> "$(LINUX_WORKER_MANIFEST)"
 	@printf '  "default_resource_budget": {\n' >> "$(LINUX_WORKER_MANIFEST)"
 	@printf '    "cpu_percent": 50\n' >> "$(LINUX_WORKER_MANIFEST)"
@@ -104,5 +113,5 @@ package-linux-worker-self-test: package-linux-worker
 	@test -f "$(LINUX_WORKER_DOCS_DIR)/headless_agent_render_cli.md" || (echo "Missing docs/headless_agent_render_cli.md"; exit 1)
 	@test -f "$(LINUX_WORKER_CONFIG_DIR)/scene_config.json" || (echo "Missing config/scene_config.json"; exit 1)
 	@test -f "$(LINUX_WORKER_ARCHIVE)" || (echo "Missing worker archive"; exit 1)
-	@python3 tools/validate_linux_worker_package.py --archive "$(LINUX_WORKER_ARCHIVE)" --package-root "$(LINUX_WORKER_BASENAME)"
+	@python3 tools/validate_linux_worker_package.py --archive "$(LINUX_WORKER_ARCHIVE)" --package-root "$(LINUX_WORKER_BASENAME)" --platform "$(LINUX_WORKER_PLATFORM)"
 	@echo "package-linux-worker-self-test passed."

@@ -2,7 +2,9 @@
 """Validate ray_tracing Linux worker package hygiene."""
 
 import argparse
+import json
 import stat
+import struct
 import sys
 import tarfile
 
@@ -22,40 +24,97 @@ ALLOWED_EXECUTABLE_FILES = {
     "bin/run_worker.sh",
 }
 
+NATIVE_EXECUTABLE_FILES = {
+    "bin/ray_tracing_render_headless",
+    "bin/ray_tracing_job_runner",
+}
+
+ELF_MACHINE_BY_PLATFORM = {
+    "linux-x86_64": 62,
+    "linux-aarch64": 183,
+}
+
 
 def fail(message: str) -> int:
     print(message, file=sys.stderr)
     return 1
 
 
-def validate_archive(path: str, package_root: str) -> int:
+def elf_machine(data: bytes) -> int | None:
+    if len(data) < 20 or data[:4] != b"\x7fELF":
+        return None
+    if data[5] == 1:
+        byte_order = "<"
+    elif data[5] == 2:
+        byte_order = ">"
+    else:
+        return None
+    return int(struct.unpack(f"{byte_order}H", data[18:20])[0])
+
+
+def validate_archive(path: str, package_root: str, platform: str) -> int:
+    expected_machine = ELF_MACHINE_BY_PLATFORM.get(platform)
+    if expected_machine is None:
+        return fail(f"unsupported worker package platform: {platform}")
     with tarfile.open(path, "r:gz") as archive:
         members = archive.getmembers()
+        if not members:
+            return fail("worker archive is empty")
 
-    if not members:
-        return fail("worker archive is empty")
+        by_name = {member.name: member for member in members}
+        for member in members:
+            name = member.name
+            if name.startswith("/") or "/../" in name or name.endswith("/..") or name == "..":
+                return fail(f"unsafe archive member path: {name}")
+            if name != package_root and not name.startswith(package_root + "/"):
+                return fail(f"archive member outside package root: {name}")
+            for forbidden in FORBIDDEN_SUBSTRINGS:
+                if forbidden in name:
+                    return fail(f"forbidden private/generated artifact in worker archive: {name}")
+            if member.isfile() and (member.mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)):
+                rel = name[len(package_root) + 1 :]
+                if rel not in ALLOWED_EXECUTABLE_FILES:
+                    return fail(f"unexpected executable file in worker archive: {name}")
 
-    for member in members:
-        name = member.name
-        if name.startswith("/") or "/../" in name or name.endswith("/..") or name == "..":
-            return fail(f"unsafe archive member path: {name}")
-        if name != package_root and not name.startswith(package_root + "/"):
-            return fail(f"archive member outside package root: {name}")
-        for forbidden in FORBIDDEN_SUBSTRINGS:
-            if forbidden in name:
-                return fail(f"forbidden private/generated artifact in worker archive: {name}")
-        if member.isfile() and (member.mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)):
-            rel = name[len(package_root) + 1 :]
-            if rel not in ALLOWED_EXECUTABLE_FILES:
-                return fail(f"unexpected executable file in worker archive: {name}")
+        for required in ALLOWED_EXECUTABLE_FILES:
+            full_name = f"{package_root}/{required}"
+            member = by_name.get(full_name)
+            if member is None:
+                return fail(f"missing executable worker file: {full_name}")
+            if not (member.mode & stat.S_IXUSR):
+                return fail(f"required worker file is not executable: {full_name}")
 
-    for required in ALLOWED_EXECUTABLE_FILES:
-        full_name = f"{package_root}/{required}"
-        matches = [member for member in members if member.name == full_name]
-        if not matches:
-            return fail(f"missing executable worker file: {full_name}")
-        if not (matches[0].mode & stat.S_IXUSR):
-            return fail(f"required worker file is not executable: {full_name}")
+        for relative in NATIVE_EXECUTABLE_FILES:
+            full_name = f"{package_root}/{relative}"
+            extracted = archive.extractfile(by_name[full_name])
+            data = extracted.read(64) if extracted is not None else b""
+            machine = elf_machine(data)
+            if machine is None:
+                return fail(f"native worker file is not ELF: {full_name}")
+            if machine != expected_machine:
+                return fail(
+                    f"native worker architecture mismatch for {full_name}: "
+                    f"platform {platform} requires ELF machine {expected_machine}, got {machine}"
+                )
+
+        manifest_name = f"{package_root}/manifest.json"
+        manifest_member = by_name.get(manifest_name)
+        if manifest_member is None:
+            return fail(f"missing worker manifest: {manifest_name}")
+        extracted_manifest = archive.extractfile(manifest_member)
+        try:
+            manifest = json.loads(
+                extracted_manifest.read().decode("utf-8")
+                if extracted_manifest is not None
+                else ""
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return fail(f"invalid worker manifest JSON: {manifest_name}")
+        if manifest.get("platform") != platform:
+            return fail(
+                f"worker manifest platform expected {platform!r}, "
+                f"got {manifest.get('platform')!r}"
+            )
     return 0
 
 
@@ -63,8 +122,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--archive", required=True)
     parser.add_argument("--package-root", required=True)
+    parser.add_argument("--platform", required=True)
     args = parser.parse_args()
-    return validate_archive(args.archive, args.package_root)
+    return validate_archive(args.archive, args.package_root, args.platform)
 
 
 if __name__ == "__main__":

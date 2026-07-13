@@ -7,6 +7,7 @@ import argparse
 import io
 import os
 import shutil
+import struct
 import subprocess
 import sys
 import tarfile
@@ -21,6 +22,23 @@ REQUIRED_EXECUTABLES = (
 )
 
 
+def fake_elf(machine: int) -> bytes:
+    data = bytearray(64)
+    data[:4] = b"\x7fELF"
+    data[4] = 2
+    data[5] = 1
+    data[18:20] = struct.pack("<H", machine)
+    return bytes(data)
+
+
+def fixture_data(name: str, machine: int | None) -> bytes:
+    if name.endswith("/manifest.json"):
+        return b'{"platform":"linux-x86_64"}\n'
+    if any(name.endswith("/" + relative) for relative in REQUIRED_EXECUTABLES[:2]):
+        return b"not-elf\n" if machine is None else fake_elf(machine)
+    return b"#!/usr/bin/env bash\n" if name.endswith("/bin/run_worker.sh") else b"x\n"
+
+
 def add_file(archive: tarfile.TarFile, name: str, mode: int = 0o644, data: bytes = b"x\n") -> None:
     info = tarfile.TarInfo(name)
     info.mode = mode
@@ -28,11 +46,11 @@ def add_file(archive: tarfile.TarFile, name: str, mode: int = 0o644, data: bytes
     archive.addfile(info, io.BytesIO(data))
 
 
-def write_archive(path: Path, members: list[tuple[str, int]]) -> None:
+def write_archive(path: Path, members: list[tuple[str, int]], machine: int | None = 62) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with tarfile.open(path, "w:gz") as archive:
         for name, mode in members:
-            add_file(archive, name, mode)
+            add_file(archive, name, mode, fixture_data(name, machine))
 
 
 def valid_members() -> list[tuple[str, int]]:
@@ -56,6 +74,8 @@ def run_validator(root_dir: Path, archive: Path, package_root: str = PACKAGE_ROO
             str(archive),
             "--package-root",
             package_root,
+            "--platform",
+            "linux-x86_64",
         ],
         text=True,
         stdout=subprocess.PIPE,
@@ -128,6 +148,22 @@ def main() -> int:
         else:
             require(stderr_needle is not None, f"{label}: missing expected stderr needle")
             expect_fail(label, result, stderr_needle)
+
+    wrong_arch = work_root / "wrong_architecture.tar.gz"
+    write_archive(wrong_arch, valid_members(), machine=183)
+    expect_fail(
+        "wrong_architecture",
+        run_validator(root_dir, wrong_arch),
+        "native worker architecture mismatch",
+    )
+
+    non_elf = work_root / "non_elf_native_binary.tar.gz"
+    write_archive(non_elf, valid_members(), machine=None)
+    expect_fail(
+        "non_elf_native_binary",
+        run_validator(root_dir, non_elf),
+        "native worker file is not ELF",
+    )
 
     print(f"ray tracing Linux worker package validator fixtures passed: {work_root}")
     return 0
