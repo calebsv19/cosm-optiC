@@ -20,6 +20,13 @@ typedef struct {
     uint32_t calls;
 } PhotonPathTransportMultiMaterialFixture3D;
 
+typedef struct {
+    RuntimeMaterialPayload3D glass;
+    RuntimeMaterialPayload3D water;
+    int resolvedObjects[16];
+    uint32_t calls;
+} PhotonPathTransportNestedMaterialFixture3D;
+
 static bool photon_path_transport_fixture_material(
     const HitInfo3D* hit,
     RuntimeMaterialPayload3D* out_payload,
@@ -45,6 +52,25 @@ static bool photon_path_transport_multi_material(
         *out_payload = fixture->object51;
     } else if (hit->sceneObjectIndex == 52) {
         *out_payload = fixture->object52;
+    } else {
+        return false;
+    }
+    out_payload->sceneObjectIndex = hit->sceneObjectIndex;
+    return out_payload->valid;
+}
+
+static bool photon_path_transport_nested_material(
+    const HitInfo3D* hit,
+    RuntimeMaterialPayload3D* out_payload,
+    void* user_data) {
+    PhotonPathTransportNestedMaterialFixture3D* fixture =
+        (PhotonPathTransportNestedMaterialFixture3D*)user_data;
+    if (!hit || !out_payload || !fixture || fixture->calls >= 16u) return false;
+    fixture->resolvedObjects[fixture->calls++] = hit->sceneObjectIndex;
+    if (hit->sceneObjectIndex == 71) {
+        *out_payload = fixture->glass;
+    } else if (hit->sceneObjectIndex == 72) {
+        *out_payload = fixture->water;
     } else {
         return false;
     }
@@ -212,6 +238,38 @@ static bool photon_path_transport_build_tir_slab(RuntimeScene3D* scene) {
         &scene->triangleMesh.triangles[0], 0.0, vec3(0.0, 0.0, -1.0), 0);
     photon_path_transport_set_large_triangle(
         &scene->triangleMesh.triangles[1], 1.0, vec3(0.0, 0.0, 1.0), 1);
+    return RuntimeSceneAcceleration3D_RebuildTLASFromScene(scene);
+}
+
+static bool photon_path_transport_build_nested_media(RuntimeScene3D* scene) {
+    static const double z[4] = {3.0, 2.0, 1.0, 0.0};
+    static const int object_id[4] = {71, 72, 72, 71};
+    if (!scene) return false;
+    RuntimeScene3D_Init(scene);
+    scene->primitiveCapacity = 2;
+    scene->triangleMesh.triangleCapacity = 4;
+    scene->primitives = calloc(2u, sizeof(*scene->primitives));
+    scene->triangleMesh.triangles =
+        calloc(4u, sizeof(*scene->triangleMesh.triangles));
+    if (!scene->primitives || !scene->triangleMesh.triangles) {
+        RuntimeScene3D_Free(scene);
+        return false;
+    }
+    scene->primitiveCount = 2;
+    scene->triangleMesh.triangleCount = 4;
+    for (int i = 0; i < 2; ++i) {
+        scene->primitives[i].kind = RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH;
+        scene->primitives[i].source.kind = RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH;
+        scene->primitives[i].source.sceneObjectIndex = 71 + i;
+    }
+    for (int i = 0; i < 4; ++i) {
+        Vec3 normal = i < 2 ? vec3(0.0, 0.0, 1.0)
+                            : vec3(0.0, 0.0, -1.0);
+        photon_path_transport_set_large_triangle(
+            &scene->triangleMesh.triangles[i], z[i], normal, i);
+        scene->triangleMesh.triangles[i].sceneObjectIndex = object_id[i];
+        scene->triangleMesh.triangles[i].primitiveIndex = object_id[i] - 71;
+    }
     return RuntimeSceneAcceleration3D_RebuildTLASFromScene(scene);
 }
 
@@ -447,6 +505,16 @@ static int test_runtime_caustic_photon_path_transport_tir_continuation(void) {
     settings.sceneTrace.materialResolver = photon_path_transport_fixture_material;
     settings.sceneTrace.materialResolverUserData = &fixture;
     settings.applyRoulette = false;
+    settings.hasInitialMediumStack = true;
+    {
+        RuntimeCausticPhotonMediumEntry3D glass;
+        RuntimeCausticPhotonMediumTransition3D transition;
+        memset(&glass, 0, sizeof(glass));
+        RuntimeCausticPhotonMediumEntry3D_FromMaterial(
+            &fixture.material, 61, 0.0, &glass);
+        RuntimeCausticPhotonMediumStack3D_ObserveBoundary(
+            &settings.initialMediumStack, &glass, true, false, &transition);
+    }
 
     assert_true("runtime_caustic_photon_path_transport_tir_trace",
                 RuntimeCausticPhotonPathTransport3D_Trace(
@@ -462,7 +530,7 @@ static int test_runtime_caustic_photon_path_transport_tir_continuation(void) {
                     trace.readback.mediumTransitionFailureCount == 0u &&
                     trace.finalMediumStack.tirNoChangeCount == 4u &&
                     RuntimeCausticPhotonMediumStack3D_Depth(
-                        &trace.finalMediumStack) == 0u &&
+                        &trace.finalMediumStack) == 1u &&
                     trace.readback.termination ==
                         RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_MAX_DEPTH);
     for (uint32_t i = 0u; i < 4u; ++i) {
@@ -480,8 +548,8 @@ static int test_runtime_caustic_photon_path_transport_tir_continuation(void) {
                         trace.hitEvents[i].mediumTransition.reason ==
                             RUNTIME_CAUSTIC_PHOTON_MEDIUM_TRANSITION_TIR_NO_CHANGE &&
                         !trace.hitEvents[i].mediumTransition.stackChanged &&
-                        trace.hitEvents[i].mediumTransition.depthBefore == 0u &&
-                        trace.hitEvents[i].mediumTransition.depthAfter == 0u &&
+                        trace.hitEvents[i].mediumTransition.depthBefore == 1u &&
+                        trace.hitEvents[i].mediumTransition.depthAfter == 1u &&
                         trace.hitEvents[i].dielectric.etaFrom >
                             trace.hitEvents[i].dielectric.etaTo);
     }
@@ -498,6 +566,116 @@ static int test_runtime_caustic_photon_path_transport_tir_continuation(void) {
                  trace.trace.finalState.throughput.x,
                  sample.flux.x,
                  1.0e-12);
+
+    RuntimeSceneAcceleration3D_ResetTLASForTests();
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
+static int test_runtime_caustic_photon_path_transport_nested_ior_replay(void) {
+    static const int object_id[4] = {71, 72, 72, 71};
+    static const int material_id[4] = {701, 702, 702, 701};
+    static const double eta_from[4] = {1.0, 1.5, 1.33, 1.5};
+    static const double eta_to[4] = {1.5, 1.33, 1.5, 1.0};
+    static const uint32_t depth_before[4] = {0u, 1u, 2u, 1u};
+    static const uint32_t depth_after[4] = {1u, 2u, 1u, 0u};
+    RuntimeScene3D scene;
+    RuntimeCausticPhotonSample3D sample = photon_path_transport_sample();
+    RuntimeCausticPhotonPathTransportSettings3D settings;
+    RuntimeCausticPhotonSceneTrace3D trace;
+    RuntimeCausticPhotonSceneTrace3D replay;
+    PhotonPathTransportNestedMaterialFixture3D fixture;
+    bool found_closed_path = false;
+
+    sample.position = vec3(0.0, 0.0, 4.0);
+    sample.direction = vec3_normalize(vec3(0.35, 0.0, -0.9367496998));
+    assert_true("runtime_caustic_photon_path_transport_nested_build",
+                photon_path_transport_build_nested_media(&scene));
+    memset(&fixture, 0, sizeof(fixture));
+    fixture.glass = photon_path_transport_glass();
+    fixture.glass.materialId = 701;
+    fixture.glass.opticalIor = 1.5;
+    fixture.glass.bsdf.ior = 1.5;
+    fixture.water = photon_path_transport_glass();
+    fixture.water.materialId = 702;
+    fixture.water.opticalIor = 1.33;
+    fixture.water.bsdf.ior = 1.33;
+    RuntimeCausticPhotonPathTransport3D_DefaultSettings(&settings);
+    settings.sceneTrace.maxDepth = 5u;
+    settings.sceneTrace.materialResolver = photon_path_transport_nested_material;
+    settings.sceneTrace.materialResolverUserData = &fixture;
+    settings.applyRoulette = false;
+
+    for (uint64_t i = 0u; i < 2048u; ++i) {
+        sample.photonId = 25000u + i;
+        sample.sampleIndex = 100u + i;
+        fixture.calls = 0u;
+        if (RuntimeCausticPhotonPathTransport3D_Trace(
+                &scene, &sample, &settings, &trace) &&
+            trace.trace.dielectricEventCount == 4u &&
+            trace.readback.mediumTransitionCount == 4u &&
+            RuntimeCausticPhotonMediumStack3D_Depth(&trace.finalMediumStack) ==
+                0u) {
+            found_closed_path = true;
+            break;
+        }
+    }
+    assert_true("runtime_caustic_photon_path_transport_nested_find_path",
+                found_closed_path);
+    fixture.calls = 0u;
+    assert_true("runtime_caustic_photon_path_transport_nested_replay",
+                RuntimeCausticPhotonPathTransport3D_Trace(
+                    &scene, &sample, &settings, &replay));
+    assert_true("runtime_caustic_photon_path_transport_nested_ledger",
+                trace.readback.succeeded && replay.readback.succeeded &&
+                    trace.readback.hitEventCount == 4u && fixture.calls == 4u &&
+                    trace.finalMediumStack.pushCount == 2u &&
+                    trace.finalMediumStack.popCount == 2u &&
+                    trace.finalMediumStack.maxDepth == 2u &&
+                    trace.readback.mediumTransitionFailureCount == 0u &&
+                    trace.readback.termination ==
+                        RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_ESCAPED);
+    for (uint32_t i = 0u; i < 4u; ++i) {
+        RuntimeCausticPhotonSceneHitEvent3D* hit = &trace.hitEvents[i];
+        RuntimeCausticPhotonSceneHitEvent3D* replay_hit = &replay.hitEvents[i];
+        assert_true("runtime_caustic_photon_path_transport_nested_identity",
+                    hit->hit.sceneObjectIndex == object_id[i] &&
+                        hit->material.materialId == material_id[i] &&
+                        hit->mediumTransition.boundary.sceneObjectIndex ==
+                            object_id[i] &&
+                        hit->mediumTransition.boundary.materialId == material_id[i]);
+        assert_true("runtime_caustic_photon_path_transport_nested_transition",
+                    hit->mediumTransition.succeeded &&
+                        hit->mediumTransition.depthBefore == depth_before[i] &&
+                        hit->mediumTransition.depthAfter == depth_after[i] &&
+                        hit->mediumTransition.reason ==
+                            (i < 2u
+                                 ? RUNTIME_CAUSTIC_PHOTON_MEDIUM_TRANSITION_ENTER_PUSHED
+                                 : RUNTIME_CAUSTIC_PHOTON_MEDIUM_TRANSITION_EXIT_POPPED));
+        assert_close("runtime_caustic_photon_path_transport_nested_eta_from",
+                     hit->dielectric.etaFrom,
+                     eta_from[i],
+                     1.0e-12);
+        assert_close("runtime_caustic_photon_path_transport_nested_eta_to",
+                     hit->dielectric.etaTo,
+                     eta_to[i],
+                     1.0e-12);
+        assert_true("runtime_caustic_photon_path_transport_nested_direction_replay",
+                    vec3_length(vec3_sub(
+                        hit->bsdfDirection.outgoingDirection,
+                        replay_hit->bsdfDirection.outgoingDirection)) < 1.0e-12);
+    }
+    assert_true("runtime_caustic_photon_path_transport_nested_refraction_shape",
+                trace.hitEvents[0].bsdfDirection.outgoingDirection.x <
+                        sample.direction.x &&
+                    trace.hitEvents[1].bsdfDirection.outgoingDirection.x >
+                        trace.hitEvents[0].bsdfDirection.outgoingDirection.x &&
+                    trace.hitEvents[2].bsdfDirection.outgoingDirection.x <
+                        trace.hitEvents[1].bsdfDirection.outgoingDirection.x &&
+                    trace.hitEvents[3].bsdfDirection.outgoingDirection.x >
+                        trace.hitEvents[2].bsdfDirection.outgoingDirection.x &&
+                    fabs(trace.hitEvents[3].bsdfDirection.outgoingDirection.x -
+                         sample.direction.x) < 1.0e-9);
 
     RuntimeSceneAcceleration3D_ResetTLASForTests();
     RuntimeScene3D_Free(&scene);
@@ -686,6 +864,7 @@ int run_test_runtime_caustic_photon_path_transport_3d_tests(void) {
     failures += test_runtime_caustic_photon_path_transport_two_object_reflection();
     failures += test_runtime_caustic_photon_path_transport_two_object_transmission();
     failures += test_runtime_caustic_photon_path_transport_tir_continuation();
+    failures += test_runtime_caustic_photon_path_transport_nested_ior_replay();
     failures += test_runtime_caustic_photon_path_population_transaction();
     return failures;
 }

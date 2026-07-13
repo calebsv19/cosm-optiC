@@ -9,6 +9,8 @@ typedef struct {
     bool entering;
     bool hasRefraction;
     bool totalInternalReflection;
+    double etaFrom;
+    double etaTo;
     double fresnel;
     Vec3 orientedNormal;
     Vec3 incidentDir;
@@ -20,5 +22,12 @@ bool RuntimeDielectricTransport3D_Resolve(const RuntimeMaterialPayload3D* payloa
                                           Vec3 surface_normal,
                                           Vec3 incident_dir,
                                           RuntimeDielectricTransport3D* out_transport);
+bool RuntimeDielectricTransport3D_ResolveInterface(
+    const RuntimeMaterialPayload3D* payload,
+    Vec3 surface_normal,
+    Vec3 incident_dir,
+    double eta_from,
+    double eta_to,
+    RuntimeDielectricTransport3D* out_transport);
 
 #endif

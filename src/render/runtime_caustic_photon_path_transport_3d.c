@@ -64,23 +64,17 @@ static bool photon_path_transport_append_dielectric(
 
 static void photon_path_transport_observe_medium(
     RuntimeCausticPhotonMediumStack3D* stack,
-    const HitInfo3D* hit,
-    const RuntimeMaterialPayload3D* material,
+    const RuntimeCausticPhotonMediumEntry3D* boundary,
     const RuntimeCausticPhotonBsdfDirection3D* direction,
     RuntimeCausticPhotonSceneHitEvent3D* hit_event,
     RuntimeCausticPhotonSceneTraceReadback3D* readback) {
-    RuntimeCausticPhotonMediumEntry3D boundary;
     bool succeeded;
-    if (!stack || !hit || !material || !direction || !hit_event || !readback ||
-        material->thinWalled) {
+    if (!stack || !boundary || !direction || !hit_event || !readback) {
         return;
     }
-    memset(&boundary, 0, sizeof(boundary));
-    RuntimeCausticPhotonMediumEntry3D_FromMaterial(
-        material, hit->sceneObjectIndex, 0.0, &boundary);
     succeeded = RuntimeCausticPhotonMediumStack3D_ObserveBoundary(
         stack,
-        &boundary,
+        boundary,
         direction->dielectric.entering,
         direction->totalInternalReflection,
         &hit_event->mediumTransition);
@@ -141,14 +135,11 @@ static void photon_path_transport_fill_dielectric_event(
     const RuntimeCausticPhotonBsdfDirection3D* direction,
     RuntimeCausticPhotonDielectricEvent3D* out_event) {
     RuntimeCausticPhotonDielectricEvent3D event;
-    double ior;
     memset(&event, 0, sizeof(event));
     if (!sample || !hit || !material || !selection || !direction || !out_event) {
         if (out_event) *out_event = event;
         return;
     }
-    ior = material->opticalIor > 1.0 ? material->opticalIor : material->bsdf.ior;
-    if (!(ior > 1.0)) ior = 1.0;
     event.photonId = sample->photonId;
     event.depth = depth;
     event.sceneObjectIndex = hit->sceneObjectIndex;
@@ -162,8 +153,8 @@ static void photon_path_transport_fill_dielectric_event(
     event.selectedDirection = direction->outgoingDirection;
     event.throughputBefore = selection->throughputBefore;
     event.throughputAfter = selection->throughputAfter;
-    event.etaFrom = direction->dielectric.entering ? 1.0 : ior;
-    event.etaTo = direction->dielectric.entering ? ior : 1.0;
+    event.etaFrom = direction->dielectric.etaFrom;
+    event.etaTo = direction->dielectric.etaTo;
     event.fresnel = direction->dielectric.fresnel;
     event.branchPdf = selection->branchPdf;
     event.selectedBranch = direction->totalInternalReflection
@@ -181,6 +172,7 @@ void RuntimeCausticPhotonPathTransport3D_DefaultSettings(
     settings->depthPolicy = RuntimePathDepthPolicy3D_Resolve();
     settings->applyRoulette = true;
     settings->continueTotalInternalReflection = true;
+    RuntimeCausticPhotonMediumStack3D_Init(&settings->initialMediumStack);
 }
 
 bool RuntimeCausticPhotonPathTransport3D_Trace(
@@ -211,7 +203,12 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
 
     memset(&result, 0, sizeof(result));
     result.readback.attempted = true;
-    RuntimeCausticPhotonMediumStack3D_Init(&medium_stack);
+    if (active->hasInitialMediumStack) {
+        medium_stack = active->initialMediumStack;
+        if (!RuntimeCausticPhotonMediumStack3D_Top(&medium_stack)) return false;
+    } else {
+        RuntimeCausticPhotonMediumStack3D_Init(&medium_stack);
+    }
     result.initialMediumStack = medium_stack;
     result.finalMediumStack = medium_stack;
     trace->sample = *sample;
@@ -246,6 +243,7 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
         RuntimeCausticPhotonSceneHitEvent3D* hit_event;
         RuntimeCausticPhotonBsdfSampleStream3D stream;
         RuntimeMaterialPayload3D material;
+        RuntimeCausticPhotonMediumEntry3D medium_boundary;
         RuntimeDielectricTransport3D dielectric_probe;
         HitInfo3D hit;
         Ray3D ray;
@@ -256,6 +254,10 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
         bool found;
         bool terminal;
         bool exact_tir = false;
+        bool entering = false;
+        bool medium_interface_resolved = false;
+        double eta_from = 0.0;
+        double eta_to = 0.0;
         double incident_cosine;
 
         ray = depth == 1u
@@ -325,11 +327,30 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
         incident_cosine = fabs(vec3_dot(vec3_scale(state.direction, -1.0),
                                        geometric_normal));
 
+        memset(&medium_boundary, 0, sizeof(medium_boundary));
+        entering = vec3_dot(state.direction, geometric_normal) < 0.0;
+        if (material.transparency > 1.0e-12 && !material.thinWalled &&
+            RuntimeCausticPhotonMediumEntry3D_FromMaterial(
+                &material, hit.sceneObjectIndex, 0.0, &medium_boundary)) {
+            medium_interface_resolved =
+                RuntimeCausticPhotonMediumStack3D_ResolveInterface(
+                    &medium_stack,
+                    &medium_boundary,
+                    entering,
+                    &eta_from,
+                    &eta_to);
+        }
+
         memset(&dielectric_probe, 0, sizeof(dielectric_probe));
         if (active->continueTotalInternalReflection &&
             material.transparency > 1.0e-12 &&
-            RuntimeDielectricTransport3D_Resolve(
-                &material, geometric_normal, state.direction, &dielectric_probe) &&
+            !material.thinWalled && medium_interface_resolved &&
+            RuntimeDielectricTransport3D_ResolveInterface(&material,
+                                                          geometric_normal,
+                                                          state.direction,
+                                                          eta_from,
+                                                          eta_to,
+                                                          &dielectric_probe) &&
             dielectric_probe.totalInternalReflection) {
             exact_tir = true;
         }
@@ -391,13 +412,26 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
         terminal = hit_event->bsdfSelection.termination !=
                    RUNTIME_CAUSTIC_PHOTON_BSDF_TERMINATION_NONE;
         if (!terminal && !exact_tir &&
-            !RuntimeCausticPhotonBsdfDirection3D_Sample(
-                hit_event->bsdfSelection.lobe,
-                &material,
-                state.direction,
-                geometric_normal,
-                &stream.bsdfSample.directionSample,
-                &hit_event->bsdfDirection)) {
+            ((hit_event->bsdfSelection.lobe ==
+                  RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_TRANSMISSION &&
+              !material.thinWalled && !medium_interface_resolved) ||
+             !RuntimeCausticPhotonBsdfDirection3D_SampleInterface(
+                 hit_event->bsdfSelection.lobe,
+                 &material,
+                 state.direction,
+                 geometric_normal,
+                 &stream.bsdfSample.directionSample,
+                 hit_event->bsdfSelection.lobe ==
+                             RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_TRANSMISSION &&
+                         !material.thinWalled
+                     ? eta_from
+                     : 0.0,
+                 hit_event->bsdfSelection.lobe ==
+                             RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_TRANSMISSION &&
+                         !material.thinWalled
+                     ? eta_to
+                     : 0.0,
+                 &hit_event->bsdfDirection))) {
             hit_event->termination =
                 hit_event->bsdfDirection.totalInternalReflection
                     ? RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_TIR_DEFERRED
@@ -439,12 +473,17 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
                 hard_failure = true;
                 break;
             }
-            photon_path_transport_observe_medium(&medium_stack,
-                                                 &hit,
-                                                 &material,
-                                                 &hit_event->bsdfDirection,
-                                                 hit_event,
-                                                 &result.readback);
+            if (!material.thinWalled) {
+                photon_path_transport_observe_medium(&medium_stack,
+                                                     &medium_boundary,
+                                                     &hit_event->bsdfDirection,
+                                                     hit_event,
+                                                     &result.readback);
+                if (!hit_event->mediumTransition.succeeded) {
+                    hard_failure = true;
+                    break;
+                }
+            }
             if (hit_event->bsdfDirection.totalInternalReflection) {
                 trace->debug.totalInternalReflectionCount++;
                 trace->debug.reflectedBranchCount++;

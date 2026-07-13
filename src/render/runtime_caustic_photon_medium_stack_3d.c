@@ -136,6 +136,38 @@ uint32_t RuntimeCausticPhotonMediumStack3D_Depth(
     return stack->count - 1u;
 }
 
+bool RuntimeCausticPhotonMediumStack3D_ResolveInterface(
+    const RuntimeCausticPhotonMediumStack3D* stack,
+    const RuntimeCausticPhotonMediumEntry3D* boundary,
+    bool entering,
+    double* out_eta_from,
+    double* out_eta_to) {
+    const RuntimeCausticPhotonMediumEntry3D* top;
+    const RuntimeCausticPhotonMediumEntry3D* destination;
+    if (out_eta_from) *out_eta_from = 0.0;
+    if (out_eta_to) *out_eta_to = 0.0;
+    if (!stack || !out_eta_from || !out_eta_to ||
+        !photon_medium_entry_valid(boundary) || boundary->isAir) {
+        return false;
+    }
+    top = RuntimeCausticPhotonMediumStack3D_Top(stack);
+    if (!photon_medium_entry_valid(top)) return false;
+    if (entering) {
+        if (photon_medium_entries_match(top, boundary)) return false;
+        *out_eta_from = top->ior;
+        *out_eta_to = boundary->ior;
+        return true;
+    }
+    if (stack->count <= 1u || !photon_medium_entries_match(top, boundary)) {
+        return false;
+    }
+    destination = &stack->entries[stack->count - 2u];
+    if (!photon_medium_entry_valid(destination)) return false;
+    *out_eta_from = top->ior;
+    *out_eta_to = destination->ior;
+    return true;
+}
+
 bool RuntimeCausticPhotonMediumStack3D_ObserveBoundary(
     RuntimeCausticPhotonMediumStack3D* stack,
     const RuntimeCausticPhotonMediumEntry3D* boundary,
