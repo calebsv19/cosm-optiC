@@ -316,7 +316,7 @@ static void runtime_diffuse_bounce_3d_trace_path(
                                                                 sample_index,
                                                                 (uint32_t)(depth - 1));
         bounce_ray = RuntimeRay3D_MakeOffset(current_hit.position,
-                                             current_hit.normal,
+                                             HitInfo3D_OffsetNormal(&current_hit),
                                              sample_dir,
                                              kRuntimeDiffuseBounce3DEpsilon);
         io_result->secondaryRayCount += 1;

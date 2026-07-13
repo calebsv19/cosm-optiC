@@ -204,7 +204,7 @@ bool RuntimeDisneyV2_3D_ApplyRecursivePathLoopFromDirection(
         state.throughputB = throughput_b / survival;
         state.pdf = vertex_sample.pdf;
         state.ray = RuntimeRay3D_MakeOffset(current_hit.position,
-                                            current_hit.normal,
+                                            HitInfo3D_OffsetNormal(&current_hit),
                                             vertex_sample.direction,
                                             kRuntimeDisneyV2Transport3DEpsilon);
         throughput_r = state.throughputR;
@@ -449,7 +449,8 @@ static Ray3D runtime_disney_v2_transport_3d_make_rough_reflection_ray(
         direction = axis;
     }
     return RuntimeRay3D_MakeOffset(source_hit ? source_hit->position : vec3(0.0, 0.0, 0.0),
-                                   source_hit ? source_hit->normal : vec3(0.0, 1.0, 0.0),
+                                   source_hit ? HitInfo3D_OffsetNormal(source_hit)
+                                              : vec3(0.0, 1.0, 0.0),
                                    direction,
                                    kRuntimeDisneyV2Transport3DEpsilon);
 }

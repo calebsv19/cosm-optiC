@@ -98,7 +98,7 @@ bool RuntimeSpecularReflection3D_Trace(const RuntimeScene3D* scene,
     }
 
     result.ray = RuntimeRay3D_MakeOffset(hit->position,
-                                         hit->normal,
+                                         HitInfo3D_OffsetNormal(hit),
                                          reflection_dir,
                                          kRuntimeSpecularReflection3DEpsilon);
     result.traced = true;

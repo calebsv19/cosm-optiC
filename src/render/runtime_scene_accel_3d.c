@@ -300,6 +300,10 @@ static uint64_t runtime_scene_accel_3d_geometry_signature(const RuntimeScene3D* 
         hash = runtime_scene_accel_3d_hash_vec3(hash, triangle->p1);
         hash = runtime_scene_accel_3d_hash_vec3(hash, triangle->p2);
         hash = runtime_scene_accel_3d_hash_vec3(hash, triangle->normal);
+        hash = runtime_scene_accel_3d_hash_bool(hash, triangle->hasVertexNormals);
+        hash = runtime_scene_accel_3d_hash_vec3(hash, triangle->vertexNormal0);
+        hash = runtime_scene_accel_3d_hash_vec3(hash, triangle->vertexNormal1);
+        hash = runtime_scene_accel_3d_hash_vec3(hash, triangle->vertexNormal2);
         hash = runtime_scene_accel_3d_hash_bool(hash, triangle->twoSided);
         hash = runtime_scene_accel_3d_hash_bool(hash, triangle->hasObjectTextureCoords);
         hash = runtime_scene_accel_3d_hash_vec3(hash, triangle->objectTexture0);
@@ -518,15 +522,6 @@ static int runtime_scene_accel_3d_remap_scene_triangle(
     return -1;
 }
 
-static Vec3 runtime_scene_accel_3d_orient_normal(Vec3 normal, const Ray3D* ray) {
-    normal = vec3_normalize(normal);
-    if (!ray || vec3_length(normal) <= 1e-9) return normal;
-    if (vec3_dot(normal, ray->direction) > 0.0) {
-        normal = vec3_scale(normal, -1.0);
-    }
-    return normal;
-}
-
 static bool runtime_scene_accel_3d_remap_hit(
     const RuntimeScene3D* scene,
     const RuntimeSceneAcceleration3DInstanceBounds* instance,
@@ -565,8 +560,14 @@ static bool runtime_scene_accel_3d_remap_hit(
     out_hit->t = world_t;
     out_hit->position = vec3_add(world_ray->origin,
                                  vec3_scale(world_ray->direction, world_t));
-    out_hit->normal =
-        runtime_scene_accel_3d_orient_normal(scene_triangle->normal, world_ray);
+    RuntimeRay3D_ResolveTriangleNormals(scene_triangle,
+                                       world_ray,
+                                       local_hit->baryU,
+                                       local_hit->baryV,
+                                       local_hit->baryW,
+                                       &out_hit->geometricNormal,
+                                       &out_hit->shadingNormal);
+    out_hit->normal = out_hit->shadingNormal;
     out_hit->triangleIndex = scene_triangle_index;
     out_hit->localTriangleIndex = scene_triangle->localTriangleIndex;
     out_hit->primitiveIndex = instance->primitiveIndex;

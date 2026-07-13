@@ -20,6 +20,10 @@ static int test_runtime_ray_3d_triangle_intersection_contract(void) {
     triangle.p1 = vec3(1.0, 0.0, 0.0);
     triangle.p2 = vec3(0.0, 1.0, 0.0);
     triangle.normal = vec3(0.0, 0.0, 1.0);
+    triangle.hasVertexNormals = true;
+    triangle.vertexNormal0 = vec3(0.0, 0.0, 1.0);
+    triangle.vertexNormal1 = vec3_normalize(vec3(1.0, 0.0, 1.0));
+    triangle.vertexNormal2 = vec3_normalize(vec3(0.0, 1.0, 1.0));
     triangle.hasObjectTextureCoords = true;
     triangle.objectTexture0 = vec3(0.10, 0.20, 0.30);
     triangle.objectTexture1 = vec3(0.70, 0.20, 0.30);
@@ -35,7 +39,16 @@ static int test_runtime_ray_3d_triangle_intersection_contract(void) {
     assert_close("runtime_ray_3d_triangle_hit_px", hit.position.x, 0.25, 1e-6);
     assert_close("runtime_ray_3d_triangle_hit_py", hit.position.y, 0.25, 1e-6);
     assert_close("runtime_ray_3d_triangle_hit_pz", hit.position.z, 0.0, 1e-6);
-    assert_close("runtime_ray_3d_triangle_hit_nz", hit.normal.z, 1.0, 1e-6);
+    assert_close("runtime_ray_3d_triangle_hit_ng_z", hit.geometricNormal.z, 1.0, 1e-6);
+    assert_true("runtime_ray_3d_triangle_hit_ns_interpolated",
+                hit.shadingNormal.x > 0.1 && hit.shadingNormal.y > 0.1 &&
+                    hit.shadingNormal.z > 0.9);
+    assert_close("runtime_ray_3d_triangle_hit_normal_alias_x",
+                 hit.normal.x,
+                 hit.shadingNormal.x,
+                 1e-9);
+    assert_true("runtime_ray_3d_triangle_hit_ns_same_hemisphere",
+                vec3_dot(hit.geometricNormal, hit.shadingNormal) > 0.0);
     assert_true("runtime_ray_3d_triangle_hit_triangle_index", hit.triangleIndex == 11);
     assert_true("runtime_ray_3d_triangle_hit_local_triangle_index", hit.localTriangleIndex == 5);
     assert_true("runtime_ray_3d_triangle_hit_primitive_index", hit.primitiveIndex == 3);
@@ -65,16 +78,21 @@ static int test_runtime_ray_3d_triangle_intersection_contract(void) {
     ray = RuntimeRay3D_Make(vec3(0.25, 0.25, -3.0), vec3(0.0, 0.0, 2.0));
     ok = RuntimeRay3D_IntersectTriangle(&ray, &triangle, 12, 0.001, 10.0, &hit);
     assert_true("runtime_ray_3d_triangle_two_sided_back_hit_ok", ok);
-    assert_close("runtime_ray_3d_triangle_two_sided_back_hit_nz", hit.normal.z, -1.0, 1e-6);
+    assert_true("runtime_ray_3d_triangle_two_sided_back_hit_ns_oriented",
+                hit.normal.z < -0.9);
+    assert_close("runtime_ray_3d_triangle_two_sided_back_hit_ngz",
+                 hit.geometricNormal.z,
+                 -1.0,
+                 1e-6);
+    assert_true("runtime_ray_3d_triangle_two_sided_back_hit_ns_hemisphere",
+                vec3_dot(hit.geometricNormal, hit.shadingNormal) > 0.0);
 
     triangle.twoSided = false;
     ray = RuntimeRay3D_Make(vec3(0.25, 0.25, -3.0), vec3(0.0, 0.0, 2.0));
     ok = RuntimeRay3D_IntersectTriangle(&ray, &triangle, 13, 0.001, 10.0, &hit);
     assert_true("runtime_ray_3d_triangle_single_sided_back_hit_ok", ok);
-    assert_close("runtime_ray_3d_triangle_single_sided_shading_normal_oriented",
-                 hit.normal.z,
-                 -1.0,
-                 1e-6);
+    assert_true("runtime_ray_3d_triangle_single_sided_shading_normal_oriented",
+                hit.normal.z < -0.9);
     return 0;
 }
 

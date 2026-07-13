@@ -9,9 +9,11 @@
 static const unsigned char kRuntimeMeshAssetPackMagic[8] = {
     'R', 'T', 'M', 'P', 'K', '1', '3', '\0'
 };
-static const uint32_t kRuntimeMeshAssetPackVersion = 1u;
-static const uint32_t kRuntimeMeshAssetPackCacheVersion = 2u;
-static const uint32_t kRuntimeMeshAssetPackCacheSchemaVersion = 1u;
+static const uint32_t kRuntimeMeshAssetPackLegacyVersion = 1u;
+static const uint32_t kRuntimeMeshAssetPackLegacyCacheVersion = 2u;
+static const uint32_t kRuntimeMeshAssetPackVersion = 3u;
+static const uint32_t kRuntimeMeshAssetPackCacheVersion = 4u;
+static const uint32_t kRuntimeMeshAssetPackCacheSchemaVersion = 2u;
 static const uint32_t kRuntimeMeshAssetPackEndianMarker = 0x01020304u;
 static const uint64_t kRuntimeMeshAssetPackFnvOffset = 1469598103934665603ull;
 static const uint64_t kRuntimeMeshAssetPackFnvPrime = 1099511628211ull;
@@ -156,6 +158,7 @@ static bool runtime_mesh_asset_pack_write_document_file(
     uint32_t format_version = source_key ? kRuntimeMeshAssetPackCacheVersion
                                          : kRuntimeMeshAssetPackVersion;
     uint32_t vertex_count = 0u;
+    uint32_t normal_count = 0u;
     uint32_t triangle_count = 0u;
     uint32_t surface_group_count = 0u;
     CoreResult validate_result = core_result_ok();
@@ -192,6 +195,10 @@ static bool runtime_mesh_asset_pack_write_document_file(
     }
     if (!runtime_mesh_asset_pack_count_to_u32(document->vertex_count,
                                              &vertex_count,
+                                             out_diagnostics,
+                                             out_diagnostics_size) ||
+        !runtime_mesh_asset_pack_count_to_u32(document->vertex_normal_count,
+                                             &normal_count,
                                              out_diagnostics,
                                              out_diagnostics_size) ||
         !runtime_mesh_asset_pack_count_to_u32(document->triangle_count,
@@ -250,6 +257,8 @@ static bool runtime_mesh_asset_pack_write_document_file(
         return false;
     }
     if (!runtime_mesh_asset_pack_write_u32(f, vertex_count) ||
+        !runtime_mesh_asset_pack_write_u32(f, normal_count) ||
+        !runtime_mesh_asset_pack_write_u32(f, (uint32_t)document->normal_provenance) ||
         !runtime_mesh_asset_pack_write_u32(f, triangle_count) ||
         !runtime_mesh_asset_pack_write_u32(f, surface_group_count) ||
         !runtime_mesh_asset_pack_write_string64(f, document->contract.asset_id) ||
@@ -297,6 +306,17 @@ static bool runtime_mesh_asset_pack_write_document_file(
             fclose(f);
             if (atomic_write) unlink(write_path);
             runtime_mesh_asset_pack_diag(out_diagnostics, out_diagnostics_size, "mesh asset pack vertex write failed");
+            return false;
+        }
+    }
+
+    for (size_t i = 0u; i < document->vertex_normal_count; ++i) {
+        if (!runtime_mesh_asset_pack_write_vec3(f, document->vertices[i].normal)) {
+            fclose(f);
+            if (atomic_write) unlink(write_path);
+            runtime_mesh_asset_pack_diag(out_diagnostics,
+                                         out_diagnostics_size,
+                                         "mesh asset pack normal write failed");
             return false;
         }
     }
@@ -376,6 +396,8 @@ static bool runtime_mesh_asset_pack_read_document_file(
     uint32_t version = 0u;
     uint32_t endian_marker = 0u;
     uint32_t vertex_count = 0u;
+    uint32_t normal_count = 0u;
+    uint32_t normal_provenance = 0u;
     uint32_t triangle_count = 0u;
     uint32_t surface_group_count = 0u;
     uint32_t asset_type = 0u;
@@ -406,16 +428,20 @@ static bool runtime_mesh_asset_pack_read_document_file(
         memcmp(magic, kRuntimeMeshAssetPackMagic, sizeof(magic)) != 0 ||
         !runtime_mesh_asset_pack_read_u32(f, &version) ||
         !runtime_mesh_asset_pack_read_u32(f, &endian_marker) ||
-        (version != kRuntimeMeshAssetPackVersion &&
+        (version != kRuntimeMeshAssetPackLegacyVersion &&
+         version != kRuntimeMeshAssetPackLegacyCacheVersion &&
+         version != kRuntimeMeshAssetPackVersion &&
          version != kRuntimeMeshAssetPackCacheVersion) ||
         endian_marker != kRuntimeMeshAssetPackEndianMarker ||
-        (require_cache_key && version != kRuntimeMeshAssetPackCacheVersion)) {
+        (require_cache_key && version != kRuntimeMeshAssetPackLegacyCacheVersion &&
+         version != kRuntimeMeshAssetPackCacheVersion)) {
         fclose(f);
         runtime_mesh_asset_pack_diag(out_diagnostics, out_diagnostics_size, "mesh asset pack header invalid");
         return false;
     }
     memset(&actual_source_key, 0, sizeof(actual_source_key));
-    if (version == kRuntimeMeshAssetPackCacheVersion) {
+    if (version == kRuntimeMeshAssetPackLegacyCacheVersion ||
+        version == kRuntimeMeshAssetPackCacheVersion) {
         if (!runtime_mesh_asset_pack_read_u32(f, &actual_source_key.core_mesh_asset_schema_version) ||
             !runtime_mesh_asset_pack_read_u32(f, &actual_source_key.ray_tracing_cache_schema_version) ||
             !runtime_mesh_asset_pack_read_u32(f, &actual_source_key.pointer_size_bytes) ||
@@ -439,8 +465,11 @@ static bool runtime_mesh_asset_pack_read_document_file(
         runtime_mesh_asset_pack_diag(out_diagnostics, out_diagnostics_size, "mesh asset cache key missing");
         return false;
     }
-    if (
-        !runtime_mesh_asset_pack_read_u32(f, &vertex_count) ||
+    if (!runtime_mesh_asset_pack_read_u32(f, &vertex_count) ||
+        ((version == kRuntimeMeshAssetPackVersion ||
+          version == kRuntimeMeshAssetPackCacheVersion) &&
+         (!runtime_mesh_asset_pack_read_u32(f, &normal_count) ||
+          !runtime_mesh_asset_pack_read_u32(f, &normal_provenance))) ||
         !runtime_mesh_asset_pack_read_u32(f, &triangle_count) ||
         !runtime_mesh_asset_pack_read_u32(f, &surface_group_count)) {
         fclose(f);
@@ -495,6 +524,26 @@ static bool runtime_mesh_asset_pack_read_document_file(
             core_mesh_asset_runtime_document_free(&document);
             runtime_mesh_asset_pack_diag(out_diagnostics, out_diagnostics_size, "mesh asset pack vertex invalid");
             return false;
+        }
+    }
+    if (normal_count > 0u) {
+        if (normal_count != vertex_count) {
+            result = (CoreResult){CORE_ERR_INVALID_ARG,
+                                  "mesh asset pack normal count invalid"};
+            goto fail;
+        }
+        document.vertex_normal_count = (size_t)normal_count;
+        document.normal_provenance =
+            (CoreMeshAssetRuntimeNormalProvenance)normal_provenance;
+        for (size_t i = 0u; i < document.vertex_normal_count; ++i) {
+            if (!runtime_mesh_asset_pack_read_vec3(f, &document.vertices[i].normal)) {
+                fclose(f);
+                core_mesh_asset_runtime_document_free(&document);
+                runtime_mesh_asset_pack_diag(out_diagnostics,
+                                             out_diagnostics_size,
+                                             "mesh asset pack normal invalid");
+                return false;
+            }
         }
     }
 

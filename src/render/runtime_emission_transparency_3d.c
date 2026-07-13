@@ -103,7 +103,7 @@ static double runtime_emission_transparency_3d_secondary_emissive(
                                                                             sample_count,
                                                                             i);
         Ray3D bounce_ray = RuntimeRay3D_MakeOffset(hit->position,
-                                                   hit->normal,
+                                                   HitInfo3D_OffsetNormal(hit),
                                                    sample_dir,
                                                    kRuntimeEmissionTransparency3DEpsilon);
         double secondary_facing = 0.0;
@@ -181,7 +181,7 @@ static bool runtime_emission_transparency_3d_trace_support(
     HitInfo3D_Reset(&transmitted_hit);
 
     support_ray = RuntimeRay3D_MakeOffset(hit->position,
-                                          hit->normal,
+                                          HitInfo3D_OffsetNormal(hit),
                                           support_dir,
                                           kRuntimeEmissionTransparency3DEpsilon);
     while (skip_count < kRuntimeEmissionTransparency3DMaxTransmissionSurfaceSkips &&
@@ -204,7 +204,7 @@ static bool runtime_emission_transparency_3d_trace_support(
         source_segment_distance += transmitted_hit.t;
         remaining_distance -= transmitted_hit.t;
         support_ray = RuntimeRay3D_MakeOffset(transmitted_hit.position,
-                                              transmitted_hit.normal,
+                                              HitInfo3D_OffsetNormal(&transmitted_hit),
                                               support_dir,
                                               kRuntimeEmissionTransparency3DEpsilon);
         skip_count += 1;
