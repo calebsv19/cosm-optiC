@@ -129,6 +129,7 @@ bool RuntimeCausticPhotonPathPopulation3D_PopulateMaps(
     if (!path || !out_readback) return false;
     readback.attempted = true;
     readback.emittedFlux = path->trace.debug.emittedFlux;
+    readback.mediumAbsorbedFlux = path->readback.mediumAbsorbedFlux;
     photon_path_population_terminal_energy(path, &readback);
     if (!active) {
         RuntimeCausticPhotonPathPopulation3D_DefaultSettings(&defaults);
@@ -205,7 +206,7 @@ bool RuntimeCausticPhotonPathPopulation3D_PopulateMaps(
             beam->radiusEnd = active->beamRadiusEnd;
             beam->transmittance = active->beamTransmittance;
             beam->densityWeight = active->beamDensityWeight;
-            beam->mediumId = active->beamMediumId;
+            beam->mediumId = hit->segmentMedium.mediumId;
         }
     }
 
@@ -296,6 +297,9 @@ void RuntimeCausticPhotonPathPopulationBatch3D_Accumulate(
         vec3_add(batch->storedSurfaceFlux, path_readback->storedSurfaceFlux);
     batch->storedBeamFlux =
         vec3_add(batch->storedBeamFlux, path_readback->storedBeamFlux);
+    batch->mediumAbsorbedFlux =
+        vec3_add(batch->mediumAbsorbedFlux,
+                 path_readback->mediumAbsorbedFlux);
     batch->escapedFlux = vec3_add(batch->escapedFlux, path_readback->escapedFlux);
     batch->absorbedFlux = vec3_add(batch->absorbedFlux, path_readback->absorbedFlux);
     batch->rouletteTerminatedFlux =

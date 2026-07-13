@@ -1,5 +1,6 @@
 #include "test_runtime_caustic_photon_medium_stack_3d.h"
 
+#include <math.h>
 #include <string.h>
 
 #include "render/runtime_caustic_photon_medium_stack_3d.h"
@@ -59,6 +60,39 @@ static int test_runtime_caustic_photon_medium_stack_material_entry(void) {
                     entry.absorptionColor.y == 0.8 &&
                     entry.absorptionColor.z == 0.9 &&
                     entry.absorptionDistance == 6.0 && entry.density == 0.4);
+    return 0;
+}
+
+static int test_runtime_caustic_photon_medium_segment_transmittance(void) {
+    RuntimeCausticPhotonMediumEntry3D medium =
+        photon_medium_entry(18, 92, 1.42);
+    RuntimeCausticPhotonMediumStack3D stack;
+    Vec3 transmittance;
+    medium.absorptionColor = vec3(0.25, 0.5, 1.0);
+    medium.absorptionDistance = 2.0;
+    assert_true("runtime_caustic_photon_medium_segment_beer",
+                RuntimeCausticPhotonMediumEntry3D_SegmentTransmittance(
+                    &medium, 1.0, &transmittance));
+    assert_close("runtime_caustic_photon_medium_segment_beer_r",
+                 transmittance.x,
+                 0.5,
+                 1.0e-12);
+    assert_close("runtime_caustic_photon_medium_segment_beer_g",
+                 transmittance.y,
+                 sqrt(0.5),
+                 1.0e-12);
+    assert_close("runtime_caustic_photon_medium_segment_beer_b",
+                 transmittance.z,
+                 1.0,
+                 1.0e-12);
+    RuntimeCausticPhotonMediumStack3D_Init(&stack);
+    assert_true("runtime_caustic_photon_medium_segment_air",
+                RuntimeCausticPhotonMediumEntry3D_SegmentTransmittance(
+                    RuntimeCausticPhotonMediumStack3D_Top(&stack),
+                    100.0,
+                    &transmittance) &&
+                    transmittance.x == 1.0 && transmittance.y == 1.0 &&
+                    transmittance.z == 1.0);
     return 0;
 }
 
@@ -222,6 +256,7 @@ int run_test_runtime_caustic_photon_medium_stack_3d_tests(void) {
     int result = 0;
     result |= test_runtime_caustic_photon_medium_stack_initial_air();
     result |= test_runtime_caustic_photon_medium_stack_material_entry();
+    result |= test_runtime_caustic_photon_medium_segment_transmittance();
     result |= test_runtime_caustic_photon_medium_stack_nested_transitions();
     result |= test_runtime_caustic_photon_medium_stack_nested_interfaces();
     result |= test_runtime_caustic_photon_medium_stack_tir_and_mismatch();

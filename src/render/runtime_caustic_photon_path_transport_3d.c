@@ -9,6 +9,49 @@ static double photon_path_transport_luma(Vec3 value) {
     return 0.2126 * value.x + 0.7152 * value.y + 0.0722 * value.z;
 }
 
+static Vec3 photon_path_transport_multiply(Vec3 a, Vec3 b) {
+    return vec3(a.x * b.x, a.y * b.y, a.z * b.z);
+}
+
+static bool photon_path_transport_apply_segment_attenuation(
+    const RuntimeCausticPhotonMediumStack3D* stack,
+    Vec3 path_start,
+    Vec3 path_end,
+    Vec3 throughput,
+    RuntimeCausticPhotonSceneHitEvent3D* hit_event,
+    RuntimeCausticPhotonSceneTraceReadback3D* readback,
+    Vec3* out_throughput) {
+    const RuntimeCausticPhotonMediumEntry3D* medium;
+    Vec3 transmittance;
+    if (!stack || !hit_event || !readback || !out_throughput) return false;
+    medium = RuntimeCausticPhotonMediumStack3D_Top(stack);
+    if (!medium) return false;
+    hit_event->segmentMedium = *medium;
+    hit_event->segmentDistance = vec3_length(vec3_sub(path_end, path_start));
+    hit_event->throughputBeforeAttenuation = throughput;
+    if (!RuntimeCausticPhotonMediumEntry3D_SegmentTransmittance(
+            medium, hit_event->segmentDistance, &transmittance)) {
+        return false;
+    }
+    hit_event->segmentTransmittance = transmittance;
+    hit_event->throughputAfterAttenuation =
+        photon_path_transport_multiply(throughput, transmittance);
+    hit_event->segmentAbsorbedFlux =
+        vec3_sub(throughput, hit_event->throughputAfterAttenuation);
+    hit_event->segmentAttenuationApplied =
+        !medium->isAir && medium->absorptionDistance > 1.0e-12 &&
+        hit_event->segmentDistance > 1.0e-12;
+    if (hit_event->segmentAttenuationApplied) {
+        readback->attenuatedSegmentCount++;
+        readback->attenuatedSegmentDistance += hit_event->segmentDistance;
+        readback->mediumAbsorbedFlux =
+            vec3_add(readback->mediumAbsorbedFlux,
+                     hit_event->segmentAbsorbedFlux);
+    }
+    *out_throughput = hit_event->throughputAfterAttenuation;
+    return true;
+}
+
 static Vec3 photon_path_transport_geometric_normal(const RuntimeScene3D* scene,
                                                    const HitInfo3D* hit) {
     if (scene && hit && hit->triangleIndex >= 0 &&
@@ -321,6 +364,25 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
         hit_event->usedSeededBsdfSamples = true;
         hit_event->pathStart = path_start;
         hit_event->pathPdfBefore = path_pdf_before;
+        if (!photon_path_transport_apply_segment_attenuation(
+                &medium_stack,
+                path_start,
+                hit.position,
+                state.throughput,
+                hit_event,
+                &result.readback,
+                &state.throughput)) {
+            trace->finalState = state;
+            photon_path_transport_mark_terminal(
+                &result,
+                RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_TRACE_ERROR,
+                RUNTIME_CAUSTIC_PHOTON_REJECT_INVALID_MEDIUM,
+                state.throughput,
+                false);
+            hard_failure = true;
+            break;
+        }
+        throughput_before = state.throughput;
         geometric_normal = photon_path_transport_geometric_normal(scene, &hit);
         hit.normal = geometric_normal;
         hit_event->hit.normal = geometric_normal;

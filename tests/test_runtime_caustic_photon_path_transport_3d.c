@@ -500,6 +500,9 @@ static int test_runtime_caustic_photon_path_transport_tir_continuation(void) {
     memset(&fixture, 0, sizeof(fixture));
     fixture.material = photon_path_transport_glass();
     fixture.material.materialId = 61;
+    fixture.material.baseColorR = 0.25;
+    fixture.material.baseColorG = 0.5;
+    fixture.material.absorptionDistance = 2.0;
     RuntimeCausticPhotonPathTransport3D_DefaultSettings(&settings);
     settings.sceneTrace.maxDepth = 4u;
     settings.sceneTrace.materialResolver = photon_path_transport_fixture_material;
@@ -528,6 +531,9 @@ static int test_runtime_caustic_photon_path_transport_tir_continuation(void) {
                     trace.trace.debug.refractedBranchCount == 0u &&
                     trace.readback.mediumTransitionCount == 4u &&
                     trace.readback.mediumTransitionFailureCount == 0u &&
+                    trace.readback.attenuatedSegmentCount == 4u &&
+                    trace.readback.attenuatedSegmentDistance > 4.5 &&
+                    trace.readback.mediumAbsorbedFlux.x > 0.0 &&
                     trace.finalMediumStack.tirNoChangeCount == 4u &&
                     RuntimeCausticPhotonMediumStack3D_Depth(
                         &trace.finalMediumStack) == 1u &&
@@ -550,6 +556,10 @@ static int test_runtime_caustic_photon_path_transport_tir_continuation(void) {
                         !trace.hitEvents[i].mediumTransition.stackChanged &&
                         trace.hitEvents[i].mediumTransition.depthBefore == 1u &&
                         trace.hitEvents[i].mediumTransition.depthAfter == 1u &&
+                        trace.hitEvents[i].segmentMedium.mediumId == 61 &&
+                        trace.hitEvents[i].segmentAttenuationApplied &&
+                        trace.hitEvents[i].segmentDistance > 0.0 &&
+                        trace.hitEvents[i].segmentTransmittance.x < 1.0 &&
                         trace.hitEvents[i].dielectric.etaFrom >
                             trace.hitEvents[i].dielectric.etaTo);
     }
@@ -564,7 +574,10 @@ static int test_runtime_caustic_photon_path_transport_tir_continuation(void) {
                  1.0e-12);
     assert_close("runtime_caustic_photon_path_transport_tir_flux",
                  trace.trace.finalState.throughput.x,
-                 sample.flux.x,
+                 sample.flux.x *
+                     pow(0.25,
+                         trace.readback.attenuatedSegmentDistance /
+                             fixture.material.absorptionDistance),
                  1.0e-12);
 
     RuntimeSceneAcceleration3D_ResetTLASForTests();
@@ -761,8 +774,11 @@ static int test_runtime_caustic_photon_path_population_transaction(void) {
                     surface_map.records[0].depth == 2u &&
                     beam_map.segments[0].start.z == 2.0 &&
                     beam_map.segments[0].end.z == 1.0 &&
+                    beam_map.segments[0].mediumId == 0 &&
                     beam_map.segments[1].start.z == 1.0 &&
-                    beam_map.segments[1].end.z == 0.0);
+                    beam_map.segments[1].end.z == 0.0 &&
+                    beam_map.segments[1].mediumId ==
+                        trace.hitEvents[1].segmentMedium.mediumId);
     assert_close("runtime_caustic_photon_path_population_surface_pdf",
                  surface_map.records[0].pathPdf,
                  trace.hitEvents[1].pathPdfBefore,
@@ -775,7 +791,9 @@ static int test_runtime_caustic_photon_path_population_transaction(void) {
     RuntimeCausticPhotonPathPopulationBatch3D_Accumulate(&batch, &readback);
     assert_true("runtime_caustic_photon_path_population_batch",
                 batch.pathCount == 1u && batch.succeededPathCount == 1u &&
-                    batch.storedSurfaceCount == 1u && batch.storedBeamCount == 2u);
+                    batch.storedSurfaceCount == 1u && batch.storedBeamCount == 2u &&
+                    batch.mediumAbsorbedFlux.x ==
+                        trace.readback.mediumAbsorbedFlux.x);
 
     RuntimeCausticPhotonMap3D_Clear(&surface_map);
     RuntimeCausticBeamMap3D_Free(&beam_map);

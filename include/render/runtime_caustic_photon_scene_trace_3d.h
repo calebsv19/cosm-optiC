@@ -54,6 +54,13 @@ typedef struct {
     Vec3 pathStart;
     double pathPdfBefore;
     double pathPdfAfter;
+    RuntimeCausticPhotonMediumEntry3D segmentMedium;
+    double segmentDistance;
+    Vec3 segmentTransmittance;
+    Vec3 throughputBeforeAttenuation;
+    Vec3 throughputAfterAttenuation;
+    Vec3 segmentAbsorbedFlux;
+    bool segmentAttenuationApplied;
     HitInfo3D hit;
     RuntimeMaterialPayload3D material;
     RuntimeCausticPhotonDielectricEvent3D dielectric;
@@ -76,6 +83,9 @@ typedef struct {
     uint32_t hitEventCount;
     uint32_t mediumTransitionCount;
     uint32_t mediumTransitionFailureCount;
+    uint32_t attenuatedSegmentCount;
+    double attenuatedSegmentDistance;
+    Vec3 mediumAbsorbedFlux;
     bool usedSharedSceneAccelerationRoute;
     RuntimeCausticPhotonSceneTermination3D termination;
     RuntimeRay3DRouteStats routeStats;
