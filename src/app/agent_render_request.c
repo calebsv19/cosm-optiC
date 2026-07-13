@@ -813,6 +813,10 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
         if (RayTracingJsonGetInt(inspection, "object_audit_max_dimension", &int_value)) {
             request.object_audit_max_dimension = int_value;
         }
+        if (RayTracingJsonGetBool(inspection, "render_trace_cost_ledger_enabled", &bool_value) ||
+            RayTracingJsonGetBool(inspection, "trace_cost_ledger_enabled", &bool_value)) {
+            request.render_trace_cost_ledger_enabled = bool_value;
+        }
     }
 
     if (!agent_render_request_finalize_loaded(&request,

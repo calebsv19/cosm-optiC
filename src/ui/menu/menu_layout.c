@@ -4,166 +4,115 @@
 #include <string.h>
 
 #include "config/config_manager.h"
-#include "render/ray_tracing_integrator_catalog.h"
-#include "render/text_draw.h"
 #include "ui/sdl_menu_render.h"
 
 #define MENU_WIDTH 1200
 #define MENU_HEIGHT 900
 #define MENU_MARGIN_X 30
 #define MENU_MARGIN_Y 30
-#define MENU_ZONE_GAP 18
-#define MENU_LEFT_PANEL_MIN_WIDTH 350
-#define MENU_LEFT_PANEL_MAX_WIDTH 390
-#define MENU_SLIDER_PANEL_WIDTH 304
-#define MENU_ROUTE_STACK_WIDTH 430
-#define MENU_ROUTE_STACK_BUTTON_HEIGHT 50
-#define MENU_ROUTE_STACK_GAP 8
+#define MENU_ROUTE_STACK_BUTTON_HEIGHT 38
+#define MENU_ROUTE_STACK_BUTTON_COUNT 5
+#define MENU_ROUTE_STACK_GAP 6
+#define MENU_ROUTE_STACK_TITLE_HEIGHT 28
 #define MENU_BOTTOM_ACTION_HEIGHT 64
-#define MENU_CENTER_CONTROLS_MIN_HEIGHT 300
-#define MENU_CENTER_CONTROLS_MAX_HEIGHT 336
-#define MENU_CENTER_RESUME_HEIGHT 150
-#define MENU_CENTER_RESUME_MIN_HEIGHT 126
 #define MENU_MANIFEST_PANEL_MIN_HEIGHT 140
 #define MENU_MANIFEST_PANEL_MAX_HEIGHT 340
 #define MENU_MANIFEST_PANEL_GAP 6
 #define MENU_LEFT_PANEL_CONTENT_INSET 18
 #define MENU_PANEL_BOTTOM_GAP 18
-#define MENU_BATCH_MIN_HEIGHT 150
-
-static int max_int(int a, int b) {
-    return (a > b) ? a : b;
-}
 
 static int min_int(int a, int b) {
     return (a < b) ? a : b;
 }
 
-static int measure_button_width(TTF_Font* font,
-                                const char* text,
-                                int min_width,
-                                int max_width) {
-    int width = min_width;
-    int text_w = 0;
-    if (font && text && text[0] &&
-        ray_tracing_text_measure_utf8(NULL, font, text, &text_w, NULL)) {
-        width = max_int(width, text_w + 24);
-    }
-    if (max_width > 0) {
-        width = min_int(width, max_width);
-    }
-    return width;
-}
-
 void menu_layout_build_base(TTF_Font* font,
-                            const MenuRuntimeState* state,
+                            MenuRuntimeState* state,
                             int window_width,
                             int window_height,
                             MenuScreenLayout* out_layout) {
     MenuScreenLayout layout;
-    const RayTracingIntegratorMenuState integrator_menu =
-        RayTracingIntegratorCatalog_BuildMenuState(&animSettings);
-    const bool show_path_toggles = integrator_menu.showPathToggles;
     const int menu_width = (window_width > 0) ? window_width : MENU_WIDTH;
     const int menu_height = (window_height > 0) ? window_height : MENU_HEIGHT;
-    const int left_panel_w = min_int(MENU_LEFT_PANEL_MAX_WIDTH,
-                                     max_int(MENU_LEFT_PANEL_MIN_WIDTH,
-                                             max_int(measure_button_width(font,
-                                                                          "Load Scene [Runtime]: ps4d_runtime_scene_visual_test.json (ray)",
-                                                                          340,
-                                                                          360),
-                                                     140 + (56 * 3) + 12) + 20));
     const int bottom_row_y = menu_height - MENU_MARGIN_Y - MENU_BOTTOM_ACTION_HEIGHT;
-    const int route_stack_h = MENU_ROUTE_STACK_BUTTON_HEIGHT * 5 + MENU_ROUTE_STACK_GAP * 4 + 20;
-    const int route_stack_y = bottom_row_y - MENU_PANEL_BOTTOM_GAP - route_stack_h;
-    const int slider_bottom = route_stack_y - MENU_PANEL_BOTTOM_GAP;
-    const int center_left = MENU_MARGIN_X + left_panel_w + MENU_ZONE_GAP;
-    const int slider_x = menu_width - MENU_MARGIN_X - MENU_SLIDER_PANEL_WIDTH;
-    int center_width = slider_x - MENU_ZONE_GAP - center_left;
-    int center_controls_h = MENU_CENTER_CONTROLS_MIN_HEIGHT + (show_path_toggles ? 56 : 0);
-    int center_controls_available_h = 0;
-    int center_batch_y = 0;
-    int center_batch_h = 0;
-    int center_resume_h = MENU_CENTER_RESUME_HEIGHT;
-    int center_resume_y = 0;
+    const int route_stack_h = MENU_ROUTE_STACK_TITLE_HEIGHT +
+                              MENU_ROUTE_STACK_BUTTON_HEIGHT * MENU_ROUTE_STACK_BUTTON_COUNT +
+                              MENU_ROUTE_STACK_GAP * (MENU_ROUTE_STACK_BUTTON_COUNT - 1) + 20;
+    const int pane_bottom = bottom_row_y - MENU_PANEL_BOTTOM_GAP;
+    const SDL_Rect pane_bounds = {
+        MENU_MARGIN_X,
+        MENU_MARGIN_Y,
+        menu_width - MENU_MARGIN_X * 2,
+        pane_bottom - MENU_MARGIN_Y
+    };
+    const RayTracingMenuPaneLayout* pane_layout = NULL;
+    SDL_Rect scene_rect = {MENU_MARGIN_X, MENU_MARGIN_Y, 390, pane_bounds.h};
+    SDL_Rect workspace_rect = {438, MENU_MARGIN_Y, 410, pane_bounds.h};
+    SDL_Rect health_rect = {866, MENU_MARGIN_Y, 304, pane_bounds.h};
+    int route_stack_y;
+    int slider_bottom;
+    int center_left;
+    MenuWorkspaceLayout workspace_layout;
 
-    (void)state;
+    (void)font;
 
-    center_controls_available_h =
-        bottom_row_y - MENU_PANEL_BOTTOM_GAP - MENU_MARGIN_Y - MENU_ZONE_GAP -
-        MENU_BATCH_MIN_HEIGHT;
-    if (center_controls_available_h < 196) {
-        center_controls_available_h = 196;
+    if (state) {
+        if (!state->menuPaneHost.initialized) {
+            (void)ray_tracing_menu_pane_host_init(&state->menuPaneHost, pane_bounds);
+            ray_tracing_menu_pane_host_set_targets(&state->menuPaneHost,
+                                                   animSettings.menuPaneSceneWidth,
+                                                   animSettings.menuPaneHealthWidth);
+            (void)ray_tracing_menu_pane_host_rebuild(&state->menuPaneHost, pane_bounds);
+        } else {
+            (void)ray_tracing_menu_pane_host_rebuild(&state->menuPaneHost, pane_bounds);
+        }
+        pane_layout = ray_tracing_menu_pane_host_layout(&state->menuPaneHost);
     }
-    if (center_controls_h > MENU_CENTER_CONTROLS_MAX_HEIGHT) {
-        center_controls_h = MENU_CENTER_CONTROLS_MAX_HEIGHT;
+    if (pane_layout) {
+        scene_rect = pane_layout->scene_rect;
+        workspace_rect = pane_layout->workspace_rect;
+        health_rect = pane_layout->health_rect;
     }
-    if (center_controls_h > center_controls_available_h) {
-        center_controls_h = center_controls_available_h;
-    }
-    if (center_width < 300) {
-        center_width = 300;
-    }
+    center_left = workspace_rect.x;
+    route_stack_y = health_rect.y + health_rect.h - route_stack_h;
+    slider_bottom = route_stack_y - MENU_PANEL_BOTTOM_GAP;
+
+    menu_workspace_build_layout(workspace_rect, &workspace_layout);
 
     memset(&layout, 0, sizeof(layout));
     layout.menuRect = (SDL_Rect){0, 0, menu_width, menu_height};
     layout.leftPanelRect = (SDL_Rect){
-        MENU_MARGIN_X,
-        MENU_MARGIN_Y,
-        left_panel_w,
-        menu_height - MENU_MARGIN_Y * 2
+        scene_rect.x,
+        scene_rect.y,
+        scene_rect.w,
+        scene_rect.h
     };
+    layout.workspace = workspace_layout;
     layout.sliderPanelRect = (SDL_Rect){
-        slider_x,
-        MENU_MARGIN_Y,
-        MENU_SLIDER_PANEL_WIDTH,
-        slider_bottom - MENU_MARGIN_Y
+        health_rect.x,
+        health_rect.y,
+        health_rect.w,
+        slider_bottom - health_rect.y
     };
     layout.routeStackRect = (SDL_Rect){
-        menu_width - MENU_MARGIN_X - MENU_ROUTE_STACK_WIDTH,
+        health_rect.x,
         route_stack_y,
-        MENU_ROUTE_STACK_WIDTH,
+        health_rect.w,
         route_stack_h
     };
     layout.bottomActionRowRect = (SDL_Rect){
         center_left,
         bottom_row_y,
-        menu_width - center_left - MENU_MARGIN_X,
+        health_rect.x + health_rect.w - center_left,
         MENU_BOTTOM_ACTION_HEIGHT
     };
     layout.centerControlsRect = (SDL_Rect){
-        center_left,
-        MENU_MARGIN_Y,
-        center_width,
-        center_controls_h
+        workspace_layout.content_rect.x,
+        workspace_layout.content_rect.y,
+        workspace_layout.content_rect.w,
+        workspace_layout.content_rect.h
     };
-    center_batch_y = layout.centerControlsRect.y + layout.centerControlsRect.h + MENU_ZONE_GAP;
-    center_resume_y = layout.bottomActionRowRect.y - MENU_PANEL_BOTTOM_GAP - center_resume_h;
-    if (center_resume_y - MENU_ZONE_GAP - center_batch_y < MENU_BATCH_MIN_HEIGHT) {
-        center_resume_h = max_int(MENU_CENTER_RESUME_MIN_HEIGHT,
-                                  layout.bottomActionRowRect.y - MENU_PANEL_BOTTOM_GAP -
-                                  MENU_ZONE_GAP - center_batch_y - MENU_BATCH_MIN_HEIGHT);
-        if (center_resume_h < MENU_CENTER_RESUME_MIN_HEIGHT) {
-            center_resume_h = MENU_CENTER_RESUME_MIN_HEIGHT;
-        }
-        center_resume_y = layout.bottomActionRowRect.y - MENU_PANEL_BOTTOM_GAP - center_resume_h;
-    }
-    center_batch_h = center_resume_y - MENU_ZONE_GAP - center_batch_y;
-    if (center_batch_h < MENU_BATCH_MIN_HEIGHT) {
-        center_batch_h = MENU_BATCH_MIN_HEIGHT;
-    }
-    layout.centerBatchRect = (SDL_Rect){
-        center_left,
-        center_batch_y,
-        center_width,
-        center_batch_h
-    };
-    layout.centerResumeRect = (SDL_Rect){
-        center_left,
-        center_resume_y,
-        center_width,
-        center_resume_h
-    };
+    layout.centerBatchRect = layout.centerControlsRect;
+    layout.centerResumeRect = layout.centerControlsRect;
 
     if (out_layout) {
         *out_layout = layout;
@@ -173,12 +122,7 @@ void menu_layout_build_base(TTF_Font* font,
 void menu_layout_finalize_with_buttons(MenuScreenLayout* layout,
                                        const MenuButtonLayout* buttons,
                                        const MenuRuntimeState* state) {
-    int batch_top = 0;
-    int batch_bottom = 0;
     if (!layout || !buttons) return;
-
-    batch_top = layout->centerControlsRect.y + layout->centerControlsRect.h + MENU_ZONE_GAP;
-    batch_bottom = layout->centerResumeRect.y - MENU_ZONE_GAP;
 
     if (state && (state->manifestDropdownOpen ||
                   animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D)) {
@@ -206,27 +150,4 @@ void menu_layout_finalize_with_buttons(MenuScreenLayout* layout,
     } else {
         layout->manifestReserveRect = (SDL_Rect){0, 0, 0, 0};
     }
-
-    if (batch_bottom - batch_top < MENU_BATCH_MIN_HEIGHT) {
-        batch_top = batch_bottom - MENU_BATCH_MIN_HEIGHT;
-    }
-    if (batch_top < layout->centerControlsRect.y + layout->centerControlsRect.h + MENU_ZONE_GAP) {
-        batch_top = layout->centerControlsRect.y + layout->centerControlsRect.h + MENU_ZONE_GAP;
-    }
-    if (batch_bottom < batch_top) {
-        batch_bottom = batch_top;
-    }
-
-    layout->centerBatchRect = (SDL_Rect){
-        layout->centerBatchRect.x,
-        batch_top,
-        layout->centerBatchRect.w,
-        batch_bottom - batch_top
-    };
-    layout->centerResumeRect = (SDL_Rect){
-        layout->centerResumeRect.x,
-        layout->centerResumeRect.y,
-        layout->centerResumeRect.w,
-        layout->centerResumeRect.h
-    };
 }

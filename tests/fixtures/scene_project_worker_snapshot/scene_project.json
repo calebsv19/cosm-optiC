@@ -1,0 +1,12 @@
+{
+  "schema": "codework_scene_project_v1",
+  "scene_id": "ray_scene_project_worker_snapshot",
+  "display_name": "Ray Scene Project Worker Snapshot",
+  "active": {
+    "scene_authoring": "scene_authoring.json",
+    "scene_runtime": "scene_runtime.json",
+    "object_manifest": "object_manifest.json",
+    "physics_cache": "physics_sim/active_cache_manifest.json",
+    "render_request": "ray_tracing/render_request.json"
+  }
+}

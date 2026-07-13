@@ -166,6 +166,7 @@ package-linux-desktop-archive:
 	@cd "$(RELEASE_DIR)" && sha256sum "$(notdir $(LINUX_DESKTOP_ARCHIVE))" > "$(notdir $(LINUX_DESKTOP_SHA256))"
 
 package-linux-desktop-self-test: package-linux-desktop
+	@$(MAKE) test-ray-tracing-folder-picker
 	@test -x "$(LINUX_DESKTOP_BIN_DIR)/raytracing-launcher" || (echo "Missing Linux launcher"; exit 1)
 	@test -x "$(LINUX_DESKTOP_BIN_DIR)/raytracing-bin" || (echo "Missing app binary"; exit 1)
 	@test -f "$(LINUX_DESKTOP_ENTRY)" || (echo "Missing Linux desktop entry"; exit 1)

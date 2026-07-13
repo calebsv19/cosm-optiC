@@ -128,6 +128,7 @@ typedef struct RayTracingAgentRenderRequest {
     double volume_albedo_b;
     bool object_audit_enabled;
     int object_audit_max_dimension;
+    bool render_trace_cost_ledger_enabled;
     bool overwrite;
 } RayTracingAgentRenderRequest;
 

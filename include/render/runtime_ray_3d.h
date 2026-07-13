@@ -49,9 +49,11 @@ typedef struct RuntimeRay3DRouteStats {
     uint64_t tlasTraceUnready;
     uint64_t tlasTraceUnsupported;
     uint64_t tlasTraceErrors;
+    uint64_t accelerationFailureCalls;
     uint64_t flattenedFallbackCalls;
     uint64_t parityCheckedRays;
     uint64_t parityMismatches;
+    char lastAccelerationFailureStatus[32];
     char lastParityMismatchReason[128];
 } RuntimeRay3DRouteStats;
 

@@ -251,7 +251,8 @@ static uint32_t menu_elapsed_ms(uint64_t start, uint64_t end, uint64_t frequency
 
 static bool menu_state_interaction_active(const MenuRuntimeState* state) {
     if (!state) return false;
-    return state->draggingSlider ||
+    return ray_tracing_menu_pane_host_splitter_drag_active(&state->menuPaneHost) ||
+           state->draggingSlider ||
            state->manifestScrollbarDragging ||
            state->editingBounce ||
            state->editingFrame ||
@@ -355,6 +356,7 @@ static bool menu_process_event(SDL_Window* window,
                                           menu_state);
             return true;
         case SDL_MOUSEBUTTONUP:
+            ray_tracing_menu_pane_host_end_splitter_drag(&menu_state->menuPaneHost);
             menu_state->draggingSlider = false;
             menu_state->manifestScrollbarDragging = false;
             return true;

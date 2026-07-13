@@ -63,6 +63,10 @@ typedef struct RuntimeSceneAcceleration3DTraceStats {
     uint64_t identityRemapMapHits;
     uint64_t identityRemapFallbackScans;
     uint64_t identityRemapFailures;
+    uint64_t identityRemapTriangleLookupFailures;
+    uint64_t identityRemapRayDirectionFailures;
+    uint64_t identityRemapRangeFailures;
+    uint64_t identityRemapRangeToleranceClamps;
 } RuntimeSceneAcceleration3DTraceStats;
 
 static inline const char* RuntimeSceneAcceleration3DReuseStatusLabel(

@@ -100,6 +100,11 @@ package-desktop-self-test: package-desktop-smoke
 	@echo "package-desktop-self-test passed."
 
 package-desktop-copy-desktop: package-desktop
+	@if [ ! -d "$(CURDIR)/.git" ] && [ "$${RAY_TRACING_ALLOW_WORKTREE_DESKTOP_REFRESH:-0}" != "1" ]; then \
+		echo "Refusing Desktop app overwrite from linked worktree: $(CURDIR)"; \
+		echo "Use the canonical ray_tracing checkout, or explicitly set RAY_TRACING_ALLOW_WORKTREE_DESKTOP_REFRESH=1."; \
+		exit 1; \
+	fi
 	@mkdir -p "$(dir $(DESKTOP_APP_DIR))"
 	@rm -rf "$(DESKTOP_APP_DIR)"
 	@/usr/bin/ditto "$(PACKAGE_APP_DIR)" "$(DESKTOP_APP_DIR)"
@@ -116,6 +121,11 @@ package-desktop-remove:
 	@echo "Removed desktop package: $(PACKAGE_APP_DIR)"
 
 package-desktop-refresh: package-desktop
+	@if [ ! -d "$(CURDIR)/.git" ] && [ "$${RAY_TRACING_ALLOW_WORKTREE_DESKTOP_REFRESH:-0}" != "1" ]; then \
+		echo "Refusing Desktop app overwrite from linked worktree: $(CURDIR)"; \
+		echo "Use the canonical ray_tracing checkout, or explicitly set RAY_TRACING_ALLOW_WORKTREE_DESKTOP_REFRESH=1."; \
+		exit 1; \
+	fi
 	@mkdir -p "$(dir $(DESKTOP_APP_DIR))"
 	@rm -rf "$(DESKTOP_APP_DIR)"
 	@/usr/bin/ditto "$(PACKAGE_APP_DIR)" "$(DESKTOP_APP_DIR)"

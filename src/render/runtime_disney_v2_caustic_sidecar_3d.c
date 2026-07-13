@@ -9,7 +9,7 @@
 #include "scene/object_manager.h"
 
 static RuntimeDisneyV2CausticMode3D g_caustic_mode =
-    RUNTIME_DISNEY_V2_CAUSTIC_MODE_ANALYTIC;
+    RUNTIME_DISNEY_V2_CAUSTIC_MODE_OFF;
 static double g_caustic_sidecar_strength = 1.0;
 static RuntimeDisneyV2CausticSidecarDiagnostics3D g_caustic_sidecar_diagnostics = {0};
 
@@ -43,7 +43,7 @@ void RuntimeDisneyV2_3D_SetCausticMode(RuntimeDisneyV2CausticMode3D mode,
     if (mode != RUNTIME_DISNEY_V2_CAUSTIC_MODE_OFF &&
         mode != RUNTIME_DISNEY_V2_CAUSTIC_MODE_ANALYTIC &&
         mode != RUNTIME_DISNEY_V2_CAUSTIC_MODE_TRANSPORT) {
-        mode = RUNTIME_DISNEY_V2_CAUSTIC_MODE_ANALYTIC;
+        mode = RUNTIME_DISNEY_V2_CAUSTIC_MODE_OFF;
     }
     g_caustic_mode = mode;
     g_caustic_sidecar_strength = caustic_sidecar_clamp(strength, 0.0, 16.0);

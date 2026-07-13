@@ -314,5 +314,5 @@ void menu_render_draw_sliders(SDL_Renderer* renderer,
                               TTF_Font* font,
                               MenuRuntimeState* state,
                               const SliderLayout* layout) {
-    menu_render_draw_slider_items(renderer, font, state, layout, "Render Settings");
+    menu_render_draw_slider_items(renderer, font, state, layout, "Effective Render");
 }

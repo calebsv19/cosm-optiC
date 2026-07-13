@@ -9,6 +9,7 @@ STABLE_TEST_TARGETS := \
 	test-runtime-triangle-bvh-3d \
 	test-ray-tracing-core-sim-runtime-frame-contract \
 	test-ray-tracing-runtime-host-lifecycle-contract \
+	test-menu-pane-host-contract \
 	test-scene-editor-pane-host-contract \
 	test-ray-tracing-render-headless-preflight \
 	test-ray-tracing-render-headless-image-export \
@@ -55,6 +56,27 @@ visual-artifact: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 
 test: $(APP_TARGET) $(TEST_BIN)
 	./$(TEST_BIN)
+
+RAY_TRACING_FOLDER_PICKER_TEST_BIN := $(BUILD_DIR)/tests/ray_tracing_folder_picker_test
+RAY_TRACING_FOLDER_PICKER_TEST_SRCS := \
+	$(TEST_DIR)/ray_tracing_folder_picker_test.c \
+	$(SRC_DIR)/platform/ray_tracing_folder_picker.c
+RAY_TRACING_FOLDER_PICKER_TEST_PLATFORM_FLAGS :=
+
+ifeq ($(UNAME_S),Linux)
+RAY_TRACING_FOLDER_PICKER_TEST_PLATFORM_FLAGS += -D_POSIX_C_SOURCE=200809L -D_XOPEN_SOURCE=700
+endif
+
+$(RAY_TRACING_FOLDER_PICKER_TEST_BIN): $(RAY_TRACING_FOLDER_PICKER_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
+		$(RAY_TRACING_FOLDER_PICKER_TEST_PLATFORM_FLAGS) \
+		-DRAY_TRACING_FOLDER_PICKER_FORCE_LINUX -I$(INC_DIR) -I$(SRC_DIR) \
+		-o $@ $(RAY_TRACING_FOLDER_PICKER_TEST_SRCS)
+
+test-ray-tracing-folder-picker: $(RAY_TRACING_FOLDER_PICKER_TEST_BIN)
+	@$(RAY_TRACING_FOLDER_PICKER_TEST_BIN) || (echo "ray tracing folder picker test failed."; exit 1)
+	@echo "ray tracing folder picker lane passed"
 
 test-runtime-scene-bridge-contract: $(APP_TARGET) $(TEST_BIN)
 	@TEST_RUNNER_GROUP=runtime_scene_bridge_core ./$(TEST_BIN) || (echo "ray tracing runtime scene bridge core contract test failed."; exit 1)
@@ -439,6 +461,28 @@ $(SCENE_EDITOR_PANE_HOST_TEST_BIN): $(SCENE_EDITOR_PANE_HOST_TEST_SRCS)
 
 test-scene-editor-pane-host-contract: $(SCENE_EDITOR_PANE_HOST_TEST_BIN)
 	@$(SCENE_EDITOR_PANE_HOST_TEST_BIN) || (echo "scene editor pane host contract test failed."; exit 1)
+
+MENU_PANE_HOST_TEST_BIN := $(BUILD_DIR)/tests/menu_pane_host_contract_test
+MENU_PANE_HOST_TEST_SRCS := \
+	$(TEST_DIR)/menu_pane_host_contract_test.c \
+	$(TEST_DIR)/kit_render_backend_vk_stub.c \
+	$(SRC_DIR)/ui/menu/menu_pane_host.c \
+	$(CORE_PANE_DIR)/src/core_pane.c \
+	$(KIT_PANE_DIR)/src/kit_pane.c \
+	$(KIT_RENDER_DIR)/src/kit_render.c \
+	$(KIT_RENDER_DIR)/src/kit_render_backend_null.c \
+	$(CORE_THEME_DIR)/src/core_theme.c \
+	$(CORE_FONT_DIR)/src/core_font.c \
+	$(CORE_BASE_DIR)/src/core_base.c
+
+$(MENU_PANE_HOST_TEST_BIN): $(MENU_PANE_HOST_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g -DKIT_RENDER_ENABLE_VK_BACKEND=0 \
+		-I$(INC_DIR) -I$(SRC_DIR) -I$(CORE_PANE_DIR)/include -I$(KIT_PANE_DIR)/include -I$(KIT_RENDER_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-o $@ $(MENU_PANE_HOST_TEST_SRCS) -lm
+
+test-menu-pane-host-contract: $(MENU_PANE_HOST_TEST_BIN)
+	@$(MENU_PANE_HOST_TEST_BIN) || (echo "menu pane host contract test failed."; exit 1)
 
 test-ray-tracing-render-headless-preflight: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	tests/integration/run_ray_tracing_render_headless_preflight.sh

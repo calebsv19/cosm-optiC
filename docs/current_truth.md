@@ -1,6 +1,6 @@
 # optiC Current Truth
 
-Last updated: 2026-07-08
+Last updated: 2026-07-12
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -602,13 +602,37 @@ Last updated: 2026-07-08
     PhysicsSim cache, PhysicsSim bundle, and RayTracing render-request
     presence without changing paths or export modes
   - the menu worker export action is intentionally narrow: it requires the
-    selected scene source to be a runtime scene and resolves the render request
-    from `RAY_TRACING_WORKER_RENDER_REQUEST`, `render_request.json`, or
-    `ray_tracing_request.json` beside that runtime scene before writing a
-    queue-ready item under `visual_artifacts/worker_queue_exports/`
-  - main-menu frame-resume state now lives in a compact `Frame Resume` pane
-    below `Data I/O + Batch`; it owns resume-existing, start-frame editing, and
-    next-existing readback instead of using oversized route-stack buttons
+    selected scene source to be a runtime scene; project-backed scenes resolve
+    the manifest's active request pointer (defaulting to
+    `ray_tracing/render_request.json`) and create it on first export with
+    portable simulation-frame start/count/stride state, while loose scenes and
+    `RAY_TRACING_WORKER_RENDER_REQUEST` keep compatibility behavior
+  - project render-request discovery and JSON-preserving writeback live in
+    `src/app/scene_project_render_request.c`; unsafe project-relative traversal
+    is rejected and explicit external requests are never written
+  - the existing menu action still writes the original scene-only queue item;
+    the headless export CLI also provides an explicit
+    `scene-plus-physics-cache` mode for project-backed scenes
+  - that project mode snapshots canonical project/authoring/runtime/object
+    files, referenced mesh sidecars, the project render request, and only the
+    VF3D/pack/water frames selected by `simulation_frames.start/count/stride`
+  - portable project manifests keep the project-root directory contract; the
+    live worker projection uses the same canonical `assets/vf3d/...` and
+    `assets/physics/...` paths, while hashes and lineage preserve the source
+    active-run identity and selection window
+  - the renderer projection stays within the live preview profile's 16-file
+    limit by excluding portable-only project metadata from inline payload files
+    without removing it from the portable snapshot
+  - the approved S5 item was accepted, claimed by Linux PC, and rendered two
+    frames with scene, VF3D volume, and water attachments intact; bounded
+    readback reports diagnostics `ok`
+  - VPS terminal status is still failed with publication `none` because upload
+    of the completed 94,324-byte stage result returned HTTP 400 after local
+    rendering; completion-result acceptance is the next boundary
+  - main-menu frame-resume state now lives in the switchable compact
+    `Frame Resume` center module; it owns resume-existing, start-frame editing,
+    and next-existing readback, while compact `Preview` and `Start` actions stay
+    in the always-visible right-side `Runtime Route` stack
   - the global persistence footer now starts to the right of the full-height
     `Scene + Mode` pane, so `Exit w/o Saving`, `Restore Defaults`, and `Save`
     no longer compete with left-pane scene/volume controls
@@ -1060,6 +1084,8 @@ Last updated: 2026-07-08
     detection from the selected runtime-scene path
   - `src/ui/menu/menu_worker_export.c` for the menu-triggered scene-only worker
     export command wrapper
+  - `tools/scene_project_worker_export.py` for non-UI project snapshot
+    selection, copying, path normalization, and lineage
 
 ## Recommended Scene-Authoring / Render Loop
 - Treat `line_drawing` as the canonical source for room/object/camera/light

@@ -162,6 +162,7 @@ typedef struct RayTracingHeadlessPreflight {
     RuntimeNative3DPreparedSceneCacheStats prepared_scene_cache_stats;
     RuntimeDynamicGeometryWaterCacheDiagnostics3D dynamic_water_cache_stats;
     RuntimeSceneAcceleration3DDiagnostics scene_acceleration_stats;
+    RuntimeSceneAcceleration3DTraceStats scene_acceleration_trace_stats;
     RuntimeRay3DRouteStats ray_trace_route_stats;
     RuntimeRenderTraceCostLedger3D render_trace_cost_ledger;
     RayTracingRuntimeMeshAssetTimingStats mesh_asset_timing_stats;

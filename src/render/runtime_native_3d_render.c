@@ -1,5 +1,8 @@
 #include "render/runtime_native_3d_render_internal_host.h"
 
+#include "render/runtime_ray_3d.h"
+#include "render/runtime_scene_accel_3d.h"
+
 static bool runtime_native_3d_render_prepared_frame_serial(
     uint8_t* pixel_buffer,
     RayTracing3DIntegratorId integrator_id,
@@ -9,7 +12,17 @@ static bool runtime_native_3d_render_prepared_frame_serial(
     void* progress_user_data,
     RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DRenderUnit render_unit = {0};
+    const RuntimeScene3D* trace_scene = NULL;
     bool ok = false;
+
+    trace_scene = frame && frame->traceScene ? frame->traceScene
+                                             : (frame ? &frame->scene : NULL);
+    if (frame && frame->traceScene &&
+        RuntimeRay3D_CurrentTraceRoute() !=
+            RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH &&
+        !RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(trace_scene)) {
+        return false;
+    }
 
     RuntimeNative3DRenderUnit_TakeReusable(&render_unit);
     ok = RuntimeNative3DRenderUnit_Setup(&render_unit,

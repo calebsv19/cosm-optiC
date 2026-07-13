@@ -393,15 +393,45 @@ static int test_menu_layout_builds_non_overlapping_primary_zones(void) {
     assert_true("menu_layout_center_above_footer",
                 screen.centerBatchRect.y + screen.centerBatchRect.h <= screen.bottomActionRowRect.y);
     assert_true("menu_layout_resume_panel_has_width", screen.centerResumeRect.w >= 300);
-    assert_true("menu_layout_batch_above_resume",
-                screen.centerBatchRect.y + screen.centerBatchRect.h < screen.centerResumeRect.y);
+    assert_true("menu_layout_workspace_modules_share_content_rect",
+                memcmp(&screen.centerBatchRect,
+                       &screen.centerResumeRect,
+                       sizeof(SDL_Rect)) == 0 &&
+                memcmp(&screen.centerControlsRect,
+                       &screen.centerBatchRect,
+                       sizeof(SDL_Rect)) == 0);
     assert_true("menu_layout_resume_above_footer",
                 screen.centerResumeRect.y + screen.centerResumeRect.h <= screen.bottomActionRowRect.y);
     assert_true("menu_layout_footer_starts_after_left_panel",
                 screen.bottomActionRowRect.x > screen.leftPanelRect.x + screen.leftPanelRect.w);
-    assert_true("menu_layout_left_panel_reaches_footer_band",
-                screen.leftPanelRect.y + screen.leftPanelRect.h > screen.bottomActionRowRect.y);
+    assert_true("menu_layout_left_panel_stops_above_global_footer",
+                screen.leftPanelRect.y + screen.leftPanelRect.h <= screen.bottomActionRowRect.y);
     animSettings = saved_anim;
+    return 0;
+}
+
+static int test_menu_workspace_registers_and_switches_nested_modules(void) {
+    MenuWorkspaceHost host;
+    MenuWorkspaceLayout layout;
+    SDL_Rect frame = {400, 30, 420, 700};
+
+    memset(&host, 0, sizeof(host));
+    memset(&layout, 0, sizeof(layout));
+    assert_true("menu_workspace_host_init", menu_workspace_host_init(&host));
+    assert_true("menu_workspace_defaults_to_render",
+                host.active_module == MENU_WORKSPACE_RENDER);
+    assert_true("menu_workspace_selects_output",
+                menu_workspace_host_select(&host, MENU_WORKSPACE_OUTPUT));
+    assert_true("menu_workspace_output_active",
+                host.active_module == MENU_WORKSPACE_OUTPUT);
+    menu_workspace_build_layout(frame, &layout);
+    assert_true("menu_workspace_content_below_tabs",
+                layout.content_rect.y > layout.tab_rects[0].y + layout.tab_rects[0].h);
+    assert_true("menu_workspace_tab_hit",
+                menu_workspace_tab_at_point(&layout,
+                                            layout.tab_rects[2].x + 2,
+                                            layout.tab_rects[2].y + 2) ==
+                    (int)MENU_WORKSPACE_RUN);
     return 0;
 }
 
@@ -437,10 +467,10 @@ static int test_menu_layout_keeps_manifest_list_inside_left_panel(void) {
                 test_rect_right(&screen.manifestReserveRect) <= test_rect_right(&screen.leftPanelRect));
     assert_true("menu_layout_manifest_list_inside_left_panel_bottom",
                 test_rect_bottom(&screen.manifestReserveRect) <= test_rect_bottom(&screen.leftPanelRect));
-    assert_true("menu_layout_batch_y_unchanged_when_manifest_opens",
-                screen.centerBatchRect.y == screen.centerControlsRect.y + screen.centerControlsRect.h + 18);
-    assert_true("menu_layout_batch_above_resume",
-                screen.centerBatchRect.y + screen.centerBatchRect.h < screen.centerResumeRect.y);
+    assert_true("menu_layout_workspace_unchanged_when_manifest_opens",
+                memcmp(&screen.centerBatchRect,
+                       &screen.centerControlsRect,
+                       sizeof(SDL_Rect)) == 0);
     animSettings = saved_anim;
     return 0;
 }
@@ -510,11 +540,26 @@ static int test_menu_button_layout_respects_owned_screen_zones(void) {
     assert_true("menu_buttons_route_stack_inside_route_zone",
                 buttons.spaceModeRect.x >= screen.routeStackRect.x &&
                 buttons.spaceModeRect.y >= screen.routeStackRect.y &&
-                buttons.previewRect.y >= screen.routeStackRect.y &&
-                buttons.previewRect.y < test_rect_bottom(&screen.routeStackRect));
-    assert_true("menu_buttons_route_actions_use_route_width",
+                buttons.startRect.y < test_rect_bottom(&screen.routeStackRect));
+    assert_true("menu_buttons_launch_actions_stay_in_runtime_route",
+                buttons.previewRect.x >= screen.routeStackRect.x &&
                 buttons.startRect.x >= screen.routeStackRect.x &&
-                test_rect_right(&buttons.startRect) <= test_rect_right(&screen.routeStackRect));
+                test_rect_right(&buttons.previewRect) <= test_rect_right(&screen.routeStackRect) &&
+                test_rect_right(&buttons.startRect) <= test_rect_right(&screen.routeStackRect) &&
+                buttons.previewRect.y > buttons.sceneEditorRect.y &&
+                buttons.startRect.y > buttons.previewRect.y);
+    assert_true("menu_buttons_runtime_route_is_compact",
+                buttons.spaceModeRect.h <= 40 &&
+                buttons.startRect.h <= 40);
+    assert_true("menu_buttons_run_module_selects",
+                menu_workspace_host_init(&state.menuWorkspaceHost) &&
+                menu_workspace_host_select(&state.menuWorkspaceHost,
+                                           MENU_WORKSPACE_RUN));
+    menu_render_build_button_layout(NULL, &state, &screen, &buttons);
+    assert_true("menu_buttons_run_module_keeps_launch_actions_in_runtime_route",
+                buttons.startRect.x >= screen.routeStackRect.x &&
+                buttons.previewRect.x >= screen.routeStackRect.x &&
+                buttons.startRect.y > buttons.previewRect.y);
     assert_true("menu_buttons_footer_inside_bottom_row",
                 buttons.exitRect.x >= screen.bottomActionRowRect.x &&
                 buttons.exitRect.y >= screen.bottomActionRowRect.y &&
@@ -599,6 +644,11 @@ static int test_menu_resume_panel_clicks_preserve_frame_behavior(void) {
                 menu_resume_panel_handle_click(&event, &state, &resume));
     assert_true("menu_resume_next_sets_start", animSettings.startFrameIndex == 6);
     assert_true("menu_resume_next_clears_edit", !state.editingStartFrame);
+
+    event.button.x = resume.panelRect.x + 4;
+    event.button.y = resume.panelRect.y + 4;
+    assert_true("menu_resume_blank_click_passes_through",
+                !menu_resume_panel_handle_click(&event, &state, &resume));
 
     animSettings = saved_anim;
     return 0;
@@ -766,7 +816,8 @@ static int test_integrator_catalog_menu_routes_by_space_mode(void) {
     assert_true("integrator_menu_lighting_tab_rects_in_title_band",
                 buttons.rendererLightingTabRect.y >= screen.centerControlsRect.y &&
                 buttons.rendererPerformanceTabRect.y >= screen.centerControlsRect.y &&
-                buttons.rendererLightingTabRect.x < buttons.rendererPerformanceTabRect.x);
+                buttons.rendererLightingTabRect.x < buttons.rendererPerformanceTabRect.x &&
+                buttons.rendererPerformanceTabRect.x < buttons.rendererCausticsTabRect.x);
     assert_true("integrator_menu_lighting_sliders_present",
                 buttons.rendererControlSliders.count >= 5);
 
@@ -782,6 +833,23 @@ static int test_integrator_catalog_menu_routes_by_space_mode(void) {
     assert_true("integrator_menu_performance_tile_size_slider_present",
                 buttons.rendererControlSliders.count >= 1 &&
                 buttons.rendererControlSliders.items[0].value == &animSettings.tileSize);
+
+    memset(&buttons, 0, sizeof(buttons));
+    state.rendererControlsTab = MENU_RENDERER_CONTROLS_CAUSTICS;
+    RuntimeCausticSettings3D_Default(&state.causticSettings);
+    state.causticSettings.mode = RUNTIME_CAUSTIC_MODE_OFF;
+    menu_render_build_button_layout(NULL, &state, &screen, &buttons);
+    assert_true("integrator_menu_caustic_controls_present",
+                buttons.causticModeRect.w > 0 &&
+                buttons.causticEngineRect.w > 0 &&
+                buttons.causticSurfaceRect.w > 0 &&
+                buttons.causticVolumeRect.w > 0);
+    assert_true("integrator_menu_caustic_budget_sliders_present",
+                buttons.rendererControlSliders.count == 2 &&
+                buttons.rendererControlSliders.items[0].value ==
+                    &state.causticSettings.sampleBudget &&
+                buttons.rendererControlSliders.items[1].value ==
+                    &state.causticSettings.maxPathDepth);
 
     animSettings.spaceMode = SPACE_MODE_2D;
     menu_state = RayTracingIntegratorCatalog_BuildMenuState(&animSettings);
@@ -1587,6 +1655,7 @@ int run_test_ui_menu_contract_tests(void) {
     test_object_editor_motion_overlay_reports_selected_path_readback();
     test_menu_scene_project_summary_keeps_loose_runtime_scene_separate();
     test_menu_layout_builds_non_overlapping_primary_zones();
+    test_menu_workspace_registers_and_switches_nested_modules();
     test_menu_layout_keeps_manifest_list_inside_left_panel();
     test_menu_button_layout_respects_owned_screen_zones();
     test_menu_button_layout_compacts_scene_mode_controls_in_3d();

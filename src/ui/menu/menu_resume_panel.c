@@ -132,7 +132,7 @@ bool menu_resume_panel_handle_click(const SDL_Event* event,
         return true;
     }
 
-    return true;
+    return false;
 }
 
 void menu_resume_panel_render(SDL_Renderer* renderer,

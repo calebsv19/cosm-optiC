@@ -36,6 +36,9 @@
 #define BOTTOM_BUTTON_SPACING 10
 #define BOTTOM_BUTTON_WIDTH_START 200
 #define BOTTOM_BUTTON_HEIGHT_START 50
+#define ROUTE_BUTTON_WIDTH 184
+#define ROUTE_BUTTON_HEIGHT 38
+#define ROUTE_BUTTON_GAP 6
 #define BOTTOM_BUTTON_MARGIN_Y_START (MENU_HEIGHT -MENU_MARGIN_Y - BOTTOM_BUTTON_HEIGHT_START)
 #define BOTTOM_BUTTON_WIDTH_EXIT 180
 #define BOTTOM_BUTTON_HEIGHT_EXIT 40
@@ -74,7 +77,6 @@
 #define ROOT_ROW_HEIGHT 34
 #define ROOT_ROW_SPACING 8
 #define ROOT_CTRL_BUTTON_W 56
-#define RENDERER_CONTROL_TAB_WIDTH 112
 #define RENDERER_CONTROL_TAB_HEIGHT 22
 #define RENDERER_CONTROL_BUTTON_HEIGHT 32
 #define RENDERER_CONTROL_ROW_GAP 8
@@ -285,7 +287,24 @@ static void menu_renderer_controls_build_slider_layout(TTF_Font* font,
     if (layout.panelRect.h < 0) layout.panelRect.h = 0;
 
     menu_state_sync_from_anim(state);
-    if (state->rendererControlsTab == MENU_RENDERER_CONTROLS_PERFORMANCE) {
+    if (state->rendererControlsTab == MENU_RENDERER_CONTROLS_CAUSTICS) {
+        menu_renderer_controls_add_slider(&layout,
+                                          &state->causticSettings.sampleBudget,
+                                          0,
+                                          100000,
+                                          "Photon / Path Budget",
+                                          slider_x,
+                                          slider_width,
+                                          text_height);
+        menu_renderer_controls_add_slider(&layout,
+                                          &state->causticSettings.maxPathDepth,
+                                          0,
+                                          16,
+                                          "Caustic Path Depth",
+                                          slider_x,
+                                          slider_width,
+                                          text_height);
+    } else if (state->rendererControlsTab == MENU_RENDERER_CONTROLS_PERFORMANCE) {
         menu_renderer_controls_add_slider(&layout,
                                           &animSettings.tileSize,
                                           4,
@@ -543,7 +562,8 @@ void menu_render_build_button_layout(TTF_Font* font,
         maxLeftWidth = screen_layout->leftPanelRect.w - 36;
         rightEdge = screen_layout->routeStackRect.x + screen_layout->routeStackRect.w - 10;
         leftTopY = screen_layout->leftPanelRect.y + MENU_PANEL_CHROME_TITLE_BAND + 12;
-        routeTopY = screen_layout->routeStackRect.y + 10;
+        routeTopY = screen_layout->routeStackRect.y +
+                    MENU_PANEL_CHROME_TITLE_BAND + 8;
         footerButtonY = screen_layout->bottomActionRowRect.y +
                         (screen_layout->bottomActionRowRect.h - BOTTOM_BUTTON_HEIGHT_EXIT) / 2;
         footerRightLimit = screen_layout->bottomActionRowRect.x + screen_layout->bottomActionRowRect.w - 14;
@@ -709,36 +729,78 @@ void menu_render_build_button_layout(TTF_Font* font,
         int content_right = screen_layout->centerControlsRect.x +
                             screen_layout->centerControlsRect.w - 12;
         int content_width = content_right - content_left;
-        int tab_y = screen_layout->centerControlsRect.y + 3;
-        int tab_right = content_right;
-        int first_row_y = screen_layout->centerControlsRect.y +
-                          MENU_PANEL_CHROME_TITLE_BAND + 10;
-        int second_row_y = first_row_y + RENDERER_CONTROL_BUTTON_HEIGHT +
-                           RENDERER_CONTROL_ROW_GAP;
-        int slider_start_y = second_row_y + RENDERER_CONTROL_BUTTON_HEIGHT + 12;
+        int tab_y = screen_layout->centerControlsRect.y +
+                    MENU_PANEL_CHROME_TITLE_BAND + 6;
+        int tab_width = (content_width - RENDERER_CONTROL_COLUMN_GAP * 2) / 3;
+        int first_row_y;
+        int second_row_y;
+        int slider_start_y;
         int column_width =
             (content_width - RENDERER_CONTROL_COLUMN_GAP) / 2;
         if (column_width < 120) column_width = 120;
 
-        layout.rendererPerformanceTabRect = (SDL_Rect){
-            tab_right - RENDERER_CONTROL_TAB_WIDTH,
-            tab_y,
-            RENDERER_CONTROL_TAB_WIDTH,
-            RENDERER_CONTROL_TAB_HEIGHT
-        };
+        if (tab_width < 72) tab_width = 72;
         layout.rendererLightingTabRect = (SDL_Rect){
-            layout.rendererPerformanceTabRect.x - RENDERER_CONTROL_COLUMN_GAP -
-                RENDERER_CONTROL_TAB_WIDTH,
+            content_left,
             tab_y,
-            RENDERER_CONTROL_TAB_WIDTH,
+            tab_width,
             RENDERER_CONTROL_TAB_HEIGHT
         };
+        layout.rendererPerformanceTabRect = (SDL_Rect){
+            layout.rendererLightingTabRect.x + tab_width +
+                RENDERER_CONTROL_COLUMN_GAP,
+            tab_y,
+            tab_width,
+            RENDERER_CONTROL_TAB_HEIGHT
+        };
+        layout.rendererCausticsTabRect = (SDL_Rect){
+            layout.rendererPerformanceTabRect.x + tab_width +
+                RENDERER_CONTROL_COLUMN_GAP,
+            tab_y,
+            tab_width,
+            RENDERER_CONTROL_TAB_HEIGHT
+        };
+        first_row_y = tab_y + RENDERER_CONTROL_TAB_HEIGHT + 10;
+        second_row_y = first_row_y + RENDERER_CONTROL_BUTTON_HEIGHT +
+                       RENDERER_CONTROL_ROW_GAP;
+        slider_start_y = second_row_y + RENDERER_CONTROL_BUTTON_HEIGHT + 12;
         centerLeftX = content_left;
         centerRightX = centerLeftX + column_width + RENDERER_CONTROL_COLUMN_GAP;
         centerColumnMaxWidth = column_width;
 
         if (state &&
-            state->rendererControlsTab == MENU_RENDERER_CONTROLS_PERFORMANCE) {
+            state->rendererControlsTab == MENU_RENDERER_CONTROLS_CAUSTICS) {
+            layout.causticModeRect = build_adaptive_button_rect(
+                font, content_left, first_row_y, content_width,
+                RENDERER_CONTROL_BUTTON_HEIGHT, "Caustics", content_width);
+            layout.causticEngineRect = build_adaptive_button_rect(
+                font, content_left, second_row_y, content_width,
+                RENDERER_CONTROL_BUTTON_HEIGHT, "Deposition", content_width);
+            layout.causticSurfaceRect = build_adaptive_button_rect(
+                font, centerLeftX,
+                second_row_y + RENDERER_CONTROL_BUTTON_HEIGHT + RENDERER_CONTROL_ROW_GAP,
+                column_width,
+                RENDERER_CONTROL_BUTTON_HEIGHT, "Surface Cache", centerColumnMaxWidth);
+            layout.causticVolumeRect = build_adaptive_button_rect(
+                font, centerRightX,
+                second_row_y + RENDERER_CONTROL_BUTTON_HEIGHT + RENDERER_CONTROL_ROW_GAP,
+                column_width,
+                RENDERER_CONTROL_BUTTON_HEIGHT, "Volume Cache", centerColumnMaxWidth);
+            layout.causticDebugSummaryRect = build_adaptive_button_rect(
+                font, centerLeftX,
+                second_row_y + (RENDERER_CONTROL_BUTTON_HEIGHT + RENDERER_CONTROL_ROW_GAP) * 2,
+                column_width, RENDERER_CONTROL_BUTTON_HEIGHT,
+                "Debug Summary", centerColumnMaxWidth);
+            layout.causticDebugExportRect = build_adaptive_button_rect(
+                font, centerRightX,
+                second_row_y + (RENDERER_CONTROL_BUTTON_HEIGHT + RENDERER_CONTROL_ROW_GAP) * 2,
+                column_width, RENDERER_CONTROL_BUTTON_HEIGHT,
+                "Debug Export", centerColumnMaxWidth);
+            slider_start_y = second_row_y +
+                             (RENDERER_CONTROL_BUTTON_HEIGHT + RENDERER_CONTROL_ROW_GAP) * 3 +
+                             12;
+        } else if (state &&
+                   state->rendererControlsTab == MENU_RENDERER_CONTROLS_PERFORMANCE) {
             layout.tileRect = build_adaptive_button_rect(font,
                                                          centerLeftX,
                                                          first_row_y,
@@ -831,16 +893,19 @@ void menu_render_build_button_layout(TTF_Font* font,
     }
 
     layout.startRect = build_adaptive_button_rect_right(font, rightEdge,
-                                                        screen_layout ? (routeTopY + (BOTTOM_BUTTON_HEIGHT_START + 8) * 3) : BOTTOM_BUTTON_MARGIN_Y_START,
-                                                        BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START,
+                                                        screen_layout ? (routeTopY + (ROUTE_BUTTON_HEIGHT + ROUTE_BUTTON_GAP) * 4) : BOTTOM_BUTTON_MARGIN_Y_START,
+                                                        screen_layout ? ROUTE_BUTTON_WIDTH : BOTTOM_BUTTON_WIDTH_START,
+                                                        screen_layout ? ROUTE_BUTTON_HEIGHT : BOTTOM_BUTTON_HEIGHT_START,
                                                         "Start", 0);
     layout.previewRect = build_adaptive_button_rect_right(font, rightEdge,
-                                                          screen_layout ? (routeTopY + (BOTTOM_BUTTON_HEIGHT_START + 8) * 4) : BOTTOM_BUTTON_MARGIN_Y_PREVIEW,
-                                                          BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START,
+                                                          screen_layout ? (routeTopY + (ROUTE_BUTTON_HEIGHT + ROUTE_BUTTON_GAP) * 3) : BOTTOM_BUTTON_MARGIN_Y_PREVIEW,
+                                                          screen_layout ? ROUTE_BUTTON_WIDTH : BOTTOM_BUTTON_WIDTH_START,
+                                                          screen_layout ? ROUTE_BUTTON_HEIGHT : BOTTOM_BUTTON_HEIGHT_START,
                                                           "Preview", 0);
     layout.sceneEditorRect = build_adaptive_button_rect_right(font, rightEdge,
-                                                              screen_layout ? (routeTopY + (BOTTOM_BUTTON_HEIGHT_START + 8) * 2) : (layout.startRect.y - (BOTTOM_BUTTON_HEIGHT_START + 8)),
-                                                              BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START,
+                                                              screen_layout ? (routeTopY + (ROUTE_BUTTON_HEIGHT + ROUTE_BUTTON_GAP) * 2) : (layout.startRect.y - (BOTTOM_BUTTON_HEIGHT_START + 8)),
+                                                              screen_layout ? ROUTE_BUTTON_WIDTH : BOTTOM_BUTTON_WIDTH_START,
+                                                              screen_layout ? ROUTE_BUTTON_HEIGHT : BOTTOM_BUTTON_HEIGHT_START,
                                                               "Scene Editor", 0);
     int clampedEditorMode = EditorModeRouter_ClampEditorMode(animSettings.editorMode,
                                                              AnimationUseFluidScene());
@@ -852,12 +917,14 @@ void menu_render_build_button_layout(TTF_Font* font,
                                   (clampedEditorMode == EDITOR_MODE_CAMERA) ? "Editor: Camera" :
                                   "Editor: Material";
     layout.sceneModeRect = build_adaptive_button_rect_right(font, rightEdge,
-                                                            screen_layout ? (routeTopY + (BOTTOM_BUTTON_HEIGHT_START + 6)) : (layout.sceneEditorRect.y - (BOTTOM_BUTTON_HEIGHT_START + 6)),
-                                                            BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START,
+                                                            screen_layout ? (routeTopY + ROUTE_BUTTON_HEIGHT + ROUTE_BUTTON_GAP) : (layout.sceneEditorRect.y - (BOTTOM_BUTTON_HEIGHT_START + 6)),
+                                                            screen_layout ? ROUTE_BUTTON_WIDTH : BOTTOM_BUTTON_WIDTH_START,
+                                                            screen_layout ? ROUTE_BUTTON_HEIGHT : BOTTOM_BUTTON_HEIGHT_START,
                                                             editorModeLabel, 0);
     layout.spaceModeRect = build_adaptive_button_rect_right(font, rightEdge,
                                                             screen_layout ? routeTopY : (layout.sceneModeRect.y - (BOTTOM_BUTTON_HEIGHT_START + 6)),
-                                                            BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START,
+                                                            screen_layout ? ROUTE_BUTTON_WIDTH : BOTTOM_BUTTON_WIDTH_START,
+                                                            screen_layout ? ROUTE_BUTTON_HEIGHT : BOTTOM_BUTTON_HEIGHT_START,
                                                             menu_space_mode_button_label(), 0);
     layout.exitRect = build_adaptive_button_rect(font,
                                                  screen_layout ? (screen_layout->bottomActionRowRect.x + 14) : BOTTOM_BUTTON_MARGIN_X_EXIT,
@@ -881,6 +948,29 @@ void menu_render_build_button_layout(TTF_Font* font,
         if (layout.saveRect.x + layout.saveRect.w > footerRightLimit) {
             layout.saveRect.w = max_int(70, footerRightLimit - layout.saveRect.x);
         }
+    }
+
+    if (state &&
+        state->menuWorkspaceHost.active_module != MENU_WORKSPACE_RENDER) {
+        layout.rendererLightingTabRect = (SDL_Rect){0, 0, 0, 0};
+        layout.rendererPerformanceTabRect = (SDL_Rect){0, 0, 0, 0};
+        layout.rendererCausticsTabRect = (SDL_Rect){0, 0, 0, 0};
+        layout.falloffRect = (SDL_Rect){0, 0, 0, 0};
+        layout.tileRect = (SDL_Rect){0, 0, 0, 0};
+        layout.tilePreviewRect = (SDL_Rect){0, 0, 0, 0};
+        layout.denoiseRect = (SDL_Rect){0, 0, 0, 0};
+        layout.topFillRect = (SDL_Rect){0, 0, 0, 0};
+        layout.environmentPresetRect = (SDL_Rect){0, 0, 0, 0};
+        layout.environmentBackgroundModeRect = (SDL_Rect){0, 0, 0, 0};
+        layout.upscaleModeRect = (SDL_Rect){0, 0, 0, 0};
+        layout.lightHeightRect = (SDL_Rect){0, 0, 0, 0};
+        layout.causticModeRect = (SDL_Rect){0, 0, 0, 0};
+        layout.causticEngineRect = (SDL_Rect){0, 0, 0, 0};
+        layout.causticSurfaceRect = (SDL_Rect){0, 0, 0, 0};
+        layout.causticVolumeRect = (SDL_Rect){0, 0, 0, 0};
+        layout.causticDebugSummaryRect = (SDL_Rect){0, 0, 0, 0};
+        layout.causticDebugExportRect = (SDL_Rect){0, 0, 0, 0};
+        layout.rendererControlSliders.count = 0u;
     }
 
     if (out_layout) {

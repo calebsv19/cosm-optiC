@@ -15,6 +15,7 @@
 #include "engine/Render/render_pipeline.h"
 #include "render/ray_tracing_integrator_catalog.h"
 #include "import/runtime_scene_bridge.h"
+#include "platform/ray_tracing_folder_picker.h"
 #include "ui/menu_batch_panel.h"
 #include "ui/menu_resume_panel.h"
 #include "ui/scene_source_ui_labels.h"
@@ -40,35 +41,6 @@ static bool scene_manifest_list_visible(const MenuRuntimeState *state) {
     return state &&
            (state->manifestDropdownOpen ||
             animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D);
-}
-
-static bool pick_folder_macos(const char *prompt, char *out_path, size_t out_cap) {
-#if defined(__APPLE__)
-    FILE *pipe = NULL;
-    char cmd[320];
-    char line[512];
-    if (!prompt || !out_path || out_cap == 0u) return false;
-    snprintf(cmd,
-             sizeof(cmd),
-             "/usr/bin/osascript -e 'POSIX path of (choose folder with prompt \"%s\")'",
-             prompt);
-    pipe = popen(cmd, "r");
-    if (!pipe) return false;
-    if (!fgets(line, sizeof(line), pipe)) {
-        (void)pclose(pipe);
-        return false;
-    }
-    (void)pclose(pipe);
-    line[strcspn(line, "\r\n")] = '\0';
-    if (line[0] == '\0') return false;
-    snprintf(out_path, out_cap, "%s", line);
-    return true;
-#else
-    (void)prompt;
-    (void)out_path;
-    (void)out_cap;
-    return false;
-#endif
 }
 
 static void begin_input_root_edit(MenuRuntimeState *state) {
@@ -235,7 +207,7 @@ void menu_input_handle_key(SDL_Event* event,
     if (ctrl_or_cmd && shift) {
         if (event->key.keysym.sym == SDLK_b) {
             char selected[PATH_MAX];
-            if (pick_folder_macos("Choose optiC Output Root", selected, sizeof(selected))) {
+            if (RayTracing_FolderPicker_Select("Choose optiC Output Root", animSettings.outputRoot, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_SELECTED) {
                 apply_output_root(state, selected);
             }
             return;
@@ -263,7 +235,7 @@ void menu_input_handle_key(SDL_Event* event,
     }
     if (ctrl_or_cmd && event->key.keysym.sym == SDLK_b) {
         char selected[PATH_MAX];
-        if (pick_folder_macos("Choose optiC Input Root", selected, sizeof(selected))) {
+        if (RayTracing_FolderPicker_Select("Choose optiC Input Root", animSettings.inputRoot, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_SELECTED) {
             apply_input_root(state, selected);
         }
         return;
@@ -362,6 +334,21 @@ void menu_input_handle_key(SDL_Event* event,
 
 void menu_input_handle_mouse_motion(SDL_Event* event, MenuRuntimeState* state) {
     if (!event || !state) return;
+    if (ray_tracing_menu_pane_host_splitter_drag_active(&state->menuPaneHost)) {
+        if (ray_tracing_menu_pane_host_update_splitter_drag(&state->menuPaneHost,
+                                                            (float)event->motion.x,
+                                                            (float)event->motion.y)) {
+            animSettings.menuPaneSceneWidth = state->menuPaneHost.target_scene_width;
+            animSettings.menuPaneHealthWidth = state->menuPaneHost.target_health_width;
+        }
+        return;
+    }
+    if (!state->draggingSlider && !state->manifestScrollbarDragging &&
+        !state->volumeScrollbarDragging) {
+        ray_tracing_menu_pane_host_update_pointer(&state->menuPaneHost,
+                                                  (float)event->motion.x,
+                                                  (float)event->motion.y);
+    }
     if (state->manifestScrollbarDragging && scene_manifest_list_visible(state) && state->manifestScrollbarVisible) {
         float trackRange = state->manifestTrackHeight - state->manifestThumbHeight;
         if (trackRange < 1.0f) trackRange = 1.0f;
@@ -446,20 +433,39 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         SDL_GetWindowSize(render_ctx->window, &menu_width, &menu_height);
     }
     menu_layout_build_base(*font, state, menu_width, menu_height, &screenLayout);
+    if (ray_tracing_menu_pane_host_begin_splitter_drag(&state->menuPaneHost,
+                                                       (float)event->button.x,
+                                                       (float)event->button.y)) {
+        state->draggingSlider = false;
+        state->selectedSlider = NULL;
+        return;
+    }
     menu_render_build_button_layout(*font, state, &screenLayout, &buttons);
     menu_layout_finalize_with_buttons(&screenLayout, &buttons, state);
     menu_render_build_slider_layout(*font, state, &screenLayout, &layout);
     menu_batch_panel_build_layout(*font, state, &screenLayout, &batchLayout);
     menu_resume_panel_build_layout(*font, state, &screenLayout, &resumeLayout);
-    if (handle_slider_click(event, &buttons.rendererControlSliders, state)) {
+    int x = event->button.x;
+    int y = event->button.y;
+    {
+        int workspace_tab = menu_workspace_tab_at_point(&screenLayout.workspace, x, y);
+        if (workspace_tab >= 0) {
+            (void)menu_workspace_host_select(&state->menuWorkspaceHost,
+                                             (MenuWorkspaceModule)workspace_tab);
+            animSettings.menuWorkspaceModule =
+                (int)state->menuWorkspaceHost.active_module;
+            state->draggingSlider = false;
+            state->selectedSlider = NULL;
+            return;
+        }
+    }
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER &&
+        handle_slider_click(event, &buttons.rendererControlSliders, state)) {
         return;
     }
     if (handle_slider_click(event, &layout, state)) {
         return;
     }
-
-    int x = event->button.x;
-    int y = event->button.y;
 
     if (scene_manifest_list_visible(state)) {
         if (point_in_rect(&state->manifestPanelRect, x, y)) {
@@ -547,14 +553,23 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         }
     }
 
-    if (point_in_rect(&buttons.rendererLightingTabRect, x, y)) {
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER &&
+        point_in_rect(&buttons.rendererLightingTabRect, x, y)) {
         state->rendererControlsTab = MENU_RENDERER_CONTROLS_LIGHTING;
         state->draggingSlider = false;
         state->selectedSlider = NULL;
         return;
     }
-    if (point_in_rect(&buttons.rendererPerformanceTabRect, x, y)) {
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER &&
+        point_in_rect(&buttons.rendererPerformanceTabRect, x, y)) {
         state->rendererControlsTab = MENU_RENDERER_CONTROLS_PERFORMANCE;
+        state->draggingSlider = false;
+        state->selectedSlider = NULL;
+        return;
+    }
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER &&
+        point_in_rect(&buttons.rendererCausticsTabRect, x, y)) {
+        state->rendererControlsTab = MENU_RENDERER_CONTROLS_CAUSTICS;
         state->draggingSlider = false;
         state->selectedSlider = NULL;
         return;
@@ -607,17 +622,19 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         return;
     }
 
-    if (menu_batch_panel_handle_click(event, renderer, *font, state, &batchLayout)) {
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_OUTPUT &&
+        menu_batch_panel_handle_click(event, renderer, *font, state, &batchLayout)) {
         return;
     }
 
-    if (menu_resume_panel_handle_click(event, state, &resumeLayout)) {
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RUN &&
+        menu_resume_panel_handle_click(event, state, &resumeLayout)) {
         return;
     }
 
     if (point_in_rect(&buttons.inputRootFolderRect, x, y)) {
         char selected[PATH_MAX];
-        if (pick_folder_macos("Choose optiC Input Root", selected, sizeof(selected))) {
+        if (RayTracing_FolderPicker_Select("Choose optiC Input Root", animSettings.inputRoot, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_SELECTED) {
             apply_input_root(state, selected);
         }
         return;
@@ -636,7 +653,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     }
     if (point_in_rect(&buttons.meshAssetRootFolderRect, x, y)) {
         char selected[PATH_MAX];
-        if (pick_folder_macos("Choose optiC Mesh Asset Root", selected, sizeof(selected))) {
+        if (RayTracing_FolderPicker_Select("Choose optiC Mesh Asset Root", animSettings.meshAssetRoot, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_SELECTED) {
             apply_mesh_asset_root(state, selected);
         }
         return;
@@ -724,6 +741,48 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         state->statusColor = (SDL_Color){255, 220, 140, 255};
         state->statusExpireMs = SDL_GetTicks() + 2200;
         printf("Space Mode Toggled: %s\n", menu_space_mode_button_label());
+        return;
+    }
+
+    if (point_in_rect(&buttons.causticModeRect, x, y)) {
+        state->causticSettings.mode =
+            (RuntimeCausticMode3D)(((int)state->causticSettings.mode + 1) % 4);
+        if (state->causticSettings.mode == RUNTIME_CAUSTIC_MODE_OFF ||
+            state->causticSettings.mode == RUNTIME_CAUSTIC_MODE_ANALYTIC) {
+            state->causticSettings.surfaceCacheEnabled = false;
+            state->causticSettings.volumeCacheEnabled = false;
+        } else if (!state->causticSettings.surfaceCacheEnabled &&
+                   !state->causticSettings.volumeCacheEnabled) {
+            state->causticSettings.surfaceCacheEnabled = true;
+        }
+        return;
+    }
+    if (point_in_rect(&buttons.causticEngineRect, x, y)) {
+        state->causticSettings.transportEngine =
+            state->causticSettings.transportEngine ==
+                    RUNTIME_CAUSTIC_TRANSPORT_ENGINE_PHOTON_MAP
+                ? RUNTIME_CAUSTIC_TRANSPORT_ENGINE_EXPLORATORY_LENS_TRANSPORT
+                : RUNTIME_CAUSTIC_TRANSPORT_ENGINE_PHOTON_MAP;
+        return;
+    }
+    if (point_in_rect(&buttons.causticSurfaceRect, x, y)) {
+        state->causticSettings.surfaceCacheEnabled =
+            !state->causticSettings.surfaceCacheEnabled;
+        return;
+    }
+    if (point_in_rect(&buttons.causticVolumeRect, x, y)) {
+        state->causticSettings.volumeCacheEnabled =
+            !state->causticSettings.volumeCacheEnabled;
+        return;
+    }
+    if (point_in_rect(&buttons.causticDebugSummaryRect, x, y)) {
+        state->causticSettings.debugSummaryEnabled =
+            !state->causticSettings.debugSummaryEnabled;
+        return;
+    }
+    if (point_in_rect(&buttons.causticDebugExportRect, x, y)) {
+        state->causticSettings.debugExportEnabled =
+            !state->causticSettings.debugExportEnabled;
         return;
     }
 
@@ -867,6 +926,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         if (state->editingStartFrame) {
             finish_start_frame_edit(state, true);
         }
+        menu_state_apply_effective_render_recipe(state);
         SaveAllSettings();
         strncpy(state->statusLabel, "Saved", sizeof(state->statusLabel) - 1);
         state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
@@ -892,6 +952,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
             finish_start_frame_edit(state, true);
         }
         menu_state_sync_from_anim(state);
+        menu_state_apply_effective_render_recipe(state);
         animSettings.previewMode = false;
         SaveAllSettings();
         SceneEditorSessionRequestPreviewOnBegin();
@@ -911,6 +972,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
             finish_start_frame_edit(state, true);
         }
         menu_state_sync_from_anim(state);
+        menu_state_apply_effective_render_recipe(state);
         printf("[Menu] Start pressed: spaceMode=%d integrator2D=%d integrator3D=%d falloffMode=%d decay=%.2f softness=%.2f intensity=%.2f\n",
                animSettings.spaceMode,
                animSettings.integratorMode,

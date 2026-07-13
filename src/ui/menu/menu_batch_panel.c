@@ -7,6 +7,7 @@
 
 #include "app/animation.h"
 #include "config/config_manager.h"
+#include "platform/ray_tracing_folder_picker.h"
 #include "ui/menu_panel_chrome.h"
 #include "ui/menu_scene_project_summary.h"
 #include "ui/menu_worker_export.h"
@@ -31,35 +32,6 @@ static bool point_in_rect(const SDL_Rect *rect, int x, int y) {
     if (!rect) return false;
     return x >= rect->x && x <= rect->x + rect->w &&
            y >= rect->y && y <= rect->y + rect->h;
-}
-
-static bool pick_folder_macos(const char *prompt, char *out_path, size_t out_cap) {
-#if defined(__APPLE__)
-    FILE *pipe = NULL;
-    char cmd[320];
-    char line[512];
-    if (!prompt || !out_path || out_cap == 0u) return false;
-    snprintf(cmd,
-             sizeof(cmd),
-             "/usr/bin/osascript -e 'POSIX path of (choose folder with prompt \"%s\")'",
-             prompt);
-    pipe = popen(cmd, "r");
-    if (!pipe) return false;
-    if (!fgets(line, sizeof(line), pipe)) {
-        (void)pclose(pipe);
-        return false;
-    }
-    (void)pclose(pipe);
-    line[strcspn(line, "\r\n")] = '\0';
-    if (line[0] == '\0') return false;
-    snprintf(out_path, out_cap, "%s", line);
-    return true;
-#else
-    (void)prompt;
-    (void)out_path;
-    (void)out_cap;
-    return false;
-#endif
 }
 
 static void set_status(MenuRuntimeState *state,
@@ -355,7 +327,7 @@ bool menu_batch_panel_handle_click(const SDL_Event* event,
 
     if (point_in_rect(&layout->frameDirValueRect, x, y)) {
         if (event->button.clicks >= 2 &&
-            pick_folder_macos("Choose render frames root", selected, sizeof(selected))) {
+            RayTracing_FolderPicker_Select("Choose render frames root", animSettings.frameDir, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_SELECTED) {
             apply_frame_dir(state, selected);
         } else {
             begin_frame_dir_edit(state);
@@ -364,7 +336,7 @@ bool menu_batch_panel_handle_click(const SDL_Event* event,
     }
     if (point_in_rect(&layout->videoRootValueRect, x, y)) {
         if (event->button.clicks >= 2 &&
-            pick_folder_macos("Choose video output root", selected, sizeof(selected))) {
+            RayTracing_FolderPicker_Select("Choose video output root", animSettings.videoOutputRoot, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_SELECTED) {
             apply_video_root(state, selected);
         } else {
             begin_video_root_edit(state);
@@ -380,13 +352,13 @@ bool menu_batch_panel_handle_click(const SDL_Event* event,
         return true;
     }
     if (point_in_rect(&layout->frameDirFolderRect, x, y)) {
-        if (pick_folder_macos("Choose render frames root", selected, sizeof(selected))) {
+        if (RayTracing_FolderPicker_Select("Choose render frames root", animSettings.frameDir, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_SELECTED) {
             apply_frame_dir(state, selected);
         }
         return true;
     }
     if (point_in_rect(&layout->videoRootFolderRect, x, y)) {
-        if (pick_folder_macos("Choose video output root", selected, sizeof(selected))) {
+        if (RayTracing_FolderPicker_Select("Choose video output root", animSettings.videoOutputRoot, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_SELECTED) {
             apply_video_root(state, selected);
         }
         return true;

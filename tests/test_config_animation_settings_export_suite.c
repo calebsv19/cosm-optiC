@@ -78,9 +78,9 @@ static int test_agent_render_request_disney_v2_integrator_label_roundtrip(void) 
     assert_true("agent_render_disney_v2_request_id",
                 request.integrator_3d == RAY_TRACING_3D_INTEGRATOR_DISNEY_V2);
     assert_true("agent_render_disney_v2_caustic_default_mode",
-                request.caustic_mode == RUNTIME_DISNEY_V2_CAUSTIC_MODE_ANALYTIC);
-    assert_true("agent_render_disney_v2_caustic_default_enabled",
-                request.caustic_sidecar_enabled);
+                request.caustic_mode == RUNTIME_DISNEY_V2_CAUSTIC_MODE_OFF);
+    assert_true("agent_render_disney_v2_caustic_default_disabled",
+                !request.caustic_sidecar_enabled);
     assert_true("agent_render_disney_v2_label",
                 strcmp(ray_tracing_agent_render_request_integrator_label(
                            RAY_TRACING_3D_INTEGRATOR_DISNEY_V2),
@@ -1054,6 +1054,37 @@ static int test_agent_render_request_environment_lighting_overrides(void) {
     return 0;
 }
 
+static int test_agent_render_request_render_trace_cost_ledger_flag(void) {
+    char request_path[PATH_MAX];
+    char diagnostics[256];
+    RayTracingAgentRenderRequest request;
+    const char* json_text =
+        "{\n"
+        "  \"schema_version\": \"ray_tracing_agent_render_request_v1\",\n"
+        "  \"run_id\": \"render_trace_cost_ledger_test\",\n"
+        "  \"scene\": {\"runtime_scene_path\": \"scene_runtime.json\"},\n"
+        "  \"inspection\": {\n"
+        "    \"render_trace_cost_ledger_enabled\": true\n"
+        "  }\n"
+        "}\n";
+
+    snprintf(request_path,
+             sizeof(request_path),
+             "%s",
+             "/tmp/ray_tracing_agent_render_trace_cost_ledger_request.json");
+    assert_true("agent_render_trace_cost_ledger_request_write",
+                write_text_file(request_path, json_text));
+    assert_true("agent_render_trace_cost_ledger_request_load",
+                ray_tracing_agent_render_request_load_file(request_path,
+                                                           &request,
+                                                           diagnostics,
+                                                           sizeof(diagnostics)));
+    assert_true("agent_render_trace_cost_ledger_enabled",
+                request.render_trace_cost_ledger_enabled);
+    unlink(request_path);
+    return 0;
+}
+
 static int test_animation_native_3d_temporal_frames_roundtrip_and_clamp(void) {
     size_t backup_size = 0;
     char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
@@ -1779,6 +1810,87 @@ static int test_animation_deep_render_frame_resume_roundtrip_and_clamp(void) {
     return 0;
 }
 
+static int test_animation_native_3d_caustics_roundtrip_and_default_off(void) {
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+    const char* json_missing_caustics =
+        "{\n"
+        "  \"spaceMode\": 1,\n"
+        "  \"integratorMode3D\": 3\n"
+        "}\n";
+
+    animSettings.causticMode3D = 3;
+    animSettings.causticTransportEngine3D = 1;
+    animSettings.causticSurfaceCacheEnabled3D = true;
+    animSettings.causticVolumeCacheEnabled3D = false;
+    animSettings.causticSampleBudget3D = 4096;
+    animSettings.causticMaxPathDepth3D = 8;
+    animSettings.causticDebugSummaryEnabled3D = true;
+    animSettings.causticDebugExportEnabled3D = false;
+    animSettings.menuWorkspaceModule = 2;
+    animSettings.menuPaneSceneWidth = 430;
+    animSettings.menuPaneHealthWidth = 380;
+    SaveAnimationConfig();
+
+    animSettings.causticMode3D = 0;
+    animSettings.causticTransportEngine3D = 0;
+    animSettings.causticSurfaceCacheEnabled3D = false;
+    animSettings.causticVolumeCacheEnabled3D = true;
+    animSettings.causticSampleBudget3D = 0;
+    animSettings.causticMaxPathDepth3D = 0;
+    animSettings.causticDebugSummaryEnabled3D = false;
+    animSettings.causticDebugExportEnabled3D = true;
+    animSettings.menuWorkspaceModule = 0;
+    animSettings.menuPaneSceneWidth = 390;
+    animSettings.menuPaneHealthWidth = 340;
+    LoadAnimationConfig();
+
+    assert_true("caustics_roundtrip_mode", animSettings.causticMode3D == 3);
+    assert_true("caustics_roundtrip_engine",
+                animSettings.causticTransportEngine3D == 1);
+    assert_true("caustics_roundtrip_surface_cache",
+                animSettings.causticSurfaceCacheEnabled3D);
+    assert_true("caustics_roundtrip_volume_cache",
+                !animSettings.causticVolumeCacheEnabled3D);
+    assert_true("caustics_roundtrip_sample_budget",
+                animSettings.causticSampleBudget3D == 4096);
+    assert_true("caustics_roundtrip_path_depth",
+                animSettings.causticMaxPathDepth3D == 8);
+    assert_true("caustics_roundtrip_debug_summary",
+                animSettings.causticDebugSummaryEnabled3D);
+    assert_true("caustics_roundtrip_debug_export",
+                !animSettings.causticDebugExportEnabled3D);
+    assert_true("menu_workspace_roundtrip_module",
+                animSettings.menuWorkspaceModule == 2);
+    assert_true("menu_workspace_roundtrip_scene_width",
+                animSettings.menuPaneSceneWidth == 430);
+    assert_true("menu_workspace_roundtrip_health_width",
+                animSettings.menuPaneHealthWidth == 380);
+
+    assert_true("caustics_write_legacy_config",
+                write_text_file(kRuntimeAnimationConfigPath, json_missing_caustics));
+    LoadAnimationConfig();
+    assert_true("caustics_legacy_mode_defaults_off",
+                animSettings.causticMode3D == RUNTIME_3D_CAUSTIC_MODE_DEFAULT);
+    assert_true("caustics_legacy_surface_cache_defaults_off",
+                !animSettings.causticSurfaceCacheEnabled3D);
+    assert_true("caustics_legacy_volume_cache_defaults_off",
+                !animSettings.causticVolumeCacheEnabled3D);
+    assert_true("caustics_legacy_budget_defaults_zero",
+                animSettings.causticSampleBudget3D == 0);
+    assert_true("caustics_legacy_depth_defaults_zero",
+                animSettings.causticMaxPathDepth3D == 0);
+    assert_true("menu_workspace_legacy_module_defaults_render",
+                animSettings.menuWorkspaceModule == MENU_WORKSPACE_MODULE_DEFAULT);
+    assert_true("menu_workspace_legacy_scene_width_defaults",
+                animSettings.menuPaneSceneWidth == MENU_PANE_SCENE_WIDTH_DEFAULT);
+    assert_true("menu_workspace_legacy_health_width_defaults",
+                animSettings.menuPaneHealthWidth == MENU_PANE_HEALTH_WIDTH_DEFAULT);
+
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
 static int test_native_3d_export_frame_bmp_uses_preview_buffer_directly(void) {
     char tmp_template[] = "/tmp/ray_tracing_native3d_export_XXXXXX";
     char* tmp_root = mkdtemp(tmp_template);
@@ -1853,6 +1965,7 @@ int run_test_config_animation_settings_export_suite(void) {
     test_agent_render_request_resource_budget_roundtrip();
     test_agent_render_request_resource_budget_env_default();
     test_agent_render_request_environment_lighting_overrides();
+    test_agent_render_request_render_trace_cost_ledger_flag();
     test_animation_native_3d_temporal_frames_roundtrip_and_clamp();
     test_animation_native_3d_bounce_depth_and_roulette_roundtrip_and_clamp();
     test_animation_native_3d_top_fill_roundtrip_and_default();
@@ -1866,6 +1979,7 @@ int run_test_config_animation_settings_export_suite(void) {
     test_animation_video_output_root_migrates_from_output_root();
     test_data_paths_resolve_video_output_path_uses_configured_root();
     test_animation_deep_render_frame_resume_roundtrip_and_clamp();
+    test_animation_native_3d_caustics_roundtrip_and_default_off();
     test_render_export_batch_counts_and_clears_frames();
     test_render_export_batch_reports_highest_and_next_frame();
     test_render_export_batch_make_video_rejects_empty_frame_dir();

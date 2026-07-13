@@ -92,11 +92,46 @@ python3 bin/vps_worker_job_queue.py \
   --item-name ray-tracing-portable-fixture-20260624a
 ```
 
-The first supported mode is `scene-only`: it exports a runtime scene, referenced
+The original mode is `scene-only`: it exports a runtime scene, referenced
 `assets/mesh_assets/*.runtime.json` sidecars, `bundle/render_request.json`,
 queue-compatible `bundle/request/job.json`, `bundle/request/payload/...`, and a
-manifest. VF3D and PhysicsSim bundle attachment modes are intentionally deferred
-until the sidecar/package shape is clearer.
+manifest. That package shape remains unchanged.
+
+For a project-backed scene with an active PhysicsSim cache, use the explicit
+R2-B mode:
+
+```bash
+python3 ray_tracing/tools/export_worker_queue_fixture.py \
+  --mode scene-plus-physics-cache \
+  --scene-project /path/to/portable_scene_project \
+  --output-root ray_tracing/visual_artifacts/worker_queue_exports \
+  --item-name ray-tracing-scene-project-cache-20260712a \
+  --job-id ray-tracing--scene-project-cache--20260712T220000Z--rtbundle05 \
+  --ray-version <active-worker-package-version>
+```
+
+This mode reads the project-owned `ray_tracing/render_request.json`, selects
+PhysicsSim frames using `simulation_frames.start`, `count`, and `stride`, and
+copies only those VF3D/pack and water-surface frames. It also includes the
+project, authoring, runtime, optional object manifest, referenced mesh assets,
+active cache/scene-bundle/water manifests, package hashes, and source lineage.
+
+The portable bundle and live worker request keep canonical project attachment
+paths under `assets/vf3d/...` and `assets/physics/...`. Portable-only project
+metadata remains in the snapshot and lineage but is not duplicated into the
+inline renderer projection. This keeps the current live preview request within
+its 16-file limit. This is a snapshot of an existing cache: `start_stage` is
+`ray_tracing`, and PhysicsSim is not run automatically.
+
+When a compatible package exists on only one worker, `--force-worker-id <id>`
+can hard-target that exported job. The option changes only the generated job's
+submit arguments; it does not alter scheduler policy.
+
+The first approved live proof reached Linux PC and rendered the scene, VF3D
+volume, water mesh, and two frames successfully. The VPS did not publish that
+run because its completed-stage result upload returned HTTP 400. Treat
+completion-result upload acceptance as a separate worker-control boundary; do
+not reconstruct package paths or rerender solely to reproduce that failure.
 
 The same helper can export explicit runtime scene and render-request paths:
 
@@ -118,6 +153,29 @@ direct tooling. Current Desktop queue prepare still expects
 `--ray-inspection-file` to be an inspection-settings JSON object, so the fixture
 also writes `bundle/presets/inspection_settings.json` and points queue
 `submit_args` at that file.
+
+For a runtime scene beside `scene_project.json`, RayTracing also recognizes a
+project-owned render request. It prefers the manifest's active render-request
+pointer and otherwise uses `ray_tracing/render_request.json`. The request keeps
+the existing `ray_tracing_agent_render_request_v1` schema and adds
+project-relative `scene_project` metadata plus a `simulation_frames` object:
+
+```json
+{
+  "simulation_frames": {
+    "cache_manifest": "physics_sim/active_cache_manifest.json",
+    "start": 0,
+    "count": 1,
+    "stride": 1
+  }
+}
+```
+
+The menu's existing scene-only export creates this sidecar when it is absent.
+Existing request fields are preserved during writeback. Unsafe project pointer
+traversal is rejected; explicit external request paths remain read-only
+compatibility inputs. The R2-B CLI snapshot mode consumes this state without
+changing the menu's scene-only behavior.
 
 ## Publication Lanes
 

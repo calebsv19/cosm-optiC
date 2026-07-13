@@ -228,6 +228,7 @@ void RuntimeNative3DRenderUnit_ReleaseReusableScratchCache(void) {
 }
 
 static bool runtime_native_3d_render_unit_ensure_features(RuntimeNative3DRenderUnit* unit) {
+    const RuntimeScene3D* trace_scene = NULL;
     if (!unit || !unit->frame) return false;
     if (unit->featuresPrepared) {
         return true;
@@ -236,9 +237,12 @@ static bool runtime_native_3d_render_unit_ensure_features(RuntimeNative3DRenderU
         unit->featuresPrepared = true;
         return true;
     }
+    trace_scene = unit->frame->traceScene
+                      ? unit->frame->traceScene
+                      : &unit->frame->scene;
     if (!RuntimeNative3DFeatureBuffer_Ensure(&unit->featureBuffer, unit->width, unit->height) ||
         !RuntimeNative3DFeatureBuffer_RenderRegion(&unit->featureBuffer,
-                                                   &unit->frame->scene,
+                                                   trace_scene,
                                                    &unit->frame->projector,
                                                    unit->startX,
                                                    unit->startY,
@@ -422,7 +426,9 @@ bool RuntimeNative3DRenderUnit_RenderSubpass(RuntimeNative3DRenderUnit* unit,
         (uint32_t)subpass_index,
         unit->temporalFrames);
     subpass_frame.sampling = subpass_sampling;
-    subpass_frame.traceScene = &unit->frame->scene;
+    subpass_frame.traceScene = unit->frame->traceScene
+                                   ? unit->frame->traceScene
+                                   : &unit->frame->scene;
     if (unit->measureAdaptiveState) {
         subpass_frame.featureAttributionBuffer = &unit->featureBuffer;
         subpass_frame.featureAttributionStartX = unit->startX;

@@ -11,6 +11,7 @@ typedef struct MenuButtonLayout MenuButtonLayout;
 typedef struct {
     SDL_Rect menuRect;
     SDL_Rect leftPanelRect;
+    MenuWorkspaceLayout workspace;
     SDL_Rect centerControlsRect;
     SDL_Rect centerBatchRect;
     SDL_Rect centerResumeRect;
@@ -21,7 +22,7 @@ typedef struct {
 } MenuScreenLayout;
 
 void menu_layout_build_base(TTF_Font* font,
-                            const MenuRuntimeState* state,
+                            MenuRuntimeState* state,
                             int window_width,
                             int window_height,
                             MenuScreenLayout* out_layout);

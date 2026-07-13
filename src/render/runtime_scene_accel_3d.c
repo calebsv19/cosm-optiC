@@ -22,6 +22,11 @@ typedef struct RuntimeSceneAcceleration3DTLASNode {
 
 static RuntimeSceneAcceleration3DInstanceBounds* gRuntimeSceneAcceleration3DInstances;
 static const RuntimeScene3D* gRuntimeSceneAcceleration3DPreparedScene;
+enum { RUNTIME_SCENE_ACCEL_3D_COMPATIBLE_SCENE_CAPACITY = 64 };
+/* Temporal/prepared rendering can bind several geometry-identical scene snapshots. */
+static const RuntimeScene3D*
+    gRuntimeSceneAcceleration3DCompatibleScenes[RUNTIME_SCENE_ACCEL_3D_COMPATIBLE_SCENE_CAPACITY];
+static int gRuntimeSceneAcceleration3DCompatibleSceneCount;
 static int gRuntimeSceneAcceleration3DPreparedPrimitiveCount;
 static int gRuntimeSceneAcceleration3DPreparedTriangleCount;
 static uint64_t gRuntimeSceneAcceleration3DPreparedGeometrySignature;
@@ -209,6 +214,10 @@ static int runtime_scene_accel_3d_build_node(int* indices, int start, int end) {
 
 static void runtime_scene_accel_3d_free_tlas(void) {
     gRuntimeSceneAcceleration3DPreparedScene = NULL;
+    memset(gRuntimeSceneAcceleration3DCompatibleScenes,
+           0,
+           sizeof(gRuntimeSceneAcceleration3DCompatibleScenes));
+    gRuntimeSceneAcceleration3DCompatibleSceneCount = 0;
     gRuntimeSceneAcceleration3DPreparedPrimitiveCount = 0;
     gRuntimeSceneAcceleration3DPreparedTriangleCount = 0;
     gRuntimeSceneAcceleration3DPreparedGeometrySignature = 0u;
@@ -224,6 +233,29 @@ static void runtime_scene_accel_3d_free_tlas(void) {
     gRuntimeSceneAcceleration3DTLASNodes = NULL;
     gRuntimeSceneAcceleration3DTLASNodeCount = 0;
     gRuntimeSceneAcceleration3DTLASNodeCapacity = 0;
+}
+
+static void runtime_scene_accel_3d_register_compatible_scene(
+    const RuntimeScene3D* scene) {
+    if (!scene) return;
+    for (int i = 0; i < gRuntimeSceneAcceleration3DCompatibleSceneCount; ++i) {
+        if (gRuntimeSceneAcceleration3DCompatibleScenes[i] == scene) return;
+    }
+    if (gRuntimeSceneAcceleration3DCompatibleSceneCount >=
+        RUNTIME_SCENE_ACCEL_3D_COMPATIBLE_SCENE_CAPACITY) {
+        return;
+    }
+    gRuntimeSceneAcceleration3DCompatibleScenes
+        [gRuntimeSceneAcceleration3DCompatibleSceneCount++] = scene;
+}
+
+static bool runtime_scene_accel_3d_scene_is_compatible(
+    const RuntimeScene3D* scene) {
+    if (!scene) return false;
+    for (int i = 0; i < gRuntimeSceneAcceleration3DCompatibleSceneCount; ++i) {
+        if (gRuntimeSceneAcceleration3DCompatibleScenes[i] == scene) return true;
+    }
+    return false;
 }
 
 static uint64_t runtime_scene_accel_3d_hash_bytes(uint64_t hash,
@@ -259,15 +291,21 @@ static uint64_t runtime_scene_accel_3d_hash_vec3(uint64_t hash, Vec3 value) {
     return runtime_scene_accel_3d_hash_double(hash, value.z);
 }
 
-static uint64_t runtime_scene_accel_3d_geometry_signature(const RuntimeScene3D* scene) {
+static uint64_t runtime_scene_accel_3d_geometry_signature_prefix(
+    const RuntimeScene3D* scene,
+    int primitive_count,
+    int triangle_count) {
     uint64_t hash = 1469598103934665603ull;
     const int sample_budget = 64;
-    int triangle_count = 0;
     int last_sampled = -1;
     if (!scene) return 0u;
-    hash = runtime_scene_accel_3d_hash_int(hash, scene->primitiveCount);
-    hash = runtime_scene_accel_3d_hash_int(hash, scene->triangleMesh.triangleCount);
-    for (int i = 0; i < scene->primitiveCount; ++i) {
+    if (primitive_count < 0 || primitive_count > scene->primitiveCount ||
+        triangle_count < 0 || triangle_count > scene->triangleMesh.triangleCount) {
+        return 0u;
+    }
+    hash = runtime_scene_accel_3d_hash_int(hash, primitive_count);
+    hash = runtime_scene_accel_3d_hash_int(hash, triangle_count);
+    for (int i = 0; i < primitive_count; ++i) {
         const RuntimePrimitive3D* primitive = &scene->primitives[i];
         hash = runtime_scene_accel_3d_hash_int(hash, (int)primitive->kind);
         hash = runtime_scene_accel_3d_hash_int(hash, (int)primitive->source.kind);
@@ -278,7 +316,6 @@ static uint64_t runtime_scene_accel_3d_geometry_signature(const RuntimeScene3D* 
                                                          sizeof(primitive->source.objectId)));
     }
 
-    triangle_count = scene->triangleMesh.triangleCount;
     for (int sample = 0; sample < sample_budget && sample < triangle_count; ++sample) {
         int i = 0;
         const RuntimeTriangle3D* triangle = NULL;
@@ -314,6 +351,44 @@ static uint64_t runtime_scene_accel_3d_geometry_signature(const RuntimeScene3D* 
         hash = runtime_scene_accel_3d_hash_int(hash, triangle->localTriangleIndex);
     }
     return hash;
+}
+
+static uint64_t runtime_scene_accel_3d_geometry_signature(const RuntimeScene3D* scene) {
+    if (!scene) return 0u;
+    return runtime_scene_accel_3d_geometry_signature_prefix(
+        scene,
+        scene->primitiveCount,
+        scene->triangleMesh.triangleCount);
+}
+
+static bool runtime_scene_accel_3d_has_compatible_dynamic_water_extension(
+    const RuntimeScene3D* scene) {
+    const RuntimePrimitive3D* water_primitive = NULL;
+    const RuntimeTriangle3D* first_water_triangle = NULL;
+    const RuntimeTriangle3D* last_water_triangle = NULL;
+    if (!scene || scene->primitiveCount != gRuntimeSceneAcceleration3DPreparedPrimitiveCount + 1 ||
+        scene->triangleMesh.triangleCount <= gRuntimeSceneAcceleration3DPreparedTriangleCount) {
+        return false;
+    }
+    water_primitive = &scene->primitives[gRuntimeSceneAcceleration3DPreparedPrimitiveCount];
+    if (strcmp(water_primitive->source.objectId, "water_surface") != 0) {
+        return false;
+    }
+    first_water_triangle =
+        &scene->triangleMesh.triangles[gRuntimeSceneAcceleration3DPreparedTriangleCount];
+    last_water_triangle =
+        &scene->triangleMesh.triangles[scene->triangleMesh.triangleCount - 1];
+    if (first_water_triangle->primitiveIndex !=
+            gRuntimeSceneAcceleration3DPreparedPrimitiveCount ||
+        last_water_triangle->primitiveIndex !=
+            gRuntimeSceneAcceleration3DPreparedPrimitiveCount) {
+        return false;
+    }
+    return runtime_scene_accel_3d_geometry_signature_prefix(
+               scene,
+               gRuntimeSceneAcceleration3DPreparedPrimitiveCount,
+               gRuntimeSceneAcceleration3DPreparedTriangleCount) ==
+           gRuntimeSceneAcceleration3DPreparedGeometrySignature;
 }
 
 bool RuntimeSceneAcceleration3D_RebuildTLASFromScene(const RuntimeScene3D* scene) {
@@ -389,6 +464,7 @@ bool RuntimeSceneAcceleration3D_RebuildTLASFromScene(const RuntimeScene3D* scene
     gRuntimeSceneAcceleration3DTLASDiagnostics.tlasRebuilds = prior.tlasRebuilds + 1u;
     gRuntimeSceneAcceleration3DTLASDiagnostics.tlasRefits = prior.tlasRefits;
     gRuntimeSceneAcceleration3DPreparedScene = scene;
+    runtime_scene_accel_3d_register_compatible_scene(scene);
     gRuntimeSceneAcceleration3DPreparedPrimitiveCount = scene->primitiveCount;
     gRuntimeSceneAcceleration3DPreparedTriangleCount = scene->triangleMesh.triangleCount;
     gRuntimeSceneAcceleration3DPreparedGeometrySignature =
@@ -419,6 +495,7 @@ bool RuntimeSceneAcceleration3D_RebuildPreparedFromSceneAndMeshAssets(
 
 bool RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(const RuntimeScene3D* scene) {
     struct timespec bind_start = {0};
+    bool compatible_dynamic_water_extension = false;
     (void)clock_gettime(CLOCK_MONOTONIC, &bind_start);
     if (!scene) {
         runtime_scene_accel_3d_set_diag("TLAS bind skipped: scene missing");
@@ -435,16 +512,20 @@ bool RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(const RuntimeScene3D
             runtime_scene_accel_3d_elapsed_ms_since(&bind_start);
         return false;
     }
-    if (scene->primitiveCount != gRuntimeSceneAcceleration3DPreparedPrimitiveCount ||
+    compatible_dynamic_water_extension =
+        runtime_scene_accel_3d_has_compatible_dynamic_water_extension(scene);
+    if (!compatible_dynamic_water_extension &&
+        (scene->primitiveCount != gRuntimeSceneAcceleration3DPreparedPrimitiveCount ||
         scene->triangleMesh.triangleCount !=
-            gRuntimeSceneAcceleration3DPreparedTriangleCount) {
+            gRuntimeSceneAcceleration3DPreparedTriangleCount)) {
         runtime_scene_accel_3d_set_diag(
             "TLAS bind skipped: prepared scene geometry counts differ");
         gRuntimeSceneAcceleration3DTLASDiagnostics.tlasBindMs +=
             runtime_scene_accel_3d_elapsed_ms_since(&bind_start);
         return false;
     }
-    if (runtime_scene_accel_3d_geometry_signature(scene) !=
+    if (!compatible_dynamic_water_extension &&
+        runtime_scene_accel_3d_geometry_signature(scene) !=
         gRuntimeSceneAcceleration3DPreparedGeometrySignature) {
         runtime_scene_accel_3d_set_diag(
             "TLAS bind skipped: prepared scene geometry signature differs");
@@ -452,7 +533,7 @@ bool RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(const RuntimeScene3D
             runtime_scene_accel_3d_elapsed_ms_since(&bind_start);
         return false;
     }
-    gRuntimeSceneAcceleration3DPreparedScene = scene;
+    runtime_scene_accel_3d_register_compatible_scene(scene);
     RuntimeRay3D_SetSceneAccelerationTraceFirstHit(
         (RuntimeRay3DSceneAccelerationTraceFirstHitFn)
             RuntimeSceneAcceleration3D_TraceFirstHit);
@@ -552,6 +633,7 @@ static bool runtime_scene_accel_3d_remap_hit(
     if (scene_triangle_index < 0 ||
         scene_triangle_index >= scene->triangleMesh.triangleCount) {
         if (out_identity_failure) *out_identity_failure = true;
+        gRuntimeSceneAcceleration3DTraceStats.identityRemapTriangleLookupFailures += 1u;
         return false;
     }
 
@@ -785,7 +867,7 @@ RuntimeSceneAcceleration3DTraceStatus RuntimeSceneAcceleration3D_TraceFirstHit(
         best_hit = water_hit;
         found = true;
     }
-    if (scene != gRuntimeSceneAcceleration3DPreparedScene) {
+    if (!runtime_scene_accel_3d_scene_is_compatible(scene)) {
         if (found) {
             *out_hit = best_hit;
             gRuntimeSceneAcceleration3DTraceStats.traceHits += 1u;

@@ -1327,6 +1327,7 @@ bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
     }
     frame.valid = true;
     *out_frame = frame;
+    out_frame->traceScene = &out_frame->scene;
     runtime_native_3d_prepare_bind_scene_for_frame(&out_frame->scene, true);
     return true;
 }

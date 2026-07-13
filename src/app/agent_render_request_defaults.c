@@ -64,7 +64,7 @@ void ray_tracing_agent_render_request_defaults(RayTracingAgentRenderRequest *req
     request->has_trace_route_override = false;
     request->trace_route = RuntimeRay3D_DefaultTraceRoute();
     request->has_caustic_mode_override = false;
-    request->caustic_mode = RUNTIME_DISNEY_V2_CAUSTIC_MODE_ANALYTIC;
+    request->caustic_mode = RUNTIME_DISNEY_V2_CAUSTIC_MODE_OFF;
     RuntimeCausticSettings3D_Default(&request->caustic_settings);
     request->has_caustic_product_mode_override = false;
     RuntimeCausticPhotonIntegration3D_DefaultSettings(
@@ -73,7 +73,7 @@ void ray_tracing_agent_render_request_defaults(RayTracingAgentRenderRequest *req
     request->caustic_photon_populated_callsite_readback_enabled = false;
     request->caustic_photon_trace_populated_callsite_readback_enabled = false;
     request->has_caustic_sidecar_enabled_override = false;
-    request->caustic_sidecar_enabled = true;
+    request->caustic_sidecar_enabled = false;
     request->has_caustic_sidecar_strength_override = false;
     request->caustic_sidecar_strength = 1.0;
     request->volume_tint_r = 1.0;
@@ -84,5 +84,6 @@ void ray_tracing_agent_render_request_defaults(RayTracingAgentRenderRequest *req
     request->volume_albedo_b = 1.0;
     request->object_audit_enabled = true;
     request->object_audit_max_dimension = 160;
+    request->render_trace_cost_ledger_enabled = false;
     request->overwrite = false;
 }

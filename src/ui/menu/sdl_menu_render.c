@@ -180,9 +180,41 @@ void menu_render_frame(SDL_Renderer* renderer,
     }
 
     menu_panel_chrome_draw(renderer, font, &screenLayout.leftPanelRect, "Scene + Mode", true);
-    menu_panel_chrome_draw(renderer, font, &screenLayout.centerControlsRect, "Renderer Controls", false);
-    menu_panel_chrome_draw(renderer, font, &screenLayout.routeStackRect, NULL, false);
+    menu_panel_chrome_draw(renderer, font, &screenLayout.workspace.frame_rect, NULL, false);
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER) {
+        menu_panel_chrome_draw(renderer, font, &screenLayout.centerControlsRect, "Render Recipe", false);
+    }
+    menu_panel_chrome_draw(renderer, font, &screenLayout.routeStackRect, "Runtime Route", false);
     menu_panel_chrome_draw(renderer, font, &screenLayout.bottomActionRowRect, NULL, false);
+    {
+        RayTracingMenuPaneSplitterVisual splitters[RAY_TRACING_MENU_PANE_SPLITTER_CAP];
+        uint32_t splitter_count = ray_tracing_menu_pane_host_splitter_visuals(
+            &state->menuPaneHost,
+            splitters,
+            RAY_TRACING_MENU_PANE_SPLITTER_CAP);
+        uint32_t splitter_index;
+        for (splitter_index = 0u; splitter_index < splitter_count; ++splitter_index) {
+            SDL_Color splitter_color = has_shared_palette
+                                           ? palette.panel_border
+                                           : (SDL_Color){72, 76, 86, 255};
+            if (splitters[splitter_index].hovered) {
+                splitter_color = has_shared_palette
+                                     ? palette.accent_primary
+                                     : (SDL_Color){125, 155, 215, 255};
+            }
+            if (splitters[splitter_index].active) {
+                splitter_color = has_shared_palette
+                                     ? palette.accent_primary
+                                     : (SDL_Color){170, 205, 255, 255};
+            }
+            SDL_SetRenderDrawColor(renderer,
+                                   splitter_color.r,
+                                   splitter_color.g,
+                                   splitter_color.b,
+                                   splitter_color.a);
+            SDL_RenderFillRect(renderer, &splitters[splitter_index].rect);
+        }
+    }
 
     menu_render_draw_button_rect(renderer, font, &buttons.interactiveRect, "Interactive Mode", animSettings.interactiveMode);
     menu_render_draw_button_rect(renderer,
@@ -299,17 +331,79 @@ void menu_render_frame(SDL_Renderer* renderer,
         state->volumeThumbHeight = 0.0f;
         state->volumeTrackHeight = 0.0f;
     }
-    menu_render_draw_button_rect(renderer,
-                                 font,
-                                 &buttons.rendererLightingTabRect,
-                                 "Lighting",
-                                 state->rendererControlsTab == MENU_RENDERER_CONTROLS_LIGHTING);
-    menu_render_draw_button_rect(renderer,
-                                 font,
-                                 &buttons.rendererPerformanceTabRect,
-                                 "Performance",
-                                 state->rendererControlsTab == MENU_RENDERER_CONTROLS_PERFORMANCE);
-    if (state->rendererControlsTab == MENU_RENDERER_CONTROLS_PERFORMANCE) {
+    {
+        int module_index;
+        for (module_index = 0;
+             module_index < MENU_WORKSPACE_MODULE_COUNT;
+             ++module_index) {
+            menu_render_draw_button_rect(
+                renderer,
+                font,
+                &screenLayout.workspace.tab_rects[module_index],
+                menu_workspace_module_label((MenuWorkspaceModule)module_index),
+                state->menuWorkspaceHost.active_module ==
+                    (MenuWorkspaceModule)module_index);
+        }
+    }
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER) {
+        menu_render_draw_button_rect(renderer,
+                                     font,
+                                     &buttons.rendererLightingTabRect,
+                                     "Lighting",
+                                     state->rendererControlsTab == MENU_RENDERER_CONTROLS_LIGHTING);
+        menu_render_draw_button_rect(renderer,
+                                     font,
+                                     &buttons.rendererPerformanceTabRect,
+                                     "Performance",
+                                     state->rendererControlsTab == MENU_RENDERER_CONTROLS_PERFORMANCE);
+        menu_render_draw_button_rect(renderer,
+                                     font,
+                                     &buttons.rendererCausticsTabRect,
+                                     "Caustics",
+                                     state->rendererControlsTab == MENU_RENDERER_CONTROLS_CAUSTICS);
+    }
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER &&
+        state->rendererControlsTab == MENU_RENDERER_CONTROLS_CAUSTICS) {
+        char mode_label[96];
+        char engine_label[96];
+        (void)snprintf(mode_label,
+                       sizeof(mode_label),
+                       "Caustics: %s",
+                       RuntimeCausticMode3D_Label(state->causticSettings.mode));
+        (void)snprintf(engine_label,
+                       sizeof(engine_label),
+                       "Deposit: %s",
+                       RuntimeCausticTransportEngine3D_Label(
+                           state->causticSettings.transportEngine));
+        menu_render_draw_button_rect(renderer, font, &buttons.causticModeRect,
+                                     mode_label,
+                                     state->causticSettings.mode != RUNTIME_CAUSTIC_MODE_OFF);
+        menu_render_draw_button_rect(renderer, font, &buttons.causticEngineRect,
+                                     engine_label,
+                                     state->causticSettings.transportEngine ==
+                                         RUNTIME_CAUSTIC_TRANSPORT_ENGINE_PHOTON_MAP);
+        menu_render_draw_button_rect(renderer, font, &buttons.causticSurfaceRect,
+                                     state->causticSettings.surfaceCacheEnabled
+                                         ? "Surface Cache: ON"
+                                         : "Surface Cache: OFF",
+                                     state->causticSettings.surfaceCacheEnabled);
+        menu_render_draw_button_rect(renderer, font, &buttons.causticVolumeRect,
+                                     state->causticSettings.volumeCacheEnabled
+                                         ? "Volume Cache: ON"
+                                         : "Volume Cache: OFF",
+                                     state->causticSettings.volumeCacheEnabled);
+        menu_render_draw_button_rect(renderer, font, &buttons.causticDebugSummaryRect,
+                                     state->causticSettings.debugSummaryEnabled
+                                         ? "Summary: ON"
+                                         : "Summary: OFF",
+                                     state->causticSettings.debugSummaryEnabled);
+        menu_render_draw_button_rect(renderer, font, &buttons.causticDebugExportRect,
+                                     state->causticSettings.debugExportEnabled
+                                         ? "Debug Export: ON"
+                                         : "Debug Export: OFF",
+                                     state->causticSettings.debugExportEnabled);
+    } else if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER &&
+        state->rendererControlsTab == MENU_RENDERER_CONTROLS_PERFORMANCE) {
         const char* tileButtonLabel =
             animSettings.useTiledRenderer ? "Tile Renderer: ON" : "Tile Renderer: OFF";
         const char* previewLabel =
@@ -337,7 +431,7 @@ void menu_render_frame(SDL_Renderer* renderer,
                                      &buttons.upscaleModeRect,
                                      menu_upscale_mode_button_label(),
                                      animSettings.upscaleMode3D != RUNTIME_3D_UPSCALE_MODE_OFF);
-    } else {
+    } else if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER) {
         menu_render_draw_button_rect(renderer,
                                      font,
                                      &buttons.topFillRect,
@@ -361,15 +455,68 @@ void menu_render_frame(SDL_Renderer* renderer,
                                          : "BG: Manual",
                                      !animSettings.environmentBackgroundBrightnessAuto);
     }
-    menu_render_draw_slider_items(renderer,
-                                  font,
-                                  state,
-                                  &buttons.rendererControlSliders,
-                                  NULL);
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER) {
+        menu_render_draw_slider_items(renderer,
+                                      font,
+                                      state,
+                                      &buttons.rendererControlSliders,
+                                      NULL);
+    }
 
     menu_render_draw_sliders(renderer, font, state, &sliderLayout);
-    menu_batch_panel_render(renderer, font, state, &batchPanel);
-    menu_resume_panel_render(renderer, font, state, &resumePanel);
+    {
+        const bool high_cost =
+            animSettings.transmissionSamples3D > 8 ||
+            animSettings.secondaryDiffuseSamples3D > 16 ||
+            animSettings.temporalFrames3D > 8 ||
+            state->causticSettings.sampleBudget > 10000;
+        SDL_Color recipe_color = has_shared_palette
+                                     ? palette.text_muted
+                                     : (SDL_Color){210, 210, 210, 255};
+        SDL_Color cost_color = high_cost
+                                   ? (SDL_Color){255, 196, 96, 255}
+                                   : recipe_color;
+        const int summary_x = screenLayout.sliderPanelRect.x + 12;
+        const int summary_w = screenLayout.sliderPanelRect.w - 24;
+        const int recipe_y = screenLayout.sliderPanelRect.y +
+                             screenLayout.sliderPanelRect.h - 78;
+        const int cost_y = recipe_y + 18;
+        char summary[256];
+        char fitted[256];
+
+        snprintf(summary,
+                 sizeof(summary),
+                 "Recipe: %s | Caustics: %s",
+                 RayTracingModeBackend_IntegratorStatusLabel(&route),
+                 RuntimeCausticMode3D_Label(state->causticSettings.mode));
+        menu_render_fit_text_to_width(font, summary, summary_w, fitted, sizeof(fitted));
+        menu_render_draw_text_color(renderer,
+                                    font,
+                                    summary_x,
+                                    recipe_y,
+                                    recipe_color,
+                                    fitted);
+        snprintf(summary,
+                 sizeof(summary),
+                 "%s T=%d S=%d F=%d Photon=%d",
+                 high_cost ? "Cost warning:" : "Cost:",
+                 animSettings.transmissionSamples3D,
+                 animSettings.secondaryDiffuseSamples3D,
+                 animSettings.temporalFrames3D,
+                 state->causticSettings.sampleBudget);
+        menu_render_fit_text_to_width(font, summary, summary_w, fitted, sizeof(fitted));
+        menu_render_draw_text_color(renderer,
+                                    font,
+                                    summary_x,
+                                    cost_y,
+                                    cost_color,
+                                    fitted);
+    }
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_OUTPUT) {
+        menu_batch_panel_render(renderer, font, state, &batchPanel);
+    } else if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RUN) {
+        menu_resume_panel_render(renderer, font, state, &resumePanel);
+    }
 
     menu_render_draw_button_rect(renderer, font, &buttons.sceneEditorRect, "Scene Editor", false);
     int currentEditorMode = EditorModeRouter_ClampEditorMode(animSettings.editorMode,
@@ -393,21 +540,14 @@ void menu_render_frame(SDL_Renderer* renderer,
                                                       palette.text_muted.b,
                                                       230}
                                         : (SDL_Color){210, 210, 210, 230};
-        int hintX = buttons.spaceModeRect.x;
-        int hintMaxWidth = screenLayout.menuRect.w - hintX - MENU_MARGIN_X;
-        int hintLine1Y = 0;
-        int hintLine2Y = 0;
+        int hintX = screenLayout.sliderPanelRect.x + 12;
+        int hintMaxWidth = screenLayout.sliderPanelRect.w - 24;
+        int hintLine1Y = screenLayout.sliderPanelRect.y +
+                         screenLayout.sliderPanelRect.h - 40;
+        int hintLine2Y = hintLine1Y + 18;
         char hintLine1[192];
         char hintLine2[256];
         char hintFit[256];
-
-        if (buttons.spaceModeRect.y - 36 >= MENU_MARGIN_Y) {
-            hintLine1Y = buttons.spaceModeRect.y - 34;
-            hintLine2Y = buttons.spaceModeRect.y - 18;
-        } else {
-            hintLine1Y = buttons.spaceModeRect.y + buttons.spaceModeRect.h + 4;
-            hintLine2Y = hintLine1Y + 16;
-        }
 
         snprintf(hintLine1,
                  sizeof(hintLine1),
@@ -457,33 +597,35 @@ void menu_render_frame(SDL_Renderer* renderer,
     menu_render_draw_button_rect(renderer, font, &buttons.previewRect, "Preview", animSettings.previewMode);
     menu_render_draw_button_rect(renderer, font, &buttons.exitRect, "Exit w/o Saving", false);
 
-    if (has_shared_palette) {
-        SDL_Color startFill = menu_render_ensure_highlight_fill_contrast(palette.accent_primary,
-                                                                         palette.button_text,
-                                                                         palette.panel_fill);
-        SDL_SetRenderDrawColor(renderer,
-                               startFill.r, startFill.g,
-                               startFill.b, startFill.a);
-    } else {
-        SDL_SetRenderDrawColor(renderer, 90, 220, 110, 255);
-    }
-    SDL_RenderFillRect(renderer, &buttons.startRect);
-    if (has_shared_palette) {
-        SDL_SetRenderDrawColor(renderer,
-                               palette.panel_border.r, palette.panel_border.g,
-                               palette.panel_border.b, palette.panel_border.a);
-    } else {
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    }
-    SDL_RenderDrawRect(renderer, &buttons.startRect);
-    if (has_shared_palette) {
-        SDL_Color startFill = menu_render_ensure_highlight_fill_contrast(palette.accent_primary,
-                                                                         palette.button_text,
-                                                                         palette.panel_fill);
-        SDL_Color startText = menu_render_choose_readable_text(startFill, palette.button_text);
-        render_centered_text_color(renderer, font, &buttons.startRect, startText, "Start");
-    } else {
-        RenderButtonText(renderer, buttons.startRect, "Start");
+    if (buttons.startRect.w > 0 && buttons.startRect.h > 0) {
+        if (has_shared_palette) {
+            SDL_Color startFill = menu_render_ensure_highlight_fill_contrast(palette.accent_primary,
+                                                                             palette.button_text,
+                                                                             palette.panel_fill);
+            SDL_SetRenderDrawColor(renderer,
+                                   startFill.r, startFill.g,
+                                   startFill.b, startFill.a);
+        } else {
+            SDL_SetRenderDrawColor(renderer, 90, 220, 110, 255);
+        }
+        SDL_RenderFillRect(renderer, &buttons.startRect);
+        if (has_shared_palette) {
+            SDL_SetRenderDrawColor(renderer,
+                                   palette.panel_border.r, palette.panel_border.g,
+                                   palette.panel_border.b, palette.panel_border.a);
+        } else {
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        }
+        SDL_RenderDrawRect(renderer, &buttons.startRect);
+        if (has_shared_palette) {
+            SDL_Color startFill = menu_render_ensure_highlight_fill_contrast(palette.accent_primary,
+                                                                             palette.button_text,
+                                                                             palette.panel_fill);
+            SDL_Color startText = menu_render_choose_readable_text(startFill, palette.button_text);
+            render_centered_text_color(renderer, font, &buttons.startRect, startText, "Start");
+        } else {
+            RenderButtonText(renderer, buttons.startRect, "Start");
+        }
     }
 
     Uint32 now = SDL_GetTicks();

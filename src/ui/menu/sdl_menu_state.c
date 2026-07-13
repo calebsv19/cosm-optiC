@@ -16,6 +16,9 @@
 #include "render/font_runtime.h"
 #include "import/fluid_volume_import_3d.h"
 #include "render/ray_tracing_integrator_catalog.h"
+#include "render/runtime_caustic_bootstrap_3d.h"
+#include "render/runtime_caustic_transport_3d.h"
+#include "render/runtime_disney_v2_caustic_sidecar_3d.h"
 #include "render/runtime_volume_3d_debug.h"
 #include "ui/scene_source_catalog.h"
 #include "ui/scene_source_ui_labels.h"
@@ -792,6 +795,36 @@ void menu_state_init(MenuRuntimeState* state) {
     state->manifestDropdownOpen = false;
     state->volumeDropdownOpen = false;
     state->rendererControlsTab = MENU_RENDERER_CONTROLS_LIGHTING;
+    RuntimeCausticSettings3D_Default(&state->causticSettings);
+    state->causticSettings.mode = (RuntimeCausticMode3D)animSettings.causticMode3D;
+    state->causticSettings.transportEngine =
+        (RuntimeCausticTransportEngine3D)animSettings.causticTransportEngine3D;
+    state->causticSettings.volumeCacheEnabled = animSettings.causticVolumeCacheEnabled3D;
+    state->causticSettings.surfaceCacheEnabled = animSettings.causticSurfaceCacheEnabled3D;
+    state->causticSettings.sampleBudget = animSettings.causticSampleBudget3D;
+    state->causticSettings.maxPathDepth = animSettings.causticMaxPathDepth3D;
+    state->causticSettings.debugSummaryEnabled = animSettings.causticDebugSummaryEnabled3D;
+    state->causticSettings.debugExportEnabled = animSettings.causticDebugExportEnabled3D;
+    (void)menu_workspace_host_init(&state->menuWorkspaceHost);
+    (void)menu_workspace_host_select(
+        &state->menuWorkspaceHost,
+        (MenuWorkspaceModule)animSettings.menuWorkspaceModule);
+    {
+        const char* workspace = getenv("RAY_TRACING_MENU_WORKSPACE");
+        const char* render_tab = getenv("RAY_TRACING_MENU_RENDER_TAB");
+        if (workspace && strcmp(workspace, "output") == 0) {
+            (void)menu_workspace_host_select(&state->menuWorkspaceHost,
+                                             MENU_WORKSPACE_OUTPUT);
+        } else if (workspace && strcmp(workspace, "run") == 0) {
+            (void)menu_workspace_host_select(&state->menuWorkspaceHost,
+                                             MENU_WORKSPACE_RUN);
+        }
+        if (render_tab && strcmp(render_tab, "performance") == 0) {
+            state->rendererControlsTab = MENU_RENDERER_CONTROLS_PERFORMANCE;
+        } else if (render_tab && strcmp(render_tab, "caustics") == 0) {
+            state->rendererControlsTab = MENU_RENDERER_CONTROLS_CAUSTICS;
+        }
+    }
     menu_state_sync_load_scene_dropdown_flags(state);
     menu_state_sync_from_anim(state);
     menu_state_sync_source_and_library(state);
@@ -825,6 +858,39 @@ void menu_state_init(MenuRuntimeState* state) {
     state->sliderPanelRect = (SDL_Rect){0, 0, 0, 0};
     state->oldWindowWidth = sceneSettings.windowWidth;
     state->oldWindowHeight = sceneSettings.windowHeight;
+}
+
+void menu_state_apply_effective_render_recipe(const MenuRuntimeState* state) {
+    RuntimeDisneyV2CausticMode3D disney_mode =
+        RUNTIME_DISNEY_V2_CAUSTIC_MODE_OFF;
+    if (!state) return;
+    animSettings.causticMode3D = (int)state->causticSettings.mode;
+    animSettings.causticTransportEngine3D =
+        (int)state->causticSettings.transportEngine;
+    animSettings.causticVolumeCacheEnabled3D =
+        state->causticSettings.volumeCacheEnabled;
+    animSettings.causticSurfaceCacheEnabled3D =
+        state->causticSettings.surfaceCacheEnabled;
+    animSettings.causticSampleBudget3D = state->causticSettings.sampleBudget;
+    animSettings.causticMaxPathDepth3D = state->causticSettings.maxPathDepth;
+    animSettings.causticDebugSummaryEnabled3D =
+        state->causticSettings.debugSummaryEnabled;
+    animSettings.causticDebugExportEnabled3D =
+        state->causticSettings.debugExportEnabled;
+    animSettings.menuWorkspaceModule =
+        (int)state->menuWorkspaceHost.active_module;
+    if (state->menuPaneHost.target_scene_width > 0) {
+        animSettings.menuPaneSceneWidth = state->menuPaneHost.target_scene_width;
+    }
+    if (state->menuPaneHost.target_health_width > 0) {
+        animSettings.menuPaneHealthWidth = state->menuPaneHost.target_health_width;
+    }
+    if (state->causticSettings.mode == RUNTIME_CAUSTIC_MODE_ANALYTIC) {
+        disney_mode = RUNTIME_DISNEY_V2_CAUSTIC_MODE_ANALYTIC;
+    }
+    RuntimeDisneyV2_3D_SetCausticMode(disney_mode, 1.0);
+    RuntimeCausticBootstrap3D_SetRequestState(&state->causticSettings);
+    RuntimeCausticTransport3D_SetRequestState(&state->causticSettings);
 }
 
 void menu_state_reset_defaults(MenuRuntimeState* state) {
@@ -901,6 +967,19 @@ void menu_state_reset_defaults(MenuRuntimeState* state) {
     if (state) {
         state->sliderScroll = 0.0f;
         state->rendererControlsTab = MENU_RENDERER_CONTROLS_LIGHTING;
+        RuntimeCausticSettings3D_Default(&state->causticSettings);
+        state->causticSettings.mode = RUNTIME_CAUSTIC_MODE_OFF;
+        state->causticSettings.volumeCacheEnabled = false;
+        state->causticSettings.surfaceCacheEnabled = false;
+        if (!state->menuWorkspaceHost.initialized) {
+            (void)menu_workspace_host_init(&state->menuWorkspaceHost);
+        } else {
+            (void)menu_workspace_host_select(&state->menuWorkspaceHost,
+                                             MENU_WORKSPACE_RENDER);
+        }
+        ray_tracing_menu_pane_host_set_targets(&state->menuPaneHost,
+                                               MENU_PANE_SCENE_WIDTH_DEFAULT,
+                                               MENU_PANE_HEALTH_WIDTH_DEFAULT);
     }
     double diag = hypot(sceneSettings.windowWidth, sceneSettings.windowHeight);
     animSettings.forwardDecay = (diag > 0.0) ? diag : 2000.0;
@@ -912,6 +991,17 @@ void menu_state_reset_defaults(MenuRuntimeState* state) {
     animSettings.temporalFrames3D = RUNTIME_3D_TEMPORAL_FRAMES_DEFAULT;
     animSettings.renderScale3D = RUNTIME_3D_RENDER_SCALE_DEFAULT;
     animSettings.upscaleMode3D = RUNTIME_3D_UPSCALE_MODE_DEFAULT;
+    animSettings.causticMode3D = RUNTIME_3D_CAUSTIC_MODE_DEFAULT;
+    animSettings.causticTransportEngine3D = RUNTIME_3D_CAUSTIC_ENGINE_DEFAULT;
+    animSettings.causticSurfaceCacheEnabled3D = false;
+    animSettings.causticVolumeCacheEnabled3D = false;
+    animSettings.causticSampleBudget3D = 0;
+    animSettings.causticMaxPathDepth3D = 0;
+    animSettings.causticDebugSummaryEnabled3D = false;
+    animSettings.causticDebugExportEnabled3D = false;
+    animSettings.menuWorkspaceModule = MENU_WORKSPACE_MODULE_DEFAULT;
+    animSettings.menuPaneSceneWidth = MENU_PANE_SCENE_WIDTH_DEFAULT;
+    animSettings.menuPaneHealthWidth = MENU_PANE_HEALTH_WIDTH_DEFAULT;
     menu_state_sync_from_anim(state);
     if (state) {
         menu_state_refresh_manifest_options(state);

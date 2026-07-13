@@ -58,6 +58,24 @@ make -C ray_tracing test-ray-tracing-core-sim-runtime-frame-contract
 make -C ray_tracing test-scene-editor-pane-host-contract
 ```
 
+Scene-project worker snapshot lane:
+
+```bash
+python3 -m unittest ray_tracing/tests/test_scene_project_worker_export.py
+python3 ray_tracing/tools/export_worker_queue_fixture.py \
+  --fixture \
+  --mode scene-plus-physics-cache \
+  --output-root ray_tracing/visual_artifacts/worker_queue_exports/r2b_fixture \
+  --item-name ray-tracing-r2b-scene-project-20260712a \
+  --force
+```
+
+The Python fixture proves selected-frame VF3D/pack and water attachment
+copying, canonical worker attachment paths, source lineage, unsafe-path
+rejection, live inline-file-limit compliance, optional job-scoped worker
+targeting, and missing-frame failure before partial output creation. The
+existing `scene-only` fixture remains a separate regression gate.
+
 Headless request/render/material lanes:
 
 ```bash
@@ -80,9 +98,10 @@ make -C ray_tracing test-ray-tracing-emissive-light-preview-matrix
 `test-ray-tracing-caustic-probe-matrix` is the local L4 caustic-readiness proof
 target. It renders the canonical overhead-light, glass-sphere, matte-receiver
 fixture and writes baseline receiver metrics under `_private_workspace_artifacts/`.
-The original L4 baseline proved the old no-solver state. The current Disney v2
-request now runs the L5 analytic caustic policy by default, while direct-light
-and emission-transparency cells remain baseline comparisons.
+The original L4 baseline proved the old no-solver state. Ordinary Disney v2
+requests now default caustics to off; this fixture explicitly enables the L5
+analytic policy while direct-light and emission-transparency cells remain
+baseline comparisons.
 
 `test-ray-tracing-spatial-caustic-phase4-matrix` is the local spatial-caustic
 Phase 4 proof target. It generates a compact uniform raw VF3D fog field under

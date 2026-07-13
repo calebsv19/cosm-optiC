@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Export a deterministic RayTracing worker-queue item.
 
-The first supported package mode is scene-only: runtime scene plus mesh sidecars,
-with no VF3D or PhysicsSim volume attachment. The output is a local queue root
-with one inbox item so it can be validated by bin/vps_worker_job_queue.py.
+``scene-only`` preserves the original runtime-scene package.  The explicit
+``scene-plus-physics-cache`` mode snapshots one portable scene project and its
+selected active PhysicsSim cache without re-running PhysicsSim.
 """
 
 from __future__ import annotations
@@ -15,12 +15,19 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from scene_project_worker_export import (
+    SceneProjectExportError,
+    export_scene_plus_physics_cache,
+)
+
 
 SCRIPT_PATH = Path(__file__).resolve()
 RAY_ROOT = SCRIPT_PATH.parents[1]
 WORKSPACE_ROOT = RAY_ROOT.parent
 DEFAULT_ITEM_NAME = "ray-tracing-portable-fixture-20260624a"
 DEFAULT_JOB_ID = "ray-tracing--portable-fixture--20260624T000000Z--rtbundle01"
+DEFAULT_PROJECT_ITEM_NAME = "ray-tracing-scene-project-cache-fixture-20260712a"
+DEFAULT_PROJECT_JOB_ID = "ray-tracing--scene-project-cache-fixture--20260712T000000Z--rtbundle05"
 DEFAULT_RAY_VERSION = "0.4.17"
 DEFAULT_PHYSICS_VERSION = "0.1.0"
 
@@ -79,6 +86,10 @@ def fixture_scene_runtime() -> Path:
 
 def fixture_render_request() -> Path:
     return RAY_ROOT / "tests" / "fixtures" / "agent_render_mesh_asset_spheres_request.json"
+
+
+def fixture_scene_project() -> Path:
+    return RAY_ROOT / "tests" / "fixtures" / "scene_project_worker_snapshot"
 
 
 def default_output_root() -> Path:
@@ -510,8 +521,17 @@ def role_for_path(path: Path, bundle_root: Path) -> str:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--fixture", action="store_true", help="Use the built-in mesh-asset sphere fixture paths.")
-    parser.add_argument("--mode", choices=["scene-only"], default="scene-only")
+    parser.add_argument(
+        "--fixture",
+        action="store_true",
+        help="Use the built-in fixture for the selected export mode.",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["scene-only", "scene-plus-physics-cache"],
+        default="scene-only",
+    )
+    parser.add_argument("--scene-project", type=Path)
     parser.add_argument("--scene-runtime", type=Path)
     parser.add_argument("--scene-authoring", type=Path)
     parser.add_argument("--render-request", type=Path)
@@ -521,17 +541,43 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--job-id", default=DEFAULT_JOB_ID)
     parser.add_argument("--ray-version", default=DEFAULT_RAY_VERSION)
     parser.add_argument("--physics-version", default=DEFAULT_PHYSICS_VERSION)
+    parser.add_argument(
+        "--force-worker-id",
+        help="Optionally hard-target the project-backed queue item to one worker id.",
+    )
     parser.add_argument("--force", action="store_true")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    if not args.fixture and (not args.scene_runtime or not args.render_request):
-        raise SystemExit("error: use --fixture or provide --scene-runtime and --render-request")
+    if args.mode == "scene-only" and not args.fixture and (not args.scene_runtime or not args.render_request):
+        raise SystemExit("error: scene-only requires --fixture or --scene-runtime and --render-request")
+    if args.mode == "scene-plus-physics-cache" and not args.fixture and not args.scene_project:
+        raise SystemExit("error: scene-plus-physics-cache requires --fixture or --scene-project")
     try:
-        result = export_scene_only(args)
-    except ExportError as exc:
+        if args.mode == "scene-plus-physics-cache":
+            result = export_scene_plus_physics_cache(
+                project_root=args.scene_project or fixture_scene_project(),
+                output_root=args.output_root or default_output_root(),
+                item_name=(
+                    DEFAULT_PROJECT_ITEM_NAME
+                    if args.item_name == DEFAULT_ITEM_NAME
+                    else args.item_name
+                ),
+                job_id=(
+                    DEFAULT_PROJECT_JOB_ID
+                    if args.job_id == DEFAULT_JOB_ID
+                    else args.job_id
+                ),
+                ray_version=args.ray_version,
+                physics_version=args.physics_version,
+                force_worker_id=args.force_worker_id,
+                force=args.force,
+            )
+        else:
+            result = export_scene_only(args)
+    except (ExportError, SceneProjectExportError) as exc:
         raise SystemExit(f"error: {exc}") from exc
     print(json.dumps(result, indent=2))
     return 0

@@ -11,6 +11,8 @@ void ray_tracing_headless_finalize_render_diagnostics(
     const RayTracingAgentRenderRequest *request) {
     if (!preflight || !request) return;
     RuntimeTriangleBVH3D_SnapshotTraceStats(&preflight->bvh_trace_stats);
+    RuntimeSceneAcceleration3D_SnapshotTraceStats(
+        &preflight->scene_acceleration_trace_stats);
     RuntimeRay3D_SnapshotRouteStats(&preflight->ray_trace_route_stats);
     RuntimeNative3DPreparedSceneCacheStatsSnapshot(
         &preflight->prepared_scene_cache_stats);

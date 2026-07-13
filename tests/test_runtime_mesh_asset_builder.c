@@ -593,6 +593,56 @@ static int test_mesh_blas_cache_builds_once_for_repeated_instances(void) {
         assert_true("mrt3_route_tlas_hit_count", route_stats.tlasTraceHits == 1u);
         assert_true("mrt3_route_tlas_no_fallback",
                     route_stats.flattenedFallbackCalls == 0u);
+
+        {
+            HitInfo3D bounded_hit = {0};
+            bool bounded_found = false;
+
+            RuntimeRay3D_ResetRouteStats();
+            bounded_found = RuntimeRay3D_TraceSceneFirstHit(&scene,
+                                                            &ray,
+                                                            0.001,
+                                                            0.5,
+                                                            &bounded_hit);
+            assert_true("mrt3_route_tlas_bounded_far_hit_is_miss", !bounded_found);
+            RuntimeRay3D_SnapshotRouteStats(&route_stats);
+            assert_true("mrt3_route_tlas_bounded_miss_count",
+                        route_stats.tlasTraceMisses == 1u);
+            assert_true("mrt3_route_tlas_bounded_no_error",
+                        route_stats.tlasTraceErrors == 0u);
+            assert_true("mrt3_route_tlas_bounded_no_fallback",
+                        route_stats.flattenedFallbackCalls == 0u);
+        }
+
+        {
+            RuntimeScene3D equivalent_scene = scene;
+            HitInfo3D equivalent_hit = {0};
+            HitInfo3D original_hit_after_equivalent_bind = {0};
+
+            assert_true("mrt3_route_equivalent_scene_bind",
+                        RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(
+                            &equivalent_scene));
+            RuntimeRay3D_ResetRouteStats();
+            assert_true("mrt3_route_equivalent_scene_hit",
+                        RuntimeRay3D_TraceSceneFirstHit(&equivalent_scene,
+                                                       &ray,
+                                                       0.001,
+                                                       10.0,
+                                                       &equivalent_hit));
+            assert_true("mrt3_route_original_scene_remains_compatible",
+                        RuntimeRay3D_TraceSceneFirstHit(&scene,
+                                                       &ray,
+                                                       0.001,
+                                                       10.0,
+                                                       &original_hit_after_equivalent_bind));
+            RuntimeRay3D_SnapshotRouteStats(&route_stats);
+            assert_true("mrt3_route_equivalent_scene_tlas_calls",
+                        route_stats.tlasTraceCalls == 2u);
+            assert_true("mrt3_route_equivalent_scene_no_unready",
+                        route_stats.tlasTraceUnready == 0u);
+            assert_true("mrt3_route_equivalent_scene_no_fallback",
+                        route_stats.flattenedFallbackCalls == 0u);
+        }
         RuntimeRay3D_ResetTraceRouteForTests();
         RuntimeRay3D_ResetRouteStats();
     }
