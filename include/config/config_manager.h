@@ -102,6 +102,19 @@ typedef enum {
 #define RUNTIME_3D_UPSCALE_MODE_MAX RUNTIME_3D_UPSCALE_MODE_BILINEAR
 #define RUNTIME_3D_UPSCALE_MODE_DEFAULT RUNTIME_3D_UPSCALE_MODE_OFF
 
+#define RUNTIME_3D_CAUSTIC_MODE_MIN 0
+#define RUNTIME_3D_CAUSTIC_MODE_MAX 3
+#define RUNTIME_3D_CAUSTIC_MODE_DEFAULT 0
+#define RUNTIME_3D_CAUSTIC_ENGINE_MIN 0
+#define RUNTIME_3D_CAUSTIC_ENGINE_MAX 1
+#define RUNTIME_3D_CAUSTIC_ENGINE_DEFAULT 0
+#define RUNTIME_3D_CAUSTIC_SAMPLE_BUDGET_MAX 1000000
+#define RUNTIME_3D_CAUSTIC_PATH_DEPTH_MAX 16
+#define MENU_WORKSPACE_MODULE_DEFAULT 0
+#define MENU_WORKSPACE_MODULE_MAX 2
+#define MENU_PANE_SCENE_WIDTH_DEFAULT 390
+#define MENU_PANE_HEALTH_WIDTH_DEFAULT 340
+
 #define RAY_TRACING_DEFAULT_LIGHT_INTENSITY 0.4
 
 // **Animation Config Struct**
@@ -177,6 +190,17 @@ typedef struct {
     int temporalFrames3D;
     int renderScale3D;
     int upscaleMode3D;
+    int causticMode3D;
+    int causticTransportEngine3D;
+    bool causticSurfaceCacheEnabled3D;
+    bool causticVolumeCacheEnabled3D;
+    int causticSampleBudget3D;
+    int causticMaxPathDepth3D;
+    bool causticDebugSummaryEnabled3D;
+    bool causticDebugExportEnabled3D;
+    int menuWorkspaceModule;
+    int menuPaneSceneWidth;
+    int menuPaneHealthWidth;
     int runtimeWindowWidth;
     int runtimeWindowHeight;
     // Integrator mode: 0 = forward, 1 = hybrid (camera-path GI), 2 = direct light (Disney path paused).

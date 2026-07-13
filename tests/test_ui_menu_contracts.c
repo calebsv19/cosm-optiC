@@ -540,11 +540,18 @@ static int test_menu_button_layout_respects_owned_screen_zones(void) {
     assert_true("menu_buttons_route_stack_inside_route_zone",
                 buttons.spaceModeRect.x >= screen.routeStackRect.x &&
                 buttons.spaceModeRect.y >= screen.routeStackRect.y &&
-                buttons.previewRect.y >= screen.routeStackRect.y &&
-                buttons.previewRect.y < test_rect_bottom(&screen.routeStackRect));
-    assert_true("menu_buttons_route_actions_use_route_width",
-                buttons.startRect.x >= screen.routeStackRect.x &&
-                test_rect_right(&buttons.startRect) <= test_rect_right(&screen.routeStackRect));
+                buttons.sceneEditorRect.y < test_rect_bottom(&screen.routeStackRect));
+    assert_true("menu_buttons_run_actions_hidden_outside_run_module",
+                buttons.startRect.w == 0 && buttons.previewRect.w == 0);
+    assert_true("menu_buttons_run_module_selects",
+                menu_workspace_host_init(&state.menuWorkspaceHost) &&
+                menu_workspace_host_select(&state.menuWorkspaceHost,
+                                           MENU_WORKSPACE_RUN));
+    menu_render_build_button_layout(NULL, &state, &screen, &buttons);
+    assert_true("menu_buttons_run_actions_use_workspace_width",
+                buttons.startRect.x >= screen.centerResumeRect.x &&
+                test_rect_right(&buttons.startRect) <= test_rect_right(&screen.centerResumeRect) &&
+                buttons.previewRect.y >= screen.centerResumeRect.y);
     assert_true("menu_buttons_footer_inside_bottom_row",
                 buttons.exitRect.x >= screen.bottomActionRowRect.x &&
                 buttons.exitRect.y >= screen.bottomActionRowRect.y &&
@@ -796,7 +803,8 @@ static int test_integrator_catalog_menu_routes_by_space_mode(void) {
     assert_true("integrator_menu_lighting_tab_rects_in_title_band",
                 buttons.rendererLightingTabRect.y >= screen.centerControlsRect.y &&
                 buttons.rendererPerformanceTabRect.y >= screen.centerControlsRect.y &&
-                buttons.rendererLightingTabRect.x < buttons.rendererPerformanceTabRect.x);
+                buttons.rendererLightingTabRect.x < buttons.rendererPerformanceTabRect.x &&
+                buttons.rendererPerformanceTabRect.x < buttons.rendererCausticsTabRect.x);
     assert_true("integrator_menu_lighting_sliders_present",
                 buttons.rendererControlSliders.count >= 5);
 
@@ -812,6 +820,23 @@ static int test_integrator_catalog_menu_routes_by_space_mode(void) {
     assert_true("integrator_menu_performance_tile_size_slider_present",
                 buttons.rendererControlSliders.count >= 1 &&
                 buttons.rendererControlSliders.items[0].value == &animSettings.tileSize);
+
+    memset(&buttons, 0, sizeof(buttons));
+    state.rendererControlsTab = MENU_RENDERER_CONTROLS_CAUSTICS;
+    RuntimeCausticSettings3D_Default(&state.causticSettings);
+    state.causticSettings.mode = RUNTIME_CAUSTIC_MODE_OFF;
+    menu_render_build_button_layout(NULL, &state, &screen, &buttons);
+    assert_true("integrator_menu_caustic_controls_present",
+                buttons.causticModeRect.w > 0 &&
+                buttons.causticEngineRect.w > 0 &&
+                buttons.causticSurfaceRect.w > 0 &&
+                buttons.causticVolumeRect.w > 0);
+    assert_true("integrator_menu_caustic_budget_sliders_present",
+                buttons.rendererControlSliders.count == 2 &&
+                buttons.rendererControlSliders.items[0].value ==
+                    &state.causticSettings.sampleBudget &&
+                buttons.rendererControlSliders.items[1].value ==
+                    &state.causticSettings.maxPathDepth);
 
     animSettings.spaceMode = SPACE_MODE_2D;
     menu_state = RayTracingIntegratorCatalog_BuildMenuState(&animSettings);

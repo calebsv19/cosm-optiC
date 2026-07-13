@@ -63,6 +63,7 @@ typedef struct MenuButtonLayout {
     SDL_Rect outputRootApplyRect;
     SDL_Rect rendererLightingTabRect;
     SDL_Rect rendererPerformanceTabRect;
+    SDL_Rect rendererCausticsTabRect;
     SDL_Rect falloffRect;
     SDL_Rect tileRect;
     SDL_Rect tilePreviewRect;
@@ -72,6 +73,12 @@ typedef struct MenuButtonLayout {
     SDL_Rect environmentBackgroundModeRect;
     SDL_Rect upscaleModeRect;
     SDL_Rect lightHeightRect;
+    SDL_Rect causticModeRect;
+    SDL_Rect causticEngineRect;
+    SDL_Rect causticSurfaceRect;
+    SDL_Rect causticVolumeRect;
+    SDL_Rect causticDebugSummaryRect;
+    SDL_Rect causticDebugExportRect;
     SDL_Rect sceneEditorRect;
     SDL_Rect sceneModeRect;
     SDL_Rect spaceModeRect;

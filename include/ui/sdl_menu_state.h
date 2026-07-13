@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include "app/render_export_batch.h"
+#include "render/runtime_caustic_settings_3d.h"
 #include "ui/menu_pane_host.h"
 #include "ui/menu_workspace.h"
 
@@ -46,7 +47,8 @@ typedef enum {
 
 typedef enum {
     MENU_RENDERER_CONTROLS_LIGHTING = 0,
-    MENU_RENDERER_CONTROLS_PERFORMANCE = 1
+    MENU_RENDERER_CONTROLS_PERFORMANCE = 1,
+    MENU_RENDERER_CONTROLS_CAUSTICS = 2
 } MenuRendererControlsTab;
 
 typedef struct {
@@ -136,11 +138,13 @@ typedef struct {
     float sliderMaxScroll;
     RayTracingMenuPaneHost menuPaneHost;
     MenuWorkspaceHost menuWorkspaceHost;
+    RuntimeCausticSettings3D causticSettings;
 } MenuRuntimeState;
 
 void menu_state_init(MenuRuntimeState* state);
 void menu_state_reset_defaults(MenuRuntimeState* state);
 void menu_state_sync_from_anim(MenuRuntimeState* state);
+void menu_state_apply_effective_render_recipe(const MenuRuntimeState* state);
 
 void menu_state_manifest_clamp_scroll(MenuRuntimeState* state);
 void menu_state_manifest_scroll_by(MenuRuntimeState* state, float delta);

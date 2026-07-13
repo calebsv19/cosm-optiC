@@ -335,9 +335,12 @@ void menu_input_handle_key(SDL_Event* event,
 void menu_input_handle_mouse_motion(SDL_Event* event, MenuRuntimeState* state) {
     if (!event || !state) return;
     if (ray_tracing_menu_pane_host_splitter_drag_active(&state->menuPaneHost)) {
-        (void)ray_tracing_menu_pane_host_update_splitter_drag(&state->menuPaneHost,
-                                                              (float)event->motion.x,
-                                                              (float)event->motion.y);
+        if (ray_tracing_menu_pane_host_update_splitter_drag(&state->menuPaneHost,
+                                                            (float)event->motion.x,
+                                                            (float)event->motion.y)) {
+            animSettings.menuPaneSceneWidth = state->menuPaneHost.target_scene_width;
+            animSettings.menuPaneHealthWidth = state->menuPaneHost.target_health_width;
+        }
         return;
     }
     if (!state->draggingSlider && !state->manifestScrollbarDragging &&
@@ -449,6 +452,8 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         if (workspace_tab >= 0) {
             (void)menu_workspace_host_select(&state->menuWorkspaceHost,
                                              (MenuWorkspaceModule)workspace_tab);
+            animSettings.menuWorkspaceModule =
+                (int)state->menuWorkspaceHost.active_module;
             state->draggingSlider = false;
             state->selectedSlider = NULL;
             return;
@@ -558,6 +563,13 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER &&
         point_in_rect(&buttons.rendererPerformanceTabRect, x, y)) {
         state->rendererControlsTab = MENU_RENDERER_CONTROLS_PERFORMANCE;
+        state->draggingSlider = false;
+        state->selectedSlider = NULL;
+        return;
+    }
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER &&
+        point_in_rect(&buttons.rendererCausticsTabRect, x, y)) {
+        state->rendererControlsTab = MENU_RENDERER_CONTROLS_CAUSTICS;
         state->draggingSlider = false;
         state->selectedSlider = NULL;
         return;
@@ -732,6 +744,48 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         return;
     }
 
+    if (point_in_rect(&buttons.causticModeRect, x, y)) {
+        state->causticSettings.mode =
+            (RuntimeCausticMode3D)(((int)state->causticSettings.mode + 1) % 4);
+        if (state->causticSettings.mode == RUNTIME_CAUSTIC_MODE_OFF ||
+            state->causticSettings.mode == RUNTIME_CAUSTIC_MODE_ANALYTIC) {
+            state->causticSettings.surfaceCacheEnabled = false;
+            state->causticSettings.volumeCacheEnabled = false;
+        } else if (!state->causticSettings.surfaceCacheEnabled &&
+                   !state->causticSettings.volumeCacheEnabled) {
+            state->causticSettings.surfaceCacheEnabled = true;
+        }
+        return;
+    }
+    if (point_in_rect(&buttons.causticEngineRect, x, y)) {
+        state->causticSettings.transportEngine =
+            state->causticSettings.transportEngine ==
+                    RUNTIME_CAUSTIC_TRANSPORT_ENGINE_PHOTON_MAP
+                ? RUNTIME_CAUSTIC_TRANSPORT_ENGINE_EXPLORATORY_LENS_TRANSPORT
+                : RUNTIME_CAUSTIC_TRANSPORT_ENGINE_PHOTON_MAP;
+        return;
+    }
+    if (point_in_rect(&buttons.causticSurfaceRect, x, y)) {
+        state->causticSettings.surfaceCacheEnabled =
+            !state->causticSettings.surfaceCacheEnabled;
+        return;
+    }
+    if (point_in_rect(&buttons.causticVolumeRect, x, y)) {
+        state->causticSettings.volumeCacheEnabled =
+            !state->causticSettings.volumeCacheEnabled;
+        return;
+    }
+    if (point_in_rect(&buttons.causticDebugSummaryRect, x, y)) {
+        state->causticSettings.debugSummaryEnabled =
+            !state->causticSettings.debugSummaryEnabled;
+        return;
+    }
+    if (point_in_rect(&buttons.causticDebugExportRect, x, y)) {
+        state->causticSettings.debugExportEnabled =
+            !state->causticSettings.debugExportEnabled;
+        return;
+    }
+
     if (point_in_rect(&buttons.falloffRect, x, y)) {
         animSettings.forwardFalloffMode = (animSettings.forwardFalloffMode + 1) % 3;
         return;
@@ -872,6 +926,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         if (state->editingStartFrame) {
             finish_start_frame_edit(state, true);
         }
+        menu_state_apply_effective_render_recipe(state);
         SaveAllSettings();
         strncpy(state->statusLabel, "Saved", sizeof(state->statusLabel) - 1);
         state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
@@ -897,6 +952,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
             finish_start_frame_edit(state, true);
         }
         menu_state_sync_from_anim(state);
+        menu_state_apply_effective_render_recipe(state);
         animSettings.previewMode = false;
         SaveAllSettings();
         SceneEditorSessionRequestPreviewOnBegin();
@@ -916,6 +972,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
             finish_start_frame_edit(state, true);
         }
         menu_state_sync_from_anim(state);
+        menu_state_apply_effective_render_recipe(state);
         printf("[Menu] Start pressed: spaceMode=%d integrator2D=%d integrator3D=%d falloffMode=%d decay=%.2f softness=%.2f intensity=%.2f\n",
                animSettings.spaceMode,
                animSettings.integratorMode,

@@ -1810,6 +1810,87 @@ static int test_animation_deep_render_frame_resume_roundtrip_and_clamp(void) {
     return 0;
 }
 
+static int test_animation_native_3d_caustics_roundtrip_and_default_off(void) {
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+    const char* json_missing_caustics =
+        "{\n"
+        "  \"spaceMode\": 1,\n"
+        "  \"integratorMode3D\": 3\n"
+        "}\n";
+
+    animSettings.causticMode3D = 3;
+    animSettings.causticTransportEngine3D = 1;
+    animSettings.causticSurfaceCacheEnabled3D = true;
+    animSettings.causticVolumeCacheEnabled3D = false;
+    animSettings.causticSampleBudget3D = 4096;
+    animSettings.causticMaxPathDepth3D = 8;
+    animSettings.causticDebugSummaryEnabled3D = true;
+    animSettings.causticDebugExportEnabled3D = false;
+    animSettings.menuWorkspaceModule = 2;
+    animSettings.menuPaneSceneWidth = 430;
+    animSettings.menuPaneHealthWidth = 380;
+    SaveAnimationConfig();
+
+    animSettings.causticMode3D = 0;
+    animSettings.causticTransportEngine3D = 0;
+    animSettings.causticSurfaceCacheEnabled3D = false;
+    animSettings.causticVolumeCacheEnabled3D = true;
+    animSettings.causticSampleBudget3D = 0;
+    animSettings.causticMaxPathDepth3D = 0;
+    animSettings.causticDebugSummaryEnabled3D = false;
+    animSettings.causticDebugExportEnabled3D = true;
+    animSettings.menuWorkspaceModule = 0;
+    animSettings.menuPaneSceneWidth = 390;
+    animSettings.menuPaneHealthWidth = 340;
+    LoadAnimationConfig();
+
+    assert_true("caustics_roundtrip_mode", animSettings.causticMode3D == 3);
+    assert_true("caustics_roundtrip_engine",
+                animSettings.causticTransportEngine3D == 1);
+    assert_true("caustics_roundtrip_surface_cache",
+                animSettings.causticSurfaceCacheEnabled3D);
+    assert_true("caustics_roundtrip_volume_cache",
+                !animSettings.causticVolumeCacheEnabled3D);
+    assert_true("caustics_roundtrip_sample_budget",
+                animSettings.causticSampleBudget3D == 4096);
+    assert_true("caustics_roundtrip_path_depth",
+                animSettings.causticMaxPathDepth3D == 8);
+    assert_true("caustics_roundtrip_debug_summary",
+                animSettings.causticDebugSummaryEnabled3D);
+    assert_true("caustics_roundtrip_debug_export",
+                !animSettings.causticDebugExportEnabled3D);
+    assert_true("menu_workspace_roundtrip_module",
+                animSettings.menuWorkspaceModule == 2);
+    assert_true("menu_workspace_roundtrip_scene_width",
+                animSettings.menuPaneSceneWidth == 430);
+    assert_true("menu_workspace_roundtrip_health_width",
+                animSettings.menuPaneHealthWidth == 380);
+
+    assert_true("caustics_write_legacy_config",
+                write_text_file(kRuntimeAnimationConfigPath, json_missing_caustics));
+    LoadAnimationConfig();
+    assert_true("caustics_legacy_mode_defaults_off",
+                animSettings.causticMode3D == RUNTIME_3D_CAUSTIC_MODE_DEFAULT);
+    assert_true("caustics_legacy_surface_cache_defaults_off",
+                !animSettings.causticSurfaceCacheEnabled3D);
+    assert_true("caustics_legacy_volume_cache_defaults_off",
+                !animSettings.causticVolumeCacheEnabled3D);
+    assert_true("caustics_legacy_budget_defaults_zero",
+                animSettings.causticSampleBudget3D == 0);
+    assert_true("caustics_legacy_depth_defaults_zero",
+                animSettings.causticMaxPathDepth3D == 0);
+    assert_true("menu_workspace_legacy_module_defaults_render",
+                animSettings.menuWorkspaceModule == MENU_WORKSPACE_MODULE_DEFAULT);
+    assert_true("menu_workspace_legacy_scene_width_defaults",
+                animSettings.menuPaneSceneWidth == MENU_PANE_SCENE_WIDTH_DEFAULT);
+    assert_true("menu_workspace_legacy_health_width_defaults",
+                animSettings.menuPaneHealthWidth == MENU_PANE_HEALTH_WIDTH_DEFAULT);
+
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
 static int test_native_3d_export_frame_bmp_uses_preview_buffer_directly(void) {
     char tmp_template[] = "/tmp/ray_tracing_native3d_export_XXXXXX";
     char* tmp_root = mkdtemp(tmp_template);
@@ -1898,6 +1979,7 @@ int run_test_config_animation_settings_export_suite(void) {
     test_animation_video_output_root_migrates_from_output_root();
     test_data_paths_resolve_video_output_path_uses_configured_root();
     test_animation_deep_render_frame_resume_roundtrip_and_clamp();
+    test_animation_native_3d_caustics_roundtrip_and_default_off();
     test_render_export_batch_counts_and_clears_frames();
     test_render_export_batch_reports_highest_and_next_frame();
     test_render_export_batch_make_video_rejects_empty_frame_dir();

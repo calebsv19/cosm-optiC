@@ -384,6 +384,28 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config,
                            "upscaleMode3D",
                            json_object_new_int(animSettings.upscaleMode3D));
+    json_object_object_add(config, "causticMode3D",
+                           json_object_new_int(animSettings.causticMode3D));
+    json_object_object_add(config, "causticTransportEngine3D",
+                           json_object_new_int(animSettings.causticTransportEngine3D));
+    json_object_object_add(config, "causticSurfaceCacheEnabled3D",
+                           json_object_new_boolean(animSettings.causticSurfaceCacheEnabled3D));
+    json_object_object_add(config, "causticVolumeCacheEnabled3D",
+                           json_object_new_boolean(animSettings.causticVolumeCacheEnabled3D));
+    json_object_object_add(config, "causticSampleBudget3D",
+                           json_object_new_int(animSettings.causticSampleBudget3D));
+    json_object_object_add(config, "causticMaxPathDepth3D",
+                           json_object_new_int(animSettings.causticMaxPathDepth3D));
+    json_object_object_add(config, "causticDebugSummaryEnabled3D",
+                           json_object_new_boolean(animSettings.causticDebugSummaryEnabled3D));
+    json_object_object_add(config, "causticDebugExportEnabled3D",
+                           json_object_new_boolean(animSettings.causticDebugExportEnabled3D));
+    json_object_object_add(config, "menuWorkspaceModule",
+                           json_object_new_int(animSettings.menuWorkspaceModule));
+    json_object_object_add(config, "menuPaneSceneWidth",
+                           json_object_new_int(animSettings.menuPaneSceneWidth));
+    json_object_object_add(config, "menuPaneHealthWidth",
+                           json_object_new_int(animSettings.menuPaneHealthWidth));
     json_object_object_add(config,
                            "runtimeWindowWidth",
                            json_object_new_int(animSettings.runtimeWindowWidth));
@@ -780,6 +802,48 @@ void LoadAnimationConfig(void) {
     } else {
         animSettings.upscaleMode3D = RUNTIME_3D_UPSCALE_MODE_DEFAULT;
     }
+    if (json_object_object_get_ex(config, "causticMode3D", &temp)) {
+        animSettings.causticMode3D = json_object_get_int(temp);
+    } else {
+        animSettings.causticMode3D = RUNTIME_3D_CAUSTIC_MODE_DEFAULT;
+    }
+    if (json_object_object_get_ex(config, "causticTransportEngine3D", &temp)) {
+        animSettings.causticTransportEngine3D = json_object_get_int(temp);
+    } else {
+        animSettings.causticTransportEngine3D = RUNTIME_3D_CAUSTIC_ENGINE_DEFAULT;
+    }
+    animSettings.causticSurfaceCacheEnabled3D =
+        json_object_object_get_ex(config, "causticSurfaceCacheEnabled3D", &temp) &&
+        json_object_get_boolean(temp);
+    animSettings.causticVolumeCacheEnabled3D =
+        json_object_object_get_ex(config, "causticVolumeCacheEnabled3D", &temp) &&
+        json_object_get_boolean(temp);
+    animSettings.causticSampleBudget3D =
+        json_object_object_get_ex(config, "causticSampleBudget3D", &temp)
+            ? json_object_get_int(temp)
+            : 0;
+    animSettings.causticMaxPathDepth3D =
+        json_object_object_get_ex(config, "causticMaxPathDepth3D", &temp)
+            ? json_object_get_int(temp)
+            : 0;
+    animSettings.causticDebugSummaryEnabled3D =
+        json_object_object_get_ex(config, "causticDebugSummaryEnabled3D", &temp) &&
+        json_object_get_boolean(temp);
+    animSettings.causticDebugExportEnabled3D =
+        json_object_object_get_ex(config, "causticDebugExportEnabled3D", &temp) &&
+        json_object_get_boolean(temp);
+    animSettings.menuWorkspaceModule =
+        json_object_object_get_ex(config, "menuWorkspaceModule", &temp)
+            ? json_object_get_int(temp)
+            : MENU_WORKSPACE_MODULE_DEFAULT;
+    animSettings.menuPaneSceneWidth =
+        json_object_object_get_ex(config, "menuPaneSceneWidth", &temp)
+            ? json_object_get_int(temp)
+            : MENU_PANE_SCENE_WIDTH_DEFAULT;
+    animSettings.menuPaneHealthWidth =
+        json_object_object_get_ex(config, "menuPaneHealthWidth", &temp)
+            ? json_object_get_int(temp)
+            : MENU_PANE_HEALTH_WIDTH_DEFAULT;
     if (json_object_object_get_ex(config, "runtimeWindowWidth", &temp)) {
         animSettings.runtimeWindowWidth = json_object_get_int(temp);
     } else {

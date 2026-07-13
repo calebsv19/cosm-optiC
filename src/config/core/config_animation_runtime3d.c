@@ -102,6 +102,12 @@ static int ClampUpscaleMode3D(int value) {
     return value;
 }
 
+static int ClampInt(int value, int min_value, int max_value) {
+    if (value < min_value) return min_value;
+    if (value > max_value) return max_value;
+    return value;
+}
+
 int animation_config_runtime_window_dimension_clamp(int value, int fallback) {
     if (value <= 0) {
         value = fallback;
@@ -135,6 +141,30 @@ void animation_config_normalize_runtime3d_fields(AnimationConfig* cfg) {
         ClampRenderScale3D(cfg->renderScale3D);
     cfg->upscaleMode3D =
         ClampUpscaleMode3D(cfg->upscaleMode3D);
+    cfg->causticMode3D = ClampInt(cfg->causticMode3D,
+                                 RUNTIME_3D_CAUSTIC_MODE_MIN,
+                                 RUNTIME_3D_CAUSTIC_MODE_MAX);
+    cfg->causticTransportEngine3D = ClampInt(
+        cfg->causticTransportEngine3D,
+        RUNTIME_3D_CAUSTIC_ENGINE_MIN,
+        RUNTIME_3D_CAUSTIC_ENGINE_MAX);
+    cfg->causticSampleBudget3D = ClampInt(
+        cfg->causticSampleBudget3D,
+        0,
+        RUNTIME_3D_CAUSTIC_SAMPLE_BUDGET_MAX);
+    cfg->causticMaxPathDepth3D = ClampInt(
+        cfg->causticMaxPathDepth3D,
+        0,
+        RUNTIME_3D_CAUSTIC_PATH_DEPTH_MAX);
+    if (cfg->causticMode3D == RUNTIME_3D_CAUSTIC_MODE_DEFAULT) {
+        cfg->causticSurfaceCacheEnabled3D = false;
+        cfg->causticVolumeCacheEnabled3D = false;
+    }
+    cfg->menuWorkspaceModule = ClampInt(cfg->menuWorkspaceModule,
+                                        MENU_WORKSPACE_MODULE_DEFAULT,
+                                        MENU_WORKSPACE_MODULE_MAX);
+    cfg->menuPaneSceneWidth = ClampInt(cfg->menuPaneSceneWidth, 350, 470);
+    cfg->menuPaneHealthWidth = ClampInt(cfg->menuPaneHealthWidth, 250, 480);
 }
 
 void ApplyAnimationWindowSizeOverride(void) {
