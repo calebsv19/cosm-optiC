@@ -36,6 +36,9 @@
 #define BOTTOM_BUTTON_SPACING 10
 #define BOTTOM_BUTTON_WIDTH_START 200
 #define BOTTOM_BUTTON_HEIGHT_START 50
+#define ROUTE_BUTTON_WIDTH 184
+#define ROUTE_BUTTON_HEIGHT 38
+#define ROUTE_BUTTON_GAP 6
 #define BOTTOM_BUTTON_MARGIN_Y_START (MENU_HEIGHT -MENU_MARGIN_Y - BOTTOM_BUTTON_HEIGHT_START)
 #define BOTTOM_BUTTON_WIDTH_EXIT 180
 #define BOTTOM_BUTTON_HEIGHT_EXIT 40
@@ -890,16 +893,19 @@ void menu_render_build_button_layout(TTF_Font* font,
     }
 
     layout.startRect = build_adaptive_button_rect_right(font, rightEdge,
-                                                        screen_layout ? (routeTopY + (BOTTOM_BUTTON_HEIGHT_START + 8) * 3) : BOTTOM_BUTTON_MARGIN_Y_START,
-                                                        BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START,
+                                                        screen_layout ? (routeTopY + (ROUTE_BUTTON_HEIGHT + ROUTE_BUTTON_GAP) * 4) : BOTTOM_BUTTON_MARGIN_Y_START,
+                                                        screen_layout ? ROUTE_BUTTON_WIDTH : BOTTOM_BUTTON_WIDTH_START,
+                                                        screen_layout ? ROUTE_BUTTON_HEIGHT : BOTTOM_BUTTON_HEIGHT_START,
                                                         "Start", 0);
     layout.previewRect = build_adaptive_button_rect_right(font, rightEdge,
-                                                          screen_layout ? (routeTopY + (BOTTOM_BUTTON_HEIGHT_START + 8) * 4) : BOTTOM_BUTTON_MARGIN_Y_PREVIEW,
-                                                          BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START,
+                                                          screen_layout ? (routeTopY + (ROUTE_BUTTON_HEIGHT + ROUTE_BUTTON_GAP) * 3) : BOTTOM_BUTTON_MARGIN_Y_PREVIEW,
+                                                          screen_layout ? ROUTE_BUTTON_WIDTH : BOTTOM_BUTTON_WIDTH_START,
+                                                          screen_layout ? ROUTE_BUTTON_HEIGHT : BOTTOM_BUTTON_HEIGHT_START,
                                                           "Preview", 0);
     layout.sceneEditorRect = build_adaptive_button_rect_right(font, rightEdge,
-                                                              screen_layout ? (routeTopY + (BOTTOM_BUTTON_HEIGHT_START + 8) * 2) : (layout.startRect.y - (BOTTOM_BUTTON_HEIGHT_START + 8)),
-                                                              BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START,
+                                                              screen_layout ? (routeTopY + (ROUTE_BUTTON_HEIGHT + ROUTE_BUTTON_GAP) * 2) : (layout.startRect.y - (BOTTOM_BUTTON_HEIGHT_START + 8)),
+                                                              screen_layout ? ROUTE_BUTTON_WIDTH : BOTTOM_BUTTON_WIDTH_START,
+                                                              screen_layout ? ROUTE_BUTTON_HEIGHT : BOTTOM_BUTTON_HEIGHT_START,
                                                               "Scene Editor", 0);
     int clampedEditorMode = EditorModeRouter_ClampEditorMode(animSettings.editorMode,
                                                              AnimationUseFluidScene());
@@ -911,25 +917,15 @@ void menu_render_build_button_layout(TTF_Font* font,
                                   (clampedEditorMode == EDITOR_MODE_CAMERA) ? "Editor: Camera" :
                                   "Editor: Material";
     layout.sceneModeRect = build_adaptive_button_rect_right(font, rightEdge,
-                                                            screen_layout ? (routeTopY + (BOTTOM_BUTTON_HEIGHT_START + 6)) : (layout.sceneEditorRect.y - (BOTTOM_BUTTON_HEIGHT_START + 6)),
-                                                            BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START,
+                                                            screen_layout ? (routeTopY + ROUTE_BUTTON_HEIGHT + ROUTE_BUTTON_GAP) : (layout.sceneEditorRect.y - (BOTTOM_BUTTON_HEIGHT_START + 6)),
+                                                            screen_layout ? ROUTE_BUTTON_WIDTH : BOTTOM_BUTTON_WIDTH_START,
+                                                            screen_layout ? ROUTE_BUTTON_HEIGHT : BOTTOM_BUTTON_HEIGHT_START,
                                                             editorModeLabel, 0);
     layout.spaceModeRect = build_adaptive_button_rect_right(font, rightEdge,
                                                             screen_layout ? routeTopY : (layout.sceneModeRect.y - (BOTTOM_BUTTON_HEIGHT_START + 6)),
-                                                            BOTTOM_BUTTON_WIDTH_START, BOTTOM_BUTTON_HEIGHT_START,
+                                                            screen_layout ? ROUTE_BUTTON_WIDTH : BOTTOM_BUTTON_WIDTH_START,
+                                                            screen_layout ? ROUTE_BUTTON_HEIGHT : BOTTOM_BUTTON_HEIGHT_START,
                                                             menu_space_mode_button_label(), 0);
-    if (screen_layout && state &&
-        state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RUN) {
-        const int run_button_x = screen_layout->centerResumeRect.x + 18;
-        const int run_button_w = screen_layout->centerResumeRect.w - 36;
-        const int start_y = screen_layout->centerResumeRect.y +
-                            screen_layout->centerResumeRect.h - 68;
-        layout.startRect = (SDL_Rect){run_button_x, start_y, run_button_w, 50};
-        layout.previewRect = (SDL_Rect){run_button_x, start_y - 58, run_button_w, 50};
-    } else if (screen_layout) {
-        layout.startRect = (SDL_Rect){0, 0, 0, 0};
-        layout.previewRect = (SDL_Rect){0, 0, 0, 0};
-    }
     layout.exitRect = build_adaptive_button_rect(font,
                                                  screen_layout ? (screen_layout->bottomActionRowRect.x + 14) : BOTTOM_BUTTON_MARGIN_X_EXIT,
                                                  footerButtonY,

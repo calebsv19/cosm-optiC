@@ -10,8 +10,9 @@
 #define MENU_HEIGHT 900
 #define MENU_MARGIN_X 30
 #define MENU_MARGIN_Y 30
-#define MENU_ROUTE_STACK_BUTTON_HEIGHT 50
-#define MENU_ROUTE_STACK_GAP 8
+#define MENU_ROUTE_STACK_BUTTON_HEIGHT 38
+#define MENU_ROUTE_STACK_BUTTON_COUNT 5
+#define MENU_ROUTE_STACK_GAP 6
 #define MENU_ROUTE_STACK_TITLE_HEIGHT 28
 #define MENU_BOTTOM_ACTION_HEIGHT 64
 #define MENU_MANIFEST_PANEL_MIN_HEIGHT 140
@@ -34,8 +35,8 @@ void menu_layout_build_base(TTF_Font* font,
     const int menu_height = (window_height > 0) ? window_height : MENU_HEIGHT;
     const int bottom_row_y = menu_height - MENU_MARGIN_Y - MENU_BOTTOM_ACTION_HEIGHT;
     const int route_stack_h = MENU_ROUTE_STACK_TITLE_HEIGHT +
-                              MENU_ROUTE_STACK_BUTTON_HEIGHT * 3 +
-                              MENU_ROUTE_STACK_GAP * 2 + 20;
+                              MENU_ROUTE_STACK_BUTTON_HEIGHT * MENU_ROUTE_STACK_BUTTON_COUNT +
+                              MENU_ROUTE_STACK_GAP * (MENU_ROUTE_STACK_BUTTON_COUNT - 1) + 20;
     const int pane_bottom = bottom_row_y - MENU_PANEL_BOTTOM_GAP;
     const SDL_Rect pane_bounds = {
         MENU_MARGIN_X,

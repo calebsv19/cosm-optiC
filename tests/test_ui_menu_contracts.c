@@ -540,18 +540,26 @@ static int test_menu_button_layout_respects_owned_screen_zones(void) {
     assert_true("menu_buttons_route_stack_inside_route_zone",
                 buttons.spaceModeRect.x >= screen.routeStackRect.x &&
                 buttons.spaceModeRect.y >= screen.routeStackRect.y &&
-                buttons.sceneEditorRect.y < test_rect_bottom(&screen.routeStackRect));
-    assert_true("menu_buttons_run_actions_hidden_outside_run_module",
-                buttons.startRect.w == 0 && buttons.previewRect.w == 0);
+                buttons.startRect.y < test_rect_bottom(&screen.routeStackRect));
+    assert_true("menu_buttons_launch_actions_stay_in_runtime_route",
+                buttons.previewRect.x >= screen.routeStackRect.x &&
+                buttons.startRect.x >= screen.routeStackRect.x &&
+                test_rect_right(&buttons.previewRect) <= test_rect_right(&screen.routeStackRect) &&
+                test_rect_right(&buttons.startRect) <= test_rect_right(&screen.routeStackRect) &&
+                buttons.previewRect.y > buttons.sceneEditorRect.y &&
+                buttons.startRect.y > buttons.previewRect.y);
+    assert_true("menu_buttons_runtime_route_is_compact",
+                buttons.spaceModeRect.h <= 40 &&
+                buttons.startRect.h <= 40);
     assert_true("menu_buttons_run_module_selects",
                 menu_workspace_host_init(&state.menuWorkspaceHost) &&
                 menu_workspace_host_select(&state.menuWorkspaceHost,
                                            MENU_WORKSPACE_RUN));
     menu_render_build_button_layout(NULL, &state, &screen, &buttons);
-    assert_true("menu_buttons_run_actions_use_workspace_width",
-                buttons.startRect.x >= screen.centerResumeRect.x &&
-                test_rect_right(&buttons.startRect) <= test_rect_right(&screen.centerResumeRect) &&
-                buttons.previewRect.y >= screen.centerResumeRect.y);
+    assert_true("menu_buttons_run_module_keeps_launch_actions_in_runtime_route",
+                buttons.startRect.x >= screen.routeStackRect.x &&
+                buttons.previewRect.x >= screen.routeStackRect.x &&
+                buttons.startRect.y > buttons.previewRect.y);
     assert_true("menu_buttons_footer_inside_bottom_row",
                 buttons.exitRect.x >= screen.bottomActionRowRect.x &&
                 buttons.exitRect.y >= screen.bottomActionRowRect.y &&
@@ -636,6 +644,11 @@ static int test_menu_resume_panel_clicks_preserve_frame_behavior(void) {
                 menu_resume_panel_handle_click(&event, &state, &resume));
     assert_true("menu_resume_next_sets_start", animSettings.startFrameIndex == 6);
     assert_true("menu_resume_next_clears_edit", !state.editingStartFrame);
+
+    event.button.x = resume.panelRect.x + 4;
+    event.button.y = resume.panelRect.y + 4;
+    assert_true("menu_resume_blank_click_passes_through",
+                !menu_resume_panel_handle_click(&event, &state, &resume));
 
     animSettings = saved_anim;
     return 0;

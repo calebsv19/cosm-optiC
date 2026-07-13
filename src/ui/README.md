@@ -14,9 +14,12 @@ Menu components presented before starting the renderer.
 
 The main menu keeps Scene + Mode visible on the left and Effective Render on
 the right. The center module separates render recipe editing from output/batch
-work and run/resume actions. Render has nested Lighting, Performance, and
+work and frame-resume configuration. Render has nested Lighting, Performance, and
 Caustics views; caustics and photon budgets default off/zero, while the right
 pane continuously reports the effective recipe, multiplicative cost warning,
-and current compatibility/digest route. Pane widths and the active center
-module persist without introducing a separate shared snapshot format.
+and current compatibility/digest route. Its compact Runtime Route stack owns
+Space, Editor, Scene Editor, Preview, and Start, so launch actions remain
+available independently of the selected center module. Pane widths and the
+active center module persist without introducing a separate shared snapshot
+format.
 - `menu/text_zoom_shortcuts.c` – Shared text-zoom shortcut handling used by menu and runtime/editor flows.
