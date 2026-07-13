@@ -15,6 +15,11 @@ typedef struct {
     uint32_t calls;
 } PhotonSceneTraceMaterialFixture3D;
 
+typedef struct {
+    RuntimeMaterialPayload3D payload;
+    uint32_t calls;
+} PhotonSceneTraceBsdfFixture3D;
+
 static bool photon_scene_trace_fixture_material(
     const HitInfo3D* hit,
     RuntimeMaterialPayload3D* out_payload,
@@ -36,6 +41,34 @@ static bool photon_scene_trace_fixture_material(
     out_payload->absorptionDistance = 8.0;
     out_payload->bsdf.ior = 1.45;
     return true;
+}
+
+static bool photon_scene_trace_bsdf_material(
+    const HitInfo3D* hit,
+    RuntimeMaterialPayload3D* out_payload,
+    void* user_data) {
+    PhotonSceneTraceBsdfFixture3D* fixture =
+        (PhotonSceneTraceBsdfFixture3D*)user_data;
+    if (!hit || !out_payload || !fixture) return false;
+    fixture->calls++;
+    *out_payload = fixture->payload;
+    out_payload->sceneObjectIndex = hit->sceneObjectIndex;
+    return out_payload->valid;
+}
+
+static RuntimeMaterialPayload3D photon_scene_trace_bsdf_payload(void) {
+    RuntimeMaterialPayload3D payload;
+    RuntimeMaterialPayload3D_Reset(&payload);
+    payload.valid = true;
+    payload.materialId = 91;
+    payload.baseColorR = 0.8;
+    payload.baseColorG = 0.6;
+    payload.baseColorB = 0.4;
+    payload.opticalIor = 1.5;
+    payload.bsdf.ior = 1.5;
+    payload.bsdf.diffuseWeight = 1.0;
+    payload.bsdf.roughness = 0.5;
+    return payload;
 }
 
 static bool photon_scene_trace_build_slab(RuntimeScene3D* scene) {
@@ -352,11 +385,160 @@ static int test_runtime_caustic_photon_scene_trace_preserves_opaque_hit_payload(
     return 0;
 }
 
+static int test_runtime_caustic_photon_scene_trace_bsdf_scattering_events(void) {
+    RuntimeScene3D scene;
+    RuntimeCausticPhotonSample3D sample = photon_scene_trace_sample();
+    RuntimeCausticPhotonSceneTraceSettings3D settings;
+    RuntimeCausticPhotonSceneBsdfSample3D bsdf_sample = {0};
+    RuntimeCausticPhotonSceneTrace3D scene_trace;
+    PhotonSceneTraceBsdfFixture3D fixture;
+
+    assert_true("runtime_caustic_photon_scene_trace_bsdf_build_slab",
+                photon_scene_trace_build_slab(&scene));
+    RuntimeCausticPhotonSceneTrace3D_DefaultSettings(&settings);
+    settings.materialResolver = photon_scene_trace_bsdf_material;
+    settings.materialResolverUserData = &fixture;
+    bsdf_sample.lobeUnitSample = 0.5;
+    bsdf_sample.directionSample.unitU = 0.0;
+    bsdf_sample.directionSample.unitV = 0.0;
+
+    memset(&fixture, 0, sizeof(fixture));
+    fixture.payload = photon_scene_trace_bsdf_payload();
+    assert_true("runtime_caustic_photon_scene_trace_bsdf_diffuse",
+                RuntimeCausticPhotonSceneTrace3D_TraceDeterministicBsdfHit(
+                    &scene, &sample, &bsdf_sample, &settings, &scene_trace));
+    assert_true("runtime_caustic_photon_scene_trace_bsdf_diffuse_ledger",
+                scene_trace.readback.succeeded &&
+                    scene_trace.readback.termination ==
+                        RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_EVENT_READY &&
+                    scene_trace.readback.hitEventCount == 1u &&
+                    scene_trace.trace.eventCount == 2u &&
+                    scene_trace.hitEvents[0].bsdfSelection.lobe ==
+                        RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_DIFFUSE &&
+                    scene_trace.hitEvents[0].bsdfDirection.valid &&
+                    scene_trace.trace.events[1].kind ==
+                        RUNTIME_CAUSTIC_PHOTON_EVENT_SURFACE &&
+                    scene_trace.trace.events[1].outgoingDirection.z > 0.999 &&
+                    scene_trace.readback.routeStats.tlasTraceCalls == 1u);
+    assert_close("runtime_caustic_photon_scene_trace_bsdf_diffuse_pdf",
+                 scene_trace.trace.events[1].pathPdf,
+                 sample.emissionPdf / 3.14159265358979323846,
+                 1.0e-12);
+    assert_close("runtime_caustic_photon_scene_trace_bsdf_diffuse_flux_r",
+                 scene_trace.trace.events[1].throughput.x,
+                 sample.flux.x * fixture.payload.baseColorR,
+                 1.0e-12);
+
+    fixture.calls = 0u;
+    fixture.payload = photon_scene_trace_bsdf_payload();
+    fixture.payload.bsdf.diffuseWeight = 0.0;
+    fixture.payload.bsdf.specWeight = 1.0;
+    fixture.payload.bsdf.roughness = 0.4;
+    bsdf_sample.directionSample.unitV = 0.64;
+    assert_true("runtime_caustic_photon_scene_trace_bsdf_glossy",
+                RuntimeCausticPhotonSceneTrace3D_TraceDeterministicBsdfHit(
+                    &scene, &sample, &bsdf_sample, &settings, &scene_trace));
+    assert_true("runtime_caustic_photon_scene_trace_bsdf_glossy_ledger",
+                scene_trace.hitEvents[0].bsdfSelection.lobe ==
+                        RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_GLOSSY &&
+                    scene_trace.hitEvents[0].bsdfDirection.angularPdf > 0.0 &&
+                    scene_trace.trace.events[1].outgoingDirection.x > 0.0 &&
+                    scene_trace.trace.events[1].outgoingDirection.z > 0.0);
+
+    fixture.calls = 0u;
+    fixture.payload.bsdf.roughness = 0.0;
+    assert_true("runtime_caustic_photon_scene_trace_bsdf_specular",
+                RuntimeCausticPhotonSceneTrace3D_TraceDeterministicBsdfHit(
+                    &scene, &sample, &bsdf_sample, &settings, &scene_trace));
+    assert_true("runtime_caustic_photon_scene_trace_bsdf_specular_ledger",
+                scene_trace.hitEvents[0].bsdfSelection.lobe ==
+                        RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_SPECULAR &&
+                    scene_trace.hitEvents[0].bsdfDirection.angularPdf == 1.0 &&
+                    scene_trace.trace.events[1].outgoingDirection.z > 0.999);
+
+    fixture.calls = 0u;
+    fixture.payload = photon_scene_trace_bsdf_payload();
+    fixture.payload.transparency = 1.0;
+    fixture.payload.bsdf.diffuseWeight = 0.0;
+    fixture.payload.bsdf.specWeight = 0.0;
+    bsdf_sample.lobeUnitSample = 0.5;
+    assert_true("runtime_caustic_photon_scene_trace_bsdf_transmission",
+                RuntimeCausticPhotonSceneTrace3D_TraceDeterministicBsdfHit(
+                    &scene, &sample, &bsdf_sample, &settings, &scene_trace));
+    assert_true("runtime_caustic_photon_scene_trace_bsdf_transmission_ledger",
+                scene_trace.hitEvents[0].bsdfSelection.lobe ==
+                        RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_TRANSMISSION &&
+                    scene_trace.hitEvents[0].bsdfSelection.branchPdf > 0.9 &&
+                    scene_trace.hitEvents[0].bsdfDirection.dielectric.hasRefraction &&
+                    scene_trace.trace.events[1].outgoingDirection.z < -0.999 &&
+                    scene_trace.trace.finalState.active);
+
+    RuntimeSceneAcceleration3D_ResetTLASForTests();
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
+static int test_runtime_caustic_photon_scene_trace_bsdf_terminal_events(void) {
+    RuntimeScene3D scene;
+    RuntimeCausticPhotonSample3D sample = photon_scene_trace_sample();
+    RuntimeCausticPhotonSceneTraceSettings3D settings;
+    RuntimeCausticPhotonSceneBsdfSample3D bsdf_sample = {0};
+    RuntimeCausticPhotonSceneTrace3D scene_trace;
+    PhotonSceneTraceBsdfFixture3D fixture;
+
+    assert_true("runtime_caustic_photon_scene_trace_bsdf_terminal_build_slab",
+                photon_scene_trace_build_slab(&scene));
+    RuntimeCausticPhotonSceneTrace3D_DefaultSettings(&settings);
+    settings.materialResolver = photon_scene_trace_bsdf_material;
+    settings.materialResolverUserData = &fixture;
+    bsdf_sample.lobeUnitSample = 0.5;
+    bsdf_sample.directionSample.unitU = 0.5;
+    bsdf_sample.directionSample.unitV = 0.5;
+
+    memset(&fixture, 0, sizeof(fixture));
+    fixture.payload = photon_scene_trace_bsdf_payload();
+    fixture.payload.emissive = 1.0;
+    assert_true("runtime_caustic_photon_scene_trace_bsdf_emissive",
+                RuntimeCausticPhotonSceneTrace3D_TraceDeterministicBsdfHit(
+                    &scene, &sample, &bsdf_sample, &settings, &scene_trace));
+    assert_true("runtime_caustic_photon_scene_trace_bsdf_emissive_ledger",
+                scene_trace.readback.termination ==
+                        RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_EMISSIVE &&
+                    scene_trace.hitEvents[0].bsdfSelection.lobe ==
+                        RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_EMISSIVE &&
+                    scene_trace.hitEvents[0].bsdfSelection.termination ==
+                        RUNTIME_CAUSTIC_PHOTON_BSDF_TERMINATION_EMISSIVE &&
+                    scene_trace.trace.events[1].kind ==
+                        RUNTIME_CAUSTIC_PHOTON_EVENT_TERMINATED &&
+                    scene_trace.trace.finalState.terminated);
+
+    fixture.calls = 0u;
+    fixture.payload = photon_scene_trace_bsdf_payload();
+    sample.flux = vec3(0.0, 0.0, 0.0);
+    assert_true("runtime_caustic_photon_scene_trace_bsdf_absorbed",
+                RuntimeCausticPhotonSceneTrace3D_TraceDeterministicBsdfHit(
+                    &scene, &sample, &bsdf_sample, &settings, &scene_trace));
+    assert_true("runtime_caustic_photon_scene_trace_bsdf_absorbed_ledger",
+                scene_trace.readback.termination ==
+                        RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_ABSORBED &&
+                    scene_trace.hitEvents[0].bsdfSelection.termination ==
+                        RUNTIME_CAUSTIC_PHOTON_BSDF_TERMINATION_ABSORBED &&
+                    scene_trace.trace.events[1].throughput.x == 0.0 &&
+                    scene_trace.trace.finalState.rejectReason ==
+                        RUNTIME_CAUSTIC_PHOTON_REJECT_BELOW_FLUX_THRESHOLD);
+
+    RuntimeSceneAcceleration3D_ResetTLASForTests();
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
 int run_test_runtime_caustic_photon_scene_trace_3d_tests(void) {
     int failures = 0;
     failures += test_runtime_caustic_photon_scene_trace_defaults();
     failures += test_runtime_caustic_photon_scene_trace_accel_events_and_oracle_parity();
     failures += test_runtime_caustic_photon_scene_trace_reports_material_failures();
     failures += test_runtime_caustic_photon_scene_trace_preserves_opaque_hit_payload();
+    failures += test_runtime_caustic_photon_scene_trace_bsdf_scattering_events();
+    failures += test_runtime_caustic_photon_scene_trace_bsdf_terminal_events();
     return failures;
 }

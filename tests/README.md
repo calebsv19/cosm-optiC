@@ -109,13 +109,14 @@ surface photon map and volume beam map helpers while keeping render contribution
 outside this module.
 
 `TEST_RUNNER_GROUP=runtime_caustic_photon_scene_trace_3d make -C ray_tracing test`
-is the focused PPM-20 slice-one general traversal proof. It builds a two-interface
-glass slab in a real `RuntimeScene3D`, rebuilds TLAS, proves both photon hits use
-the shared TLAS route without flattened fallback, retains resolved material and
-object/primitive/triangle identity for every hit, and matches deterministic
-entry/exit direction, branch, termination, and flux against the descriptor-fed
-oracle. Separate cases prove unresolved-material diagnostics and opaque-hit
-payload retention. No map storage or render contribution occurs in this group.
+is the focused PPM-20 plus PPM-21 slice-two general traversal proof. It retains
+the two-interface glass-slab TLAS and descriptor-oracle checks, unresolved
+material diagnostics, and opaque-hit payload coverage. Additional one-hit
+fixtures inject deterministic lobe/direction samples and prove diffuse,
+glossy, perfect-specular, transmission, emissive, and zero-throughput absorbed
+events, including selected lobe, branch/angular/full path PDF, outgoing
+direction, throughput, terminal reason, and shared-TLAS route readback. No
+recursive continuation, roulette, map storage, or render contribution occurs.
 
 `TEST_RUNNER_GROUP=runtime_caustic_photon_bsdf_policy_3d make -C ray_tracing test`
 is the focused PPM-21 slice-one mixed-BSDF policy proof. It validates malformed

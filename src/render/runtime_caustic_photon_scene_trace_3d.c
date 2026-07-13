@@ -116,6 +116,14 @@ const char* RuntimeCausticPhotonSceneTermination3D_Label(
             return "different_object_before_exit";
         case RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_TIR_DEFERRED:
             return "tir_deferred";
+        case RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_EVENT_READY:
+            return "bsdf_event_ready";
+        case RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_EMISSIVE:
+            return "bsdf_emissive";
+        case RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_ABSORBED:
+            return "bsdf_absorbed";
+        case RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_DIRECTION_INVALID:
+            return "bsdf_direction_invalid";
         case RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_TRACE_ERROR:
             return "trace_error";
         case RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_NONE:
@@ -438,6 +446,207 @@ bool RuntimeCausticPhotonSceneTrace3D_TraceDeterministicDielectric(
                                         RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_MAX_DEPTH,
                                         RUNTIME_CAUSTIC_PHOTON_REJECT_MAX_DEPTH);
     }
+    RuntimeRay3DTraceContext_SnapshotRouteStats(&ray_context,
+                                                &result.readback.routeStats);
+    result.readback.usedSharedSceneAccelerationRoute =
+        result.readback.routeStats.tlasTraceCalls > 0u;
+    trace->debug.eventCount = trace->eventCount;
+    *out_trace = result;
+    return result.readback.succeeded;
+}
+
+bool RuntimeCausticPhotonSceneTrace3D_TraceDeterministicBsdfHit(
+    const RuntimeScene3D* scene,
+    const RuntimeCausticPhotonSample3D* sample,
+    const RuntimeCausticPhotonSceneBsdfSample3D* bsdf_sample,
+    const RuntimeCausticPhotonSceneTraceSettings3D* settings,
+    RuntimeCausticPhotonSceneTrace3D* out_trace) {
+    RuntimeCausticPhotonSceneTraceSettings3D defaults;
+    const RuntimeCausticPhotonSceneTraceSettings3D* active = settings;
+    RuntimeCausticPhotonSceneTrace3D result;
+    RuntimeCausticPhotonTrace3D* trace = &result.trace;
+    RuntimeCausticPhotonPathState3D state;
+    RuntimeCausticPhotonEvent3D event;
+    RuntimeRay3DTraceContext ray_context;
+    RuntimeCausticPhotonSceneHitEvent3D* hit_event;
+    RuntimeMaterialPayload3D material;
+    HitInfo3D hit;
+    Ray3D ray;
+    bool found;
+    bool terminal;
+    double incident_cosine;
+
+    if (out_trace) memset(out_trace, 0, sizeof(*out_trace));
+    if (!scene || !sample || !bsdf_sample || !out_trace ||
+        !isfinite(bsdf_sample->lobeUnitSample) ||
+        !isfinite(bsdf_sample->directionSample.unitU) ||
+        !isfinite(bsdf_sample->directionSample.unitV)) {
+        return false;
+    }
+    if (!active) {
+        RuntimeCausticPhotonSceneTrace3D_DefaultSettings(&defaults);
+        active = &defaults;
+    }
+
+    memset(&result, 0, sizeof(result));
+    result.readback.attempted = true;
+    trace->sample = *sample;
+    RuntimeCausticPhotonTrace3D_InitPathState(sample, &state);
+    trace->initialState = state;
+    trace->finalState = state;
+    trace->debug.photonId = sample->photonId;
+    trace->debug.emittedFlux = sample->flux;
+
+    memset(&event, 0, sizeof(event));
+    event.photonId = sample->photonId;
+    event.kind = RUNTIME_CAUSTIC_PHOTON_EVENT_EMISSION;
+    event.sceneObjectIndex = -1;
+    event.primitiveIndex = -1;
+    event.triangleIndex = -1;
+    event.position = sample->position;
+    event.incidentDirection = state.direction;
+    event.outgoingDirection = state.direction;
+    event.throughput = state.throughput;
+    event.pathPdf = state.pathPdf;
+    if (!photon_scene_trace_append_event(trace, &event)) return false;
+
+    RuntimeRay3DTraceContext_Init(&ray_context);
+    RuntimeRay3DTraceContext_SetTraceRoute(&ray_context, active->traceRoute);
+    RuntimeRay3DTraceContext_SetSceneAccelerationTraceFirstHit(
+        &ray_context,
+        (RuntimeRay3DSceneAccelerationTraceFirstHitFn)
+            RuntimeSceneAcceleration3D_TraceFirstHit);
+    ray = RuntimeRay3D_Make(state.position, state.direction);
+    HitInfo3D_Reset(&hit);
+    result.readback.intersectionCount = 1u;
+    found = RuntimeRay3D_TraceSceneFirstHitWithContext(&ray_context,
+                                                       scene,
+                                                       &ray,
+                                                       active->tMin,
+                                                       active->tMax,
+                                                       &hit);
+    if (!found) {
+        photon_scene_trace_set_terminal(&result,
+                                        RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_ESCAPED,
+                                        RUNTIME_CAUSTIC_PHOTON_REJECT_ESCAPED_SCENE);
+        goto finish;
+    }
+
+    RuntimeMaterialPayload3D_Reset(&material);
+    if (!active->materialResolver ||
+        !active->materialResolver(&hit,
+                                  &material,
+                                  active->materialResolverUserData) ||
+        !material.valid) {
+        result.readback.materialResolveFailureCount = 1u;
+        photon_scene_trace_set_terminal(
+            &result,
+            RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_MATERIAL_UNRESOLVED,
+            RUNTIME_CAUSTIC_PHOTON_REJECT_INVALID_MEDIUM);
+        goto finish;
+    }
+    result.readback.materialResolveCount = 1u;
+    hit_event = photon_scene_trace_append_hit(&result, &hit, &material, 1u);
+    if (!hit_event) {
+        photon_scene_trace_set_terminal(&result,
+                                        RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_MAX_DEPTH,
+                                        RUNTIME_CAUSTIC_PHOTON_REJECT_MAX_DEPTH);
+        goto finish;
+    }
+
+    incident_cosine = fabs(vec3_dot(vec3_scale(state.direction, -1.0),
+                                   vec3_normalize(hit.normal)));
+    if (!RuntimeCausticPhotonBsdfPolicy3D_Build(&material,
+                                                incident_cosine,
+                                                state.throughput,
+                                                &hit_event->bsdfPolicy) ||
+        !RuntimeCausticPhotonBsdfPolicy3D_Select(&hit_event->bsdfPolicy,
+                                                 bsdf_sample->lobeUnitSample,
+                                                 &hit_event->bsdfSelection)) {
+        hit_event->termination =
+            RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_DIRECTION_INVALID;
+        photon_scene_trace_set_terminal(
+            &result,
+            RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_DIRECTION_INVALID,
+            RUNTIME_CAUSTIC_PHOTON_REJECT_INVALID_MEDIUM);
+        goto finish;
+    }
+
+    terminal = hit_event->bsdfSelection.termination !=
+               RUNTIME_CAUSTIC_PHOTON_BSDF_TERMINATION_NONE;
+    if (!terminal &&
+        !RuntimeCausticPhotonBsdfDirection3D_Sample(
+            hit_event->bsdfSelection.lobe,
+            &material,
+            state.direction,
+            hit.normal,
+            &bsdf_sample->directionSample,
+            &hit_event->bsdfDirection)) {
+        hit_event->termination = hit_event->bsdfDirection.totalInternalReflection
+                                     ? RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_TIR_DEFERRED
+                                     : RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_DIRECTION_INVALID;
+        photon_scene_trace_set_terminal(
+            &result,
+            hit_event->termination,
+            RUNTIME_CAUSTIC_PHOTON_REJECT_INVALID_MEDIUM);
+        goto finish;
+    }
+
+    state.depth = 1u;
+    state.position = hit.position;
+    state.throughput = hit_event->bsdfSelection.throughputAfter;
+    state.pathPdf *= hit_event->bsdfSelection.branchPdf;
+    if (!terminal) {
+        state.direction = hit_event->bsdfDirection.outgoingDirection;
+        state.pathPdf *= hit_event->bsdfDirection.angularPdf;
+    }
+
+    memset(&event, 0, sizeof(event));
+    event.photonId = sample->photonId;
+    event.depth = 1u;
+    event.kind = terminal ? RUNTIME_CAUSTIC_PHOTON_EVENT_TERMINATED
+                          : RUNTIME_CAUSTIC_PHOTON_EVENT_SURFACE;
+    event.sceneObjectIndex = hit.sceneObjectIndex;
+    event.primitiveIndex = hit.primitiveIndex;
+    event.triangleIndex = hit.triangleIndex;
+    event.position = hit.position;
+    event.normal = hit.normal;
+    event.incidentDirection = ray.direction;
+    event.outgoingDirection = terminal ? vec3(0.0, 0.0, 0.0) : state.direction;
+    event.throughput = state.throughput;
+    event.pathPdf = state.pathPdf;
+    if (!photon_scene_trace_append_event(trace, &event)) {
+        photon_scene_trace_set_terminal(&result,
+                                        RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_MAX_DEPTH,
+                                        RUNTIME_CAUSTIC_PHOTON_REJECT_MAX_DEPTH);
+        goto finish;
+    }
+
+    if (hit_event->bsdfSelection.termination ==
+        RUNTIME_CAUSTIC_PHOTON_BSDF_TERMINATION_EMISSIVE) {
+        hit_event->termination = RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_EMISSIVE;
+        state.active = false;
+        state.terminated = true;
+    } else if (hit_event->bsdfSelection.termination ==
+               RUNTIME_CAUSTIC_PHOTON_BSDF_TERMINATION_ABSORBED) {
+        hit_event->termination = RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_ABSORBED;
+        state.active = false;
+        state.terminated = true;
+        state.rejectReason = RUNTIME_CAUSTIC_PHOTON_REJECT_BELOW_FLUX_THRESHOLD;
+    } else {
+        hit_event->termination = RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_EVENT_READY;
+        state.active = true;
+        state.terminated = false;
+        state.rejectReason = RUNTIME_CAUSTIC_PHOTON_REJECT_NONE;
+    }
+    trace->finalState = state;
+    trace->postExitOrigin = hit.position;
+    trace->postExitDirection = event.outgoingDirection;
+    trace->valid = true;
+    result.readback.succeeded = true;
+    result.readback.termination = hit_event->termination;
+
+finish:
     RuntimeRay3DTraceContext_SnapshotRouteStats(&ray_context,
                                                 &result.readback.routeStats);
     result.readback.usedSharedSceneAccelerationRoute =
