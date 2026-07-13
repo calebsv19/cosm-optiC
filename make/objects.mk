@@ -274,6 +274,7 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_emit_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_integration_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_map_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_photon_bsdf_policy_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_scene_population_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_scene_trace_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_trace_3d.o \

@@ -117,6 +117,15 @@ entry/exit direction, branch, termination, and flux against the descriptor-fed
 oracle. Separate cases prove unresolved-material diagnostics and opaque-hit
 payload retention. No map storage or render contribution occurs in this group.
 
+`TEST_RUNNER_GROUP=runtime_caustic_photon_bsdf_policy_3d make -C ray_tracing test`
+is the focused PPM-21 slice-one mixed-BSDF policy proof. It validates malformed
+payload rejection, diffuse and mirror/specular cases, Fresnel-adjusted mixed
+diffuse/glossy/transmission candidate weights, normalized branch PDFs,
+sample-selected throughput compensation, expected scattered-versus-absorbed
+RGB ledgers, emissive termination, and black-surface absorption. The group does
+not exercise RNG, scene-loop selection, ray continuation, map storage, roulette,
+or production defaults.
+
 `TEST_RUNNER_GROUP=runtime_caustic_photon_map_3d make -C ray_tracing test`
 is the focused PPM-2 surface photon-map proof. It covers map allocation,
 explicit surface-hit storage/query, PDF-normalized query flux, diagnostics,
