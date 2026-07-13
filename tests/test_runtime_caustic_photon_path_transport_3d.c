@@ -378,7 +378,9 @@ static int test_runtime_caustic_photon_path_transport_two_object_transmission(vo
                 photon_path_transport_build_two_object_scene(&scene, 0.0));
     memset(&fixture, 0, sizeof(fixture));
     fixture.object51 = photon_path_transport_glass();
+    fixture.object51.materialId = 51;
     fixture.object52 = photon_path_transport_mirror();
+    fixture.object52.materialId = 52;
     RuntimeCausticPhotonPathTransport3D_DefaultSettings(&settings);
     settings.sceneTrace.maxDepth = 2u;
     settings.sceneTrace.materialResolver = photon_path_transport_multi_material;
@@ -398,6 +400,16 @@ static int test_runtime_caustic_photon_path_transport_two_object_transmission(vo
                     trace.hitEvents[1].hit.sceneObjectIndex == 52 &&
                     trace.trace.events[2].outgoingDirection.z > 0.999 &&
                     trace.trace.dielectricEventCount == 1u &&
+                    trace.readback.mediumTransitionCount == 1u &&
+                    trace.readback.mediumTransitionFailureCount == 0u &&
+                    trace.hitEvents[0].mediumTransition.succeeded &&
+                    trace.hitEvents[0].mediumTransition.reason ==
+                        RUNTIME_CAUSTIC_PHOTON_MEDIUM_TRANSITION_ENTER_PUSHED &&
+                    trace.hitEvents[0].mediumTransition.depthBefore == 0u &&
+                    trace.hitEvents[0].mediumTransition.depthAfter == 1u &&
+                    trace.finalMediumStack.pushCount == 1u &&
+                    RuntimeCausticPhotonMediumStack3D_Depth(
+                        &trace.finalMediumStack) == 1u &&
                     trace.trace.debug.refractedBranchCount == 1u &&
                     trace.trace.debug.reflectedBranchCount == 1u);
     assert_close("runtime_caustic_photon_path_transport_two_object_transmit_pdf",
@@ -429,6 +441,7 @@ static int test_runtime_caustic_photon_path_transport_tir_continuation(void) {
                 photon_path_transport_build_tir_slab(&scene));
     memset(&fixture, 0, sizeof(fixture));
     fixture.material = photon_path_transport_glass();
+    fixture.material.materialId = 61;
     RuntimeCausticPhotonPathTransport3D_DefaultSettings(&settings);
     settings.sceneTrace.maxDepth = 4u;
     settings.sceneTrace.materialResolver = photon_path_transport_fixture_material;
@@ -445,6 +458,11 @@ static int test_runtime_caustic_photon_path_transport_tir_continuation(void) {
                     trace.trace.debug.totalInternalReflectionCount == 4u &&
                     trace.trace.debug.reflectedBranchCount == 4u &&
                     trace.trace.debug.refractedBranchCount == 0u &&
+                    trace.readback.mediumTransitionCount == 4u &&
+                    trace.readback.mediumTransitionFailureCount == 0u &&
+                    trace.finalMediumStack.tirNoChangeCount == 4u &&
+                    RuntimeCausticPhotonMediumStack3D_Depth(
+                        &trace.finalMediumStack) == 0u &&
                     trace.readback.termination ==
                         RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_MAX_DEPTH);
     for (uint32_t i = 0u; i < 4u; ++i) {
@@ -458,6 +476,12 @@ static int test_runtime_caustic_photon_path_transport_tir_continuation(void) {
                         trace.hitEvents[i].dielectric.totalInternalReflection &&
                         trace.hitEvents[i].dielectric.selectedBranch ==
                             RUNTIME_CAUSTIC_PHOTON_BRANCH_TOTAL_INTERNAL_REFLECTION &&
+                        trace.hitEvents[i].mediumTransition.succeeded &&
+                        trace.hitEvents[i].mediumTransition.reason ==
+                            RUNTIME_CAUSTIC_PHOTON_MEDIUM_TRANSITION_TIR_NO_CHANGE &&
+                        !trace.hitEvents[i].mediumTransition.stackChanged &&
+                        trace.hitEvents[i].mediumTransition.depthBefore == 0u &&
+                        trace.hitEvents[i].mediumTransition.depthAfter == 0u &&
                         trace.hitEvents[i].dielectric.etaFrom >
                             trace.hitEvents[i].dielectric.etaTo);
     }
