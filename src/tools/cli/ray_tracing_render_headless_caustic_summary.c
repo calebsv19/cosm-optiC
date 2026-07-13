@@ -145,6 +145,59 @@ void ray_tracing_headless_write_caustic_state_summary(
                     callsite->receiverContribution.receiverSurfaceRadiance.x,
                     callsite->receiverContribution.receiverSurfaceRadiance.y,
                     callsite->receiverContribution.receiverSurfaceRadiance.z);
+            fprintf(file, "        \"beam_contribution_attempted\": %s,\n",
+                    callsite->beamContribution.attempted ? "true" : "false");
+            fprintf(file, "        \"beam_contribution_suppressed\": %s,\n",
+                    callsite->beamContribution.suppressed ? "true" : "false");
+            fprintf(file, "        \"beam_contribution_volume_sampleable\": %s,\n",
+                    callsite->beamContribution.volumeSampleable ? "true" : "false");
+            fprintf(file, "        \"beam_contribution_beam_map_allocated\": %s,\n",
+                    callsite->beamContribution.beamMapAllocated ? "true" : "false");
+            fprintf(file, "        \"beam_contribution_query_hit\": %s,\n",
+                    callsite->beamContribution.queryHit ? "true" : "false");
+            fprintf(file, "        \"beam_contribution_eligible\": %s,\n",
+                    callsite->beamContribution.contributionEligible ? "true" : "false");
+            fprintf(file, "        \"beam_contribution_volume_deposited\": %s,\n",
+                    callsite->beamContribution.volumeDeposited ? "true" : "false");
+            fprintf(file, "        \"beam_contribution_medium_id\": %d,\n",
+                    callsite->beamContribution.mediumId);
+            fprintf(file, "        \"beam_contribution_query_attempt_count\": %llu,\n",
+                    (unsigned long long)callsite->beamContribution.queryAttemptCount);
+            fprintf(file, "        \"beam_contribution_query_hit_count\": %llu,\n",
+                    (unsigned long long)callsite->beamContribution.queryHitCount);
+            fprintf(file, "        \"beam_contribution_candidate_count\": %llu,\n",
+                    (unsigned long long)callsite->beamContribution.candidateCount);
+            fprintf(file, "        \"beam_contribution_contributing_count\": %llu,\n",
+                    (unsigned long long)callsite->beamContribution.contributingCount);
+            fprintf(file, "        \"beam_contribution_radius_reject_count\": %llu,\n",
+                    (unsigned long long)callsite->beamContribution.radiusRejectCount);
+            fprintf(file, "        \"beam_contribution_direction_reject_count\": %llu,\n",
+                    (unsigned long long)callsite->beamContribution.directionRejectCount);
+            fprintf(file, "        \"beam_contribution_medium_reject_count\": %llu,\n",
+                    (unsigned long long)callsite->beamContribution.mediumRejectCount);
+            fprintf(file, "        \"beam_contribution_volume_deposit_attempt_count\": %llu,\n",
+                    (unsigned long long)callsite->beamContribution.volumeDepositAttemptCount);
+            fprintf(file, "        \"beam_contribution_volume_deposit_accepted_count\": %llu,\n",
+                    (unsigned long long)callsite->beamContribution.volumeDepositAcceptedCount);
+            fprintf(file, "        \"beam_contribution_density\": %.9f,\n",
+                    callsite->beamContribution.density);
+            fprintf(file, "        \"beam_contribution_transmittance\": %.9f,\n",
+                    callsite->beamContribution.transmittance);
+            fprintf(file,
+                    "        \"beam_contribution_physical_flux\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
+                    callsite->beamContribution.physicalFlux.x,
+                    callsite->beamContribution.physicalFlux.y,
+                    callsite->beamContribution.physicalFlux.z);
+            fprintf(file,
+                    "        \"beam_contribution_display_flux\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
+                    callsite->beamContribution.displayFlux.x,
+                    callsite->beamContribution.displayFlux.y,
+                    callsite->beamContribution.displayFlux.z);
+            fprintf(file,
+                    "        \"beam_contribution_radiance\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
+                    callsite->beamContribution.radiance.x,
+                    callsite->beamContribution.radiance.y,
+                    callsite->beamContribution.radiance.z);
             fprintf(file, "        \"estimated_cost\": %llu,\n",
                     (unsigned long long)callsite->estimatedCost);
             fprintf(file,
@@ -152,6 +205,48 @@ void ray_tracing_headless_write_caustic_state_summary(
                     callsite->radiance.x,
                     callsite->radiance.y,
                     callsite->radiance.z);
+            fprintf(file, "        \"map_lifecycle\": {\n");
+            fprintf(file, "          \"evaluated\": %s,\n",
+                    callsite->mapLifecycle.evaluated ? "true" : "false");
+            fprintf(file, "          \"rebuilt\": %s,\n",
+                    callsite->mapLifecycle.rebuilt ? "true" : "false");
+            fprintf(file, "          \"reused\": %s,\n",
+                    callsite->mapLifecycle.reused ? "true" : "false");
+            fprintf(file, "          \"persistent_ownership_enabled\": %s,\n",
+                    callsite->mapLifecycle.persistentMapOwnershipEnabled ? "true" : "false");
+            fprintf(file, "          \"rebuild_reason\": \"%s\",\n",
+                    RuntimeCausticPhotonMapRebuildReason3D_Label(
+                        callsite->mapLifecycle.rebuildReason));
+            fprintf(file, "          \"budget_tier\": \"%s\",\n",
+                    RuntimeCausticPhotonBudgetTier3D_Label(
+                        callsite->mapLifecycle.budgetTier));
+            fprintf(file, "          \"generation\": %llu,\n",
+                    (unsigned long long)callsite->mapLifecycle.generation);
+            fprintf(file, "          \"rebuild_count\": %llu,\n",
+                    (unsigned long long)callsite->mapLifecycle.rebuildCount);
+            fprintf(file, "          \"reuse_count\": %llu,\n",
+                    (unsigned long long)callsite->mapLifecycle.reuseCount);
+            fprintf(file, "          \"fingerprint_cpu_ms\": %.6f,\n",
+                    callsite->mapLifecycle.fingerprintCpuMs);
+            fprintf(file, "          \"map_build_cpu_ms\": %.6f,\n",
+                    callsite->mapLifecycle.mapBuildCpuMs);
+            fprintf(file, "          \"query_and_deposit_cpu_ms\": %.6f,\n",
+                    callsite->mapLifecycle.queryAndDepositCpuMs);
+            fprintf(file, "          \"emission_count\": %llu,\n",
+                    (unsigned long long)callsite->mapLifecycle.emissionCount);
+            fprintf(file, "          \"traced_count\": %llu,\n",
+                    (unsigned long long)callsite->mapLifecycle.tracedCount);
+            fprintf(file, "          \"stored_surface_record_count\": %llu,\n",
+                    (unsigned long long)callsite->mapLifecycle.storedSurfaceRecordCount);
+            fprintf(file, "          \"stored_beam_segment_count\": %llu,\n",
+                    (unsigned long long)callsite->mapLifecycle.storedBeamSegmentCount);
+            fprintf(file, "          \"acceleration_build_count\": %llu,\n",
+                    (unsigned long long)callsite->mapLifecycle.accelerationBuildCount);
+            fprintf(file, "          \"query_count\": %llu,\n",
+                    (unsigned long long)callsite->mapLifecycle.queryCount);
+            fprintf(file, "          \"cache_deposit_count\": %llu\n",
+                    (unsigned long long)callsite->mapLifecycle.cacheDepositCount);
+            fprintf(file, "        },\n");
             fprintf(file, "        \"map_population\": {\n");
             fprintf(file, "          \"attempted\": %s,\n",
                     population->attempted ? "true" : "false");

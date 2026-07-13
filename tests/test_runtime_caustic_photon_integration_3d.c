@@ -3,6 +3,7 @@
 #include "config/config_manager.h"
 #include "material/material_manager.h"
 #include "render/runtime_caustic_photon_integration_3d.h"
+#include "render/runtime_caustic_photon_map_store_3d.h"
 #include "render/runtime_caustic_photon_receiver_policy_3d.h"
 #include "render/runtime_caustic_photon_scene_descriptor_3d.h"
 #include "test_support.h"
@@ -125,6 +126,35 @@ static RuntimeCausticPhotonTrace3D test_trace_record(uint64_t photon_id) {
     trace.receiverPlaneT = 1.0;
     trace.receiverCrossing = vec3(0.0, 0.0, 1.0);
     return trace;
+}
+
+static bool test_volume_attachment_with_density(RuntimeVolumeAttachment3D* volume) {
+    if (!volume) return false;
+    RuntimeVolumeAttachment3D_Init(volume);
+    if (!RuntimeVolumeGrid3D_Configure(&volume->grid,
+                                       1u,
+                                       4u,
+                                       4u,
+                                       4u,
+                                       0.0,
+                                       0u,
+                                       0.0,
+                                       vec3(-1.0, -1.0, -1.0),
+                                       1.0,
+                                       vec3(0.0, 1.0, 0.0),
+                                       0u) ||
+        !RuntimeVolumeAttachment3D_AllocateOwnedChannels(
+            volume,
+            RUNTIME_VOLUME_3D_CHANNEL_DENSITY)) {
+        RuntimeVolumeAttachment3D_Free(volume);
+        return false;
+    }
+    volume->enabled = true;
+    volume->affectsLighting = true;
+    for (uint64_t i = 0u; i < volume->grid.cellCount; ++i) {
+        volume->channels.density[i] = 0.25f;
+    }
+    return true;
 }
 
 static int test_runtime_caustic_photon_receiver_policy_selects_primary_bucket(void) {
@@ -407,6 +437,91 @@ static int test_runtime_caustic_photon_integration_deposits_gated_contribution(v
     RuntimeCausticSurfaceCache3D_Free(&surface_cache);
     RuntimeCausticVolumeCache3D_Free(&volume_cache);
     RuntimeCausticPhotonMap3D_Free(&surface_map);
+    RuntimeCausticBeamMap3D_Free(&beam_map);
+    return 0;
+}
+
+static int test_runtime_caustic_photon_integration_deposits_volume_beam_contribution(void) {
+    RuntimeCausticBeamMap3D beam_map;
+    RuntimeCausticVolumeCache3D volume_cache;
+    RuntimeVolumeAttachment3D volume;
+    RuntimeCausticPhotonIntegrationSettings3D settings;
+    RuntimeCausticBeamMapQuery3D query;
+    RuntimeCausticPhotonBeamContributionReadback3D readback;
+    RuntimeCausticPhotonVolumeBeamSegment3D segment = test_volume_segment();
+    RuntimeCausticVolumeCacheDiagnostics3D cache_diag;
+
+    RuntimeCausticBeamMap3D_Init(&beam_map);
+    RuntimeCausticVolumeCache3D_Init(&volume_cache);
+    RuntimeCausticPhotonIntegration3D_DefaultSettings(&settings);
+    RuntimeCausticBeamMap3D_DefaultQuery(&query);
+    settings.productMode = RUNTIME_CAUSTIC_PRODUCT_MODE_PRODUCTION;
+    settings.surfaceQueryEnabled = false;
+    settings.volumeQueryEnabled = true;
+    settings.renderContributionEnabled = true;
+    settings.volumeQueryRadius = 1.0;
+
+    assert_true("runtime_caustic_photon_integration_beam_contribution_map_alloc",
+                RuntimeCausticBeamMap3D_Allocate(&beam_map, 4u));
+    assert_true("runtime_caustic_photon_integration_beam_contribution_store",
+                RuntimeCausticBeamMap3D_StoreSegment(&beam_map, &segment));
+    assert_true("runtime_caustic_photon_integration_beam_contribution_volume",
+                test_volume_attachment_with_density(&volume));
+    assert_true("runtime_caustic_photon_integration_beam_contribution_cache_alloc",
+                RuntimeCausticVolumeCache3D_AllocateFromVolume(&volume_cache, &volume));
+
+    query.position = vec3(0.0, 0.0, 1.0);
+    query.direction = vec3(0.0, 0.0, 1.0);
+    query.radius = 1.0;
+    query.mediumId = 4;
+    query.requireMediumId = true;
+    query.minDirectionDot = 0.90;
+    assert_true("runtime_caustic_photon_integration_beam_contribution_deposit",
+                RuntimeCausticPhotonIntegration3D_DepositVolumeContributionFromBeamMap(
+                    &beam_map,
+                    &volume_cache,
+                    &volume,
+                    &settings,
+                    &query,
+                    &readback));
+    assert_true("runtime_caustic_photon_integration_beam_contribution_readback",
+                readback.attempted && readback.volumeSampleable && readback.beamMapAllocated &&
+                    readback.queryHit && readback.contributionEligible &&
+                    readback.volumeDeposited && readback.candidateCount == 1u &&
+                    readback.contributingCount == 1u && readback.density > 0.0 &&
+                    readback.transmittance > 0.0 && readback.transmittance < 1.0 &&
+                    readback.volumeDepositAcceptedCount == 1u && readback.radiance.x > 0.0);
+    RuntimeCausticVolumeCache3D_SnapshotDiagnostics(&volume_cache, &cache_diag);
+    assert_true("runtime_caustic_photon_integration_beam_contribution_cache_written",
+                cache_diag.depositAcceptedCount == 1u && cache_diag.nonZeroCellCount > 0u);
+
+    query.mediumId = 99;
+    assert_true("runtime_caustic_photon_integration_beam_contribution_medium_reject",
+                !RuntimeCausticPhotonIntegration3D_DepositVolumeContributionFromBeamMap(
+                    &beam_map,
+                    &volume_cache,
+                    &volume,
+                    &settings,
+                    &query,
+                    &readback) &&
+                    !readback.queryHit && readback.mediumRejectCount == 1u &&
+                    readback.volumeDepositAcceptedCount == 0u);
+
+    query.mediumId = 4;
+    query.direction = vec3(1.0, 0.0, 0.0);
+    assert_true("runtime_caustic_photon_integration_beam_contribution_direction_reject",
+                !RuntimeCausticPhotonIntegration3D_DepositVolumeContributionFromBeamMap(
+                    &beam_map,
+                    &volume_cache,
+                    &volume,
+                    &settings,
+                    &query,
+                    &readback) &&
+                    !readback.queryHit && readback.directionRejectCount == 1u &&
+                    readback.volumeDepositAcceptedCount == 0u);
+
+    RuntimeCausticVolumeCache3D_Free(&volume_cache);
+    RuntimeVolumeAttachment3D_Free(&volume);
     RuntimeCausticBeamMap3D_Free(&beam_map);
     return 0;
 }
@@ -906,6 +1021,109 @@ static int test_runtime_caustic_photon_scene_descriptor_harvests_mesh_dielectric
     return 0;
 }
 
+static int test_runtime_caustic_photon_lifecycle_classifies_rebuilds(void) {
+    RuntimeCausticPhotonMapLifecycleInput3D input = {0};
+    RuntimeCausticPhotonMapLifecycleState3D state;
+    RuntimeCausticPhotonMapLifecycleReadback3D readback;
+
+    RuntimeCausticPhotonMapLifecycle3D_Init(&state);
+    input.geometryKey = 1u;
+    input.lightKey = 2u;
+    input.materialKey = 3u;
+    input.volumeKey = 4u;
+    input.budgetKey = 5u;
+    RuntimeCausticPhotonMapLifecycle3D_Evaluate(&input, &state, &readback);
+    assert_true("runtime_caustic_photon_lifecycle_per_frame",
+                readback.evaluated && readback.rebuilt && !readback.reused &&
+                    readback.rebuildReason ==
+                        RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_PER_FRAME_POLICY);
+
+    input.persistentMapOwnershipEnabled = true;
+    RuntimeCausticPhotonMapLifecycle3D_Init(&state);
+    RuntimeCausticPhotonMapLifecycle3D_Evaluate(&input, &state, &readback);
+    assert_true("runtime_caustic_photon_lifecycle_first_build",
+                readback.rebuildReason == RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_FIRST_BUILD);
+    RuntimeCausticPhotonMapLifecycle3D_Evaluate(&input, &state, &readback);
+    assert_true("runtime_caustic_photon_lifecycle_reuse",
+                readback.reused && !readback.rebuilt);
+    input.lightKey += 1u;
+    RuntimeCausticPhotonMapLifecycle3D_Evaluate(&input, &state, &readback);
+    assert_true("runtime_caustic_photon_lifecycle_light_change",
+                readback.rebuilt && readback.rebuildReason ==
+                    RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_LIGHT_CHANGED);
+    input.materialKey += 1u;
+    RuntimeCausticPhotonMapLifecycle3D_Evaluate(&input, &state, &readback);
+    assert_true("runtime_caustic_photon_lifecycle_material_change",
+                readback.rebuildReason ==
+                    RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_MATERIAL_CHANGED);
+    input.volumeKey += 1u;
+    RuntimeCausticPhotonMapLifecycle3D_Evaluate(&input, &state, &readback);
+    assert_true("runtime_caustic_photon_lifecycle_volume_change",
+                readback.rebuildReason ==
+                    RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_VOLUME_CHANGED);
+    input.geometryKey += 1u;
+    RuntimeCausticPhotonMapLifecycle3D_Evaluate(&input, &state, &readback);
+    assert_true("runtime_caustic_photon_lifecycle_geometry_change",
+                readback.rebuildReason ==
+                    RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_GEOMETRY_CHANGED);
+    input.budgetKey += 1u;
+    RuntimeCausticPhotonMapLifecycle3D_Evaluate(&input, &state, &readback);
+    assert_true("runtime_caustic_photon_lifecycle_budget_change",
+                readback.rebuildReason ==
+                    RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_BUDGET_CHANGED);
+    input.explicitRebuildRequested = true;
+    RuntimeCausticPhotonMapLifecycle3D_Evaluate(&input, &state, &readback);
+    assert_true("runtime_caustic_photon_lifecycle_explicit_rebuild",
+                readback.rebuildReason ==
+                    RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_EXPLICIT_REQUEST);
+    assert_true("runtime_caustic_photon_budget_tiers",
+                RuntimeCausticPhotonBudgetTier3D_FromBudget(64, 4) ==
+                    RUNTIME_CAUSTIC_PHOTON_BUDGET_PREVIEW &&
+                    RuntimeCausticPhotonBudgetTier3D_FromBudget(512, 8) ==
+                        RUNTIME_CAUSTIC_PHOTON_BUDGET_INSPECTION &&
+                    RuntimeCausticPhotonBudgetTier3D_FromBudget(513, 8) ==
+                        RUNTIME_CAUSTIC_PHOTON_BUDGET_FINAL);
+    return 0;
+}
+
+static int test_runtime_caustic_photon_map_store_reuses_owned_maps(void) {
+    RuntimeCausticPhotonMapStore3D store;
+    RuntimeCausticPhotonMapLifecycleInput3D input = {0};
+    RuntimeCausticPhotonMapLifecycleReadback3D readback;
+    RuntimeCausticPhotonMapPopulationReadback3D population = {0};
+
+    RuntimeCausticPhotonMapStore3D_Init(&store);
+    input.geometryKey = 10u;
+    input.lightKey = 20u;
+    input.materialKey = 30u;
+    input.volumeKey = 40u;
+    input.budgetKey = 50u;
+    input.persistentMapOwnershipEnabled = true;
+    assert_true("runtime_caustic_photon_map_store_first_build",
+                RuntimeCausticPhotonMapStore3D_Begin(&store, &input, &readback) &&
+                    readback.rebuilt && readback.generation == 1u &&
+                    readback.rebuildCount == 1u && readback.reuseCount == 0u);
+    assert_true("runtime_caustic_photon_map_store_allocates_owned_surface_map",
+                RuntimeCausticPhotonMap3D_Allocate(&store.surfaceMap, 4u));
+    population.surfaceMapRecordCount = 7u;
+    RuntimeCausticPhotonMapStore3D_CommitPopulation(&store, &population);
+    assert_true("runtime_caustic_photon_map_store_reuse",
+                RuntimeCausticPhotonMapStore3D_Begin(&store, &input, &readback) &&
+                    readback.reused && readback.generation == 1u &&
+                    readback.rebuildCount == 1u && readback.reuseCount == 1u &&
+                    RuntimeCausticPhotonMap3D_IsAllocated(&store.surfaceMap) &&
+                    store.population.surfaceMapRecordCount == 7u);
+    input.lightKey += 1u;
+    assert_true("runtime_caustic_photon_map_store_invalidates",
+                RuntimeCausticPhotonMapStore3D_Begin(&store, &input, &readback) &&
+                    readback.rebuilt && readback.generation == 2u &&
+                    readback.rebuildCount == 2u && readback.reuseCount == 1u &&
+                    !RuntimeCausticPhotonMap3D_IsAllocated(&store.surfaceMap) &&
+                    store.population.surfaceMapRecordCount == 0u);
+    RuntimeCausticPhotonMapStore3D_Free(&store);
+    return 0;
+}
+
 int run_test_runtime_caustic_photon_integration_3d_tests(void) {
     int failures = 0;
     failures += test_runtime_caustic_photon_integration_modes_and_settings();
@@ -913,6 +1131,7 @@ int run_test_runtime_caustic_photon_integration_3d_tests(void) {
     failures +=
         test_runtime_caustic_photon_integration_suppresses_contribution_by_default();
     failures += test_runtime_caustic_photon_integration_deposits_gated_contribution();
+    failures += test_runtime_caustic_photon_integration_deposits_volume_beam_contribution();
     failures += test_runtime_caustic_photon_integration_deposits_receiver_buckets();
     failures += test_runtime_caustic_photon_integration_reference_does_not_query_maps();
     failures += test_runtime_caustic_photon_integration_render_callsite_readback();
@@ -924,5 +1143,7 @@ int run_test_runtime_caustic_photon_integration_3d_tests(void) {
     failures +=
         test_runtime_caustic_photon_integration_harvests_mesh_dielectric_fixture_traces();
     failures += test_runtime_caustic_photon_scene_descriptor_harvests_mesh_dielectric();
+    failures += test_runtime_caustic_photon_lifecycle_classifies_rebuilds();
+    failures += test_runtime_caustic_photon_map_store_reuses_owned_maps();
     return failures;
 }

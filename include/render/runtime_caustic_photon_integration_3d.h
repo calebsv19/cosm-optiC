@@ -10,6 +10,7 @@
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_caustic_surface_cache_3d.h"
 #include "render/runtime_caustic_volume_cache_3d.h"
+#include "render/runtime_caustic_photon_lifecycle_3d.h"
 
 typedef enum {
     RUNTIME_CAUSTIC_PRODUCT_MODE_OFF = 0,
@@ -142,6 +143,34 @@ typedef struct {
 
 typedef struct {
     bool attempted;
+    bool suppressed;
+    bool volumeSampleable;
+    bool beamMapAllocated;
+    bool queryHit;
+    bool contributionEligible;
+    bool volumeDeposited;
+    int mediumId;
+    Vec3 position;
+    Vec3 direction;
+    double radius;
+    double density;
+    double transmittance;
+    uint64_t queryAttemptCount;
+    uint64_t queryHitCount;
+    uint64_t candidateCount;
+    uint64_t contributingCount;
+    uint64_t radiusRejectCount;
+    uint64_t directionRejectCount;
+    uint64_t mediumRejectCount;
+    uint64_t volumeDepositAttemptCount;
+    uint64_t volumeDepositAcceptedCount;
+    Vec3 physicalFlux;
+    Vec3 displayFlux;
+    Vec3 radiance;
+} RuntimeCausticPhotonBeamContributionReadback3D;
+
+typedef struct {
+    bool attempted;
     bool surfaceMapAllocated;
     bool emissionAttempted;
     bool emissionSucceeded;
@@ -223,6 +252,8 @@ typedef struct {
     uint64_t volumeCandidateCount;
     uint64_t volumeContributingCount;
     RuntimeCausticPhotonReceiverContributionReadback3D receiverContribution;
+    RuntimeCausticPhotonBeamContributionReadback3D beamContribution;
+    RuntimeCausticPhotonMapLifecycleReadback3D mapLifecycle;
     uint64_t estimatedCost;
     Vec3 radiance;
     RuntimeCausticPhotonMapPopulationReadback3D mapPopulation;
@@ -266,6 +297,19 @@ bool RuntimeCausticPhotonIntegration3D_DepositSurfaceContributionsForReceiverBuc
     RuntimeCausticSurfaceCache3D* surface_cache,
     const RuntimeCausticPhotonIntegrationSettings3D* settings,
     RuntimeCausticPhotonReceiverContributionReadback3D* out_readback);
+bool RuntimeCausticPhotonIntegration3D_DepositVolumeContributionFromBeamMap(
+    RuntimeCausticBeamMap3D* beam_map,
+    RuntimeCausticVolumeCache3D* volume_cache,
+    const RuntimeVolumeAttachment3D* volume,
+    const RuntimeCausticPhotonIntegrationSettings3D* settings,
+    const RuntimeCausticBeamMapQuery3D* query,
+    RuntimeCausticPhotonBeamContributionReadback3D* out_readback);
+bool RuntimeCausticPhotonIntegration3D_SelectVolumeBeamQueryForVolume(
+    const RuntimeCausticBeamMap3D* beam_map,
+    const RuntimeVolumeAttachment3D* volume,
+    int medium_id,
+    double radius,
+    RuntimeCausticBeamMapQuery3D* out_query);
 bool RuntimeCausticPhotonIntegration3D_PopulateSurfaceMapFromLightSet(
     RuntimeCausticPhotonMap3D* surface_map,
     const RuntimeLightSet3D* light_set,

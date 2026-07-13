@@ -36,6 +36,9 @@ typedef struct {
     uint64_t testedCount;
     uint64_t candidateCount;
     uint64_t contributingCount;
+    uint64_t radiusRejectCount;
+    uint64_t directionRejectCount;
+    uint64_t mediumRejectCount;
     uint64_t candidateLimit;
     bool candidateLimitReached;
     double physicalEnergyScale;
