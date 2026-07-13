@@ -39,6 +39,7 @@ RAY_TRACING_JOB_RUNNER_OBJ := $(BUILD_DIR)/tools/cli/ray_tracing_job_runner.o
 RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_SRC := $(SRC_DIR)/tools/cli/ray_tracing_material_preview_headless.c
 RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_BIN := $(BUILD_DIR)/tools/cli/ray_tracing_material_preview_headless
 RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_OBJ := $(BUILD_DIR)/tools/cli/ray_tracing_material_preview_headless.o
+SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN := $(BUILD_DIR)/tools/smooth_mesh_reflection/compile_runtime_fixture
 
 VIDEO_FRAMES_DIR ?= data/runtime/frames/default
 VIDEO_OUTPUT ?= data/runtime/videos/output.mp4
