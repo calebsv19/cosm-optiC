@@ -7,6 +7,7 @@
 #include "render/runtime_caustic_photon_bsdf_direction_3d.h"
 #include "render/runtime_caustic_photon_bsdf_policy_3d.h"
 #include "render/runtime_caustic_photon_bsdf_sampling_3d.h"
+#include "render/runtime_caustic_photon_medium_stack_3d.h"
 #include "render/runtime_caustic_photon_trace_3d.h"
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_ray_3d.h"
@@ -59,6 +60,7 @@ typedef struct {
     RuntimeCausticPhotonBsdfPolicy3D bsdfPolicy;
     RuntimeCausticPhotonBsdfSelection3D bsdfSelection;
     RuntimeCausticPhotonBsdfDirection3D bsdfDirection;
+    RuntimeCausticPhotonMediumTransition3D mediumTransition;
     RuntimeCausticPhotonBsdfSampleStream3D bsdfSampleStream;
     RuntimeCausticPhotonRoulette3D roulette;
     bool usedSeededBsdfSamples;
@@ -72,6 +74,8 @@ typedef struct {
     uint32_t materialResolveCount;
     uint32_t materialResolveFailureCount;
     uint32_t hitEventCount;
+    uint32_t mediumTransitionCount;
+    uint32_t mediumTransitionFailureCount;
     bool usedSharedSceneAccelerationRoute;
     RuntimeCausticPhotonSceneTermination3D termination;
     RuntimeRay3DRouteStats routeStats;
@@ -80,6 +84,8 @@ typedef struct {
 typedef struct {
     RuntimeCausticPhotonTrace3D trace;
     RuntimeCausticPhotonSceneTraceReadback3D readback;
+    RuntimeCausticPhotonMediumStack3D initialMediumStack;
+    RuntimeCausticPhotonMediumStack3D finalMediumStack;
     RuntimeCausticPhotonSceneHitEvent3D hitEvents[
         RUNTIME_CAUSTIC_PHOTON_TRACE_MAX_DIELECTRIC_EVENTS];
 } RuntimeCausticPhotonSceneTrace3D;

@@ -19,6 +19,7 @@
 #include "test_runtime_caustic_photon_emit_3d.h"
 #include "test_runtime_caustic_photon_integration_3d.h"
 #include "test_runtime_caustic_photon_map_3d.h"
+#include "test_runtime_caustic_photon_medium_stack_3d.h"
 #include "test_runtime_caustic_photon_path_transport_3d.h"
 #include "test_runtime_caustic_photon_bsdf_policy_3d.h"
 #include "test_runtime_caustic_photon_bsdf_sampling_3d.h"
@@ -128,6 +129,8 @@ int test_runner_main(int argc, char** argv) {
         {"runtime_caustic_photon_integration_3d",
          run_test_runtime_caustic_photon_integration_3d_tests},
         {"runtime_caustic_photon_map_3d", run_test_runtime_caustic_photon_map_3d_tests},
+        {"runtime_caustic_photon_medium_stack_3d",
+         run_test_runtime_caustic_photon_medium_stack_3d_tests},
         {"runtime_caustic_photon_path_transport_3d",
          run_test_runtime_caustic_photon_path_transport_3d_tests},
         {"runtime_caustic_photon_bsdf_policy_3d",
