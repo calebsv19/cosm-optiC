@@ -178,6 +178,14 @@ render-prep path no longer writes a synthetic dielectric-centroid cache
 footprint; it stores traced prepared-scene receiver hits through the production
 integration receiver-policy adapter before cache conversion.
 
+`TEST_RUNNER_GROUP=runtime_caustic_photon_scene_population_3d make -C ray_tracing test`
+is the focused PPM-20 slice-two proof. It resolves an opaque receiver through
+the shared TLAS route after the general scene tracer's dielectric exit, stores
+one surface record and one beam segment through the existing map adapters, and
+proves exact identity, position, flux, PDF, and segment parity against the
+descriptor-trace adapters. It also proves transparent-receiver rejection before
+storage and reason-coded partial-store accounting when one target map rejects.
+
 `test-ray-tracing-spatial-caustic-phase6-surface-matrix` is the local Phase 6
 surface-calibration proof target. It renders off, analytic-only,
 transport-surface-cache-only, and combined transport+analytic cells on the
