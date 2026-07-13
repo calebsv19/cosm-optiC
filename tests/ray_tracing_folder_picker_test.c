@@ -19,8 +19,18 @@ static bool write_script(const char *path, const char *body) {
     return chmod(path, 0700) == 0;
 }
 
+static char *make_fixture_directory(char *template, size_t template_size, const char *prefix) {
+    const char *tmpdir = getenv("TMPDIR");
+
+    if (!tmpdir || !tmpdir[0]) tmpdir = "/tmp";
+    if (snprintf(template, template_size, "%s/%sXXXXXX", tmpdir, prefix) >= (int)template_size) {
+        return NULL;
+    }
+    return mkdtemp(template);
+}
+
 static bool setup_fixture(char *root, char *zenity, char *kdialog, char *marker) {
-    char template[] = "/tmp/ray_tracing_folder_picker_XXXXXX";
+    char template[PATH_MAX];
     const char *zenity_script =
         "#!/bin/sh\n"
         "case \"$RAY_TRACING_FOLDER_PICKER_TEST_ZENITY\" in\n"
@@ -33,7 +43,7 @@ static bool setup_fixture(char *root, char *zenity, char *kdialog, char *marker)
         "#!/bin/sh\n"
         ": > \"$RAY_TRACING_FOLDER_PICKER_KDIALOG_MARKER\"\n"
         "printf '%s\\n' \"$RAY_TRACING_FOLDER_PICKER_KDIALOG_PATH\"\n";
-    char *created = mkdtemp(template);
+    char *created = make_fixture_directory(template, sizeof(template), "ray_tracing_folder_picker_");
 
     if (!created || snprintf(root, PATH_MAX, "%s", created) >= PATH_MAX ||
         snprintf(zenity, PATH_MAX, "%s/zenity", root) >= PATH_MAX ||
@@ -92,9 +102,9 @@ static bool test_cancel_does_not_fallback(void) {
 }
 
 static bool test_no_picker_available(void) {
-    char template[] = "/tmp/ray_tracing_folder_picker_empty_XXXXXX";
+    char template[PATH_MAX];
     char selected[PATH_MAX];
-    char *root = mkdtemp(template);
+    char *root = make_fixture_directory(template, sizeof(template), "ray_tracing_folder_picker_empty_");
     bool passed;
     if (!root) return false;
     (void)setenv("PATH", root, 1);
