@@ -1061,7 +1061,7 @@ void vk_renderer_draw_point(VkRenderer* renderer, float x, float y) {
     float x1 = x + 1.0f;
     float y1 = y + 1.0f;
 
-    float quad[6][6] = {
+    const float quad[6][6] = {
         {x0, y0, color[0], color[1], color[2], color[3]},
         {x1, y0, color[0], color[1], color[2], color[3]},
         {x1, y1, color[0], color[1], color[2], color[3]},
@@ -1542,7 +1542,7 @@ void vk_renderer_fill_rect(VkRenderer* renderer, const SDL_Rect* rect) {
         renderer->draw_state.current_color[3],
     };
 
-    float quad[6][6] = {
+    const float quad[6][6] = {
         {x, y, color[0], color[1], color[2], color[3]},
         {x + w, y, color[0], color[1], color[2], color[3]},
         {x + w, y + h, color[0], color[1], color[2], color[3]},

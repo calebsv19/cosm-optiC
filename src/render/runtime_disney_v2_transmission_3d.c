@@ -251,7 +251,7 @@ static bool runtime_disney_v2_3d_trace_transmission_next_hit(
     if (!scene || !source_hit || !out_hit || !out_ray) return false;
     HitInfo3D_Reset(out_hit);
     ray = RuntimeRay3D_MakeOffset(source_hit->position,
-                                  source_hit->normal,
+                                  HitInfo3D_OffsetNormal(source_hit),
                                   direction,
                                   kRuntimeDisneyV2_3DPrimaryTransmissionEpsilon);
     for (int skip_count = 0;
@@ -285,7 +285,7 @@ static bool runtime_disney_v2_3d_trace_transmission_next_hit(
         }
         remaining_distance -= hit.t;
         ray = RuntimeRay3D_MakeOffset(hit.position,
-                                      hit.normal,
+                                      HitInfo3D_OffsetNormal(&hit),
                                       direction,
                                       kRuntimeDisneyV2_3DPrimaryTransmissionEpsilon);
     }

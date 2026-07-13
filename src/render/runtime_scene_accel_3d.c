@@ -300,6 +300,10 @@ static uint64_t runtime_scene_accel_3d_geometry_signature(const RuntimeScene3D* 
         hash = runtime_scene_accel_3d_hash_vec3(hash, triangle->p1);
         hash = runtime_scene_accel_3d_hash_vec3(hash, triangle->p2);
         hash = runtime_scene_accel_3d_hash_vec3(hash, triangle->normal);
+        hash = runtime_scene_accel_3d_hash_bool(hash, triangle->hasVertexNormals);
+        hash = runtime_scene_accel_3d_hash_vec3(hash, triangle->vertexNormal0);
+        hash = runtime_scene_accel_3d_hash_vec3(hash, triangle->vertexNormal1);
+        hash = runtime_scene_accel_3d_hash_vec3(hash, triangle->vertexNormal2);
         hash = runtime_scene_accel_3d_hash_bool(hash, triangle->twoSided);
         hash = runtime_scene_accel_3d_hash_bool(hash, triangle->hasObjectTextureCoords);
         hash = runtime_scene_accel_3d_hash_vec3(hash, triangle->objectTexture0);
@@ -463,8 +467,10 @@ static bool runtime_scene_accel_3d_intersect_aabb(const Ray3D* ray,
                                                   Vec3 max_bounds,
                                                   double t_min,
                                                   double t_max) {
-    double enter = t_min;
-    double exit = t_max;
+    double interval_epsilon =
+        1e-9 * fmax(1.0, fmax(fabs(t_min), fabs(t_max)));
+    double enter = t_min - interval_epsilon;
+    double exit = t_max + interval_epsilon;
     if (!ray) return false;
     const double origins[3] = {ray->origin.x, ray->origin.y, ray->origin.z};
     const double dirs[3] = {ray->direction.x, ray->direction.y, ray->direction.z};
@@ -472,13 +478,17 @@ static bool runtime_scene_accel_3d_intersect_aabb(const Ray3D* ray,
     const double maxs[3] = {max_bounds.x, max_bounds.y, max_bounds.z};
 
     for (int axis = 0; axis < 3; ++axis) {
+        double bounds_epsilon =
+            1e-9 * fmax(1.0, fmax(fabs(mins[axis]), fabs(maxs[axis])));
+        double padded_min = mins[axis] - bounds_epsilon;
+        double padded_max = maxs[axis] + bounds_epsilon;
         if (fabs(dirs[axis]) <= 1e-12) {
-            if (origins[axis] < mins[axis] || origins[axis] > maxs[axis]) return false;
+            if (origins[axis] < padded_min || origins[axis] > padded_max) return false;
             continue;
         }
         double inv_dir = 1.0 / dirs[axis];
-        double t0 = (mins[axis] - origins[axis]) * inv_dir;
-        double t1 = (maxs[axis] - origins[axis]) * inv_dir;
+        double t0 = (padded_min - origins[axis]) * inv_dir;
+        double t1 = (padded_max - origins[axis]) * inv_dir;
         if (t0 > t1) {
             double tmp = t0;
             t0 = t1;
@@ -518,15 +528,6 @@ static int runtime_scene_accel_3d_remap_scene_triangle(
     return -1;
 }
 
-static Vec3 runtime_scene_accel_3d_orient_normal(Vec3 normal, const Ray3D* ray) {
-    normal = vec3_normalize(normal);
-    if (!ray || vec3_length(normal) <= 1e-9) return normal;
-    if (vec3_dot(normal, ray->direction) > 0.0) {
-        normal = vec3_scale(normal, -1.0);
-    }
-    return normal;
-}
-
 static bool runtime_scene_accel_3d_remap_hit(
     const RuntimeScene3D* scene,
     const RuntimeSceneAcceleration3DInstanceBounds* instance,
@@ -534,58 +535,37 @@ static bool runtime_scene_accel_3d_remap_hit(
     const HitInfo3D* local_hit,
     double t_min,
     double t_max,
-    HitInfo3D* out_hit) {
+    HitInfo3D* out_hit,
+    bool* out_identity_failure) {
     int scene_triangle_index = -1;
     const RuntimeTriangle3D* scene_triangle = NULL;
-    Vec3 world_position;
-    Vec3 ray_delta;
-    double ray_length_sq = 0.0;
-    double world_t = 0.0;
 
-    if (!scene || !instance || !world_ray || !local_hit || !out_hit) return false;
+    if (out_identity_failure) *out_identity_failure = false;
+    if (!scene || !instance || !world_ray || !local_hit || !out_hit) {
+        if (out_identity_failure) *out_identity_failure = true;
+        return false;
+    }
     scene_triangle_index =
         runtime_scene_accel_3d_remap_scene_triangle(scene,
                                                     instance,
                                                     local_hit->localTriangleIndex);
     if (scene_triangle_index < 0 ||
         scene_triangle_index >= scene->triangleMesh.triangleCount) {
+        if (out_identity_failure) *out_identity_failure = true;
         return false;
     }
 
     scene_triangle = &scene->triangleMesh.triangles[scene_triangle_index];
-    world_position =
-        RuntimeSceneAcceleration3D_TransformPoint(instance, local_hit->position);
-    ray_delta = vec3_sub(world_position, world_ray->origin);
-    ray_length_sq = vec3_dot(world_ray->direction, world_ray->direction);
-    if (!(ray_length_sq > 1e-18)) return false;
-    world_t = vec3_dot(ray_delta, world_ray->direction) / ray_length_sq;
-    if (world_t < t_min || world_t > t_max) return false;
-
-    HitInfo3D_Reset(out_hit);
-    out_hit->t = world_t;
-    out_hit->position = vec3_add(world_ray->origin,
-                                 vec3_scale(world_ray->direction, world_t));
-    out_hit->normal =
-        runtime_scene_accel_3d_orient_normal(scene_triangle->normal, world_ray);
-    out_hit->triangleIndex = scene_triangle_index;
-    out_hit->localTriangleIndex = scene_triangle->localTriangleIndex;
-    out_hit->primitiveIndex = instance->primitiveIndex;
-    out_hit->sceneObjectIndex = instance->sceneObjectIndex;
+    if (!RuntimeRay3D_IntersectTriangle(world_ray,
+                                       scene_triangle,
+                                       scene_triangle_index,
+                                       t_min,
+                                       t_max,
+                                       out_hit)) {
+        return false;
+    }
     if (instance->primitiveIndex >= 0 && instance->primitiveIndex < scene->primitiveCount) {
         out_hit->source = scene->primitives[instance->primitiveIndex].source;
-    }
-    out_hit->baryU = local_hit->baryU;
-    out_hit->baryV = local_hit->baryV;
-    out_hit->baryW = local_hit->baryW;
-    if (scene_triangle->hasObjectTextureCoords) {
-        out_hit->hasObjectTextureCoord = true;
-        out_hit->objectTextureCoord =
-            vec3_add(vec3_add(vec3_scale(scene_triangle->objectTexture0,
-                                         out_hit->baryU),
-                              vec3_scale(scene_triangle->objectTexture1,
-                                         out_hit->baryV)),
-                     vec3_scale(scene_triangle->objectTexture2,
-                                out_hit->baryW));
     }
     return true;
 }
@@ -705,8 +685,14 @@ static RuntimeSceneAcceleration3DTraceStatus runtime_scene_accel_3d_trace_instan
     double t_max,
     HitInfo3D* out_hit) {
     Ray3D local_ray;
+    Vec3 local_direction;
+    double local_direction_scale = 0.0;
+    double local_t_min = 0.0;
+    double local_t_max = DBL_MAX;
+    double world_t_tolerance = 0.0;
     HitInfo3D local_hit = {0};
     RuntimeTriangleBVH3DTraceResult blas_result;
+    bool identity_failure = false;
 
     if (!instance) {
         return RUNTIME_SCENE_ACCEL_3D_TRACE_UNREADY;
@@ -725,18 +711,25 @@ static RuntimeSceneAcceleration3DTraceStatus runtime_scene_accel_3d_trace_instan
 
     local_ray.origin =
         RuntimeSceneAcceleration3D_InverseTransformPoint(instance, world_ray->origin);
-    local_ray.direction = vec3_normalize(
-        RuntimeSceneAcceleration3D_InverseTransformDirection(instance,
-                                                            world_ray->direction));
-    if (!(vec3_length(local_ray.direction) > 1e-9)) {
+    local_direction = RuntimeSceneAcceleration3D_InverseTransformDirection(
+        instance,
+        world_ray->direction);
+    local_direction_scale = vec3_length(local_direction);
+    if (!(local_direction_scale > 1e-9)) {
         return RUNTIME_SCENE_ACCEL_3D_TRACE_ERROR;
+    }
+    local_ray.direction = vec3_scale(local_direction, 1.0 / local_direction_scale);
+    world_t_tolerance = 1e-9 * fmax(1.0, fmax(fabs(t_min), fabs(t_max)));
+    local_t_min = fmax(0.0, t_min - world_t_tolerance) * local_direction_scale;
+    if (t_max + world_t_tolerance < DBL_MAX / local_direction_scale) {
+        local_t_max = (t_max + world_t_tolerance) * local_direction_scale;
     }
 
     gRuntimeSceneAcceleration3DTraceStats.blasTraceCalls += 1u;
     blas_result = RuntimeTriangleBVH3D_TraceFirstHitStatus(instance->localMesh,
                                                            &local_ray,
-                                                           1e-9,
-                                                           DBL_MAX,
+                                                           local_t_min,
+                                                           local_t_max,
                                                            &local_hit);
     if (blas_result == RUNTIME_TRIANGLE_BVH_3D_TRACE_MISS) {
         return RUNTIME_SCENE_ACCEL_3D_TRACE_MISS;
@@ -750,9 +743,13 @@ static RuntimeSceneAcceleration3DTraceStatus runtime_scene_accel_3d_trace_instan
                                           &local_hit,
                                           t_min,
                                           t_max,
-                                          out_hit)) {
-        gRuntimeSceneAcceleration3DTraceStats.identityRemapFailures += 1u;
-        return RUNTIME_SCENE_ACCEL_3D_TRACE_ERROR;
+                                          out_hit,
+                                          &identity_failure)) {
+        if (identity_failure) {
+            gRuntimeSceneAcceleration3DTraceStats.identityRemapFailures += 1u;
+            return RUNTIME_SCENE_ACCEL_3D_TRACE_ERROR;
+        }
+        return RUNTIME_SCENE_ACCEL_3D_TRACE_MISS;
     }
     gRuntimeSceneAcceleration3DTraceStats.blasTraceHits += 1u;
     return RUNTIME_SCENE_ACCEL_3D_TRACE_HIT;

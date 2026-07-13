@@ -176,7 +176,7 @@ static RuntimeVisibility3DTransmittance runtime_visibility_3d_trace_opaque_fast_
         if (source_hit && runtime_visibility_3d_hit_matches_source(&blocker_hit, source_hit)) {
             remaining_distance -= blocker_hit.t;
             current_ray = RuntimeRay3D_MakeOffset(blocker_hit.position,
-                                                  blocker_hit.normal,
+                                                  HitInfo3D_OffsetNormal(&blocker_hit),
                                                   ray_dir,
                                                   length_epsilon);
             skip_count += 1;
@@ -264,7 +264,7 @@ static RuntimeVisibility3DTransmittance runtime_visibility_3d_trace_transmittanc
         if (source_hit && runtime_visibility_3d_hit_matches_source(&blocker_hit, source_hit)) {
             remaining_distance -= blocker_hit.t;
             current_ray = RuntimeRay3D_MakeOffset(blocker_hit.position,
-                                                  blocker_hit.normal,
+                                                  HitInfo3D_OffsetNormal(&blocker_hit),
                                                   ray_dir,
                                                   length_epsilon);
             skip_count += 1;
@@ -287,7 +287,7 @@ static RuntimeVisibility3DTransmittance runtime_visibility_3d_trace_transmittanc
         for (;;) {
             remaining_distance -= current_surface.t;
             current_ray = RuntimeRay3D_MakeOffset(current_surface.position,
-                                                  current_surface.normal,
+                                                  HitInfo3D_OffsetNormal(&current_surface),
                                                   ray_dir,
                                                   length_epsilon);
             skip_count += 1;

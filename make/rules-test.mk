@@ -4,6 +4,7 @@ STABLE_TEST_TARGETS := \
 	test-runtime-mesh-asset-loader \
 	test-runtime-mesh-asset-pack \
 	test-runtime-mesh-asset-builder \
+	test-smooth-mesh-reflection-fixtures \
 	test-runtime-mesh-asset-headless-audit \
 	test-runtime-triangle-bvh-3d \
 	test-ray-tracing-core-sim-runtime-frame-contract \
@@ -170,6 +171,12 @@ $(RUNTIME_MESH_ASSET_BUILDER_TEST_BIN): $(RUNTIME_MESH_ASSET_BUILDER_TEST_SRCS)
 test-runtime-mesh-asset-builder: $(RUNTIME_MESH_ASSET_BUILDER_TEST_BIN)
 	@$(RUNTIME_MESH_ASSET_BUILDER_TEST_BIN) || (echo "ray tracing runtime mesh asset builder test failed."; exit 1)
 	@echo "ray tracing runtime mesh asset builder lane passed"
+
+test-smooth-mesh-reflection-fixtures: $(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN)
+	bash tests/integration/run_smooth_mesh_reflection_fixture_smoke.sh
+
+test-smooth-mesh-reflection-matrix: $(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN) $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	bash tests/integration/run_smooth_mesh_reflection_matrix.sh
 
 RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_BIN := $(BUILD_DIR)/tests/runtime_mesh_asset_headless_audit_test
 RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_SRCS := \

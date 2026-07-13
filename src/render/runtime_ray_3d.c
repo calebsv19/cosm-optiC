@@ -116,13 +116,37 @@ static Vec3 runtime_ray_3d_triangle_normal(const RuntimeTriangle3D* triangle) {
     return vec3_normalize(vec3_cross(edge1, edge2));
 }
 
-static Vec3 runtime_ray_3d_orient_shading_normal(Vec3 normal, const Ray3D* ray) {
-    normal = vec3_normalize(normal);
-    if (!ray || vec3_length(normal) <= 1e-9) return normal;
-    if (vec3_dot(normal, ray->direction) > 0.0) {
-        return vec3_scale(normal, -1.0);
+void RuntimeRay3D_ResolveTriangleNormals(const RuntimeTriangle3D* triangle,
+                                        const Ray3D* ray,
+                                        double bary_u,
+                                        double bary_v,
+                                        double bary_w,
+                                        Vec3* out_geometric_normal,
+                                        Vec3* out_shading_normal) {
+    Vec3 geometric = runtime_ray_3d_triangle_normal(triangle);
+    Vec3 shading = geometric;
+    bool flip_for_ray = false;
+
+    if (triangle && triangle->hasVertexNormals) {
+        Vec3 interpolated =
+            vec3_add(vec3_add(vec3_scale(triangle->vertexNormal0, bary_u),
+                              vec3_scale(triangle->vertexNormal1, bary_v)),
+                     vec3_scale(triangle->vertexNormal2, bary_w));
+        interpolated = vec3_normalize(interpolated);
+        if (vec3_length(interpolated) > 1e-9) {
+            shading = interpolated;
+        }
     }
-    return normal;
+    if (vec3_dot(shading, geometric) < 0.0) {
+        shading = vec3_scale(shading, -1.0);
+    }
+    flip_for_ray = ray && vec3_dot(geometric, ray->direction) > 0.0;
+    if (flip_for_ray) {
+        geometric = vec3_scale(geometric, -1.0);
+        shading = vec3_scale(shading, -1.0);
+    }
+    if (out_geometric_normal) *out_geometric_normal = geometric;
+    if (out_shading_normal) *out_shading_normal = shading;
 }
 
 Ray3D RuntimeRay3D_Make(Vec3 origin, Vec3 direction) {
@@ -163,6 +187,14 @@ void HitInfo3D_Reset(HitInfo3D* hit) {
     hit->primitiveIndex = -1;
     hit->sceneObjectIndex = -1;
     hit->source.kind = RUNTIME_PRIMITIVE_3D_KIND_INVALID;
+}
+
+Vec3 HitInfo3D_OffsetNormal(const HitInfo3D* hit) {
+    if (!hit) return vec3(0.0, 0.0, 0.0);
+    if (vec3_length(hit->geometricNormal) > 1e-9) {
+        return hit->geometricNormal;
+    }
+    return hit->normal;
 }
 
 bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
@@ -218,9 +250,14 @@ bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
     HitInfo3D_Reset(&hit);
     hit.t = t;
     hit.position = vec3_add(ray->origin, vec3_scale(ray->direction, t));
-    hit.normal = runtime_ray_3d_orient_shading_normal(
-        runtime_ray_3d_triangle_normal(triangle),
-        ray);
+    RuntimeRay3D_ResolveTriangleNormals(triangle,
+                                       ray,
+                                       bary_u,
+                                       bary_v,
+                                       bary_w,
+                                       &hit.geometricNormal,
+                                       &hit.shadingNormal);
+    hit.normal = hit.shadingNormal;
     hit.triangleIndex = triangle_index;
     hit.localTriangleIndex = triangle->localTriangleIndex;
     hit.primitiveIndex = triangle->primitiveIndex;
@@ -441,6 +478,16 @@ static bool runtime_ray_3d_hits_match(const HitInfo3D* expected,
         snprintf(reason, reason_size, "barycentric");
         return false;
     }
+    if (vec3_length(vec3_sub(expected->geometricNormal,
+                             actual->geometricNormal)) > 1e-7) {
+        snprintf(reason, reason_size, "geometric_normal");
+        return false;
+    }
+    if (vec3_length(vec3_sub(expected->shadingNormal,
+                             actual->shadingNormal)) > 1e-7) {
+        snprintf(reason, reason_size, "shading_normal");
+        return false;
+    }
     if (expected->hasObjectTextureCoord != actual->hasObjectTextureCoord) {
         snprintf(reason, reason_size, "object_texture_presence");
         return false;
@@ -487,10 +534,23 @@ static bool runtime_ray_3d_trace_scene_first_hit_parity(
     stats->parityCheckedRays += 1u;
     if (flattened_found != tlas_found) {
         stats->parityMismatches += 1u;
-        runtime_ray_3d_set_parity_mismatch(
-            context,
-            flattened_found ? "tlas_miss_flattened_hit"
-                            : "tlas_hit_flattened_miss");
+        if (flattened_found) {
+            snprintf(reason,
+                     sizeof(reason),
+                     "tlas_%d_flattened_hit:%s:%d:t=%.6g",
+                     (int)tlas_status,
+                     flattened_hit.source.objectId,
+                     flattened_hit.triangleIndex,
+                     flattened_hit.t);
+        } else {
+            snprintf(reason,
+                     sizeof(reason),
+                     "tlas_hit_flattened_miss:%s:%d:t=%.6g",
+                     tlas_hit.source.objectId,
+                     tlas_hit.triangleIndex,
+                     tlas_hit.t);
+        }
+        runtime_ray_3d_set_parity_mismatch(context, reason);
     } else if (flattened_found &&
                !runtime_ray_3d_hits_match(&flattened_hit,
                                            &tlas_hit,

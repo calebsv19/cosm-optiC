@@ -74,6 +74,13 @@ Last updated: 2026-07-04
     through an app-local import bridge. This is advisory retained-scene/editor
     plumbing only; collision proxies, obstacle truth, SDFs, solver projection,
     and physics semantics remain PhysicsSim-owned.
+    `core_scene_view >= 0.2.0` is now used for the app-local read-only
+    `PhysicsSimSceneViewPacketReadout`, which consumes
+    `ray_tracing_scene_view_packet_v0` compact packet readback and derives its
+    material/transparent/display/count summary through
+    `CoreSceneViewPacketSummary` without routing into retained scene apply,
+    solver projection, scene-project cache output, or
+    `extensions.physics_sim` overlay writeback.
   - `line_drawing`: `core_mesh_asset >= 0.5.2` and
     `core_mesh_compile >= 0.6.5` for file-pane STL import and the private
     x3 high-triangle sidecar proof ceiling, plus

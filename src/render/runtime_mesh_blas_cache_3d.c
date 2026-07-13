@@ -345,6 +345,18 @@ static bool runtime_mesh_blas_cache_3d_build_local_mesh(
         dst->p1 = p1;
         dst->p2 = p2;
         dst->normal = normal;
+        if (document->vertex_normal_count == document->vertex_count) {
+            dst->vertexNormal0 = vec3(document->vertices[src->a].normal.x,
+                                      document->vertices[src->a].normal.y,
+                                      document->vertices[src->a].normal.z);
+            dst->vertexNormal1 = vec3(document->vertices[src->b].normal.x,
+                                      document->vertices[src->b].normal.y,
+                                      document->vertices[src->b].normal.z);
+            dst->vertexNormal2 = vec3(document->vertices[src->c].normal.x,
+                                      document->vertices[src->c].normal.y,
+                                      document->vertices[src->c].normal.z);
+            dst->hasVertexNormals = true;
+        }
         dst->twoSided = false;
         dst->primitiveIndex = -1;
         dst->sceneObjectIndex = -1;

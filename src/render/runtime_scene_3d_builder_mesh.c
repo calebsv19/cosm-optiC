@@ -2,6 +2,12 @@
 
 #include "import/runtime_scene_motion_bridge.h"
 
+static bool runtime_scene_3d_builder_smooth_mesh_shading_enabled(void) {
+    const char* mode = getenv("RAY_TRACING_MESH_SHADING_MODE");
+    return !mode || !mode[0] ||
+           (strcmp(mode, "flat") != 0 && strcmp(mode, "0") != 0);
+}
+
 static Vec3 runtime_scene_3d_builder_rotate_instance(Vec3 p,
                                                      const RayTracingRuntimeMeshAssetInstance* instance) {
     double cx = cos(instance->rotation_x);
@@ -37,6 +43,21 @@ static Vec3 runtime_scene_3d_builder_transform_mesh_vertex(
                     vec3(instance->position_x,
                          instance->position_y,
                          instance->position_z));
+}
+
+static Vec3 runtime_scene_3d_builder_transform_mesh_normal(
+    const CoreMeshAssetRuntimeVertex* vertex,
+    const RayTracingRuntimeMeshAssetInstance* instance) {
+    Vec3 normal;
+    if (!vertex || !instance || fabs(instance->scale_x) <= 1e-18 ||
+        fabs(instance->scale_y) <= 1e-18 || fabs(instance->scale_z) <= 1e-18) {
+        return vec3(0.0, 0.0, 0.0);
+    }
+    normal = vec3(vertex->normal.x / instance->scale_x,
+                  vertex->normal.y / instance->scale_y,
+                  vertex->normal.z / instance->scale_z);
+    normal = runtime_scene_3d_builder_rotate_instance(normal, instance);
+    return vec3_normalize(normal);
 }
 
 typedef struct {
@@ -309,6 +330,21 @@ bool runtime_scene_3d_builder_append_mesh_asset_set_at_t(
                 runtime_scene_3d_builder_set_diag("append mesh assets failed: triangle append failed");
                 RuntimeScene3D_Reset(scene);
                 return false;
+            }
+            if (runtime_scene_3d_builder_smooth_mesh_shading_enabled() &&
+                document->vertex_normal_count == document->vertex_count) {
+                RuntimeTriangle3D* appended =
+                    &scene->triangleMesh.triangles[scene->triangleMesh.triangleCount - 1];
+                appended->vertexNormal0 = runtime_scene_3d_builder_transform_mesh_normal(
+                    &document->vertices[src->a], instance);
+                appended->vertexNormal1 = runtime_scene_3d_builder_transform_mesh_normal(
+                    &document->vertices[src->b], instance);
+                appended->vertexNormal2 = runtime_scene_3d_builder_transform_mesh_normal(
+                    &document->vertices[src->c], instance);
+                appended->hasVertexNormals =
+                    vec3_length(appended->vertexNormal0) > 1e-9 &&
+                    vec3_length(appended->vertexNormal1) > 1e-9 &&
+                    vec3_length(appended->vertexNormal2) > 1e-9;
             }
             appended_triangle_count += 1;
         }

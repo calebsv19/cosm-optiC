@@ -14,7 +14,10 @@ typedef struct {
 typedef struct {
     double t;
     Vec3 position;
+    /* Compatibility alias for shadingNormal. */
     Vec3 normal;
+    Vec3 geometricNormal;
+    Vec3 shadingNormal;
     int triangleIndex;
     int localTriangleIndex;
     int primitiveIndex;
@@ -72,6 +75,14 @@ Ray3D RuntimeRay3D_MakeOffset(Vec3 origin,
                               Vec3 direction,
                               [[fisics::dim(length)]] [[fisics::unit(meter)]] double epsilon);
 void HitInfo3D_Reset(HitInfo3D* hit);
+Vec3 HitInfo3D_OffsetNormal(const HitInfo3D* hit);
+void RuntimeRay3D_ResolveTriangleNormals(const RuntimeTriangle3D* triangle,
+                                        const Ray3D* ray,
+                                        double bary_u,
+                                        double bary_v,
+                                        double bary_w,
+                                        Vec3* out_geometric_normal,
+                                        Vec3* out_shading_normal);
 
 bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
                                     const RuntimeTriangle3D* triangle,

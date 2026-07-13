@@ -58,6 +58,26 @@ typedef struct CoreSceneViewPacketReadback {
     unsigned char firstAlpha;
 } CoreSceneViewPacketReadback;
 
+typedef struct CoreSceneViewPacketSummary {
+    bool valid;
+    bool readOnly;
+    bool materialPreview;
+    bool transparentPreview;
+    bool emissivePreview;
+    bool mirrorPreview;
+    bool texturedPreview;
+    bool projected;
+    bool complete;
+    int focusedObjectIndex;
+    int triangleCount;
+    int faceGroupCount;
+    int firstFaceGroupIndex;
+    int lastFaceGroupIndex;
+    unsigned char firstAlpha;
+    CoreSceneViewPreviewQuality previewQuality;
+    CoreSceneViewDegradedReason degradedReason;
+} CoreSceneViewPacketSummary;
+
 const char *core_scene_view_preview_quality_name(CoreSceneViewPreviewQuality quality);
 CoreResult core_scene_view_preview_quality_parse(const char *text,
                                                  CoreSceneViewPreviewQuality *out_quality);
@@ -69,6 +89,10 @@ void core_scene_view_packet_readback_init(CoreSceneViewPacketReadback *readback)
 CoreResult core_scene_view_packet_readback_from_json_string(
     const char *json,
     CoreSceneViewPacketReadback *out_readback);
+void core_scene_view_packet_summary_init(CoreSceneViewPacketSummary *summary);
+CoreResult core_scene_view_packet_summary_from_readback(
+    const CoreSceneViewPacketReadback *readback,
+    CoreSceneViewPacketSummary *out_summary);
 
 #ifdef __cplusplus
 }

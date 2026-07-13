@@ -91,6 +91,52 @@ void core_scene_view_packet_readback_init(CoreSceneViewPacketReadback *readback)
     memset(readback, 0, sizeof(*readback));
 }
 
+void core_scene_view_packet_summary_init(CoreSceneViewPacketSummary *summary) {
+    if (!summary) return;
+    memset(summary, 0, sizeof(*summary));
+    summary->readOnly = true;
+    summary->focusedObjectIndex = -1;
+    summary->firstFaceGroupIndex = -1;
+    summary->lastFaceGroupIndex = -1;
+}
+
+CoreResult core_scene_view_packet_summary_from_readback(
+    const CoreSceneViewPacketReadback *readback,
+    CoreSceneViewPacketSummary *out_summary) {
+    if (out_summary) core_scene_view_packet_summary_init(out_summary);
+    if (!readback || !out_summary) {
+        return csv_result(CORE_ERR_INVALID_ARG, "invalid scene-view summary args");
+    }
+    if (!readback->valid) {
+        return csv_result(CORE_ERR_FORMAT, "invalid scene-view readback summary source");
+    }
+
+    out_summary->valid = true;
+    out_summary->readOnly = true;
+    out_summary->projected = readback->projected;
+    out_summary->complete = readback->complete;
+    out_summary->focusedObjectIndex = readback->focusedObjectIndex;
+    out_summary->triangleCount = readback->triangleCount;
+    out_summary->faceGroupCount = readback->faceGroupCount;
+    out_summary->firstFaceGroupIndex = readback->firstPickId.faceGroupIndex;
+    out_summary->lastFaceGroupIndex = readback->lastPickId.faceGroupIndex;
+    out_summary->firstAlpha = readback->firstAlpha;
+    out_summary->previewQuality = readback->previewQuality;
+    out_summary->degradedReason = readback->degradedReason;
+    out_summary->materialPreview =
+        readback->previewQuality == CORE_SCENE_VIEW_PREVIEW_MATERIAL;
+    out_summary->transparentPreview =
+        (readback->firstDisplayFlags & CORE_SCENE_VIEW_DISPLAY_TRANSPARENT) != 0u ||
+        readback->firstAlpha < 255u;
+    out_summary->emissivePreview =
+        (readback->firstDisplayFlags & CORE_SCENE_VIEW_DISPLAY_EMISSIVE) != 0u;
+    out_summary->mirrorPreview =
+        (readback->firstDisplayFlags & CORE_SCENE_VIEW_DISPLAY_MIRROR) != 0u;
+    out_summary->texturedPreview =
+        (readback->firstDisplayFlags & CORE_SCENE_VIEW_DISPLAY_TEXTURED) != 0u;
+    return core_result_ok();
+}
+
 static bool csv_get_int(const cJSON *obj, const char *key, int *out_value) {
     const cJSON *value = NULL;
     if (!cJSON_IsObject(obj) || !key || !out_value) return false;

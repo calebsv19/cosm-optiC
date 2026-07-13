@@ -385,7 +385,7 @@ bool runtime_caustic_transport_deposit_surface(
                     }
                     remaining_tangent_distance -= fmax(tangent_receiver.t, 1.0e-7);
                     reverse_ray = RuntimeRay3D_MakeOffset(tangent_receiver.position,
-                                                          tangent_receiver.normal,
+                                                          HitInfo3D_OffsetNormal(&tangent_receiver),
                                                           reverse_ray.direction,
                                                           1.0e-5);
                 }
@@ -420,7 +420,7 @@ bool runtime_caustic_transport_deposit_surface(
                         }
                         remaining_probe_distance -= fmax(projected_receiver.t, 1.0e-6);
                         receiver_probe = RuntimeRay3D_MakeOffset(projected_receiver.position,
-                                                                 projected_receiver.normal,
+                                                                 HitInfo3D_OffsetNormal(&projected_receiver),
                                                                  receiver_probe.direction,
                                                                  1.0e-5);
                     }

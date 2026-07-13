@@ -104,7 +104,7 @@ static void fill_source_key(const char* path,
     out_key->source_size_bytes = (int64_t)st.st_size;
     out_key->source_checksum = checksum;
     out_key->core_mesh_asset_schema_version = CORE_MESH_ASSET_SCHEMA_VERSION_1;
-    out_key->ray_tracing_cache_schema_version = 1u;
+    out_key->ray_tracing_cache_schema_version = 2u;
     out_key->pointer_size_bytes = (uint32_t)sizeof(void*);
 }
 
@@ -119,6 +119,14 @@ static void compare_sample_vertex(const CoreMeshAssetRuntimeDocument* a,
     assert_near(name, b->vertices[index].position.y, a->vertices[index].position.y, 0.0);
     snprintf(name, sizeof(name), "%s_z", label);
     assert_near(name, b->vertices[index].position.z, a->vertices[index].position.z, 0.0);
+    if (a->vertex_normal_count == a->vertex_count) {
+        snprintf(name, sizeof(name), "%s_nx", label);
+        assert_near(name, b->vertices[index].normal.x, a->vertices[index].normal.x, 0.0);
+        snprintf(name, sizeof(name), "%s_ny", label);
+        assert_near(name, b->vertices[index].normal.y, a->vertices[index].normal.y, 0.0);
+        snprintf(name, sizeof(name), "%s_nz", label);
+        assert_near(name, b->vertices[index].normal.z, a->vertices[index].normal.z, 0.0);
+    }
 }
 
 static void compare_sample_triangle(const CoreMeshAssetRuntimeDocument* a,
@@ -160,6 +168,12 @@ static int test_runtime_mesh_asset_pack_pressure_fixture(void) {
                load_result.message ? load_result.message : "load failed");
         return 0;
     }
+    json_document.vertex_normal_count = json_document.vertex_count;
+    json_document.normal_provenance =
+        CORE_MESH_ASSET_RUNTIME_NORMAL_PROVENANCE_GENERATED_SMOOTH;
+    for (size_t i = 0u; i < json_document.vertex_count; ++i) {
+        json_document.vertices[i].normal.z = 1.0;
+    }
 
     write_start = clock();
     ok = ray_tracing_runtime_mesh_asset_pack_write_file(kMrt13PackPath,
@@ -195,6 +209,10 @@ static int test_runtime_mesh_asset_pack_pressure_fixture(void) {
                        json_document.contract.source_asset_id) == 0);
     assert_true("mrt13_pack_vertex_count",
                 packed_document.vertex_count == json_document.vertex_count);
+    assert_true("mrt13_pack_normal_count",
+                packed_document.vertex_normal_count == json_document.vertex_normal_count);
+    assert_true("mrt13_pack_normal_provenance",
+                packed_document.normal_provenance == json_document.normal_provenance);
     assert_true("mrt13_pack_triangle_count",
                 packed_document.triangle_count == json_document.triangle_count);
     assert_true("mrt13_pack_surface_group_count",

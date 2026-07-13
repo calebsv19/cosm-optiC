@@ -424,6 +424,14 @@ static int test_mesh_blas_cache_builds_once_for_repeated_instances(void) {
     document->vertices[2].position.x = 0.0;
     document->vertices[2].position.y = 1.0;
     document->vertices[2].position.z = 0.0;
+    document->vertex_normal_count = document->vertex_count;
+    document->normal_provenance =
+        CORE_MESH_ASSET_RUNTIME_NORMAL_PROVENANCE_GENERATED_SMOOTH;
+    document->vertices[0].normal.z = 1.0;
+    document->vertices[1].normal.x = sqrt(0.5);
+    document->vertices[1].normal.z = sqrt(0.5);
+    document->vertices[2].normal.y = sqrt(0.5);
+    document->vertices[2].normal.z = sqrt(0.5);
     document->triangles[0].a = 0u;
     document->triangles[0].b = 1u;
     document->triangles[0].c = 2u;
@@ -505,6 +513,29 @@ static int test_mesh_blas_cache_builds_once_for_repeated_instances(void) {
                                         &accel_hit);
             assert_true("mrt3_accel_repeated_second_object",
                         accel_hit.sceneObjectIndex == 21);
+            assert_near("mrt3_smooth_flat_geometric_x",
+                        flat_hit.geometricNormal.x,
+                        0.0,
+                        1e-9);
+            assert_true("mrt3_smooth_flat_shading_interpolated",
+                        fabs(flat_hit.shadingNormal.x) > 0.1 &&
+                            fabs(flat_hit.shadingNormal.y) > 0.1);
+            assert_near("mrt3_smooth_flat_alias_x",
+                        flat_hit.normal.x,
+                        flat_hit.shadingNormal.x,
+                        1e-9);
+            assert_near("mrt3_smooth_tlas_shading_x",
+                        accel_hit.shadingNormal.x,
+                        flat_hit.shadingNormal.x,
+                        1e-9);
+            assert_near("mrt3_smooth_tlas_shading_y",
+                        accel_hit.shadingNormal.y,
+                        flat_hit.shadingNormal.y,
+                        1e-9);
+            assert_near("mrt3_smooth_tlas_geometric_z",
+                        accel_hit.geometricNormal.z,
+                        flat_hit.geometricNormal.z,
+                        1e-9);
         }
         RuntimeSceneAcceleration3D_SnapshotTraceStats(&trace_stats);
         assert_true("mrt3_accel_repeated_trace_calls", trace_stats.traceCalls == 1u);
@@ -565,6 +596,17 @@ static int test_mesh_blas_cache_builds_once_for_repeated_instances(void) {
         RuntimeRay3D_ResetTraceRouteForTests();
         RuntimeRay3D_ResetRouteStats();
     }
+
+    RuntimeScene3D_Free(&scene);
+    RuntimeScene3D_Init(&scene);
+    setenv("RAY_TRACING_MESH_SHADING_MODE", "flat", 1);
+    ok = RuntimeScene3DBuilder_AppendMeshAssetSet(&scene, &set);
+    assert_true("mrt3_flat_toggle_append", ok);
+    assert_true("mrt3_flat_toggle_disables_vertex_normals",
+                ok && scene.triangleMesh.triangleCount == 2 &&
+                    !scene.triangleMesh.triangles[0].hasVertexNormals &&
+                    !scene.triangleMesh.triangles[1].hasVertexNormals);
+    unsetenv("RAY_TRACING_MESH_SHADING_MODE");
 
     RuntimeScene3D_Free(&scene);
     ray_tracing_runtime_mesh_asset_set_free(&set);

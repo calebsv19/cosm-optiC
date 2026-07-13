@@ -164,7 +164,7 @@ static bool RuntimeNative3DLightMarkerPathVisible(const RuntimeScene3D* scene,
         }
         remaining_distance -= blocker_hit.t;
         ray = RuntimeRay3D_MakeOffset(blocker_hit.position,
-                                      blocker_hit.normal,
+                                      HitInfo3D_OffsetNormal(&blocker_hit),
                                       ray.direction,
                                       1e-4);
         skip_count += 1;

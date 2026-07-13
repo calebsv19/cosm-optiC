@@ -105,7 +105,7 @@ static void runtime_mesh_asset_pack_source_key(const char* resolved_path,
     out_key->source_size_bytes = (int64_t)file_size;
     out_key->source_checksum = (uint64_t)checksum;
     out_key->core_mesh_asset_schema_version = CORE_MESH_ASSET_SCHEMA_VERSION_1;
-    out_key->ray_tracing_cache_schema_version = 1u;
+    out_key->ray_tracing_cache_schema_version = 2u;
     out_key->pointer_size_bytes = (uint32_t)sizeof(void*);
 }
 
@@ -142,6 +142,8 @@ static bool runtime_mesh_asset_document_copy(const CoreMeshAssetRuntimeDocument*
 
     result = core_mesh_asset_runtime_document_set_vertex_count(dst, src->vertex_count);
     if (result.code != CORE_OK) goto fail;
+    dst->vertex_normal_count = src->vertex_normal_count;
+    dst->normal_provenance = src->normal_provenance;
     result = core_mesh_asset_runtime_document_set_triangle_count(dst, src->triangle_count);
     if (result.code != CORE_OK) goto fail;
     result = core_mesh_asset_runtime_document_set_surface_group_count(dst,

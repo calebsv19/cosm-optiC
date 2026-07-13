@@ -113,8 +113,10 @@ static bool runtime_triangle_bvh_intersect_aabb(const Ray3D* ray,
                                                 double t_min,
                                                 double t_max,
                                                 double* out_t_enter) {
-    double enter = t_min;
-    double exit = t_max;
+    double interval_epsilon =
+        1e-9 * fmax(1.0, fmax(fabs(t_min), fabs(t_max)));
+    double enter = t_min - interval_epsilon;
+    double exit = t_max + interval_epsilon;
     const double origins[3] = {ray->origin.x, ray->origin.y, ray->origin.z};
     const double dirs[3] = {ray->direction.x, ray->direction.y, ray->direction.z};
     const double mins[3] = {min.x, min.y, min.z};
@@ -122,15 +124,19 @@ static bool runtime_triangle_bvh_intersect_aabb(const Ray3D* ray,
 
     runtime_triangle_bvh_counter_add(&g_aabb_tests, 1u);
     for (int axis = 0; axis < 3; ++axis) {
+        double bounds_epsilon =
+            1e-9 * fmax(1.0, fmax(fabs(mins[axis]), fabs(maxs[axis])));
+        double padded_min = mins[axis] - bounds_epsilon;
+        double padded_max = maxs[axis] + bounds_epsilon;
         if (fabs(dirs[axis]) <= 1e-12) {
-            if (origins[axis] < mins[axis] || origins[axis] > maxs[axis]) {
+            if (origins[axis] < padded_min || origins[axis] > padded_max) {
                 return false;
             }
             continue;
         }
         double inv_dir = 1.0 / dirs[axis];
-        double t0 = (mins[axis] - origins[axis]) * inv_dir;
-        double t1 = (maxs[axis] - origins[axis]) * inv_dir;
+        double t0 = (padded_min - origins[axis]) * inv_dir;
+        double t1 = (padded_max - origins[axis]) * inv_dir;
         if (t0 > t1) {
             double tmp = t0;
             t0 = t1;

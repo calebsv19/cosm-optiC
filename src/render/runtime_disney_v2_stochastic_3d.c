@@ -549,7 +549,7 @@ void runtime_disney_v2_3d_apply_stochastic_transport(
 
     io_result->bsdfSampleCount = 1;
     io_result->pathState.ray = RuntimeRay3D_MakeOffset(hit->position,
-                                                       hit->normal,
+                                                       HitInfo3D_OffsetNormal(hit),
                                                        sample_dir,
                                                        RUNTIME_DISNEY_V2_3D_EPSILON);
     io_result->secondaryRayCount = 1;
