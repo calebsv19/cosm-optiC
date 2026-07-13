@@ -12,6 +12,13 @@ typedef struct {
     uint32_t calls;
 } PhotonPathTransportMaterialFixture3D;
 
+typedef struct {
+    RuntimeMaterialPayload3D object51;
+    RuntimeMaterialPayload3D object52;
+    int resolvedObjects[8];
+    uint32_t calls;
+} PhotonPathTransportMultiMaterialFixture3D;
+
 static bool photon_path_transport_fixture_material(
     const HitInfo3D* hit,
     RuntimeMaterialPayload3D* out_payload,
@@ -21,6 +28,25 @@ static bool photon_path_transport_fixture_material(
     if (!hit || !out_payload || !fixture) return false;
     fixture->calls++;
     *out_payload = fixture->material;
+    out_payload->sceneObjectIndex = hit->sceneObjectIndex;
+    return out_payload->valid;
+}
+
+static bool photon_path_transport_multi_material(
+    const HitInfo3D* hit,
+    RuntimeMaterialPayload3D* out_payload,
+    void* user_data) {
+    PhotonPathTransportMultiMaterialFixture3D* fixture =
+        (PhotonPathTransportMultiMaterialFixture3D*)user_data;
+    if (!hit || !out_payload || !fixture || fixture->calls >= 8u) return false;
+    fixture->resolvedObjects[fixture->calls++] = hit->sceneObjectIndex;
+    if (hit->sceneObjectIndex == 51) {
+        *out_payload = fixture->object51;
+    } else if (hit->sceneObjectIndex == 52) {
+        *out_payload = fixture->object52;
+    } else {
+        return false;
+    }
     out_payload->sceneObjectIndex = hit->sceneObjectIndex;
     return out_payload->valid;
 }
@@ -37,6 +63,22 @@ static RuntimeMaterialPayload3D photon_path_transport_mirror(void) {
     material.bsdf.diffuseWeight = 0.0;
     material.bsdf.specWeight = 1.0;
     material.bsdf.reflectivity = 1.0;
+    material.bsdf.roughness = 0.0;
+    return material;
+}
+
+static RuntimeMaterialPayload3D photon_path_transport_glass(void) {
+    RuntimeMaterialPayload3D material;
+    RuntimeMaterialPayload3D_Reset(&material);
+    material.valid = true;
+    material.baseColorR = 1.0;
+    material.baseColorG = 1.0;
+    material.baseColorB = 1.0;
+    material.transparency = 1.0;
+    material.opticalIor = 1.5;
+    material.bsdf.ior = 1.5;
+    material.bsdf.diffuseWeight = 0.0;
+    material.bsdf.specWeight = 0.0;
     material.bsdf.roughness = 0.0;
     return material;
 }
@@ -79,6 +121,41 @@ static bool photon_path_transport_build_mirror_box(RuntimeScene3D* scene) {
         &scene->triangleMesh.triangles[0], 0.0, vec3(0.0, 0.0, 1.0), 0);
     photon_path_transport_set_triangle(
         &scene->triangleMesh.triangles[1], 1.0, vec3(0.0, 0.0, -1.0), 1);
+    return RuntimeSceneAcceleration3D_RebuildTLASFromScene(scene);
+}
+
+static bool photon_path_transport_build_two_object_scene(RuntimeScene3D* scene,
+                                                         double second_z) {
+    if (!scene) return false;
+    RuntimeScene3D_Init(scene);
+    scene->primitiveCapacity = 2;
+    scene->triangleMesh.triangleCapacity = 2;
+    scene->primitives = calloc(2u, sizeof(*scene->primitives));
+    scene->triangleMesh.triangles =
+        calloc(2u, sizeof(*scene->triangleMesh.triangles));
+    if (!scene->primitives || !scene->triangleMesh.triangles) {
+        RuntimeScene3D_Free(scene);
+        return false;
+    }
+    scene->primitiveCount = 2;
+    scene->triangleMesh.triangleCount = 2;
+    for (int i = 0; i < 2; ++i) {
+        scene->primitives[i].kind = RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH;
+        scene->primitives[i].source.kind =
+            RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH;
+        scene->primitives[i].source.sceneObjectIndex = 51 + i;
+    }
+    photon_path_transport_set_triangle(
+        &scene->triangleMesh.triangles[0], 1.0, vec3(0.0, 0.0, 1.0), 0);
+    scene->triangleMesh.triangles[0].sceneObjectIndex = 51;
+    scene->triangleMesh.triangles[0].primitiveIndex = 0;
+    photon_path_transport_set_triangle(
+        &scene->triangleMesh.triangles[1],
+        second_z,
+        second_z > 1.0 ? vec3(0.0, 0.0, -1.0) : vec3(0.0, 0.0, 1.0),
+        0);
+    scene->triangleMesh.triangles[1].sceneObjectIndex = 52;
+    scene->triangleMesh.triangles[1].primitiveIndex = 1;
     return RuntimeSceneAcceleration3D_RebuildTLASFromScene(scene);
 }
 
@@ -179,9 +256,113 @@ static int test_runtime_caustic_photon_path_transport_reflective_depth_loop(void
     return 0;
 }
 
+static int test_runtime_caustic_photon_path_transport_two_object_reflection(void) {
+    RuntimeScene3D scene;
+    RuntimeCausticPhotonSample3D sample = photon_path_transport_sample();
+    RuntimeCausticPhotonPathTransportSettings3D settings;
+    RuntimeCausticPhotonSceneTrace3D trace;
+    PhotonPathTransportMultiMaterialFixture3D fixture;
+
+    sample.position = vec3(0.0, 0.0, 2.0);
+    assert_true("runtime_caustic_photon_path_transport_two_object_reflect_build",
+                photon_path_transport_build_two_object_scene(&scene, 3.0));
+    memset(&fixture, 0, sizeof(fixture));
+    fixture.object51 = photon_path_transport_mirror();
+    fixture.object52 = photon_path_transport_mirror();
+    RuntimeCausticPhotonPathTransport3D_DefaultSettings(&settings);
+    settings.sceneTrace.maxDepth = 2u;
+    settings.sceneTrace.materialResolver = photon_path_transport_multi_material;
+    settings.sceneTrace.materialResolverUserData = &fixture;
+    settings.applyRoulette = false;
+
+    assert_true("runtime_caustic_photon_path_transport_two_object_reflect_trace",
+                RuntimeCausticPhotonPathTransport3D_Trace(
+                    &scene, &sample, &settings, &trace));
+    assert_true("runtime_caustic_photon_path_transport_two_object_reflect_ledger",
+                fixture.calls == 2u && fixture.resolvedObjects[0] == 51 &&
+                    fixture.resolvedObjects[1] == 52 &&
+                    trace.hitEvents[0].hit.sceneObjectIndex == 51 &&
+                    trace.hitEvents[1].hit.sceneObjectIndex == 52 &&
+                    trace.trace.events[1].outgoingDirection.z > 0.999 &&
+                    trace.trace.events[2].outgoingDirection.z < -0.999 &&
+                    trace.trace.debug.reflectedBranchCount == 2u &&
+                    trace.readback.termination ==
+                        RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_MAX_DEPTH);
+    assert_close("runtime_caustic_photon_path_transport_two_object_reflect_pdf",
+                 trace.trace.finalState.pathPdf,
+                 sample.emissionPdf,
+                 1.0e-12);
+    RuntimeSceneAcceleration3D_ResetTLASForTests();
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
+static int test_runtime_caustic_photon_path_transport_two_object_transmission(void) {
+    RuntimeScene3D scene;
+    RuntimeCausticPhotonSample3D sample = photon_path_transport_sample();
+    RuntimeCausticPhotonPathTransportSettings3D settings;
+    RuntimeCausticPhotonSceneTrace3D trace;
+    PhotonPathTransportMultiMaterialFixture3D fixture;
+    RuntimeCausticPhotonBsdfSampleStream3D stream;
+    bool found_transmission_sample = false;
+
+    sample.position = vec3(0.0, 0.0, 2.0);
+    for (uint64_t i = 0u; i < 128u; ++i) {
+        sample.photonId = 23000u + i;
+        sample.sampleIndex = i;
+        if (RuntimeCausticPhotonBsdfSampling3D_Generate(&sample, 1u, &stream) &&
+            stream.bsdfSample.lobeUnitSample > 0.2) {
+            found_transmission_sample = true;
+            break;
+        }
+    }
+    assert_true("runtime_caustic_photon_path_transport_find_transmission_sample",
+                found_transmission_sample);
+    assert_true("runtime_caustic_photon_path_transport_two_object_transmit_build",
+                photon_path_transport_build_two_object_scene(&scene, 0.0));
+    memset(&fixture, 0, sizeof(fixture));
+    fixture.object51 = photon_path_transport_glass();
+    fixture.object52 = photon_path_transport_mirror();
+    RuntimeCausticPhotonPathTransport3D_DefaultSettings(&settings);
+    settings.sceneTrace.maxDepth = 2u;
+    settings.sceneTrace.materialResolver = photon_path_transport_multi_material;
+    settings.sceneTrace.materialResolverUserData = &fixture;
+    settings.applyRoulette = false;
+
+    assert_true("runtime_caustic_photon_path_transport_two_object_transmit_trace",
+                RuntimeCausticPhotonPathTransport3D_Trace(
+                    &scene, &sample, &settings, &trace));
+    assert_true("runtime_caustic_photon_path_transport_two_object_transmit_ledger",
+                fixture.calls == 2u && fixture.resolvedObjects[0] == 51 &&
+                    fixture.resolvedObjects[1] == 52 &&
+                    trace.hitEvents[0].bsdfSelection.lobe ==
+                        RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_TRANSMISSION &&
+                    trace.hitEvents[0].bsdfDirection.dielectric.entering &&
+                    trace.hitEvents[0].bsdfDirection.outgoingDirection.z < -0.999 &&
+                    trace.hitEvents[1].hit.sceneObjectIndex == 52 &&
+                    trace.trace.events[2].outgoingDirection.z > 0.999 &&
+                    trace.trace.dielectricEventCount == 1u &&
+                    trace.trace.debug.refractedBranchCount == 1u &&
+                    trace.trace.debug.reflectedBranchCount == 1u);
+    assert_close("runtime_caustic_photon_path_transport_two_object_transmit_pdf",
+                 trace.trace.finalState.pathPdf,
+                 sample.emissionPdf *
+                     trace.hitEvents[0].bsdfSelection.branchPdf,
+                 1.0e-12);
+    assert_close("runtime_caustic_photon_path_transport_two_object_transmit_flux",
+                 trace.trace.finalState.throughput.x,
+                 sample.flux.x,
+                 1.0e-12);
+    RuntimeSceneAcceleration3D_ResetTLASForTests();
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
 int run_test_runtime_caustic_photon_path_transport_3d_tests(void) {
     int failures = 0;
     failures += test_runtime_caustic_photon_path_transport_defaults();
     failures += test_runtime_caustic_photon_path_transport_reflective_depth_loop();
+    failures += test_runtime_caustic_photon_path_transport_two_object_reflection();
+    failures += test_runtime_caustic_photon_path_transport_two_object_transmission();
     return failures;
 }
