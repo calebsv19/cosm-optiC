@@ -109,13 +109,55 @@ surface photon map and volume beam map helpers while keeping render contribution
 outside this module.
 
 `TEST_RUNNER_GROUP=runtime_caustic_photon_scene_trace_3d make -C ray_tracing test`
-is the focused PPM-20 slice-one general traversal proof. It builds a two-interface
-glass slab in a real `RuntimeScene3D`, rebuilds TLAS, proves both photon hits use
-the shared TLAS route without flattened fallback, retains resolved material and
-object/primitive/triangle identity for every hit, and matches deterministic
-entry/exit direction, branch, termination, and flux against the descriptor-fed
-oracle. Separate cases prove unresolved-material diagnostics and opaque-hit
-payload retention. No map storage or render contribution occurs in this group.
+is the focused PPM-20 plus completed PPM-21 general traversal proof. It retains
+the two-interface glass-slab TLAS and descriptor-oracle checks, unresolved
+material diagnostics, and opaque-hit payload coverage. Additional one-hit
+fixtures inject deterministic lobe/direction samples and prove diffuse,
+glossy, perfect-specular, transmission, emissive, and zero-throughput absorbed
+events, including selected lobe, branch/angular/full path PDF, outgoing
+direction, throughput, terminal reason, and shared-TLAS route readback. No
+recursive continuation, map storage, or render contribution occurs. The seeded
+fixture additionally proves replay-stable renderer-owned samples and explicit
+roulette survival/termination state through the same one-hit TLAS seam.
+
+`TEST_RUNNER_GROUP=runtime_caustic_photon_bsdf_policy_3d make -C ray_tracing test`
+is the focused PPM-21 slice-one mixed-BSDF policy proof. It validates malformed
+payload rejection, diffuse and mirror/specular cases, Fresnel-adjusted mixed
+diffuse/glossy/transmission candidate weights, normalized branch PDFs,
+sample-selected throughput compensation, expected scattered-versus-absorbed
+RGB ledgers, emissive termination, and black-surface absorption. The group does
+not exercise RNG, scene-loop selection, ray continuation, map storage, roulette,
+or production defaults.
+
+`TEST_RUNNER_GROUP=runtime_caustic_photon_bsdf_sampling_3d make -C ray_tracing test`
+is the focused PPM-21 seeded sampling and roulette proof. It validates stable
+sample replay from photon identity plus depth, independent lobe/direction/
+roulette dimensions, mixed-lobe population frequencies, RGB expected-energy
+reconciliation, shared path-depth-policy roulette decisions, survival
+reweighting, termination accounting, and statistical unbiasedness. Recursive
+scene continuation, TIR continuation, nested-media tracking, map storage, and
+production-default integration remain PPM-22 and later work.
+
+`TEST_RUNNER_GROUP=runtime_caustic_photon_path_transport_3d make -C ray_tracing test`
+is the focused PPM-22 continuation proof. The PPM-22.1 fixture traces a seeded
+photon between reflective surfaces for three shared-TLAS hits, resolves material
+state and records a distinct sample stream at every depth, applies geometric-
+normal ray offsets, preserves cumulative throughput/PDF, reproduces the same
+path on replay, and terminates through the explicit max-depth ledger. PPM-22.2
+adds distinct-object mirror-to-mirror and glass-to-mirror fixtures that prove
+ordered object
+and material resolution, reflective/refractive direction, dielectric event
+counts, cumulative branch PDF, and throughput across object boundaries.
+PPM-22.3 adds an outward-normal closed glass
+slab with an internally launched above-critical-angle path and proves four
+same-object TIR continuations, alternating reflected directions, unit branch
+PDFs, preserved throughput, no false self-hit, and max-depth termination.
+PPM-22.4 traces transparent object 51 into diffuse receiver object 52, preserves
+the incoming receiver flux and pre-event path PDF, and transactionally stores
+one receiver record plus both unique traversed beam segments. The same fixture
+proves per-path/batch accounting and zero map mutation for insufficient beam
+capacity, invalid traces, emissive terminal-before-storage paths, and
+transparent-only paths.
 
 `TEST_RUNNER_GROUP=runtime_caustic_photon_map_3d make -C ray_tracing test`
 is the focused PPM-2 surface photon-map proof. It covers map allocation,

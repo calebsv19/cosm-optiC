@@ -30,7 +30,12 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_caustic_photon_lifecycle_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_map_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_map_store_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_path_transport_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_path_population_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_beam_contribution_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_bsdf_direction_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_bsdf_policy_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_bsdf_sampling_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_receiver_contribution_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_receiver_policy_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_scene_descriptor_3d.o \
@@ -274,6 +279,9 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_emit_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_integration_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_map_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_photon_path_transport_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_photon_bsdf_policy_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_photon_bsdf_sampling_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_scene_population_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_scene_trace_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_trace_3d.o \
