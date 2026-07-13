@@ -202,6 +202,44 @@ static void test_bvh_matches_flat_trace(void) {
     RuntimeScene3D_Free(&scene);
 }
 
+static void test_bvh_float_bounds_remain_conservative_at_t_max(void) {
+    RuntimeScene3D scene;
+    Ray3D ray;
+    HitInfo3D hit = {0};
+    const double endpoint = 5.31913839;
+
+    RuntimeScene3D_Init(&scene);
+    scene.triangleMesh.triangleCapacity = 1;
+    scene.triangleMesh.triangleCount = 1;
+    scene.triangleMesh.triangles =
+        (RuntimeTriangle3D*)calloc(1u, sizeof(*scene.triangleMesh.triangles));
+    assert_true("bvh_conservative_bounds_allocate",
+                scene.triangleMesh.triangles != NULL);
+    if (!scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        return;
+    }
+    scene.triangleMesh.triangles[0] =
+        make_triangle(vec3(-1.0, endpoint, -1.0),
+                      vec3(1.0, endpoint, -1.0),
+                      vec3(0.0, endpoint, 1.0),
+                      0,
+                      0,
+                      0);
+    scene.triangleMesh.bvhDirty = true;
+    assert_true("bvh_conservative_bounds_build",
+                RuntimeTriangleMesh3D_BuildBVH(&scene.triangleMesh));
+    ray = RuntimeRay3D_Make(vec3(0.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0));
+    assert_true("bvh_conservative_bounds_endpoint_hit",
+                RuntimeTriangleBVH3D_TraceFirstHit(&scene.triangleMesh,
+                                                   &ray,
+                                                   0.0,
+                                                   endpoint,
+                                                   &hit));
+    assert_near("bvh_conservative_bounds_endpoint_t", hit.t, endpoint, 1e-12);
+    RuntimeScene3D_Free(&scene);
+}
+
 static void test_bvh_copy_preserves_trace_results(void) {
     RuntimeScene3D scene;
     RuntimeScene3D copy;
@@ -339,8 +377,8 @@ static void test_parity_route_reports_unready_accel_mismatch(void) {
     assert_true("route_parity_unready_mismatch", route_stats.parityMismatches == 1u);
     assert_true("route_parity_unready_tlas_unready", route_stats.tlasTraceUnready == 1u);
     assert_true("route_parity_unready_reason",
-                strcmp(route_stats.lastParityMismatchReason,
-                       "tlas_miss_flattened_hit") == 0);
+                strstr(route_stats.lastParityMismatchReason,
+                       "flattened_hit") != NULL);
     RuntimeRay3D_ResetTraceRouteForTests();
     RuntimeRay3D_ResetRouteStats();
     RuntimeScene3D_Free(&scene);
@@ -394,6 +432,7 @@ static void test_trace_context_owns_route_stats(void) {
 
 int main(void) {
     test_bvh_matches_flat_trace();
+    test_bvh_float_bounds_remain_conservative_at_t_max();
     test_bvh_copy_preserves_trace_results();
     test_bvh_overflow_falls_back_to_flat_trace();
     test_bvh_reports_nonfinite_centroid();

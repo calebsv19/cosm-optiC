@@ -142,6 +142,8 @@ static bool runtime_mesh_asset_document_copy(const CoreMeshAssetRuntimeDocument*
 
     result = core_mesh_asset_runtime_document_set_vertex_count(dst, src->vertex_count);
     if (result.code != CORE_OK) goto fail;
+    dst->vertex_normal_count = src->vertex_normal_count;
+    dst->normal_provenance = src->normal_provenance;
     result = core_mesh_asset_runtime_document_set_triangle_count(dst, src->triangle_count);
     if (result.code != CORE_OK) goto fail;
     result = core_mesh_asset_runtime_document_set_surface_group_count(dst,

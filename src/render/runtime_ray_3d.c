@@ -534,10 +534,23 @@ static bool runtime_ray_3d_trace_scene_first_hit_parity(
     stats->parityCheckedRays += 1u;
     if (flattened_found != tlas_found) {
         stats->parityMismatches += 1u;
-        runtime_ray_3d_set_parity_mismatch(
-            context,
-            flattened_found ? "tlas_miss_flattened_hit"
-                            : "tlas_hit_flattened_miss");
+        if (flattened_found) {
+            snprintf(reason,
+                     sizeof(reason),
+                     "tlas_%d_flattened_hit:%s:%d:t=%.6g",
+                     (int)tlas_status,
+                     flattened_hit.source.objectId,
+                     flattened_hit.triangleIndex,
+                     flattened_hit.t);
+        } else {
+            snprintf(reason,
+                     sizeof(reason),
+                     "tlas_hit_flattened_miss:%s:%d:t=%.6g",
+                     tlas_hit.source.objectId,
+                     tlas_hit.triangleIndex,
+                     tlas_hit.t);
+        }
+        runtime_ray_3d_set_parity_mismatch(context, reason);
     } else if (flattened_found &&
                !runtime_ray_3d_hits_match(&flattened_hit,
                                            &tlas_hit,

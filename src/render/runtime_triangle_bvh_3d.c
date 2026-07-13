@@ -89,8 +89,19 @@ bool runtime_triangle_bvh_vec3_isfinite(Vec3 value) {
     return isfinite(value.x) && isfinite(value.y) && isfinite(value.z);
 }
 
-static RuntimeTriangleBVH3DBoundsF runtime_triangle_bvh_bounds_f_from_vec3(Vec3 value) {
-    RuntimeTriangleBVH3DBoundsF bounds = {(float)value.x, (float)value.y, (float)value.z};
+static RuntimeTriangleBVH3DBoundsF runtime_triangle_bvh_min_bounds_f_from_vec3(Vec3 value) {
+    RuntimeTriangleBVH3DBoundsF bounds = {
+        nextafterf((float)value.x, -INFINITY),
+        nextafterf((float)value.y, -INFINITY),
+        nextafterf((float)value.z, -INFINITY)};
+    return bounds;
+}
+
+static RuntimeTriangleBVH3DBoundsF runtime_triangle_bvh_max_bounds_f_from_vec3(Vec3 value) {
+    RuntimeTriangleBVH3DBoundsF bounds = {
+        nextafterf((float)value.x, INFINITY),
+        nextafterf((float)value.y, INFINITY),
+        nextafterf((float)value.z, INFINITY)};
     return bounds;
 }
 
@@ -682,9 +693,9 @@ bool RuntimeTriangleMesh3D_BuildBVH(RuntimeTriangleMesh3D* mesh) {
             return false;
         }
         bvh->triangleBoundsMin[i] =
-            runtime_triangle_bvh_bounds_f_from_vec3(triangle_bounds_min);
+            runtime_triangle_bvh_min_bounds_f_from_vec3(triangle_bounds_min);
         bvh->triangleBoundsMax[i] =
-            runtime_triangle_bvh_bounds_f_from_vec3(triangle_bounds_max);
+            runtime_triangle_bvh_max_bounds_f_from_vec3(triangle_bounds_max);
     }
     bvh->centroidBuildCpuMs += runtime_triangle_bvh_clock_elapsed_ms(stage_start);
     stage_start = clock();

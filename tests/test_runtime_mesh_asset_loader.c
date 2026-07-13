@@ -91,6 +91,75 @@ static int find_loaded_asset(const RayTracingRuntimeMeshAssetSet* set, const cha
     return -1;
 }
 
+static int test_runtime_mesh_asset_loader_cache_preserves_vertex_normal_contract(void) {
+    const char* dir = "/private/tmp/ray_tracing_mesh_normal_cache";
+    const char* assets_dir = "/private/tmp/ray_tracing_mesh_normal_cache/assets";
+    const char* mesh_dir =
+        "/private/tmp/ray_tracing_mesh_normal_cache/assets/mesh_assets";
+    const char* scene_path = "/private/tmp/ray_tracing_mesh_normal_cache/scene_runtime.json";
+    const char* asset_path =
+        "/private/tmp/ray_tracing_mesh_normal_cache/assets/mesh_assets/normal_triangle.runtime.json";
+    const char* scene_json =
+        "{\"objects\":[{\"object_id\":\"normal_triangle_instance\","
+        "\"object_type\":\"mesh_asset_instance\","
+        "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"normal_triangle\"}}]}";
+    const char* asset_json =
+        "{\"schema_family\":\"codework_geometry\","
+        "\"schema_variant\":\"mesh_asset_runtime_v1\",\"schema_version\":1,"
+        "\"asset_id\":\"normal_triangle\",\"source_asset_id\":\"normal_triangle\","
+        "\"asset_type\":\"solid_mesh\","
+        "\"local_bounds\":{\"min\":{\"x\":0,\"y\":0,\"z\":0},"
+        "\"max\":{\"x\":1,\"y\":1,\"z\":0}},"
+        "\"topology_flags\":{\"closed_volume\":false,\"manifold_expected\":false},"
+        "\"surface_groups\":[{\"group_id\":\"surface\",\"semantic\":\"surface\","
+        "\"triangle_span\":{\"start\":0,\"count\":1}}],"
+        "\"mesh\":{\"vertex_count\":3,\"normal_count\":3,"
+        "\"normal_provenance\":\"generated_smooth\","
+        "\"vertices\":[{\"x\":0,\"y\":0,\"z\":0},{\"x\":1,\"y\":0,\"z\":0},"
+        "{\"x\":0,\"y\":1,\"z\":0}],"
+        "\"normals\":[{\"x\":0,\"y\":0,\"z\":1},{\"x\":0,\"y\":0,\"z\":1},"
+        "{\"x\":0,\"y\":0,\"z\":1}],"
+        "\"triangle_count\":1,\"triangles\":[{\"a\":0,\"b\":1,\"c\":2,"
+        "\"surface_group_id\":\"surface\"}]}}";
+    RayTracingRuntimeMeshAssetSet set;
+    char diagnostics[256] = {0};
+    bool ok = false;
+
+    mkdir(dir, 0777);
+    mkdir(assets_dir, 0777);
+    mkdir(mesh_dir, 0777);
+    assert_true("mesh_normal_cache_write_scene", write_text_file(scene_path, scene_json));
+    assert_true("mesh_normal_cache_write_asset", write_text_file(asset_path, asset_json));
+    ray_tracing_runtime_mesh_assets_reset_cache();
+    for (int pass = 0; pass < 2; ++pass) {
+        ray_tracing_runtime_mesh_asset_set_init(&set);
+        ok = ray_tracing_runtime_mesh_assets_load_scene_file(scene_path,
+                                                              &set,
+                                                              diagnostics,
+                                                              sizeof(diagnostics));
+        assert_true(pass == 0 ? "mesh_normal_cache_first_load" :
+                                "mesh_normal_cache_second_load",
+                    ok);
+        if (ok && set.asset_count == 1) {
+            assert_true(pass == 0 ? "mesh_normal_cache_first_count" :
+                                    "mesh_normal_cache_second_count",
+                        set.assets[0].document.vertex_normal_count == 3u);
+            assert_true(pass == 0 ? "mesh_normal_cache_first_provenance" :
+                                    "mesh_normal_cache_second_provenance",
+                        set.assets[0].document.normal_provenance ==
+                            CORE_MESH_ASSET_RUNTIME_NORMAL_PROVENANCE_GENERATED_SMOOTH);
+        }
+        ray_tracing_runtime_mesh_asset_set_free(&set);
+    }
+    ray_tracing_runtime_mesh_assets_reset_cache();
+    remove(asset_path);
+    remove(scene_path);
+    rmdir(mesh_dir);
+    rmdir(assets_dir);
+    rmdir(dir);
+    return 0;
+}
+
 static int test_runtime_mesh_asset_loader_resolves_and_loads_mrt0_fixture(void) {
     RayTracingRuntimeMeshAssetSet set;
     char diagnostics[256] = {0};
@@ -1286,6 +1355,7 @@ int run_test_runtime_mesh_asset_loader_tests(void) {
     int before = g_runtime_mesh_asset_loader_failures;
 
     test_runtime_mesh_asset_loader_resolves_and_loads_mrt0_fixture();
+    test_runtime_mesh_asset_loader_cache_preserves_vertex_normal_contract();
     test_runtime_mesh_asset_loader_reports_missing_asset();
     test_runtime_mesh_asset_loader_reports_malformed_asset();
     test_runtime_mesh_asset_loader_uses_line_drawing_runtime_path_hint();
