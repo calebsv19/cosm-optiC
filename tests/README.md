@@ -108,6 +108,15 @@ The PPM-8 coverage stores traced mesh-dielectric output into the existing
 surface photon map and volume beam map helpers while keeping render contribution
 outside this module.
 
+`TEST_RUNNER_GROUP=runtime_caustic_photon_scene_trace_3d make -C ray_tracing test`
+is the focused PPM-20 slice-one general traversal proof. It builds a two-interface
+glass slab in a real `RuntimeScene3D`, rebuilds TLAS, proves both photon hits use
+the shared TLAS route without flattened fallback, retains resolved material and
+object/primitive/triangle identity for every hit, and matches deterministic
+entry/exit direction, branch, termination, and flux against the descriptor-fed
+oracle. Separate cases prove unresolved-material diagnostics and opaque-hit
+payload retention. No map storage or render contribution occurs in this group.
+
 `TEST_RUNNER_GROUP=runtime_caustic_photon_map_3d make -C ray_tracing test`
 is the focused PPM-2 surface photon-map proof. It covers map allocation,
 explicit surface-hit storage/query, PDF-normalized query flux, diagnostics,
@@ -168,6 +177,14 @@ generated visual output, and positive surface-cache sampling contribution. The
 render-prep path no longer writes a synthetic dielectric-centroid cache
 footprint; it stores traced prepared-scene receiver hits through the production
 integration receiver-policy adapter before cache conversion.
+
+`TEST_RUNNER_GROUP=runtime_caustic_photon_scene_population_3d make -C ray_tracing test`
+is the focused PPM-20 slice-two proof. It resolves an opaque receiver through
+the shared TLAS route after the general scene tracer's dielectric exit, stores
+one surface record and one beam segment through the existing map adapters, and
+proves exact identity, position, flux, PDF, and segment parity against the
+descriptor-trace adapters. It also proves transparent-receiver rejection before
+storage and reason-coded partial-store accounting when one target map rejects.
 
 `test-ray-tracing-spatial-caustic-phase6-surface-matrix` is the local Phase 6
 surface-calibration proof target. It renders off, analytic-only,
