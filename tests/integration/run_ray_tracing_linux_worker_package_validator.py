@@ -32,8 +32,12 @@ def fake_elf(machine: int) -> bytes:
 
 
 def fixture_data(name: str, machine: int | None) -> bytes:
-    if name.endswith("/manifest.json"):
-        return b'{"platform":"linux-x86_64"}\n'
+    if name.endswith("/manifest.json") or name.endswith("/package_manifest.json"):
+        return (
+            b'{"platform":"linux-x86_64","capabilities":['
+            b'"trio-headless-v1","scene-project-portable-v1",'
+            b'"ray-tracing-project-render-v1","platform-linux-x86_64-v1"]}\n'
+        )
     if any(name.endswith("/" + relative) for relative in REQUIRED_EXECUTABLES[:2]):
         return b"not-elf\n" if machine is None else fake_elf(machine)
     return b"#!/usr/bin/env bash\n" if name.endswith("/bin/run_worker.sh") else b"x\n"
@@ -58,6 +62,7 @@ def valid_members() -> list[tuple[str, int]]:
     members.extend(
         [
             (f"{PACKAGE_ROOT}/manifest.json", 0o644),
+            (f"{PACKAGE_ROOT}/package_manifest.json", 0o644),
             (f"{PACKAGE_ROOT}/docs/headless_agent_render_cli.md", 0o644),
             (f"{PACKAGE_ROOT}/config/scene_config.json", 0o644),
         ]

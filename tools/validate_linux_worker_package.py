@@ -34,6 +34,11 @@ ELF_MACHINE_BY_PLATFORM = {
     "linux-aarch64": 183,
 }
 
+PLATFORM_CAPABILITY_BY_PLATFORM = {
+    "linux-x86_64": "platform-linux-x86_64-v1",
+    "linux-aarch64": "platform-linux-aarch64-v1",
+}
+
 
 def fail(message: str) -> int:
     print(message, file=sys.stderr)
@@ -114,6 +119,37 @@ def validate_archive(path: str, package_root: str, platform: str) -> int:
             return fail(
                 f"worker manifest platform expected {platform!r}, "
                 f"got {manifest.get('platform')!r}"
+            )
+        expected_capabilities = {
+            "trio-headless-v1",
+            "scene-project-portable-v1",
+            "ray-tracing-project-render-v1",
+            PLATFORM_CAPABILITY_BY_PLATFORM[platform],
+        }
+        if set(manifest.get("capabilities") or []) != expected_capabilities:
+            return fail("manifest.json capabilities do not match the RayTracing package contract")
+
+        package_manifest_name = f"{package_root}/package_manifest.json"
+        package_manifest_member = by_name.get(package_manifest_name)
+        if package_manifest_member is None:
+            return fail(f"missing worker package manifest: {package_manifest_name}")
+        extracted_package_manifest = archive.extractfile(package_manifest_member)
+        try:
+            package_manifest = json.loads(
+                extracted_package_manifest.read().decode("utf-8")
+                if extracted_package_manifest is not None
+                else ""
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return fail(f"invalid worker package manifest JSON: {package_manifest_name}")
+        if package_manifest.get("platform") != platform:
+            return fail(
+                f"worker package manifest platform expected {platform!r}, "
+                f"got {package_manifest.get('platform')!r}"
+            )
+        if set(package_manifest.get("capabilities") or []) != expected_capabilities:
+            return fail(
+                "package_manifest.json capabilities do not match the RayTracing package contract"
             )
     return 0
 
