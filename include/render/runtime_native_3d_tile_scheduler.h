@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdatomic.h>
 
 #include "render/integrators/integrator_common.h"
 #include "render/runtime_native_3d_render.h"
@@ -33,13 +34,16 @@ typedef bool (*RuntimeNative3DTileSchedulerProgressCallback)(
     void* user_data);
 
 typedef struct RuntimeNative3DTileSchedulerCancelToken {
-    const volatile bool* cancelRequested;
+    const atomic_bool* cancelRequested;
     uint64_t generation;
 } RuntimeNative3DTileSchedulerCancelToken;
 
 typedef struct RuntimeNative3DTileSchedulerControl {
     const RuntimeNative3DTileSchedulerCancelToken* cancelToken;
 } RuntimeNative3DTileSchedulerControl;
+
+bool RuntimeNative3DTileSchedulerCancelToken_IsRequested(
+    const RuntimeNative3DTileSchedulerCancelToken* token);
 
 int RuntimeNative3DTileSchedulerResolveTileSize(int requested);
 int RuntimeNative3DTileSchedulerResolveTileSizeForScale(int requested, int render_scale);

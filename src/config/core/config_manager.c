@@ -35,6 +35,7 @@ typedef enum {
 AnimationConfig animSettings = {
     .interactiveMode = true,
     .deepRenderMode = false,
+    .asyncDeepRender = false,
     .bounceMode = false,
     .autoMP4 = false,
     .bounceLimit = 10,

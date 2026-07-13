@@ -57,7 +57,7 @@ static int test_runtime_native_3d_render_request_snapshot_copies_async_boundary_
         .temporalSubpassIndex = 2u,
         .temporalSubpassCount = 8u,
     };
-    volatile bool cancel_requested = false;
+    atomic_bool cancel_requested = ATOMIC_VAR_INIT(false);
     RuntimeNative3DTileSchedulerCancelToken cancel_token = {
         .cancelRequested = &cancel_requested,
         .generation = 17u,
@@ -2205,7 +2205,7 @@ static int test_runtime_native_3d_tiled_cancel_before_dispatch_blocks_publish(vo
     RuntimeNative3DPreparedFrame frame = {0};
     RuntimeScene3D scene;
     RuntimeNative3DRenderStats stats = {0};
-    volatile bool cancel_requested = true;
+    atomic_bool cancel_requested = ATOMIC_VAR_INIT(true);
     RuntimeNative3DTileSchedulerCancelToken cancel_token = {0};
     RuntimeNative3DTileSchedulerControl scheduler_control = {0};
     uint8_t pixel_buffer[32 * 32 * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES];

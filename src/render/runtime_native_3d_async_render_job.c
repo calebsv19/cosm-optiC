@@ -10,7 +10,7 @@ struct RuntimeNative3DAsyncRenderJob {
     bool mutexReady;
     bool threadStarted;
     bool published;
-    volatile bool cancelRequested;
+    atomic_bool cancelRequested;
     RuntimeNative3DAsyncRenderJobStatus status;
     RuntimeNative3DRenderRequestSnapshot snapshot;
     RuntimeNative3DAsyncRenderJobRunFn runFn;
@@ -45,7 +45,9 @@ static void* runtime_native_3d_async_render_job_worker(void* user_data) {
                     &job->snapshot.cancelToken,
                     job->userData,
                     &result);
-    cancel_requested = job->cancelRequested || result.cancelRequested;
+    cancel_requested =
+        atomic_load_explicit(&job->cancelRequested, memory_order_acquire) ||
+        result.cancelRequested;
     result.cancelRequested = cancel_requested;
     result.canceled = result.canceled || cancel_requested;
     result.succeeded = ok && !result.canceled;
@@ -74,6 +76,7 @@ RuntimeNative3DAsyncRenderJob* RuntimeNative3DAsyncRenderJob_Create(void) {
         return NULL;
     }
     job->mutexReady = true;
+    atomic_init(&job->cancelRequested, false);
     job->status = RUNTIME_NATIVE_3D_ASYNC_RENDER_JOB_IDLE;
     return job;
 }
@@ -112,7 +115,7 @@ bool RuntimeNative3DAsyncRenderJob_Start(
     snapshot.cancelToken.generation = desc->generation;
     snapshot.cancelGeneration = desc->generation;
 
-    job->cancelRequested = false;
+    atomic_store_explicit(&job->cancelRequested, false, memory_order_release);
     job->published = false;
     job->snapshot = snapshot;
     job->runFn = desc->run_fn;
@@ -138,9 +141,7 @@ bool RuntimeNative3DAsyncRenderJob_Start(
 
 void RuntimeNative3DAsyncRenderJob_RequestCancel(RuntimeNative3DAsyncRenderJob* job) {
     if (!job) return;
-    pthread_mutex_lock(&job->mutex);
-    job->cancelRequested = true;
-    pthread_mutex_unlock(&job->mutex);
+    atomic_store_explicit(&job->cancelRequested, true, memory_order_release);
 }
 
 bool RuntimeNative3DAsyncRenderJob_Join(RuntimeNative3DAsyncRenderJob* job) {

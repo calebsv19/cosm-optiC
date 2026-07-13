@@ -304,6 +304,11 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_native_3d_denoise.o \
 	$(BUILD_DIR)/tests/test_runtime_native_3d_async_render_bridge.o \
 	$(BUILD_DIR)/tests/test_runtime_native_3d_async_render_job.o \
+	$(BUILD_DIR)/tests/test_ray_tracing_deep_render_session.o \
+	$(BUILD_DIR)/tests/test_ray_tracing_deep_render_listener.o \
+	$(BUILD_DIR)/tests/test_ray_tracing_deep_render_completion.o \
+	$(BUILD_DIR)/tests/test_ray_tracing_deep_render_cancellation.o \
+	$(BUILD_DIR)/tests/test_ray_tracing_deep_render_desktop_host.o \
 	$(BUILD_DIR)/tests/test_runtime_native_3d_render.o \
 	$(BUILD_DIR)/tests/test_runtime_native_3d_render_live_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_native_3d_render_prepared_suite.o \

@@ -497,6 +497,16 @@ static int test_menu_button_layout_compacts_scene_mode_controls_in_3d(void) {
                 buttons.interactiveRect.w == 0 && buttons.interactiveRect.h == 0);
     assert_true("menu_scene_mode_deep_render_compact_in_3d",
                 buttons.deepRenderRect.h < 40);
+    assert_true("menu_scene_mode_async_render_visible_in_3d",
+                buttons.asyncDeepRenderRect.w > 0 &&
+                    buttons.asyncDeepRenderRect.h > 0);
+    assert_true("menu_scene_mode_async_render_shares_mode_row",
+                buttons.asyncDeepRenderRect.y == buttons.deepRenderRect.y &&
+                    buttons.asyncDeepRenderRect.x >=
+                        buttons.deepRenderRect.x + buttons.deepRenderRect.w);
+    assert_true("menu_scene_mode_bounce_below_async_render",
+                buttons.bounceRect.y >=
+                    buttons.deepRenderRect.y + buttons.deepRenderRect.h);
     assert_true("menu_scene_mode_bounce_auto_same_row",
                 buttons.bounceRect.y == buttons.autoMp4Rect.y &&
                 buttons.bounceRect.x < buttons.autoMp4Rect.x);

@@ -45,11 +45,13 @@ static bool async_render_job_probe_wait_for_cancel(
         return false;
     }
     probe->entered = true;
-    while (!*cancel_token->cancelRequested && spins < 10000) {
+    while (!RuntimeNative3DTileSchedulerCancelToken_IsRequested(cancel_token) &&
+           spins < 10000) {
         usleep(1000);
         spins++;
     }
-    probe->saw_cancel_requested = *cancel_token->cancelRequested;
+    probe->saw_cancel_requested =
+        RuntimeNative3DTileSchedulerCancelToken_IsRequested(cancel_token);
     out_result->cancelRequested = probe->saw_cancel_requested;
     out_result->canceled = probe->saw_cancel_requested;
     return !probe->saw_cancel_requested;

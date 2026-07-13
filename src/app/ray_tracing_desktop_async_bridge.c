@@ -284,8 +284,8 @@ static bool desktop_async_worker_run(
         NULL,
         &control,
         &stats);
-    cancel_requested = cancel_token && cancel_token->cancelRequested &&
-                       *cancel_token->cancelRequested;
+    cancel_requested =
+        RuntimeNative3DTileSchedulerCancelToken_IsRequested(cancel_token);
     if (ok && !cancel_requested) {
         ok = RuntimeNative3DPreviewReconstructABGRWithMode(state->renderPixels,
                                                            state->renderWidth,
@@ -415,7 +415,7 @@ static bool desktop_async_start_job(RayTracingDesktopAsyncBridgeState* state,
     RuntimeNative3DAsyncRenderJobStartDesc start_desc = {0};
     RuntimeSceneAcceleration3DDiagnostics accel_diag =
         RuntimeSceneAcceleration3DDiagnostics_Disabled();
-    volatile bool cancel_probe = false;
+    atomic_bool cancel_probe = ATOMIC_VAR_INIT(false);
     RuntimeNative3DTileSchedulerCancelToken cancel_token = {0};
     bool display_dimensions_changed = false;
     size_t render_bytes = 0u;

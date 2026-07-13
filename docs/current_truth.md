@@ -580,6 +580,13 @@ Last updated: 2026-07-13
   - absolute start-frame selection
   - resume from highest existing saved frame
   - shared absolute-frame truth across output numbering and path sampling
+  - a persisted, default-off `Async Render` mode for native tiled `3D` Deep
+    Render. One immutable prepared-frame request is owned by a background job;
+    matching-generation tile progress is retained and presented by the desktop
+    thread, output advances only after verified frame commit, and close/Escape
+    drains cancellation before request teardown
+  - conservative synchronous fallback when native tiled routing is unavailable
+    or dynamic volume/water frame dependencies are selected
   - authored Bezier light/camera path sampling in native `3D` deep render even
     when an older saved config still carries the legacy `interactiveMode=true`
     bit; deep-render config load treats deep render as the authoritative
@@ -588,7 +595,7 @@ Last updated: 2026-07-13
   - legacy `Interactive Mode` remains available in `2D` mode for the quick
     mouse-driven light sandbox
   - native/compact `3D` mode hides the oversized interactive primary control,
-    compresses `3D Render`, `Bounce`, `Auto MP4`, and integrator controls, and
+    compresses `3D Render`, `Async Render`, `Bounce`, `Auto MP4`, and integrator controls, and
     gives the always-visible runtime scene list more vertical space
 - Export/video workflow state:
   - `frameDir` remains frame export root

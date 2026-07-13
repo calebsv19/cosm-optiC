@@ -57,6 +57,11 @@ int run_test_ui_menu_contract_tests(void);
 int run_test_scene_project_render_request_tests(void);
 int run_test_runtime_native_3d_async_render_bridge_tests(void);
 int run_test_runtime_native_3d_async_render_job_tests(void);
+int run_test_ray_tracing_deep_render_session_tests(void);
+int run_test_ray_tracing_deep_render_listener_tests(void);
+int run_test_ray_tracing_deep_render_completion_tests(void);
+int run_test_ray_tracing_deep_render_cancellation_tests(void);
+int run_test_ray_tracing_deep_render_desktop_host_tests(void);
 
 typedef int (*TestGroupFn)(void);
 
@@ -161,6 +166,13 @@ int test_runner_main(int argc, char** argv) {
         {"runtime_native_3d_denoise", run_test_runtime_native_3d_denoise_tests},
         {"runtime_native_3d_async_render_bridge", run_test_runtime_native_3d_async_render_bridge_tests},
         {"runtime_native_3d_async_render_job", run_test_runtime_native_3d_async_render_job_tests},
+        {"ray_tracing_deep_render_session", run_test_ray_tracing_deep_render_session_tests},
+        {"ray_tracing_deep_render_listener", run_test_ray_tracing_deep_render_listener_tests},
+        {"ray_tracing_deep_render_completion", run_test_ray_tracing_deep_render_completion_tests},
+        {"ray_tracing_deep_render_cancellation",
+         run_test_ray_tracing_deep_render_cancellation_tests},
+        {"ray_tracing_deep_render_desktop_host",
+         run_test_ray_tracing_deep_render_desktop_host_tests},
         {"runtime_native_3d_render", run_test_runtime_native_3d_render_tests},
         {"runtime_native_3d_render_live", run_test_runtime_native_3d_render_live_suite},
         {"runtime_native_3d_render_prepared", run_test_runtime_native_3d_render_prepared_suite},

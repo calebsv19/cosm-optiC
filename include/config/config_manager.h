@@ -121,6 +121,7 @@ typedef enum {
 typedef struct {
     bool interactiveMode;
     bool deepRenderMode;
+    bool asyncDeepRender;
     bool bounceMode;
     bool autoMP4;
     int bounceLimit;

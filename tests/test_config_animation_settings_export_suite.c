@@ -1786,6 +1786,8 @@ static int test_animation_deep_render_frame_resume_roundtrip_and_clamp(void) {
                 animSettings.startFrameIndex == 0);
     assert_true("deep_render_resume_missing_defaults_off",
                 !animSettings.resumeFromExistingFrames);
+    assert_true("deep_render_async_missing_defaults_off",
+                !animSettings.asyncDeepRender);
 
     assert_true("deep_render_start_resume_write_invalid",
                 write_text_file(kRuntimeAnimationConfigPath, json_invalid_start_resume));
@@ -1797,14 +1799,18 @@ static int test_animation_deep_render_frame_resume_roundtrip_and_clamp(void) {
 
     animSettings.startFrameIndex = 117;
     animSettings.resumeFromExistingFrames = true;
+    animSettings.asyncDeepRender = true;
     SaveAnimationConfig();
     animSettings.startFrameIndex = 0;
     animSettings.resumeFromExistingFrames = false;
+    animSettings.asyncDeepRender = false;
     LoadAnimationConfig();
     assert_true("deep_render_start_roundtrip_persisted",
                 animSettings.startFrameIndex == 117);
     assert_true("deep_render_resume_roundtrip_persisted",
                 animSettings.resumeFromExistingFrames);
+    assert_true("deep_render_async_roundtrip_persisted",
+                animSettings.asyncDeepRender);
 
     restore_runtime_animation_config(backup, backup_size);
     return 0;

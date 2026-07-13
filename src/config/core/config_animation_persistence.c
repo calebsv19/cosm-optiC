@@ -268,6 +268,9 @@ void SaveAnimationConfig(void) {
 
     json_object_object_add(config, "interactiveMode", json_object_new_boolean(animSettings.interactiveMode));
     json_object_object_add(config, "deepRenderMode", json_object_new_boolean(animSettings.deepRenderMode));
+    json_object_object_add(config,
+                           "asyncDeepRender",
+                           json_object_new_boolean(animSettings.asyncDeepRender));
     json_object_object_add(config, "bounceMode", json_object_new_boolean(animSettings.bounceMode));
     json_object_object_add(config, "autoMP4", json_object_new_boolean(animSettings.autoMP4));
     json_object_object_add(config, "bounceLimit", json_object_new_int(animSettings.bounceLimit));
@@ -493,6 +496,10 @@ void LoadAnimationConfig(void) {
         animSettings.interactiveMode = json_object_get_boolean(temp);
     if (json_object_object_get_ex(config, "deepRenderMode", &temp))
         animSettings.deepRenderMode = json_object_get_boolean(temp);
+    if (json_object_object_get_ex(config, "asyncDeepRender", &temp))
+        animSettings.asyncDeepRender = json_object_get_boolean(temp);
+    else
+        animSettings.asyncDeepRender = false;
     if (json_object_object_get_ex(config, "bounceMode", &temp))
         animSettings.bounceMode = json_object_get_boolean(temp);
     if (animSettings.deepRenderMode) {

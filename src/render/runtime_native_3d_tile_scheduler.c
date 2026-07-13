@@ -36,6 +36,12 @@ static void runtime_native_3d_tile_scheduler_free(RuntimeNative3DTileScheduler* 
     runtime_native_3d_tile_scheduler_reset(scheduler);
 }
 
+bool RuntimeNative3DTileSchedulerCancelToken_IsRequested(
+    const RuntimeNative3DTileSchedulerCancelToken* token) {
+    return token && token->cancelRequested &&
+           atomic_load_explicit(token->cancelRequested, memory_order_acquire);
+}
+
 static bool runtime_native_3d_tile_scheduler_cancel_requested(
     RuntimeNative3DTileScheduler* scheduler) {
     const RuntimeNative3DTileSchedulerCancelToken* token = NULL;
@@ -46,7 +52,7 @@ static bool runtime_native_3d_tile_scheduler_cancel_requested(
     }
     scheduler->cancelCheckCount += 1;
     token = scheduler->control ? scheduler->control->cancelToken : NULL;
-    requested = token && token->cancelRequested && *token->cancelRequested;
+    requested = RuntimeNative3DTileSchedulerCancelToken_IsRequested(token);
     if (requested) {
         scheduler->cancelRequested = true;
         scheduler->cancelRequestedCount += 1;

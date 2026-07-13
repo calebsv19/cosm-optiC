@@ -14,6 +14,9 @@ Buttons (top to bottom)
 - Interactive Mode: legacy `2D` quick-light sandbox; hidden as a primary
   control in native/compact `3D`.
 - Deep Render / 3D Render: enable offline/deep render settings.
+- Async Render: opt into the native tiled `3D` Deep Render worker/session path.
+  It is off by default; unsupported routes and dynamic volume/water selection
+  retain the synchronous Deep Render path.
 - Bounce / Bounce Mode: toggle bounce animation for deep render playback.
 - Auto MP4: auto-generate MP4 after deep render finishes.
 - Integrator: cycles Forward Light ↔ Hybrid (Camera Path) ↔ Direct Light (LOS-only).

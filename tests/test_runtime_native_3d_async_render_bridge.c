@@ -7,7 +7,7 @@
 
 static RuntimeNative3DRenderRequestSnapshot make_bridge_snapshot(void) {
     RuntimeNative3DRenderRequestSnapshot snapshot;
-    static volatile bool cancel_requested = false;
+    static atomic_bool cancel_requested = ATOMIC_VAR_INIT(false);
     RuntimeNative3DTileSchedulerCancelToken cancel_token = {
         .cancelRequested = &cancel_requested,
         .generation = 9u,

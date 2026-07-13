@@ -577,13 +577,22 @@ void menu_render_build_button_layout(TTF_Font* font,
         layout.deepRenderRect = build_adaptive_button_rect(font,
                                                            leftX,
                                                            leftTopY,
-                                                           TOGGLE_BUTTON_WIDTH,
+                                                           mode_row_w,
                                                            COMPACT_TOGGLE_BUTTON_HEIGHT,
                                                            "3D Render",
-                                                           maxLeftWidth);
+                                                           mode_row_w);
+        layout.asyncDeepRenderRect = build_adaptive_button_rect(
+            font,
+            leftX + maxLeftWidth - mode_row_w,
+            layout.deepRenderRect.y,
+            mode_row_w,
+            COMPACT_TOGGLE_BUTTON_HEIGHT,
+            "Async Render",
+            mode_row_w);
         layout.bounceRect = build_adaptive_button_rect(font,
                                                        leftX,
-                                                       layout.deepRenderRect.y + layout.deepRenderRect.h + 8,
+                                                       layout.deepRenderRect.y +
+                                                           layout.deepRenderRect.h + 8,
                                                        mode_row_w,
                                                        COMPACT_SUBSETTING_BUTTON_HEIGHT,
                                                        "Bounce",
@@ -611,8 +620,19 @@ void menu_render_build_button_layout(TTF_Font* font,
                                                            TOGGLE_BUTTON_WIDTH, TOGGLE_BUTTON_HEIGHT,
                                                            "Deep Render", maxLeftWidth);
 
+        layout.asyncDeepRenderRect = build_adaptive_button_rect(
+            font,
+            subX,
+            layout.deepRenderRect.y + layout.deepRenderRect.h + 15,
+            SUBSETTING_BUTTON_WIDTH,
+            SUBSETTING_BUTTON_HEIGHT,
+            "Async Render",
+            maxLeftWidth);
+
         layout.bounceRect = build_adaptive_button_rect(font, subX,
-                                                       layout.deepRenderRect.y + layout.deepRenderRect.h + 15,
+                                                       layout.asyncDeepRenderRect.y +
+                                                           layout.asyncDeepRenderRect.h +
+                                                           TOGGLE_BUTTON_SPACING,
                                                        SUBSETTING_BUTTON_WIDTH, SUBSETTING_BUTTON_HEIGHT,
                                                        "Bounce Mode", maxLeftWidth);
         layout.autoMp4Rect = build_adaptive_button_rect(font, subX,
@@ -712,6 +732,9 @@ void menu_render_build_button_layout(TTF_Font* font,
     }
     leftColumnRight = max_int(layout.interactiveRect.x + layout.interactiveRect.w,
                               layout.deepRenderRect.x + layout.deepRenderRect.w);
+    leftColumnRight = max_int(leftColumnRight,
+                              layout.asyncDeepRenderRect.x +
+                                  layout.asyncDeepRenderRect.w);
     leftColumnRight = max_int(leftColumnRight, layout.bounceRect.x + layout.bounceRect.w);
     leftColumnRight = max_int(leftColumnRight, layout.autoMp4Rect.x + layout.autoMp4Rect.w);
     leftColumnRight = max_int(leftColumnRight, layout.integratorRect.x + layout.integratorRect.w);

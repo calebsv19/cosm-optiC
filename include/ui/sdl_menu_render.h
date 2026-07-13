@@ -40,6 +40,7 @@ typedef struct SliderLayout {
 typedef struct MenuButtonLayout {
     SDL_Rect interactiveRect;
     SDL_Rect deepRenderRect;
+    SDL_Rect asyncDeepRenderRect;
     SDL_Rect bounceRect;
     SDL_Rect autoMp4Rect;
     SDL_Rect integratorRect;

@@ -11,6 +11,7 @@
 #include "app/data_paths.h"
 #include "app/ray_tracing_runtime_host.h"
 #include "app/ray_tracing_core_sim_runtime_frame.h"
+#include "app/ray_tracing_deep_render_desktop_host.h"
 #include "app/ray_tracing_desktop_async_bridge.h"
 #include "app/render_export_batch.h"
 #include "app/runtime_time.h"
@@ -208,6 +209,7 @@ int AnimationInit(void) {
 
 
 void AnimationCleanup(void) {   
+    RayTracingDeepRenderDesktopHost_Shutdown();
     RayTracingDesktopAsyncBridge_Shutdown();
     CleanupRayTracing();
     ray_tracing_runtime_host_shutdown();
@@ -615,6 +617,14 @@ static void SubmitRenderFrame(const RayTracingFrameRenderInputs* inputs,
     if (!inputs) {
         return;
     }
+    if (RayTracingDeepRenderDesktopHost_SubmitFrame(window,
+                                                    renderer,
+                                                    inputs->light_x,
+                                                    inputs->light_y,
+                                                    frameCounter,
+                                                    running)) {
+        return;
+    }
     if (RayTracingDesktopAsyncBridge_SubmitFrame(window,
                                                 renderer,
                                                 inputs->light_x,
@@ -738,8 +748,13 @@ void RunMainLoop(void) {
         fprintf(stderr, "ray_tracing: failed to initialize core_sim runtime frame loop.\n");
         running = false;
     }
+    if (running) {
+        (void)RayTracingDeepRenderDesktopHost_BeginRun(
+            s_deepRenderStartFrameIndex, animSettings.frameLimit);
+    }
     
-    while (running && !quitRequested) {
+    while ((running && !quitRequested) ||
+           RayTracingDeepRenderDesktopHost_HasActiveWork()) {
         KitRuntimeDiagInputFrame input_frame = {0};
         RayTracingInputRoutingResult input_result = {0};
         RayTracingFrameRenderInputs render_inputs = {0};
@@ -852,7 +867,8 @@ void RunMainLoop(void) {
         SDL_Delay(16);  // Prevent CPU overload, ~60FPS
     }
  
-    if (animSettings.deepRenderMode && !quitRequested) {
+    if (animSettings.deepRenderMode && !quitRequested &&
+        !RayTracingDeepRenderDesktopHost_IsSelected()) {
         printf("Deep render mode complete. Press close on the window to exit.\n");
         bool waitingForExit = true;
         SDL_Event event; 
@@ -942,7 +958,9 @@ int AnimationRunAppSession(void) {
         printf("Starting animation loop...\n");
         RunMainLoop();
 
-        if (animSettings.autoMP4 && animSettings.deepRenderMode) {
+        if (animSettings.autoMP4 && animSettings.deepRenderMode &&
+            (!RayTracingDeepRenderDesktopHost_IsSelected() ||
+             RayTracingDeepRenderDesktopHost_CompletedSuccessfully())) {
             RayTracingRenderExportStatus export_status;
             printf("Generating MP4 automatically...\n");
             if (!ray_tracing_render_export_make_video(&export_status)) {

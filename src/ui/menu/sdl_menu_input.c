@@ -690,6 +690,11 @@ void menu_input_handle_mouse_click(SDL_Event* event,
             return;
         }
 
+        if (point_in_rect(&buttons.asyncDeepRenderRect, x, y)) {
+            animSettings.asyncDeepRender = !animSettings.asyncDeepRender;
+            return;
+        }
+
         if (point_in_rect(&buttons.autoMp4Rect, x, y)) {
             animSettings.autoMP4 = !animSettings.autoMP4;
             return;

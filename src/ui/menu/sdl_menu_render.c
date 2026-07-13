@@ -226,6 +226,11 @@ void menu_render_frame(SDL_Renderer* renderer,
                                  animSettings.deepRenderMode);
     menu_render_draw_button_rect(renderer,
                                  font,
+                                 &buttons.asyncDeepRenderRect,
+                                 "Async Render",
+                                 animSettings.asyncDeepRender);
+    menu_render_draw_button_rect(renderer,
+                                 font,
                                  &buttons.bounceRect,
                                  animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D
                                      ? "Bounce"

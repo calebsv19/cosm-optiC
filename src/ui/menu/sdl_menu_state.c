@@ -896,6 +896,7 @@ void menu_state_apply_effective_render_recipe(const MenuRuntimeState* state) {
 void menu_state_reset_defaults(MenuRuntimeState* state) {
     animSettings.interactiveMode = true;
     animSettings.deepRenderMode = false;
+    animSettings.asyncDeepRender = false;
     animSettings.bounceMode = false;
     animSettings.autoMP4 = false;
     animSettings.bounceLimit = SDL_MENU_DEFAULT_BOUNCE_LIMIT;
