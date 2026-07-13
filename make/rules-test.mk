@@ -175,6 +175,9 @@ test-runtime-mesh-asset-builder: $(RUNTIME_MESH_ASSET_BUILDER_TEST_BIN)
 test-smooth-mesh-reflection-fixtures: $(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN)
 	bash tests/integration/run_smooth_mesh_reflection_fixture_smoke.sh
 
+test-smooth-mesh-reflection-matrix: $(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN) $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	bash tests/integration/run_smooth_mesh_reflection_matrix.sh
+
 RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_BIN := $(BUILD_DIR)/tests/runtime_mesh_asset_headless_audit_test
 RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_SRCS := \
 	$(TEST_DIR)/test_runtime_mesh_asset_headless_audit.c \
