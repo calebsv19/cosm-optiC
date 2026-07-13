@@ -9,6 +9,17 @@ static double photon_path_transport_luma(Vec3 value) {
     return 0.2126 * value.x + 0.7152 * value.y + 0.0722 * value.z;
 }
 
+static Vec3 photon_path_transport_geometric_normal(const RuntimeScene3D* scene,
+                                                   const HitInfo3D* hit) {
+    if (scene && hit && hit->triangleIndex >= 0 &&
+        hit->triangleIndex < scene->triangleMesh.triangleCount &&
+        scene->triangleMesh.triangles) {
+        Vec3 normal = scene->triangleMesh.triangles[hit->triangleIndex].normal;
+        if (vec3_length(normal) > 1.0e-12) return vec3_normalize(normal);
+    }
+    return hit ? vec3_normalize(hit->normal) : vec3(0.0, 0.0, 0.0);
+}
+
 static bool photon_path_transport_append_event(
     RuntimeCausticPhotonTrace3D* trace,
     const RuntimeCausticPhotonEvent3D* event) {
@@ -209,6 +220,7 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
         HitInfo3D hit;
         Ray3D ray;
         Vec3 throughput_before = state.throughput;
+        Vec3 geometric_normal;
         bool found;
         bool terminal;
         bool exact_tir = false;
@@ -273,14 +285,17 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
         }
         hit_event->bsdfSampleStream = stream;
         hit_event->usedSeededBsdfSamples = true;
+        geometric_normal = photon_path_transport_geometric_normal(scene, &hit);
+        hit.normal = geometric_normal;
+        hit_event->hit.normal = geometric_normal;
         incident_cosine = fabs(vec3_dot(vec3_scale(state.direction, -1.0),
-                                       vec3_normalize(hit.normal)));
+                                       geometric_normal));
 
         memset(&dielectric_probe, 0, sizeof(dielectric_probe));
         if (active->continueTotalInternalReflection &&
             material.transparency > 1.0e-12 &&
             RuntimeDielectricTransport3D_Resolve(
-                &material, hit.normal, state.direction, &dielectric_probe) &&
+                &material, geometric_normal, state.direction, &dielectric_probe) &&
             dielectric_probe.totalInternalReflection) {
             exact_tir = true;
         }
@@ -346,7 +361,7 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
                 hit_event->bsdfSelection.lobe,
                 &material,
                 state.direction,
-                hit.normal,
+                geometric_normal,
                 &stream.bsdfSample.directionSample,
                 &hit_event->bsdfDirection)) {
             hit_event->termination =
@@ -428,7 +443,7 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
         event.primitiveIndex = hit.primitiveIndex;
         event.triangleIndex = hit.triangleIndex;
         event.position = hit.position;
-        event.normal = hit.normal;
+        event.normal = geometric_normal;
         event.incidentDirection = ray.direction;
         event.outgoingDirection = terminal ? vec3(0.0, 0.0, 0.0)
                                            : state.direction;
@@ -441,7 +456,7 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
         trace->finalState = state;
         trace->postExitOrigin = hit.position;
         trace->postExitDirection = event.outgoingDirection;
-        previous_normal = hit.normal;
+        previous_normal = geometric_normal;
 
         if (hit_event->bsdfSelection.termination ==
             RUNTIME_CAUSTIC_PHOTON_BSDF_TERMINATION_EMISSIVE) {

@@ -144,12 +144,15 @@ photon between reflective surfaces for three shared-TLAS hits, resolves material
 state and records a distinct sample stream at every depth, applies geometric-
 normal ray offsets, preserves cumulative throughput/PDF, reproduces the same
 path on replay, and terminates through the explicit max-depth ledger. PPM-22.2
-adds distinct-
-object mirror-to-mirror and glass-to-mirror fixtures that prove ordered object
+adds distinct-object mirror-to-mirror and glass-to-mirror fixtures that prove
+ordered object
 and material resolution, reflective/refractive direction, dielectric event
 counts, cumulative branch PDF, and throughput across object boundaries. The
-module still does not write surface or beam maps; TIR and storage acceptance
-remain subsequent PPM-22 slices.
+module still does not write surface or beam maps; storage acceptance remains a
+subsequent PPM-22 slice. PPM-22.3 adds an outward-normal closed glass
+slab with an internally launched above-critical-angle path and proves four
+same-object TIR continuations, alternating reflected directions, unit branch
+PDFs, preserved throughput, no false self-hit, and max-depth termination.
 
 `TEST_RUNNER_GROUP=runtime_caustic_photon_map_3d make -C ray_tracing test`
 is the focused PPM-2 surface photon-map proof. It covers map allocation,
