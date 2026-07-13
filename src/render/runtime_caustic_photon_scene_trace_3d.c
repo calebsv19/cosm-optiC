@@ -124,6 +124,8 @@ const char* RuntimeCausticPhotonSceneTermination3D_Label(
             return "bsdf_absorbed";
         case RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_DIRECTION_INVALID:
             return "bsdf_direction_invalid";
+        case RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_ROULETTE_TERMINATED:
+            return "bsdf_roulette_terminated";
         case RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_TRACE_ERROR:
             return "trace_error";
         case RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_NONE:
@@ -553,6 +555,9 @@ bool RuntimeCausticPhotonSceneTrace3D_TraceDeterministicBsdfHit(
                                         RUNTIME_CAUSTIC_PHOTON_REJECT_MAX_DEPTH);
         goto finish;
     }
+    hit_event->bsdfSampleStream.valid = true;
+    hit_event->bsdfSampleStream.depth = 1u;
+    hit_event->bsdfSampleStream.bsdfSample = *bsdf_sample;
 
     incident_cosine = fabs(vec3_dot(vec3_scale(state.direction, -1.0),
                                    vec3_normalize(hit.normal)));
@@ -654,6 +659,89 @@ finish:
     trace->debug.eventCount = trace->eventCount;
     *out_trace = result;
     return result.readback.succeeded;
+}
+
+bool RuntimeCausticPhotonSceneTrace3D_TraceSeededBsdfHit(
+    const RuntimeScene3D* scene,
+    const RuntimeCausticPhotonSample3D* sample,
+    uint32_t depth,
+    const RuntimeCausticPhotonSceneTraceSettings3D* settings,
+    RuntimeCausticPhotonSceneTrace3D* out_trace) {
+    RuntimeCausticPhotonBsdfSampleStream3D stream;
+    bool succeeded;
+
+    if (out_trace) memset(out_trace, 0, sizeof(*out_trace));
+    if (!out_trace ||
+        !RuntimeCausticPhotonBsdfSampling3D_Generate(sample, depth, &stream)) {
+        return false;
+    }
+    succeeded = RuntimeCausticPhotonSceneTrace3D_TraceDeterministicBsdfHit(
+        scene,
+        sample,
+        &stream.bsdfSample,
+        settings,
+        out_trace);
+    if (out_trace->readback.hitEventCount > 0u) {
+        out_trace->hitEvents[0].bsdfSampleStream = stream;
+        out_trace->hitEvents[0].usedSeededBsdfSamples = true;
+    }
+    return succeeded;
+}
+
+bool RuntimeCausticPhotonSceneTrace3D_TraceSeededBsdfHitWithRoulette(
+    const RuntimeScene3D* scene,
+    const RuntimeCausticPhotonSample3D* sample,
+    uint32_t depth,
+    const RuntimePathDepthPolicy3D* roulette_policy,
+    const RuntimeCausticPhotonSceneTraceSettings3D* settings,
+    RuntimeCausticPhotonSceneTrace3D* out_trace) {
+    RuntimeCausticPhotonSceneHitEvent3D* hit_event;
+    RuntimeCausticPhotonEvent3D* event;
+
+    if (!RuntimeCausticPhotonSceneTrace3D_TraceSeededBsdfHit(
+            scene, sample, depth, settings, out_trace)) {
+        return false;
+    }
+    if (!out_trace || out_trace->readback.hitEventCount == 0u ||
+        out_trace->trace.eventCount == 0u) {
+        return false;
+    }
+    hit_event = &out_trace->hitEvents[0];
+    if (hit_event->termination !=
+        RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_EVENT_READY) {
+        return true;
+    }
+    if (!RuntimeCausticPhotonBsdfSampling3D_EvaluateRoulette(
+            roulette_policy,
+            depth,
+            out_trace->trace.finalState.throughput,
+            hit_event->bsdfSampleStream.rouletteUnitSample,
+            &hit_event->roulette)) {
+        return false;
+    }
+
+    event = &out_trace->trace.events[out_trace->trace.eventCount - 1u];
+    out_trace->trace.finalState.pathPdf *= hit_event->roulette.branchPdf;
+    out_trace->trace.finalState.throughput = hit_event->roulette.throughputAfter;
+    event->pathPdf = out_trace->trace.finalState.pathPdf;
+    event->throughput = hit_event->roulette.throughputAfter;
+    if (!hit_event->roulette.terminated) {
+        return true;
+    }
+
+    event->kind = RUNTIME_CAUSTIC_PHOTON_EVENT_TERMINATED;
+    out_trace->trace.finalState.active = false;
+    out_trace->trace.finalState.terminated = true;
+    out_trace->trace.finalState.rejectReason =
+        RUNTIME_CAUSTIC_PHOTON_REJECT_RUSSIAN_ROULETTE;
+    out_trace->trace.debug.rejectedPhotonCount = 1u;
+    out_trace->trace.debug.lastRejectReason =
+        RUNTIME_CAUSTIC_PHOTON_REJECT_RUSSIAN_ROULETTE;
+    out_trace->trace.debug.rejectedFlux = hit_event->roulette.terminatedThroughput;
+    hit_event->termination =
+        RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_ROULETTE_TERMINATED;
+    out_trace->readback.termination = hit_event->termination;
+    return true;
 }
 
 bool RuntimeCausticPhotonSceneTrace3D_CompareDescriptorOracle(

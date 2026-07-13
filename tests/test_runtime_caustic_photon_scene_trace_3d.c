@@ -532,6 +532,92 @@ static int test_runtime_caustic_photon_scene_trace_bsdf_terminal_events(void) {
     return 0;
 }
 
+static int test_runtime_caustic_photon_scene_trace_seeded_roulette(void) {
+    RuntimeScene3D scene;
+    RuntimeCausticPhotonSample3D sample = photon_scene_trace_sample();
+    RuntimeCausticPhotonSample3D survive_sample = sample;
+    RuntimeCausticPhotonSample3D terminate_sample = sample;
+    RuntimeCausticPhotonSceneTraceSettings3D settings;
+    RuntimeCausticPhotonSceneTrace3D first;
+    RuntimeCausticPhotonSceneTrace3D repeat;
+    RuntimePathDepthPolicy3D policy = {0};
+    PhotonSceneTraceBsdfFixture3D fixture;
+    bool found_survive = false;
+    bool found_terminate = false;
+
+    assert_true("runtime_caustic_photon_scene_trace_seeded_build_slab",
+                photon_scene_trace_build_slab(&scene));
+    RuntimeCausticPhotonSceneTrace3D_DefaultSettings(&settings);
+    memset(&fixture, 0, sizeof(fixture));
+    fixture.payload = photon_scene_trace_bsdf_payload();
+    settings.materialResolver = photon_scene_trace_bsdf_material;
+    settings.materialResolverUserData = &fixture;
+    sample.flux = vec3(0.25, 0.25, 0.25);
+    policy.minDepthBeforeRoulette = 2;
+    policy.rouletteThreshold = 1.0;
+
+    for (uint64_t i = 0u; i < 256u && (!found_survive || !found_terminate); ++i) {
+        RuntimeCausticPhotonBsdfSampleStream3D stream;
+        RuntimeCausticPhotonSample3D candidate = sample;
+        candidate.photonId += i;
+        candidate.sampleIndex = i;
+        if (!RuntimeCausticPhotonBsdfSampling3D_Generate(&candidate, 2u, &stream)) {
+            continue;
+        }
+        if (!found_survive && stream.rouletteUnitSample < 0.1) {
+            survive_sample = candidate;
+            found_survive = true;
+        }
+        if (!found_terminate && stream.rouletteUnitSample > 0.9) {
+            terminate_sample = candidate;
+            found_terminate = true;
+        }
+    }
+    assert_true("runtime_caustic_photon_scene_trace_seeded_find_branches",
+                found_survive && found_terminate);
+
+    assert_true("runtime_caustic_photon_scene_trace_seeded_survive",
+                RuntimeCausticPhotonSceneTrace3D_TraceSeededBsdfHitWithRoulette(
+                    &scene, &survive_sample, 2u, &policy, &settings, &first));
+    fixture.calls = 0u;
+    assert_true("runtime_caustic_photon_scene_trace_seeded_replay",
+                RuntimeCausticPhotonSceneTrace3D_TraceSeededBsdfHitWithRoulette(
+                    &scene, &survive_sample, 2u, &policy, &settings, &repeat) &&
+                    memcmp(&first.hitEvents[0].bsdfSampleStream,
+                           &repeat.hitEvents[0].bsdfSampleStream,
+                           sizeof(first.hitEvents[0].bsdfSampleStream)) == 0);
+    assert_true("runtime_caustic_photon_scene_trace_seeded_survive_ledger",
+                first.hitEvents[0].usedSeededBsdfSamples &&
+                    first.hitEvents[0].roulette.valid &&
+                    first.hitEvents[0].roulette.evaluated &&
+                    !first.hitEvents[0].roulette.terminated &&
+                    first.trace.finalState.active &&
+                    first.trace.events[1].kind == RUNTIME_CAUSTIC_PHOTON_EVENT_SURFACE &&
+                    first.readback.routeStats.tlasTraceCalls == 1u);
+
+    fixture.calls = 0u;
+    assert_true("runtime_caustic_photon_scene_trace_seeded_terminate",
+                RuntimeCausticPhotonSceneTrace3D_TraceSeededBsdfHitWithRoulette(
+                    &scene, &terminate_sample, 2u, &policy, &settings, &first));
+    assert_true("runtime_caustic_photon_scene_trace_seeded_terminate_ledger",
+                first.hitEvents[0].roulette.terminated &&
+                    first.hitEvents[0].termination ==
+                        RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_ROULETTE_TERMINATED &&
+                    first.readback.termination ==
+                        RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_ROULETTE_TERMINATED &&
+                    first.trace.events[1].kind ==
+                        RUNTIME_CAUSTIC_PHOTON_EVENT_TERMINATED &&
+                    first.trace.finalState.terminated &&
+                    first.trace.finalState.rejectReason ==
+                        RUNTIME_CAUSTIC_PHOTON_REJECT_RUSSIAN_ROULETTE &&
+                    first.trace.finalState.throughput.x == 0.0 &&
+                    first.trace.debug.rejectedFlux.x > 0.0);
+
+    RuntimeSceneAcceleration3D_ResetTLASForTests();
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
 int run_test_runtime_caustic_photon_scene_trace_3d_tests(void) {
     int failures = 0;
     failures += test_runtime_caustic_photon_scene_trace_defaults();
@@ -540,5 +626,6 @@ int run_test_runtime_caustic_photon_scene_trace_3d_tests(void) {
     failures += test_runtime_caustic_photon_scene_trace_preserves_opaque_hit_payload();
     failures += test_runtime_caustic_photon_scene_trace_bsdf_scattering_events();
     failures += test_runtime_caustic_photon_scene_trace_bsdf_terminal_events();
+    failures += test_runtime_caustic_photon_scene_trace_seeded_roulette();
     return failures;
 }
