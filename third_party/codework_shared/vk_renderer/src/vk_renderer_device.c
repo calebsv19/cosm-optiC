@@ -324,10 +324,12 @@ static VkBool32 device_supports_extensions(VkPhysicalDevice device,
     return supported;
 }
 
+#if defined(__APPLE__)
 static VkBool32 device_supports_extension(VkPhysicalDevice device,
                                           const char *extension_name) {
     return device_supports_extensions(device, &extension_name, 1u);
 }
+#endif
 
 static VkBool32 device_supports_swapchain(VkPhysicalDevice device,
                                           VkSurfaceKHR surface) {

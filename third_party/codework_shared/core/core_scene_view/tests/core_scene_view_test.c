@@ -83,6 +83,84 @@ static int test_packet_readback(void) {
     return 0;
 }
 
+static int test_packet_summary_from_readback(void) {
+    CoreSceneViewPacketReadback readback;
+    CoreSceneViewPacketSummary summary;
+    CoreResult result = core_scene_view_packet_readback_from_json_string(kPacket, &readback);
+
+    CHECK(result.code == CORE_OK);
+    result = core_scene_view_packet_summary_from_readback(&readback, &summary);
+    CHECK(result.code == CORE_OK);
+    CHECK(summary.valid);
+    CHECK(summary.readOnly);
+    CHECK(summary.materialPreview);
+    CHECK(summary.transparentPreview);
+    CHECK(summary.texturedPreview);
+    CHECK(!summary.emissivePreview);
+    CHECK(!summary.mirrorPreview);
+    CHECK(summary.projected);
+    CHECK(summary.complete);
+    CHECK(summary.focusedObjectIndex == 4);
+    CHECK(summary.triangleCount == 2);
+    CHECK(summary.faceGroupCount == 6);
+    CHECK(summary.firstFaceGroupIndex == 0);
+    CHECK(summary.lastFaceGroupIndex == 5);
+    CHECK(summary.firstAlpha == 96u);
+    CHECK(summary.previewQuality == CORE_SCENE_VIEW_PREVIEW_MATERIAL);
+    CHECK(summary.degradedReason == CORE_SCENE_VIEW_DEGRADED_NONE);
+    return 0;
+}
+
+static int test_packet_summary_flags_and_alpha_fallback(void) {
+    CoreSceneViewPacketReadback readback;
+    CoreSceneViewPacketSummary summary;
+
+    core_scene_view_packet_readback_init(&readback);
+    readback.valid = true;
+    readback.previewQuality = CORE_SCENE_VIEW_PREVIEW_FLAT_SOLID;
+    readback.degradedReason = CORE_SCENE_VIEW_DEGRADED_PROJECTION_UNAVAILABLE;
+    readback.firstDisplayFlags = CORE_SCENE_VIEW_DISPLAY_EMISSIVE |
+                                 CORE_SCENE_VIEW_DISPLAY_MIRROR;
+    readback.firstAlpha = 128u;
+    readback.firstPickId.faceGroupIndex = 2;
+    readback.lastPickId.faceGroupIndex = 4;
+
+    CHECK(core_scene_view_packet_summary_from_readback(&readback, &summary).code ==
+          CORE_OK);
+    CHECK(summary.valid);
+    CHECK(summary.readOnly);
+    CHECK(!summary.materialPreview);
+    CHECK(summary.transparentPreview);
+    CHECK(summary.emissivePreview);
+    CHECK(summary.mirrorPreview);
+    CHECK(!summary.texturedPreview);
+    CHECK(summary.firstFaceGroupIndex == 2);
+    CHECK(summary.lastFaceGroupIndex == 4);
+    CHECK(summary.degradedReason == CORE_SCENE_VIEW_DEGRADED_PROJECTION_UNAVAILABLE);
+    return 0;
+}
+
+static int test_packet_summary_rejects_invalid_source(void) {
+    CoreSceneViewPacketReadback readback;
+    CoreSceneViewPacketSummary summary;
+    CoreResult result;
+
+    core_scene_view_packet_readback_init(&readback);
+    memset(&summary, 0x7f, sizeof(summary));
+    result = core_scene_view_packet_summary_from_readback(&readback, &summary);
+    CHECK(result.code == CORE_ERR_FORMAT);
+    CHECK(!summary.valid);
+    CHECK(summary.readOnly);
+    CHECK(summary.focusedObjectIndex == -1);
+    CHECK(summary.firstFaceGroupIndex == -1);
+    CHECK(summary.lastFaceGroupIndex == -1);
+    CHECK(core_scene_view_packet_summary_from_readback(NULL, &summary).code ==
+          CORE_ERR_INVALID_ARG);
+    CHECK(core_scene_view_packet_summary_from_readback(&readback, NULL).code ==
+          CORE_ERR_INVALID_ARG);
+    return 0;
+}
+
 static int test_packet_rejects_bad_schema(void) {
     static const char *bad_schema =
         "{\"schema_family\":\"codework_scene_view\","
@@ -100,6 +178,9 @@ int main(void) {
     int failed = 0;
     failed |= test_names_and_parse();
     failed |= test_packet_readback();
+    failed |= test_packet_summary_from_readback();
+    failed |= test_packet_summary_flags_and_alpha_fallback();
+    failed |= test_packet_summary_rejects_invalid_source();
     failed |= test_packet_rejects_bad_schema();
     if (failed) {
         printf("core_scene_view_test failed\n");

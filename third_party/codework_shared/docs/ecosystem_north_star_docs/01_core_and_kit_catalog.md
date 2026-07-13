@@ -113,6 +113,7 @@ contract.
 - Preview quality, degraded reason, display flag, and pick-id vocabulary
 - Compact JSON readback validation for packet metadata
 - Shared readback structs for producer/consumer fixture parity
+- Compact summary derivation from validated packet readback metadata
 
 **Boundary:**
 - Owns packet meaning only

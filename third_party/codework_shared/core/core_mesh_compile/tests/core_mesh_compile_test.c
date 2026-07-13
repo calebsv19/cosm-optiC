@@ -1,6 +1,7 @@
 #include "core_mesh_compile.h"
 
 #include <stdint.h>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -123,6 +124,78 @@ static int test_imported_stl_to_runtime_document(void) {
     CHECK(runtime.contract.local_bounds.max.x == 1.0);
     CHECK(runtime.contract.local_bounds.max.y == 1.0);
     CHECK(runtime.contract.local_bounds.max.z == 1.0);
+    CHECK(core_mesh_asset_runtime_document_validate(&runtime).code == CORE_OK);
+
+    core_mesh_asset_runtime_document_free(&runtime);
+    core_mesh_asset_authoring_document_free(&authoring);
+    return 0;
+}
+
+static int test_imported_stl_generates_angle_weighted_smooth_normals(void) {
+    CoreMeshAssetAuthoringDocument authoring;
+    CoreMeshAssetRuntimeDocument runtime;
+    size_t i;
+
+    core_mesh_asset_authoring_document_init(&authoring);
+    core_mesh_asset_runtime_document_init(&runtime);
+    CHECK(core_mesh_asset_authoring_document_load_file(
+              "tests/fixtures/mesh_asset_authoring_v1_imported_stl_tetrahedron.json",
+              &authoring).code == CORE_OK);
+    authoring.imported_mesh_source.normal_mode =
+        CORE_MESH_ASSET_IMPORTED_NORMAL_MODE_SMOOTH;
+    CHECK(core_mesh_compile_imported_mesh_to_runtime_document(
+              &authoring,
+              ".",
+              "asset_imported_tetrahedron_smooth_runtime",
+              &runtime).code == CORE_OK);
+    CHECK(runtime.vertex_count == 4u);
+    CHECK(runtime.vertex_normal_count == runtime.vertex_count);
+    CHECK(runtime.normal_provenance ==
+          CORE_MESH_ASSET_RUNTIME_NORMAL_PROVENANCE_GENERATED_SMOOTH);
+    for (i = 0u; i < runtime.vertex_count; ++i) {
+        CoreObjectVec3 normal = runtime.vertices[i].normal;
+        double length_sq = normal.x * normal.x + normal.y * normal.y + normal.z * normal.z;
+        CHECK(fabs(length_sq - 1.0) < 1e-8);
+    }
+    CHECK(core_mesh_asset_runtime_document_validate(&runtime).code == CORE_OK);
+
+    core_mesh_asset_runtime_document_free(&runtime);
+    core_mesh_asset_authoring_document_free(&authoring);
+    return 0;
+}
+
+static int test_imported_stl_crease_aware_normals_split_hard_edges(void) {
+    CoreMeshAssetAuthoringDocument authoring;
+    CoreMeshAssetRuntimeDocument runtime;
+    size_t triangle_index;
+
+    core_mesh_asset_authoring_document_init(&authoring);
+    core_mesh_asset_runtime_document_init(&runtime);
+    CHECK(core_mesh_asset_authoring_document_load_file(
+              "tests/fixtures/mesh_asset_authoring_v1_imported_stl_tetrahedron.json",
+              &authoring).code == CORE_OK);
+    authoring.imported_mesh_source.normal_mode =
+        CORE_MESH_ASSET_IMPORTED_NORMAL_MODE_CREASE_AWARE;
+    authoring.imported_mesh_source.crease_angle_degrees = 30.0;
+    CHECK(core_mesh_compile_imported_mesh_to_runtime_document(
+              &authoring,
+              ".",
+              "asset_imported_tetrahedron_crease_runtime",
+              &runtime).code == CORE_OK);
+    CHECK(runtime.vertex_count == 12u);
+    CHECK(runtime.vertex_normal_count == 12u);
+    CHECK(runtime.normal_provenance ==
+          CORE_MESH_ASSET_RUNTIME_NORMAL_PROVENANCE_GENERATED_CREASE_AWARE);
+    for (triangle_index = 0u; triangle_index < runtime.triangle_count; ++triangle_index) {
+        const CoreMeshAssetRuntimeTriangle *triangle = &runtime.triangles[triangle_index];
+        CoreObjectVec3 a = runtime.vertices[triangle->a].normal;
+        CoreObjectVec3 b = runtime.vertices[triangle->b].normal;
+        CoreObjectVec3 c = runtime.vertices[triangle->c].normal;
+        CHECK(fabs(a.x - b.x) < 1e-12 && fabs(a.y - b.y) < 1e-12 &&
+              fabs(a.z - b.z) < 1e-12);
+        CHECK(fabs(a.x - c.x) < 1e-12 && fabs(a.y - c.y) < 1e-12 &&
+              fabs(a.z - c.z) < 1e-12);
+    }
     CHECK(core_mesh_asset_runtime_document_validate(&runtime).code == CORE_OK);
 
     core_mesh_asset_runtime_document_free(&runtime);
@@ -473,6 +546,8 @@ int main(void) {
     if (test_instance_contract_validation() != 0) return 1;
     if (test_authoring_compile_contract_validation() != 0) return 1;
     if (test_imported_stl_to_runtime_document() != 0) return 1;
+    if (test_imported_stl_generates_angle_weighted_smooth_normals() != 0) return 1;
+    if (test_imported_stl_crease_aware_normals_split_hard_edges() != 0) return 1;
     if (test_imported_stl_to_runtime_file() != 0) return 1;
     if (test_imported_binary_stl_to_runtime_document() != 0) return 1;
     if (test_imported_binary_stl_indexed_weld_to_runtime_document() != 0) return 1;
