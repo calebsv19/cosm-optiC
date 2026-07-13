@@ -281,8 +281,16 @@ static void beam_map_query_consider_segment(
         result->nearestDirectionDot = direction_dot;
     }
     result->candidateCount += 1u;
-    if (d2 > radius * radius || direction_dot < min_direction_dot ||
-        !beam_map_medium_matches(segment, active_query)) {
+    if (d2 > radius * radius) {
+        result->radiusRejectCount += 1u;
+        return;
+    }
+    if (direction_dot < min_direction_dot) {
+        result->directionRejectCount += 1u;
+        return;
+    }
+    if (!beam_map_medium_matches(segment, active_query)) {
+        result->mediumRejectCount += 1u;
         return;
     }
     weight = exp(-d2 / (2.0 * radius * radius)) *

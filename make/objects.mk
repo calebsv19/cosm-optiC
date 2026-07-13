@@ -27,7 +27,10 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_caustic_lens_transport_shapes_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_emit_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_integration_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_lifecycle_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_map_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_map_store_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_beam_contribution_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_receiver_contribution_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_receiver_policy_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_scene_descriptor_3d.o \
@@ -348,7 +351,10 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_caustic_lens_transport_shapes_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_photon_emit_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_photon_integration_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_photon_lifecycle_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_photon_map_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_photon_map_store_3d.o \
+		$(BUILD_DIR)/render/runtime_caustic_photon_beam_contribution_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_photon_receiver_contribution_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_photon_receiver_policy_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_photon_scene_descriptor_3d.o \

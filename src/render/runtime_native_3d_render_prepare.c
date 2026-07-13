@@ -18,7 +18,9 @@
 #include "material/material.h"
 #include "render/runtime_caustic_beam_map_3d.h"
 #include "render/runtime_caustic_photon_map_3d.h"
+#include "render/runtime_caustic_photon_map_store_3d.h"
 #include "render/runtime_caustic_photon_scene_descriptor_3d.h"
+#include "render/runtime_volume_3d_sampling.h"
 #include "render/runtime_dynamic_geometry_accel_3d.h"
 #include "render/runtime_scene_3d_builder.h"
 #include "render/runtime_scene_3d_samples.h"
@@ -44,6 +46,7 @@ static Vec3 gRuntimeNative3DInspectionCameraPosition = {0};
 static Vec3 gRuntimeNative3DInspectionCameraLookAt = {0};
 static RuntimeCausticPhotonIntegrationSettings3D
     gRuntimeNative3DCausticPhotonRenderPrepSettings;
+static RuntimeCausticPhotonMapStore3D gRuntimeNative3DCausticPhotonMapStore;
 static const char* kRuntimeNative3DFrameBVHSkipOnTLASEnv =
     "RAY_TRACING_NATIVE3D_SKIP_FLATTENED_BVH_ON_TLAS";
 static const char* kRuntimeNative3DFrameBVHSkipDefaultDisableEnv =
@@ -112,6 +115,11 @@ void RuntimeNative3DRender_SetCausticPhotonRenderPrepPopulation(
         RuntimeCausticPhotonIntegration3D_DefaultSettings(
             &gRuntimeNative3DCausticPhotonRenderPrepSettings);
     }
+    if (!enabled) RuntimeNative3DRender_ResetCausticPhotonMapStore();
+}
+
+void RuntimeNative3DRender_ResetCausticPhotonMapStore(void) {
+    RuntimeCausticPhotonMapStore3D_Free(&gRuntimeNative3DCausticPhotonMapStore);
 }
 
 static double runtime_native_3d_render_resolve_default_light_radius(
@@ -946,12 +954,21 @@ static bool runtime_native_3d_prepare_harvest_photon_mesh_dielectric(
 static void runtime_native_3d_prepare_populate_photon_render_prep(
     RuntimeNative3DPreparedFrame* frame) {
     RuntimeCausticPhotonIntegrationSettings3D settings;
-    RuntimeCausticPhotonMap3D surface_map;
+    RuntimeCausticPhotonMap3D* surface_map;
+    RuntimeCausticBeamMap3D* beam_map;
     RuntimeCausticPhotonMapPopulationReadback3D population;
+    RuntimeCausticPhotonMapPopulationReadback3D volume_population;
     RuntimeCausticPhotonMapPopulationReadback3D harvest;
     RuntimeCausticPhotonReceiverSelection3D receiver;
+    RuntimeCausticPhotonIntegrationQuery3D volume_query;
+    RuntimeCausticPhotonMapLifecycleInput3D lifecycle_input;
+    RuntimeCausticPhotonMapLifecycleReadback3D lifecycle_readback;
     RuntimeCausticLensShape3D shape;
     RuntimeTriangle3D triangle;
+    struct timespec fingerprint_started_at = {0};
+    struct timespec map_build_started_at = {0};
+    struct timespec query_started_at = {0};
+    double map_build_cpu_ms = 0.0;
     uint64_t cache_capacity = 1u;
 
     if (!frame || !gRuntimeNative3DCausticPhotonRenderPrepPopulationEnabled) return;
@@ -985,17 +1002,56 @@ static void runtime_native_3d_prepare_populate_photon_render_prep(
                                                              &frame->scene.volume);
     }
 
-    RuntimeCausticPhotonMap3D_Init(&surface_map);
-    memset(&population, 0, sizeof(population));
-    memset(&receiver, 0, sizeof(receiver));
-    if (!RuntimeCausticPhotonIntegration3D_PopulateReceiverSurfaceMapFromMeshDielectricScene(
-            &surface_map,
-            &frame->scene,
-            &shape,
-            &triangle,
-            &settings,
-            &population,
-            &receiver)) {
+    clock_gettime(CLOCK_MONOTONIC, &fingerprint_started_at);
+    RuntimeCausticPhotonMapLifecycle3D_BuildInputFromScene(
+        &frame->scene,
+        settings.sampleBudget,
+        settings.maxPathDepth,
+        settings.surfaceQueryRadius,
+        settings.volumeQueryRadius,
+        settings.volumeQueryEnabled,
+        true,
+        &lifecycle_input);
+    if (!RuntimeCausticPhotonMapStore3D_Begin(
+        &gRuntimeNative3DCausticPhotonMapStore,
+        &lifecycle_input,
+        &lifecycle_readback)) {
+        return;
+    }
+    lifecycle_readback.fingerprintCpuMs =
+        runtime_native_3d_prepare_elapsed_ms_since(&fingerprint_started_at);
+    lifecycle_readback.budgetTier = RuntimeCausticPhotonBudgetTier3D_FromBudget(
+        settings.sampleBudget,
+        settings.maxPathDepth);
+    surface_map = &gRuntimeNative3DCausticPhotonMapStore.surfaceMap;
+    beam_map = &gRuntimeNative3DCausticPhotonMapStore.beamMap;
+
+    if (lifecycle_readback.rebuilt) {
+        clock_gettime(CLOCK_MONOTONIC, &map_build_started_at);
+        memset(&population, 0, sizeof(population));
+        memset(&receiver, 0, sizeof(receiver));
+        if (!RuntimeCausticPhotonIntegration3D_PopulateReceiverSurfaceMapFromMeshDielectricScene(
+                surface_map,
+                &frame->scene,
+                &shape,
+                &triangle,
+                &settings,
+                &population,
+                &receiver)) {
+            population.preparedSceneMeshDielectricAttempted =
+                harvest.preparedSceneMeshDielectricAttempted;
+            population.preparedSceneMeshDielectricSucceeded =
+                harvest.preparedSceneMeshDielectricSucceeded;
+            population.preparedSceneMeshDielectricCandidateCount =
+                harvest.preparedSceneMeshDielectricCandidateCount;
+            RuntimeCausticPhotonMapStore3D_CommitPopulation(
+                &gRuntimeNative3DCausticPhotonMapStore,
+                &population);
+            frame->causticPhotonRenderPrepReadback.mapLifecycle = lifecycle_readback;
+            frame->causticPhotonRenderPrepReadback.mapPopulation = population;
+            frame->causticPhotonRenderPrepReadbackBuilt = true;
+            return;
+        }
         population.preparedSceneMeshDielectricAttempted =
             harvest.preparedSceneMeshDielectricAttempted;
         population.preparedSceneMeshDielectricSucceeded =
@@ -1012,30 +1068,55 @@ static void runtime_native_3d_prepare_populate_photon_render_prep(
             harvest.preparedSceneMeshDielectricTriangleIndex;
         population.preparedSceneMeshDielectricTriangleCount =
             harvest.preparedSceneMeshDielectricTriangleCount;
-        frame->causticPhotonRenderPrepReadback.mapPopulation = population;
-        frame->causticPhotonRenderPrepReadbackBuilt = true;
-        RuntimeCausticPhotonMap3D_Free(&surface_map);
-        return;
+
+        if (settings.volumeQueryEnabled) {
+            RuntimeCausticPhotonIntegration3D_DefaultQuery(&volume_query);
+            volume_query.querySurface = false;
+            volume_query.queryVolume = true;
+            volume_query.volume.mediumId = 1;
+            volume_query.volume.requireMediumId = true;
+            volume_query.volume.radius = settings.volumeQueryRadius;
+            memset(&volume_population, 0, sizeof(volume_population));
+            if (RuntimeCausticPhotonIntegration3D_PopulateMapsFromMeshDielectricFixture(
+                    NULL,
+                    beam_map,
+                    &frame->scene.lightSet,
+                    &shape,
+                    &triangle,
+                    &settings,
+                    &volume_query,
+                    &volume_population)) {
+                population.volumeBeamMapAllocated = volume_population.volumeBeamMapAllocated;
+                population.volumeBeamPopulationAttempted =
+                    volume_population.volumeBeamPopulationAttempted;
+                population.volumeBeamPopulated = volume_population.volumeBeamPopulated;
+                population.volumeBeamStoreAttemptCount =
+                    volume_population.volumeBeamStoreAttemptCount;
+                population.volumeBeamStoreAcceptedCount =
+                    volume_population.volumeBeamStoreAcceptedCount;
+                population.volumeBeamStoreRejectedCount =
+                    volume_population.volumeBeamStoreRejectedCount;
+                population.volumeBeamSegmentCount = volume_population.volumeBeamSegmentCount;
+                population.volumeBeamAccelerationInsertedCount =
+                    volume_population.volumeBeamAccelerationInsertedCount;
+                population.totalStoredVolumeFlux = volume_population.totalStoredVolumeFlux;
+            }
+        }
+        map_build_cpu_ms =
+            runtime_native_3d_prepare_elapsed_ms_since(&map_build_started_at);
+        RuntimeCausticPhotonMapStore3D_CommitPopulation(
+            &gRuntimeNative3DCausticPhotonMapStore,
+            &population);
+    } else {
+        population = gRuntimeNative3DCausticPhotonMapStore.population;
     }
-    population.preparedSceneMeshDielectricAttempted =
-        harvest.preparedSceneMeshDielectricAttempted;
-    population.preparedSceneMeshDielectricSucceeded =
-        harvest.preparedSceneMeshDielectricSucceeded;
-    population.fixtureMeshDielectricFallbackUsed = harvest.fixtureMeshDielectricFallbackUsed;
-    population.preparedSceneMeshDielectricCandidateCount =
-        harvest.preparedSceneMeshDielectricCandidateCount;
-    population.preparedSceneMeshDielectricSceneObjectIndex =
-        harvest.preparedSceneMeshDielectricSceneObjectIndex;
-    population.preparedSceneMeshDielectricPrimitiveIndex =
-        harvest.preparedSceneMeshDielectricPrimitiveIndex;
-    population.preparedSceneMeshDielectricTriangleIndex =
-        harvest.preparedSceneMeshDielectricTriangleIndex;
-    population.preparedSceneMeshDielectricTriangleCount =
-        harvest.preparedSceneMeshDielectricTriangleCount;
 
     memset(&frame->causticPhotonRenderPrepReadback,
            0,
            sizeof(frame->causticPhotonRenderPrepReadback));
+    frame->causticPhotonRenderPrepReadback.mapLifecycle = lifecycle_readback;
+    frame->causticPhotonRenderPrepReadback.mapLifecycle.mapBuildCpuMs =
+        map_build_cpu_ms;
     frame->causticPhotonRenderPrepReadback.productMode = settings.productMode;
     frame->causticPhotonRenderPrepReadback.route =
         RuntimeCausticPhotonIntegration3D_RouteForSettings(&settings);
@@ -1044,8 +1125,9 @@ static void runtime_native_3d_prepare_populate_photon_render_prep(
     frame->causticPhotonRenderPrepReadback.queryAttempted = true;
     frame->causticPhotonRenderPrepReadback.contributionAttempted = true;
     frame->causticPhotonRenderPrepReadback.cacheDepositAttempted = true;
+    clock_gettime(CLOCK_MONOTONIC, &query_started_at);
     (void)RuntimeCausticPhotonIntegration3D_DepositSurfaceContributionsForReceiverBuckets(
-        &surface_map,
+        surface_map,
         &frame->causticSurfaceCache,
         &settings,
         &frame->causticPhotonRenderPrepReadback.receiverContribution);
@@ -1069,9 +1151,64 @@ static void runtime_native_3d_prepare_populate_photon_render_prep(
     frame->causticPhotonRenderPrepReadback.radiance =
         frame->causticPhotonRenderPrepReadback.receiverContribution
             .receiverSurfaceRadiance;
+    if (settings.volumeQueryEnabled &&
+        RuntimeCausticVolumeCache3D_IsAllocated(&frame->causticVolumeCache)) {
+        RuntimeCausticPhotonIntegration3D_DefaultQuery(&volume_query);
+        volume_query.querySurface = false;
+        volume_query.queryVolume = true;
+        volume_query.volume.mediumId = 1;
+        volume_query.volume.requireMediumId = true;
+        volume_query.volume.radius = settings.volumeQueryRadius;
+        if (RuntimeCausticPhotonIntegration3D_SelectVolumeBeamQueryForVolume(
+                beam_map,
+                &frame->scene.volume,
+                volume_query.volume.mediumId,
+                settings.volumeQueryRadius,
+                &volume_query.volume)) {
+            (void)RuntimeCausticPhotonIntegration3D_DepositVolumeContributionFromBeamMap(
+                beam_map,
+                &frame->causticVolumeCache,
+                &frame->scene.volume,
+                &settings,
+                &volume_query.volume,
+                &frame->causticPhotonRenderPrepReadback.beamContribution);
+        }
+    }
+    frame->causticPhotonRenderPrepReadback.mapLifecycle.queryAndDepositCpuMs =
+        runtime_native_3d_prepare_elapsed_ms_since(&query_started_at);
+    frame->causticPhotonRenderPrepReadback.volumeDeposited =
+        frame->causticPhotonRenderPrepReadback.beamContribution.volumeDeposited;
+    frame->causticPhotonRenderPrepReadback.volumeCandidateCount =
+        frame->causticPhotonRenderPrepReadback.beamContribution.candidateCount;
+    frame->causticPhotonRenderPrepReadback.volumeContributingCount =
+        frame->causticPhotonRenderPrepReadback.beamContribution.contributingCount;
+    frame->causticPhotonRenderPrepReadback.estimatedCost +=
+        frame->causticPhotonRenderPrepReadback.beamContribution.queryAttemptCount;
+    frame->causticPhotonRenderPrepReadback.radiance = vec3_add(
+        frame->causticPhotonRenderPrepReadback.radiance,
+        frame->causticPhotonRenderPrepReadback.beamContribution.radiance);
+    frame->causticPhotonRenderPrepReadback.mapLifecycle.emissionCount =
+        lifecycle_readback.rebuilt ? population.emittedPhotonCount : 0u;
+    frame->causticPhotonRenderPrepReadback.mapLifecycle.tracedCount =
+        lifecycle_readback.rebuilt ? population.traceRecordCount : 0u;
+    frame->causticPhotonRenderPrepReadback.mapLifecycle.storedSurfaceRecordCount =
+        population.surfaceMapRecordCount;
+    frame->causticPhotonRenderPrepReadback.mapLifecycle.storedBeamSegmentCount =
+        population.volumeBeamSegmentCount;
+    frame->causticPhotonRenderPrepReadback.mapLifecycle.accelerationBuildCount =
+        lifecycle_readback.rebuilt
+            ? population.surfaceMapAccelerationInsertedCount +
+                  population.volumeBeamAccelerationInsertedCount
+            : 0u;
+    frame->causticPhotonRenderPrepReadback.mapLifecycle.queryCount =
+        frame->causticPhotonRenderPrepReadback.estimatedCost;
+    frame->causticPhotonRenderPrepReadback.mapLifecycle.cacheDepositCount =
+        frame->causticPhotonRenderPrepReadback.receiverContribution
+            .receiverSurfaceDepositAcceptedCount +
+        frame->causticPhotonRenderPrepReadback.beamContribution
+            .volumeDepositAcceptedCount;
     frame->causticPhotonRenderPrepReadback.mapPopulation = population;
     frame->causticPhotonRenderPrepReadbackBuilt = true;
-    RuntimeCausticPhotonMap3D_Free(&surface_map);
 }
 
 bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(

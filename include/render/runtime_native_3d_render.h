@@ -377,6 +377,7 @@ void RuntimeNative3DRender_SetInspectionCameraLookAt(Vec3 target);
 void RuntimeNative3DRender_SetCausticPhotonRenderPrepPopulation(
     bool enabled,
     const RuntimeCausticPhotonIntegrationSettings3D* settings);
+void RuntimeNative3DRender_ResetCausticPhotonMapStore(void);
 const char* RuntimeNative3DPrepareFrameLastDiagnostics(void);
 bool RuntimeNative3DPrepareFrame(RuntimeNative3DPreparedFrame* out_frame,
                                  int width,

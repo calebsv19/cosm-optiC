@@ -8,6 +8,7 @@ import copy
 import json
 import platform
 import shutil
+import struct
 import subprocess
 import sys
 import time
@@ -74,6 +75,15 @@ VARIANTS = (
         "scene_variant": "vertical_receiver_wall",
         "description": "opt-in production render-prep population on a vertical receiver wall",
     },
+    {
+        "id": "production_render_prep_volume_populated",
+        "product_mode": "production",
+        "render_contribution": True,
+        "render_prep_population": True,
+        "volume_render_prep": True,
+        "integrator_3d": "disney_v2",
+        "description": "opt-in render-prep beam-map contribution into a sampleable VF3D volume",
+    },
 )
 
 
@@ -127,6 +137,28 @@ def reset_review_root(path: Path) -> None:
     if path.exists():
         shutil.rmtree(path)
     path.mkdir(parents=True, exist_ok=True)
+
+
+def write_uniform_vf3d(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    w = h = d = 16
+    cell_count = w * h * d
+    magic = (ord("V") << 24) | (ord("F") << 16) | (ord("3") << 8) | ord("D")
+    header = struct.pack(
+        "@IIIIIdQdfffffffIIII",
+        magic, 1, w, h, d, 0.0, 0, 1.0 / 24.0,
+        -10.0, -10.0, -10.0, 20.0 / float(w), 0.0, 0.0, 1.0, 0, 0, 0, 0,
+    )
+    if struct.calcsize("@IIIIIdQdfffffffIIII") != 92:
+        raise RuntimeError("unexpected native vf3d header packing")
+    density = [0.18] * cell_count
+    zero_float = [0.0] * cell_count
+    with path.open("wb") as f:
+        f.write(header)
+        f.write(b"\0\0\0\0")
+        for channel in (density, zero_float, zero_float, zero_float, zero_float):
+            f.write(struct.pack(f"@{cell_count}f", *channel))
+        f.write(bytes(cell_count))
 
 
 def resolved_scene_path(base_request_path: Path, base_request: dict) -> str:
@@ -204,6 +236,16 @@ def request_for_variant(root: Path, review_root: Path, variant: dict) -> dict:
     request["render"]["temporal_frames"] = 1
     if variant.get("integrator_3d"):
         request["render"]["integrator_3d"] = variant["integrator_3d"]
+    if variant.get("volume_render_prep"):
+        volume_path = review_root / "generated_volume" / "ppm18_uniform_volume.vf3d"
+        write_uniform_vf3d(volume_path)
+        request["volume"] = {
+            "enabled": True,
+            "source_kind": "raw_vf3d",
+            "source_path": str(volume_path),
+            "affects_lighting": True,
+            "debug_overlay": False,
+        }
     if variant.get("scene_variant") == "vertical_receiver_wall":
         request.setdefault("inspection", {}).update({
             "camera_position": {"x": 0.0, "y": -5.2, "z": 1.9},
@@ -215,11 +257,14 @@ def request_for_variant(root: Path, review_root: Path, variant: dict) -> dict:
         "caustic_surface_query_enabled": True,
         "caustic_volume_query_enabled": bool(
             variant.get("trace_populated_callsite", False)
+            or variant.get("volume_render_prep", False)
         ),
         "caustic_photon_sample_budget": 64,
         "caustic_photon_max_path_depth": 3,
         "caustic_photon_surface_query_radius": 0.20,
-        "caustic_photon_volume_query_radius": 0.20,
+        "caustic_photon_volume_query_radius": (
+            1.50 if variant.get("volume_render_prep", False) else 0.20
+        ),
         "caustic_photon_surface_radiance_scale": 1.0,
         "caustic_photon_render_prep_population_enabled": bool(
             variant.get("render_prep_population", False)
@@ -232,6 +277,7 @@ def request_for_variant(root: Path, review_root: Path, variant: dict) -> dict:
         "caustic_photon_trace_populated_callsite_readback_enabled": bool(
             variant.get("trace_populated_callsite", False)
         ),
+        "caustic_sidecar_enabled": not variant.get("volume_render_prep", False),
     })
     request["output"] = {
         "root": str(output_root),
@@ -301,6 +347,7 @@ def photon_callsite_counts(summary: dict) -> dict:
     caustic_state = nested(summary, "inspection", "caustic_state", default={})
     callsite = caustic_state.get("photon_callsite", {})
     population = callsite.get("map_population", {})
+    lifecycle = callsite.get("map_lifecycle", {})
     radiance = callsite.get("radiance", {})
     return {
         "readback_enabled": nested(
@@ -323,6 +370,28 @@ def photon_callsite_counts(summary: dict) -> dict:
         ),
         "readback_built": caustic_state.get("photon_callsite_readback_built", False),
         "route": callsite.get("route", ""),
+        "map_lifecycle_evaluated": lifecycle.get("evaluated", False),
+        "map_lifecycle_rebuilt": lifecycle.get("rebuilt", False),
+        "map_lifecycle_reused": lifecycle.get("reused", False),
+        "map_lifecycle_persistent": lifecycle.get(
+            "persistent_ownership_enabled", False
+        ),
+        "map_lifecycle_rebuild_reason": lifecycle.get("rebuild_reason", ""),
+        "map_lifecycle_budget_tier": lifecycle.get("budget_tier", ""),
+        "map_lifecycle_generation": int(lifecycle.get("generation", 0) or 0),
+        "map_lifecycle_rebuild_count": int(
+            lifecycle.get("rebuild_count", 0) or 0
+        ),
+        "map_lifecycle_reuse_count": int(lifecycle.get("reuse_count", 0) or 0),
+        "map_lifecycle_fingerprint_cpu_ms": float(
+            lifecycle.get("fingerprint_cpu_ms", 0.0) or 0.0
+        ),
+        "map_lifecycle_map_build_cpu_ms": float(
+            lifecycle.get("map_build_cpu_ms", 0.0) or 0.0
+        ),
+        "map_lifecycle_query_and_deposit_cpu_ms": float(
+            lifecycle.get("query_and_deposit_cpu_ms", 0.0) or 0.0
+        ),
         "query_attempted": callsite.get("query_attempted", False),
         "query_hit": callsite.get("query_hit", False),
         "contribution_eligible": callsite.get("contribution_eligible", False),
@@ -334,6 +403,37 @@ def photon_callsite_counts(summary: dict) -> dict:
         ),
         "volume_contributing_count": int(
             callsite.get("volume_contributing_count", 0) or 0
+        ),
+        "volume_deposited": callsite.get("volume_deposited", False),
+        "beam_contribution_attempted": callsite.get("beam_contribution_attempted", False),
+        "beam_contribution_volume_sampleable": callsite.get(
+            "beam_contribution_volume_sampleable", False
+        ),
+        "beam_contribution_beam_map_allocated": callsite.get(
+            "beam_contribution_beam_map_allocated", False
+        ),
+        "beam_contribution_query_hit": callsite.get("beam_contribution_query_hit", False),
+        "beam_contribution_eligible": callsite.get("beam_contribution_eligible", False),
+        "beam_contribution_volume_deposited": callsite.get(
+            "beam_contribution_volume_deposited", False
+        ),
+        "beam_contribution_query_attempt_count": int(
+            callsite.get("beam_contribution_query_attempt_count", 0) or 0
+        ),
+        "beam_contribution_candidate_count": int(
+            callsite.get("beam_contribution_candidate_count", 0) or 0
+        ),
+        "beam_contribution_contributing_count": int(
+            callsite.get("beam_contribution_contributing_count", 0) or 0
+        ),
+        "beam_contribution_volume_deposit_accepted_count": int(
+            callsite.get("beam_contribution_volume_deposit_accepted_count", 0) or 0
+        ),
+        "beam_contribution_density": float(
+            callsite.get("beam_contribution_density", 0.0) or 0.0
+        ),
+        "beam_contribution_transmittance": float(
+            callsite.get("beam_contribution_transmittance", 0.0) or 0.0
         ),
         "receiver_contribution_attempted": callsite.get(
             "receiver_contribution_attempted",
@@ -482,6 +582,9 @@ def photon_callsite_counts(summary: dict) -> dict:
         "surface_cache_sample_contributing_count": int(
             caustic_state.get("surface_cache_sample_contributing_count", 0) or 0
         ),
+        "volume_cache_sample_contributing_count": int(
+            caustic_state.get("volume_cache_sample_contributing_count", 0) or 0
+        ),
     }
 
 
@@ -569,6 +672,7 @@ def validate_cell(cell: dict, summary: dict, preflight_only: bool) -> list[str]:
         failures.append(f"{cell['id']}: photon-map route unexpectedly requested")
     counts = photon_callsite_counts(summary)
     expected_render_prep = bool(cell.get("render_prep_population", False))
+    expected_volume_render_prep = bool(cell.get("volume_render_prep", False))
     expected_populated = bool(cell.get("populated_callsite", False) or expected_render_prep)
     expected_trace_populated = bool(cell.get("trace_populated_callsite", False))
     expected_proxy_populated = expected_populated and not expected_trace_populated
@@ -623,7 +727,14 @@ def validate_cell(cell: dict, summary: dict, preflight_only: bool) -> list[str]:
                     "volume_contributing_count",
                 )
             if expected_render_prep:
+                required_true += (
+                    "map_lifecycle_evaluated",
+                    "map_lifecycle_rebuilt",
+                    "map_lifecycle_persistent",
+                )
                 required_positive += (
+                    "map_lifecycle_generation",
+                    "map_lifecycle_rebuild_count",
                     "surface_cache_sample_contributing_count",
                     "receiver_lookup_attempt_count",
                     "receiver_candidate_count",
@@ -636,6 +747,38 @@ def validate_cell(cell: dict, summary: dict, preflight_only: bool) -> list[str]:
                     "receiver_contribution_query_hit_count",
                     "receiver_contribution_surface_deposit_accepted_count",
                     "receiver_contribution_surface_contributing_count",
+                )
+                if counts["map_lifecycle_reused"]:
+                    failures.append(f"{cell['id']}: first prepared map unexpectedly reused")
+                if counts["map_lifecycle_rebuild_reason"] != "first_build":
+                    failures.append(
+                        f"{cell['id']}: expected first_build lifecycle reason"
+                    )
+                if counts["map_lifecycle_budget_tier"] != "preview":
+                    failures.append(
+                        f"{cell['id']}: expected preview lifecycle budget tier"
+                    )
+            if expected_volume_render_prep:
+                required_true += (
+                    "volume_deposited",
+                    "beam_contribution_attempted",
+                    "beam_contribution_volume_sampleable",
+                    "beam_contribution_beam_map_allocated",
+                    "beam_contribution_query_hit",
+                    "beam_contribution_eligible",
+                    "beam_contribution_volume_deposited",
+                )
+                required_positive += (
+                    "volume_beam_store_accepted_count",
+                    "volume_beam_segment_count",
+                    "volume_contributing_count",
+                    "beam_contribution_query_attempt_count",
+                    "beam_contribution_candidate_count",
+                    "beam_contribution_contributing_count",
+                    "beam_contribution_volume_deposit_accepted_count",
+                    "beam_contribution_density",
+                    "beam_contribution_transmittance",
+                    "volume_cache_sample_contributing_count",
                 )
             if counts["fixture_mesh_dielectric_fallback_used"]:
                 failures.append(

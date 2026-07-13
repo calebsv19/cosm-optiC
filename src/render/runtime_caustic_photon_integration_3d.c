@@ -742,7 +742,7 @@ bool RuntimeCausticPhotonIntegration3D_PopulateMapsFromMeshDielectricFixture(
 
     readback.attempted = true;
     readback.tracePopulationAttempted = true;
-    if (!surface_map || !light_set || !mesh_dielectric || !entry_triangle ||
+    if ((!surface_map && !beam_map) || !light_set || !mesh_dielectric || !entry_triangle ||
         RuntimeCausticPhotonIntegration3D_RouteForSettings(active_settings) !=
             RUNTIME_CAUSTIC_PHOTON_INTEGRATION_ROUTE_PHOTON_QUERY_READY) {
         *out_readback = readback;

@@ -129,7 +129,7 @@ surface photon-map proxy population, map-capacity reject accounting, and the
 guard that render contribution remains gated outside this module.
 
 `TEST_RUNNER_GROUP=runtime_caustic_photon_integration_3d make -C ray_tracing test`
-is the focused PPM-4/PPM-6/PPM-11/PPM-12A/PPM-12C/PPM-13 product integration proof. It covers
+is the focused PPM-4/PPM-6/PPM-11/PPM-12A/PPM-12C/PPM-13/PPM-16 through PPM-19 product integration proof. It covers
 off/reference/production product labels, product-mode-to-caustic-settings
 application, bounded sample/depth defaults, combined surface photon-map plus
 volume beam-map query readback, default render-contribution suppression, and
@@ -145,9 +145,11 @@ headless probe: emitted photons are converted into solved lens paths, traced
 into photon records, stored into both production maps, and queried for surface
 plus volume contribution. It also proves the PPM-13 reusable
 `RuntimeScene3D` mesh-dielectric descriptor batch used by the headless trace
-cell.
+cell. PPM-19 coverage additionally proves persistent owner generation and reuse,
+retained map/population state, invalidation on geometry/light/material/volume/
+budget or explicit rebuild changes, and preview/inspection/final budget labels.
 
-`test-ray-tracing-ppm10-product-ab-fixture` is the compact PPM-10/PPM-11A/PPM-12C/PPM-13/PPM-14/PPM-15
+`test-ray-tracing-ppm10-product-ab-fixture` is the compact PPM-10 through PPM-19
 product A/B fixture. It renders generated `off`, `reference`, explicit opt-in
 `production`, explicit `production_populated`, and explicit
 `production_trace_populated` cells from the same transparent mesh scene plus a
