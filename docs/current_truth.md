@@ -707,6 +707,13 @@ Last updated: 2026-07-08
     - `ambient_strength` for the ambient surface-fill amount (`0.0..1.0`)
     - `top_fill_strength` for the top-fill lane (`0.0..20.0`)
   - runtime mesh asset instances are now part of the native `3D` headless path:
+    - optional runtime per-vertex normals are transported into native triangles;
+      hits retain geometric `Ng` for offsets/sidedness and barycentrically
+      interpolated shading `Ns` for mirror, metal, and BSDF evaluation
+    - position-only assets remain compatible through `Ns = Ng`, non-uniform
+      instance scale uses the inverse transpose, and
+      `RAY_TRACING_MESH_SHADING_MODE=flat` restores face-normal shading for
+      comparison
     - runtime scenes may reference `mesh_asset_instance` objects through
       `geometry_ref.kind = "mesh_asset"`
     - file-backed assets are resolved beside the runtime scene from
