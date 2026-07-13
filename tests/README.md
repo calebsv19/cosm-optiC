@@ -58,6 +58,24 @@ make -C ray_tracing test-ray-tracing-core-sim-runtime-frame-contract
 make -C ray_tracing test-scene-editor-pane-host-contract
 ```
 
+Scene-project worker snapshot lane:
+
+```bash
+python3 -m unittest ray_tracing/tests/test_scene_project_worker_export.py
+python3 ray_tracing/tools/export_worker_queue_fixture.py \
+  --fixture \
+  --mode scene-plus-physics-cache \
+  --output-root ray_tracing/visual_artifacts/worker_queue_exports/r2b_fixture \
+  --item-name ray-tracing-r2b-scene-project-20260712a \
+  --force
+```
+
+The Python fixture proves selected-frame VF3D/pack and water attachment
+copying, canonical worker attachment paths, source lineage, unsafe-path
+rejection, live inline-file-limit compliance, optional job-scoped worker
+targeting, and missing-frame failure before partial output creation. The
+existing `scene-only` fixture remains a separate regression gate.
+
 Headless request/render/material lanes:
 
 ```bash

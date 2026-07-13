@@ -1,0 +1,38 @@
+{
+  "schema_version": "ray_tracing_agent_render_request_v1",
+  "run_id": "fixture-scene-project-render",
+  "scene": {
+    "runtime_scene_path": "../scene_runtime.json"
+  },
+  "render": {
+    "start_frame": 0,
+    "frame_count": 2,
+    "width": 96,
+    "height": 64,
+    "temporal_frames": 1,
+    "integrator_3d": "direct_light"
+  },
+  "simulation_frames": {
+    "cache_manifest": "physics_sim/active_cache_manifest.json",
+    "start": 0,
+    "count": 2,
+    "stride": 2
+  },
+  "inspection": {
+    "camera_position": { "x": 2.4, "y": -4.0, "z": 2.2 },
+    "camera_look_at": { "x": 0.3, "y": 0.3, "z": 0.35 },
+    "camera_zoom": 1.0,
+    "environment_light_mode": "ambient",
+    "ambient_strength": 0.35,
+    "top_fill_strength": 1.5,
+    "light_intensity": 4.0,
+    "light_radius": 0.12
+  },
+  "output": {
+    "root": "frames_temp",
+    "overwrite": false
+  },
+  "custom_fixture_field": {
+    "preserve": true
+  }
+}

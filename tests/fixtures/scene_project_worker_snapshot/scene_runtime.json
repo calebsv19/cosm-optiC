@@ -1,0 +1,64 @@
+{
+  "schema_family": "codework_scene",
+  "schema_variant": "scene_runtime_v1",
+  "schema_version": 1,
+  "scene_id": "ray_scene_project_worker_snapshot",
+  "source_scene_id": "ray_scene_project_worker_snapshot",
+  "space_mode_default": "3d",
+  "unit_system": "meters",
+  "world_scale": 1.0,
+  "objects": [
+    {
+      "object_id": "fixture_mesh",
+      "object_type": "mesh_asset_instance",
+      "dimensional_mode": "full_3d",
+      "locked_plane": "xy",
+      "transform": {
+        "position": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+      },
+      "geometry_ref": {
+        "kind": "mesh_asset",
+        "id": "fixture_mesh"
+      },
+      "material_ref": {
+        "id": "fixture_material"
+      },
+      "flags": {
+        "visible": true,
+        "locked": false,
+        "selectable": true
+      }
+    }
+  ],
+  "materials": [
+    {
+      "id": "fixture_material",
+      "name": "Fixture material",
+      "base_color": { "r": 0.8, "g": 0.7, "b": 0.55 },
+      "roughness": 0.6,
+      "metallic": 0.0
+    }
+  ],
+  "lights": [
+    {
+      "light_id": "fixture_key",
+      "kind": "point",
+      "position": { "x": -2.5, "y": -2.8, "z": 4.2 },
+      "intensity": 2.8,
+      "radius": 0.12
+    }
+  ],
+  "cameras": [
+    {
+      "camera_id": "fixture_camera",
+      "kind": "perspective",
+      "position": { "x": 2.4, "y": -4.0, "z": 2.2 },
+      "target": { "x": 0.3, "y": 0.3, "z": 0.35 },
+      "yaw": 0.0,
+      "look_pitch": -0.08
+    }
+  ],
+  "extensions": {}
+}

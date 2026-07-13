@@ -1,0 +1,10 @@
+{
+  "manifest_version": 2,
+  "run_name": "/nonportable/source/run",
+  "frame_contract": "vf3d",
+  "frames": [
+    {"frame_index": 0, "path": "frame_000000.vf3d", "frame_contract": "vf3d"},
+    {"frame_index": 2, "path": "frame_000002.vf3d", "frame_contract": "vf3d"},
+    {"frame_index": 4, "path": "frame_000004.vf3d", "frame_contract": "vf3d"}
+  ]
+}

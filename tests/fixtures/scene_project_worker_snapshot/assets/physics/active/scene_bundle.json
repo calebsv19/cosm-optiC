@@ -1,0 +1,15 @@
+{
+  "bundle_type": "physics_scene_bundle_v1",
+  "bundle_version": 1,
+  "profile": "physics",
+  "fluid_source": {
+    "kind": "manifest",
+    "path": "manifest.json",
+    "contract": "vf3d"
+  },
+  "water_source": {
+    "kind": "water_manifest",
+    "path": "water_manifest_v1.json",
+    "contract": "water_manifest_v1"
+  }
+}

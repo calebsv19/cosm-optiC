@@ -1,0 +1,15 @@
+{
+  "schema": "physics_sim_active_cache_manifest_v1",
+  "project_root": ".",
+  "runtime_scene": "scene_runtime.json",
+  "active_run_id": "physics-fixture-run",
+  "vf3d_active_dir": "assets/vf3d/active",
+  "physics_active_dir": "assets/physics/active",
+  "scene_bundle": "assets/physics/active/scene_bundle.json",
+  "frame_count": 3,
+  "retained_frame_indices": [0, 2, 4],
+  "export_start_frame": 0,
+  "export_stride": 2,
+  "export_max_frames": 3,
+  "created_at": "2026-07-12T00:00:00Z"
+}

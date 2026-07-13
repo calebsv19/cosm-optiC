@@ -1,0 +1,10 @@
+{
+  "schema": "codework_scene_object_manifest_v1",
+  "scene_id": "ray_scene_project_worker_snapshot",
+  "objects": [
+    {
+      "object_id": "fixture_mesh",
+      "runtime_asset": "assets/mesh_assets/fixture_mesh.runtime.json"
+    }
+  ]
+}
