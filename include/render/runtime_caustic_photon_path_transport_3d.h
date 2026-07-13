@@ -10,6 +10,8 @@ typedef struct {
     RuntimePathDepthPolicy3D depthPolicy;
     bool applyRoulette;
     bool continueTotalInternalReflection;
+    bool hasInitialMediumStack;
+    RuntimeCausticPhotonMediumStack3D initialMediumStack;
 } RuntimeCausticPhotonPathTransportSettings3D;
 
 void RuntimeCausticPhotonPathTransport3D_DefaultSettings(

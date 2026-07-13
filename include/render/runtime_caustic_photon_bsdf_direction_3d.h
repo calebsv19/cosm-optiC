@@ -29,5 +29,14 @@ bool RuntimeCausticPhotonBsdfDirection3D_Sample(
     Vec3 surface_normal,
     const RuntimeCausticPhotonBsdfDirectionSample3D* sample,
     RuntimeCausticPhotonBsdfDirection3D* out_direction);
+bool RuntimeCausticPhotonBsdfDirection3D_SampleInterface(
+    RuntimeCausticPhotonBsdfLobe3D lobe,
+    const RuntimeMaterialPayload3D* material,
+    Vec3 incident_direction,
+    Vec3 surface_normal,
+    const RuntimeCausticPhotonBsdfDirectionSample3D* sample,
+    double eta_from,
+    double eta_to,
+    RuntimeCausticPhotonBsdfDirection3D* out_direction);
 
 #endif

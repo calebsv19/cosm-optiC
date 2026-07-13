@@ -72,6 +72,12 @@ const RuntimeCausticPhotonMediumEntry3D* RuntimeCausticPhotonMediumStack3D_Top(
     const RuntimeCausticPhotonMediumStack3D* stack);
 uint32_t RuntimeCausticPhotonMediumStack3D_Depth(
     const RuntimeCausticPhotonMediumStack3D* stack);
+bool RuntimeCausticPhotonMediumStack3D_ResolveInterface(
+    const RuntimeCausticPhotonMediumStack3D* stack,
+    const RuntimeCausticPhotonMediumEntry3D* boundary,
+    bool entering,
+    double* out_eta_from,
+    double* out_eta_to);
 bool RuntimeCausticPhotonMediumStack3D_ObserveBoundary(
     RuntimeCausticPhotonMediumStack3D* stack,
     const RuntimeCausticPhotonMediumEntry3D* boundary,

@@ -50,6 +50,25 @@ bool RuntimeCausticPhotonBsdfDirection3D_Sample(
     Vec3 surface_normal,
     const RuntimeCausticPhotonBsdfDirectionSample3D* sample,
     RuntimeCausticPhotonBsdfDirection3D* out_direction) {
+    return RuntimeCausticPhotonBsdfDirection3D_SampleInterface(lobe,
+                                                               material,
+                                                               incident_direction,
+                                                               surface_normal,
+                                                               sample,
+                                                               0.0,
+                                                               0.0,
+                                                               out_direction);
+}
+
+bool RuntimeCausticPhotonBsdfDirection3D_SampleInterface(
+    RuntimeCausticPhotonBsdfLobe3D lobe,
+    const RuntimeMaterialPayload3D* material,
+    Vec3 incident_direction,
+    Vec3 surface_normal,
+    const RuntimeCausticPhotonBsdfDirectionSample3D* sample,
+    double eta_from,
+    double eta_to,
+    RuntimeCausticPhotonBsdfDirection3D* out_direction) {
     RuntimeCausticPhotonBsdfDirection3D result;
     RuntimePrincipledBSDF3D principled;
     Vec3 incident;
@@ -124,10 +143,21 @@ bool RuntimeCausticPhotonBsdfDirection3D_Sample(
             RuntimePrincipledBSDF3D_GGXHalfVectorPdf(&principled, cos_half, dot_i_h),
             1.0e-12);
     } else if (lobe == RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_TRANSMISSION) {
-        if (!RuntimeDielectricTransport3D_Resolve(material,
-                                                  surface_normal,
-                                                  incident,
-                                                  &result.dielectric)) {
+        bool explicit_interface = eta_from > 0.0 && eta_to > 0.0;
+        bool resolved = explicit_interface
+                            ? RuntimeDielectricTransport3D_ResolveInterface(
+                                  material,
+                                  surface_normal,
+                                  incident,
+                                  eta_from,
+                                  eta_to,
+                                  &result.dielectric)
+                            : RuntimeDielectricTransport3D_Resolve(
+                                  material,
+                                  surface_normal,
+                                  incident,
+                                  &result.dielectric);
+        if (!resolved) {
             *out_direction = result;
             return false;
         }

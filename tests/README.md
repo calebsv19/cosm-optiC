@@ -134,12 +134,12 @@ is the focused PPM-21 seeded sampling and roulette proof. It validates stable
 sample replay from photon identity plus depth, independent lobe/direction/
 roulette dimensions, mixed-lobe population frequencies, RGB expected-energy
 reconciliation, shared path-depth-policy roulette decisions, survival
-reweighting, termination accounting, and statistical unbiasedness. Nested-
-medium eta selection and production-default integration remain PPM-23.2 and
-later work.
+reweighting, termination accounting, and statistical unbiasedness. PPM-23.2
+adds nested-medium eta selection in the continuation suite; production-default
+integration remains later work.
 
 `TEST_RUNNER_GROUP=runtime_caustic_photon_path_transport_3d make -C ray_tracing test`
-is the focused PPM-22 continuation and PPM-23.1 path-integration proof. The
+is the focused PPM-22 continuation and PPM-23.1/23.2 integration proof. The
 PPM-22.1 fixture traces a seeded
 photon between reflective surfaces for three shared-TLAS hits, resolves material
 state and records a distinct sample stream at every depth, applies geometric-
@@ -160,19 +160,23 @@ proves per-path/batch accounting and zero map mutation for insufficient beam
 capacity, invalid traces, emissive terminal-before-storage paths, and
 transparent-only paths.
 
-The glass-to-mirror and same-object TIR fixtures also prove PPM-23.1 transition
-readback: a solid-dielectric entry pushes one object/material medium above air,
-while each TIR records a successful no-change transition without changing
-depth. These assertions remain diagnostic and do not change eta selection,
-directions, throughput, storage, or production defaults.
+The glass-to-mirror fixture proves a solid entry above air. The same-object TIR
+fixture now begins from an explicit glass stack and proves stack-derived
+glass-to-air eta with four successful no-change transitions. PPM-23.2 adds a
+closed air/glass/water/glass/air scene that proves four ordered object/material
+identities, push/push/pop/pop transitions, `1.0/1.5`, `1.5/1.33`, `1.33/1.5`,
+and `1.5/1.0` interface pairs, refraction shape, return to air, and exact replay.
+Attenuation, beam medium identity, storage behavior, and production defaults do
+not change in this slice.
 
 `TEST_RUNNER_GROUP=runtime_caustic_photon_medium_stack_3d make -C ray_tracing test`
-is the independent PPM-23.1 medium-state proof. It validates explicit air
+is the independent PPM-23.1/23.2 medium-state proof. It validates explicit air
 initialization, material metadata conversion, ordered glass/water entry and
-exit, TIR no-change, duplicate-entry and wrong-exit mismatch records, bounded
-overflow, air underflow, invalid entries, counters, and stable reason labels.
-No scene traversal, direction sampling, attenuation, or map mutation occurs in
-this group.
+exit, non-mutating nested interface-IOR resolution, TIR no-change,
+duplicate-entry and wrong-exit mismatch records, bounded overflow, air
+underflow, invalid entries, counters, and stable reason labels. No scene
+traversal, direction sampling, attenuation, or map mutation occurs in this
+group.
 
 `TEST_RUNNER_GROUP=runtime_caustic_photon_map_3d make -C ray_tracing test`
 is the focused PPM-2 surface photon-map proof. It covers map allocation,

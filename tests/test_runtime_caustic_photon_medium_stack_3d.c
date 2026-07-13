@@ -101,6 +101,44 @@ static int test_runtime_caustic_photon_medium_stack_nested_transitions(void) {
     return 0;
 }
 
+static int test_runtime_caustic_photon_medium_stack_nested_interfaces(void) {
+    RuntimeCausticPhotonMediumStack3D stack;
+    RuntimeCausticPhotonMediumEntry3D glass = photon_medium_entry(21, 101, 1.5);
+    RuntimeCausticPhotonMediumEntry3D water = photon_medium_entry(22, 102, 1.33);
+    RuntimeCausticPhotonMediumTransition3D transition;
+    double eta_from = 0.0;
+    double eta_to = 0.0;
+    RuntimeCausticPhotonMediumStack3D_Init(&stack);
+
+    assert_true("runtime_caustic_photon_medium_interface_air_glass",
+                RuntimeCausticPhotonMediumStack3D_ResolveInterface(
+                    &stack, &glass, true, &eta_from, &eta_to) &&
+                    eta_from == 1.0 && eta_to == 1.5 &&
+                    RuntimeCausticPhotonMediumStack3D_Depth(&stack) == 0u);
+    RuntimeCausticPhotonMediumStack3D_ObserveBoundary(
+        &stack, &glass, true, false, &transition);
+    assert_true("runtime_caustic_photon_medium_interface_glass_water",
+                RuntimeCausticPhotonMediumStack3D_ResolveInterface(
+                    &stack, &water, true, &eta_from, &eta_to) &&
+                    eta_from == 1.5 && eta_to == 1.33 &&
+                    RuntimeCausticPhotonMediumStack3D_Depth(&stack) == 1u);
+    RuntimeCausticPhotonMediumStack3D_ObserveBoundary(
+        &stack, &water, true, false, &transition);
+    assert_true("runtime_caustic_photon_medium_interface_water_glass",
+                RuntimeCausticPhotonMediumStack3D_ResolveInterface(
+                    &stack, &water, false, &eta_from, &eta_to) &&
+                    eta_from == 1.33 && eta_to == 1.5 &&
+                    RuntimeCausticPhotonMediumStack3D_Depth(&stack) == 2u);
+    RuntimeCausticPhotonMediumStack3D_ObserveBoundary(
+        &stack, &water, false, false, &transition);
+    assert_true("runtime_caustic_photon_medium_interface_glass_air",
+                RuntimeCausticPhotonMediumStack3D_ResolveInterface(
+                    &stack, &glass, false, &eta_from, &eta_to) &&
+                    eta_from == 1.5 && eta_to == 1.0 &&
+                    RuntimeCausticPhotonMediumStack3D_Depth(&stack) == 1u);
+    return 0;
+}
+
 static int test_runtime_caustic_photon_medium_stack_tir_and_mismatch(void) {
     RuntimeCausticPhotonMediumStack3D stack;
     RuntimeCausticPhotonMediumEntry3D glass = photon_medium_entry(31, 201, 1.5);
@@ -185,6 +223,7 @@ int run_test_runtime_caustic_photon_medium_stack_3d_tests(void) {
     result |= test_runtime_caustic_photon_medium_stack_initial_air();
     result |= test_runtime_caustic_photon_medium_stack_material_entry();
     result |= test_runtime_caustic_photon_medium_stack_nested_transitions();
+    result |= test_runtime_caustic_photon_medium_stack_nested_interfaces();
     result |= test_runtime_caustic_photon_medium_stack_tir_and_mismatch();
     result |= test_runtime_caustic_photon_medium_stack_failure_records();
     return result;
