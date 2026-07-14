@@ -1,5 +1,6 @@
 #include "platform/ray_tracing_path_opener.h"
 
+#include <errno.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -36,12 +37,27 @@ static bool setup_fixture(char *root, char *directory, char *xdg_open, char *gio
         "printf '%s\\n' \"$@\" > \"$RAY_TRACING_PATH_OPENER_LOG\"\n"
         "exit 0\n";
     char *created_root = mkdtemp(root_template);
-    if (!created_root || snprintf(root, PATH_MAX, "%s", created_root) >= PATH_MAX ||
+    if (!created_root) {
+        perror("ray_tracing_path_opener_test: mkdtemp");
+        return false;
+    }
+    if (snprintf(root, PATH_MAX, "%s", created_root) >= PATH_MAX ||
         snprintf(directory, PATH_MAX, "%s/output", root) >= PATH_MAX ||
         snprintf(xdg_open, PATH_MAX, "%s/xdg-open", root) >= PATH_MAX ||
         snprintf(gio, PATH_MAX, "%s/gio", root) >= PATH_MAX ||
-        snprintf(log_path, PATH_MAX, "%s/args.log", root) >= PATH_MAX) return false;
-    return mkdir(directory, 0700) == 0 && write_script(xdg_open, xdg_script) && write_script(gio, gio_script);
+        snprintf(log_path, PATH_MAX, "%s/args.log", root) >= PATH_MAX) {
+        fprintf(stderr, "ray_tracing_path_opener_test: fixture path too long\n");
+        return false;
+    }
+    if (mkdir(directory, 0700) != 0) {
+        perror("ray_tracing_path_opener_test: mkdir");
+        return false;
+    }
+    if (!write_script(xdg_open, xdg_script) || !write_script(gio, gio_script)) {
+        perror("ray_tracing_path_opener_test: write fixture");
+        return false;
+    }
+    return true;
 }
 
 static bool read_text(const char *path, char *out, size_t out_size) {
