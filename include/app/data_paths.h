@@ -38,6 +38,7 @@ const char *ray_tracing_resolve_shape_asset_dir(const char *shape_asset_env,
 const char *ray_tracing_resolve_import_dir(char *out, size_t out_size);
 
 size_t ray_tracing_manifest_default_roots(const char ***out_roots);
+bool ray_tracing_find_program_root(char *out, size_t out_size);
 bool ray_tracing_find_stable_input_root(char *out, size_t out_size);
 bool ray_tracing_find_stable_output_root(char *out, size_t out_size);
 

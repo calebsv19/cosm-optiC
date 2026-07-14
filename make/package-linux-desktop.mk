@@ -167,6 +167,7 @@ package-linux-desktop-archive:
 
 package-linux-desktop-self-test: package-linux-desktop
 	@$(MAKE) test-ray-tracing-folder-picker
+	@$(MAKE) test-ray-tracing-path-opener
 	@test -x "$(LINUX_DESKTOP_BIN_DIR)/raytracing-launcher" || (echo "Missing Linux launcher"; exit 1)
 	@test -x "$(LINUX_DESKTOP_BIN_DIR)/raytracing-bin" || (echo "Missing app binary"; exit 1)
 	@test -f "$(LINUX_DESKTOP_ENTRY)" || (echo "Missing Linux desktop entry"; exit 1)
@@ -196,6 +197,8 @@ package-linux-desktop-self-test: package-linux-desktop
 	@HOME="$(abspath $(RELEASE_DIR)/linux-desktop-self-test/home)" XDG_DATA_HOME="$(abspath $(RELEASE_DIR)/linux-desktop-self-test/xdg-data)" "$(RELEASE_DIR)/linux-desktop-self-test/unpack/$(LINUX_DESKTOP_BASENAME)/share/install-desktop-entry.sh" >/dev/null
 	@test -f "$(RELEASE_DIR)/linux-desktop-self-test/xdg-data/applications/optic.desktop" || (echo "Installer did not write optic.desktop"; exit 1)
 	@test -f "$(RELEASE_DIR)/linux-desktop-self-test/xdg-data/icons/hicolor/scalable/apps/optic.svg" || (echo "Installer did not write optic.svg"; exit 1)
+	@HOME="$(abspath $(RELEASE_DIR)/linux-desktop-self-test/home)" XDG_DATA_HOME="$(abspath $(RELEASE_DIR)/linux-desktop-self-test/xdg-data)" XDG_STATE_HOME="$(abspath $(RELEASE_DIR)/linux-desktop-self-test/xdg-state)" "$(RELEASE_DIR)/linux-desktop-self-test/unpack/$(LINUX_DESKTOP_BASENAME)/bin/raytracing-launcher" --print-config | grep -q '^RAY_TRACING_INPUT_ROOT=$(abspath $(RELEASE_DIR)/linux-desktop-self-test/xdg-data)/RayTracing/runtime/config$$' || (echo "Launcher did not derive input root from XDG data"; exit 1)
+	@HOME="$(abspath $(RELEASE_DIR)/linux-desktop-self-test/home)" XDG_DATA_HOME="$(abspath $(RELEASE_DIR)/linux-desktop-self-test/xdg-data)" XDG_STATE_HOME="$(abspath $(RELEASE_DIR)/linux-desktop-self-test/xdg-state)" "$(RELEASE_DIR)/linux-desktop-self-test/unpack/$(LINUX_DESKTOP_BASENAME)/bin/raytracing-launcher" --print-config | grep -q '^RAY_TRACING_OUTPUT_ROOT=$(abspath $(RELEASE_DIR)/linux-desktop-self-test/xdg-data)/RayTracing/runtime/data/runtime$$' || (echo "Launcher did not derive output root from XDG data"; exit 1)
 	@RAY_TRACING_RUNTIME_DIR="$(LINUX_DESKTOP_SELF_TEST_RUNTIME_DIR)" XDG_STATE_HOME="$(LINUX_DESKTOP_SELF_TEST_STATE_DIR)" "$(RELEASE_DIR)/linux-desktop-self-test/unpack/$(LINUX_DESKTOP_BASENAME)/bin/raytracing-launcher" --self-test
 	@echo "package-linux-desktop-self-test passed."
 

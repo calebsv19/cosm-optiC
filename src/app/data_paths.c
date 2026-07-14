@@ -74,23 +74,74 @@ static bool find_program_root_from_base(const char *base_dir,
         resolve_candidate_program_root(candidate, out, out_size)) {
         return true;
     }
-    if (snprintf(candidate, sizeof(candidate), "%s/Desktop/CodeWork/ray_tracing", base_dir) < (int)sizeof(candidate) &&
-        resolve_candidate_program_root(candidate, out, out_size)) {
-        return true;
-    }
     return false;
 }
 
-static bool ray_tracing_find_program_root(char *out, size_t out_size) {
+static bool read_xdg_desktop_directory(const char *home,
+                                       char *out,
+                                       size_t out_size) {
+    const char *config_home = getenv("XDG_CONFIG_HOME");
+    char config_path[PATH_MAX];
+    char line[PATH_MAX];
+    FILE *file = NULL;
+
+    if (!home || home[0] != '/' || !out || out_size == 0u) return false;
+    if (!config_home || config_home[0] != '/') {
+        if (snprintf(config_path, sizeof(config_path), "%s/.config/user-dirs.dirs", home) >=
+            (int)sizeof(config_path)) {
+            return false;
+        }
+    } else if (snprintf(config_path, sizeof(config_path), "%s/user-dirs.dirs", config_home) >=
+               (int)sizeof(config_path)) {
+        return false;
+    }
+    file = fopen(config_path, "r");
+    if (!file) return false;
+    while (fgets(line, sizeof(line), file)) {
+        char *value = NULL;
+        size_t length = 0u;
+        if (strncmp(line, "XDG_DESKTOP_DIR=", 16u) != 0) continue;
+        value = line + 16u;
+        length = strcspn(value, "\r\n");
+        value[length] = '\0';
+        if (value[0] == '"') {
+            length = strlen(value);
+            if (length < 2u || value[length - 1u] != '"') continue;
+            value[length - 1u] = '\0';
+            value += 1;
+        }
+        (void)fclose(file);
+        if (strncmp(value, "$HOME/", 6u) == 0) {
+            return snprintf(out, out_size, "%s/%s", home, value + 6u) < (int)out_size;
+        }
+        if (strcmp(value, "$HOME") == 0) {
+            return snprintf(out, out_size, "%s", home) < (int)out_size;
+        }
+        return value[0] == '/' && snprintf(out, out_size, "%s", value) < (int)out_size;
+    }
+    (void)fclose(file);
+    return false;
+}
+
+bool ray_tracing_find_program_root(char *out, size_t out_size) {
     char cwd[PATH_MAX];
     char cursor[PATH_MAX];
+    char configured_desktop[PATH_MAX];
+    char legacy_desktop[PATH_MAX];
     const char *home = getenv("HOME");
+    const char *configured_root = getenv("RAY_TRACING_PROGRAM_ROOT");
     if (!out || out_size == 0) return false;
+
+    if (configured_root && configured_root[0] &&
+        resolve_candidate_program_root(configured_root, out, out_size)) {
+        return true;
+    }
 
     if (getcwd(cwd, sizeof(cwd))) {
         snprintf(cursor, sizeof(cursor), "%s", cwd);
         while (cursor[0]) {
-            if (find_program_root_from_base(cursor, out, out_size)) {
+            if (resolve_candidate_program_root(cursor, out, out_size) ||
+                find_program_root_from_base(cursor, out, out_size)) {
                 return true;
             }
             char *slash = strrchr(cursor, '/');
@@ -105,6 +156,15 @@ static bool ray_tracing_find_program_root(char *out, size_t out_size) {
 
     if (home && home[0]) {
         if (find_program_root_from_base(home, out, out_size)) {
+            return true;
+        }
+        if (read_xdg_desktop_directory(home, configured_desktop, sizeof(configured_desktop)) &&
+            find_program_root_from_base(configured_desktop, out, out_size)) {
+            return true;
+        }
+        if (snprintf(legacy_desktop, sizeof(legacy_desktop), "%s/Desktop", home) <
+                (int)sizeof(legacy_desktop) &&
+            find_program_root_from_base(legacy_desktop, out, out_size)) {
             return true;
         }
     }

@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include "config/config_manager.h"
+#include "app/data_paths.h"
 #include "app/scene_project_render_request.h"
 
 static bool file_exists(const char *path) {
@@ -97,37 +98,10 @@ static bool resolve_program_root_from_candidate(const char *candidate,
 }
 
 static bool find_program_root(char *out, size_t out_size) {
-    char cwd[PATH_MAX];
-    char cursor[PATH_MAX];
     char candidate[PATH_MAX];
-    const char *home = getenv("HOME");
 
     if (!out || out_size == 0) return false;
-    if (getcwd(cwd, sizeof(cwd))) {
-        if (!copy_string(cursor, sizeof(cursor), cwd)) return false;
-        while (cursor[0]) {
-            if (resolve_program_root_from_candidate(cursor, out, out_size)) {
-                return true;
-            }
-            if (join_path(cursor, "ray_tracing", candidate, sizeof(candidate)) &&
-                resolve_program_root_from_candidate(candidate, out, out_size)) {
-                return true;
-            }
-            char *slash = strrchr(cursor, '/');
-            if (!slash) break;
-            if (slash == cursor) {
-                cursor[1] = '\0';
-                break;
-            }
-            *slash = '\0';
-        }
-    }
-
-    if (home && home[0] &&
-        snprintf(candidate,
-                 sizeof(candidate),
-                 "%s/Desktop/CodeWork/ray_tracing",
-                 home) < (int)sizeof(candidate) &&
+    if (ray_tracing_find_program_root(candidate, sizeof(candidate)) &&
         resolve_program_root_from_candidate(candidate, out, out_size)) {
         return true;
     }

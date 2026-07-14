@@ -1132,6 +1132,61 @@ static int test_manifest_default_roots_expands_runtime_and_legacy_paths(void) {
     return 0;
 }
 
+static int test_stable_roots_accept_packaged_runtime_cwd(void) {
+    char tmp_template[] = "/tmp/ray_tracing_runtime_root_XXXXXX";
+    char *tmp_root = mkdtemp(tmp_template);
+    char original_cwd[PATH_MAX];
+    char config_dir[PATH_MAX];
+    char data_dir[PATH_MAX];
+    char runtime_dir[PATH_MAX];
+    char resolved_config_dir[PATH_MAX];
+    char resolved_runtime_dir[PATH_MAX];
+    char input_root[PATH_MAX];
+    char output_root[PATH_MAX];
+    const char *configured_root = getenv("RAY_TRACING_PROGRAM_ROOT");
+    char configured_root_backup[PATH_MAX] = {0};
+    bool had_configured_root = false;
+
+    assert_true("stable_roots_runtime_tmp_created", tmp_root != NULL);
+    assert_true("stable_roots_runtime_cwd_read", getcwd(original_cwd, sizeof(original_cwd)) != NULL);
+    if (!tmp_root || !original_cwd[0]) return 0;
+    if (configured_root && configured_root[0]) {
+        snprintf(configured_root_backup, sizeof(configured_root_backup), "%s", configured_root);
+        had_configured_root = true;
+    }
+    snprintf(config_dir, sizeof(config_dir), "%s/config", tmp_root);
+    snprintf(data_dir, sizeof(data_dir), "%s/data", tmp_root);
+    snprintf(runtime_dir, sizeof(runtime_dir), "%s/runtime", data_dir);
+    assert_true("stable_roots_runtime_config_created", mkdir(config_dir, 0700) == 0);
+    assert_true("stable_roots_runtime_data_created", mkdir(data_dir, 0700) == 0);
+    assert_true("stable_roots_runtime_output_created", mkdir(runtime_dir, 0700) == 0);
+    unsetenv("RAY_TRACING_PROGRAM_ROOT");
+    assert_true("stable_roots_runtime_chdir", chdir(tmp_root) == 0);
+    assert_true("stable_roots_runtime_input_resolved",
+                ray_tracing_find_stable_input_root(input_root, sizeof(input_root)) &&
+                    strcmp(input_root,
+                           realpath(config_dir, resolved_config_dir)
+                               ? resolved_config_dir
+                               : config_dir) == 0);
+    assert_true("stable_roots_runtime_output_resolved",
+                ray_tracing_find_stable_output_root(output_root, sizeof(output_root)) &&
+                    strcmp(output_root,
+                           realpath(runtime_dir, resolved_runtime_dir)
+                               ? resolved_runtime_dir
+                               : runtime_dir) == 0);
+    (void)chdir(original_cwd);
+    if (had_configured_root) {
+        setenv("RAY_TRACING_PROGRAM_ROOT", configured_root_backup, 1);
+    } else {
+        unsetenv("RAY_TRACING_PROGRAM_ROOT");
+    }
+    rmdir(runtime_dir);
+    rmdir(data_dir);
+    rmdir(config_dir);
+    rmdir(tmp_root);
+    return 0;
+}
+
 static int test_scene_source_catalog_collect_admits_runtime_and_manifest_lanes(void) {
     char tmp_template[] = "/tmp/ray_tracing_catalog_s6_XXXXXX";
     char *tmp_root = mkdtemp(tmp_template);
@@ -1680,6 +1735,7 @@ int run_test_ui_menu_contract_tests(void) {
     test_integrator_catalog_cycle_preserves_inactive_mode();
     test_menu_fit_text_to_width_supports_in_place_buffer();
     test_manifest_default_roots_expands_runtime_and_legacy_paths();
+    test_stable_roots_accept_packaged_runtime_cwd();
     test_scene_source_catalog_collect_admits_runtime_and_manifest_lanes();
     test_scene_source_catalog_collects_all_runtime_scene_folders();
     test_menu_state_manifest_options_follow_configured_input_root();
