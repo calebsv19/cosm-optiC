@@ -1,5 +1,6 @@
 #include "app/ray_tracing_desktop_async_bridge.h"
 
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -415,11 +416,12 @@ static bool desktop_async_start_job(RayTracingDesktopAsyncBridgeState* state,
     RuntimeNative3DAsyncRenderJobStartDesc start_desc = {0};
     RuntimeSceneAcceleration3DDiagnostics accel_diag =
         RuntimeSceneAcceleration3DDiagnostics_Disabled();
-    atomic_bool cancel_probe = ATOMIC_VAR_INIT(false);
+    atomic_bool cancel_probe;
     RuntimeNative3DTileSchedulerCancelToken cancel_token = {0};
     bool display_dimensions_changed = false;
     size_t render_bytes = 0u;
     size_t host_bytes = 0u;
+    atomic_init(&cancel_probe, false);
     if (!state || !route) return false;
 
     state->generation += 1u;

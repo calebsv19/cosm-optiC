@@ -251,10 +251,11 @@ RayTracingDeepRenderDesktopRenderUnit_Start(
     RuntimeNative3DAsyncRenderAssessment assessment;
     RuntimeNative3DAsyncRenderJobStartDesc start = {0};
     RuntimeNative3DTileSchedulerCancelToken probe_token = {0};
-    atomic_bool cancel_probe = ATOMIC_VAR_INIT(false);
+    atomic_bool cancel_probe;
     size_t render_bytes = 0u;
     size_t host_bytes = 0u;
 
+    atomic_init(&cancel_probe, false);
     deep_render_desktop_set_reason(out_reason, "invalid async desktop request");
     if (!unit || !session || !job || !desc || desc->generation == 0u ||
         !desc->outputRoot || !desc->frameDirectory || !desc->finalFramePath) {
