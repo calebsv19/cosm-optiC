@@ -8,6 +8,7 @@
 #include "app/data_paths.h"
 #include "editor/material_editor_internal.h"
 #include "import/runtime_scene_bridge.h"
+#include "platform/ray_tracing_folder_picker.h"
 #include "render/render_helper.h"
 #include "render/runtime_material_authored_texture_3d.h"
 
@@ -93,97 +94,6 @@ static void material_editor_authored_basename(const char* path,
     if (!path || !path[0]) return;
     slash = strrchr(path, '/');
     snprintf(out_name, out_size, "%s", slash ? slash + 1 : path);
-}
-
-static bool material_editor_authored_escape_applescript_string(const char* src,
-                                                               char* out,
-                                                               size_t out_cap) {
-    size_t write_index = 0u;
-    size_t i = 0u;
-    if (!src || !out || out_cap == 0u) return false;
-    for (i = 0u; src[i] != '\0'; ++i) {
-        char ch = src[i];
-        if (ch == '"' || ch == '\\') {
-            if (write_index + 2u >= out_cap) return false;
-            out[write_index++] = '\\';
-            out[write_index++] = ch;
-            continue;
-        }
-        if ((unsigned char)ch < 32u) {
-            if (write_index + 1u >= out_cap) return false;
-            out[write_index++] = ' ';
-            continue;
-        }
-        if (write_index + 1u >= out_cap) return false;
-        out[write_index++] = ch;
-    }
-    out[write_index] = '\0';
-    return true;
-}
-
-static void material_editor_authored_trim_path(char* path) {
-    size_t len = 0u;
-    if (!path) return;
-    len = strlen(path);
-    while (len > 0u &&
-           (path[len - 1u] == '\n' || path[len - 1u] == '\r' || path[len - 1u] == ' ')) {
-        path[--len] = '\0';
-    }
-    while (len > 1u && path[len - 1u] == '/') {
-        path[--len] = '\0';
-    }
-}
-
-static bool material_editor_authored_pick_file_macos(const char* prompt,
-                                                     const char* initial_dir,
-                                                     char* out_path,
-                                                     size_t out_cap) {
-#if defined(__APPLE__)
-    FILE* pipe = NULL;
-    char escaped_prompt[256];
-    char escaped_initial_dir[768];
-    char cmd[1600];
-    char line[1024];
-    if (!prompt || !out_path || out_cap == 0u) return false;
-    if (!material_editor_authored_escape_applescript_string(prompt,
-                                                            escaped_prompt,
-                                                            sizeof(escaped_prompt))) {
-        return false;
-    }
-    if (initial_dir && initial_dir[0] &&
-        material_editor_authored_escape_applescript_string(initial_dir,
-                                                           escaped_initial_dir,
-                                                           sizeof(escaped_initial_dir))) {
-        snprintf(cmd,
-                 sizeof(cmd),
-                 "/usr/bin/osascript -e 'set chosenFile to choose file with prompt \"%s\" default location POSIX file \"%s\"' -e 'POSIX path of chosenFile'",
-                 escaped_prompt,
-                 escaped_initial_dir);
-    } else {
-        snprintf(cmd,
-                 sizeof(cmd),
-                 "/usr/bin/osascript -e 'set chosenFile to choose file with prompt \"%s\"' -e 'POSIX path of chosenFile'",
-                 escaped_prompt);
-    }
-    pipe = popen(cmd, "r");
-    if (!pipe) return false;
-    if (!fgets(line, sizeof(line), pipe)) {
-        (void)pclose(pipe);
-        return false;
-    }
-    (void)pclose(pipe);
-    line[strcspn(line, "\r\n")] = '\0';
-    material_editor_authored_trim_path(line);
-    if (line[0] == '\0') return false;
-    snprintf(out_path, out_cap, "%s", line);
-    return true;
-#else
-    (void)prompt;
-    (void)initial_dir;
-    (void)out_path;
-    (void)out_cap;
-    return false;
-#endif
 }
 
 static void material_editor_authored_default_pick_dir(char* out_dir,
@@ -434,10 +344,10 @@ bool MaterialEditorAuthoredTextureBindingHandleEvent(const SDL_Event* event,
         } else {
             material_editor_authored_default_pick_dir(initial_dir, sizeof(initial_dir));
         }
-        if (!material_editor_authored_pick_file_macos("Select authored texture manifest",
-                                                      initial_dir[0] ? initial_dir : NULL,
-                                                      picked_path,
-                                                      sizeof(picked_path))) {
+        if (RayTracing_FilePicker_Select("Select authored texture manifest",
+                                         initial_dir[0] ? initial_dir : NULL,
+                                         picked_path,
+                                         sizeof(picked_path)) != RAY_TRACING_FOLDER_PICKER_SELECTED) {
             material_editor_authored_set_status("Manifest picker cancelled or unavailable",
                                                 (SDL_Color){210, 210, 215, 255});
             return true;

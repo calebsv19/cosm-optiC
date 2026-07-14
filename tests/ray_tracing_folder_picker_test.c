@@ -33,6 +33,14 @@ static bool setup_fixture(char *root, char *zenity, char *kdialog, char *marker)
     char template[PATH_MAX];
     const char *zenity_script =
         "#!/bin/sh\n"
+        "if [ \"$RAY_TRACING_FOLDER_PICKER_EXPECT_FILE\" = file ]; then\n"
+        "  saw_file=0; saw_directory=0\n"
+        "  for arg in \"$@\"; do\n"
+        "    [ \"$arg\" = --file-selection ] && saw_file=1\n"
+        "    [ \"$arg\" = --directory ] && saw_directory=1\n"
+        "  done\n"
+        "  [ \"$saw_file\" = 1 ] && [ \"$saw_directory\" = 0 ] || exit 9\n"
+        "fi\n"
         "case \"$RAY_TRACING_FOLDER_PICKER_TEST_ZENITY\" in\n"
         "  selected) printf '%s\\n' \"$RAY_TRACING_FOLDER_PICKER_SELECTED_PATH\"; exit 0 ;;\n"
         "  cancelled) exit 1 ;;\n"
@@ -41,6 +49,9 @@ static bool setup_fixture(char *root, char *zenity, char *kdialog, char *marker)
         "esac\n";
     const char *kdialog_script =
         "#!/bin/sh\n"
+        "if [ \"$RAY_TRACING_FOLDER_PICKER_EXPECT_FILE\" = file ]; then\n"
+        "  [ \"$1\" = --getopenfilename ] || exit 9\n"
+        "fi\n"
         ": > \"$RAY_TRACING_FOLDER_PICKER_KDIALOG_MARKER\"\n"
         "printf '%s\\n' \"$RAY_TRACING_FOLDER_PICKER_KDIALOG_PATH\"\n";
     char *created = make_fixture_directory(template, sizeof(template), "ray_tracing_folder_picker_");
@@ -114,18 +125,83 @@ static bool test_no_picker_available(void) {
     return passed;
 }
 
+static bool test_file_zenity_selection(void) {
+    char root[PATH_MAX], zenity[PATH_MAX], kdialog[PATH_MAX], marker[PATH_MAX], selected[PATH_MAX];
+    bool passed = false;
+    if (!setup_fixture(root, zenity, kdialog, marker)) return false;
+    (void)setenv("PATH", root, 1);
+    (void)setenv("RAY_TRACING_FOLDER_PICKER_EXPECT_FILE", "file", 1);
+    (void)setenv("RAY_TRACING_FOLDER_PICKER_TEST_ZENITY", "selected", 1);
+    (void)setenv("RAY_TRACING_FOLDER_PICKER_SELECTED_PATH", "/tmp/texture manifest.json", 1);
+    passed = RayTracing_FilePicker_Select("Choose manifest", "/tmp/starting.json", selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_SELECTED &&
+             strcmp(selected, "/tmp/texture manifest.json") == 0 && access(marker, F_OK) != 0;
+    remove_fixture(root, zenity, kdialog, marker);
+    return passed;
+}
+
+static bool test_file_kdialog_fallback(void) {
+    char root[PATH_MAX], zenity[PATH_MAX], kdialog[PATH_MAX], marker[PATH_MAX], selected[PATH_MAX];
+    bool passed = false;
+    if (!setup_fixture(root, zenity, kdialog, marker)) return false;
+    (void)setenv("PATH", root, 1);
+    (void)setenv("RAY_TRACING_FOLDER_PICKER_EXPECT_FILE", "file", 1);
+    (void)setenv("RAY_TRACING_FOLDER_PICKER_TEST_ZENITY", "unavailable", 1);
+    (void)setenv("RAY_TRACING_FOLDER_PICKER_KDIALOG_MARKER", marker, 1);
+    (void)setenv("RAY_TRACING_FOLDER_PICKER_KDIALOG_PATH", "/tmp/fallback manifest.json", 1);
+    passed = RayTracing_FilePicker_Select("Choose manifest", NULL, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_SELECTED &&
+             strcmp(selected, "/tmp/fallback manifest.json") == 0 && access(marker, F_OK) == 0;
+    remove_fixture(root, zenity, kdialog, marker);
+    return passed;
+}
+
+static bool test_file_cancel_does_not_fallback(void) {
+    char root[PATH_MAX], zenity[PATH_MAX], kdialog[PATH_MAX], marker[PATH_MAX], selected[PATH_MAX];
+    bool passed = false;
+    if (!setup_fixture(root, zenity, kdialog, marker)) return false;
+    (void)setenv("PATH", root, 1);
+    (void)setenv("RAY_TRACING_FOLDER_PICKER_EXPECT_FILE", "file", 1);
+    (void)setenv("RAY_TRACING_FOLDER_PICKER_TEST_ZENITY", "cancelled", 1);
+    (void)setenv("RAY_TRACING_FOLDER_PICKER_KDIALOG_MARKER", marker, 1);
+    passed = RayTracing_FilePicker_Select("Choose manifest", NULL, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_CANCELLED &&
+             selected[0] == '\0' && access(marker, F_OK) != 0;
+    remove_fixture(root, zenity, kdialog, marker);
+    return passed;
+}
+
+static bool test_file_picker_unavailable(void) {
+    char template[PATH_MAX];
+    char selected[PATH_MAX];
+    char *root = make_fixture_directory(template, sizeof(template), "ray_tracing_file_picker_empty_");
+    bool passed;
+    if (!root) return false;
+    (void)setenv("PATH", root, 1);
+    passed = RayTracing_FilePicker_Select("Unavailable", NULL, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_UNAVAILABLE &&
+             selected[0] == '\0';
+    (void)rmdir(root);
+    return passed;
+}
+
 int main(void) {
     const bool zenity_selection = test_zenity_selection();
     const bool kdialog_fallback = test_kdialog_fallback();
     const bool cancellation = test_cancel_does_not_fallback();
     const bool unavailable = test_no_picker_available();
-    const bool passed = zenity_selection && kdialog_fallback && cancellation && unavailable;
+    const bool file_zenity_selection = test_file_zenity_selection();
+    const bool file_kdialog_fallback = test_file_kdialog_fallback();
+    const bool file_cancellation = test_file_cancel_does_not_fallback();
+    const bool file_unavailable = test_file_picker_unavailable();
+    const bool passed = zenity_selection && kdialog_fallback && cancellation && unavailable &&
+                        file_zenity_selection && file_kdialog_fallback && file_cancellation && file_unavailable;
     fprintf(stderr,
-            "ray_tracing_folder_picker_test cases: zenity=%d kdialog=%d cancel=%d unavailable=%d\n",
+            "ray_tracing_folder_picker_test cases: zenity=%d kdialog=%d cancel=%d unavailable=%d file_zenity=%d file_kdialog=%d file_cancel=%d file_unavailable=%d\n",
             zenity_selection,
             kdialog_fallback,
             cancellation,
-            unavailable);
+            unavailable,
+            file_zenity_selection,
+            file_kdialog_fallback,
+            file_cancellation,
+            file_unavailable);
     fprintf(stdout, "ray_tracing_folder_picker_test: %s\n", passed ? "success" : "failed");
     return passed ? 0 : 1;
 }

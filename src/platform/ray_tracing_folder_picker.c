@@ -81,28 +81,30 @@ static bool escape_applescript_literal(const char *input, char *output, size_t o
     return true;
 }
 
-static RayTracingFolderPickerResult select_macos_folder(const char *prompt,
-                                                         const char *initial_directory,
-                                                         char *out_path,
-                                                         size_t out_path_size) {
+static RayTracingFolderPickerResult select_macos_path(bool select_file,
+                                                      const char *prompt,
+                                                      const char *initial_path,
+                                                      char *out_path,
+                                                      size_t out_path_size) {
     char escaped_prompt[512];
-    char escaped_directory[2048];
+    char escaped_path[2048];
     char script[3072];
     const char *argv[4];
+    const char *chooser = select_file ? "choose file" : "choose folder";
 
     if (!escape_applescript_literal(prompt, escaped_prompt, sizeof(escaped_prompt))) {
         return RAY_TRACING_FOLDER_PICKER_FAILED;
     }
-    if (initial_directory && initial_directory[0]) {
-        if (!escape_applescript_literal(initial_directory, escaped_directory, sizeof(escaped_directory))) {
+    if (initial_path && initial_path[0]) {
+        if (!escape_applescript_literal(initial_path, escaped_path, sizeof(escaped_path))) {
             return RAY_TRACING_FOLDER_PICKER_FAILED;
         }
         snprintf(script, sizeof(script),
-                 "POSIX path of (choose folder with prompt \"%s\" default location POSIX file \"%s\")",
-                 escaped_prompt, escaped_directory);
+                 "POSIX path of (%s with prompt \"%s\" default location POSIX file \"%s\")",
+                 chooser, escaped_prompt, escaped_path);
     } else {
         snprintf(script, sizeof(script),
-                 "POSIX path of (choose folder with prompt \"%s\")", escaped_prompt);
+                 "POSIX path of (%s with prompt \"%s\")", chooser, escaped_prompt);
     }
     argv[0] = "/usr/bin/osascript";
     argv[1] = "-e";
@@ -111,21 +113,23 @@ static RayTracingFolderPickerResult select_macos_folder(const char *prompt,
     return run_picker(argv, out_path, out_path_size);
 }
 #else
-static RayTracingFolderPickerResult select_linux_folder(const char *prompt,
-                                                         const char *initial_directory,
-                                                         char *out_path,
-                                                         size_t out_path_size) {
-    const char *zenity_argv[8] = {"zenity", "--file-selection", "--directory", "--title", prompt, NULL, NULL, NULL};
-    const char *kdialog_argv[7] = {"kdialog", "--getexistingdirectory", NULL, "--title", prompt, NULL, NULL};
+static RayTracingFolderPickerResult select_linux_path(bool select_file,
+                                                      const char *prompt,
+                                                      const char *initial_path,
+                                                      char *out_path,
+                                                      size_t out_path_size) {
+    const char *zenity_argv[8] = {"zenity", "--file-selection", "--title", prompt, NULL, NULL, NULL, NULL};
+    const char *kdialog_argv[6] = {"kdialog", NULL, NULL, "--title", prompt, NULL};
     RayTracingFolderPickerResult result;
+    size_t zenity_index = 4u;
 
-    if (initial_directory && initial_directory[0]) {
-        zenity_argv[5] = "--filename";
-        zenity_argv[6] = initial_directory;
-        kdialog_argv[2] = initial_directory;
-    } else {
-        kdialog_argv[2] = ".";
+    if (!select_file) zenity_argv[zenity_index++] = "--directory";
+    if (initial_path && initial_path[0]) {
+        zenity_argv[zenity_index++] = "--filename";
+        zenity_argv[zenity_index] = initial_path;
     }
+    kdialog_argv[1] = select_file ? "--getopenfilename" : "--getexistingdirectory";
+    kdialog_argv[2] = initial_path && initial_path[0] ? initial_path : ".";
     result = run_picker(zenity_argv, out_path, out_path_size);
     if (result != RAY_TRACING_FOLDER_PICKER_UNAVAILABLE) return result;
     return run_picker(kdialog_argv, out_path, out_path_size);
@@ -141,11 +145,29 @@ RayTracingFolderPickerResult RayTracing_FolderPicker_Select(const char *prompt,
     }
     out_path[0] = '\0';
 #if RAY_TRACING_FOLDER_PICKER_MACOS
-    return select_macos_folder(prompt, initial_directory, out_path, out_path_size);
+    return select_macos_path(false, prompt, initial_directory, out_path, out_path_size);
 #elif defined(__linux__) || defined(RAY_TRACING_FOLDER_PICKER_FORCE_LINUX)
-    return select_linux_folder(prompt, initial_directory, out_path, out_path_size);
+    return select_linux_path(false, prompt, initial_directory, out_path, out_path_size);
 #else
     (void)initial_directory;
+    return RAY_TRACING_FOLDER_PICKER_UNAVAILABLE;
+#endif
+}
+
+RayTracingFolderPickerResult RayTracing_FilePicker_Select(const char *prompt,
+                                                          const char *initial_path,
+                                                          char *out_path,
+                                                          size_t out_path_size) {
+    if (!prompt || !prompt[0] || !out_path || out_path_size < 2u) {
+        return RAY_TRACING_FOLDER_PICKER_FAILED;
+    }
+    out_path[0] = '\0';
+#if RAY_TRACING_FOLDER_PICKER_MACOS
+    return select_macos_path(true, prompt, initial_path, out_path, out_path_size);
+#elif defined(__linux__) || defined(RAY_TRACING_FOLDER_PICKER_FORCE_LINUX)
+    return select_linux_path(true, prompt, initial_path, out_path, out_path_size);
+#else
+    (void)initial_path;
     return RAY_TRACING_FOLDER_PICKER_UNAVAILABLE;
 #endif
 }

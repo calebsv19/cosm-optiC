@@ -14,3 +14,9 @@ RayTracingFolderPickerResult RayTracing_FolderPicker_Select(const char *prompt,
                                                             const char *initial_directory,
                                                             char *out_path,
                                                             size_t out_path_size);
+
+/* Opens the host file chooser without routing prompt or path text through a shell. */
+RayTracingFolderPickerResult RayTracing_FilePicker_Select(const char *prompt,
+                                                          const char *initial_path,
+                                                          char *out_path,
+                                                          size_t out_path_size);
