@@ -136,24 +136,31 @@ static int test_scene_editor_mesh_preview_complex_scene_from_env(void) {
 
     if (!scene_path || !scene_path[0]) return 0;
     ray_tracing_runtime_mesh_asset_set_init(&set);
-    ok = ray_tracing_runtime_mesh_assets_load_scene_file(scene_path,
-                                                          &set,
-                                                          diagnostics,
-                                                          sizeof(diagnostics));
+    ok = ray_tracing_runtime_mesh_assets_load_scene_file_preview_limited(
+        scene_path,
+        1024u * 1024u,
+        &set,
+        diagnostics,
+        sizeof(diagnostics));
     assert_true("mesh_preview_complex_scene_load", ok);
     if (!ok) return 0;
     ray_tracing_runtime_mesh_assets_take_last(&set);
     active = ray_tracing_runtime_mesh_assets_last();
     SceneEditorMeshPreviewStorePrepare(active);
-    if (active) {
-        for (int i = 0; i < active->asset_count; ++i) {
-            const CoreMeshPreviewLodMesh* lod = SceneEditorMeshPreviewStoreGet(i);
-            if (lod && lod->source_triangle_count > largest_source_triangles) {
-                largest_source_triangles = lod->source_triangle_count;
-                largest_lod = lod;
-            }
+    for (int i = 0; i < SceneEditorMeshPreviewStoreInstanceCount(); ++i) {
+        const RayTracingRuntimeMeshAssetInstance* instance =
+            SceneEditorMeshPreviewStoreGetInstance(i);
+        const CoreMeshPreviewLodMesh* lod =
+            instance ? SceneEditorMeshPreviewStoreGet(instance->asset_index) : NULL;
+        if (lod && lod->source_triangle_count > largest_source_triangles) {
+            largest_source_triangles = lod->source_triangle_count;
+            largest_lod = lod;
         }
     }
+    assert_true("mesh_preview_complex_large_asset_was_preview_limited",
+                active && active->skipped_instance_count > 0);
+    assert_true("mesh_preview_complex_large_asset_recovered",
+                SceneEditorMeshPreviewStoreRecoveredInstanceCount() > 0);
     assert_true("mesh_preview_complex_source_is_high_triangle",
                 largest_source_triangles >= 100000u);
     assert_true("mesh_preview_complex_coherent_lod_available",
@@ -1452,6 +1459,9 @@ static int test_runtime_mesh_asset_loader_preview_limited_keeps_sidecar_metadata
         "\"objects\":[{"
         "\"object_id\":\"obj_preview_limited_mesh\","
         "\"object_type\":\"mesh_asset_instance\","
+        "\"transform\":{\"position\":{\"x\":2,\"y\":3,\"z\":4},"
+        "\"rotation\":{\"x\":0,\"y\":0,\"z\":0},"
+        "\"scale\":{\"x\":1.5,\"y\":1.5,\"z\":1.5}},"
         "\"geometry_ref\":{\"kind\":\"mesh_asset\",\"id\":\"asset_sphere_8x4\"}"
         "}]"
         "}";
@@ -1500,6 +1510,24 @@ static int test_runtime_mesh_asset_loader_preview_limited_keeps_sidecar_metadata
                     preview->metadata.preview_vertex_count == 0u);
         assert_true("mrt_preview_limited_meta_radius",
                     preview->metadata.bounding_sphere_radius > 0.0);
+        SceneEditorMeshPreviewStorePrepare(&set);
+        assert_true("mrt_preview_limited_editor_recovers_instance",
+                    SceneEditorMeshPreviewStoreRecoveredInstanceCount() == 1);
+        assert_true("mrt_preview_limited_editor_has_scene_object",
+                    SceneEditorMeshPreviewStoreHasSceneObject(0));
+        assert_true("mrt_preview_limited_editor_builds_lod",
+                    SceneEditorMeshPreviewStoreInstanceCount() == 1 &&
+                        SceneEditorMeshPreviewStoreGet(0) != NULL);
+        if (SceneEditorMeshPreviewStoreInstanceCount() == 1) {
+            const RayTracingRuntimeMeshAssetInstance* recovered =
+                SceneEditorMeshPreviewStoreGetInstance(0);
+            assert_true("mrt_preview_limited_editor_keeps_transform",
+                        recovered && fabs(recovered->position_x - 2.0) < 1e-9 &&
+                            fabs(recovered->position_y - 3.0) < 1e-9 &&
+                            fabs(recovered->position_z - 4.0) < 1e-9 &&
+                            fabs(recovered->scale_x - 1.5) < 1e-9);
+        }
+        SceneEditorMeshPreviewStoreReset();
     }
 
     ray_tracing_runtime_mesh_asset_set_free(&set);

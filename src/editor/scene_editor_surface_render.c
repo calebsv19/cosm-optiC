@@ -17,6 +17,7 @@
 #include "editor/object_editor_panels.h"
 #include "editor/scene_editor_chrome_shell.h"
 #include "editor/scene_editor_mesh_preview_render.h"
+#include "editor/scene_editor_mesh_preview_store.h"
 #include "editor/scene_editor_tool_state.h"
 #include "import/runtime_mesh_asset_loader.h"
 #include "render/render_helper.h"
@@ -129,7 +130,7 @@ static int SceneEditorSurfaceRenderObjectList(SDL_Renderer* renderer,
     const RayTracingRuntimeMeshAssetSet* mesh_assets = ray_tracing_runtime_mesh_assets_last();
     const int row_h = 24;
     const int gap = 4;
-    int loaded_mesh_instances = mesh_assets ? mesh_assets->instance_count : 0;
+    int preview_mesh_instances = SceneEditorMeshPreviewStoreInstanceCount();
     int max_rows = 0;
     char line[160];
     if (!renderer || bounds.w <= 0 || cursor_y >= bottom_y) return cursor_y;
@@ -137,9 +138,9 @@ static int SceneEditorSurfaceRenderObjectList(SDL_Renderer* renderer,
 
     snprintf(line,
              sizeof(line),
-             "Scene Objects  %d   Mesh Loaded %d",
+             "Scene Objects  %d   Mesh Preview %d",
              sceneSettings.objectCount,
-             loaded_mesh_instances);
+             preview_mesh_instances);
     cursor_y = SceneEditorSurfaceRenderFlowLine(renderer,
                                                 bounds,
                                                 cursor_y,
@@ -177,6 +178,8 @@ static int SceneEditorSurfaceRenderObjectList(SDL_Renderer* renderer,
         primitive = SceneEditorSurfaceFindPrimitiveDigest(&digest, i);
         if (loaded_mesh) {
             role = "mesh loaded";
+        } else if (skipped_mesh && SceneEditorMeshPreviewStoreHasSceneObject(i)) {
+            role = "mesh preview";
         } else if (skipped_mesh) {
             role = "mesh skipped";
         } else if (primitive) {
@@ -189,7 +192,15 @@ static int SceneEditorSurfaceRenderObjectList(SDL_Renderer* renderer,
         SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
         SDL_RenderDrawRect(renderer, &row);
         ObjectEditorRegisterObjectListRow(i, row);
-        if (skipped_mesh) {
+        if (skipped_mesh && SceneEditorMeshPreviewStoreHasSceneObject(i)) {
+            snprintf(line,
+                     sizeof(line),
+                     "#%d  %s  %s  LOD from %.1f MB",
+                     i,
+                     role,
+                     short_id,
+                     (double)skipped_mesh->file_size_bytes / (1024.0 * 1024.0));
+        } else if (skipped_mesh) {
             snprintf(line,
                      sizeof(line),
                      "#%d  %s  %s  %.1f/%.1f MB",

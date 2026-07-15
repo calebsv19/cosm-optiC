@@ -72,6 +72,7 @@ typedef struct RayTracingRuntimeMeshAssetSkippedInstance {
     size_t file_size_bytes;
     size_t max_file_size_bytes;
     RayTracingRuntimeMeshPreviewInfo preview;
+    RayTracingRuntimeMeshAssetInstance preview_instance;
 } RayTracingRuntimeMeshAssetSkippedInstance;
 
 typedef struct RayTracingRuntimeMeshAssetSet {

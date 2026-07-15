@@ -510,6 +510,22 @@ static bool ray_tracing_runtime_mesh_assets_load_scene_file_with_options(
                 skipped->file_size_bytes = asset_file_size_bytes;
                 skipped->max_file_size_bytes = max_asset_file_bytes;
                 runtime_mesh_asset_probe_preview(resolved_asset_path, &skipped->preview);
+                memset(&skipped->preview_instance, 0, sizeof(skipped->preview_instance));
+                runtime_mesh_asset_copy_id(skipped->preview_instance.object_id,
+                                           sizeof(skipped->preview_instance.object_id),
+                                           object_id,
+                                           out_diagnostics,
+                                           out_diagnostics_size);
+                runtime_mesh_asset_copy_id(skipped->preview_instance.asset_id,
+                                           sizeof(skipped->preview_instance.asset_id),
+                                           asset_id,
+                                           out_diagnostics,
+                                           out_diagnostics_size);
+                skipped->preview_instance.asset_index = -1;
+                skipped->preview_instance.scene_object_index = runtime_object_index;
+                runtime_mesh_asset_read_transform(object,
+                                                  world_scale,
+                                                  &skipped->preview_instance);
                 out_set->skipped_instance_count += 1;
             }
         }

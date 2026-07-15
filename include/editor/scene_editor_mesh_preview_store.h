@@ -10,4 +10,10 @@
 void SceneEditorMeshPreviewStoreReset(void);
 void SceneEditorMeshPreviewStorePrepare(const RayTracingRuntimeMeshAssetSet* assets);
 const CoreMeshPreviewLodMesh* SceneEditorMeshPreviewStoreGet(int asset_index);
+const CoreMeshAssetRuntimeContract* SceneEditorMeshPreviewStoreGetContract(int asset_index);
+int SceneEditorMeshPreviewStoreInstanceCount(void);
+const RayTracingRuntimeMeshAssetInstance* SceneEditorMeshPreviewStoreGetInstance(
+    int instance_index);
+bool SceneEditorMeshPreviewStoreHasSceneObject(int scene_object_index);
+int SceneEditorMeshPreviewStoreRecoveredInstanceCount(void);
 bool SceneEditorMeshPreviewStoreIsValid(int asset_index);

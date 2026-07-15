@@ -132,32 +132,32 @@ static SceneEditorMeshPreviewPoint3 scene_editor_mesh_preview_rotate(
 }
 
 static SceneEditorMeshPreviewPoint3 scene_editor_mesh_preview_pivot(
-    const CoreMeshAssetRuntimeDocument* document,
+    const CoreMeshAssetRuntimeContract* contract,
     const RayTracingRuntimeMeshAssetInstance* instance) {
     SceneEditorMeshPreviewPoint3 pivot = {0.0, 0.0, 0.0};
-    if (!document || !instance) return pivot;
+    if (!contract || !instance) return pivot;
     if (instance->rotation_pivot_policy == RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_CUSTOM) {
         pivot.x = instance->rotation_pivot_x * instance->scale_x;
         pivot.y = instance->rotation_pivot_y * instance->scale_y;
         pivot.z = instance->rotation_pivot_z * instance->scale_z;
     } else if (instance->rotation_pivot_policy ==
                RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_BOUNDS_CENTER) {
-        pivot.x = (document->contract.local_bounds.min.x +
-                   document->contract.local_bounds.max.x) * 0.5 * instance->scale_x;
-        pivot.y = (document->contract.local_bounds.min.y +
-                   document->contract.local_bounds.max.y) * 0.5 * instance->scale_y;
-        pivot.z = (document->contract.local_bounds.min.z +
-                   document->contract.local_bounds.max.z) * 0.5 * instance->scale_z;
+        pivot.x = (contract->local_bounds.min.x +
+                   contract->local_bounds.max.x) * 0.5 * instance->scale_x;
+        pivot.y = (contract->local_bounds.min.y +
+                   contract->local_bounds.max.y) * 0.5 * instance->scale_y;
+        pivot.z = (contract->local_bounds.min.z +
+                   contract->local_bounds.max.z) * 0.5 * instance->scale_z;
     }
     return pivot;
 }
 
 static SceneEditorMeshPreviewPoint3 scene_editor_mesh_preview_world_point(
     CoreObjectVec3 local,
-    const CoreMeshAssetRuntimeDocument* document,
+    const CoreMeshAssetRuntimeContract* contract,
     const RayTracingRuntimeMeshAssetInstance* instance) {
     const SceneEditorMeshPreviewPoint3 pivot =
-        scene_editor_mesh_preview_pivot(document, instance);
+        scene_editor_mesh_preview_pivot(contract, instance);
     SceneEditorMeshPreviewPoint3 point = {
         local.x * instance->scale_x - pivot.x,
         local.y * instance->scale_y - pivot.y,
@@ -298,7 +298,7 @@ static bool scene_editor_mesh_preview_build_slot(
     uint64_t signature,
     const SceneEditorDigestOverlayProjector* projector,
     const RayTracingRuntimeMeshAssetInstance* instance,
-    const CoreMeshAssetRuntimeDocument* document,
+    const CoreMeshAssetRuntimeContract* contract,
     const CoreMeshPreviewLodMesh* lod,
     int scene_object_index) {
     SDL_FPoint* vertices = NULL;
@@ -311,7 +311,7 @@ static bool scene_editor_mesh_preview_build_slot(
     SDL_Color material = scene_editor_mesh_preview_material_color(scene_object_index);
     bool ok = false;
 
-    if (!renderer || !slot || !projector || !instance || !document || !lod ||
+    if (!renderer || !slot || !projector || !instance || !contract || !lod ||
         lod->vertex_count == 0u || lod->triangle_count == 0u || !lod->vertices || !lod->indices ||
         lod->vertex_count > UINT32_MAX || lod->triangle_count > UINT32_MAX / 6u) {
         return false;
@@ -329,7 +329,7 @@ static bool scene_editor_mesh_preview_build_slot(
 
     for (size_t i = 0u; i < lod->vertex_count; ++i) {
         const SceneEditorMeshPreviewPoint3 world = scene_editor_mesh_preview_world_point(
-            lod->vertices[i], document, instance);
+            lod->vertices[i], contract, instance);
         if (!scene_editor_mesh_preview_project(projector, world, &vertices[i])) goto cleanup;
     }
     for (size_t i = 0u; i < lod->triangle_count; ++i) {
@@ -344,9 +344,9 @@ static bool scene_editor_mesh_preview_build_slot(
         if (a >= lod->vertex_count || b >= lod->vertex_count || c >= lod->vertex_count) {
             goto cleanup;
         }
-        wa = scene_editor_mesh_preview_world_point(lod->vertices[a], document, instance);
-        wb = scene_editor_mesh_preview_world_point(lod->vertices[b], document, instance);
-        wc = scene_editor_mesh_preview_world_point(lod->vertices[c], document, instance);
+        wa = scene_editor_mesh_preview_world_point(lod->vertices[a], contract, instance);
+        wb = scene_editor_mesh_preview_world_point(lod->vertices[b], contract, instance);
+        wc = scene_editor_mesh_preview_world_point(lod->vertices[c], contract, instance);
         depth_triangles[i].a = a;
         depth_triangles[i].b = b;
         depth_triangles[i].c = c;
@@ -453,11 +453,11 @@ static bool scene_editor_mesh_preview_instance_visible(int active_editor_mode,
 }
 
 static void scene_editor_mesh_preview_bounds_points(
-    const CoreMeshAssetRuntimeDocument* document,
+    const CoreMeshAssetRuntimeContract* contract,
     const RayTracingRuntimeMeshAssetInstance* instance,
     SceneEditorMeshPreviewPoint3 out_points[8]) {
-    const CoreObjectVec3 min = document->contract.local_bounds.min;
-    const CoreObjectVec3 max = document->contract.local_bounds.max;
+    const CoreObjectVec3 min = contract->local_bounds.min;
+    const CoreObjectVec3 max = contract->local_bounds.max;
     int index = 0;
     for (int z = 0; z < 2; ++z) {
         for (int y = 0; y < 2; ++y) {
@@ -468,7 +468,7 @@ static void scene_editor_mesh_preview_bounds_points(
                     z ? max.z : min.z
                 };
                 out_points[index++] =
-                    scene_editor_mesh_preview_world_point(local, document, instance);
+                    scene_editor_mesh_preview_world_point(local, contract, instance);
             }
         }
     }
@@ -477,7 +477,7 @@ static void scene_editor_mesh_preview_bounds_points(
 static void scene_editor_mesh_preview_draw_bounds(
     SDL_Renderer* renderer,
     const SceneEditorDigestOverlayProjector* projector,
-    const CoreMeshAssetRuntimeDocument* document,
+    const CoreMeshAssetRuntimeContract* contract,
     const RayTracingRuntimeMeshAssetInstance* instance,
     SDL_Color color) {
     static const int edges[12][2] = {
@@ -486,7 +486,7 @@ static void scene_editor_mesh_preview_draw_bounds(
         {0, 4}, {1, 5}, {2, 6}, {3, 7}
     };
     SceneEditorMeshPreviewPoint3 points[8];
-    scene_editor_mesh_preview_bounds_points(document, instance, points);
+    scene_editor_mesh_preview_bounds_points(contract, instance, points);
     SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
     for (int i = 0; i < 12; ++i) {
         SceneEditorDigestOverlayDrawLine3(renderer,
@@ -570,30 +570,30 @@ bool SceneEditorMeshPreviewRenderGeometry(
     int selected_object_index,
     int hover_object_index,
     SceneEditorMeshPreviewFrameStats* out_stats) {
-    const RayTracingRuntimeMeshAssetSet* assets = ray_tracing_runtime_mesh_assets_last();
     SceneEditorMeshPreviewFrameStats stats = {0};
     stats.mode = SceneEditorMeshPreviewModeGet();
     if (out_stats) *out_stats = stats;
-    if (!renderer || !projector || !assets) return false;
+    if (!renderer || !projector) return false;
 
-    for (int i = 0; i < assets->instance_count; ++i) {
-        const RayTracingRuntimeMeshAssetInstance* instance = &assets->instances[i];
-        const CoreMeshAssetRuntimeDocument* document = NULL;
+    for (int i = 0; i < SceneEditorMeshPreviewStoreInstanceCount(); ++i) {
+        const RayTracingRuntimeMeshAssetInstance* instance =
+            SceneEditorMeshPreviewStoreGetInstance(i);
+        const CoreMeshAssetRuntimeContract* contract = NULL;
         const CoreMeshPreviewLodMesh* lod = NULL;
         SDL_Color highlight = {0};
-        if (instance->asset_index < 0 || instance->asset_index >= assets->asset_count ||
+        if (!instance ||
             !scene_editor_mesh_preview_instance_visible(active_editor_mode,
                                                         selected_object_index,
                                                         instance->scene_object_index)) {
             continue;
         }
-        document = &assets->assets[instance->asset_index].document;
+        contract = SceneEditorMeshPreviewStoreGetContract(instance->asset_index);
         lod = SceneEditorMeshPreviewStoreGet(instance->asset_index);
-        if (!lod) continue;
+        if (!contract || !lod) continue;
         if (stats.mode == SCENE_EDITOR_MESH_DISPLAY_BOUNDS) {
             scene_editor_mesh_preview_draw_bounds(renderer,
                                                   projector,
-                                                  document,
+                                                  contract,
                                                   instance,
                                                   (SDL_Color){112, 168, 220, 235});
             stats.rendered_bounds += 1;
@@ -618,7 +618,7 @@ bool SceneEditorMeshPreviewRenderGeometry(
                                                       signature,
                                                       projector,
                                                       instance,
-                                                      document,
+                                                      contract,
                                                       lod,
                                                       instance->scene_object_index)) {
                 continue;
@@ -650,7 +650,7 @@ bool SceneEditorMeshPreviewRenderGeometry(
         if (highlight.a != 0u) {
             scene_editor_mesh_preview_draw_bounds(renderer,
                                                   projector,
-                                                  document,
+                                                  contract,
                                                   instance,
                                                   highlight);
         }
@@ -699,7 +699,7 @@ static bool scene_editor_mesh_preview_point_in_triangle(double px,
 
 static bool scene_editor_mesh_preview_pick_bounds(
     const SceneEditorDigestOverlayProjector* projector,
-    const CoreMeshAssetRuntimeDocument* document,
+    const CoreMeshAssetRuntimeContract* contract,
     const RayTracingRuntimeMeshAssetInstance* instance,
     int screen_x,
     int screen_y,
@@ -710,7 +710,7 @@ static bool scene_editor_mesh_preview_pick_bounds(
     int max_x = 0;
     int max_y = 0;
     bool seeded = false;
-    scene_editor_mesh_preview_bounds_points(document, instance, points);
+    scene_editor_mesh_preview_bounds_points(contract, instance, points);
     for (int i = 0; i < 8; ++i) {
         SDL_FPoint projected;
         if (!scene_editor_mesh_preview_project(projector, points[i], &projected)) continue;
@@ -739,31 +739,31 @@ int SceneEditorMeshPreviewPickObjectIndex(
     int selected_object_index,
     int screen_x,
     int screen_y) {
-    const RayTracingRuntimeMeshAssetSet* assets = ray_tracing_runtime_mesh_assets_last();
     int picked = -1;
     double picked_depth = -DBL_MAX;
     double picked_area = DBL_MAX;
-    if (!projector || !assets ||
+    if (!projector ||
         SceneEditorMeshPreviewModeButtonAtPoint(&projector->viewport, screen_x, screen_y) >= 0) {
         return -1;
     }
-    for (int i = 0; i < assets->instance_count; ++i) {
-        const RayTracingRuntimeMeshAssetInstance* instance = &assets->instances[i];
-        const CoreMeshAssetRuntimeDocument* document = NULL;
+    for (int i = 0; i < SceneEditorMeshPreviewStoreInstanceCount(); ++i) {
+        const RayTracingRuntimeMeshAssetInstance* instance =
+            SceneEditorMeshPreviewStoreGetInstance(i);
+        const CoreMeshAssetRuntimeContract* contract = NULL;
         const CoreMeshPreviewLodMesh* lod = NULL;
-        if (instance->asset_index < 0 || instance->asset_index >= assets->asset_count ||
+        if (!instance ||
             !scene_editor_mesh_preview_instance_visible(active_editor_mode,
                                                         selected_object_index,
                                                         instance->scene_object_index)) {
             continue;
         }
-        document = &assets->assets[instance->asset_index].document;
+        contract = SceneEditorMeshPreviewStoreGetContract(instance->asset_index);
         lod = SceneEditorMeshPreviewStoreGet(instance->asset_index);
-        if (!lod) continue;
+        if (!contract || !lod) continue;
         if (SceneEditorMeshPreviewModeGet() == SCENE_EDITOR_MESH_DISPLAY_BOUNDS) {
             double area = 0.0;
             if (scene_editor_mesh_preview_pick_bounds(projector,
-                                                      document,
+                                                      contract,
                                                       instance,
                                                       screen_x,
                                                       screen_y,
@@ -787,9 +787,9 @@ int SceneEditorMeshPreviewPickObjectIndex(
             if (ia >= lod->vertex_count || ib >= lod->vertex_count || ic >= lod->vertex_count) {
                 continue;
             }
-            wa = scene_editor_mesh_preview_world_point(lod->vertices[ia], document, instance);
-            wb = scene_editor_mesh_preview_world_point(lod->vertices[ib], document, instance);
-            wc = scene_editor_mesh_preview_world_point(lod->vertices[ic], document, instance);
+            wa = scene_editor_mesh_preview_world_point(lod->vertices[ia], contract, instance);
+            wb = scene_editor_mesh_preview_world_point(lod->vertices[ib], contract, instance);
+            wc = scene_editor_mesh_preview_world_point(lod->vertices[ic], contract, instance);
             if (!scene_editor_mesh_preview_project(projector, wa, &a) ||
                 !scene_editor_mesh_preview_project(projector, wb, &b) ||
                 !scene_editor_mesh_preview_project(projector, wc, &c) ||
