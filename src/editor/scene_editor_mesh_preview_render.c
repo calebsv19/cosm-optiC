@@ -626,16 +626,17 @@ bool SceneEditorMeshPreviewRenderGeometry(
             if (stats.mode == SCENE_EDITOR_MESH_DISPLAY_WIRE) {
                 vk_renderer_draw_line_mesh(vk, &slot->wire_mesh);
                 stats.rendered_wire_segments += slot->wire_segment_count;
-            } else if (stats.mode == SCENE_EDITOR_MESH_DISPLAY_MATERIAL) {
-                vk_renderer_draw_tri_mesh(vk, &slot->material_mesh);
-                vk_renderer_draw_line_mesh(vk, &slot->wire_mesh);
-                stats.rendered_triangles += slot->triangle_count;
-                stats.rendered_wire_segments += slot->wire_segment_count;
             } else {
-                vk_renderer_draw_tri_mesh(vk, &slot->solid_mesh);
-                vk_renderer_draw_line_mesh(vk, &slot->wire_mesh);
+                vk_renderer_draw_tri_mesh(
+                    vk,
+                    stats.mode == SCENE_EDITOR_MESH_DISPLAY_MATERIAL
+                        ? &slot->material_mesh
+                        : &slot->solid_mesh);
                 stats.rendered_triangles += slot->triangle_count;
-                stats.rendered_wire_segments += slot->wire_segment_count;
+                if (SceneEditorMeshDisplayModeDrawsStructuralWire(stats.mode)) {
+                    vk_renderer_draw_line_mesh(vk, &slot->wire_mesh);
+                    stats.rendered_wire_segments += slot->wire_segment_count;
+                }
             }
             stats.rendered_instances += 1;
 #else

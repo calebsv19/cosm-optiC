@@ -50,6 +50,13 @@ static inline SceneEditorMeshDisplayMode SceneEditorMeshDisplayModeCycle(
     return (SceneEditorMeshDisplayMode)next;
 }
 
+static inline bool SceneEditorMeshDisplayModeDrawsStructuralWire(
+    SceneEditorMeshDisplayMode mode) {
+    const SceneEditorMeshDisplayMode clamped = SceneEditorMeshDisplayModeClamp((int)mode);
+    return clamped == SCENE_EDITOR_MESH_DISPLAY_WIRE ||
+           clamped == SCENE_EDITOR_MESH_DISPLAY_MATERIAL;
+}
+
 static inline bool SceneEditorMeshPreviewInvalidationResetsQuality(unsigned invalidation) {
     return (invalidation & (SCENE_EDITOR_MESH_PREVIEW_INVALIDATION_GEOMETRY |
                             SCENE_EDITOR_MESH_PREVIEW_INVALIDATION_VIEW_DIRECTION)) != 0u;

@@ -38,6 +38,15 @@ static int test_scene_editor_mesh_preview_contract(void) {
     assert_true("mesh_preview_contract_reverse_cycle",
                 SceneEditorMeshDisplayModeCycle(SCENE_EDITOR_MESH_DISPLAY_BOUNDS, -1) ==
                     SCENE_EDITOR_MESH_DISPLAY_MATERIAL);
+    assert_true("mesh_preview_contract_wire_draws_structure",
+                SceneEditorMeshDisplayModeDrawsStructuralWire(
+                    SCENE_EDITOR_MESH_DISPLAY_WIRE));
+    assert_true("mesh_preview_contract_solid_omits_structure",
+                !SceneEditorMeshDisplayModeDrawsStructuralWire(
+                    SCENE_EDITOR_MESH_DISPLAY_SOLID));
+    assert_true("mesh_preview_contract_material_draws_structure",
+                SceneEditorMeshDisplayModeDrawsStructuralWire(
+                    SCENE_EDITOR_MESH_DISPLAY_MATERIAL));
     assert_true("mesh_preview_contract_overlay_stable",
                 !SceneEditorMeshPreviewInvalidationResetsQuality(overlay_only));
     assert_true("mesh_preview_contract_geometry_resets",
