@@ -55,6 +55,12 @@ Last updated: 2026-07-13
   indexed LOD construction.
 - RayTracing prepares those bounded LODs in a separate editor-only store after
   runtime mesh loading; the runtime loader's value-copy ABI remains unchanged.
+- The retained loader still declines runtime mesh documents above its 1 MiB
+  editor budget. For those skipped records, the editor-only store now performs
+  one transient document load, builds the same fixed shared coherent LOD, copies
+  only the runtime contract and instance transform, and frees the full document.
+  Large preview geometry therefore does not enter final-render geometry or BVH
+  ownership and is not retained as a full source document by the editor.
 - RayTracing owns Bounds/Wire/Solid/Material mode meaning and quality
   invalidation. Zoom, pan, projection, appearance, hover, and selection do not
   demote the established geometry tier; geometry and view-direction changes may.
@@ -70,9 +76,11 @@ Last updated: 2026-07-13
   changes.
 - Native GPU/depth rendering, normals, materials, light sampling, camera,
   overlays, picking, cache policy, final geometry, and BVHs remain RayTracing
-  authority. A local 171k-triangle skull scene passes the optional complex-mesh
-  LOD proof; native screenshot capture was unavailable in the proving session,
-  so hands-on packaged visual acceptance remains the next proof boundary.
+  authority. The real local 171k-triangle skull scene passes through the same
+  1 MiB-limited loader path, is recovered as an 18,000-triangle editor LOD, and
+  remains available to the native renderer and real-triangle picker. Native
+  screenshot capture was unavailable in the proving session, so hands-on
+  packaged visual acceptance remains the next proof boundary.
 
 ## Stable Worker Routing Truth
 
@@ -961,9 +969,12 @@ Last updated: 2026-07-13
       loaded mesh sidecars, over-budget skipped mesh sidecars, and primitive
       scene objects such as planes, and rows can be clicked to select the
       matching scene object
-    - for mixed skull/platform scenes, the expected editor reading is:
-      one over-budget skull mesh row marked skipped, one primitive plane row,
-      and one loaded platform mesh row counted in `Mesh Loaded`
+    - for mixed skull/platform scenes, the retained loader still records the
+      skull as over budget, but the editor-only LOD store recovers it without
+      retaining the 17.9 MiB source document; the object pane reports both mesh
+      instances in `Mesh Preview`, labels the skull `mesh preview ... LOD from
+      17.9 MB`, and leaves an invalid/unrecoverable over-budget file labeled
+      `mesh skipped`
     - loaded mesh preview edges now use a dedicated high-contrast editor
       diagnostic color and append a mesh-local bounds outline, so small
       default-material meshes such as the platform do not visually blend into
