@@ -40,11 +40,13 @@ Keep `ray_tracing` stable as a hybrid editor/runtime while treating the shipped 
    - Use `ray_tracing_material_preview_headless` as the bounded preview/tuning
      loop for imported mesh material presets before running expensive full
      native `3D` render proofs.
-   - Route the editor-only shared coherent LOD store through RayTracing-native
-     rendering and picking, expose distinct Bounds/Wire/Solid/Material controls,
-     and prove stable skull/dragon-class navigation and selection without moving
-     renderer, material, camera, overlay, cache, final-geometry, or BVH policy
-     into shared core.
+   - Preserve the now-routed editor-only shared coherent LOD store, direct
+     Bounds/Wire/Solid/Material controls, triangle picking, native GPU mesh
+     submission, and per-frame-slot cache without moving renderer, material,
+     camera, overlay, final-geometry, or BVH policy into shared core.
+   - Complete hands-on packaged skull/dragon visual acceptance when native UI
+     capture is available, then tune only renderer-local feature thresholds or
+     appearance if the proof exposes a concrete readability defect.
 
 4. Build the next native `3D` lighting pass around an authored lighting model
    rather than one-off inspection overrides.

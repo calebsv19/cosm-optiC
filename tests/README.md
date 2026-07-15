@@ -5,6 +5,13 @@ fixtures. It is intentionally broader than a single test style because the
 program has interactive editor, renderer, import, headless, worker-package, and
 visual-proof surfaces.
 
+The `runtime_mesh_asset_loader` group covers the shared editor mesh-preview
+contract, direct four-mode controls, stable projected-triangle picking, and the
+bounded coherent LOD store. Set `RAY_TRACING_MESH_PREVIEW_COMPLEX_SCENE` to a
+runtime-scene path to add an opt-in skull/dragon-class proof requiring a source
+mesh of at least 100,000 triangles and a valid LOD no larger than the editor's
+18,000-triangle budget.
+
 ## Layout
 
 - `test_runner.c`, `test_runner_registry.*`: C test runner and group registry.

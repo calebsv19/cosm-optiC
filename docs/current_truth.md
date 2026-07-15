@@ -58,10 +58,21 @@ Last updated: 2026-07-13
 - RayTracing owns Bounds/Wire/Solid/Material mode meaning and quality
   invalidation. Zoom, pan, projection, appearance, hover, and selection do not
   demote the established geometry tier; geometry and view-direction changes may.
+- Object and Material editor viewports expose the four modes directly. Bounds
+  draws diagnostic cages only; Wire derives unique boundary, silhouette, and
+  sharp-feature lines from the coherent indexed LOD; Solid submits an opaque
+  neutral native GPU triangle mesh; Material submits the same geometry with
+  the RayTracing object color. Selection and hover stay separate bounds
+  overlays, and non-Bounds picking tests real projected triangles.
+- GPU preview resources are cached per Vulkan frame slot and keyed by geometry,
+  transform, projection, and appearance. The fixed 18,000-triangle editor LOD
+  is not rebuilt or demoted by zoom, pan, hover, selection, or display-mode
+  changes.
 - Native GPU/depth rendering, normals, materials, light sampling, camera,
   overlays, picking, cache policy, final geometry, and BVHs remain RayTracing
-  authority. Renderer/picking routing and complex-asset visual proof are the
-  next adoption boundary.
+  authority. A local 171k-triangle skull scene passes the optional complex-mesh
+  LOD proof; native screenshot capture was unavailable in the proving session,
+  so hands-on packaged visual acceptance remains the next proof boundary.
 
 ## Stable Worker Routing Truth
 
