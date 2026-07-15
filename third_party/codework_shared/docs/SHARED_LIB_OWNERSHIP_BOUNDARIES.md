@@ -21,7 +21,10 @@ This document defines what each shared library owns so behavior does not overlap
 - `core_scene`: scene schema and scene-level object grouping/state metadata.
 - `core_scene_compile`: shared authoring-to-runtime scene compile and normalization boundary.
 - `core_scene_view`: renderer-free scene-view packet schema/readback vocabulary, including preview quality, degraded reason, display flags, pick ids, compact JSON readback validation, and compact summary derivation from validated readback metadata.
-- `core_mesh_preview`: viewport-safe runtime mesh preview sidecar contract, bounded feature-edge payload generation, local bounds/source-count metadata, and file-backed preview save/load helpers.
+- `core_mesh_preview`: viewport-safe runtime mesh preview sidecar contract,
+  bounded feature-edge payload generation, local bounds/source-count metadata,
+  file-backed preview save/load helpers, and renderer-neutral coherent indexed
+  LOD construction with host-selected triangle budgets.
 - `core_space`: coordinate-space mapping, transforms, and grid/window/world conversion.
 - `core_viewport2d`: renderer-agnostic 2D viewport/camera state transitions for fit-to-window, screen/content transforms, drag pan, and cursor-anchor zoom.
 - `core_units`: unit vocabulary, unit conversions, and world-scale conversion primitives.
