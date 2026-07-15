@@ -49,6 +49,20 @@ Last updated: 2026-07-13
   - `src/app/animation.c` (`main()` delegates through `ray_tracing_app_main(...)`)
   - wrapper shell: `include/ray_tracing/ray_tracing_app_main.h`, `src/app/ray_tracing_app_main.c`
 
+## Shared Complex-Mesh Preview Adoption
+
+- The managed shared subtree includes `core_mesh_preview` `0.5.0` coherent
+  indexed LOD construction.
+- RayTracing prepares those bounded LODs in a separate editor-only store after
+  runtime mesh loading; the runtime loader's value-copy ABI remains unchanged.
+- RayTracing owns Bounds/Wire/Solid/Material mode meaning and quality
+  invalidation. Zoom, pan, projection, appearance, hover, and selection do not
+  demote the established geometry tier; geometry and view-direction changes may.
+- Native GPU/depth rendering, normals, materials, light sampling, camera,
+  overlays, picking, cache policy, final geometry, and BVHs remain RayTracing
+  authority. Renderer/picking routing and complex-asset visual proof are the
+  next adoption boundary.
+
 ## Stable Worker Routing Truth
 
 - the current proven trio worker lane supports preferred-home-server routing
